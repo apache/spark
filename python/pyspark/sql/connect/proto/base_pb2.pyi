@@ -92,71 +92,6 @@ class Plan(google.protobuf.message.Message):
 
 global___Plan = Plan
 
-class Explain(google.protobuf.message.Message):
-    """Explains the input plan based on a configurable mode."""
-
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
-
-    class _ExplainMode:
-        ValueType = typing.NewType("ValueType", builtins.int)
-        V: typing_extensions.TypeAlias = ValueType
-
-    class _ExplainModeEnumTypeWrapper(
-        google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[Explain._ExplainMode.ValueType],
-        builtins.type,
-    ):  # noqa: F821
-        DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
-        MODE_UNSPECIFIED: Explain._ExplainMode.ValueType  # 0
-        SIMPLE: Explain._ExplainMode.ValueType  # 1
-        """Generates only physical plan."""
-        EXTENDED: Explain._ExplainMode.ValueType  # 2
-        """Generates parsed logical plan, analyzed logical plan, optimized logical plan and physical plan.
-        Parsed Logical plan is a unresolved plan that extracted from the query. Analyzed logical plans
-        transforms which translates unresolvedAttribute and unresolvedRelation into fully typed objects.
-        The optimized logical plan transforms through a set of optimization rules, resulting in the
-        physical plan.
-        """
-        CODEGEN: Explain._ExplainMode.ValueType  # 3
-        """Generates code for the statement, if any and a physical plan."""
-        COST: Explain._ExplainMode.ValueType  # 4
-        """If plan node statistics are available, generates a logical plan and also the statistics."""
-        FORMATTED: Explain._ExplainMode.ValueType  # 5
-        """Generates a physical plan outline and also node details."""
-
-    class ExplainMode(_ExplainMode, metaclass=_ExplainModeEnumTypeWrapper):
-        """Plan explanation mode."""
-
-    MODE_UNSPECIFIED: Explain.ExplainMode.ValueType  # 0
-    SIMPLE: Explain.ExplainMode.ValueType  # 1
-    """Generates only physical plan."""
-    EXTENDED: Explain.ExplainMode.ValueType  # 2
-    """Generates parsed logical plan, analyzed logical plan, optimized logical plan and physical plan.
-    Parsed Logical plan is a unresolved plan that extracted from the query. Analyzed logical plans
-    transforms which translates unresolvedAttribute and unresolvedRelation into fully typed objects.
-    The optimized logical plan transforms through a set of optimization rules, resulting in the
-    physical plan.
-    """
-    CODEGEN: Explain.ExplainMode.ValueType  # 3
-    """Generates code for the statement, if any and a physical plan."""
-    COST: Explain.ExplainMode.ValueType  # 4
-    """If plan node statistics are available, generates a logical plan and also the statistics."""
-    FORMATTED: Explain.ExplainMode.ValueType  # 5
-    """Generates a physical plan outline and also node details."""
-
-    EXPLAIN_MODE_FIELD_NUMBER: builtins.int
-    explain_mode: global___Explain.ExplainMode.ValueType
-    """(Required) For analyzePlan rpc calls, configure the mode to explain plan in strings."""
-    def __init__(
-        self,
-        *,
-        explain_mode: global___Explain.ExplainMode.ValueType = ...,
-    ) -> None: ...
-    def ClearField(
-        self, field_name: typing_extensions.Literal["explain_mode", b"explain_mode"]
-    ) -> None: ...
-
-global___Explain = Explain
-
 class UserContext(google.protobuf.message.Message):
     """User Context is used to refer to one particular user session that is executing
     queries in the backend.
@@ -201,11 +136,198 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
+    class Schema(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        PLAN_FIELD_NUMBER: builtins.int
+        @property
+        def plan(self) -> global___Plan:
+            """(Required) The logical plan to be analyzed."""
+        def __init__(
+            self,
+            *,
+            plan: global___Plan | None = ...,
+        ) -> None: ...
+        def HasField(
+            self, field_name: typing_extensions.Literal["plan", b"plan"]
+        ) -> builtins.bool: ...
+        def ClearField(self, field_name: typing_extensions.Literal["plan", b"plan"]) -> None: ...
+
+    class Explain(google.protobuf.message.Message):
+        """Explains the input plan based on a configurable mode."""
+
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        class _ExplainMode:
+            ValueType = typing.NewType("ValueType", builtins.int)
+            V: typing_extensions.TypeAlias = ValueType
+
+        class _ExplainModeEnumTypeWrapper(
+            google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[
+                AnalyzePlanRequest.Explain._ExplainMode.ValueType
+            ],
+            builtins.type,
+        ):  # noqa: F821
+            DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
+            EXPLAIN_MODE_UNSPECIFIED: AnalyzePlanRequest.Explain._ExplainMode.ValueType  # 0
+            EXPLAIN_MODE_SIMPLE: AnalyzePlanRequest.Explain._ExplainMode.ValueType  # 1
+            """Generates only physical plan."""
+            EXPLAIN_MODE_EXTENDED: AnalyzePlanRequest.Explain._ExplainMode.ValueType  # 2
+            """Generates parsed logical plan, analyzed logical plan, optimized logical plan and physical plan.
+            Parsed Logical plan is a unresolved plan that extracted from the query. Analyzed logical plans
+            transforms which translates unresolvedAttribute and unresolvedRelation into fully typed objects.
+            The optimized logical plan transforms through a set of optimization rules, resulting in the
+            physical plan.
+            """
+            EXPLAIN_MODE_CODEGEN: AnalyzePlanRequest.Explain._ExplainMode.ValueType  # 3
+            """Generates code for the statement, if any and a physical plan."""
+            EXPLAIN_MODE_COST: AnalyzePlanRequest.Explain._ExplainMode.ValueType  # 4
+            """If plan node statistics are available, generates a logical plan and also the statistics."""
+            EXPLAIN_MODE_FORMATTED: AnalyzePlanRequest.Explain._ExplainMode.ValueType  # 5
+            """Generates a physical plan outline and also node details."""
+
+        class ExplainMode(_ExplainMode, metaclass=_ExplainModeEnumTypeWrapper):
+            """Plan explanation mode."""
+
+        EXPLAIN_MODE_UNSPECIFIED: AnalyzePlanRequest.Explain.ExplainMode.ValueType  # 0
+        EXPLAIN_MODE_SIMPLE: AnalyzePlanRequest.Explain.ExplainMode.ValueType  # 1
+        """Generates only physical plan."""
+        EXPLAIN_MODE_EXTENDED: AnalyzePlanRequest.Explain.ExplainMode.ValueType  # 2
+        """Generates parsed logical plan, analyzed logical plan, optimized logical plan and physical plan.
+        Parsed Logical plan is a unresolved plan that extracted from the query. Analyzed logical plans
+        transforms which translates unresolvedAttribute and unresolvedRelation into fully typed objects.
+        The optimized logical plan transforms through a set of optimization rules, resulting in the
+        physical plan.
+        """
+        EXPLAIN_MODE_CODEGEN: AnalyzePlanRequest.Explain.ExplainMode.ValueType  # 3
+        """Generates code for the statement, if any and a physical plan."""
+        EXPLAIN_MODE_COST: AnalyzePlanRequest.Explain.ExplainMode.ValueType  # 4
+        """If plan node statistics are available, generates a logical plan and also the statistics."""
+        EXPLAIN_MODE_FORMATTED: AnalyzePlanRequest.Explain.ExplainMode.ValueType  # 5
+        """Generates a physical plan outline and also node details."""
+
+        PLAN_FIELD_NUMBER: builtins.int
+        EXPLAIN_MODE_FIELD_NUMBER: builtins.int
+        @property
+        def plan(self) -> global___Plan:
+            """(Required) The logical plan to be analyzed."""
+        explain_mode: global___AnalyzePlanRequest.Explain.ExplainMode.ValueType
+        """(Required) For analyzePlan rpc calls, configure the mode to explain plan in strings."""
+        def __init__(
+            self,
+            *,
+            plan: global___Plan | None = ...,
+            explain_mode: global___AnalyzePlanRequest.Explain.ExplainMode.ValueType = ...,
+        ) -> None: ...
+        def HasField(
+            self, field_name: typing_extensions.Literal["plan", b"plan"]
+        ) -> builtins.bool: ...
+        def ClearField(
+            self,
+            field_name: typing_extensions.Literal["explain_mode", b"explain_mode", "plan", b"plan"],
+        ) -> None: ...
+
+    class TreeString(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        PLAN_FIELD_NUMBER: builtins.int
+        @property
+        def plan(self) -> global___Plan:
+            """(Required) The logical plan to be analyzed."""
+        def __init__(
+            self,
+            *,
+            plan: global___Plan | None = ...,
+        ) -> None: ...
+        def HasField(
+            self, field_name: typing_extensions.Literal["plan", b"plan"]
+        ) -> builtins.bool: ...
+        def ClearField(self, field_name: typing_extensions.Literal["plan", b"plan"]) -> None: ...
+
+    class IsLocal(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        PLAN_FIELD_NUMBER: builtins.int
+        @property
+        def plan(self) -> global___Plan:
+            """(Required) The logical plan to be analyzed."""
+        def __init__(
+            self,
+            *,
+            plan: global___Plan | None = ...,
+        ) -> None: ...
+        def HasField(
+            self, field_name: typing_extensions.Literal["plan", b"plan"]
+        ) -> builtins.bool: ...
+        def ClearField(self, field_name: typing_extensions.Literal["plan", b"plan"]) -> None: ...
+
+    class IsStreaming(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        PLAN_FIELD_NUMBER: builtins.int
+        @property
+        def plan(self) -> global___Plan:
+            """(Required) The logical plan to be analyzed."""
+        def __init__(
+            self,
+            *,
+            plan: global___Plan | None = ...,
+        ) -> None: ...
+        def HasField(
+            self, field_name: typing_extensions.Literal["plan", b"plan"]
+        ) -> builtins.bool: ...
+        def ClearField(self, field_name: typing_extensions.Literal["plan", b"plan"]) -> None: ...
+
+    class InputFiles(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        PLAN_FIELD_NUMBER: builtins.int
+        @property
+        def plan(self) -> global___Plan:
+            """(Required) The logical plan to be analyzed."""
+        def __init__(
+            self,
+            *,
+            plan: global___Plan | None = ...,
+        ) -> None: ...
+        def HasField(
+            self, field_name: typing_extensions.Literal["plan", b"plan"]
+        ) -> builtins.bool: ...
+        def ClearField(self, field_name: typing_extensions.Literal["plan", b"plan"]) -> None: ...
+
+    class SparkVersion(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        def __init__(
+            self,
+        ) -> None: ...
+
+    class DDLParse(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        DDL_STRING_FIELD_NUMBER: builtins.int
+        ddl_string: builtins.str
+        """(Required) The DDL formatted string to be parsed."""
+        def __init__(
+            self,
+            *,
+            ddl_string: builtins.str = ...,
+        ) -> None: ...
+        def ClearField(
+            self, field_name: typing_extensions.Literal["ddl_string", b"ddl_string"]
+        ) -> None: ...
+
     CLIENT_ID_FIELD_NUMBER: builtins.int
     USER_CONTEXT_FIELD_NUMBER: builtins.int
-    PLAN_FIELD_NUMBER: builtins.int
     CLIENT_TYPE_FIELD_NUMBER: builtins.int
+    SCHEMA_FIELD_NUMBER: builtins.int
     EXPLAIN_FIELD_NUMBER: builtins.int
+    TREE_STRING_FIELD_NUMBER: builtins.int
+    IS_LOCAL_FIELD_NUMBER: builtins.int
+    IS_STREAMING_FIELD_NUMBER: builtins.int
+    INPUT_FILES_FIELD_NUMBER: builtins.int
+    SPARK_VERSION_FIELD_NUMBER: builtins.int
+    DDL_PARSE_FIELD_NUMBER: builtins.int
     client_id: builtins.str
     """(Required)
 
@@ -215,37 +337,67 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
     @property
     def user_context(self) -> global___UserContext:
         """(Required) User context"""
-    @property
-    def plan(self) -> global___Plan:
-        """(Required) The logical plan to be analyzed."""
     client_type: builtins.str
     """Provides optional information about the client sending the request. This field
     can be used for language or version specific information and is only intended for
     logging purposes and will not be interpreted by the server.
     """
     @property
-    def explain(self) -> global___Explain:
-        """(Optional) Get the explain string of the plan."""
+    def schema(self) -> global___AnalyzePlanRequest.Schema: ...
+    @property
+    def explain(self) -> global___AnalyzePlanRequest.Explain: ...
+    @property
+    def tree_string(self) -> global___AnalyzePlanRequest.TreeString: ...
+    @property
+    def is_local(self) -> global___AnalyzePlanRequest.IsLocal: ...
+    @property
+    def is_streaming(self) -> global___AnalyzePlanRequest.IsStreaming: ...
+    @property
+    def input_files(self) -> global___AnalyzePlanRequest.InputFiles: ...
+    @property
+    def spark_version(self) -> global___AnalyzePlanRequest.SparkVersion: ...
+    @property
+    def ddl_parse(self) -> global___AnalyzePlanRequest.DDLParse: ...
     def __init__(
         self,
         *,
         client_id: builtins.str = ...,
         user_context: global___UserContext | None = ...,
-        plan: global___Plan | None = ...,
         client_type: builtins.str | None = ...,
-        explain: global___Explain | None = ...,
+        schema: global___AnalyzePlanRequest.Schema | None = ...,
+        explain: global___AnalyzePlanRequest.Explain | None = ...,
+        tree_string: global___AnalyzePlanRequest.TreeString | None = ...,
+        is_local: global___AnalyzePlanRequest.IsLocal | None = ...,
+        is_streaming: global___AnalyzePlanRequest.IsStreaming | None = ...,
+        input_files: global___AnalyzePlanRequest.InputFiles | None = ...,
+        spark_version: global___AnalyzePlanRequest.SparkVersion | None = ...,
+        ddl_parse: global___AnalyzePlanRequest.DDLParse | None = ...,
     ) -> None: ...
     def HasField(
         self,
         field_name: typing_extensions.Literal[
             "_client_type",
             b"_client_type",
+            "analyze",
+            b"analyze",
             "client_type",
             b"client_type",
+            "ddl_parse",
+            b"ddl_parse",
             "explain",
             b"explain",
-            "plan",
-            b"plan",
+            "input_files",
+            b"input_files",
+            "is_local",
+            b"is_local",
+            "is_streaming",
+            b"is_streaming",
+            "schema",
+            b"schema",
+            "spark_version",
+            b"spark_version",
+            "tree_string",
+            b"tree_string",
             "user_context",
             b"user_context",
         ],
@@ -255,21 +407,49 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
         field_name: typing_extensions.Literal[
             "_client_type",
             b"_client_type",
+            "analyze",
+            b"analyze",
             "client_id",
             b"client_id",
             "client_type",
             b"client_type",
+            "ddl_parse",
+            b"ddl_parse",
             "explain",
             b"explain",
-            "plan",
-            b"plan",
+            "input_files",
+            b"input_files",
+            "is_local",
+            b"is_local",
+            "is_streaming",
+            b"is_streaming",
+            "schema",
+            b"schema",
+            "spark_version",
+            b"spark_version",
+            "tree_string",
+            b"tree_string",
             "user_context",
             b"user_context",
         ],
     ) -> None: ...
+    @typing.overload
     def WhichOneof(
         self, oneof_group: typing_extensions.Literal["_client_type", b"_client_type"]
     ) -> typing_extensions.Literal["client_type"] | None: ...
+    @typing.overload
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["analyze", b"analyze"]
+    ) -> typing_extensions.Literal[
+        "schema",
+        "explain",
+        "tree_string",
+        "is_local",
+        "is_streaming",
+        "input_files",
+        "spark_version",
+        "ddl_parse",
+    ] | None: ...
 
 global___AnalyzePlanRequest = AnalyzePlanRequest
 
@@ -280,64 +460,227 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
+    class Schema(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        SCHEMA_FIELD_NUMBER: builtins.int
+        @property
+        def schema(self) -> pyspark.sql.connect.proto.types_pb2.DataType: ...
+        def __init__(
+            self,
+            *,
+            schema: pyspark.sql.connect.proto.types_pb2.DataType | None = ...,
+        ) -> None: ...
+        def HasField(
+            self, field_name: typing_extensions.Literal["schema", b"schema"]
+        ) -> builtins.bool: ...
+        def ClearField(
+            self, field_name: typing_extensions.Literal["schema", b"schema"]
+        ) -> None: ...
+
+    class Explain(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        EXPLAIN_STRING_FIELD_NUMBER: builtins.int
+        explain_string: builtins.str
+        def __init__(
+            self,
+            *,
+            explain_string: builtins.str = ...,
+        ) -> None: ...
+        def ClearField(
+            self, field_name: typing_extensions.Literal["explain_string", b"explain_string"]
+        ) -> None: ...
+
+    class TreeString(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        TREE_STRING_FIELD_NUMBER: builtins.int
+        tree_string: builtins.str
+        def __init__(
+            self,
+            *,
+            tree_string: builtins.str = ...,
+        ) -> None: ...
+        def ClearField(
+            self, field_name: typing_extensions.Literal["tree_string", b"tree_string"]
+        ) -> None: ...
+
+    class IsLocal(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        IS_LOCAL_FIELD_NUMBER: builtins.int
+        is_local: builtins.bool
+        def __init__(
+            self,
+            *,
+            is_local: builtins.bool = ...,
+        ) -> None: ...
+        def ClearField(
+            self, field_name: typing_extensions.Literal["is_local", b"is_local"]
+        ) -> None: ...
+
+    class IsStreaming(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        IS_STREAMING_FIELD_NUMBER: builtins.int
+        is_streaming: builtins.bool
+        def __init__(
+            self,
+            *,
+            is_streaming: builtins.bool = ...,
+        ) -> None: ...
+        def ClearField(
+            self, field_name: typing_extensions.Literal["is_streaming", b"is_streaming"]
+        ) -> None: ...
+
+    class InputFiles(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        FILES_FIELD_NUMBER: builtins.int
+        @property
+        def files(
+            self,
+        ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
+            """A best-effort snapshot of the files that compose this Dataset"""
+        def __init__(
+            self,
+            *,
+            files: collections.abc.Iterable[builtins.str] | None = ...,
+        ) -> None: ...
+        def ClearField(self, field_name: typing_extensions.Literal["files", b"files"]) -> None: ...
+
+    class SparkVersion(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        VERSION_FIELD_NUMBER: builtins.int
+        version: builtins.str
+        def __init__(
+            self,
+            *,
+            version: builtins.str = ...,
+        ) -> None: ...
+        def ClearField(
+            self, field_name: typing_extensions.Literal["version", b"version"]
+        ) -> None: ...
+
+    class DDLParse(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        PARSED_FIELD_NUMBER: builtins.int
+        @property
+        def parsed(self) -> pyspark.sql.connect.proto.types_pb2.DataType: ...
+        def __init__(
+            self,
+            *,
+            parsed: pyspark.sql.connect.proto.types_pb2.DataType | None = ...,
+        ) -> None: ...
+        def HasField(
+            self, field_name: typing_extensions.Literal["parsed", b"parsed"]
+        ) -> builtins.bool: ...
+        def ClearField(
+            self, field_name: typing_extensions.Literal["parsed", b"parsed"]
+        ) -> None: ...
+
     CLIENT_ID_FIELD_NUMBER: builtins.int
     SCHEMA_FIELD_NUMBER: builtins.int
-    EXPLAIN_STRING_FIELD_NUMBER: builtins.int
+    EXPLAIN_FIELD_NUMBER: builtins.int
     TREE_STRING_FIELD_NUMBER: builtins.int
     IS_LOCAL_FIELD_NUMBER: builtins.int
     IS_STREAMING_FIELD_NUMBER: builtins.int
     INPUT_FILES_FIELD_NUMBER: builtins.int
+    SPARK_VERSION_FIELD_NUMBER: builtins.int
+    DDL_PARSE_FIELD_NUMBER: builtins.int
     client_id: builtins.str
     @property
-    def schema(self) -> pyspark.sql.connect.proto.types_pb2.DataType: ...
-    explain_string: builtins.str
-    """The extended explain string as produced by Spark."""
-    tree_string: builtins.str
-    """Get the tree string of the schema."""
-    is_local: builtins.bool
-    """Whether the 'collect' and 'take' methods can be run locally."""
-    is_streaming: builtins.bool
-    """Whether this plan contains one or more sources that continuously
-    return data as it arrives.
-    """
+    def schema(self) -> global___AnalyzePlanResponse.Schema: ...
     @property
-    def input_files(
-        self,
-    ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
-        """A best-effort snapshot of the files that compose this Dataset"""
+    def explain(self) -> global___AnalyzePlanResponse.Explain: ...
+    @property
+    def tree_string(self) -> global___AnalyzePlanResponse.TreeString: ...
+    @property
+    def is_local(self) -> global___AnalyzePlanResponse.IsLocal: ...
+    @property
+    def is_streaming(self) -> global___AnalyzePlanResponse.IsStreaming: ...
+    @property
+    def input_files(self) -> global___AnalyzePlanResponse.InputFiles: ...
+    @property
+    def spark_version(self) -> global___AnalyzePlanResponse.SparkVersion: ...
+    @property
+    def ddl_parse(self) -> global___AnalyzePlanResponse.DDLParse: ...
     def __init__(
         self,
         *,
         client_id: builtins.str = ...,
-        schema: pyspark.sql.connect.proto.types_pb2.DataType | None = ...,
-        explain_string: builtins.str = ...,
-        tree_string: builtins.str = ...,
-        is_local: builtins.bool = ...,
-        is_streaming: builtins.bool = ...,
-        input_files: collections.abc.Iterable[builtins.str] | None = ...,
+        schema: global___AnalyzePlanResponse.Schema | None = ...,
+        explain: global___AnalyzePlanResponse.Explain | None = ...,
+        tree_string: global___AnalyzePlanResponse.TreeString | None = ...,
+        is_local: global___AnalyzePlanResponse.IsLocal | None = ...,
+        is_streaming: global___AnalyzePlanResponse.IsStreaming | None = ...,
+        input_files: global___AnalyzePlanResponse.InputFiles | None = ...,
+        spark_version: global___AnalyzePlanResponse.SparkVersion | None = ...,
+        ddl_parse: global___AnalyzePlanResponse.DDLParse | None = ...,
     ) -> None: ...
     def HasField(
-        self, field_name: typing_extensions.Literal["schema", b"schema"]
-    ) -> builtins.bool: ...
-    def ClearField(
         self,
         field_name: typing_extensions.Literal[
-            "client_id",
-            b"client_id",
-            "explain_string",
-            b"explain_string",
+            "ddl_parse",
+            b"ddl_parse",
+            "explain",
+            b"explain",
             "input_files",
             b"input_files",
             "is_local",
             b"is_local",
             "is_streaming",
             b"is_streaming",
+            "result",
+            b"result",
             "schema",
             b"schema",
+            "spark_version",
+            b"spark_version",
+            "tree_string",
+            b"tree_string",
+        ],
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "client_id",
+            b"client_id",
+            "ddl_parse",
+            b"ddl_parse",
+            "explain",
+            b"explain",
+            "input_files",
+            b"input_files",
+            "is_local",
+            b"is_local",
+            "is_streaming",
+            b"is_streaming",
+            "result",
+            b"result",
+            "schema",
+            b"schema",
+            "spark_version",
+            b"spark_version",
             "tree_string",
             b"tree_string",
         ],
     ) -> None: ...
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["result", b"result"]
+    ) -> typing_extensions.Literal[
+        "schema",
+        "explain",
+        "tree_string",
+        "is_local",
+        "is_streaming",
+        "input_files",
+        "spark_version",
+        "ddl_parse",
+    ] | None: ...
 
 global___AnalyzePlanResponse = AnalyzePlanResponse
 

@@ -2751,6 +2751,12 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
                     self.spark.read.parquet(path).schema,
                 )
 
+    def test_version(self):
+        self.assertEqual(
+            self.connect.version,
+            self.spark.version,
+        )
+
     def test_unsupported_functions(self):
         # SPARK-41225: Disable unsupported functions.
         df = self.connect.read.table(self.tbl_name)
@@ -2799,7 +2805,6 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             "sparkContext",
             "streams",
             "readStream",
-            "version",
         ):
             with self.assertRaises(NotImplementedError):
                 getattr(self.connect, f)()
