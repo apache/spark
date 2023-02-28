@@ -207,7 +207,7 @@ class SparkSession(
   // Disable style checker so "implicits" object can start with lowercase i
   /**
    * (Scala-specific) Implicit methods available in Scala for converting common names and
-   * [[Symbol]]s into [[Column]]s.
+   * [[Symbol]]s into [[Column]]s, and for converting common Scala objects into `DataFrame`s.
    *
    * {{{
    *   val sparkSession = SparkSession.builder.getOrCreate()
