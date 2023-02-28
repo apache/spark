@@ -30,6 +30,7 @@ import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach}
 import org.apache.spark.connect.proto
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{functions => fn}
+import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.connect.client.SparkConnectClient
 import org.apache.spark.sql.connect.client.util.ConnectFunSuite
 import org.apache.spark.sql.expressions.Window
@@ -285,6 +286,11 @@ class PlanGenerationTestSuite
   /* Dataset API */
   test("select") {
     simple.select(fn.col("id"))
+  }
+
+  test("select typed 1-arg") {
+    val encoder = ScalaReflection.encoderFor[(Long, Int)]
+    simple.select(fn.struct(fn.col("id"), fn.col("a")).as(encoder))
   }
 
   test("limit") {
@@ -874,6 +880,10 @@ class PlanGenerationTestSuite
 
   functionTest("count") {
     fn.count(fn.col("a"))
+  }
+
+  test("function count typed") {
+    simple.select(fn.count("a"))
   }
 
   functionTest("countDistinct") {
@@ -1958,6 +1968,10 @@ class PlanGenerationTestSuite
 
   test("pivot") {
     simple.groupBy(Column("id")).pivot("a", Seq(1, 2, 3)).agg(functions.count(Column("b")))
+  }
+
+  test("pivot without column values") {
+    simple.groupBy(Column("id")).pivot("a").agg(functions.count(Column("b")))
   }
 
   test("function lit") {

@@ -241,6 +241,31 @@ class RelationalGroupedDataset protected[sql] (
   }
 
   /**
+   * Pivots a column of the current `DataFrame` and performs the specified aggregation.
+   *
+   * There are two versions of `pivot` function: one that requires the caller to specify the list
+   * of distinct values to pivot on, and one that does not. The latter is more concise but less
+   * efficient, because Spark needs to first compute the list of distinct values internally.
+   *
+   * {{{
+   *   // Compute the sum of earnings for each year by course with each course as a separate column
+   *   df.groupBy("year").pivot("course", Seq("dotNET", "Java")).sum("earnings")
+   *
+   *   // Or without specifying column values (less efficient)
+   *   df.groupBy("year").pivot("course").sum("earnings")
+   * }}}
+   *
+   * @see
+   *   `org.apache.spark.sql.Dataset.unpivot` for the reverse operation, except for the
+   *   aggregation.
+   *
+   * @param pivotColumn
+   *   Name of the column to pivot.
+   * @since 3.4.0
+   */
+  def pivot(pivotColumn: String): RelationalGroupedDataset = pivot(Column(pivotColumn))
+
+  /**
    * Pivots a column of the current `DataFrame` and performs the specified aggregation. There are
    * two versions of pivot function: one that requires the caller to specify the list of distinct
    * values to pivot on, and one that does not. The latter is more concise but less efficient,
@@ -348,6 +373,27 @@ class RelationalGroupedDataset protected[sql] (
       case _ =>
         throw new UnsupportedOperationException()
     }
+  }
+
+  /**
+   * Pivots a column of the current `DataFrame` and performs the specified aggregation. This is an
+   * overloaded version of the `pivot` method with `pivotColumn` of the `String` type.
+   *
+   * {{{
+   *   // Or without specifying column values (less efficient)
+   *   df.groupBy($"year").pivot($"course").sum($"earnings");
+   * }}}
+   *
+   * @see
+   *   `org.apache.spark.sql.Dataset.unpivot` for the reverse operation, except for the
+   *   aggregation.
+   *
+   * @param pivotColumn
+   *   he column to pivot.
+   * @since 3.4.0
+   */
+  def pivot(pivotColumn: Column): RelationalGroupedDataset = {
+    pivot(pivotColumn, Seq())
   }
 
   /**
