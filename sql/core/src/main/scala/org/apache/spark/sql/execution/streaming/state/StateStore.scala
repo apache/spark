@@ -343,11 +343,12 @@ object StateStoreProvider {
     if (conf.formatValidationEnabled) {
       val validationError = UnsafeRowUtils.validateStructuralIntegrityWithReason(keyRow, keySchema)
       validationError.foreach { error => throw new InvalidUnsafeRowException(error) }
-    }
-    if (conf.formatValidationCheckValue) {
-      val validationError =
-        UnsafeRowUtils.validateStructuralIntegrityWithReason(valueRow, valueSchema)
-      validationError.foreach { error => throw new InvalidUnsafeRowException(error) }
+
+      if (conf.formatValidationCheckValue) {
+        val validationError =
+          UnsafeRowUtils.validateStructuralIntegrityWithReason(valueRow, valueSchema)
+        validationError.foreach { error => throw new InvalidUnsafeRowException(error) }
+      }
     }
   }
 }

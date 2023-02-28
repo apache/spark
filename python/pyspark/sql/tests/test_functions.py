@@ -318,19 +318,29 @@ class FunctionsTestsMixin:
         )
 
     def test_inverse_trig_functions(self):
+        df = self.spark.createDataFrame([Row(a=i * 0.2, b=i * -0.2) for i in range(10)])
+
+        def check(trig, inv, y_axis_symmetrical):
+            SQLTestUtils.assert_close(
+                [n * 0.2 for n in range(10)],
+                df.select(inv(trig(df.a))).collect(),
+            )
+            if y_axis_symmetrical:
+                SQLTestUtils.assert_close(
+                    [n * 0.2 for n in range(10)],
+                    df.select(inv(trig(df.b))).collect(),
+                )
+            else:
+                SQLTestUtils.assert_close(
+                    [n * -0.2 for n in range(10)],
+                    df.select(inv(trig(df.b))).collect(),
+                )
+
         from pyspark.sql import functions
 
-        funs = [
-            (functions.acosh, "ACOSH"),
-            (functions.asinh, "ASINH"),
-            (functions.atanh, "ATANH"),
-        ]
-
-        cols = ["a", functions.col("a")]
-
-        for f, alias in funs:
-            for c in cols:
-                self.assertIn(f"{alias}(a)", repr(f(c)))
+        check(functions.cosh, functions.acosh, y_axis_symmetrical=True)
+        check(functions.sinh, functions.asinh, y_axis_symmetrical=False)
+        check(functions.tanh, functions.atanh, y_axis_symmetrical=False)
 
     def test_reciprocal_trig_functions(self):
         # SPARK-36683: Tests for reciprocal trig functions (SEC, CSC and COT)
@@ -578,8 +588,12 @@ class FunctionsTestsMixin:
         self.assertRaises(TypeError, lambda: df.stat.approxQuantile(["a", 123], [0.1, 0.9], 0.1))
 
     def test_sorting_functions_with_column(self):
-        from pyspark.sql import functions
         from pyspark.sql.column import Column
+
+        self.check_sorting_functions_with_column(Column)
+
+    def check_sorting_functions_with_column(self, tpe):
+        from pyspark.sql import functions
 
         funs = [
             functions.asc_nulls_first,
@@ -592,17 +606,17 @@ class FunctionsTestsMixin:
         for fun in funs:
             for _expr in exprs:
                 res = fun(_expr)
-                self.assertIsInstance(res, Column)
+                self.assertIsInstance(res, tpe)
                 self.assertIn(f"""'x {fun.__name__.replace("_", " ").upper()}'""", str(res))
 
         for _expr in exprs:
             res = functions.asc(_expr)
-            self.assertIsInstance(res, Column)
+            self.assertIsInstance(res, tpe)
             self.assertIn("""'x ASC NULLS FIRST'""", str(res))
 
         for _expr in exprs:
             res = functions.desc(_expr)
-            self.assertIsInstance(res, Column)
+            self.assertIsInstance(res, tpe)
             self.assertIn("""'x DESC NULLS LAST'""", str(res))
 
     def test_sort_with_nulls_order(self):

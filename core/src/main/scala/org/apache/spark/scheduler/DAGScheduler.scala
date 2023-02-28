@@ -2763,7 +2763,7 @@ private[spark] class DAGScheduler(
           val stage = stageIdToStage(stageId)
           if (runningStages.contains(stage)) {
             try { // cancelTasks will fail if a SchedulerBackend does not implement killTask
-              taskScheduler.cancelTasks(stageId, shouldInterruptTaskThread(job))
+              taskScheduler.cancelTasks(stageId, shouldInterruptTaskThread(job), reason)
               markStageAsFinished(stage, Some(reason))
             } catch {
               case e: UnsupportedOperationException =>

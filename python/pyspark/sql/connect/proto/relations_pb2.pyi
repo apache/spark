@@ -1266,32 +1266,39 @@ class Drop(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
     INPUT_FIELD_NUMBER: builtins.int
-    COLS_FIELD_NUMBER: builtins.int
+    COLUMNS_FIELD_NUMBER: builtins.int
+    COLUMN_NAMES_FIELD_NUMBER: builtins.int
     @property
     def input(self) -> global___Relation:
         """(Required) The input relation."""
     @property
-    def cols(
+    def columns(
         self,
     ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
         pyspark.sql.connect.proto.expressions_pb2.Expression
     ]:
-        """(Required) columns to drop.
-
-        Should contain at least 1 item.
-        """
+        """(Optional) columns to drop."""
+    @property
+    def column_names(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
+        """(Optional) names of columns to drop."""
     def __init__(
         self,
         *,
         input: global___Relation | None = ...,
-        cols: collections.abc.Iterable[pyspark.sql.connect.proto.expressions_pb2.Expression]
+        columns: collections.abc.Iterable[pyspark.sql.connect.proto.expressions_pb2.Expression]
         | None = ...,
+        column_names: collections.abc.Iterable[builtins.str] | None = ...,
     ) -> None: ...
     def HasField(
         self, field_name: typing_extensions.Literal["input", b"input"]
     ) -> builtins.bool: ...
     def ClearField(
-        self, field_name: typing_extensions.Literal["cols", b"cols", "input", b"input"]
+        self,
+        field_name: typing_extensions.Literal[
+            "column_names", b"column_names", "columns", b"columns", "input", b"input"
+        ],
     ) -> None: ...
 
 global___Drop = Drop

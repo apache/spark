@@ -443,14 +443,18 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
 
         plan = df.filter(df.col_name > 3).drop("col_a", "col_b")._plan.to_proto(self.connect)
         self.assertEqual(
-            [f.unresolved_attribute.unparsed_identifier for f in plan.root.drop.cols],
+            plan.root.drop.column_names,
             ["col_a", "col_b"],
         )
 
         plan = df.filter(df.col_name > 3).drop(df.col_x, "col_b")._plan.to_proto(self.connect)
         self.assertEqual(
-            [f.unresolved_attribute.unparsed_identifier for f in plan.root.drop.cols],
-            ["col_x", "col_b"],
+            [f.unresolved_attribute.unparsed_identifier for f in plan.root.drop.columns],
+            ["col_x"],
+        )
+        self.assertEqual(
+            plan.root.drop.column_names,
+            ["col_b"],
         )
 
     def test_deduplicate(self):
@@ -833,9 +837,6 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
 
         p = multi_type_lit.to_plan(None)
         self.assertIsNotNone(p)
-
-        lit_list_plan = lit([lit(10), lit("str")]).to_plan(None)
-        self.assertIsNotNone(lit_list_plan)
 
     def test_column_alias(self) -> None:
         # SPARK-40809: Support for Column Aliases

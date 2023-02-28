@@ -207,7 +207,7 @@ class SparkSession private[sql] (
   // Disable style checker so "implicits" object can start with lowercase i
   /**
    * (Scala-specific) Implicit methods available in Scala for converting common names and
-   * [[Symbol]]s into [[Column]]s.
+   * [[Symbol]]s into [[Column]]s, and for converting common Scala objects into `DataFrame`s.
    *
    * {{{
    *   val sparkSession = SparkSession.builder.getOrCreate()
@@ -254,8 +254,11 @@ class SparkSession private[sql] (
 
   private[sql] def analyze(
       plan: proto.Plan,
-      mode: proto.Explain.ExplainMode): proto.AnalyzePlanResponse =
-    client.analyze(plan, mode)
+      method: proto.AnalyzePlanRequest.AnalyzeCase,
+      explainMode: Option[proto.AnalyzePlanRequest.Explain.ExplainMode] = None)
+      : proto.AnalyzePlanResponse = {
+    client.analyze(plan, method, explainMode)
+  }
 
   private[sql] def execute[T](plan: proto.Plan, encoder: AgnosticEncoder[T]): SparkResult[T] = {
     val value = client.execute(plan)

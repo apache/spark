@@ -89,11 +89,50 @@ private[sql] class SparkConnectClient(
    * @return
    *   A [[proto.AnalyzePlanResponse]] from the Spark Connect server.
    */
-  def analyze(plan: proto.Plan, mode: proto.Explain.ExplainMode): proto.AnalyzePlanResponse = {
-    val request = proto.AnalyzePlanRequest
-      .newBuilder()
-      .setPlan(plan)
-      .setExplain(proto.Explain.newBuilder().setExplainMode(mode))
+  def analyze(
+      plan: proto.Plan,
+      method: proto.AnalyzePlanRequest.AnalyzeCase,
+      explainMode: Option[proto.AnalyzePlanRequest.Explain.ExplainMode] = None)
+      : proto.AnalyzePlanResponse = {
+    val builder = proto.AnalyzePlanRequest.newBuilder()
+    method match {
+      case proto.AnalyzePlanRequest.AnalyzeCase.SCHEMA =>
+        builder.setSchema(
+          proto.AnalyzePlanRequest.Schema
+            .newBuilder()
+            .setPlan(plan)
+            .build())
+      case proto.AnalyzePlanRequest.AnalyzeCase.EXPLAIN =>
+        if (explainMode.isEmpty) {
+          throw new IllegalArgumentException(s"ExplainMode is required in Explain request")
+        }
+        builder.setExplain(
+          proto.AnalyzePlanRequest.Explain
+            .newBuilder()
+            .setPlan(plan)
+            .setExplainMode(explainMode.get)
+            .build())
+      case proto.AnalyzePlanRequest.AnalyzeCase.IS_LOCAL =>
+        builder.setIsLocal(
+          proto.AnalyzePlanRequest.IsLocal
+            .newBuilder()
+            .setPlan(plan)
+            .build())
+      case proto.AnalyzePlanRequest.AnalyzeCase.IS_STREAMING =>
+        builder.setIsStreaming(
+          proto.AnalyzePlanRequest.IsStreaming
+            .newBuilder()
+            .setPlan(plan)
+            .build())
+      case proto.AnalyzePlanRequest.AnalyzeCase.INPUT_FILES =>
+        builder.setInputFiles(
+          proto.AnalyzePlanRequest.InputFiles
+            .newBuilder()
+            .setPlan(plan)
+            .build())
+      case other => throw new IllegalArgumentException(s"Unknown Analyze request $other")
+    }
+    val request = builder
       .setUserContext(userContext)
       .setClientId(sessionId)
       .setClientType(userAgent)

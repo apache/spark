@@ -251,10 +251,12 @@ class MathFunctionsSuite extends QueryTest with SharedSparkSession {
   }
 
   test("SPARK-36229 conv should return result equal to -1 in base of toBase") {
-    val df = Seq(("aaaaaaa0aaaaaaa0a"), ("aaaaaaa0aaaaaaa0")).toDF("num")
-    checkAnswer(df.select(conv($"num", 16, 10)),
-      Seq(Row("18446744073709551615"), Row("12297829339523361440")))
-    checkAnswer(df.select(conv($"num", 16, -10)), Seq(Row("-1"), Row("-6148914734186190176")))
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> false.toString) {
+      val df = Seq(("aaaaaaa0aaaaaaa0a"), ("aaaaaaa0aaaaaaa0")).toDF("num")
+      checkAnswer(df.select(conv($"num", 16, 10)),
+        Seq(Row("18446744073709551615"), Row("12297829339523361440")))
+      checkAnswer(df.select(conv($"num", 16, -10)), Seq(Row("-1"), Row("-6148914734186190176")))
+    }
   }
 
   test("floor") {

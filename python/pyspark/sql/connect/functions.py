@@ -224,6 +224,10 @@ def lit(col: Any) -> Column:
     if isinstance(col, Column):
         return col
     elif isinstance(col, list):
+        if any(isinstance(c, Column) for c in col):
+            raise PySparkValueError(
+                error_class="COLUMN_IN_LIST", message_parameters={"func_name": "lit"}
+            )
         return array(*[lit(c) for c in col])
     elif isinstance(col, np.ndarray) and col.ndim == 1:
         if _from_numpy_type(col.dtype) is None:
