@@ -1361,16 +1361,16 @@ class SparkConnectPlanner(val session: SparkSession) {
   }
 
   private def transformDrop(rel: proto.Drop): LogicalPlan = {
-    assert(rel.getColsCount > 0, s"cols must contains at least 1 item!")
-
-    val cols = rel.getColsList.asScala.toArray.map { expr =>
-      Column(transformExpression(expr))
+    var output = Dataset.ofRows(session, transformRelation(rel.getInput))
+    if (rel.getColumnsCount > 0) {
+      val cols = rel.getColumnsList.asScala.toSeq.map(expr => Column(transformExpression(expr)))
+      output = output.drop(cols.head, cols.tail: _*)
     }
-
-    Dataset
-      .ofRows(session, transformRelation(rel.getInput))
-      .drop(cols.head, cols.tail: _*)
-      .logicalPlan
+    if (rel.getColumnNamesCount > 0) {
+      val colNames = rel.getColumnNamesList.asScala.toSeq
+      output = output.drop(colNames: _*)
+    }
+    output.logicalPlan
   }
 
   private def transformAggregate(rel: proto.Aggregate): LogicalPlan = {

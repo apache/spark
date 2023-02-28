@@ -703,21 +703,13 @@ package object dsl {
       def drop(columns: String*): Relation = {
         assert(columns.nonEmpty)
 
-        val cols = columns.map(col =>
-          Expression.newBuilder
-            .setUnresolvedAttribute(
-              Expression.UnresolvedAttribute.newBuilder
-                .setUnparsedIdentifier(col)
-                .build())
-            .build())
-
         Relation
           .newBuilder()
           .setDrop(
             Drop
               .newBuilder()
               .setInput(logicalPlan)
-              .addAllCols(cols.asJava)
+              .addAllColumnNames(columns.toSeq.asJava)
               .build())
           .build()
       }
