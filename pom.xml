@@ -352,6 +352,10 @@
         <enabled>false</enabled>
       </snapshots>
     </repository>
+    <repository>
+      <id>google-maven-repository</id>
+      <url>https://maven.google.com</url>
+    </repository>
   </repositories>
   <pluginRepositories>
     <pluginRepository>
