@@ -24,7 +24,6 @@ import scala.collection.JavaConverters._
 
 import org.apache.arrow.memory.RootAllocator
 
-import org.apache.spark.SPARK_VERSION
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.connect.proto
 import org.apache.spark.internal.Logging
@@ -63,7 +62,9 @@ class SparkSession private[sql] (
 
   private[this] val allocator = new RootAllocator()
 
-  def version: String = SPARK_VERSION
+  lazy val version: String = {
+    client.analyze(proto.AnalyzePlanRequest.AnalyzeCase.SPARK_VERSION).getSparkVersion.getVersion
+  }
 
   /**
    * Runtime configuration interface for Spark.
@@ -257,7 +258,7 @@ class SparkSession private[sql] (
       method: proto.AnalyzePlanRequest.AnalyzeCase,
       explainMode: Option[proto.AnalyzePlanRequest.Explain.ExplainMode] = None)
       : proto.AnalyzePlanResponse = {
-    client.analyze(plan, method, explainMode)
+    client.analyze(method, Some(plan), explainMode)
   }
 
   private[sql] def execute[T](plan: proto.Plan, encoder: AgnosticEncoder[T]): SparkResult[T] = {
