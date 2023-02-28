@@ -16,22 +16,22 @@
  */
 package org.apache.spark.sql
 
+import com.google.protobuf.ByteString
+
 import java.io.Closeable
 import java.util.concurrent.TimeUnit._
 import java.util.concurrent.atomic.AtomicLong
-
 import scala.collection.JavaConverters._
-
 import org.apache.arrow.memory.RootAllocator
-
 import org.apache.spark.SPARK_VERSION
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.connect.proto
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
+import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, ExpressionEncoder}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{BoxedLongEncoder, UnboundRowEncoder}
 import org.apache.spark.sql.connect.client.{SparkConnectClient, SparkResult}
 import org.apache.spark.sql.connect.client.util.Cleaner
+import org.apache.spark.sql.types.StructType
 
 /**
  * The entry point to programming Spark with the Dataset and DataFrame API.
@@ -90,6 +90,138 @@ class SparkSession(
     println(s"Time taken: ${NANOSECONDS.toMillis(end - start)} ms")
     // scalastyle:on println
     ret
+  }
+
+  private def convertToArrow[T](encoder: AgnosticEncoder[T], data: Iterator[T]): ByteString = {
+    val serializer = ExpressionEncoder(encoder).resolveAndBind().createSerializer()
+    val internalRows = data.map(serializer)
+    ArrowConverters.toBatchWithSchemaIterator(
+      rows,
+      schema,
+      maxRecordsPerBatch,
+      maxBatchSize,
+      timeZoneId)
+
+
+
+    null
+
+
+
+  }
+
+  /**
+   * Returns a `DataFrame` with no rows or columns.
+   *
+   * @since 2.0.0
+   */
+  @transient
+  lazy val emptyDataFrame: DataFrame = newDataFrame { builder =>
+    builder.getLocalRelationBuilder.setSchema()
+  }
+
+  /**
+   * Creates a new [[Dataset]] of type T containing zero elements.
+   *
+   * @since 2.0.0
+   */
+  def emptyDataset[T: Encoder]: Dataset[T] = {
+    val encoder = implicitly[Encoder[T]]
+  }
+
+  /**
+   * Creates a `DataFrame` from a local Seq of Product.
+   *
+   * @since 2.0.0
+   */
+  def createDataFrame[A <: Product : TypeTag](data: Seq[A]): DataFrame = {
+
+    val schema = ScalaReflection.schemaFor[A].dataType.asInstanceOf[StructType]
+    val attributeSeq = schema.toAttributes
+    Dataset.ofRows(self, LocalRelation.fromProduct(attributeSeq, data))
+  }
+
+  /**
+   * :: DeveloperApi ::
+   * Creates a `DataFrame` from a `java.util.List` containing [[Row]]s using the given schema.
+   * It is important to make sure that the structure of every [[Row]] of the provided List matches
+   * the provided schema. Otherwise, there will be runtime exception.
+   *
+   * @since 2.0.0
+   */
+  def createDataFrame(rows: java.util.List[Row], schema: StructType): DataFrame = {
+    val replaced = CharVarcharUtils.failIfHasCharVarchar(schema).asInstanceOf[StructType]
+    Dataset.ofRows(self, LocalRelation.fromExternalRows(replaced.toAttributes, rows.asScala.toSeq))
+  }
+
+  /**
+   * Applies a schema to a List of Java Beans.
+   *
+   * WARNING: Since there is no guaranteed ordering for fields in a Java Bean,
+   *          SELECT * queries will return the columns in an undefined order.
+   * @since 1.6.0
+   */
+  def createDataFrame(data: java.util.List[_], beanClass: Class[_]): DataFrame = {
+
+
+    val attrSeq = getSchema(beanClass)
+    val rows = SQLContext.beansToRows(data.asScala.iterator, beanClass, attrSeq)
+    Dataset.ofRows(self, LocalRelation(attrSeq, rows.toSeq))
+  }
+
+  /**
+   * Creates a [[Dataset]] from a local Seq of data of a given type. This method requires an
+   * encoder (to convert a JVM object of type `T` to and from the internal Spark SQL representation)
+   * that is generally created automatically through implicits from a `SparkSession`, or can be
+   * created explicitly by calling static methods on [[Encoders]].
+   *
+   * == Example ==
+   *
+   * {{{
+   *
+   *   import spark.implicits._
+   *   case class Person(name: String, age: Long)
+   *   val data = Seq(Person("Michael", 29), Person("Andy", 30), Person("Justin", 19))
+   *   val ds = spark.createDataset(data)
+   *
+   *   ds.show()
+   *   // +-------+---+
+   *   // |   name|age|
+   *   // +-------+---+
+   *   // |Michael| 29|
+   *   // |   Andy| 30|
+   *   // | Justin| 19|
+   *   // +-------+---+
+   * }}}
+   *
+   * @since 2.0.0
+   */
+  def createDataset[T : Encoder](data: Seq[T]): Dataset[T] = {
+    val enc = encoderFor[T]
+    val toRow = enc.createSerializer()
+    val attributes = enc.schema.toAttributes
+    val encoded = data.map(d => toRow(d).copy())
+    val plan = new LocalRelation(attributes, encoded)
+    Dataset[T](self, plan)
+  }
+
+  /**
+   * Creates a [[Dataset]] from a `java.util.List` of a given type. This method requires an
+   * encoder (to convert a JVM object of type `T` to and from the internal Spark SQL representation)
+   * that is generally created automatically through implicits from a `SparkSession`, or can be
+   * created explicitly by calling static methods on [[Encoders]].
+   *
+   * == Java Example ==
+   *
+   * {{{
+   *     List<String> data = Arrays.asList("hello", "world");
+   *     Dataset<String> ds = spark.createDataset(data, Encoders.STRING());
+   * }}}
+   *
+   * @since 2.0.0
+   */
+  def createDataset[T : Encoder](data: java.util.List[T]): Dataset[T] = {
+    createDataset(data.asScala.toSeq)
   }
 
   /**
