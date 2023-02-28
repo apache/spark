@@ -38,35 +38,7 @@ message Plan {
   }
 }
 
-// Explains the input plan based on a configurable mode.
-message Explain {
-  // Plan explanation mode.
-  enum ExplainMode {
-    MODE_UNSPECIFIED = 0;
 
-    // Generates only physical plan.
-    SIMPLE = 1;
-
-    // Generates parsed logical plan, analyzed logical plan, optimized logical plan and physical plan.
-    // Parsed Logical plan is a unresolved plan that extracted from the query. Analyzed logical plans
-    // transforms which translates unresolvedAttribute and unresolvedRelation into fully typed objects.
-    // The optimized logical plan transforms through a set of optimization rules, resulting in the
-    // physical plan.
-    EXTENDED = 2;
-
-    // Generates code for the statement, if any and a physical plan.
-    CODEGEN = 3;
-
-    // If plan node statistics are available, generates a logical plan and also the statistics.
-    COST = 4;
-
-    // Generates a physical plan outline and also node details.
-    FORMATTED = 5;
-  }
-
-  // (Required) For analyzePlan rpc calls, configure the mode to explain plan in strings.
-  ExplainMode explain_mode= 1;
-}
 
 // User Context is used to refer to one particular user session that is executing
 // queries in the backend.
@@ -92,39 +64,136 @@ message AnalyzePlanRequest {
   // (Required) User context
   UserContext user_context = 2;
 
-  // (Required) The logical plan to be analyzed.
-  Plan plan = 3;
-
   // Provides optional information about the client sending the request. This field
   // can be used for language or version specific information and is only intended for
   // logging purposes and will not be interpreted by the server.
-  optional string client_type = 4;
+  optional string client_type = 3;
 
-  // (Optional) Get the explain string of the plan.
-  Explain explain = 5;
+  oneof analyze {
+    Schema schema = 4;
+    Explain explain = 5;
+    TreeString tree_string = 6;
+    IsLocal is_local = 7;
+    IsStreaming is_streaming = 8;
+    InputFiles input_files = 9;
+    SparkVersion spark_version = 10;
+    DDLParse ddl_parse = 11;
+  }
+
+  message Schema {
+    // (Required) The logical plan to be analyzed.
+    Plan plan = 1;
+  }
+
+  // Explains the input plan based on a configurable mode.
+  message Explain {
+    // (Required) The logical plan to be analyzed.
+    Plan plan = 1;
+
+    // (Required) For analyzePlan rpc calls, configure the mode to explain plan in strings.
+    ExplainMode explain_mode = 2;
+
+    // Plan explanation mode.
+    enum ExplainMode {
+      EXPLAIN_MODE_UNSPECIFIED = 0;
+
+      // Generates only physical plan.
+      EXPLAIN_MODE_SIMPLE = 1;
+
+      // Generates parsed logical plan, analyzed logical plan, optimized logical plan and physical plan.
+      // Parsed Logical plan is a unresolved plan that extracted from the query. Analyzed logical plans
+      // transforms which translates unresolvedAttribute and unresolvedRelation into fully typed objects.
+      // The optimized logical plan transforms through a set of optimization rules, resulting in the
+      // physical plan.
+      EXPLAIN_MODE_EXTENDED = 2;
+
+      // Generates code for the statement, if any and a physical plan.
+      EXPLAIN_MODE_CODEGEN = 3;
+
+      // If plan node statistics are available, generates a logical plan and also the statistics.
+      EXPLAIN_MODE_COST = 4;
+
+      // Generates a physical plan outline and also node details.
+      EXPLAIN_MODE_FORMATTED = 5;
+    }
+  }
+
+  message TreeString {
+    // (Required) The logical plan to be analyzed.
+    Plan plan = 1;
+  }
+
+  message IsLocal {
+    // (Required) The logical plan to be analyzed.
+    Plan plan = 1;
+  }
+
+  message IsStreaming {
+    // (Required) The logical plan to be analyzed.
+    Plan plan = 1;
+  }
+
+  message InputFiles {
+    // (Required) The logical plan to be analyzed.
+    Plan plan = 1;
+  }
+
+  message SparkVersion { }
+
+  message DDLParse {
+    // (Required) The DDL formatted string to be parsed.
+    string ddl_string = 1;
+  }
 }
 
 // Response to performing analysis of the query. Contains relevant metadata to be able to
 // reason about the performance.
 message AnalyzePlanResponse {
   string client_id = 1;
-  DataType schema = 2;
 
-  // The extended explain string as produced by Spark.
-  string explain_string = 3;
+  oneof result {
+    Schema schema = 2;
+    Explain explain = 3;
+    TreeString tree_string = 4;
+    IsLocal is_local = 5;
+    IsStreaming is_streaming = 6;
+    InputFiles input_files = 7;
+    SparkVersion spark_version = 8;
+    DDLParse ddl_parse = 9;
+  }
 
-  // Get the tree string of the schema.
-  string tree_string = 4;
+  message Schema {
+    DataType schema = 1;
+  }
 
-  // Whether the 'collect' and 'take' methods can be run locally.
-  bool is_local = 5;
+  message Explain {
+    string explain_string = 1;
+  }
 
-  // Whether this plan contains one or more sources that continuously
-  // return data as it arrives.
-  bool is_streaming = 6;
+  message TreeString {
+    string tree_string = 1;
+  }
 
-  // A best-effort snapshot of the files that compose this Dataset
-  repeated string input_files = 7;
+  message IsLocal {
+    bool is_local = 1;
+  }
+
+  message IsStreaming {
+    bool is_streaming = 1;
+  }
+
+  message InputFiles {
+    // A best-effort snapshot of the files that compose this Dataset
+    repeated string files = 1;
+  }
+
+  message SparkVersion {
+    string version = 1;
+  }
+
+  message DDLParse {
+    DataType parsed = 1;
+  }
 }
 
 // A request to be executed by the service.
