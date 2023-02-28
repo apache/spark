@@ -207,7 +207,21 @@ class DummySparkConnectService() extends SparkConnectServiceGrpc.SparkConnectSer
       responseObserver: StreamObserver[AnalyzePlanResponse]): Unit = {
     // Reply with a dummy response using the same client ID
     val requestClientId = request.getClientId
-    inputPlan = request.getPlan
+    request.getAnalyzeCase match {
+      case proto.AnalyzePlanRequest.AnalyzeCase.SCHEMA =>
+        inputPlan = request.getSchema.getPlan
+      case proto.AnalyzePlanRequest.AnalyzeCase.EXPLAIN =>
+        inputPlan = request.getExplain.getPlan
+      case proto.AnalyzePlanRequest.AnalyzeCase.TREE_STRING =>
+        inputPlan = request.getTreeString.getPlan
+      case proto.AnalyzePlanRequest.AnalyzeCase.IS_LOCAL =>
+        inputPlan = request.getIsLocal.getPlan
+      case proto.AnalyzePlanRequest.AnalyzeCase.IS_STREAMING =>
+        inputPlan = request.getIsStreaming.getPlan
+      case proto.AnalyzePlanRequest.AnalyzeCase.INPUT_FILES =>
+        inputPlan = request.getInputFiles.getPlan
+      case _ => inputPlan = null
+    }
     val response = AnalyzePlanResponse
       .newBuilder()
       .setClientId(requestClientId)

@@ -27,8 +27,7 @@ import org.apache.arrow.vector.ipc.ArrowStreamReader
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.connect.dsl.MockRemoteSession
 import org.apache.spark.sql.connect.dsl.plans._
-import org.apache.spark.sql.connect.service.SparkConnectService
-import org.apache.spark.sql.execution.ExplainMode
+import org.apache.spark.sql.connect.service.{SparkConnectAnalyzeHandler, SparkConnectService}
 import org.apache.spark.sql.test.SharedSparkSession
 
 /**
@@ -43,21 +42,30 @@ class SparkConnectServiceSuite extends SharedSparkSession {
           | USING parquet
           |""".stripMargin)
 
-      val instance = new SparkConnectService(false)
-      val relation = proto.Relation
+      val plan = proto.Plan
         .newBuilder()
-        .setRead(
-          proto.Read
+        .setRoot(
+          proto.Relation
             .newBuilder()
-            .setNamedTable(proto.Read.NamedTable.newBuilder.setUnparsedIdentifier("test").build())
+            .setRead(
+              proto.Read
+                .newBuilder()
+                .setNamedTable(
+                  proto.Read.NamedTable.newBuilder.setUnparsedIdentifier("test").build())
+                .build())
             .build())
         .build()
 
-      val response =
-        instance.handleAnalyzePlanRequest(relation, spark, ExplainMode.fromString("simple"))
+      val handler = new SparkConnectAnalyzeHandler(null)
 
-      assert(response.getSchema.hasStruct)
-      val schema = response.getSchema.getStruct
+      val request1 = proto.AnalyzePlanRequest
+        .newBuilder()
+        .setSchema(proto.AnalyzePlanRequest.Schema.newBuilder().setPlan(plan).build())
+        .build()
+      val response1 = handler.process(request1, spark)
+      assert(response1.hasSchema)
+      assert(response1.getSchema.getSchema.hasStruct)
+      val schema = response1.getSchema.getSchema.getStruct
       assert(schema.getFieldsCount == 2)
       assert(
         schema.getFields(0).getName == "col1"
@@ -66,14 +74,53 @@ class SparkConnectServiceSuite extends SharedSparkSession {
         schema.getFields(1).getName == "col2"
           && schema.getFields(1).getDataType.getKindCase == proto.DataType.KindCase.STRING)
 
-      assert(!response.getIsLocal)
-      assert(!response.getIsLocal)
+      val request2 = proto.AnalyzePlanRequest
+        .newBuilder()
+        .setExplain(
+          proto.AnalyzePlanRequest.Explain
+            .newBuilder()
+            .setPlan(plan)
+            .setExplainMode(proto.AnalyzePlanRequest.Explain.ExplainMode.EXPLAIN_MODE_SIMPLE)
+            .build())
+        .build()
+      val response2 = handler.process(request2, spark)
+      assert(response2.hasExplain)
+      assert(response2.getExplain.getExplainString.size > 0)
 
-      assert(response.getTreeString.contains("root"))
-      assert(response.getTreeString.contains("|-- col1: integer (nullable = true)"))
-      assert(response.getTreeString.contains("|-- col2: string (nullable = true)"))
+      val request3 = proto.AnalyzePlanRequest
+        .newBuilder()
+        .setIsLocal(proto.AnalyzePlanRequest.IsLocal.newBuilder().setPlan(plan).build())
+        .build()
+      val response3 = handler.process(request3, spark)
+      assert(response3.hasIsLocal)
+      assert(!response3.getIsLocal.getIsLocal)
 
-      assert(response.getInputFilesCount === 0)
+      val request4 = proto.AnalyzePlanRequest
+        .newBuilder()
+        .setIsStreaming(proto.AnalyzePlanRequest.IsStreaming.newBuilder().setPlan(plan).build())
+        .build()
+      val response4 = handler.process(request4, spark)
+      assert(response4.hasIsStreaming)
+      assert(!response4.getIsStreaming.getIsStreaming)
+
+      val request5 = proto.AnalyzePlanRequest
+        .newBuilder()
+        .setTreeString(proto.AnalyzePlanRequest.TreeString.newBuilder().setPlan(plan).build())
+        .build()
+      val response5 = handler.process(request5, spark)
+      assert(response5.hasTreeString)
+      val treeString = response5.getTreeString.getTreeString
+      assert(treeString.contains("root"))
+      assert(treeString.contains("|-- col1: integer (nullable = true)"))
+      assert(treeString.contains("|-- col2: string (nullable = true)"))
+
+      val request6 = proto.AnalyzePlanRequest
+        .newBuilder()
+        .setInputFiles(proto.AnalyzePlanRequest.InputFiles.newBuilder().setPlan(plan).build())
+        .build()
+      val response6 = handler.process(request6, spark)
+      assert(response6.hasInputFiles)
+      assert(response6.getInputFiles.getFilesCount === 0)
     }
   }
 
@@ -200,7 +247,6 @@ class SparkConnectServiceSuite extends SharedSparkSession {
           | CREATE TABLE test (col1 INT, col2 STRING)
           | USING parquet
           |""".stripMargin)
-      val instance = new SparkConnectService(false)
       val relation = proto.Relation
         .newBuilder()
         .setProject(
@@ -225,14 +271,26 @@ class SparkConnectServiceSuite extends SharedSparkSession {
                     proto.Read.NamedTable.newBuilder.setUnparsedIdentifier("test").build()))))
         .build()
 
-      val response =
-        instance
-          .handleAnalyzePlanRequest(relation, spark, ExplainMode.fromString("extended"))
-          .build()
-      assert(response.getExplainString.contains("Parsed Logical Plan"))
-      assert(response.getExplainString.contains("Analyzed Logical Plan"))
-      assert(response.getExplainString.contains("Optimized Logical Plan"))
-      assert(response.getExplainString.contains("Physical Plan"))
+      val plan = proto.Plan.newBuilder().setRoot(relation).build()
+
+      val handler = new SparkConnectAnalyzeHandler(null)
+
+      val request = proto.AnalyzePlanRequest
+        .newBuilder()
+        .setExplain(
+          proto.AnalyzePlanRequest.Explain
+            .newBuilder()
+            .setPlan(plan)
+            .setExplainMode(proto.AnalyzePlanRequest.Explain.ExplainMode.EXPLAIN_MODE_EXTENDED)
+            .build())
+        .build()
+
+      val response = handler.process(request, spark)
+
+      assert(response.getExplain.getExplainString.contains("Parsed Logical Plan"))
+      assert(response.getExplain.getExplainString.contains("Analyzed Logical Plan"))
+      assert(response.getExplain.getExplainString.contains("Optimized Logical Plan"))
+      assert(response.getExplain.getExplainString.contains("Physical Plan"))
     }
   }
 }

@@ -376,29 +376,63 @@ class PlanMetrics:
 class AnalyzeResult:
     def __init__(
         self,
-        schema: pb2.DataType,
-        explain: str,
-        tree_string: str,
-        is_local: bool,
-        is_streaming: bool,
-        input_files: List[str],
+        schema: Optional[pb2.DataType],
+        explain_string: Optional[str],
+        tree_string: Optional[str],
+        is_local: Optional[bool],
+        is_streaming: Optional[bool],
+        input_files: Optional[List[str]],
+        spark_version: Optional[str],
+        parsed: Optional[pb2.DataType],
     ):
         self.schema = schema
-        self.explain_string = explain
+        self.explain_string = explain_string
         self.tree_string = tree_string
         self.is_local = is_local
         self.is_streaming = is_streaming
         self.input_files = input_files
+        self.spark_version = spark_version
+        self.parsed = parsed
 
     @classmethod
     def fromProto(cls, pb: Any) -> "AnalyzeResult":
+        schema: Optional[pb2.DataType] = None
+        explain_string: Optional[str] = None
+        tree_string: Optional[str] = None
+        is_local: Optional[bool] = None
+        is_streaming: Optional[bool] = None
+        input_files: Optional[List[str]] = None
+        spark_version: Optional[str] = None
+        parsed: Optional[pb2.DataType] = None
+
+        if pb.HasField("schema"):
+            schema = pb.schema.schema
+        elif pb.HasField("explain"):
+            explain_string = pb.explain.explain_string
+        elif pb.HasField("tree_string"):
+            tree_string = pb.tree_string.tree_string
+        elif pb.HasField("is_local"):
+            is_local = pb.is_local.is_local
+        elif pb.HasField("is_streaming"):
+            is_streaming = pb.is_streaming.is_streaming
+        elif pb.HasField("input_files"):
+            input_files = pb.input_files.files
+        elif pb.HasField("spark_version"):
+            spark_version = pb.spark_version.version
+        elif pb.HasField("ddl_parse"):
+            parsed = pb.ddl_parse.parsed
+        else:
+            raise SparkConnectException("No analyze result found!")
+
         return AnalyzeResult(
-            pb.schema,
-            pb.explain_string,
-            pb.tree_string,
-            pb.is_local,
-            pb.is_streaming,
-            pb.input_files,
+            schema,
+            explain_string,
+            tree_string,
+            is_local,
+            is_streaming,
+            input_files,
+            spark_version,
+            parsed,
         )
 
 
@@ -575,7 +609,8 @@ class SparkConnectClient(object):
         Return schema for given plan.
         """
         logger.info(f"Schema for plan: {self._proto_to_string(plan)}")
-        proto_schema = self._analyze(plan).schema
+        proto_schema = self._analyze(method="schema", plan=plan).schema
+        assert proto_schema is not None
         # Server side should populate the struct field which is the schema.
         assert proto_schema.HasField("struct")
 
@@ -600,8 +635,11 @@ class SparkConnectClient(object):
         Return explain string for given plan.
         """
         logger.info(f"Explain (mode={explain_mode}) for plan {self._proto_to_string(plan)}")
-        result = self._analyze(plan, explain_mode)
-        return result.explain_string
+        result = self._analyze(
+            method="explain", plan=plan, explain_mode=explain_mode
+        ).explain_string
+        assert result is not None
+        return result
 
     def execute_command(self, command: pb2.Command) -> None:
         """
@@ -637,40 +675,62 @@ class SparkConnectClient(object):
             req.user_context.user_id = self._user_id
         return req
 
-    def _analyze(self, plan: pb2.Plan, explain_mode: str = "extended") -> AnalyzeResult:
+    def _analyze(self, method: str, **kwargs: Any) -> AnalyzeResult:
         """
         Call the analyze RPC of Spark Connect.
-
-        Parameters
-        ----------
-        plan : :class:`pyspark.sql.connect.proto.Plan`
-           Proto representation of the plan.
-        explain_mode : str
-           Explain mode
 
         Returns
         -------
         The result of the analyze call.
         """
         req = self._analyze_plan_request_with_metadata()
-        req.plan.CopyFrom(plan)
-        if explain_mode not in ["simple", "extended", "codegen", "cost", "formatted"]:
-            raise ValueError(
-                f"""
-                Unknown explain mode: {explain_mode}. Accepted "
-                "explain modes are 'simple', 'extended', 'codegen', 'cost', 'formatted'."
-                """
-            )
-        if explain_mode == "simple":
-            req.explain.explain_mode = pb2.Explain.ExplainMode.SIMPLE
-        elif explain_mode == "extended":
-            req.explain.explain_mode = pb2.Explain.ExplainMode.EXTENDED
-        elif explain_mode == "cost":
-            req.explain.explain_mode = pb2.Explain.ExplainMode.COST
-        elif explain_mode == "codegen":
-            req.explain.explain_mode = pb2.Explain.ExplainMode.CODEGEN
-        else:  # formatted
-            req.explain.explain_mode = pb2.Explain.ExplainMode.FORMATTED
+        if method == "schema":
+            req.schema.plan.CopyFrom(cast(pb2.Plan, kwargs.get("plan")))
+        elif method == "explain":
+            req.explain.plan.CopyFrom(cast(pb2.Plan, kwargs.get("plan")))
+            explain_mode = kwargs.get("explain_mode")
+            if explain_mode not in ["simple", "extended", "codegen", "cost", "formatted"]:
+                raise ValueError(
+                    f"""
+                    Unknown explain mode: {explain_mode}. Accepted "
+                    "explain modes are 'simple', 'extended', 'codegen', 'cost', 'formatted'."
+                    """
+                )
+            if explain_mode == "simple":
+                req.explain.explain_mode = (
+                    pb2.AnalyzePlanRequest.Explain.ExplainMode.EXPLAIN_MODE_SIMPLE
+                )
+            elif explain_mode == "extended":
+                req.explain.explain_mode = (
+                    pb2.AnalyzePlanRequest.Explain.ExplainMode.EXPLAIN_MODE_EXTENDED
+                )
+            elif explain_mode == "cost":
+                req.explain.explain_mode = (
+                    pb2.AnalyzePlanRequest.Explain.ExplainMode.EXPLAIN_MODE_COST
+                )
+            elif explain_mode == "codegen":
+                req.explain.explain_mode = (
+                    pb2.AnalyzePlanRequest.Explain.ExplainMode.EXPLAIN_MODE_CODEGEN
+                )
+            else:  # formatted
+                req.explain.explain_mode = (
+                    pb2.AnalyzePlanRequest.Explain.ExplainMode.EXPLAIN_MODE_FORMATTED
+                )
+        elif method == "tree_string":
+            req.tree_string.plan.CopyFrom(cast(pb2.Plan, kwargs.get("plan")))
+        elif method == "is_local":
+            req.is_local.plan.CopyFrom(cast(pb2.Plan, kwargs.get("plan")))
+        elif method == "is_streaming":
+            req.is_streaming.plan.CopyFrom(cast(pb2.Plan, kwargs.get("plan")))
+        elif method == "input_files":
+            req.input_files.plan.CopyFrom(cast(pb2.Plan, kwargs.get("plan")))
+        elif method == "spark_version":
+            req.spark_version.SetInParent()
+        elif method == "ddl_parse":
+            req.ddl_parse.ddl_string = cast(str, kwargs.get("ddl_string"))
+        else:
+            raise ValueError(f"Unknown Analyze method: {method}")
+
         try:
             for attempt in Retrying(
                 can_retry=SparkConnectClient.retry_exception, **self._retry_policy
