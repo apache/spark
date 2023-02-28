@@ -4915,12 +4915,12 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Drop the column that joined both DataFrames on.
 
-        >>> df.join(df2, df.name == df2.name, 'inner').drop('name').show()
+        >>> df.join(df2, df.name == df2.name, 'inner').drop('name').sort('age').show()
         +---+------+
         |age|height|
         +---+------+
-        | 16|    85|
         | 14|    80|
+        | 16|    85|
         +---+------+
         """
         column_names: List[str] = []

@@ -321,10 +321,11 @@ message Drop {
   // (Required) The input relation.
   Relation input = 1;
 
-  // (Required) columns to drop.
-  //
-  // Should contain at least 1 item.
-  repeated Expression cols = 2;
+  // (Optional) columns to drop.
+  repeated Expression columns = 2;
+
+  // (Optional) names of columns to drop.
+  repeated string column_names = 3;
 }
 
 

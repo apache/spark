@@ -1716,9 +1716,6 @@ def _test() -> None:
     del pyspark.sql.connect.dataframe.DataFrame.repartition.__doc__
     del pyspark.sql.connect.dataframe.DataFrame.repartitionByRange.__doc__
 
-    # TODO(SPARK-42367): DataFrame.drop should handle duplicated columns
-    del pyspark.sql.connect.dataframe.DataFrame.drop.__doc__
-
     # TODO(SPARK-41625): Support Structured Streaming
     del pyspark.sql.connect.dataframe.DataFrame.isStreaming.__doc__
 

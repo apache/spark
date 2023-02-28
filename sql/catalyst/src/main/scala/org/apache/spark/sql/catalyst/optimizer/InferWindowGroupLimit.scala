@@ -17,8 +17,8 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, CurrentRow, DenseRank, EqualTo, Expression, GreaterThan, GreaterThanOrEqual, IntegerLiteral, LessThan, LessThanOrEqual, NamedExpression, PredicateHelper, Rank, RowFrame, RowNumber, SpecifiedWindowFrame, UnboundedPreceding, WindowExpression, WindowSpecDefinition}
-import org.apache.spark.sql.catalyst.plans.logical.{Filter, LocalRelation, LogicalPlan, Window, WindowGroupLimit}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, CurrentRow, DenseRank, EqualTo, Expression, GreaterThan, GreaterThanOrEqual, IntegerLiteral, LessThan, LessThanOrEqual, Literal, NamedExpression, PredicateHelper, Rank, RowFrame, RowNumber, SpecifiedWindowFrame, UnboundedPreceding, WindowExpression, WindowSpecDefinition}
+import org.apache.spark.sql.catalyst.plans.logical.{Filter, Limit, LocalRelation, LogicalPlan, Window, WindowGroupLimit}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{FILTER, WINDOW}
 
@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.{FILTER, WINDOW}
  *   SELECT *, ROW_NUMBER() OVER(PARTITION BY k ORDER BY a) AS rn FROM Tab1 WHERE 5 >= rn
  * }}}
  */
-object InsertWindowGroupLimit extends Rule[LogicalPlan] with PredicateHelper {
+object InferWindowGroupLimit extends Rule[LogicalPlan] with PredicateHelper {
 
   /**
    * Extract all the limit values from predicates.
@@ -86,10 +86,18 @@ object InsertWindowGroupLimit extends Rule[LogicalPlan] with PredicateHelper {
           selectedLimits.minBy(_._1) match {
             case (limit, rankLikeFunction) if limit <= conf.windowGroupLimitThreshold =>
               if (limit > 0) {
-                val windowGroupLimit =
-                  WindowGroupLimit(partitionSpec, orderSpec, rankLikeFunction, limit, child)
-                val newWindow = window.withNewChildren(Seq(windowGroupLimit))
-                filter.withNewChildren(Seq(newWindow))
+                val newFilterChild = if (rankLikeFunction.isInstanceOf[RowNumber] &&
+                  partitionSpec.isEmpty && child.maxRows.forall(_ > limit) &&
+                  limit < conf.topKSortFallbackThreshold) {
+                  // Top n (Limit + Sort) have better performance than WindowGroupLimit if the
+                  // window function is RowNumber and Window partitionSpec is empty.
+                  Limit(Literal(limit), window)
+                } else {
+                  val windowGroupLimit =
+                    WindowGroupLimit(partitionSpec, orderSpec, rankLikeFunction, limit, child)
+                  window.withNewChildren(Seq(windowGroupLimit))
+                }
+                filter.withNewChildren(Seq(newFilterChild))
               } else {
                 LocalRelation(filter.output, data = Seq.empty, isStreaming = filter.isStreaming)
               }
