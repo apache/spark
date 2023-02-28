@@ -200,20 +200,20 @@ refer it, e.g. `SELECT * FROM global_temp.view1`.
 {% include_example global_temp_view python/sql/basic.py %}
 </div>
 
-<div data-lang="SQL"  markdown="1">
-{% highlight sql %}
-CREATE GLOBAL TEMPORARY VIEW temp_view AS SELECT a + 1, b * 2 FROM tbl
-
-SELECT * FROM global_temp.temp_view
-{% endhighlight %}
-</div>
-
 <div data-lang="scala"  markdown="1">
 {% include_example global_temp_view scala/org/apache/spark/examples/sql/SparkSQLExample.scala %}
 </div>
 
 <div data-lang="java" markdown="1">
 {% include_example global_temp_view java/org/apache/spark/examples/sql/JavaSparkSQLExample.java %}
+</div>
+
+<div data-lang="SQL"  markdown="1">
+{% highlight sql %}
+CREATE GLOBAL TEMPORARY VIEW temp_view AS SELECT a + 1, b * 2 FROM tbl
+
+SELECT * FROM global_temp.temp_view
+{% endhighlight %}
 </div>
 
 </div>

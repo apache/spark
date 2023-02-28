@@ -119,6 +119,18 @@ ORC data source:
 {% include_example manual_save_options_orc python/sql/datasource.py %}
 </div>
 
+<div data-lang="scala"  markdown="1">
+{% include_example manual_save_options_orc scala/org/apache/spark/examples/sql/SQLDataSourceExample.scala %}
+</div>
+
+<div data-lang="java"  markdown="1">
+{% include_example manual_save_options_orc java/org/apache/spark/examples/sql/JavaSQLDataSourceExample.java %}
+</div>
+
+<div data-lang="r"  markdown="1">
+{% include_example manual_save_options_orc r/RSparkSQLExample.R %}
+</div>
+
 <div data-lang="SQL"  markdown="1">
 {% highlight sql %}
 CREATE TABLE users_with_options (
@@ -134,18 +146,6 @@ OPTIONS (
 {% endhighlight %}
 </div>
 
-<div data-lang="scala"  markdown="1">
-{% include_example manual_save_options_orc scala/org/apache/spark/examples/sql/SQLDataSourceExample.scala %}
-</div>
-
-<div data-lang="java"  markdown="1">
-{% include_example manual_save_options_orc java/org/apache/spark/examples/sql/JavaSQLDataSourceExample.java %}
-</div>
-
-<div data-lang="r"  markdown="1">
-{% include_example manual_save_options_orc r/RSparkSQLExample.R %}
-</div>
-
 </div>
 
 Parquet data source:
@@ -154,6 +154,18 @@ Parquet data source:
 
 <div data-lang="python"  markdown="1">
 {% include_example manual_save_options_parquet python/sql/datasource.py %}
+</div>
+
+<div data-lang="scala"  markdown="1">
+{% include_example manual_save_options_parquet scala/org/apache/spark/examples/sql/SQLDataSourceExample.scala %}
+</div>
+
+<div data-lang="java"  markdown="1">
+{% include_example manual_save_options_parquet java/org/apache/spark/examples/sql/JavaSQLDataSourceExample.java %}
+</div>
+
+<div data-lang="r"  markdown="1">
+{% include_example manual_save_options_parquet r/RSparkSQLExample.R %}
 </div>
 
 <div data-lang="SQL"  markdown="1">
@@ -170,18 +182,6 @@ OPTIONS (
   parquet.page.write-checksum.enabled true
 )
 {% endhighlight %}
-</div>
-
-<div data-lang="scala"  markdown="1">
-{% include_example manual_save_options_parquet scala/org/apache/spark/examples/sql/SQLDataSourceExample.scala %}
-</div>
-
-<div data-lang="java"  markdown="1">
-{% include_example manual_save_options_parquet java/org/apache/spark/examples/sql/JavaSQLDataSourceExample.java %}
-</div>
-
-<div data-lang="r"  markdown="1">
-{% include_example manual_save_options_parquet r/RSparkSQLExample.R %}
 </div>
 
 </div>
@@ -290,6 +290,14 @@ Bucketing and sorting are applicable only to persistent tables:
 {% include_example write_sorting_and_bucketing python/sql/datasource.py %}
 </div>
 
+<div data-lang="scala"  markdown="1">
+{% include_example write_sorting_and_bucketing scala/org/apache/spark/examples/sql/SQLDataSourceExample.scala %}
+</div>
+
+<div data-lang="java"  markdown="1">
+{% include_example write_sorting_and_bucketing java/org/apache/spark/examples/sql/JavaSQLDataSourceExample.java %}
+</div>
+
 <div data-lang="SQL"  markdown="1">
 {% highlight sql %}
 
@@ -303,13 +311,6 @@ CLUSTERED BY(name) INTO 42 BUCKETS;
 {% endhighlight %}
 </div>
 
-<div data-lang="scala"  markdown="1">
-{% include_example write_sorting_and_bucketing scala/org/apache/spark/examples/sql/SQLDataSourceExample.scala %}
-</div>
-
-<div data-lang="java"  markdown="1">
-{% include_example write_sorting_and_bucketing java/org/apache/spark/examples/sql/JavaSQLDataSourceExample.java %}
-</div>
 
 </div>
 
@@ -320,6 +321,14 @@ while partitioning can be used with both `save` and `saveAsTable` when using the
 
 <div data-lang="python"  markdown="1">
 {% include_example write_partitioning python/sql/datasource.py %}
+</div>
+
+<div data-lang="scala"  markdown="1">
+{% include_example write_partitioning scala/org/apache/spark/examples/sql/SQLDataSourceExample.scala %}
+</div>
+
+<div data-lang="java"  markdown="1">
+{% include_example write_partitioning java/org/apache/spark/examples/sql/JavaSQLDataSourceExample.java %}
 </div>
 
 <div data-lang="SQL"  markdown="1">
@@ -334,14 +343,6 @@ CREATE TABLE users_by_favorite_color(
 {% endhighlight %}
 </div>
 
-<div data-lang="scala"  markdown="1">
-{% include_example write_partitioning scala/org/apache/spark/examples/sql/SQLDataSourceExample.scala %}
-</div>
-
-<div data-lang="java"  markdown="1">
-{% include_example write_partitioning java/org/apache/spark/examples/sql/JavaSQLDataSourceExample.java %}
-</div>
-
 </div>
 
 It is possible to use both partitioning and bucketing for a single table:
@@ -350,6 +351,14 @@ It is possible to use both partitioning and bucketing for a single table:
 
 <div data-lang="python"  markdown="1">
 {% include_example write_partition_and_bucket python/sql/datasource.py %}
+</div>
+
+<div data-lang="scala"  markdown="1">
+{% include_example write_partition_and_bucket scala/org/apache/spark/examples/sql/SQLDataSourceExample.scala %}
+</div>
+
+<div data-lang="java"  markdown="1">
+{% include_example write_partition_and_bucket java/org/apache/spark/examples/sql/JavaSQLDataSourceExample.java %}
 </div>
 
 <div data-lang="SQL"  markdown="1">
@@ -364,14 +373,6 @@ PARTITIONED BY (favorite_color)
 CLUSTERED BY(name) SORTED BY (favorite_numbers) INTO 42 BUCKETS;
 
 {% endhighlight %}
-</div>
-
-<div data-lang="scala"  markdown="1">
-{% include_example write_partition_and_bucket scala/org/apache/spark/examples/sql/SQLDataSourceExample.scala %}
-</div>
-
-<div data-lang="java"  markdown="1">
-{% include_example write_partition_and_bucket java/org/apache/spark/examples/sql/JavaSQLDataSourceExample.java %}
 </div>
 
 </div>
