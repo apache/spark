@@ -447,7 +447,9 @@ class SparkSession:
 
     @property
     def version(self) -> str:
-        raise NotImplementedError("version() is not implemented.")
+        result = self._client._analyze(method="spark_version").spark_version
+        assert result is not None
+        return result
 
     # SparkConnect-specific API
     @property

@@ -234,7 +234,13 @@ class Dataset[T] private[sql] (
    */
   def schema: StructType = {
     if (encoder == UnboundRowEncoder) {
-      DataTypeProtoConverter.toCatalystType(analyze.getSchema).asInstanceOf[StructType]
+      DataTypeProtoConverter
+        .toCatalystType(
+          sparkSession
+            .analyze(plan, proto.AnalyzePlanRequest.AnalyzeCase.SCHEMA)
+            .getSchema
+            .getSchema)
+        .asInstanceOf[StructType]
     } else {
       encoder.schema
     }
@@ -272,11 +278,11 @@ class Dataset[T] private[sql] (
    */
   def explain(mode: String): Unit = {
     val protoMode = mode.trim.toLowerCase(Locale.ROOT) match {
-      case "simple" => proto.Explain.ExplainMode.SIMPLE
-      case "extended" => proto.Explain.ExplainMode.EXTENDED
-      case "codegen" => proto.Explain.ExplainMode.CODEGEN
-      case "cost" => proto.Explain.ExplainMode.COST
-      case "formatted" => proto.Explain.ExplainMode.FORMATTED
+      case "simple" => proto.AnalyzePlanRequest.Explain.ExplainMode.EXPLAIN_MODE_SIMPLE
+      case "extended" => proto.AnalyzePlanRequest.Explain.ExplainMode.EXPLAIN_MODE_EXTENDED
+      case "codegen" => proto.AnalyzePlanRequest.Explain.ExplainMode.EXPLAIN_MODE_CODEGEN
+      case "cost" => proto.AnalyzePlanRequest.Explain.ExplainMode.EXPLAIN_MODE_COST
+      case "formatted" => proto.AnalyzePlanRequest.Explain.ExplainMode.EXPLAIN_MODE_FORMATTED
       case _ => throw new IllegalArgumentException("Unsupported explain mode: " + mode)
     }
     explain(protoMode)
@@ -293,9 +299,9 @@ class Dataset[T] private[sql] (
    */
   def explain(extended: Boolean): Unit = {
     val mode = if (extended) {
-      proto.Explain.ExplainMode.EXTENDED
+      proto.AnalyzePlanRequest.Explain.ExplainMode.EXPLAIN_MODE_EXTENDED
     } else {
-      proto.Explain.ExplainMode.SIMPLE
+      proto.AnalyzePlanRequest.Explain.ExplainMode.EXPLAIN_MODE_SIMPLE
     }
     explain(mode)
   }
@@ -306,11 +312,15 @@ class Dataset[T] private[sql] (
    * @group basic
    * @since 3.4.0
    */
-  def explain(): Unit = explain(proto.Explain.ExplainMode.SIMPLE)
+  def explain(): Unit = explain(proto.AnalyzePlanRequest.Explain.ExplainMode.EXPLAIN_MODE_SIMPLE)
 
-  private def explain(mode: proto.Explain.ExplainMode): Unit = {
+  private def explain(mode: proto.AnalyzePlanRequest.Explain.ExplainMode): Unit = {
     // scalastyle:off println
-    println(sparkSession.analyze(plan, mode).getExplainString)
+    println(
+      sparkSession
+        .analyze(plan, proto.AnalyzePlanRequest.AnalyzeCase.EXPLAIN, Some(mode))
+        .getExplain
+        .getExplainString)
     // scalastyle:on println
   }
 
@@ -339,7 +349,10 @@ class Dataset[T] private[sql] (
    * @group basic
    * @since 3.4.0
    */
-  def isLocal: Boolean = analyze.getIsLocal
+  def isLocal: Boolean = sparkSession
+    .analyze(plan, proto.AnalyzePlanRequest.AnalyzeCase.IS_LOCAL)
+    .getIsLocal
+    .getIsLocal
 
   /**
    * Returns true if the `Dataset` is empty.
@@ -359,7 +372,10 @@ class Dataset[T] private[sql] (
    * @group streaming
    * @since 3.4.0
    */
-  def isStreaming: Boolean = analyze.getIsStreaming
+  def isStreaming: Boolean = sparkSession
+    .analyze(plan, proto.AnalyzePlanRequest.AnalyzeCase.IS_STREAMING)
+    .getIsStreaming
+    .getIsStreaming
 
   /**
    * Displays the Dataset in a tabular form. Strings more than 20 characters will be truncated,
@@ -2616,7 +2632,13 @@ class Dataset[T] private[sql] (
    * @group basic
    * @since 3.4.0
    */
-  def inputFiles: Array[String] = analyze.getInputFilesList.asScala.toArray
+  def inputFiles: Array[String] =
+    sparkSession
+      .analyze(plan, proto.AnalyzePlanRequest.AnalyzeCase.INPUT_FILES)
+      .getInputFiles
+      .getFilesList
+      .asScala
+      .toArray
 
   /**
    * Interface for saving the content of the non-streaming Dataset out into external storage.
@@ -2714,7 +2736,7 @@ class Dataset[T] private[sql] (
   }
 
   private[sql] def analyze: proto.AnalyzePlanResponse = {
-    sparkSession.analyze(plan, proto.Explain.ExplainMode.SIMPLE)
+    sparkSession.analyze(plan, proto.AnalyzePlanRequest.AnalyzeCase.SCHEMA)
   }
 
   def collectResult(): SparkResult[T] = sparkSession.execute(plan, encoder)

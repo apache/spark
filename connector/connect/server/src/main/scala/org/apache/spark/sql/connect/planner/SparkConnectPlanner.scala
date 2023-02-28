@@ -597,7 +597,7 @@ class SparkConnectPlanner(val session: SparkSession) {
     }
   }
 
-  private def parseDatatypeString(sqlText: String): DataType = {
+  private[connect] def parseDatatypeString(sqlText: String): DataType = {
     val parser = session.sessionState.sqlParser
     try {
       parser.parseTableSchema(sqlText)
