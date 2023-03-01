@@ -92,6 +92,9 @@ class CategoricalTest(ComparisonTestBase, TestUtils):
         self.assert_eq(pser.cat.add_categories([4, 5]), psser.cat.add_categories([4, 5]))
         self.assert_eq(pser.cat.add_categories([]), psser.cat.add_categories([]))
 
+        pser = pser.cat.add_categories(4)
+        psser = psser.cat.add_categories(4)
+
         self.assertRaises(ValueError, lambda: psser.cat.add_categories(4))
         self.assertRaises(ValueError, lambda: psser.cat.add_categories([5, 5]))
 
@@ -122,21 +125,12 @@ class CategoricalTest(ComparisonTestBase, TestUtils):
 
         self.assert_eq(pser.cat.remove_unused_categories(), psser.cat.remove_unused_categories())
 
-        pser.cat.add_categories(4, inplace=True)
-        pser.cat.remove_categories(2, inplace=True)
-        psser.cat.add_categories(4, inplace=True)
-        psser.cat.remove_categories(2, inplace=True)
+        pser = pser.cat.add_categories(4)
+        pser = pser.cat.remove_categories(2)
+        psser = psser.cat.add_categories(4)
+        psser = psser.cat.remove_categories(2)
 
         self.assert_eq(pser.cat.remove_unused_categories(), psser.cat.remove_unused_categories())
-
-        pser.cat.remove_unused_categories(inplace=True)
-        psser.cat.remove_unused_categories(inplace=True)
-        if LooseVersion(pd.__version__) >= LooseVersion("1.3"):
-            # Bug in pandas 1.3. dtype is not updated properly with `inplace` argument.
-            pser = pser.astype(CategoricalDtype(categories=[1, 3]))
-
-        self.assert_eq(pser, psser)
-        self.assert_eq(pdf, psdf)
 
     def test_reorder_categories(self):
         pdf, psdf = self.df_pair
@@ -158,12 +152,6 @@ class CategoricalTest(ComparisonTestBase, TestUtils):
             pser.cat.reorder_categories([3, 2, 1], ordered=True),
             psser.cat.reorder_categories([3, 2, 1], ordered=True),
         )
-
-        pser.cat.reorder_categories([1, 2, 3], inplace=True)
-        psser.cat.reorder_categories([1, 2, 3], inplace=True)
-
-        self.assert_eq(pser, psser)
-        self.assert_eq(pdf, psdf)
 
         self.assertRaises(ValueError, lambda: psser.cat.reorder_categories([1, 2]))
         self.assertRaises(ValueError, lambda: psser.cat.reorder_categories([1, 2, 4]))
