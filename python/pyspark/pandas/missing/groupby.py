@@ -50,7 +50,6 @@ class MissingPandasLikeDataFrameGroupBy:
     indices = _unsupported_property("indices")
     ngroups = _unsupported_property("ngroups")
     plot = _unsupported_property("plot")
-    tshift = _unsupported_property("tshift")
 
     # Deprecated properties
     take = _unsupported_property("take", deprecated=True)
@@ -79,7 +78,6 @@ class MissingPandasLikeSeriesGroupBy:
     is_monotonic_increasing = _unsupported_property("is_monotonic_increasing")
     ngroups = _unsupported_property("ngroups")
     plot = _unsupported_property("plot")
-    tshift = _unsupported_property("tshift")
 
     # Deprecated properties
     take = _unsupported_property("take", deprecated=True)
