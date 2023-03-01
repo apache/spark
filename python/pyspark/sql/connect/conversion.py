@@ -252,7 +252,7 @@ class LocalDataToArrowConversion:
         for item in data:
             for i, col in enumerate(column_names):
                 if isinstance(item, dict):
-                    value = item[col]
+                    value = item.get(col)
                 else:
                     value = item[i]
 
