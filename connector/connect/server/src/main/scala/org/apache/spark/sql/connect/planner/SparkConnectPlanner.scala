@@ -1494,7 +1494,8 @@ class SparkConnectPlanner(val session: SparkSession) {
         maxRecordsPerBatch,
         maxBatchSize,
         timeZoneId)
-      batches.reduce(_ ++ _)
+      assert(batches.size == 1)
+      batches.next()
     }
 
     // To avoid explicit handling of the result on the client, we build the expected input
@@ -1526,7 +1527,7 @@ class SparkConnectPlanner(val session: SparkSession) {
         .setSqlCommandResult(result)
         .build())
 
-    // Semd Metrics
+    // Send Metrics
     SparkConnectStreamHandler.sendMetricsToResponse(clientId, df)
   }
 
