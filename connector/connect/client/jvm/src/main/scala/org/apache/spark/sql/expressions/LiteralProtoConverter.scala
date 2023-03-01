@@ -14,19 +14,12 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql
+package org.apache.spark.sql.expressions
 
-import java.lang.{Boolean => JavaBoolean}
-import java.lang.{Byte => JavaByte}
-import java.lang.{Character => JavaChar}
-import java.lang.{Double => JavaDouble}
-import java.lang.{Float => JavaFloat}
-import java.lang.{Integer => JavaInteger}
-import java.lang.{Long => JavaLong}
-import java.lang.{Short => JavaShort}
+import java.lang.{Boolean => JavaBoolean, Byte => JavaByte, Character => JavaChar, Double => JavaDouble, Float => JavaFloat, Integer => JavaInteger, Long => JavaLong, Short => JavaShort}
 import java.math.{BigDecimal => JavaBigDecimal}
 import java.sql.{Date, Timestamp}
-import java.time.{Duration, Instant, LocalDate, LocalDateTime, Period}
+import java.time._
 
 import com.google.protobuf.ByteString
 
@@ -36,7 +29,7 @@ import org.apache.spark.sql.connect.client.unsupported
 import org.apache.spark.sql.types.{DayTimeIntervalType, Decimal, DecimalType, YearMonthIntervalType}
 import org.apache.spark.unsafe.types.CalendarInterval
 
-object LiteralProto {
+object LiteralProtoConverter {
 
   private lazy val nullType =
     proto.DataType.newBuilder().setNull(proto.DataType.NULL.getDefaultInstance).build()

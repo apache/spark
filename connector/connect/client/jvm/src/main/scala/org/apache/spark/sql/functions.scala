@@ -22,9 +22,9 @@ import scala.collection.JavaConverters._
 import scala.reflect.runtime.universe.{typeTag, TypeTag}
 
 import org.apache.spark.connect.proto
-import org.apache.spark.sql.LiteralProto._
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.PrimitiveLongEncoder
 import org.apache.spark.sql.expressions.{ScalarUserDefinedFunction, UserDefinedFunction}
+import org.apache.spark.sql.expressions.LiteralProtoConverter._
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.sql.types.DataType.parseTypeWithFallback
 
