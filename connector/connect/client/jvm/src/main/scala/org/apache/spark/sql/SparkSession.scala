@@ -220,6 +220,10 @@ class SparkSession private[sql] (
   object implicits extends SQLImplicits
   // scalastyle:on
 
+  def newSession(): SparkSession = {
+    throw new UnsupportedOperationException("newSession is not supported")
+  }
+
   private def range(
       start: Long,
       end: Long,
@@ -320,5 +324,25 @@ object SparkSession extends Logging {
       }
       new SparkSession(_client, cleaner, planIdGenerator)
     }
+  }
+
+  def getActiveSession: Option[SparkSession] = {
+    throw new UnsupportedOperationException("getActiveSession is not supported")
+  }
+
+  def getDefaultSession: Option[SparkSession] = {
+    throw new UnsupportedOperationException("getDefaultSession is not supported")
+  }
+
+  def setActiveSession(session: SparkSession): Unit = {
+    throw new UnsupportedOperationException("setActiveSession is not supported")
+  }
+
+  def clearActiveSession(): Unit = {
+    throw new UnsupportedOperationException("clearActiveSession is not supported")
+  }
+
+  def active: SparkSession = {
+    throw new UnsupportedOperationException("active is not supported")
   }
 }
