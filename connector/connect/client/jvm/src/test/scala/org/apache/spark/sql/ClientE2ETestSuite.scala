@@ -260,7 +260,7 @@ class ClientE2ETestSuite extends RemoteSparkSession {
   test("Dataset inspection") {
     val df = spark.range(10)
     val local = spark.newDataFrame { builder =>
-      builder.getLocalRelationBuilder.setSchema(simpleSchema.catalogString)
+      builder.getLocalRelationBuilder.setSchemaString(simpleSchema.catalogString)
     }
     assert(!df.isLocal)
     assert(local.isLocal)

@@ -353,11 +353,16 @@ message LocalRelation {
   optional bytes data = 1;
 
   // (Optional) The schema of local data.
-  // It should be either a DDL-formatted type string or a JSON string.
   //
   // The server side will update the column names and data types according to this schema.
   // If the 'data' is not provided, then this schema will be required.
-  optional string schema = 2;
+  oneof schema {
+    // Either a DDL-formatted type string or a JSON string.
+    string schemaString = 2;
+
+    // DataType representing the schema. This must be struct.
+    DataType dataType = 3;
+  }
 }
 
 // Relation of type [[Sample]] that samples a fraction of the dataset.

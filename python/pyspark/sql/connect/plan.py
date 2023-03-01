@@ -338,7 +338,7 @@ class LocalRelation(LogicalPlan):
             plan.local_relation.data = sink.getvalue().to_pybytes()
 
         if self._schema is not None:
-            plan.local_relation.schema = self._schema
+            plan.local_relation.schemaString = self._schema
         return plan
 
     def print(self, indent: int = 0) -> str:

@@ -218,7 +218,7 @@ class PlanGenerationTestSuite
 
   private def createLocalRelation(schema: String): DataFrame = session.newDataFrame { builder =>
     // TODO API is not consistent. Now we have two different ways of working with schemas!
-    builder.getLocalRelationBuilder.setSchema(schema)
+    builder.getLocalRelationBuilder.setSchemaString(schema)
   }
 
   // A few helper dataframes.

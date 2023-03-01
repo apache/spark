@@ -623,16 +623,20 @@ class SparkConnectPlanner(val session: SparkSession) {
   }
 
   private def transformLocalRelation(rel: proto.LocalRelation): LogicalPlan = {
-    var schema: StructType = null
-    if (rel.hasSchema) {
-      val schemaType = DataType.parseTypeWithFallback(
-        rel.getSchema,
+    val dataType = if (rel.hasDataType) {
+      DataTypeProtoConverter.toCatalystType(rel.getDataType)
+    } else if (rel.hasSchemaString) {
+      DataType.parseTypeWithFallback(
+        rel.getSchemaString,
         parseDatatypeString,
         fallbackParser = DataType.fromJson)
-      schema = schemaType match {
-        case s: StructType => s
-        case d => StructType(Seq(StructField("value", d)))
-      }
+    } else {
+      null
+    }
+    val schema = dataType match {
+      case s: StructType => s
+      case d: DataType => StructType(Seq(StructField("value", d)))
+      case _ => null
     }
 
     if (rel.hasData) {
