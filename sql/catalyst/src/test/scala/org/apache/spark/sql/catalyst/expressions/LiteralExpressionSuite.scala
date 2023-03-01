@@ -38,11 +38,6 @@ import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
 
-  test("array literal") {
-    val literal = Literal(Array(Array(1), Array(2)))
-    literal
-  }
-
   test("null") {
     checkEvaluation(Literal.create(null, BooleanType), null)
     checkEvaluation(Literal.create(null, ByteType), null)
