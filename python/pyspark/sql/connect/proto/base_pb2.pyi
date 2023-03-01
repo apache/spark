@@ -1255,3 +1255,259 @@ class ConfigResponse(google.protobuf.message.Message):
     ) -> None: ...
 
 global___ConfigResponse = ConfigResponse
+
+class AddArtifactsRequest(google.protobuf.message.Message):
+    """Request to transfer client-local artifacts."""
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    class ArtifactChunk(google.protobuf.message.Message):
+        """A chunk of an Artifact."""
+
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        DATA_FIELD_NUMBER: builtins.int
+        CRC_FIELD_NUMBER: builtins.int
+        data: builtins.bytes
+        """Data chunk."""
+        crc: builtins.int
+        """CRC to allow server to verify integrity of the chunk."""
+        def __init__(
+            self,
+            *,
+            data: builtins.bytes = ...,
+            crc: builtins.int = ...,
+        ) -> None: ...
+        def ClearField(
+            self, field_name: typing_extensions.Literal["crc", b"crc", "data", b"data"]
+        ) -> None: ...
+
+    class SingleChunkArtifact(google.protobuf.message.Message):
+        """An artifact that is contained in a single `ArtifactChunk`.
+        Generally, this message represents tiny artifacts such as REPL-generated class files.
+        """
+
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        NAME_FIELD_NUMBER: builtins.int
+        DATA_FIELD_NUMBER: builtins.int
+        name: builtins.str
+        """The name of the artifact is expected in the form of a "Relative Path" that is made up of a
+        sequence of directories and the final file element.
+        Examples of "Relative Path"s: "jars/test.jar", "classes/xyz.class", "abc.xyz", "a/b/X.jar".
+        The server is expected to maintain the hierarchy of files as defined by their name. (i.e
+        The relative path of the file on the server's filesystem will be the same as the name of
+        the provided artifact)
+        """
+        @property
+        def data(self) -> global___AddArtifactsRequest.ArtifactChunk:
+            """A single data chunk."""
+        def __init__(
+            self,
+            *,
+            name: builtins.str = ...,
+            data: global___AddArtifactsRequest.ArtifactChunk | None = ...,
+        ) -> None: ...
+        def HasField(
+            self, field_name: typing_extensions.Literal["data", b"data"]
+        ) -> builtins.bool: ...
+        def ClearField(
+            self, field_name: typing_extensions.Literal["data", b"data", "name", b"name"]
+        ) -> None: ...
+
+    class Batch(google.protobuf.message.Message):
+        """A number of `SingleChunkArtifact` batched into a single RPC."""
+
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        ARTIFACTS_FIELD_NUMBER: builtins.int
+        @property
+        def artifacts(
+            self,
+        ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+            global___AddArtifactsRequest.SingleChunkArtifact
+        ]: ...
+        def __init__(
+            self,
+            *,
+            artifacts: collections.abc.Iterable[global___AddArtifactsRequest.SingleChunkArtifact]
+            | None = ...,
+        ) -> None: ...
+        def ClearField(
+            self, field_name: typing_extensions.Literal["artifacts", b"artifacts"]
+        ) -> None: ...
+
+    class BeginChunkedArtifact(google.protobuf.message.Message):
+        """Signals the beginning/start of a chunked artifact.
+        A large artifact is transferred through a payload of `BeginChunkedArtifact` followed by a
+        sequence of `ArtifactChunk`s.
+        """
+
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        NAME_FIELD_NUMBER: builtins.int
+        TOTAL_BYTES_FIELD_NUMBER: builtins.int
+        NUM_CHUNKS_FIELD_NUMBER: builtins.int
+        INITIAL_CHUNK_FIELD_NUMBER: builtins.int
+        name: builtins.str
+        """Name of the artifact undergoing chunking. Follows the same conventions as the `name` in
+        the `Artifact` message.
+        """
+        total_bytes: builtins.int
+        """Total size of the artifact in bytes."""
+        num_chunks: builtins.int
+        """Number of chunks the artifact is split into.
+        This includes the `initial_chunk`.
+        """
+        @property
+        def initial_chunk(self) -> global___AddArtifactsRequest.ArtifactChunk:
+            """The first/initial chunk."""
+        def __init__(
+            self,
+            *,
+            name: builtins.str = ...,
+            total_bytes: builtins.int = ...,
+            num_chunks: builtins.int = ...,
+            initial_chunk: global___AddArtifactsRequest.ArtifactChunk | None = ...,
+        ) -> None: ...
+        def HasField(
+            self, field_name: typing_extensions.Literal["initial_chunk", b"initial_chunk"]
+        ) -> builtins.bool: ...
+        def ClearField(
+            self,
+            field_name: typing_extensions.Literal[
+                "initial_chunk",
+                b"initial_chunk",
+                "name",
+                b"name",
+                "num_chunks",
+                b"num_chunks",
+                "total_bytes",
+                b"total_bytes",
+            ],
+        ) -> None: ...
+
+    CLIENT_ID_FIELD_NUMBER: builtins.int
+    USER_CONTEXT_FIELD_NUMBER: builtins.int
+    BATCH_FIELD_NUMBER: builtins.int
+    BEGIN_CHUNK_FIELD_NUMBER: builtins.int
+    CHUNK_FIELD_NUMBER: builtins.int
+    client_id: builtins.str
+    """The client_id is set by the client to be able to collate streaming responses from
+    different queries.
+    """
+    @property
+    def user_context(self) -> global___UserContext:
+        """User context"""
+    @property
+    def batch(self) -> global___AddArtifactsRequest.Batch: ...
+    @property
+    def begin_chunk(self) -> global___AddArtifactsRequest.BeginChunkedArtifact:
+        """The metadata and the initial chunk of a large artifact chunked into multiple requests.
+        The server side is notified about the total size of the large artifact as well as the
+        number of chunks to expect.
+        """
+    @property
+    def chunk(self) -> global___AddArtifactsRequest.ArtifactChunk:
+        """A chunk of an artifact excluding metadata. This can be any chunk of a large artifact
+        excluding the first chunk (which is included in `BeginChunkedArtifact`).
+        """
+    def __init__(
+        self,
+        *,
+        client_id: builtins.str = ...,
+        user_context: global___UserContext | None = ...,
+        batch: global___AddArtifactsRequest.Batch | None = ...,
+        begin_chunk: global___AddArtifactsRequest.BeginChunkedArtifact | None = ...,
+        chunk: global___AddArtifactsRequest.ArtifactChunk | None = ...,
+    ) -> None: ...
+    def HasField(
+        self,
+        field_name: typing_extensions.Literal[
+            "batch",
+            b"batch",
+            "begin_chunk",
+            b"begin_chunk",
+            "chunk",
+            b"chunk",
+            "payload",
+            b"payload",
+            "user_context",
+            b"user_context",
+        ],
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "batch",
+            b"batch",
+            "begin_chunk",
+            b"begin_chunk",
+            "chunk",
+            b"chunk",
+            "client_id",
+            b"client_id",
+            "payload",
+            b"payload",
+            "user_context",
+            b"user_context",
+        ],
+    ) -> None: ...
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["payload", b"payload"]
+    ) -> typing_extensions.Literal["batch", "begin_chunk", "chunk"] | None: ...
+
+global___AddArtifactsRequest = AddArtifactsRequest
+
+class AddArtifactsResponse(google.protobuf.message.Message):
+    """Response to adding an artifact. Contains relevant metadata to verify successful transfer of
+    artifact(s).
+    """
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    class ArtifactSummary(google.protobuf.message.Message):
+        """Metadata of an artifact."""
+
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        NAME_FIELD_NUMBER: builtins.int
+        IS_CRC_SUCCESSFUL_FIELD_NUMBER: builtins.int
+        name: builtins.str
+        is_crc_successful: builtins.bool
+        """Whether the CRC (Cyclic Redundancy Check) is successful on server verification.
+        The server discards any artifact that fails the CRC.
+        If false, the client may choose to resend the artifact specified by `name`.
+        """
+        def __init__(
+            self,
+            *,
+            name: builtins.str = ...,
+            is_crc_successful: builtins.bool = ...,
+        ) -> None: ...
+        def ClearField(
+            self,
+            field_name: typing_extensions.Literal[
+                "is_crc_successful", b"is_crc_successful", "name", b"name"
+            ],
+        ) -> None: ...
+
+    ARTIFACTS_FIELD_NUMBER: builtins.int
+    @property
+    def artifacts(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+        global___AddArtifactsResponse.ArtifactSummary
+    ]:
+        """The list of artifact(s) seen by the server."""
+    def __init__(
+        self,
+        *,
+        artifacts: collections.abc.Iterable[global___AddArtifactsResponse.ArtifactSummary]
+        | None = ...,
+    ) -> None: ...
+    def ClearField(
+        self, field_name: typing_extensions.Literal["artifacts", b"artifacts"]
+    ) -> None: ...
+
+global___AddArtifactsResponse = AddArtifactsResponse
