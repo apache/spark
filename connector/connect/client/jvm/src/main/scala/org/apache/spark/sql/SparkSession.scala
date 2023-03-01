@@ -24,7 +24,6 @@ import scala.collection.JavaConverters._
 
 import org.apache.arrow.memory.RootAllocator
 
-import org.apache.spark.SPARK_VERSION
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.connect.proto
 import org.apache.spark.internal.Logging
@@ -53,7 +52,7 @@ import org.apache.spark.sql.connect.client.util.Cleaner
  *     .getOrCreate()
  * }}}
  */
-class SparkSession(
+class SparkSession private[sql] (
     private val client: SparkConnectClient,
     private val cleaner: Cleaner,
     private val planIdGenerator: AtomicLong)
@@ -63,7 +62,9 @@ class SparkSession(
 
   private[this] val allocator = new RootAllocator()
 
-  def version: String = SPARK_VERSION
+  lazy val version: String = {
+    client.analyze(proto.AnalyzePlanRequest.AnalyzeCase.SPARK_VERSION).getSparkVersion.getVersion
+  }
 
   /**
    * Runtime configuration interface for Spark.
@@ -219,6 +220,10 @@ class SparkSession(
   object implicits extends SQLImplicits
   // scalastyle:on
 
+  def newSession(): SparkSession = {
+    throw new UnsupportedOperationException("newSession is not supported")
+  }
+
   private def range(
       start: Long,
       end: Long,
@@ -254,8 +259,11 @@ class SparkSession(
 
   private[sql] def analyze(
       plan: proto.Plan,
-      mode: proto.Explain.ExplainMode): proto.AnalyzePlanResponse =
-    client.analyze(plan, mode)
+      method: proto.AnalyzePlanRequest.AnalyzeCase,
+      explainMode: Option[proto.AnalyzePlanRequest.Explain.ExplainMode] = None)
+      : proto.AnalyzePlanResponse = {
+    client.analyze(method, Some(plan), explainMode)
+  }
 
   private[sql] def execute[T](plan: proto.Plan, encoder: AgnosticEncoder[T]): SparkResult[T] = {
     val value = client.execute(plan)
@@ -316,5 +324,25 @@ object SparkSession extends Logging {
       }
       new SparkSession(_client, cleaner, planIdGenerator)
     }
+  }
+
+  def getActiveSession: Option[SparkSession] = {
+    throw new UnsupportedOperationException("getActiveSession is not supported")
+  }
+
+  def getDefaultSession: Option[SparkSession] = {
+    throw new UnsupportedOperationException("getDefaultSession is not supported")
+  }
+
+  def setActiveSession(session: SparkSession): Unit = {
+    throw new UnsupportedOperationException("setActiveSession is not supported")
+  }
+
+  def clearActiveSession(): Unit = {
+    throw new UnsupportedOperationException("clearActiveSession is not supported")
+  }
+
+  def active: SparkSession = {
+    throw new UnsupportedOperationException("active is not supported")
   }
 }
