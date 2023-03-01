@@ -155,7 +155,7 @@ trait RemoteSparkSession extends ConnectFunSuite with BeforeAndAfterAll {
 
   override def afterAll(): Unit = {
     try {
-      if (spark != null) spark.close()
+      if (spark != null) spark.stop()
     } catch {
       case e: Throwable => debug(e)
     }
