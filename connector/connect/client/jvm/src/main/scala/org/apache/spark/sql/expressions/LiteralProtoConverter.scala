@@ -16,8 +16,8 @@
  */
 package org.apache.spark.sql.expressions
 
-import java.lang.{Boolean => JavaBoolean, Byte => JavaByte, Character => JavaChar, Double => JavaDouble, Float => JavaFloat, Integer => JavaInteger, Long => JavaLong, Short => JavaShort}
-import java.math.{BigDecimal => JavaBigDecimal}
+import java.lang.{Boolean => JBoolean, Byte => JByte, Character => JChar, Double => JDouble, Float => JFloat, Integer => JInteger, Long => JLong, Short => JShort}
+import java.math.{BigDecimal => JBigDecimal}
 import java.sql.{Date, Timestamp}
 import java.time._
 
@@ -69,7 +69,7 @@ object LiteralProtoConverter {
       case v: Double => builder.setDouble(v)
       case v: BigDecimal =>
         builder.setDecimal(decimalBuilder(v.precision, v.scale, v.toString))
-      case v: JavaBigDecimal =>
+      case v: JBigDecimal =>
         builder.setDecimal(decimalBuilder(v.precision, v.scale, v.toString))
       case v: String => builder.setString(v)
       case v: Char => builder.setString(v.toString)
@@ -103,42 +103,42 @@ object LiteralProtoConverter {
 
   private def componentTypeToProto(clz: Class[_]): proto.DataType = clz match {
     // primitive types
-    case JavaShort.TYPE =>
+    case JShort.TYPE =>
       proto.DataType
         .newBuilder()
         .setShort(proto.DataType.Short.getDefaultInstance)
         .build()
-    case JavaInteger.TYPE =>
+    case JInteger.TYPE =>
       proto.DataType
         .newBuilder()
         .setInteger(proto.DataType.Integer.getDefaultInstance)
         .build()
-    case JavaLong.TYPE =>
+    case JLong.TYPE =>
       proto.DataType
         .newBuilder()
         .setLong(proto.DataType.Long.getDefaultInstance)
         .build()
-    case JavaDouble.TYPE =>
+    case JDouble.TYPE =>
       proto.DataType
         .newBuilder()
         .setDouble(proto.DataType.Double.getDefaultInstance)
         .build()
-    case JavaByte.TYPE =>
+    case JByte.TYPE =>
       proto.DataType
         .newBuilder()
         .setByte(proto.DataType.Byte.getDefaultInstance)
         .build()
-    case JavaFloat.TYPE =>
+    case JFloat.TYPE =>
       proto.DataType
         .newBuilder()
         .setFloat(proto.DataType.Float.getDefaultInstance)
         .build()
-    case JavaBoolean.TYPE =>
+    case JBoolean.TYPE =>
       proto.DataType
         .newBuilder()
         .setBoolean(proto.DataType.Boolean.getDefaultInstance)
         .build()
-    case JavaChar.TYPE =>
+    case JChar.TYPE =>
       proto.DataType
         .newBuilder()
         .setString(proto.DataType.String.getDefaultInstance)
@@ -190,7 +190,7 @@ object LiteralProtoConverter {
             .setEndField(YearMonthIntervalType().endField)
             .build())
         .build()
-    case _ if clz == classOf[JavaBigDecimal] =>
+    case _ if clz == classOf[JBigDecimal] =>
       proto.DataType
         .newBuilder()
         .setDecimal(
@@ -209,37 +209,37 @@ object LiteralProtoConverter {
         .newBuilder()
         .setString(proto.DataType.String.getDefaultInstance)
         .build()
-    case _ if clz == classOf[JavaShort] =>
+    case _ if clz == classOf[JShort] =>
       proto.DataType
         .newBuilder()
         .setShort(proto.DataType.Short.getDefaultInstance)
         .build()
-    case _ if clz == classOf[JavaInteger] =>
+    case _ if clz == classOf[JInteger] =>
       proto.DataType
         .newBuilder()
         .setInteger(proto.DataType.Integer.getDefaultInstance)
         .build()
-    case _ if clz == classOf[JavaLong] =>
+    case _ if clz == classOf[JLong] =>
       proto.DataType
         .newBuilder()
         .setLong(proto.DataType.Long.getDefaultInstance)
         .build()
-    case _ if clz == classOf[JavaDouble] =>
+    case _ if clz == classOf[JDouble] =>
       proto.DataType
         .newBuilder()
         .setDouble(proto.DataType.Double.getDefaultInstance)
         .build()
-    case _ if clz == classOf[JavaByte] =>
+    case _ if clz == classOf[JByte] =>
       proto.DataType
         .newBuilder()
         .setByte(proto.DataType.Byte.getDefaultInstance)
         .build()
-    case _ if clz == classOf[JavaFloat] =>
+    case _ if clz == classOf[JFloat] =>
       proto.DataType
         .newBuilder()
         .setFloat(proto.DataType.Float.getDefaultInstance)
         .build()
-    case _ if clz == classOf[JavaBoolean] =>
+    case _ if clz == classOf[JBoolean] =>
       proto.DataType
         .newBuilder()
         .setBoolean(proto.DataType.Boolean.getDefaultInstance)
