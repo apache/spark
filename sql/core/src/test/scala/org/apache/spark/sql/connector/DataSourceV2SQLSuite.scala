@@ -1093,8 +1093,8 @@ class DataSourceV2SQLSuiteV1Filter
       verifyTable(t1, df)
       // Missing columns
       assert(intercept[AnalysisException] {
-        sql(s"INSERT INTO $t1(data) VALUES(4)")
-      }.getMessage.contains("Cannot find data for output column 'id'"))
+        sql(s"INSERT INTO $t1 VALUES(4)")
+      }.getMessage.contains("not enough data columns"))
       // Duplicate columns
       checkError(
         exception = intercept[AnalysisException] {
@@ -1121,9 +1121,9 @@ class DataSourceV2SQLSuiteV1Filter
       verifyTable(t1, Seq((3L, "c")).toDF("id", "data"))
       // Missing columns
       assert(intercept[AnalysisException] {
-        sql(s"INSERT OVERWRITE $t1(data) VALUES(4)")
-      }.getMessage.contains("Cannot find data for output column 'id'"))
-      // Duplicate columns
+        sql(s"INSERT OVERWRITE $t1 VALUES(4)")
+      }.getMessage.contains("not enough data columns"))
+    // Duplicate columns
       checkError(
         exception = intercept[AnalysisException] {
           sql(s"INSERT OVERWRITE $t1(data, data) VALUES(5)")
@@ -1150,9 +1150,9 @@ class DataSourceV2SQLSuiteV1Filter
       verifyTable(t1, Seq((1L, "c", "e"), (2L, "b", "d")).toDF("id", "data", "data2"))
       // Missing columns
       assert(intercept[AnalysisException] {
-        sql(s"INSERT OVERWRITE $t1(data, id) VALUES('a', 4)")
-      }.getMessage.contains("Cannot find data for output column 'data2'"))
-      // Duplicate columns
+        sql(s"INSERT OVERWRITE $t1 VALUES('a', 4)")
+      }.getMessage.contains("not enough data columns"))
+    // Duplicate columns
       checkError(
         exception = intercept[AnalysisException] {
           sql(s"INSERT OVERWRITE $t1(data, data) VALUES(5)")
