@@ -230,14 +230,6 @@ class PlanGenerationTestSuite
   private def temporals = createLocalRelation(temporalsSchemaString)
 
   /* Spark Session API */
-  test("sql") {
-    session.sql("select 1")
-  }
-
-  test("parameterized sql") {
-    session.sql("select 1", Map("minId" -> "7", "maxId" -> "20"))
-  }
-
   test("range") {
     session.range(1, 10, 1, 2)
   }

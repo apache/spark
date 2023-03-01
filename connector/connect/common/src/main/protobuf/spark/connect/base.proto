@@ -221,11 +221,26 @@ message ExecutePlanRequest {
 message ExecutePlanResponse {
   string client_id = 1;
 
-  ArrowBatch arrow_batch = 2;
+  // Union type for the different response messages.
+  oneof response_type {
+    ArrowBatch arrow_batch = 2;
+
+    // Special case for executing SQL commands.
+    SqlCommandResult sql_command_result = 5;
+
+    // Support arbitrary result objects.
+    google.protobuf.Any extension = 999;
+  }
 
   // Metrics for the query execution. Typically, this field is only present in the last
   // batch of results and then represent the overall state of the query execution.
   Metrics metrics = 4;
+
+  // A SQL command returns an opaque Relation that can be directly used as input for the next
+  // call.
+  message SqlCommandResult {
+    Relation relation = 1;
+  }
 
   // Batch results of metrics.
   message ArrowBatch {
