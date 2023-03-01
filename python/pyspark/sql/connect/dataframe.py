@@ -1356,7 +1356,9 @@ class DataFrame:
         if self._plan is None:
             raise Exception("Cannot analyze on empty plan.")
         query = self._plan.to_proto(self._session.client)
-        return self._session.client._analyze(query).is_local
+        result = self._session.client._analyze(method="is_local", plan=query).is_local
+        assert result is not None
+        return result
 
     isLocal.__doc__ = PySparkDataFrame.isLocal.__doc__
 
@@ -1365,7 +1367,9 @@ class DataFrame:
         if self._plan is None:
             raise Exception("Cannot analyze on empty plan.")
         query = self._plan.to_proto(self._session.client)
-        return self._session.client._analyze(query).is_streaming
+        result = self._session.client._analyze(method="is_streaming", plan=query).is_streaming
+        assert result is not None
+        return result
 
     isStreaming.__doc__ = PySparkDataFrame.isStreaming.__doc__
 
@@ -1373,7 +1377,9 @@ class DataFrame:
         if self._plan is None:
             raise Exception("Cannot analyze on empty plan.")
         query = self._plan.to_proto(self._session.client)
-        return self._session.client._analyze(query).tree_string
+        result = self._session.client._analyze(method="tree_string", plan=query).tree_string
+        assert result is not None
+        return result
 
     def printSchema(self) -> None:
         print(self._tree_string())
@@ -1384,7 +1390,9 @@ class DataFrame:
         if self._plan is None:
             raise Exception("Cannot analyze on empty plan.")
         query = self._plan.to_proto(self._session.client)
-        return self._session.client._analyze(query).input_files
+        result = self._session.client._analyze(method="input_files", plan=query).input_files
+        assert result is not None
+        return result
 
     inputFiles.__doc__ = PySparkDataFrame.inputFiles.__doc__
 

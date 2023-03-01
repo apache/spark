@@ -35,7 +35,7 @@ import org.apache.spark.connect.proto
  *
  * @since 3.4.0
  */
-class RelationalGroupedDataset protected[sql] (
+class RelationalGroupedDataset private[sql] (
     private[sql] val df: DataFrame,
     private[sql] val groupingExprs: Seq[proto.Expression],
     groupType: proto.Aggregate.GroupType,
