@@ -3126,8 +3126,8 @@ object SQLConf {
   val USE_NULLS_FOR_MISSING_DEFAULT_COLUMN_VALUES =
     buildConf("spark.sql.defaultColumn.useNullsForMissingDefaultValues")
       .internal()
-      .doc("When true, and DEFAULT columns are enabled, allow INSERT INTO commands with " +
-        "user-specified lists of fewer columns than the target table to behave as if they had " +
+      .doc("When true, and DEFAULT columns are enabled, allow INSERT INTO commands with user-" +
+        "specified lists of fewer columns than the target table to behave as if they had " +
         "specified DEFAULT for all remaining columns instead, in order.")
       .version("3.4.0")
       .booleanConf
