@@ -28,15 +28,74 @@ import java.math.{BigDecimal => JavaBigDecimal}
 import java.sql.{Date, Timestamp}
 import java.time.{Duration, Instant, LocalDate, LocalDateTime, Period}
 
+import com.google.protobuf.ByteString
+
 import org.apache.spark.connect.proto
-import org.apache.spark.sql.types.{DayTimeIntervalType, DecimalType, YearMonthIntervalType}
+import org.apache.spark.sql.catalyst.util.{DateTimeUtils, IntervalUtils}
+import org.apache.spark.sql.connect.client.unsupported
+import org.apache.spark.sql.types.{DayTimeIntervalType, Decimal, DecimalType, YearMonthIntervalType}
 import org.apache.spark.unsafe.types.CalendarInterval
 
-// scalastyle:off
-object lits {
-// scalastyle:on
+object LiteralProto {
 
-  def componentTypeToProto(clz: Class[_]): proto.DataType = clz match {
+  private lazy val nullType =
+    proto.DataType.newBuilder().setNull(proto.DataType.NULL.getDefaultInstance).build()
+
+  def toLiteralProtoBuilder(literal: Any): proto.Expression.Literal.Builder = {
+    val builder = proto.Expression.Literal.newBuilder()
+
+    def decimalBuilder(precision: Int, scale: Int, value: String) = {
+      builder.getDecimalBuilder.setPrecision(precision).setScale(scale).setValue(value)
+    }
+
+    def calendarIntervalBuilder(months: Int, days: Int, microseconds: Long) = {
+      builder.getCalendarIntervalBuilder.setMonths(months).setDays(days)
+        .setMicroseconds(microseconds)
+    }
+
+    def arrayBuilder(array: Array[_]) = {
+      val ab = builder.getArrayBuilder
+        .setElementType(componentTypeToProto(array.getClass.getComponentType))
+      array.foreach(x => ab.addElement(toLiteralProtoBuilder(x)))
+      ab
+    }
+
+    literal match {
+      case v: Boolean => builder.setBoolean(v)
+      case v: Byte => builder.setByte(v)
+      case v: Short => builder.setShort(v)
+      case v: Int => builder.setInteger(v)
+      case v: Long => builder.setLong(v)
+      case v: Float => builder.setFloat(v)
+      case v: Double => builder.setDouble(v)
+      case v: BigDecimal =>
+        builder.setDecimal(decimalBuilder(v.precision, v.scale, v.toString))
+      case v: JavaBigDecimal =>
+        builder.setDecimal(decimalBuilder(v.precision, v.scale, v.toString))
+      case v: String => builder.setString(v)
+      case v: Char => builder.setString(v.toString)
+      case v: Array[Char] => builder.setString(String.valueOf(v))
+      case v: Array[Byte] => builder.setBinary(ByteString.copyFrom(v))
+      case v: collection.mutable.WrappedArray[_] => builder.setArray(arrayBuilder(v.array))
+      case v: LocalDate => builder.setDate(v.toEpochDay.toInt)
+      case v: Decimal =>
+        builder.setDecimal(decimalBuilder(Math.max(v.precision, v.scale), v.scale, v.toString))
+      case v: Instant => builder.setTimestamp(DateTimeUtils.instantToMicros(v))
+      case v: Timestamp => builder.setTimestamp(DateTimeUtils.fromJavaTimestamp(v))
+      case v: LocalDateTime => builder.setTimestampNtz(DateTimeUtils.localDateTimeToMicros(v))
+      case v: Date => builder.setDate(DateTimeUtils.fromJavaDate(v))
+      case v: Duration => builder.setDayTimeInterval(IntervalUtils.durationToMicros(v))
+      case v: Period => builder.setYearMonthInterval(IntervalUtils.periodToMonths(v))
+      case v: Array[_] => builder.setArray(arrayBuilder(v))
+      case v: CalendarInterval =>
+        builder.setCalendarInterval(calendarIntervalBuilder(v.months, v.days, v.microseconds))
+      case null => builder.setNull(nullType)
+      case _ => unsupported(s"literal $literal not supported (yet).")
+    }
+    builder
+  }
+
+  private def componentTypeToProto(clz: Class[_]): proto.DataType = clz match {
     // primitive types
     case JavaShort.TYPE =>
       proto.DataType
