@@ -39,7 +39,7 @@ import org.apache.spark.sql.connector.expressions.{Expression, Literal, NamedRef
 import org.apache.spark.sql.connector.expressions.aggregate.AggregateFunc
 import org.apache.spark.sql.connector.util.V2ExpressionSQLBuilder
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.execution.datasources.jdbc.{DriverRegistry, JDBCOptions, JdbcUtils}
+import org.apache.spark.sql.execution.datasources.jdbc.{DriverRegistry, JDBCOptions, JdbcOptionsInWrite, JdbcUtils}
 import org.apache.spark.sql.execution.datasources.jdbc.connection.ConnectionProvider
 import org.apache.spark.sql.execution.datasources.v2.TableSampleInfo
 import org.apache.spark.sql.internal.SQLConf
@@ -133,6 +133,25 @@ abstract class JdbcDialect extends Serializable with Logging {
    */
   def quoteIdentifier(colName: String): String = {
     s""""$colName""""
+  }
+
+  /**
+   * Create the table if the table does not exist.
+   * To allow certain options to append when create a new table, which can be
+   * table_options or partition_options.
+   * E.g., "CREATE TABLE t (name string) ENGINE=InnoDB DEFAULT CHARSET=utf8"
+   * @param statement
+   * @param tableName
+   * @param strSchema
+   * @param options
+   */
+  def createTable(
+      statement: Statement,
+      tableName: String,
+      strSchema: String,
+      options: JdbcOptionsInWrite): Unit = {
+    val createTableOptions = options.createTableOptions
+    statement.executeUpdate(s"CREATE TABLE $tableName ($strSchema) $createTableOptions")
   }
 
   /**
@@ -511,7 +530,7 @@ abstract class JdbcDialect extends Serializable with Logging {
    *
    * @param indexName the name of the index to be dropped.
    * @param tableIdent the table on which index to be dropped.
-  * @return the SQL statement to use for dropping the index.
+   * @return the SQL statement to use for dropping the index.
    */
   def dropIndex(indexName: String, tableIdent: Identifier): String = {
     throw new UnsupportedOperationException("dropIndex is not supported")
@@ -541,14 +560,14 @@ abstract class JdbcDialect extends Serializable with Logging {
    * Returns the LIMIT clause for the SELECT statement
    */
   def getLimitClause(limit: Integer): String = {
-    if (limit > 0 ) s"LIMIT $limit" else ""
+    if (limit > 0) s"LIMIT $limit" else ""
   }
 
   /**
    * Returns the OFFSET clause for the SELECT statement
    */
   def getOffsetClause(offset: Integer): String = {
-    if (offset > 0 ) s"OFFSET $offset" else ""
+    if (offset > 0) s"OFFSET $offset" else ""
   }
 
   /**
@@ -556,6 +575,20 @@ abstract class JdbcDialect extends Serializable with Logging {
    */
   def getJdbcSQLQueryBuilder(options: JDBCOptions): JdbcSQLQueryBuilder =
     new JdbcSQLQueryBuilder(this, options)
+
+  /**
+   * Returns ture if dialect supports LIMIT clause.
+   *
+   * Note: Some build-in dialect supports LIMIT clause with some trick, please see:
+   * {@link OracleDialect.OracleSQLQueryBuilder} and
+   * {@link MsSqlServerDialect.MsSqlServerSQLQueryBuilder}.
+   */
+  def supportsLimit: Boolean = true
+
+  /**
+   * Returns ture if dialect supports OFFSET clause.
+   */
+  def supportsOffset: Boolean = true
 
   def supportsTableSample: Boolean = false
 

@@ -233,6 +233,19 @@ message EventPersonWrapper {
   EventPerson person = 1;
 }
 
+message PersonWithRecursiveArray {
+  // A protobuf with recursive repeated field
+  string name = 1;
+  repeated PersonWithRecursiveArray friends = 2;
+}
+
+message PersonWithRecursiveMap {
+  // A protobuf with recursive field in value
+  string name = 1;
+  map<string, PersonWithRecursiveMap> groups = 3;
+}
+
+
 message OneOfEventWithRecursion {
   string key = 1;
   oneof payload {
@@ -243,14 +256,26 @@ message OneOfEventWithRecursion {
 }
 
 message EventRecursiveA {
-  OneOfEventWithRecursion recursiveA = 1;
+  OneOfEventWithRecursion recursiveOneOffInA = 1;
   string key = 2;
 }
 
 message EventRecursiveB {
   string key = 1;
   string value = 2;
-  OneOfEventWithRecursion recursiveA = 3;
+  OneOfEventWithRecursion recursiveOneOffInB = 3;
+}
+
+message EmptyRecursiveProto {
+  // This is a recursive proto with no fields. Used to test edge. Catalyst schema for this
+  // should be "nothing" (i.e. completely dropped) irrespective of recursive limit.
+  EmptyRecursiveProto recursive_field = 1;
+  repeated EmptyRecursiveProto recursive_array = 2;
+}
+
+message EmptyRecursiveProtoWrapper {
+  string name = 1;
+  EmptyRecursiveProto empty_recursive = 2; // This field will be dropped.
 }
 
 message Status {

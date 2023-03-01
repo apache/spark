@@ -224,6 +224,10 @@ def lit(col: Any) -> Column:
     if isinstance(col, Column):
         return col
     elif isinstance(col, list):
+        if any(isinstance(c, Column) for c in col):
+            raise PySparkValueError(
+                error_class="COLUMN_IN_LIST", message_parameters={"func_name": "lit"}
+            )
         return array(*[lit(c) for c in col])
     elif isinstance(col, np.ndarray) and col.ndim == 1:
         if _from_numpy_type(col.dtype) is None:
@@ -2476,11 +2480,6 @@ def _test() -> None:
 
     # Spark Connect does not support Spark Context but the test depends on that.
     del pyspark.sql.connect.functions.monotonically_increasing_id.__doc__
-
-    # TODO(SPARK-41834): implement Dataframe.conf
-    del pyspark.sql.connect.functions.from_unixtime.__doc__
-    del pyspark.sql.connect.functions.timestamp_seconds.__doc__
-    del pyspark.sql.connect.functions.unix_timestamp.__doc__
 
     # TODO(SPARK-41843): Implement SparkSession.udf
     del pyspark.sql.connect.functions.call_udf.__doc__

@@ -63,7 +63,7 @@ class DataFrameReader(OptionUtils):
 
     def __init__(self, client: "SparkSession"):
         self._client = client
-        self._format = ""
+        self._format: Optional[str] = None
         self._schema = ""
         self._options: Dict[str, str] = {}
 

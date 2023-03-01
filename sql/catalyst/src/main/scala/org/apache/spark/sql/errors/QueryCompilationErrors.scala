@@ -2692,9 +2692,9 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
     new AnalysisException(
       errorClass = "INVALID_TEMP_OBJ_REFERENCE",
       messageParameters = Map(
-        "obj" -> "view",
+        "obj" -> "VIEW",
         "objName" -> toSQLId(name.nameParts),
-        "tempObj" -> "view",
+        "tempObj" -> "VIEW",
         "tempObjName" -> toSQLId(nameParts)))
   }
 
@@ -2704,9 +2704,9 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
      new AnalysisException(
       errorClass = "INVALID_TEMP_OBJ_REFERENCE",
       messageParameters = Map(
-        "obj" -> "view",
+        "obj" -> "VIEW",
         "objName" -> toSQLId(name.nameParts),
-        "tempObj" -> "function",
+        "tempObj" -> "FUNCTION",
         "tempObjName" -> toSQLId(funcName)))
   }
 
@@ -3403,6 +3403,16 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
           messageParameters = Map("funcName" -> toSQLId(funcName)),
           cause = Option(other))
     }
+  }
+
+  def generatedColumnsUnsupported(nameParts: Seq[String]): AnalysisException = {
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
+      messageParameters = Map(
+        "tableName" -> toSQLId(nameParts),
+        "operation" -> "generated columns"
+      )
+    )
   }
 
   def ambiguousLateralColumnAliasError(name: String, numOfMatches: Int): Throwable = {

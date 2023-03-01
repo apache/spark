@@ -87,7 +87,8 @@ def pyspark_types_to_proto_types(data_type: DataType) -> pb2.DataType:
     elif isinstance(data_type, DoubleType):
         ret.double.CopyFrom(pb2.DataType.Double())
     elif isinstance(data_type, DecimalType):
-        ret.decimal.CopyFrom(pb2.DataType.Decimal())
+        ret.decimal.scale = data_type.scale
+        ret.decimal.precision = data_type.precision
     elif isinstance(data_type, DateType):
         ret.date.CopyFrom(pb2.DataType.Date())
     elif isinstance(data_type, TimestampType):
@@ -351,7 +352,9 @@ def parse_data_type(data_type: str) -> DataType:
     return_type_schema = (
         PySparkSession.builder.getOrCreate().createDataFrame(data=[], schema=data_type).schema
     )
-    if len(return_type_schema.fields) == 1:
+    with_col_name = " " in data_type.strip()
+    if len(return_type_schema.fields) == 1 and not with_col_name:
+        # To match pyspark.sql.types._parse_datatype_string
         return_type = return_type_schema.fields[0].dataType
     else:
         return_type = return_type_schema

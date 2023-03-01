@@ -18,6 +18,7 @@
 import unittest
 
 from pyspark.errors.exceptions.connect import SparkConnectException
+from pyspark.sql.connect.column import Column
 from pyspark.sql.tests.test_functions import FunctionsTestsMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
 
@@ -38,23 +39,11 @@ class FunctionsParityTests(FunctionsTestsMixin, ReusedConnectTestCase):
     def test_input_file_name_reset_for_rdd(self):
         super().test_input_file_name_reset_for_rdd()
 
-    # TODO(SPARK-41901): Parity in String representation of Column
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_inverse_trig_functions(self):
-        super().test_inverse_trig_functions()
-
-    # TODO(SPARK-41834): Implement SparkSession.conf
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_lit_list(self):
-        super().test_lit_list()
-
     def test_raise_error(self):
         self.check_raise_error(SparkConnectException)
 
-    # Comparing column type of connect and pyspark
-    @unittest.skip("Fails in Spark Connect, should enable.")
     def test_sorting_functions_with_column(self):
-        super().test_sorting_functions_with_column()
+        self.check_sorting_functions_with_column(Column)
 
 
 if __name__ == "__main__":

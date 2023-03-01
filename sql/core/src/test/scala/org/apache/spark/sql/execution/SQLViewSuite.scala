@@ -87,9 +87,9 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
             },
             errorClass = "INVALID_TEMP_OBJ_REFERENCE",
             parameters = Map(
-              "obj" -> "view",
+              "obj" -> "VIEW",
               "objName" -> s"`$SESSION_CATALOG_NAME`.`default`.`jtv1`",
-              "tempObj" -> "view",
+              "tempObj" -> "VIEW",
               "tempObjName" -> "`temp_jtv1`"))
           val globalTempDB = spark.sharedState.globalTempViewManager.database
           sql("CREATE GLOBAL TEMP VIEW global_temp_jtv1 AS SELECT * FROM jt WHERE id > 0")
@@ -99,9 +99,9 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
             },
             errorClass = "INVALID_TEMP_OBJ_REFERENCE",
             parameters = Map(
-              "obj" -> "view",
+              "obj" -> "VIEW",
               "objName" -> s"`$SESSION_CATALOG_NAME`.`default`.`jtv1`",
-              "tempObj" -> "view",
+              "tempObj" -> "VIEW",
               "tempObjName" -> "`global_temp`.`global_temp_jtv1`"))
         }
       }

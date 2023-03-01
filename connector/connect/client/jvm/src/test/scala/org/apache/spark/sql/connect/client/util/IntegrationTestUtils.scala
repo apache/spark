@@ -40,8 +40,9 @@ object IntegrationTestUtils {
   private[connect] def debug(error: Throwable): Unit = if (isDebug) error.printStackTrace()
 
   /**
-   * Find a jar in the Spark project artifacts. It requires a build first (e.g. sbt package, mvn
-   * clean install -DskipTests) so that this method can find the jar in the target folders.
+   * Find a jar in the Spark project artifacts. It requires a build first (e.g. build/sbt package,
+   * build/mvn clean install -DskipTests) so that this method can find the jar in the target
+   * folders.
    *
    * @return
    *   the jar
@@ -52,7 +53,7 @@ object IntegrationTestUtils {
       targetDir.exists(),
       s"Fail to locate the target folder: '${targetDir.getCanonicalPath}'. " +
         s"SPARK_HOME='${new File(sparkHome).getCanonicalPath}'. " +
-        "Make sure the spark project jars has been built (e.g. using sbt package)" +
+        "Make sure the spark project jars has been built (e.g. using build/sbt package)" +
         "and the env variable `SPARK_HOME` is set correctly.")
     val jars = recursiveListFiles(targetDir).filter { f =>
       // SBT jar
