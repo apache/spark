@@ -2026,7 +2026,16 @@ class PlanGenerationTestSuite
   }
 
   test("expression extension") {
-    val extension = proto.ExamplePluginExpression.newBuilder().setCustomField("abc").build()
+    val extension = proto.ExamplePluginExpression
+      .newBuilder()
+      .setChild(
+        proto.Expression
+          .newBuilder()
+          .setUnresolvedAttribute(proto.Expression.UnresolvedAttribute
+            .newBuilder()
+            .setUnparsedIdentifier("id")))
+      .setCustomField("abc")
+      .build()
     simple.select(Column(com.google.protobuf.Any.pack(extension)))
   }
 }

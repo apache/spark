@@ -14,6 +14,11 @@
     "expressions": [{
       "extension": {
         "@type": "type.googleapis.com/spark.connect.ExamplePluginExpression",
+        "child": {
+          "unresolvedAttribute": {
+            "unparsedIdentifier": "id"
+          }
+        },
         "customField": "abc"
       }
     }]
