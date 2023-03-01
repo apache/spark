@@ -1401,12 +1401,20 @@ case class ArrayContains(left: Expression, right: Expression)
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage =
-    "_FUNC_(array, value) - Returns an array containing value as well as all elements from array. The new element is positioned at the beginning of the array.",
+  usage = """
+      _FUNC_(array, element) - Add the element at the beginning of the array passed as first
+      argument. Type of element should be similar to type of the elements of the array.
+      Null element is also prepended to the array. But if the array passed is NULL
+      output is NULL
+    """,
   examples = """
     Examples:
       > SELECT _FUNC_(array('b', 'd', 'c', 'a'), 'd');
        ["d","b","d","c","a"]
+      > SELECT _FUNC_(array(1, 2, 3, null), null);
+       [null,1,2,3,null]
+      > SELECT _FUNC_(CAST(null as Array<Int>), 2);
+       NULL
   """,
   group = "array_funcs",
   since = "3.4.0")
@@ -1448,25 +1456,23 @@ case class ArrayPrepend(left: Expression, right: Expression)
       val newArraySize = ctx.freshName("newArraySize")
       val newArray = ctx.freshName("newArray")
       val i = ctx.freshName("i")
-      val pos = ctx.freshName("pos")
+      val iPlus1 = s"$i+1"
+      val zero = "0"
       val allocation = CodeGenerator.createArrayData(
         newArray,
         elementType,
         newArraySize,
         s" $prettyName failed.")
       val assignment =
-        CodeGenerator.createArrayAssignment(newArray, elementType, arr, pos, i, false)
+        CodeGenerator.createArrayAssignment(newArray, elementType, arr, iPlus1, i, false)
       val newElemAssignment =
-        CodeGenerator.setArrayElement(newArray, elementType, pos, value, Some(rightGen.isNull))
+        CodeGenerator.setArrayElement(newArray, elementType, zero, value, Some(rightGen.isNull))
       s"""
-         |int $pos = 0;
          |int $newArraySize = $arr.numElements() + 1;
          |$allocation
          |$newElemAssignment
-         |$pos = $pos + 1;
          |for (int $i = 0; $i < $arr.numElements(); $i ++) {
          |  $assignment
-         |  $pos = $pos + 1;
          |}
          |${ev.value} = $newArray;
          |""".stripMargin

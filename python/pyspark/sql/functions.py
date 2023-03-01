@@ -7632,7 +7632,7 @@ def get(col: "ColumnOrName", index: Union["ColumnOrName", int]) -> Column:
 
 
 @try_remote_functions
-def array_prepend(col: "ColumnOrName", element: Any) -> Column:
+def array_prepend(col: "ColumnOrName", value: Any) -> Column:
     """
     Collection function: Returns an array containing element as
     well as all elements from array. The new element is positioned
@@ -7644,8 +7644,8 @@ def array_prepend(col: "ColumnOrName", element: Any) -> Column:
     ----------
     col : :class:`~pyspark.sql.Column` or str
         name of column containing array
-    element :
-        element to be prepended to the array
+    value :
+        a literal value, or a :class:`~pyspark.sql.Column` expression.
 
     Returns
     -------
@@ -7658,7 +7658,7 @@ def array_prepend(col: "ColumnOrName", element: Any) -> Column:
     >>> df.select(array_prepend(df.data, 1)).collect()
     [Row(array_prepend(data, 1)=[1, 2, 3, 4]), Row(array_prepend(data, 1)=[1])]
     """
-    return _invoke_function("array_prepend", _to_java_column(col), element)
+    return _invoke_function_over_columns("array_prepend", col, lit(value))
 
 
 @try_remote_functions
