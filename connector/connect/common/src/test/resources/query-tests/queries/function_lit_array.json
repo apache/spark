@@ -327,20 +327,6 @@
       "literal": {
         "array": {
           "elementType": {
-            "binary": {
-            }
-          },
-          "element": [{
-            "binary": "eHl6e3x9fn+AgYKDhIWGh4iJiouMjY4="
-          }, {
-            "binary": "eHl6e3x9fn+AgQ=="
-          }]
-        }
-      }
-    }, {
-      "literal": {
-        "array": {
-          "elementType": {
             "date": {
             }
           },

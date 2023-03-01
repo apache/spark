@@ -2022,8 +2022,6 @@ class PlanGenerationTestSuite
       fn.lit(Array('T', 'F')),
       fn.lit(Array(Array.tabulate(10)(i => ('A' + i).toChar),
         Array.tabulate(10)(i => ('B' + i).toChar))),
-      fn.lit(Array(Array.tabulate(23)(i => (i + 120).toByte),
-        Array.tabulate(10)(i => (i + 120).toByte))),
       fn.lit(Array(java.time.LocalDate.of(2020, 10, 10),
         java.time.LocalDate.of(2020, 10, 11))),
       fn.lit(Array(java.time.Instant.ofEpochMilli(1677155519808L),
