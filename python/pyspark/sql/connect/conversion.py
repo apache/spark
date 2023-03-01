@@ -250,6 +250,8 @@ class LocalDataToArrowConversion:
         pylist: List[List] = [[] for _ in range(len(column_names))]
 
         for item in data:
+            if not isinstance(item, Row) and hasattr(item, "__dict__"):
+                item = item.__dict__
             for i, col in enumerate(column_names):
                 if isinstance(item, dict):
                     value = item.get(col)
