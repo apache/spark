@@ -360,7 +360,7 @@ message LocalRelation {
     // Either a DDL-formatted type string or a JSON string.
     string schemaString = 2;
 
-    // DataType representing the schema. This must be struct.
+    // DataType representing the schema.
     DataType dataType = 3;
   }
 }
