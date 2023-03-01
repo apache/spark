@@ -533,6 +533,10 @@ class ClientE2ETestSuite extends RemoteSparkSession {
     assert(!spark.conf.isModifiable("spark.sql.globalTempDatabase"))
     intercept[Exception](spark.conf.set("spark.sql.globalTempDatabase", "/dev/null"))
   }
+
+  test("SparkVersion") {
+    assert(!spark.version.isEmpty)
+  }
 }
 
 private[sql] case class MyType(id: Long, a: Double, b: Double)

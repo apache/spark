@@ -51,7 +51,7 @@ object TableOutputResolver {
 
       query.output.zip(expected).flatMap {
         case (queryExpr, tableAttr) =>
-          checkField(tableAttr, queryExpr, byName, conf, err => errors += err)
+          checkField(tableAttr, queryExpr, byName, conf, err => errors += err, Seq(tableAttr.name))
       }
     }
 
@@ -105,7 +105,7 @@ object TableOutputResolver {
             resolveMapType(
               matchedCol, matchedType, expectedType, expectedName, conf, addError, newColPath)
           case _ =>
-            checkField(expectedCol, matchedCol, byName = true, conf, addError)
+            checkField(expectedCol, matchedCol, byName = true, conf, addError, newColPath)
         }
       }
     }
@@ -251,7 +251,8 @@ object TableOutputResolver {
       queryExpr: NamedExpression,
       byName: Boolean,
       conf: SQLConf,
-      addError: String => Unit): Option[NamedExpression] = {
+      addError: String => Unit,
+      colPath: Seq[String]): Option[NamedExpression] = {
 
     val storeAssignmentPolicy = conf.storeAssignmentPolicy
     lazy val outputField = if (tableAttr.dataType.sameType(queryExpr.dataType) &&
@@ -264,7 +265,7 @@ object TableOutputResolver {
           val cast = Cast(queryExpr, tableAttr.dataType, Option(conf.sessionLocalTimeZone),
             ansiEnabled = true)
           cast.setTagValue(Cast.BY_TABLE_INSERTION, ())
-          checkCastOverflowInTableInsert(cast, tableAttr.name)
+          checkCastOverflowInTableInsert(cast, colPath.quoted)
         case StoreAssignmentPolicy.LEGACY =>
           Cast(queryExpr, tableAttr.dataType, Option(conf.sessionLocalTimeZone),
             ansiEnabled = false)
@@ -289,10 +290,10 @@ object TableOutputResolver {
       case StoreAssignmentPolicy.STRICT | StoreAssignmentPolicy.ANSI =>
         // run the type check first to ensure type errors are present
         val canWrite = DataType.canWrite(
-          queryExpr.dataType, tableAttr.dataType, byName, conf.resolver, tableAttr.name,
+          queryExpr.dataType, tableAttr.dataType, byName, conf.resolver, colPath.quoted,
           storeAssignmentPolicy, addError)
         if (queryExpr.nullable && !tableAttr.nullable) {
-          addError(s"Cannot write nullable values to non-null column '${tableAttr.name}'")
+          addError(s"Cannot write nullable values to non-null column '${colPath.quoted}'")
           None
 
         } else if (!canWrite) {

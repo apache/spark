@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions.{CurrentRow, DenseRank, Literal, NthValue, NTile, Rank, RowFrame, RowNumber, SpecifiedWindowFrame, UnboundedPreceding}
@@ -25,14 +26,15 @@ import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.internal.SQLConf
 
-class InsertWindowGroupLimitSuite extends PlanTest {
+class InferWindowGroupLimitSuite extends PlanTest {
   private object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =
       Batch("Insert WindowGroupLimit", FixedPoint(10),
         CollapseProject,
         RemoveNoopOperators,
         PushDownPredicates,
-        InsertWindowGroupLimit) :: Nil
+        InferWindowGroupLimit,
+        LimitPushDownThroughWindow) :: Nil
   }
 
   private object WithoutOptimize extends RuleExecutor[LogicalPlan] {
@@ -40,11 +42,13 @@ class InsertWindowGroupLimitSuite extends PlanTest {
       Batch("Insert WindowGroupLimit", FixedPoint(10),
         CollapseProject,
         RemoveNoopOperators,
-        PushDownPredicates) :: Nil
+        PushDownPredicates,
+        LimitPushDownThroughWindow) :: Nil
   }
 
-  private val testRelation = LocalRelation(
-    Seq("a".attr.int, "b".attr.int, "c".attr.int))
+  private val testRelation = LocalRelation.fromExternalRows(
+    Seq("a".attr.int, "b".attr.int, "c".attr.int),
+    1.to(6).map(_ => Row(1, 2, 3)))
   private val a = testRelation.output(0)
   private val b = testRelation.output(1)
   private val c = testRelation.output(2)
@@ -113,24 +117,26 @@ class InsertWindowGroupLimitSuite extends PlanTest {
         Optimize.execute(originalQuery0.analyze),
         WithoutOptimize.execute(correctAnswer0.analyze))
 
-      val originalQuery1 =
-        testRelation
-          .select(a, b, c,
-            windowExpr(function,
-              windowSpec(Nil, c.desc :: Nil, windowFrame)).as("rn"))
-          .where(cond)
+      withSQLConf(SQLConf.TOP_K_SORT_FALLBACK_THRESHOLD.key -> "-1") {
+        val originalQuery1 =
+          testRelation
+            .select(a, b, c,
+              windowExpr(function,
+                windowSpec(Nil, c.desc :: Nil, windowFrame)).as("rn"))
+            .where(cond)
 
-      val correctAnswer1 =
-        testRelation
-          .windowGroupLimit(Nil, c.desc :: Nil, function, 2)
-          .select(a, b, c,
-            windowExpr(function,
-              windowSpec(Nil, c.desc :: Nil, windowFrame)).as("rn"))
-          .where(cond)
+        val correctAnswer1 =
+          testRelation
+            .windowGroupLimit(Nil, c.desc :: Nil, function, 2)
+            .select(a, b, c,
+              windowExpr(function,
+                windowSpec(Nil, c.desc :: Nil, windowFrame)).as("rn"))
+            .where(cond)
 
-      comparePlans(
-        Optimize.execute(originalQuery1.analyze),
-        WithoutOptimize.execute(correctAnswer1.analyze))
+        comparePlans(
+          Optimize.execute(originalQuery1.analyze),
+          WithoutOptimize.execute(correctAnswer1.analyze))
+      }
     }
   }
 
@@ -282,6 +288,54 @@ class InsertWindowGroupLimitSuite extends PlanTest {
           Optimize.execute(originalQuery.analyze),
           WithoutOptimize.execute(correctAnswer.analyze))
       }
+    }
+  }
+
+  test("Insert limit node for top-k computation") {
+    for (condition <- supportedConditions; moreCond <- Seq(true, false)) {
+      val cond = if (moreCond) {
+        condition && b > 0
+      } else {
+        condition
+      }
+
+      val originalQuery0 =
+        testRelation
+          .select(a, b, c,
+            windowExpr(RowNumber(),
+              windowSpec(Nil, c.desc :: Nil, windowFrame)).as("rn"))
+          .where(cond)
+
+      val correctAnswer0 =
+        testRelation
+          .select(a, b, c,
+            windowExpr(RowNumber(),
+              windowSpec(Nil, c.desc :: Nil, windowFrame)).as("rn"))
+          .limit(2)
+          .where(cond)
+
+      comparePlans(
+        Optimize.execute(originalQuery0.analyze),
+        WithoutOptimize.execute(correctAnswer0.analyze))
+
+      val originalQuery1 =
+        testRelation
+          .select(a, b, c,
+            windowExpr(Rank(c :: Nil),
+              windowSpec(Nil, c.desc :: Nil, windowFrame)).as("rn"))
+          .where(cond)
+
+      val correctAnswer1 =
+        testRelation
+          .windowGroupLimit(Nil, c.desc :: Nil, Rank(c :: Nil), 2)
+          .select(a, b, c,
+            windowExpr(Rank(c :: Nil),
+              windowSpec(Nil, c.desc :: Nil, windowFrame)).as("rn"))
+          .where(cond)
+
+      comparePlans(
+        Optimize.execute(originalQuery1.analyze),
+        WithoutOptimize.execute(correctAnswer1.analyze))
     }
   }
 }

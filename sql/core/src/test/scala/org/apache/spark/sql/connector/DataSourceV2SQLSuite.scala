@@ -2408,9 +2408,9 @@ class DataSourceV2SQLSuiteV1Filter
           },
           errorClass = "INVALID_TEMP_OBJ_REFERENCE",
           parameters = Map(
-            "obj" -> "view",
+            "obj" -> "VIEW",
             "objName" -> "`spark_catalog`.`default`.`v`",
-            "tempObj" -> "view",
+            "tempObj" -> "VIEW",
             "tempObjName" -> "`t`"))
       }
     }

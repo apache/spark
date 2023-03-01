@@ -143,7 +143,7 @@
     <parquet.version>1.12.3</parquet.version>
     <orc.version>1.8.2</orc.version>
     <orc.classifier>shaded-protobuf</orc.classifier>
-    <jetty.version>9.4.50.v20221201</jetty.version>
+    <jetty.version>9.4.51.v20230217</jetty.version>
     <jakartaservlet.version>4.0.3</jakartaservlet.version>
     <chill.version>0.10.0</chill.version>
     <ivy.version>2.5.1</ivy.version>
@@ -806,7 +806,7 @@
       <dependency>
         <groupId>com.github.luben</groupId>
         <artifactId>zstd-jni</artifactId>
-        <version>1.5.4-1</version>
+        <version>1.5.4-2</version>
       </dependency>
       <dependency>
         <groupId>com.clearspring.analytics</groupId>

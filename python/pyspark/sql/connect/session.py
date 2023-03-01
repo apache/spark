@@ -43,6 +43,7 @@ import pyarrow as pa
 from pandas.api.types import (  # type: ignore[attr-defined]
     is_datetime64_dtype,
     is_datetime64tz_dtype,
+    is_timedelta64_dtype,
 )
 
 from pyspark import SparkContext, SparkConf, __version__
@@ -60,6 +61,7 @@ from pyspark.sql.types import (
     _merge_type,
     Row,
     DataType,
+    DayTimeIntervalType,
     StructType,
     AtomicType,
     TimestampType,
@@ -245,6 +247,8 @@ class SparkSession:
                 arrow_types = [
                     to_arrow_type(TimestampType())
                     if is_datetime64_dtype(t) or is_datetime64tz_dtype(t)
+                    else to_arrow_type(DayTimeIntervalType())
+                    if is_timedelta64_dtype(t)
                     else None
                     for t in data.dtypes
                 ]
@@ -452,7 +456,9 @@ class SparkSession:
 
     @property
     def version(self) -> str:
-        raise NotImplementedError("version() is not implemented.")
+        result = self._client._analyze(method="spark_version").spark_version
+        assert result is not None
+        return result
 
     # SparkConnect-specific API
     @property

@@ -37,7 +37,7 @@ import org.apache.spark.sql.connector.catalog.CatalogV2Util.structTypeToV2Column
 import org.apache.spark.sql.connector.catalog.index.SupportsIndex
 import org.apache.spark.sql.connector.expressions.{FieldReference, LiteralValue}
 import org.apache.spark.sql.connector.expressions.filter.{And => V2And, Not => V2Not, Or => V2Or, Predicate}
-import org.apache.spark.sql.connector.read.{LocalScan, SupportsReportStatistics}
+import org.apache.spark.sql.connector.read.LocalScan
 import org.apache.spark.sql.connector.read.streaming.{ContinuousStream, MicroBatchStream}
 import org.apache.spark.sql.connector.write.V1Write
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
@@ -340,14 +340,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
     case DescribeColumn(r: ResolvedTable, column, isExtended, output) =>
       column match {
         case c: Attribute =>
-          val colStats =
-            r.table.asReadable.newScanBuilder(CaseInsensitiveStringMap.empty()).build() match {
-            case s: SupportsReportStatistics =>
-              val stats = s.estimateStatistics()
-              Some(stats.columnStats().get(FieldReference.column(c.name)))
-            case _ => None
-          }
-          DescribeColumnExec(output, c, isExtended, colStats) :: Nil
+          DescribeColumnExec(output, c, isExtended, r.table) :: Nil
         case nested =>
           throw QueryCompilationErrors.commandNotSupportNestedColumnError(
             "DESC TABLE COLUMN", toPrettySQL(nested))
