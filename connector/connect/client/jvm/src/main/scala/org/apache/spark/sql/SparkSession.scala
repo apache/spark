@@ -296,6 +296,19 @@ class SparkSession private[sql] (
     planIdGenerator.set(0)
   }
 
+  /**
+   * Synonym for `close()`.
+   *
+   * @since 3.4.0
+   */
+  def stop(): Unit = close()
+
+  /**
+   * Close the [[SparkSession]]. This closes the connection, and the allocator. The latter will
+   * throw an exception if there are still open [[SparkResult]]s.
+   *
+   * @since 3.4.0
+   */
   override def close(): Unit = {
     client.shutdown()
     allocator.close()
