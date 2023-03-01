@@ -85,6 +85,17 @@ trait ConstraintHelper {
     case e: Expression if e.semanticEquals(source) => destination
   })
 
+  private def hasComplexOperator(plan: LogicalPlan): Boolean = plan.exists {
+    case _: Join | _: Aggregate | _: Window => true
+    case _ => false
+  }
+
+  private def hasComplexInOrCorrelatedExistsSubquery(e: Expression): Boolean = e.exists {
+    case lq: ListQuery => hasComplexOperator(lq.plan)
+    case ex: Exists => hasComplexOperator(ex.plan)
+    case _ => false
+  }
+
   /**
    * Infers a set of `isNotNull` constraints from null intolerant expressions as well as
    * non-nullable attributes. For e.g., if an expression is of the form (`a > 5`), this
