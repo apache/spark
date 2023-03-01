@@ -34,6 +34,11 @@ object LiteralProtoConverter {
   private lazy val nullType =
     proto.DataType.newBuilder().setNull(proto.DataType.NULL.getDefaultInstance).build()
 
+  /**
+   * Transforms literal value to the `proto.Expression.Literal.Builder`.
+   *
+   * @return proto.Expression.Literal.Builder
+   */
   def toLiteralProtoBuilder(literal: Any): proto.Expression.Literal.Builder = {
     val builder = proto.Expression.Literal.newBuilder()
 
