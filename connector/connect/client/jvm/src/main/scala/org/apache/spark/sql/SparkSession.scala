@@ -16,21 +16,24 @@
  */
 package org.apache.spark.sql
 
-import com.google.protobuf.ByteString
-
 import java.io.Closeable
 import java.util.concurrent.TimeUnit._
 import java.util.concurrent.atomic.AtomicLong
+
 import scala.collection.JavaConverters._
+import scala.reflect.runtime.universe.TypeTag
+
 import org.apache.arrow.memory.RootAllocator
+
 import org.apache.spark.SPARK_VERSION
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.connect.proto
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, ExpressionEncoder}
+import org.apache.spark.sql.catalyst.{JavaTypeInference, ScalaReflection}
+import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, RowEncoder}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{BoxedLongEncoder, UnboundRowEncoder}
 import org.apache.spark.sql.connect.client.{SparkConnectClient, SparkResult}
-import org.apache.spark.sql.connect.client.util.Cleaner
+import org.apache.spark.sql.connect.client.util.{Cleaner, ConvertToArrow}
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -92,53 +95,32 @@ class SparkSession(
     ret
   }
 
-  private def convertToArrow[T](encoder: AgnosticEncoder[T], data: Iterator[T]): ByteString = {
-    val serializer = ExpressionEncoder(encoder).resolveAndBind().createSerializer()
-    val internalRows = data.map(serializer)
-    ArrowConverters.toBatchWithSchemaIterator(
-      rows,
-      schema,
-      maxRecordsPerBatch,
-      maxBatchSize,
-      timeZoneId)
-
-
-
-    null
-
-
-
-  }
-
   /**
    * Returns a `DataFrame` with no rows or columns.
    *
-   * @since 2.0.0
+   * @since 3.4.0
    */
   @transient
-  lazy val emptyDataFrame: DataFrame = newDataFrame { builder =>
-    builder.getLocalRelationBuilder.setSchema()
-  }
+  val emptyDataFrame: DataFrame = emptyDataset(UnboundRowEncoder)
 
   /**
    * Creates a new [[Dataset]] of type T containing zero elements.
    *
-   * @since 2.0.0
+   * @since 3.4.0
    */
-  def emptyDataset[T: Encoder]: Dataset[T] = {
-    val encoder = implicitly[Encoder[T]]
+  def emptyDataset[T: Encoder]: Dataset[T] = createDataset[T](Nil)
+
+  private def createDataFrame[T](encoder: AgnosticEncoder[T], data: Seq[T]): DataFrame = {
+    createDataset(data)(encoder).toDF()
   }
 
   /**
    * Creates a `DataFrame` from a local Seq of Product.
    *
-   * @since 2.0.0
+   * @since 3.4.0
    */
   def createDataFrame[A <: Product : TypeTag](data: Seq[A]): DataFrame = {
-
-    val schema = ScalaReflection.schemaFor[A].dataType.asInstanceOf[StructType]
-    val attributeSeq = schema.toAttributes
-    Dataset.ofRows(self, LocalRelation.fromProduct(attributeSeq, data))
+    createDataFrame(ScalaReflection.encoderFor[A], data)
   }
 
   /**
@@ -147,11 +129,10 @@ class SparkSession(
    * It is important to make sure that the structure of every [[Row]] of the provided List matches
    * the provided schema. Otherwise, there will be runtime exception.
    *
-   * @since 2.0.0
+   * @since 3.4.0
    */
   def createDataFrame(rows: java.util.List[Row], schema: StructType): DataFrame = {
-    val replaced = CharVarcharUtils.failIfHasCharVarchar(schema).asInstanceOf[StructType]
-    Dataset.ofRows(self, LocalRelation.fromExternalRows(replaced.toAttributes, rows.asScala.toSeq))
+    createDataFrame(RowEncoder.encoderFor(schema), rows.asScala)
   }
 
   /**
@@ -159,14 +140,12 @@ class SparkSession(
    *
    * WARNING: Since there is no guaranteed ordering for fields in a Java Bean,
    *          SELECT * queries will return the columns in an undefined order.
-   * @since 1.6.0
+   * @since 3.4.0
    */
   def createDataFrame(data: java.util.List[_], beanClass: Class[_]): DataFrame = {
-
-
-    val attrSeq = getSchema(beanClass)
-    val rows = SQLContext.beansToRows(data.asScala.iterator, beanClass, attrSeq)
-    Dataset.ofRows(self, LocalRelation(attrSeq, rows.toSeq))
+    createDataFrame(
+      JavaTypeInference.encoderFor(beanClass.asInstanceOf[Class[Any]]),
+      data.asScala.asInstanceOf[Seq[Any]])
   }
 
   /**
@@ -194,15 +173,19 @@ class SparkSession(
    *   // +-------+---+
    * }}}
    *
-   * @since 2.0.0
+   * @since 3.4.0
    */
   def createDataset[T : Encoder](data: Seq[T]): Dataset[T] = {
-    val enc = encoderFor[T]
-    val toRow = enc.createSerializer()
-    val attributes = enc.schema.toAttributes
-    val encoded = data.map(d => toRow(d).copy())
-    val plan = new LocalRelation(attributes, encoded)
-    Dataset[T](self, plan)
+    val encoder = encoderFor[T]
+    newDataset(encoder) { builder =>
+      val localRelationBuilder = builder.getLocalRelationBuilder
+        .setSchema(encoder.schema.catalogString)
+      if (data.nonEmpty) {
+        val timeZoneId = conf.get("spark.sql.session.timeZone")
+        val arrowData = ConvertToArrow(encoder, data.iterator, timeZoneId, allocator)
+        localRelationBuilder.setData(arrowData)
+      }
+    }
   }
 
   /**
@@ -218,7 +201,7 @@ class SparkSession(
    *     Dataset<String> ds = spark.createDataset(data, Encoders.STRING());
    * }}}
    *
-   * @since 2.0.0
+   * @since 3.4.0
    */
   def createDataset[T : Encoder](data: java.util.List[T]): Dataset[T] = {
     createDataset(data.asScala.toSeq)
