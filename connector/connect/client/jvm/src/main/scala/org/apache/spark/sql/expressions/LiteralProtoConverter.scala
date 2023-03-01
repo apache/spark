@@ -39,6 +39,7 @@ object LiteralProtoConverter {
    *
    * @return proto.Expression.Literal.Builder
    */
+  @scala.annotation.tailrec
   def toLiteralProtoBuilder(literal: Any): proto.Expression.Literal.Builder = {
     val builder = proto.Expression.Literal.newBuilder()
 
@@ -54,7 +55,7 @@ object LiteralProtoConverter {
     def arrayBuilder(array: Array[_]) = {
       val ab = builder.getArrayBuilder
         .setElementType(componentTypeToProto(array.getClass.getComponentType))
-      array.foreach(x => ab.addElement(toLiteralProtoBuilder(x)))
+      array.foreach(x => ab.addElement(toLiteralProto(x)))
       ab
     }
 
@@ -91,6 +92,14 @@ object LiteralProtoConverter {
       case _ => unsupported(s"literal $literal not supported (yet).")
     }
   }
+
+  /**
+   * Transforms literal value to the `proto.Expression.Literal`.
+   *
+   * @return proto.Expression.Literal
+   */
+  def toLiteralProto(literal: Any): proto.Expression.Literal =
+    toLiteralProtoBuilder(literal).build()
 
   private def componentTypeToProto(clz: Class[_]): proto.DataType = clz match {
     // primitive types
