@@ -64,7 +64,6 @@ SCALA_BINARY_VERSION=$($MVN -q \
     --non-recursive \
     org.codehaus.mojo:exec-maven-plugin:1.6.0:exec | grep -E '[0-9]+\.[0-9]+')
 if [[ "$SCALA_BINARY_VERSION" != "2.12" ]]; then
-  # TODO(SPARK-36168) Support Scala 2.13 in dev/test-dependencies.sh
   echo "Skip dependency testing on $SCALA_BINARY_VERSION"
   exit 0
 fi
