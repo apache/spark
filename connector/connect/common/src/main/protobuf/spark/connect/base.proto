@@ -79,6 +79,7 @@ message AnalyzePlanRequest {
     InputFiles input_files = 9;
     SparkVersion spark_version = 10;
     DDLParse ddl_parse = 11;
+    SameSemantics same_semantics = 12;
   }
 
   message Schema {
@@ -145,6 +146,16 @@ message AnalyzePlanRequest {
     // (Required) The DDL formatted string to be parsed.
     string ddl_string = 1;
   }
+
+
+  // Returns `true` when the logical query plans  are equal and therefore return same results.
+  message SameSemantics {
+    // (Required) The plan to be compared.
+    Plan target_plan = 1;
+
+    // (Required) The other plan to be compared.
+    Plan other_plan = 2;
+  }
 }
 
 // Response to performing analysis of the query. Contains relevant metadata to be able to
@@ -161,6 +172,7 @@ message AnalyzePlanResponse {
     InputFiles input_files = 7;
     SparkVersion spark_version = 8;
     DDLParse ddl_parse = 9;
+    SameSemantics same_semantics = 10;
   }
 
   message Schema {
@@ -194,6 +206,10 @@ message AnalyzePlanResponse {
 
   message DDLParse {
     DataType parsed = 1;
+  }
+
+  message SameSemantics {
+    bool result = 1;
   }
 }
 

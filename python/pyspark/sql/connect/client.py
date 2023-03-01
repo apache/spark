@@ -401,6 +401,7 @@ class AnalyzeResult:
         input_files: Optional[List[str]],
         spark_version: Optional[str],
         parsed: Optional[pb2.DataType],
+        is_same_semantics: Optional[bool],
     ):
         self.schema = schema
         self.explain_string = explain_string
@@ -410,6 +411,7 @@ class AnalyzeResult:
         self.input_files = input_files
         self.spark_version = spark_version
         self.parsed = parsed
+        self.is_same_semantics = is_same_semantics
 
     @classmethod
     def fromProto(cls, pb: Any) -> "AnalyzeResult":
@@ -421,6 +423,7 @@ class AnalyzeResult:
         input_files: Optional[List[str]] = None
         spark_version: Optional[str] = None
         parsed: Optional[pb2.DataType] = None
+        is_same_semantics: Optional[bool] = None
 
         if pb.HasField("schema"):
             schema = pb.schema.schema
@@ -438,6 +441,8 @@ class AnalyzeResult:
             spark_version = pb.spark_version.version
         elif pb.HasField("ddl_parse"):
             parsed = pb.ddl_parse.parsed
+        elif pb.HasField("same_semantics"):
+            is_same_semantics = pb.same_semantics.result
         else:
             raise SparkConnectException("No analyze result found!")
 
@@ -450,6 +455,7 @@ class AnalyzeResult:
             input_files,
             spark_version,
             parsed,
+            is_same_semantics,
         )
 
 
@@ -690,6 +696,14 @@ class SparkConnectClient(object):
         else:
             return (None, properties)
 
+    def same_semantics(self, plan: pb2.Plan, other: pb2.Plan) -> bool:
+        """
+        return if two plans have the same semantics.
+        """
+        result = self._analyze(method="same_semantics", plan=plan, other=other).is_same_semantics
+        assert result is not None
+        return result
+
     def close(self) -> None:
         """
         Close the channel.
@@ -765,6 +779,9 @@ class SparkConnectClient(object):
             req.spark_version.SetInParent()
         elif method == "ddl_parse":
             req.ddl_parse.ddl_string = cast(str, kwargs.get("ddl_string"))
+        elif method == "same_semantics":
+            req.same_semantics.target_plan.CopyFrom(cast(pb2.Plan, kwargs.get("plan")))
+            req.same_semantics.other_plan.CopyFrom(cast(pb2.Plan, kwargs.get("other")))
         else:
             raise ValueError(f"Unknown Analyze method: {method}")
 

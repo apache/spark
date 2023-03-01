@@ -318,6 +318,38 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
             self, field_name: typing_extensions.Literal["ddl_string", b"ddl_string"]
         ) -> None: ...
 
+    class SameSemantics(google.protobuf.message.Message):
+        """Returns `true` when the logical query plans  are equal and therefore return same results."""
+
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        TARGET_PLAN_FIELD_NUMBER: builtins.int
+        OTHER_PLAN_FIELD_NUMBER: builtins.int
+        @property
+        def target_plan(self) -> global___Plan:
+            """(Required) The plan to be compared."""
+        @property
+        def other_plan(self) -> global___Plan:
+            """(Required) The other plan to be compared."""
+        def __init__(
+            self,
+            *,
+            target_plan: global___Plan | None = ...,
+            other_plan: global___Plan | None = ...,
+        ) -> None: ...
+        def HasField(
+            self,
+            field_name: typing_extensions.Literal[
+                "other_plan", b"other_plan", "target_plan", b"target_plan"
+            ],
+        ) -> builtins.bool: ...
+        def ClearField(
+            self,
+            field_name: typing_extensions.Literal[
+                "other_plan", b"other_plan", "target_plan", b"target_plan"
+            ],
+        ) -> None: ...
+
     CLIENT_ID_FIELD_NUMBER: builtins.int
     USER_CONTEXT_FIELD_NUMBER: builtins.int
     CLIENT_TYPE_FIELD_NUMBER: builtins.int
@@ -329,6 +361,7 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
     INPUT_FILES_FIELD_NUMBER: builtins.int
     SPARK_VERSION_FIELD_NUMBER: builtins.int
     DDL_PARSE_FIELD_NUMBER: builtins.int
+    SAME_SEMANTICS_FIELD_NUMBER: builtins.int
     client_id: builtins.str
     """(Required)
 
@@ -359,6 +392,8 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
     def spark_version(self) -> global___AnalyzePlanRequest.SparkVersion: ...
     @property
     def ddl_parse(self) -> global___AnalyzePlanRequest.DDLParse: ...
+    @property
+    def same_semantics(self) -> global___AnalyzePlanRequest.SameSemantics: ...
     def __init__(
         self,
         *,
@@ -373,6 +408,7 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
         input_files: global___AnalyzePlanRequest.InputFiles | None = ...,
         spark_version: global___AnalyzePlanRequest.SparkVersion | None = ...,
         ddl_parse: global___AnalyzePlanRequest.DDLParse | None = ...,
+        same_semantics: global___AnalyzePlanRequest.SameSemantics | None = ...,
     ) -> None: ...
     def HasField(
         self,
@@ -393,6 +429,8 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
             b"is_local",
             "is_streaming",
             b"is_streaming",
+            "same_semantics",
+            b"same_semantics",
             "schema",
             b"schema",
             "spark_version",
@@ -424,6 +462,8 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
             b"is_local",
             "is_streaming",
             b"is_streaming",
+            "same_semantics",
+            b"same_semantics",
             "schema",
             b"schema",
             "spark_version",
@@ -450,6 +490,7 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
         "input_files",
         "spark_version",
         "ddl_parse",
+        "same_semantics",
     ] | None: ...
 
 global___AnalyzePlanRequest = AnalyzePlanRequest
@@ -583,6 +624,20 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
             self, field_name: typing_extensions.Literal["parsed", b"parsed"]
         ) -> None: ...
 
+    class SameSemantics(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        RESULT_FIELD_NUMBER: builtins.int
+        result: builtins.bool
+        def __init__(
+            self,
+            *,
+            result: builtins.bool = ...,
+        ) -> None: ...
+        def ClearField(
+            self, field_name: typing_extensions.Literal["result", b"result"]
+        ) -> None: ...
+
     CLIENT_ID_FIELD_NUMBER: builtins.int
     SCHEMA_FIELD_NUMBER: builtins.int
     EXPLAIN_FIELD_NUMBER: builtins.int
@@ -592,6 +647,7 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
     INPUT_FILES_FIELD_NUMBER: builtins.int
     SPARK_VERSION_FIELD_NUMBER: builtins.int
     DDL_PARSE_FIELD_NUMBER: builtins.int
+    SAME_SEMANTICS_FIELD_NUMBER: builtins.int
     client_id: builtins.str
     @property
     def schema(self) -> global___AnalyzePlanResponse.Schema: ...
@@ -609,6 +665,8 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
     def spark_version(self) -> global___AnalyzePlanResponse.SparkVersion: ...
     @property
     def ddl_parse(self) -> global___AnalyzePlanResponse.DDLParse: ...
+    @property
+    def same_semantics(self) -> global___AnalyzePlanResponse.SameSemantics: ...
     def __init__(
         self,
         *,
@@ -621,6 +679,7 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
         input_files: global___AnalyzePlanResponse.InputFiles | None = ...,
         spark_version: global___AnalyzePlanResponse.SparkVersion | None = ...,
         ddl_parse: global___AnalyzePlanResponse.DDLParse | None = ...,
+        same_semantics: global___AnalyzePlanResponse.SameSemantics | None = ...,
     ) -> None: ...
     def HasField(
         self,
@@ -637,6 +696,8 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
             b"is_streaming",
             "result",
             b"result",
+            "same_semantics",
+            b"same_semantics",
             "schema",
             b"schema",
             "spark_version",
@@ -662,6 +723,8 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
             b"is_streaming",
             "result",
             b"result",
+            "same_semantics",
+            b"same_semantics",
             "schema",
             b"schema",
             "spark_version",
@@ -681,6 +744,7 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
         "input_files",
         "spark_version",
         "ddl_parse",
+        "same_semantics",
     ] | None: ...
 
 global___AnalyzePlanResponse = AnalyzePlanResponse
