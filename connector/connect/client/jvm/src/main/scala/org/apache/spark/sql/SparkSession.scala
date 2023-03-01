@@ -261,6 +261,14 @@ class SparkSession private[sql] (
     new Dataset[T](this, plan, encoder)
   }
 
+  def newDataFrame(extension: com.google.protobuf.Any): DataFrame = {
+    newDataset(extension, UnboundRowEncoder)
+  }
+
+  def newDataset[T](extension: com.google.protobuf.Any, encoder: AgnosticEncoder[T]): Dataset[T] = {
+    newDataset(encoder) { builder => builder.setExtension(extension) }
+  }
+
   private[sql] def newCommand[T](f: proto.Command.Builder => Unit): proto.Command = {
     val builder = proto.Command.newBuilder()
     f(builder)
@@ -285,6 +293,11 @@ class SparkSession private[sql] (
   private[sql] def execute(command: proto.Command): Unit = {
     val plan = proto.Plan.newBuilder().setCommand(command).build()
     client.execute(plan).asScala.foreach(_ => ())
+  }
+
+  def execute(extension: com.google.protobuf.Any): Unit = {
+    val command = proto.Command.newBuilder().setExtension(extension).build()
+    execute(command)
   }
 
   /**

@@ -1312,6 +1312,10 @@ private[sql] object Column {
     new Column(builder.build())
   }
 
+  def apply(extension: com.google.protobuf.Any): Column = {
+    apply { builder => builder.setExtension(extension) }
+  }
+
   private[sql] def fn(name: String, inputs: Column*): Column = {
     fn(name, isDistinct = false, inputs: _*)
   }
