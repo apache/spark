@@ -22,8 +22,8 @@ import java.util.Locale
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.connect.proto.Expression.{Literal => GLiteral}
 import org.apache.spark.connect.proto.{NAReplace, Relation}
+import org.apache.spark.connect.proto.Expression.{Literal => GLiteral}
 import org.apache.spark.connect.proto.NAReplace.Replacement
 
 /**
