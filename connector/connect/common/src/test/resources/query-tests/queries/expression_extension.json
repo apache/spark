@@ -2,7 +2,7 @@
   "common": {
     "planId": "1"
   },
-  "drop": {
+  "project": {
     "input": {
       "common": {
         "planId": "0"
@@ -11,9 +11,10 @@
         "schema": "struct\u003cid:bigint,a:int,b:double\u003e"
       }
     },
-    "columns": [{
-      "unresolvedAttribute": {
-        "unparsedIdentifier": "b"
+    "expressions": [{
+      "extension": {
+        "@type": "type.googleapis.com/spark.connect.ExamplePluginExpression",
+        "customField": "abc"
       }
     }]
   }

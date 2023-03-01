@@ -120,7 +120,7 @@ import org.apache.spark.util.Utils
  */
 class Dataset[T] private[sql] (
     val sparkSession: SparkSession,
-    private[sql] val plan: proto.Plan,
+    val plan: proto.Plan,
     val encoder: AgnosticEncoder[T])
     extends Serializable {
   // Make sure we don't forget to set plan id.
