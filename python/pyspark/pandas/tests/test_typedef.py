@@ -330,7 +330,7 @@ class TypeHintTests(unittest.TestCase):
             np.unicode_: (np.unicode_, StringType()),
             str: (np.unicode_, StringType()),
             # bool
-            bool: (np.bool, BooleanType()),
+            bool: (np.bool_, BooleanType()),
             # datetime
             np.datetime64: (np.datetime64, TimestampType()),
             datetime.datetime: (np.dtype("datetime64[ns]"), TimestampType()),
