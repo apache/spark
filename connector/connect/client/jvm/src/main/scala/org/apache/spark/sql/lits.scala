@@ -33,7 +33,7 @@ import org.apache.spark.sql.types.{DayTimeIntervalType, DecimalType, YearMonthIn
 import org.apache.spark.unsafe.types.CalendarInterval
 
 // scalastyle:off
-object converters {
+object lits {
 // scalastyle:on
 
   def componentTypeToProto(clz: Class[_]): proto.DataType = clz match {

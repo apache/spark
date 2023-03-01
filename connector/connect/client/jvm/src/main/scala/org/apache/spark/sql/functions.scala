@@ -30,8 +30,8 @@ import org.apache.spark.connect.proto
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.PrimitiveLongEncoder
 import org.apache.spark.sql.catalyst.util.{DateTimeUtils, IntervalUtils}
 import org.apache.spark.sql.connect.client.unsupported
-import org.apache.spark.sql.converters._
 import org.apache.spark.sql.expressions.{ScalarUserDefinedFunction, UserDefinedFunction}
+import org.apache.spark.sql.lits._
 import org.apache.spark.sql.types.{DataType, Decimal, StructType}
 import org.apache.spark.sql.types.DataType.parseTypeWithFallback
 import org.apache.spark.unsafe.types.CalendarInterval
@@ -105,7 +105,7 @@ object functions {
     builder =>
       val elementType = componentTypeToProto(array.getClass.getComponentType)
       val arrayBuilder = proto.Expression.Literal.Array.newBuilder()
-        .setElementType(elementType).setContainsNull(true)
+        .setElementType(elementType)
       // Need to optimize `lit(x).expr.getLiteral` ?
       array.foreach(x => arrayBuilder.addElement(lit(x).expr.getLiteral))
       val literalBuilder = proto.Expression.Literal.newBuilder()
