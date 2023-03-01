@@ -36,21 +36,22 @@ object TableOutputResolver {
       byName: Boolean,
       conf: SQLConf): LogicalPlan = {
 
-    if (expected.size < query.output.size) {
-      throw QueryCompilationErrors.cannotWriteTooManyColumnsToTableError(tableName, expected, query)
-    }
-
     val actualExpectedCols = expected.map { attr =>
       attr.withDataType(CharVarcharUtils.getRawType(attr.metadata).getOrElse(attr.dataType))
+    }
+
+    if (actualExpectedCols.size < query.output.size) {
+      throw QueryCompilationErrors.cannotWriteTooManyColumnsToTableError(
+        tableName, actualExpectedCols, query)
     }
 
     val errors = new mutable.ArrayBuffer[String]()
     val resolved: Seq[NamedExpression] = if (byName) {
       reorderColumnsByName(query.output, actualExpectedCols, conf, errors += _)
     } else {
-      if (expected.size > query.output.size) {
+      if (actualExpectedCols.size > query.output.size) {
         throw QueryCompilationErrors.cannotWriteNotEnoughColumnsToTableError(
-          tableName, expected, query)
+          tableName, actualExpectedCols, query)
       }
 
       query.output.zip(actualExpectedCols).flatMap {
