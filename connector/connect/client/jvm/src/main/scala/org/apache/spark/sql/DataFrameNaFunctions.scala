@@ -38,11 +38,7 @@ final class DataFrameNaFunctions private[sql](sparkSession: SparkSession, root: 
    *
    * @since 3.4.0
    */
-  def drop(): DataFrame = {
-    sparkSession.newDataFrame { builder =>
-      builder.getDropNaBuilder.setInput(root)
-    }
-  }
+  def drop(): DataFrame = buildDropDataFrame(None, None)
 
   /**
    * Returns a new `DataFrame` that drops rows containing null or NaN values.
@@ -53,14 +49,12 @@ final class DataFrameNaFunctions private[sql](sparkSession: SparkSession, root: 
    * @since 3.4.0
    */
   def drop(how: String): DataFrame = {
-    sparkSession.newDataFrame { builder =>
-      val dropNaBuilder = builder.getDropNaBuilder.setInput(root)
-      how.toLowerCase(Locale.ROOT) match {
-        case "any" => // No-Op. Do nothing.
-        case "all" => dropNaBuilder.setMinNonNulls(1)
-        case _ => throw new IllegalArgumentException(s"how ($how) must be 'any' or 'all'")
-      }
+    val minNonNulls = how.toLowerCase(Locale.ROOT) match {
+      case "any" => None // No-Op. Do nothing.
+      case "all" => Some(1)
+      case _ => throw new IllegalArgumentException(s"how ($how) must be 'any' or 'all'")
     }
+    buildDropDataFrame(None, minNonNulls)
   }
 
   /**
@@ -77,11 +71,7 @@ final class DataFrameNaFunctions private[sql](sparkSession: SparkSession, root: 
    *
    * @since 3.4.0
    */
-  def drop(cols: Seq[String]): DataFrame = {
-    sparkSession.newDataFrame { builder =>
-      builder.getDropNaBuilder.setInput(root).addAllCols(cols.asJava)
-    }
-  }
+  def drop(cols: Seq[String]): DataFrame = buildDropDataFrame(Some(cols), None)
 
   /**
    * Returns a new `DataFrame` that drops rows containing null or NaN values
@@ -104,14 +94,12 @@ final class DataFrameNaFunctions private[sql](sparkSession: SparkSession, root: 
    * @since 3.4.0
    */
   def drop(how: String, cols: Seq[String]): DataFrame = {
-    sparkSession.newDataFrame { builder =>
-      val dropNaBuilder = builder.getDropNaBuilder.setInput(root).addAllCols(cols.asJava)
-      how.toLowerCase(Locale.ROOT) match {
-        case "any" => // No-Op. Do nothing.
-        case "all" => dropNaBuilder.setMinNonNulls(1)
-        case _ => throw new IllegalArgumentException(s"how ($how) must be 'any' or 'all'")
-      }
+    val minNonNulls = how.toLowerCase(Locale.ROOT) match {
+      case "any" => None // No-Op. Do nothing.
+      case "all" => Some(1)
+      case _ => throw new IllegalArgumentException(s"how ($how) must be 'any' or 'all'")
     }
+    buildDropDataFrame(Some(cols), minNonNulls)
   }
 
   /**
@@ -121,9 +109,7 @@ final class DataFrameNaFunctions private[sql](sparkSession: SparkSession, root: 
    * @since 3.4.0
    */
   def drop(minNonNulls: Int): DataFrame = {
-    sparkSession.newDataFrame { builder =>
-      builder.getDropNaBuilder.setInput(root).setMinNonNulls(minNonNulls)
-    }
+    buildDropDataFrame(None, Some(minNonNulls))
   }
 
   /**
@@ -141,11 +127,14 @@ final class DataFrameNaFunctions private[sql](sparkSession: SparkSession, root: 
    * @since 3.4.0
    */
   def drop(minNonNulls: Int, cols: Seq[String]): DataFrame = {
+    buildDropDataFrame(Some(cols), Some(minNonNulls))
+  }
+
+  private def buildDropDataFrame(cols: Option[Seq[String]], minNonNulls: Option[Int]): DataFrame = {
     sparkSession.newDataFrame { builder =>
-      builder.getDropNaBuilder
-        .setInput(root)
-        .setMinNonNulls(minNonNulls)
-        .addAllCols(cols.asJava)
+      val dropNaBuilder = builder.getDropNaBuilder.setInput(root)
+      cols.foreach(c => dropNaBuilder.addAllCols(c.asJava))
+      minNonNulls.foreach(dropNaBuilder.setMinNonNulls)
     }
   }
 
@@ -155,11 +144,7 @@ final class DataFrameNaFunctions private[sql](sparkSession: SparkSession, root: 
    * @since 3.4.0
    */
   def fill(value: Long): DataFrame = {
-    sparkSession.newDataFrame { builder =>
-      builder.getFillNaBuilder
-        .setInput(root)
-        .addValues(GLiteral.newBuilder().setLong(value))
-    }
+    buildFillDataFrame(None, GLiteral.newBuilder().setLong(value).build())
   }
 
   /**
@@ -177,12 +162,7 @@ final class DataFrameNaFunctions private[sql](sparkSession: SparkSession, root: 
    * @since 3.4.0
    */
   def fill(value: Long, cols: Seq[String]): DataFrame = {
-    sparkSession.newDataFrame { builder =>
-      builder.getFillNaBuilder
-        .setInput(root)
-        .addValues(GLiteral.newBuilder().setLong(value))
-        .addAllCols(cols.asJava)
-    }
+    buildFillDataFrame(Some(cols), GLiteral.newBuilder().setLong(value).build())
   }
 
   /**
@@ -191,11 +171,7 @@ final class DataFrameNaFunctions private[sql](sparkSession: SparkSession, root: 
    * @since 3.4.0
    */
   def fill(value: Double): DataFrame = {
-    sparkSession.newDataFrame { builder =>
-      builder.getFillNaBuilder
-        .setInput(root)
-        .addValues(GLiteral.newBuilder().setDouble(value))
-    }
+    buildFillDataFrame(None, GLiteral.newBuilder().setDouble(value).build())
   }
 
   /**
@@ -213,12 +189,7 @@ final class DataFrameNaFunctions private[sql](sparkSession: SparkSession, root: 
    * @since 3.4.0
    */
   def fill(value: Double, cols: Seq[String]): DataFrame = {
-    sparkSession.newDataFrame { builder =>
-      builder.getFillNaBuilder
-        .setInput(root)
-        .addValues(GLiteral.newBuilder().setDouble(value))
-        .addAllCols(cols.asJava)
-    }
+    buildFillDataFrame(Some(cols), GLiteral.newBuilder().setDouble(value).build())
   }
 
   /**
@@ -227,11 +198,7 @@ final class DataFrameNaFunctions private[sql](sparkSession: SparkSession, root: 
    * @since 3.4.0
    */
   def fill(value: String): DataFrame = {
-    sparkSession.newDataFrame { builder =>
-      builder.getFillNaBuilder
-        .setInput(root)
-        .addValues(GLiteral.newBuilder().setString(value))
-    }
+    buildFillDataFrame(None, GLiteral.newBuilder().setString(value).build())
   }
 
   /**
@@ -249,12 +216,7 @@ final class DataFrameNaFunctions private[sql](sparkSession: SparkSession, root: 
    * @since 3.4.0
    */
   def fill(value: String, cols: Seq[String]): DataFrame = {
-    sparkSession.newDataFrame { builder =>
-      builder.getFillNaBuilder
-        .setInput(root)
-        .addValues(GLiteral.newBuilder().setString(value))
-        .addAllCols(cols.asJava)
-    }
+    buildFillDataFrame(Some(cols), GLiteral.newBuilder().setString(value).build())
   }
 
   /**
@@ -263,11 +225,7 @@ final class DataFrameNaFunctions private[sql](sparkSession: SparkSession, root: 
    * @since 3.4.0
    */
   def fill(value: Boolean): DataFrame = {
-    sparkSession.newDataFrame { builder =>
-      builder.getFillNaBuilder
-        .setInput(root)
-        .addValues(GLiteral.newBuilder().setBoolean(value))
-    }
+    buildFillDataFrame(None, GLiteral.newBuilder().setBoolean(value).build())
   }
 
   /**
@@ -285,11 +243,14 @@ final class DataFrameNaFunctions private[sql](sparkSession: SparkSession, root: 
    * @since 3.4.0
    */
   def fill(value: Boolean, cols: Seq[String]): DataFrame = {
+    buildFillDataFrame(Some(cols), GLiteral.newBuilder().setBoolean(value).build())
+  }
+
+  private def buildFillDataFrame(cols: Option[Seq[String]], value: GLiteral): DataFrame = {
     sparkSession.newDataFrame { builder =>
-      builder.getFillNaBuilder
-        .setInput(root)
-        .addValues(GLiteral.newBuilder().setBoolean(value))
-        .addAllCols(cols.asJava)
+      val fillNaBuilder = builder.getFillNaBuilder.setInput(root)
+      fillNaBuilder.addValues(value)
+      cols.foreach(c => fillNaBuilder.addAllCols(c.asJava))
     }
   }
 
@@ -399,13 +360,8 @@ final class DataFrameNaFunctions private[sql](sparkSession: SparkSession, root: 
    * @since 3.4.0
    */
   def replace[T](col: String, replacement: Map[T, T]): DataFrame = {
-    sparkSession.newDataFrame { builder =>
-      val replaceBuilder = builder.getReplaceBuilder
-        .addAllReplacements(buildReplacement(replacement))
-      if (col != "*") {
-        replaceBuilder.addCols(col)
-      }
-    }
+    val cols = if (col != "*") Some(Seq(col)) else None
+    buildReplaceDataFrame(cols, buildReplacement(replacement))
   }
 
   /**
@@ -451,14 +407,20 @@ final class DataFrameNaFunctions private[sql](sparkSession: SparkSession, root: 
    * @since 3.4.0
    */
   def replace[T](cols: Seq[String], replacement: Map[T, T]): DataFrame = {
+    buildReplaceDataFrame(Some(cols), buildReplacement(replacement))
+  }
+
+  private def buildReplaceDataFrame(
+      cols: Option[Seq[String]],
+      replacements: Iterable[NAReplace.Replacement]): DataFrame = {
     sparkSession.newDataFrame { builder =>
-      builder.getReplaceBuilder
-        .addAllReplacements(buildReplacement(replacement))
-        .addAllCols(cols.asJava)
+      val replaceBuilder = builder.getReplaceBuilder.setInput(root)
+      replaceBuilder.addAllReplacements(replacements.asJava)
+      cols.foreach(c => replaceBuilder.addAllCols(c.asJava))
     }
   }
 
-  private def buildReplacement[T](replacement: Map[T, T]): jl.Iterable[NAReplace.Replacement] = {
+  private def buildReplacement[T](replacement: Map[T, T]): Iterable[NAReplace.Replacement] = {
     // Convert the NumericType in replacement map to DoubleType,
     // while leaving StringType, BooleanType and null untouched.
     val replacementMap: Map[_, _] = replacement.map {
@@ -497,7 +459,7 @@ final class DataFrameNaFunctions private[sql](sparkSession: SparkSession, root: 
             .setNewValue(GLiteral.newBuilder().setString(newValue.asInstanceOf[String]))
             .build()
       }
-    }.asJava
+    }
   }
 
   private def convertToDouble(v: Any): Double = v match {
