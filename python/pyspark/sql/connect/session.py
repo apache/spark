@@ -43,13 +43,14 @@ import pyarrow as pa
 from pandas.api.types import (  # type: ignore[attr-defined]
     is_datetime64_dtype,
     is_datetime64tz_dtype,
+    is_timedelta64_dtype,
 )
 
 from pyspark import SparkContext, SparkConf, __version__
 from pyspark.sql.connect.client import SparkConnectClient
 from pyspark.sql.connect.conf import RuntimeConf
 from pyspark.sql.connect.dataframe import DataFrame
-from pyspark.sql.connect.plan import SQL, Range, LocalRelation
+from pyspark.sql.connect.plan import SQL, Range, LocalRelation, CachedRelation
 from pyspark.sql.connect.readwriter import DataFrameReader
 from pyspark.sql.pandas.serializers import ArrowStreamPandasSerializer
 from pyspark.sql.pandas.types import to_arrow_type, _get_local_timezone
@@ -60,6 +61,7 @@ from pyspark.sql.types import (
     _merge_type,
     Row,
     DataType,
+    DayTimeIntervalType,
     StructType,
     AtomicType,
     TimestampType,
@@ -245,6 +247,8 @@ class SparkSession:
                 arrow_types = [
                     to_arrow_type(TimestampType())
                     if is_datetime64_dtype(t) or is_datetime64tz_dtype(t)
+                    else to_arrow_type(DayTimeIntervalType())
+                    if is_timedelta64_dtype(t)
                     else None
                     for t in data.dtypes
                 ]
@@ -343,7 +347,12 @@ class SparkSession:
     createDataFrame.__doc__ = PySparkSession.createDataFrame.__doc__
 
     def sql(self, sqlQuery: str, args: Optional[Dict[str, str]] = None) -> "DataFrame":
-        return DataFrame.withPlan(SQL(sqlQuery, args), self)
+        cmd = SQL(sqlQuery, args)
+        data, properties = self.client.execute_command(cmd.command(self._client))
+        if "sql_command_result" in properties:
+            return DataFrame.withPlan(CachedRelation(properties["sql_command_result"]), self)
+        else:
+            return DataFrame.withPlan(SQL(sqlQuery, args), self)
 
     sql.__doc__ = PySparkSession.sql.__doc__
 
@@ -447,7 +456,9 @@ class SparkSession:
 
     @property
     def version(self) -> str:
-        raise NotImplementedError("version() is not implemented.")
+        result = self._client._analyze(method="spark_version").spark_version
+        assert result is not None
+        return result
 
     # SparkConnect-specific API
     @property

@@ -63,6 +63,7 @@ class Command(google.protobuf.message.Message):
     WRITE_OPERATION_FIELD_NUMBER: builtins.int
     CREATE_DATAFRAME_VIEW_FIELD_NUMBER: builtins.int
     WRITE_OPERATION_V2_FIELD_NUMBER: builtins.int
+    SQL_COMMAND_FIELD_NUMBER: builtins.int
     EXTENSION_FIELD_NUMBER: builtins.int
     @property
     def register_function(
@@ -74,6 +75,8 @@ class Command(google.protobuf.message.Message):
     def create_dataframe_view(self) -> global___CreateDataFrameViewCommand: ...
     @property
     def write_operation_v2(self) -> global___WriteOperationV2: ...
+    @property
+    def sql_command(self) -> global___SqlCommand: ...
     @property
     def extension(self) -> google.protobuf.any_pb2.Any:
         """This field is used to mark extensions to the protocol. When plugins generate arbitrary
@@ -87,6 +90,7 @@ class Command(google.protobuf.message.Message):
         write_operation: global___WriteOperation | None = ...,
         create_dataframe_view: global___CreateDataFrameViewCommand | None = ...,
         write_operation_v2: global___WriteOperationV2 | None = ...,
+        sql_command: global___SqlCommand | None = ...,
         extension: google.protobuf.any_pb2.Any | None = ...,
     ) -> None: ...
     def HasField(
@@ -100,6 +104,8 @@ class Command(google.protobuf.message.Message):
             b"extension",
             "register_function",
             b"register_function",
+            "sql_command",
+            b"sql_command",
             "write_operation",
             b"write_operation",
             "write_operation_v2",
@@ -117,6 +123,8 @@ class Command(google.protobuf.message.Message):
             b"extension",
             "register_function",
             b"register_function",
+            "sql_command",
+            b"sql_command",
             "write_operation",
             b"write_operation",
             "write_operation_v2",
@@ -130,10 +138,58 @@ class Command(google.protobuf.message.Message):
         "write_operation",
         "create_dataframe_view",
         "write_operation_v2",
+        "sql_command",
         "extension",
     ] | None: ...
 
 global___Command = Command
+
+class SqlCommand(google.protobuf.message.Message):
+    """A SQL Command is used to trigger the eager evaluation of SQL commands in Spark.
+
+    When the SQL provide as part of the message is a command it will be immediately evaluated
+    and the result will be collected and returned as part of a LocalRelation. If the result is
+    not a command, the operation will simply return a SQL Relation. This allows the client to be
+    almost oblivious to the server-side behavior.
+    """
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    class ArgsEntry(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        KEY_FIELD_NUMBER: builtins.int
+        VALUE_FIELD_NUMBER: builtins.int
+        key: builtins.str
+        value: builtins.str
+        def __init__(
+            self,
+            *,
+            key: builtins.str = ...,
+            value: builtins.str = ...,
+        ) -> None: ...
+        def ClearField(
+            self, field_name: typing_extensions.Literal["key", b"key", "value", b"value"]
+        ) -> None: ...
+
+    SQL_FIELD_NUMBER: builtins.int
+    ARGS_FIELD_NUMBER: builtins.int
+    sql: builtins.str
+    """(Required) SQL Query."""
+    @property
+    def args(self) -> google.protobuf.internal.containers.ScalarMap[builtins.str, builtins.str]:
+        """(Optional) A map of parameter names to literal values."""
+    def __init__(
+        self,
+        *,
+        sql: builtins.str = ...,
+        args: collections.abc.Mapping[builtins.str, builtins.str] | None = ...,
+    ) -> None: ...
+    def ClearField(
+        self, field_name: typing_extensions.Literal["args", b"args", "sql", b"sql"]
+    ) -> None: ...
+
+global___SqlCommand = SqlCommand
 
 class CreateDataFrameViewCommand(google.protobuf.message.Message):
     """A command that can create DataFrame global temp view or local temp view."""

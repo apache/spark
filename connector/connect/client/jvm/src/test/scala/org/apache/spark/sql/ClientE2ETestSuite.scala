@@ -52,6 +52,23 @@ class ClientE2ETestSuite extends RemoteSparkSession {
     assert(result(1).getString(0) == "World")
   }
 
+  test("eager execution of sql") {
+    withTable("test_martin") {
+      // Fails, because table does not exist.
+      assertThrows[StatusRuntimeException] {
+        spark.sql("select * from test_martin").collect()
+      }
+      // Execute eager, DML
+      spark.sql("create table test_martin (id int)")
+      // Execute read again.
+      val rows = spark.sql("select * from test_martin").collect()
+      assert(rows.length == 0)
+      spark.sql("insert into test_martin values (1), (2)")
+      val rows_new = spark.sql("select * from test_martin").collect()
+      assert(rows_new.length == 2)
+    }
+  }
+
   test("simple dataset") {
     val df = spark.range(10).limit(3)
     val result = df.collect()
@@ -189,10 +206,8 @@ class ClientE2ETestSuite extends RemoteSparkSession {
   //  e.g. spark.conf.set("spark.sql.catalog.testcat", classOf[InMemoryTableCatalog].getName)
   test("writeTo with create") {
     withTable("myTableV2") {
-      assertThrows[StatusRuntimeException] {
-        // Failed to create as Hive support is required.
-        spark.range(3).writeTo("myTableV2").create()
-      }
+      // Failed to create as Hive support is required.
+      spark.range(3).writeTo("myTableV2").create()
     }
   }
 
@@ -517,6 +532,10 @@ class ClientE2ETestSuite extends RemoteSparkSession {
     assert(spark.conf.isModifiable("spark.sql.ansi.enabled"))
     assert(!spark.conf.isModifiable("spark.sql.globalTempDatabase"))
     intercept[Exception](spark.conf.set("spark.sql.globalTempDatabase", "/dev/null"))
+  }
+
+  test("SparkVersion") {
+    assert(!spark.version.isEmpty)
   }
 }
 

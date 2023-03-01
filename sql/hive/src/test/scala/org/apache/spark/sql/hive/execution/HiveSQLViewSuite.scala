@@ -88,9 +88,9 @@ class HiveSQLViewSuite extends SQLViewSuite with TestHiveSingleton {
               exception = e,
               errorClass = "INVALID_TEMP_OBJ_REFERENCE",
               parameters = Map(
-                "obj" -> "view",
+                "obj" -> "VIEW",
                 "objName" -> s"`$SESSION_CATALOG_NAME`.`default`.`view1`",
-                "tempObj" -> "function",
+                "tempObj" -> "FUNCTION",
                 "tempObjName" -> s"`$tempFunctionName`"))
           }
         }

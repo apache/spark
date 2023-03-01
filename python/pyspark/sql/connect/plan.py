@@ -607,23 +607,17 @@ class Drop(LogicalPlan):
     ) -> None:
         super().__init__(child)
         assert len(columns) > 0 and all(isinstance(c, (Column, str)) for c in columns)
-        self.columns = columns
-
-    def _convert_to_expr(
-        self, col: Union[Column, str], session: "SparkConnectClient"
-    ) -> proto.Expression:
-        expr = proto.Expression()
-        if isinstance(col, Column):
-            expr.CopyFrom(col.to_plan(session))
-        else:
-            expr.CopyFrom(self.unresolved_attr(col))
-        return expr
+        self._columns = columns
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
         assert self._child is not None
         plan = self._create_proto_relation()
         plan.drop.input.CopyFrom(self._child.plan(session))
-        plan.drop.cols.extend([self._convert_to_expr(c, session) for c in self.columns])
+        for c in self._columns:
+            if isinstance(c, Column):
+                plan.drop.columns.append(c.to_plan(session))
+            else:
+                plan.drop.column_names.append(c)
         return plan
 
 
@@ -960,6 +954,14 @@ class SQL(LogicalPlan):
                 plan.sql.args[k] = v
 
         return plan
+
+    def command(self, session: "SparkConnectClient") -> proto.Command:
+        cmd = proto.Command()
+        cmd.sql_command.sql = self._query
+        if self._args is not None and len(self._args) > 0:
+            for k, v in self._args.items():
+                cmd.sql_command.args[k] = v
+        return cmd
 
 
 class Range(LogicalPlan):
@@ -1886,3 +1888,14 @@ class FrameMap(LogicalPlan):
         plan.frame_map.input.CopyFrom(self._child.plan(session))
         plan.frame_map.func.CopyFrom(self._func.to_plan_udf(session))
         return plan
+
+
+class CachedRelation(LogicalPlan):
+    def __init__(self, plan: proto.Relation) -> None:
+        super(CachedRelation, self).__init__(None)
+        self._plan = plan
+        # Update the plan ID based on the incremented counter.
+        self._plan.common.plan_id = self._plan_id
+
+    def plan(self, session: "SparkConnectClient") -> proto.Relation:
+        return self._plan

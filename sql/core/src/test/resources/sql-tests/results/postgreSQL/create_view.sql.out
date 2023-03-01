@@ -280,9 +280,9 @@ org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
   "messageParameters" : {
-    "obj" : "view",
+    "obj" : "VIEW",
     "objName" : "`spark_catalog`.`temp_view_test`.`v1_temp`",
-    "tempObj" : "view",
+    "tempObj" : "VIEW",
     "tempObjName" : "`temp_table`"
   }
 }
@@ -344,9 +344,9 @@ org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
   "messageParameters" : {
-    "obj" : "view",
+    "obj" : "VIEW",
     "objName" : "`spark_catalog`.`temp_view_test`.`v3_temp`",
-    "tempObj" : "view",
+    "tempObj" : "VIEW",
     "tempObjName" : "`temp_table`"
   }
 }
@@ -401,9 +401,9 @@ org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
   "messageParameters" : {
-    "obj" : "view",
+    "obj" : "VIEW",
     "objName" : "`spark_catalog`.`temp_view_test`.`v4_temp`",
-    "tempObj" : "view",
+    "tempObj" : "VIEW",
     "tempObjName" : "`temp_table`"
   }
 }
@@ -421,9 +421,9 @@ org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
   "messageParameters" : {
-    "obj" : "view",
+    "obj" : "VIEW",
     "objName" : "`spark_catalog`.`temp_view_test`.`v5_temp`",
-    "tempObj" : "view",
+    "tempObj" : "VIEW",
     "tempObjName" : "`temp_table`"
   }
 }
@@ -588,9 +588,9 @@ org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
   "messageParameters" : {
-    "obj" : "view",
+    "obj" : "VIEW",
     "objName" : "`spark_catalog`.`temp_view_test`.`v6_temp`",
-    "tempObj" : "view",
+    "tempObj" : "VIEW",
     "tempObjName" : "`temp_table`"
   }
 }
@@ -605,9 +605,9 @@ org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
   "messageParameters" : {
-    "obj" : "view",
+    "obj" : "VIEW",
     "objName" : "`spark_catalog`.`temp_view_test`.`v7_temp`",
-    "tempObj" : "view",
+    "tempObj" : "VIEW",
     "tempObjName" : "`temp_table`"
   }
 }
@@ -622,9 +622,9 @@ org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
   "messageParameters" : {
-    "obj" : "view",
+    "obj" : "VIEW",
     "objName" : "`spark_catalog`.`temp_view_test`.`v8_temp`",
-    "tempObj" : "view",
+    "tempObj" : "VIEW",
     "tempObjName" : "`temp_table`"
   }
 }
@@ -639,9 +639,9 @@ org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
   "messageParameters" : {
-    "obj" : "view",
+    "obj" : "VIEW",
     "objName" : "`spark_catalog`.`temp_view_test`.`v9_temp`",
-    "tempObj" : "view",
+    "tempObj" : "VIEW",
     "tempObjName" : "`temp_table`"
   }
 }
@@ -795,9 +795,9 @@ org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
   "messageParameters" : {
-    "obj" : "view",
+    "obj" : "VIEW",
     "objName" : "`spark_catalog`.`testviewschm2`.`temporal1`",
-    "tempObj" : "view",
+    "tempObj" : "VIEW",
     "tempObjName" : "`tt`"
   }
 }
@@ -844,9 +844,9 @@ org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
   "messageParameters" : {
-    "obj" : "view",
+    "obj" : "VIEW",
     "objName" : "`spark_catalog`.`testviewschm2`.`temporal2`",
-    "tempObj" : "view",
+    "tempObj" : "VIEW",
     "tempObjName" : "`tt`"
   }
 }
@@ -893,9 +893,9 @@ org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
   "messageParameters" : {
-    "obj" : "view",
+    "obj" : "VIEW",
     "objName" : "`spark_catalog`.`testviewschm2`.`temporal3`",
-    "tempObj" : "view",
+    "tempObj" : "VIEW",
     "tempObjName" : "`tt`"
   }
 }
@@ -942,9 +942,9 @@ org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
   "messageParameters" : {
-    "obj" : "view",
+    "obj" : "VIEW",
     "objName" : "`spark_catalog`.`testviewschm2`.`temporal4`",
-    "tempObj" : "view",
+    "tempObj" : "VIEW",
     "tempObjName" : "`tt`"
   }
 }
@@ -959,9 +959,9 @@ org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INVALID_TEMP_OBJ_REFERENCE",
   "messageParameters" : {
-    "obj" : "view",
+    "obj" : "VIEW",
     "objName" : "`spark_catalog`.`testviewschm2`.`temporal5`",
-    "tempObj" : "view",
+    "tempObj" : "VIEW",
     "tempObjName" : "`tt`"
   }
 }
