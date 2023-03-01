@@ -118,7 +118,7 @@ CREATE TABLE student (id INT, name STRING, age INT) USING CSV;
 CREATE TABLE student_copy USING CSV
     AS SELECT * FROM student;
   
---Omit the USING clause, which uses the default data source (parquet by default)
+--Omit the USING clause, which uses the default data source (textfile by default)
 CREATE TABLE student (id INT, name STRING, age INT);
 
 --Use parquet data source with parquet storage options
