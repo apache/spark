@@ -69,7 +69,7 @@ object LiteralProtoConverter {
       case v: Char => builder.setString(v.toString)
       case v: Array[Char] => builder.setString(String.valueOf(v))
       case v: Array[Byte] => builder.setBinary(ByteString.copyFrom(v))
-      case v: collection.mutable.WrappedArray[_] => builder.setArray(arrayBuilder(v.array))
+      case v: collection.mutable.WrappedArray[_] => toLiteralProtoBuilder(v.array)
       case v: LocalDate => builder.setDate(v.toEpochDay.toInt)
       case v: Decimal =>
         builder.setDecimal(decimalBuilder(Math.max(v.precision, v.scale), v.scale, v.toString))
@@ -85,7 +85,6 @@ object LiteralProtoConverter {
       case null => builder.setNull(nullType)
       case _ => unsupported(s"literal $literal not supported (yet).")
     }
-    builder
   }
 
   private def componentTypeToProto(clz: Class[_]): proto.DataType = clz match {

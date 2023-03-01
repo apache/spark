@@ -166,6 +166,8 @@ object LiteralValueProtoConverter {
       makeArrayData(size => new Array[Boolean](size), v => v.getBoolean)
     } else if (elementType.hasString) {
       makeArrayData(size => new Array[String](size), v => v.getString)
+    } else if (elementType.hasBinary) {
+      makeArrayData(size => new Array[Array[Byte]](size), v => v.getBinary.toByteArray)
     } else if (elementType.hasDate) {
       makeArrayData(size => new Array[java.sql.Date](size),
         v => DateTimeUtils.toJavaDate(v.getDate))
@@ -213,6 +215,8 @@ object LiteralValueProtoConverter {
       ArrayType(BooleanType)
     } else if (elementType.hasString) {
       ArrayType(StringType)
+    } else if (elementType.hasBinary) {
+      ArrayType(BinaryType)
     } else if (elementType.hasDate) {
       ArrayType(DateType)
     } else if (elementType.hasTimestamp) {
