@@ -101,13 +101,12 @@ class PlanGenerationTestSuite
     "query-tests",
     "test-data")
 
-  private val registry = TypeRegistry.newBuilder()
+  private val registry = TypeRegistry
+    .newBuilder()
     .add(proto.ExamplePluginRelation.getDescriptor)
     .add(proto.ExamplePluginExpression.getDescriptor)
     .add(proto.ExamplePluginCommand.getDescriptor)
     .build()
-
-  private val parser = JsonFormat.parser().usingTypeRegistry(registry)
 
   private val printer = JsonFormat.printer().usingTypeRegistry(registry)
 
@@ -161,9 +160,11 @@ class PlanGenerationTestSuite
   }
 
   private def readRelation(path: Path): proto.Relation = {
-    val builder = proto.Relation.newBuilder()
-    parser.merge(Files.readString(path), builder)
-    builder.build()
+    val input = Files.newInputStream(path)
+    try proto.Relation.parseFrom(input)
+    finally {
+      input.close()
+    }
   }
 
   private def writeGoldenFile(path: Path, relation: proto.Relation): Unit = {
@@ -2026,7 +2027,6 @@ class PlanGenerationTestSuite
 
   test("expression extension") {
     val extension = proto.ExamplePluginExpression.newBuilder().setCustomField("abc").build()
-    simple.select(
-      Column(com.google.protobuf.Any.pack(extension)))
+    simple.select(Column(com.google.protobuf.Any.pack(extension)))
   }
 }

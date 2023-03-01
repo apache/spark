@@ -18,6 +18,7 @@ package org.apache.spark.sql
 
 import scala.collection.JavaConverters._
 
+import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.Expression.SortOrder.NullOrdering
 import org.apache.spark.connect.proto.Expression.SortOrder.SortDirection
@@ -1312,8 +1313,9 @@ private[sql] object Column {
     new Column(builder.build())
   }
 
+  @DeveloperApi
   def apply(extension: com.google.protobuf.Any): Column = {
-    apply { builder => builder.setExtension(extension) }
+    apply(_.setExtension(extension))
   }
 
   private[sql] def fn(name: String, inputs: Column*): Column = {
