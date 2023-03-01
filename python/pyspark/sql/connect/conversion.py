@@ -243,36 +243,24 @@ class LocalDataToArrowConversion:
 
         column_names = schema.fieldNames()
 
-        column_convs = {
-            field.name: LocalDataToArrowConversion._create_converter(field.dataType)
-            for field in schema.fields
-        }
+        column_convs = [
+            LocalDataToArrowConversion._create_converter(field.dataType) for field in schema.fields
+        ]
 
-        pylist = []
+        pylist: List[List] = [[] for _ in range(len(column_names))]
 
         for item in data:
-            _dict = {}
+            if not isinstance(item, Row) and hasattr(item, "__dict__"):
+                item = item.__dict__
+            for i, col in enumerate(column_names):
+                if isinstance(item, dict):
+                    value = item.get(col)
+                else:
+                    value = item[i]
 
-            if isinstance(item, dict):
-                for col, value in item.items():
-                    _dict[col] = column_convs[col](value)
-            elif isinstance(item, Row) and hasattr(item, "__fields__"):
-                for col, value in item.asDict(recursive=False).items():
-                    _dict[col] = column_convs[col](value)
-            elif not isinstance(item, Row) and hasattr(item, "__dict__"):
-                for col, value in item.__dict__.items():
-                    print(col, value)
-                    _dict[col] = column_convs[col](value)
-            else:
-                i = 0
-                for value in item:
-                    col = column_names[i]
-                    _dict[col] = column_convs[col](value)
-                    i += 1
+                pylist[i].append(column_convs[i](value))
 
-            pylist.append(_dict)
-
-        return pa.Table.from_pylist(pylist, schema=pa_schema)
+        return pa.Table.from_arrays(pylist, schema=pa_schema)
 
 
 class ArrowTableToRowsConversion:
