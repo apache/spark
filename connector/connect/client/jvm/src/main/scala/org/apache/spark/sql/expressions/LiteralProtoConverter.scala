@@ -37,7 +37,8 @@ object LiteralProtoConverter {
   /**
    * Transforms literal value to the `proto.Expression.Literal.Builder`.
    *
-   * @return proto.Expression.Literal.Builder
+   * @return
+   *   proto.Expression.Literal.Builder
    */
   @scala.annotation.tailrec
   def toLiteralProtoBuilder(literal: Any): proto.Expression.Literal.Builder = {
@@ -48,7 +49,9 @@ object LiteralProtoConverter {
     }
 
     def calendarIntervalBuilder(months: Int, days: Int, microseconds: Long) = {
-      builder.getCalendarIntervalBuilder.setMonths(months).setDays(days)
+      builder.getCalendarIntervalBuilder
+        .setMonths(months)
+        .setDays(days)
         .setMicroseconds(microseconds)
     }
 
@@ -96,7 +99,8 @@ object LiteralProtoConverter {
   /**
    * Transforms literal value to the `proto.Expression.Literal`.
    *
-   * @return proto.Expression.Literal
+   * @return
+   *   proto.Expression.Literal
    */
   def toLiteralProto(literal: Any): proto.Expression.Literal =
     toLiteralProtoBuilder(literal).build()
@@ -194,7 +198,8 @@ object LiteralProtoConverter {
       proto.DataType
         .newBuilder()
         .setDecimal(
-          proto.DataType.Decimal.newBuilder()
+          proto.DataType.Decimal
+            .newBuilder()
             .setPrecision(DecimalType.SYSTEM_DEFAULT.precision)
             .setScale(DecimalType.SYSTEM_DEFAULT.scale)
             .build())
@@ -255,7 +260,8 @@ object LiteralProtoConverter {
       proto.DataType
         .newBuilder()
         .setDecimal(
-          proto.DataType.Decimal.newBuilder()
+          proto.DataType.Decimal
+            .newBuilder()
             .setPrecision(DecimalType.SYSTEM_DEFAULT.precision)
             .setScale(DecimalType.SYSTEM_DEFAULT.scale)
             .build())
@@ -264,7 +270,8 @@ object LiteralProtoConverter {
       proto.DataType
         .newBuilder()
         .setDecimal(
-          proto.DataType.Decimal.newBuilder()
+          proto.DataType.Decimal
+            .newBuilder()
             .setPrecision(DecimalType.SYSTEM_DEFAULT.precision)
             .setScale(DecimalType.SYSTEM_DEFAULT.scale)
             .build())
@@ -284,6 +291,7 @@ object LiteralProtoConverter {
             .setContainsNull(true)
             .build())
         .build()
-    case _ => throw new UnsupportedOperationException(s"Unsupported component type $clz in arrays.")
+    case _ =>
+      throw new UnsupportedOperationException(s"Unsupported component type $clz in arrays.")
   }
 }

@@ -100,7 +100,8 @@ object LiteralValueProtoConverter {
 
       case proto.Expression.Literal.LiteralTypeCase.ARRAY =>
         expressions.Literal.create(
-          toArrayData(lit.getArray), toArrayType(lit.getArray.getElementType))
+          toArrayData(lit.getArray),
+          toArrayType(lit.getArray.getElementType))
       case _ =>
         throw InvalidPlanInput(
           s"Unsupported Literal Type: ${lit.getLiteralTypeCase.getNumber}" +
@@ -136,7 +137,8 @@ object LiteralValueProtoConverter {
   }
 
   private def toArrayData(array: proto.Expression.Literal.Array): Any = {
-    def makeArrayData[T](initFunc: Int => Array[T],
+    def makeArrayData[T](
+        initFunc: Int => Array[T],
         converter: proto.Expression.Literal => T): Array[T] = {
       val elementList = array.getElementList
       val data = initFunc(elementList.size())
@@ -169,24 +171,30 @@ object LiteralValueProtoConverter {
     } else if (elementType.hasBinary) {
       makeArrayData(size => new Array[Array[Byte]](size), v => v.getBinary.toByteArray)
     } else if (elementType.hasDate) {
-      makeArrayData(size => new Array[java.sql.Date](size),
+      makeArrayData(
+        size => new Array[java.sql.Date](size),
         v => DateTimeUtils.toJavaDate(v.getDate))
     } else if (elementType.hasTimestamp) {
-      makeArrayData(size => new Array[java.sql.Timestamp](size),
+      makeArrayData(
+        size => new Array[java.sql.Timestamp](size),
         v => DateTimeUtils.toJavaTimestamp(v.getTimestamp))
     } else if (elementType.hasTimestampNtz) {
-      makeArrayData(size => new Array[java.time.LocalDateTime](size),
+      makeArrayData(
+        size => new Array[java.time.LocalDateTime](size),
         v => DateTimeUtils.microsToLocalDateTime(v.getTimestampNtz))
     } else if (elementType.hasDayTimeInterval) {
-      makeArrayData(size => new Array[java.time.Duration](size),
+      makeArrayData(
+        size => new Array[java.time.Duration](size),
         v => IntervalUtils.microsToDuration(v.getDayTimeInterval))
     } else if (elementType.hasYearMonthInterval) {
-      makeArrayData(size => new Array[java.time.Period](size),
+      makeArrayData(
+        size => new Array[java.time.Period](size),
         v => IntervalUtils.monthsToPeriod(v.getYearMonthInterval))
     } else if (elementType.hasDecimal) {
       makeArrayData(size => new Array[Decimal](size), v => Decimal(v.getDecimal.getValue))
     } else if (elementType.hasCalendarInterval) {
-      makeArrayData(size => new Array[CalendarInterval](size),
+      makeArrayData(
+        size => new Array[CalendarInterval](size),
         v => {
           val interval = v.getCalendarInterval
           new CalendarInterval(interval.getMonths, interval.getDays, interval.getMicroseconds)
@@ -225,12 +233,10 @@ object LiteralValueProtoConverter {
       ArrayType(TimestampNTZType)
     } else if (elementType.hasDayTimeInterval) {
       val interval = elementType.getDayTimeInterval
-      ArrayType(DayTimeIntervalType(
-        interval.getStartField.toByte, interval.getEndField.toByte))
+      ArrayType(DayTimeIntervalType(interval.getStartField.toByte, interval.getEndField.toByte))
     } else if (elementType.hasYearMonthInterval) {
       val interval = elementType.getYearMonthInterval
-      ArrayType(YearMonthIntervalType(
-        interval.getStartField.toByte, interval.getEndField.toByte))
+      ArrayType(YearMonthIntervalType(interval.getStartField.toByte, interval.getEndField.toByte))
     } else if (elementType.hasDecimal) {
       val decimal = elementType.getDecimal
       ArrayType(DecimalType(decimal.getPrecision, decimal.getScale))

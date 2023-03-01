@@ -2016,24 +2016,28 @@ class PlanGenerationTestSuite
       fn.lit(Array(Math.E, 1.toDouble, 2.toDouble)),
       fn.lit(Array(-0.8f, -0.7f, -0.9f)),
       fn.lit(Array(BigDecimal(8997620, 5), BigDecimal(8997621, 5))),
-      fn.lit(Array(BigDecimal(898897667231L, 7).bigDecimal,
-        BigDecimal(898897667231L, 7).bigDecimal)),
+      fn.lit(
+        Array(BigDecimal(898897667231L, 7).bigDecimal, BigDecimal(898897667231L, 7).bigDecimal)),
       fn.lit(Array("connect!", "disconnect!")),
       fn.lit(Array('T', 'F')),
-      fn.lit(Array(Array.tabulate(10)(i => ('A' + i).toChar),
-        Array.tabulate(10)(i => ('B' + i).toChar))),
-      fn.lit(Array(java.time.LocalDate.of(2020, 10, 10),
-        java.time.LocalDate.of(2020, 10, 11))),
-      fn.lit(Array(java.time.Instant.ofEpochMilli(1677155519808L),
-        java.time.Instant.ofEpochMilli(1677155519809L))),
+      fn.lit(
+        Array(
+          Array.tabulate(10)(i => ('A' + i).toChar),
+          Array.tabulate(10)(i => ('B' + i).toChar))),
+      fn.lit(Array(java.time.LocalDate.of(2020, 10, 10), java.time.LocalDate.of(2020, 10, 11))),
+      fn.lit(
+        Array(
+          java.time.Instant.ofEpochMilli(1677155519808L),
+          java.time.Instant.ofEpochMilli(1677155519809L))),
       fn.lit(Array(new java.sql.Timestamp(12345L), new java.sql.Timestamp(23456L))),
-      fn.lit(Array(java.time.LocalDateTime.of(2023, 2, 23, 20, 36),
-        java.time.LocalDateTime.of(2023, 2, 23, 21, 36))),
+      fn.lit(
+        Array(
+          java.time.LocalDateTime.of(2023, 2, 23, 20, 36),
+          java.time.LocalDateTime.of(2023, 2, 23, 21, 36))),
       fn.lit(Array(java.sql.Date.valueOf("2023-02-23"), java.sql.Date.valueOf("2023-03-01"))),
       fn.lit(Array(java.time.Duration.ofSeconds(100L), java.time.Duration.ofSeconds(200L))),
       fn.lit(Array(java.time.Period.ofDays(100), java.time.Period.ofDays(200))),
-      fn.lit(Array(new CalendarInterval(2, 20, 100L),
-        new CalendarInterval(2, 21, 200L))))
+      fn.lit(Array(new CalendarInterval(2, 20, 100L), new CalendarInterval(2, 21, 200L))))
   }
 
   /* Window API */
