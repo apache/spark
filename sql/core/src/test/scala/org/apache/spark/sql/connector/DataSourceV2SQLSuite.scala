@@ -31,11 +31,14 @@ import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableExceptio
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.ColumnStat
 import org.apache.spark.sql.catalyst.statsEstimation.StatsEstimationTestBase
-import org.apache.spark.sql.catalyst.util.{DateTimeUtils, ResolveDefaultColumns}
-import org.apache.spark.sql.connector.catalog._
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.connector.catalog.{Column => ColumnV2, _}
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.connector.catalog.CatalogV2Util.withDefaultOwnership
+import org.apache.spark.sql.connector.expressions.LiteralValue
 import org.apache.spark.sql.errors.QueryErrorsBase
+import org.apache.spark.sql.execution.FilterExec
+import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
 import org.apache.spark.sql.execution.streaming.MemoryStream
@@ -43,13 +46,14 @@ import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.internal.SQLConf.{PARTITION_OVERWRITE_MODE, PartitionOverwriteMode, V2_SESSION_CATALOG_IMPLEMENTATION}
 import org.apache.spark.sql.internal.connector.SimpleTableProvider
 import org.apache.spark.sql.sources.SimpleScanSource
-import org.apache.spark.sql.types.{LongType, MetadataBuilder, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{LongType, StringType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.unsafe.types.UTF8String
 
 abstract class DataSourceV2SQLSuite
   extends InsertIntoTests(supportsDynamicOverwrite = true, includeSQLOnlyTests = true)
-  with DeleteFromTests with DatasourceV2SQLBase with StatsEstimationTestBase {
+  with DeleteFromTests with DatasourceV2SQLBase with StatsEstimationTestBase
+  with AdaptiveSparkPlanHelper {
 
   protected val v2Source = classOf[FakeV2Provider].getName
   override protected val v2Format = v2Source
@@ -582,7 +586,7 @@ class DataSourceV2SQLSuiteV1Filter
     assert(maybeReplacedTable === table, "Table should not have changed.")
   }
 
-  test("ReplaceTable: Erases the table contents and changes the metadata.") {
+  test("ReplaceTable: Erases the table contents and changes the metadata") {
     spark.sql(s"CREATE TABLE testcat.table_name USING $v2Source AS SELECT id, data FROM source")
 
     val testCatalog = catalog("testcat").asTableCatalog
@@ -595,14 +599,11 @@ class DataSourceV2SQLSuiteV1Filter
 
       assert(replaced.asInstanceOf[InMemoryTable].rows.isEmpty,
         "Replaced table should have no rows after committing.")
-      assert(replaced.schema().fields.length === 1,
+      assert(replaced.columns.length === 1,
         "Replaced table should have new schema.")
-      val actual = replaced.schema().fields(0)
-      val expected = StructField("id", LongType, nullable = false,
-        new MetadataBuilder().putString(
-          ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY, "41 + 1")
-          .putString(ResolveDefaultColumns.EXISTS_DEFAULT_COLUMN_METADATA_KEY, "CAST(42 AS BIGINT)")
-          .build())
+      val actual = replaced.columns.head
+      val expected = ColumnV2.create("id", LongType, false, null,
+        new ColumnDefaultValue("41 + 1", LiteralValue(42L, LongType)), null)
       assert(actual === expected,
         "Replaced table should have new schema with DEFAULT column metadata.")
     }
@@ -1092,8 +1093,8 @@ class DataSourceV2SQLSuiteV1Filter
       verifyTable(t1, df)
       // Missing columns
       assert(intercept[AnalysisException] {
-        sql(s"INSERT INTO $t1(data) VALUES(4)")
-      }.getMessage.contains("Cannot find data for output column 'id'"))
+        sql(s"INSERT INTO $t1 VALUES(4)")
+      }.getMessage.contains("not enough data columns"))
       // Duplicate columns
       checkError(
         exception = intercept[AnalysisException] {
@@ -1120,9 +1121,9 @@ class DataSourceV2SQLSuiteV1Filter
       verifyTable(t1, Seq((3L, "c")).toDF("id", "data"))
       // Missing columns
       assert(intercept[AnalysisException] {
-        sql(s"INSERT OVERWRITE $t1(data) VALUES(4)")
-      }.getMessage.contains("Cannot find data for output column 'id'"))
-      // Duplicate columns
+        sql(s"INSERT OVERWRITE $t1 VALUES(4)")
+      }.getMessage.contains("not enough data columns"))
+    // Duplicate columns
       checkError(
         exception = intercept[AnalysisException] {
           sql(s"INSERT OVERWRITE $t1(data, data) VALUES(5)")
@@ -1149,9 +1150,9 @@ class DataSourceV2SQLSuiteV1Filter
       verifyTable(t1, Seq((1L, "c", "e"), (2L, "b", "d")).toDF("id", "data", "data2"))
       // Missing columns
       assert(intercept[AnalysisException] {
-        sql(s"INSERT OVERWRITE $t1(data, id) VALUES('a', 4)")
-      }.getMessage.contains("Cannot find data for output column 'data2'"))
-      // Duplicate columns
+        sql(s"INSERT OVERWRITE $t1 VALUES('a', 4)")
+      }.getMessage.contains("not enough data columns"))
+    // Duplicate columns
       checkError(
         exception = intercept[AnalysisException] {
           sql(s"INSERT OVERWRITE $t1(data, data) VALUES(5)")
@@ -1419,6 +1420,228 @@ class DataSourceV2SQLSuiteV1Filter
       assert(catalogManager.currentCatalog.name() == "dummy")
       assert(catalogManager.currentNamespace === Array("ns1"))
     }
+  }
+
+  test("SPARK-41290: Generated columns only allowed with TableCatalogs that " +
+    "SUPPORTS_CREATE_TABLE_WITH_GENERATED_COLUMNS") {
+    val tblName = "my_tab"
+    val tableDefinition =
+      s"$tblName(eventDate DATE, eventYear INT GENERATED ALWAYS AS (year(eventDate)))"
+    for (statement <- Seq("CREATE TABLE", "REPLACE TABLE")) {
+      // InMemoryTableCatalog.capabilities() = {SUPPORTS_CREATE_TABLE_WITH_GENERATED_COLUMNS}
+      withTable(s"testcat.$tblName") {
+        if (statement == "REPLACE TABLE") {
+          sql(s"CREATE TABLE testcat.$tblName(a INT) USING foo")
+        }
+        // Can create table with a generated column
+        sql(s"$statement testcat.$tableDefinition USING foo")
+        assert(catalog("testcat").asTableCatalog.tableExists(Identifier.of(Array(), tblName)))
+      }
+      // BasicInMemoryTableCatalog.capabilities() = {}
+      withSQLConf("spark.sql.catalog.dummy" -> classOf[BasicInMemoryTableCatalog].getName) {
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql("USE dummy")
+            sql(s"$statement dummy.$tableDefinition USING foo")
+          },
+          errorClass = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
+          parameters = Map(
+            "tableName" -> "`my_tab`",
+            "operation" -> "generated columns"
+          )
+        )
+      }
+    }
+  }
+
+  test("SPARK-41290: Column cannot have both a generation expression and a default value") {
+    val tblName = "my_tab"
+    val tableDefinition =
+      s"$tblName(eventDate DATE, eventYear INT GENERATED ALWAYS AS (year(eventDate)) DEFAULT 0)"
+    withSQLConf(SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS.key -> "foo") {
+      for (statement <- Seq("CREATE TABLE", "REPLACE TABLE")) {
+        withTable(s"testcat.$tblName") {
+          if (statement == "REPLACE TABLE") {
+            sql(s"CREATE TABLE testcat.$tblName(a INT) USING foo")
+          }
+          checkError(
+            exception = intercept[AnalysisException] {
+              sql(s"$statement testcat.$tableDefinition USING foo")
+            },
+            errorClass = "GENERATED_COLUMN_WITH_DEFAULT_VALUE",
+            parameters = Map(
+              "colName" -> "eventYear",
+              "defaultValue" -> "0",
+              "genExpr" -> "year(eventDate)")
+          )
+        }
+      }
+    }
+  }
+
+  test("SPARK-41290: Generated column expression must be valid generation expression") {
+    val tblName = "my_tab"
+    def checkUnsupportedGenerationExpression(
+        expr: String,
+        expectedReason: String,
+        genColType: String = "INT",
+        customTableDef: Option[String] = None): Unit = {
+      val tableDef =
+        s"CREATE TABLE testcat.$tblName(a INT, b $genColType GENERATED ALWAYS AS ($expr)) USING foo"
+      withTable(s"testcat.$tblName") {
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql(customTableDef.getOrElse(tableDef))
+          },
+          errorClass = "UNSUPPORTED_EXPRESSION_GENERATED_COLUMN",
+          parameters = Map(
+            "fieldName" -> "b",
+            "expressionStr" -> expr,
+            "reason" -> expectedReason)
+        )
+      }
+    }
+
+    // Expression cannot be resolved since it doesn't exist
+    checkUnsupportedGenerationExpression(
+      "not_a_function(a)",
+      "failed to resolve `not_a_function` to a built-in function"
+    )
+
+    // Expression cannot be resolved since it's not a built-in function
+    spark.udf.register("timesTwo", (x: Int) => x * 2)
+    checkUnsupportedGenerationExpression(
+      "timesTwo(a)",
+      "failed to resolve `timesTwo` to a built-in function"
+    )
+
+    // Generated column can't reference itself
+    checkUnsupportedGenerationExpression(
+      "b + 1",
+      "generation expression cannot reference itself"
+    )
+    // Obeys case sensitivity when intercepting the error message
+    // Intercepts when case-insensitive
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+      checkUnsupportedGenerationExpression(
+        "B + 1",
+        "generation expression cannot reference itself"
+      )
+    }
+    // Doesn't intercept when case-sensitive
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+      withTable(s"testcat.$tblName") {
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql(s"CREATE TABLE testcat.$tblName(a INT, " +
+              "b INT GENERATED ALWAYS AS (B + 1)) USING foo")
+          },
+          errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+          parameters = Map("objectName" -> "`B`", "proposal" -> "`a`"),
+          context = ExpectedContext(fragment = "B", start = 0, stop = 0)
+        )
+      }
+    }
+    // Respects case sensitivity when resolving
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+      withTable(s"testcat.$tblName") {
+        sql(s"CREATE TABLE testcat.$tblName(" +
+          "a INT, b INT GENERATED ALWAYS AS (B + 1), B INT) USING foo")
+        assert(catalog("testcat").asTableCatalog.tableExists(Identifier.of(Array(), tblName)))
+      }
+    }
+
+    // Generated column can't reference other generated columns
+    checkUnsupportedGenerationExpression(
+      "c + 1",
+      "generation expression cannot reference another generated column",
+      customTableDef = Some(
+        s"CREATE TABLE testcat.$tblName(a INT, " +
+          "b INT GENERATED ALWAYS AS (c + 1), c INT GENERATED ALWAYS AS (a + 1)) USING foo"
+      )
+    )
+    // Respects case-insensitivity
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+      checkUnsupportedGenerationExpression(
+        "C + 1",
+        "generation expression cannot reference another generated column",
+        customTableDef = Some(
+          s"CREATE TABLE testcat.$tblName(a INT, " +
+            "b INT GENERATED ALWAYS AS (C + 1), c INT GENERATED ALWAYS AS (a + 1)) USING foo"
+        )
+      )
+      checkUnsupportedGenerationExpression(
+        "c + 1",
+        "generation expression cannot reference another generated column",
+        customTableDef = Some(
+          s"CREATE TABLE testcat.$tblName(a INT, " +
+            "b INT GENERATED ALWAYS AS (c + 1), C INT GENERATED ALWAYS AS (a + 1)) USING foo"
+        )
+      )
+    }
+    // Respects case sensitivity when resolving
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+      withTable(s"testcat.$tblName") {
+        sql(s"CREATE TABLE testcat.$tblName(" +
+          "a INT, A INT GENERATED ALWAYS AS (a + 1), b INT GENERATED ALWAYS AS (a + 1)) USING foo")
+        assert(catalog("testcat").asTableCatalog.tableExists(Identifier.of(Array(), tblName)))
+      }
+    }
+
+    // Generated column can't reference non-existent column
+    withTable(s"testcat.$tblName") {
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"CREATE TABLE testcat.$tblName(a INT, b INT GENERATED ALWAYS AS (c + 1)) USING foo")
+        },
+        errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+        parameters = Map("objectName" -> "`c`", "proposal" -> "`a`"),
+        context = ExpectedContext(fragment = "c", start = 0, stop = 0)
+      )
+    }
+
+    // Expression must be deterministic
+    checkUnsupportedGenerationExpression(
+      "rand()",
+      "generation expression is not deterministic"
+    )
+
+    // Data type is incompatible
+    checkUnsupportedGenerationExpression(
+      "a + 1",
+      "generation expression data type int is incompatible with column data type boolean",
+      "BOOLEAN"
+    )
+    // But we allow valid up-casts
+    withTable(s"testcat.$tblName") {
+      sql(s"CREATE TABLE testcat.$tblName(a INT, b LONG GENERATED ALWAYS AS (a + 1)) USING foo")
+      assert(catalog("testcat").asTableCatalog.tableExists(Identifier.of(Array(), tblName)))
+    }
+
+    // No subquery expressions
+    checkUnsupportedGenerationExpression(
+      "(SELECT 1)",
+      "subquery expressions are not allowed for generated columns"
+    )
+    checkUnsupportedGenerationExpression(
+      "(SELECT (SELECT 2) + 1)", // nested
+      "subquery expressions are not allowed for generated columns"
+    )
+    checkUnsupportedGenerationExpression(
+      "(SELECT 1) + a", // refers to another column
+      "subquery expressions are not allowed for generated columns"
+    )
+    withTable("other") {
+      sql("create table other(x INT) using parquet")
+      checkUnsupportedGenerationExpression(
+        "(select min(x) from other)", // refers to another table
+        "subquery expressions are not allowed for generated columns"
+      )
+    }
+    checkUnsupportedGenerationExpression(
+      "(select min(x) from faketable)", // refers to a non-existent table
+      "subquery expressions are not allowed for generated columns"
+    )
   }
 
   test("ShowCurrentNamespace: basic tests") {
@@ -2070,8 +2293,10 @@ class DataSourceV2SQLSuiteV1Filter
         // the session catalog, not the `global_temp` v2 catalog.
         sql(s"CREATE TABLE $globalTempDB.ns1.ns2.tbl (id bigint, data string) USING json")
       },
-      errorClass = "_LEGACY_ERROR_TEMP_1117",
-      parameters = Map("sessionCatalog" -> "spark_catalog", "ns" -> "[global_temp, ns1, ns2]"))
+      errorClass = "REQUIRES_SINGLE_PART_NAMESPACE",
+      parameters = Map(
+        "sessionCatalog" -> "spark_catalog",
+        "namespace" -> "`global_temp`.`ns1`.`ns2`"))
   }
 
   test("table name same as catalog can be used") {
@@ -2104,8 +2329,8 @@ class DataSourceV2SQLSuiteV1Filter
         def verify(sql: String): Unit = {
           checkError(
             exception = intercept[AnalysisException](spark.sql(sql)),
-            errorClass = "_LEGACY_ERROR_TEMP_1117",
-            parameters = Map("sessionCatalog" -> "spark_catalog", "ns" -> "[]"))
+            errorClass = "REQUIRES_SINGLE_PART_NAMESPACE",
+            parameters = Map("sessionCatalog" -> "spark_catalog", "namespace" -> ""))
         }
 
         verify(s"select * from $t")
@@ -2181,8 +2406,12 @@ class DataSourceV2SQLSuiteV1Filter
           exception = intercept[AnalysisException] {
             sql(s"CREATE VIEW $sessionCatalogName.default.v AS SELECT * FROM t")
           },
-          errorClass = "_LEGACY_ERROR_TEMP_1283",
-          parameters = Map("name" -> "`spark_catalog`.`default`.`v`", "nameParts" -> "t"))
+          errorClass = "INVALID_TEMP_OBJ_REFERENCE",
+          parameters = Map(
+            "obj" -> "VIEW",
+            "objName" -> "`spark_catalog`.`default`.`v`",
+            "tempObj" -> "VIEW",
+            "tempObjName" -> "`t`"))
       }
     }
 
@@ -2887,6 +3116,78 @@ class DataSourceV2SQLSuiteV1Filter
         assert(stats.rowCount.get == 5)
         assert(stats.attributeStats ==
           toAttributeMap(expectedColumnStats, df.queryExecution.optimizedPlan))
+    }
+  }
+
+  test("DESCRIBE TABLE EXTENDED of a V2 table with a default column value") {
+    withSQLConf(SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS.key -> v2Source) {
+      withTable("t") {
+        spark.sql(s"CREATE TABLE t (id bigint default 42) USING $v2Source")
+        val descriptionDf = spark.sql(s"DESCRIBE TABLE EXTENDED t")
+        assert(descriptionDf.schema.map { field =>
+          (field.name, field.dataType)
+        } === Seq(
+          ("col_name", StringType),
+          ("data_type", StringType),
+          ("comment", StringType)))
+        QueryTest.checkAnswer(
+          descriptionDf.filter(
+            "!(col_name in ('Catalog', 'Created Time', 'Created By', 'Database', " +
+              "'index', 'Location', 'Name', 'Owner', 'Provider', 'Table', 'Table Properties', " +
+              "'Type', '_partition', ''))"),
+          Seq(
+            Row("# Detailed Table Information", "", ""),
+            Row("# Column Default Values", "", ""),
+            Row("# Metadata Columns", "", ""),
+            Row("id", "bigint", "42"),
+            Row("id", "bigint", null)
+          ))
+      }
+    }
+  }
+
+  test("SPARK-40045: Move the post-Scan Filters to the far right") {
+    val t1 = s"${catalogAndNamespace}table"
+    withUserDefinedFunction("udfStrLen" -> true) {
+      withTable(t1) {
+        spark.udf.register("udfStrLen", (str: String) => str.length)
+        sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format")
+        sql(s"INSERT INTO $t1 VALUES (1, 'a'), (2, 'b'), (3, 'c')")
+
+        val filterBefore = spark.sql(
+          s"""
+             |SELECT id, data FROM $t1
+             |WHERE udfStrLen(data) = 1
+             |and id = 2
+             |""".stripMargin
+        )
+        val conditionBefore =
+          find(filterBefore.queryExecution.executedPlan)(_.isInstanceOf[FilterExec])
+            .head.asInstanceOf[FilterExec]
+            .condition
+        val expressionsBefore = splitConjunctivePredicates(conditionBefore)
+        assert(expressionsBefore.length == 3
+          && expressionsBefore(0).toString.trim.startsWith("isnotnull(id")
+          && expressionsBefore(1).toString.trim.startsWith("(id")
+          && expressionsBefore(2).toString.trim.startsWith("(udfStrLen(data"))
+
+        val filterAfter = spark.sql(
+          s"""
+             |SELECT id, data FROM $t1
+             |WHERE id = 2
+             |and udfStrLen(data) = 1
+             |""".stripMargin
+        )
+        val conditionAfter =
+          find(filterAfter.queryExecution.executedPlan)(_.isInstanceOf[FilterExec])
+            .head.asInstanceOf[FilterExec]
+            .condition
+        val expressionsAfter = splitConjunctivePredicates(conditionAfter)
+        assert(expressionsAfter.length == 3
+          && expressionsAfter(0).toString.trim.startsWith("isnotnull(id")
+          && expressionsAfter(1).toString.trim.startsWith("(id")
+          && expressionsAfter(2).toString.trim.startsWith("(udfStrLen(data"))
+      }
     }
   }
 

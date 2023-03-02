@@ -41,28 +41,7 @@ if have_pandas:
     not have_pandas or not have_pyarrow,
     cast(str, pandas_requirement_message or pyarrow_requirement_message),
 )
-class MapInPandasTests(ReusedSQLTestCase):
-    @classmethod
-    def setUpClass(cls):
-        ReusedSQLTestCase.setUpClass()
-
-        # Synchronize default timezone between Python and Java
-        cls.tz_prev = os.environ.get("TZ", None)  # save current tz if set
-        tz = "America/Los_Angeles"
-        os.environ["TZ"] = tz
-        time.tzset()
-
-        cls.sc.environment["TZ"] = tz
-        cls.spark.conf.set("spark.sql.session.timeZone", tz)
-
-    @classmethod
-    def tearDownClass(cls):
-        del os.environ["TZ"]
-        if cls.tz_prev is not None:
-            os.environ["TZ"] = cls.tz_prev
-        time.tzset()
-        ReusedSQLTestCase.tearDownClass()
-
+class MapInPandasTestsMixin:
     def test_map_in_pandas(self):
         def func(iterator):
             for pdf in iterator:
@@ -99,20 +78,19 @@ class MapInPandasTests(ReusedSQLTestCase):
         self.assertEqual(set((r.a for r in actual)), set(range(100)))
 
     def test_other_than_dataframe(self):
+        with QuietTest(self.sc):
+            self.check_other_than_dataframe()
+
+    def check_other_than_dataframe(self):
         def bad_iter(_):
             return iter([1])
 
-        with QuietTest(self.sc):
-            with self.assertRaisesRegex(
-                PythonException,
-                "Return type of the user-defined function should be Pandas.DataFrame, "
-                "but is <class 'int'>",
-            ):
-                (
-                    self.spark.range(10, numPartitions=3)
-                    .mapInPandas(bad_iter, "a int, b string")
-                    .count()
-                )
+        with self.assertRaisesRegex(
+            PythonException,
+            "Return type of the user-defined function should be Pandas.DataFrame, "
+            "but is <class 'int'>",
+        ):
+            self.spark.range(10, numPartitions=3).mapInPandas(bad_iter, "a int, b string").count()
 
     def test_empty_iterator(self):
         def empty_iter(_):
@@ -143,24 +121,20 @@ class MapInPandasTests(ReusedSQLTestCase):
         self.assertEqual(mapped.count(), 10)
 
     def test_empty_dataframes_with_less_columns(self):
+        with QuietTest(self.sc):
+            self.check_empty_dataframes_with_less_columns()
+
+    def check_empty_dataframes_with_less_columns(self):
         def empty_dataframes_with_less_columns(iterator):
             for pdf in iterator:
                 yield pdf
             # after yielding all elements of the iterator, also yield a dataframe with less columns
             yield pd.DataFrame([(1,)], columns=["id"])
 
-        with QuietTest(self.sc):
-            with self.assertRaisesRegex(
-                PythonException,
-                "KeyError: 'value'",
-            ):
-                (
-                    self.spark.range(10, numPartitions=3)
-                    .withColumn("value", lit(0))
-                    .toDF("id", "value")
-                    .mapInPandas(empty_dataframes_with_less_columns, "id int, value int")
-                    .collect()
-                )
+        with self.assertRaisesRegex(PythonException, "KeyError: 'value'"):
+            self.spark.range(10, numPartitions=3).withColumn("value", lit(0)).toDF(
+                "id", "value"
+            ).mapInPandas(empty_dataframes_with_less_columns, "id int, value int").collect()
 
     def test_chain_map_partitions_in_pandas(self):
         def func(iterator):
@@ -201,6 +175,29 @@ class MapInPandasTests(ReusedSQLTestCase):
                     )
         finally:
             shutil.rmtree(path)
+
+
+class MapInPandasTests(ReusedSQLTestCase, MapInPandasTestsMixin):
+    @classmethod
+    def setUpClass(cls):
+        ReusedSQLTestCase.setUpClass()
+
+        # Synchronize default timezone between Python and Java
+        cls.tz_prev = os.environ.get("TZ", None)  # save current tz if set
+        tz = "America/Los_Angeles"
+        os.environ["TZ"] = tz
+        time.tzset()
+
+        cls.sc.environment["TZ"] = tz
+        cls.spark.conf.set("spark.sql.session.timeZone", tz)
+
+    @classmethod
+    def tearDownClass(cls):
+        del os.environ["TZ"]
+        if cls.tz_prev is not None:
+            os.environ["TZ"] = cls.tz_prev
+        time.tzset()
+        ReusedSQLTestCase.tearDownClass()
 
 
 if __name__ == "__main__":

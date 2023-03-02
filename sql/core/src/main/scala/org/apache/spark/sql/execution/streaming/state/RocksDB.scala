@@ -710,7 +710,8 @@ case class AcquiredThreadInfo() {
   override def toString(): String = {
     val taskStr = if (tc != null) {
       val taskDetails =
-        s"${tc.partitionId}.${tc.attemptNumber} in stage ${tc.stageId}, TID ${tc.taskAttemptId}"
+        s"partition ${tc.partitionId}.${tc.attemptNumber} in stage " +
+          s"${tc.stageId}.${tc.stageAttemptNumber()}, TID ${tc.taskAttemptId}"
       s", task: $taskDetails"
     } else ""
 

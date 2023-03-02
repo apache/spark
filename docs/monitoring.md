@@ -1425,16 +1425,17 @@ Note: applies to the shuffle service
 - **note:** the metrics below apply when the server side configuration
   `spark.shuffle.push.server.mergedShuffleFileManagerImpl` is set to
   `org.apache.spark.network.shuffle.MergedShuffleFileManager` for Push-Based Shuffle
-- blockBytesWritten - the size of the pushed block data written to file in bytes
-- blockAppendCollisions - the number of shuffle push blocks collided in shuffle services
+- blockBytesWritten - size of the pushed block data written to file in bytes
+- blockAppendCollisions - number of shuffle push blocks collided in shuffle services
   as another block for the same reduce partition were being written
-- lateBlockPushes - the number of shuffle push blocks that are received in shuffle service
+- lateBlockPushes - number of shuffle push blocks that are received in shuffle service
   after the specific shuffle merge has been finalized
-- deferredBlocks - the number of the current deferred block parts buffered in memory
-- deferredBlockBytes - the size of the current deferred block parts buffered in memory
-- staleBlockPushes - the number of stale shuffle block push requests
-- ignoredBlockBytes - the size of the pushed block data that are ignored after the shuffle
-  file is finalized or when a request is for a duplicate block
+- deferredBlocks - number of the current deferred block parts buffered in memory
+- deferredBlockBytes - size of the current deferred block parts buffered in memory
+- staleBlockPushes - number of stale shuffle block push requests
+- ignoredBlockBytes - size of the pushed block data that was transferred to ESS, but ignored.
+  The pushed block data are considered as ignored when: 1. it was received after the shuffle
+  was finalized; 2. when a push request is for a duplicate block; 3. ESS was unable to write the block.
 
 # Advanced Instrumentation
 

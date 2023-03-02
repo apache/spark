@@ -15,7 +15,6 @@
 # limitations under the License.
 #
 
-import cloudpickle  # type: ignore
 from contextlib import contextmanager
 import collections
 import logging
@@ -31,6 +30,7 @@ import textwrap
 import time
 from typing import Union, Callable, List, Dict, Optional, Any, Tuple, Generator
 
+from pyspark import cloudpickle
 from pyspark.sql import SparkSession
 from pyspark.ml.torch.log_communication import (  # type: ignore
     get_driver_host,
@@ -263,9 +263,23 @@ class TorchDistributor(Distributor):
 
     .. versionadded:: 3.4.0
 
+    Parameters
+    ----------
+    num_processes : int, optional
+        An integer that determines how many different concurrent
+        tasks are allowed. We expect spark.task.gpus = 1 for GPU-enabled training. Default
+        should be 1; we don't want to invoke multiple cores/gpus without explicit mention.
+    local_mode : bool, optional
+        A boolean that determines whether we are using the driver
+        node for training. Default should be false; we don't want to invoke executors without
+        explicit mention.
+    use_gpu : bool, optional
+        A boolean that indicates whether or not we are doing training
+        on the GPU. Note that there are differences in how GPU-enabled code looks like and
+        how CPU-specific code looks like.
+
     Examples
     --------
-
     Run PyTorch Training locally on GPU (using a PyTorch native function)
 
     >>> def train(learning_rate):
@@ -294,7 +308,7 @@ class TorchDistributor(Distributor):
     >>> def train():
     ...     from pytorch_lightning import Trainer
     ...     # ...
-    ...     # required to set devices = 1 and num_nodes == num_processes for multi node
+    ...     # required to set devices = 1 and num_nodes = num_processes for multi node
     ...     # required to set devices = num_processes and num_nodes = 1 for single node multi GPU
     ...     trainer = Trainer(accelerator="gpu", devices=1, num_nodes=num_proc, strategy="ddp")
     ...     trainer.fit()
@@ -307,9 +321,9 @@ class TorchDistributor(Distributor):
     >>> trainer = distributor.run(train)
     """
 
-    PICKLED_FUNC_FILE = "func.pickle"
-    TRAIN_FILE = "train.py"
-    PICKLED_OUTPUT_FILE = "output.pickle"
+    _PICKLED_FUNC_FILE = "func.pickle"
+    _TRAIN_FILE = "train.py"
+    _PICKLED_OUTPUT_FILE = "output.pickle"
 
     def __init__(
         self,
@@ -597,7 +611,7 @@ class TorchDistributor(Distributor):
     def _setup_files(train_fn: Callable, *args: Any) -> Generator[Tuple[str, str], None, None]:
         save_dir = TorchDistributor._create_save_dir()
         pickle_file_path = TorchDistributor._save_pickled_function(save_dir, train_fn, *args)
-        output_file_path = os.path.join(save_dir, TorchDistributor.PICKLED_OUTPUT_FILE)
+        output_file_path = os.path.join(save_dir, TorchDistributor._PICKLED_OUTPUT_FILE)
         train_file_path = TorchDistributor._create_torchrun_train_file(
             save_dir, pickle_file_path, output_file_path
         )
@@ -613,7 +627,13 @@ class TorchDistributor(Distributor):
         with TorchDistributor._setup_files(train_fn, *args) as (train_file_path, output_file_path):
             args = []  # type: ignore
             TorchDistributor._run_training_on_pytorch_file(input_params, train_file_path, *args)
-            output = TorchDistributor._get_pickled_output(output_file_path)
+            try:
+                output = TorchDistributor._get_pickled_output(output_file_path)
+            except FileNotFoundError as e:
+                raise RuntimeError(
+                    "TorchDistributor failed during training. "
+                    "View stdout logs for detailed error message."
+                ) from e
         return output
 
     @staticmethod
@@ -627,7 +647,7 @@ class TorchDistributor(Distributor):
 
     @staticmethod
     def _save_pickled_function(save_dir: str, train_fn: Union[str, Callable], *args: Any) -> str:
-        saved_pickle_path = os.path.join(save_dir, TorchDistributor.PICKLED_FUNC_FILE)
+        saved_pickle_path = os.path.join(save_dir, TorchDistributor._PICKLED_FUNC_FILE)
         with open(saved_pickle_path, "wb") as f:
             cloudpickle.dump((train_fn, args), f)
         return saved_pickle_path
@@ -649,7 +669,7 @@ class TorchDistributor(Distributor):
                             cloudpickle.dump(output, f)
                     """
         )
-        saved_file_path = os.path.join(save_dir_path, TorchDistributor.TRAIN_FILE)
+        saved_file_path = os.path.join(save_dir_path, TorchDistributor._TRAIN_FILE)
         with open(saved_file_path, "w") as f:
             f.write(code)
         return saved_file_path
@@ -666,15 +686,28 @@ class TorchDistributor(Distributor):
         Parameters
         ----------
         train_object : callable object or str
-            Either a PyTorch/PyTorch Lightning training function or the path to a python file
+            Either a PyTorch function, PyTorch Lightning function, or the path to a python file
             that launches distributed training.
         args :
-            The arguments for train_object
+            If train_object is a python function and not a path to a python file, args need
+            to be the input parameters to that function. It would look like
+
+            >>> model = distributor.run(train, 1e-3, 64)
+
+            where train is a function and 1e-3 is a regular numeric input to the function.
+
+            If train_object is a python file, then args would be the command-line arguments for
+            that python file which are all in the form of strings. An example would be
+
+            >>> distributor.run("/path/to/train.py", "--learning-rate=1e-3", "--batch-size=64")
+
+            where since the input is a path, all of the parameters are strings that can be
+            handled by argparse in that python file.
 
         Returns
         -------
-            Returns the output of train_object called with args if train_object is a
-            Callable with an expected output.
+            Returns the output of train_object called with args if the train_object is a
+            Callable with an expected output. Returns None if train_object is a file.
         """
         if isinstance(train_object, str):
             framework_wrapper_fn = TorchDistributor._run_training_on_pytorch_file

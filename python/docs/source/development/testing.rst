@@ -68,15 +68,9 @@ Running Tests for Spark Connect
 Running Tests for Python Client
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-In order to run the tests for Spark Connect in Pyth, you should pass ``--parallelism 1`` option together, for example, as below:
-
-.. code-block:: bash
-
-    python/run-tests --module pyspark-connect --parallelism 1
-
-Note that if you made some changes in Protobuf definitions, for example, at
+In order to test the changes in Protobuf definitions, for example, at
 `spark/connector/connect/common/src/main/protobuf/spark/connect <https://github.com/apache/spark/tree/master/connector/connect/common/src/main/protobuf/spark/connect>`_,
-you should regenerate Python Protobuf client by running ``dev/connect-gen-protos.sh``.
+you should regenerate Python Protobuf client first by running ``dev/connect-gen-protos.sh``.
 
 
 Running PySpark Shell with Python Client

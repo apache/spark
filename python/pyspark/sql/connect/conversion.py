@@ -14,8 +14,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+from pyspark.sql.connect.utils import check_dependencies
 
+check_dependencies(__name__, __file__)
+
+import array
 import datetime
+import decimal
 
 import pyarrow as pa
 
@@ -30,6 +35,8 @@ from pyspark.sql.types import (
     ArrayType,
     BinaryType,
     NullType,
+    DecimalType,
+    StringType,
 )
 
 from pyspark.sql.connect.types import to_arrow_schema
@@ -66,6 +73,12 @@ class LocalDataToArrowConversion:
         elif isinstance(dataType, (TimestampType, TimestampNTZType)):
             # Always truncate
             return True
+        elif isinstance(dataType, DecimalType):
+            # Convert Decimal('NaN') to None
+            return True
+        elif isinstance(dataType, StringType):
+            # Coercion to StringType is allowed
+            return True
         else:
             return False
 
@@ -92,7 +105,9 @@ class LocalDataToArrowConversion:
                 if value is None:
                     return None
                 else:
-                    assert isinstance(value, (tuple, dict)), f"{type(value)} {value}"
+                    assert isinstance(value, (tuple, dict)) or hasattr(
+                        value, "__dict__"
+                    ), f"{type(value)} {value}"
 
                     _dict = {}
                     if isinstance(value, dict):
@@ -101,6 +116,10 @@ class LocalDataToArrowConversion:
                             _dict[k] = field_convs[k](v)
                     elif isinstance(value, Row) and hasattr(value, "__fields__"):
                         for k, v in value.asDict(recursive=False).items():
+                            assert isinstance(k, str)
+                            _dict[k] = field_convs[k](v)
+                    elif not isinstance(value, Row) and hasattr(value, "__dict__"):
+                        for k, v in value.__dict__.items():
                             assert isinstance(k, str)
                             _dict[k] = field_convs[k](v)
                     else:
@@ -122,7 +141,7 @@ class LocalDataToArrowConversion:
                 if value is None:
                     return None
                 else:
-                    assert isinstance(value, list)
+                    assert isinstance(value, (list, array.array))
                     return [element_conv(v) for v in value]
 
             return convert_array
@@ -168,6 +187,48 @@ class LocalDataToArrowConversion:
 
             return convert_timestample
 
+        elif isinstance(dataType, DecimalType):
+
+            def convert_decimal(value: Any) -> Any:
+                if value is None:
+                    return None
+                else:
+                    assert isinstance(value, decimal.Decimal)
+                    return None if value.is_nan() else value
+
+            return convert_decimal
+
+        elif isinstance(dataType, StringType):
+
+            def convert_string(value: Any) -> Any:
+                if value is None:
+                    return None
+                else:
+                    # only atomic types are supported
+                    assert isinstance(
+                        value,
+                        (
+                            bool,
+                            int,
+                            float,
+                            str,
+                            bytes,
+                            bytearray,
+                            decimal.Decimal,
+                            datetime.date,
+                            datetime.datetime,
+                            datetime.timedelta,
+                        ),
+                    )
+                    if isinstance(value, bool):
+                        # To match the PySpark which convert bool to string in
+                        # the JVM side (python.EvaluatePython.makeFromJava)
+                        return str(value).lower()
+                    else:
+                        return str(value)
+
+            return convert_string
+
         else:
 
             return lambda value: value
@@ -182,32 +243,24 @@ class LocalDataToArrowConversion:
 
         column_names = schema.fieldNames()
 
-        column_convs = {
-            field.name: LocalDataToArrowConversion._create_converter(field.dataType)
-            for field in schema.fields
-        }
+        column_convs = [
+            LocalDataToArrowConversion._create_converter(field.dataType) for field in schema.fields
+        ]
 
-        pylist = []
+        pylist: List[List] = [[] for _ in range(len(column_names))]
 
         for item in data:
-            _dict = {}
+            if not isinstance(item, Row) and hasattr(item, "__dict__"):
+                item = item.__dict__
+            for i, col in enumerate(column_names):
+                if isinstance(item, dict):
+                    value = item.get(col)
+                else:
+                    value = item[i]
 
-            if isinstance(item, dict):
-                for col, value in item.items():
-                    _dict[col] = column_convs[col](value)
-            elif isinstance(item, Row) and hasattr(item, "__fields__"):
-                for col, value in item.asDict(recursive=False).items():
-                    _dict[col] = column_convs[col](value)
-            else:
-                i = 0
-                for value in item:
-                    col = column_names[i]
-                    _dict[col] = column_convs[col](value)
-                    i += 1
+                pylist[i].append(column_convs[i](value))
 
-            pylist.append(_dict)
-
-        return pa.Table.from_pylist(pylist, schema=pa_schema)
+        return pa.Table.from_arrays(pylist, schema=pa_schema)
 
 
 class ArrowTableToRowsConversion:

@@ -142,6 +142,10 @@ case class StructField(
     }
   }
 
+  private def getDDLDefault = getCurrentDefaultValue()
+    .map(" DEFAULT " + _)
+    .getOrElse("")
+
   private def getDDLComment = getComment()
     .map(escapeSingleQuotedString)
     .map(" COMMENT '" + _ + "'")
@@ -161,7 +165,7 @@ case class StructField(
    */
   def toDDL: String = {
     val nullString = if (nullable) "" else " NOT NULL"
-    s"${quoteIfNeeded(name)} ${dataType.sql}${nullString}$getDDLComment"
+    s"${quoteIfNeeded(name)} ${dataType.sql}${nullString}$getDDLDefault$getDDLComment"
   }
 
   private[sql] def toAttribute: AttributeReference =

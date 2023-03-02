@@ -16,42 +16,21 @@
 #
 import unittest
 
+from pyspark.sql.connect.readwriter import DataFrameWriterV2
 from pyspark.sql.tests.test_readwriter import ReadwriterTestsMixin, ReadwriterV2TestsMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
 class ReadwriterParityTests(ReadwriterTestsMixin, ReusedConnectTestCase):
-    # TODO(SPARK-41999): NPE for bucketed write
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_bucketed_write(self):
-        super().test_bucketed_write()
-
-    # TODO(SPARK-42000): saveAsTable fail to find the default source
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_insert_into(self):
-        super().test_insert_into()
-
-    # TODO(SPARK-41834): Implement SparkSession.conf
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_save_and_load(self):
-        super().test_save_and_load()
-
-    # TODO(SPARK-41834): Implement SparkSession.conf
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_save_and_load_builder(self):
-        super().test_save_and_load_builder()
+    pass
 
 
 class ReadwriterV2ParityTests(ReadwriterV2TestsMixin, ReusedConnectTestCase):
-    # TODO(SPARK-42002): Implement writeTo()
-    @unittest.skip("Fails in Spark Connect, should enable.")
     def test_api(self):
-        super().test_api()
+        self.check_api(DataFrameWriterV2)
 
-    # TODO(SPARK-42002): Implement writeTo()
-    @unittest.skip("Fails in Spark Connect, should enable.")
     def test_partitioning_functions(self):
-        super().test_partitioning_functions()
+        self.check_partitioning_functions(DataFrameWriterV2)
 
 
 if __name__ == "__main__":

@@ -18,11 +18,10 @@
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.trees.TreePattern.{COUNT, TreePattern}
-import org.apache.spark.sql.errors.QueryErrorsBase
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -59,17 +58,13 @@ case class Count(children: Seq[Expression]) extends DeclarativeAggregate
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (children.isEmpty && !SQLConf.get.getConf(SQLConf.ALLOW_PARAMETERLESS_COUNT)) {
-      DataTypeMismatch(
-        errorSubClass = "WRONG_NUM_ARGS_WITH_SUGGESTION",
-        messageParameters = Map(
-          "functionName" -> toSQLId(prettyName),
-          "expectedNum" -> " >= 1",
-          "actualNum" -> "0",
-          "legacyNum" -> "0",
-          "legacyConfKey" -> toSQLConf(SQLConf.ALLOW_PARAMETERLESS_COUNT.key),
-          "legacyConfValue" -> toSQLConfVal(true.toString)
-        )
-      )
+      throw QueryCompilationErrors.wrongNumArgsError(
+        toSQLId(prettyName),
+        Seq(" >= 1"),
+        0,
+        "0",
+        toSQLConf(SQLConf.ALLOW_PARAMETERLESS_COUNT.key),
+        toSQLConfVal(true.toString))
     } else {
       TypeCheckResult.TypeCheckSuccess
     }

@@ -30,6 +30,7 @@ import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.connect.config.Connect.CONNECT_GRPC_ARROW_MAX_BATCH_SIZE
 import org.apache.spark.sql.connect.planner.SparkConnectPlanner
+import org.apache.spark.sql.connect.service.SparkConnectStreamHandler.processAsArrowBatches
 import org.apache.spark.sql.execution.{SparkPlan, SQLExecution}
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, AdaptiveSparkPlanHelper, QueryStageExec}
 import org.apache.spark.sql.execution.arrow.ArrowConverters
@@ -44,11 +45,13 @@ class SparkConnectStreamHandler(responseObserver: StreamObserver[ExecutePlanResp
       SparkConnectService
         .getOrCreateIsolatedSession(v.getUserContext.getUserId, v.getClientId)
         .session
-    v.getPlan.getOpTypeCase match {
-      case proto.Plan.OpTypeCase.COMMAND => handleCommand(session, v)
-      case proto.Plan.OpTypeCase.ROOT => handlePlan(session, v)
-      case _ =>
-        throw new UnsupportedOperationException(s"${v.getPlan.getOpTypeCase} not supported.")
+    session.withActive {
+      v.getPlan.getOpTypeCase match {
+        case proto.Plan.OpTypeCase.COMMAND => handleCommand(session, v)
+        case proto.Plan.OpTypeCase.ROOT => handlePlan(session, v)
+        case _ =>
+          throw new UnsupportedOperationException(s"${v.getPlan.getOpTypeCase} not supported.")
+      }
     }
   }
 
@@ -56,10 +59,41 @@ class SparkConnectStreamHandler(responseObserver: StreamObserver[ExecutePlanResp
     // Extract the plan from the request and convert it to a logical plan
     val planner = new SparkConnectPlanner(session)
     val dataframe = Dataset.ofRows(session, planner.transformRelation(request.getPlan.getRoot))
-    processAsArrowBatches(request.getClientId, dataframe)
+    processAsArrowBatches(request.getClientId, dataframe, responseObserver)
+    responseObserver.onNext(
+      SparkConnectStreamHandler.sendMetricsToResponse(request.getClientId, dataframe))
+    responseObserver.onCompleted()
   }
 
-  private def processAsArrowBatches(clientId: String, dataframe: DataFrame): Unit = {
+  private def handleCommand(session: SparkSession, request: ExecutePlanRequest): Unit = {
+    val command = request.getPlan.getCommand
+    val planner = new SparkConnectPlanner(session)
+    planner.process(command, request.getClientId, responseObserver)
+    responseObserver.onCompleted()
+  }
+}
+
+object SparkConnectStreamHandler {
+  type Batch = (Array[Byte], Long)
+
+  def rowToArrowConverter(
+      schema: StructType,
+      maxRecordsPerBatch: Int,
+      maxBatchSize: Long,
+      timeZoneId: String): Iterator[InternalRow] => Iterator[Batch] = { rows =>
+    val batches = ArrowConverters.toBatchWithSchemaIterator(
+      rows,
+      schema,
+      maxRecordsPerBatch,
+      maxBatchSize,
+      timeZoneId)
+    batches.map(b => b -> batches.rowCountInLastBatch)
+  }
+
+  def processAsArrowBatches(
+      clientId: String,
+      dataframe: DataFrame,
+      responseObserver: StreamObserver[ExecutePlanResponse]): Unit = {
     val spark = dataframe.sparkSession
     val schema = dataframe.schema
     val maxRecordsPerBatch = spark.sessionState.conf.arrowMaxRecordsPerBatch
@@ -161,44 +195,16 @@ class SparkConnectStreamHandler(responseObserver: StreamObserver[ExecutePlanResp
         response.setArrowBatch(batch)
         responseObserver.onNext(response.build())
       }
-
-      responseObserver.onNext(sendMetricsToResponse(clientId, dataframe))
-      responseObserver.onCompleted()
     }
   }
 
-  private def sendMetricsToResponse(clientId: String, rows: DataFrame): ExecutePlanResponse = {
+  def sendMetricsToResponse(clientId: String, rows: DataFrame): ExecutePlanResponse = {
     // Send a last batch with the metrics
     ExecutePlanResponse
       .newBuilder()
       .setClientId(clientId)
       .setMetrics(MetricGenerator.buildMetrics(rows.queryExecution.executedPlan))
       .build()
-  }
-
-  private def handleCommand(session: SparkSession, request: ExecutePlanRequest): Unit = {
-    val command = request.getPlan.getCommand
-    val planner = new SparkConnectPlanner(session)
-    planner.process(command)
-    responseObserver.onCompleted()
-  }
-}
-
-object SparkConnectStreamHandler {
-  type Batch = (Array[Byte], Long)
-
-  private def rowToArrowConverter(
-      schema: StructType,
-      maxRecordsPerBatch: Int,
-      maxBatchSize: Long,
-      timeZoneId: String): Iterator[InternalRow] => Iterator[Batch] = { rows =>
-    val batches = ArrowConverters.toBatchWithSchemaIterator(
-      rows,
-      schema,
-      maxRecordsPerBatch,
-      maxBatchSize,
-      timeZoneId)
-    batches.map(b => b -> batches.rowCountInLastBatch)
   }
 }
 

@@ -111,10 +111,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "WRONG_NUM_ARGS.WITH_SUGGESTION",
+  "errorClass" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
   "sqlState" : "42605",
   "messageParameters" : {
     "actualNum" : "0",
+    "docroot" : "https://spark.apache.org/docs/latest",
     "expectedNum" : "[1, 2]",
     "functionName" : "`to_json`"
   },
@@ -237,10 +238,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "WRONG_NUM_ARGS.WITH_SUGGESTION",
+  "errorClass" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
   "sqlState" : "42605",
   "messageParameters" : {
     "actualNum" : "0",
+    "docroot" : "https://spark.apache.org/docs/latest",
     "expectedNum" : "[2, 3]",
     "functionName" : "`from_json`"
   },
@@ -584,10 +586,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "WRONG_NUM_ARGS.WITH_SUGGESTION",
+  "errorClass" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
   "sqlState" : "42605",
   "messageParameters" : {
     "actualNum" : "0",
+    "docroot" : "https://spark.apache.org/docs/latest",
     "expectedNum" : "1",
     "functionName" : "`json_array_length`"
   },
@@ -672,10 +675,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "WRONG_NUM_ARGS.WITH_SUGGESTION",
+  "errorClass" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
   "sqlState" : "42605",
   "messageParameters" : {
     "actualNum" : "0",
+    "docroot" : "https://spark.apache.org/docs/latest",
     "expectedNum" : "1",
     "functionName" : "`json_object_keys`"
   },

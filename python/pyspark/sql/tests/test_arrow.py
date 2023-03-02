@@ -465,8 +465,23 @@ class ArrowTests(ReusedSQLTestCase):
         wrong_schema = StructType(fields)
         with self.sql_conf({"spark.sql.execution.pandas.convertToArrowArraySafely": False}):
             with QuietTest(self.sc):
-                with self.assertRaisesRegex(Exception, "[D|d]ecimal.*got.*date"):
+                with self.assertRaises(Exception) as context:
                     self.spark.createDataFrame(pdf, schema=wrong_schema)
+
+                # the exception provides us with the column that is incorrect
+                exception = context.exception
+                self.assertTrue(hasattr(exception, "args"))
+                self.assertEqual(len(exception.args), 1)
+                self.assertRegex(
+                    exception.args[0],
+                    "with name '7_date_t' " "to Arrow Array \\(decimal128\\(38, 18\\)\\)",
+                )
+
+                # the inner exception provides us with the incorrect types
+                exception = exception.__context__
+                self.assertTrue(hasattr(exception, "args"))
+                self.assertEqual(len(exception.args), 1)
+                self.assertRegex(exception.args[0], "[D|d]ecimal.*got.*date")
 
     def test_createDataFrame_with_names(self):
         pdf = self.create_pandas_data_frame()

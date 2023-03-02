@@ -24,7 +24,7 @@ import java.sql.{Date, Timestamp}
 
 import scala.util.Random
 
-import org.apache.spark.{SparkException, SparkRuntimeException}
+import org.apache.spark.{SPARK_DOC_ROOT, SparkException, SparkRuntimeException}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, UnresolvedAttribute}
 import org.apache.spark.sql.catalyst.expressions.{Alias, ArraysZip, AttributeReference, Expression, NamedExpression, UnaryExpression}
@@ -3106,6 +3106,50 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     )
   }
 
+  test("array_insert functions") {
+    val fiveShort: Short = 5
+
+    val df1 = Seq((Array[Integer](3, 2, 5, 1, 2), 6, 3)).toDF("a", "b", "c")
+    val df2 = Seq((Array[Short](1, 2, 3, 4), 5, fiveShort)).toDF("a", "b", "c")
+    val df3 = Seq((Array[Double](3.0, 2.0, 5.0, 1.0, 2.0), 2, 3.0)).toDF("a", "b", "c")
+    val df4 = Seq((Array[Boolean](true, false), 3, false)).toDF("a", "b", "c")
+    val df5 = Seq((Array[String]("a", "b", "c"), 0, "d")).toDF("a", "b", "c")
+    val df6 = Seq((Array[String]("a", null, "b", "c"), 5, "d")).toDF("a", "b", "c")
+
+    checkAnswer(df1.selectExpr("array_insert(a, b, c)"), Seq(Row(Seq(3, 2, 5, 1, 2, 3))))
+    checkAnswer(df2.selectExpr("array_insert(a, b, c)"), Seq(Row(Seq[Short](1, 2, 3, 4, 5))))
+    checkAnswer(
+      df3.selectExpr("array_insert(a, b, c)"),
+      Seq(Row(Seq[Double](3.0, 3.0, 2.0, 5.0, 1.0, 2.0)))
+    )
+    checkAnswer(df4.selectExpr("array_insert(a, b, c)"), Seq(Row(Seq(true, false, false))))
+    checkAnswer(df5.selectExpr("array_insert(a, b, c)"), Seq(Row(Seq("d", "a", "b", "c"))))
+    checkAnswer(df5.select(
+      array_insert(col("a"), lit(1), col("c"))),
+      Seq(Row(Seq("d", "a", "b", "c")))
+    )
+    // null checks
+    checkAnswer(df6.selectExpr("array_insert(a, b, c)"), Seq(Row(Seq("a", null, "b", "c", "d"))))
+    checkAnswer(df5.select(
+      array_insert(col("a"), col("b"), lit(null).cast("string"))),
+      Seq(Row(Seq(null, "a", "b", "c")))
+    )
+    checkAnswer(df6.select(
+      array_insert(col("a"), col("b"), lit(null).cast("string"))),
+      Seq(Row(Seq("a", null, "b", "c", null)))
+    )
+    checkAnswer(
+      df5.select(array_insert(col("a"), lit(null).cast("integer"), col("c"))),
+      Seq(Row(null))
+    )
+    checkAnswer(
+      df5.select(array_insert(lit(null).cast("array<string>"), col("b"), col("c"))),
+      Seq(Row(null))
+    )
+    checkAnswer(df1.selectExpr("array_insert(a, 7, c)"), Seq(Row(Seq(3, 2, 5, 1, 2, null, 3))))
+    checkAnswer(df1.selectExpr("array_insert(a, -6, c)"), Seq(Row(Seq(3, null, 3, 2, 5, 1, 2))))
+  }
+
   test("transform function - array for primitive type not containing null") {
     val df = Seq(
       Seq(1, 9, 8, 7),
@@ -4899,11 +4943,12 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         df.selectExpr("zip_with(a1, a2, (acc, x) -> x, (acc, x) -> x)")
       },
-      errorClass = "WRONG_NUM_ARGS.WITH_SUGGESTION",
+      errorClass = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
       parameters = Map(
         "functionName" -> toSQLId("zip_with"),
         "expectedNum" -> "3",
-        "actualNum" -> "4"),
+        "actualNum" -> "4",
+        "docroot" -> SPARK_DOC_ROOT),
       context = ExpectedContext(
         fragment = "zip_with(a1, a2, (acc, x) -> x, (acc, x) -> x)",
         start = 0,
@@ -4997,144 +5042,130 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         df.select(coalesce())
       },
-      errorClass = "DATATYPE_MISMATCH.WRONG_NUM_ARGS",
+      errorClass = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
       sqlState = None,
       parameters = Map(
-        "sqlExpr" -> "\"coalesce()\"",
         "functionName" -> "`coalesce`",
         "expectedNum" -> "> 0",
-        "actualNum" -> "0"))
+        "actualNum" -> "0",
+        "docroot" -> SPARK_DOC_ROOT)
+    )
 
     checkError(
       exception = intercept[AnalysisException] {
         df.selectExpr("coalesce()")
       },
-      errorClass = "DATATYPE_MISMATCH.WRONG_NUM_ARGS",
+      errorClass = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
       sqlState = None,
       parameters = Map(
-        "sqlExpr" -> "\"coalesce()\"",
         "functionName" -> "`coalesce`",
         "expectedNum" -> "> 0",
-        "actualNum" -> "0"),
-      context = ExpectedContext(
-        fragment = "coalesce()",
-        start = 0,
-        stop = 9))
+        "actualNum" -> "0",
+        "docroot" -> SPARK_DOC_ROOT)
+    )
 
     checkError(
       exception = intercept[AnalysisException] {
         df.select(hash())
       },
-      errorClass = "DATATYPE_MISMATCH.WRONG_NUM_ARGS",
+      errorClass = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
       sqlState = None,
       parameters = Map(
-        "sqlExpr" -> "\"hash()\"",
         "functionName" -> "`hash`",
         "expectedNum" -> "> 0",
-        "actualNum" -> "0"))
+        "actualNum" -> "0",
+        "docroot" -> SPARK_DOC_ROOT)
+    )
 
     checkError(
       exception = intercept[AnalysisException] {
         df.selectExpr("hash()")
       },
-      errorClass = "DATATYPE_MISMATCH.WRONG_NUM_ARGS",
+      errorClass = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
       sqlState = None,
       parameters = Map(
-        "sqlExpr" -> "\"hash()\"",
         "functionName" -> "`hash`",
         "expectedNum" -> "> 0",
-        "actualNum" -> "0"),
-      context = ExpectedContext(
-        fragment = "hash()",
-        start = 0,
-        stop = 5))
+        "actualNum" -> "0",
+        "docroot" -> SPARK_DOC_ROOT)
+    )
 
     checkError(
       exception = intercept[AnalysisException] {
         df.select(xxhash64())
       },
-      errorClass = "DATATYPE_MISMATCH.WRONG_NUM_ARGS",
+      errorClass = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
       sqlState = None,
       parameters = Map(
-        "sqlExpr" -> "\"xxhash64()\"",
         "functionName" -> "`xxhash64`",
         "expectedNum" -> "> 0",
-        "actualNum" -> "0"))
+        "actualNum" -> "0",
+        "docroot" -> SPARK_DOC_ROOT)
+    )
 
     checkError(
       exception = intercept[AnalysisException] {
         df.selectExpr("xxhash64()")
       },
-      errorClass = "DATATYPE_MISMATCH.WRONG_NUM_ARGS",
+      errorClass = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
       sqlState = None,
       parameters = Map(
-        "sqlExpr" -> "\"xxhash64()\"",
         "functionName" -> "`xxhash64`",
         "expectedNum" -> "> 0",
-        "actualNum" -> "0"),
-      context = ExpectedContext(
-        fragment = "xxhash64()",
-        start = 0,
-        stop = 9))
+        "actualNum" -> "0",
+        "docroot" -> SPARK_DOC_ROOT)
+    )
 
     checkError(
       exception = intercept[AnalysisException] {
         df.select(greatest())
       },
-      errorClass = "DATATYPE_MISMATCH.WRONG_NUM_ARGS",
+      errorClass = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
       sqlState = None,
       parameters = Map(
-        "sqlExpr" -> "\"greatest()\"",
         "functionName" -> "`greatest`",
         "expectedNum" -> "> 1",
-        "actualNum" -> "0")
+        "actualNum" -> "0",
+        "docroot" -> SPARK_DOC_ROOT)
     )
 
     checkError(
       exception = intercept[AnalysisException] {
         df.selectExpr("greatest()")
       },
-      errorClass = "DATATYPE_MISMATCH.WRONG_NUM_ARGS",
+      errorClass = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
       sqlState = None,
       parameters = Map(
-        "sqlExpr" -> "\"greatest()\"",
         "functionName" -> "`greatest`",
         "expectedNum" -> "> 1",
-        "actualNum" -> "0"),
-      context = ExpectedContext(
-        fragment = "greatest()",
-        start = 0,
-        stop = 9)
+        "actualNum" -> "0",
+        "docroot" -> SPARK_DOC_ROOT)
     )
 
     checkError(
       exception = intercept[AnalysisException] {
         df.select(least())
       },
-      errorClass = "DATATYPE_MISMATCH.WRONG_NUM_ARGS",
+      errorClass = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
       sqlState = None,
       parameters = Map(
-        "sqlExpr" -> "\"least()\"",
         "functionName" -> "`least`",
         "expectedNum" -> "> 1",
-        "actualNum" -> "0")
+        "actualNum" -> "0",
+        "docroot" -> SPARK_DOC_ROOT)
     )
 
     checkError(
       exception = intercept[AnalysisException] {
         df.selectExpr("least()")
       },
-      errorClass = "DATATYPE_MISMATCH.WRONG_NUM_ARGS",
+      errorClass = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
       sqlState = None,
       parameters = Map(
-        "sqlExpr" -> "\"least()\"",
         "functionName" -> "`least`",
         "expectedNum" -> "> 1",
-        "actualNum" -> "0"),
-      context = ExpectedContext(
-        fragment = "least()",
-        start = 0,
-        stop = 6)
+        "actualNum" -> "0",
+        "docroot" -> SPARK_DOC_ROOT)
     )
   }
 
@@ -5398,6 +5429,27 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
 
     checkAnswer(df10.selectExpr("array_append(a, b)"),
       Seq(Row(Seq(1, 2, 3, null, null)))
+    )
+  }
+
+  test("SPARK-42401: array_insert - explicitly insert null") {
+    checkAnswer(
+      sql("select array_insert(array('b', 'a', 'c'), 2, cast(null as string))"),
+      Seq(Row(Seq("b", null, "a", "c")))
+    )
+  }
+
+  test("SPARK-42401: array_insert - implicitly insert null") {
+    checkAnswer(
+      sql("select array_insert(array('b', 'a', 'c'), 5, 'q')"),
+      Seq(Row(Seq("b", "a", "c", null, "q")))
+    )
+  }
+
+  test("SPARK-42401: array_append - append null") {
+    checkAnswer(
+      sql("select array_append(array('b', 'a', 'c'), cast(null as string))"),
+      Seq(Row(Seq("b", "a", "c", null)))
     )
   }
 }

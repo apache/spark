@@ -147,6 +147,7 @@ Equivalent to ``{equiv}``
 Parameters
 ----------
 other : Series or scalar value
+fill_value : Scalar value, default None
 
 Returns
 -------
@@ -496,7 +497,17 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         return [self.index]
 
     # Arithmetic Operators
-    def add(self, other: Any) -> "Series":
+    def add(self, other: Any, fill_value: Union[int, str, float] = None) -> "Series":
+        if fill_value is not None:
+            if isinstance(other, (int, str, float)):
+                scol = self.spark.column
+                scol = F.when(scol.isNull() | F.isnan(scol), fill_value).otherwise(scol)
+                self = self._with_new_scol(scol)
+            else:
+                raise NotImplementedError(
+                    "`fill_value` currently only works when type of `other` is in (int, str, float)"
+                )
+
         return self + other
 
     add.__doc__ = _flex_doc_SERIES.format(
@@ -507,7 +518,17 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         series_examples=_add_example_SERIES,
     )
 
-    def radd(self, other: Any) -> "Series":
+    def radd(self, other: Any, fill_value: Union[int, str, float] = None) -> "Series":
+        if fill_value is not None:
+            if isinstance(other, (int, str, float)):
+                scol = self.spark.column
+                scol = F.when(scol.isNull() | F.isnan(scol), fill_value).otherwise(scol)
+                self = self._with_new_scol(scol)
+            else:
+                raise NotImplementedError(
+                    "`fill_value` currently only works when type of `other` is in (int, str, float)"
+                )
+
         return other + self
 
     radd.__doc__ = _flex_doc_SERIES.format(
@@ -3564,6 +3585,8 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         """
         Concatenate two or more Series.
 
+        .. deprecated:: 3.4.0
+
         Parameters
         ----------
         to_append : Series or list/tuple of Series
@@ -3611,6 +3634,12 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         5    6
         dtype: int64
         """
+        warnings.warn(
+            "The Series.append method is deprecated "
+            "and will be removed in a future version. "
+            "Use pyspark.pandas.concat instead.",
+            FutureWarning,
+        )
         return first_series(
             self.to_frame().append(to_append.to_frame(), ignore_index, verify_integrity)
         ).rename(self.name)
@@ -5903,6 +5932,8 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         """
         Return the mean absolute deviation of values.
 
+        .. deprecated:: 3.4.0
+
         Examples
         --------
         >>> s = ps.Series([1, 2, 3, 4])
@@ -5916,7 +5947,11 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         >>> s.mad()
         1.0
         """
-
+        warnings.warn(
+            "The 'mad' method is deprecated and will be removed in a future version. "
+            "To compute the same result, you may do `(series - series.mean()).abs().mean()`.",
+            FutureWarning,
+        )
         sdf = self._internal.spark_frame
         spark_column = self.spark.column
         avg = unpack_scalar(sdf.select(F.avg(spark_column)))
@@ -6779,6 +6814,8 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         return (left_ser.copy(), right.copy()) if copy else (left_ser, right)
 
+    # TODO(SPARK-42620): Add `inclusive` parameter and replace `include_start` & `include_end`.
+    # See https://github.com/pandas-dev/pandas/issues/43248
     def between_time(
         self,
         start_time: Union[datetime.time, str],
@@ -6801,8 +6838,14 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             End time as a time filter limit.
         include_start : bool, default True
             Whether the start time needs to be included in the result.
+
+            .. deprecated:: 3.4.0
+
         include_end : bool, default True
             Whether the end time needs to be included in the result.
+
+            .. deprecated:: 3.4.0
+
         axis : {0 or 'index', 1 or 'columns'}, default 0
             Determine range time on index or columns value.
 

@@ -223,6 +223,23 @@ for converting to `ml.linalg` types, and
 for converting to `mllib.linalg` types.
 
 <div class="codetabs">
+
+<div data-lang="python"  markdown="1">
+
+{% highlight python %}
+from pyspark.mllib.util import MLUtils
+
+# convert DataFrame columns
+convertedVecDF = MLUtils.convertVectorColumnsToML(vecDF)
+convertedMatrixDF = MLUtils.convertMatrixColumnsToML(matrixDF)
+# convert a single vector or matrix
+mlVec = mllibVec.asML()
+mlMat = mllibMat.asML()
+{% endhighlight %}
+
+Refer to the [`MLUtils` Python docs](api/python/reference/api/pyspark.mllib.util.MLUtils.html#pyspark.mllib.util.MLUtils) for further detail.
+</div>
+
 <div data-lang="scala"  markdown="1">
 
 {% highlight scala %}
@@ -256,21 +273,6 @@ org.apache.spark.ml.linalg.Matrix mlMat = mllibMat.asML();
 Refer to the [`MLUtils` Java docs](api/java/org/apache/spark/mllib/util/MLUtils.html) for further detail.
 </div>
 
-<div data-lang="python"  markdown="1">
-
-{% highlight python %}
-from pyspark.mllib.util import MLUtils
-
-# convert DataFrame columns
-convertedVecDF = MLUtils.convertVectorColumnsToML(vecDF)
-convertedMatrixDF = MLUtils.convertMatrixColumnsToML(matrixDF)
-# convert a single vector or matrix
-mlVec = mllibVec.asML()
-mlMat = mllibMat.asML()
-{% endhighlight %}
-
-Refer to the [`MLUtils` Python docs](api/python/reference/api/pyspark.mllib.util.MLUtils.html#pyspark.mllib.util.MLUtils) for further detail.
-</div>
 </div>
 
 **Deprecated methods removed**

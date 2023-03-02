@@ -191,6 +191,139 @@ class RocksDBSuite extends SparkFunSuite {
     }
   }
 
+  test("RocksDBFileManager: delete orphan files") {
+    withTempDir { dir =>
+      val dfsRootDir = dir.getAbsolutePath
+      // Use 2 file managers here to emulate concurrent execution
+      // that checkpoint the same version of state
+      val fileManager = new RocksDBFileManager(
+        dfsRootDir, Utils.createTempDir(), new Configuration)
+      val fileManager_ = new RocksDBFileManager(
+        dfsRootDir, Utils.createTempDir(), new Configuration)
+      val sstDir = s"$dfsRootDir/SSTs"
+      def numRemoteSSTFiles: Int = listFiles(sstDir).length
+      val logDir = s"$dfsRootDir/logs"
+      def numRemoteLogFiles: Int = listFiles(logDir).length
+
+      // Save a version of checkpoint files
+      val cpFiles1 = Seq(
+        "001.sst" -> 10,
+        "002.sst" -> 20,
+        "other-file1" -> 100,
+        "other-file2" -> 200,
+        "archive/00001.log" -> 1000,
+        "archive/00002.log" -> 2000
+      )
+      saveCheckpointFiles(fileManager, cpFiles1, version = 1, numKeys = 101)
+      assert(fileManager.getLatestVersion() === 1)
+      assert(numRemoteSSTFiles == 2) // 2 sst files copied
+      assert(numRemoteLogFiles == 2)
+
+
+      // Overwrite version 1, previous sst and log files will become orphan
+      val cpFiles1_ = Seq(
+        "001.sst" -> 10,
+        "002.sst" -> 20,
+        "other-file1" -> 100,
+        "other-file2" -> 200,
+        "archive/00002.log" -> 1000,
+        "archive/00003.log" -> 2000
+      )
+      saveCheckpointFiles(fileManager_, cpFiles1_, version = 1, numKeys = 101)
+      assert(fileManager_.getLatestVersion() === 1)
+      assert(numRemoteSSTFiles == 4)
+      assert(numRemoteLogFiles == 4)
+
+      // For orphan files cleanup test, add a sleep between 2 checkpoints.
+      // We use file modification timestamp to find orphan files older than
+      // any tracked files. Some file systems has timestamps in second precision.
+      // Sleeping for 1.5s makes sure files from different versions has different timestamps.
+      Thread.sleep(1500)
+      // Save a version of checkpoint files
+      val cpFiles2 = Seq(
+        "003.sst" -> 10,
+        "004.sst" -> 20,
+        "other-file1" -> 100,
+        "other-file2" -> 200,
+        "archive/00004.log" -> 1000,
+        "archive/00005.log" -> 2000
+      )
+      saveCheckpointFiles(fileManager_, cpFiles2, version = 2, numKeys = 121)
+      fileManager_.deleteOldVersions(1)
+      assert(numRemoteSSTFiles <= 4) // delete files recorded in 1.zip
+      assert(numRemoteLogFiles <= 5) // delete files recorded in 1.zip and orphan 00001.log
+
+      Thread.sleep(1500)
+      // Save a version of checkpoint files
+      val cpFiles3 = Seq(
+        "005.sst" -> 10,
+        "other-file1" -> 100,
+        "other-file2" -> 200,
+        "archive/00006.log" -> 1000,
+        "archive/00007.log" -> 2000
+      )
+      saveCheckpointFiles(fileManager_, cpFiles3, version = 3, numKeys = 131)
+      assert(fileManager_.getLatestVersion() === 3)
+      fileManager_.deleteOldVersions(1)
+      assert(numRemoteSSTFiles == 1)
+      assert(numRemoteLogFiles == 2)
+    }
+  }
+
+  test("RocksDBFileManager: don't delete orphan files when there is only 1 version") {
+    withTempDir { dir =>
+      val dfsRootDir = dir.getAbsolutePath
+      val fileManager = new RocksDBFileManager(
+        dfsRootDir, Utils.createTempDir(), new Configuration)
+      (new File(dfsRootDir, "SSTs")).mkdir()
+      (new File(dfsRootDir, "logs")).mkdir()
+
+      val sstDir = s"$dfsRootDir/SSTs"
+      def numRemoteSSTFiles: Int = listFiles(sstDir).length
+
+      val logDir = s"$dfsRootDir/logs"
+      def numRemoteLogFiles: Int = listFiles(logDir).length
+
+      new File(sstDir, "orphan.sst").createNewFile()
+      new File(logDir, "orphan.log").createNewFile()
+
+      Thread.sleep(1500)
+      // Save a version of checkpoint files
+      val cpFiles1 = Seq(
+        "001.sst" -> 10,
+        "002.sst" -> 20,
+        "other-file1" -> 100,
+        "other-file2" -> 200,
+        "archive/00001.log" -> 1000,
+        "archive/00002.log" -> 2000
+      )
+      saveCheckpointFiles(fileManager, cpFiles1, version = 1, numKeys = 101)
+      fileManager.deleteOldVersions(1)
+      // Should not delete orphan files even when they are older than all existing files
+      // when there is only 1 version.
+      assert(numRemoteSSTFiles == 3)
+      assert(numRemoteLogFiles == 3)
+
+      Thread.sleep(1500)
+      // Save a version of checkpoint files
+      val cpFiles2 = Seq(
+        "003.sst" -> 10,
+        "004.sst" -> 20,
+        "other-file1" -> 100,
+        "other-file2" -> 200,
+        "archive/00003.log" -> 1000,
+        "archive/00004.log" -> 2000
+      )
+      saveCheckpointFiles(fileManager, cpFiles2, version = 2, numKeys = 101)
+      assert(numRemoteSSTFiles == 5)
+      assert(numRemoteLogFiles == 5)
+      fileManager.deleteOldVersions(1)
+      // Orphan files should be deleted now.
+      assert(numRemoteSSTFiles == 2)
+      assert(numRemoteLogFiles == 2)
+    }
+  }
+
   test("RocksDBFileManager: upload only new immutable files") {
     withTempDir { dir =>
       val dfsRootDir = dir.getAbsolutePath

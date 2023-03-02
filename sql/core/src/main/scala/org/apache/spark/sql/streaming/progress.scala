@@ -38,7 +38,7 @@ import org.apache.spark.util.JacksonUtils
  * Information about updates made to stateful operators in a [[StreamingQuery]] during a trigger.
  */
 @Evolving
-class StateOperatorProgress private[sql](
+class StateOperatorProgress private[spark](
     val operatorName: String,
     val numRowsTotal: Long,
     val numRowsUpdated: Long,
@@ -125,7 +125,7 @@ class StateOperatorProgress private[sql](
  * @since 2.1.0
  */
 @Evolving
-class StreamingQueryProgress private[sql](
+class StreamingQueryProgress private[spark](
   val id: UUID,
   val runId: UUID,
   val name: String,
@@ -221,7 +221,7 @@ class StreamingQueryProgress private[sql](
  * @since 2.1.0
  */
 @Evolving
-class SourceProgress protected[sql](
+class SourceProgress protected[spark](
   val description: String,
   val startOffset: String,
   val endOffset: String,
@@ -279,7 +279,7 @@ class SourceProgress protected[sql](
  * @since 2.1.0
  */
 @Evolving
-class SinkProgress protected[sql](
+class SinkProgress protected[spark](
     val description: String,
     val numOutputRows: Long,
     val metrics: ju.Map[String, String] = Map[String, String]().asJava) extends Serializable {

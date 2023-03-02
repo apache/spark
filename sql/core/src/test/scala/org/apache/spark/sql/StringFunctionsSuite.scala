@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.SparkRuntimeException
+import org.apache.spark.{SPARK_DOC_ROOT, SparkRuntimeException}
 import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -580,11 +580,12 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         df.selectExpr("sentences()")
       },
-      errorClass = "WRONG_NUM_ARGS.WITH_SUGGESTION",
+      errorClass = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
       parameters = Map(
         "functionName" -> toSQLId("sentences"),
         "expectedNum" -> "[1, 2, 3]",
-        "actualNum" -> "0"
+        "actualNum" -> "0",
+        "docroot" -> SPARK_DOC_ROOT
       ),
       context = ExpectedContext(
         fragment = "sentences()",
@@ -699,6 +700,18 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
         "functionName" -> toSQLId("rlike"),
         "value" -> "'[a\\\\d]{0, 2}'"
       )
+    )
+  }
+
+  test("SPARK-42384: mask with null input") {
+    val df = Seq(
+      ("AbCD123-@$#"),
+      (null)
+    ).toDF("a")
+
+    checkAnswer(
+      df.selectExpr("mask(a,'Q','q','d','o')"),
+      Row("QqQQdddoooo") :: Row(null) :: Nil
     )
   }
 }
