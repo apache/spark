@@ -246,10 +246,6 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
     new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0024", ctx)
   }
 
-  def invalidIntervalLiteralError(ctx: IntervalContext): Throwable = {
-    new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0025", ctx)
-  }
-
   def invalidIntervalFormError(value: String, ctx: MultiUnitsIntervalContext): Throwable = {
     new ParseException(
       errorClass = "_LEGACY_ERROR_TEMP_0026",
