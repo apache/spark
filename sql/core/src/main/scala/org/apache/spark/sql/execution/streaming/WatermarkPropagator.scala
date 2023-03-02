@@ -137,7 +137,7 @@ class UseSingleWatermarkPropagator extends WatermarkPropagator {
  *      This could be individual origin watermark value, but we decide to retain global watermark
  *      to keep the watermark model be simple.
  *   -- stateless nodes: same as input watermark
- *   -- stateful nodes: the return value of `op.produceWatermark(input watermark)`.
+ *   -- stateful nodes: the return value of `op.produceOutputWatermark(input watermark)`.
  *
  *      @see [[StateStoreWriter.produceOutputWatermark]]
  *
