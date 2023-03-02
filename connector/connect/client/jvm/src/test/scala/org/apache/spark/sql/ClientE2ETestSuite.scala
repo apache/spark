@@ -30,6 +30,7 @@ import org.scalactic.TolerantNumerics
 import org.apache.spark.SPARK_VERSION
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.connect.client.util.{IntegrationTestUtils, RemoteSparkSession}
+import org.apache.spark.sql.connect.common.DataTypeProtoConverter
 import org.apache.spark.sql.functions.{aggregate, array, col, count, lit, rand, sequence, shuffle, struct, transform, udf}
 import org.apache.spark.sql.types._
 
@@ -260,7 +261,8 @@ class ClientE2ETestSuite extends RemoteSparkSession {
   test("Dataset inspection") {
     val df = spark.range(10)
     val local = spark.newDataFrame { builder =>
-      builder.getLocalRelationBuilder.setSchemaString(simpleSchema.catalogString)
+      builder.getLocalRelationBuilder
+        .setDataType(DataTypeProtoConverter.toConnectProtoType(simpleSchema))
     }
     assert(!df.isLocal)
     assert(local.isLocal)

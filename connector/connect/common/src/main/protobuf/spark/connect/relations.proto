@@ -358,10 +358,10 @@ message LocalRelation {
   // If the 'data' is not provided, then this schema will be required.
   oneof schema {
     // Either a DDL-formatted type string or a JSON string.
-    string schemaString = 2;
+    string schema_string = 2;
 
     // DataType representing the schema.
-    DataType dataType = 3;
+    DataType data_type = 3;
   }
 }
 
