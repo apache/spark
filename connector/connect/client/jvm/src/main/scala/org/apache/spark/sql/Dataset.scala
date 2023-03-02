@@ -2739,7 +2739,7 @@ class Dataset[T] private[sql] (
     sparkSession.analyze(plan, proto.AnalyzePlanRequest.AnalyzeCase.SCHEMA)
   }
 
-  private[sql] def collectResult(): SparkResult[T] = sparkSession.execute(plan, encoder)
+  def collectResult(): SparkResult[T] = sparkSession.execute(plan, encoder)
 
   private[sql] def withResult[E](f: SparkResult[T] => E): E = {
     val result = collectResult()

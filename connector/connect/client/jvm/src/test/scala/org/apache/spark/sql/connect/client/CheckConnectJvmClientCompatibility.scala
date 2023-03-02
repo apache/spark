@@ -79,7 +79,7 @@ object CheckConnectJvmClientCompatibility {
             "module and not belong to the sql module include: \n")
         resultWriter.write(incompatibleApis.mkString("\n"))
         resultWriter.write(
-          "Exceptions can be added in " +
+          "Exceptions can be added to exceptionMethods in " +
             "'CheckConnectJvmClientCompatibility#checkDatasetApiCompatibility'\n")
         resultWriter.write("\n")
       }
