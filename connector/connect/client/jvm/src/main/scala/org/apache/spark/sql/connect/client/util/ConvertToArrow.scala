@@ -32,6 +32,7 @@ import org.apache.spark.sql.util.ArrowUtils
  * Utility for converting common Scala objects into Arrow IPC Stream.
  */
 object ConvertToArrow {
+
   /**
    * Convert an iterator of common Scala objects into a sinlge Arrow IPC Stream.
    */
@@ -51,11 +52,13 @@ object ConvertToArrow {
       // Convert and write the data to the vector root.
       val serializer = ExpressionEncoder(encoder).createSerializer()
       data.foreach(o => writer.write(serializer(o)))
+      writer.finish()
 
       // Write the IPC Stream
       MessageSerializer.serialize(channel, root.getSchema)
       val batch = unloader.getRecordBatch
-      try MessageSerializer.serialize(channel, batch) finally {
+      try MessageSerializer.serialize(channel, batch)
+      finally {
         batch.close()
       }
       ArrowStreamWriter.writeEndOfStream(channel, IpcOption.DEFAULT)

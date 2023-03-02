@@ -120,15 +120,14 @@ class SparkSession private[sql] (
    *
    * @since 3.4.0
    */
-  def createDataFrame[A <: Product : TypeTag](data: Seq[A]): DataFrame = {
+  def createDataFrame[A <: Product: TypeTag](data: Seq[A]): DataFrame = {
     createDataFrame(ScalaReflection.encoderFor[A], data)
   }
 
   /**
-   * :: DeveloperApi ::
-   * Creates a `DataFrame` from a `java.util.List` containing [[Row]]s using the given schema.
-   * It is important to make sure that the structure of every [[Row]] of the provided List matches
-   * the provided schema. Otherwise, there will be runtime exception.
+   * :: DeveloperApi :: Creates a `DataFrame` from a `java.util.List` containing [[Row]]s using
+   * the given schema. It is important to make sure that the structure of every [[Row]] of the
+   * provided List matches the provided schema. Otherwise, there will be runtime exception.
    *
    * @since 3.4.0
    */
@@ -139,8 +138,8 @@ class SparkSession private[sql] (
   /**
    * Applies a schema to a List of Java Beans.
    *
-   * WARNING: Since there is no guaranteed ordering for fields in a Java Bean,
-   *          SELECT * queries will return the columns in an undefined order.
+   * WARNING: Since there is no guaranteed ordering for fields in a Java Bean, SELECT * queries
+   * will return the columns in an undefined order.
    * @since 3.4.0
    */
   def createDataFrame(data: java.util.List[_], beanClass: Class[_]): DataFrame = {
@@ -151,11 +150,11 @@ class SparkSession private[sql] (
 
   /**
    * Creates a [[Dataset]] from a local Seq of data of a given type. This method requires an
-   * encoder (to convert a JVM object of type `T` to and from the internal Spark SQL representation)
-   * that is generally created automatically through implicits from a `SparkSession`, or can be
-   * created explicitly by calling static methods on [[Encoders]].
+   * encoder (to convert a JVM object of type `T` to and from the internal Spark SQL
+   * representation) that is generally created automatically through implicits from a
+   * `SparkSession`, or can be created explicitly by calling static methods on [[Encoders]].
    *
-   * == Example ==
+   * ==Example==
    *
    * {{{
    *
@@ -176,7 +175,7 @@ class SparkSession private[sql] (
    *
    * @since 3.4.0
    */
-  def createDataset[T : Encoder](data: Seq[T]): Dataset[T] = {
+  def createDataset[T: Encoder](data: Seq[T]): Dataset[T] = {
     val encoder = encoderFor[T]
     newDataset(encoder) { builder =>
       val localRelationBuilder = builder.getLocalRelationBuilder
@@ -191,11 +190,11 @@ class SparkSession private[sql] (
 
   /**
    * Creates a [[Dataset]] from a `java.util.List` of a given type. This method requires an
-   * encoder (to convert a JVM object of type `T` to and from the internal Spark SQL representation)
-   * that is generally created automatically through implicits from a `SparkSession`, or can be
-   * created explicitly by calling static methods on [[Encoders]].
+   * encoder (to convert a JVM object of type `T` to and from the internal Spark SQL
+   * representation) that is generally created automatically through implicits from a
+   * `SparkSession`, or can be created explicitly by calling static methods on [[Encoders]].
    *
-   * == Java Example ==
+   * ==Java Example==
    *
    * {{{
    *     List<String> data = Arrays.asList("hello", "world");
@@ -204,7 +203,7 @@ class SparkSession private[sql] (
    *
    * @since 3.4.0
    */
-  def createDataset[T : Encoder](data: java.util.List[T]): Dataset[T] = {
+  def createDataset[T: Encoder](data: java.util.List[T]): Dataset[T] = {
     createDataset(data.asScala.toSeq)
   }
 

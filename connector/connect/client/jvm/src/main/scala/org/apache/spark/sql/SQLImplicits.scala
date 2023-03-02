@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders._
  *
  * @since 3.4.0
  */
-abstract class SQLImplicits private[sql](session: SparkSession) extends LowPrioritySQLImplicits {
+abstract class SQLImplicits private[sql] (session: SparkSession) extends LowPrioritySQLImplicits {
 
   /**
    * Converts $"col name" into a [[Column]].
@@ -269,7 +269,7 @@ abstract class SQLImplicits private[sql](session: SparkSession) extends LowPrior
    * Creates a [[Dataset]] from a local Seq.
    * @since 3.4.0
    */
-  implicit def localSeqToDatasetHolder[T : Encoder](s: Seq[T]): DatasetHolder[T] = {
+  implicit def localSeqToDatasetHolder[T: Encoder](s: Seq[T]): DatasetHolder[T] = {
     DatasetHolder(session.createDataset(s))
   }
 }
