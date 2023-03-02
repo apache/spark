@@ -101,6 +101,11 @@ final class DataFrameStatFunctions private[sql] (sparkSession: SparkSession, roo
       cols: Array[String],
       probabilities: Array[Double],
       relativeError: Double): Array[Array[Double]] = {
+    require(
+      probabilities.forall(p => p >= 0.0 && p <= 1.0),
+      "percentile should be in the range [0.0, 1.0]")
+    require(relativeError >= 0,
+      s"Relative Error must be non-negative but got $relativeError")
     sparkSession
       .newDataset(
         ArrayEncoder(
