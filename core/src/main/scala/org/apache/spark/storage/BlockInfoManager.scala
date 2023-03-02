@@ -431,14 +431,19 @@ private[storage] class BlockInfoManager(trackingCacheVisibility: Boolean = false
     try {
       val wrapper = new BlockInfoWrapper(newBlockInfo, lock)
       while (true) {
-        val previous = invisibleRDDBlocks.synchronized {
-          val res = blockInfoWrappers.putIfAbsent(blockId, wrapper)
-          if (res == null && trackingCacheVisibility) {
-            // Added to invisible blocks if it doesn't exist before.
-            blockId.asRDDId.foreach(invisibleRDDBlocks.add)
+        val previous = if (trackingCacheVisibility) {
+          invisibleRDDBlocks.synchronized {
+            val res = blockInfoWrappers.putIfAbsent(blockId, wrapper)
+            if (res == null) {
+              // Added to invisible blocks if it doesn't exist before.
+              blockId.asRDDId.foreach(invisibleRDDBlocks.add)
+            }
+            res
           }
-          res
+        } else {
+          blockInfoWrappers.putIfAbsent(blockId, wrapper)
         }
+
         if (previous == null) {
           // New block lock it for writing.
           val result = lockForWriting(blockId, blocking = false)

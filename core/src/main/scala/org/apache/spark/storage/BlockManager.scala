@@ -1363,7 +1363,7 @@ private[spark] class BlockManager(
       level: StorageLevel,
       classTag: ClassTag[T],
       makeIterator: () => Iterator[T],
-      isCacheVisible: Boolean = true): Either[BlockResult, Iterator[T]] = {
+      isCacheVisible: Boolean): Either[BlockResult, Iterator[T]] = {
     // Track whether the data is computed or not, force to do the computation later if need to.
     // The reason we push the force computing later is that once the executor is decommissioned we
     // will have a better chance to replicate the cache block because of the `checkShouldStore`
