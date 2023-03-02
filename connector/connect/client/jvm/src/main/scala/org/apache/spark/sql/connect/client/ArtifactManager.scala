@@ -16,13 +16,11 @@
  */
 package org.apache.spark.sql.connect.client
 
-import java.io.{ByteArrayInputStream, InputStream}
+import java.io.InputStream
 import java.net.URI
 import java.nio.file.{Files, Path, Paths}
-import java.util.concurrent.CopyOnWriteArrayList
 import java.util.zip.{CheckedInputStream, CRC32}
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.concurrent.Promise
 import scala.concurrent.duration.Duration
@@ -50,12 +48,6 @@ class ArtifactManager(userContext: proto.UserContext, channel: ManagedChannel) {
   private val CHUNK_SIZE: Int = 32 * 1024
 
   private[this] val stub = proto.SparkConnectServiceGrpc.newStub(channel)
-  private[this] val classFinders = new CopyOnWriteArrayList[ClassFinder]
-
-  /**
-   * Register a [[ClassFinder]] for dynamically generated classes.
-   */
-  def register(finder: ClassFinder): Unit = classFinders.add(finder)
 
   /**
    * Add a single artifact to the session.
@@ -92,13 +84,6 @@ class ArtifactManager(userContext: proto.UserContext, channel: ManagedChannel) {
    * Currently only local files with extensions .jar and .class are supported.
    */
   def addArtifact(uri: URI): Unit = addArtifacts(parseArtifacts(uri))
-
-  /**
-   * Ensure that all classfile artifacts have been uploaded to the server, and are ready for use.
-   */
-  private[client] def ensureAllClassFileArtifactsUploaded(): Unit = {
-    addArtifacts(classFinders.asScala.flatMap(_.findClasses()))
-  }
 
   /**
    * Add multiple artifacts to the session.
@@ -142,7 +127,7 @@ class ArtifactManager(userContext: proto.UserContext, channel: ManagedChannel) {
     }
 
     artifacts.iterator.foreach { artifact =>
-      val data = artifact.storage.asInstanceOf[LocalData]
+      val data = artifact.storage
       val size = data.size
       if (size > CHUNK_SIZE) {
         // Payload can either be a batch OR a single chunked artifact. Write batch if non-empty
@@ -163,7 +148,7 @@ class ArtifactManager(userContext: proto.UserContext, channel: ManagedChannel) {
     }
     stream.onCompleted()
     ThreadUtils.awaitResult(promise.future, Duration.Inf)
-    // TODO: Handle responses containing CRC failures.
+    // TODO(SPARK-42658): Handle responses containing CRC failures.
   }
 
   /**
@@ -271,11 +256,7 @@ class ArtifactManager(userContext: proto.UserContext, channel: ManagedChannel) {
   }
 }
 
-trait ClassFinder {
-  def findClasses(): Iterator[Artifact]
-}
-
-class Artifact private (val path: Path, val storage: Storage) {
+class Artifact private (val path: Path, val storage: LocalData) {
   require(!path.isAbsolute, s"Bad path: $path")
 
   lazy val size: Long = storage match {
@@ -287,11 +268,11 @@ object Artifact {
   val CLASS_PREFIX: Path = Paths.get("classes")
   val JAR_PREFIX: Path = Paths.get("jars")
 
-  def newJarArtifact(fileName: Path, storage: Storage): Artifact = {
+  def newJarArtifact(fileName: Path, storage: LocalData): Artifact = {
     newArtifact(JAR_PREFIX, ".jar", fileName, storage)
   }
 
-  def newClassArtifact(fileName: Path, storage: Storage): Artifact = {
+  def newClassArtifact(fileName: Path, storage: LocalData): Artifact = {
     newArtifact(CLASS_PREFIX, ".class", fileName, storage)
   }
 
@@ -299,31 +280,18 @@ object Artifact {
       prefix: Path,
       requiredSuffix: String,
       fileName: Path,
-      storage: Storage): Artifact = {
+      storage: LocalData): Artifact = {
     require(!fileName.isAbsolute)
     require(fileName.toString.endsWith(requiredSuffix))
     new Artifact(prefix.resolve(fileName), storage)
   }
 
   /**
-   * A pointer to the stored bytes of an artifact.
-   */
-  sealed trait Storage
-
-  /**
    * Payload stored on this machine.
    */
-  sealed trait LocalData extends Storage {
+  sealed trait LocalData {
     def stream: InputStream
     def size: Long
-  }
-
-  /**
-   * Payload stored in memory.
-   */
-  class InMemory(bytes: Array[Byte]) extends LocalData {
-    override def size: Long = bytes.length
-    override def stream: InputStream = new ByteArrayInputStream(bytes)
   }
 
   /**
