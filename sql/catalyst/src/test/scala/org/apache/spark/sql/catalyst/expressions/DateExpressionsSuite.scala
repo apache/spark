@@ -2043,14 +2043,17 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("SPARK-42635: timestampadd unit conversion overflow") {
     withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
-      checkExceptionInExpression[SparkArithmeticException](TimestampAdd("DAY",
+      checkErrorInExpression[SparkArithmeticException](TimestampAdd("DAY",
         Literal(106751992),
         Literal(0L, TimestampType)),
-        "[DATETIME_OVERFLOW] Datetime operation overflow")
-      checkExceptionInExpression[SparkArithmeticException](TimestampAdd("QUARTER",
+        errorClass = "DATETIME_OVERFLOW",
+        parameters = Map("operation" -> "add 106751992 DAY to TIMESTAMP '1970-01-01 00:00:00'"))
+      checkErrorInExpression[SparkArithmeticException](TimestampAdd("QUARTER",
         Literal(1431655764),
         Literal(0L, TimestampType)),
-        "[DATETIME_OVERFLOW] Datetime operation overflow")
+        errorClass = "DATETIME_OVERFLOW",
+        parameters = Map("operation" ->
+          "add 1431655764 QUARTER to TIMESTAMP '1970-01-01 00:00:00'"))
     }
   }
 
