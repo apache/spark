@@ -263,8 +263,10 @@ object ParserUtils {
   /**
    * Converts to the given parse tree to an alias. It adds a gap between two terms
    * when both contains only either letters or digits.
+   * @param normalizeStringLiterals When set to `true`, convert double quoted string literals
+   *                                to single quoted. For example: "abc" -> 'abc'
    */
-  def toExprAlias(ctx: ParseTree): String = {
+  def toExprAlias(ctx: ParseTree, normalizeStringLiterals: Boolean): String = {
     def getTerms(ctx: ParseTree, terms: ArrayBuffer[TerminalNodeImpl]): Unit = {
       for (i <- 0 until ctx.getChildCount) {
         ctx.getChild(i) match {
@@ -278,7 +280,12 @@ object ParserUtils {
     val sb = new StringBuilder()
     for (i <- 0 until terms.length) {
       val current = terms(i).getText
-      sb.append(current)
+      val currentNormalized = if (normalizeStringLiterals && current.startsWith("\"")) {
+        "'" + current.stripSuffix("\"").stripPrefix("\"") + "'"
+      } else {
+        current
+      }
+      sb.append(currentNormalized)
       if (i < terms.length - 1) {
         val next = terms(i + 1).getText
         if (current.forall(_.isLetterOrDigit) && next.forall(_.isLetterOrDigit)) {

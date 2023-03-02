@@ -669,9 +669,9 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
     )
   }
 
-  private def getAliasFunc(alias: => String): Option[Expression => String] = {
+  private def getAliasFunc(ctx: ParseTree): Option[Expression => String] = {
     if (conf.getConf(SQLConf.STABLE_DERIVED_COLUMN_ALIAS_ENABLED)) {
-      Some(_ => alias)
+      Some(_ => toExprAlias(ctx, !conf.doubleQuotedIdentifiers))
     } else {
       None
     }
@@ -681,14 +681,14 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
       ctx: NamedExpressionSeqContext): Seq[(Expression, Option[Expression => String])] = {
     Option(ctx).toSeq
       .flatMap(_.namedExpression.asScala)
-      .map(ctx => (typedVisit[Expression](ctx), getAliasFunc(toExprAlias(ctx))))
+      .map(ctx => (typedVisit[Expression](ctx), getAliasFunc(ctx)))
   }
 
   override def visitExpressionSeq(
       ctx: ExpressionSeqContext): Seq[(Expression, Option[Expression => String])] = {
     Option(ctx).toSeq
       .flatMap(_.expression.asScala)
-      .map(ctx => (typedVisit[Expression](ctx), getAliasFunc(toExprAlias(ctx))))
+      .map(ctx => (typedVisit[Expression](ctx), getAliasFunc(ctx)))
   }
 
   /**

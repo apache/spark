@@ -100,7 +100,7 @@ class ResolveAliasesSuite extends AnalysisTest {
       Seq(
         // Literals
         "' 1'" -> "' 1'",
-        """"abc"""" -> """"abc"""",
+        """"abc"""" -> "'abc'",
         """'\t\n xyz \t\r'""" -> """'\t\n xyz \t\r'""",
         "1L" -> "1L", "1S" -> "1S",
         "date'-0001-1-28'" -> "date'-0001-1-28'",
