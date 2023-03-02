@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql
 
+import java.util.Properties
+
 import scala.collection.JavaConverters._
 
 import org.apache.spark.annotation.Stable
@@ -182,6 +184,25 @@ class DataFrameReader private[sql] (sparkSession: SparkSession) extends Logging 
       paths.foreach(path => dataSourceBuilder.addPaths(path))
       builder.build()
     }
+  }
+
+  /**
+   * Construct a `DataFrame` representing the database table accessible via JDBC URL
+   * url named table and connection properties.
+   *
+   * You can find the JDBC-specific option and parameter documentation for reading tables
+   * via JDBC in
+   * <a href="https://spark.apache.org/docs/latest/sql-data-sources-jdbc.html#data-source-option">
+   *   Data Source Option</a> in the version you use.
+   *
+   * @since 3.5.0
+   */
+  def jdbc(url: String, table: String, properties: Properties): DataFrame = {
+    // properties should override settings in extraOptions.
+    this.extraOptions ++= properties.asScala
+    // explicit url and dbtable should override all
+    this.extraOptions ++= Seq("url" -> url, "dbtable" -> table)
+    format("jdbc").load()
   }
 
   /**
