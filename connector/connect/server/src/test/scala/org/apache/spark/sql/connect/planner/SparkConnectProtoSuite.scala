@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, GenericInternalRow, UnsafeProjection}
 import org.apache.spark.sql.catalyst.plans.{FullOuter, Inner, LeftAnti, LeftOuter, LeftSemi, PlanTest, RightOuter}
 import org.apache.spark.sql.catalyst.plans.logical.{Distinct, LocalRelation, LogicalPlan}
-import org.apache.spark.sql.connect.common.InvalidPlanInput
+import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, InvalidPlanInput}
 import org.apache.spark.sql.connect.dsl.MockRemoteSession
 import org.apache.spark.sql.connect.dsl.commands._
 import org.apache.spark.sql.connect.dsl.expressions._
@@ -318,6 +318,20 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
     val sparkPlan =
       LocalRelation(AttributeReference("a", StructType(Seq(StructField("id", IntegerType))))())
     comparePlans(connectPlan, sparkPlan)
+  }
+
+  test("Test empty LocalRelation with Schema") {
+    val schema = new StructType().add("x", "int").add("y", "string").add("z", "binary")
+
+    val withSchemaString = proto.LocalRelation.newBuilder()
+      .setSchemaString(schema.toDDL)
+      .build()
+    val withDataType = proto.LocalRelation.newBuilder()
+      .setDatType(DataTypeProtoConverter.toConnectProtoType(schema))
+      .build()
+    val sparkPlan = LocalRelation(schema.toAttributes)
+    comparePlans(withSchemaString, sparkPlan)
+    comparePlans(withDataType, sparkPlan)
   }
 
   test("Test limit offset") {
