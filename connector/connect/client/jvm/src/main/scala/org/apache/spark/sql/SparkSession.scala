@@ -17,6 +17,7 @@
 package org.apache.spark.sql
 
 import java.io.Closeable
+import java.net.URI
 import java.util.concurrent.TimeUnit._
 import java.util.concurrent.atomic.AtomicLong
 
@@ -286,6 +287,28 @@ class SparkSession private[sql] (
     val plan = proto.Plan.newBuilder().setCommand(command).build()
     client.execute(plan).asScala.foreach(_ => ())
   }
+
+  /**
+   * Add a single artifact to the client session.
+   *
+   * Currently only local files with extensions .jar and .class are supported.
+   */
+  def addArtifact(path: String): Unit = client.addArtifact(path)
+
+  /**
+   * Add a single artifact to the client session.
+   *
+   * Currently only local files with extensions .jar and .class are supported.
+   */
+  def addArtifact(uri: URI): Unit = client.addArtifact(uri)
+
+  /**
+   * Add one or more artifacts to the session.
+   *
+   * Currently only local files with extensions .jar and .class are supported.
+   */
+  @scala.annotation.varargs
+  def addArtifacts(uri: URI*): Unit = client.addArtifacts(uri)
 
   /**
    * This resets the plan id generator so we can produce plans that are comparable.
