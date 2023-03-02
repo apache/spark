@@ -71,7 +71,9 @@ object CheckConnectJvmClientCompatibility {
       }
       val incompatibleApis = checkDatasetApiCompatibility(clientJar, sqlJar)
       if (incompatibleApis.nonEmpty) {
-        resultWriter.write("ERROR: Dataset apis incompatible with the sql module include: \n")
+        resultWriter.write(
+          "ERROR: The Dataset apis only exist in the connect client " +
+            "module and not belong to the sql module include: \n")
         resultWriter.write(incompatibleApis.mkString("\n"))
         resultWriter.write("\n")
       }
