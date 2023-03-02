@@ -82,7 +82,9 @@ class CompatibilitySuite extends ConnectFunSuite {
       IncludeByName("org.apache.spark.sql.RelationalGroupedDataset.*"),
       IncludeByName("org.apache.spark.sql.SparkSession.*"),
       IncludeByName("org.apache.spark.sql.RuntimeConfig.*"),
-      IncludeByName("org.apache.spark.sql.TypedColumn.*"))
+      IncludeByName("org.apache.spark.sql.TypedColumn.*"),
+      IncludeByName("org.apache.spark.sql.SQLImplicits.*"),
+      IncludeByName("org.apache.spark.sql.DatasetHolder.*"))
     val excludeRules = Seq(
       // Filter unsupported rules:
       // Note when muting errors for a method, checks on all overloading methods are also muted.
@@ -146,7 +148,6 @@ class CompatibilitySuite extends ConnectFunSuite {
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.RelationalGroupedDataset.this"),
 
       // SparkSession
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.getDefaultSession"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.clearDefaultSession"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.setDefaultSession"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.sparkContext"),
@@ -157,9 +158,6 @@ class CompatibilitySuite extends ConnectFunSuite {
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.experimental"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.udf"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.streams"),
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.newSession"),
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.emptyDataFrame"),
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.emptyDataset"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.createDataFrame"),
       ProblemFilters.exclude[Problem](
         "org.apache.spark.sql.SparkSession.baseRelationToDataFrame"),
@@ -167,17 +165,18 @@ class CompatibilitySuite extends ConnectFunSuite {
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.catalog"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.executeCommand"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.readStream"),
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.stop"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.this"),
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.setDefaultSession"),
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.clearDefaultSession"),
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.getDefaultSession"),
 
       // RuntimeConfig
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.RuntimeConfig.this"),
 
       // TypedColumn
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.TypedColumn.this"))
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.TypedColumn.this"),
+
+      // SQLImplicits
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.SQLImplicits.this"),
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.SQLImplicits.rddToDatasetHolder"),
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.SQLImplicits._sqlContext"))
     val problems = allProblems
       .filter { p =>
         includedRules.exists(rule => rule(p))

@@ -23,12 +23,13 @@ import java.util
 
 import scala.util.{Failure, Success, Try}
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.catalyst.{catalog, QueryPlanningTracker}
 import org.apache.spark.sql.catalyst.analysis.{caseSensitiveResolution, Analyzer, FunctionRegistry, Resolver, TableFunctionRegistry}
 import org.apache.spark.sql.catalyst.catalog.SessionCatalog
 import org.apache.spark.sql.catalyst.optimizer.ReplaceExpressions
+import org.apache.spark.sql.connect.config.Connect
 import org.apache.spark.sql.connect.planner.SparkConnectPlanner
 import org.apache.spark.sql.connector.catalog.{CatalogManager, Identifier, InMemoryCatalog}
 import org.apache.spark.sql.connector.expressions.Transform
@@ -56,6 +57,17 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
  */
 // scalastyle:on
 class ProtoToParsedPlanTestSuite extends SparkFunSuite with SharedSparkSession {
+  override def sparkConf: SparkConf = {
+    super.sparkConf
+      .set(
+        Connect.CONNECT_EXTENSIONS_RELATION_CLASSES.key,
+        "org.apache.spark.sql.connect.plugin.ExampleRelationPlugin")
+      .set(
+        Connect.CONNECT_EXTENSIONS_EXPRESSION_CLASSES.key,
+        "org.apache.spark.sql.connect.plugin.ExampleExpressionPlugin")
+      .set(org.apache.spark.sql.internal.SQLConf.ANSI_ENABLED.key, false.toString)
+  }
+
   protected val baseResourcePath: Path = {
     getWorkspaceFilePath(
       "connector",

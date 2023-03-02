@@ -18,12 +18,22 @@ package org.apache.spark.sql.connect.client.util
 
 import java.io.File
 
+import scala.util.Properties.versionNumberString
+
 import org.scalatest.Assertions.fail
 
 object IntegrationTestUtils {
 
   // System properties used for testing and debugging
   private val DEBUG_SC_JVM_CLIENT = "spark.debug.sc.jvm.client"
+
+  private[sql] lazy val scalaDir = {
+    val version = versionNumberString.split('.') match {
+      case Array(major, minor, _*) => major + "." + minor
+      case _ => versionNumberString
+    }
+    "scala-" + version
+  }
 
   private[sql] lazy val sparkHome: String = {
     if (!(sys.props.contains("spark.test.home") || sys.env.contains("SPARK_HOME"))) {
@@ -57,7 +67,7 @@ object IntegrationTestUtils {
         "and the env variable `SPARK_HOME` is set correctly.")
     val jars = recursiveListFiles(targetDir).filter { f =>
       // SBT jar
-      (f.getParentFile.getName.startsWith("scala-") &&
+      (f.getParentFile.getName == scalaDir &&
         f.getName.startsWith(sbtName) && f.getName.endsWith(".jar")) ||
       // Maven Jar
       (f.getParent.endsWith("target") &&
