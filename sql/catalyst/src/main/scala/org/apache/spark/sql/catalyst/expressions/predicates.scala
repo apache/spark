@@ -805,7 +805,10 @@ case class And(left: Expression, right: Expression) extends BinaryOperator with 
     copy(left = newLeft, right = newRight)
 
   override lazy val canonicalized: Expression = {
-    orderCommutative({ case And(l, r) => Seq(l, r) }).reduce(And)
+    buildCanonicalizedPlan(
+      { case And(l, r) => Seq(l, r) },
+      { case (l: Expression, r: Expression) => And(l, r)}
+    )
   }
 }
 
@@ -899,7 +902,10 @@ case class Or(left: Expression, right: Expression) extends BinaryOperator with P
     copy(left = newLeft, right = newRight)
 
   override lazy val canonicalized: Expression = {
-    orderCommutative({ case Or(l, r) => Seq(l, r) }).reduce(Or)
+    buildCanonicalizedPlan(
+      { case Or(l, r) => Seq(l, r) },
+      { case (l: Expression, r: Expression) => Or(l, r)}
+    )
   }
 }
 

@@ -35,6 +35,7 @@ from py4j.java_gateway import JavaObject
 
 from pyspark import copy_func
 from pyspark.context import SparkContext
+from pyspark.errors import PySparkTypeError
 from pyspark.sql.types import DataType
 
 if TYPE_CHECKING:
@@ -279,7 +280,6 @@ class Column:
     __ge__ = _bin_op("geq")
     __gt__ = _bin_op("gt")
 
-    # TODO(SPARK-41812): DataFrame.join: ambiguous column
     _eqNullSafe_doc = """
     Equality test that is safe for null values.
 
@@ -315,9 +315,9 @@ class Column:
     ...     Row(value = 'bar'),
     ...     Row(value = None)
     ... ])
-    >>> df1.join(df2, df1["value"] == df2["value"]).count()  # doctest: +SKIP
+    >>> df1.join(df2, df1["value"] == df2["value"]).count()
     0
-    >>> df1.join(df2, df1["value"].eqNullSafe(df2["value"])).count()  # doctest: +SKIP
+    >>> df1.join(df2, df1["value"].eqNullSafe(df2["value"])).count()
     1
     >>> df2 = spark.createDataFrame([
     ...     Row(id=1, value=float('NaN')),
@@ -556,10 +556,16 @@ class Column:
         +---+
         """
         if not isinstance(fieldName, str):
-            raise TypeError("fieldName should be a string")
+            raise PySparkTypeError(
+                error_class="NOT_STR",
+                message_parameters={"arg_name": "fieldName", "arg_type": type(fieldName).__name__},
+            )
 
         if not isinstance(col, Column):
-            raise TypeError("col should be a Column")
+            raise PySparkTypeError(
+                error_class="NOT_COLUMN",
+                message_parameters={"arg_name": "col", "arg_type": type(col).__name__},
+            )
 
         return Column(self._jc.withField(fieldName, col._jc))
 
@@ -670,13 +676,13 @@ class Column:
     _startswith_doc = """
     String starts with. Returns a boolean :class:`Column` based on a string match.
 
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
+
     Parameters
     ----------
     other : :class:`Column` or str
         string at start of line (do not use a regex `^`)
-
-    .. versionchanged:: 3.4.0
-        Support Spark Connect.
 
     Examples
     --------
@@ -845,12 +851,14 @@ class Column:
         [Row(col='Ali'), Row(col='Bob')]
         """
         if type(startPos) != type(length):
-            raise TypeError(
-                "startPos and length must be the same type. "
-                "Got {startPos_t} and {length_t}, respectively.".format(
-                    startPos_t=type(startPos),
-                    length_t=type(length),
-                )
+            raise PySparkTypeError(
+                error_class="NOT_SAME_TYPE",
+                message_parameters={
+                    "arg_name1": "startPos",
+                    "arg_name2": "length",
+                    "arg_type1": type(startPos).__name__,
+                    "arg_type2": type(length).__name__,
+                },
             )
         if isinstance(startPos, int):
             jc = self._jc.substr(startPos, length)
@@ -904,6 +912,9 @@ class Column:
     _asc_doc = """
     Returns a sort expression based on the ascending order of the column.
 
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
+
     Examples
     --------
     >>> from pyspark.sql import Row
@@ -916,6 +927,9 @@ class Column:
     return before non-null values.
 
     .. versionadded:: 2.4.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Examples
     --------
@@ -931,6 +945,9 @@ class Column:
 
     .. versionadded:: 2.4.0
 
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
+
     Examples
     --------
     >>> from pyspark.sql import Row
@@ -943,6 +960,9 @@ class Column:
     Returns a sort expression based on the descending order of the column.
 
     .. versionadded:: 2.4.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Examples
     --------
@@ -957,6 +977,9 @@ class Column:
 
     .. versionadded:: 2.4.0
 
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
+
     Examples
     --------
     >>> from pyspark.sql import Row
@@ -970,6 +993,9 @@ class Column:
     appear after non-null values.
 
     .. versionadded:: 2.4.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Examples
     --------
@@ -1128,6 +1154,9 @@ class Column:
         True if the current column is between the lower bound and upper bound, inclusive.
 
         .. versionadded:: 1.3.0
+
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
 
         Parameters
         ----------

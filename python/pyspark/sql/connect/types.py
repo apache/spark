@@ -14,6 +14,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+from pyspark.sql.connect.utils import check_dependencies
+
+check_dependencies(__name__, __file__)
 
 import json
 
@@ -44,9 +47,11 @@ from pyspark.sql.types import (
     BinaryType,
     BooleanType,
     NullType,
+    UserDefinedType,
 )
 
 import pyspark.sql.connect.proto as pb2
+from pyspark.sql.utils import is_remote
 
 
 JVM_BYTE_MIN: int = -(1 << 7)
@@ -82,7 +87,8 @@ def pyspark_types_to_proto_types(data_type: DataType) -> pb2.DataType:
     elif isinstance(data_type, DoubleType):
         ret.double.CopyFrom(pb2.DataType.Double())
     elif isinstance(data_type, DecimalType):
-        ret.decimal.CopyFrom(pb2.DataType.Decimal())
+        ret.decimal.scale = data_type.scale
+        ret.decimal.precision = data_type.precision
     elif isinstance(data_type, DateType):
         ret.date.CopyFrom(pb2.DataType.Date())
     elif isinstance(data_type, TimestampType):
@@ -108,6 +114,17 @@ def pyspark_types_to_proto_types(data_type: DataType) -> pb2.DataType:
     elif isinstance(data_type, ArrayType):
         ret.array.element_type.CopyFrom(pyspark_types_to_proto_types(data_type.elementType))
         ret.array.contains_null = data_type.containsNull
+    elif isinstance(data_type, UserDefinedType):
+        json_value = data_type.jsonValue()
+        ret.udt.type = "udt"
+        if "class" in json_value:
+            # Scala/Java UDT
+            ret.udt.jvm_class = json_value["class"]
+        else:
+            # Python UDT
+            ret.udt.serialized_python_class = json_value["serializedClass"]
+        ret.udt.python_class = json_value["pyClass"]
+        ret.udt.sql_type.CopyFrom(pyspark_types_to_proto_types(data_type.sqlType()))
     else:
         raise Exception(f"Unsupported data type {data_type}")
     return ret
@@ -184,6 +201,14 @@ def proto_schema_to_pyspark_data_type(schema: pb2.DataType) -> DataType:
             proto_schema_to_pyspark_data_type(schema.map.value_type),
             schema.map.value_contains_null,
         )
+    elif schema.HasField("udt"):
+        assert schema.udt.type == "udt"
+        json_value = {}
+        if schema.udt.HasField("python_class"):
+            json_value["pyClass"] = schema.udt.python_class
+        if schema.udt.HasField("serialized_python_class"):
+            json_value["serializedClass"] = schema.udt.serialized_python_class
+        return UserDefinedType.fromJson(json_value)
     else:
         raise Exception(f"Unsupported data type {schema}")
 
@@ -314,3 +339,23 @@ def from_arrow_schema(arrow_schema: "pa.Schema") -> StructType:
             for field in arrow_schema
         ]
     )
+
+
+def parse_data_type(data_type: str) -> DataType:
+    # Currently we don't have a way to have a current Spark session in Spark Connect, and
+    # pyspark.sql.SparkSession has a centralized logic to control the session creation.
+    # So uses pyspark.sql.SparkSession for now. Should replace this to using the current
+    # Spark session for Spark Connect in the future.
+    from pyspark.sql import SparkSession as PySparkSession
+
+    assert is_remote()
+    return_type_schema = (
+        PySparkSession.builder.getOrCreate().createDataFrame(data=[], schema=data_type).schema
+    )
+    with_col_name = " " in data_type.strip()
+    if len(return_type_schema.fields) == 1 and not with_col_name:
+        # To match pyspark.sql.types._parse_datatype_string
+        return_type = return_type_schema.fields[0].dataType
+    else:
+        return_type = return_type_schema
+    return return_type

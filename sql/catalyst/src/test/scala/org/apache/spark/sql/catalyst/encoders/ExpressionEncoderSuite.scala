@@ -24,7 +24,7 @@ import java.util.Arrays
 import scala.collection.mutable.ArrayBuffer
 import scala.reflect.runtime.universe.TypeTag
 
-import org.apache.spark.{SparkArithmeticException, SparkRuntimeException, SparkUnsupportedOperationException}
+import org.apache.spark.{SPARK_DOC_ROOT, SparkArithmeticException, SparkRuntimeException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.{Encoder, Encoders}
 import org.apache.spark.sql.catalyst.{FooClassWithEnum, FooEnum, OptionalData, PrimitiveData, ScroogeLikeExample}
 import org.apache.spark.sql.catalyst.analysis.AnalysisTest
@@ -490,7 +490,9 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
     checkError(
       exception = exception,
       errorClass = "ENCODER_NOT_FOUND",
-      parameters = Map("typeName" -> "Any")
+      parameters = Map(
+        "typeName" -> "Any",
+        "docroot" -> SPARK_DOC_ROOT)
     )
   }
 

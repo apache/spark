@@ -34,7 +34,6 @@ import org.apache.spark.api.java.function._
 import org.apache.spark.api.python.{PythonRDD, SerDeUtil}
 import org.apache.spark.api.r.RRDD
 import org.apache.spark.broadcast.Broadcast
-import org.apache.spark.paths.SparkPath
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, QueryPlanningTracker, ScalaReflection, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis._
@@ -49,6 +48,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.catalyst.util.IntervalUtils
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
+import org.apache.spark.sql.errors.QueryCompilationErrors.toSQLId
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.aggregate.TypedAggregateExpression
 import org.apache.spark.sql.execution.arrow.{ArrowBatchStreamWriter, ArrowConverters}
@@ -251,11 +251,8 @@ class Dataset[T] private[sql](
   }
 
   private def resolveException(colName: String, fields: Array[String]): AnalysisException = {
-    val extraMsg = if (fields.exists(sparkSession.sessionState.analyzer.resolver(_, colName))) {
-      s"; did you mean to quote the `$colName` column?"
-    } else ""
-    val fieldsStr = fields.mkString(", ")
-    QueryCompilationErrors.cannotResolveColumnNameAmongFieldsError(colName, fieldsStr, extraMsg)
+    QueryCompilationErrors.unresolvedColumnWithSuggestionError(
+      colName, fields.map(toSQLId).mkString(", "))
   }
 
   private[sql] def numericColumns: Seq[Expression] = {
@@ -1861,7 +1858,7 @@ class Dataset[T] private[sql](
    * @group action
    * @since 1.6.0
    */
-  def reduce(func: (T, T) => T): T = withNewRDDExecutionId {
+  def reduce(func: (T, T) => T): T = withNewRDDExecutionId("reduce") {
     rdd.reduce(func)
   }
 
@@ -3339,7 +3336,7 @@ class Dataset[T] private[sql](
    * @group action
    * @since 1.6.0
    */
-  def foreach(f: T => Unit): Unit = withNewRDDExecutionId {
+  def foreach(f: T => Unit): Unit = withNewRDDExecutionId("foreach") {
     rdd.foreach(f)
   }
 
@@ -3358,7 +3355,7 @@ class Dataset[T] private[sql](
    * @group action
    * @since 1.6.0
    */
-  def foreachPartition(f: Iterator[T] => Unit): Unit = withNewRDDExecutionId {
+  def foreachPartition(f: Iterator[T] => Unit): Unit = withNewRDDExecutionId("foreachPartition") {
     rdd.foreachPartition(f)
   }
 
@@ -3925,18 +3922,18 @@ class Dataset[T] private[sql](
    * @since 2.0.0
    */
   def inputFiles: Array[String] = {
-    val files: Seq[SparkPath] = queryExecution.optimizedPlan.collect {
+    val files: Seq[String] = queryExecution.optimizedPlan.collect {
       case LogicalRelation(fsBasedRelation: FileRelation, _, _, _) =>
         fsBasedRelation.inputFiles
       case fr: FileRelation =>
         fr.inputFiles
       case r: HiveTableRelation =>
-        r.tableMeta.storage.locationUri.map(SparkPath.fromUri).toArray
+        r.tableMeta.storage.locationUri.map(_.toString).toArray
       case DataSourceV2ScanRelation(DataSourceV2Relation(table: FileTable, _, _, _, _),
           _, _, _, _) =>
         table.fileIndex.inputFiles
     }.flatten
-    files.iterator.map(_.urlEncoded).toSet.toArray
+    files.toSet.toArray
   }
 
   /**
@@ -4151,8 +4148,8 @@ class Dataset[T] private[sql](
    * them with an execution. Before performing the action, the metrics of the executed plan will be
    * reset.
    */
-  private def withNewRDDExecutionId[U](body: => U): U = {
-    SQLExecution.withNewExecutionId(rddQueryExecution) {
+  private def withNewRDDExecutionId[U](name: String)(body: => U): U = {
+    SQLExecution.withNewExecutionId(rddQueryExecution, Some(name)) {
       rddQueryExecution.executedPlan.resetMetrics()
       body
     }

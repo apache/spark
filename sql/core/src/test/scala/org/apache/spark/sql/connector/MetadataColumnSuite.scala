@@ -387,6 +387,19 @@ class MetadataColumnSuite extends DatasourceV2SQLBase {
       }
     }
   }
+
+  test("SPARK-42331: Fix metadata col can not been resolved") {
+    withTable(tbl) {
+      prepareTable()
+
+      checkAnswer(
+        spark.table(tbl).where("index = 0").select("index"),
+        Seq(Row(0), Row(0), Row(0)))
+      checkAnswer(
+        spark.table(tbl).where("index = 0").select("_partition"),
+        Seq(Row("3/1"), Row("0/2"), Row("1/3")))
+    }
+  }
 }
 
 class MetadataTestTable(

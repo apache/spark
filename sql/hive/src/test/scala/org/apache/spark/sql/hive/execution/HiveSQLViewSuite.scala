@@ -83,10 +83,15 @@ class HiveSQLViewSuite extends SQLViewSuite with TestHiveSingleton {
             // permanent view
             val e = intercept[AnalysisException] {
               sql(s"CREATE VIEW view1 AS SELECT $tempFunctionName(id) from tab1")
-            }.getMessage
-            assert(e.contains("Not allowed to create a permanent view " +
-              s"`$SESSION_CATALOG_NAME`.`default`.`view1` by " +
-              s"referencing a temporary function `$tempFunctionName`"))
+            }
+            checkError(
+              exception = e,
+              errorClass = "INVALID_TEMP_OBJ_REFERENCE",
+              parameters = Map(
+                "obj" -> "VIEW",
+                "objName" -> s"`$SESSION_CATALOG_NAME`.`default`.`view1`",
+                "tempObj" -> "FUNCTION",
+                "tempObjName" -> s"`$tempFunctionName`"))
           }
         }
       }

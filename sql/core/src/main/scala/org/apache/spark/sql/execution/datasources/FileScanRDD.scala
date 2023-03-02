@@ -147,7 +147,8 @@ class FileScanRDD(
       private def updateMetadataRow(): Unit =
         if (metadataColumns.nonEmpty && currentFile != null) {
           updateMetadataInternalRow(metadataRow, metadataColumns.map(_.name),
-            currentFile.toPath, currentFile.fileSize, currentFile.modificationTime)
+            currentFile.toPath, currentFile.fileSize, currentFile.start, currentFile.length,
+            currentFile.modificationTime)
         }
 
       /**
@@ -167,6 +168,14 @@ class FileScanRDD(
           case FILE_SIZE =>
             val columnVector = new ConstantColumnVector(c.numRows(), LongType)
             columnVector.setLong(currentFile.fileSize)
+            columnVector
+          case FILE_BLOCK_START =>
+            val columnVector = new ConstantColumnVector(c.numRows(), LongType)
+            columnVector.setLong(currentFile.start)
+            columnVector
+          case FILE_BLOCK_LENGTH =>
+            val columnVector = new ConstantColumnVector(c.numRows(), LongType)
+            columnVector.setLong(currentFile.length)
             columnVector
           case FILE_MODIFICATION_TIME =>
             val columnVector = new ConstantColumnVector(c.numRows(), LongType)

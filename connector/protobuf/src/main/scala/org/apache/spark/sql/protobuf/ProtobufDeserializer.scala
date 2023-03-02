@@ -91,7 +91,8 @@ private[sql] class ProtobufDeserializer(
         val element = iterator.next()
         if (element == null) {
           if (!containsNull) {
-            throw QueryCompilationErrors.nullableArrayOrMapElementError(protoElementPath)
+            throw QueryCompilationErrors.notNullConstraintViolationArrayElementError(
+              protoElementPath)
           } else {
             elementUpdater.setNullAt(i)
           }
@@ -129,7 +130,7 @@ private[sql] class ProtobufDeserializer(
             keyWriter(keyUpdater, i, field.getField(keyField))
             if (field.getField(valueField) == null) {
               if (!valueContainsNull) {
-                throw QueryCompilationErrors.nullableArrayOrMapElementError(protoPath)
+                throw QueryCompilationErrors.notNullConstraintViolationMapValueError(protoPath)
               } else {
                 valueUpdater.setNullAt(i)
               }
@@ -156,9 +157,6 @@ private[sql] class ProtobufDeserializer(
     (protoType.getJavaType, catalystType) match {
 
       case (null, NullType) => (updater, ordinal, _) => updater.setNullAt(ordinal)
-      // It is possible that this will result in data being dropped, This is intentional,
-      // to catch recursive fields and drop them as necessary.
-      case (MESSAGE, NullType) => (updater, ordinal, _) => updater.setNullAt(ordinal)
 
       // TODO: we can avoid boxing if future version of Protobuf provide primitive accessors.
       case (BOOLEAN, BooleanType) =>

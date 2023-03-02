@@ -329,6 +329,12 @@ case class UnresolvedWindowExpression(
   override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_WINDOW_EXPRESSION)
 }
 
+object WindowExpression {
+  def hasWindowExpression(e: Expression): Boolean = {
+    e.find(_.isInstanceOf[WindowExpression]).isDefined
+  }
+}
+
 case class WindowExpression(
     windowFunction: Expression,
     windowSpec: WindowSpecDefinition) extends Expression with Unevaluable

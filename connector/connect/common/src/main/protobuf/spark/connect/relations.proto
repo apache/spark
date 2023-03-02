@@ -60,6 +60,7 @@ message Relation {
     Unpivot unpivot = 25;
     ToSchema to_schema = 26;
     RepartitionByExpression repartition_by_expression = 27;
+    FrameMap frame_map = 28;
 
     // NA functions
     NAFill fill_na = 90;
@@ -93,12 +94,18 @@ message Unknown {}
 message RelationCommon {
   // (Required) Shared relation metadata.
   string source_info = 1;
+
+  // (Optional) A per-client globally unique id for a given connect plan.
+  optional int64 plan_id = 2;
 }
 
 // Relation that uses a SQL query to generate the output.
 message SQL {
   // (Required) The SQL query.
   string query = 1;
+
+  // (Optional) A map of parameter names to literal values.
+  map<string, string> args = 2;
 }
 
 // Relation that reads from a file / table or other data source. Does not have additional
@@ -115,8 +122,10 @@ message Read {
   }
 
   message DataSource {
-    // (Required) Supported formats include: parquet, orc, text, json, parquet, csv, avro.
-    string format = 1;
+    // (Optional) Supported formats include: parquet, orc, text, json, parquet, csv, avro.
+    //
+    // If not set, the value from SQL conf 'spark.sql.sources.default' will be used.
+    optional string format = 1;
 
     // (Optional) If not set, Spark will infer the schema.
     //
@@ -312,10 +321,11 @@ message Drop {
   // (Required) The input relation.
   Relation input = 1;
 
-  // (Required) columns to drop.
-  //
-  // Should contain at least 1 item.
-  repeated Expression cols = 2;
+  // (Optional) columns to drop.
+  repeated Expression columns = 2;
+
+  // (Optional) names of columns to drop.
+  repeated string column_names = 3;
 }
 
 
@@ -729,13 +739,17 @@ message Unpivot {
   repeated Expression ids = 2;
 
   // (Optional) Value columns to unpivot.
-  repeated Expression values = 3;
+  optional Values values = 3;
 
   // (Required) Name of the variable column.
   string variable_column_name = 4;
 
   // (Required) Name of the value column.
   string value_column_name = 5;
+
+  message Values {
+    repeated Expression values = 1;
+  }
 }
 
 message ToSchema {
@@ -758,3 +772,12 @@ message RepartitionByExpression {
   // (Optional) number of partitions, must be positive.
   optional int32 num_partitions = 3;
 }
+
+message FrameMap {
+  // (Required) Input relation for a Frame Map API: mapInPandas, mapInArrow.
+  Relation input = 1;
+
+  // (Required) Input user-defined function of a Frame Map API.
+  CommonInlineUserDefinedFunction func = 2;
+}
+

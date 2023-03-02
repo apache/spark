@@ -21,18 +21,20 @@ import java.util.concurrent.TimeUnit
 
 import scala.io.Source
 
-import org.scalatest.Assertions.fail
 import org.scalatest.BeforeAndAfterAll
 import sys.process._
 
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connect.client.SparkConnectClient
+import org.apache.spark.sql.connect.client.util.IntegrationTestUtils._
 import org.apache.spark.sql.connect.common.config.ConnectCommon
+import org.apache.spark.util.Utils
 
 /**
  * An util class to start a local spark connect server in a different process for local E2E tests.
- * It is designed to start the server once but shared by all tests. It is equivalent to use the
- * following command to start the connect server via command line:
+ * Pre-running the tests, the spark connect artifact needs to be built using e.g. `build/sbt
+ * package`. It is designed to start the server once but shared by all tests. It is equivalent to
+ * use the following command to start the connect server via command line:
  *
  * {{{
  * bin/spark-shell \
@@ -45,53 +47,45 @@ import org.apache.spark.sql.connect.common.config.ConnectCommon
  * print the server process output in the console to debug server start stop problems.
  */
 object SparkConnectServerUtils {
-  // System properties used for testing and debugging
-  private val DEBUG_SC_JVM_CLIENT = "spark.debug.sc.jvm.client"
-
-  protected lazy val sparkHome: String = {
-    if (!(sys.props.contains("spark.test.home") || sys.env.contains("SPARK_HOME"))) {
-      fail("spark.test.home or SPARK_HOME is not set.")
-    }
-    sys.props.getOrElse("spark.test.home", sys.env("SPARK_HOME"))
-  }
-  private val isDebug = System.getProperty(DEBUG_SC_JVM_CLIENT, "false").toBoolean
-
-  // Log server start stop debug info into console
-  // scalastyle:off println
-  private[connect] def debug(msg: String): Unit = if (isDebug) println(msg)
-  // scalastyle:on println
-  private[connect] def debug(error: Throwable): Unit = if (isDebug) error.printStackTrace()
 
   // Server port
   private[connect] val port = ConnectCommon.CONNECT_GRPC_BINDING_PORT + util.Random.nextInt(1000)
 
   @volatile private var stopped = false
 
+  private var consoleOut: BufferedOutputStream = _
+  private val serverStopCommand = "q"
+
   private lazy val sparkConnect: Process = {
     debug("Starting the Spark Connect Server...")
-    val jar = findSparkConnectJar
+    val jar = findJar(
+      "connector/connect/server",
+      "spark-connect-assembly",
+      "spark-connect").getCanonicalPath
     val builder = Process(
-      new File(sparkHome, "bin/spark-shell").getCanonicalPath,
       Seq(
-        "--jars",
-        jar,
+        "bin/spark-submit",
         "--driver-class-path",
         jar,
         "--conf",
-        "spark.plugins=org.apache.spark.sql.connect.SparkConnectPlugin",
+        s"spark.connect.grpc.binding.port=$port",
         "--conf",
-        s"spark.connect.grpc.binding.port=$port"))
+        "spark.sql.catalog.testcat=org.apache.spark.sql.connect.catalog.InMemoryTableCatalog",
+        "--conf",
+        "spark.sql.catalogImplementation=hive",
+        "--class",
+        "org.apache.spark.sql.connect.SimpleSparkConnectService",
+        jar),
+      new File(sparkHome))
 
     val io = new ProcessIO(
-      // Hold the input channel to the spark console to keep the console open
-      in => new BufferedOutputStream(in),
-      // Only redirect output if debug to avoid channel interruption error on process termination.
-      out => if (isDebug) Source.fromInputStream(out).getLines.foreach(debug),
-      err => if (isDebug) Source.fromInputStream(err).getLines.foreach(debug))
+      in => consoleOut = new BufferedOutputStream(in),
+      out => Source.fromInputStream(out).getLines.foreach(debug),
+      err => Source.fromInputStream(err).getLines.foreach(debug))
     val process = builder.run(io)
 
     // Adding JVM shutdown hook
-    sys.addShutdownHook(kill())
+    sys.addShutdownHook(stop())
     process
   }
 
@@ -100,49 +94,26 @@ object SparkConnectServerUtils {
     sparkConnect
   }
 
-  def kill(): Int = {
+  def stop(): Int = {
     stopped = true
     debug("Stopping the Spark Connect Server...")
-    sparkConnect.destroy()
+    try {
+      consoleOut.write(serverStopCommand.getBytes)
+      consoleOut.flush()
+      consoleOut.close()
+    } catch {
+      case e: Throwable =>
+        debug(e)
+        sparkConnect.destroy()
+    }
+
     val code = sparkConnect.exitValue()
     debug(s"Spark Connect Server is stopped with exit code: $code")
     code
   }
-
-  private def findSparkConnectJar: String = {
-    val target = "connector/connect/server/target"
-    val parentDir = new File(sparkHome, target)
-    assert(
-      parentDir.exists(),
-      s"Fail to locate the spark connect server target folder: '${parentDir.getCanonicalPath}'. " +
-        s"SPARK_HOME='${new File(sparkHome).getCanonicalPath}'. " +
-        "Make sure the spark connect server jar has been built " +
-        "and the env variable `SPARK_HOME` is set correctly.")
-    val jars = recursiveListFiles(parentDir).filter { f =>
-      // SBT jar
-      (f.getParentFile.getName.startsWith("scala-") &&
-        f.getName.startsWith("spark-connect-assembly") && f.getName.endsWith(".jar")) ||
-      // Maven Jar
-      (f.getParent.endsWith("target") &&
-        f.getName.startsWith("spark-connect") && f.getName.endsWith(".jar"))
-    }
-    // It is possible we found more than one: one built by maven, and another by SBT
-    assert(
-      jars.nonEmpty,
-      s"Failed to find the `spark-connect` jar inside folder: ${parentDir.getCanonicalPath}")
-    debug("Using jar: " + jars(0).getCanonicalPath)
-    jars(0).getCanonicalPath // return the first one
-  }
-
-  def recursiveListFiles(f: File): Array[File] = {
-    val these = f.listFiles
-    these ++ these.filter(_.isDirectory).flatMap(recursiveListFiles)
-  }
 }
 
-trait RemoteSparkSession
-    extends org.scalatest.funsuite.AnyFunSuite // scalastyle:ignore funsuite
-    with BeforeAndAfterAll {
+trait RemoteSparkSession extends ConnectFunSuite with BeforeAndAfterAll {
   import SparkConnectServerUtils._
   var spark: SparkSession = _
 
@@ -162,8 +133,7 @@ trait RemoteSparkSession
         // Run a simple query to verify the server is really up and ready
         val result = spark
           .sql("select val from (values ('Hello'), ('World')) as t(val)")
-          .collectResult()
-          .toArray
+          .collect()
         assert(result.length == 2)
         success = true
         debug("Spark Connect Server is up.")
@@ -185,11 +155,22 @@ trait RemoteSparkSession
 
   override def afterAll(): Unit = {
     try {
-      if (spark != null) spark.close()
+      if (spark != null) spark.stop()
     } catch {
       case e: Throwable => debug(e)
     }
     spark = null
     super.afterAll()
+  }
+
+  /**
+   * Drops table `tableName` after calling `f`.
+   */
+  protected def withTable(tableNames: String*)(f: => Unit): Unit = {
+    Utils.tryWithSafeFinally(f) {
+      tableNames.foreach { name =>
+        spark.sql(s"DROP TABLE IF EXISTS $name").collect()
+      }
+    }
   }
 }

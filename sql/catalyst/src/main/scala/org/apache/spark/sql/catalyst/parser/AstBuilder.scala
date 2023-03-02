@@ -29,9 +29,8 @@ import org.antlr.v4.runtime.tree.{ParseTree, RuleNode, TerminalNode}
 import org.apache.commons.codec.DecoderException
 import org.apache.commons.codec.binary.Hex
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkArithmeticException, SparkException}
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, SQLConfHelper, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat}
@@ -41,7 +40,7 @@ import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin
-import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, DateTimeUtils, IntervalUtils, ResolveDefaultColumns}
+import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, DateTimeUtils, GeneratedColumn, IntervalUtils, ResolveDefaultColumns}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{convertSpecialDate, convertSpecialTimestamp, convertSpecialTimestampNTZ, getZoneId, stringToDate, stringToTimestamp, stringToTimestampWithoutTimeZone}
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, SupportsNamespaces, TableCatalog}
 import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition
@@ -1331,10 +1330,14 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
           throw new IllegalStateException(s"Unimplemented joinCriteria: $c")
         case None if ctx.NATURAL != null =>
           if (ctx.LATERAL != null) {
-            throw QueryParsingErrors.lateralJoinWithNaturalJoinUnsupportedError(ctx)
+            throw QueryParsingErrors.incompatibleJoinTypesError(
+              joinType1 = ctx.LATERAL.toString, joinType2 = ctx.NATURAL.toString, ctx = ctx
+            )
           }
           if (baseJoinType == Cross) {
-            throw QueryParsingErrors.naturalCrossJoinUnsupportedError(ctx)
+            throw QueryParsingErrors.incompatibleJoinTypesError(
+              joinType1 = ctx.NATURAL.toString, joinType2 = baseJoinType.toString, ctx = ctx
+            )
           }
           (NaturalJoin(baseJoinType), None)
         case None =>
@@ -2600,7 +2603,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
     try {
       Literal(BigDecimal(raw).underlying())
     } catch {
-      case e: AnalysisException =>
+      case e: SparkArithmeticException =>
         throw new ParseException(
           errorClass = "_LEGACY_ERROR_TEMP_0061",
           messageParameters = Map("msg" -> e.getMessage),
@@ -2755,15 +2758,14 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
           innerCtx.unitToUnitInterval)
       }
       visitMultiUnitsInterval(innerCtx.multiUnitsInterval)
-    } else if (ctx.errorCapturingUnitToUnitInterval != null) {
+    } else {
+      assert(ctx.errorCapturingUnitToUnitInterval != null)
       val innerCtx = ctx.errorCapturingUnitToUnitInterval
       if (innerCtx.error1 != null || innerCtx.error2 != null) {
         val errorCtx = if (innerCtx.error1 != null) innerCtx.error1 else innerCtx.error2
         throw QueryParsingErrors.moreThanOneFromToUnitInIntervalLiteralError(errorCtx)
       }
       visitUnitToUnitInterval(innerCtx.body)
-    } else {
-      throw QueryParsingErrors.invalidIntervalLiteralError(ctx)
     }
   }
 
@@ -2889,6 +2891,8 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
       case ("interval", Nil) => CalendarIntervalType
       case (dt @ ("character" | "char" | "varchar"), Nil) =>
         throw QueryParsingErrors.charTypeMissingLengthError(dt, ctx)
+      case (dt @ ("array" | "struct" | "map"), Nil) =>
+        throw QueryParsingErrors.nestedTypeMissingElementTypeError(dt, ctx)
       case (dt, params) =>
         val dtStr = if (params.nonEmpty) s"$dt(${params.mkString(",")})" else dt
         throw QueryParsingErrors.dataTypeUnsupportedError(dtStr, ctx)
@@ -2997,6 +3001,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
     // Check that no duplicates exist among any CREATE TABLE column options specified.
     var nullable = true
     var defaultExpression: Option[DefaultExpressionContext] = None
+    var generationExpression: Option[GenerationExpressionContext] = None
     var commentSpec: Option[CommentSpecContext] = None
     ctx.colDefinitionOption().asScala.foreach { option =>
       if (option.NULL != null) {
@@ -3012,6 +3017,13 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
             option, colName.getText, "DEFAULT")
         }
         defaultExpression = Some(expr)
+      }
+      Option(option.generationExpression()).foreach { expr =>
+        if (generationExpression.isDefined) {
+          throw QueryParsingErrors.duplicateCreateTableColumnOption(
+            option, colName.getText, "GENERATED ALWAYS AS")
+        }
+        generationExpression = Some(expr)
       }
       Option(option.commentSpec()).foreach { spec =>
         if (commentSpec.isDefined) {
@@ -3036,6 +3048,11 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
       } else {
         throw QueryParsingErrors.defaultColumnNotEnabledError(ctx)
       }
+    }
+    // Add the 'GENERATED ALWAYS AS expression' clause in the column definition, if any, to the
+    // column metadata.
+    generationExpression.map(visitGenerationExpression).foreach { field =>
+      builder.putString(GeneratedColumn.GENERATION_EXPRESSION_METADATA_KEY, field)
     }
 
     val name: String = colName.getText
@@ -3095,11 +3112,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
     string(visitStringLit(ctx.stringLit))
   }
 
-  /**
-   * Create a default string.
-   */
-  override def visitDefaultExpression(ctx: DefaultExpressionContext): String = withOrigin(ctx) {
-    val exprCtx = ctx.expression()
+  private def verifyAndGetExpression(exprCtx: ExpressionContext): String = {
     // Make sure it can be converted to Catalyst expressions.
     expression(exprCtx)
     // Extract the raw expression text so that we can save the user provided text. We don't
@@ -3110,6 +3123,22 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
     val end = exprCtx.getStop.getStopIndex
     exprCtx.getStart.getInputStream.getText(new Interval(start, end))
   }
+
+  /**
+   * Create a default string.
+   */
+  override def visitDefaultExpression(ctx: DefaultExpressionContext): String =
+    withOrigin(ctx) {
+      verifyAndGetExpression(ctx.expression())
+    }
+
+  /**
+   * Create a generation expression string.
+   */
+  override def visitGenerationExpression(ctx: GenerationExpressionContext): String =
+    withOrigin(ctx) {
+      verifyAndGetExpression(ctx.expression())
+    }
 
   /**
    * Create an optional comment string.
@@ -4383,7 +4412,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
    *
    * For example:
    * {{{
-   *   MSCK REPAIR TABLE multi_part_name [{ADD|DROP|SYNC} PARTITIONS]
+   *   [MSCK] REPAIR TABLE multi_part_name [{ADD|DROP|SYNC} PARTITIONS]
    * }}}
    */
   override def visitRepairTable(ctx: RepairTableContext): LogicalPlan = withOrigin(ctx) {

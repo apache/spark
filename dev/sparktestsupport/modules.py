@@ -273,7 +273,7 @@ sql_kafka = Module(
 
 connect = Module(
     name="connect",
-    dependencies=[sql],
+    dependencies=[hive],
     source_file_regexes=[
         "connector/connect",
     ],
@@ -508,6 +508,7 @@ pyspark_connect = Module(
     python_test_goals=[
         # doctests
         "pyspark.sql.connect.catalog",
+        "pyspark.sql.connect.conf",
         "pyspark.sql.connect.group",
         "pyspark.sql.connect.session",
         "pyspark.sql.connect.window",
@@ -516,12 +517,14 @@ pyspark_connect = Module(
         "pyspark.sql.connect.dataframe",
         "pyspark.sql.connect.functions",
         # unittests
+        "pyspark.sql.tests.connect.test_client",
         "pyspark.sql.tests.connect.test_connect_plan",
         "pyspark.sql.tests.connect.test_connect_basic",
         "pyspark.sql.tests.connect.test_connect_function",
         "pyspark.sql.tests.connect.test_connect_column",
         "pyspark.sql.tests.connect.test_parity_datasources",
         "pyspark.sql.tests.connect.test_parity_catalog",
+        "pyspark.sql.tests.connect.test_parity_conf",
         "pyspark.sql.tests.connect.test_parity_serde",
         "pyspark.sql.tests.connect.test_parity_functions",
         "pyspark.sql.tests.connect.test_parity_group",
@@ -529,6 +532,9 @@ pyspark_connect = Module(
         "pyspark.sql.tests.connect.test_parity_types",
         "pyspark.sql.tests.connect.test_parity_column",
         "pyspark.sql.tests.connect.test_parity_readwriter",
+        "pyspark.sql.tests.connect.test_parity_udf",
+        "pyspark.sql.tests.connect.test_parity_pandas_udf",
+        "pyspark.sql.tests.connect.test_parity_pandas_map",
     ],
     excluded_python_implementations=[
         "PyPy"  # Skip these tests under PyPy since they require numpy, pandas, and pyarrow and
@@ -746,9 +752,12 @@ pyspark_pandas_slow = Module(
         "pyspark.pandas.tests.indexes.test_base",
         "pyspark.pandas.tests.indexes.test_datetime",
         "pyspark.pandas.tests.test_dataframe",
+        "pyspark.pandas.tests.test_dataframe_slow",
         "pyspark.pandas.tests.test_groupby",
+        "pyspark.pandas.tests.test_groupby_slow",
         "pyspark.pandas.tests.test_indexing",
         "pyspark.pandas.tests.test_ops_on_diff_frames",
+        "pyspark.pandas.tests.test_ops_on_diff_frames_slow",
         "pyspark.pandas.tests.test_ops_on_diff_frames_groupby",
         "pyspark.pandas.tests.test_series",
         "pyspark.pandas.tests.test_stats",

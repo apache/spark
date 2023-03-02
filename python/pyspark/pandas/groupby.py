@@ -988,6 +988,8 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
 
         .. versionadded:: 3.4.0
 
+        .. deprecated:: 3.4.0
+
         Examples
         --------
         >>> df = ps.DataFrame({"A": [1, 2, 1, 1], "B": [True, False, False, True],
@@ -1010,6 +1012,11 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         pyspark.pandas.Series.groupby
         pyspark.pandas.DataFrame.groupby
         """
+        warnings.warn(
+            "The 'mad' method is deprecated and will be removed in a future version. "
+            "To compute the same result, you may do `(group_df - group_df.mean()).abs().mean()`.",
+            FutureWarning,
+        )
         groupkey_names = [SPARK_INDEX_NAME_FORMAT(i) for i in range(len(self._groupkeys))]
         internal, agg_columns, sdf = self._prepare_reduce(
             groupkey_names=groupkey_names,
@@ -2644,7 +2651,19 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         """
         return self.fillna(method="bfill", limit=limit)
 
-    backfill = bfill
+    def backfill(self, limit: Optional[int] = None) -> FrameLike:
+        """
+        Alias for bfill.
+
+        .. deprecated:: 3.4.0
+        """
+        warnings.warn(
+            "The GroupBy.backfill method is deprecated "
+            "and will be removed in a future version. "
+            "Use GroupBy.bfill instead.",
+            FutureWarning,
+        )
+        return self.bfill(limit=limit)
 
     def ffill(self, limit: Optional[int] = None) -> FrameLike:
         """
@@ -2695,7 +2714,19 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         """
         return self.fillna(method="ffill", limit=limit)
 
-    pad = ffill
+    def pad(self, limit: Optional[int] = None) -> FrameLike:
+        """
+        Alias for ffill.
+
+        .. deprecated:: 3.4.0
+        """
+        warnings.warn(
+            "The GroupBy.pad method is deprecated "
+            "and will be removed in a future version. "
+            "Use GroupBy.ffill instead.",
+            FutureWarning,
+        )
+        return self.ffill(limit=limit)
 
     def _limit(self, n: int, asc: bool) -> FrameLike:
         """

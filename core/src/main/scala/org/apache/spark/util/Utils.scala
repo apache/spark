@@ -19,7 +19,7 @@ package org.apache.spark.util
 
 import java.io._
 import java.lang.{Byte => JByte}
-import java.lang.management.{LockInfo, ManagementFactory, MonitorInfo, ThreadInfo}
+import java.lang.management.{LockInfo, ManagementFactory, MonitorInfo, PlatformManagedObject, ThreadInfo}
 import java.lang.reflect.InvocationTargetException
 import java.math.{MathContext, RoundingMode}
 import java.net._
@@ -1106,6 +1106,24 @@ private[spark] object Utils extends Logging {
       "[" + addr + "]"
     } else {
       addr
+    }
+  }
+
+  /**
+   * Normalize IPv6 IPs and no-op on all other hosts.
+   */
+  private[spark] def normalizeIpIfNeeded(host: String): String = {
+    // Is this a v6 address. We ask users to add [] around v6 addresses as strs but
+    // there not always there. If it's just 0-9 and : and [] we treat it as a v6 address.
+    // This means some invalid addresses are treated as v6 addresses, but since they are
+    // not valid hostnames it doesn't matter.
+    // See https://www.rfc-editor.org/rfc/rfc1123#page-13 for context around valid hostnames.
+    val addressRe = """^\[{0,1}([0-9:]+?:[0-9]*)\]{0,1}$""".r
+    host match {
+      case addressRe(unbracketed) =>
+        addBracketsIfNeeded(InetAddresses.toAddrString(InetAddresses.forString(unbracketed)))
+      case _ =>
+        host
     }
   }
 
@@ -3259,6 +3277,24 @@ private[spark] object Utils extends Logging {
         math.max((sortedSize(len / 2) + sortedSize(len / 2 - 1)) / 2, 1)
       case _ => math.max(sortedSize(len / 2), 1)
     }
+  }
+
+  /**
+   * Return whether we are using G1GC or not
+   */
+  lazy val isG1GC: Boolean = {
+    Try {
+      val clazz = Utils.classForName("com.sun.management.HotSpotDiagnosticMXBean")
+        .asInstanceOf[Class[_ <: PlatformManagedObject]]
+      val vmOptionClazz = Utils.classForName("com.sun.management.VMOption")
+      val hotSpotDiagnosticMXBean = ManagementFactory.getPlatformMXBean(clazz)
+      val vmOptionMethod = clazz.getMethod("getVMOption", classOf[String])
+      val valueMethod = vmOptionClazz.getMethod("getValue")
+
+      val useG1GCObject = vmOptionMethod.invoke(hotSpotDiagnosticMXBean, "UseG1GC")
+      val useG1GC = valueMethod.invoke(useG1GCObject).asInstanceOf[String]
+      "true".equals(useG1GC)
+    }.getOrElse(false)
   }
 }
 

@@ -1174,8 +1174,11 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
       withTable("tab1", "tab2") {
         (("a", "b") :: Nil).toDF().write.json(tempDir.getCanonicalPath)
 
-        val e = intercept[AnalysisException] { sql("CREATE TABLE tab1 USING json") }.getMessage
-        assert(e.contains("Unable to infer schema for JSON. It must be specified manually"))
+        checkError(
+          exception = intercept[AnalysisException] { sql("CREATE TABLE tab1 USING json") },
+          errorClass = "UNABLE_TO_INFER_SCHEMA",
+          parameters = Map("format" -> "JSON")
+        )
 
         sql(s"CREATE TABLE tab2 using json location '${tempDir.toURI}'")
         checkAnswer(spark.table("tab2"), Row("a", "b"))
@@ -2177,6 +2180,17 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
       sql("REFRESH FUNCTION default.rand")
       assert(spark.sessionState.catalog.isRegisteredFunction(rand))
     }
+  }
+
+  test("SPARK-41290: No generated columns with V1") {
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql(s"create table t(a int, b int generated always as (a + 1)) using parquet")
+      },
+      errorClass = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
+      parameters = Map("tableName" -> "`spark_catalog`.`default`.`t`",
+        "operation" -> "generated columns")
+    )
   }
 }
 

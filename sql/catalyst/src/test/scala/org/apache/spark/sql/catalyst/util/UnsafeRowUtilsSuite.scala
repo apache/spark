@@ -44,15 +44,15 @@ class UnsafeRowUtilsSuite extends SparkFunSuite {
 
   test("UnsafeRow format invalidation") {
     // Pass the checking
-    UnsafeRowUtils.validateStructuralIntegrity(testRow, testOutputSchema)
+    assert(UnsafeRowUtils.validateStructuralIntegrityWithReason(testRow, testOutputSchema).isEmpty)
     // Fail for fields number not match
-    assert(!UnsafeRowUtils.validateStructuralIntegrity(
-      testRow, StructType(testKeys.map(createIntegerField))))
+    assert(UnsafeRowUtils.validateStructuralIntegrityWithReason(
+      testRow, StructType(testKeys.map(createIntegerField))).isDefined)
     // Fail for invalid schema
     val invalidSchema = StructType(testKeys.map(createIntegerField) ++
       Seq(StructField("struct", StructType(Seq(StructField("value1", StringType, true))), true),
         StructField("value2", IntegerType, false)))
-    assert(!UnsafeRowUtils.validateStructuralIntegrity(testRow, invalidSchema))
+    assert(UnsafeRowUtils.validateStructuralIntegrityWithReason(testRow, invalidSchema).isDefined)
   }
 
   test("Handle special case for null variable-length Decimal") {
@@ -62,23 +62,33 @@ class UnsafeRowUtilsSuite extends SparkFunSuite {
 
     // row is empty at this point
     assert(row.isNullAt(0) && UnsafeRowUtils.getOffsetAndSize(row, 0) == (16, 0))
-    assert(UnsafeRowUtils.validateStructuralIntegrity(row, schema))
+    assert(UnsafeRowUtils.validateStructuralIntegrityWithReason(row, schema).isEmpty)
 
     // set Decimal field to precision-overflowed value
     val bigDecimalVal = Decimal(new JavaBigDecimal("12345678901234567890")) // precision=20, scale=0
     row.setDecimal(0, bigDecimalVal, 19) // should overflow and become null
     assert(row.isNullAt(0) && UnsafeRowUtils.getOffsetAndSize(row, 0) == (16, 0))
-    assert(UnsafeRowUtils.validateStructuralIntegrity(row, schema))
+    assert(UnsafeRowUtils.validateStructuralIntegrityWithReason(row, schema).isEmpty)
 
     // set Decimal field to valid non-null value
     val bigDecimalVal2 = Decimal(new JavaBigDecimal("1234567890123456789")) // precision=19, scale=0
     row.setDecimal(0, bigDecimalVal2, 19) // should succeed
     assert(!row.isNullAt(0) && UnsafeRowUtils.getOffsetAndSize(row, 0) == (16, 8))
-    assert(UnsafeRowUtils.validateStructuralIntegrity(row, schema))
+    assert(UnsafeRowUtils.validateStructuralIntegrityWithReason(row, schema).isEmpty)
 
     // set Decimal field to null explicitly, after which this field no longer supports updating
     row.setNullAt(0)
     assert(row.isNullAt(0) && UnsafeRowUtils.getOffsetAndSize(row, 0) == (0, 0))
-    assert(UnsafeRowUtils.validateStructuralIntegrity(row, schema))
+    assert(UnsafeRowUtils.validateStructuralIntegrityWithReason(row, schema).isEmpty)
+  }
+
+  test("Better schema status message") {
+    assert(UnsafeRowUtils.getStructuralIntegrityStatus(testRow, testOutputSchema)
+      .contains("[UnsafeRowStatus] expectedSchema: StructType(" +
+        "StructField(key1,IntegerType,false),StructField(key2,IntegerType,false)," +
+        "StructField(sum(key1),IntegerType,false),StructField(sum(key2),IntegerType,false)), " +
+        "expectedSchemaNumFields: 4, numFields: 4, bitSetWidthInBytes: 8, rowSizeInBytes: 40\n" +
+        "fieldStatus:\n" +
+        "[UnsafeRowFieldStatus] index: 0, expectedFieldType: IntegerType,"))
   }
 }

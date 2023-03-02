@@ -22,11 +22,14 @@ if sys.version_info >= (3, 8):
 else:
     from typing_extensions import Protocol
 
-from typing import Union, Optional
+from typing import Any, Callable, Iterable, Union, Optional
 import datetime
 import decimal
 
+from pandas.core.frame import DataFrame as PandasDataFrame
+
 from pyspark.sql.connect.column import Column
+from pyspark.sql.connect.types import DataType
 
 
 ColumnOrName = Union[Column, str]
@@ -40,6 +43,28 @@ LiteralType = PrimitiveType
 DecimalLiteral = decimal.Decimal
 
 DateTimeLiteral = Union[datetime.datetime, datetime.date]
+
+DataTypeOrString = Union[DataType, str]
+
+DataFrameLike = PandasDataFrame
+
+PandasMapIterFunction = Callable[[Iterable[DataFrameLike]], Iterable[DataFrameLike]]
+
+
+class UserDefinedFunctionLike(Protocol):
+    func: Callable[..., Any]
+    evalType: int
+    deterministic: bool
+
+    @property
+    def returnType(self) -> DataType:
+        ...
+
+    def __call__(self, *args: ColumnOrName) -> Column:
+        ...
+
+    def asNondeterministic(self) -> "UserDefinedFunctionLike":
+        ...
 
 
 class UserDefinedFunctionCallable(Protocol):

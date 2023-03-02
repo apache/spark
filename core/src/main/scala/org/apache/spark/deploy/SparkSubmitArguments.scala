@@ -623,8 +623,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
       System.setSecurityManager(sm)
 
       try {
-        Utils.classForName(mainClass).getMethod("main", classOf[Array[String]])
-          .invoke(null, Array(HELP))
+        Utils.classForName(mainClass).getMethod("printUsage").invoke(null)
       } catch {
         case e: InvocationTargetException =>
           // Ignore SecurityException, since we throw it above.

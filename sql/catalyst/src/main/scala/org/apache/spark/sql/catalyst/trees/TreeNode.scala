@@ -734,7 +734,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
     afterRulesStream.flatMap { afterRule =>
       if (afterRule.containsChild.nonEmpty) {
         MultiTransform.generateCartesianProduct(
-            afterRule.children.map(_.multiTransformDownWithPruning(cond, ruleId)(rule)))
+            afterRule.children.map(c => () => c.multiTransformDownWithPruning(cond, ruleId)(rule)))
           .map(afterRule.withNewChildren)
       } else {
         Stream(afterRule)
@@ -1373,11 +1373,11 @@ object MultiTransform {
    * @param elementSeqs a list of sequences to build the cartesian product from
    * @return            the stream of generated `Seq` elements
    */
-  def generateCartesianProduct[T](elementSeqs: Seq[Seq[T]]): Stream[Seq[T]] = {
+  def generateCartesianProduct[T](elementSeqs: Seq[() => Seq[T]]): Stream[Seq[T]] = {
     elementSeqs.foldRight(Stream(Seq.empty[T]))((elements, elementTails) =>
       for {
         elementTail <- elementTails
-        element <- elements
+        element <- elements()
       } yield element +: elementTail
     )
   }

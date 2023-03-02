@@ -365,7 +365,7 @@ logging into the data sources.
     <td>read/write</td>
   </tr>
   <tr>
-    <td><code>inferTimestampNTZType</code></td>
+    <td><code>preferTimestampNTZ</code></td>
     <td>false</td>
     <td>
       When the option is set to <code>true</code>, all timestamps are inferred as TIMESTAMP WITHOUT TIME ZONE.
@@ -391,16 +391,16 @@ If the requirements are not met, please consider using the <code>JdbcConnectionP
 
 <div class="codetabs">
 
+<div data-lang="python"  markdown="1">
+{% include_example jdbc_dataset python/sql/datasource.py %}
+</div>
+
 <div data-lang="scala"  markdown="1">
 {% include_example jdbc_dataset scala/org/apache/spark/examples/sql/SQLDataSourceExample.scala %}
 </div>
 
 <div data-lang="java"  markdown="1">
 {% include_example jdbc_dataset java/org/apache/spark/examples/sql/JavaSQLDataSourceExample.java %}
-</div>
-
-<div data-lang="python"  markdown="1">
-{% include_example jdbc_dataset python/sql/datasource.py %}
 </div>
 
 <div data-lang="r"  markdown="1">

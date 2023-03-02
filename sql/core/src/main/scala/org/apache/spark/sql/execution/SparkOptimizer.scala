@@ -58,7 +58,8 @@ class SparkOptimizer(
     Batch("InjectRuntimeFilter", FixedPoint(1),
       InjectRuntimeFilter) :+
     Batch("MergeScalarSubqueries", Once,
-      MergeScalarSubqueries) :+
+      MergeScalarSubqueries,
+      RewriteDistinctAggregates) :+
     Batch("Pushdown Filters from PartitionPruning", fixedPoint,
       PushDownPredicates) :+
     Batch("Cleanup filters that cannot be pushed down", Once,
@@ -79,7 +80,9 @@ class SparkOptimizer(
       // The eval-python node may be between Project/Filter and the scan node, which breaks
       // column pruning and filter push-down. Here we rerun the related optimizer rules.
       ColumnPruning,
+      LimitPushDown,
       PushPredicateThroughNonJoin,
+      PushProjectionThroughLimit,
       RemoveNoopOperators) :+
     Batch("User Provided Optimizers", fixedPoint, experimentalMethods.extraOptimizations: _*) :+
     Batch("Replace CTE with Repartition", Once, ReplaceCTERefWithRepartition)

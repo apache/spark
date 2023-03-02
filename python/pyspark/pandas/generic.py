@@ -1099,11 +1099,17 @@ class Frame(object, metaclass=ABCMeta):
         encoding: str, optional
             Encoding of the resulting excel file. Only necessary for xlwt,
             other writers support unicode natively.
+
+            .. deprecated:: 3.4.0
+
         inf_rep: str, default 'inf'
             Representation for infinity (there is no native representation for
             infinity in Excel).
         verbose: bool, default True
             Display more information in the error logs.
+
+            .. deprecated:: 3.4.0
+
         freeze_panes: tuple of int (length 2), optional
             Specifies the one-based bottommost row and rightmost column that
             is to be frozen.
@@ -2307,7 +2313,7 @@ class Frame(object, metaclass=ABCMeta):
         dropna: bool = True,
     ) -> "GroupBy[FrameLike]":
         """
-        Group DataFrame or Series using a Series of columns.
+        Group DataFrame or Series using one or more columns.
 
         A groupby operation involves some combination of splitting the
         object, applying a function, and combining the results. This can be

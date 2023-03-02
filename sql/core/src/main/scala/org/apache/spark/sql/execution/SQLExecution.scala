@@ -124,7 +124,7 @@ object SQLExecution {
           val endTime = System.nanoTime()
           val errorMessage = ex.map {
             case e: SparkThrowable =>
-              SparkThrowableHelper.getMessage(e, ErrorMessageFormat.STANDARD)
+              SparkThrowableHelper.getMessage(e, ErrorMessageFormat.MINIMAL)
             case e =>
               // unexpected behavior
               SparkThrowableHelper.getMessage(e)

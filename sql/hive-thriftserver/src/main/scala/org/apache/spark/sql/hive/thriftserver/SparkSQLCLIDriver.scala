@@ -47,7 +47,9 @@ import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.client.HiveClientImpl
 import org.apache.spark.sql.hive.security.HiveDelegationTokenProvider
+import org.apache.spark.sql.hive.thriftserver.SparkSQLCLIDriver.closeHiveSessionStateIfStarted
 import org.apache.spark.sql.internal.SharedState
+import org.apache.spark.sql.internal.SQLConf.LEGACY_EMPTY_CURRENT_DB_IN_CLI
 import org.apache.spark.util.ShutdownHookManager
 import org.apache.spark.util.SparkExitCode._
 
@@ -110,12 +112,12 @@ private[hive] object SparkSQLCLIDriver extends Logging {
       sessionState.err = new PrintStream(System.err, true, UTF_8.name())
     } catch {
       case e: UnsupportedEncodingException =>
-        sessionState.close()
+        closeHiveSessionStateIfStarted(sessionState)
         exit(ERROR_PATH_NOT_FOUND)
     }
 
     if (!oproc.process_stage2(sessionState)) {
-      sessionState.close()
+      closeHiveSessionStateIfStarted(sessionState)
       exit(ERROR_MISUSE_SHELL_BUILTIN)
     }
 
@@ -150,7 +152,7 @@ private[hive] object SparkSQLCLIDriver extends Logging {
 
     // Clean up after we exit
     ShutdownHookManager.addShutdownHook { () =>
-      sessionState.close()
+      closeHiveSessionStateIfStarted(sessionState)
       SparkSQLEnv.stop(exitCode)
     }
 
@@ -278,8 +280,15 @@ private[hive] object SparkSQLCLIDriver extends Logging {
 
     var ret = 0
     var prefix = ""
-    val currentDB = ReflectionUtils.invokeStatic(classOf[CliDriver], "getFormattedDb",
-      classOf[HiveConf] -> conf, classOf[CliSessionState] -> sessionState)
+
+    def currentDB = {
+      if (!SparkSQLEnv.sqlContext.conf.getConf(LEGACY_EMPTY_CURRENT_DB_IN_CLI)) {
+        s" (${SparkSQLEnv.sqlContext.sparkSession.catalog.currentDatabase})"
+      } else {
+        ReflectionUtils.invokeStatic(classOf[CliDriver], "getFormattedDb",
+          classOf[HiveConf] -> conf, classOf[CliSessionState] -> sessionState)
+      }
+    }
 
     def promptWithCurrentDB: String = s"$prompt$currentDB"
     def continuedPromptWithDBSpaces: String = continuedPrompt + ReflectionUtils.invokeStatic(
@@ -307,7 +316,7 @@ private[hive] object SparkSQLCLIDriver extends Logging {
       line = reader.readLine(currentPrompt + "> ")
     }
 
-    sessionState.close()
+    closeHiveSessionStateIfStarted(sessionState)
 
     exit(ret)
   }
@@ -318,6 +327,16 @@ private[hive] object SparkSQLCLIDriver extends Logging {
     state.isHiveServerQuery
   }
 
+  def printUsage(): Unit = {
+    val processor = new OptionsProcessor()
+    ReflectionUtils.invoke(classOf[OptionsProcessor], processor, "printUsage")
+  }
+
+  private def closeHiveSessionStateIfStarted(state: SessionState): Unit = {
+    if (ReflectionUtils.getSuperField(state, "isStarted").asInstanceOf[Boolean]) {
+      state.close()
+    }
+  }
 }
 
 private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
@@ -363,7 +382,7 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
     val cmd_1: String = cmd_trimmed.substring(tokens(0).length()).trim()
     if (cmd_lower.equals("quit") ||
       cmd_lower.equals("exit")) {
-      sessionState.close()
+      closeHiveSessionStateIfStarted(sessionState)
       SparkSQLCLIDriver.exit(EXIT_SUCCESS)
     }
     if (tokens(0).toLowerCase(Locale.ROOT).equals("source") ||

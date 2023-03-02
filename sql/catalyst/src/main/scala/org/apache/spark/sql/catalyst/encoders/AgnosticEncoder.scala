@@ -91,7 +91,9 @@ object AgnosticEncoders {
       name: String,
       enc: AgnosticEncoder[_],
       nullable: Boolean,
-      metadata: Metadata) {
+      metadata: Metadata,
+      readMethod: Option[String] = None,
+      writeMethod: Option[String] = None) {
     def structField: StructField = StructField(name, enc.dataType, nullable, metadata)
   }
 
@@ -105,11 +107,27 @@ object AgnosticEncoders {
     override def dataType: DataType = schema
   }
 
-  case class RowEncoder(fields: Seq[EncoderField]) extends AgnosticEncoder[Row] {
+  abstract class BaseRowEncoder extends AgnosticEncoder[Row] {
+    override def isPrimitive: Boolean = false
+    override def dataType: DataType = schema
+    override def clsTag: ClassTag[Row] = classTag[Row]
+  }
+
+  case class RowEncoder(fields: Seq[EncoderField]) extends BaseRowEncoder {
+    override val schema: StructType = StructType(fields.map(_.structField))
+  }
+
+  object UnboundRowEncoder extends BaseRowEncoder {
+    override val schema: StructType = new StructType()
+  }
+
+  case class JavaBeanEncoder[K](
+      override val clsTag: ClassTag[K],
+      fields: Seq[EncoderField])
+    extends AgnosticEncoder[K] {
     override def isPrimitive: Boolean = false
     override val schema: StructType = StructType(fields.map(_.structField))
     override def dataType: DataType = schema
-    override def clsTag: ClassTag[Row] = classTag[Row]
   }
 
   // This will only work for encoding from/to Sparks' InternalRow format.
