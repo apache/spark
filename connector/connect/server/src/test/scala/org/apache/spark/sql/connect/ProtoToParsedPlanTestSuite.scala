@@ -65,6 +65,7 @@ class ProtoToParsedPlanTestSuite extends SparkFunSuite with SharedSparkSession {
       .set(
         Connect.CONNECT_EXTENSIONS_EXPRESSION_CLASSES.key,
         "org.apache.spark.sql.connect.plugin.ExampleExpressionPlugin")
+      .set(org.apache.spark.sql.internal.SQLConf.ANSI_ENABLED.key, false.toString)
   }
 
   protected val baseResourcePath: Path = {
