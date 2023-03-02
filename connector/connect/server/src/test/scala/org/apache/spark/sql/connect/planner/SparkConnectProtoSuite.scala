@@ -323,12 +323,16 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
   test("Test empty LocalRelation with Schema") {
     val schema = new StructType().add("x", "int").add("y", "string").add("z", "binary")
 
-    val withSchemaString = proto.LocalRelation.newBuilder()
-      .setSchemaString(schema.toDDL)
-      .build()
-    val withDataType = proto.LocalRelation.newBuilder()
-      .setDatType(DataTypeProtoConverter.toConnectProtoType(schema))
-      .build()
+    val withSchemaString = {
+      val builder = proto.Relation.newBuilder()
+      builder.getLocalRelationBuilder.setSchemaString(schema.toDDL)
+      builder.build()
+    }
+    val withDataType = {
+      val builder = proto.Relation.newBuilder()
+      builder.getLocalRelationBuilder.setDataType(DataTypeProtoConverter.toConnectProtoType(schema))
+      builder.build()
+    }
     val sparkPlan = LocalRelation(schema.toAttributes)
     comparePlans(withSchemaString, sparkPlan)
     comparePlans(withDataType, sparkPlan)
