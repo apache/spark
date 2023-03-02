@@ -127,9 +127,9 @@ class UserDefinedFunction:
         )
         return CommonInlineUserDefinedFunction(
             function_name=self._name,
+            function=py_udf,
             deterministic=self.deterministic,
             arguments=arg_exprs,
-            function=py_udf,
         )
 
     def __call__(self, *cols: "ColumnOrName") -> Column:

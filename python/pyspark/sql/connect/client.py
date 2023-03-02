@@ -47,6 +47,7 @@ from typing import (
     Callable,
     Generator,
     Type,
+    TYPE_CHECKING,
 )
 
 import pandas as pd
@@ -79,6 +80,10 @@ from pyspark.sql.types import (
 )
 from pyspark.serializers import CloudPickleSerializer
 from pyspark.rdd import PythonEvalType
+
+
+if TYPE_CHECKING:
+    from pyspark.sql.connect._typing import DataTypeOrString
 
 
 def _configure_logging() -> logging.Logger:
@@ -535,7 +540,7 @@ class SparkConnectClient(object):
     def register_udf(
         self,
         function: Any,
-        return_type: Union[str, DataType],
+        return_type: "DataTypeOrString",
         name: Optional[str] = None,
         eval_type: int = PythonEvalType.SQL_BATCHED_UDF,
         deterministic: bool = True,
@@ -562,9 +567,9 @@ class SparkConnectClient(object):
         # construct a CommonInlineUserDefinedFunction
         fun = CommonInlineUserDefinedFunction(
             function_name=name,
-            deterministic=deterministic,
             arguments=[],
             function=py_udf,
+            deterministic=deterministic,
         ).to_plan_udf(self)
 
         # construct the request
@@ -578,17 +583,20 @@ class SparkConnectClient(object):
         self,
         name: str,
         javaClassName: str,
-        return_type: Union[str, DataType],
-    ) -> str:
+        return_type: Optional["DataTypeOrString"] = None,
+    ) -> None:
         # convert str return_type to DataType
         if isinstance(return_type, str):
             return_type = parse_data_type(return_type)
 
         # construct a JavaUDF
-        java_udf = JavaUDF(
-            class_name=javaClassName,
-            output_type=return_type.json(),
-        )
+        if return_type is None:
+            java_udf = JavaUDF(class_name=javaClassName)
+        else:
+            java_udf = JavaUDF(
+                class_name=javaClassName,
+                output_type=return_type.json(),
+            )
         fun = CommonInlineUserDefinedFunction(
             function_name=name,
             function=java_udf,
