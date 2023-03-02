@@ -24,6 +24,7 @@ import scala.collection.mutable
 import scala.util.{Failure, Success, Try}
 
 import com.google.protobuf.util.JsonFormat
+import com.google.protobuf.util.JsonFormat.TypeRegistry
 import io.grpc.inprocess.InProcessChannelBuilder
 import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach}
 
@@ -100,7 +101,14 @@ class PlanGenerationTestSuite
     "query-tests",
     "test-data")
 
-  private val printer = JsonFormat.printer()
+  private val registry = TypeRegistry
+    .newBuilder()
+    .add(proto.ExamplePluginRelation.getDescriptor)
+    .add(proto.ExamplePluginExpression.getDescriptor)
+    .add(proto.ExamplePluginCommand.getDescriptor)
+    .build()
+
+  private val printer = JsonFormat.printer().usingTypeRegistry(registry)
 
   private var session: SparkSession = _
 
@@ -2006,5 +2014,28 @@ class PlanGenerationTestSuite
       fn.min("id").over(Window.orderBy("a").rowsBetween(2L, 3L)),
       fn.min("id").over(Window.orderBy("a").rangeBetween(2L, 3L)),
       fn.count(Column("id")).over())
+  }
+
+  /* Extensions */
+  test("relation extension") {
+    val input = proto.ExamplePluginRelation
+      .newBuilder()
+      .setInput(simple.plan.getRoot)
+      .build()
+    session.newDataFrame(com.google.protobuf.Any.pack(input))
+  }
+
+  test("expression extension") {
+    val extension = proto.ExamplePluginExpression
+      .newBuilder()
+      .setChild(
+        proto.Expression
+          .newBuilder()
+          .setUnresolvedAttribute(proto.Expression.UnresolvedAttribute
+            .newBuilder()
+            .setUnparsedIdentifier("id")))
+      .setCustomField("abc")
+      .build()
+    simple.select(Column(com.google.protobuf.Any.pack(extension)))
   }
 }
