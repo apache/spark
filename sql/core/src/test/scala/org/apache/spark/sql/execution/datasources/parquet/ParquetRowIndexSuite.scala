@@ -173,11 +173,11 @@ class ParquetRowIndexSuite extends QueryTest with SharedSparkSession {
       withSQLConf(conf.sqlConfs: _*) {
         withTempPath { path =>
           // Read row index using _metadata.row_index if that is supported by the file format.
-          val metadataColumnsSupported = conf.readFormat match {
+          val rowIndexMetadataColumnSupported = conf.readFormat match {
             case "parquet" => true
             case _ => false
           }
-          val rowIndexColName = if (metadataColumnsSupported) {
+          val rowIndexColName = if (rowIndexMetadataColumnSupported) {
             s"${FileFormat.METADATA_NAME}.${FileFormat.ROW_INDEX}"
           } else {
             FileFormat.ROW_INDEX_TEMPORARY_COLUMN_NAME
@@ -191,7 +191,7 @@ class ParquetRowIndexSuite extends QueryTest with SharedSparkSession {
             .withColumn(expectedRowIdxCol, ($"id" % numRecordsPerFile).cast("int"))
 
           // Add row index to schema if required.
-          val schemaWithRowIdx = if (metadataColumnsSupported) {
+          val schemaWithRowIdx = if (rowIndexMetadataColumnSupported) {
             df.schema
           } else {
             df.schema.add(rowIndexColName, LongType, nullable = true)
