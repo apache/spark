@@ -538,7 +538,7 @@ class ClientE2ETestSuite extends RemoteSparkSession {
     assert(!spark.version.isEmpty)
   }
 
-  private def checkSameResult[E](expected: Seq[E], dataset: Dataset[E]): Unit = {
+  private def checkSameResult[E](expected: scala.collection.Seq[E], dataset: Dataset[E]): Unit = {
     dataset.withResult { result =>
       assert(expected === result.iterator.asScala.toBuffer)
     }
@@ -584,7 +584,7 @@ class ClientE2ETestSuite extends RemoteSparkSession {
     checkSameResult(list.asScala, session.createDataset(list))
     checkSameResult(
       list.asScala.map(kv => Row(kv.key, kv.value)),
-      session.createDataFrame(list.asScala))
+      session.createDataFrame(list.asScala.toSeq))
   }
 }
 

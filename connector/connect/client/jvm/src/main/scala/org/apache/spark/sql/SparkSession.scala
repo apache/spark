@@ -111,8 +111,16 @@ class SparkSession private[sql] (
    */
   def emptyDataset[T: Encoder]: Dataset[T] = createDataset[T](Nil)
 
-  private def createDataFrame[T](encoder: AgnosticEncoder[T], data: Seq[T]): DataFrame = {
-    createDataset(data)(encoder).toDF()
+  private def createDataset[T](encoder: AgnosticEncoder[T], data: Iterator[T]): Dataset[T] = {
+    newDataset(encoder) { builder =>
+      val localRelationBuilder = builder.getLocalRelationBuilder
+        .setSchema(encoder.schema.catalogString)
+      if (data.nonEmpty) {
+        val timeZoneId = conf.get("spark.sql.session.timeZone")
+        val arrowData = ConvertToArrow(encoder, data, timeZoneId, allocator)
+        localRelationBuilder.setData(arrowData)
+      }
+    }
   }
 
   /**
@@ -121,7 +129,7 @@ class SparkSession private[sql] (
    * @since 3.4.0
    */
   def createDataFrame[A <: Product: TypeTag](data: Seq[A]): DataFrame = {
-    createDataFrame(ScalaReflection.encoderFor[A], data)
+    createDataset(ScalaReflection.encoderFor[A], data.iterator).toDF()
   }
 
   /**
@@ -132,7 +140,7 @@ class SparkSession private[sql] (
    * @since 3.4.0
    */
   def createDataFrame(rows: java.util.List[Row], schema: StructType): DataFrame = {
-    createDataFrame(RowEncoder.encoderFor(schema), rows.asScala)
+    createDataset(RowEncoder.encoderFor(schema), rows.iterator().asScala).toDF()
   }
 
   /**
@@ -143,9 +151,8 @@ class SparkSession private[sql] (
    * @since 3.4.0
    */
   def createDataFrame(data: java.util.List[_], beanClass: Class[_]): DataFrame = {
-    createDataFrame(
-      JavaTypeInference.encoderFor(beanClass.asInstanceOf[Class[Any]]),
-      data.asScala.asInstanceOf[Seq[Any]])
+    val encoder = JavaTypeInference.encoderFor(beanClass.asInstanceOf[Class[Any]])
+    createDataset(encoder, data.iterator().asScala).toDF()
   }
 
   /**
@@ -176,16 +183,7 @@ class SparkSession private[sql] (
    * @since 3.4.0
    */
   def createDataset[T: Encoder](data: Seq[T]): Dataset[T] = {
-    val encoder = encoderFor[T]
-    newDataset(encoder) { builder =>
-      val localRelationBuilder = builder.getLocalRelationBuilder
-        .setSchema(encoder.schema.catalogString)
-      if (data.nonEmpty) {
-        val timeZoneId = conf.get("spark.sql.session.timeZone")
-        val arrowData = ConvertToArrow(encoder, data.iterator, timeZoneId, allocator)
-        localRelationBuilder.setData(arrowData)
-      }
-    }
+    createDataset(encoderFor[T], data.iterator)
   }
 
   /**
