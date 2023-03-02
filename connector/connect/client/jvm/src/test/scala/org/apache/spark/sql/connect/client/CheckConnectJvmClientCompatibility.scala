@@ -242,7 +242,7 @@ object CheckConnectJvmClientCompatibility {
     val className = "org.apache.spark.sql.Dataset"
     val clientMethods = methods(clientJar, className)
     val sqlMethods = methods(sqlJar, className)
-    // Exclude some public methods that must be added through `exceptions`
+    // Exclude some public methods that must be added through `exceptionMethods`
     val exceptionMethods =
       Seq("org.apache.spark.sql.Dataset.collectResult", "org.apache.spark.sql.Dataset.plan")
 
