@@ -67,10 +67,10 @@ object CheckConnectJvmClientCompatibility {
         resultWriter.write(s"ERROR: Comparing client jar: $clientJar and and sql jar: $sqlJar \n")
         resultWriter.write(s"problems: \n")
         resultWriter.write(s"${problems.map(p => p.description("client")).mkString("\n")}")
+        resultWriter.write("\n")
         resultWriter.write(
           "Exceptions to binary compatibility can be added in " +
             "'CheckConnectJvmClientCompatibility#checkMiMaCompatibility'\n")
-        resultWriter.write("\n")
       }
       val incompatibleApis = checkDatasetApiCompatibility(clientJar, sqlJar)
       if (incompatibleApis.nonEmpty) {
@@ -78,10 +78,10 @@ object CheckConnectJvmClientCompatibility {
           "ERROR: The Dataset apis only exist in the connect client " +
             "module and not belong to the sql module include: \n")
         resultWriter.write(incompatibleApis.mkString("\n"))
+        resultWriter.write("\n")
         resultWriter.write(
           "Exceptions can be added to exceptionMethods in " +
             "'CheckConnectJvmClientCompatibility#checkDatasetApiCompatibility'\n")
-        resultWriter.write("\n")
       }
     } catch {
       case e: Throwable =>
