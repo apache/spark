@@ -87,7 +87,7 @@ class ClientE2ETestSuite extends RemoteSparkSession {
     }
   }
 
-  ignore("read and write") {
+  test("read and write") {
     val testDataPath = java.nio.file.Paths
       .get(
         IntegrationTestUtils.sparkHome,
