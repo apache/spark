@@ -235,7 +235,7 @@ object CheckConnectJvmClientCompatibility {
     val clientMethods = methods(clientJar, className)
     val sqlMethods = methods(sqlJar, className)
 
-    // For now we simply check the new methods is a subset of the old methods.
+    // Find new public functions that are not in sql module `Dataset`.
     clientMethods.diff(sqlMethods)
   }
 
