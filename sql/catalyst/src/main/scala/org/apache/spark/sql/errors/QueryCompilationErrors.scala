@@ -194,13 +194,13 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   }
 
   def unresolvedUsingColForJoinError(
-      colName: String, plan: LogicalPlan, side: String): Throwable = {
+      colName: String, suggestion: String, side: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1001",
+      errorClass = "UNRESOLVED_USING_COLUMN_FOR_JOIN",
       messageParameters = Map(
-        "colName" -> colName,
+        "colName" -> toSQLId(colName),
         "side" -> side,
-        "plan" -> plan.output.map(_.name).mkString(", ")))
+        "suggestion" -> suggestion))
   }
 
   def unresolvedAttributeError(
@@ -1566,7 +1566,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
 
   def outputPathAlreadyExistsError(outputPath: Path): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1152",
+      errorClass = "PATH_ALREADY_EXISTS",
       messageParameters = Map("outputPath" -> outputPath.toString))
   }
 
@@ -2355,14 +2355,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
         "precision" -> precision.toString))
   }
 
-  def decimalOnlySupportPrecisionUptoError(decimalType: String, precision: Int): Throwable = {
-    new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1229",
-      messageParameters = Map(
-        "decimalType" -> decimalType,
-        "precision" -> precision.toString))
-  }
-
   def negativeScaleNotAllowedError(scale: Int): Throwable = {
     SparkException.internalError(s"Negative scale is not allowed: ${scale.toString}." +
       s" Set the config ${toSQLConf(LEGACY_ALLOW_NEGATIVE_SCALE_OF_DECIMAL_ENABLED.key)}" +
@@ -2800,20 +2792,24 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       name: TableIdentifier,
       nameParts: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1283",
+      errorClass = "INVALID_TEMP_OBJ_REFERENCE",
       messageParameters = Map(
-        "name" -> name.toString,
-        "nameParts" -> nameParts))
+        "obj" -> "VIEW",
+        "objName" -> toSQLId(name.nameParts),
+        "tempObj" -> "VIEW",
+        "tempObjName" -> toSQLId(nameParts)))
   }
 
   def notAllowedToCreatePermanentViewByReferencingTempFuncError(
       name: TableIdentifier,
       funcName: String): Throwable = {
      new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1284",
+      errorClass = "INVALID_TEMP_OBJ_REFERENCE",
       messageParameters = Map(
-        "name" -> name.toString,
-        "funcName" -> funcName))
+        "obj" -> "VIEW",
+        "objName" -> toSQLId(name.nameParts),
+        "tempObj" -> "FUNCTION",
+        "tempObjName" -> toSQLId(funcName)))
   }
 
   def queryFromRawFilesIncludeCorruptRecordColumnError(): Throwable = {
@@ -2847,10 +2843,14 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       messageParameters = Map("name" -> name))
   }
 
-  def columnNameContainsInvalidCharactersError(name: String): Throwable = {
+  def invalidColumnNameAsPathError(datasource: String, columnName: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1289",
-      messageParameters = Map("name" -> name))
+      errorClass = "INVALID_COLUMN_NAME_AS_PATH",
+      messageParameters = Map(
+        "datasource" -> datasource,
+        "columnName" -> toSQLId(columnName)
+      )
+    )
   }
 
   def textDataSourceWithMultiColumnsError(schema: StructType): Throwable = {
@@ -3091,8 +3091,8 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
 
   def cannotModifyValueOfSparkConfigError(key: String, docroot: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1326",
-      messageParameters = Map("key" -> key, "docroot" -> docroot))
+      errorClass = "CANNOT_MODIFY_CONFIG",
+      messageParameters = Map("key" -> toSQLConf(key), "docroot" -> docroot))
   }
 
   def commandExecutionInRunnerUnsupportedError(runner: String): Throwable = {
@@ -3505,6 +3505,16 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
           messageParameters = Map("funcName" -> toSQLId(funcName)),
           cause = Option(other))
     }
+  }
+
+  def generatedColumnsUnsupported(nameParts: Seq[String]): AnalysisException = {
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
+      messageParameters = Map(
+        "tableName" -> toSQLId(nameParts),
+        "operation" -> "generated columns"
+      )
+    )
   }
 
   def ambiguousLateralColumnAliasError(name: String, numOfMatches: Int): Throwable = {

@@ -31,15 +31,31 @@ option java_package = "org.apache.spark.connect.proto";
 // produce a relational result.
 message Command {
   oneof command_type {
+    CommonInlineUserDefinedFunction register_function = 1;
     WriteOperation write_operation = 2;
     CreateDataFrameViewCommand create_dataframe_view = 3;
     WriteOperationV2 write_operation_v2 = 4;
+    SqlCommand sql_command = 5;
 
     // This field is used to mark extensions to the protocol. When plugins generate arbitrary
     // Commands they can add them here. During the planning the correct resolution is done.
     google.protobuf.Any extension = 999;
 
   }
+}
+
+// A SQL Command is used to trigger the eager evaluation of SQL commands in Spark.
+//
+// When the SQL provide as part of the message is a command it will be immediately evaluated
+// and the result will be collected and returned as part of a LocalRelation. If the result is
+// not a command, the operation will simply return a SQL Relation. This allows the client to be
+// almost oblivious to the server-side behavior.
+message SqlCommand {
+  // (Required) SQL Query.
+  string sql = 1;
+
+  // (Optional) A map of parameter names to literal values.
+  map<string, string> args = 2;
 }
 
 // A command that can create DataFrame global temp view or local temp view.
@@ -65,13 +81,13 @@ message WriteOperation {
   // (Required) The output of the `input` relation will be persisted according to the options.
   Relation input = 1;
 
-  // (Required) Format value according to the Spark documentation. Examples are: text, parquet, delta.
-  string source = 2;
+  // (Optional) Format value according to the Spark documentation. Examples are: text, parquet, delta.
+  optional string source = 2;
 
   // The destination of the write operation must be either a path or a table.
   oneof save_type {
     string path = 3;
-    string table_name = 4;
+    SaveTable table = 4;
   }
 
   // (Required) the save mode.
@@ -89,6 +105,19 @@ message WriteOperation {
 
   // (Optional) A list of configuration options.
   map<string, string> options = 9;
+
+  message SaveTable {
+    // (Required) The table name.
+    string table_name = 1;
+    // (Required) The method to be called to write to the table.
+    TableSaveMethod save_method = 2;
+
+    enum TableSaveMethod {
+      TABLE_SAVE_METHOD_UNSPECIFIED = 0;
+      TABLE_SAVE_METHOD_SAVE_AS_TABLE = 1;
+      TABLE_SAVE_METHOD_INSERT_INTO = 2;
+    }
+  }
 
   message BucketBy {
     repeated string bucket_column_names = 1;
@@ -109,12 +138,12 @@ message WriteOperationV2 {
   // (Required) The output of the `input` relation will be persisted according to the options.
   Relation input = 1;
 
-  // The destination of the write operation must be either a path or a table.
+  // (Required) The destination of the write operation must be either a path or a table.
   string table_name = 2;
 
-  // A provider for the underlying output data source. Spark's default catalog supports
+  // (Optional) A provider for the underlying output data source. Spark's default catalog supports
   // "parquet", "json", etc.
-  string provider = 3;
+  optional string provider = 3;
 
   // (Optional) List of columns for partitioning for output table created by `create`,
   // `createOrReplace`, or `replace`
@@ -126,6 +155,7 @@ message WriteOperationV2 {
   // (Optional) A list of table properties.
   map<string, string> table_properties = 6;
 
+  // (Required) Write mode.
   Mode mode = 7;
 
   enum Mode {

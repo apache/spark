@@ -311,7 +311,7 @@ object ResolveWindowTime extends Rule[LogicalPlan] {
             !metadata.contains(SessionWindow.marker)) {
             // FIXME: error framework?
             throw new AnalysisException(
-              "The input is not a correct window column: $windowTime", plan = Some(p))
+              s"The input is not a correct window column: $windowTime", plan = Some(p))
           }
 
           val newMetadata = new MetadataBuilder()

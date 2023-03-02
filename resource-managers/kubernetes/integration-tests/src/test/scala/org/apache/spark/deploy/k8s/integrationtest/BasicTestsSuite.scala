@@ -135,6 +135,22 @@ private[spark] trait BasicTestsSuite { k8sSuite: KubernetesSuite =>
       expectedJVMValue = Seq("(spark.test.foo,spark.test.bar)"))
   }
 
+  test("SPARK-42474: Run extraJVMOptions JVM GC option check - G1GC", k8sTestTag) {
+    sparkAppConf
+      .set("spark.driver.extraJavaOptions", "-XX:+UseG1GC")
+      .set("spark.executor.extraJavaOptions", "-XX:+UseG1GC")
+    runSparkJVMCheckAndVerifyCompletion(
+      expectedJVMValue = Seq("JVM G1GC Flag: true"))
+  }
+
+  test("SPARK-42474: Run extraJVMOptions JVM GC option check - Other GC", k8sTestTag) {
+    sparkAppConf
+      .set("spark.driver.extraJavaOptions", "-XX:+UseParallelGC")
+      .set("spark.executor.extraJavaOptions", "-XX:+UseParallelGC")
+    runSparkJVMCheckAndVerifyCompletion(
+      expectedJVMValue = Seq("JVM G1GC Flag: false"))
+  }
+
   test("Run SparkRemoteFileTest using a remote data file", k8sTestTag, localTestTag) {
     assert(sys.props.contains("spark.test.home"), "spark.test.home is not set!")
     TestUtils.withHttpServer(sys.props("spark.test.home")) { baseURL =>

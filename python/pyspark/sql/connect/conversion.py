@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from pyspark.sql.connect import check_dependencies
+from pyspark.sql.connect.utils import check_dependencies
 
 check_dependencies(__name__, __file__)
 
@@ -105,7 +105,9 @@ class LocalDataToArrowConversion:
                 if value is None:
                     return None
                 else:
-                    assert isinstance(value, (tuple, dict)), f"{type(value)} {value}"
+                    assert isinstance(value, (tuple, dict)) or hasattr(
+                        value, "__dict__"
+                    ), f"{type(value)} {value}"
 
                     _dict = {}
                     if isinstance(value, dict):
@@ -114,6 +116,10 @@ class LocalDataToArrowConversion:
                             _dict[k] = field_convs[k](v)
                     elif isinstance(value, Row) and hasattr(value, "__fields__"):
                         for k, v in value.asDict(recursive=False).items():
+                            assert isinstance(k, str)
+                            _dict[k] = field_convs[k](v)
+                    elif not isinstance(value, Row) and hasattr(value, "__dict__"):
+                        for k, v in value.__dict__.items():
                             assert isinstance(k, str)
                             _dict[k] = field_convs[k](v)
                     else:
@@ -237,32 +243,24 @@ class LocalDataToArrowConversion:
 
         column_names = schema.fieldNames()
 
-        column_convs = {
-            field.name: LocalDataToArrowConversion._create_converter(field.dataType)
-            for field in schema.fields
-        }
+        column_convs = [
+            LocalDataToArrowConversion._create_converter(field.dataType) for field in schema.fields
+        ]
 
-        pylist = []
+        pylist: List[List] = [[] for _ in range(len(column_names))]
 
         for item in data:
-            _dict = {}
+            if not isinstance(item, Row) and hasattr(item, "__dict__"):
+                item = item.__dict__
+            for i, col in enumerate(column_names):
+                if isinstance(item, dict):
+                    value = item.get(col)
+                else:
+                    value = item[i]
 
-            if isinstance(item, dict):
-                for col, value in item.items():
-                    _dict[col] = column_convs[col](value)
-            elif isinstance(item, Row) and hasattr(item, "__fields__"):
-                for col, value in item.asDict(recursive=False).items():
-                    _dict[col] = column_convs[col](value)
-            else:
-                i = 0
-                for value in item:
-                    col = column_names[i]
-                    _dict[col] = column_convs[col](value)
-                    i += 1
+                pylist[i].append(column_convs[i](value))
 
-            pylist.append(_dict)
-
-        return pa.Table.from_pylist(pylist, schema=pa_schema)
+        return pa.Table.from_arrays(pylist, schema=pa_schema)
 
 
 class ArrowTableToRowsConversion:

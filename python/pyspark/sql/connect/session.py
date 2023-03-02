@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from pyspark.sql.connect import check_dependencies
+from pyspark.sql.connect.utils import check_dependencies
 
 check_dependencies(__name__, __file__)
 
@@ -43,12 +43,14 @@ import pyarrow as pa
 from pandas.api.types import (  # type: ignore[attr-defined]
     is_datetime64_dtype,
     is_datetime64tz_dtype,
+    is_timedelta64_dtype,
 )
 
 from pyspark import SparkContext, SparkConf, __version__
 from pyspark.sql.connect.client import SparkConnectClient
+from pyspark.sql.connect.conf import RuntimeConf
 from pyspark.sql.connect.dataframe import DataFrame
-from pyspark.sql.connect.plan import SQL, Range, LocalRelation
+from pyspark.sql.connect.plan import SQL, Range, LocalRelation, CachedRelation
 from pyspark.sql.connect.readwriter import DataFrameReader
 from pyspark.sql.pandas.serializers import ArrowStreamPandasSerializer
 from pyspark.sql.pandas.types import to_arrow_type, _get_local_timezone
@@ -59,6 +61,7 @@ from pyspark.sql.types import (
     _merge_type,
     Row,
     DataType,
+    DayTimeIntervalType,
     StructType,
     AtomicType,
     TimestampType,
@@ -68,6 +71,7 @@ from pyspark.sql.utils import to_str
 if TYPE_CHECKING:
     from pyspark.sql.connect._typing import OptionalPrimitiveType
     from pyspark.sql.connect.catalog import Catalog
+    from pyspark.sql.connect.udf import UDFRegistration
 
 
 class SparkSession:
@@ -243,6 +247,8 @@ class SparkSession:
                 arrow_types = [
                     to_arrow_type(TimestampType())
                     if is_datetime64_dtype(t) or is_datetime64tz_dtype(t)
+                    else to_arrow_type(DayTimeIntervalType())
+                    if is_timedelta64_dtype(t)
                     else None
                     for t in data.dtypes
                 ]
@@ -294,7 +300,9 @@ class SparkSession:
                 # For dictionaries, we sort the schema in alphabetical order.
                 _data = [dict(sorted(d.items())) for d in _data]
 
-            elif not isinstance(_data[0], (Row, tuple, list, dict)):
+            elif not isinstance(_data[0], (Row, tuple, list, dict)) and not hasattr(
+                _data[0], "__dict__"
+            ):
                 # input data can be [1, 2, 3]
                 # we need to convert it to [[1], [2], [3]] to be able to infer schema.
                 _data = [[d] for d in _data]
@@ -305,6 +313,8 @@ class SparkSession:
                 # For cases like createDataFrame([("Alice", None, 80.1)], schema)
                 # we can not infer the schema from the data itself.
                 warnings.warn("failed to infer the schema from data")
+                if _schema is None and _schema_str is not None:
+                    _schema = self.createDataFrame([], schema=_schema_str).schema
                 if _schema is None or not isinstance(_schema, StructType):
                     raise ValueError(
                         "Some of types cannot be determined after inferring, "
@@ -338,8 +348,13 @@ class SparkSession:
 
     createDataFrame.__doc__ = PySparkSession.createDataFrame.__doc__
 
-    def sql(self, sqlQuery: str) -> "DataFrame":
-        return DataFrame.withPlan(SQL(sqlQuery), self)
+    def sql(self, sqlQuery: str, args: Optional[Dict[str, str]] = None) -> "DataFrame":
+        cmd = SQL(sqlQuery, args)
+        data, properties = self.client.execute_command(cmd.command(self._client))
+        if "sql_command_result" in properties:
+            return DataFrame.withPlan(CachedRelation(properties["sql_command_result"]), self)
+        else:
+            return DataFrame.withPlan(SQL(sqlQuery, args), self)
 
     sql.__doc__ = PySparkSession.sql.__doc__
 
@@ -418,8 +433,8 @@ class SparkSession:
         raise NotImplementedError("newSession() is not implemented.")
 
     @property
-    def conf(self) -> Any:
-        raise NotImplementedError("conf() is not implemented.")
+    def conf(self) -> RuntimeConf:
+        return RuntimeConf(self.client)
 
     @property
     def sparkContext(self) -> Any:
@@ -434,12 +449,18 @@ class SparkSession:
         raise NotImplementedError("readStream() is not implemented.")
 
     @property
-    def udf(self) -> Any:
-        raise NotImplementedError("udf() is not implemented.")
+    def udf(self) -> "UDFRegistration":
+        from pyspark.sql.connect.udf import UDFRegistration
+
+        return UDFRegistration(self)
+
+    udf.__doc__ = PySparkSession.udf.__doc__
 
     @property
     def version(self) -> str:
-        raise NotImplementedError("version() is not implemented.")
+        result = self._client._analyze(method="spark_version").spark_version
+        assert result is not None
+        return result
 
     # SparkConnect-specific API
     @property

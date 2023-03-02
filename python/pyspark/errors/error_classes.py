@@ -26,7 +26,7 @@ ERROR_CLASSES_JSON = """
   },
   "COLUMN_IN_LIST": {
     "message": [
-      "<func_name> does not allow a Column in a list."
+      "`<func_name>` does not allow a Column in a list."
     ]
   },
   "DISALLOWED_TYPE_FOR_CONTAINER" : {
@@ -96,12 +96,22 @@ ERROR_CLASSES_JSON = """
   },
   "NOT_DATAFRAME" : {
     "message" : [
-      "Argument `<arg_name>` must be a DataFrame, got <arg_type>."
+      "Argument `<arg_name>` should be a DataFrame, got <arg_type>."
+    ]
+  },
+  "NOT_DATATYPE_OR_STR" : {
+    "message" : [
+      "Argument `<arg_name>` should be a DataType or str, got <arg_type>."
     ]
   },
   "NOT_DICT" : {
     "message" : [
       "Argument `<arg_name>` should be a dict, got <arg_type>."
+    ]
+  },
+  "NOT_EXPRESSION" : {
+    "message" : [
+      "Argument `<arg_name>` should be a Expression, got <arg_type>."
     ]
   },
   "NOT_FLOAT_OR_INT" : {
@@ -119,6 +129,11 @@ ERROR_CLASSES_JSON = """
       "Argument `<arg_name>` should be an int, got <arg_type>."
     ]
   },
+  "NOT_ITERABLE" : {
+    "message" : [
+      "<objectName> is not iterable."
+    ]
+  },
   "NOT_LIST_OR_STR_OR_TUPLE" : {
     "message" : [
       "Argument `<arg_name>` should be a list, str or tuple, got <arg_type>."
@@ -129,9 +144,19 @@ ERROR_CLASSES_JSON = """
       "Argument `<arg_name>` should be a list or tuple, got <arg_type>."
     ]
   },
+  "NOT_SAME_TYPE" : {
+    "message" : [
+      "Argument `<arg_name1>` and `<arg_name2>` should be the same type, got <arg_type1> and <arg_type2>."
+    ]
+  },
   "NOT_STR" : {
     "message" : [
       "Argument `<arg_name>` should be a str, got <arg_type>."
+    ]
+  },
+  "NOT_WINDOWSPEC" : {
+    "message" : [
+      "Argument `<arg_name>` should be a WindowSpec, got <arg_type>."
     ]
   },
   "UNSUPPORTED_NUMPY_ARRAY_SCALAR" : {

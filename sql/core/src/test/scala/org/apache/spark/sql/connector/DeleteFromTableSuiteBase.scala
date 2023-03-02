@@ -24,6 +24,7 @@ import org.scalatest.BeforeAndAfter
 import org.apache.spark.sql.{AnalysisException, DataFrame, Encoders, QueryTest, Row}
 import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryRowLevelOperationTable, InMemoryRowLevelOperationTableCatalog}
 import org.apache.spark.sql.connector.expressions.LogicalExpressions._
+import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.execution.{QueryExecution, SparkPlan}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.datasources.v2.{DeleteFromTableExec, ReplaceDataExec, WriteDeltaExec}
@@ -564,7 +565,8 @@ abstract class DeleteFromTableSuiteBase
 
   protected def createTable(schemaString: String): Unit = {
     val schema = StructType.fromDDL(schemaString)
-    catalog.createTable(ident, schema, Array(identity(reference(Seq("dep")))), extraTableProps)
+    catalog.createTable(
+      ident, schema, Array[Transform](identity(reference(Seq("dep")))), extraTableProps)
   }
 
   protected def createAndInitTable(schemaString: String, jsonData: String): Unit = {

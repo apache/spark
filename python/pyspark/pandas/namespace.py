@@ -261,11 +261,17 @@ def read_csv(
         returning names where the callable function evaluates to `True`.
     squeeze : bool, default False
         If the parsed data only contains one column then return a Series.
+
+        .. deprecated:: 3.4.0
+
     mangle_dupe_cols : bool, default True
         Duplicate columns will be specified as 'X0', 'X1', ... 'XN', rather
         than 'X' ... 'X'. Passing in False will cause data to be overwritten if
         there are duplicate names in the columns.
         Currently only `True` is allowed.
+
+        .. deprecated:: 3.4.0
+
     dtype : Type name or dict of column -> type, default None
         Data type for data or columns. E.g. {‘a’: np.float64, ‘b’: np.int32} Use str or object
         together with suitable na_values settings to preserve and not interpret dtype.
@@ -978,6 +984,9 @@ def read_excel(
           column if the callable returns ``True``.
     squeeze : bool, default False
         If the parsed data only contains one column then return a Series.
+
+        .. deprecated:: 3.4.0
+
     dtype : Type name or dict of column -> type, default None
         Data type for data or columns. E.g. {'a': np.float64, 'b': np.int32}
         Use `object` to preserve data as stored in Excel and not interpret dtype.
@@ -1049,10 +1058,16 @@ def read_excel(
         Convert integral floats to int (i.e., 1.0 --> 1). If False, all numeric
         data will be read in as floats: Excel stores all numbers as floats
         internally.
+
+        .. deprecated:: 3.4.0
+
     mangle_dupe_cols : bool, default True
         Duplicate columns will be specified as 'X', 'X.1', ...'X.N', rather than
         'X'...'X'. Passing in False will cause data to be overwritten if there
         are duplicate names in the columns.
+
+        .. deprecated:: 3.4.0
+
     **kwds : optional
         Optional keyword arguments can be passed to ``TextFileReader``.
 
@@ -1733,6 +1748,8 @@ def to_datetime(
     )
 
 
+# TODO(SPARK-42621): Add `inclusive` parameter and replace `closed`.
+# See https://github.com/pandas-dev/pandas/issues/40245
 def date_range(
     start: Union[str, Any] = None,
     end: Union[str, Any] = None,
@@ -1768,6 +1785,9 @@ def date_range(
     closed : {None, 'left', 'right'}, optional
         Make the interval closed with respect to the given frequency to
         the 'left', 'right', or both sides (None, the default).
+
+        .. deprecated:: 3.4.0
+
     **kwargs
         For compatibility. Has no effect on the result.
 

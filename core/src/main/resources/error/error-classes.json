@@ -76,6 +76,19 @@
       "Could not load Protobuf class with name <protobufClassName>. <explanation>."
     ]
   },
+  "CANNOT_MERGE_INCOMPATIBLE_DATA_TYPE" : {
+    "message" : [
+      "Failed to merge incompatible data types <left> and <right>."
+    ],
+    "sqlState" : "42825"
+  },
+  "CANNOT_MODIFY_CONFIG" : {
+    "message" : [
+      "Cannot modify the value of the Spark config: <key>.",
+      "See also '<docroot>/sql-migration-guide.html#ddl-statements'."
+    ],
+    "sqlState" : "46110"
+  },
   "CANNOT_PARSE_DECIMAL" : {
     "message" : [
       "Cannot parse decimal."
@@ -98,6 +111,11 @@
       "<message>. If necessary set <ansiConfig> to \"false\" to bypass this error."
     ],
     "sqlState" : "22007"
+  },
+  "CANNOT_READ_FILE_FOOTER" : {
+    "message" : [
+      "Could not read footer for file: <file>."
+    ]
   },
   "CANNOT_RECOGNIZE_HIVE_TYPE" : {
     "message" : [
@@ -494,6 +512,12 @@
     ],
     "sqlState" : "22012"
   },
+  "DUPLICATED_MAP_KEY" : {
+    "message" : [
+      "Duplicate map key <key> was found, please check the input data. If you want to remove the duplicated keys, you can set <mapKeyDedupPolicy> to \"LAST_WIN\" so that the key inserted at last takes precedence."
+    ],
+    "sqlState" : "23505"
+  },
   "DUPLICATE_KEY" : {
     "message" : [
       "Found duplicate keys <keyColumn>."
@@ -546,6 +570,11 @@
       "The operation <statement> is not allowed on the <objectType>: <objectName>."
     ],
     "sqlState" : "42809"
+  },
+  "GENERATED_COLUMN_WITH_DEFAULT_VALUE" : {
+    "message" : [
+      "A column cannot have both a default value and a generation expression but column <colName> has default value: (<defaultValue>) and generation expression: (<genExpr>)."
+    ]
   },
   "GRAPHITE_SINK_INVALID_PROTOCOL" : {
     "message" : [
@@ -814,6 +843,12 @@
       "The expected format is ByteString, but was <unsupported> (<class>)."
     ]
   },
+  "INVALID_COLUMN_NAME_AS_PATH" : {
+    "message" : [
+      "The datasource <datasource> cannot save the column <columnName> because its name contains some characters that are not allowed in file paths. Please, use an alias to rename it."
+    ],
+    "sqlState" : "46121"
+  },
   "INVALID_COLUMN_OR_FIELD_DATA_TYPE" : {
     "message" : [
       "Column or field <name> is of type <type> while it's required to be <expectedType>."
@@ -1026,6 +1061,12 @@
     },
     "sqlState" : "42K07"
   },
+  "INVALID_SET_SYNTAX" : {
+    "message" : [
+      "Expected format is 'SET', 'SET key', or 'SET key=value'. If you want to include special characters in key, or include semicolon in value, please use backquotes, e.g., SET `key`=`value`."
+    ],
+    "sqlState" : "42000"
+  },
   "INVALID_SQL_ARG" : {
     "message" : [
       "The argument <name> of `sql()` is invalid. Consider to replace it by a SQL literal."
@@ -1049,6 +1090,11 @@
       }
     },
     "sqlState" : "42823"
+  },
+  "INVALID_TEMP_OBJ_REFERENCE" : {
+    "message" : [
+      "Cannot create the persistent object <objName> of the type <obj> because it references to the temporary object <tempObjName> of the type <tempObj>. Please make the temporary object <tempObjName> persistent, or make the persistent object <objName> temporary."
+    ]
   },
   "INVALID_TYPED_LITERAL" : {
     "message" : [
@@ -1077,6 +1123,12 @@
   "MALFORMED_PROTOBUF_MESSAGE" : {
     "message" : [
       "Malformed Protobuf messages are detected in message deserialization. Parse Mode: <failFastMode>. To process malformed protobuf message as null result, try setting the option 'mode' as 'PERMISSIVE'."
+    ]
+  },
+  "MALFORMED_RECORD_IN_PARSING" : {
+    "message" : [
+      "Malformed records are detected in record parsing: <badRecord>.",
+      "Parse Mode: <failFastMode>. To process malformed records as null result, try setting the option 'mode' as 'PERMISSIVE'."
     ]
   },
   "MISSING_AGGREGATION" : {
@@ -1239,6 +1291,12 @@
       "To tolerate the error on drop use ALTER TABLE … DROP IF EXISTS PARTITION."
     ],
     "sqlState" : "428FT"
+  },
+  "PATH_ALREADY_EXISTS" : {
+    "message" : [
+      "Path <outputPath> already exists. Set mode as \"overwrite\" to overwrite the existing path."
+    ],
+    "sqlState" : "42K04"
   },
   "PATH_NOT_FOUND" : {
     "message" : [
@@ -1565,6 +1623,23 @@
     ],
     "sqlState" : "42883"
   },
+  "UNRESOLVED_USING_COLUMN_FOR_JOIN" : {
+    "message" : [
+      "USING column <colName> cannot be resolved on the <side> side of the join. The <side>-side columns: [<suggestion>]."
+    ],
+    "sqlState" : "42703"
+  },
+  "UNSUPPORTED_ARROWTYPE" : {
+    "message" : [
+      "Unsupported arrow type <typeName>."
+    ],
+    "sqlState" : "0A000"
+  },
+  "UNSUPPORTED_DATASOURCE_FOR_DIRECT_QUERY" : {
+    "message" : [
+      "Unsupported data source type for direct query on files: <dataSourceType>"
+    ]
+  },
   "UNSUPPORTED_DATATYPE" : {
     "message" : [
       "Unsupported data type <typeName>."
@@ -1588,6 +1663,11 @@
       }
     },
     "sqlState" : "0A000"
+  },
+  "UNSUPPORTED_EXPRESSION_GENERATED_COLUMN" : {
+    "message" : [
+      "Cannot create generated column <fieldName> with generation expression <expressionStr> because <reason>."
+    ]
   },
   "UNSUPPORTED_EXPR_FOR_OPERATOR" : {
     "message" : [
@@ -2074,11 +2154,6 @@
       "Found duplicate clauses: <clauseName>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_0042" : {
-    "message" : [
-      "Expected format is 'SET', 'SET key', or 'SET key=value'. If you want to include special characters in key, or include semicolon in value, please use quotes, e.g., SET `key`=`value`."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_0043" : {
     "message" : [
       "Expected format is 'RESET' or 'RESET key'. If you want to include special characters in key, please use quotes, e.g., RESET `key`."
@@ -2182,11 +2257,6 @@
   "_LEGACY_ERROR_TEMP_1000" : {
     "message" : [
       "LEGACY store assignment policy is disallowed in Spark data source V2. Please set the configuration <configKey> to other values."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1001" : {
-    "message" : [
-      "USING column `<colName>` cannot be resolved on the <side> side of the join. The <side>-side columns: [<plan>]."
     ]
   },
   "_LEGACY_ERROR_TEMP_1002" : {
@@ -2786,11 +2856,6 @@
       "Fail to resolve data source for the table <table> since the table serde property has the duplicated key <key> with extra options specified for this scan operation. To fix this, you can rollback to the legacy behavior of ignoring the extra options by setting the config <config> to `false`, or address the conflicts of the same config."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1152" : {
-    "message" : [
-      "Path <outputPath> already exists."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1153" : {
     "message" : [
       "Cannot use <field> for partition column."
@@ -3134,11 +3199,6 @@
       "Decimal scale (<scale>) cannot be greater than precision (<precision>)."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1229" : {
-    "message" : [
-      "<decimalType> can only support precision up to <precision>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1231" : {
     "message" : [
       "<key> is not a valid partition column in table <tblName>."
@@ -3349,16 +3409,6 @@
       "Not allowed to create a permanent view <name> without explicitly assigning an alias for expression <attrName>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1283" : {
-    "message" : [
-      "Not allowed to create a permanent view <name> by referencing a temporary view <nameParts>. Please create a temp view instead by CREATE TEMP VIEW."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1284" : {
-    "message" : [
-      "Not allowed to create a permanent view <name> by referencing a temporary function `<funcName>`."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1285" : {
     "message" : [
       "Since Spark 2.3, the queries from raw JSON/CSV files are disallowed when the",
@@ -3384,11 +3434,6 @@
   "_LEGACY_ERROR_TEMP_1288" : {
     "message" : [
       "Table or view '<name>' already exists. SaveMode: ErrorIfExists."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1289" : {
-    "message" : [
-      "Column name \"<name>\" contains invalid character(s). Please use alias to rename it."
     ]
   },
   "_LEGACY_ERROR_TEMP_1290" : {
@@ -3549,12 +3594,6 @@
   "_LEGACY_ERROR_TEMP_1325" : {
     "message" : [
       "Cannot modify the value of a static config: <key>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1326" : {
-    "message" : [
-      "Cannot modify the value of a Spark config: <key>.",
-      "See also '<docroot>/sql-migration-guide.html#ddl-statements'."
     ]
   },
   "_LEGACY_ERROR_TEMP_1327" : {
@@ -4087,16 +4126,6 @@
       "The input filter of <owner> should be fully convertible."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2091" : {
-    "message" : [
-      "Could not read footer for file: <file>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2092" : {
-    "message" : [
-      "Could not read footer for file: <file>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2093" : {
     "message" : [
       "Found duplicate field(s) \"<requiredFieldName>\": <matchedOrcFields> in case-insensitive mode."
@@ -4125,11 +4154,6 @@
   "_LEGACY_ERROR_TEMP_2098" : {
     "message" : [
       "Could not compare cost with <cost>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2099" : {
-    "message" : [
-      "Unsupported data type: <dt>."
     ]
   },
   "_LEGACY_ERROR_TEMP_2100" : {
@@ -4232,29 +4256,14 @@
       "Failed parsing <simpleString>: <raw>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2123" : {
-    "message" : [
-      "Failed to merge fields '<leftName>' and '<rightName>'. <message>"
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2124" : {
     "message" : [
       "Failed to merge decimal types with incompatible scale <leftScale> and <rightScale>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2125" : {
-    "message" : [
-      "Failed to merge incompatible data types <leftCatalogString> and <rightCatalogString>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2126" : {
     "message" : [
       "Unsuccessful attempt to build maps with <size> elements due to exceeding the map size limit <maxRoundedArrayLength>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2127" : {
-    "message" : [
-      "Duplicate map key <key> was found, please check the input data. If you want to remove the duplicated keys, you can set <mapKeyDedupPolicy> to <lastWin> so that the key inserted at last takes precedence."
     ]
   },
   "_LEGACY_ERROR_TEMP_2128" : {
@@ -4467,11 +4476,6 @@
   "_LEGACY_ERROR_TEMP_2176" : {
     "message" : [
       "Cannot create array with <numElements> elements of data due to exceeding the limit <maxRoundedArrayLength> elements for ArrayData. <additionalErrorMessage>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2177" : {
-    "message" : [
-      "Malformed records are detected in record parsing. Parse Mode: <failFastMode>. To process malformed records as null result, try setting the option 'mode' as 'PERMISSIVE'."
     ]
   },
   "_LEGACY_ERROR_TEMP_2178" : {
@@ -5162,11 +5166,6 @@
   "_LEGACY_ERROR_TEMP_2331" : {
     "message" : [
       "failed to evaluate expression <sqlExpr>: <msg>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2332" : {
-    "message" : [
-      "<msg>"
     ]
   },
   "_LEGACY_ERROR_TEMP_2400" : {

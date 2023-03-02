@@ -23,7 +23,7 @@ from pyspark.sql.types import StringType, StructType, StructField, ArrayType, In
 from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 from pyspark.testing.connectutils import ReusedConnectTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
-from pyspark.errors import SparkConnectAnalysisException, SparkConnectException
+from pyspark.errors.exceptions.connect import AnalysisException, SparkConnectException
 
 
 class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, SQLTestUtils):
@@ -892,14 +892,17 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
         ):
             cdf.select(CF.sum("a").over(CW.orderBy("b").rowsBetween(0, (1 << 33)))).show()
 
-        with self.assertRaisesRegex(
-            TypeError,
-            "window should be WindowSpec",
-        ):
+        with self.assertRaises(PySparkTypeError) as pe:
             cdf.select(CF.rank().over(cdf.a))
 
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_WINDOWSPEC",
+            message_parameters={"arg_name": "window", "arg_type": "Column"},
+        )
+
         # invalid window function
-        with self.assertRaises(SparkConnectAnalysisException):
+        with self.assertRaises(AnalysisException):
             cdf.select(cdf.b.over(CW.orderBy("b"))).show()
 
         # invalid window frame
@@ -913,34 +916,34 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
             CF.lead("c", 1),
             CF.ntile(1),
         ]:
-            with self.assertRaises(SparkConnectAnalysisException):
+            with self.assertRaises(AnalysisException):
                 cdf.select(
                     ccol.over(CW.orderBy("b").rowsBetween(CW.currentRow, CW.currentRow + 123))
                 ).show()
 
-            with self.assertRaises(SparkConnectAnalysisException):
+            with self.assertRaises(AnalysisException):
                 cdf.select(
                     ccol.over(CW.orderBy("b").rangeBetween(CW.currentRow, CW.currentRow + 123))
                 ).show()
 
-            with self.assertRaises(SparkConnectAnalysisException):
+            with self.assertRaises(AnalysisException):
                 cdf.select(
                     ccol.over(CW.orderBy("b").rangeBetween(CW.unboundedPreceding, CW.currentRow))
                 ).show()
 
         # Function 'cume_dist' requires Windowframe(RangeFrame, UnboundedPreceding, CurrentRow)
         ccol = CF.cume_dist()
-        with self.assertRaises(SparkConnectAnalysisException):
+        with self.assertRaises(AnalysisException):
             cdf.select(
                 ccol.over(CW.orderBy("b").rangeBetween(CW.currentRow, CW.currentRow + 123))
             ).show()
 
-        with self.assertRaises(SparkConnectAnalysisException):
+        with self.assertRaises(AnalysisException):
             cdf.select(
                 ccol.over(CW.orderBy("b").rowsBetween(CW.currentRow, CW.currentRow + 123))
             ).show()
 
-        with self.assertRaises(SparkConnectAnalysisException):
+        with self.assertRaises(AnalysisException):
             cdf.select(
                 ccol.over(CW.orderBy("b").rowsBetween(CW.unboundedPreceding, CW.currentRow))
             ).show()
@@ -1073,12 +1076,26 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
 
         # test array_append
         self.assert_eq(
+            cdf.select(CF.array_append(cdf.a, "xyz")).toPandas(),
+            sdf.select(SF.array_append(sdf.a, "xyz")).toPandas(),
+        )
+        self.assert_eq(
             cdf.select(CF.array_append(cdf.a, CF.lit("ab"))).toPandas(),
             sdf.select(SF.array_append(sdf.a, SF.lit("ab"))).toPandas(),
         )
         self.assert_eq(
             cdf.select(CF.array_append(cdf.a, cdf.f)).toPandas(),
             sdf.select(SF.array_append(sdf.a, sdf.f)).toPandas(),
+        )
+
+        # test array_insert
+        self.assert_eq(
+            cdf.select(CF.array_insert(cdf.a, -5, "ab")).toPandas(),
+            sdf.select(SF.array_insert(sdf.a, -5, "ab")).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(CF.array_insert(cdf.a, 3, cdf.f)).toPandas(),
+            sdf.select(SF.array_insert(sdf.a, 3, sdf.f)).toPandas(),
         )
 
         # test array_join

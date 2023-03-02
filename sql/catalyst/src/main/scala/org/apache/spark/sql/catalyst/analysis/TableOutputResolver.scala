@@ -36,22 +36,29 @@ object TableOutputResolver {
       byName: Boolean,
       conf: SQLConf): LogicalPlan = {
 
-    if (expected.size < query.output.size) {
-      throw QueryCompilationErrors.cannotWriteTooManyColumnsToTableError(tableName, expected, query)
+    val actualExpectedCols = expected.map { attr =>
+      attr.withDataType(CharVarcharUtils.getRawType(attr.metadata).getOrElse(attr.dataType))
+    }
+
+    if (actualExpectedCols.size < query.output.size) {
+      throw QueryCompilationErrors.cannotWriteTooManyColumnsToTableError(
+        tableName, actualExpectedCols, query)
     }
 
     val errors = new mutable.ArrayBuffer[String]()
     val resolved: Seq[NamedExpression] = if (byName) {
-      reorderColumnsByName(tableName, query.output, expected, conf, errors += _)
+      reorderColumnsByName(tableName, actualExpectedCols, expected, conf, errors += _)
     } else {
-      if (expected.size > query.output.size) {
+      if (actualExpectedCols.size > query.output.size) {
         throw QueryCompilationErrors.cannotWriteNotEnoughColumnsToTableError(
-          tableName, expected, query)
+          tableName, actualExpectedCols, query)
       }
 
-      query.output.zip(expected).flatMap {
+      query.output.zip(actualExpectedCols).flatMap {
         case (queryExpr, tableAttr) =>
-          checkField(tableName, tableAttr, queryExpr, byName, conf, err => errors += err)
+          checkField(
+            tableName, tableAttr, queryExpr, byName, conf,
+            err => errors += err, Seq(tableAttr.name))
       }
     }
 
@@ -107,7 +114,8 @@ object TableOutputResolver {
               tableName, matchedCol, matchedType, expectedType,
               expectedName, conf, addError, newColPath)
           case _ =>
-            checkField(tableName, expectedCol, matchedCol, byName = true, conf, addError)
+            checkField(
+              tableName, expectedCol, matchedCol, byName = true, conf, addError, newColPath)
         }
       }
     }
@@ -263,30 +271,26 @@ object TableOutputResolver {
       queryExpr: NamedExpression,
       byName: Boolean,
       conf: SQLConf,
-      addError: String => Unit): Option[NamedExpression] = {
+      addError: String => Unit,
+      colPath: Seq[String]): Option[NamedExpression] = {
 
+    val attrTypeHasCharVarchar = CharVarcharUtils.hasCharVarchar(tableAttr.dataType)
+    val attrTypeWithoutCharVarchar = if (attrTypeHasCharVarchar) {
+      CharVarcharUtils.replaceCharVarcharWithString(tableAttr.dataType)
+    } else {
+      tableAttr.dataType
+    }
     val storeAssignmentPolicy = conf.storeAssignmentPolicy
     lazy val outputField = if (tableAttr.dataType.sameType(queryExpr.dataType) &&
       tableAttr.name == queryExpr.name &&
       tableAttr.metadata == queryExpr.metadata) {
       Some(queryExpr)
     } else {
-      val casted = storeAssignmentPolicy match {
-        case StoreAssignmentPolicy.ANSI =>
-          val cast = Cast(queryExpr, tableAttr.dataType, Option(conf.sessionLocalTimeZone),
-            ansiEnabled = true)
-          cast.setTagValue(Cast.BY_TABLE_INSERTION, ())
-          checkCastOverflowInTableInsert(cast, tableAttr.name)
-        case StoreAssignmentPolicy.LEGACY =>
-          Cast(queryExpr, tableAttr.dataType, Option(conf.sessionLocalTimeZone),
-            ansiEnabled = false)
-        case _ =>
-          Cast(queryExpr, tableAttr.dataType, Option(conf.sessionLocalTimeZone))
-      }
-      val exprWithStrLenCheck = if (conf.charVarcharAsString) {
+      val casted = cast(queryExpr, attrTypeWithoutCharVarchar, conf, colPath.quoted)
+      val exprWithStrLenCheck = if (conf.charVarcharAsString || !attrTypeHasCharVarchar) {
         casted
       } else {
-        CharVarcharUtils.stringLengthCheck(casted, tableAttr)
+        CharVarcharUtils.stringLengthCheck(casted, tableAttr.dataType)
       }
       // Renaming is needed for handling the following cases like
       // 1) Column names/types do not match, e.g., INSERT INTO TABLE tab1 SELECT 1, 2
@@ -301,8 +305,8 @@ object TableOutputResolver {
       case StoreAssignmentPolicy.STRICT | StoreAssignmentPolicy.ANSI =>
         // run the type check first to ensure type errors are present
         val canWrite = DataType.canWrite(
-          tableName, queryExpr.dataType, tableAttr.dataType, byName, conf.resolver,
-          tableAttr.name, storeAssignmentPolicy, addError)
+          tableName, queryExpr.dataType, attrTypeWithoutCharVarchar, byName, conf.resolver,
+          colPath.quoted, storeAssignmentPolicy, addError)
         if (queryExpr.nullable && !tableAttr.nullable) {
           throw QueryCompilationErrors.incompatibleDataToTableNullableColumnError(
             tableName, tableAttr.name)
@@ -312,6 +316,26 @@ object TableOutputResolver {
         } else {
           outputField
         }
+    }
+  }
+
+  private def cast(
+      expr: Expression,
+      expectedType: DataType,
+      conf: SQLConf,
+      colName: String): Expression = {
+
+    conf.storeAssignmentPolicy match {
+      case StoreAssignmentPolicy.ANSI =>
+        val cast = Cast(expr, expectedType, Option(conf.sessionLocalTimeZone), ansiEnabled = true)
+        cast.setTagValue(Cast.BY_TABLE_INSERTION, ())
+        checkCastOverflowInTableInsert(cast, colName)
+
+      case StoreAssignmentPolicy.LEGACY =>
+        Cast(expr, expectedType, Option(conf.sessionLocalTimeZone), ansiEnabled = false)
+
+      case _ =>
+        Cast(expr, expectedType, Option(conf.sessionLocalTimeZone))
     }
   }
 }

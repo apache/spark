@@ -1,0 +1,2 @@
+Sort [id#0L ASC NULLS FIRST, b#0 ASC NULLS FIRST, a#0 ASC NULLS FIRST], true
++- LocalRelation <empty>, [id#0L, a#0, b#0]

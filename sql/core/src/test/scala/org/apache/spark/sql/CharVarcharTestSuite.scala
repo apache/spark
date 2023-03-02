@@ -926,4 +926,56 @@ class DSV2CharVarcharTestSuite extends CharVarcharTestSuite
       }
     }
   }
+
+  test("SPARK-42611: check char/varchar length in reordered nested structs") {
+    Seq("CHAR(5)", "VARCHAR(5)").foreach { typ =>
+      withTable("t") {
+        sql(s"CREATE TABLE t(s STRUCT<n_c: $typ, n_i: INT>) USING $format")
+
+        val inputDF = sql("SELECT named_struct('n_i', 1, 'n_c', '123456') AS s")
+
+        val e = intercept[RuntimeException](inputDF.writeTo("t").append())
+        assert(e.getMessage.contains("Exceeds char/varchar type length limitation: 5"))
+      }
+    }
+  }
+
+  test("SPARK-42611: check char/varchar length in reordered structs within arrays") {
+    Seq("CHAR(5)", "VARCHAR(5)").foreach { typ =>
+      withTable("t") {
+        sql(s"CREATE TABLE t(a ARRAY<STRUCT<n_c: $typ, n_i: INT>>) USING $format")
+
+        val inputDF = sql("SELECT array(named_struct('n_i', 1, 'n_c', '123456')) AS a")
+
+        val e = intercept[SparkException](inputDF.writeTo("t").append())
+        assert(e.getCause.getMessage.contains("Exceeds char/varchar type length limitation: 5"))
+      }
+    }
+  }
+
+  test("SPARK-42611: check char/varchar length in reordered structs within map keys") {
+    Seq("CHAR(5)", "VARCHAR(5)").foreach { typ =>
+      withTable("t") {
+        sql(s"CREATE TABLE t(m MAP<STRUCT<n_c: $typ, n_i: INT>, INT>) USING $format")
+
+        val inputDF = sql("SELECT map(named_struct('n_i', 1, 'n_c', '123456'), 1) AS m")
+
+        val e = intercept[SparkException](inputDF.writeTo("t").append())
+        assert(e.getCause.getMessage.contains("Exceeds char/varchar type length limitation: 5"))
+      }
+    }
+  }
+
+  test("SPARK-42611: check char/varchar length in reordered structs within map values") {
+    Seq("CHAR(5)", "VARCHAR(5)").foreach { typ =>
+      withTable("t") {
+        sql(s"CREATE TABLE t(m MAP<INT, STRUCT<n_c: $typ, n_i: INT>>) USING $format")
+
+        val inputDF = sql("SELECT map(1, named_struct('n_i', 1, 'n_c', '123456')) AS m")
+
+        val e = intercept[SparkException](inputDF.writeTo("t").append())
+        assert(e.getCause.getMessage.contains("Exceeds char/varchar type length limitation: 5"))
+      }
+    }
+  }
 }

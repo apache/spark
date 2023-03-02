@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from pyspark.sql.connect import check_dependencies
+from pyspark.sql.connect.utils import check_dependencies
 
 check_dependencies(__name__, __file__)
 
@@ -37,10 +37,7 @@ from typing import (
 
 import numpy as np
 
-from pyspark.errors.exceptions import (
-    PySparkTypeError,
-    PySparkValueError,
-)
+from pyspark.errors import PySparkTypeError, PySparkValueError
 from pyspark.sql.connect.column import Column
 from pyspark.sql.connect.expressions import (
     CaseWhen,
@@ -64,6 +61,15 @@ if TYPE_CHECKING:
         UserDefinedFunctionLike,
     )
     from pyspark.sql.connect.dataframe import DataFrame
+
+
+def _to_col_with_plan_id(col: str, plan_id: Optional[int]) -> Column:
+    if col == "*":
+        return Column(UnresolvedStar(unparsed_target=None))
+    elif col.endswith(".*"):
+        return Column(UnresolvedStar(unparsed_target=col))
+    else:
+        return Column(ColumnReference(unparsed_identifier=col, plan_id=plan_id))
 
 
 def _to_col(col: "ColumnOrName") -> Column:
@@ -205,12 +211,7 @@ def _options_to_col(options: Dict[str, Any]) -> Column:
 
 
 def col(col: str) -> Column:
-    if col == "*":
-        return Column(UnresolvedStar(unparsed_target=None))
-    elif col.endswith(".*"):
-        return Column(UnresolvedStar(unparsed_target=col))
-    else:
-        return Column(ColumnReference(unparsed_identifier=col))
+    return _to_col_with_plan_id(col=col, plan_id=None)
 
 
 col.__doc__ = pysparkfuncs.col.__doc__
@@ -223,6 +224,10 @@ def lit(col: Any) -> Column:
     if isinstance(col, Column):
         return col
     elif isinstance(col, list):
+        if any(isinstance(c, Column) for c in col):
+            raise PySparkValueError(
+                error_class="COLUMN_IN_LIST", message_parameters={"func_name": "lit"}
+            )
         return array(*[lit(c) for c in col])
     elif isinstance(col, np.ndarray) and col.ndim == 1:
         if _from_numpy_type(col.dtype) is None:
@@ -1155,8 +1160,8 @@ def array(*cols: Union["ColumnOrName", List["ColumnOrName"], Tuple["ColumnOrName
 array.__doc__ = pysparkfuncs.array.__doc__
 
 
-def array_append(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
-    return _invoke_function_over_columns("array_append", col1, col2)
+def array_append(col: "ColumnOrName", value: Any) -> Column:
+    return _invoke_function("array_append", _to_col(col), lit(value))
 
 
 array_append.__doc__ = pysparkfuncs.array_append.__doc__
@@ -1181,6 +1186,14 @@ def array_except(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
 
 
 array_except.__doc__ = pysparkfuncs.array_except.__doc__
+
+
+def array_insert(arr: "ColumnOrName", pos: Union["ColumnOrName", int], value: Any) -> Column:
+    _pos = lit(pos) if isinstance(pos, int) else _to_col(pos)
+    return _invoke_function("array_insert", _to_col(arr), _pos, lit(value))
+
+
+array_insert.__doc__ = pysparkfuncs.array_insert.__doc__
 
 
 def array_intersect(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
@@ -2467,14 +2480,6 @@ def _test() -> None:
 
     # Spark Connect does not support Spark Context but the test depends on that.
     del pyspark.sql.connect.functions.monotonically_increasing_id.__doc__
-
-    # TODO(SPARK-41834): implement Dataframe.conf
-    del pyspark.sql.connect.functions.from_unixtime.__doc__
-    del pyspark.sql.connect.functions.timestamp_seconds.__doc__
-    del pyspark.sql.connect.functions.unix_timestamp.__doc__
-
-    # TODO(SPARK-41812): Proper column names after join
-    del pyspark.sql.connect.functions.count_distinct.__doc__
 
     # TODO(SPARK-41843): Implement SparkSession.udf
     del pyspark.sql.connect.functions.call_udf.__doc__

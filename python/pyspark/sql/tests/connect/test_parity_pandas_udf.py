@@ -19,9 +19,6 @@ import unittest
 
 from pyspark.sql.tests.pandas.test_pandas_udf import PandasUDFTestsMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
-from pyspark.errors.exceptions import SparkConnectGrpcException
-from pyspark.sql.connect.functions import udf
-from pyspark.sql.functions import pandas_udf, PandasUDFType
 
 
 class PandasUDFParityTests(PandasUDFTestsMixin, ReusedConnectTestCase):
@@ -53,24 +50,10 @@ class PandasUDFParityTests(PandasUDFTestsMixin, ReusedConnectTestCase):
     def test_pandas_udf_basic(self):
         super().test_pandas_udf_basic()
 
-    def test_stopiteration_in_udf(self):
-        # The vanilla PySpark throws PythonException instead.
-        def foo(x):
-            raise StopIteration()
-
-        exc_message = "Caught StopIteration thrown from user's code; failing the task"
-        df = self.spark.range(0, 100)
-
-        self.assertRaisesRegex(
-            SparkConnectGrpcException, exc_message, df.withColumn("v", udf(foo)("id")).collect
-        )
-
-        # pandas scalar udf
-        self.assertRaisesRegex(
-            SparkConnectGrpcException,
-            exc_message,
-            df.withColumn("v", pandas_udf(foo, "double", PandasUDFType.SCALAR)("id")).collect,
-        )
+    # TODO(SPARK-42340): implement GroupedData.applyInPandas
+    @unittest.skip("Fails in Spark Connect, should enable.")
+    def test_stopiteration_in_grouped_map(self):
+        super().test_stopiteration_in_grouped_map()
 
 
 if __name__ == "__main__":

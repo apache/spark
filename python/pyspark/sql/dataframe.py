@@ -356,7 +356,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Throw an exception if the table already exists.
 
-        >>> df.createTempView("people")  # doctest: +IGNORE_EXCEPTION_DETAIL, +SKIP
+        >>> df.createTempView("people")  # doctest: +IGNORE_EXCEPTION_DETAIL
         Traceback (most recent call last):
         ...
         AnalysisException: "Temporary table 'people' already exists;"
@@ -439,7 +439,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Throws an exception if the global temporary view already exists.
 
-        >>> df.createGlobalTempView("people")  # doctest: +IGNORE_EXCEPTION_DETAIL, +SKIP
+        >>> df.createGlobalTempView("people")  # doctest: +IGNORE_EXCEPTION_DETAIL
         Traceback (most recent call last):
         ...
         AnalysisException: "Temporary table 'people' already exists;"
@@ -1681,6 +1681,9 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         .. versionadded:: 2.4.0
 
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
+
         Parameters
         ----------
         numPartitions : int
@@ -1873,6 +1876,9 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         fraction given on each stratum.
 
         .. versionadded:: 1.5.0
+
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
 
         Parameters
         ----------
@@ -3191,6 +3197,9 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         .. versionadded:: 1.4.0
 
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
+
         Parameters
         ----------
         cols : list, str or :class:`Column`
@@ -3236,6 +3245,9 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         the specified columns, so we can run aggregations on them.
 
         .. versionadded:: 1.4.0
+
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
 
         Parameters
         ----------
@@ -4328,6 +4340,9 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         .. versionadded:: 2.0.0
 
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
+
         Parameters
         ----------
         col: str, tuple or list
@@ -4427,6 +4442,9 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         .. versionadded:: 1.4.0
 
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
+
         Parameters
         ----------
         col1 : str
@@ -4476,6 +4494,9 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         double value. :func:`DataFrame.cov` and :func:`DataFrameStatFunctions.cov` are aliases.
 
         .. versionadded:: 1.4.0
+
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
 
         Parameters
         ----------
@@ -4574,6 +4595,9 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         :func:`DataFrame.freqItems` and :func:`DataFrameStatFunctions.freqItems` are aliases.
 
         .. versionadded:: 1.4.0
+
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
 
         Parameters
         ----------
@@ -4806,6 +4830,9 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         .. versionadded:: 3.3.0
 
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
+
         Parameters
         ----------
         columnName : str
@@ -4888,29 +4915,34 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Drop the column that joined both DataFrames on.
 
-        >>> df.join(df2, df.name == df2.name, 'inner').drop('name').show()
+        >>> df.join(df2, df.name == df2.name, 'inner').drop('name').sort('age').show()
         +---+------+
         |age|height|
         +---+------+
-        | 16|    85|
         | 14|    80|
+        | 16|    85|
         +---+------+
         """
-        if len(cols) == 1:
-            col = cols[0]
-            if isinstance(col, str):
-                jdf = self._jdf.drop(col)
-            elif isinstance(col, Column):
-                jdf = self._jdf.drop(col._jc)
+        column_names: List[str] = []
+        java_columns: List[JavaObject] = []
+
+        for c in cols:
+            if isinstance(c, str):
+                column_names.append(c)
+            elif isinstance(c, Column):
+                java_columns.append(c._jc)
             else:
                 raise PySparkTypeError(
                     error_class="NOT_COLUMN_OR_STR",
-                    message_parameters={"arg_name": "col", "arg_type": type(col).__name__},
+                    message_parameters={"arg_name": "col", "arg_type": type(c).__name__},
                 )
-        else:
-            jcols = [_to_java_column(c) for c in cols]
-            first_column, *remaining_columns = jcols
-            jdf = self._jdf.drop(first_column, self._jseq(remaining_columns))
+
+        jdf = self._jdf
+        if len(java_columns) > 0:
+            first_column, *remaining_columns = java_columns
+            jdf = jdf.drop(first_column, self._jseq(remaining_columns))
+        if len(column_names) > 0:
+            jdf = jdf.drop(self._jseq(column_names))
 
         return DataFrame(jdf, self.sparkSession)
 
