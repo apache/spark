@@ -28,6 +28,7 @@ import com.typesafe.tools.mima.core.{Problem, ProblemFilter, ProblemFilters}
 import com.typesafe.tools.mima.lib.MiMaLib
 
 import org.apache.spark.sql.connect.client.util.IntegrationTestUtils._
+import org.apache.spark.util.ChildFirstURLClassLoader
 
 /**
  * A tool for checking the binary compatibility of the connect client API against the spark SQL
@@ -216,7 +217,7 @@ object CheckConnectJvmClientCompatibility {
 
     def methods(jar: File, className: String): Seq[String] = {
       val classLoader: URLClassLoader =
-        new URLClassLoader(Seq(jar.toURI.toURL).toArray, this.getClass.getClassLoader)
+        new ChildFirstURLClassLoader(Seq(jar.toURI.toURL).toArray, this.getClass.getClassLoader)
       val mirror = runtimeMirror(classLoader)
       // scalastyle:off classforname
       val classSymbol =
