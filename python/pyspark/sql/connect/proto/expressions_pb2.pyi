@@ -1182,8 +1182,9 @@ class PythonUDF(google.protobuf.message.Message):
     EVAL_TYPE_FIELD_NUMBER: builtins.int
     COMMAND_FIELD_NUMBER: builtins.int
     PYTHON_VER_FIELD_NUMBER: builtins.int
-    output_type: builtins.str
-    """(Required) Output type of the Python UDF"""
+    @property
+    def output_type(self) -> pyspark.sql.connect.proto.types_pb2.DataType:
+        """(Required) Output type of the Python UDF"""
     eval_type: builtins.int
     """(Required) EvalType of the Python UDF"""
     command: builtins.bytes
@@ -1193,11 +1194,14 @@ class PythonUDF(google.protobuf.message.Message):
     def __init__(
         self,
         *,
-        output_type: builtins.str = ...,
+        output_type: pyspark.sql.connect.proto.types_pb2.DataType | None = ...,
         eval_type: builtins.int = ...,
         command: builtins.bytes = ...,
         python_ver: builtins.str = ...,
     ) -> None: ...
+    def HasField(
+        self, field_name: typing_extensions.Literal["output_type", b"output_type"]
+    ) -> builtins.bool: ...
     def ClearField(
         self,
         field_name: typing_extensions.Literal[

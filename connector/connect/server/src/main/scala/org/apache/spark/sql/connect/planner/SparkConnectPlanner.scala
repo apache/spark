@@ -901,13 +901,7 @@ class SparkConnectPlanner(val session: SparkSession) {
     PythonUDF(
       name = fun.getFunctionName,
       func = transformPythonFunction(udf),
-      dataType = DataType.parseTypeWithFallback(
-        schema = udf.getOutputType,
-        parser = DataType.fromDDL,
-        fallbackParser = DataType.fromJson) match {
-        case s: DataType => s
-        case other => throw InvalidPlanInput(s"Invalid return type $other")
-      },
+      dataType = DataTypeProtoConverter.toCatalystType(udf.getOutputType),
       children = fun.getArgumentsList.asScala.map(transformExpression).toSeq,
       evalType = udf.getEvalType,
       udfDeterministic = fun.getDeterministic)
@@ -1548,13 +1542,7 @@ class SparkConnectPlanner(val session: SparkSession) {
     val udpf = UserDefinedPythonFunction(
       name = fun.getFunctionName,
       func = function,
-      dataType = DataType.parseTypeWithFallback(
-        schema = udf.getOutputType,
-        parser = DataType.fromDDL,
-        fallbackParser = DataType.fromJson) match {
-        case s: DataType => s
-        case other => throw InvalidPlanInput(s"Invalid return type $other")
-      },
+      dataType = DataTypeProtoConverter.toCatalystType(udf.getOutputType),
       pythonEvalType = udf.getEvalType,
       udfDeterministic = fun.getDeterministic)
 

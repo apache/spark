@@ -26,14 +26,12 @@ import functools
 from typing import cast, Callable, Any, TYPE_CHECKING, Optional, Union
 
 from pyspark.rdd import PythonEvalType
-from pyspark.serializers import CloudPickleSerializer
 from pyspark.sql.connect.expressions import (
     ColumnReference,
     PythonUDF,
     CommonInlineUserDefinedFunction,
 )
 from pyspark.sql.connect.column import Column
-from pyspark.sql.connect.types import parse_data_type
 from pyspark.sql.types import DataType, StringType
 from pyspark.sql.udf import UDFRegistration as PySparkUDFRegistration
 
@@ -99,9 +97,7 @@ class UserDefinedFunction:
             )
 
         self.func = func
-        self._returnType = (
-            parse_data_type(returnType) if isinstance(returnType, str) else returnType
-        )
+        self._returnType = returnType
         self._name = name or (
             func.__name__ if hasattr(func, "__name__") else func.__class__.__name__
         )
@@ -116,13 +112,10 @@ class UserDefinedFunction:
         ]
         arg_exprs = [col._expr for col in arg_cols]
 
-        data_type_str = (
-            self._returnType.json() if isinstance(self._returnType, DataType) else self._returnType
-        )
         py_udf = PythonUDF(
-            output_type=data_type_str,
+            output_type=self._returnType,
             eval_type=self.evalType,
-            command=CloudPickleSerializer().dumps((self.func, self._returnType)),
+            func=self.func,
             python_ver="%d.%d" % sys.version_info[:2],
         )
         return CommonInlineUserDefinedFunction(

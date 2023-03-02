@@ -70,13 +70,11 @@ from pyspark.sql.connect.expressions import (
     PythonUDF,
     CommonInlineUserDefinedFunction,
 )
-from pyspark.sql.connect.types import parse_data_type
 from pyspark.sql.types import (
     DataType,
     StructType,
     StructField,
 )
-from pyspark.serializers import CloudPickleSerializer
 from pyspark.rdd import PythonEvalType
 
 
@@ -383,7 +381,7 @@ class AnalyzeResult:
         is_streaming: Optional[bool],
         input_files: Optional[List[str]],
         spark_version: Optional[str],
-        parsed: Optional[pb2.DataType],
+        parsed: Optional[DataType],
     ):
         self.schema = schema
         self.explain_string = explain_string
@@ -403,7 +401,7 @@ class AnalyzeResult:
         is_streaming: Optional[bool] = None
         input_files: Optional[List[str]] = None
         spark_version: Optional[str] = None
-        parsed: Optional[pb2.DataType] = None
+        parsed: Optional[DataType] = None
 
         if pb.HasField("schema"):
             schema = pb.schema.schema
@@ -420,7 +418,7 @@ class AnalyzeResult:
         elif pb.HasField("spark_version"):
             spark_version = pb.spark_version.version
         elif pb.HasField("ddl_parse"):
-            parsed = pb.ddl_parse.parsed
+            parsed = types.proto_schema_to_pyspark_data_type(pb.ddl_parse.parsed)
         else:
             raise SparkConnectException("No analyze result found!")
 
@@ -524,14 +522,11 @@ class SparkConnectClient(object):
         if name is None:
             name = f"fun_{uuid.uuid4().hex}"
 
-        # convert str return_type to DataType
-        if isinstance(return_type, str):
-            return_type = parse_data_type(return_type)
         # construct a PythonUDF
         py_udf = PythonUDF(
-            output_type=return_type.json(),
+            output_type=return_type,
             eval_type=eval_type,
-            command=CloudPickleSerializer().dumps((function, return_type)),
+            func=function,
             python_ver="%d.%d" % sys.version_info[:2],
         )
 

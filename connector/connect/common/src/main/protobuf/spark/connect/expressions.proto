@@ -316,7 +316,7 @@ message CommonInlineUserDefinedFunction {
 
 message PythonUDF {
   // (Required) Output type of the Python UDF
-  string output_type = 1;
+  DataType output_type = 1;
   // (Required) EvalType of the Python UDF
   int32 eval_type = 2;
   // (Required) The encoded commands of the Python UDF
