@@ -955,7 +955,7 @@ booleanValue
     ;
 
 interval
-    : INTERVAL (errorCapturingMultiUnitsInterval | errorCapturingUnitToUnitInterval)?
+    : INTERVAL (errorCapturingMultiUnitsInterval | errorCapturingUnitToUnitInterval)
     ;
 
 errorCapturingMultiUnitsInterval

@@ -970,16 +970,6 @@ class ExpressionParserSuite extends AnalysisTest {
       }
     }
 
-    // Empty interval statement
-    checkError(
-      exception = parseException("interval"),
-      errorClass = "_LEGACY_ERROR_TEMP_0025",
-      parameters = Map.empty,
-      context = ExpectedContext(
-        fragment = "interval",
-        start = 0,
-        stop = 7))
-
     // Single Intervals.
     val forms = Seq("", "s")
     val values = Seq("0", "10", "-7", "21")
