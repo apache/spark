@@ -114,6 +114,20 @@ trait StateStoreWriter extends StatefulOperator with PythonSQLMetrics { self: Sp
    * will evict based on min input watermark and ensure it will be minimum of the event time value
    * for the output so far (including output from eviction). Operators which behave differently
    * (e.g. different criteria on eviction) must override this method.
+   *
+   * Note that the default behavior wil advance the watermark aggressively to simplify the logic,
+   * but it does not break the semantic of output watermark, which is following:
+   *
+   * An operator guarantees that it will not emit record with an event timestamp lower than its
+   * output watermark.
+   *
+   * For example, for 5 minutes time window aggregation, the advancement of watermark can happen
+   * "before" the window has been evicted and produced as output. Say, suppose there's an window
+   * in state: [0, 5) and input watermark = 3. Although there is no output for this operator, this
+   * operator will produce an output watermark as 3. It's still respecting the guarantee, as the
+   * operator will produce the window [0, 5) only when the output watermark is equal or greater
+   * than 5, and the downstream operator will process the input data, "and then" advance the
+   * watermark. Hence this window is considered as "non-late" record.
    */
   def produceOutputWatermark(inputWatermarkMs: Long): Option[Long] = Some(inputWatermarkMs)
 
