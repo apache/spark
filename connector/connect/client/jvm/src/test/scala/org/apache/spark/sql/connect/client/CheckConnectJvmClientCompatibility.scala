@@ -215,7 +215,8 @@ object CheckConnectJvmClientCompatibility {
   private def checkDatasetApiCompatibility(clientJar: File, sqlJar: File): Seq[String] = {
 
     def methods(jar: File, className: String): Seq[String] = {
-      val classLoader: URLClassLoader = new URLClassLoader(Seq(jar.toURI.toURL).toArray)
+      val classLoader: URLClassLoader =
+        new URLClassLoader(Seq(jar.toURI.toURL).toArray, this.getClass.getClassLoader)
       val mirror = runtimeMirror(classLoader)
       // scalastyle:off classforname
       val classSymbol =
