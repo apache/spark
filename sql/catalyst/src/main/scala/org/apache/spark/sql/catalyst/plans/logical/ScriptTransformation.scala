@@ -17,7 +17,8 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet}
+import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.plans.ReferenceAllColumns
 
 /**
  * Transforms the input by forking and running the specified script.
@@ -30,10 +31,7 @@ case class ScriptTransformation(
     script: String,
     output: Seq[Attribute],
     child: LogicalPlan,
-    ioschema: ScriptInputOutputSchema) extends UnaryNode {
-  @transient
-  override lazy val references: AttributeSet = AttributeSet(child.output)
-
+    ioschema: ScriptInputOutputSchema) extends UnaryNode with ReferenceAllColumns[LogicalPlan] {
   override protected def withNewChildInternal(newChild: LogicalPlan): ScriptTransformation =
     copy(child = newChild)
 }

@@ -837,6 +837,9 @@ def plot_frame(
         labels with "(right)" in the legend
     sort_columns: bool, default is False
         When True, will sort values on plots.
+
+        .. deprecated:: 3.4.0
+
     **kwds : keywords
         Options to pass to matplotlib plotting method
 

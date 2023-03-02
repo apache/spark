@@ -22,20 +22,10 @@ from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
 class DataFrameParityTests(DataFrameTestsMixin, ReusedConnectTestCase):
-    # TODO(SPARK-41868): Support data type Duration(NANOSECOND)
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_create_dataframe_from_pandas_with_day_time_interval(self):
-        super().test_create_dataframe_from_pandas_with_day_time_interval()
-
     # TODO(SPARK-41834): Implement SparkSession.conf
     @unittest.skip("Fails in Spark Connect, should enable.")
     def test_create_dataframe_from_pandas_with_dst(self):
         super().test_create_dataframe_from_pandas_with_dst()
-
-    # TODO(SPARK-41870): Handle duplicate columns in `createDataFrame`
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_duplicated_column_names(self):
-        super().test_duplicated_column_names()
 
     @unittest.skip("Spark Connect does not support RDD but the tests depend on them.")
     def test_help_command(self):

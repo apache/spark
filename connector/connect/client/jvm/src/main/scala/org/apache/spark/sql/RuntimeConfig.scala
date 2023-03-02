@@ -25,7 +25,7 @@ import org.apache.spark.sql.connect.client.SparkConnectClient
  *
  * @since 3.4.0
  */
-class RuntimeConfig(client: SparkConnectClient) extends Logging {
+class RuntimeConfig private[sql] (client: SparkConnectClient) extends Logging {
 
   /**
    * Sets the given Spark runtime configuration property.

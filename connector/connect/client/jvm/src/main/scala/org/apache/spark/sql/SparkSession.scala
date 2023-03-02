@@ -24,8 +24,7 @@ import scala.collection.JavaConverters._
 
 import org.apache.arrow.memory.RootAllocator
 
-import org.apache.spark.SPARK_VERSION
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.connect.proto
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
@@ -53,7 +52,7 @@ import org.apache.spark.sql.connect.client.util.Cleaner
  *     .getOrCreate()
  * }}}
  */
-class SparkSession(
+class SparkSession private[sql] (
     private val client: SparkConnectClient,
     private val cleaner: Cleaner,
     private val planIdGenerator: AtomicLong)
@@ -63,7 +62,9 @@ class SparkSession(
 
   private[this] val allocator = new RootAllocator()
 
-  def version: String = SPARK_VERSION
+  lazy val version: String = {
+    client.analyze(proto.AnalyzePlanRequest.AnalyzeCase.SPARK_VERSION).getSparkVersion.getVersion
+  }
 
   /**
    * Runtime configuration interface for Spark.
@@ -122,8 +123,18 @@ class SparkSession(
   @Experimental
   def sql(sqlText: String, args: java.util.Map[String, String]): DataFrame = newDataFrame {
     builder =>
-      builder
-        .setSql(proto.SQL.newBuilder().setQuery(sqlText).putAllArgs(args))
+      // Send the SQL once to the server and then check the output.
+      val cmd = newCommand(b =>
+        b.setSqlCommand(proto.SqlCommand.newBuilder().setSql(sqlText).putAllArgs(args)))
+      val plan = proto.Plan.newBuilder().setCommand(cmd)
+      val responseIter = client.execute(plan.build())
+
+      val response = responseIter.asScala
+        .find(_.hasSqlCommandResult)
+        .getOrElse(throw new RuntimeException("SQLCommandResult must be present"))
+
+      // Update the builder with the values from the result.
+      builder.mergeFrom(response.getSqlCommandResult.getRelation)
   }
 
   /**
@@ -219,6 +230,10 @@ class SparkSession(
   object implicits extends SQLImplicits
   // scalastyle:on
 
+  def newSession(): SparkSession = {
+    throw new UnsupportedOperationException("newSession is not supported")
+  }
+
   private def range(
       start: Long,
       end: Long,
@@ -246,6 +261,18 @@ class SparkSession(
     new Dataset[T](this, plan, encoder)
   }
 
+  @DeveloperApi
+  def newDataFrame(extension: com.google.protobuf.Any): DataFrame = {
+    newDataset(extension, UnboundRowEncoder)
+  }
+
+  @DeveloperApi
+  def newDataset[T](
+      extension: com.google.protobuf.Any,
+      encoder: AgnosticEncoder[T]): Dataset[T] = {
+    newDataset(encoder)(_.setExtension(extension))
+  }
+
   private[sql] def newCommand[T](f: proto.Command.Builder => Unit): proto.Command = {
     val builder = proto.Command.newBuilder()
     f(builder)
@@ -254,8 +281,11 @@ class SparkSession(
 
   private[sql] def analyze(
       plan: proto.Plan,
-      mode: proto.Explain.ExplainMode): proto.AnalyzePlanResponse =
-    client.analyze(plan, mode)
+      method: proto.AnalyzePlanRequest.AnalyzeCase,
+      explainMode: Option[proto.AnalyzePlanRequest.Explain.ExplainMode] = None)
+      : proto.AnalyzePlanResponse = {
+    client.analyze(method, Some(plan), explainMode)
+  }
 
   private[sql] def execute[T](plan: proto.Plan, encoder: AgnosticEncoder[T]): SparkResult[T] = {
     val value = client.execute(plan)
@@ -269,6 +299,12 @@ class SparkSession(
     client.execute(plan).asScala.foreach(_ => ())
   }
 
+  @DeveloperApi
+  def execute(extension: com.google.protobuf.Any): Unit = {
+    val command = proto.Command.newBuilder().setExtension(extension).build()
+    execute(command)
+  }
+
   /**
    * This resets the plan id generator so we can produce plans that are comparable.
    *
@@ -278,6 +314,19 @@ class SparkSession(
     planIdGenerator.set(0)
   }
 
+  /**
+   * Synonym for `close()`.
+   *
+   * @since 3.4.0
+   */
+  def stop(): Unit = close()
+
+  /**
+   * Close the [[SparkSession]]. This closes the connection, and the allocator. The latter will
+   * throw an exception if there are still open [[SparkResult]]s.
+   *
+   * @since 3.4.0
+   */
   override def close(): Unit = {
     client.shutdown()
     allocator.close()
@@ -316,5 +365,25 @@ object SparkSession extends Logging {
       }
       new SparkSession(_client, cleaner, planIdGenerator)
     }
+  }
+
+  def getActiveSession: Option[SparkSession] = {
+    throw new UnsupportedOperationException("getActiveSession is not supported")
+  }
+
+  def getDefaultSession: Option[SparkSession] = {
+    throw new UnsupportedOperationException("getDefaultSession is not supported")
+  }
+
+  def setActiveSession(session: SparkSession): Unit = {
+    throw new UnsupportedOperationException("setActiveSession is not supported")
+  }
+
+  def clearActiveSession(): Unit = {
+    throw new UnsupportedOperationException("clearActiveSession is not supported")
+  }
+
+  def active: SparkSession = {
+    throw new UnsupportedOperationException("active is not supported")
   }
 }

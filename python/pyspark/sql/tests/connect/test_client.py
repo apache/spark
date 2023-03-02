@@ -20,6 +20,11 @@ from typing import Optional
 
 from pyspark.sql.connect.client import SparkConnectClient
 import pyspark.sql.connect.proto as proto
+from pyspark.testing.connectutils import should_test_connect
+
+if should_test_connect:
+    import pandas as pd
+    import pyarrow as pa
 
 
 class SparkConnectClientTestCase(unittest.TestCase):
@@ -60,6 +65,18 @@ class MockService:
         self.req = req
         resp = proto.ExecutePlanResponse()
         resp.client_id = self._session_id
+
+        pdf = pd.DataFrame(data={"col1": [1, 2]})
+        schema = pa.Schema.from_pandas(pdf)
+        table = pa.Table.from_pandas(pdf)
+        sink = pa.BufferOutputStream()
+
+        writer = pa.ipc.new_stream(sink, schema=schema)
+        writer.write(table)
+        writer.close()
+
+        buf = sink.getvalue()
+        resp.arrow_batch.data = buf.to_pybytes()
         return [resp]
 
 
