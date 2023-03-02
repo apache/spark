@@ -22,16 +22,17 @@ import java.util.Locale
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.connect.proto.{NAReplace, Relation}
+import org.apache.spark.connect.proto.{DataType => GDataType, NAReplace, Relation}
 import org.apache.spark.connect.proto.Expression.{Literal => GLiteral}
 import org.apache.spark.connect.proto.NAReplace.Replacement
+import org.apache.spark.sql.types.{BooleanType, DataType, DoubleType, FloatType, IntegerType, LongType, StringType}
 
 /**
  * Functionality for working with missing data in `DataFrame`s.
  *
  * @since 3.4.0
  */
-final class DataFrameNaFunctions private[sql](sparkSession: SparkSession, root: Relation) {
+final class DataFrameNaFunctions private[sql] (sparkSession: SparkSession, root: Relation) {
 
   /**
    * Returns a new `DataFrame` that drops rows containing any null or NaN values.
@@ -43,8 +44,8 @@ final class DataFrameNaFunctions private[sql](sparkSession: SparkSession, root: 
   /**
    * Returns a new `DataFrame` that drops rows containing null or NaN values.
    *
-   * If `how` is "any", then drop rows containing any null or NaN values.
-   * If `how` is "all", then drop rows only if every column is null or NaN for that row.
+   * If `how` is "any", then drop rows containing any null or NaN values. If `how` is "all", then
+   * drop rows only if every column is null or NaN for that row.
    *
    * @since 3.4.0
    */
@@ -58,8 +59,8 @@ final class DataFrameNaFunctions private[sql](sparkSession: SparkSession, root: 
   }
 
   /**
-   * Returns a new `DataFrame` that drops rows containing any null or NaN values
-   * in the specified columns.
+   * Returns a new `DataFrame` that drops rows containing any null or NaN values in the specified
+   * columns.
    *
    * @since 3.4.0
    */
@@ -74,8 +75,8 @@ final class DataFrameNaFunctions private[sql](sparkSession: SparkSession, root: 
   def drop(cols: Seq[String]): DataFrame = buildDropDataFrame(Some(cols), None)
 
   /**
-   * Returns a new `DataFrame` that drops rows containing null or NaN values
-   * in the specified columns.
+   * Returns a new `DataFrame` that drops rows containing null or NaN values in the specified
+   * columns.
    *
    * If `how` is "any", then drop rows containing any null or NaN values in the specified columns.
    * If `how` is "all", then drop rows only if every specified column is null or NaN for that row.
@@ -85,8 +86,8 @@ final class DataFrameNaFunctions private[sql](sparkSession: SparkSession, root: 
   def drop(how: String, cols: Array[String]): DataFrame = drop(how, cols.toSeq)
 
   /**
-   * (Scala-specific) Returns a new `DataFrame` that drops rows containing null or NaN values
-   * in the specified columns.
+   * (Scala-specific) Returns a new `DataFrame` that drops rows containing null or NaN values in
+   * the specified columns.
    *
    * If `how` is "any", then drop rows containing any null or NaN values in the specified columns.
    * If `how` is "all", then drop rows only if every specified column is null or NaN for that row.
@@ -103,8 +104,8 @@ final class DataFrameNaFunctions private[sql](sparkSession: SparkSession, root: 
   }
 
   /**
-   * Returns a new `DataFrame` that drops rows containing
-   * less than `minNonNulls` non-null and non-NaN values.
+   * Returns a new `DataFrame` that drops rows containing less than `minNonNulls` non-null and
+   * non-NaN values.
    *
    * @since 3.4.0
    */
@@ -113,16 +114,16 @@ final class DataFrameNaFunctions private[sql](sparkSession: SparkSession, root: 
   }
 
   /**
-   * Returns a new `DataFrame` that drops rows containing
-   * less than `minNonNulls` non-null and non-NaN values in the specified columns.
+   * Returns a new `DataFrame` that drops rows containing less than `minNonNulls` non-null and
+   * non-NaN values in the specified columns.
    *
    * @since 3.4.0
    */
   def drop(minNonNulls: Int, cols: Array[String]): DataFrame = drop(minNonNulls, cols.toSeq)
 
   /**
-   * (Scala-specific) Returns a new `DataFrame` that drops rows containing less than
-   * `minNonNulls` non-null and non-NaN values in the specified columns.
+   * (Scala-specific) Returns a new `DataFrame` that drops rows containing less than `minNonNulls`
+   * non-null and non-NaN values in the specified columns.
    *
    * @since 3.4.0
    */
@@ -130,7 +131,9 @@ final class DataFrameNaFunctions private[sql](sparkSession: SparkSession, root: 
     buildDropDataFrame(Some(cols), Some(minNonNulls))
   }
 
-  private def buildDropDataFrame(cols: Option[Seq[String]], minNonNulls: Option[Int]): DataFrame = {
+  private def buildDropDataFrame(
+      cols: Option[Seq[String]],
+      minNonNulls: Option[Int]): DataFrame = {
     sparkSession.newDataFrame { builder =>
       val dropNaBuilder = builder.getDropNaBuilder.setInput(root)
       cols.foreach(c => dropNaBuilder.addAllCols(c.asJava))
@@ -144,12 +147,12 @@ final class DataFrameNaFunctions private[sql](sparkSession: SparkSession, root: 
    * @since 3.4.0
    */
   def fill(value: Long): DataFrame = {
-    buildFillDataFrame(None, GLiteral.newBuilder().setLong(value).build())
+    buildFillDataFrame(None, convertToLiteral(value, LongType))
   }
 
   /**
-   * Returns a new `DataFrame` that replaces null or NaN values in specified numeric columns.
-   * If a specified column is not a numeric column, it is ignored.
+   * Returns a new `DataFrame` that replaces null or NaN values in specified numeric columns. If a
+   * specified column is not a numeric column, it is ignored.
    *
    * @since 3.4.0
    */
@@ -162,7 +165,7 @@ final class DataFrameNaFunctions private[sql](sparkSession: SparkSession, root: 
    * @since 3.4.0
    */
   def fill(value: Long, cols: Seq[String]): DataFrame = {
-    buildFillDataFrame(Some(cols), GLiteral.newBuilder().setLong(value).build())
+    buildFillDataFrame(Some(cols), convertToLiteral(value, LongType))
   }
 
   /**
@@ -171,12 +174,12 @@ final class DataFrameNaFunctions private[sql](sparkSession: SparkSession, root: 
    * @since 3.4.0
    */
   def fill(value: Double): DataFrame = {
-    buildFillDataFrame(None, GLiteral.newBuilder().setDouble(value).build())
+    buildFillDataFrame(None, convertToLiteral(value, DoubleType))
   }
 
   /**
-   * Returns a new `DataFrame` that replaces null or NaN values in specified numeric columns.
-   * If a specified column is not a numeric column, it is ignored.
+   * Returns a new `DataFrame` that replaces null or NaN values in specified numeric columns. If a
+   * specified column is not a numeric column, it is ignored.
    *
    * @since 3.4.0
    */
@@ -189,7 +192,7 @@ final class DataFrameNaFunctions private[sql](sparkSession: SparkSession, root: 
    * @since 3.4.0
    */
   def fill(value: Double, cols: Seq[String]): DataFrame = {
-    buildFillDataFrame(Some(cols), GLiteral.newBuilder().setDouble(value).build())
+    buildFillDataFrame(Some(cols), convertToLiteral(value, DoubleType))
   }
 
   /**
@@ -198,25 +201,25 @@ final class DataFrameNaFunctions private[sql](sparkSession: SparkSession, root: 
    * @since 3.4.0
    */
   def fill(value: String): DataFrame = {
-    buildFillDataFrame(None, GLiteral.newBuilder().setString(value).build())
+    buildFillDataFrame(None, convertToLiteral(value, StringType))
   }
 
   /**
-   * Returns a new `DataFrame` that replaces null values in specified string columns.
-   * If a specified column is not a string column, it is ignored.
+   * Returns a new `DataFrame` that replaces null values in specified string columns. If a
+   * specified column is not a string column, it is ignored.
    *
    * @since 3.4.0
    */
   def fill(value: String, cols: Array[String]): DataFrame = fill(value, cols.toSeq)
 
   /**
-   * (Scala-specific) Returns a new `DataFrame` that replaces null values in
-   * specified string columns. If a specified column is not a string column, it is ignored.
+   * (Scala-specific) Returns a new `DataFrame` that replaces null values in specified string
+   * columns. If a specified column is not a string column, it is ignored.
    *
    * @since 3.4.0
    */
   def fill(value: String, cols: Seq[String]): DataFrame = {
-    buildFillDataFrame(Some(cols), GLiteral.newBuilder().setString(value).build())
+    buildFillDataFrame(Some(cols), convertToLiteral(value, StringType))
   }
 
   /**
@@ -225,25 +228,25 @@ final class DataFrameNaFunctions private[sql](sparkSession: SparkSession, root: 
    * @since 3.4.0
    */
   def fill(value: Boolean): DataFrame = {
-    buildFillDataFrame(None, GLiteral.newBuilder().setBoolean(value).build())
+    buildFillDataFrame(None, convertToLiteral(value, BooleanType))
   }
 
   /**
-   * Returns a new `DataFrame` that replaces null values in specified boolean columns.
-   * If a specified column is not a boolean column, it is ignored.
+   * Returns a new `DataFrame` that replaces null values in specified boolean columns. If a
+   * specified column is not a boolean column, it is ignored.
    *
    * @since 3.4.0
    */
   def fill(value: Boolean, cols: Array[String]): DataFrame = fill(value, cols.toSeq)
 
   /**
-   * (Scala-specific) Returns a new `DataFrame` that replaces null values in specified
-   * boolean columns. If a specified column is not a boolean column, it is ignored.
+   * (Scala-specific) Returns a new `DataFrame` that replaces null values in specified boolean
+   * columns. If a specified column is not a boolean column, it is ignored.
    *
    * @since 3.4.0
    */
   def fill(value: Boolean, cols: Seq[String]): DataFrame = {
-    buildFillDataFrame(Some(cols), GLiteral.newBuilder().setBoolean(value).build())
+    buildFillDataFrame(Some(cols), convertToLiteral(value, BooleanType))
   }
 
   private def buildFillDataFrame(cols: Option[Seq[String]], value: GLiteral): DataFrame = {
@@ -257,13 +260,12 @@ final class DataFrameNaFunctions private[sql](sparkSession: SparkSession, root: 
   /**
    * Returns a new `DataFrame` that replaces null values.
    *
-   * The key of the map is the column name, and the value of the map is the replacement value.
-   * The value must be of the following type:
-   * `Integer`, `Long`, `Float`, `Double`, `String`, `Boolean`.
-   * Replacement values are cast to the column data type.
+   * The key of the map is the column name, and the value of the map is the replacement value. The
+   * value must be of the following type: `Integer`, `Long`, `Float`, `Double`, `String`,
+   * `Boolean`. Replacement values are cast to the column data type.
    *
-   * For example, the following replaces null values in column "A" with string "unknown", and
-   * null values in column "B" with numeric value 1.0.
+   * For example, the following replaces null values in column "A" with string "unknown", and null
+   * values in column "B" with numeric value 1.0.
    * {{{
    *   import com.google.common.collect.ImmutableMap;
    *   df.na.fill(ImmutableMap.of("A", "unknown", "B", 1.0));
@@ -276,13 +278,12 @@ final class DataFrameNaFunctions private[sql](sparkSession: SparkSession, root: 
   /**
    * Returns a new `DataFrame` that replaces null values.
    *
-   * The key of the map is the column name, and the value of the map is the replacement value.
-   * The value must be of the following type:
-   * `Integer`, `Long`, `Float`, `Double`, `String`, `Boolean`.
-   * Replacement values are cast to the column data type.
+   * The key of the map is the column name, and the value of the map is the replacement value. The
+   * value must be of the following type: `Integer`, `Long`, `Float`, `Double`, `String`,
+   * `Boolean`. Replacement values are cast to the column data type.
    *
-   * For example, the following replaces null values in column "A" with string "unknown", and
-   * null values in column "B" with numeric value 1.0.
+   * For example, the following replaces null values in column "A" with string "unknown", and null
+   * values in column "B" with numeric value 1.0.
    * {{{
    *   import com.google.common.collect.ImmutableMap;
    *   df.na.fill(ImmutableMap.of("A", "unknown", "B", 1.0));
@@ -296,17 +297,17 @@ final class DataFrameNaFunctions private[sql](sparkSession: SparkSession, root: 
     sparkSession.newDataFrame { builder =>
       val fillNaBuilder = builder.getFillNaBuilder.setInput(root)
       values.zipWithIndex.map { case ((colName, replaceValue), index) =>
-        fillNaBuilder.setCols(index, colName)
+        fillNaBuilder.addCols(colName)
         replaceValue match {
-          case v: jl.Float => fillNaBuilder.addValues(index, GLiteral.newBuilder().setFloat(v))
-          case v: jl.Double => fillNaBuilder.addValues(index, GLiteral.newBuilder().setDouble(v))
-          case v: jl.Long => fillNaBuilder.addValues(index, GLiteral.newBuilder().setLong(v))
-          case v: jl.Integer => fillNaBuilder.addValues(index, GLiteral.newBuilder().setInteger(v))
-          case v: jl.Boolean => fillNaBuilder.addValues(index,
-            GLiteral.newBuilder().setBoolean(v.booleanValue()))
-          case v: String => fillNaBuilder.addValues(index, GLiteral.newBuilder().setString(v))
-          case _ => throw new IllegalArgumentException(
-            s"Unsupported value type ${replaceValue.getClass.getName} ($replaceValue).")
+          case v: jl.Float => fillNaBuilder.addValues(index, convertToLiteral(v, FloatType))
+          case v: jl.Double => fillNaBuilder.addValues(index, convertToLiteral(v, DoubleType))
+          case v: jl.Long => fillNaBuilder.addValues(index, convertToLiteral(v, LongType))
+          case v: jl.Integer => fillNaBuilder.addValues(index, convertToLiteral(v, IntegerType))
+          case v: jl.Boolean => fillNaBuilder.addValues(index, convertToLiteral(v, BooleanType))
+          case v: String => fillNaBuilder.addValues(index, convertToLiteral(v, StringType))
+          case _ =>
+            throw new IllegalArgumentException(
+              s"Unsupported value type ${replaceValue.getClass.getName} ($replaceValue).")
         }
       }
     }
@@ -328,11 +329,12 @@ final class DataFrameNaFunctions private[sql](sparkSession: SparkSession, root: 
    *   df.na.replace("*", ImmutableMap.of("UNKNOWN", "unnamed"));
    * }}}
    *
-   * @param col         name of the column to apply the value replacement. If `col` is "*",
-   *                    replacement is applied on all string, numeric or boolean columns.
-   * @param replacement value replacement map. Key and value of `replacement` map must have
-   *                    the same type, and can only be doubles, strings or booleans.
-   *                    The map value can have nulls.
+   * @param col
+   *   name of the column to apply the value replacement. If `col` is "*", replacement is applied
+   *   on all string, numeric or boolean columns.
+   * @param replacement
+   *   value replacement map. Key and value of `replacement` map must have the same type, and can
+   *   only be doubles, strings or booleans. The map value can have nulls.
    * @since 3.4.0
    */
   def replace[T](col: String, replacement: java.util.Map[T, T]): DataFrame =
@@ -352,11 +354,12 @@ final class DataFrameNaFunctions private[sql](sparkSession: SparkSession, root: 
    *   df.na.replace("*", Map("UNKNOWN" -> "unnamed"));
    * }}}
    *
-   * @param col         name of the column to apply the value replacement. If `col` is "*",
-   *                    replacement is applied on all string, numeric or boolean columns.
-   * @param replacement value replacement map. Key and value of `replacement` map must have
-   *                    the same type, and can only be doubles, strings or booleans.
-   *                    The map value can have nulls.
+   * @param col
+   *   name of the column to apply the value replacement. If `col` is "*", replacement is applied
+   *   on all string, numeric or boolean columns.
+   * @param replacement
+   *   value replacement map. Key and value of `replacement` map must have the same type, and can
+   *   only be doubles, strings or booleans. The map value can have nulls.
    * @since 3.4.0
    */
   def replace[T](col: String, replacement: Map[T, T]): DataFrame = {
@@ -377,11 +380,12 @@ final class DataFrameNaFunctions private[sql](sparkSession: SparkSession, root: 
    *   df.na.replace(new String[] {"firstname", "lastname"}, ImmutableMap.of("UNKNOWN", "unnamed"));
    * }}}
    *
-   * @param cols        list of columns to apply the value replacement. If `col` is "*",
-   *                    replacement is applied on all string, numeric or boolean columns.
-   * @param replacement value replacement map. Key and value of `replacement` map must have
-   *                    the same type, and can only be doubles, strings or booleans.
-   *                    The map value can have nulls.
+   * @param cols
+   *   list of columns to apply the value replacement. If `col` is "*", replacement is applied on
+   *   all string, numeric or boolean columns.
+   * @param replacement
+   *   value replacement map. Key and value of `replacement` map must have the same type, and can
+   *   only be doubles, strings or booleans. The map value can have nulls.
    * @since 3.4.0
    */
   def replace[T](cols: Array[String], replacement: java.util.Map[T, T]): DataFrame = {
@@ -399,11 +403,12 @@ final class DataFrameNaFunctions private[sql](sparkSession: SparkSession, root: 
    *   df.na.replace("firstname" :: "lastname" :: Nil, Map("UNKNOWN" -> "unnamed"));
    * }}}
    *
-   * @param cols        list of columns to apply the value replacement. If `col` is "*",
-   *                    replacement is applied on all string, numeric or boolean columns.
-   * @param replacement value replacement map. Key and value of `replacement` map must have
-   *                    the same type, and can only be doubles, strings or booleans.
-   *                    The map value can have nulls.
+   * @param cols
+   *   list of columns to apply the value replacement. If `col` is "*", replacement is applied on
+   *   all string, numeric or boolean columns.
+   * @param replacement
+   *   value replacement map. Key and value of `replacement` map must have the same type, and can
+   *   only be doubles, strings or booleans. The map value can have nulls.
    * @since 3.4.0
    */
   def replace[T](cols: Seq[String], replacement: Map[T, T]): DataFrame = {
@@ -436,30 +441,76 @@ final class DataFrameNaFunctions private[sql](sparkSession: SparkSession, root: 
     // depending on the type of first key in replacement map.
     // Only fields of targetColumnType will perform replacement.
     val targetColumnType = replacement.head._1 match {
-      case _: jl.Double | _: jl.Float | _: jl.Integer | _: jl.Long => "double"
-      case _: jl.Boolean => "boolean"
-      case _: String => "string"
+      case _: jl.Double | _: jl.Float | _: jl.Integer | _: jl.Long => DoubleType
+      case _: jl.Boolean => BooleanType
+      case _: String => StringType
     }
 
     replacementMap.map { case (oldValue, newValue) =>
       targetColumnType match {
-        case "double" =>
-          Replacement.newBuilder()
-            .setOldValue(GLiteral.newBuilder().setDouble(convertToDouble(oldValue)))
-            .setNewValue(GLiteral.newBuilder().setDouble(convertToDouble(newValue)))
+        case DoubleType =>
+          Replacement
+            .newBuilder()
+            .setOldValue(convertToLiteral(oldValue, DoubleType))
+            .setNewValue(convertToLiteral(newValue, DoubleType))
             .build()
-        case "boolean" =>
-          Replacement.newBuilder()
-            .setOldValue(GLiteral.newBuilder().setBoolean(oldValue.asInstanceOf[jl.Boolean]))
-            .setNewValue(GLiteral.newBuilder().setBoolean(newValue.asInstanceOf[jl.Boolean]))
+        case BooleanType =>
+          Replacement
+            .newBuilder()
+            .setOldValue(convertToLiteral(oldValue, BooleanType))
+            .setNewValue(convertToLiteral(newValue, BooleanType))
             .build()
-        case "string" =>
-          Replacement.newBuilder()
-            .setOldValue(GLiteral.newBuilder().setString(oldValue.asInstanceOf[String]))
-            .setNewValue(GLiteral.newBuilder().setString(newValue.asInstanceOf[String]))
+        case StringType =>
+          Replacement
+            .newBuilder()
+            .setOldValue(convertToLiteral(oldValue, StringType))
+            .setNewValue(convertToLiteral(newValue, StringType))
             .build()
       }
     }
+  }
+
+  private def convertToLiteral(v: Any, dataType: DataType): GLiteral = dataType match {
+    case DoubleType if v == null =>
+      GLiteral
+        .newBuilder()
+        .setNull(GDataType.newBuilder().setDouble(GDataType.Double.getDefaultInstance))
+        .build()
+    case DoubleType => GLiteral.newBuilder().setDouble(convertToDouble(v)).build()
+    case FloatType if v == null =>
+      GLiteral
+        .newBuilder()
+        .setNull(GDataType.newBuilder().setFloat(GDataType.Float.getDefaultInstance))
+        .build()
+    case FloatType =>
+      GLiteral.newBuilder().setFloat(v.asInstanceOf[jl.Float]).build()
+    case LongType if v == null =>
+      GLiteral
+        .newBuilder()
+        .setNull(GDataType.newBuilder().setLong(GDataType.Long.getDefaultInstance))
+        .build()
+    case LongType =>
+      GLiteral.newBuilder().setLong(v.asInstanceOf[jl.Long]).build()
+    case IntegerType if v == null =>
+      GLiteral
+        .newBuilder()
+        .setNull(GDataType.newBuilder().setInteger(GDataType.Integer.getDefaultInstance))
+        .build()
+    case IntegerType =>
+      GLiteral.newBuilder().setInteger(v.asInstanceOf[jl.Integer]).build()
+    case BooleanType if v == null =>
+      GLiteral
+        .newBuilder()
+        .setNull(GDataType.newBuilder().setBoolean(GDataType.Boolean.getDefaultInstance))
+        .build()
+    case BooleanType => GLiteral.newBuilder().setBoolean(v.asInstanceOf[jl.Boolean]).build()
+    case StringType if v == null =>
+      GLiteral
+        .newBuilder()
+        .setNull(GDataType.newBuilder().setString(GDataType.String.getDefaultInstance))
+        .build()
+    case StringType =>
+      GLiteral.newBuilder().setString(v.asInstanceOf[String]).build()
   }
 
   private def convertToDouble(v: Any): Double = v match {
@@ -467,7 +518,7 @@ final class DataFrameNaFunctions private[sql](sparkSession: SparkSession, root: 
     case v: Double => v
     case v: Long => v.toDouble
     case v: Int => v.toDouble
-    case v => throw new IllegalArgumentException(
-      s"Unsupported value type ${v.getClass.getName} ($v).")
+    case v =>
+      throw new IllegalArgumentException(s"Unsupported value type ${v.getClass.getName} ($v).")
   }
 }
