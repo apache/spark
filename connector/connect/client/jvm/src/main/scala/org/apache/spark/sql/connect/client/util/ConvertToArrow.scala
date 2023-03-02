@@ -31,7 +31,7 @@ import org.apache.spark.sql.util.ArrowUtils
 /**
  * Utility for converting common Scala objects into Arrow IPC Stream.
  */
-object ConvertToArrow {
+private[sql] object ConvertToArrow {
 
   /**
    * Convert an iterator of common Scala objects into a sinlge Arrow IPC Stream.
