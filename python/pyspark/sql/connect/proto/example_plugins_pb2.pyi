@@ -47,6 +47,7 @@ else:
 
 DESCRIPTOR: google.protobuf.descriptor.FileDescriptor
 
+@typing_extensions.final
 class ExamplePluginRelation(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -71,6 +72,7 @@ class ExamplePluginRelation(google.protobuf.message.Message):
 
 global___ExamplePluginRelation = ExamplePluginRelation
 
+@typing_extensions.final
 class ExamplePluginExpression(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -95,6 +97,7 @@ class ExamplePluginExpression(google.protobuf.message.Message):
 
 global___ExamplePluginExpression = ExamplePluginExpression
 
+@typing_extensions.final
 class ExamplePluginCommand(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
