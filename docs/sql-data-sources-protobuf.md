@@ -50,6 +50,67 @@ Kafka key-value record will be augmented with some metadata, such as the ingesti
 Spark SQL schema is generated based on the protobuf descriptor file or protobuf class passed to `from_protobuf` and `to_protobuf`. The specified protobuf class or protobuf descriptor file must match the data, otherwise, the behavior is undefined: it may fail or return arbitrary results.
 
 <div class="codetabs">
+
+<div data-lang="python" markdown="1">
+{% highlight python %}
+from pyspark.sql.protobuf.functions import from_protobuf, to_protobuf
+
+# `from_protobuf` and `to_protobuf` provides two schema choices. First, via the protobuf descriptor
+# file, and then via the protobuf message class name.
+# give input .proto protobuf schema
+# syntax  = "proto3"
+# message AppEvent {
+#    string name = 1;
+#    int64 id = 2;
+#    string context = 3;
+# }
+
+df = spark\
+.readStream\
+.format("kafka")\
+.option("kafka.bootstrap.servers", "host1:port1,host2:port2")\
+.option("subscribe", "topic1")\
+.load()
+
+# 1. Decode the Protobuf data of schema `AppEvent` into a struct;
+# 2. Filter by column `name`;
+# 3. Encode the column `event` in Protobuf format.
+# The Protobuf protoc command can be used to generate a protobuf descriptor file for give .proto file.
+output = df\
+.select(from_protobuf("value", "AppEvent", descriptorFilePath).alias("event"))\
+.where('event.name == "alice"')\
+.select(to_protobuf("event", "AppEvent", descriptorFilePath).alias("event"))
+
+# Alternatively, you can decode and encode the SQL columns into protobuf format using protobuf
+# class name. The specified Protobuf class must match the data, otherwise the behavior is undefined:
+# it may fail or return arbitrary result. To avoid conflicts, the jar file containing the
+# 'com.google.protobuf.*' classes should be shaded. An example of shading can be found at
+# https://github.com/rangadi/shaded-protobuf-classes.
+
+output = df\
+.select(from_protobuf("value", "org.sparkproject.spark_protobuf.protobuf.AppEvent").alias("event"))\
+.where('event.name == "alice"')
+
+output.printSchema()
+# root
+#  |--event: struct (nullable = true)
+#  |   |-- name : string (nullable = true)
+#  |   |-- id: long (nullable = true)
+#  |   |-- context: string (nullable = true)
+
+output = output
+.select(to_protobuf("event", "org.sparkproject.spark_protobuf.protobuf.AppEvent").alias("event"))
+
+query = output\
+.writeStream\
+.format("kafka")\
+.option("kafka.bootstrap.servers", "host1:port1,host2:port2")\
+.option("topic", "topic2")\
+.start()
+
+{% endhighlight %}
+</div>
+
 <div data-lang="scala" markdown="1">
 {% highlight scala %}
 import org.apache.spark.sql.protobuf.functions._
@@ -114,6 +175,7 @@ val query = output
 
 {% endhighlight %}
 </div>
+
 <div data-lang="java" markdown="1">
 {% highlight java %}
 import static org.apache.spark.sql.functions.col;
@@ -176,65 +238,7 @@ StreamingQuery query = output
 
 {% endhighlight %}
 </div>
-<div data-lang="python" markdown="1">
-{% highlight python %}
-from pyspark.sql.protobuf.functions import from_protobuf, to_protobuf
 
-# `from_protobuf` and `to_protobuf` provides two schema choices. First, via the protobuf descriptor
-# file, and then via the protobuf message class name.
-# give input .proto protobuf schema
-# syntax  = "proto3"
-# message AppEvent {
-#    string name = 1;
-#    int64 id = 2;
-#    string context = 3;
-# }
-
-df = spark\
-.readStream\
-.format("kafka")\
-.option("kafka.bootstrap.servers", "host1:port1,host2:port2")\
-.option("subscribe", "topic1")\
-.load()
-
-# 1. Decode the Protobuf data of schema `AppEvent` into a struct;
-# 2. Filter by column `name`;
-# 3. Encode the column `event` in Protobuf format.
-# The Protobuf protoc command can be used to generate a protobuf descriptor file for give .proto file.
-output = df\
-.select(from_protobuf("value", "AppEvent", descriptorFilePath).alias("event"))\
-.where('event.name == "alice"')\
-.select(to_protobuf("event", "AppEvent", descriptorFilePath).alias("event"))
-
-# Alternatively, you can decode and encode the SQL columns into protobuf format using protobuf
-# class name. The specified Protobuf class must match the data, otherwise the behavior is undefined:
-# it may fail or return arbitrary result. To avoid conflicts, the jar file containing the
-# 'com.google.protobuf.*' classes should be shaded. An example of shading can be found at
-# https://github.com/rangadi/shaded-protobuf-classes.
-
-output = df\
-.select(from_protobuf("value", "org.sparkproject.spark_protobuf.protobuf.AppEvent").alias("event"))\
-.where('event.name == "alice"')
-
-output.printSchema()
-# root
-#  |--event: struct (nullable = true)
-#  |   |-- name : string (nullable = true)
-#  |   |-- id: long (nullable = true)
-#  |   |-- context: string (nullable = true)
-
-output = output
-.select(to_protobuf("event", "org.sparkproject.spark_protobuf.protobuf.AppEvent").alias("event"))
-
-query = output\
-.writeStream\
-.format("kafka")\
-.option("kafka.bootstrap.servers", "host1:port1,host2:port2")\
-.option("topic", "topic2")\
-.start()
-
-{% endhighlight %}
-</div>
 </div>
 
 ## Supported types for Protobuf -> Spark SQL conversion
