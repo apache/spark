@@ -564,6 +564,9 @@ jobs:
       run: ./dev/lint-scala
     - name: Java linter
       run: ./dev/lint-java
+    - name: Spark connect jvm client mima check
+      if: inputs.branch != 'branch-3.2' && inputs.branch != 'branch-3.3'
+      run: ./dev/connect-jvm-client-mima-check
     - name: Install Python linter dependencies
       run: |
         # TODO(SPARK-32407): Sphinx 3.1+ does not correctly index nested classes.
@@ -577,7 +580,7 @@ jobs:
     - name: Install dependencies for Python code generation check
       run: |
         # See more in "Installation" https://docs.buf.build/installation#tarball
-        curl -LO https://github.com/bufbuild/buf/releases/download/v1.14.0/buf-Linux-x86_64.tar.gz
+        curl -LO https://github.com/bufbuild/buf/releases/download/v1.15.0/buf-Linux-x86_64.tar.gz
         mkdir -p $HOME/buf
         tar -xvzf buf-Linux-x86_64.tar.gz -C $HOME/buf --strip-components 1
         python3.9 -m pip install 'protobuf==3.19.5' 'mypy-protobuf==3.3.0'
