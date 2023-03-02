@@ -25,7 +25,7 @@ import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.arrow.memory.RootAllocator
 
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.connect.proto
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.{JavaTypeInference, ScalaReflection}
@@ -373,6 +373,18 @@ class SparkSession private[sql] (
     new Dataset[T](this, plan, encoder)
   }
 
+  @DeveloperApi
+  def newDataFrame(extension: com.google.protobuf.Any): DataFrame = {
+    newDataset(extension, UnboundRowEncoder)
+  }
+
+  @DeveloperApi
+  def newDataset[T](
+      extension: com.google.protobuf.Any,
+      encoder: AgnosticEncoder[T]): Dataset[T] = {
+    newDataset(encoder)(_.setExtension(extension))
+  }
+
   private[sql] def newCommand[T](f: proto.Command.Builder => Unit): proto.Command = {
     val builder = proto.Command.newBuilder()
     f(builder)
@@ -399,6 +411,12 @@ class SparkSession private[sql] (
     client.execute(plan).asScala.foreach(_ => ())
   }
 
+  @DeveloperApi
+  def execute(extension: com.google.protobuf.Any): Unit = {
+    val command = proto.Command.newBuilder().setExtension(extension).build()
+    execute(command)
+  }
+
   /**
    * This resets the plan id generator so we can produce plans that are comparable.
    *
@@ -408,6 +426,19 @@ class SparkSession private[sql] (
     planIdGenerator.set(0)
   }
 
+  /**
+   * Synonym for `close()`.
+   *
+   * @since 3.4.0
+   */
+  def stop(): Unit = close()
+
+  /**
+   * Close the [[SparkSession]]. This closes the connection, and the allocator. The latter will
+   * throw an exception if there are still open [[SparkResult]]s.
+   *
+   * @since 3.4.0
+   */
   override def close(): Unit = {
     client.shutdown()
     allocator.close()

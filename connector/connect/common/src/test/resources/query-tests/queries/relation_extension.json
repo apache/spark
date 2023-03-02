@@ -2,7 +2,8 @@
   "common": {
     "planId": "1"
   },
-  "drop": {
+  "extension": {
+    "@type": "type.googleapis.com/spark.connect.ExamplePluginRelation",
     "input": {
       "common": {
         "planId": "0"
@@ -10,11 +11,6 @@
       "localRelation": {
         "schema": "struct\u003cid:bigint,a:int,b:double\u003e"
       }
-    },
-    "columns": [{
-      "unresolvedAttribute": {
-        "unparsedIdentifier": "b"
-      }
-    }]
+    }
   }
 }
