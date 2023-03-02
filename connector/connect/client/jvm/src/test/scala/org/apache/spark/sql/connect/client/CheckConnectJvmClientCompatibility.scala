@@ -67,6 +67,9 @@ object CheckConnectJvmClientCompatibility {
         resultWriter.write(s"ERROR: Comparing client jar: $clientJar and and sql jar: $sqlJar \n")
         resultWriter.write(s"problems: \n")
         resultWriter.write(s"${problems.map(p => p.description("client")).mkString("\n")}")
+        resultWriter.write(
+          "Exceptions to binary compatibility can be added in " +
+            "'CheckConnectJvmClientCompatibility#checkMiMaCompatibility'\n")
         resultWriter.write("\n")
       }
       val incompatibleApis = checkDatasetApiCompatibility(clientJar, sqlJar)
@@ -75,6 +78,9 @@ object CheckConnectJvmClientCompatibility {
           "ERROR: The Dataset apis only exist in the connect client " +
             "module and not belong to the sql module include: \n")
         resultWriter.write(incompatibleApis.mkString("\n"))
+        resultWriter.write(
+          "Exceptions can be added in " +
+            "'CheckConnectJvmClientCompatibility#checkDatasetApiCompatibility'\n")
         resultWriter.write("\n")
       }
     } catch {
@@ -236,9 +242,12 @@ object CheckConnectJvmClientCompatibility {
     val className = "org.apache.spark.sql.Dataset"
     val clientMethods = methods(clientJar, className)
     val sqlMethods = methods(sqlJar, className)
+    // Exclude some public methods that must be added through `exceptions`
+    val exceptionMethods =
+      Seq("org.apache.spark.sql.Dataset.collectResult", "org.apache.spark.sql.Dataset.plan")
 
     // Find new public functions that are not in sql module `Dataset`.
-    clientMethods.diff(sqlMethods)
+    clientMethods.diff(sqlMethods).diff(exceptionMethods)
   }
 
   private case class IncludeByName(name: String) extends ProblemFilter {
