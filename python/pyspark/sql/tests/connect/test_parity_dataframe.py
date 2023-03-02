@@ -27,11 +27,6 @@ class DataFrameParityTests(DataFrameTestsMixin, ReusedConnectTestCase):
     def test_create_dataframe_from_pandas_with_dst(self):
         super().test_create_dataframe_from_pandas_with_dst()
 
-    # TODO(SPARK-41870): Handle duplicate columns in `createDataFrame`
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_duplicated_column_names(self):
-        super().test_duplicated_column_names()
-
     @unittest.skip("Spark Connect does not support RDD but the tests depend on them.")
     def test_help_command(self):
         super().test_help_command()

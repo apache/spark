@@ -123,8 +123,18 @@ class SparkSession private[sql] (
   @Experimental
   def sql(sqlText: String, args: java.util.Map[String, String]): DataFrame = newDataFrame {
     builder =>
-      builder
-        .setSql(proto.SQL.newBuilder().setQuery(sqlText).putAllArgs(args))
+      // Send the SQL once to the server and then check the output.
+      val cmd = newCommand(b =>
+        b.setSqlCommand(proto.SqlCommand.newBuilder().setSql(sqlText).putAllArgs(args)))
+      val plan = proto.Plan.newBuilder().setCommand(cmd)
+      val responseIter = client.execute(plan.build())
+
+      val response = responseIter.asScala
+        .find(_.hasSqlCommandResult)
+        .getOrElse(throw new RuntimeException("SQLCommandResult must be present"))
+
+      // Update the builder with the values from the result.
+      builder.mergeFrom(response.getSqlCommandResult.getRelation)
   }
 
   /**
@@ -286,6 +296,19 @@ class SparkSession private[sql] (
     planIdGenerator.set(0)
   }
 
+  /**
+   * Synonym for `close()`.
+   *
+   * @since 3.4.0
+   */
+  def stop(): Unit = close()
+
+  /**
+   * Close the [[SparkSession]]. This closes the connection, and the allocator. The latter will
+   * throw an exception if there are still open [[SparkResult]]s.
+   *
+   * @since 3.4.0
+   */
   override def close(): Unit = {
     client.shutdown()
     allocator.close()

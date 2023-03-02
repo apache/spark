@@ -50,7 +50,7 @@ from pyspark import SparkContext, SparkConf, __version__
 from pyspark.sql.connect.client import SparkConnectClient
 from pyspark.sql.connect.conf import RuntimeConf
 from pyspark.sql.connect.dataframe import DataFrame
-from pyspark.sql.connect.plan import SQL, Range, LocalRelation
+from pyspark.sql.connect.plan import SQL, Range, LocalRelation, CachedRelation
 from pyspark.sql.connect.readwriter import DataFrameReader
 from pyspark.sql.pandas.serializers import ArrowStreamPandasSerializer
 from pyspark.sql.pandas.types import to_arrow_type, _get_local_timezone
@@ -313,6 +313,8 @@ class SparkSession:
                 # For cases like createDataFrame([("Alice", None, 80.1)], schema)
                 # we can not infer the schema from the data itself.
                 warnings.warn("failed to infer the schema from data")
+                if _schema is None and _schema_str is not None:
+                    _schema = self.createDataFrame([], schema=_schema_str).schema
                 if _schema is None or not isinstance(_schema, StructType):
                     raise ValueError(
                         "Some of types cannot be determined after inferring, "
@@ -347,7 +349,12 @@ class SparkSession:
     createDataFrame.__doc__ = PySparkSession.createDataFrame.__doc__
 
     def sql(self, sqlQuery: str, args: Optional[Dict[str, str]] = None) -> "DataFrame":
-        return DataFrame.withPlan(SQL(sqlQuery, args), self)
+        cmd = SQL(sqlQuery, args)
+        data, properties = self.client.execute_command(cmd.command(self._client))
+        if "sql_command_result" in properties:
+            return DataFrame.withPlan(CachedRelation(properties["sql_command_result"]), self)
+        else:
+            return DataFrame.withPlan(SQL(sqlQuery, args), self)
 
     sql.__doc__ = PySparkSession.sql.__doc__
 
