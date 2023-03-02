@@ -213,10 +213,6 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
     new ParseException("Can only have a single from-to unit in the interval literal syntax", ctx)
   }
 
-  def invalidIntervalLiteralError(ctx: IntervalContext): Throwable = {
-    new ParseException("at least one time unit should be given for interval literal", ctx)
-  }
-
   def invalidIntervalFormError(value: String, ctx: MultiUnitsIntervalContext): Throwable = {
     new ParseException("Can only use numbers in the interval value part for" +
       s" multiple unit value pairs interval form, but got invalid value: $value", ctx)
