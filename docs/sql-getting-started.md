@@ -25,6 +25,7 @@ license: |
 ## Starting Point: SparkSession
 
 <div class="codetabs">
+
 <div data-lang="python"  markdown="1">
 
 The entry point into all functionality in Spark is the [`SparkSession`](api/python/reference/pyspark.sql/api/pyspark.sql.SparkSession.html) class. To create a basic `SparkSession`, just use `SparkSession.builder`:
@@ -54,6 +55,7 @@ The entry point into all functionality in Spark is the [`SparkSession`](api/R/re
 
 Note that when invoked for the first time, `sparkR.session()` initializes a global `SparkSession` singleton instance, and always returns a reference to this instance for successive invocations. In this way, users only need to initialize the `SparkSession` once, then SparkR functions like `read.df` will be able to access this global instance implicitly, and users don't need to pass the `SparkSession` instance around.
 </div>
+
 </div>
 
 `SparkSession` in Spark 2.0 provides builtin support for Hive features including the ability to
@@ -63,6 +65,7 @@ To use these features, you do not need to have an existing Hive setup.
 ## Creating DataFrames
 
 <div class="codetabs">
+
 <div data-lang="python"  markdown="1">
 With a `SparkSession`, applications can create DataFrames from an [existing `RDD`](#interoperating-with-rdds),
 from a Hive table, or from [Spark data sources](sql-data-sources.html).
@@ -99,6 +102,7 @@ As an example, the following creates a DataFrame based on the content of a JSON 
 {% include_example create_df r/RSparkSQLExample.R %}
 
 </div>
+
 </div>
 
 

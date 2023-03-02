@@ -855,6 +855,25 @@ Based on user feedback, we changed the default behavior of `DataFrame.groupBy().
 grouping columns in the resulting `DataFrame`. To keep the behavior in 1.3, set `spark.sql.retainGroupColumns` to `false`.
 
 <div class="codetabs">
+
+<div data-lang="python"  markdown="1">
+{% highlight python %}
+
+import pyspark.sql.functions as func
+
+# In 1.3.x, in order for the grouping column "department" to show up,
+# it must be included explicitly as part of the agg function call.
+df.groupBy("department").agg(df["department"], func.max("age"), func.sum("expense"))
+
+# In 1.4+, grouping column "department" is included automatically.
+df.groupBy("department").agg(func.max("age"), func.sum("expense"))
+
+# Revert to 1.3.x behavior (not retaining grouping column) by:
+sqlContext.setConf("spark.sql.retainGroupColumns", "false")
+
+{% endhighlight %}
+</div>
+
 <div data-lang="scala"  markdown="1">
 {% highlight scala %}
 
@@ -883,24 +902,6 @@ df.groupBy("department").agg(max("age"), sum("expense"));
 
 // Revert to 1.3 behavior (not retaining grouping column) by:
 sqlContext.setConf("spark.sql.retainGroupColumns", "false");
-
-{% endhighlight %}
-</div>
-
-<div data-lang="python"  markdown="1">
-{% highlight python %}
-
-import pyspark.sql.functions as func
-
-# In 1.3.x, in order for the grouping column "department" to show up,
-# it must be included explicitly as part of the agg function call.
-df.groupBy("department").agg(df["department"], func.max("age"), func.sum("expense"))
-
-# In 1.4+, grouping column "department" is included automatically.
-df.groupBy("department").agg(func.max("age"), func.sum("expense"))
-
-# Revert to 1.3.x behavior (not retaining grouping column) by:
-sqlContext.setConf("spark.sql.retainGroupColumns", "false")
 
 {% endhighlight %}
 </div>
