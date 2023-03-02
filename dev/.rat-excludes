@@ -144,3 +144,5 @@ any.proto
 empty.proto
 .*\.explain
 .*\.proto.bin
+LimitedInputStream.java
+TimSort.java
