@@ -90,13 +90,6 @@ class RelationalGroupedDataset protected[sql](
       UnresolvedAlias(a, Some(Column.generateAlias))
     case expr: Expression => UnresolvedAlias(expr, None)
   }
-  /**
-   * Returns true if `exprs` contains a star.
-   */
-  private[this] def containsStar(exprs: Seq[Expression]): Boolean =
-    exprs.exists(_.collect { case _: Star => true }.nonEmpty)
-
-
   private[this] def aggregateNumericColumns(colNames: String*)(f: Expression => AggregateFunction)
     : DataFrame = {
 
