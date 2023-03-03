@@ -22,9 +22,10 @@ import io.grpc.{Server, StatusRuntimeException}
 import io.grpc.netty.NettyServerBuilder
 import io.grpc.stub.StreamObserver
 import org.scalatest.BeforeAndAfterEach
+import scala.collection.mutable
 
 import org.apache.spark.connect.proto
-import org.apache.spark.connect.proto.{AnalyzePlanRequest, AnalyzePlanResponse, ExecutePlanRequest, ExecutePlanResponse, SparkConnectServiceGrpc}
+import org.apache.spark.connect.proto.{AddArtifactsRequest, AddArtifactsResponse, AnalyzePlanRequest, AnalyzePlanResponse, ExecutePlanRequest, ExecutePlanResponse, SparkConnectServiceGrpc}
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connect.client.util.ConnectFunSuite
 import org.apache.spark.sql.connect.common.config.ConnectCommon
@@ -181,11 +182,19 @@ class SparkConnectClientSuite extends ConnectFunSuite with BeforeAndAfterEach {
 class DummySparkConnectService() extends SparkConnectServiceGrpc.SparkConnectServiceImplBase {
 
   private var inputPlan: proto.Plan = _
+  private val inputArtifactRequests: mutable.ListBuffer[AddArtifactsRequest] =
+    mutable.ListBuffer.empty
 
   private[sql] def getAndClearLatestInputPlan(): proto.Plan = {
     val plan = inputPlan
     inputPlan = null
     plan
+  }
+
+  private[sql] def getAndClearLatestAddArtifactRequests(): Seq[AddArtifactsRequest] = {
+    val requests = inputArtifactRequests.toSeq
+    inputArtifactRequests.clear()
+    requests
   }
 
   override def executePlan(
@@ -228,5 +237,17 @@ class DummySparkConnectService() extends SparkConnectServiceGrpc.SparkConnectSer
       .build()
     responseObserver.onNext(response)
     responseObserver.onCompleted()
+  }
+
+  override def addArtifacts(responseObserver: StreamObserver[AddArtifactsResponse])
+      : StreamObserver[AddArtifactsRequest] = new StreamObserver[AddArtifactsRequest] {
+    override def onNext(v: AddArtifactsRequest): Unit = inputArtifactRequests.append(v)
+
+    override def onError(throwable: Throwable): Unit = responseObserver.onError(throwable)
+
+    override def onCompleted(): Unit = {
+      responseObserver.onNext(proto.AddArtifactsResponse.newBuilder().build())
+      responseObserver.onCompleted()
+    }
   }
 }
