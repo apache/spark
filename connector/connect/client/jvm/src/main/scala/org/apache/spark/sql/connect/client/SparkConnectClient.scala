@@ -36,6 +36,8 @@ private[sql] class SparkConnectClient(
 
   private[this] val stub = proto.SparkConnectServiceGrpc.newBlockingStub(channel)
 
+  private[client] val artifactManager: ArtifactManager = new ArtifactManager(userContext, channel)
+
   /**
    * Placeholder method.
    * @return
@@ -146,6 +148,27 @@ private[sql] class SparkConnectClient(
       .build()
     analyze(request)
   }
+
+  /**
+   * Add a single artifact to the client session.
+   *
+   * Currently only local files with extensions .jar and .class are supported.
+   */
+  def addArtifact(path: String): Unit = artifactManager.addArtifact(path)
+
+  /**
+   * Add a single artifact to the client session.
+   *
+   * Currently only local files with extensions .jar and .class are supported.
+   */
+  def addArtifact(uri: URI): Unit = artifactManager.addArtifact(uri)
+
+  /**
+   * Add multiple artifacts to the session.
+   *
+   * Currently only local files with extensions .jar and .class are supported.
+   */
+  def addArtifacts(uri: Seq[URI]): Unit = artifactManager.addArtifacts(uri)
 
   /**
    * Shutdown the client's connection to the server.
