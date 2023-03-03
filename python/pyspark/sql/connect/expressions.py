@@ -642,11 +642,7 @@ class UnresolvedExtractValue(Expression):
 
 
 class UnresolvedRegex(Expression):
-    def __init__(
-        self,
-        col_name: str,
-        plan_id: Optional[int] = None
-    ) -> None:
+    def __init__(self, col_name: str, plan_id: Optional[int] = None) -> None:
         super().__init__()
 
         assert isinstance(col_name, str)
