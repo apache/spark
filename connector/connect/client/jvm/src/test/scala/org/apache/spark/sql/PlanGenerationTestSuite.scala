@@ -2038,4 +2038,16 @@ class PlanGenerationTestSuite
       .build()
     simple.select(Column(com.google.protobuf.Any.pack(extension)))
   }
+
+  test("crosstab") {
+    simple.stat.crosstab("a", "b")
+  }
+
+  test("freqItems") {
+    simple.stat.freqItems(Array("id", "a"), 0.1)
+  }
+
+  test("sampleBy") {
+    simple.stat.sampleBy("id", Map(0 -> 0.1, 1 -> 0.2), 0L)
+  }
 }
