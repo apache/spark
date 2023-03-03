@@ -32,7 +32,6 @@ import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.mllib.fpm.{AssociationRules => MLlibAssociationRules, FPGrowth => MLlibFPGrowth}
 import org.apache.spark.mllib.fpm.FPGrowth.FreqItemset
 import org.apache.spark.sql._
-import org.apache.spark.sql.expressions.SparkUserDefinedFunction
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
@@ -275,29 +274,38 @@ class FPGrowthModel private[ml] (
   @Since("2.2.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
-    genericTransform(dataset)
-  }
+    val arrayType = associationRules.schema("consequent").dataType
 
-  private def genericTransform(dataset: Dataset[_]): DataFrame = {
-    val rules: Array[(Seq[Any], Seq[Any])] = associationRules.select("antecedent", "consequent")
-      .rdd.map(r => (r.getSeq(0), r.getSeq(1)))
-      .collect().asInstanceOf[Array[(Seq[Any], Seq[Any])]]
-    val brRules = dataset.sparkSession.sparkContext.broadcast(rules)
-
-    val dt = dataset.schema($(itemsCol)).dataType
-    // For each rule, examine the input items and summarize the consequents
-    val predictUDF = SparkUserDefinedFunction((items: Seq[Any]) => {
-      if (items != null) {
-        val itemset = items.toSet
-        brRules.value.filter(_._1.forall(itemset.contains))
-          .flatMap(_._2.filter(!itemset.contains(_))).distinct
-      } else {
-        Seq.empty
-      }},
-      dt,
-      Nil
+    dataset.crossJoin(
+      broadcast(
+        associationRules
+          .where(not(isnull(col("antecedent"))) &&
+            not(isnull(col("consequent"))))
+          .select(
+            collect_list(
+              struct("antecedent", "consequent")
+            ).as($(predictionCol))
+          )
+      )
+    ).withColumn(
+      $(predictionCol),
+      when(not(isnull(col($(itemsCol)))),
+        array_sort(
+          array_distinct(
+            aggregate(
+              col($(predictionCol)),
+              array().cast(arrayType),
+              (r, s) => when(
+                forall(s.getField("antecedent"),
+                  c => array_contains(col($(itemsCol)), c)),
+                array_union(r,
+                  array_except(s.getField("consequent"), col($(itemsCol))))
+              ).otherwise(r)
+            )
+          )
+        )
+      ).otherwise(array().cast(arrayType))
     )
-    dataset.withColumn($(predictionCol), predictUDF(col($(itemsCol))))
   }
 
   @Since("2.2.0")
