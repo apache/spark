@@ -68,27 +68,7 @@ class PlanGenerationTestSuite
   // Borrowed from SparkFunSuite
   private val regenerateGoldenFiles: Boolean = System.getenv("SPARK_GENERATE_GOLDEN_FILES") == "1"
 
-  // Borrowed from SparkFunSuite
-  private def getWorkspaceFilePath(first: String, more: String*): Path = {
-    if (!(sys.props.contains("spark.test.home") || sys.env.contains("SPARK_HOME"))) {
-      fail("spark.test.home or SPARK_HOME is not set.")
-    }
-    val sparkHome = sys.props.getOrElse("spark.test.home", sys.env("SPARK_HOME"))
-    java.nio.file.Paths.get(sparkHome, first +: more: _*)
-  }
-
-  protected val baseResourcePath: Path = {
-    getWorkspaceFilePath(
-      "connector",
-      "connect",
-      "common",
-      "src",
-      "test",
-      "resources",
-      "query-tests").toAbsolutePath
-  }
-
-  protected val queryFilePath: Path = baseResourcePath.resolve("queries")
+  protected val queryFilePath: Path = commonResourcePath.resolve("queries")
 
   // A relative path to /connector/connect/server, used by `ProtoToParsedPlanTestSuite` to run
   // with the datasource.
@@ -1964,6 +1944,12 @@ class PlanGenerationTestSuite
 
   test("cube string") {
     simple.cube("a", "b").count()
+  }
+
+  test("grouping and grouping_id") {
+    simple
+      .cube("a", "b")
+      .agg(fn.grouping("a"), fn.grouping("b"), fn.grouping_id("a", "b"))
   }
 
   test("pivot") {
