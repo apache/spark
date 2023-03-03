@@ -1,3 +1,6 @@
+
+
+
 body {
   color: #666666;
   font-family: 'DM Sans', sans-serif;
@@ -92,13 +95,14 @@ section {
 }
 
 .hero-banner .bg {
-  background: url(../images/spark-hero-thin-light.jpg) no-repeat;
+  background: url(/img/spark-hero-thin-light.jpg) no-repeat;
   transform: translate(36%, 0%);
   height: 475px;
   top: 0;
   position: absolute;
   right: 0;
   width: 100%;
+  opacity: 50%;
 }
 
 .hero-banner h1 {
@@ -976,3 +980,129 @@ blockquote {
   color: rgba(0, 0, 0, .5);
   border-left: 0.25em solid rgba(0, 0, 0, .1)
 }
+
+
+.content {
+  z-index: 1;
+  position: relative;
+  background-color: #FFF;
+  max-width: 914px;
+  line-height: 1.6; /* Inspired by GitHub's wiki style */
+  padding-left: 15px;
+}
+
+.content-with-sidebar {
+  z-index: 1;
+  position: relative;
+  background-color: #FFF;
+  max-width: 914px;
+  line-height: 1.6; /* Inspired by GitHub's wiki style */
+  padding-left: 30px;
+  min-height: 100vh;
+}
+
+/**
+ * The left navigation bar.
+ */
+ .left-menu-wrapper {
+  margin-left: 0px;
+  margin-right: 0px;
+  border-top-width: 0px;
+  border-left-width: 0px;
+  border-bottom-width: 0px;
+  margin-top: 0px;
+  width: 220px;
+  height: 80%;
+  float: left;
+  position: fixed;
+  overflow-y: scroll;
+  padding-right: 20px;
+  font-size: 0.9em !important;
+}
+
+.left-menu h3 {
+  margin-left: 10px;
+  line-height: 30px;
+}
+
+/**
+ * The collapsing button for the navigation bar.
+ */
+.nav-trigger {
+  position: fixed;
+  clip: rect(0, 0, 0, 0);
+}
+
+.nav-trigger + label:after {
+  content: '»';
+}
+
+label {
+  z-index: 10;
+}
+
+label[for="nav-trigger"] {
+  position: fixed;
+  margin-left: 0px;
+  padding-top: 100px;
+  padding-left: 5px;
+  width: 10px;
+  height: 80%;
+  cursor: pointer;
+  background-size: contain;
+  background-color: #e2e2e2;
+  box-sizing: content-box;
+}
+
+label[for="nav-trigger"]:hover {
+  background-color: #d0cdcd;
+}
+
+.nav-trigger:checked + label {
+  margin-left: 200px;
+}
+
+.nav-trigger:checked + label:after {
+  content: '«';
+}
+
+.nav-trigger:checked ~ div.content-with-sidebar {
+  margin-left: 200px;
+}
+
+.nav-trigger + label, div.content-with-sidebar {
+  transition: left 0.4s;
+}
+
+/**
+ * Rules to collapse the menu automatically when the screen becomes too thin.
+ */
+
+@media all and (max-width: 780px) {
+
+  div.content-with-sidebar {
+    margin-left: 200px;
+  }
+  .nav-trigger + label:after {
+    content: '«';
+  }
+  label[for="nav-trigger"] {
+    margin-left: 200px;
+  }
+
+  .nav-trigger:checked + label {
+    margin-left: 0px;
+  }
+  .nav-trigger:checked + label:after {
+    content: '»';
+  }
+  .nav-trigger:checked ~ div.content-with-sidebar {
+    margin-left: 0px;
+  }
+
+  div.container-index {
+    margin-left: -215px;
+  }
+
+}
+

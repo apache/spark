@@ -118,6 +118,27 @@
             </div>
         </nav>
 
+        {% if page.url == "/" %}
+            <section class="hero-banner position-relative">
+            <div class="bg">
+            </div>
+            <div class="container position-relative">
+                <div class="row">
+                  <h1 style="max-width: 680px;">Unified engine for large-scale data analytics</h1>
+                </div>
+                <div class="row mt-5">
+                  <div class="col-12 col-lg-6 no-gutters">
+                    <strong style="font-size:1.4em;">Apache Spark</strong> is a unified analytics engine for large-scale data processing.
+                    It provides high-level APIs in Java, Scala, Python and R,
+                    and an optimized engine that supports general execution graphs.
+                    It also supports a rich set of higher-level tools including [Spark SQL](sql-programming-guide.html) for SQL and structured data processing, [pandas API on Spark](api/python/getting_started/quickstart_ps.html) for pandas workloads, [MLlib](ml-guide.html) for machine learning, [GraphX](graphx-programming-guide.html) for graph processing, and [Structured Streaming](structured-streaming-programming-guide.html) for incremental computation and stream processing.
+                  </div>
+                </div>
+            </div>
+          </section>
+
+        {% endif %}
+
         <div class="container">
 
             {% if page.url contains "/ml" or page.url contains "/sql" or page.url contains "migration-guide.html" %}
