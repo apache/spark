@@ -69,6 +69,10 @@ object SparkConnectServerUtils {
         jar,
         "--conf",
         s"spark.connect.grpc.binding.port=$port",
+        "--conf",
+        "spark.sql.catalog.testcat=org.apache.spark.sql.connect.catalog.InMemoryTableCatalog",
+        "--conf",
+        "spark.sql.catalogImplementation=hive",
         "--class",
         "org.apache.spark.sql.connect.SimpleSparkConnectService",
         jar),
@@ -151,7 +155,7 @@ trait RemoteSparkSession extends ConnectFunSuite with BeforeAndAfterAll {
 
   override def afterAll(): Unit = {
     try {
-      if (spark != null) spark.close()
+      if (spark != null) spark.stop()
     } catch {
       case e: Throwable => debug(e)
     }

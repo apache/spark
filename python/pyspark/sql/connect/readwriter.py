@@ -692,9 +692,6 @@ def _test() -> None:
 
     globs = pyspark.sql.connect.readwriter.__dict__.copy()
 
-    # TODO(SPARK-42458): createDataFrame should support DDL string as schema
-    del pyspark.sql.connect.readwriter.DataFrameWriter.option.__doc__
-
     globs["spark"] = (
         PySparkSession.builder.appName("sql.connect.readwriter tests")
         .remote("local[4]")

@@ -3126,13 +3126,12 @@ object SQLConf {
   val USE_NULLS_FOR_MISSING_DEFAULT_COLUMN_VALUES =
     buildConf("spark.sql.defaultColumn.useNullsForMissingDefaultValues")
       .internal()
-      .doc("When true, and DEFAULT columns are enabled, allow column definitions lacking " +
-        "explicit default values to behave as if they had specified DEFAULT NULL instead. " +
-        "For example, this allows most INSERT INTO statements to specify only a prefix of the " +
-        "columns in the target table, and the remaining columns will receive NULL values.")
+      .doc("When true, and DEFAULT columns are enabled, allow INSERT INTO commands with user-" +
+        "specified lists of fewer columns than the target table to behave as if they had " +
+        "specified DEFAULT for all remaining columns instead, in order.")
       .version("3.4.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   val SKIP_TYPE_VALIDATION_ON_ALTER_PARTITION =
     buildConf("spark.sql.legacy.skipTypeValidationOnAlterPartition")

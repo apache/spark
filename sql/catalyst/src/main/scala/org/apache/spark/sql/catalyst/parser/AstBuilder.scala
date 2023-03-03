@@ -2758,15 +2758,14 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
           innerCtx.unitToUnitInterval)
       }
       visitMultiUnitsInterval(innerCtx.multiUnitsInterval)
-    } else if (ctx.errorCapturingUnitToUnitInterval != null) {
+    } else {
+      assert(ctx.errorCapturingUnitToUnitInterval != null)
       val innerCtx = ctx.errorCapturingUnitToUnitInterval
       if (innerCtx.error1 != null || innerCtx.error2 != null) {
         val errorCtx = if (innerCtx.error1 != null) innerCtx.error1 else innerCtx.error2
         throw QueryParsingErrors.moreThanOneFromToUnitInIntervalLiteralError(errorCtx)
       }
       visitUnitToUnitInterval(innerCtx.body)
-    } else {
-      throw QueryParsingErrors.invalidIntervalLiteralError(ctx)
     }
   }
 
