@@ -262,6 +262,17 @@ class PlanGenerationTestSuite
       new Properties())
   }
 
+  test("read jdbc with partition") {
+    session.read.jdbc(
+      "jdbc:h2:mem:testdb0;user=testUser;password=testPass",
+      "TEST.EMP",
+      "THEID",
+      0,
+      4,
+      3,
+      new Properties())
+  }
+
   test("read json") {
     session.read.json(testDataPath.resolve("people.json").toString)
   }
