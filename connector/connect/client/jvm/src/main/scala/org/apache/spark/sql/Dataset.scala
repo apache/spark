@@ -917,6 +917,13 @@ class Dataset[T] private[sql] (
         .addAllParameters(parameters.map(p => functions.lit(p).expr).asJava)
   }
 
+  private def getPlanId: Option[Long] =
+    if (plan.getRoot.hasCommon && plan.getRoot.getCommon.hasPlanId) {
+      Option(plan.getRoot.getCommon.getPlanId)
+    } else {
+      None
+    }
+
   /**
    * Selects column based on the column name and returns it as a [[Column]].
    *
@@ -927,12 +934,7 @@ class Dataset[T] private[sql] (
    * @since 3.4.0
    */
   def col(colName: String): Column = {
-    val planId = if (plan.getRoot.hasCommon && plan.getRoot.getCommon.hasPlanId) {
-      Option(plan.getRoot.getCommon.getPlanId)
-    } else {
-      None
-    }
-    Column.apply(colName, planId)
+    Column.apply(colName, getPlanId)
   }
 
   /**
@@ -941,15 +943,9 @@ class Dataset[T] private[sql] (
    * @since 3.4.0
    */
   def colRegex(colName: String): Column = {
-    val planId = if (plan.getRoot.hasCommon && plan.getRoot.getCommon.hasPlanId) {
-      Option(plan.getRoot.getCommon.getPlanId)
-    } else {
-      None
-    }
-
     Column { builder =>
       val unresolvedRegexBuilder = builder.getUnresolvedRegexBuilder.setColName(colName)
-      planId.foreach(unresolvedRegexBuilder.setPlanId)
+      getPlanId.foreach(unresolvedRegexBuilder.setPlanId)
     }
   }
 
