@@ -344,9 +344,7 @@ class SparkSession private[sql] (
   // scalastyle:on
 
   def newSession(): SparkSession = {
-    val newClient: SparkConnectClient =
-      new SparkConnectClient(this.client.userContext, this.client.channel, this.client.userAgent)
-    SparkSession.builder().client(newClient).build()
+    SparkSession.builder().client(client.copy()).build()
   }
 
   private def range(

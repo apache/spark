@@ -30,9 +30,9 @@ import org.apache.spark.sql.connect.common.config.ConnectCommon
  * Conceptually the remote spark session that communicates with the server.
  */
 private[sql] class SparkConnectClient(
-    private[sql] val userContext: proto.UserContext,
-    private[sql] val channel: ManagedChannel,
-    private[sql] val userAgent: String) {
+    private val userContext: proto.UserContext,
+    private val channel: ManagedChannel,
+    private[client] val userAgent: String) {
 
   private[this] val stub = proto.SparkConnectServiceGrpc.newBlockingStub(channel)
 
@@ -147,6 +147,10 @@ private[sql] class SparkConnectClient(
       .setClientType(userAgent)
       .build()
     analyze(request)
+  }
+
+  def copy(): SparkConnectClient = {
+    new SparkConnectClient(userContext, channel, userAgent)
   }
 
   /**
