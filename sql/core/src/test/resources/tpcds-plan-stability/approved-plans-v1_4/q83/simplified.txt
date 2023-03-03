@@ -22,7 +22,7 @@ TakeOrderedAndProject [item_id,sr_item_qty,sr_dev,cr_item_qty,cr_dev,wr_item_qty
                                           WholeStageCodegen (3)
                                             Project [d_date_sk]
                                               BroadcastHashJoin [d_date,d_date]
-                                                Filter [d_date_sk]
+                                                Filter [d_date_sk,d_date]
                                                   ColumnarToRow
                                                     InputAdapter
                                                       Scan parquet spark_catalog.default.date_dim [d_date_sk,d_date]
@@ -31,14 +31,15 @@ TakeOrderedAndProject [item_id,sr_item_qty,sr_dev,cr_item_qty,cr_dev,wr_item_qty
                                                     WholeStageCodegen (2)
                                                       Project [d_date]
                                                         BroadcastHashJoin [d_week_seq,d_week_seq]
-                                                          ColumnarToRow
-                                                            InputAdapter
-                                                              Scan parquet spark_catalog.default.date_dim [d_date,d_week_seq]
+                                                          Filter [d_week_seq,d_date]
+                                                            ColumnarToRow
+                                                              InputAdapter
+                                                                Scan parquet spark_catalog.default.date_dim [d_date,d_week_seq]
                                                           InputAdapter
                                                             BroadcastExchange #4
                                                               WholeStageCodegen (1)
                                                                 Project [d_week_seq]
-                                                                  Filter [d_date]
+                                                                  Filter [d_date,d_week_seq]
                                                                     ColumnarToRow
                                                                       InputAdapter
                                                                         Scan parquet spark_catalog.default.date_dim [d_date,d_week_seq]

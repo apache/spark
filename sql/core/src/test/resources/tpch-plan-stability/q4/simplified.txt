@@ -11,7 +11,7 @@ WholeStageCodegen (4)
                     Project [o_orderpriority]
                       BroadcastHashJoin [o_orderkey,l_orderkey]
                         Project [o_orderkey,o_orderpriority]
-                          Filter [o_orderdate]
+                          Filter [o_orderdate,o_orderkey]
                             ColumnarToRow
                               InputAdapter
                                 Scan parquet spark_catalog.default.orders [o_orderkey,o_orderdate,o_orderpriority]
@@ -19,7 +19,7 @@ WholeStageCodegen (4)
                           BroadcastExchange #3
                             WholeStageCodegen (1)
                               Project [l_orderkey]
-                                Filter [l_commitdate,l_receiptdate]
+                                Filter [l_commitdate,l_receiptdate,l_orderkey]
                                   ColumnarToRow
                                     InputAdapter
                                       Scan parquet spark_catalog.default.lineitem [l_orderkey,l_commitdate,l_receiptdate]

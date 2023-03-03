@@ -128,7 +128,7 @@ Input [4]: [ss_item_sk#1, ss_addr_sk#2, ss_ext_sales_price#3, ca_address_sk#7]
 Output [2]: [i_item_sk#9, i_item_id#10]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/item]
-PushedFilters: [IsNotNull(i_item_sk)]
+PushedFilters: [IsNotNull(i_item_sk), IsNotNull(i_item_id)]
 ReadSchema: struct<i_item_sk:int,i_item_id:string>
 
 (15) ColumnarToRow [codegen id : 4]
@@ -136,13 +136,13 @@ Input [2]: [i_item_sk#9, i_item_id#10]
 
 (16) Filter [codegen id : 4]
 Input [2]: [i_item_sk#9, i_item_id#10]
-Condition : isnotnull(i_item_sk#9)
+Condition : (isnotnull(i_item_sk#9) AND isnotnull(i_item_id#10))
 
 (17) Scan parquet spark_catalog.default.item
 Output [2]: [i_item_id#11, i_color#12]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/item]
-PushedFilters: [In(i_color, [blanched            ,burnished           ,slate               ])]
+PushedFilters: [In(i_color, [blanched            ,burnished           ,slate               ]), IsNotNull(i_item_id)]
 ReadSchema: struct<i_item_id:string,i_color:string>
 
 (18) ColumnarToRow [codegen id : 3]
@@ -150,7 +150,7 @@ Input [2]: [i_item_id#11, i_color#12]
 
 (19) Filter [codegen id : 3]
 Input [2]: [i_item_id#11, i_color#12]
-Condition : i_color#12 IN (slate               ,blanched            ,burnished           )
+Condition : (i_color#12 IN (slate               ,blanched            ,burnished           ) AND isnotnull(i_item_id#11))
 
 (20) Project [codegen id : 3]
 Output [1]: [i_item_id#11]

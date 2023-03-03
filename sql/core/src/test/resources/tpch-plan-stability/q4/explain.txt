@@ -21,7 +21,7 @@
 Output [3]: [o_orderkey#1, o_orderdate#2, o_orderpriority#3]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/orders]
-PushedFilters: [IsNotNull(o_orderdate), GreaterThanOrEqual(o_orderdate,1993-07-01), LessThan(o_orderdate,1993-10-01)]
+PushedFilters: [IsNotNull(o_orderdate), GreaterThanOrEqual(o_orderdate,1993-07-01), LessThan(o_orderdate,1993-10-01), IsNotNull(o_orderkey)]
 ReadSchema: struct<o_orderkey:bigint,o_orderdate:date,o_orderpriority:string>
 
 (2) ColumnarToRow [codegen id : 2]
@@ -29,7 +29,7 @@ Input [3]: [o_orderkey#1, o_orderdate#2, o_orderpriority#3]
 
 (3) Filter [codegen id : 2]
 Input [3]: [o_orderkey#1, o_orderdate#2, o_orderpriority#3]
-Condition : ((isnotnull(o_orderdate#2) AND (o_orderdate#2 >= 1993-07-01)) AND (o_orderdate#2 < 1993-10-01))
+Condition : (((isnotnull(o_orderdate#2) AND (o_orderdate#2 >= 1993-07-01)) AND (o_orderdate#2 < 1993-10-01)) AND isnotnull(o_orderkey#1))
 
 (4) Project [codegen id : 2]
 Output [2]: [o_orderkey#1, o_orderpriority#3]
@@ -39,7 +39,7 @@ Input [3]: [o_orderkey#1, o_orderdate#2, o_orderpriority#3]
 Output [3]: [l_orderkey#4, l_commitdate#5, l_receiptdate#6]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/lineitem]
-PushedFilters: [IsNotNull(l_commitdate), IsNotNull(l_receiptdate)]
+PushedFilters: [IsNotNull(l_commitdate), IsNotNull(l_receiptdate), IsNotNull(l_orderkey)]
 ReadSchema: struct<l_orderkey:bigint,l_commitdate:date,l_receiptdate:date>
 
 (6) ColumnarToRow [codegen id : 1]
@@ -47,7 +47,7 @@ Input [3]: [l_orderkey#4, l_commitdate#5, l_receiptdate#6]
 
 (7) Filter [codegen id : 1]
 Input [3]: [l_orderkey#4, l_commitdate#5, l_receiptdate#6]
-Condition : ((isnotnull(l_commitdate#5) AND isnotnull(l_receiptdate#6)) AND (l_commitdate#5 < l_receiptdate#6))
+Condition : (((isnotnull(l_commitdate#5) AND isnotnull(l_receiptdate#6)) AND (l_commitdate#5 < l_receiptdate#6)) AND isnotnull(l_orderkey#4))
 
 (8) Project [codegen id : 1]
 Output [1]: [l_orderkey#4]

@@ -29,6 +29,7 @@ WholeStageCodegen (4)
                         InputAdapter
                           BroadcastExchange #4
                             WholeStageCodegen (1)
-                              ColumnarToRow
-                                InputAdapter
-                                  Scan parquet spark_catalog.default.orders [o_custkey]
+                              Filter [o_custkey]
+                                ColumnarToRow
+                                  InputAdapter
+                                    Scan parquet spark_catalog.default.orders [o_custkey]

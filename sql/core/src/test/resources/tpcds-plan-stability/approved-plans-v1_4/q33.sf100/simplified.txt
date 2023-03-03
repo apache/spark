@@ -37,7 +37,7 @@ TakeOrderedAndProject [total_sales,i_manufact_id]
                                         BroadcastExchange #4
                                           WholeStageCodegen (3)
                                             BroadcastHashJoin [i_manufact_id,i_manufact_id]
-                                              Filter [i_item_sk]
+                                              Filter [i_item_sk,i_manufact_id]
                                                 ColumnarToRow
                                                   InputAdapter
                                                     Scan parquet spark_catalog.default.item [i_item_sk,i_manufact_id]
@@ -45,7 +45,7 @@ TakeOrderedAndProject [total_sales,i_manufact_id]
                                                 BroadcastExchange #5
                                                   WholeStageCodegen (2)
                                                     Project [i_manufact_id]
-                                                      Filter [i_category]
+                                                      Filter [i_category,i_manufact_id]
                                                         ColumnarToRow
                                                           InputAdapter
                                                             Scan parquet spark_catalog.default.item [i_category,i_manufact_id]

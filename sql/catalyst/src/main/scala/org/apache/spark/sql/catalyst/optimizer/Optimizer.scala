@@ -231,7 +231,9 @@ abstract class Optimizer(catalogManager: CatalogManager)
       ColumnPruning,
       CollapseProject,
       RemoveRedundantAliases,
-      RemoveNoopOperators) :+
+      RemoveNoopOperators,
+      InferFiltersFromConstraints,
+      PushDownPredicates) :+
     // This batch must be executed after the `RewriteSubquery` batch, which creates joins.
     Batch("NormalizeFloatingNumbers", Once, NormalizeFloatingNumbers) :+
     Batch("ReplaceUpdateFieldsExpression", Once, ReplaceUpdateFieldsExpression)

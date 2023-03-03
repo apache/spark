@@ -24,7 +24,7 @@ WholeStageCodegen (12)
                                               Exchange [cs_order_number] #2
                                                 WholeStageCodegen (1)
                                                   Project [cs_ship_date_sk,cs_ship_addr_sk,cs_call_center_sk,cs_warehouse_sk,cs_order_number,cs_ext_ship_cost,cs_net_profit]
-                                                    Filter [cs_ship_date_sk,cs_ship_addr_sk,cs_call_center_sk]
+                                                    Filter [cs_ship_date_sk,cs_ship_addr_sk,cs_call_center_sk,cs_order_number,cs_warehouse_sk]
                                                       Subquery #1
                                                         ObjectHashAggregate [buf] [bloom_filter_agg(xxhash64(ca_address_sk, 42), 17961, 333176, 0, 0),bloomFilter,buf]
                                                           Exchange #3
@@ -65,9 +65,10 @@ WholeStageCodegen (12)
                                               Exchange [cs_order_number] #6
                                                 WholeStageCodegen (3)
                                                   Project [cs_warehouse_sk,cs_order_number]
-                                                    ColumnarToRow
-                                                      InputAdapter
-                                                        Scan parquet spark_catalog.default.catalog_sales [cs_warehouse_sk,cs_order_number,cs_sold_date_sk]
+                                                    Filter [cs_order_number,cs_warehouse_sk]
+                                                      ColumnarToRow
+                                                        InputAdapter
+                                                          Scan parquet spark_catalog.default.catalog_sales [cs_warehouse_sk,cs_order_number,cs_sold_date_sk]
                               InputAdapter
                                 WholeStageCodegen (7)
                                   Sort [cr_order_number]
@@ -75,9 +76,10 @@ WholeStageCodegen (12)
                                       Exchange [cr_order_number] #7
                                         WholeStageCodegen (6)
                                           Project [cr_order_number]
-                                            ColumnarToRow
-                                              InputAdapter
-                                                Scan parquet spark_catalog.default.catalog_returns [cr_order_number,cr_returned_date_sk]
+                                            Filter [cr_order_number]
+                                              ColumnarToRow
+                                                InputAdapter
+                                                  Scan parquet spark_catalog.default.catalog_returns [cr_order_number,cr_returned_date_sk]
                             InputAdapter
                               BroadcastExchange #8
                                 WholeStageCodegen (8)

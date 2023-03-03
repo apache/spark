@@ -35,6 +35,7 @@ TakeOrderedAndProject [sumsales,ss_customer_sk]
                           Exchange [ss_item_sk,ss_ticket_number] #4
                             WholeStageCodegen (4)
                               Project [ss_item_sk,ss_customer_sk,ss_ticket_number,ss_quantity,ss_sales_price]
-                                ColumnarToRow
-                                  InputAdapter
-                                    Scan parquet spark_catalog.default.store_sales [ss_item_sk,ss_customer_sk,ss_ticket_number,ss_quantity,ss_sales_price,ss_sold_date_sk]
+                                Filter [ss_item_sk,ss_ticket_number]
+                                  ColumnarToRow
+                                    InputAdapter
+                                      Scan parquet spark_catalog.default.store_sales [ss_item_sk,ss_customer_sk,ss_ticket_number,ss_quantity,ss_sales_price,ss_sold_date_sk]

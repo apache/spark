@@ -28,14 +28,15 @@ TakeOrderedAndProject [numwait,s_name]
                                     InputAdapter
                                       BroadcastExchange #3
                                         WholeStageCodegen (1)
-                                          ColumnarToRow
-                                            InputAdapter
-                                              Scan parquet spark_catalog.default.lineitem [l_orderkey,l_suppkey]
+                                          Filter [l_orderkey,l_suppkey]
+                                            ColumnarToRow
+                                              InputAdapter
+                                                Scan parquet spark_catalog.default.lineitem [l_orderkey,l_suppkey]
                                   InputAdapter
                                     BroadcastExchange #4
                                       WholeStageCodegen (2)
                                         Project [l_orderkey,l_suppkey]
-                                          Filter [l_receiptdate,l_commitdate]
+                                          Filter [l_receiptdate,l_commitdate,l_orderkey,l_suppkey]
                                             ColumnarToRow
                                               InputAdapter
                                                 Scan parquet spark_catalog.default.lineitem [l_orderkey,l_suppkey,l_commitdate,l_receiptdate]

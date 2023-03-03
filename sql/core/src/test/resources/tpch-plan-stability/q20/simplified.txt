@@ -7,7 +7,7 @@ WholeStageCodegen (8)
             BroadcastHashJoin [s_nationkey,n_nationkey]
               Project [s_name,s_address,s_nationkey]
                 BroadcastHashJoin [s_suppkey,ps_suppkey]
-                  Filter [s_nationkey]
+                  Filter [s_nationkey,s_suppkey]
                     ColumnarToRow
                       InputAdapter
                         Scan parquet spark_catalog.default.supplier [s_suppkey,s_name,s_address,s_nationkey]
@@ -25,7 +25,7 @@ WholeStageCodegen (8)
                                 BroadcastExchange #3
                                   WholeStageCodegen (1)
                                     Project [p_partkey]
-                                      Filter [p_name]
+                                      Filter [p_name,p_partkey]
                                         ColumnarToRow
                                           InputAdapter
                                             Scan parquet spark_catalog.default.part [p_partkey,p_name]

@@ -31,9 +31,10 @@ TakeOrderedAndProject [o_totalprice,o_orderdate,c_name,c_custkey,o_orderkey,sum(
                                             Exchange [l_orderkey] #4
                                               WholeStageCodegen (1)
                                                 HashAggregate [l_orderkey,l_quantity] [sum,isEmpty,sum,isEmpty]
-                                                  ColumnarToRow
-                                                    InputAdapter
-                                                      Scan parquet spark_catalog.default.lineitem [l_orderkey,l_quantity]
+                                                  Filter [l_orderkey]
+                                                    ColumnarToRow
+                                                      InputAdapter
+                                                        Scan parquet spark_catalog.default.lineitem [l_orderkey,l_quantity]
                   InputAdapter
                     BroadcastExchange #5
                       WholeStageCodegen (6)

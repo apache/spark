@@ -42,7 +42,7 @@
 Output [4]: [s_suppkey#1, s_name#2, s_address#3, s_nationkey#4]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/supplier]
-PushedFilters: [IsNotNull(s_nationkey)]
+PushedFilters: [IsNotNull(s_nationkey), IsNotNull(s_suppkey)]
 ReadSchema: struct<s_suppkey:bigint,s_name:string,s_address:string,s_nationkey:bigint>
 
 (2) ColumnarToRow [codegen id : 7]
@@ -50,7 +50,7 @@ Input [4]: [s_suppkey#1, s_name#2, s_address#3, s_nationkey#4]
 
 (3) Filter [codegen id : 7]
 Input [4]: [s_suppkey#1, s_name#2, s_address#3, s_nationkey#4]
-Condition : isnotnull(s_nationkey#4)
+Condition : (isnotnull(s_nationkey#4) AND isnotnull(s_suppkey#1))
 
 (4) Scan parquet spark_catalog.default.partsupp
 Output [3]: [ps_partkey#5, ps_suppkey#6, ps_availqty#7]
@@ -70,7 +70,7 @@ Condition : ((isnotnull(ps_availqty#7) AND isnotnull(ps_partkey#5)) AND isnotnul
 Output [2]: [p_partkey#8, p_name#9]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/part]
-PushedFilters: [IsNotNull(p_name), StringStartsWith(p_name,forest)]
+PushedFilters: [IsNotNull(p_name), StringStartsWith(p_name,forest), IsNotNull(p_partkey)]
 ReadSchema: struct<p_partkey:bigint,p_name:string>
 
 (8) ColumnarToRow [codegen id : 1]
@@ -78,7 +78,7 @@ Input [2]: [p_partkey#8, p_name#9]
 
 (9) Filter [codegen id : 1]
 Input [2]: [p_partkey#8, p_name#9]
-Condition : (isnotnull(p_name#9) AND StartsWith(p_name#9, forest))
+Condition : ((isnotnull(p_name#9) AND StartsWith(p_name#9, forest)) AND isnotnull(p_partkey#8))
 
 (10) Project [codegen id : 1]
 Output [1]: [p_partkey#8]

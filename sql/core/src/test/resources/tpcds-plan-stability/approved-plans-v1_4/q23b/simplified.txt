@@ -19,7 +19,7 @@ TakeOrderedAndProject [c_last_name,c_first_name,sales]
                                     WholeStageCodegen (5)
                                       Project [cs_bill_customer_sk,cs_quantity,cs_list_price,cs_sold_date_sk]
                                         BroadcastHashJoin [cs_item_sk,item_sk]
-                                          Filter [cs_bill_customer_sk]
+                                          Filter [cs_bill_customer_sk,cs_item_sk]
                                             ColumnarToRow
                                               InputAdapter
                                                 Scan parquet spark_catalog.default.catalog_sales [cs_bill_customer_sk,cs_item_sk,cs_quantity,cs_list_price,cs_sold_date_sk]
@@ -166,7 +166,7 @@ TakeOrderedAndProject [c_last_name,c_first_name,sales]
                                     WholeStageCodegen (23)
                                       Project [ws_bill_customer_sk,ws_quantity,ws_list_price,ws_sold_date_sk]
                                         BroadcastHashJoin [ws_item_sk,item_sk]
-                                          Filter [ws_bill_customer_sk]
+                                          Filter [ws_bill_customer_sk,ws_item_sk]
                                             ColumnarToRow
                                               InputAdapter
                                                 Scan parquet spark_catalog.default.web_sales [ws_item_sk,ws_bill_customer_sk,ws_quantity,ws_list_price,ws_sold_date_sk]

@@ -19,17 +19,18 @@ WholeStageCodegen (24)
                                     WholeStageCodegen (5)
                                       Project [cs_bill_customer_sk,cs_quantity,cs_list_price,cs_sold_date_sk]
                                         BroadcastHashJoin [cs_item_sk,item_sk]
-                                          ColumnarToRow
-                                            InputAdapter
-                                              Scan parquet spark_catalog.default.catalog_sales [cs_bill_customer_sk,cs_item_sk,cs_quantity,cs_list_price,cs_sold_date_sk]
-                                                SubqueryBroadcast [d_date_sk] #1
-                                                  BroadcastExchange #3
-                                                    WholeStageCodegen (1)
-                                                      Project [d_date_sk]
-                                                        Filter [d_year,d_moy,d_date_sk]
-                                                          ColumnarToRow
-                                                            InputAdapter
-                                                              Scan parquet spark_catalog.default.date_dim [d_date_sk,d_year,d_moy]
+                                          Filter [cs_item_sk,cs_bill_customer_sk]
+                                            ColumnarToRow
+                                              InputAdapter
+                                                Scan parquet spark_catalog.default.catalog_sales [cs_bill_customer_sk,cs_item_sk,cs_quantity,cs_list_price,cs_sold_date_sk]
+                                                  SubqueryBroadcast [d_date_sk] #1
+                                                    BroadcastExchange #3
+                                                      WholeStageCodegen (1)
+                                                        Project [d_date_sk]
+                                                          Filter [d_year,d_moy,d_date_sk]
+                                                            ColumnarToRow
+                                                              InputAdapter
+                                                                Scan parquet spark_catalog.default.date_dim [d_date_sk,d_year,d_moy]
                                           InputAdapter
                                             BroadcastExchange #4
                                               WholeStageCodegen (4)
@@ -136,10 +137,11 @@ WholeStageCodegen (24)
                                     WholeStageCodegen (16)
                                       Project [ws_bill_customer_sk,ws_quantity,ws_list_price,ws_sold_date_sk]
                                         BroadcastHashJoin [ws_item_sk,item_sk]
-                                          ColumnarToRow
-                                            InputAdapter
-                                              Scan parquet spark_catalog.default.web_sales [ws_item_sk,ws_bill_customer_sk,ws_quantity,ws_list_price,ws_sold_date_sk]
-                                                ReusedSubquery [d_date_sk] #1
+                                          Filter [ws_item_sk,ws_bill_customer_sk]
+                                            ColumnarToRow
+                                              InputAdapter
+                                                Scan parquet spark_catalog.default.web_sales [ws_item_sk,ws_bill_customer_sk,ws_quantity,ws_list_price,ws_sold_date_sk]
+                                                  ReusedSubquery [d_date_sk] #1
                                           InputAdapter
                                             ReusedExchange [item_sk] #4
                           InputAdapter
