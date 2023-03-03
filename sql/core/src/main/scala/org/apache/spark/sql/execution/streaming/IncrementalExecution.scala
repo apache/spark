@@ -117,9 +117,12 @@ class IncrementalExecution(
       numStateStores)
   }
 
-  /** Locates save/restore pairs surrounding aggregation. */
-  val shufflePartitionsRule = new Rule[SparkPlan] {
-    override def apply(plan: SparkPlan): SparkPlan = plan transform {
+  sealed trait SparkPlanPartialRule {
+    val rule: PartialFunction[SparkPlan, SparkPlan]
+  }
+
+  object ShufflePartitionsRule extends SparkPlanPartialRule {
+    override val rule: PartialFunction[SparkPlan, SparkPlan] = {
       // NOTE: we should include all aggregate execs here which are used in streaming aggregations
       case a: SortAggregateExec if a.isStreaming =>
         a.copy(numShufflePartitions = Some(numStateStores))
@@ -138,7 +141,7 @@ class IncrementalExecution(
     }
   }
 
-  val convertLocalLimitRule = new Rule[SparkPlan] {
+  object ConvertLocalLimitRule extends SparkPlanPartialRule {
     /**
      * Ensures that this plan DOES NOT have any stateful operation in it whose pipelined execution
      * depends on this plan. In other words, this function returns true if this plan does
@@ -165,7 +168,7 @@ class IncrementalExecution(
       !statefulOpFound
     }
 
-    override def apply(plan: SparkPlan): SparkPlan = plan transform {
+    override val rule: PartialFunction[SparkPlan, SparkPlan] = {
       case StreamingLocalLimitExec(limit, child) if hasNoStatefulOp(child) =>
         // Optimize limit execution by replacing StreamingLocalLimitExec (consumes the iterator
         // completely) to LocalLimitExec (does not consume the iterator) when the child plan has
@@ -174,11 +177,11 @@ class IncrementalExecution(
     }
   }
 
-  val stateOpIdRule = new Rule[SparkPlan] {
-    override def apply(plan: SparkPlan): SparkPlan = plan transform {
+  object StateOpIdRule extends SparkPlanPartialRule {
+    override val rule: PartialFunction[SparkPlan, SparkPlan] = {
       case StateStoreSaveExec(keys, None, None, None, None, stateFormatVersion,
-             UnaryExecNode(agg,
-               StateStoreRestoreExec(_, None, _, child))) =>
+      UnaryExecNode(agg,
+      StateStoreRestoreExec(_, None, _, child))) =>
         val aggStateInfo = nextStatefulOperationStateInfo
         StateStoreSaveExec(
           keys,
@@ -195,27 +198,27 @@ class IncrementalExecution(
               child) :: Nil))
 
       case SessionWindowStateStoreSaveExec(keys, session, None, None, None, None,
-        stateFormatVersion,
-        UnaryExecNode(agg,
-        SessionWindowStateStoreRestoreExec(_, _, None, None, None, _, child))) =>
-          val aggStateInfo = nextStatefulOperationStateInfo
-          SessionWindowStateStoreSaveExec(
-            keys,
-            session,
-            Some(aggStateInfo),
-            Some(outputMode),
-            eventTimeWatermarkForLateEvents = None,
-            eventTimeWatermarkForEviction = None,
-            stateFormatVersion,
-            agg.withNewChildren(
-              SessionWindowStateStoreRestoreExec(
-                keys,
-                session,
-                Some(aggStateInfo),
-                eventTimeWatermarkForLateEvents = None,
-                eventTimeWatermarkForEviction = None,
-                stateFormatVersion,
-                child) :: Nil))
+      stateFormatVersion,
+      UnaryExecNode(agg,
+      SessionWindowStateStoreRestoreExec(_, _, None, None, None, _, child))) =>
+        val aggStateInfo = nextStatefulOperationStateInfo
+        SessionWindowStateStoreSaveExec(
+          keys,
+          session,
+          Some(aggStateInfo),
+          Some(outputMode),
+          eventTimeWatermarkForLateEvents = None,
+          eventTimeWatermarkForEviction = None,
+          stateFormatVersion,
+          agg.withNewChildren(
+            SessionWindowStateStoreRestoreExec(
+              keys,
+              session,
+              Some(aggStateInfo),
+              eventTimeWatermarkForLateEvents = None,
+              eventTimeWatermarkForEviction = None,
+              stateFormatVersion,
+              child) :: Nil))
 
       case StreamingDeduplicateExec(keys, child, None, None, None) =>
         StreamingDeduplicateExec(
@@ -258,7 +261,68 @@ class IncrementalExecution(
     }
   }
 
-  val watermarkPropagationRule = new Rule[SparkPlan] {
+  object WatermarkPropagationRule extends SparkPlanPartialRule {
+    private def inputWatermarkForLateEvents(stateInfo: StatefulOperatorStateInfo): Option[Long] = {
+      Some(watermarkPropagator.getInputWatermarkForLateEvents(currentBatchId,
+        stateInfo.operatorId))
+    }
+
+    private def inputWatermarkForEviction(stateInfo: StatefulOperatorStateInfo): Option[Long] = {
+      Some(watermarkPropagator.getInputWatermarkForEviction(currentBatchId, stateInfo.operatorId))
+    }
+
+    override val rule: PartialFunction[SparkPlan, SparkPlan] = {
+      case s: StateStoreSaveExec if s.stateInfo.isDefined =>
+        s.copy(
+          eventTimeWatermarkForLateEvents = inputWatermarkForLateEvents(s.stateInfo.get),
+          eventTimeWatermarkForEviction = inputWatermarkForEviction(s.stateInfo.get)
+        )
+
+      case s: SessionWindowStateStoreSaveExec if s.stateInfo.isDefined =>
+        s.copy(
+          eventTimeWatermarkForLateEvents = inputWatermarkForLateEvents(s.stateInfo.get),
+          eventTimeWatermarkForEviction = inputWatermarkForEviction(s.stateInfo.get)
+        )
+
+      case s: SessionWindowStateStoreRestoreExec if s.stateInfo.isDefined =>
+        s.copy(
+          eventTimeWatermarkForLateEvents = inputWatermarkForLateEvents(s.stateInfo.get),
+          eventTimeWatermarkForEviction = inputWatermarkForEviction(s.stateInfo.get)
+        )
+
+      case s: StreamingDeduplicateExec if s.stateInfo.isDefined =>
+        s.copy(
+          eventTimeWatermarkForLateEvents = inputWatermarkForLateEvents(s.stateInfo.get),
+          eventTimeWatermarkForEviction = inputWatermarkForEviction(s.stateInfo.get)
+        )
+
+      case m: FlatMapGroupsWithStateExec if m.stateInfo.isDefined =>
+        m.copy(
+          eventTimeWatermarkForLateEvents = inputWatermarkForLateEvents(m.stateInfo.get),
+          eventTimeWatermarkForEviction = inputWatermarkForEviction(m.stateInfo.get)
+        )
+
+      case m: FlatMapGroupsInPandasWithStateExec if m.stateInfo.isDefined =>
+        m.copy(
+          eventTimeWatermarkForLateEvents = inputWatermarkForLateEvents(m.stateInfo.get),
+          eventTimeWatermarkForEviction = inputWatermarkForEviction(m.stateInfo.get)
+        )
+
+      case j: StreamingSymmetricHashJoinExec =>
+        val iwLateEvents = inputWatermarkForLateEvents(j.stateInfo.get)
+        val iwEviction = inputWatermarkForEviction(j.stateInfo.get)
+        j.copy(
+          eventTimeWatermarkForLateEvents = iwLateEvents,
+          eventTimeWatermarkForEviction = iwEviction,
+          stateWatermarkPredicates =
+            StreamingSymmetricHashJoinHelper.getStateWatermarkPredicates(
+              j.left.output, j.right.output, j.leftKeys, j.rightKeys, j.condition.full,
+              iwEviction, !allowMultipleStatefulOperators)
+        )
+    }
+  }
+
+  val state = new Rule[SparkPlan] {
     private def simulateWatermarkPropagation(plan: SparkPlan): Unit = {
       val watermarkForPrevBatch = prevOffsetSeqMetadata.map(_.batchWatermarkMs).getOrElse(0L)
       val watermarkForCurrBatch = offsetSeqMetadata.batchWatermarkMs
@@ -269,74 +333,22 @@ class IncrementalExecution(
       watermarkPropagator.propagate(currentBatchId, plan, watermarkForCurrBatch)
     }
 
-    private def inputWatermarkForLateEvents(stateInfo: StatefulOperatorStateInfo): Option[Long] = {
-      Some(watermarkPropagator.getInputWatermarkForLateEvents(currentBatchId,
-        stateInfo.operatorId))
-    }
+    private lazy val composedRule: PartialFunction[SparkPlan, SparkPlan] = {
+      // There should be no same pattern across rules in the list.
+      val rulesToCompose = Seq(ShufflePartitionsRule, ConvertLocalLimitRule, StateOpIdRule)
+        .map(_.rule)
 
-    private def inputWatermarkForEviction(stateInfo: StatefulOperatorStateInfo): Option[Long] = {
-      Some(watermarkPropagator.getInputWatermarkForEviction(currentBatchId, stateInfo.operatorId))
+      rulesToCompose.reduceLeft { (ruleA, ruleB) => ruleA orElse ruleB }
     }
 
     override def apply(plan: SparkPlan): SparkPlan = {
-      simulateWatermarkPropagation(plan)
-      plan transform {
-        case s: StateStoreSaveExec if s.stateInfo.isDefined =>
-          s.copy(
-            eventTimeWatermarkForLateEvents = inputWatermarkForLateEvents(s.stateInfo.get),
-            eventTimeWatermarkForEviction = inputWatermarkForEviction(s.stateInfo.get)
-          )
-
-        case s: SessionWindowStateStoreSaveExec if s.stateInfo.isDefined =>
-          s.copy(
-            eventTimeWatermarkForLateEvents = inputWatermarkForLateEvents(s.stateInfo.get),
-            eventTimeWatermarkForEviction = inputWatermarkForEviction(s.stateInfo.get)
-          )
-
-        case s: SessionWindowStateStoreRestoreExec if s.stateInfo.isDefined =>
-          s.copy(
-            eventTimeWatermarkForLateEvents = inputWatermarkForLateEvents(s.stateInfo.get),
-            eventTimeWatermarkForEviction = inputWatermarkForEviction(s.stateInfo.get)
-          )
-
-        case s: StreamingDeduplicateExec if s.stateInfo.isDefined =>
-          s.copy(
-            eventTimeWatermarkForLateEvents = inputWatermarkForLateEvents(s.stateInfo.get),
-            eventTimeWatermarkForEviction = inputWatermarkForEviction(s.stateInfo.get)
-          )
-
-        case m: FlatMapGroupsWithStateExec if m.stateInfo.isDefined =>
-          m.copy(
-            eventTimeWatermarkForLateEvents = inputWatermarkForLateEvents(m.stateInfo.get),
-            eventTimeWatermarkForEviction = inputWatermarkForEviction(m.stateInfo.get)
-          )
-
-        case m: FlatMapGroupsInPandasWithStateExec if m.stateInfo.isDefined =>
-          m.copy(
-            eventTimeWatermarkForLateEvents = inputWatermarkForLateEvents(m.stateInfo.get),
-            eventTimeWatermarkForEviction = inputWatermarkForEviction(m.stateInfo.get)
-          )
-
-        case j: StreamingSymmetricHashJoinExec =>
-          val iwLateEvents = inputWatermarkForLateEvents(j.stateInfo.get)
-          val iwEviction = inputWatermarkForEviction(j.stateInfo.get)
-          j.copy(
-            eventTimeWatermarkForLateEvents = iwLateEvents,
-            eventTimeWatermarkForEviction = iwEviction,
-            stateWatermarkPredicates =
-              StreamingSymmetricHashJoinHelper.getStateWatermarkPredicates(
-                j.left.output, j.right.output, j.leftKeys, j.rightKeys, j.condition.full,
-                iwEviction, !allowMultipleStatefulOperators)
-          )
-      }
+      val planWithStateOpId = plan transform composedRule
+      simulateWatermarkPropagation(planWithStateOpId)
+      planWithStateOpId transform WatermarkPropagationRule.rule
     }
   }
 
-  override def preparations: Seq[Rule[SparkPlan]] = Seq(
-    shufflePartitionsRule,
-    convertLocalLimitRule,
-    stateOpIdRule,
-    watermarkPropagationRule) ++ super.preparations
+  override def preparations: Seq[Rule[SparkPlan]] = state +: super.preparations
 
   /** No need assert supported, as this check has already been done */
   override def assertSupported(): Unit = { }
