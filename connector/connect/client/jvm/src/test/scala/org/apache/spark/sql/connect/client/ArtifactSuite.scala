@@ -19,8 +19,8 @@ package org.apache.spark.sql.connect.client
 import java.io.InputStream
 import java.nio.file.{Files, Path, Paths}
 import java.util.concurrent.TimeUnit
-import java.util.zip.{CheckedInputStream, CRC32}
 
+import collection.JavaConverters._
 import com.google.protobuf.ByteString
 import io.grpc.{ManagedChannel, Server}
 import io.grpc.inprocess.{InProcessChannelBuilder, InProcessServerBuilder}
@@ -76,6 +76,16 @@ class ArtifactSuite extends ConnectFunSuite with BeforeAndAfterEach {
 
   private val CHUNK_SIZE: Int = 32 * 1024
   protected def artifactFilePath: Path = baseResourcePath.resolve("artifact-tests")
+  protected def artifactCrcPath: Path = artifactFilePath.resolve("crc")
+
+  private def getCrcValues(filePath: Path): Seq[Long] = {
+    val fileName = filePath.getFileName.toString
+    val crcFileName = fileName.split('.').head + ".txt"
+    Files
+      .readAllLines(artifactCrcPath.resolve(crcFileName))
+      .asScala
+      .map(_.toLong)
+  }
 
   /**
    * Check if the data sent to the server (stored in `artifactChunk`) is equivalent to the local
@@ -86,10 +96,10 @@ class ArtifactSuite extends ConnectFunSuite with BeforeAndAfterEach {
   private def assertFileDataEquality(
       artifactChunk: AddArtifactsRequest.ArtifactChunk,
       localPath: Path): Unit = {
-    val in = new CheckedInputStream(Files.newInputStream(localPath), new CRC32)
-    val localData = ByteString.readFrom(in)
+    val localData = ByteString.readFrom(Files.newInputStream(localPath))
+    val expectedCrc = getCrcValues(localPath).head
     assert(artifactChunk.getData == localData)
-    assert(artifactChunk.getCrc == in.getChecksum.getValue)
+    assert(artifactChunk.getCrc == expectedCrc)
   }
 
   private def singleChunkArtifactTest(path: String): Unit = {
@@ -137,25 +147,26 @@ class ArtifactSuite extends ConnectFunSuite with BeforeAndAfterEach {
   }
 
   /**
-   * Read data in a chunk of `CHUNK_SIZE` bytes from `in` and verify equality with server-side
+   * Reads data in a chunk of `CHUNK_SIZE` bytes from `in` and verify equality with server-side
    * data stored in `chunk`.
    * @param in
    * @param chunk
    * @return
    */
-  private def checkChunkDataAndCrc(
-      in: CheckedInputStream,
-      chunk: AddArtifactsRequest.ArtifactChunk): Boolean = {
-    val expectedData = readNextChunk(in)
-    val expectedCRC = in.getChecksum.getValue
-    chunk.getData == expectedData && chunk.getCrc == expectedCRC
+  private def checkChunksDataAndCrc(
+      filePath: Path,
+      chunks: Seq[AddArtifactsRequest.ArtifactChunk]): Unit = {
+    val in = Files.newInputStream(filePath)
+    val crcs = getCrcValues(filePath)
+    chunks.zip(crcs).foreach { case (chunk, expectedCrc) =>
+      val expectedData = readNextChunk(in)
+      chunk.getData == expectedData && chunk.getCrc == expectedCrc
+    }
   }
 
   test("Chunked Artifact - junitLargeJar.jar") {
     val artifactPath = artifactFilePath.resolve("junitLargeJar.jar")
     artifactManager.addArtifact(artifactPath.toString)
-    val in = new CheckedInputStream(Files.newInputStream(artifactPath), new CRC32)
-
     // Expected chunks = roundUp( file_size / chunk_size) = 12
     // File size of `junitLargeJar.jar` is 384581 bytes.
     val expectedChunks = (384581 + (CHUNK_SIZE - 1)) / CHUNK_SIZE
@@ -167,9 +178,9 @@ class ArtifactSuite extends ConnectFunSuite with BeforeAndAfterEach {
     assert(beginChunkRequest.getName == "jars/junitLargeJar.jar")
     assert(beginChunkRequest.getTotalBytes == 384581)
     assert(beginChunkRequest.getNumChunks == expectedChunks)
-    checkChunkDataAndCrc(in, beginChunkRequest.getInitialChunk)
-    // Check remaining `ArtifactChunk`s for data equality.
-    receivedRequests.drop(1).forall(r => r.hasChunk && checkChunkDataAndCrc(in, r.getChunk))
+    val dataChunks = Seq(beginChunkRequest.getInitialChunk) ++
+      receivedRequests.drop(1).map(_.getChunk)
+    checkChunksDataAndCrc(artifactPath, dataChunks)
   }
 
   test("Batched SingleChunkArtifacts") {
@@ -221,13 +232,10 @@ class ArtifactSuite extends ConnectFunSuite with BeforeAndAfterEach {
     assert(beginChunkRequest.getName == "jars/junitLargeJar.jar")
     assert(beginChunkRequest.getTotalBytes == 384581)
     assert(beginChunkRequest.getNumChunks == 12)
-    val file2in = new CheckedInputStream(Files.newInputStream(Paths.get(file2)), new CRC32)
-    checkChunkDataAndCrc(file2in, beginChunkRequest.getInitialChunk)
     // Large artifact data chunks are requests number 3 to 13.
-    receivedRequests
-      .drop(2)
-      .dropRight(1)
-      .forall(r => r.hasChunk && checkChunkDataAndCrc(file2in, r.getChunk))
+    val dataChunks = Seq(beginChunkRequest.getInitialChunk) ++
+      receivedRequests.drop(2).dropRight(1).map(_.getChunk)
+    checkChunksDataAndCrc(Paths.get(file2), dataChunks)
 
     val lastBatch = receivedRequests.last.getBatch
     assert(lastBatch.getArtifactsCount == 2)

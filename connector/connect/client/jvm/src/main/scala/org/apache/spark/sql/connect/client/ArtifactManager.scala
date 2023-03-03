@@ -234,6 +234,7 @@ class ArtifactManager(userContext: proto.UserContext, channel: ManagedChannel) {
             .setData(dataChunk)
             .setCrc(in.getChecksum.getValue))
       stream.onNext(builder.build())
+      in.getChecksum.reset()
       builder.clearBeginChunk()
 
       dataChunk = readNextChunk(in)
@@ -242,7 +243,7 @@ class ArtifactManager(userContext: proto.UserContext, channel: ManagedChannel) {
         artifactChunkBuilder.setData(dataChunk).setCrc(in.getChecksum.getValue)
         builder.setChunk(artifactChunkBuilder.build())
         stream.onNext(builder.build())
-
+        in.getChecksum.reset()
         builder.clearChunk()
         dataChunk = readNextChunk(in)
       }
