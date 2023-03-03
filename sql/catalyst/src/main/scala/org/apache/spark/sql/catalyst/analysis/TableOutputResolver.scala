@@ -47,7 +47,7 @@ object TableOutputResolver {
 
     val errors = new mutable.ArrayBuffer[String]()
     val resolved: Seq[NamedExpression] = if (byName) {
-      reorderColumnsByName(tableName, actualExpectedCols, expected, conf, errors += _)
+      reorderColumnsByName(tableName, query.output, actualExpectedCols, conf, errors += _)
     } else {
       if (actualExpectedCols.size > query.output.size) {
         throw QueryCompilationErrors.cannotWriteNotEnoughColumnsToTableError(
