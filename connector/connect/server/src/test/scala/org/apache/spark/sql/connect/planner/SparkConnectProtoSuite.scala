@@ -330,7 +330,8 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
     }
     val withDataType = {
       val builder = proto.Relation.newBuilder()
-      builder.getLocalRelationBuilder.setDataType(DataTypeProtoConverter.toConnectProtoType(schema))
+      builder.getLocalRelationBuilder.setDataType(
+        DataTypeProtoConverter.toConnectProtoType(schema))
       builder.build()
     }
     val sparkPlan = LocalRelation(schema.toAttributes)
