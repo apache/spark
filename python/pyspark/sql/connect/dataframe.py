@@ -153,7 +153,7 @@ class DataFrame:
                 error_class="NOT_STR",
                 message_parameters={"arg_name": "colName", "arg_type": type(colName).__name__},
             )
-        return Column(UnresolvedRegex(colName))
+        return Column(UnresolvedRegex(colName, self._plan._plan_id))
 
     colRegex.__doc__ = PySparkDataFrame.colRegex.__doc__
 

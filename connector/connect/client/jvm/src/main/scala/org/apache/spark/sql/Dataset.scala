@@ -940,8 +940,17 @@ class Dataset[T] private[sql] (
    * @group untypedrel
    * @since 3.4.0
    */
-  def colRegex(colName: String): Column = Column { builder =>
-    builder.getUnresolvedRegexBuilder.setColName(colName)
+  def colRegex(colName: String): Column = {
+    val planId = if (plan.getRoot.hasCommon && plan.getRoot.getCommon.hasPlanId) {
+      Option(plan.getRoot.getCommon.getPlanId)
+    } else {
+      None
+    }
+
+    Column { builder =>
+      val unresolvedRegexBuilder = builder.getUnresolvedRegexBuilder.setColName(colName)
+      planId.foreach(unresolvedRegexBuilder.setPlanId)
+    }
   }
 
   /**
