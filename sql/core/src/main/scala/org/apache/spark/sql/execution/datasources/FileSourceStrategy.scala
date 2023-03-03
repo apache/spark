@@ -219,7 +219,9 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
         def unapply(attributeReference: AttributeReference): Option[AttributeReference] = {
           attributeReference match {
             case attr @ FileSourceMetadataAttribute(
-                AttributeReference("_metadata", StructType(_), _, _)) =>
+                MetadataAttributeWithLogicalName(
+                  AttributeReference(_, StructType(_), _, _),
+                  FileFormat.METADATA_NAME)) =>
               Some(attr)
             case _ => None
           }
@@ -295,8 +297,9 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
             // Replace references to the _metadata column. This will affect references to the column
             // itself but also where fields from the metadata struct are used.
             case MetadataStructColumn(AttributeReference(_, fields @ StructType(_), _, _)) =>
-              CreateStruct(fields.map(
-                field => metadataColumns.find(attr => attr.name == newFieldName(field.name)).get))
+              val reboundFields = fields.map(
+                field => metadataColumns.find(attr => attr.name == newFieldName(field.name)).get)
+              CreateStruct(reboundFields)
           }.transform {
             // Replace references to struct fields with the field values. This is to avoid creating
             // temporaries to improve performance.

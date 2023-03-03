@@ -43,6 +43,34 @@ abstract class LogicalPlan
    */
   def metadataOutput: Seq[Attribute] = children.flatMap(_.metadataOutput)
 
+  /**
+   * Searches for a metadata attribute by its logical name.
+   *
+   * The search works in spite of conflicts with column names in the data schema.
+   */
+  def getMetadataAttributeByNameOpt(name: String): Option[AttributeReference] = {
+    // NOTE: An already-referenced column might appear in `output` instead of `metadataOutput`.
+    (metadataOutput ++ output).collectFirst {
+      case MetadataAttributeWithLogicalName(attr, logicalName)
+          if conf.resolver(name, logicalName) => attr
+    }
+  }
+
+  /**
+   * Returns the metadata attribute having the specified logical name.
+   *
+   * Throws [[AnalysisException]] if no such metadata attribute exists.
+   */
+  def getMetadataAttributeByName(name: String): AttributeReference = {
+    getMetadataAttributeByNameOpt(name).getOrElse {
+      val availableMetadataColumns = (metadataOutput ++ output).collect {
+        case MetadataAttributeWithLogicalName(_, logicalName) => logicalName
+      }
+      throw QueryCompilationErrors.unresolvedAttributeError(
+        "UNRESOLVED_COLUMN", name, availableMetadataColumns.distinct, origin)
+    }
+  }
+
   /** Returns true if this subtree has data from a streaming data source. */
   def isStreaming: Boolean = _isStreaming
   private[this] lazy val _isStreaming = children.exists(_.isStreaming)
@@ -341,13 +369,17 @@ trait ExposesMetadataColumns extends LogicalPlan {
       val resolve = conf.resolver
       val outputNames = outputSet.map(_.name)
 
-      def isOutputColumn(col: AttributeReference): Boolean = {
-        outputNames.exists(name => resolve(col.name, name))
+      // Generate a unique name by prepending underscores.
+      @scala.annotation.tailrec
+      def makeUnique(name: String): String = name match {
+        case name if outputNames.exists(resolve(_, name)) => makeUnique(s"_$name")
+        case name => name
       }
-      // filter out the metadata struct column if it has the name conflicting with output columns.
-      // if the file has a column "_metadata",
-      // then the data column should be returned not the metadata struct column
-      metadataOutput.filterNot(isOutputColumn)
+
+      // Rename any metadata column whose name conflicts with an output column.
+      //
+      // Use [[LogicalPlan.getMetadataAttributeByName]] to reliably find renamed metadata columns.
+      metadataOutput.map(attr => attr.withName(makeUnique(attr.name)))
     } else {
       metadataColFromOutput.asInstanceOf[Seq[AttributeReference]]
     }
