@@ -482,6 +482,12 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             .schema,
         )
 
+    def test_with_sequence_column(self):
+        self.assertEqual(
+            self.connect.read.table(self.tbl_name)._withSequenceColumn("sequence").schema,
+            self.spark.read.table(self.tbl_name)._withSequenceColumn("sequence").schema,
+        )
+
     def test_with_local_data(self):
         """SPARK-41114: Test creating a dataframe using local data"""
         pdf = pd.DataFrame({"a": [1, 2, 3], "b": ["a", "b", "c"]})

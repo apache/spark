@@ -90,6 +90,7 @@ class Relation(google.protobuf.message.Message):
     TO_SCHEMA_FIELD_NUMBER: builtins.int
     REPARTITION_BY_EXPRESSION_FIELD_NUMBER: builtins.int
     FRAME_MAP_FIELD_NUMBER: builtins.int
+    WITH_SEQUENCE_COLUMN_FIELD_NUMBER: builtins.int
     FILL_NA_FIELD_NUMBER: builtins.int
     DROP_NA_FIELD_NUMBER: builtins.int
     REPLACE_FIELD_NUMBER: builtins.int
@@ -161,6 +162,8 @@ class Relation(google.protobuf.message.Message):
     @property
     def frame_map(self) -> global___FrameMap: ...
     @property
+    def with_sequence_column(self) -> global___WithSequenceColumn: ...
+    @property
     def fill_na(self) -> global___NAFill:
         """NA functions"""
     @property
@@ -225,6 +228,7 @@ class Relation(google.protobuf.message.Message):
         to_schema: global___ToSchema | None = ...,
         repartition_by_expression: global___RepartitionByExpression | None = ...,
         frame_map: global___FrameMap | None = ...,
+        with_sequence_column: global___WithSequenceColumn | None = ...,
         fill_na: global___NAFill | None = ...,
         drop_na: global___NADrop | None = ...,
         replace: global___NAReplace | None = ...,
@@ -329,6 +333,8 @@ class Relation(google.protobuf.message.Message):
             b"with_columns",
             "with_columns_renamed",
             b"with_columns_renamed",
+            "with_sequence_column",
+            b"with_sequence_column",
         ],
     ) -> builtins.bool: ...
     def ClearField(
@@ -420,6 +426,8 @@ class Relation(google.protobuf.message.Message):
             b"with_columns",
             "with_columns_renamed",
             b"with_columns_renamed",
+            "with_sequence_column",
+            b"with_sequence_column",
         ],
     ) -> None: ...
     def WhichOneof(
@@ -452,6 +460,7 @@ class Relation(google.protobuf.message.Message):
         "to_schema",
         "repartition_by_expression",
         "frame_map",
+        "with_sequence_column",
         "fill_na",
         "drop_na",
         "replace",
@@ -2702,3 +2711,31 @@ class FrameMap(google.protobuf.message.Message):
     ) -> None: ...
 
 global___FrameMap = FrameMap
+
+class WithSequenceColumn(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    INPUT_FIELD_NUMBER: builtins.int
+    NAME_FIELD_NUMBER: builtins.int
+    @property
+    def input(self) -> global___Relation:
+        """(Required) The input relation."""
+    name: builtins.str
+    """(Required)
+
+    name for sequence column.
+    """
+    def __init__(
+        self,
+        *,
+        input: global___Relation | None = ...,
+        name: builtins.str = ...,
+    ) -> None: ...
+    def HasField(
+        self, field_name: typing_extensions.Literal["input", b"input"]
+    ) -> builtins.bool: ...
+    def ClearField(
+        self, field_name: typing_extensions.Literal["input", b"input", "name", b"name"]
+    ) -> None: ...
+
+global___WithSequenceColumn = WithSequenceColumn

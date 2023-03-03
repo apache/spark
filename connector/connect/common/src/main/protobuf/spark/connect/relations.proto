@@ -61,6 +61,7 @@ message Relation {
     ToSchema to_schema = 26;
     RepartitionByExpression repartition_by_expression = 27;
     FrameMap frame_map = 28;
+    WithSequenceColumn with_sequence_column = 29;
 
     // NA functions
     NAFill fill_na = 90;
@@ -781,3 +782,12 @@ message FrameMap {
   CommonInlineUserDefinedFunction func = 2;
 }
 
+message WithSequenceColumn {
+  // (Required) The input relation.
+  Relation input = 1;
+
+  // (Required)
+  //
+  // name for sequence column.
+  string name = 2;
+}

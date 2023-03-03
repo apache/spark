@@ -1899,3 +1899,28 @@ class CachedRelation(LogicalPlan):
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
         return self._plan
+
+
+class WithSequenceColumn(LogicalPlan):
+    """Logical plan object for a withSequenceColumn operation."""
+
+    def __init__(
+        self,
+        child: Optional["LogicalPlan"],
+        column_name: str,
+        metadata: Optional[Sequence[str]] = None,
+    ) -> None:
+        super().__init__(child)
+
+        assert isinstance(column_name, str)
+
+        self._column_name = column_name
+
+    def plan(self, session: "SparkConnectClient") -> proto.Relation:
+        assert self._child is not None
+        plan = self._create_proto_relation()
+        plan.with_sequence_column.input.CopyFrom(self._child.plan(session))
+
+        plan.with_sequence_column.name = self._column_name
+
+        return plan

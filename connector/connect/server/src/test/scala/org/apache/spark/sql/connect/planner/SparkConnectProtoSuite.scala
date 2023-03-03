@@ -554,6 +554,12 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
       parameters = Map("columnName" -> "`duplicatedcol`"))
   }
 
+  test("Test withSequenceColumn") {
+    comparePlans(
+      connectTestRelation.withSequenceColumn("sequence"),
+      sparkTestRelation.withSequenceColumn("sequence"))
+  }
+
   test("Writes fails without path or table") {
     assertThrows[UnsupportedOperationException] {
       transform(localRelation.write())

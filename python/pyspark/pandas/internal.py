@@ -886,12 +886,7 @@ class InternalFrame:
 
     @staticmethod
     def attach_distributed_column(sdf: SparkDataFrame, column_name: str) -> SparkDataFrame:
-        scols = [scol_for(sdf, column) for column in sdf.columns]
-        jvm = sdf.sparkSession._jvm
-        tag = jvm.org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FUNC_ALIAS()
-        jexpr = F.monotonically_increasing_id()._jc.expr()
-        jexpr.setTagValue(tag, "distributed_index")
-        return sdf.select(Column(jvm.Column(jexpr)).alias(column_name), *scols)
+        return sdf._withSequenceColumn(column_name)
 
     @staticmethod
     def attach_distributed_sequence_column(sdf: SparkDataFrame, column_name: str) -> SparkDataFrame:

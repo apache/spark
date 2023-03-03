@@ -962,6 +962,17 @@ package object dsl {
           .build()
       }
 
+      def withSequenceColumn(name: String): Relation = {
+        Relation
+          .newBuilder()
+          .setWithSequenceColumn(
+            WithSequenceColumn
+              .newBuilder()
+              .setInput(logicalPlan)
+              .setName(name))
+          .build()
+      }
+
       def hint(name: String, parameters: Any*): Relation = {
         val expressions = parameters.map { parameter =>
           proto.Expression.newBuilder().setLiteral(toConnectProtoValue(parameter)).build()
