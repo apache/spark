@@ -23,7 +23,7 @@ import io.grpc.stub.StreamObserver
 
 import org.apache.spark.connect.proto
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{Dataset, SparkSession}
+import org.apache.spark.sql.Dataset
 import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, InvalidPlanInput}
 import org.apache.spark.sql.connect.planner.SparkConnectPlanner
 import org.apache.spark.sql.execution.{CodegenMode, CostMode, ExtendedMode, FormattedMode, SimpleMode}
@@ -33,20 +33,20 @@ private[connect] class SparkConnectAnalyzeHandler(
     extends Logging {
 
   def handle(request: proto.AnalyzePlanRequest): Unit = {
-    val session =
+    val sessionHolder =
       SparkConnectService
         .getOrCreateIsolatedSession(request.getUserContext.getUserId, request.getClientId)
-        .session
 
-    val response = process(request, session)
+    val response = process(request, sessionHolder)
     responseObserver.onNext(response)
     responseObserver.onCompleted()
   }
 
   def process(
       request: proto.AnalyzePlanRequest,
-      session: SparkSession): proto.AnalyzePlanResponse = {
-    lazy val planner = new SparkConnectPlanner(session)
+      sessionHolder: SessionHolder): proto.AnalyzePlanResponse = {
+    lazy val planner = new SparkConnectPlanner(sessionHolder)
+    val session = sessionHolder.session
     val builder = proto.AnalyzePlanResponse.newBuilder()
 
     request.getAnalyzeCase match {

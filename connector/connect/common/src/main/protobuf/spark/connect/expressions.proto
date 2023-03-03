@@ -172,6 +172,12 @@ message Expression {
       CalendarInterval calendar_interval = 19;
       int32 year_month_interval = 20;
       int64 day_time_interval = 21;
+
+      List list = 99;
+    }
+
+    message List {
+      repeated Expression.Literal elements = 1;
     }
 
     message Decimal {

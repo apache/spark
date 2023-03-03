@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.catalog.SessionCatalog
 import org.apache.spark.sql.catalyst.optimizer.ReplaceExpressions
 import org.apache.spark.sql.connect.config.Connect
 import org.apache.spark.sql.connect.planner.SparkConnectPlanner
+import org.apache.spark.sql.connect.service.SessionHolder
 import org.apache.spark.sql.connector.catalog.{CatalogManager, Identifier, InMemoryCatalog}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.test.SharedSparkSession
@@ -57,6 +58,9 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
  */
 // scalastyle:on
 class ProtoToParsedPlanTestSuite extends SparkFunSuite with SharedSparkSession {
+
+  val sessionHolder = SessionHolder("user1", "session1", spark)
+
   override def sparkConf: SparkConf = {
     super.sparkConf
       .set(
@@ -127,7 +131,7 @@ class ProtoToParsedPlanTestSuite extends SparkFunSuite with SharedSparkSession {
     val name = fileName.stripSuffix(".proto.bin")
     test(name) {
       val relation = readRelation(file)
-      val planner = new SparkConnectPlanner(spark)
+      val planner = new SparkConnectPlanner(sessionHolder)
       val catalystPlan =
         analyzer.executeAndCheck(planner.transformRelation(relation), new QueryPlanningTracker)
       val actual = normalizeExprIds(ReplaceExpressions(catalystPlan)).treeString
