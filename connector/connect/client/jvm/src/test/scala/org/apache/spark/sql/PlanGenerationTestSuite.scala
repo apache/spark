@@ -17,7 +17,7 @@
 package org.apache.spark.sql
 
 import java.nio.file.{Files, Path}
-import java.util.Collections
+import java.util.{Collections, Properties}
 import java.util.concurrent.atomic.AtomicLong
 
 import scala.collection.mutable
@@ -253,6 +253,13 @@ class PlanGenerationTestSuite
       .option("header", "true")
       .options(Map("delimiter" -> ";"))
       .load(testDataPath.resolve("people.csv").toString)
+  }
+
+  test("read jdbc") {
+    session.read.jdbc(
+      "jdbc:h2:mem:testdb0;user=testUser;password=testPass",
+      "TEST.TIMETYPES",
+      new Properties())
   }
 
   test("read json") {
