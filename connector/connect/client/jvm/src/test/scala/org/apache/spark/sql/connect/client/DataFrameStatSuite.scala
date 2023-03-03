@@ -19,11 +19,16 @@ package org.apache.spark.sql.connect.client
 
 import java.util.Random
 
+import io.grpc.StatusRuntimeException
+
 import org.apache.spark.sql.connect.client.util.RemoteSparkSession
+import org.apache.spark.sql.functions.col
 
 class DataFrameStatSuite extends RemoteSparkSession {
 
-  test("approximate quantile") {
+  private def toLetter(i: Int): String = (i + 97).toChar.toString
+
+  test("approxQuantile") {
     val session = spark
     import session.implicits._
 
@@ -74,9 +79,41 @@ class DataFrameStatSuite extends RemoteSparkSession {
     assert(e2.getMessage.contains("Relative Error must be non-negative"))
   }
 
+  test("covariance") {
+    val session = spark
+    import session.implicits._
+
+    val df =
+      Seq.tabulate(10)(i => (i, 2.0 * i, toLetter(i))).toDF("singles", "doubles", "letters")
+
+    val results = df.stat.cov("singles", "doubles")
+    assert(math.abs(results - 55.0 / 3) < 1e-12)
+    intercept[StatusRuntimeException] {
+      df.stat.cov("singles", "letters") // doesn't accept non-numerical dataTypes
+    }
+    val decimalData = Seq.tabulate(6)(i => (BigDecimal(i % 3), BigDecimal(i % 2))).toDF("a", "b")
+    val decimalRes = decimalData.stat.cov("a", "b")
+    assert(math.abs(decimalRes) < 1e-12)
+  }
+
+  test("correlation") {
+    val session = spark
+    import session.implicits._
+
+    val df = Seq.tabulate(10)(i => (i, 2 * i, i * -1.0)).toDF("a", "b", "c")
+    val corr1 = df.stat.corr("a", "b", "pearson")
+    assert(math.abs(corr1 - 1.0) < 1e-12)
+    val corr2 = df.stat.corr("a", "c", "pearson")
+    assert(math.abs(corr2 + 1.0) < 1e-12)
+    val df2 = Seq.tabulate(20)(x => (x, x * x - 2 * x + 3.5)).toDF("a", "b")
+    val corr3 = df2.stat.corr("a", "b", "pearson")
+    assert(math.abs(corr3 - 0.95723391394758572) < 1e-12)
+  }
+
   test("crosstab") {
     val session = spark
     import session.implicits._
+
     val rng = new Random()
     val data = Seq.tabulate(25)(_ => (rng.nextInt(5), rng.nextInt(10)))
     val df = data.toDF("a", "b")
@@ -93,6 +130,35 @@ class DataFrameStatSuite extends RemoteSparkSession {
         assert(row.getLong(col) === expected.getOrElse((i, j), 0).toLong)
       }
     }
+  }
+
+  test("freqItems") {
+    val session = spark
+    import session.implicits._
+
+    val rows = Seq.tabulate(1000) { i =>
+      if (i % 3 == 0) (1, toLetter(1), -1.0) else (i, toLetter(i), i * -1.0)
+    }
+    val df = rows.toDF("numbers", "letters", "negDoubles")
+
+    val results = df.stat.freqItems(Array("numbers", "letters"), 0.1)
+    val items = results.collect().head
+    assert(items.getSeq[Int](0).contains(1))
+    assert(items.getSeq[String](1).contains(toLetter(1)))
+
+    val singleColResults = df.stat.freqItems(Array("negDoubles"), 0.1)
+    val items2 = singleColResults.collect().head
+    assert(items2.getSeq[Double](0).contains(-1.0))
+  }
+
+  test("sampleBy") {
+    val df = spark.range(0, 100).select((col("id") % 3).as("key"))
+    val sampled = df.stat.sampleBy("key", Map(0 -> 0.1, 1 -> 0.2), 0L)
+    val rows = sampled.groupBy("key").count().orderBy("key").collect()
+    assert(rows.length == 2)
+//    checkAnswer(
+//      sampled.groupBy("key").count().orderBy("key"),
+//      Seq(Row(0, 1), Row(1, 6)))
   }
 
 }

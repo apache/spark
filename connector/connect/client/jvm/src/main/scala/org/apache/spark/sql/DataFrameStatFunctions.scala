@@ -21,8 +21,9 @@ import java.{lang => jl, util => ju}
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.connect.proto.Relation
+import org.apache.spark.connect.proto.{Relation, StatSampleBy}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{ArrayEncoder, PrimitiveDoubleEncoder}
+import org.apache.spark.sql.functions.lit
 import org.apache.spark.util.sketch.{BloomFilter, CountMinSketch}
 
 /**
@@ -104,8 +105,7 @@ final class DataFrameStatFunctions private[sql] (sparkSession: SparkSession, roo
     require(
       probabilities.forall(p => p >= 0.0 && p <= 1.0),
       "percentile should be in the range [0.0, 1.0]")
-    require(relativeError >= 0,
-      s"Relative Error must be non-negative but got $relativeError")
+    require(relativeError >= 0, s"Relative Error must be non-negative but got $relativeError")
     sparkSession
       .newDataset(
         ArrayEncoder(
@@ -480,13 +480,18 @@ final class DataFrameStatFunctions private[sql] (sparkSession: SparkSession, roo
     require(
       fractions.values.forall(p => p >= 0.0 && p <= 1.0),
       s"Fractions must be in [0, 1], but got $fractions.")
-    import org.apache.spark.sql.functions.{rand, udf}
-    val r = rand(seed)
-    val f = udf { (stratum: Any, x: Double) =>
-      x < fractions.getOrElse(stratum.asInstanceOf[T], 0.0)
-    }
     sparkSession.newDataFrame { builder =>
-      builder.getFilterBuilder.setInput(root).setCondition(f(col, r).expr)
+      val sampleByBuilder = builder.getSampleByBuilder
+        .setInput(root)
+        .setCol(lit(col).expr)
+        .setSeed(seed)
+      fractions.foreach { case (k, v) =>
+        sampleByBuilder.addFractions(
+          StatSampleBy.Fraction
+            .newBuilder()
+            .setStratum(lit(k).expr.getLiteral)
+            .setFraction(v))
+      }
     }
   }
 
