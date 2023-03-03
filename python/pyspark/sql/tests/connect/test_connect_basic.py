@@ -484,8 +484,8 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
 
     def test_with_sequence_column(self):
         self.assertEqual(
-            self.connect.read.table(self.tbl_name)._withSequenceColumn("sequence").schema,
-            self.spark.read.table(self.tbl_name)._withSequenceColumn("sequence").schema,
+            self.connect.read.table(self.tbl_name)._withSequenceColumn("sequence").collect(),
+            self.spark.read.table(self.tbl_name)._withSequenceColumn("sequence").collect(),
         )
 
     def test_with_local_data(self):

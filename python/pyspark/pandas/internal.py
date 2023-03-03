@@ -886,7 +886,12 @@ class InternalFrame:
 
     @staticmethod
     def attach_distributed_column(sdf: SparkDataFrame, column_name: str) -> SparkDataFrame:
-        return sdf._withSequenceColumn(column_name)
+        scols = [scol_for(sdf, column) for column in sdf.columns]
+        jvm = sdf.sparkSession._jvm
+        tag = jvm.org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FUNC_ALIAS()
+        jexpr = F.monotonically_increasing_id()._jc.expr()
+        jexpr.setTagValue(tag, "distributed_index")
+        return sdf.select(Column(jvm.Column(jexpr)).alias(column_name), *scols)
 
     @staticmethod
     def attach_distributed_sequence_column(sdf: SparkDataFrame, column_name: str) -> SparkDataFrame:
@@ -906,10 +911,7 @@ class InternalFrame:
         +--------+---+
         """
         if len(sdf.columns) > 0:
-            return SparkDataFrame(
-                sdf._jdf.toDF().withSequenceColumn(column_name),
-                sdf.sparkSession,
-            )
+            return sdf._withSequenceColumn(column_name)
         else:
             cnt = sdf.count()
             if cnt > 0:

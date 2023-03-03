@@ -5277,20 +5277,10 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         This is intended to use internally for pandas API on Spark.
         """
-        from pyspark.pandas.utils import scol_for
-        from pyspark.sql.functions import monotonically_increasing_id
-
-        if not isinstance(column_name, str):
-            raise PySparkTypeError(
-                error_class="NOT_STR",
-                message_parameters={"arg_name": "name", "arg_type": type(column_name).__name__},
-            )
-        scols = [scol_for(self, column) for column in self.columns]
-        jvm = self.sparkSession._jvm
-        tag = jvm.org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FUNC_ALIAS()
-        jexpr = monotonically_increasing_id()._jc.expr()
-        jexpr.setTagValue(tag, "distributed_index")
-        return self.select(Column(jvm.Column(jexpr)).alias(column_name), *scols)
+        return DataFrame(
+            self._jdf.toDF().withSequenceColumn(column_name),
+            self.sparkSession,
+        )
 
 
 def _to_scala_map(sc: SparkContext, jm: Dict) -> JavaObject:

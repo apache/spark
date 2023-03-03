@@ -1570,11 +1570,6 @@ class DataFrame:
     mapInPandas.__doc__ = PySparkDataFrame.mapInPandas.__doc__
 
     def _withSequenceColumn(self, column_name: str) -> "DataFrame":
-        if not isinstance(column_name, str):
-            raise PySparkTypeError(
-                error_class="NOT_STR",
-                message_parameters={"arg_name": "name", "arg_type": type(column_name).__name__},
-            )
         return DataFrame.withPlan(
             plan.WithSequenceColumn(
                 self._plan,
