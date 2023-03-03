@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
+import org.apache.spark.sql.catalyst.util.toPrettySQL
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.aggregate.TypedAggregateExpression
 import org.apache.spark.sql.streaming.OutputMode
@@ -88,8 +89,17 @@ class RelationalGroupedDataset protected[sql](
     case expr: NamedExpression => expr
     case a: AggregateExpression if a.aggregateFunction.isInstanceOf[TypedAggregateExpression] =>
       UnresolvedAlias(a, Some(Column.generateAlias))
-    case expr: Expression => UnresolvedAlias(expr, None)
+    case ag: UnresolvedFunction if (containsStar(Seq(ag))) || ag.isDistinct =>
+             UnresolvedAlias(expr, None)
+    case expr: Expression => Alias(expr, toPrettySQL(expr))()
   }
+
+  /**
+   * Returns true if `exprs` contains a star.
+   */
+   private[this] def containsStar(exprs: Seq[Expression]): Boolean =
+    exprs.exists(_.collect { case _: Star => true }.nonEmpty)
+
   private[this] def aggregateNumericColumns(colNames: String*)(f: Expression => AggregateFunction)
     : DataFrame = {
 
