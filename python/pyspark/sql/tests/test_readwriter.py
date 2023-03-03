@@ -56,11 +56,11 @@ class ReadwriterTestsMixin:
             self.assertEqual(sorted(df.collect()), sorted(actual.collect()))
 
             try:
-                self.spark.sql("SET spark.sql.sources.default=org.apache.spark.sql.json").collect()
+                self.spark.sql("SET spark.sql.sources.default=org.apache.spark.sql.json")
                 actual = self.spark.read.load(path=tmpPath)
                 self.assertEqual(sorted(df.collect()), sorted(actual.collect()))
             finally:
-                self.spark.sql("RESET spark.sql.sources.default").collect()
+                self.spark.sql("RESET spark.sql.sources.default")
 
             csvpath = os.path.join(tempfile.mkdtemp(), "data")
             df.write.option("quote", None).format("csv").save(csvpath)
@@ -95,11 +95,11 @@ class ReadwriterTestsMixin:
             self.assertEqual(sorted(df.collect()), sorted(actual.collect()))
 
             try:
-                self.spark.sql("SET spark.sql.sources.default=org.apache.spark.sql.json").collect()
+                self.spark.sql("SET spark.sql.sources.default=org.apache.spark.sql.json")
                 actual = self.spark.read.load(path=tmpPath)
                 self.assertEqual(sorted(df.collect()), sorted(actual.collect()))
             finally:
-                self.spark.sql("RESET spark.sql.sources.default").collect()
+                self.spark.sql("RESET spark.sql.sources.default")
         finally:
             shutil.rmtree(tmpPath)
 

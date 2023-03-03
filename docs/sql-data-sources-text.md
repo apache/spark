@@ -23,16 +23,16 @@ Spark SQL provides `spark.read().text("file_name")` to read a file or directory 
 
 <div class="codetabs">
 
+<div data-lang="python"  markdown="1">
+{% include_example text_dataset python/sql/datasource.py %}
+</div>
+
 <div data-lang="scala"  markdown="1">
 {% include_example text_dataset scala/org/apache/spark/examples/sql/SQLDataSourceExample.scala %}
 </div>
 
 <div data-lang="java"  markdown="1">
 {% include_example text_dataset java/org/apache/spark/examples/sql/JavaSQLDataSourceExample.java %}
-</div>
-
-<div data-lang="python"  markdown="1">
-{% include_example text_dataset python/sql/datasource.py %}
 </div>
 
 </div>

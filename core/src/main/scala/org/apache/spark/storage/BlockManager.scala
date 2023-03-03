@@ -43,7 +43,7 @@ import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.executor.DataReadMethod
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config
-import org.apache.spark.internal.config.Network
+import org.apache.spark.internal.config.{Network, RDD_CACHE_VISIBILITY_TRACKING_ENABLED}
 import org.apache.spark.memory.{MemoryManager, MemoryMode}
 import org.apache.spark.metrics.source.Source
 import org.apache.spark.network._
@@ -199,8 +199,11 @@ private[spark] class BlockManager(
     new DiskBlockManager(conf, deleteFilesOnStop = deleteFilesOnStop, isDriver = isDriver)
   }
 
+  /** Whether rdd cache visibility tracking is enabled. */
+  private val trackingCacheVisibility: Boolean = conf.get(RDD_CACHE_VISIBILITY_TRACKING_ENABLED)
+
   // Visible for testing
-  private[storage] val blockInfoManager = new BlockInfoManager
+  private[storage] val blockInfoManager = new BlockInfoManager(trackingCacheVisibility)
 
   private val futureExecutionContext = ExecutionContext.fromExecutorService(
     ThreadUtils.newDaemonCachedThreadPool("block-manager-future", 128))
@@ -1324,30 +1327,73 @@ private[spark] class BlockManager(
   }
 
   /**
+   * Retrieve the given rdd block if it exists and is visible, otherwise call the provided
+   * `makeIterator` method to compute the block, persist it, and return its values.
+   *
+   * @return either a BlockResult if the block was successfully cached, or an iterator if the block
+   *         could not be cached.
+   */
+  def getOrElseUpdateRDDBlock[T](
+      taskId: Long,
+      blockId: RDDBlockId,
+      level: StorageLevel,
+      classTag: ClassTag[T],
+      makeIterator: () => Iterator[T]): Either[BlockResult, Iterator[T]] = {
+    val isCacheVisible = isRDDBlockVisible(blockId)
+    val res = getOrElseUpdate(blockId, level, classTag, makeIterator, isCacheVisible)
+    if (res.isLeft && !isCacheVisible) {
+      // Block exists but not visible, report taskId -> blockId info to master.
+      master.updateRDDBlockTaskInfo(blockId, taskId)
+    }
+
+    res
+  }
+
+  /**
    * Retrieve the given block if it exists, otherwise call the provided `makeIterator` method
    * to compute the block, persist it, and return its values.
    *
    * @return either a BlockResult if the block was successfully cached, or an iterator if the block
    *         could not be cached.
    */
-  def getOrElseUpdate[T](
+  private def getOrElseUpdate[T](
       blockId: BlockId,
       level: StorageLevel,
       classTag: ClassTag[T],
-      makeIterator: () => Iterator[T]): Either[BlockResult, Iterator[T]] = {
-    // Attempt to read the block from local or remote storage. If it's present, then we don't need
-    // to go through the local-get-or-put path.
-    get[T](blockId)(classTag) match {
-      case Some(block) =>
-        return Left(block)
-      case _ =>
-        // Need to compute the block.
+      makeIterator: () => Iterator[T],
+      isCacheVisible: Boolean): Either[BlockResult, Iterator[T]] = {
+    // Track whether the data is computed or not, force to do the computation later if need to.
+    // The reason we push the force computing later is that once the executor is decommissioned we
+    // will have a better chance to replicate the cache block because of the `checkShouldStore`
+    // validation when putting a new block.
+    var computed: Boolean = false
+    val iterator = () => {
+      computed = true
+      makeIterator()
     }
+    if (isCacheVisible) {
+      // Attempt to read the block from local or remote storage. If it's present, then we don't need
+      // to go through the local-get-or-put path.
+      get[T](blockId)(classTag) match {
+        case Some(block) =>
+          return Left(block)
+        case _ =>
+          // Need to compute the block.
+      }
+    }
+
+    // TODO: need a better way to handle blocks with indeterminate/unordered results, replicas
+    //  for same blockId could be different. And the reported accumulators could be not matching
+    //  the cached results.
     // Initially we hold no locks on this block.
-    doPutIterator(blockId, makeIterator, level, classTag, keepReadLock = true) match {
+    doPutIterator(blockId, iterator, level, classTag, keepReadLock = true) match {
       case None =>
         // doPut() didn't hand work back to us, so the block already existed or was successfully
         // stored. Therefore, we now hold a read lock on the block.
+        if (!isCacheVisible && !computed) {
+          // Force compute to report accumulator updates.
+          Utils.getIteratorSize(makeIterator())
+        }
         val blockResult = getLocalValues(blockId).getOrElse {
           // Since we held a read lock between the doPut() and get() calls, the block should not
           // have been evicted, so get() not returning the block indicates some internal error.
@@ -1420,6 +1466,28 @@ private[spark] class BlockManager(
     val blockStoreUpdater =
       ByteBufferBlockStoreUpdater(blockId, level, implicitly[ClassTag[T]], bytes, tellMaster)
     blockStoreUpdater.save()
+  }
+
+  // Check whether a rdd block is visible or not.
+  private[spark] def isRDDBlockVisible(blockId: RDDBlockId): Boolean = {
+    // Cached blocks are always visible if the feature flag is disabled.
+    if (!trackingCacheVisibility) {
+      return true
+    }
+
+    // If the rdd block visibility information not available in the block manager,
+    // asking master for the information.
+    if (blockInfoManager.isRDDBlockVisible(blockId)) {
+      return true
+    }
+
+    if(master.isRDDBlockVisible(blockId)) {
+      // Cache the visibility status if block exists.
+      blockInfoManager.tryMarkBlockAsVisible(blockId)
+      true
+    } else {
+      false
+    }
   }
 
   /**
