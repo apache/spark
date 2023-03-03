@@ -17,14 +17,14 @@
 
 package org.apache.spark.sql
 
+import java.util.Random
+
 import io.grpc.StatusRuntimeException
+
 import org.apache.spark.sql.connect.client.util.RemoteSparkSession
 import org.apache.spark.sql.functions.col
 
-import java.util.Random
-
 class DataFrameStatSuite extends RemoteSparkSession {
-
   private def toLetter(i: Int): String = (i + 97).toChar.toString
 
   test("approxQuantile") {
@@ -155,9 +155,11 @@ class DataFrameStatSuite extends RemoteSparkSession {
     val sampled = df.stat.sampleBy("key", Map(0 -> 0.1, 1 -> 0.2), 0L)
     val rows = sampled.groupBy("key").count().orderBy("key").collect()
     assert(rows.length == 2)
-//    checkAnswer(
-//      sampled.groupBy("key").count().orderBy("key"),
-//      Seq(Row(0, 1), Row(1, 6)))
+    val row0 = rows(0)
+    assert(row0.getLong(0) == 0L)
+    assert(row0.getLong(1) == 2L)
+    val row1 = rows(1)
+    assert(row1.getLong(0) == 1L)
+    assert(row1.getLong(1) == 6L)
   }
-
 }
