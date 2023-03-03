@@ -786,8 +786,6 @@ message WithSequenceColumn {
   // (Required) The input relation.
   Relation input = 1;
 
-  // (Required)
-  //
-  // name for sequence column.
+  // (Required) The name for sequence column.
   string name = 2;
 }
