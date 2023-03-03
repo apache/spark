@@ -15,14 +15,13 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.connect.client
-
-import java.util.Random
+package org.apache.spark.sql
 
 import io.grpc.StatusRuntimeException
-
 import org.apache.spark.sql.connect.client.util.RemoteSparkSession
 import org.apache.spark.sql.functions.col
+
+import java.util.Random
 
 class DataFrameStatSuite extends RemoteSparkSession {
 
