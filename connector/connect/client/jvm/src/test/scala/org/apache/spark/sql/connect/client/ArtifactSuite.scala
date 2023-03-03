@@ -85,6 +85,7 @@ class ArtifactSuite extends ConnectFunSuite with BeforeAndAfterEach {
       .readAllLines(artifactCrcPath.resolve(crcFileName))
       .asScala
       .map(_.toLong)
+      .toSeq
   }
 
   /**
