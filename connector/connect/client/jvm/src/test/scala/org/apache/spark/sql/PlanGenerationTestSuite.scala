@@ -1966,6 +1966,12 @@ class PlanGenerationTestSuite
     simple.cube("a", "b").count()
   }
 
+  test("grouping and grouping_id") {
+    simple
+      .cube("a", "b")
+      .agg(fn.grouping("a"), fn.grouping("b"), fn.grouping_id("a", "b"))
+  }
+
   test("pivot") {
     simple.groupBy(Column("id")).pivot("a", Seq(1, 2, 3)).agg(functions.count(Column("b")))
   }

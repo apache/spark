@@ -20,7 +20,6 @@ import java.io.{ByteArrayOutputStream, PrintStream}
 import java.nio.file.Files
 
 import scala.collection.JavaConverters._
-import scala.reflect.runtime.universe.TypeTag
 
 import io.grpc.StatusRuntimeException
 import org.apache.commons.io.FileUtils
@@ -28,7 +27,6 @@ import org.apache.commons.io.output.TeeOutputStream
 import org.scalactic.TolerantNumerics
 
 import org.apache.spark.SPARK_VERSION
-import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.connect.client.util.{IntegrationTestUtils, RemoteSparkSession}
 import org.apache.spark.sql.functions.{aggregate, array, col, count, lit, rand, sequence, shuffle, struct, transform, udf}
 import org.apache.spark.sql.types._
@@ -410,12 +408,10 @@ class ClientE2ETestSuite extends RemoteSparkSession {
     assert(spark.range(10).count() === 10)
   }
 
-  // We can remove this as soon this is added to SQLImplicits.
-  private implicit def newProductEncoder[T <: Product: TypeTag]: Encoder[T] =
-    ScalaReflection.encoderFor[T]
-
   test("Dataset collect tuple") {
-    val result = spark
+    val session = spark
+    import session.implicits._
+    val result = session
       .range(3)
       .select(col("id"), (col("id") % 2).cast("int").as("a"), (col("id") / lit(10.0d)).as("b"))
       .as[(Long, Int, Double)]
@@ -442,7 +438,9 @@ class ClientE2ETestSuite extends RemoteSparkSession {
   }
 
   test("Dataset collect complex type") {
-    val result = spark
+    val session = spark
+    import session.implicits._
+    val result = session
       .range(3)
       .select(generateMyTypeColumns: _*)
       .as[MyType]
@@ -456,7 +454,9 @@ class ClientE2ETestSuite extends RemoteSparkSession {
   }
 
   test("Dataset typed select - complex column") {
-    val ds = spark
+    val session = spark
+    import session.implicits._
+    val ds = session
       .range(3)
       .select(struct(generateMyTypeColumns: _*).as[MyType])
     validateMyTypeResult(ds.collect())
@@ -537,6 +537,60 @@ class ClientE2ETestSuite extends RemoteSparkSession {
   test("SparkVersion") {
     assert(!spark.version.isEmpty)
   }
+
+  private def checkSameResult[E](expected: scala.collection.Seq[E], dataset: Dataset[E]): Unit = {
+    dataset.withResult { result =>
+      assert(expected === result.iterator.asScala.toBuffer)
+    }
+  }
+
+  test("Local Relation implicit conversion") {
+    val session = spark
+    import session.implicits._
+
+    val simpleValues = Seq(1, 24, 3)
+    checkSameResult(simpleValues, simpleValues.toDS())
+    checkSameResult(simpleValues.map(v => Row(v)), simpleValues.toDF())
+
+    val complexValues = Seq((5, "a"), (6, "b"))
+    checkSameResult(complexValues, complexValues.toDS())
+    checkSameResult(
+      complexValues.map(kv => KV(kv._2, kv._1)),
+      complexValues.toDF("value", "key").as[KV])
+  }
+
+  test("SparkSession.createDataFrame - row") {
+    val rows = java.util.Arrays.asList(Row("bob", 99), Row("Club", 5), Row("Bag", 5))
+    val schema = new StructType().add("key", "string").add("value", "int")
+    checkSameResult(rows.asScala, spark.createDataFrame(rows, schema))
+  }
+
+  test("SparkSession.createDataFrame - bean") {
+    def bean(v: String): SimpleBean = {
+      val bean = new SimpleBean
+      bean.setValue(v)
+      bean
+    }
+    val beans = java.util.Arrays.asList(bean("x"), bean("s"), bean("d"))
+    checkSameResult(
+      beans.asScala.map(b => Row(b.value)),
+      spark.createDataFrame(beans, classOf[SimpleBean]))
+  }
+
+  test("SparkSession typed createDataSet/createDataframe") {
+    val session = spark
+    import session.implicits._
+    val list = java.util.Arrays.asList(KV("bob", 99), KV("Club", 5), KV("Bag", 5))
+    checkSameResult(list.asScala, session.createDataset(list))
+    checkSameResult(
+      list.asScala.map(kv => Row(kv.key, kv.value)),
+      session.createDataFrame(list.asScala.toSeq))
+  }
 }
 
 private[sql] case class MyType(id: Long, a: Double, b: Double)
+private[sql] case class KV(key: String, value: Int)
+private[sql] class SimpleBean {
+  @scala.beans.BeanProperty
+  var value: String = _
+}
