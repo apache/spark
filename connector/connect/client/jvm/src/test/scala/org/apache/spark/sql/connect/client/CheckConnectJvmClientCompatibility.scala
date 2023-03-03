@@ -109,6 +109,7 @@ object CheckConnectJvmClientCompatibility {
       IncludeByName("org.apache.spark.sql.ColumnName.*"),
       IncludeByName("org.apache.spark.sql.DataFrame.*"),
       IncludeByName("org.apache.spark.sql.DataFrameReader.*"),
+      IncludeByName("org.apache.spark.sql.DataFrameStatFunctions.*"),
       IncludeByName("org.apache.spark.sql.DataFrameWriter.*"),
       IncludeByName("org.apache.spark.sql.DataFrameWriterV2.*"),
       IncludeByName("org.apache.spark.sql.Dataset.*"),
@@ -132,6 +133,10 @@ object CheckConnectJvmClientCompatibility {
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.DataFrameReader.csv"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.DataFrameReader.jdbc"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.DataFrameWriter.jdbc"),
+
+      // DataFrameStatFunctions
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.DataFrameStatFunctions.bloomFilter"),
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.DataFrameStatFunctions.this"),
 
       // Dataset
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.ofRows"),
