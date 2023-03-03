@@ -147,6 +147,10 @@ class UseSingleWatermarkPropagator extends WatermarkPropagator {
  * Once the algorithm traverses the physical plan tree, the association between stateful operator
  * and input watermark will be constructed. Spark will request the input watermark for specific
  * stateful operator, which this implementation will give the value from the association.
+ *
+ * We skip simulation of propagation for the value of watermark as 0. Input watermark for every
+ * operator will be 0. (This may not be expected for the case op.produceOutputWatermark returns
+ * higher than the input watermark, but it won't happen in most practical cases.)
  */
 class PropagateWatermarkSimulator extends WatermarkPropagator with Logging {
   // We use treemap to sort the key (batchID) and evict old batch IDs efficiently.
@@ -246,7 +250,14 @@ class PropagateWatermarkSimulator extends WatermarkPropagator with Logging {
     } else {
       logDebug(s"watermark for batch ID $batchId is received as $originWatermark, " +
         s"call site: ${Utils.getCallSite().longForm}")
-      doSimulate(batchId, plan, originWatermark)
+
+      if (originWatermark == 0) {
+        logDebug(s"skipping the propagation for batch $batchId as origin watermark is 0.")
+        batchIdToWatermark.put(batchId, 0L)
+        inputWatermarks.put(batchId, Map.empty[Long, Option[Long]])
+      } else {
+        doSimulate(batchId, plan, originWatermark)
+      }
     }
   }
 
@@ -255,12 +266,22 @@ class PropagateWatermarkSimulator extends WatermarkPropagator with Logging {
       0
     } else {
       assert(isInitialized(batchId), s"Watermark for batch ID $batchId is not yet set!")
-      // In current Spark's logic, event time watermark cannot go down to negative. So even there is
-      // no input watermark for operator, the final input watermark for operator should be 0L.
       inputWatermarks(batchId).get(stateOpId) match {
-        case Some(wmOpt) => Math.max(wmOpt.getOrElse(0L), 0L)
-        case None => throw new IllegalStateException(s"Watermark for batch ID $batchId and " +
-          s"stateOpId $stateOpId is not yet set!")
+        case Some(wmOpt) =>
+          // In current Spark's logic, event time watermark cannot go down to negative. So even
+          // there is no input watermark for operator, the final input watermark for operator should
+          // be 0L.
+          Math.max(wmOpt.getOrElse(0L), 0L)
+        case None =>
+          if (batchIdToWatermark.get(batchId) == 0L) {
+            // We skip the propagation when the origin watermark is produced as 0L. This is safe,
+            // as output watermark is not expected to be later than the input watermark. That said,
+            // all operators would have the input watermark as 0L.
+            0L
+          } else {
+            throw new IllegalStateException(s"Watermark for batch ID $batchId and " +
+              s"stateOpId $stateOpId is not yet set!")
+          }
       }
     }
   }
