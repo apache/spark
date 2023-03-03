@@ -37,10 +37,11 @@ private[connect] class SparkConnectAnalyzeHandler(
       SparkConnectService
         .getOrCreateIsolatedSession(request.getUserContext.getUserId, request.getClientId)
         .session
-
-    val response = process(request, session)
-    responseObserver.onNext(response)
-    responseObserver.onCompleted()
+    session.withActive {
+      val response = process(request, session)
+      responseObserver.onNext(response)
+      responseObserver.onCompleted()
+    }
   }
 
   def process(
