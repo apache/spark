@@ -2340,7 +2340,6 @@ class IndexesTest(ComparisonTestBase, TestUtils):
         psidx = ps.Index(pidx)
 
         self.assert_eq(psidx.astype(int), pidx.astype(int))
-        self.assert_eq(psidx.astype(np.int), pidx.astype(np.int))
         self.assert_eq(psidx.astype(np.int8), pidx.astype(np.int8))
         self.assert_eq(psidx.astype(np.int16), pidx.astype(np.int16))
         self.assert_eq(psidx.astype(np.int32), pidx.astype(np.int32))
@@ -2356,7 +2355,6 @@ class IndexesTest(ComparisonTestBase, TestUtils):
         self.assert_eq(psidx.astype("i"), pidx.astype("i"))
         self.assert_eq(psidx.astype("long"), pidx.astype("long"))
         self.assert_eq(psidx.astype("short"), pidx.astype("short"))
-        self.assert_eq(psidx.astype(np.float), pidx.astype(np.float))
         self.assert_eq(psidx.astype(np.float32), pidx.astype(np.float32))
         self.assert_eq(psidx.astype(np.float64), pidx.astype(np.float64))
         self.assert_eq(psidx.astype("float"), pidx.astype("float"))
