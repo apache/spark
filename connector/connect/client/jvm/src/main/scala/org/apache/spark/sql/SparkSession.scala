@@ -344,7 +344,9 @@ class SparkSession private[sql] (
   // scalastyle:on
 
   def newSession(): SparkSession = {
-    throw new UnsupportedOperationException("newSession is not supported")
+    val newClient: SparkConnectClient =
+      new SparkConnectClient(this.client.userContext, this.client.channel, this.client.userAgent)
+    SparkSession.builder().client(newClient).build()
   }
 
   private def range(
