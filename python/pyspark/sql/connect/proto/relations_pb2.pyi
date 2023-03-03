@@ -2721,10 +2721,7 @@ class WithSequenceColumn(google.protobuf.message.Message):
     def input(self) -> global___Relation:
         """(Required) The input relation."""
     name: builtins.str
-    """(Required)
-
-    name for sequence column.
-    """
+    """(Required) The name for sequence column."""
     def __init__(
         self,
         *,
