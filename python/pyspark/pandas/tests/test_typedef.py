@@ -321,20 +321,16 @@ class TypeHintTests(unittest.TestCase):
             np.int16: (np.int16, ShortType()),
             np.int32: (np.int32, IntegerType()),
             np.int64: (np.int64, LongType()),
-            np.int: (np.int64, LongType()),
             int: (np.int64, LongType()),
             # floating
             np.float32: (np.float32, FloatType()),
-            np.float: (np.float64, DoubleType()),
             np.float64: (np.float64, DoubleType()),
             float: (np.float64, DoubleType()),
             # string
-            np.str: (np.unicode_, StringType()),
             np.unicode_: (np.unicode_, StringType()),
             str: (np.unicode_, StringType()),
             # bool
-            np.bool: (np.bool, BooleanType()),
-            bool: (np.bool, BooleanType()),
+            bool: (np.bool_, BooleanType()),
             # datetime
             np.datetime64: (np.datetime64, TimestampType()),
             datetime.datetime: (np.dtype("datetime64[ns]"), TimestampType()),

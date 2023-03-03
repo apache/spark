@@ -1127,7 +1127,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
 
         In case of Series, it works as below.
 
-        >>> def plus_max(x) -> ps.Series[np.int]:
+        >>> def plus_max(x) -> ps.Series[int]:
         ...     return x + x.max()
         >>> df.B.groupby(df.A).apply(plus_max).sort_index()  # doctest: +SKIP
         0    6
@@ -1145,7 +1145,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
 
         You can also return a scalar value as a aggregated value of the group:
 
-        >>> def plus_length(x) -> np.int:
+        >>> def plus_length(x) -> int:
         ...     return len(x)
         >>> df.B.groupby(df.A).apply(plus_length).sort_index()  # doctest: +SKIP
         0    1
@@ -1154,7 +1154,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
 
         The extra arguments to the function can be passed as below.
 
-        >>> def calculation(x, y, z) -> np.int:
+        >>> def calculation(x, y, z) -> int:
         ...     return len(x) + y * z
         >>> df.B.groupby(df.A).apply(calculation, 5, z=10).sort_index()  # doctest: +SKIP
         0    51
@@ -2186,7 +2186,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         1  a string 2  a string 6
         2  a string 3  a string 5
 
-        >>> def plus_max(x) -> ps.Series[np.int]:
+        >>> def plus_max(x) -> ps.Series[int]:
         ...     return x + x.max()
         >>> g.transform(plus_max)  # doctest: +NORMALIZE_WHITESPACE
            B   C
@@ -2220,7 +2220,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
 
         You can also specify extra arguments to pass to the function.
 
-        >>> def calculation(x, y, z) -> ps.Series[np.int]:
+        >>> def calculation(x, y, z) -> ps.Series[int]:
         ...     return x + x.min() + y + z
         >>> g.transform(calculation, 5, z=20)  # doctest: +NORMALIZE_WHITESPACE
             B   C
