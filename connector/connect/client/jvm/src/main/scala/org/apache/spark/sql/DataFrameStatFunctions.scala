@@ -22,9 +22,9 @@ import java.{lang => jl, util => ju}
 import scala.collection.JavaConverters._
 
 import org.apache.spark.connect.proto.{Relation, StatSampleBy}
-import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{ArrayEncoder, PrimitiveDoubleEncoder}
+import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{ArrayEncoder, BinaryEncoder, PrimitiveDoubleEncoder}
 import org.apache.spark.sql.functions.lit
-import org.apache.spark.util.sketch.{BloomFilter, CountMinSketch}
+import org.apache.spark.util.sketch.CountMinSketch
 
 /**
  * Statistic functions for `DataFrame`s.
@@ -153,11 +153,10 @@ final class DataFrameStatFunctions private[sql] (sparkSession: SparkSession, roo
    */
   def cov(col1: String, col2: String): Double = {
     sparkSession
-      .newDataFrame { builder =>
+      .newDataset(PrimitiveDoubleEncoder) { builder =>
         builder.getCovBuilder.setInput(root).setCol1(col1).setCol2(col2)
       }
       .head()
-      .getDouble(0)
   }
 
   /**
@@ -187,11 +186,10 @@ final class DataFrameStatFunctions private[sql] (sparkSession: SparkSession, roo
       "Currently only the calculation of the Pearson Correlation " +
         "coefficient is supported.")
     sparkSession
-      .newDataFrame { builder =>
+      .newDataset(PrimitiveDoubleEncoder) { builder =>
         builder.getCorrBuilder.setInput(root).setCol1(col1).setCol2(col2)
       }
       .head()
-      .getDouble(0)
   }
 
   /**
@@ -574,7 +572,7 @@ final class DataFrameStatFunctions private[sql] (sparkSession: SparkSession, roo
    * @since 3.4.0
    */
   def countMinSketch(col: Column, depth: Int, width: Int, seed: Int): CountMinSketch = {
-    countMinSketch(col, CountMinSketch.create(depth, width, seed))
+    countMinSketch(col, eps = 2.0 / width, confidence = 1 - 1 / Math.pow(2, depth), seed)
   }
 
   /**
@@ -593,78 +591,12 @@ final class DataFrameStatFunctions private[sql] (sparkSession: SparkSession, roo
    * @since 3.4.0
    */
   def countMinSketch(col: Column, eps: Double, confidence: Double, seed: Int): CountMinSketch = {
-    countMinSketch(col, CountMinSketch.create(eps, confidence, seed))
-  }
-
-  private def countMinSketch(col: Column, zero: CountMinSketch): CountMinSketch = {
-    throw new UnsupportedOperationException("countMinSketch is not implemented.")
-  }
-
-  /**
-   * Builds a Bloom filter over a specified column.
-   *
-   * @param colName
-   *   name of the column over which the filter is built
-   * @param expectedNumItems
-   *   expected number of items which will be put into the filter.
-   * @param fpp
-   *   expected false positive probability of the filter.
-   * @since 3.4.0
-   */
-  def bloomFilter(colName: String, expectedNumItems: Long, fpp: Double): BloomFilter = {
-    buildBloomFilter(Column(colName), expectedNumItems, -1L, fpp)
-  }
-
-  /**
-   * Builds a Bloom filter over a specified column.
-   *
-   * @param col
-   *   the column over which the filter is built
-   * @param expectedNumItems
-   *   expected number of items which will be put into the filter.
-   * @param fpp
-   *   expected false positive probability of the filter.
-   * @since 3.4.0
-   */
-  def bloomFilter(col: Column, expectedNumItems: Long, fpp: Double): BloomFilter = {
-    buildBloomFilter(col, expectedNumItems, -1L, fpp)
-  }
-
-  /**
-   * Builds a Bloom filter over a specified column.
-   *
-   * @param colName
-   *   name of the column over which the filter is built
-   * @param expectedNumItems
-   *   expected number of items which will be put into the filter.
-   * @param numBits
-   *   expected number of bits of the filter.
-   * @since 3.4.0
-   */
-  def bloomFilter(colName: String, expectedNumItems: Long, numBits: Long): BloomFilter = {
-    buildBloomFilter(Column(colName), expectedNumItems, numBits, Double.NaN)
-  }
-
-  /**
-   * Builds a Bloom filter over a specified column.
-   *
-   * @param col
-   *   the column over which the filter is built
-   * @param expectedNumItems
-   *   expected number of items which will be put into the filter.
-   * @param numBits
-   *   expected number of bits of the filter.
-   * @since 3.4.0
-   */
-  def bloomFilter(col: Column, expectedNumItems: Long, numBits: Long): BloomFilter = {
-    buildBloomFilter(col, expectedNumItems, numBits, Double.NaN)
-  }
-
-  private def buildBloomFilter(
-      col: Column,
-      expectedNumItems: Long,
-      numBits: Long,
-      fpp: Double): BloomFilter = {
-    throw new UnsupportedOperationException("buildBloomFilter is not implemented.")
+    val agg = Column.fn("count_min_sketch", col, lit(eps), lit(confidence), lit(seed))
+    val ds = sparkSession.newDataset(BinaryEncoder) { builder =>
+      builder.getProjectBuilder
+        .setInput(root)
+        .addExpressions(agg.expr)
+    }
+    CountMinSketch.readFrom(ds.head())
   }
 }

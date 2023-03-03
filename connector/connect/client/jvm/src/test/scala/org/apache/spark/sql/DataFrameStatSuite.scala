@@ -20,6 +20,7 @@ package org.apache.spark.sql
 import java.util.Random
 
 import io.grpc.StatusRuntimeException
+import org.scalatest.matchers.must.Matchers._
 
 import org.apache.spark.sql.connect.client.util.RemoteSparkSession
 import org.apache.spark.sql.functions.col
@@ -155,11 +156,27 @@ class DataFrameStatSuite extends RemoteSparkSession {
     val sampled = df.stat.sampleBy("key", Map(0 -> 0.1, 1 -> 0.2), 0L)
     val rows = sampled.groupBy("key").count().orderBy("key").collect()
     assert(rows.length == 2)
+    // scalastyle:off
+    rows.foreach(println)
     val row0 = rows(0)
     assert(row0.getLong(0) == 0L)
     assert(row0.getLong(1) == 2L)
     val row1 = rows(1)
     assert(row1.getLong(0) == 1L)
     assert(row1.getLong(1) == 6L)
+  }
+
+  test("countMinSketch") {
+    val df = spark.range(1000)
+
+    val sketch1 = df.stat.countMinSketch("id", depth = 10, width = 20, seed = 42)
+    assert(sketch1.totalCount() === 1000)
+    assert(sketch1.depth() === 10)
+    assert(sketch1.width() === 20)
+
+    val sketch = df.stat.countMinSketch("id", eps = 0.001, confidence = 0.99, seed = 42)
+    assert(sketch.totalCount() === 1000)
+    assert(sketch.relativeError() === 0.001)
+    assert(sketch.confidence() === 0.99 +- 5e-3)
   }
 }
