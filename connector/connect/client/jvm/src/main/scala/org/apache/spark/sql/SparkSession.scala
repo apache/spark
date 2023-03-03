@@ -34,6 +34,7 @@ import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, RowEncoder}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{BoxedLongEncoder, UnboundRowEncoder}
 import org.apache.spark.sql.connect.client.{SparkConnectClient, SparkResult}
 import org.apache.spark.sql.connect.client.util.{Cleaner, ConvertToArrow}
+import org.apache.spark.sql.connect.common.DataTypeProtoConverter
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -115,7 +116,7 @@ class SparkSession private[sql] (
   private def createDataset[T](encoder: AgnosticEncoder[T], data: Iterator[T]): Dataset[T] = {
     newDataset(encoder) { builder =>
       val localRelationBuilder = builder.getLocalRelationBuilder
-        .setSchema(encoder.schema.catalogString)
+        .setDataType(DataTypeProtoConverter.toConnectProtoType(encoder.schema))
       if (data.nonEmpty) {
         val timeZoneId = conf.get("spark.sql.session.timeZone")
         val arrowData = ConvertToArrow(encoder, data, timeZoneId, allocator)
