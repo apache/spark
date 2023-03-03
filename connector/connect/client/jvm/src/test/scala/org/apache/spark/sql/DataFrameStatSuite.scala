@@ -158,8 +158,6 @@ class DataFrameStatSuite extends RemoteSparkSession {
     val sampled = df.stat.sampleBy("name", fractions, 36L)
     val rows = sampled.groupBy("name").count().orderBy("name").collect()
     assert(rows.length == 1)
-    // scalastyle:off
-    rows.foreach(println)
     val row0 = rows(0)
     assert(row0.getString(0) == "Nico")
     assert(row0.getLong(1) == 1L)
