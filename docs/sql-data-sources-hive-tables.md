@@ -44,16 +44,16 @@ You may need to grant write privilege to the user who starts the Spark applicati
 
 <div class="codetabs">
 
+<div data-lang="python"  markdown="1">
+{% include_example spark_hive python/sql/hive.py %}
+</div>
+
 <div data-lang="scala"  markdown="1">
 {% include_example spark_hive scala/org/apache/spark/examples/sql/hive/SparkHiveExample.scala %}
 </div>
 
 <div data-lang="java"  markdown="1">
 {% include_example spark_hive java/org/apache/spark/examples/sql/hive/JavaSparkHiveExample.java %}
-</div>
-
-<div data-lang="python"  markdown="1">
-{% include_example spark_hive python/sql/hive.py %}
 </div>
 
 <div data-lang="r"  markdown="1">

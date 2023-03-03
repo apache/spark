@@ -41,42 +41,7 @@ It is available in either Scala (which runs on the Java VM and is thus a good wa
 or Python. Start it by running the following in the Spark directory:
 
 <div class="codetabs">
-<div data-lang="scala" markdown="1">
 
-    ./bin/spark-shell
-
-Spark's primary abstraction is a distributed collection of items called a Dataset. Datasets can be created from Hadoop InputFormats (such as HDFS files) or by transforming other Datasets. Let's make a new Dataset from the text of the README file in the Spark source directory:
-
-{% highlight scala %}
-scala> val textFile = spark.read.textFile("README.md")
-textFile: org.apache.spark.sql.Dataset[String] = [value: string]
-{% endhighlight %}
-
-You can get values from Dataset directly, by calling some actions, or transform the Dataset to get a new one. For more details, please read the _[API doc](api/scala/org/apache/spark/sql/Dataset.html)_.
-
-{% highlight scala %}
-scala> textFile.count() // Number of items in this Dataset
-res0: Long = 126 // May be different from yours as README.md will change over time, similar to other outputs
-
-scala> textFile.first() // First item in this Dataset
-res1: String = # Apache Spark
-{% endhighlight %}
-
-Now let's transform this Dataset into a new one. We call `filter` to return a new Dataset with a subset of the items in the file.
-
-{% highlight scala %}
-scala> val linesWithSpark = textFile.filter(line => line.contains("Spark"))
-linesWithSpark: org.apache.spark.sql.Dataset[String] = [value: string]
-{% endhighlight %}
-
-We can chain together transformations and actions:
-
-{% highlight scala %}
-scala> textFile.filter(line => line.contains("Spark")).count() // How many lines contain "Spark"?
-res3: Long = 15
-{% endhighlight %}
-
-</div>
 <div data-lang="python" markdown="1">
 
     ./bin/pyspark
@@ -116,6 +81,44 @@ We can chain together transformations and actions:
 {% endhighlight %}
 
 </div>
+
+<div data-lang="scala" markdown="1">
+
+    ./bin/spark-shell
+
+Spark's primary abstraction is a distributed collection of items called a Dataset. Datasets can be created from Hadoop InputFormats (such as HDFS files) or by transforming other Datasets. Let's make a new Dataset from the text of the README file in the Spark source directory:
+
+{% highlight scala %}
+scala> val textFile = spark.read.textFile("README.md")
+textFile: org.apache.spark.sql.Dataset[String] = [value: string]
+{% endhighlight %}
+
+You can get values from Dataset directly, by calling some actions, or transform the Dataset to get a new one. For more details, please read the _[API doc](api/scala/org/apache/spark/sql/Dataset.html)_.
+
+{% highlight scala %}
+scala> textFile.count() // Number of items in this Dataset
+res0: Long = 126 // May be different from yours as README.md will change over time, similar to other outputs
+
+scala> textFile.first() // First item in this Dataset
+res1: String = # Apache Spark
+{% endhighlight %}
+
+Now let's transform this Dataset into a new one. We call `filter` to return a new Dataset with a subset of the items in the file.
+
+{% highlight scala %}
+scala> val linesWithSpark = textFile.filter(line => line.contains("Spark"))
+linesWithSpark: org.apache.spark.sql.Dataset[String] = [value: string]
+{% endhighlight %}
+
+We can chain together transformations and actions:
+
+{% highlight scala %}
+scala> textFile.filter(line => line.contains("Spark")).count() // How many lines contain "Spark"?
+res3: Long = 15
+{% endhighlight %}
+
+</div>
+
 </div>
 
 
@@ -123,6 +126,32 @@ We can chain together transformations and actions:
 Dataset actions and transformations can be used for more complex computations. Let's say we want to find the line with the most words:
 
 <div class="codetabs">
+
+<div data-lang="python" markdown="1">
+
+{% highlight python %}
+>>> from pyspark.sql.functions import *
+>>> textFile.select(size(split(textFile.value, "\s+")).name("numWords")).agg(max(col("numWords"))).collect()
+[Row(max(numWords)=15)]
+{% endhighlight %}
+
+This first maps a line to an integer value and aliases it as "numWords", creating a new DataFrame. `agg` is called on that DataFrame to find the largest word count. The arguments to `select` and `agg` are both _[Column](api/python/index.html#pyspark.sql.Column)_, we can use `df.colName` to get a column from a DataFrame. We can also import pyspark.sql.functions, which provides a lot of convenient functions to build a new Column from an old one.
+
+One common data flow pattern is MapReduce, as popularized by Hadoop. Spark can implement MapReduce flows easily:
+
+{% highlight python %}
+>>> wordCounts = textFile.select(explode(split(textFile.value, "\s+")).alias("word")).groupBy("word").count()
+{% endhighlight %}
+
+Here, we use the `explode` function in `select`, to transform a Dataset of lines to a Dataset of words, and then combine `groupBy` and `count` to compute the per-word counts in the file as a DataFrame of 2 columns: "word" and "count". To collect the word counts in our shell, we can call `collect`:
+
+{% highlight python %}
+>>> wordCounts.collect()
+[Row(word=u'online', count=1), Row(word=u'graphs', count=1), ...]
+{% endhighlight %}
+
+</div>
+
 <div data-lang="scala" markdown="1">
 
 {% highlight scala %}
@@ -155,36 +184,33 @@ res6: Array[(String, Int)] = Array((means,1), (under,2), (this,3), (Because,1), 
 {% endhighlight %}
 
 </div>
-<div data-lang="python" markdown="1">
 
-{% highlight python %}
->>> from pyspark.sql.functions import *
->>> textFile.select(size(split(textFile.value, "\s+")).name("numWords")).agg(max(col("numWords"))).collect()
-[Row(max(numWords)=15)]
-{% endhighlight %}
-
-This first maps a line to an integer value and aliases it as "numWords", creating a new DataFrame. `agg` is called on that DataFrame to find the largest word count. The arguments to `select` and `agg` are both _[Column](api/python/index.html#pyspark.sql.Column)_, we can use `df.colName` to get a column from a DataFrame. We can also import pyspark.sql.functions, which provides a lot of convenient functions to build a new Column from an old one.
-
-One common data flow pattern is MapReduce, as popularized by Hadoop. Spark can implement MapReduce flows easily:
-
-{% highlight python %}
->>> wordCounts = textFile.select(explode(split(textFile.value, "\s+")).alias("word")).groupBy("word").count()
-{% endhighlight %}
-
-Here, we use the `explode` function in `select`, to transform a Dataset of lines to a Dataset of words, and then combine `groupBy` and `count` to compute the per-word counts in the file as a DataFrame of 2 columns: "word" and "count". To collect the word counts in our shell, we can call `collect`:
-
-{% highlight python %}
->>> wordCounts.collect()
-[Row(word=u'online', count=1), Row(word=u'graphs', count=1), ...]
-{% endhighlight %}
-
-</div>
 </div>
 
 ## Caching
 Spark also supports pulling data sets into a cluster-wide in-memory cache. This is very useful when data is accessed repeatedly, such as when querying a small "hot" dataset or when running an iterative algorithm like PageRank. As a simple example, let's mark our `linesWithSpark` dataset to be cached:
 
 <div class="codetabs">
+
+<div data-lang="python" markdown="1">
+
+{% highlight python %}
+>>> linesWithSpark.cache()
+
+>>> linesWithSpark.count()
+15
+
+>>> linesWithSpark.count()
+15
+{% endhighlight %}
+
+It may seem silly to use Spark to explore and cache a 100-line text file. The interesting part is
+that these same functions can be used on very large data sets, even when they are striped across
+tens or hundreds of nodes. You can also do this interactively by connecting `bin/pyspark` to
+a cluster, as described in the [RDD programming guide](rdd-programming-guide.html#using-the-shell).
+
+</div>
+
 <div data-lang="scala" markdown="1">
 
 {% highlight scala %}
@@ -204,24 +230,7 @@ tens or hundreds of nodes. You can also do this interactively by connecting `bin
 a cluster, as described in the [RDD programming guide](rdd-programming-guide.html#using-the-shell).
 
 </div>
-<div data-lang="python" markdown="1">
 
-{% highlight python %}
->>> linesWithSpark.cache()
-
->>> linesWithSpark.count()
-15
-
->>> linesWithSpark.count()
-15
-{% endhighlight %}
-
-It may seem silly to use Spark to explore and cache a 100-line text file. The interesting part is
-that these same functions can be used on very large data sets, even when they are striped across
-tens or hundreds of nodes. You can also do this interactively by connecting `bin/pyspark` to
-a cluster, as described in the [RDD programming guide](rdd-programming-guide.html#using-the-shell).
-
-</div>
 </div>
 
 # Self-Contained Applications
@@ -229,6 +238,71 @@ Suppose we wish to write a self-contained application using the Spark API. We wi
 simple application in Scala (with sbt), Java (with Maven), and Python (pip).
 
 <div class="codetabs">
+
+<div data-lang="python" markdown="1">
+
+Now we will show how to write an application using the Python API (PySpark).
+
+
+If you are building a packaged PySpark application or library you can add it to your setup.py file as:
+
+{% highlight python %}
+    install_requires=[
+        'pyspark=={{site.SPARK_VERSION}}'
+    ]
+{% endhighlight %}
+
+
+As an example, we'll create a simple Spark application, `SimpleApp.py`:
+
+{% highlight python %}
+"""SimpleApp.py"""
+from pyspark.sql import SparkSession
+
+logFile = "YOUR_SPARK_HOME/README.md"  # Should be some file on your system
+spark = SparkSession.builder.appName("SimpleApp").getOrCreate()
+logData = spark.read.text(logFile).cache()
+
+numAs = logData.filter(logData.value.contains('a')).count()
+numBs = logData.filter(logData.value.contains('b')).count()
+
+print("Lines with a: %i, lines with b: %i" % (numAs, numBs))
+
+spark.stop()
+{% endhighlight %}
+
+
+This program just counts the number of lines containing 'a' and the number containing 'b' in a
+text file.
+Note that you'll need to replace YOUR_SPARK_HOME with the location where Spark is installed.
+As with the Scala and Java examples, we use a SparkSession to create Datasets.
+For applications that use custom classes or third-party libraries, we can also add code
+dependencies to `spark-submit` through its `--py-files` argument by packaging them into a
+.zip file (see `spark-submit --help` for details).
+`SimpleApp` is simple enough that we do not need to specify any code dependencies.
+
+We can run this application using the `bin/spark-submit` script:
+
+{% highlight bash %}
+# Use spark-submit to run your application
+$ YOUR_SPARK_HOME/bin/spark-submit \
+  --master local[4] \
+  SimpleApp.py
+...
+Lines with a: 46, Lines with b: 23
+{% endhighlight %}
+
+If you have PySpark pip installed into your environment (e.g., `pip install pyspark`), you can run your application with the regular Python interpreter or use the provided 'spark-submit' as you prefer.
+
+{% highlight bash %}
+# Use the Python interpreter to run your application
+$ python SimpleApp.py
+...
+Lines with a: 46, Lines with b: 23
+{% endhighlight %}
+
+</div>
+
 <div data-lang="scala" markdown="1">
 
 We'll create a very simple Spark application in Scala--so simple, in fact, that it's
@@ -385,69 +459,7 @@ Lines with a: 46, Lines with b: 23
 {% endhighlight %}
 
 </div>
-<div data-lang="python" markdown="1">
 
-Now we will show how to write an application using the Python API (PySpark).
-
-
-If you are building a packaged PySpark application or library you can add it to your setup.py file as:
-
-{% highlight python %}
-    install_requires=[
-        'pyspark=={{site.SPARK_VERSION}}'
-    ]
-{% endhighlight %}
-
-
-As an example, we'll create a simple Spark application, `SimpleApp.py`:
-
-{% highlight python %}
-"""SimpleApp.py"""
-from pyspark.sql import SparkSession
-
-logFile = "YOUR_SPARK_HOME/README.md"  # Should be some file on your system
-spark = SparkSession.builder.appName("SimpleApp").getOrCreate()
-logData = spark.read.text(logFile).cache()
-
-numAs = logData.filter(logData.value.contains('a')).count()
-numBs = logData.filter(logData.value.contains('b')).count()
-
-print("Lines with a: %i, lines with b: %i" % (numAs, numBs))
-
-spark.stop()
-{% endhighlight %}
-
-
-This program just counts the number of lines containing 'a' and the number containing 'b' in a
-text file.
-Note that you'll need to replace YOUR_SPARK_HOME with the location where Spark is installed.
-As with the Scala and Java examples, we use a SparkSession to create Datasets.
-For applications that use custom classes or third-party libraries, we can also add code
-dependencies to `spark-submit` through its `--py-files` argument by packaging them into a
-.zip file (see `spark-submit --help` for details).
-`SimpleApp` is simple enough that we do not need to specify any code dependencies.
-
-We can run this application using the `bin/spark-submit` script:
-
-{% highlight bash %}
-# Use spark-submit to run your application
-$ YOUR_SPARK_HOME/bin/spark-submit \
-  --master local[4] \
-  SimpleApp.py
-...
-Lines with a: 46, Lines with b: 23
-{% endhighlight %}
-
-If you have PySpark pip installed into your environment (e.g., `pip install pyspark`), you can run your application with the regular Python interpreter or use the provided 'spark-submit' as you prefer.
-
-{% highlight bash %}
-# Use the Python interpreter to run your application
-$ python SimpleApp.py
-...
-Lines with a: 46, Lines with b: 23
-{% endhighlight %}
-
-</div>
 </div>
 
 Other dependency management tools such as Conda and pip can be also used for custom classes or third-party libraries. See also [Python Package Management](api/python/user_guide/python_packaging.html).

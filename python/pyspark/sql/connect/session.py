@@ -313,6 +313,8 @@ class SparkSession:
                 # For cases like createDataFrame([("Alice", None, 80.1)], schema)
                 # we can not infer the schema from the data itself.
                 warnings.warn("failed to infer the schema from data")
+                if _schema is None and _schema_str is not None:
+                    _schema = self.createDataFrame([], schema=_schema_str).schema
                 if _schema is None or not isinstance(_schema, StructType):
                     raise ValueError(
                         "Some of types cannot be determined after inferring, "

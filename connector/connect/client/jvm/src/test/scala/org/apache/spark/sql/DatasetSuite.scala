@@ -134,4 +134,16 @@ class DatasetSuite extends ConnectFunSuite with BeforeAndAfterEach {
       df.groupBy().pivot(Column("c"), Seq(Column("col")))
     }
   }
+
+  test("command extension") {
+    val extension = proto.ExamplePluginCommand.newBuilder().setCustomField("abc").build()
+    val command = proto.Command
+      .newBuilder()
+      .setExtension(com.google.protobuf.Any.pack(extension))
+      .build()
+    val expectedPlan = proto.Plan.newBuilder().setCommand(command).build()
+    ss.execute(com.google.protobuf.Any.pack(extension))
+    val actualPlan = service.getAndClearLatestInputPlan()
+    assert(actualPlan.equals(expectedPlan))
+  }
 }
