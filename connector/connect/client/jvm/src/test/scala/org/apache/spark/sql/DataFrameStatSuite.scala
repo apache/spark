@@ -23,7 +23,6 @@ import io.grpc.StatusRuntimeException
 import org.scalatest.matchers.must.Matchers._
 
 import org.apache.spark.sql.connect.client.util.RemoteSparkSession
-import org.apache.spark.sql.functions.col
 
 class DataFrameStatSuite extends RemoteSparkSession {
   private def toLetter(i: Int): String = (i + 97).toChar.toString
@@ -152,18 +151,18 @@ class DataFrameStatSuite extends RemoteSparkSession {
   }
 
   test("sampleBy") {
-    val df = spark.range(0, 100).select((col("id") % 3).as("key"))
-    val sampled = df.stat.sampleBy("key", Map(0 -> 0.1, 1 -> 0.2), 0L)
-    val rows = sampled.groupBy("key").count().orderBy("key").collect()
-    assert(rows.length == 2)
+    val session = spark
+    import session.implicits._
+    val df = Seq("Bob", "Alice", "Nico", "Bob", "Alice").toDF("name")
+    val fractions = Map("Alice" -> 0.3, "Nico" -> 1.0)
+    val sampled = df.stat.sampleBy("name", fractions, 36L)
+    val rows = sampled.groupBy("name").count().orderBy("name").collect()
+    assert(rows.length == 1)
     // scalastyle:off
     rows.foreach(println)
     val row0 = rows(0)
-    assert(row0.getLong(0) == 0L)
-    assert(row0.getLong(1) == 2L)
-    val row1 = rows(1)
-    assert(row1.getLong(0) == 1L)
-    assert(row1.getLong(1) == 6L)
+    assert(row0.getString(0) == "Nico")
+    assert(row0.getLong(1) == 1L)
   }
 
   test("countMinSketch") {

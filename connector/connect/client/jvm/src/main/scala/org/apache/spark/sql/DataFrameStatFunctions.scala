@@ -481,7 +481,7 @@ final class DataFrameStatFunctions private[sql] (sparkSession: SparkSession, roo
     sparkSession.newDataFrame { builder =>
       val sampleByBuilder = builder.getSampleByBuilder
         .setInput(root)
-        .setCol(lit(col).expr)
+        .setCol(col.expr)
         .setSeed(seed)
       fractions.foreach { case (k, v) =>
         sampleByBuilder.addFractions(
