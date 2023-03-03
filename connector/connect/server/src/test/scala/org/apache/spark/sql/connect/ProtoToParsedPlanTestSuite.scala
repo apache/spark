@@ -60,7 +60,6 @@ import org.apache.spark.util.Utils
 // scalastyle:on
 class ProtoToParsedPlanTestSuite extends SparkFunSuite with SharedSparkSession {
   val url = "jdbc:h2:mem:testdb0"
-  val urlWithUserAndPass = "jdbc:h2:mem:testdb0;user=testUser;password=testPass"
   var conn: java.sql.Connection = null
 
   override def beforeAll(): Unit = {
@@ -81,6 +80,11 @@ class ProtoToParsedPlanTestSuite extends SparkFunSuite with SharedSparkSession {
       "create table test.emp(name TEXT(32) NOT NULL," +
         " theid INTEGER, \"Dept\" INTEGER)").executeUpdate()
     conn.commit()
+  }
+
+  override def afterAll(): Unit = {
+    conn.close()
+    super.afterAll()
   }
 
   override def sparkConf: SparkConf = {
