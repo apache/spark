@@ -22,6 +22,7 @@ import java.{lang => jl, util => ju}
 import scala.collection.JavaConverters._
 
 import org.apache.spark.connect.proto.{Relation, StatSampleBy}
+import org.apache.spark.sql.DataFrameStatFunctions.approxQuantileResultEncoder
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{ArrayEncoder, BinaryEncoder, PrimitiveDoubleEncoder}
 import org.apache.spark.sql.functions.lit
 import org.apache.spark.util.sketch.CountMinSketch
@@ -107,10 +108,7 @@ final class DataFrameStatFunctions private[sql] (sparkSession: SparkSession, roo
       "percentile should be in the range [0.0, 1.0]")
     require(relativeError >= 0, s"Relative Error must be non-negative but got $relativeError")
     sparkSession
-      .newDataset(
-        ArrayEncoder(
-          ArrayEncoder(PrimitiveDoubleEncoder, containsNull = false),
-          containsNull = false)) { builder =>
+      .newDataset(approxQuantileResultEncoder) { builder =>
         val approxQuantileBuilder = builder.getApproxQuantileBuilder
           .setInput(root)
           .setRelativeError(relativeError)
@@ -599,4 +597,9 @@ final class DataFrameStatFunctions private[sql] (sparkSession: SparkSession, roo
     }
     CountMinSketch.readFrom(ds.head())
   }
+}
+
+private object DataFrameStatFunctions {
+  private val approxQuantileResultEncoder: ArrayEncoder[Array[Double]] =
+    ArrayEncoder(ArrayEncoder(PrimitiveDoubleEncoder, containsNull = false), containsNull = false)
 }
