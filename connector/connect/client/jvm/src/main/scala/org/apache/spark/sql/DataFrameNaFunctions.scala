@@ -17,15 +17,13 @@
 
 package org.apache.spark.sql
 
-import java.{lang => jl}
 import java.util.Locale
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.connect.proto.{DataType => GDataType, NAReplace, Relation}
+import org.apache.spark.connect.proto.{NAReplace, Relation}
 import org.apache.spark.connect.proto.Expression.{Literal => GLiteral}
 import org.apache.spark.connect.proto.NAReplace.Replacement
-import org.apache.spark.sql.types.{BooleanType, DataType, DoubleType, FloatType, IntegerType, LongType, StringType}
 
 /**
  * Functionality for working with missing data in `DataFrame`s.
@@ -50,12 +48,7 @@ final class DataFrameNaFunctions private[sql] (sparkSession: SparkSession, root:
    * @since 3.4.0
    */
   def drop(how: String): DataFrame = {
-    val minNonNulls = how.toLowerCase(Locale.ROOT) match {
-      case "any" => None // No-Op. Do nothing.
-      case "all" => Some(1)
-      case _ => throw new IllegalArgumentException(s"how ($how) must be 'any' or 'all'")
-    }
-    buildDropDataFrame(None, minNonNulls)
+    buildDropDataFrame(None, buildMinNonNulls(how))
   }
 
   /**
@@ -95,12 +88,7 @@ final class DataFrameNaFunctions private[sql] (sparkSession: SparkSession, root:
    * @since 3.4.0
    */
   def drop(how: String, cols: Seq[String]): DataFrame = {
-    val minNonNulls = how.toLowerCase(Locale.ROOT) match {
-      case "any" => None // No-Op. Do nothing.
-      case "all" => Some(1)
-      case _ => throw new IllegalArgumentException(s"how ($how) must be 'any' or 'all'")
-    }
-    buildDropDataFrame(Some(cols), minNonNulls)
+    buildDropDataFrame(Some(cols), buildMinNonNulls(how))
   }
 
   /**
@@ -131,6 +119,14 @@ final class DataFrameNaFunctions private[sql] (sparkSession: SparkSession, root:
     buildDropDataFrame(Some(cols), Some(minNonNulls))
   }
 
+  private def buildMinNonNulls(how: String): Option[Int] = {
+    how.toLowerCase(Locale.ROOT) match {
+      case "any" => None // No-Op. Do nothing.
+      case "all" => Some(1)
+      case _ => throw new IllegalArgumentException(s"how ($how) must be 'any' or 'all'")
+    }
+  }
+
   private def buildDropDataFrame(
       cols: Option[Seq[String]],
       minNonNulls: Option[Int]): DataFrame = {
@@ -147,7 +143,7 @@ final class DataFrameNaFunctions private[sql] (sparkSession: SparkSession, root:
    * @since 3.4.0
    */
   def fill(value: Long): DataFrame = {
-    buildFillDataFrame(None, convertToLiteral(value, LongType))
+    buildFillDataFrame(None, GLiteral.newBuilder().setLong(value).build())
   }
 
   /**
@@ -165,7 +161,7 @@ final class DataFrameNaFunctions private[sql] (sparkSession: SparkSession, root:
    * @since 3.4.0
    */
   def fill(value: Long, cols: Seq[String]): DataFrame = {
-    buildFillDataFrame(Some(cols), convertToLiteral(value, LongType))
+    buildFillDataFrame(Some(cols), GLiteral.newBuilder().setLong(value).build())
   }
 
   /**
@@ -174,7 +170,7 @@ final class DataFrameNaFunctions private[sql] (sparkSession: SparkSession, root:
    * @since 3.4.0
    */
   def fill(value: Double): DataFrame = {
-    buildFillDataFrame(None, convertToLiteral(value, DoubleType))
+    buildFillDataFrame(None, GLiteral.newBuilder().setDouble(value).build())
   }
 
   /**
@@ -192,7 +188,7 @@ final class DataFrameNaFunctions private[sql] (sparkSession: SparkSession, root:
    * @since 3.4.0
    */
   def fill(value: Double, cols: Seq[String]): DataFrame = {
-    buildFillDataFrame(Some(cols), convertToLiteral(value, DoubleType))
+    buildFillDataFrame(Some(cols), GLiteral.newBuilder().setDouble(value).build())
   }
 
   /**
@@ -201,7 +197,7 @@ final class DataFrameNaFunctions private[sql] (sparkSession: SparkSession, root:
    * @since 3.4.0
    */
   def fill(value: String): DataFrame = {
-    buildFillDataFrame(None, convertToLiteral(value, StringType))
+    buildFillDataFrame(None, GLiteral.newBuilder().setString(value).build())
   }
 
   /**
@@ -219,7 +215,7 @@ final class DataFrameNaFunctions private[sql] (sparkSession: SparkSession, root:
    * @since 3.4.0
    */
   def fill(value: String, cols: Seq[String]): DataFrame = {
-    buildFillDataFrame(Some(cols), convertToLiteral(value, StringType))
+    buildFillDataFrame(Some(cols), GLiteral.newBuilder().setString(value).build())
   }
 
   /**
@@ -228,7 +224,7 @@ final class DataFrameNaFunctions private[sql] (sparkSession: SparkSession, root:
    * @since 3.4.0
    */
   def fill(value: Boolean): DataFrame = {
-    buildFillDataFrame(None, convertToLiteral(value, BooleanType))
+    buildFillDataFrame(None, GLiteral.newBuilder().setBoolean(value).build())
   }
 
   /**
@@ -246,7 +242,7 @@ final class DataFrameNaFunctions private[sql] (sparkSession: SparkSession, root:
    * @since 3.4.0
    */
   def fill(value: Boolean, cols: Seq[String]): DataFrame = {
-    buildFillDataFrame(Some(cols), convertToLiteral(value, BooleanType))
+    buildFillDataFrame(Some(cols), GLiteral.newBuilder().setBoolean(value).build())
   }
 
   private def buildFillDataFrame(cols: Option[Seq[String]], value: GLiteral): DataFrame = {
@@ -296,19 +292,8 @@ final class DataFrameNaFunctions private[sql] (sparkSession: SparkSession, root:
   private def fillMap(values: Seq[(String, Any)]): DataFrame = {
     sparkSession.newDataFrame { builder =>
       val fillNaBuilder = builder.getFillNaBuilder.setInput(root)
-      values.zipWithIndex.map { case ((colName, replaceValue), index) =>
-        fillNaBuilder.addCols(colName)
-        replaceValue match {
-          case v: jl.Float => fillNaBuilder.addValues(index, convertToLiteral(v, FloatType))
-          case v: jl.Double => fillNaBuilder.addValues(index, convertToLiteral(v, DoubleType))
-          case v: jl.Long => fillNaBuilder.addValues(index, convertToLiteral(v, LongType))
-          case v: jl.Integer => fillNaBuilder.addValues(index, convertToLiteral(v, IntegerType))
-          case v: jl.Boolean => fillNaBuilder.addValues(index, convertToLiteral(v, BooleanType))
-          case v: String => fillNaBuilder.addValues(index, convertToLiteral(v, StringType))
-          case _ =>
-            throw new IllegalArgumentException(
-              s"Unsupported value type ${replaceValue.getClass.getName} ($replaceValue).")
-        }
+      values.map { case (colName, replaceValue) =>
+        fillNaBuilder.addCols(colName).addValues(functions.lit(replaceValue).expr.getLiteral)
       }
     }
   }
@@ -436,81 +421,13 @@ final class DataFrameNaFunctions private[sql] (sparkSession: SparkSession, root:
       case (k, null) => (convertToDouble(k), null)
       case (k, v) => (convertToDouble(k), convertToDouble(v))
     }
-
-    // targetColumnType is either DoubleType, StringType or BooleanType,
-    // depending on the type of first key in replacement map.
-    // Only fields of targetColumnType will perform replacement.
-    val targetColumnType = replacement.head._1 match {
-      case _: jl.Double | _: jl.Float | _: jl.Integer | _: jl.Long => DoubleType
-      case _: jl.Boolean => BooleanType
-      case _: String => StringType
-    }
-
     replacementMap.map { case (oldValue, newValue) =>
-      targetColumnType match {
-        case DoubleType =>
-          Replacement
-            .newBuilder()
-            .setOldValue(convertToLiteral(oldValue, DoubleType))
-            .setNewValue(convertToLiteral(newValue, DoubleType))
-            .build()
-        case BooleanType =>
-          Replacement
-            .newBuilder()
-            .setOldValue(convertToLiteral(oldValue, BooleanType))
-            .setNewValue(convertToLiteral(newValue, BooleanType))
-            .build()
-        case StringType =>
-          Replacement
-            .newBuilder()
-            .setOldValue(convertToLiteral(oldValue, StringType))
-            .setNewValue(convertToLiteral(newValue, StringType))
-            .build()
+      Replacement
+        .newBuilder()
+        .setOldValue(functions.lit(oldValue).expr.getLiteral)
+        .setNewValue(functions.lit(newValue).expr.getLiteral)
+        .build()
       }
-    }
-  }
-
-  private def convertToLiteral(v: Any, dataType: DataType): GLiteral = dataType match {
-    case DoubleType if v == null =>
-      GLiteral
-        .newBuilder()
-        .setNull(GDataType.newBuilder().setDouble(GDataType.Double.getDefaultInstance))
-        .build()
-    case DoubleType => GLiteral.newBuilder().setDouble(convertToDouble(v)).build()
-    case FloatType if v == null =>
-      GLiteral
-        .newBuilder()
-        .setNull(GDataType.newBuilder().setFloat(GDataType.Float.getDefaultInstance))
-        .build()
-    case FloatType =>
-      GLiteral.newBuilder().setFloat(v.asInstanceOf[jl.Float]).build()
-    case LongType if v == null =>
-      GLiteral
-        .newBuilder()
-        .setNull(GDataType.newBuilder().setLong(GDataType.Long.getDefaultInstance))
-        .build()
-    case LongType =>
-      GLiteral.newBuilder().setLong(v.asInstanceOf[jl.Long]).build()
-    case IntegerType if v == null =>
-      GLiteral
-        .newBuilder()
-        .setNull(GDataType.newBuilder().setInteger(GDataType.Integer.getDefaultInstance))
-        .build()
-    case IntegerType =>
-      GLiteral.newBuilder().setInteger(v.asInstanceOf[jl.Integer]).build()
-    case BooleanType if v == null =>
-      GLiteral
-        .newBuilder()
-        .setNull(GDataType.newBuilder().setBoolean(GDataType.Boolean.getDefaultInstance))
-        .build()
-    case BooleanType => GLiteral.newBuilder().setBoolean(v.asInstanceOf[jl.Boolean]).build()
-    case StringType if v == null =>
-      GLiteral
-        .newBuilder()
-        .setNull(GDataType.newBuilder().setString(GDataType.String.getDefaultInstance))
-        .build()
-    case StringType =>
-      GLiteral.newBuilder().setString(v.asInstanceOf[String]).build()
   }
 
   private def convertToDouble(v: Any): Double = v match {

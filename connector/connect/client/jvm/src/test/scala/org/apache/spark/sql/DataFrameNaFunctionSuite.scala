@@ -19,62 +19,30 @@ package org.apache.spark.sql
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.sql.connect.client.util.{IntegrationTestUtils, QueryTest}
-import org.apache.spark.sql.types.{ByteType, DoubleType, FloatType, IntegerType, LongType, ShortType, StringType, StructField, StructType}
+import org.apache.spark.sql.connect.client.util.QueryTest
 
 class DataFrameNaFunctionSuite extends QueryTest {
-
   private def createDF(): DataFrame = {
-    val testDataPath = java.nio.file.Paths
-      .get(
-        IntegrationTestUtils.sparkHome,
-        "connector",
-        "connect",
-        "common",
-        "src",
-        "test",
-        "resources",
-        "query-tests",
-        "test-data",
-        "people_nan_null.gz.parquet")
-      .toAbsolutePath
-    spark.read
-      .format("parquet")
-      .option("path", testDataPath.toString)
-      .schema(
-        StructType(
-          StructField("name", StringType) ::
-            StructField("age", IntegerType) ::
-            StructField("height", DoubleType) :: Nil))
-      .load()
+    val sparkSession = spark
+    import sparkSession.implicits._
+    Seq[(String, java.lang.Integer, java.lang.Double)](
+      ("Bob", 16, 176.5),
+      ("Alice", null, 164.3),
+      ("David", 60, null),
+      ("Nina", 25, Double.NaN),
+      ("Amy", null, null),
+      (null, null, null)
+    ).toDF("name", "age", "height")
   }
 
-  private def createNaNDF(): DataFrame = {
-    val testDataPath = java.nio.file.Paths
-      .get(
-        IntegrationTestUtils.sparkHome,
-        "connector",
-        "connect",
-        "common",
-        "src",
-        "test",
-        "resources",
-        "query-tests",
-        "test-data",
-        "nan.gz.parquet")
-      .toAbsolutePath
-    spark.read
-      .format("parquet")
-      .option("path", testDataPath.toString)
-      .schema(
-        StructType(
-          StructField("int", IntegerType) ::
-            StructField("long", LongType) ::
-            StructField("short", ShortType) ::
-            StructField("byte", ByteType) ::
-            StructField("float", FloatType) ::
-            StructField("double", DoubleType) :: Nil))
-      .load()
+  def createNaNDF(): DataFrame = {
+    val sparkSession = spark
+    import sparkSession.implicits._
+    Seq[(java.lang.Integer, java.lang.Long, java.lang.Short,
+      java.lang.Byte, java.lang.Float, java.lang.Double)](
+      (1, 1L, 1.toShort, 1.toByte, 1.0f, 1.0),
+      (0, 0L, 0.toShort, 0.toByte, Float.NaN, Double.NaN)
+    ).toDF("int", "long", "short", "byte", "float", "double")
   }
 
   test("drop") {
@@ -134,15 +102,17 @@ class DataFrameNaFunctionSuite extends QueryTest {
   }
 
   test("fill") {
+    val sparkSession = spark
+    import sparkSession.implicits._
+
     val input = createDF()
 
-    val boolInput = spark.sql(
-      "select name, spy from (values " +
-        "('Bob', false), " +
-        "('Alice', null), " +
-        "('Mallory', true), " +
-        "(null, null))" +
-        "as t(name, spy)")
+    val boolInput = Seq[(String, java.lang.Boolean)](
+      ("Bob", false),
+      ("Alice", null),
+      ("Mallory", true),
+      (null, null)
+    ).toDF("name", "spy")
 
     val fillNumeric = input.na.fill(50.6)
     checkAnswer(
@@ -189,33 +159,52 @@ class DataFrameNaFunctionSuite extends QueryTest {
         Row(null, true) :: Nil)
 
     // fill string with subset columns
-    val df6 = spark.sql(
-      "select col1, col2 from (values " +
-        "('col1', 'col2'), " +
-        "(null, null))" +
-        "as t(col1, col2)")
-    checkAnswer(df6.filter("col1 is null").na.fill("test", "col1" :: Nil), Row("test", null))
-
-    val df7 = spark.sql(
-      "select a, b from (values " +
-        "(1, 2), " +
-        "(-1, -2), " +
-        "(9123146099426677101L, 9123146560113991650L))" +
-        "as t(a, b)")
     checkAnswer(
-      df7.na.fill(0),
-      Row(1, 2) :: Row(-1, -2) :: Row(9123146099426677101L, 9123146560113991650L) :: Nil)
+      Seq[(String, String)]((null, null)).toDF("col1", "col2").na.fill("test", "col1" :: Nil),
+      Row("test", null))
+
+    checkAnswer(
+      Seq[(Long, Long)]((1, 2), (-1, -2), (9123146099426677101L, 9123146560113991650L))
+        .toDF("a", "b").na.fill(0),
+      Row(1, 2) :: Row(-1, -2) :: Row(9123146099426677101L, 9123146560113991650L) :: Nil
+    )
+
+    checkAnswer(
+      Seq[(java.lang.Long, java.lang.Double)]((null, 3.14), (9123146099426677101L, null),
+        (9123146560113991650L, 1.6), (null, null)).toDF("a", "b").na.fill(0.2),
+      Row(0, 3.14) :: Row(9123146099426677101L, 0.2) :: Row(9123146560113991650L, 1.6)
+        :: Row(0, 0.2) :: Nil
+    )
+
+    checkAnswer(
+      Seq[(java.lang.Long, java.lang.Float)]((null, 3.14f), (9123146099426677101L, null),
+        (9123146560113991650L, 1.6f), (null, null)).toDF("a", "b").na.fill(0.2),
+      Row(0, 3.14f) :: Row(9123146099426677101L, 0.2f) :: Row(9123146560113991650L, 1.6f)
+        :: Row(0, 0.2f) :: Nil
+    )
+
+    checkAnswer(
+      Seq[(java.lang.Long, java.lang.Double)]((null, 1.23), (3L, null), (4L, 3.45))
+        .toDF("a", "b").na.fill(2.34),
+      Row(2, 1.23) :: Row(3, 2.34) :: Row(4, 3.45) :: Nil
+    )
+
+    checkAnswer(
+      Seq[(java.lang.Long, java.lang.Double)]((null, 1.23), (3L, null), (4L, 3.45))
+        .toDF("a", "b").na.fill(5),
+      Row(5, 1.23) :: Row(3, 5.0) :: Row(4, 3.45) :: Nil
+    )
   }
 
   test("fill with map") {
-    val df = spark.sql(
-      "select stringFieldA, stringFieldB, integerField, " +
-        "longField, floatField, doubleField, booleanField from (values " +
-        "('1', '2', 1, 2L, 0.3f, 0.4d, true), " +
-        "(null, null, null, null, null, null, null))" +
-        "as t(stringFieldA, stringFieldB, integerField, " +
-        "longField, floatField, doubleField, booleanField)")
-    val input = df.filter("stringFieldA is null")
+    val sparkSession = spark
+    import sparkSession.implicits._
+
+    val df = Seq[(String, String, java.lang.Integer, java.lang.Long,
+      java.lang.Float, java.lang.Double, java.lang.Boolean)](
+      (null, null, null, null, null, null, null))
+      .toDF("stringFieldA", "stringFieldB", "integerField", "longField",
+        "floatField", "doubleField", "booleanField")
 
     val fillMap = Map(
       "stringFieldA" -> "test",
@@ -226,20 +215,20 @@ class DataFrameNaFunctionSuite extends QueryTest {
       "booleanField" -> false)
 
     val expectedRow = Row("test", null, 1, 2L, 3.3f, 4.4d, false)
-    checkAnswer(input.na.fill(fillMap), expectedRow)
-    checkAnswer(input.na.fill(fillMap.asJava), expectedRow) // Test Java version
+    checkAnswer(df.na.fill(fillMap), expectedRow)
+    checkAnswer(df.na.fill(fillMap.asJava), expectedRow) // Test Java version
 
     // Ensure replacement values are cast to the column data type.
     checkAnswer(
-      input.na.fill(
+      df.na.fill(
         Map("integerField" -> 1d, "longField" -> 2d, "floatField" -> 3d, "doubleField" -> 4d)),
       Row(null, null, 1, 2L, 3f, 4d, null))
 
     // Ensure column types do not change. Columns that have null values replaced
     // will no longer be flagged as nullable, so do not compare schemas directly.
     assert(
-      input.na.fill(fillMap).schema.fields.map(_.dataType) ===
-        input.schema.fields.map(_.dataType))
+      df.na.fill(fillMap).schema.fields.map(_.dataType) ===
+        df.schema.fields.map(_.dataType))
   }
 
   test("fill with col(*)") {
