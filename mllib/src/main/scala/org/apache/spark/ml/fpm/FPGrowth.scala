@@ -290,19 +290,15 @@ class FPGrowthModel private[ml] (
     ).withColumn(
       $(predictionCol),
       when(not(isnull(col($(itemsCol)))),
-        array_sort(
-          array_distinct(
-            aggregate(
-              col($(predictionCol)),
-              array().cast(arrayType),
-              (r, s) => when(
-                forall(s.getField("antecedent"),
-                  c => array_contains(col($(itemsCol)), c)),
-                array_union(r,
-                  array_except(s.getField("consequent"), col($(itemsCol))))
-              ).otherwise(r)
-            )
-          )
+        aggregate(
+          col($(predictionCol)),
+          array().cast(arrayType),
+          (r, s) => when(
+            forall(s.getField("antecedent"),
+              c => array_contains(col($(itemsCol)), c)),
+            array_union(r,
+              array_except(s.getField("consequent"), col($(itemsCol))))
+          ).otherwise(r)
         )
       ).otherwise(array().cast(arrayType))
     )
