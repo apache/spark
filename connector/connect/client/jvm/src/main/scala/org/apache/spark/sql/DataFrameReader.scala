@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql
 
+import java.util.Properties
+
 import scala.collection.JavaConverters._
 
 import org.apache.spark.annotation.Stable
@@ -182,6 +184,70 @@ class DataFrameReader private[sql] (sparkSession: SparkSession) extends Logging 
       paths.foreach(path => dataSourceBuilder.addPaths(path))
       builder.build()
     }
+  }
+
+  /**
+   * Construct a `DataFrame` representing the database table accessible via JDBC URL url named
+   * table and connection properties.
+   *
+   * You can find the JDBC-specific option and parameter documentation for reading tables via JDBC
+   * in <a
+   * href="https://spark.apache.org/docs/latest/sql-data-sources-jdbc.html#data-source-option">
+   * Data Source Option</a> in the version you use.
+   *
+   * @since 3.4.0
+   */
+  def jdbc(url: String, table: String, properties: Properties): DataFrame = {
+    // properties should override settings in extraOptions.
+    this.extraOptions ++= properties.asScala
+    // explicit url and dbtable should override all
+    this.extraOptions ++= Seq("url" -> url, "dbtable" -> table)
+    format("jdbc").load()
+  }
+
+  // scalastyle:off line.size.limit
+  /**
+   * Construct a `DataFrame` representing the database table accessible via JDBC URL url named
+   * table. Partitions of the table will be retrieved in parallel based on the parameters passed
+   * to this function.
+   *
+   * Don't create too many partitions in parallel on a large cluster; otherwise Spark might crash
+   * your external database systems.
+   *
+   * You can find the JDBC-specific option and parameter documentation for reading tables via JDBC
+   * in <a
+   * href="https://spark.apache.org/docs/latest/sql-data-sources-jdbc.html#data-source-option">
+   * Data Source Option</a> in the version you use.
+   *
+   * @param table
+   *   Name of the table in the external database.
+   * @param columnName
+   *   Alias of `partitionColumn` option. Refer to `partitionColumn` in <a
+   *   href="https://spark.apache.org/docs/latest/sql-data-sources-jdbc.html#data-source-option">
+   *   Data Source Option</a> in the version you use.
+   * @param connectionProperties
+   *   JDBC database connection arguments, a list of arbitrary string tag/value. Normally at least
+   *   a "user" and "password" property should be included. "fetchsize" can be used to control the
+   *   number of rows per fetch and "queryTimeout" can be used to wait for a Statement object to
+   *   execute to the given number of seconds.
+   * @since 3.4.0
+   */
+  // scalastyle:on line.size.limit
+  def jdbc(
+      url: String,
+      table: String,
+      columnName: String,
+      lowerBound: Long,
+      upperBound: Long,
+      numPartitions: Int,
+      connectionProperties: Properties): DataFrame = {
+    // columnName, lowerBound, upperBound and numPartitions override settings in extraOptions.
+    this.extraOptions ++= Map(
+      "partitionColumn" -> columnName,
+      "lowerBound" -> lowerBound.toString,
+      "upperBound" -> upperBound.toString,
+      "numPartitions" -> numPartitions.toString)
+    jdbc(url, table, connectionProperties)
   }
 
   /**

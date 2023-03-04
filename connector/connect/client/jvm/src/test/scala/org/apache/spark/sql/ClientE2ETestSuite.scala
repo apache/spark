@@ -493,6 +493,11 @@ class ClientE2ETestSuite extends RemoteSparkSession {
     val right = spark.range(100).select(col("id"), rand(12).as("a"))
     val joined = left.join(right, left("id") === right("id")).select(left("id"), right("a"))
     assert(joined.schema.catalogString === "struct<id:bigint,a:double>")
+
+    val joined2 = left
+      .join(right, left.colRegex("id") === right.colRegex("id"))
+      .select(left("id"), right("a"))
+    assert(joined2.schema.catalogString === "struct<id:bigint,a:double>")
   }
 
   test("test temp view") {
@@ -585,6 +590,12 @@ class ClientE2ETestSuite extends RemoteSparkSession {
     checkSameResult(
       list.asScala.map(kv => Row(kv.key, kv.value)),
       session.createDataFrame(list.asScala.toSeq))
+  }
+
+  test("SparkSession newSession") {
+    val oldId = spark.sql("SELECT 1").analyze.getClientId
+    val newId = spark.newSession().sql("SELECT 1").analyze.getClientId
+    assert(oldId != newId)
   }
 }
 

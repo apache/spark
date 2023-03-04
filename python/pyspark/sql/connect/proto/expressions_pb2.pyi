@@ -753,16 +753,30 @@ class Expression(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
         COL_NAME_FIELD_NUMBER: builtins.int
+        PLAN_ID_FIELD_NUMBER: builtins.int
         col_name: builtins.str
         """(Required) The column name used to extract column with regex."""
+        plan_id: builtins.int
+        """(Optional) The id of corresponding connect plan."""
         def __init__(
             self,
             *,
             col_name: builtins.str = ...,
+            plan_id: builtins.int | None = ...,
         ) -> None: ...
+        def HasField(
+            self,
+            field_name: typing_extensions.Literal["_plan_id", b"_plan_id", "plan_id", b"plan_id"],
+        ) -> builtins.bool: ...
         def ClearField(
-            self, field_name: typing_extensions.Literal["col_name", b"col_name"]
+            self,
+            field_name: typing_extensions.Literal[
+                "_plan_id", b"_plan_id", "col_name", b"col_name", "plan_id", b"plan_id"
+            ],
         ) -> None: ...
+        def WhichOneof(
+            self, oneof_group: typing_extensions.Literal["_plan_id", b"_plan_id"]
+        ) -> typing_extensions.Literal["plan_id"] | None: ...
 
     class UnresolvedExtractValue(google.protobuf.message.Message):
         """Extracts a value or values from an Expression"""
