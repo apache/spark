@@ -40,6 +40,11 @@ ERROR_CLASSES_JSON = """
       "Argument `<arg_name>`(type: <arg_type>) should only contain a type in [<allowed_types>], got <return_type>"
     ]
   },
+  "HIGHER_ORDER_FUNCTION_SHOULD_RETURN_COLUMN" : {
+    "message" : [
+      "Function `<func_name>` should return Column, got <return_type>."
+    ]
+  },
   "INCOMPLETE_TYPE_DEFINITION" : {
     "message" : [
       "Incomplete complex type:"
@@ -62,11 +67,6 @@ ERROR_CLASSES_JSON = """
       }
     },
     "sqlState" : "42K01"
-  },
-  "HIGHER_ORDER_FUNCTION_SHOULD_RETURN_COLUMN" : {
-    "message" : [
-      "Function `<func_name>` should return Column, got <return_type>."
-    ]
   },
   "NOT_BOOL" : {
     "message" : [

@@ -404,10 +404,13 @@ def parse_data_type(data_type: str) -> DataType:
 class DataTypeParserBase:
     REGEXP_IDENTIFIER: Final[Pattern] = re.compile("\\w+|`(?:``|[^`])*`", re.MULTILINE)
     REGEXP_INTEGER_VALUES: Final[Pattern] = re.compile(
-        "\\(\\s*(?:-?\\s*\\d+)\\s*(?:,\\s*(?:-?\\s*\\d+)\\s*)*\\)", re.MULTILINE
+        "\\(\\s*(?:[+-]?\\d+)\\s*(?:,\\s*(?:[+-]?\\d+)\\s*)*\\)", re.MULTILINE
     )
     REGEXP_INTERVAL_TYPE: Final[Pattern] = re.compile(
         "(day|hour|minute|second)(?:\\s+to\\s+(hour|minute|second))?", re.IGNORECASE | re.MULTILINE
+    )
+    REGEXP_NOT_NULL_COMMENT: Final[Pattern] = re.compile(
+        "(not\\s+null)?(?:(?(1)\\s+)comment\\s+'((?:\\\\'|[^'])*)')?", re.IGNORECASE | re.MULTILINE
     )
 
     def __init__(self, type_str: str):
@@ -495,19 +498,33 @@ class DataTypeParserBase:
             self._lstrip()
             if sep_with_colon:
                 remaining = self._type_str[self._pos :]
-                if remaining[0] == ":":
+                if len(remaining) > 0 and remaining[0] == ":":
                     self._pos = self._pos + 1
                     self._lstrip()
             data_type = self._parse_data_type()
             remaining = self._type_str[self._pos :]
+
+            # nullable & comment
+            nullable = True
+            comment: Optional[str] = None
+            m = self.REGEXP_NOT_NULL_COMMENT.match(remaining)
+            if m:
+                nullable = m.group(1) is None
+                if m.group(2) is not None:
+                    comment = m.group(2).replace("\\'", "'").replace("\\\\", "\\")
+                self._pos = self._pos + len(m.group(0))
+                self._lstrip()
+                remaining = self._type_str[self._pos :]
+
+            field = StructField(
+                field_name, data_type, nullable, {"comment": comment} if comment is not None else {}
+            )
             if len(remaining) > 0 and remaining[0] == ",":
                 self._pos = self._pos + 1
                 self._lstrip()
-                return [StructField(field_name, data_type)] + self._parse_struct_fields(
-                    sep_with_colon=sep_with_colon
-                )
+                return [field] + self._parse_struct_fields(sep_with_colon=sep_with_colon)
             else:
-                return [StructField(field_name, data_type)]
+                return [field]
         raise ParseException(error_class="INCOMPLETE_TYPE_DEFINITION.STRUCT", message_parameters={})
 
     def _parse_interval_type(self) -> DayTimeIntervalType:

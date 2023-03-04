@@ -25,6 +25,7 @@ from pyspark.sql.types import (
     DecimalType,
     DoubleType,
     IntegerType,
+    LongType,
     MapType,
     ShortType,
     StringType,
@@ -46,6 +47,13 @@ class DDLParserTests(unittest.TestCase):
             (
                 "  struct<   a  : byte, b  :decimal(  16 , 8   )  >   ",
                 StructType().add("a", ByteType()).add("b", DecimalType(16, 8)),
+            ),
+            (
+                "struct<a:byte  not  nUlL comMent 'aa',b:long  cOMment 'aa\\'bb',c:int not null >",
+                StructType()
+                .add("a", ByteType(), nullable=False, metadata={"comment": "aa"})
+                .add("b", LongType(), metadata={"comment": "aa'bb"})
+                .add("c", IntegerType(), nullable=False),
             ),
         ]:
             with self.subTest(data_type_string):
