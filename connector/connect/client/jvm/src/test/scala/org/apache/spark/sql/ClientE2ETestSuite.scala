@@ -494,7 +494,8 @@ class ClientE2ETestSuite extends RemoteSparkSession {
     val joined = left.join(right, left("id") === right("id")).select(left("id"), right("a"))
     assert(joined.schema.catalogString === "struct<id:bigint,a:double>")
 
-    val joined2 = left.join(right, left.colRegex("id") === right.colRegex("id"))
+    val joined2 = left
+      .join(right, left.colRegex("id") === right.colRegex("id"))
       .select(left("id"), right("a"))
     assert(joined2.schema.catalogString === "struct<id:bigint,a:double>")
   }
