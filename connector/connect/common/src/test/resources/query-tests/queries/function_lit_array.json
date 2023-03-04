@@ -15,6 +15,15 @@
       "literal": {
         "array": {
           "elementType": {
+            "double": {
+            }
+          }
+        }
+      }
+    }, {
+      "literal": {
+        "array": {
+          "elementType": {
             "array": {
               "elementType": {
                 "integer": {

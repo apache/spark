@@ -2006,6 +2006,7 @@ class PlanGenerationTestSuite
 
   test("function lit array") {
     simple.select(
+      fn.lit(Array.emptyDoubleArray),
       fn.lit(Array(Array(1), Array(2), Array(3))),
       fn.lit(Array(Array(Array(1)), Array(Array(2)), Array(Array(3)))),
       fn.lit(Array(true, false)),

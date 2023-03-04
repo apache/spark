@@ -101,7 +101,7 @@ object LiteralValueProtoConverter {
       case proto.Expression.Literal.LiteralTypeCase.ARRAY =>
         expressions.Literal.create(
           toArrayData(lit.getArray),
-          toArrayType(lit.getArray.getElementType))
+          ArrayType(DataTypeProtoConverter.toCatalystType(lit.getArray.getElementType)))
       case _ =>
         throw InvalidPlanInput(
           s"Unsupported Literal Type: ${lit.getLiteralTypeCase.getNumber}" +
@@ -206,46 +206,4 @@ object LiteralValueProtoConverter {
     }
   }
 
-  private def toArrayType(elementType: proto.DataType): ArrayType = {
-    if (elementType.hasShort) {
-      ArrayType(ShortType)
-    } else if (elementType.hasInteger) {
-      ArrayType(IntegerType)
-    } else if (elementType.hasLong) {
-      ArrayType(LongType)
-    } else if (elementType.hasDouble) {
-      ArrayType(DoubleType)
-    } else if (elementType.hasByte) {
-      ArrayType(ByteType)
-    } else if (elementType.hasFloat) {
-      ArrayType(FloatType)
-    } else if (elementType.hasBoolean) {
-      ArrayType(BooleanType)
-    } else if (elementType.hasString) {
-      ArrayType(StringType)
-    } else if (elementType.hasBinary) {
-      ArrayType(BinaryType)
-    } else if (elementType.hasDate) {
-      ArrayType(DateType)
-    } else if (elementType.hasTimestamp) {
-      ArrayType(TimestampType)
-    } else if (elementType.hasTimestampNtz) {
-      ArrayType(TimestampNTZType)
-    } else if (elementType.hasDayTimeInterval) {
-      val interval = elementType.getDayTimeInterval
-      ArrayType(DayTimeIntervalType(interval.getStartField.toByte, interval.getEndField.toByte))
-    } else if (elementType.hasYearMonthInterval) {
-      val interval = elementType.getYearMonthInterval
-      ArrayType(YearMonthIntervalType(interval.getStartField.toByte, interval.getEndField.toByte))
-    } else if (elementType.hasDecimal) {
-      val decimal = elementType.getDecimal
-      ArrayType(DecimalType(decimal.getPrecision, decimal.getScale))
-    } else if (elementType.hasCalendarInterval) {
-      ArrayType(CalendarIntervalType)
-    } else if (elementType.hasArray) {
-      ArrayType(toArrayType(elementType.getArray.getElementType))
-    } else {
-      throw InvalidPlanInput(s"Unsupported Literal Type: $elementType)")
-    }
-  }
 }
