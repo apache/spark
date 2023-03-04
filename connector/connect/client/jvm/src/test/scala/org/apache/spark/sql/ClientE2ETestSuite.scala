@@ -586,6 +586,12 @@ class ClientE2ETestSuite extends RemoteSparkSession {
       list.asScala.map(kv => Row(kv.key, kv.value)),
       session.createDataFrame(list.asScala.toSeq))
   }
+
+  test("SparkSession newSession") {
+    val oldId = spark.sql("SELECT 1").analyze.getClientId
+    val newId = spark.newSession().sql("SELECT 1").analyze.getClientId
+    assert(oldId != newId)
+  }
 }
 
 private[sql] case class MyType(id: Long, a: Double, b: Double)
