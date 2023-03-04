@@ -26,7 +26,7 @@ import org.apache.spark.SparkEnv
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.{ExecutePlanRequest, ExecutePlanResponse}
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
+import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.connect.config.Connect.CONNECT_GRPC_ARROW_MAX_BATCH_SIZE
 import org.apache.spark.sql.connect.planner.LiteralValueProtoConverter.toConnectProtoValue
@@ -63,10 +63,10 @@ class SparkConnectStreamHandler(responseObserver: StreamObserver[ExecutePlanResp
     processAsArrowBatches(request.getClientId, dataframe, responseObserver)
     responseObserver.onNext(
       SparkConnectStreamHandler.sendMetricsToResponse(request.getClientId, dataframe))
-    val observedMetrics = dataframe.queryExecution.observedMetrics
-    if (observedMetrics.nonEmpty) {
+    if (dataframe.queryExecution.observedMetrics.nonEmpty) {
       responseObserver.onNext(
-        SparkConnectStreamHandler.sendObservedMetricsToResponse(request.getClientId, observedMetrics))
+        SparkConnectStreamHandler.sendObservedMetricsToResponse(
+          request.getClientId, dataframe))
     }
     responseObserver.onCompleted()
   }
@@ -215,10 +215,10 @@ object SparkConnectStreamHandler {
 
   def sendObservedMetricsToResponse(
       clientId: String,
-      observedMetrics: Map[String, Row]): ExecutePlanResponse = {
-    val metricsObjects = observedMetrics.map { case (name, row) =>
+      dataframe: DataFrame): ExecutePlanResponse = {
+    val observedMetrics = dataframe.queryExecution.observedMetrics.map { case (name, row) =>
       val cols = (0 until row.length).map(i => toConnectProtoValue(row(i)))
-      ExecutePlanResponse.ObservedMetrics.ObservedMetricsObject
+      ExecutePlanResponse.ObservedMetrics
         .newBuilder()
         .setName(name)
         .addAllValues(cols.asJava)
@@ -228,13 +228,10 @@ object SparkConnectStreamHandler {
     ExecutePlanResponse
       .newBuilder()
       .setClientId(clientId)
-      .setObservedMetrics(
-        ExecutePlanResponse.ObservedMetrics
-          .newBuilder()
-          .addAllMetricsObjects(metricsObjects.asJava)
-          .build())
+      .addAllObservedMetrics(observedMetrics.asJava)
       .build()
   }
+}
 
 object MetricGenerator extends AdaptiveSparkPlanHelper {
   def buildMetrics(p: SparkPlan): ExecutePlanResponse.Metrics = {
@@ -270,5 +267,4 @@ object MetricGenerator extends AdaptiveSparkPlanHelper {
       .build()
     Seq(mo) ++ transformChildren(p)
   }
-
 }

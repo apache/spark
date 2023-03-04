@@ -353,15 +353,13 @@ class SparkConnectServiceSuite extends SharedSparkSession {
 
         // Make sure the last response is observed metrics only
         val last = responses.last
-        assert(last.hasObservedMetrics && !last.hasArrowBatch)
+        assert(last.getObservedMetricsCount == 1 && !last.hasArrowBatch)
 
-        val observedMetrics = last.getObservedMetrics
-        assert(observedMetrics.getMetricsObjectsCount == 1)
-        val metricsObjectsList = observedMetrics.getMetricsObjectsList.asScala
-        val metricsObject = metricsObjectsList.head
-        assert(metricsObject.getName == "my_metric")
-        assert(metricsObject.getValuesCount == 2)
-        val valuesList = metricsObject.getValuesList.asScala
+        val observedMetricsList = last.getObservedMetricsList.asScala
+        val observedMetric = observedMetricsList.head
+        assert(observedMetric.getName == "my_metric")
+        assert(observedMetric.getValuesCount == 2)
+        val valuesList = observedMetric.getValuesList.asScala
         assert(valuesList.head.hasLong && valuesList.head.getLong == 0)
         assert(valuesList.last.hasLong && valuesList.last.getLong == 99)
       }
