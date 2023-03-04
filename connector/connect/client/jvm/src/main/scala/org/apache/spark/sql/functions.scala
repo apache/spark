@@ -1229,6 +1229,22 @@ object functions {
     Column.fn("map_from_arrays", keys, values)
 
   /**
+   * Marks a DataFrame as small enough for use in broadcast joins.
+   *
+   * The following example marks the right DataFrame for broadcast hash join using `joinKey`.
+   * {{{
+   *   // left and right are DataFrames
+   *   left.join(broadcast(right), "joinKey")
+   * }}}
+   *
+   * @group normal_funcs
+   * @since 3.4.0
+   */
+  def broadcast[T](df: Dataset[T]): Dataset[T] = {
+    df.hint("broadcast")
+  }
+
+  /**
    * Returns the first column that is not null, or null if all inputs are null.
    *
    * For example, `coalesce(a, b, c)` will return a if a is not null, or b if a is null and b is

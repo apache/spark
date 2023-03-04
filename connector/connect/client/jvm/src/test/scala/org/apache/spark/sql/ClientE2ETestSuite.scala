@@ -28,7 +28,7 @@ import org.scalactic.TolerantNumerics
 
 import org.apache.spark.SPARK_VERSION
 import org.apache.spark.sql.connect.client.util.{IntegrationTestUtils, RemoteSparkSession}
-import org.apache.spark.sql.functions.{aggregate, array, col, count, lit, rand, sequence, shuffle, struct, transform, udf}
+import org.apache.spark.sql.functions.{aggregate, array, broadcast, col, count, lit, rand, sequence, shuffle, struct, transform, udf}
 import org.apache.spark.sql.types._
 
 class ClientE2ETestSuite extends RemoteSparkSession {
@@ -498,6 +498,14 @@ class ClientE2ETestSuite extends RemoteSparkSession {
       .join(right, left.colRegex("id") === right.colRegex("id"))
       .select(left("id"), right("a"))
     assert(joined2.schema.catalogString === "struct<id:bigint,a:double>")
+  }
+
+  test("broadcast join") {
+    val left = spark.range(100).select(col("id"), rand(10).as("a"))
+    val right = spark.range(100).select(col("id"), rand(12).as("a"))
+    val joined =
+      left.join(broadcast(right), left("id") === right("id")).select(left("id"), right("a"))
+    assert(joined.schema.catalogString === "struct<id:bigint,a:double>")
   }
 
   test("test temp view") {
