@@ -19,6 +19,7 @@ package org.apache.spark.sql.connect
 import java.nio.charset.StandardCharsets
 import java.nio.file.{Files, FileVisitResult, Path, SimpleFileVisitor}
 import java.nio.file.attribute.BasicFileAttributes
+import java.sql.DriverManager
 import java.util
 
 import scala.util.{Failure, Success, Try}
@@ -36,6 +37,7 @@ import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.util.Utils
 
 // scalastyle:off
 /**
@@ -57,6 +59,37 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
  */
 // scalastyle:on
 class ProtoToParsedPlanTestSuite extends SparkFunSuite with SharedSparkSession {
+  val url = "jdbc:h2:mem:testdb0"
+  var conn: java.sql.Connection = null
+
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+
+    Utils.classForName("org.h2.Driver")
+    // Extra properties that will be specified for our database. We need these to test
+    // usage of parameters from OPTIONS clause in queries.
+    val properties = new util.Properties()
+    properties.setProperty("user", "testUser")
+    properties.setProperty("password", "testPass")
+
+    conn = DriverManager.getConnection(url, properties)
+    conn.prepareStatement("create schema test").executeUpdate()
+    conn
+      .prepareStatement("create table test.timetypes (a TIME, b DATE, c TIMESTAMP(7))")
+      .executeUpdate()
+    conn
+      .prepareStatement(
+        "create table test.emp(name TEXT(32) NOT NULL," +
+          " theid INTEGER, \"Dept\" INTEGER)")
+      .executeUpdate()
+    conn.commit()
+  }
+
+  override def afterAll(): Unit = {
+    conn.close()
+    super.afterAll()
+  }
+
   override def sparkConf: SparkConf = {
     super.sparkConf
       .set(
