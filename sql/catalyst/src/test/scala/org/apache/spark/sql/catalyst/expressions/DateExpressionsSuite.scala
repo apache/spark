@@ -2047,11 +2047,11 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       checkExceptionInExpression[SparkArithmeticException](TimestampAdd("DAY",
         Literal(106751992),
         Literal(0L, TimestampType)),
-        "[DATETIME_OVERFLOW] Datetime operation overflow")
+        "Datetime operation overflow")
       checkExceptionInExpression[SparkArithmeticException](TimestampAdd("QUARTER",
         Literal(1431655764),
         Literal(0L, TimestampType)),
-        "[DATETIME_OVERFLOW] Datetime operation overflow")
+        "Datetime operation overflow")
     }
   }
 
