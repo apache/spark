@@ -407,8 +407,7 @@ class DataTypeParserBase:
         "\\(\\s*(?:-?\\s*\\d+)\\s*(?:,\\s*(?:-?\\s*\\d+)\\s*)*\\)", re.MULTILINE
     )
     REGEXP_INTERVAL_TYPE: Final[Pattern] = re.compile(
-        "(day|hour|minute|second)(?:\\s+?to\\s+?(hour|minute|second))?",
-        re.IGNORECASE | re.MULTILINE,
+        "(day|hour|minute|second)(?:\\s+to\\s+(hour|minute|second))?", re.IGNORECASE | re.MULTILINE
     )
 
     def __init__(self, type_str: str):
