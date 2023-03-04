@@ -19,11 +19,13 @@ from pyspark.sql.connect.utils import check_dependencies
 check_dependencies(__name__, __file__)
 
 import json
+import re
 
 import pyarrow as pa
 
-from typing import Optional
+from typing import Final, List, Optional, Pattern
 
+from pyspark.errors import ParseException
 from pyspark.sql.types import (
     DataType,
     ByteType,
@@ -51,7 +53,6 @@ from pyspark.sql.types import (
 )
 
 import pyspark.sql.connect.proto as pb2
-from pyspark.sql.utils import is_remote
 
 
 JVM_BYTE_MIN: int = -(1 << 7)
@@ -342,20 +343,308 @@ def from_arrow_schema(arrow_schema: "pa.Schema") -> StructType:
 
 
 def parse_data_type(data_type: str) -> DataType:
-    # Currently we don't have a way to have a current Spark session in Spark Connect, and
-    # pyspark.sql.SparkSession has a centralized logic to control the session creation.
-    # So uses pyspark.sql.SparkSession for now. Should replace this to using the current
-    # Spark session for Spark Connect in the future.
-    from pyspark.sql import SparkSession as PySparkSession
+    """
+    Parses the given data type string to a :class:`DataType`. The data type string format equals
+    :class:`DataType.simpleString`, except that the top level struct type can omit
+    the ``struct<>``. Since Spark 2.3, this also supports a schema in a DDL-formatted
+    string and case-insensitive strings.
 
-    assert is_remote()
-    return_type_schema = (
-        PySparkSession.builder.getOrCreate().createDataFrame(data=[], schema=data_type).schema
+    Examples
+    --------
+    >>> parse_data_type("int ")
+    IntegerType()
+    >>> parse_data_type("INT ")
+    IntegerType()
+    >>> parse_data_type("a: byte, b: decimal(  16 , 8   ) ")
+    StructType([StructField('a', ByteType(), True), StructField('b', DecimalType(16,8), True)])
+    >>> parse_data_type("a DOUBLE, b STRING")
+    StructType([StructField('a', DoubleType(), True), StructField('b', StringType(), True)])
+    >>> parse_data_type("a DOUBLE, b CHAR( 50 )")
+    StructType([StructField('a', DoubleType(), True), StructField('b', CharType(50), True)])
+    >>> parse_data_type("a DOUBLE, b VARCHAR( 50 )")
+    StructType([StructField('a', DoubleType(), True), StructField('b', VarcharType(50), True)])
+    >>> parse_data_type("a: array< short>")
+    StructType([StructField('a', ArrayType(ShortType(), True), True)])
+    >>> parse_data_type(" map<string , string > ")
+    MapType(StringType(), StringType(), True)
+
+    >>> # Error cases
+    >>> parse_data_type("blabla") # doctest: +IGNORE_EXCEPTION_DETAIL
+    Traceback (most recent call last):
+        ...
+    ParseException:...
+    >>> parse_data_type("a: int,") # doctest: +IGNORE_EXCEPTION_DETAIL
+    Traceback (most recent call last):
+        ...
+    ParseException:...
+    >>> parse_data_type("array<int") # doctest: +IGNORE_EXCEPTION_DETAIL
+    Traceback (most recent call last):
+        ...
+    ParseException:...
+    >>> parse_data_type("map<int, boolean>>") # doctest: +IGNORE_EXCEPTION_DETAIL
+    Traceback (most recent call last):
+        ...
+    ParseException:...
+    """
+    try:
+        # DDL format, "fieldname datatype, fieldname datatype".
+        return DDLSchemaParser(data_type).from_ddl_schema()
+    except ParseException as e:
+        try:
+            # For backwards compatibility, "integer", "struct<fieldname: datatype>" and etc.
+            return DDLDataTypeParser(data_type).from_ddl_datatype()
+        except ParseException:
+            try:
+                # For backwards compatibility, "fieldname: datatype, fieldname: datatype" case.
+                return DDLDataTypeParser(f"struct<{data_type}>").from_ddl_datatype()
+            except ParseException:
+                raise e from None
+
+
+class DataTypeParserBase:
+    REGEXP_IDENTIFIER: Final[Pattern] = re.compile("\\w+|`(?:``|[^`])*?`", re.MULTILINE)
+    REGEXP_INTEGER_VALUES: Final[Pattern] = re.compile(
+        "\\(\\s*?(?:-?\\d+)\\s*?(?:,\\s*?(?:-?\\d+)\\s*)*\\)", re.MULTILINE
     )
-    with_col_name = " " in data_type.strip()
-    if len(return_type_schema.fields) == 1 and not with_col_name:
-        # To match pyspark.sql.types._parse_datatype_string
-        return_type = return_type_schema.fields[0].dataType
-    else:
-        return_type = return_type_schema
-    return return_type
+    REGEXP_INTERVAL_TYPE: Final[Pattern] = re.compile(
+        "(day|hour|minute|second)(?:\\s+to\\s+(hour|minute|second))?", re.IGNORECASE | re.MULTILINE
+    )
+
+    def __init__(self, type_str: str):
+        self._type_str = type_str
+        self._pos = 0
+        self._lstrip()
+
+    def _lstrip(self) -> None:
+        remaining = self._type_str[self._pos :]
+        self._pos = self._pos + (len(remaining) - len(remaining.lstrip()))
+
+    def _parse_data_type(self) -> DataType:
+        type_str = self._type_str[self._pos :]
+        m = self.REGEXP_IDENTIFIER.match(type_str)
+        if m:
+            data_type_name = m.group(0).lower().strip("`").replace("``", "`")
+            self._pos = self._pos + len(m.group(0))
+            self._lstrip()
+            if data_type_name == "array":
+                return self._parse_array_type()
+            elif data_type_name == "map":
+                return self._parse_map_type()
+            elif data_type_name == "struct":
+                return self._parse_struct_type()
+            elif data_type_name == "interval":
+                return self._parse_interval_type()
+            else:
+                return self._parse_primitive_types(data_type_name)
+
+        raise ParseException(
+            error_class="PARSE_SYNTAX_ERROR",
+            message_parameters={"error": f"'{type_str}'", "hint": ""},
+        )
+
+    def _parse_array_type(self) -> ArrayType:
+        type_str = self._type_str[self._pos :]
+        if len(type_str) > 0 and type_str[0] == "<":
+            self._pos = self._pos + 1
+            self._lstrip()
+            element_type = self._parse_data_type()
+            remaining = self._type_str[self._pos :]
+            if len(remaining) and remaining[0] == ">":
+                self._pos = self._pos + 1
+                self._lstrip()
+                return ArrayType(element_type)
+        raise ParseException(error_class="INCOMPLETE_TYPE_DEFINITION.ARRAY", message_parameters={})
+
+    def _parse_map_type(self) -> MapType:
+        type_str = self._type_str[self._pos :]
+        if len(type_str) > 0 and type_str[0] == "<":
+            self._pos = self._pos + 1
+            self._lstrip()
+            key_type = self._parse_data_type()
+            remaining = self._type_str[self._pos :]
+            if len(remaining) > 0 and remaining[0] == ",":
+                self._pos = self._pos + 1
+                self._lstrip()
+                value_type = self._parse_data_type()
+                remaining = self._type_str[self._pos :]
+                if len(remaining) > 0 and remaining[0] == ">":
+                    self._pos = self._pos + 1
+                    self._lstrip()
+                    return MapType(key_type, value_type)
+        raise ParseException(error_class="INCOMPLETE_TYPE_DEFINITION.MAP", message_parameters={})
+
+    def _parse_struct_type(self) -> StructType:
+        type_str = self._type_str[self._pos :]
+        if len(type_str) > 0 and type_str[0] == "<":
+            self._pos = self._pos + 1
+            self._lstrip()
+            fields = self._parse_struct_fields()
+            remaining = self._type_str[self._pos :]
+            if len(remaining) > 0 and remaining[0] == ">":
+                self._pos = self._pos + 1
+                self._lstrip()
+                return StructType(fields)
+        raise ParseException(error_class="INCOMPLETE_TYPE_DEFINITION.STRUCT", message_parameters={})
+
+    def _parse_struct_fields(self, sep_with_colon: bool = True) -> List[StructField]:
+        type_str = self._type_str[self._pos :]
+        m = self.REGEXP_IDENTIFIER.match(type_str)
+        if m:
+            field_name = m.group(0).lower().strip("`").replace("``", "`")
+            self._pos = self._pos + len(m.group(0))
+            self._lstrip()
+            if sep_with_colon:
+                remaining = self._type_str[self._pos :]
+                if remaining[0] == ":":
+                    self._pos = self._pos + 1
+                    self._lstrip()
+            data_type = self._parse_data_type()
+            remaining = self._type_str[self._pos :]
+            if len(remaining) > 0 and remaining[0] == ",":
+                self._pos = self._pos + 1
+                self._lstrip()
+                return [StructField(field_name, data_type)] + self._parse_struct_fields(
+                    sep_with_colon=sep_with_colon
+                )
+            else:
+                return [StructField(field_name, data_type)]
+        raise ParseException(error_class="INCOMPLETE_TYPE_DEFINITION.STRUCT", message_parameters={})
+
+    def _parse_interval_type(self) -> DayTimeIntervalType:
+        type_str = self._type_str[self._pos :]
+        m = self.REGEXP_INTERVAL_TYPE.match(type_str)
+        if m:
+            start_field = DayTimeIntervalType._inverted_fields[m.group(1).lower()]
+            end_field = (
+                DayTimeIntervalType._inverted_fields[m.group(2).lower()]
+                if m.group(2) is not None
+                else None
+            )
+            self._pos = self._pos + len(m.group(0))
+            self._lstrip()
+            return DayTimeIntervalType(start_field, end_field)
+        raise ParseException(
+            error_class="PARSE_SYNTAX_ERROR",
+            message_parameters={"error": f"'{type_str}'", "hint": f": extra input '{type_str}'"},
+        )
+
+    def _parse_primitive_types(self, data_type_name: str) -> DataType:
+        type_str = self._type_str[self._pos :]
+        m = self.REGEXP_INTEGER_VALUES.match(type_str)
+        if m:
+            integer_values = self._parse_integer_values(m.group(0))
+            self._pos = self._pos + len(m.group(0))
+            self._lstrip()
+        else:
+            integer_values = []
+        len_iv = len(integer_values)
+        if data_type_name == "boolean" and len_iv == 0:
+            return BooleanType()
+        elif data_type_name in ("tinyint", "byte") and len_iv == 0:
+            return ByteType()
+        elif data_type_name in ("smallint", "short") and len_iv == 0:
+            return ShortType()
+        elif data_type_name in ("int", "integer") and len_iv == 0:
+            return IntegerType()
+        elif data_type_name in ("bigint", "long") and len_iv == 0:
+            return LongType()
+        elif data_type_name in ("float", "real") and len_iv == 0:
+            return FloatType()
+        elif data_type_name == "double" and len_iv == 0:
+            return DoubleType()
+        elif data_type_name == "date" and len_iv == 0:
+            return DateType()
+        elif data_type_name == "timestamp" and len_iv == 0:
+            return TimestampType()
+        elif data_type_name == "timestamp_ntz" and len_iv == 0:
+            return TimestampNTZType()
+        elif data_type_name == "timestamp_ltz" and len_iv == 0:
+            return TimestampType()
+        elif data_type_name == "string" and len_iv == 0:
+            return StringType()
+        elif data_type_name in ("character", "char") and len_iv == 1:
+            return CharType(integer_values[0])
+        elif data_type_name == "varchar" and len_iv == 1:
+            return VarcharType(integer_values[0])
+        elif data_type_name == "binary" and len_iv == 0:
+            return BinaryType()
+        elif data_type_name in ("decimal", "dec", "numeric") and len_iv == 0:
+            return DecimalType()
+        elif data_type_name in ("decimal", "dec", "numeric") and len_iv == 1:
+            return DecimalType(precision=integer_values[0])
+        elif data_type_name in ("decimal", "dec", "numeric") and len_iv == 2:
+            return DecimalType(precision=integer_values[0], scale=integer_values[1])
+        elif data_type_name == "void" and len_iv == 0:
+            return NullType()
+        elif data_type_name in ("character", "char", "varchar") and len_iv == 0:
+            raise ParseException(
+                error_class="DATATYPE_MISSING_SIZE",
+                message_parameters={"type": f'"{data_type_name}"'},
+            )
+        elif data_type_name == "array" and len_iv == 0:
+            raise ParseException(
+                error_class="INCOMPLETE_TYPE_DEFINITION.ARRAY", message_parameters={}
+            )
+        elif data_type_name == "map" and len_iv == 0:
+            raise ParseException(
+                error_class="INCOMPLETE_TYPE_DEFINITION.MAP", message_parameters={}
+            )
+        elif data_type_name == "struct" and len_iv == 0:
+            raise ParseException(
+                error_class="INCOMPLETE_TYPE_DEFINITION.STRUCT", message_parameters={}
+            )
+        else:
+            raise ParseException(
+                error_class="UNSUPPORTED_DATATYPE",
+                message_parameters={"typeName": f'"{data_type_name}"'},
+            )
+
+    def _parse_integer_values(self, values: str) -> List[int]:
+        values = values.strip()
+        values = values[1:-1]
+        integer_values = values.split(",")
+        return [int(v.strip()) for v in integer_values]
+
+
+class DDLSchemaParser(DataTypeParserBase):
+    def __init__(self, type_str: str):
+        super().__init__(type_str)
+        self._data_type: Optional[StructType] = None
+
+    def from_ddl_schema(self) -> StructType:
+        if self._data_type is None:
+            data_type = StructType(self._parse_struct_fields(sep_with_colon=False))
+            remaining = self._type_str[self._pos :]
+            if len(remaining) == 0:
+                self._data_type = data_type
+            else:
+                raise ParseException(
+                    error_class="PARSE_SYNTAX_ERROR",
+                    message_parameters={
+                        "error": f"'{remaining}'",
+                        "hint": f": extra input '{remaining}'",
+                    },
+                )
+        return self._data_type
+
+
+class DDLDataTypeParser(DataTypeParserBase):
+    def __init__(self, type_str: str):
+        super().__init__(type_str)
+        self._data_type: Optional[DataType] = None
+
+    def from_ddl_datatype(self) -> DataType:
+        if self._data_type is None:
+            data_type = self._parse_data_type()
+            remaining = self._type_str[self._pos :]
+            if len(remaining) == 0:
+                self._data_type = data_type
+            else:
+                raise ParseException(
+                    error_class="PARSE_SYNTAX_ERROR",
+                    message_parameters={
+                        "error": f"'{remaining}'",
+                        "hint": f": extra input '{remaining}'",
+                    },
+                )
+        return self._data_type

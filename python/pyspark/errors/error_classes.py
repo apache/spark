@@ -29,10 +29,39 @@ ERROR_CLASSES_JSON = """
       "`<func_name>` does not allow a Column in a list."
     ]
   },
+  "DATATYPE_MISSING_SIZE" : {
+    "message" : [
+      "DataType <type> requires a length parameter, for example <type>(10). Please specify the length."
+    ],
+    "sqlState" : "42K01"
+  },
   "DISALLOWED_TYPE_FOR_CONTAINER" : {
     "message" : [
       "Argument `<arg_name>`(type: <arg_type>) should only contain a type in [<allowed_types>], got <return_type>"
     ]
+  },
+  "INCOMPLETE_TYPE_DEFINITION" : {
+    "message" : [
+      "Incomplete complex type:"
+    ],
+    "subClass" : {
+      "ARRAY" : {
+        "message" : [
+          "The definition of \\"ARRAY\\" type is incomplete. You must provide an element type."
+        ]
+      },
+      "MAP" : {
+        "message" : [
+          "The definition of \\"MAP\\" type is incomplete. You must provide a key type and a value type."
+        ]
+      },
+      "STRUCT" : {
+        "message" : [
+          "The definition of \\"STRUCT\\" type is incomplete. You must provide at least one field type."
+        ]
+      }
+    },
+    "sqlState" : "42K01"
   },
   "HIGHER_ORDER_FUNCTION_SHOULD_RETURN_COLUMN" : {
     "message" : [
@@ -158,6 +187,18 @@ ERROR_CLASSES_JSON = """
     "message" : [
       "Argument `<arg_name>` should be a WindowSpec, got <arg_type>."
     ]
+  },
+  "PARSE_SYNTAX_ERROR" : {
+    "message" : [
+      "Syntax error at or near <error><hint>."
+    ],
+    "sqlState" : "42601"
+  },
+  "UNSUPPORTED_DATATYPE" : {
+    "message" : [
+      "Unsupported data type <typeName>."
+    ],
+    "sqlState" : "0A000"
   },
   "UNSUPPORTED_NUMPY_ARRAY_SCALAR" : {
     "message" : [

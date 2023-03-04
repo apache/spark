@@ -522,6 +522,7 @@ pyspark_connect = Module(
         "pyspark.sql.tests.connect.test_connect_basic",
         "pyspark.sql.tests.connect.test_connect_function",
         "pyspark.sql.tests.connect.test_connect_column",
+        "pyspark.sql.tests.connect.test_connect_types",
         "pyspark.sql.tests.connect.test_parity_datasources",
         "pyspark.sql.tests.connect.test_parity_catalog",
         "pyspark.sql.tests.connect.test_parity_conf",

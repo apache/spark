@@ -52,6 +52,7 @@ from pyspark.sql.connect.conf import RuntimeConf
 from pyspark.sql.connect.dataframe import DataFrame
 from pyspark.sql.connect.plan import SQL, Range, LocalRelation, CachedRelation
 from pyspark.sql.connect.readwriter import DataFrameReader
+from pyspark.sql.connect.types import parse_data_type
 from pyspark.sql.pandas.serializers import ArrowStreamPandasSerializer
 from pyspark.sql.pandas.types import to_arrow_type, _get_local_timezone
 from pyspark.sql.session import classproperty, SparkSession as PySparkSession
@@ -314,7 +315,11 @@ class SparkSession:
                 # we can not infer the schema from the data itself.
                 warnings.warn("failed to infer the schema from data")
                 if _schema is None and _schema_str is not None:
-                    _schema = self.createDataFrame([], schema=_schema_str).schema
+                    _data_type = parse_data_type(_schema_str)
+                    if isinstance(_data_type, StructType):
+                        _schema = _data_type
+                    else:
+                        _schema = StructType().add("value", _data_type)
                 if _schema is None or not isinstance(_schema, StructType):
                     raise ValueError(
                         "Some of types cannot be determined after inferring, "
