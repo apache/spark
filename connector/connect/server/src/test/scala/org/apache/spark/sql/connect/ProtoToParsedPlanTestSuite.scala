@@ -74,11 +74,14 @@ class ProtoToParsedPlanTestSuite extends SparkFunSuite with SharedSparkSession {
 
     conn = DriverManager.getConnection(url, properties)
     conn.prepareStatement("create schema test").executeUpdate()
-    conn.prepareStatement("create table test.timetypes (a TIME, b DATE, c TIMESTAMP(7))"
-    ).executeUpdate()
-    conn.prepareStatement(
-      "create table test.emp(name TEXT(32) NOT NULL," +
-        " theid INTEGER, \"Dept\" INTEGER)").executeUpdate()
+    conn
+      .prepareStatement("create table test.timetypes (a TIME, b DATE, c TIMESTAMP(7))")
+      .executeUpdate()
+    conn
+      .prepareStatement(
+        "create table test.emp(name TEXT(32) NOT NULL," +
+          " theid INTEGER, \"Dept\" INTEGER)")
+      .executeUpdate()
     conn.commit()
   }
 
