@@ -402,12 +402,13 @@ def parse_data_type(data_type: str) -> DataType:
 
 
 class DataTypeParserBase:
-    REGEXP_IDENTIFIER: Final[Pattern] = re.compile("\\w+|`(?:``|[^`])*?`", re.MULTILINE)
+    REGEXP_IDENTIFIER: Final[Pattern] = re.compile("\\w+|`(?:``|[^`])*`", re.MULTILINE)
     REGEXP_INTEGER_VALUES: Final[Pattern] = re.compile(
-        "\\(\\s*?(?:-?\\d+)\\s*?(?:,\\s*?(?:-?\\d+)\\s*)*\\)", re.MULTILINE
+        "\\(\\s*(?:-?\\s*\\d+)\\s*(?:,\\s*(?:-?\\s*\\d+)\\s*)*\\)", re.MULTILINE
     )
     REGEXP_INTERVAL_TYPE: Final[Pattern] = re.compile(
-        "(day|hour|minute|second)(?:\\s+to\\s+(hour|minute|second))?", re.IGNORECASE | re.MULTILINE
+        "(day|hour|minute|second)(?:\\s+?to\\s+?(hour|minute|second))?",
+        re.IGNORECASE | re.MULTILINE,
     )
 
     def __init__(self, type_str: str):
