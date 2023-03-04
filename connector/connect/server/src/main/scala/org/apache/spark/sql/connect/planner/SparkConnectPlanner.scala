@@ -24,7 +24,7 @@ import com.google.common.collect.{Lists, Maps}
 import com.google.protobuf.{Any => ProtoAny, ByteString}
 import io.grpc.stub.StreamObserver
 
-import org.apache.spark.{SparkEnv, TaskContext}
+import org.apache.spark.{Partition, SparkEnv, TaskContext}
 import org.apache.spark.api.python.{PythonEvalType, SimplePythonFunction}
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.{ExecutePlanResponse, SqlCommand}
@@ -48,6 +48,8 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.arrow.ArrowConverters
 import org.apache.spark.sql.execution.command.CreateViewCommand
+import org.apache.spark.sql.execution.datasources.LogicalRelation
+import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JDBCPartition, JDBCRelation}
 import org.apache.spark.sql.execution.python.UserDefinedPythonFunction
 import org.apache.spark.sql.internal.CatalogImpl
 import org.apache.spark.sql.types._
@@ -705,6 +707,17 @@ class SparkConnectPlanner(val session: SparkSession) {
         } else {
           reader.load(rel.getDataSource.getPathsList.asScala.toSeq: _*).queryExecution.analyzed
         }
+
+      case proto.Read.ReadTypeCase.PARTITIONED_JDBC =>
+        val partitionedJdbc = rel.getPartitionedJdbc
+        val params = CaseInsensitiveMap[String](partitionedJdbc.getOptionsMap.asScala.toMap)
+        val options = new JDBCOptions(partitionedJdbc.getUrl, partitionedJdbc.getTable, params)
+        val predicates = partitionedJdbc.getPredicatesList.asScala.toArray
+        val parts: Array[Partition] = predicates.zipWithIndex.map { case (part, i) =>
+          JDBCPartition(part, i): Partition
+        }
+        val relation = JDBCRelation(parts, options)(session)
+        LogicalRelation(relation)
 
       case _ => throw InvalidPlanInput("Does not support " + rel.getReadTypeCase.name())
     }

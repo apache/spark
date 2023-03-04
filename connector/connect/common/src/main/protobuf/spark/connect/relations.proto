@@ -115,6 +115,7 @@ message Read {
   oneof read_type {
     NamedTable named_table = 1;
     DataSource data_source = 2;
+    PartitionedJDBC partitioned_jdbc = 3;
   }
 
   message NamedTable {
@@ -140,6 +141,21 @@ message Read {
 
     // (Optional) A list of path for file-system backed data sources.
     repeated string paths = 4;
+  }
+
+  message PartitionedJDBC {
+    // (Required) JDBC URL.
+    string url = 1;
+
+    // (Required) Name of the table in the external database.
+    string table = 2;
+
+    // (Optional) Condition in the where clause for each partition.
+    repeated string predicates = 3;
+
+    // Options or connection arguments for the JDBC database.
+    // The map key is case insensitive.
+    map<string, string> options = 4;
   }
 }
 

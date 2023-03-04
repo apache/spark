@@ -18,6 +18,8 @@ package org.apache.spark.sql
 
 import java.io.{ByteArrayOutputStream, PrintStream}
 import java.nio.file.Files
+import java.sql.DriverManager
+import java.util.Properties
 
 import scala.collection.JavaConverters._
 
@@ -30,8 +32,56 @@ import org.apache.spark.SPARK_VERSION
 import org.apache.spark.sql.connect.client.util.{IntegrationTestUtils, RemoteSparkSession}
 import org.apache.spark.sql.functions.{aggregate, array, broadcast, col, count, lit, rand, sequence, shuffle, struct, transform, udf}
 import org.apache.spark.sql.types._
+import org.apache.spark.util.Utils
 
 class ClientE2ETestSuite extends RemoteSparkSession {
+
+  private val url = "jdbc:h2:mem:testdb0"
+  private val urlWithUserAndPass = "jdbc:h2:mem:testdb0;user=testUser;password=testPass"
+  private var conn: java.sql.Connection = null
+
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+
+    Utils.classForName("org.h2.Driver")
+    // Extra properties that will be specified for our database. We need these to test
+    // usage of parameters from OPTIONS clause in queries.
+    val properties = new Properties()
+    properties.setProperty("user", "testUser")
+    properties.setProperty("password", "testPass")
+
+    conn = DriverManager.getConnection(url, properties)
+    conn.prepareStatement("create schema test").executeUpdate()
+    conn
+      .prepareStatement(
+        "create table test.people (name TEXT(32) NOT NULL, theid INTEGER NOT NULL)")
+      .executeUpdate()
+    conn
+      .prepareStatement("create table test.timetypes (a TIME, b DATE, c TIMESTAMP(7))")
+      .executeUpdate()
+    conn
+      .prepareStatement(
+        "insert into test.timetypes values ('12:34:56', "
+          + "'1996-01-01', '2002-02-20 11:22:33.543543543')")
+      .executeUpdate()
+    conn
+      .prepareStatement(
+        "insert into test.timetypes values ('12:34:56', "
+          + "null, '2002-02-20 11:22:33.543543543')")
+      .executeUpdate()
+    conn.commit()
+    conn
+      .prepareStatement(
+        "create table test.emp(name TEXT(32) NOT NULL," +
+          " theid INTEGER, \"Dept\" INTEGER)")
+      .executeUpdate()
+    conn.commit()
+  }
+
+  override def afterAll(): Unit = {
+    conn.close()
+    super.afterAll()
+  }
 
   // Spark Result
   test("spark result schema") {
@@ -155,6 +205,18 @@ class ClientE2ETestSuite extends RemoteSparkSession {
     assertThrows[StatusRuntimeException] {
       df.collect()
     }
+  }
+
+  test("read jdbc") {
+    val rows = spark.read.jdbc(urlWithUserAndPass, "TEST.TIMETYPES", new Properties()).collect()
+    val cachedRows = spark.read
+      .jdbc(urlWithUserAndPass, "TEST.TIMETYPES", new Properties())
+      .cache()
+      .collect()
+    val expectedTimeAtEpoch = java.sql.Timestamp.valueOf("1970-01-01 12:34:56.0")
+    assert(rows(0).getAs[java.sql.Timestamp](0) === expectedTimeAtEpoch)
+    assert(rows(1).getAs[java.sql.Timestamp](0) === expectedTimeAtEpoch)
+    assert(cachedRows(0).getAs[java.sql.Timestamp](0) === expectedTimeAtEpoch)
   }
 
   test("write table") {

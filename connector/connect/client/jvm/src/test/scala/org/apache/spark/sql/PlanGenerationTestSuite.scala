@@ -163,6 +163,8 @@ class PlanGenerationTestSuite
     }
   }
 
+  private val urlWithUserAndPass = "jdbc:h2:mem:testdb0;user=testUser;password=testPass"
+
   private val simpleSchema = new StructType()
     .add("id", "long")
     .add("a", "int")
@@ -236,21 +238,16 @@ class PlanGenerationTestSuite
   }
 
   test("read jdbc") {
-    session.read.jdbc(
-      "jdbc:h2:mem:testdb0;user=testUser;password=testPass",
-      "TEST.TIMETYPES",
-      new Properties())
+    session.read.jdbc(urlWithUserAndPass, "TEST.TIMETYPES", new Properties())
   }
 
   test("read jdbc with partition") {
-    session.read.jdbc(
-      "jdbc:h2:mem:testdb0;user=testUser;password=testPass",
-      "TEST.EMP",
-      "THEID",
-      0,
-      4,
-      3,
-      new Properties())
+    session.read.jdbc(urlWithUserAndPass, "TEST.EMP", "THEID", 0, 4, 3, new Properties())
+  }
+
+  test("read jdbc with predicates") {
+    val parts = Array[String]("THEID < 2", "THEID >= 2")
+    session.read.jdbc(urlWithUserAndPass, "TEST.PEOPLE", parts, new Properties())
   }
 
   test("read json") {
