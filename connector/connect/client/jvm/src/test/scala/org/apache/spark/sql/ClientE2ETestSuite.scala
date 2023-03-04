@@ -489,10 +489,13 @@ class ClientE2ETestSuite extends RemoteSparkSession {
   }
 
   test("ambiguous joins") {
+    spark.conf.set("spark.sql.autoBroadcastJoinThreshold", "-1")
     val left = spark.range(100).select(col("id"), rand(10).as("a"))
     val right = spark.range(100).select(col("id"), rand(12).as("a"))
     val joined = left.join(right, left("id") === right("id")).select(left("id"), right("a"))
     assert(joined.schema.catalogString === "struct<id:bigint,a:double>")
+    testCapturedStdOut(joined.explain(), "BroadcastHashJoin")
+    spark.conf.set("spark.sql.autoBroadcastJoinThreshold", "10MB")
 
     val joined2 = left
       .join(right, left.colRegex("id") === right.colRegex("id"))
@@ -501,12 +504,14 @@ class ClientE2ETestSuite extends RemoteSparkSession {
   }
 
   test("broadcast join") {
+    spark.conf.set("spark.sql.autoBroadcastJoinThreshold", "-1")
     val left = spark.range(100).select(col("id"), rand(10).as("a"))
     val right = spark.range(100).select(col("id"), rand(12).as("a"))
     val joined =
       left.join(broadcast(right), left("id") === right("id")).select(left("id"), right("a"))
     assert(joined.schema.catalogString === "struct<id:bigint,a:double>")
     testCapturedStdOut(joined.explain(), "BroadcastHashJoin")
+    spark.conf.set("spark.sql.autoBroadcastJoinThreshold", "10MB")
   }
 
   test("test temp view") {
