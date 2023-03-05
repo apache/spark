@@ -600,9 +600,11 @@ class ClientE2ETestSuite extends RemoteSparkSession {
 
   test("createDataFrame from complex type schema") {
     val schema = new StructType()
-      .add("c1", new StructType()
-        .add("c1-1", StringType)
-        .add("c1-2", StringType))
+      .add(
+        "c1",
+        new StructType()
+          .add("c1-1", StringType)
+          .add("c1-2", StringType))
     val data = Seq(Row(Row(null, "a2")), Row(Row("b1", "b2")), Row(null))
     val result = spark.createDataFrame(data.asJava, schema).collect()
     assert(result === data)
