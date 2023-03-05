@@ -119,19 +119,6 @@ final class DataFrameStatFunctions private[sql] (sparkSession: SparkSession, roo
   }
 
   /**
-   * Python-friendly version of [[approxQuantile()]]
-   */
-  private[spark] def approxQuantile(
-      cols: List[String],
-      probabilities: List[Double],
-      relativeError: Double): java.util.List[java.util.List[Double]] = {
-    approxQuantile(cols.toArray, probabilities.toArray, relativeError)
-      .map(_.toList.asJava)
-      .toList
-      .asJava
-  }
-
-  /**
    * Calculate the sample covariance of two numerical columns of a DataFrame.
    * @param col1
    *   the name of the first column
