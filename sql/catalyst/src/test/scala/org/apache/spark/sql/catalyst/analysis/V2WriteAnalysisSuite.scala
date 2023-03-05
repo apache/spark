@@ -204,8 +204,12 @@ abstract class V2StrictWriteAnalysisSuiteBase extends V2WriteAnalysisSuiteBase {
     assertNotResolved(parsedPlan)
     assertAnalysisErrorClass(
       parsedPlan,
-      expectedErrorClass = "INCOMPATIBLE_DATA_TO_TABLE.CANNOT_FIND_DATA",
-      expectedMessageParameters = Map("tableName" -> "`table-name`", "colPath" -> "`x`")
+      expectedErrorClass = "INCOMPATIBLE_DATA_TO_TABLE.CANNOT_SAFELY_CAST",
+      expectedMessageParameters = Map(
+        "tableName" -> "`table-name`",
+        "colPath" -> "`x`",
+        "from" -> "\"DOUBLE\"",
+        "to" -> "\"FLOAT\"")
     )
   }
 
@@ -223,8 +227,12 @@ abstract class V2StrictWriteAnalysisSuiteBase extends V2WriteAnalysisSuiteBase {
     assertNotResolved(parsedPlan)
     assertAnalysisErrorClass(
       parsedPlan,
-      expectedErrorClass = "INCOMPATIBLE_DATA_TO_TABLE.NULLABLE_COLUMN",
-      expectedMessageParameters = Map("tableName" -> "`table-name`", "colPath" -> "`x`")
+      expectedErrorClass = "INCOMPATIBLE_DATA_TO_TABLE.CANNOT_SAFELY_CAST",
+      expectedMessageParameters = Map(
+        "tableName" -> "`table-name`",
+        "colPath" -> "`x`",
+        "from" -> "\"DOUBLE\"",
+        "to" -> "\"FLOAT\"")
     )
   }
 
@@ -238,11 +246,12 @@ abstract class V2StrictWriteAnalysisSuiteBase extends V2WriteAnalysisSuiteBase {
     assertNotResolved(parsedPlan)
     assertAnalysisErrorClass(
       parsedPlan,
-      expectedErrorClass = "_LEGACY_ERROR_TEMP_1203",
+      expectedErrorClass = "INCOMPATIBLE_DATA_TO_TABLE.CANNOT_SAFELY_CAST",
       expectedMessageParameters = Map(
-        "tableName" -> "table-name",
-        "tableColumns" -> "'x', 'y'",
-        "dataColumns" -> "")
+        "tableName" -> "`table-name`",
+        "colPath" -> "`x`",
+        "from" -> "\"DOUBLE\"",
+        "to" -> "\"FLOAT\"")
     )
   }
 
@@ -260,8 +269,12 @@ abstract class V2StrictWriteAnalysisSuiteBase extends V2WriteAnalysisSuiteBase {
     assertNotResolved(parsedPlan)
     assertAnalysisErrorClass(
       parsedPlan,
-      expectedErrorClass = "INCOMPATIBLE_DATA_TO_TABLE.NULLABLE_COLUMN",
-      expectedMessageParameters = Map("tableName" -> "`table-name`", "colPath" -> "`x`")
+      expectedErrorClass = "INCOMPATIBLE_DATA_TO_TABLE.CANNOT_SAFELY_CAST",
+      expectedMessageParameters = Map(
+        "tableName" -> "`table-name`",
+        "colPath" -> "`x`",
+        "from" -> "\"DOUBLE\"",
+        "to" -> "\"FLOAT\"")
     )
   }
 }
@@ -817,8 +830,13 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
 
     val parsedPlan = byName(table, query)
 
-    assertAnalysisError(parsedPlan, Seq(
-      "Cannot write incompatible data to table", "'table-name'",
-      "Cannot write nullable values to non-null column 'b.x'"))
+    assertAnalysisErrorClass(
+      parsedPlan,
+      expectedErrorClass = "INCOMPATIBLE_DATA_TO_TABLE.NULLABLE_COLUMN",
+      expectedMessageParameters = Map(
+        "tableName" -> "`table-name`",
+        "colPath" -> "`x`"
+      )
+    )
   }
 }
