@@ -118,10 +118,10 @@ object LiteralProtoConverter {
     case JChar.TYPE => toConnectProtoType(StringType)
 
     // java classes
-    case _ if clz == classOf[LocalDate] => toConnectProtoType(DateType)
-    case _ if clz == classOf[Date] => toConnectProtoType(DateType)
-    case _ if clz == classOf[Instant] => toConnectProtoType(TimestampType)
-    case _ if clz == classOf[Timestamp] => toConnectProtoType(TimestampType)
+    case _ if clz == classOf[LocalDate] || clz == classOf[Date] =>
+      toConnectProtoType(DateType)
+    case _ if clz == classOf[Instant] || clz == classOf[Timestamp] =>
+      toConnectProtoType(TimestampType)
     case _ if clz == classOf[LocalDateTime] => toConnectProtoType(TimestampNTZType)
     case _ if clz == classOf[Duration] => toConnectProtoType(DayTimeIntervalType.DEFAULT)
     case _ if clz == classOf[Period] => toConnectProtoType(YearMonthIntervalType.DEFAULT)
@@ -138,8 +138,8 @@ object LiteralProtoConverter {
 
     // other scala classes
     case _ if clz == classOf[String] => toConnectProtoType(StringType)
-    case _ if clz == classOf[BigInt] => toConnectProtoType(DecimalType.SYSTEM_DEFAULT)
-    case _ if clz == classOf[BigDecimal] => toConnectProtoType(DecimalType.SYSTEM_DEFAULT)
+    case _ if clz == classOf[BigInt] || clz == classOf[BigDecimal] =>
+      toConnectProtoType(DecimalType.SYSTEM_DEFAULT)
     case _ if clz == classOf[CalendarInterval] => toConnectProtoType(CalendarIntervalType)
     case _ if clz.isArray =>
       proto.DataType
