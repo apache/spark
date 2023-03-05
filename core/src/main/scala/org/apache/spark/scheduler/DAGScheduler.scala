@@ -235,8 +235,9 @@ private[spark] class DAGScheduler(
   /**
    * Max stage attempts allowed before a stage is aborted.
    */
-  private[scheduler] val maxStageAttempts =
+  private[scheduler] val maxStageAttempts: Int = {
     Math.max(maxConsecutiveStageAttempts, sc.getConf.get(config.STAGE_MAX_ATTEMPTS))
+  }
 
   /**
    * Whether ignore stage fetch failure caused by executor decommission when
@@ -1360,25 +1361,24 @@ private[spark] class DAGScheduler(
     if (jobId.isDefined) {
       logDebug(s"submitStage($stage (name=${stage.name};" +
         s"jobs=${stage.jobIds.toSeq.sorted.mkString(",")}))")
-
-      if (stage.getNextAttemptId() >= maxStageAttempts) {
-        val reason = s"$stage (name=${stage.name}) has been resubmitted for the maximum " +
-          s"allowable number of times: $maxStageAttempts which is the max value of config " +
-          s"`spark.stage.maxAttempts` and `spark.stage.maxConsecutiveAttempts`."
-        abortStage(stage, reason, None)
-      }
-
       if (!waitingStages(stage) && !runningStages(stage) && !failedStages(stage)) {
-        val missing = getMissingParentStages(stage).sortBy(_.id)
-        logDebug("missing: " + missing)
-        if (missing.isEmpty) {
-          logInfo("Submitting " + stage + " (" + stage.rdd + "), which has no missing parents")
-          submitMissingTasks(stage, jobId.get)
+        if (stage.getNextAttemptId() >= maxStageAttempts) {
+          val reason = s"$stage (name=${stage.name}) has been resubmitted for the maximum " +
+            s"allowable number of times: ${maxStageAttempts}, which is the max value of " +
+            s"config `spark.stage.maxAttempts` and `spark.stage.maxConsecutiveAttempts`."
+          abortStage(stage, reason, None)
         } else {
-          for (parent <- missing) {
-            submitStage(parent)
+          val missing = getMissingParentStages(stage).sortBy(_.id)
+          logDebug("missing: " + missing)
+          if (missing.isEmpty) {
+            logInfo("Submitting " + stage + " (" + stage.rdd + "), which has no missing parents")
+            submitMissingTasks(stage, jobId.get)
+          } else {
+            for (parent <- missing) {
+              submitStage(parent)
+            }
+            waitingStages += stage
           }
-          waitingStages += stage
         }
       }
     } else {
