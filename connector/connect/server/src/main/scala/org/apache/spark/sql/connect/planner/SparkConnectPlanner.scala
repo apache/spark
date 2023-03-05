@@ -29,7 +29,7 @@ import org.apache.spark.api.python.{PythonEvalType, SimplePythonFunction}
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.{ExecutePlanResponse, SqlCommand}
 import org.apache.spark.connect.proto.ExecutePlanResponse.SqlCommandResult
-import org.apache.spark.sql.{Column, Dataset, Encoders, Observation, SparkSession}
+import org.apache.spark.sql.{Column, Dataset, Encoders, SparkSession}
 import org.apache.spark.sql.catalyst.{expressions, AliasIdentifier, FunctionIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{GlobalTempView, LocalTempView, MultiAlias, UnresolvedAlias, UnresolvedAttribute, UnresolvedExtractValue, UnresolvedFunction, UnresolvedRegex, UnresolvedRelation, UnresolvedStar}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
@@ -578,15 +578,7 @@ class SparkConnectPlanner(val session: SparkSession) {
       Column(transformExpression(expr))
     }
 
-    if (rel.getIsObservation) {
-      val observation = Observation(rel.getName)
-      Dataset
-        .ofRows(session, transformRelation(rel.getInput))
-        .observe(observation, metrics.head, metrics.tail: _*)
-        .logicalPlan
-    } else {
-      CollectMetrics(rel.getName, metrics.map(_.named), transformRelation(rel.getInput))
-    }
+    CollectMetrics(rel.getName, metrics.map(_.named), transformRelation(rel.getInput))
   }
 
   private def transformDeduplicate(rel: proto.Deduplicate): LogicalPlan = {

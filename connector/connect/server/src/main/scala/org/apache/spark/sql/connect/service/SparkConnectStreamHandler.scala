@@ -65,8 +65,7 @@ class SparkConnectStreamHandler(responseObserver: StreamObserver[ExecutePlanResp
       SparkConnectStreamHandler.sendMetricsToResponse(request.getClientId, dataframe))
     if (dataframe.queryExecution.observedMetrics.nonEmpty) {
       responseObserver.onNext(
-        SparkConnectStreamHandler.sendObservedMetricsToResponse(
-          request.getClientId, dataframe))
+        SparkConnectStreamHandler.sendObservedMetricsToResponse(request.getClientId, dataframe))
     }
     responseObserver.onCompleted()
   }

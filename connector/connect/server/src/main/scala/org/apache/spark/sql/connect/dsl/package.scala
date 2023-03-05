@@ -1095,7 +1095,6 @@ package object dsl {
               .newBuilder()
               .setInput(logicalPlan)
               .setName(observation.name)
-              .setIsObservation(true)
               .addAllMetrics((expr +: exprs).asJava))
           .build()
       }

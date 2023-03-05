@@ -325,9 +325,8 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
             .unresolved_attribute.unparsed_identifier,
             "id",
         )
-        self.assertEqual(plan.root.collect_metrics.is_observation, False)
 
-        from pyspark.sql import Observation
+        from pyspark.sql.observation import Observation
 
         plan = (
             df.filter(df.col_name > 3)
@@ -356,7 +355,6 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
             .unresolved_attribute.unparsed_identifier,
             "id",
         )
-        self.assertEqual(plan.root.collect_metrics.is_observation, True)
 
     def test_summary(self):
         df = self.connect.readTable(table_name=self.tbl_name)

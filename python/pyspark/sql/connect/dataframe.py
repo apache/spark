@@ -42,7 +42,6 @@ from collections.abc import Iterable
 
 from pyspark import _NoValue
 from pyspark._globals import _NoValueType
-from pyspark.sql import Observation
 from pyspark.sql.observation import Observation
 from pyspark.sql.types import Row, StructType
 from pyspark.sql.dataframe import (
@@ -794,12 +793,12 @@ class DataFrame:
 
         if isinstance(observation, Observation):
             return DataFrame.withPlan(
-                plan.CollectMetrics(self._plan, str(observation._name), list(exprs), True),
+                plan.CollectMetrics(self._plan, str(observation._name), list(exprs)),
                 self._session,
             )
         elif isinstance(observation, str):
             return DataFrame.withPlan(
-                plan.CollectMetrics(self._plan, observation, list(exprs), False),
+                plan.CollectMetrics(self._plan, observation, list(exprs)),
                 self._session,
             )
         else:

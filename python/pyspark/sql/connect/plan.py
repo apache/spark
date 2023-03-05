@@ -1058,12 +1058,10 @@ class CollectMetrics(LogicalPlan):
         child: Optional["LogicalPlan"],
         name: str,
         exprs: List["ColumnOrName"],
-        is_observation: bool,
     ) -> None:
         super().__init__(child)
         self._name = name
         self._exprs = exprs
-        self._is_observation = is_observation
 
     def col_to_expr(self, col: "ColumnOrName", session: "SparkConnectClient") -> proto.Expression:
         if isinstance(col, Column):
@@ -1078,7 +1076,6 @@ class CollectMetrics(LogicalPlan):
         plan.collect_metrics.input.CopyFrom(self._child.plan(session))
         plan.collect_metrics.name = self._name
         plan.collect_metrics.metrics.extend([self.col_to_expr(x, session) for x in self._exprs])
-        plan.collect_metrics.is_observation = self._is_observation
         return plan
 
 

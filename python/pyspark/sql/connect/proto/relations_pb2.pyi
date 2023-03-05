@@ -2720,7 +2720,6 @@ class CollectMetrics(google.protobuf.message.Message):
     INPUT_FIELD_NUMBER: builtins.int
     NAME_FIELD_NUMBER: builtins.int
     METRICS_FIELD_NUMBER: builtins.int
-    IS_OBSERVATION_FIELD_NUMBER: builtins.int
     @property
     def input(self) -> global___Relation:
         """(Required) The input relation."""
@@ -2733,8 +2732,6 @@ class CollectMetrics(google.protobuf.message.Message):
         pyspark.sql.connect.proto.expressions_pb2.Expression
     ]:
         """(Required) The metric sequence."""
-    is_observation: builtins.bool
-    """(Optional) The identity whether Observation are used."""
     def __init__(
         self,
         *,
@@ -2742,36 +2739,15 @@ class CollectMetrics(google.protobuf.message.Message):
         name: builtins.str = ...,
         metrics: collections.abc.Iterable[pyspark.sql.connect.proto.expressions_pb2.Expression]
         | None = ...,
-        is_observation: builtins.bool | None = ...,
     ) -> None: ...
     def HasField(
-        self,
-        field_name: typing_extensions.Literal[
-            "_is_observation",
-            b"_is_observation",
-            "input",
-            b"input",
-            "is_observation",
-            b"is_observation",
-        ],
+        self, field_name: typing_extensions.Literal["input", b"input"]
     ) -> builtins.bool: ...
     def ClearField(
         self,
         field_name: typing_extensions.Literal[
-            "_is_observation",
-            b"_is_observation",
-            "input",
-            b"input",
-            "is_observation",
-            b"is_observation",
-            "metrics",
-            b"metrics",
-            "name",
-            b"name",
+            "input", b"input", "metrics", b"metrics", "name", b"name"
         ],
     ) -> None: ...
-    def WhichOneof(
-        self, oneof_group: typing_extensions.Literal["_is_observation", b"_is_observation"]
-    ) -> typing_extensions.Literal["is_observation"] | None: ...
 
 global___CollectMetrics = CollectMetrics
