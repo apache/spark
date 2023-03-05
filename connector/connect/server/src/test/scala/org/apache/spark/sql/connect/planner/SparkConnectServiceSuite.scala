@@ -221,7 +221,7 @@ class SparkConnectServiceSuite extends SharedSparkSession {
       .newBuilder()
       .setPlan(plan)
       .setUserContext(context)
-      .setClientId("session")
+      .setSessionId("session")
       .build()
 
     // The observer is executed inside this thread. So

@@ -754,19 +754,24 @@ class ExecutePlanRequest(google.protobuf.message.Message):
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-    CLIENT_ID_FIELD_NUMBER: builtins.int
+    SESSION_ID_FIELD_NUMBER: builtins.int
     USER_CONTEXT_FIELD_NUMBER: builtins.int
     PLAN_FIELD_NUMBER: builtins.int
     CLIENT_TYPE_FIELD_NUMBER: builtins.int
-    client_id: builtins.str
+    session_id: builtins.str
     """(Required)
 
-    The client_id is set by the client to be able to collate streaming responses from
-    different queries.
+    The session_id specifies a spark session for a user id (which is specified
+    by user_context.user_id). The session_id is set by the client to be able to
+    collate streaming responses from different queries within the dedicated session.
     """
     @property
     def user_context(self) -> global___UserContext:
-        """(Required) User context"""
+        """(Required) User context
+
+        user_context.user_id and session+id both identify a unique remote spark session on the
+        server side.
+        """
     @property
     def plan(self) -> global___Plan:
         """(Required) The logical plan to be executed / analyzed."""
@@ -778,7 +783,7 @@ class ExecutePlanRequest(google.protobuf.message.Message):
     def __init__(
         self,
         *,
-        client_id: builtins.str = ...,
+        session_id: builtins.str = ...,
         user_context: global___UserContext | None = ...,
         plan: global___Plan | None = ...,
         client_type: builtins.str | None = ...,
@@ -801,12 +806,12 @@ class ExecutePlanRequest(google.protobuf.message.Message):
         field_name: typing_extensions.Literal[
             "_client_type",
             b"_client_type",
-            "client_id",
-            b"client_id",
             "client_type",
             b"client_type",
             "plan",
             b"plan",
+            "session_id",
+            b"session_id",
             "user_context",
             b"user_context",
         ],
@@ -819,7 +824,7 @@ global___ExecutePlanRequest = ExecutePlanRequest
 
 class ExecutePlanResponse(google.protobuf.message.Message):
     """The response of a query, can be one or more for each request. Responses belonging to the
-    same input query, carry the same `client_id`.
+    same input query, carry the same `session_id`.
     """
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
@@ -970,6 +975,7 @@ class ExecutePlanResponse(google.protobuf.message.Message):
             self, field_name: typing_extensions.Literal["metrics", b"metrics"]
         ) -> None: ...
 
+<<<<<<< HEAD
     class ObservedMetrics(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -996,12 +1002,19 @@ class ExecutePlanResponse(google.protobuf.message.Message):
         ) -> None: ...
 
     CLIENT_ID_FIELD_NUMBER: builtins.int
+=======
+    SESSION_ID_FIELD_NUMBER: builtins.int
+>>>>>>> 4be2015f44 (update)
     ARROW_BATCH_FIELD_NUMBER: builtins.int
     SQL_COMMAND_RESULT_FIELD_NUMBER: builtins.int
     EXTENSION_FIELD_NUMBER: builtins.int
     METRICS_FIELD_NUMBER: builtins.int
+<<<<<<< HEAD
     OBSERVED_METRICS_FIELD_NUMBER: builtins.int
     client_id: builtins.str
+=======
+    session_id: builtins.str
+>>>>>>> 4be2015f44 (update)
     @property
     def arrow_batch(self) -> global___ExecutePlanResponse.ArrowBatch: ...
     @property
@@ -1025,7 +1038,7 @@ class ExecutePlanResponse(google.protobuf.message.Message):
     def __init__(
         self,
         *,
-        client_id: builtins.str = ...,
+        session_id: builtins.str = ...,
         arrow_batch: global___ExecutePlanResponse.ArrowBatch | None = ...,
         sql_command_result: global___ExecutePlanResponse.SqlCommandResult | None = ...,
         extension: google.protobuf.any_pb2.Any | None = ...,
@@ -1053,8 +1066,6 @@ class ExecutePlanResponse(google.protobuf.message.Message):
         field_name: typing_extensions.Literal[
             "arrow_batch",
             b"arrow_batch",
-            "client_id",
-            b"client_id",
             "extension",
             b"extension",
             "metrics",
@@ -1063,6 +1074,8 @@ class ExecutePlanResponse(google.protobuf.message.Message):
             b"observed_metrics",
             "response_type",
             b"response_type",
+            "session_id",
+            b"session_id",
             "sql_command_result",
             b"sql_command_result",
         ],

@@ -63,7 +63,7 @@ private[sql] class SparkConnectClient(
       .newBuilder()
       .setPlan(plan)
       .setUserContext(userContext)
-      .setClientId(sessionId)
+      .setSessionId(sessionId)
       .setClientType(userAgent)
       .build()
     stub.executePlan(request)
@@ -78,7 +78,7 @@ private[sql] class SparkConnectClient(
     val request = proto.ConfigRequest
       .newBuilder()
       .setOperation(operation)
-      .setClientId(sessionId)
+      .setSessionId(sessionId)
       .setClientType(userAgent)
       .setUserContext(userContext)
       .build()
@@ -157,7 +157,7 @@ private[sql] class SparkConnectClient(
   private def analyze(builder: proto.AnalyzePlanRequest.Builder): proto.AnalyzePlanResponse = {
     val request = builder
       .setUserContext(userContext)
-      .setClientId(sessionId)
+      .setSessionId(sessionId)
       .setClientType(userAgent)
       .build()
     analyze(request)
