@@ -16,6 +16,7 @@
  */
 package org.apache.spark.sql
 
+import scala.collection.Map
 import scala.language.implicitConversions
 import scala.reflect.classTag
 import scala.reflect.runtime.universe.TypeTag
@@ -30,7 +31,7 @@ import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders._
  *
  * @since 3.4.0
  */
-abstract class SQLImplicits extends LowPrioritySQLImplicits {
+abstract class SQLImplicits private[sql] (session: SparkSession) extends LowPrioritySQLImplicits {
 
   /**
    * Converts $"col name" into a [[Column]].
@@ -262,6 +263,14 @@ abstract class SQLImplicits extends LowPrioritySQLImplicits {
   /** @since 3.4.0 */
   implicit def newProductArrayEncoder[A <: Product: TypeTag]: Encoder[Array[A]] = {
     newArrayEncoder(ScalaReflection.encoderFor[A])
+  }
+
+  /**
+   * Creates a [[Dataset]] from a local Seq.
+   * @since 3.4.0
+   */
+  implicit def localSeqToDatasetHolder[T: Encoder](s: Seq[T]): DatasetHolder[T] = {
+    DatasetHolder(session.createDataset(s))
   }
 }
 

@@ -166,6 +166,14 @@ a specific strategy may not support all join types.
 
 <div class="codetabs">
 
+<div data-lang="python"  markdown="1">
+
+{% highlight python %}
+spark.table("src").join(spark.table("records").hint("broadcast"), "key").show()
+{% endhighlight %}
+
+</div>
+
 <div data-lang="scala"  markdown="1">
 
 {% highlight scala %}
@@ -178,14 +186,6 @@ spark.table("src").join(spark.table("records").hint("broadcast"), "key").show()
 
 {% highlight java %}
 spark.table("src").join(spark.table("records").hint("broadcast"), "key").show();
-{% endhighlight %}
-
-</div>
-
-<div data-lang="python"  markdown="1">
-
-{% highlight python %}
-spark.table("src").join(spark.table("records").hint("broadcast"), "key").show()
 {% endhighlight %}
 
 </div>

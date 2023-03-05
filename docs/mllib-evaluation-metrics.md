@@ -116,6 +116,12 @@ plots (recall, false positive rate) points.
 The following code snippets illustrate how to load a sample dataset, train a binary classification algorithm on the
 data, and evaluate the performance of the algorithm by several binary evaluation metrics.
 
+<div data-lang="python" markdown="1">
+Refer to the [`BinaryClassificationMetrics` Python docs](api/python/reference/api/pyspark.mllib.evaluation.BinaryClassificationMetrics.html) and [`LogisticRegressionWithLBFGS` Python docs](api/python/reference/api/pyspark.mllib.classification.LogisticRegressionWithLBFGS.html) for more details on the API.
+
+{% include_example python/mllib/binary_classification_metrics_example.py %}
+</div>
+
 <div data-lang="scala" markdown="1">
 Refer to the [`LogisticRegressionWithLBFGS` Scala docs](api/scala/org/apache/spark/mllib/classification/LogisticRegressionWithLBFGS.html) and [`BinaryClassificationMetrics` Scala docs](api/scala/org/apache/spark/mllib/evaluation/BinaryClassificationMetrics.html) for details on the API.
 
@@ -130,11 +136,6 @@ Refer to the [`LogisticRegressionModel` Java docs](api/java/org/apache/spark/mll
 
 </div>
 
-<div data-lang="python" markdown="1">
-Refer to the [`BinaryClassificationMetrics` Python docs](api/python/reference/api/pyspark.mllib.evaluation.BinaryClassificationMetrics.html) and [`LogisticRegressionWithLBFGS` Python docs](api/python/reference/api/pyspark.mllib.classification.LogisticRegressionWithLBFGS.html) for more details on the API.
-
-{% include_example python/mllib/binary_classification_metrics_example.py %}
-</div>
 </div>
 
 
@@ -242,6 +243,13 @@ $$\hat{\delta}(x) = \begin{cases}1 & \text{if $x = 0$}, \\ 0 & \text{otherwise}.
 The following code snippets illustrate how to load a sample dataset, train a multiclass classification algorithm on
 the data, and evaluate the performance of the algorithm by several multiclass classification evaluation metrics.
 
+<div data-lang="python" markdown="1">
+Refer to the [`MulticlassMetrics` Python docs](api/python/reference/api/pyspark.mllib.evaluation.MulticlassMetrics.html) for more details on the API.
+
+{% include_example python/mllib/multi_class_metrics_example.py %}
+
+</div>
+
 <div data-lang="scala" markdown="1">
 Refer to the [`MulticlassMetrics` Scala docs](api/scala/org/apache/spark/mllib/evaluation/MulticlassMetrics.html) for details on the API.
 
@@ -256,12 +264,6 @@ Refer to the [`MulticlassMetrics` Java docs](api/java/org/apache/spark/mllib/eva
 
 </div>
 
-<div data-lang="python" markdown="1">
-Refer to the [`MulticlassMetrics` Python docs](api/python/reference/api/pyspark.mllib.evaluation.MulticlassMetrics.html) for more details on the API.
-
-{% include_example python/mllib/multi_class_metrics_example.py %}
-
-</div>
 </div>
 
 ### Multilabel classification
@@ -392,6 +394,13 @@ True classes:
 
 <div class="codetabs">
 
+<div data-lang="python" markdown="1">
+Refer to the [`MultilabelMetrics` Python docs](api/python/reference/api/pyspark.mllib.evaluation.MultilabelMetrics.html) for more details on the API.
+
+{% include_example python/mllib/multi_label_metrics_example.py %}
+
+</div>
+
 <div data-lang="scala" markdown="1">
 Refer to the [`MultilabelMetrics` Scala docs](api/scala/org/apache/spark/mllib/evaluation/MultilabelMetrics.html) for details on the API.
 
@@ -406,12 +415,6 @@ Refer to the [`MultilabelMetrics` Java docs](api/java/org/apache/spark/mllib/eva
 
 </div>
 
-<div data-lang="python" markdown="1">
-Refer to the [`MultilabelMetrics` Python docs](api/python/reference/api/pyspark.mllib.evaluation.MultilabelMetrics.html) for more details on the API.
-
-{% include_example python/mllib/multi_label_metrics_example.py %}
-
-</div>
 </div>
 
 ### Ranking systems
@@ -520,6 +523,13 @@ expanded world of non-positive weights are "the same as never having interacted 
 
 <div class="codetabs">
 
+<div data-lang="python" markdown="1">
+Refer to the [`RegressionMetrics` Python docs](api/python/reference/api/pyspark.mllib.evaluation.RegressionMetrics.html) and [`RankingMetrics` Python docs](api/python/reference/api/pyspark.mllib.evaluation.RankingMetrics.html) for more details on the API.
+
+{% include_example python/mllib/ranking_metrics_example.py %}
+
+</div>
+
 <div data-lang="scala" markdown="1">
 Refer to the [`RegressionMetrics` Scala docs](api/scala/org/apache/spark/mllib/evaluation/RegressionMetrics.html) and [`RankingMetrics` Scala docs](api/scala/org/apache/spark/mllib/evaluation/RankingMetrics.html) for details on the API.
 
@@ -534,12 +544,6 @@ Refer to the [`RegressionMetrics` Java docs](api/java/org/apache/spark/mllib/eva
 
 </div>
 
-<div data-lang="python" markdown="1">
-Refer to the [`RegressionMetrics` Python docs](api/python/reference/api/pyspark.mllib.evaluation.RegressionMetrics.html) and [`RankingMetrics` Python docs](api/python/reference/api/pyspark.mllib.evaluation.RankingMetrics.html) for more details on the API.
-
-{% include_example python/mllib/ranking_metrics_example.py %}
-
-</div>
 </div>
 
 ## Regression model evaluation

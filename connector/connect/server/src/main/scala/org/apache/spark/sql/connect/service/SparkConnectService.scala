@@ -39,6 +39,7 @@ import org.json4s.jackson.JsonMethods.{compact, render}
 import org.apache.spark.{SparkEnv, SparkException, SparkThrowable}
 import org.apache.spark.api.python.PythonException
 import org.apache.spark.connect.proto
+import org.apache.spark.connect.proto.{AddArtifactsRequest, AddArtifactsResponse}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connect.config.Connect.CONNECT_GRPC_BINDING_PORT
@@ -178,6 +179,28 @@ class SparkConnectService(debug: Boolean)
     try {
       new SparkConnectConfigHandler(responseObserver).handle(request)
     } catch handleError("config", observer = responseObserver)
+  }
+
+  /**
+   * This is the main entry method for all calls to add/transfer artifacts.
+   *
+   * @param responseObserver
+   * @return
+   */
+  override def addArtifacts(responseObserver: StreamObserver[AddArtifactsResponse])
+      : StreamObserver[AddArtifactsRequest] = {
+    // TODO: Handle artifact files
+    // No-Op StreamObserver
+    new StreamObserver[AddArtifactsRequest] {
+      override def onNext(v: AddArtifactsRequest): Unit = {}
+
+      override def onError(throwable: Throwable): Unit = responseObserver.onError(throwable)
+
+      override def onCompleted(): Unit = {
+        responseObserver.onNext(proto.AddArtifactsResponse.newBuilder().build())
+        responseObserver.onCompleted()
+      }
+    }
   }
 }
 

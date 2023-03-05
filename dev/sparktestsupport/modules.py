@@ -273,7 +273,7 @@ sql_kafka = Module(
 
 connect = Module(
     name="connect",
-    dependencies=[sql],
+    dependencies=[hive],
     source_file_regexes=[
         "connector/connect",
     ],
