@@ -26,7 +26,8 @@ import com.google.protobuf.ByteString
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.catalyst.util.{DateTimeUtils, IntervalUtils}
 import org.apache.spark.sql.connect.client.unsupported
-import org.apache.spark.sql.types.{DayTimeIntervalType, Decimal, DecimalType, YearMonthIntervalType}
+import org.apache.spark.sql.connect.common.DataTypeProtoConverter._
+import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
 
 object LiteralProtoConverter {
@@ -107,180 +108,39 @@ object LiteralProtoConverter {
 
   private def componentTypeToProto(clz: Class[_]): proto.DataType = clz match {
     // primitive types
-    case JShort.TYPE =>
-      proto.DataType
-        .newBuilder()
-        .setShort(proto.DataType.Short.getDefaultInstance)
-        .build()
-    case JInteger.TYPE =>
-      proto.DataType
-        .newBuilder()
-        .setInteger(proto.DataType.Integer.getDefaultInstance)
-        .build()
-    case JLong.TYPE =>
-      proto.DataType
-        .newBuilder()
-        .setLong(proto.DataType.Long.getDefaultInstance)
-        .build()
-    case JDouble.TYPE =>
-      proto.DataType
-        .newBuilder()
-        .setDouble(proto.DataType.Double.getDefaultInstance)
-        .build()
-    case JByte.TYPE =>
-      proto.DataType
-        .newBuilder()
-        .setByte(proto.DataType.Byte.getDefaultInstance)
-        .build()
-    case JFloat.TYPE =>
-      proto.DataType
-        .newBuilder()
-        .setFloat(proto.DataType.Float.getDefaultInstance)
-        .build()
-    case JBoolean.TYPE =>
-      proto.DataType
-        .newBuilder()
-        .setBoolean(proto.DataType.Boolean.getDefaultInstance)
-        .build()
-    case JChar.TYPE =>
-      proto.DataType
-        .newBuilder()
-        .setString(proto.DataType.String.getDefaultInstance)
-        .build()
+    case JShort.TYPE => toConnectProtoType(ShortType)
+    case JInteger.TYPE => toConnectProtoType(IntegerType)
+    case JLong.TYPE => toConnectProtoType(LongType)
+    case JDouble.TYPE => toConnectProtoType(DoubleType)
+    case JByte.TYPE => toConnectProtoType(ByteType)
+    case JFloat.TYPE => toConnectProtoType(FloatType)
+    case JBoolean.TYPE => toConnectProtoType(BooleanType)
+    case JChar.TYPE => toConnectProtoType(StringType)
 
     // java classes
-    case _ if clz == classOf[LocalDate] =>
-      proto.DataType
-        .newBuilder()
-        .setDate(proto.DataType.Date.getDefaultInstance)
-        .build()
-    case _ if clz == classOf[Date] =>
-      proto.DataType
-        .newBuilder()
-        .setDate(proto.DataType.Date.getDefaultInstance)
-        .build()
-    case _ if clz == classOf[Instant] =>
-      proto.DataType
-        .newBuilder()
-        .setTimestamp(proto.DataType.Timestamp.getDefaultInstance)
-        .build()
-    case _ if clz == classOf[Timestamp] =>
-      proto.DataType
-        .newBuilder()
-        .setTimestamp(proto.DataType.Timestamp.getDefaultInstance)
-        .build()
-    case _ if clz == classOf[LocalDateTime] =>
-      proto.DataType
-        .newBuilder()
-        .setTimestampNtz(proto.DataType.TimestampNTZ.getDefaultInstance)
-        .build()
-    case _ if clz == classOf[Duration] =>
-      proto.DataType
-        .newBuilder()
-        .setDayTimeInterval(
-          proto.DataType.DayTimeInterval
-            .newBuilder()
-            .setStartField(DayTimeIntervalType().startField)
-            .setEndField(DayTimeIntervalType().endField)
-            .build())
-        .build()
-    case _ if clz == classOf[Period] =>
-      proto.DataType
-        .newBuilder()
-        .setYearMonthInterval(
-          proto.DataType.YearMonthInterval
-            .newBuilder()
-            .setStartField(YearMonthIntervalType().startField)
-            .setEndField(YearMonthIntervalType().endField)
-            .build())
-        .build()
-    case _ if clz == classOf[JBigDecimal] =>
-      proto.DataType
-        .newBuilder()
-        .setDecimal(
-          proto.DataType.Decimal
-            .newBuilder()
-            .setPrecision(DecimalType.SYSTEM_DEFAULT.precision)
-            .setScale(DecimalType.SYSTEM_DEFAULT.scale)
-            .build())
-        .build()
-    case _ if clz == classOf[Array[Byte]] =>
-      proto.DataType
-        .newBuilder()
-        .setBinary(proto.DataType.Binary.getDefaultInstance)
-        .build()
-    case _ if clz == classOf[Array[Char]] =>
-      proto.DataType
-        .newBuilder()
-        .setString(proto.DataType.String.getDefaultInstance)
-        .build()
-    case _ if clz == classOf[JShort] =>
-      proto.DataType
-        .newBuilder()
-        .setShort(proto.DataType.Short.getDefaultInstance)
-        .build()
-    case _ if clz == classOf[JInteger] =>
-      proto.DataType
-        .newBuilder()
-        .setInteger(proto.DataType.Integer.getDefaultInstance)
-        .build()
-    case _ if clz == classOf[JLong] =>
-      proto.DataType
-        .newBuilder()
-        .setLong(proto.DataType.Long.getDefaultInstance)
-        .build()
-    case _ if clz == classOf[JDouble] =>
-      proto.DataType
-        .newBuilder()
-        .setDouble(proto.DataType.Double.getDefaultInstance)
-        .build()
-    case _ if clz == classOf[JByte] =>
-      proto.DataType
-        .newBuilder()
-        .setByte(proto.DataType.Byte.getDefaultInstance)
-        .build()
-    case _ if clz == classOf[JFloat] =>
-      proto.DataType
-        .newBuilder()
-        .setFloat(proto.DataType.Float.getDefaultInstance)
-        .build()
-    case _ if clz == classOf[JBoolean] =>
-      proto.DataType
-        .newBuilder()
-        .setBoolean(proto.DataType.Boolean.getDefaultInstance)
-        .build()
+    case _ if clz == classOf[LocalDate] => toConnectProtoType(DateType)
+    case _ if clz == classOf[Date] => toConnectProtoType(DateType)
+    case _ if clz == classOf[Instant] => toConnectProtoType(TimestampType)
+    case _ if clz == classOf[Timestamp] => toConnectProtoType(TimestampType)
+    case _ if clz == classOf[LocalDateTime] => toConnectProtoType(TimestampNTZType)
+    case _ if clz == classOf[Duration] => toConnectProtoType(DayTimeIntervalType.DEFAULT)
+    case _ if clz == classOf[Period] => toConnectProtoType(YearMonthIntervalType.DEFAULT)
+    case _ if clz == classOf[JBigDecimal] => toConnectProtoType(DecimalType.SYSTEM_DEFAULT)
+    case _ if clz == classOf[Array[Byte]] => toConnectProtoType(BinaryType)
+    case _ if clz == classOf[Array[Char]] => toConnectProtoType(StringType)
+    case _ if clz == classOf[JShort] => toConnectProtoType(ShortType)
+    case _ if clz == classOf[JInteger] => toConnectProtoType(IntegerType)
+    case _ if clz == classOf[JLong] => toConnectProtoType(LongType)
+    case _ if clz == classOf[JDouble] => toConnectProtoType(DoubleType)
+    case _ if clz == classOf[JByte] => toConnectProtoType(ByteType)
+    case _ if clz == classOf[JFloat] => toConnectProtoType(FloatType)
+    case _ if clz == classOf[JBoolean] => toConnectProtoType(BooleanType)
 
     // other scala classes
-    case _ if clz == classOf[String] =>
-      proto.DataType
-        .newBuilder()
-        .setString(proto.DataType.String.getDefaultInstance)
-        .build()
-    case _ if clz == classOf[BigInt] =>
-      proto.DataType
-        .newBuilder()
-        .setDecimal(
-          proto.DataType.Decimal
-            .newBuilder()
-            .setPrecision(DecimalType.SYSTEM_DEFAULT.precision)
-            .setScale(DecimalType.SYSTEM_DEFAULT.scale)
-            .build())
-        .build()
-    case _ if clz == classOf[BigDecimal] =>
-      proto.DataType
-        .newBuilder()
-        .setDecimal(
-          proto.DataType.Decimal
-            .newBuilder()
-            .setPrecision(DecimalType.SYSTEM_DEFAULT.precision)
-            .setScale(DecimalType.SYSTEM_DEFAULT.scale)
-            .build())
-        .build()
-    case _ if clz == classOf[CalendarInterval] =>
-      proto.DataType
-        .newBuilder()
-        .setCalendarInterval(proto.DataType.CalendarInterval.getDefaultInstance)
-        .build()
+    case _ if clz == classOf[String] => toConnectProtoType(StringType)
+    case _ if clz == classOf[BigInt] => toConnectProtoType(DecimalType.SYSTEM_DEFAULT)
+    case _ if clz == classOf[BigDecimal] => toConnectProtoType(DecimalType.SYSTEM_DEFAULT)
+    case _ if clz == classOf[CalendarInterval] => toConnectProtoType(CalendarIntervalType)
     case _ if clz.isArray =>
       proto.DataType
         .newBuilder()
