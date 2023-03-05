@@ -52,24 +52,36 @@ class HiveSaveDynamicInsertPartitionTest extends HivePlanTest with SQLTestUtils 
 
           sql(
             s"""
-               |CREATE TABLE test_db.test_table(i int)
-               |PARTITIONED BY (p int)
+               |CREATE TABLE test_db.test_table(value int)
+               |PARTITIONED BY (p1 int, p2 int)
                |STORED AS textfile""".stripMargin)
 
           sql(
             s"""
-               |INSERT OVERWRITE TABLE test_db.test_table PARTITION (p)
-               |select 1 as i, 2 as p""".stripMargin)
+               |INSERT OVERWRITE TABLE test_db.test_table PARTITION (p1=1, p2)
+               |select * from (
+               |  select 1 as value, 1 as p1, 2 as p2,
+               |  union all
+               |  select 2 as value, 1 as p1, 3 as p2
+               |)""".stripMargin)
 
           val df = sql(
             s"""
-               |SELECT * FROM TABLE ${tableNamePrefix}_test_db_test_table
+               |SELECT * FROM ${tableNamePrefix}_test_db_test_table
                |""".stripMargin
           )
 
           val rows = df.collect()
-          assert(rows.length == 1)
-          assert(rows(0).getAs[String]("p") == "2")
+          assert(rows.length == 2)
+          assert(rows(0).getAs[String]("p1") == "1")
+          assert(rows(1).getAs[String]("p1") == "1")
+          assert(
+            (rows(0).getAs[String]("p2") == "2" &&
+              rows(1).getAs[String]("p2") == "3")
+              ||
+              (rows(0).getAs[String]("p2") == "3" &&
+                rows(1).getAs[String]("p2") == "2")
+          )
         }
       }
     }

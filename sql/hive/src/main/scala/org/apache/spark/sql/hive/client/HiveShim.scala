@@ -497,7 +497,7 @@ private[client] class Shim_v0_12 extends Shim with Logging {
     val result = loadDynamicPartitionsMethod.invoke(hive, loadPath,
       tableName, partSpec, replace: JBoolean,
       numDP: JInteger, holdDDLTime, listBucketingEnabled: JBoolean)
-    result.asInstanceOf[JList[JMap[String, String]]].asScala.map(_.asScala.toMap)
+    result.asInstanceOf[JList[JMap[String, String]]].asScala.map(_.asScala.toMap).toSeq
   }
 
   override def dropIndex(hive: Hive, dbName: String, tableName: String, indexName: String): Unit = {
