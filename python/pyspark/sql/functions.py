@@ -24,7 +24,8 @@ import functools
 import warnings
 from typing import (
     Any,
-    cast,
+    # SPARK-42258: pyspark.sql.functions should not expose typing.cast
+    cast as _cast,
     Callable,
     Dict,
     List,
@@ -3894,7 +3895,7 @@ def log(arg1: Union["ColumnOrName", float], arg2: Optional["ColumnOrName"] = Non
     +-----------------+
     """
     if arg2 is None:
-        return _invoke_function_over_columns("log", cast("ColumnOrName", arg1))
+        return _invoke_function_over_columns("log", _cast("ColumnOrName", arg1))
     else:
         return _invoke_function("log", arg1, _to_java_column(arg2))
 

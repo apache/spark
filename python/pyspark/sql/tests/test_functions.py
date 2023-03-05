@@ -1268,6 +1268,12 @@ class FunctionsTestsMixin:
             message_parameters={"arg_name": "numBuckets", "arg_type": "str"},
         )
 
+    def test_no_cast(self):
+        # SPARK-42258: pyspark.sql.functions should not expose typing.cast
+        from pyspark.sql import functions
+
+        self.assertFalse(hasattr(functions, "cast"))
+
 
 class FunctionsTests(ReusedSQLTestCase, FunctionsTestsMixin):
     pass
