@@ -427,7 +427,7 @@ final class DataFrameNaFunctions private[sql] (sparkSession: SparkSession, root:
         .setOldValue(functions.lit(oldValue).expr.getLiteral)
         .setNewValue(functions.lit(newValue).expr.getLiteral)
         .build()
-      }
+    }
   }
 
   private def convertToDouble(v: Any): Double = v match {

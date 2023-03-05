@@ -31,18 +31,27 @@ class DataFrameNaFunctionSuite extends QueryTest {
       ("David", 60, null),
       ("Nina", 25, Double.NaN),
       ("Amy", null, null),
-      (null, null, null)
-    ).toDF("name", "age", "height")
+      (null, null, null)).toDF("name", "age", "height")
   }
 
   def createNaNDF(): DataFrame = {
     val sparkSession = spark
     import sparkSession.implicits._
-    Seq[(java.lang.Integer, java.lang.Long, java.lang.Short,
-      java.lang.Byte, java.lang.Float, java.lang.Double)](
+    Seq[(
+        java.lang.Integer,
+        java.lang.Long,
+        java.lang.Short,
+        java.lang.Byte,
+        java.lang.Float,
+        java.lang.Double)](
       (1, 1L, 1.toShort, 1.toByte, 1.0f, 1.0),
-      (0, 0L, 0.toShort, 0.toByte, Float.NaN, Double.NaN)
-    ).toDF("int", "long", "short", "byte", "float", "double")
+      (0, 0L, 0.toShort, 0.toByte, Float.NaN, Double.NaN)).toDF(
+      "int",
+      "long",
+      "short",
+      "byte",
+      "float",
+      "double")
   }
 
   test("drop") {
@@ -111,8 +120,7 @@ class DataFrameNaFunctionSuite extends QueryTest {
       ("Bob", false),
       ("Alice", null),
       ("Mallory", true),
-      (null, null)
-    ).toDF("name", "spy")
+      (null, null)).toDF("name", "spy")
 
     val fillNumeric = input.na.fill(50.6)
     checkAnswer(
@@ -165,46 +173,64 @@ class DataFrameNaFunctionSuite extends QueryTest {
 
     checkAnswer(
       Seq[(Long, Long)]((1, 2), (-1, -2), (9123146099426677101L, 9123146560113991650L))
-        .toDF("a", "b").na.fill(0),
-      Row(1, 2) :: Row(-1, -2) :: Row(9123146099426677101L, 9123146560113991650L) :: Nil
-    )
+        .toDF("a", "b")
+        .na
+        .fill(0),
+      Row(1, 2) :: Row(-1, -2) :: Row(9123146099426677101L, 9123146560113991650L) :: Nil)
 
     checkAnswer(
-      Seq[(java.lang.Long, java.lang.Double)]((null, 3.14), (9123146099426677101L, null),
-        (9123146560113991650L, 1.6), (null, null)).toDF("a", "b").na.fill(0.2),
+      Seq[(java.lang.Long, java.lang.Double)](
+        (null, 3.14),
+        (9123146099426677101L, null),
+        (9123146560113991650L, 1.6),
+        (null, null)).toDF("a", "b").na.fill(0.2),
       Row(0, 3.14) :: Row(9123146099426677101L, 0.2) :: Row(9123146560113991650L, 1.6)
-        :: Row(0, 0.2) :: Nil
-    )
+        :: Row(0, 0.2) :: Nil)
 
     checkAnswer(
-      Seq[(java.lang.Long, java.lang.Float)]((null, 3.14f), (9123146099426677101L, null),
-        (9123146560113991650L, 1.6f), (null, null)).toDF("a", "b").na.fill(0.2),
+      Seq[(java.lang.Long, java.lang.Float)](
+        (null, 3.14f),
+        (9123146099426677101L, null),
+        (9123146560113991650L, 1.6f),
+        (null, null)).toDF("a", "b").na.fill(0.2),
       Row(0, 3.14f) :: Row(9123146099426677101L, 0.2f) :: Row(9123146560113991650L, 1.6f)
-        :: Row(0, 0.2f) :: Nil
-    )
+        :: Row(0, 0.2f) :: Nil)
 
     checkAnswer(
       Seq[(java.lang.Long, java.lang.Double)]((null, 1.23), (3L, null), (4L, 3.45))
-        .toDF("a", "b").na.fill(2.34),
-      Row(2, 1.23) :: Row(3, 2.34) :: Row(4, 3.45) :: Nil
-    )
+        .toDF("a", "b")
+        .na
+        .fill(2.34),
+      Row(2, 1.23) :: Row(3, 2.34) :: Row(4, 3.45) :: Nil)
 
     checkAnswer(
       Seq[(java.lang.Long, java.lang.Double)]((null, 1.23), (3L, null), (4L, 3.45))
-        .toDF("a", "b").na.fill(5),
-      Row(5, 1.23) :: Row(3, 5.0) :: Row(4, 3.45) :: Nil
-    )
+        .toDF("a", "b")
+        .na
+        .fill(5),
+      Row(5, 1.23) :: Row(3, 5.0) :: Row(4, 3.45) :: Nil)
   }
 
   test("fill with map") {
     val sparkSession = spark
     import sparkSession.implicits._
 
-    val df = Seq[(String, String, java.lang.Integer, java.lang.Long,
-      java.lang.Float, java.lang.Double, java.lang.Boolean)](
-      (null, null, null, null, null, null, null))
-      .toDF("stringFieldA", "stringFieldB", "integerField", "longField",
-        "floatField", "doubleField", "booleanField")
+    val df = Seq[(
+        String,
+        String,
+        java.lang.Integer,
+        java.lang.Long,
+        java.lang.Float,
+        java.lang.Double,
+        java.lang.Boolean)]((null, null, null, null, null, null, null))
+      .toDF(
+        "stringFieldA",
+        "stringFieldB",
+        "integerField",
+        "longField",
+        "floatField",
+        "doubleField",
+        "booleanField")
 
     val fillMap = Map(
       "stringFieldA" -> "test",
