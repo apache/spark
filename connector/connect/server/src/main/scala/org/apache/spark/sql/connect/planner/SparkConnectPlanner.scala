@@ -37,7 +37,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException, ParserUtils}
 import org.apache.spark.sql.catalyst.plans.{Cross, FullOuter, Inner, JoinType, LeftAnti, LeftOuter, LeftSemi, RightOuter, UsingJoin}
 import org.apache.spark.sql.catalyst.plans.logical
-import org.apache.spark.sql.catalyst.plans.logical.{CommandResult, Deduplicate, Except, Intersect, LocalRelation, LogicalPlan, Sample, Sort, SubqueryAlias, Union, Unpivot, UnresolvedHint}
+import org.apache.spark.sql.catalyst.plans.logical.{AttachDistributedSequence, CommandResult, Deduplicate, Except, Intersect, LocalRelation, LogicalPlan, Sample, Sort, SubqueryAlias, Union, Unpivot, UnresolvedHint}
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CharVarcharUtils}
 import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, InvalidPlanInput, UdfPacket}
 import org.apache.spark.sql.connect.config.Connect.CONNECT_GRPC_ARROW_MAX_BATCH_SIZE
@@ -512,10 +512,9 @@ class SparkConnectPlanner(val session: SparkSession) {
   }
 
   private def transformWithSequenceColumn(rel: proto.WithSequenceColumn): LogicalPlan = {
-    Dataset
-      .ofRows(session, transformRelation(rel.getInput))
-      .withSequenceColumn(rel.getName)
-      .logicalPlan
+    AttachDistributedSequence(
+      AttributeReference(rel.getName, LongType, nullable = false)(),
+      transformRelation(rel.getInput))
   }
 
   private def transformHint(rel: proto.Hint): LogicalPlan = {

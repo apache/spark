@@ -2713,6 +2713,10 @@ class FrameMap(google.protobuf.message.Message):
 global___FrameMap = FrameMap
 
 class WithSequenceColumn(google.protobuf.message.Message):
+    """This is for 'distributed-sequence' default index in pandas API on Spark.
+    This should not be used for other external purpose.
+    """
+
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
     INPUT_FIELD_NUMBER: builtins.int

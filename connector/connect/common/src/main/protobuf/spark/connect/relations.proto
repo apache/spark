@@ -782,6 +782,8 @@ message FrameMap {
   CommonInlineUserDefinedFunction func = 2;
 }
 
+// This is for 'distributed-sequence' default index in pandas API on Spark.
+// This should not be used for other external purpose.
 message WithSequenceColumn {
   // (Required) The input relation.
   Relation input = 1;
