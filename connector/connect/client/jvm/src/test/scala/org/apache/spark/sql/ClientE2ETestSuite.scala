@@ -604,8 +604,8 @@ class ClientE2ETestSuite extends RemoteSparkSession {
         .add("c1-1", StringType)
         .add("c1-2", StringType))
     val data = Seq(Row(Row(null, "a2")), Row(Row("b1", "b2")), Row(null))
-    val df = spark.createDataFrame(data.asJava, schema)
-    df.show()
+    val result = spark.createDataFrame(data.asJava, schema).collect()
+    assert(result === data)
   }
 }
 
