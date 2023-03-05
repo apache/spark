@@ -18,6 +18,7 @@
 package org.apache.spark.sql.connect.planner
 
 import scala.collection.mutable
+import scala.reflect.ClassTag
 
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.catalyst.expressions
@@ -139,68 +140,56 @@ object LiteralValueProtoConverter {
   }
 
   private def toArrayData(array: proto.Expression.Literal.Array): Any = {
-    def makeArrayData[T](
-        builder: mutable.ArrayBuilder[T],
-        converter: proto.Expression.Literal => T): Array[T] = {
+    def makeArrayData[T](converter: proto.Expression.Literal => T)(implicit
+        tag: ClassTag[T]): Array[T] = {
+      val builder = mutable.ArrayBuilder.make[T]
       val elementList = array.getElementList
       builder.sizeHint(elementList.size())
       val iter = elementList.iterator()
       while (iter.hasNext) {
-        builder.+=(converter(iter.next()))
+        builder += converter(iter.next())
       }
       builder.result()
     }
 
     val elementType = array.getElementType
     if (elementType.hasShort) {
-      makeArrayData(mutable.ArrayBuilder.make[Short], v => v.getShort.toShort)
+      makeArrayData(v => v.getShort.toShort)
     } else if (elementType.hasInteger) {
-      makeArrayData(mutable.ArrayBuilder.make[Int], v => v.getInteger)
+      makeArrayData(v => v.getInteger)
     } else if (elementType.hasLong) {
-      makeArrayData(mutable.ArrayBuilder.make[Long], v => v.getLong)
+      makeArrayData(v => v.getLong)
     } else if (elementType.hasDouble) {
-      makeArrayData(mutable.ArrayBuilder.make[Double], v => v.getDouble)
+      makeArrayData(v => v.getDouble)
     } else if (elementType.hasByte) {
-      makeArrayData(mutable.ArrayBuilder.make[Byte], v => v.getByte.toByte)
+      makeArrayData(v => v.getByte.toByte)
     } else if (elementType.hasFloat) {
-      makeArrayData(mutable.ArrayBuilder.make[Float], v => v.getFloat)
+      makeArrayData(v => v.getFloat)
     } else if (elementType.hasBoolean) {
-      makeArrayData(mutable.ArrayBuilder.make[Boolean], v => v.getBoolean)
+      makeArrayData(v => v.getBoolean)
     } else if (elementType.hasString) {
-      makeArrayData(mutable.ArrayBuilder.make[String], v => v.getString)
+      makeArrayData(v => v.getString)
     } else if (elementType.hasBinary) {
-      makeArrayData(mutable.ArrayBuilder.make[Array[Byte]], v => v.getBinary.toByteArray)
+      makeArrayData(v => v.getBinary.toByteArray)
     } else if (elementType.hasDate) {
-      makeArrayData(
-        mutable.ArrayBuilder.make[java.sql.Date],
-        v => DateTimeUtils.toJavaDate(v.getDate))
+      makeArrayData(v => DateTimeUtils.toJavaDate(v.getDate))
     } else if (elementType.hasTimestamp) {
-      makeArrayData(
-        mutable.ArrayBuilder.make[java.sql.Timestamp],
-        v => DateTimeUtils.toJavaTimestamp(v.getTimestamp))
+      makeArrayData(v => DateTimeUtils.toJavaTimestamp(v.getTimestamp))
     } else if (elementType.hasTimestampNtz) {
-      makeArrayData(
-        mutable.ArrayBuilder.make[java.time.LocalDateTime],
-        v => DateTimeUtils.microsToLocalDateTime(v.getTimestampNtz))
+      makeArrayData(v => DateTimeUtils.microsToLocalDateTime(v.getTimestampNtz))
     } else if (elementType.hasDayTimeInterval) {
-      makeArrayData(
-        mutable.ArrayBuilder.make[java.time.Duration],
-        v => IntervalUtils.microsToDuration(v.getDayTimeInterval))
+      makeArrayData(v => IntervalUtils.microsToDuration(v.getDayTimeInterval))
     } else if (elementType.hasYearMonthInterval) {
-      makeArrayData(
-        mutable.ArrayBuilder.make[java.time.Period],
-        v => IntervalUtils.monthsToPeriod(v.getYearMonthInterval))
+      makeArrayData(v => IntervalUtils.monthsToPeriod(v.getYearMonthInterval))
     } else if (elementType.hasDecimal) {
-      makeArrayData(mutable.ArrayBuilder.make[Decimal], v => Decimal(v.getDecimal.getValue))
+      makeArrayData(v => Decimal(v.getDecimal.getValue))
     } else if (elementType.hasCalendarInterval) {
-      makeArrayData(
-        mutable.ArrayBuilder.make[CalendarInterval],
-        v => {
-          val interval = v.getCalendarInterval
-          new CalendarInterval(interval.getMonths, interval.getDays, interval.getMicroseconds)
-        })
+      makeArrayData(v => {
+        val interval = v.getCalendarInterval
+        new CalendarInterval(interval.getMonths, interval.getDays, interval.getMicroseconds)
+      })
     } else if (elementType.hasArray) {
-      makeArrayData(mutable.ArrayBuilder.make[Any], v => toArrayData(v.getArray))
+      makeArrayData(v => toArrayData(v.getArray))
     } else {
       throw InvalidPlanInput(s"Unsupported Literal Type: $elementType)")
     }
