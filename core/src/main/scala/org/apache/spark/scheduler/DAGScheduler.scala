@@ -1356,16 +1356,18 @@ private[spark] class DAGScheduler(
 
   /** Submits stage, but first recursively submits any missing parents. */
   private def submitStage(stage: Stage): Unit = {
-    if (stage.getNextAttemptId() >= maxStageAttempts) {
-      val reason = s"$stage (name=${stage.name}) has resubmitted for the maximum allowable " +
-        s"number of times: $maxStageAttempts."
-      abortStage(stage, reason, None)
-    }
-
     val jobId = activeJobForStage(stage)
     if (jobId.isDefined) {
       logDebug(s"submitStage($stage (name=${stage.name};" +
         s"jobs=${stage.jobIds.toSeq.sorted.mkString(",")}))")
+
+      if (stage.getNextAttemptId() >= maxStageAttempts) {
+        val reason = s"$stage (name=${stage.name}) has been resubmitted for the maximum " +
+          s"allowable number of times: $maxStageAttempts which is the max value of config " +
+          s"`spark.stage.maxAttempts` and `spark.stage.maxConsecutiveAttempts`."
+        abortStage(stage, reason, None)
+      }
+
       if (!waitingStages(stage) && !runningStages(stage) && !failedStages(stage)) {
         val missing = getMissingParentStages(stage).sortBy(_.id)
         logDebug("missing: " + missing)

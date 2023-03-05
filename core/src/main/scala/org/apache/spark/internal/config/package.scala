@@ -2482,8 +2482,11 @@ package object config {
 
   private[spark] val STAGE_MAX_ATTEMPTS =
     ConfigBuilder("spark.stage.maxAttempts")
-      .doc("TODO")
-      .version("3.4.0")
+      .doc("The max attempts for a stage, the spark job will be aborted if any of its stages is " +
+        "resubmitted multiple times beyond the limitation. The value should be no less " +
+        "than `spark.stage.maxConsecutiveAttempts` which defines the max attempts for " +
+        "fetch failures.")
+      .version("3.5.0")
       .intConf
-      .createWithDefault(8)
+      .createWithDefault(16)
 }
