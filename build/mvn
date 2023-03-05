@@ -119,6 +119,7 @@ install_mvn() {
   if [ "$MVN_BIN" ]; then
     local MVN_DETECTED_VERSION="$(mvn --version | head -n1 | awk '{print $3}')"
   fi
+  # SPARK-42673: Ban Maven 3.9.x for Spark build before finish SPARK-42380
   if [[ $(version "$MVN_DETECTED_VERSION") =~ ^003009 ]] || [ $(version $MVN_DETECTED_VERSION) -lt $(version $MVN_VERSION) ]; then
     local MVN_TARBALL="apache-maven-${MVN_VERSION}-bin.tar.gz"
     local FILE_PATH="maven/maven-3/${MVN_VERSION}/binaries/${MVN_TARBALL}"
