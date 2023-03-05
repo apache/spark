@@ -269,7 +269,7 @@ private[hive] trait HiveClient {
       tableName: String,
       partSpec: java.util.LinkedHashMap[String, String], // Hive relies on LinkedHashMap ordering
       replace: Boolean,
-      numDP: Int): Unit
+      numDP: Int): Seq[Map[String, String]]
 
   /** Create a function in an existing database. */
   def createFunction(db: String, func: CatalogFunction): Unit

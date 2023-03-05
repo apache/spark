@@ -36,6 +36,8 @@ import org.apache.spark.sql.hive.HiveExternalCatalog
 import org.apache.spark.sql.hive.HiveShim.{ShimFileSinkDesc => FileSinkDesc}
 import org.apache.spark.sql.hive.client.HiveClientImpl
 import org.apache.spark.sql.hive.client.hive._
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.{StringType, StructField, StructType}
 
 
 /**
@@ -191,13 +193,28 @@ case class InsertIntoHiveTable(
           }
         }
 
-        externalCatalog.loadDynamicPartitions(
+        val insertedPartitions = externalCatalog.loadDynamicPartitions(
           db = table.database,
           table = table.identifier.table,
           tmpLocation.toString,
           partitionSpec,
           overwrite,
           numDynamicPartitions)
+
+        if (insertedPartitions.nonEmpty &&
+          conf.getConf(SQLConf.ENABLE_DYNAMIC_PARTITION_SAVE_PARTITIONS)) {
+          val header = insertedPartitions.head.keySet.toList
+          val rows = insertedPartitions.map(m => Row.fromSeq(header.map(m(_))))
+          val structType = StructType(header.map(key => {
+            StructField(key, StringType)
+          }))
+          val df = sparkSession.createDataFrame(sparkSession.sparkContext.parallelize(rows),
+            structType)
+          df.createOrReplaceTempView(
+            s"${conf.getConf(SQLConf.DYNAMIC_PARTITION_SAVE_PARTITIONS_TABLE_NAME_PREFIX)}" +
+              s"_${table.identifier.database.getOrElse("")}_${table.identifier.table}"
+          )
+        }
       } else {
         // scalastyle:off
         // ifNotExists is only valid with static partition, refer to

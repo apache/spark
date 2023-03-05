@@ -949,7 +949,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       loadPath: String,
       partition: TablePartitionSpec,
       replace: Boolean,
-      numDP: Int): Unit = withClient {
+      numDP: Int): Seq[Map[String, String]] = withClient {
     requireTableExists(db, table)
 
     val orderedPartitionSpec = new util.LinkedHashMap[String, String]()

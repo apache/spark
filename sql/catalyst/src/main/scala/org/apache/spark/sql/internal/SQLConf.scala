@@ -4168,6 +4168,25 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val ENABLE_DYNAMIC_PARTITION_SAVE_PARTITIONS =
+    buildConf("spark.hive.exec.dynamic.partition.savePartitions")
+      .internal()
+      .doc("Enable save partitions after insert table when hive.exec.dynamic.partition=true.")
+      .version("3.5.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  val DYNAMIC_PARTITION_SAVE_PARTITIONS_TABLE_NAME_PREFIX =
+    buildConf("spark.hive.exec.dynamic.partition.savePartitions.tableNamePrefix")
+      .internal()
+      .doc("The table name prefix of saved partition table, " +
+        "the whole table name will be " +
+        "${spark.hive.exec.dynamic.partition.savePartitions.tableNamePrefix}_" +
+        "${dbName}_${tableName}")
+      .version("3.5.0")
+      .stringConf
+      .createWithDefault("hive_dynamic_inserted_partitions")
+
   /**
    * Holds information about keys that have been deprecated.
    *

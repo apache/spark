@@ -172,7 +172,7 @@ trait ExternalCatalog {
       loadPath: String,
       partition: TablePartitionSpec,
       replace: Boolean,
-      numDP: Int): Unit
+      numDP: Int): Seq[Map[String, String]]
 
   // --------------------------------------------------------------------------
   // Partitions

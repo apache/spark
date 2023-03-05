@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.hive.client
 
-import java.io.{ByteArrayOutputStream, File, PrintStream, PrintWriter}
+import java.io.{ByteArrayOutputStream, File, FileWriter, PrintStream, PrintWriter}
 import java.net.URI
 
 import org.apache.commons.lang3.{JavaVersion, SystemUtils}
@@ -467,13 +467,53 @@ class HiveClientSuite(version: String, allVersions: Seq[String])
     partSpec.put("key1", "1")
     partSpec.put("key2", "") // Dynamic partition
 
-    client.loadDynamicPartitions(
+    val insertedPartition = client.loadDynamicPartitions(
       emptyDir,
       "default",
       "src_part",
       partSpec,
       replace = false,
       numDP = 1)
+
+    assert(insertedPartition.isEmpty)
+
+    withTempDir{dir => {
+      val tmpPath = dir.getAbsolutePath
+      new File(s"$tmpPath/key1=1").mkdir()
+      new File(s"$tmpPath/key1=1/key2=22222").mkdir()
+      val dataFile = new File(s"$tmpPath/key1=1/key2=22222/data")
+      val created = dataFile.createNewFile()
+      assert(created)
+      import java.io.BufferedWriter
+      val writer: BufferedWriter = new BufferedWriter(new FileWriter(dataFile))
+      // value, key1, key2
+      writer.write("1,1,22222")
+      writer.close()
+
+      val insertedPartition = client.loadDynamicPartitions(
+        tmpPath,
+        "default",
+        "src_part",
+        partSpec,
+        replace = false,
+        numDP = 1)
+
+      assert(insertedPartition.size == 1)
+      val partition = insertedPartition.head
+      assert(partition.size == 2)
+      assert(partition("key1").equals("1"))
+      assert(partition("key2").equals("22222"))
+
+      // clean
+      client.dropPartitions(
+        "default",
+        "src_part",
+        Seq(Map("key1" -> "1", "key2" -> "22222")),
+        ignoreIfNotExists = true,
+        purge = true,
+        retainData = false
+      )
+    }}
   }
 
   test("renamePartitions") {
