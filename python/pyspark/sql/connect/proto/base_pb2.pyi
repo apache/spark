@@ -41,6 +41,7 @@ import google.protobuf.internal.containers
 import google.protobuf.internal.enum_type_wrapper
 import google.protobuf.message
 import pyspark.sql.connect.proto.commands_pb2
+import pyspark.sql.connect.proto.expressions_pb2
 import pyspark.sql.connect.proto.relations_pb2
 import pyspark.sql.connect.proto.types_pb2
 import sys
@@ -905,11 +906,37 @@ class ExecutePlanResponse(google.protobuf.message.Message):
             self, field_name: typing_extensions.Literal["metrics", b"metrics"]
         ) -> None: ...
 
+    class ObservedMetrics(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        NAME_FIELD_NUMBER: builtins.int
+        VALUES_FIELD_NUMBER: builtins.int
+        name: builtins.str
+        @property
+        def values(
+            self,
+        ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+            pyspark.sql.connect.proto.expressions_pb2.Expression.Literal
+        ]: ...
+        def __init__(
+            self,
+            *,
+            name: builtins.str = ...,
+            values: collections.abc.Iterable[
+                pyspark.sql.connect.proto.expressions_pb2.Expression.Literal
+            ]
+            | None = ...,
+        ) -> None: ...
+        def ClearField(
+            self, field_name: typing_extensions.Literal["name", b"name", "values", b"values"]
+        ) -> None: ...
+
     CLIENT_ID_FIELD_NUMBER: builtins.int
     ARROW_BATCH_FIELD_NUMBER: builtins.int
     SQL_COMMAND_RESULT_FIELD_NUMBER: builtins.int
     EXTENSION_FIELD_NUMBER: builtins.int
     METRICS_FIELD_NUMBER: builtins.int
+    OBSERVED_METRICS_FIELD_NUMBER: builtins.int
     client_id: builtins.str
     @property
     def arrow_batch(self) -> global___ExecutePlanResponse.ArrowBatch: ...
@@ -924,6 +951,13 @@ class ExecutePlanResponse(google.protobuf.message.Message):
         """Metrics for the query execution. Typically, this field is only present in the last
         batch of results and then represent the overall state of the query execution.
         """
+    @property
+    def observed_metrics(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+        global___ExecutePlanResponse.ObservedMetrics
+    ]:
+        """The metrics observed during the execution of the query plan."""
     def __init__(
         self,
         *,
@@ -932,6 +966,8 @@ class ExecutePlanResponse(google.protobuf.message.Message):
         sql_command_result: global___ExecutePlanResponse.SqlCommandResult | None = ...,
         extension: google.protobuf.any_pb2.Any | None = ...,
         metrics: global___ExecutePlanResponse.Metrics | None = ...,
+        observed_metrics: collections.abc.Iterable[global___ExecutePlanResponse.ObservedMetrics]
+        | None = ...,
     ) -> None: ...
     def HasField(
         self,
@@ -959,6 +995,8 @@ class ExecutePlanResponse(google.protobuf.message.Message):
             b"extension",
             "metrics",
             b"metrics",
+            "observed_metrics",
+            b"observed_metrics",
             "response_type",
             b"response_type",
             "sql_command_result",
