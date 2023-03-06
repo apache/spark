@@ -4244,7 +4244,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
           comment = commentSpec.map(visitCommentSpec),
           position = None,
           default = None)
-      }
+      }.toSeq
     )
   }
 

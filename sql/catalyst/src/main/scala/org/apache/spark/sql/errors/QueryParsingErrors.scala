@@ -654,7 +654,7 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
       } else {
         "ALTER_TABLE_COLUMN_OPTION_DUPLICATE"
       }
-    val alterTypeMap =
+    val alterTypeMap: Map[String, String] =
       if (isCreate) {
         Map.empty
       } else {
