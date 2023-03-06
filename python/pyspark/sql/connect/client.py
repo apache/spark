@@ -779,6 +779,31 @@ class SparkConnectClient(object):
         except grpc.RpcError as rpc_error:
             self._handle_error(rpc_error)
 
+    def _execute_ml(self, req: pb2.ExecutePlanRequest):
+        """
+        Execute the passed ML command request `req` and return ML response result
+        Parameters
+        ----------
+        req : pb2.ExecutePlanRequest
+            Proto representation of the plan.
+        """
+        logger.info("Execute ML")
+        try:
+            for attempt in Retrying(
+                    can_retry=SparkConnectClient.retry_exception, **self._retry_policy
+            ):
+                with attempt:
+                    for b in self._stub.ExecutePlan(req, metadata=self._builder.metadata()):
+                        if b.client_id != self._session_id:
+                            raise SparkConnectException(
+                                "Received incorrect session identifier for request: "
+                                f"{b.client_id} != {self._session_id}"
+                            )
+                        assert b.HasField("ml_command_result")
+                        return b.ml_command_result
+        except grpc.RpcError as rpc_error:
+            self._handle_error(rpc_error)
+
     def _execute_and_fetch(
         self, req: pb2.ExecutePlanRequest
     ) -> Tuple[Optional["pa.Table"], List[PlanMetrics], Dict[str, Any]]:

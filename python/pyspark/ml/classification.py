@@ -1121,10 +1121,200 @@ class _LogisticRegressionParams(
         return self.getOrDefault(self.upperBoundsOnIntercepts)
 
 
+class _LogisticRegressionParamSetter(_LogisticRegressionParams):
+    @overload
+    def setParams(
+            self,
+            *,
+            featuresCol: str = ...,
+            labelCol: str = ...,
+            predictionCol: str = ...,
+            maxIter: int = ...,
+            regParam: float = ...,
+            elasticNetParam: float = ...,
+            tol: float = ...,
+            fitIntercept: bool = ...,
+            threshold: float = ...,
+            probabilityCol: str = ...,
+            rawPredictionCol: str = ...,
+            standardization: bool = ...,
+            weightCol: Optional[str] = ...,
+            aggregationDepth: int = ...,
+            family: str = ...,
+            lowerBoundsOnCoefficients: Optional[Matrix] = ...,
+            upperBoundsOnCoefficients: Optional[Matrix] = ...,
+            lowerBoundsOnIntercepts: Optional[Vector] = ...,
+            upperBoundsOnIntercepts: Optional[Vector] = ...,
+            maxBlockSizeInMB: float = ...,
+    ) -> "LogisticRegression":
+        ...
+
+    @overload
+    def setParams(
+            self,
+            *,
+            featuresCol: str = ...,
+            labelCol: str = ...,
+            predictionCol: str = ...,
+            maxIter: int = ...,
+            regParam: float = ...,
+            elasticNetParam: float = ...,
+            tol: float = ...,
+            fitIntercept: bool = ...,
+            thresholds: Optional[List[float]] = ...,
+            probabilityCol: str = ...,
+            rawPredictionCol: str = ...,
+            standardization: bool = ...,
+            weightCol: Optional[str] = ...,
+            aggregationDepth: int = ...,
+            family: str = ...,
+            lowerBoundsOnCoefficients: Optional[Matrix] = ...,
+            upperBoundsOnCoefficients: Optional[Matrix] = ...,
+            lowerBoundsOnIntercepts: Optional[Vector] = ...,
+            upperBoundsOnIntercepts: Optional[Vector] = ...,
+            maxBlockSizeInMB: float = ...,
+    ) -> "LogisticRegression":
+        ...
+
+    @keyword_only
+    @since("1.3.0")
+    def setParams(
+            self,
+            *,
+            featuresCol: str = "features",
+            labelCol: str = "label",
+            predictionCol: str = "prediction",
+            maxIter: int = 100,
+            regParam: float = 0.0,
+            elasticNetParam: float = 0.0,
+            tol: float = 1e-6,
+            fitIntercept: bool = True,
+            threshold: float = 0.5,
+            thresholds: Optional[List[float]] = None,
+            probabilityCol: str = "probability",
+            rawPredictionCol: str = "rawPrediction",
+            standardization: bool = True,
+            weightCol: Optional[str] = None,
+            aggregationDepth: int = 2,
+            family: str = "auto",
+            lowerBoundsOnCoefficients: Optional[Matrix] = None,
+            upperBoundsOnCoefficients: Optional[Matrix] = None,
+            lowerBoundsOnIntercepts: Optional[Vector] = None,
+            upperBoundsOnIntercepts: Optional[Vector] = None,
+            maxBlockSizeInMB: float = 0.0,
+    ) -> "LogisticRegression":
+        """
+        setParams(self, \\*, featuresCol="features", labelCol="label", predictionCol="prediction", \
+                  maxIter=100, regParam=0.0, elasticNetParam=0.0, tol=1e-6, fitIntercept=True, \
+                  threshold=0.5, thresholds=None, probabilityCol="probability", \
+                  rawPredictionCol="rawPrediction", standardization=True, weightCol=None, \
+                  aggregationDepth=2, family="auto", \
+                  lowerBoundsOnCoefficients=None, upperBoundsOnCoefficients=None, \
+                  lowerBoundsOnIntercepts=None, upperBoundsOnIntercepts=None, \
+                  maxBlockSizeInMB=0.0):
+        Sets params for logistic regression.
+        If the threshold and thresholds Params are both set, they must be equivalent.
+        """
+        kwargs = self._input_kwargs
+        self._set(**kwargs)
+        self._checkThresholdConsistency()
+        return self
+
+    @since("2.1.0")
+    def setFamily(self, value: str) -> "LogisticRegression":
+        """
+        Sets the value of :py:attr:`family`.
+        """
+        return self._set(family=value)
+
+    @since("2.3.0")
+    def setLowerBoundsOnCoefficients(self, value: Matrix) -> "LogisticRegression":
+        """
+        Sets the value of :py:attr:`lowerBoundsOnCoefficients`
+        """
+        return self._set(lowerBoundsOnCoefficients=value)
+
+    @since("2.3.0")
+    def setUpperBoundsOnCoefficients(self, value: Matrix) -> "LogisticRegression":
+        """
+        Sets the value of :py:attr:`upperBoundsOnCoefficients`
+        """
+        return self._set(upperBoundsOnCoefficients=value)
+
+    @since("2.3.0")
+    def setLowerBoundsOnIntercepts(self, value: Vector) -> "LogisticRegression":
+        """
+        Sets the value of :py:attr:`lowerBoundsOnIntercepts`
+        """
+        return self._set(lowerBoundsOnIntercepts=value)
+
+    @since("2.3.0")
+    def setUpperBoundsOnIntercepts(self, value: Vector) -> "LogisticRegression":
+        """
+        Sets the value of :py:attr:`upperBoundsOnIntercepts`
+        """
+        return self._set(upperBoundsOnIntercepts=value)
+
+    def setMaxIter(self, value: int) -> "LogisticRegression":
+        """
+        Sets the value of :py:attr:`maxIter`.
+        """
+        return self._set(maxIter=value)
+
+    def setRegParam(self, value: float) -> "LogisticRegression":
+        """
+        Sets the value of :py:attr:`regParam`.
+        """
+        return self._set(regParam=value)
+
+    def setTol(self, value: float) -> "LogisticRegression":
+        """
+        Sets the value of :py:attr:`tol`.
+        """
+        return self._set(tol=value)
+
+    def setElasticNetParam(self, value: float) -> "LogisticRegression":
+        """
+        Sets the value of :py:attr:`elasticNetParam`.
+        """
+        return self._set(elasticNetParam=value)
+
+    def setFitIntercept(self, value: bool) -> "LogisticRegression":
+        """
+        Sets the value of :py:attr:`fitIntercept`.
+        """
+        return self._set(fitIntercept=value)
+
+    def setStandardization(self, value: bool) -> "LogisticRegression":
+        """
+        Sets the value of :py:attr:`standardization`.
+        """
+        return self._set(standardization=value)
+
+    def setWeightCol(self, value: str) -> "LogisticRegression":
+        """
+        Sets the value of :py:attr:`weightCol`.
+        """
+        return self._set(weightCol=value)
+
+    def setAggregationDepth(self, value: int) -> "LogisticRegression":
+        """
+        Sets the value of :py:attr:`aggregationDepth`.
+        """
+        return self._set(aggregationDepth=value)
+
+    @since("3.1.0")
+    def setMaxBlockSizeInMB(self, value: float) -> "LogisticRegression":
+        """
+        Sets the value of :py:attr:`maxBlockSizeInMB`.
+        """
+        return self._set(maxBlockSizeInMB=value)
+
+
 @inherit_doc
 class LogisticRegression(
     _JavaProbabilisticClassifier["LogisticRegressionModel"],
-    _LogisticRegressionParams,
+    _LogisticRegressionParamSetter,
     JavaMLWritable,
     JavaMLReadable["LogisticRegression"],
 ):
@@ -1322,196 +1512,8 @@ class LogisticRegression(
         self.setParams(**kwargs)
         self._checkThresholdConsistency()
 
-    @overload
-    def setParams(
-        self,
-        *,
-        featuresCol: str = ...,
-        labelCol: str = ...,
-        predictionCol: str = ...,
-        maxIter: int = ...,
-        regParam: float = ...,
-        elasticNetParam: float = ...,
-        tol: float = ...,
-        fitIntercept: bool = ...,
-        threshold: float = ...,
-        probabilityCol: str = ...,
-        rawPredictionCol: str = ...,
-        standardization: bool = ...,
-        weightCol: Optional[str] = ...,
-        aggregationDepth: int = ...,
-        family: str = ...,
-        lowerBoundsOnCoefficients: Optional[Matrix] = ...,
-        upperBoundsOnCoefficients: Optional[Matrix] = ...,
-        lowerBoundsOnIntercepts: Optional[Vector] = ...,
-        upperBoundsOnIntercepts: Optional[Vector] = ...,
-        maxBlockSizeInMB: float = ...,
-    ) -> "LogisticRegression":
-        ...
-
-    @overload
-    def setParams(
-        self,
-        *,
-        featuresCol: str = ...,
-        labelCol: str = ...,
-        predictionCol: str = ...,
-        maxIter: int = ...,
-        regParam: float = ...,
-        elasticNetParam: float = ...,
-        tol: float = ...,
-        fitIntercept: bool = ...,
-        thresholds: Optional[List[float]] = ...,
-        probabilityCol: str = ...,
-        rawPredictionCol: str = ...,
-        standardization: bool = ...,
-        weightCol: Optional[str] = ...,
-        aggregationDepth: int = ...,
-        family: str = ...,
-        lowerBoundsOnCoefficients: Optional[Matrix] = ...,
-        upperBoundsOnCoefficients: Optional[Matrix] = ...,
-        lowerBoundsOnIntercepts: Optional[Vector] = ...,
-        upperBoundsOnIntercepts: Optional[Vector] = ...,
-        maxBlockSizeInMB: float = ...,
-    ) -> "LogisticRegression":
-        ...
-
-    @keyword_only
-    @since("1.3.0")
-    def setParams(
-        self,
-        *,
-        featuresCol: str = "features",
-        labelCol: str = "label",
-        predictionCol: str = "prediction",
-        maxIter: int = 100,
-        regParam: float = 0.0,
-        elasticNetParam: float = 0.0,
-        tol: float = 1e-6,
-        fitIntercept: bool = True,
-        threshold: float = 0.5,
-        thresholds: Optional[List[float]] = None,
-        probabilityCol: str = "probability",
-        rawPredictionCol: str = "rawPrediction",
-        standardization: bool = True,
-        weightCol: Optional[str] = None,
-        aggregationDepth: int = 2,
-        family: str = "auto",
-        lowerBoundsOnCoefficients: Optional[Matrix] = None,
-        upperBoundsOnCoefficients: Optional[Matrix] = None,
-        lowerBoundsOnIntercepts: Optional[Vector] = None,
-        upperBoundsOnIntercepts: Optional[Vector] = None,
-        maxBlockSizeInMB: float = 0.0,
-    ) -> "LogisticRegression":
-        """
-        setParams(self, \\*, featuresCol="features", labelCol="label", predictionCol="prediction", \
-                  maxIter=100, regParam=0.0, elasticNetParam=0.0, tol=1e-6, fitIntercept=True, \
-                  threshold=0.5, thresholds=None, probabilityCol="probability", \
-                  rawPredictionCol="rawPrediction", standardization=True, weightCol=None, \
-                  aggregationDepth=2, family="auto", \
-                  lowerBoundsOnCoefficients=None, upperBoundsOnCoefficients=None, \
-                  lowerBoundsOnIntercepts=None, upperBoundsOnIntercepts=None, \
-                  maxBlockSizeInMB=0.0):
-        Sets params for logistic regression.
-        If the threshold and thresholds Params are both set, they must be equivalent.
-        """
-        kwargs = self._input_kwargs
-        self._set(**kwargs)
-        self._checkThresholdConsistency()
-        return self
-
     def _create_model(self, java_model: "JavaObject") -> "LogisticRegressionModel":
         return LogisticRegressionModel(java_model)
-
-    @since("2.1.0")
-    def setFamily(self, value: str) -> "LogisticRegression":
-        """
-        Sets the value of :py:attr:`family`.
-        """
-        return self._set(family=value)
-
-    @since("2.3.0")
-    def setLowerBoundsOnCoefficients(self, value: Matrix) -> "LogisticRegression":
-        """
-        Sets the value of :py:attr:`lowerBoundsOnCoefficients`
-        """
-        return self._set(lowerBoundsOnCoefficients=value)
-
-    @since("2.3.0")
-    def setUpperBoundsOnCoefficients(self, value: Matrix) -> "LogisticRegression":
-        """
-        Sets the value of :py:attr:`upperBoundsOnCoefficients`
-        """
-        return self._set(upperBoundsOnCoefficients=value)
-
-    @since("2.3.0")
-    def setLowerBoundsOnIntercepts(self, value: Vector) -> "LogisticRegression":
-        """
-        Sets the value of :py:attr:`lowerBoundsOnIntercepts`
-        """
-        return self._set(lowerBoundsOnIntercepts=value)
-
-    @since("2.3.0")
-    def setUpperBoundsOnIntercepts(self, value: Vector) -> "LogisticRegression":
-        """
-        Sets the value of :py:attr:`upperBoundsOnIntercepts`
-        """
-        return self._set(upperBoundsOnIntercepts=value)
-
-    def setMaxIter(self, value: int) -> "LogisticRegression":
-        """
-        Sets the value of :py:attr:`maxIter`.
-        """
-        return self._set(maxIter=value)
-
-    def setRegParam(self, value: float) -> "LogisticRegression":
-        """
-        Sets the value of :py:attr:`regParam`.
-        """
-        return self._set(regParam=value)
-
-    def setTol(self, value: float) -> "LogisticRegression":
-        """
-        Sets the value of :py:attr:`tol`.
-        """
-        return self._set(tol=value)
-
-    def setElasticNetParam(self, value: float) -> "LogisticRegression":
-        """
-        Sets the value of :py:attr:`elasticNetParam`.
-        """
-        return self._set(elasticNetParam=value)
-
-    def setFitIntercept(self, value: bool) -> "LogisticRegression":
-        """
-        Sets the value of :py:attr:`fitIntercept`.
-        """
-        return self._set(fitIntercept=value)
-
-    def setStandardization(self, value: bool) -> "LogisticRegression":
-        """
-        Sets the value of :py:attr:`standardization`.
-        """
-        return self._set(standardization=value)
-
-    def setWeightCol(self, value: str) -> "LogisticRegression":
-        """
-        Sets the value of :py:attr:`weightCol`.
-        """
-        return self._set(weightCol=value)
-
-    def setAggregationDepth(self, value: int) -> "LogisticRegression":
-        """
-        Sets the value of :py:attr:`aggregationDepth`.
-        """
-        return self._set(aggregationDepth=value)
-
-    @since("3.1.0")
-    def setMaxBlockSizeInMB(self, value: float) -> "LogisticRegression":
-        """
-        Sets the value of :py:attr:`maxBlockSizeInMB`.
-        """
-        return self._set(maxBlockSizeInMB=value)
 
 
 class LogisticRegressionModel(
