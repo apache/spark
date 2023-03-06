@@ -154,6 +154,26 @@ should use for your streaming applications and pipelines.
 - `Spark Streaming Programming Guide (Legacy) <https://spark.apache.org/docs/latest/streaming-programming-guide.html>`_
 - :ref:`Spark Streaming API Reference (Legacy)</reference/pyspark.streaming.rst>`
 
+**Spark Connect (Experimental)**
+
+Spark Connect is a new feature that allows Apache Spark to run anywhere,
+including in edge and IoT devices, as well as in cloud and on-premises data centers.
+It provides a universal interface for Spark, enabling it to work with different data stores and services,
+including popular cloud services like AWS S3, Google Cloud Storage, and Azure Blob Storage.
+
+Spark Connect uses a new GRPC/HTTP2 interface, which allows Spark to communicate with different systems in a more efficient and scalable way.
+This interface makes it easy to develop connectors for new data sources and services,
+and provides a more streamlined experience for developers who want to build applications that use Spark.
+
+While Spark Connect does not have built-in authentication, it is designed to work seamlessly with existing authentication infrastructure.
+The GRPC/HTTP2 interface allows for the use of authenticating proxies, which makes it possible to secure Spark Connect without having to implement authentication logic in Spark directly.
+
+Note that because Spark Connect is still experimental, it should be used with caution in production environments.
+
+- :ref:`/getting_started/quickstart_connect.ipynb`
+- |binder_connect|_
+- :ref:`Spark SQL API Reference</reference/pyspark.sql/index.rst>` (most DataFrame, Column, Functions APIs are implemented)
+
 .. toctree::
     :maxdepth: 2
     :hidden:
