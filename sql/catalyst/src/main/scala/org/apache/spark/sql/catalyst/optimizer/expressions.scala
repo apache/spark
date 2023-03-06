@@ -176,11 +176,12 @@ object ConstantPropagation extends Rule[LogicalPlan] {
         newAnd -> equalityPredicates
       case o: Or =>
         // Ignore the EqualityPredicates from children since they are only propagated through And.
-        o.mapChildren(traverse(_, replaceChildren = true, nullIsFalse)._1) -> mutable.Map.empty
+        val newOr = o.mapChildren(traverse(_, replaceChildren = true, nullIsFalse)._1)
+        newOr -> mutable.Map.empty
       case n: Not =>
         // Ignore the EqualityPredicates from children since they are only propagated through And.
-        n.mapChildren(traverse(_, replaceChildren = true, nullIsFalse = false)._1) ->
-          mutable.Map.empty
+        val newNot = n.mapChildren(traverse(_, replaceChildren = true, nullIsFalse = false)._1)
+        newNot -> mutable.Map.empty
       case o => o -> mutable.Map.empty
     }
 
@@ -198,8 +199,7 @@ object ConstantPropagation extends Rule[LogicalPlan] {
     val predicates = equalityPredicates.values.map(_._2).toSet
     condition transform {
       case b: BinaryComparison if !predicates.contains(b) => b transform {
-        case a: AttributeReference if equalityPredicates.contains(a.canonicalized) =>
-          equalityPredicates(a.canonicalized)._1
+        case a: AttributeReference => equalityPredicates.get(a.canonicalized).map(_._1).getOrElse(a)
       }
     }
   }
