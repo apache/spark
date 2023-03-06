@@ -279,13 +279,12 @@ class DataFrameReader private[sql] (sparkSession: SparkSession) extends Logging 
       predicates: Array[String],
       connectionProperties: Properties): DataFrame = {
     sparkSession.newDataFrame { builder =>
-      val partitionedJdbcBuilder = builder.getReadBuilder.getPartitionedJdbcBuilder
-      partitionedJdbcBuilder.setUrl(url)
-      partitionedJdbcBuilder.setTable(table)
-      predicates.foreach(predicate => partitionedJdbcBuilder.addPredicates(predicate))
+      val dataSourceBuilder = builder.getReadBuilder.getDataSourceBuilder
+      predicates.foreach(predicate => dataSourceBuilder.addPredicates(predicate))
+      this.extraOptions ++= Seq("url" -> url, "dbtable" -> table)
       val params = extraOptions ++ connectionProperties.asScala
       params.foreach { case (k, v) =>
-        partitionedJdbcBuilder.putOptions(k, v)
+        dataSourceBuilder.putOptions(k, v)
       }
       builder.build()
     }

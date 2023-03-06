@@ -3,9 +3,11 @@
     "planId": "0"
   },
   "read": {
-    "partitionedJdbc": {
-      "url": "jdbc:h2:mem:testdb0;user\u003dtestUser;password\u003dtestPass",
-      "table": "TEST.PEOPLE",
+    "dataSource": {
+      "options": {
+        "url": "jdbc:h2:mem:testdb0;user\u003dtestUser;password\u003dtestPass",
+        "dbtable": "TEST.PEOPLE"
+      },
       "predicates": ["THEID \u003c 2", "THEID \u003e\u003d 2"]
     }
   }
