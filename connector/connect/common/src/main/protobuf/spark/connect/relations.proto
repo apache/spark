@@ -61,6 +61,7 @@ message Relation {
     ToSchema to_schema = 26;
     RepartitionByExpression repartition_by_expression = 27;
     FrameMap frame_map = 28;
+    CollectMetrics collect_metrics = 29;
 
     // NA functions
     NAFill fill_na = 90;
@@ -781,3 +782,14 @@ message FrameMap {
   CommonInlineUserDefinedFunction func = 2;
 }
 
+// Collect arbitrary (named) metrics from a dataset.
+message CollectMetrics {
+  // (Required) The input relation.
+  Relation input = 1;
+
+  // (Required) Name of the metrics.
+  string name = 2;
+
+  // (Required) The metric sequence.
+  repeated Expression metrics = 3;
+}
