@@ -584,6 +584,7 @@ class SparkConnectClient(object):
         name: str,
         javaClassName: str,
         return_type: Optional["DataTypeOrString"] = None,
+        aggregate: bool = False,
     ) -> None:
         # convert str return_type to DataType
         if isinstance(return_type, str):
@@ -591,7 +592,7 @@ class SparkConnectClient(object):
 
         # construct a JavaUDF
         if return_type is None:
-            java_udf = JavaUDF(class_name=javaClassName)
+            java_udf = JavaUDF(class_name=javaClassName, aggregate=aggregate)
         else:
             java_udf = JavaUDF(
                 class_name=javaClassName,

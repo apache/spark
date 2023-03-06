@@ -669,6 +669,9 @@ class UDFRegistration:
 
         .. versionadded:: 2.3.0
 
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
+
         name : str
             name of the user-defined aggregate function
         javaClassName : str

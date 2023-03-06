@@ -242,3 +242,8 @@ class UDFRegistration:
         self.sparkSession._client.register_java(name, javaClassName, returnType)
 
     registerJavaFunction.__doc__ = PySparkUDFRegistration.registerJavaFunction.__doc__
+
+    def registerJavaUDAF(self, name: str, javaClassName: str) -> None:
+        self.sparkSession._client.register_java(name, javaClassName, aggregate=True)
+
+    registerJavaUDAF.__doc__ = PySparkUDFRegistration.registerJavaUDAF.__doc__

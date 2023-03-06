@@ -352,4 +352,7 @@ message JavaUDF {
 
   // (Optional) Output type of the Java UDF
   optional string output_type = 2;
+
+  // (Required) Indicate if the Java user-defined function is an aggregate function
+  bool aggregate = 3;
 }

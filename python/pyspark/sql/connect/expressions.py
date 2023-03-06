@@ -522,21 +522,24 @@ class PythonUDF:
 
 
 class JavaUDF:
-    """Represents a Java user-defined function."""
+    """Represents a Java (aggregate) user-defined function."""
 
     def __init__(
         self,
         class_name: str,
         output_type: Optional[str] = None,
+        aggregate: bool = False,
     ) -> None:
         self._class_name = class_name
         self._output_type = output_type
+        self._aggregate = aggregate
 
     def to_plan(self, session: "SparkConnectClient") -> proto.JavaUDF:
         expr = proto.JavaUDF()
         expr.class_name = self._class_name
         if self._output_type is not None:
             expr.output_type = self._output_type
+        expr.aggregate = self._aggregate
         return expr
 
     def __repr__(self) -> str:
