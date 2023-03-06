@@ -2530,7 +2530,8 @@ private[spark] class DAGScheduler(
     // if the cluster manager explicitly tells us that the entire worker was lost, then
     // we know to unregister shuffle output.  (Note that "worker" specifically refers to the process
     // from a Standalone cluster, where the shuffle service lives in the Worker.)
-    val fileLost = workerHost.isDefined || !env.blockManager.externalShuffleServiceEnabled
+    val fileLost = !sc.shuffleDriverComponents.supportsReliableStorage() &&
+      (workerHost.isDefined || !env.blockManager.externalShuffleServiceEnabled)
     removeExecutorAndUnregisterOutputs(
       execId = execId,
       fileLost = fileLost,

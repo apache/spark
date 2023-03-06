@@ -34,6 +34,7 @@ import org.apache.spark.resource.ResourceProfile.UNKNOWN_RESOURCE_PROFILE_ID
 import org.apache.spark.resource.ResourceProfileManager
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.dynalloc.ExecutorMonitor
+import org.apache.spark.shuffle.api.ShuffleDriverComponents
 import org.apache.spark.util.{Clock, SystemClock, ThreadUtils, Utils}
 
 /**
@@ -103,7 +104,8 @@ private[spark] class ExecutorAllocationManager(
     conf: SparkConf,
     cleaner: Option[ContextCleaner] = None,
     clock: Clock = new SystemClock(),
-    resourceProfileManager: ResourceProfileManager)
+    resourceProfileManager: ResourceProfileManager,
+    shuffleDriverComponents: ShuffleDriverComponents)
   extends Logging {
 
   allocationManager =>
@@ -203,7 +205,8 @@ private[spark] class ExecutorAllocationManager(
       throw new SparkException(
         s"s${DYN_ALLOCATION_SUSTAINED_SCHEDULER_BACKLOG_TIMEOUT.key} must be > 0!")
     }
-    if (!conf.get(config.SHUFFLE_SERVICE_ENABLED)) {
+    if (!conf.get(config.SHUFFLE_SERVICE_ENABLED) &&
+      !shuffleDriverComponents.supportsReliableStorage()) {
       if (conf.get(config.DYN_ALLOCATION_SHUFFLE_TRACKING_ENABLED)) {
         logInfo("Dynamic allocation is enabled without a shuffle service.")
       } else if (decommissionEnabled &&

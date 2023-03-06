@@ -34,6 +34,7 @@ import org.apache.spark.resource._
 import org.apache.spark.resource.ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.ExecutorInfo
+import org.apache.spark.shuffle.api.ShuffleDriverComponents
 import org.apache.spark.util.{Clock, ManualClock, SystemClock}
 
 /**
@@ -1809,9 +1810,13 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
       conf: SparkConf,
       clock: Clock = new SystemClock()): ExecutorAllocationManager = {
     ResourceProfile.reInitDefaultProfile(conf)
+    val driverComponent = mock(classOf[ShuffleDriverComponents])
+    when(driverComponent.supportsReliableStorage()).thenReturn(false)
+
     rpManager = new ResourceProfileManager(conf, listenerBus)
     val manager = new ExecutorAllocationManager(client, listenerBus, conf, clock = clock,
-      resourceProfileManager = rpManager)
+      resourceProfileManager = rpManager,
+      shuffleDriverComponents = driverComponent)
     managers += manager
     manager.start()
     manager
