@@ -61,7 +61,8 @@ message Relation {
     ToSchema to_schema = 26;
     RepartitionByExpression repartition_by_expression = 27;
     FrameMap frame_map = 28;
-    WithSequenceColumn with_sequence_column = 29;
+    CollectMetrics collect_metrics = 29;
+    WithSequenceColumn with_sequence_column = 30;
 
     // NA functions
     NAFill fill_na = 90;
@@ -780,6 +781,18 @@ message FrameMap {
 
   // (Required) Input user-defined function of a Frame Map API.
   CommonInlineUserDefinedFunction func = 2;
+}
+
+// Collect arbitrary (named) metrics from a dataset.
+message CollectMetrics {
+  // (Required) The input relation.
+  Relation input = 1;
+
+  // (Required) Name of the metrics.
+  string name = 2;
+
+  // (Required) The metric sequence.
+  repeated Expression metrics = 3;
 }
 
 // This is for 'distributed-sequence' default index in pandas API on Spark.

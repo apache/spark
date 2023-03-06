@@ -149,6 +149,10 @@ private[sql] class SparkConnectClient(
     analyze(request)
   }
 
+  def copy(): SparkConnectClient = {
+    new SparkConnectClient(userContext, channel, userAgent)
+  }
+
   /**
    * Add a single artifact to the client session.
    *

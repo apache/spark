@@ -534,6 +534,18 @@ class Dataset[T] private[sql] (
     }
   }
 
+  /**
+   * Returns a [[DataFrameStatFunctions]] for working statistic functions support.
+   * {{{
+   *   // Finding frequent items in column with name 'a'.
+   *   ds.stat.freqItems(Seq("a"))
+   * }}}
+   *
+   * @group untypedrel
+   * @since 3.4.0
+   */
+  def stat: DataFrameStatFunctions = new DataFrameStatFunctions(sparkSession, plan.getRoot)
+
   private def buildJoin(right: Dataset[_])(f: proto.Join.Builder => Unit): DataFrame = {
     sparkSession.newDataFrame { builder =>
       val joinBuilder = builder.getJoinBuilder
@@ -917,6 +929,13 @@ class Dataset[T] private[sql] (
         .addAllParameters(parameters.map(p => functions.lit(p).expr).asJava)
   }
 
+  private def getPlanId: Option[Long] =
+    if (plan.getRoot.hasCommon && plan.getRoot.getCommon.hasPlanId) {
+      Option(plan.getRoot.getCommon.getPlanId)
+    } else {
+      None
+    }
+
   /**
    * Selects column based on the column name and returns it as a [[Column]].
    *
@@ -927,12 +946,7 @@ class Dataset[T] private[sql] (
    * @since 3.4.0
    */
   def col(colName: String): Column = {
-    val planId = if (plan.getRoot.hasCommon && plan.getRoot.getCommon.hasPlanId) {
-      Option(plan.getRoot.getCommon.getPlanId)
-    } else {
-      None
-    }
-    Column.apply(colName, planId)
+    Column.apply(colName, getPlanId)
   }
 
   /**
@@ -940,8 +954,11 @@ class Dataset[T] private[sql] (
    * @group untypedrel
    * @since 3.4.0
    */
-  def colRegex(colName: String): Column = Column { builder =>
-    builder.getUnresolvedRegexBuilder.setColName(colName)
+  def colRegex(colName: String): Column = {
+    Column { builder =>
+      val unresolvedRegexBuilder = builder.getUnresolvedRegexBuilder.setColName(colName)
+      getPlanId.foreach(unresolvedRegexBuilder.setPlanId)
+    }
   }
 
   /**

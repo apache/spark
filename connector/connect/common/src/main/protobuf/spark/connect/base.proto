@@ -21,6 +21,7 @@ package spark.connect;
 
 import "google/protobuf/any.proto";
 import "spark/connect/commands.proto";
+import "spark/connect/expressions.proto";
 import "spark/connect/relations.proto";
 import "spark/connect/types.proto";
 
@@ -236,6 +237,9 @@ message ExecutePlanResponse {
   // batch of results and then represent the overall state of the query execution.
   Metrics metrics = 4;
 
+  // The metrics observed during the execution of the query plan.
+  repeated ObservedMetrics observed_metrics = 6;
+
   // A SQL command returns an opaque Relation that can be directly used as input for the next
   // call.
   message SqlCommandResult {
@@ -264,6 +268,11 @@ message ExecutePlanResponse {
       int64 value = 2;
       string metric_type = 3;
     }
+  }
+
+  message ObservedMetrics {
+    string name = 1;
+    repeated Expression.Literal values = 2;
   }
 }
 

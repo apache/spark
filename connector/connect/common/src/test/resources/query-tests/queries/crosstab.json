@@ -1,8 +1,8 @@
 {
   "common": {
-    "planId": "2"
+    "planId": "1"
   },
-  "project": {
+  "crosstab": {
     "input": {
       "common": {
         "planId": "0"
@@ -11,11 +11,7 @@
         "schema": "struct\u003cid:bigint,a:int,b:double\u003e"
       }
     },
-    "expressions": [{
-      "unresolvedRegex": {
-        "colName": "`a|id`",
-        "planId": "1"
-      }
-    }]
+    "col1": "a",
+    "col2": "b"
   }
 }

@@ -242,6 +242,9 @@ message Expression {
   message UnresolvedRegex {
     // (Required) The column name used to extract column with regex.
     string col_name = 1;
+
+    // (Optional) The id of corresponding connect plan.
+    optional int64 plan_id = 2;
   }
 
   // Extracts a value or values from an Expression

@@ -17,7 +17,7 @@
 package org.apache.spark.sql
 
 import java.nio.file.{Files, Path}
-import java.util.Collections
+import java.util.{Collections, Properties}
 import java.util.concurrent.atomic.AtomicLong
 
 import scala.collection.mutable
@@ -233,6 +233,24 @@ class PlanGenerationTestSuite
       .option("header", "true")
       .options(Map("delimiter" -> ";"))
       .load(testDataPath.resolve("people.csv").toString)
+  }
+
+  test("read jdbc") {
+    session.read.jdbc(
+      "jdbc:h2:mem:testdb0;user=testUser;password=testPass",
+      "TEST.TIMETYPES",
+      new Properties())
+  }
+
+  test("read jdbc with partition") {
+    session.read.jdbc(
+      "jdbc:h2:mem:testdb0;user=testUser;password=testPass",
+      "TEST.EMP",
+      "THEID",
+      0,
+      4,
+      3,
+      new Properties())
   }
 
   test("read json") {
@@ -1960,6 +1978,10 @@ class PlanGenerationTestSuite
     simple.groupBy(Column("id")).pivot("a").agg(functions.count(Column("b")))
   }
 
+  test("test broadcast") {
+    left.join(fn.broadcast(right), "id")
+  }
+
   test("function lit") {
     simple.select(
       fn.lit(fn.col("id")),
@@ -2023,5 +2045,17 @@ class PlanGenerationTestSuite
       .setCustomField("abc")
       .build()
     simple.select(Column(com.google.protobuf.Any.pack(extension)))
+  }
+
+  test("crosstab") {
+    simple.stat.crosstab("a", "b")
+  }
+
+  test("freqItems") {
+    simple.stat.freqItems(Array("id", "a"), 0.1)
+  }
+
+  test("sampleBy") {
+    simple.stat.sampleBy("id", Map(0 -> 0.1, 1 -> 0.2), 0L)
   }
 }
