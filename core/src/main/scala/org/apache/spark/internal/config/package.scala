@@ -2488,5 +2488,5 @@ package object config {
         "fetch failures.")
       .version("3.5.0")
       .intConf
-      .createWithDefault(16)
+      .createWithDefault(Int.MaxValue)
 }

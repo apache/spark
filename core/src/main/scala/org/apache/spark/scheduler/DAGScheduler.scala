@@ -1362,7 +1362,7 @@ private[spark] class DAGScheduler(
       logDebug(s"submitStage($stage (name=${stage.name};" +
         s"jobs=${stage.jobIds.toSeq.sorted.mkString(",")}))")
       if (!waitingStages(stage) && !runningStages(stage) && !failedStages(stage)) {
-        if (stage.getNextAttemptId() >= maxStageAttempts) {
+        if (stage.getNextAttemptId >= maxStageAttempts) {
           val reason = s"$stage (name=${stage.name}) has been resubmitted for the maximum " +
             s"allowable number of times: ${maxStageAttempts}, which is the max value of " +
             s"config `spark.stage.maxAttempts` and `spark.stage.maxConsecutiveAttempts`."
