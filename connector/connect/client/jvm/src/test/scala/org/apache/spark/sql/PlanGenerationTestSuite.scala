@@ -1978,6 +1978,10 @@ class PlanGenerationTestSuite
     simple.groupBy(Column("id")).pivot("a").agg(functions.count(Column("b")))
   }
 
+  test("test broadcast") {
+    left.join(fn.broadcast(right), "id")
+  }
+
   test("function lit") {
     simple.select(
       fn.lit(fn.col("id")),
