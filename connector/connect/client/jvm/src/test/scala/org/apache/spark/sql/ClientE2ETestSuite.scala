@@ -602,6 +602,18 @@ class ClientE2ETestSuite extends RemoteSparkSession {
     val newId = spark.newSession().sql("SELECT 1").analyze.getClientId
     assert(oldId != newId)
   }
+
+  test("createDataFrame from complex type schema") {
+    val schema = new StructType()
+      .add(
+        "c1",
+        new StructType()
+          .add("c1-1", StringType)
+          .add("c1-2", StringType))
+    val data = Seq(Row(Row(null, "a2")), Row(Row("b1", "b2")), Row(null))
+    val result = spark.createDataFrame(data.asJava, schema).collect()
+    assert(result === data)
+  }
 }
 
 private[sql] case class MyType(id: Long, a: Double, b: Double)
