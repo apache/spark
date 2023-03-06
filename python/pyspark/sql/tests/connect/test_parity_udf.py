@@ -25,6 +25,7 @@ if should_test_connect:
 
     sql.udf.UserDefinedFunction = UserDefinedFunction
 
+from pyspark.errors import AnalysisException
 from pyspark.sql.tests.test_udf import BaseUDFTestsMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
 from pyspark.sql.types import IntegerType
@@ -110,23 +111,16 @@ class UDFParityTests(BaseUDFTestsMixin, ReusedConnectTestCase):
 
     # TODO(SPARK-42210): implement `spark.udf`
     @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_non_existed_udf(self):
-        super().test_non_existed_udf()
-
-    # TODO(SPARK-42210): implement `spark.udf`
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_register_java_function(self):
-        super().test_register_java_function()
-
-    # TODO(SPARK-42210): implement `spark.udf`
-    @unittest.skip("Fails in Spark Connect, should enable.")
     def test_register_java_udaf(self):
         super().test_register_java_udaf()
 
-    # TODO(SPARK-42210): implement `spark.udf`
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_udf_in_left_outer_join_condition(self):
-        super().test_udf_in_left_outer_join_condition()
+    def test_non_existed_udf(self):
+        spark = self.spark
+        self.assertRaisesRegex(
+            AnalysisException,
+            "Can not load class non_existed_udf",
+            lambda: spark.udf.registerJavaFunction("udf1", "non_existed_udf"),
+        )
 
     def test_udf_registration_returns_udf(self):
         df = self.spark.range(10)
