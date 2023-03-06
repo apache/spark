@@ -156,7 +156,7 @@ should use for your streaming applications and pipelines.
 
 **Spark Connect (Experimental)**
 
-Spark Connect is a new feature that allows Apache Spark to run anywhere,
+Spark Connect is a new feature introduced in Spark 3.4.0 that allows Apache Spark to run anywhere,
 including in edge and IoT devices, as well as in cloud and on-premises data centers.
 It provides a universal interface for Spark, enabling it to work with different data stores and services,
 including popular cloud services like AWS S3, Google Cloud Storage, and Azure Blob Storage.
