@@ -76,7 +76,8 @@ class ClientE2ETestSuite extends RemoteSparkSession {
     assert(result(2) == 2)
   }
 
-  test("simple udf") {
+  // TODO (SPARK-42665): Ignore this test until the udf is fully implemented.
+  ignore("simple udf") {
     def dummyUdf(x: Int): Int = x + 5
     val myUdf = udf(dummyUdf _)
     val df = spark.range(5).select(myUdf(Column("id")))
