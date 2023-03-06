@@ -103,7 +103,7 @@ object LiteralProtoConverter {
    * @return
    *   proto.Expression.Literal
    */
-  def toLiteralProto(literal: Any): proto.Expression.Literal =
+  private def toLiteralProto(literal: Any): proto.Expression.Literal =
     toLiteralProtoBuilder(literal).build()
 
   private def toDataType(clz: Class[_]): DataType = clz match {
