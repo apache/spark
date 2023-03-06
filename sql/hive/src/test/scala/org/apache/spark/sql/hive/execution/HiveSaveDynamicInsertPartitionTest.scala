@@ -60,9 +60,9 @@ class HiveSaveDynamicInsertPartitionTest extends HivePlanTest with SQLTestUtils 
             s"""
                |INSERT OVERWRITE TABLE test_db.test_table PARTITION (p1=1, p2)
                |select * from (
-               |  select 1 as value, 1 as p1, 2 as p2
+               |  select 1 as value, 2 as p2
                |  union all
-               |  select 2 as value, 1 as p1, 3 as p2
+               |  select 2 as value, 3 as p2
                |)""".stripMargin)
 
           val df = sql(
