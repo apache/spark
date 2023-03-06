@@ -1580,8 +1580,7 @@ class SparkConnectPlanner(val session: SparkSession) {
   private def handleRegisterJavaUDF(fun: proto.CommonInlineUserDefinedFunction): Unit = {
     val udf = fun.getJavaUdf
     val dataType =
-      if (udf.getOutputType == null) null
-      else {
+      if (udf.hasOutputType) {
         DataType.parseTypeWithFallback(
           schema = udf.getOutputType,
           parser = DataType.fromDDL,
@@ -1589,7 +1588,7 @@ class SparkConnectPlanner(val session: SparkSession) {
           case s: DataType => s
           case other => throw InvalidPlanInput(s"Invalid return type $other")
         }
-      }
+      } else null
     session.udf.registerJava(fun.getFunctionName, udf.getClassName, dataType)
   }
 
