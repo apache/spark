@@ -136,6 +136,30 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   }
 
   /**
+   * Plans special cases of global [[SortExec]] which is the root operator.
+   * If the size of plan is small enough, it's more efficient to sort all rows at driver side that
+   * saves one shuffle.
+   */
+  object SpecialSort extends SparkStrategy {
+    override def apply(plan: LogicalPlan): Seq[SparkPlan] = {
+      plan match {
+        case ReturnAnswer(rootPlan) =>
+          val maxRows = conf.getConf(SQLConf.DRIVER_SORT_THRESHOLD)
+          rootPlan match {
+            case Sort(order, true, child) if child.maxRows.exists(_ <= maxRows) =>
+              DriverSortExec(child.output, order, planLater(child)) :: Nil
+            case Project(projectList, Sort(order, true, child))
+                if child.maxRows.exists(_ <= maxRows) =>
+              DriverSortExec(projectList, order, planLater(child)) :: Nil
+            case _ => Nil
+          }
+
+        case _ => Nil
+      }
+    }
+  }
+
+  /**
    * Select the proper physical plan for join based on join strategy hints, the availability of
    * equi-join keys and the sizes of joining relations. Below are the existing join strategies,
    * their characteristics and their limitations.

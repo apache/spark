@@ -1685,7 +1685,8 @@ class DatasetSuite extends QueryTest
         withListener(spark.sparkContext, listener) { _ =>
           // AQE adds a job per shuffle. The expression above does multiple shuffles and
           // that screws up the job counting
-          withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+          withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+              SQLConf.DRIVER_SORT_THRESHOLD.key -> "-1") {
             cp = if (reliable) ds.checkpoint(eager) else ds.localCheckpoint(eager)
           }
         }

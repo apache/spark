@@ -3260,6 +3260,16 @@ object SQLConf {
       .intConf
       .createWithDefault(ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH)
 
+  val DRIVER_SORT_THRESHOLD =
+    buildConf("spark.sql.execution.driverSortThreshold")
+      .doc("If the query row count less than or equal to this threshold and the root node is " +
+        "global sort, then Spark Optimizer will do global sort at driver side to save one " +
+        "shuffle. -1 means disable this optimization.")
+      .version("3.5.0")
+      .intConf
+      .checkValue(_ >= -1, "must be a non-negative number or -1")
+      .createWithDefault(50000)
+
   object Deprecated {
     val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"
   }

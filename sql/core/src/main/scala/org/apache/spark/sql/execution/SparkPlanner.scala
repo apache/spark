@@ -38,6 +38,7 @@ class SparkPlanner(val session: SparkSession, val experimentalMethods: Experimen
       new DataSourceV2Strategy(session) ::
       FileSourceStrategy ::
       DataSourceStrategy ::
+      SpecialSort ::
       SpecialLimits ::
       Aggregation ::
       Window ::

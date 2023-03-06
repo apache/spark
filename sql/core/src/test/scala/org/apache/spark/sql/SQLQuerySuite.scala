@@ -1501,8 +1501,10 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
   }
 
   test("external sorting updates peak execution memory") {
-    AccumulatorSuite.verifyPeakExecutionMemorySet(sparkContext, "external sort") {
-      sql("SELECT * FROM testData2 ORDER BY a ASC, b ASC").collect()
+    withSQLConf(SQLConf.DRIVER_SORT_THRESHOLD.key -> "-1") {
+      AccumulatorSuite.verifyPeakExecutionMemorySet(sparkContext, "external sort") {
+        sql("SELECT * FROM testData2 ORDER BY a ASC, b ASC").collect()
+      }
     }
   }
 

@@ -432,12 +432,14 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
   }
 
   test("Sort should be included in WholeStageCodegen") {
-    val df = spark.range(3, 0, -1).toDF().sort(col("id"))
-    val plan = df.queryExecution.executedPlan
-    assert(plan.exists(p =>
-      p.isInstanceOf[WholeStageCodegenExec] &&
-        p.asInstanceOf[WholeStageCodegenExec].child.isInstanceOf[SortExec]))
-    assert(df.collect() === Array(Row(1), Row(2), Row(3)))
+    withSQLConf(SQLConf.DRIVER_SORT_THRESHOLD.key -> "-1") {
+      val df = spark.range(3, 0, -1).toDF().sort(col("id"))
+      val plan = df.queryExecution.executedPlan
+      assert(plan.exists(p =>
+        p.isInstanceOf[WholeStageCodegenExec] &&
+          p.asInstanceOf[WholeStageCodegenExec].child.isInstanceOf[SortExec]))
+      assert(df.collect() === Array(Row(1), Row(2), Row(3)))
+    }
   }
 
   test("MapElements should be included in WholeStageCodegen") {

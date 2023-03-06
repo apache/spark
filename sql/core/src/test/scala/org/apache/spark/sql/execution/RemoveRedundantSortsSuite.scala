@@ -37,7 +37,8 @@ abstract class RemoveRedundantSortsSuiteBase
   }
 
   private def checkSorts(query: String, enabledCount: Int, disabledCount: Int): Unit = {
-    withSQLConf(SQLConf.REMOVE_REDUNDANT_SORTS_ENABLED.key -> "true") {
+    withSQLConf(SQLConf.REMOVE_REDUNDANT_SORTS_ENABLED.key -> "true",
+        SQLConf.DRIVER_SORT_THRESHOLD.key -> "-1") {
       val df = sql(query)
       checkNumSorts(df, enabledCount)
       val result = df.collect()

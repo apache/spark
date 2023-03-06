@@ -796,7 +796,8 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
       checkOutputPartitioningRewrite(inMemoryScan, expectedPartitioningClass)
     }
     // when enable AQE, the reusedExchange is inserted when executed.
-    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+        SQLConf.DRIVER_SORT_THRESHOLD.key -> "-1") {
       // ReusedExchange is HashPartitioning
       val df1 = Seq(1 -> "a", 2 -> "b").toDF("i", "j").repartition($"i")
       val df2 = Seq(1 -> "a", 2 -> "b").toDF("i", "j").repartition($"i")
@@ -1370,6 +1371,16 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
         }
       }.get
       assert(numOutputPartitioning.size == 8)
+    }
+  }
+
+  test("SPARK-42651: Optimize global sort to driver sort") {
+    val df = spark.range(5).selectExpr("id + 1 as c1", "id % 2 as c2")
+    assert(df.orderBy("c1").queryExecution.sparkPlan.isInstanceOf[DriverSortExec])
+    assert(df.orderBy("c1").select($"c2").queryExecution.sparkPlan.isInstanceOf[DriverSortExec])
+    assert(!df.orderBy("c1").limit(1).queryExecution.sparkPlan.isInstanceOf[DriverSortExec])
+    withSQLConf(SQLConf.DRIVER_SORT_THRESHOLD.key -> "1") {
+      assert(!df.orderBy("c1").queryExecution.sparkPlan.isInstanceOf[DriverSortExec])
     }
   }
 }

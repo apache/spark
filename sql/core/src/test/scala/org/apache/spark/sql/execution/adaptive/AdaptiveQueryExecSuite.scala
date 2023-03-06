@@ -29,7 +29,7 @@ import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent, SparkListe
 import org.apache.spark.sql.{Dataset, QueryTest, Row, SparkSession, Strategy}
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan}
-import org.apache.spark.sql.execution.{CollectLimitExec, LocalTableScanExec, PartialReducerPartitionSpec, QueryExecution, ReusedSubqueryExec, ShuffledRowRDD, SortExec, SparkPlan, SparkPlanInfo, UnionExec}
+import org.apache.spark.sql.execution.{CollectLimitExec, DriverSortExec, LocalTableScanExec, PartialReducerPartitionSpec, QueryExecution, ReusedSubqueryExec, ShuffledRowRDD, SortExec, SparkPlan, SparkPlanInfo, UnionExec}
 import org.apache.spark.sql.execution.aggregate.BaseAggregateExec
 import org.apache.spark.sql.execution.command.DataWritingCommandExec
 import org.apache.spark.sql.execution.datasources.noop.NoopDataSource
@@ -43,7 +43,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.PartitionOverwriteMode
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.test.SQLTestData.TestData
-import org.apache.spark.sql.types.{IntegerType, StructType}
+import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
 import org.apache.spark.sql.util.QueryExecutionListener
 import org.apache.spark.util.Utils
 
@@ -2698,6 +2698,33 @@ class AdaptiveQueryExecSuite
       val df2 = spark.range(1).selectExpr("id as c2")
       val df = df1.join(df2, col("c1") === col("c2")).repartition(3, col("c1"))
       assert(df.rdd.getNumPartitions == 3)
+    }
+  }
+
+  test("SPARK-42651: Optimize global sort to driver sort") {
+    val data = Seq(
+      Seq(9, null, "x"),
+      Seq(null, 3, "y"),
+      Seq(1, 7, null),
+      Seq(null, 0, null),
+      Seq(1, null, null),
+      Seq(null, null, "x"),
+      Seq(5, 3, "z"),
+      Seq(7, 1, "y"),
+      Seq(5, 1, "z"))
+    val schema = new StructType().add("c1", IntegerType, nullable = true)
+      .add("c2", IntegerType, nullable = true)
+      .add("c3", StringType, nullable = true)
+
+    withTable("t") {
+      val rdd = spark.sparkContext.parallelize(data)
+      spark.createDataFrame(rdd.map(s => Row.fromSeq(s)), schema)
+        .write.format("parquet").saveAsTable("t")
+
+      val (plan, adaptivePlan) = runAdaptiveAndVerifyResult(
+        "SELECT /*+ repartition */ * FROM t ORDER BY c1, c2, c3")
+      assert(plan.isInstanceOf[SortExec])
+      assert(find(adaptivePlan)(_.isInstanceOf[DriverSortExec]).isDefined)
     }
   }
 }
