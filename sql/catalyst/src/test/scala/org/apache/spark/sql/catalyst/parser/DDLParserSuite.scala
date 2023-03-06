@@ -1464,6 +1464,19 @@ class DDLParserSuite extends AnalysisTest {
         fragment = sql8,
         start = 0,
         stop = 52))
+
+    val sql9 = "ALTER TABLE table_name REPLACE COLUMNS (a STRING COMMENT 'x' COMMENT 'y')"
+    checkError(
+      exception = parseException(sql9),
+      errorClass = "ALTER_TABLE_COLUMN_OPTION_DUPLICATE",
+      parameters = Map(
+        "type" -> "REPLACE",
+        "columnName" -> "a",
+        "optionName" -> "COMMENT"),
+      context = ExpectedContext(
+        fragment = sql9,
+        start = 0,
+        stop = 72))
   }
 
   test("alter view: rename view") {
@@ -2760,6 +2773,76 @@ class DDLParserSuite extends AnalysisTest {
         "CREATE TABLE my_tab(a INT, b INT GENERATED ALWAYS AS a + 1) USING PARQUET"),
       errorClass = "PARSE_SYNTAX_ERROR",
       parameters = Map("error" -> "'a'", "hint" -> ": missing '('")
+    )
+  }
+
+  test("SPARK-42681: Relax ordering constraint for ALTER TABLE ADD COLUMN options") {
+    // Positive test cases to verify that column definition options could be applied in any order.
+    val expectedPlan = AddColumns(
+      UnresolvedTable(Seq("my_tab"), "ALTER TABLE ... ADD COLUMN", None),
+      Seq(
+        QualifiedColType(
+          path = None,
+          colName = "x",
+          dataType = StringType,
+          nullable = false,
+          comment = Some("a"),
+          position = Some(UnresolvedFieldPosition(first())),
+          default = Some("'abc'")
+        )
+      )
+    )
+    Seq("NOT NULL", "COMMENT \"a\"", "FIRST", "DEFAULT 'abc'").permutations
+      .map(_.mkString(" "))
+      .foreach { element =>
+        parseCompare(s"ALTER TABLE my_tab ADD COLUMN x STRING $element", expectedPlan)
+      }
+
+    // These are negative test cases exercising error cases.
+    checkError(
+      exception = intercept[ParseException](
+        parsePlan("ALTER TABLE my_tab ADD COLUMN b STRING NOT NULL DEFAULT \"abc\" NOT NULL")
+      ),
+      errorClass = "ALTER_TABLE_COLUMN_OPTION_DUPLICATE",
+      parameters = Map("type" -> "ADD", "columnName" -> "b", "optionName" -> "NOT NULL"),
+      context = ExpectedContext(
+        fragment = "b STRING NOT NULL DEFAULT \"abc\" NOT NULL",
+        start = 30,
+        stop = 69
+      )
+    )
+    checkError(
+      exception = intercept[ParseException](
+        parsePlan("ALTER TABLE my_tab ADD COLUMN b STRING DEFAULT \"123\" NOT NULL DEFAULT \"abc\"")
+      ),
+      errorClass = "ALTER_TABLE_COLUMN_OPTION_DUPLICATE",
+      parameters = Map("type" -> "ADD", "columnName" -> "b", "optionName" -> "DEFAULT"),
+      context = ExpectedContext(
+        fragment = "b STRING DEFAULT \"123\" NOT NULL DEFAULT \"abc\"",
+        start = 30,
+        stop = 74
+      )
+    )
+    checkError(
+      exception = intercept[ParseException](
+        parsePlan("ALTER TABLE my_tab ADD COLUMN b STRING COMMENT \"abc\" NOT NULL COMMENT \"abc\"")
+      ),
+      errorClass = "ALTER_TABLE_COLUMN_OPTION_DUPLICATE",
+      parameters = Map("type" -> "ADD", "columnName" -> "b", "optionName" -> "COMMENT"),
+      context = ExpectedContext(
+        fragment = "b STRING COMMENT \"abc\" NOT NULL COMMENT \"abc\"",
+        start = 30,
+        stop = 74
+      )
+    )
+    checkError(
+      exception = intercept[ParseException](
+        parsePlan("ALTER TABLE my_tab ADD COLUMN b STRING FIRST COMMENT \"abc\" AFTER y")
+      ),
+      errorClass = "ALTER_TABLE_COLUMN_OPTION_DUPLICATE",
+      parameters = Map("type" -> "ADD", "columnName" -> "b", "optionName" -> "FIRST|AFTER"),
+      context =
+        ExpectedContext(fragment = "b STRING FIRST COMMENT \"abc\" AFTER y", start = 30, stop = 65)
     )
   }
 }

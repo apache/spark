@@ -1,4 +1,10 @@
 {
+  "ALTER_TABLE_COLUMN_OPTION_DUPLICATE" : {
+    "message" : [
+      "ALTER TABLE <type> column <columnName> specifies option \"<optionName>\" more than once, which is invalid."
+    ],
+    "sqlState" : "42710"
+  },
   "AMBIGUOUS_COLUMN_OR_FIELD" : {
     "message" : [
       "Column or field <name> is ambiguous and has <n> matches."
