@@ -535,6 +535,18 @@ class Dataset[T] private[sql] (
   }
 
   /**
+   * Returns a [[DataFrameNaFunctions]] for working with missing data.
+   * {{{
+   *   // Dropping rows containing any null values.
+   *   ds.na.drop()
+   * }}}
+   *
+   * @group untypedrel
+   * @since 3.4.0
+   */
+  def na: DataFrameNaFunctions = new DataFrameNaFunctions(sparkSession, plan.getRoot)
+
+  /**
    * Returns a [[DataFrameStatFunctions]] for working statistic functions support.
    * {{{
    *   // Finding frequent items in column with name 'a'.
