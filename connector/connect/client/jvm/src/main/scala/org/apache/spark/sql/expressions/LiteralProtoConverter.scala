@@ -58,7 +58,7 @@ object LiteralProtoConverter {
 
     def arrayBuilder(array: Array[_]) = {
       val ab = builder.getArrayBuilder
-        .setElementType(toProtoDataType(array.getClass.getComponentType))
+        .setElementType(toConnectProtoType(toDataType(array.getClass.getComponentType)))
       array.foreach(x => ab.addElement(toLiteralProto(x)))
       ab
     }
@@ -105,10 +105,6 @@ object LiteralProtoConverter {
    */
   def toLiteralProto(literal: Any): proto.Expression.Literal =
     toLiteralProtoBuilder(literal).build()
-
-  private def toProtoDataType(cls: Class[_]): proto.DataType = {
-    toConnectProtoType(toDataType(cls))
-  }
 
   private def toDataType(clz: Class[_]): DataType = clz match {
     // primitive types
