@@ -104,16 +104,6 @@ class UDFParityTests(BaseUDFTestsMixin, ReusedConnectTestCase):
     def test_udf_registration_return_type_none(self):
         super().test_udf_registration_return_type_none()
 
-    # TODO(SPARK-42210): implement `spark.udf`
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_non_existed_udaf(self):
-        super().test_non_existed_udaf()
-
-    # TODO(SPARK-42210): implement `spark.udf`
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_register_java_udaf(self):
-        super().test_register_java_udaf()
-
     def test_non_existed_udf(self):
         spark = self.spark
         self.assertRaisesRegex(
