@@ -1589,7 +1589,11 @@ class SparkConnectPlanner(val session: SparkSession) {
           case other => throw InvalidPlanInput(s"Invalid return type $other")
         }
       } else null
-    session.udf.registerJava(fun.getFunctionName, udf.getClassName, dataType)
+    if (udf.getAggregate) {
+      session.udf.registerJavaUDAF(fun.getFunctionName, udf.getClassName)
+    } else {
+      session.udf.registerJava(fun.getFunctionName, udf.getClassName, dataType)
+    }
   }
 
   private def handleCommandPlugin(extension: ProtoAny): Unit = {
