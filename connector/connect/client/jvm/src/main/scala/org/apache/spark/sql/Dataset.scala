@@ -2741,8 +2741,23 @@ class Dataset[T] private[sql] (
     throw new UnsupportedOperationException("localCheckpoint is not implemented.")
   }
 
+  /**
+   * Returns `true` when the logical query plans inside both [[Dataset]]s are equal and therefore
+   * return same results.
+   *
+   * @note
+   *   The equality comparison here is simplified by tolerating the cosmetic differences such as
+   *   attribute names.
+   * @note
+   *   This API can compare both [[Dataset]]s but can still return `false` on the [[Dataset]] that
+   *   return the same results, for instance, from different plans. Such false negative semantic
+   *   can be useful when caching as an example. This comparison may not be fast because it will
+   *   execute a RPC call.
+   * @since 3.4.0
+   */
+  @DeveloperApi
   def sameSemantics(other: Dataset[T]): Boolean = {
-    throw new UnsupportedOperationException("sameSemantics is not implemented.")
+    sparkSession.sameSemantics(this.plan, other.plan)
   }
 
   def semanticHash(): Int = {
