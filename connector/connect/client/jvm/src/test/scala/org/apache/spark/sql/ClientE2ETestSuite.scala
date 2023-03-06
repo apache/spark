@@ -501,14 +501,19 @@ class ClientE2ETestSuite extends RemoteSparkSession {
   }
 
   test("test temp view") {
-    spark.range(100).createTempView("test1")
-    assert(spark.sql("SELECT * FROM test1").count() == 100)
-    spark.range(1000).createOrReplaceTempView("test1")
-    assert(spark.sql("SELECT * FROM test1").count() == 1000)
-    spark.range(100).createGlobalTempView("view1")
-    assert(spark.sql("SELECT * FROM global_temp.view1").count() == 100)
-    spark.range(1000).createOrReplaceGlobalTempView("view1")
-    assert(spark.sql("SELECT * FROM global_temp.view1").count() == 1000)
+    try {
+      spark.range(100).createTempView("test1")
+      assert(spark.sql("SELECT * FROM test1").count() == 100)
+      spark.range(1000).createOrReplaceTempView("test1")
+      assert(spark.sql("SELECT * FROM test1").count() == 1000)
+      spark.range(100).createGlobalTempView("view1")
+      assert(spark.sql("SELECT * FROM global_temp.view1").count() == 100)
+      spark.range(1000).createOrReplaceGlobalTempView("view1")
+      assert(spark.sql("SELECT * FROM global_temp.view1").count() == 1000)
+    } finally {
+      spark.sql("DROP VIEW IF EXISTS test1")
+      spark.sql("DROP VIEW IF EXISTS global_temp.view1")
+    }
   }
 
   test("version") {
