@@ -320,6 +320,9 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       ResolveRandomSeed ::
       ResolveBinaryArithmetic ::
       ResolveUnion ::
+      // row-level command assignments must be aligned after default value resolution
+      // but before rewriting row-level commands into executable plans
+      AlignRowLevelCommandAssignments ::
       RewriteDeleteFromTable ::
       typeCoercionRules ++
       Seq(
@@ -3338,9 +3341,6 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         } else {
           v2Write
         }
-
-      case u: UpdateTable if !u.skipSchemaResolution && u.resolved =>
-        resolveAssignments(u)
 
       case m: MergeIntoTable if !m.skipSchemaResolution && m.resolved =>
         resolveAssignments(m)

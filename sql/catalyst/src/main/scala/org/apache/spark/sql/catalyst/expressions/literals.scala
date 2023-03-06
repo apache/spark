@@ -258,6 +258,16 @@ object NonNullLiteral {
 }
 
 /**
+ * Extractor for retrieving Boolean literals.
+ */
+object BooleanLiteral {
+  def unapply(a: Any): Option[Boolean] = a match {
+    case Literal(a: Boolean, BooleanType) => Some(a)
+    case _ => None
+  }
+}
+
+/**
  * Extractor for retrieving Float literals.
  */
 object FloatLiteral {
@@ -283,6 +293,16 @@ object DoubleLiteral {
 object IntegerLiteral {
   def unapply(a: Any): Option[Int] = a match {
     case Literal(a: Int, IntegerType) => Some(a)
+    case _ => None
+  }
+}
+
+/**
+ * Extractor for retrieving Long literals.
+ */
+object LongLiteral {
+  def unapply(a: Any): Option[Long] = a match {
+    case Literal(a: Long, LongType) => Some(a)
     case _ => None
   }
 }

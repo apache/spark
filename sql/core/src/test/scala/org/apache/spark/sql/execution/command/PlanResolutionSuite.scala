@@ -1151,10 +1151,13 @@ class PlanResolutionSuite extends AnalysisTest {
       parsed9 match {
         case UpdateTable(
         _,
-        Seq(Assignment(i: AttributeReference,
-          cast @ Cast(Literal(null, _), StringType, _, EvalMode.ANSI))),
+        Seq(
+          Assignment(
+            i: AttributeReference, cast @ Cast(Literal(null, _), StringType, _, EvalMode.ANSI)),
+          Assignment(e: AttributeReference, eValue: AttributeReference)),
         None) if cast.getTagValue(Cast.BY_TABLE_INSERTION).isDefined =>
           assert(i.name == "i")
+          assert(e.name == "e" && e == eValue)
 
         case _ => fail("Expect UpdateTable, but got:\n" + parsed9.treeString)
       }
