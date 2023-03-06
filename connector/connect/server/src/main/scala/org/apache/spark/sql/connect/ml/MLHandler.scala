@@ -1,0 +1,133 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package org.apache.spark.sql.connect.ml
+
+import org.apache.spark.connect.proto
+import org.apache.spark.ml.{Estimator, Model}
+import org.apache.spark.ml.param.ParamMap
+import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.connect.service.SessionHolder
+
+object MLHandler {
+
+  def handleMlCommand(
+           mlCommand: proto.MlCommand,
+           sessionHolder: SessionHolder
+         ): proto.MlCommandResponse = {
+    mlCommand.getMlCommandTypeCase match {
+      case proto.MlCommand.MlCommandTypeCase.FIT =>
+        val fitCommandProto = mlCommand.getFit
+        val estimatorProto = fitCommandProto.getEstimator
+        assert(estimatorProto.getType == proto.Stage.StageType.ESTIMATOR)
+
+        val algoName = fitCommandProto.getEstimator.getName
+        val algo = AlgorithmRegistry.get(algoName)
+
+        val estimator = algo.initiateEstimator(estimatorProto.getUid)
+        MLUtils.setInstanceParams(estimator, estimatorProto.getParams)
+        val dataset = MLUtils.parseRelationProto(fitCommandProto.getDataset, sessionHolder)
+        val model = estimator.fit(dataset).asInstanceOf[Model[_]]
+        val refId = sessionHolder.mlCache.modelCache.register(model, algo)
+
+        proto.MlCommandResponse.newBuilder().setModelInfo(
+          proto.MlCommandResponse.ModelInfo.newBuilder
+            .setModelRefId(refId)
+            .setModelUid(model.uid)
+        ).build()
+
+      case proto.MlCommand.MlCommandTypeCase.GET_MODEL_ATTR =>
+        val getModelAttrProto = mlCommand.getGetModelAttr
+        val (model, algo) = sessionHolder.mlCache.modelCache.get(
+          getModelAttrProto.getModelRefId
+        )
+        algo.getModelAttr(model, getModelAttrProto.getName).left.get
+
+      case proto.MlCommand.MlCommandTypeCase.GET_MODEL_SUMMARY_ATTR =>
+        val getModelSummaryAttrProto = mlCommand.getGetModelSummaryAttr
+        val (model, algo) = sessionHolder.mlCache.modelCache.get(
+          getModelSummaryAttrProto.getModelRefId
+        )
+        // Create a copied model to avoid concurrently modify model params.
+        val copiedModel = model.copy(ParamMap.empty).asInstanceOf[Model[_]]
+        MLUtils.setInstanceParams(copiedModel, getModelSummaryAttrProto.getParams)
+
+        val datasetOpt = if (getModelSummaryAttrProto.hasEvaluationDataset) {
+          val evalDF = MLUtils.parseRelationProto(
+            getModelSummaryAttrProto.getEvaluationDataset,
+            sessionHolder
+          )
+          Some(evalDF)
+        } else None
+
+        algo.getModelSummaryAttr(
+          copiedModel,
+          getModelSummaryAttrProto.getName,
+          datasetOpt
+        ).left.get
+    }
+  }
+
+  def transformMLRelation(
+                           mlRelationProto: proto.MlRelation,
+                           sessionHolder: SessionHolder): DataFrame = {
+    mlRelationProto.getMlRelationTypeCase match {
+      case proto.MlRelation.MlRelationTypeCase.MODEL_TRANSFORM =>
+        val modelTransformRelationProto = mlRelationProto.getModelTransform
+        val (model, _) = sessionHolder.mlCache.modelCache.get(
+          modelTransformRelationProto.getModelRefId
+        )
+        // Create a copied model to avoid concurrently modify model params.
+        val copiedModel = model.copy(ParamMap.empty).asInstanceOf[Model[_]]
+        MLUtils.setInstanceParams(copiedModel, modelTransformRelationProto.getParams)
+        val inputDF = MLUtils.parseRelationProto(
+          modelTransformRelationProto.getInput,
+          sessionHolder
+        )
+        copiedModel.transform(inputDF)
+
+      case proto.MlRelation.MlRelationTypeCase.MODEL_ATTR =>
+        val modelAttrProto = mlRelationProto.getModelAttr
+        val (model, algo) = sessionHolder.mlCache.modelCache.get(
+          modelAttrProto.getModelRefId
+        )
+        algo.getModelAttr(model, modelAttrProto.getName).right.get
+
+      case proto.MlRelation.MlRelationTypeCase.MODEL_SUMMARY_ATTR =>
+        val modelSummaryAttr = mlRelationProto.getModelSummaryAttr
+        val (model, algo) = sessionHolder.mlCache.modelCache.get(
+          modelSummaryAttr.getModelRefId
+        )
+        // Create a copied model to avoid concurrently modify model params.
+        val copiedModel = model.copy(ParamMap.empty).asInstanceOf[Model[_]]
+        MLUtils.setInstanceParams(copiedModel, modelSummaryAttr.getParams)
+
+        val datasetOpt = if (modelSummaryAttr.hasEvaluationDataset) {
+          val evalDF = MLUtils.parseRelationProto(
+            modelSummaryAttr.getEvaluationDataset,
+            sessionHolder
+          )
+          Some(evalDF)
+        } else None
+        algo.getModelSummaryAttr(
+          copiedModel,
+          modelSummaryAttr.getName,
+          datasetOpt
+        ).right.get
+    }
+  }
+}

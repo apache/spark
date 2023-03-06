@@ -37,6 +37,7 @@ message Stage {
   string name = 1;
   Params params = 2;
   string uid = 3;
+  StageType type = 4;
   enum StageType {
       ESTIMATOR = 0;
       TRANSFORMER = 1;
@@ -50,19 +51,20 @@ message Evaluator {
 }
 
 message ModelAttr {
-  string model_ref_id = 1;
+  int64 model_ref_id = 1;
   string name = 2;
 }
 
 message ModelSummaryAttr {
-  string model_ref_id = 1;
+  int64 model_ref_id = 1;
   string name = 2;
+  Params params = 3;
 
   // Evaluation dataset that it uses to computes
   // the summary attribute
   // If not set, get attributes from
   // model.summary (i.e. the summary on training dataset)
-  optional Relation evaluation_dataset = 3;
+  optional Relation evaluation_dataset = 4;
 }
 
 message MlCommand {
@@ -77,6 +79,7 @@ message MlCommand {
 
   message Fit {
     Stage estimator = 1;
+    Relation dataset = 2;
   }
 
   message Evaluate {
@@ -89,7 +92,7 @@ message MlCommand {
   }
 
   message SaveModel {
-    string model_ref_id = 1;
+    int64 model_ref_id = 1;
     string path = 2; // saving path
     bool overwrite = 3;
     map<string, string> options = 4; // saving options
@@ -105,7 +108,7 @@ message MlCommandResponse {
     Matrix matrix = 4;
   }
   message ModelInfo {
-    string model_ref_id = 1;
+    int64 model_ref_id = 1;
     string model_uid = 2;
   }
 }
@@ -120,7 +123,7 @@ message MlRelation {
   }
   message ModelTransform {
     Relation input = 1;
-    string model_ref_id = 2;
+    int64 model_ref_id = 2;
     Params params = 3;
   }
   message FeatureTransform {
@@ -135,12 +138,12 @@ message Vector {
     Sparse sparse = 2;
   }
   message Dense {
-    bytes value_array_bytes = 1;
+    repeated double values = 1;
   }
   message Sparse {
     int32 size = 1;
-    repeated double indices_array = 2;
-    repeated double value_array = 3;
+    repeated double indices = 2;
+    repeated double values = 3;
   }
 }
 
@@ -152,14 +155,14 @@ message Matrix {
   message Dense {
     int32 num_rows = 1;
     int32 num_cols = 2;
-    repeated double value_array = 3;
+    repeated double values = 3;
   }
   message Sparse {
     int32 num_rows = 1;
     int32 num_cols = 2;
-    repeated double colptr_array = 3;
-    repeated double row_indices_array = 4;
-    repeated double value_array = 5;
+    repeated double colptrs = 3;
+    repeated double row_indices = 4;
+    repeated double values = 5;
     bool is_transposed = 6;
   }
 }

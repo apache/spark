@@ -797,6 +797,10 @@ trait Params extends Identifiable with Serializable {
     this
   }
 
+  private[spark] def _setDefault(paramPairs: ParamPair[_]*): this.type = {
+    setDefault(paramPairs: _*)
+  }
+
   /**
    * Gets the default value of a parameter.
    */
