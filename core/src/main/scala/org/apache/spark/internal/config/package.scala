@@ -2476,7 +2476,7 @@ package object config {
         " a RDD cache block can be used only when it's marked as visible. And a RDD block will be" +
         " marked as visible only when one of the tasks generating the cache block finished" +
         " successfully. This is relevant in context of consistent accumulator status.")
-      .version("3.4.0")
+      .version("3.5.0")
       .booleanConf
       .createWithDefault(false)
 }
