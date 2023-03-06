@@ -58,7 +58,7 @@ object LiteralProtoConverter {
 
     def arrayBuilder(array: Array[_]) = {
       val ab = builder.getArrayBuilder
-        .setElementType(componentTypeToProto(array.getClass.getComponentType))
+        .setElementType(toProtoDataType(array.getClass.getComponentType))
       array.foreach(x => ab.addElement(toLiteralProto(x)))
       ab
     }
@@ -106,51 +106,43 @@ object LiteralProtoConverter {
   def toLiteralProto(literal: Any): proto.Expression.Literal =
     toLiteralProtoBuilder(literal).build()
 
-  private def componentTypeToProto(clz: Class[_]): proto.DataType = clz match {
+  private def toProtoDataType(cls: Class[_]): proto.DataType = {
+    toConnectProtoType(toDataType(cls))
+  }
+
+  private def toDataType(clz: Class[_]): DataType = clz match {
     // primitive types
-    case JShort.TYPE => toConnectProtoType(ShortType)
-    case JInteger.TYPE => toConnectProtoType(IntegerType)
-    case JLong.TYPE => toConnectProtoType(LongType)
-    case JDouble.TYPE => toConnectProtoType(DoubleType)
-    case JByte.TYPE => toConnectProtoType(ByteType)
-    case JFloat.TYPE => toConnectProtoType(FloatType)
-    case JBoolean.TYPE => toConnectProtoType(BooleanType)
-    case JChar.TYPE => toConnectProtoType(StringType)
+    case JShort.TYPE => ShortType
+    case JInteger.TYPE => IntegerType
+    case JLong.TYPE => LongType
+    case JDouble.TYPE => DoubleType
+    case JByte.TYPE => ByteType
+    case JFloat.TYPE => FloatType
+    case JBoolean.TYPE => BooleanType
+    case JChar.TYPE => StringType
 
     // java classes
-    case _ if clz == classOf[LocalDate] || clz == classOf[Date] =>
-      toConnectProtoType(DateType)
-    case _ if clz == classOf[Instant] || clz == classOf[Timestamp] =>
-      toConnectProtoType(TimestampType)
-    case _ if clz == classOf[LocalDateTime] => toConnectProtoType(TimestampNTZType)
-    case _ if clz == classOf[Duration] => toConnectProtoType(DayTimeIntervalType.DEFAULT)
-    case _ if clz == classOf[Period] => toConnectProtoType(YearMonthIntervalType.DEFAULT)
-    case _ if clz == classOf[JBigDecimal] => toConnectProtoType(DecimalType.SYSTEM_DEFAULT)
-    case _ if clz == classOf[Array[Byte]] => toConnectProtoType(BinaryType)
-    case _ if clz == classOf[Array[Char]] => toConnectProtoType(StringType)
-    case _ if clz == classOf[JShort] => toConnectProtoType(ShortType)
-    case _ if clz == classOf[JInteger] => toConnectProtoType(IntegerType)
-    case _ if clz == classOf[JLong] => toConnectProtoType(LongType)
-    case _ if clz == classOf[JDouble] => toConnectProtoType(DoubleType)
-    case _ if clz == classOf[JByte] => toConnectProtoType(ByteType)
-    case _ if clz == classOf[JFloat] => toConnectProtoType(FloatType)
-    case _ if clz == classOf[JBoolean] => toConnectProtoType(BooleanType)
+    case _ if clz == classOf[LocalDate] || clz == classOf[Date] => DateType
+    case _ if clz == classOf[Instant] || clz == classOf[Timestamp] => TimestampType
+    case _ if clz == classOf[LocalDateTime] => TimestampNTZType
+    case _ if clz == classOf[Duration] => DayTimeIntervalType.DEFAULT
+    case _ if clz == classOf[Period] => YearMonthIntervalType.DEFAULT
+    case _ if clz == classOf[JBigDecimal] => DecimalType.SYSTEM_DEFAULT
+    case _ if clz == classOf[Array[Byte]] => BinaryType
+    case _ if clz == classOf[Array[Char]] => StringType
+    case _ if clz == classOf[JShort] => ShortType
+    case _ if clz == classOf[JInteger] => IntegerType
+    case _ if clz == classOf[JLong] => LongType
+    case _ if clz == classOf[JDouble] => DoubleType
+    case _ if clz == classOf[JByte] => ByteType
+    case _ if clz == classOf[JFloat] => FloatType
+    case _ if clz == classOf[JBoolean] => BooleanType
 
     // other scala classes
-    case _ if clz == classOf[String] => toConnectProtoType(StringType)
-    case _ if clz == classOf[BigInt] || clz == classOf[BigDecimal] =>
-      toConnectProtoType(DecimalType.SYSTEM_DEFAULT)
-    case _ if clz == classOf[CalendarInterval] => toConnectProtoType(CalendarIntervalType)
-    case _ if clz.isArray =>
-      proto.DataType
-        .newBuilder()
-        .setArray(
-          proto.DataType.Array
-            .newBuilder()
-            .setElementType(componentTypeToProto(clz.getComponentType))
-            .setContainsNull(true)
-            .build())
-        .build()
+    case _ if clz == classOf[String] => StringType
+    case _ if clz == classOf[BigInt] || clz == classOf[BigDecimal] => DecimalType.SYSTEM_DEFAULT
+    case _ if clz == classOf[CalendarInterval] => CalendarIntervalType
+    case _ if clz.isArray => ArrayType(toDataType(clz.getComponentType))
     case _ =>
       throw new UnsupportedOperationException(s"Unsupported component type $clz in arrays.")
   }
