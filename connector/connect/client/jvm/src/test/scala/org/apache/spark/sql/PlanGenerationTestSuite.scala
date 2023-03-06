@@ -2058,4 +2058,16 @@ class PlanGenerationTestSuite
   test("sampleBy") {
     simple.stat.sampleBy("id", Map(0 -> 0.1, 1 -> 0.2), 0L)
   }
+
+  test("drop") {
+    simple.na.drop(5, Seq("id", "a"))
+  }
+
+  test("fill") {
+    simple.na.fill(8L, Seq("id"))
+  }
+
+  test("replace") {
+    simple.na.replace[Long]("id", Map(1L -> 8L))
+  }
 }
