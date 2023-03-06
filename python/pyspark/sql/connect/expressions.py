@@ -686,10 +686,6 @@ class CastExpression(Expression):
 
 
 class UnresolvedNamedLambdaVariable(Expression):
-
-    _lock: Lock = Lock()
-    _nextVarNameId: int = 0
-
     def __init__(
         self,
         name_parts: Sequence[str],
@@ -711,20 +707,6 @@ class UnresolvedNamedLambdaVariable(Expression):
 
     def __repr__(self) -> str:
         return f"(UnresolvedNamedLambdaVariable({', '.join(self._name_parts)})"
-
-    @staticmethod
-    def fresh_var_name(name: str) -> str:
-        assert isinstance(name, str) and str != ""
-
-        _id: Optional[int] = None
-
-        with UnresolvedNamedLambdaVariable._lock:
-            _id = UnresolvedNamedLambdaVariable._nextVarNameId
-            UnresolvedNamedLambdaVariable._nextVarNameId += 1
-
-        assert _id is not None
-
-        return f"{name}_{_id}"
 
 
 class LambdaFunction(Expression):

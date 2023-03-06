@@ -160,10 +160,7 @@ def _create_lambda(f: Callable) -> LambdaFunction:
     parameters = _get_lambda_parameters(f)
 
     arg_names = ["x", "y", "z"][: len(parameters)]
-    arg_exprs = [
-        UnresolvedNamedLambdaVariable([UnresolvedNamedLambdaVariable.fresh_var_name(arg_name)])
-        for arg_name in arg_names
-    ]
+    arg_exprs = [UnresolvedNamedLambdaVariable([arg_name]) for arg_name in arg_names]
     arg_cols = [Column(arg_expr) for arg_expr in arg_exprs]
 
     result = f(*arg_cols)
