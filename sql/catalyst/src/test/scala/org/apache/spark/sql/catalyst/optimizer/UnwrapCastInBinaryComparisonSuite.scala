@@ -370,41 +370,59 @@ class UnwrapCastInBinaryComparisonSuite extends PlanTest with ExpressionEvalHelp
     assertEquivalent(castInt(f4) < t, trueIfNotNull(f4))
   }
 
-  test("SPARK-42597: Support timestamp type") {
-    val tsRelation = LocalRelation($"a".timestamp)
-    val date = Date.valueOf("2023-02-26")
+  test("SPARK-42597: Support unwrap date to timestamp type") {
+    val tsRelation = LocalRelation($"a".timestamp, $"b".timestampNTZ)
+    val dateLit = Literal.create(Date.valueOf("2023-01-01"), DateType)
+    val nullLit = Literal.create(null, DateType)
 
-    def assertTimestampEquivalent(e1: Expression, e2: Expression): Unit = {
+    def assertUnwrapDateToTimestamp(e1: Expression, e2: Expression): Unit = {
       val plan = tsRelation.where(e1).analyze
       val actual = Optimize.execute(plan)
       val expected = tsRelation.where(e2).analyze
       comparePlans(actual, expected)
     }
 
-    assertTimestampEquivalent(
-      Cast($"a", DateType) > Literal(date),
-      $"a" >= Cast(DateAdd(Literal(date), Literal(1)), TimestampType))
+    assertUnwrapDateToTimestamp(
+      Cast($"a", DateType) > dateLit || Cast($"b", DateType) > dateLit,
+      $"a" >= Cast(DateAdd(dateLit, Literal(1)), TimestampType) ||
+        $"b" >= Cast(DateAdd(dateLit, Literal(1)), TimestampNTZType))
 
-    assertTimestampEquivalent(
-      Cast($"a", DateType) >= Literal(date),
-      $"a" >= Cast(date, TimestampType))
+    assertUnwrapDateToTimestamp(
+      Cast($"a", DateType) >= dateLit || Cast($"b", DateType) >= dateLit,
+      $"a" >= Cast(dateLit, TimestampType) || $"b" >= Cast(dateLit, TimestampNTZType))
 
-    assertTimestampEquivalent(
-      Cast($"a", DateType) < Literal(date),
-      $"a" < Cast(date, TimestampType))
+    assertUnwrapDateToTimestamp(
+      Cast($"a", DateType) < dateLit || Cast($"b", DateType) < dateLit,
+      $"a" < Cast(dateLit, TimestampType) || $"b" < Cast(dateLit, TimestampNTZType))
 
-    assertTimestampEquivalent(
-      Cast($"a", DateType) <= Literal(date),
-      $"a" < Cast(DateAdd(Literal(date), Literal(1)), TimestampType))
+    assertUnwrapDateToTimestamp(
+      Cast($"a", DateType) <= dateLit || Cast($"b", DateType) <= dateLit,
+      $"a" < Cast(DateAdd(dateLit, Literal(1)), TimestampType) ||
+        $"b" < Cast(DateAdd(dateLit, Literal(1)), TimestampNTZType))
 
-    assertTimestampEquivalent(
-      Cast($"a", DateType) === Literal(date),
-      $"a" >= Cast(date, TimestampType) &&
-        $"a" < Cast(DateAdd(Literal(date), Literal(1)), TimestampType))
+    assertUnwrapDateToTimestamp(
+      Cast($"a", DateType) === dateLit || Cast($"b", DateType) === dateLit,
+      ($"a" >= Cast(dateLit, TimestampType) &&
+        $"a" < Cast(DateAdd(dateLit, Literal(1)), TimestampType)) ||
+        ($"b" >= Cast(dateLit, TimestampNTZType) &&
+          $"b" < Cast(DateAdd(dateLit, Literal(1)), TimestampNTZType)))
 
-    assertTimestampEquivalent(
-      Literal(date) < Cast($"a", DateType),
-      $"a" >= Cast(DateAdd(Literal(date), Literal(1)), TimestampType))
+    assertUnwrapDateToTimestamp(
+      Cast($"a", DateType) <=> dateLit || Cast($"b", DateType) <=> dateLit,
+      ($"a" >= Cast(dateLit, TimestampType) &&
+        $"a" < Cast(DateAdd(dateLit, Literal(1)), TimestampType)) ||
+        ($"b" >= Cast(dateLit, TimestampNTZType) &&
+          $"b" < Cast(DateAdd(dateLit, Literal(1)), TimestampNTZType)))
+
+    assertUnwrapDateToTimestamp(
+      dateLit < Cast($"a", DateType) || dateLit < Cast($"b", DateType),
+      Cast(DateAdd(dateLit, Literal(1)), TimestampType) <= $"a" ||
+        Cast(DateAdd(dateLit, Literal(1)), TimestampNTZType) <= $"b")
+
+    // Null date literal should be handled by NullPropagation
+    assertUnwrapDateToTimestamp(
+      Cast($"a", DateType) > nullLit || Cast($"b", DateType) > nullLit,
+      Literal.create(null, BooleanType) || Literal.create(null, BooleanType))
   }
 
   private def castInt(e: Expression): Expression = Cast(e, IntegerType)

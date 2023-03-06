@@ -134,9 +134,10 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
       simplifyNumericComparison(be, fromExp, toType, value)
 
     case be @ BinaryComparison(
-      Cast(fromExp, _, timeZoneId, evalMode), date @ Literal(_, DateType))
-        if fromExp.dataType == TimestampType =>
-      simplifyDateComparison(be, fromExp, date, timeZoneId, evalMode)
+      Cast(fromExp, _, timeZoneId, evalMode), date @ Literal(value, DateType))
+        if (fromExp.dataType == TimestampType || fromExp.dataType == TimestampNTZType) &&
+          value != null =>
+      unwrapDateToTimestamp(be, fromExp, date, timeZoneId, evalMode)
 
     // As the analyzer makes sure that the list of In is already of the same data type, then the
     // rule can simply check the first literal in `in.list` can implicitly cast to `toType` or not,
@@ -303,27 +304,25 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
    * so some BinaryComparison needs to be changed,
    * such as CAST(ts AS date) > DATE '2023-01-01' ===> ts >= TIMESTAMP '2023-01-02 00:00:00'
    */
-  private def simplifyDateComparison(
+  private def unwrapDateToTimestamp(
       exp: BinaryComparison,
       fromExp: Expression,
       date: Literal,
       tz: Option[String],
       evalMode: EvalMode.Value): Expression = {
+    val dateAddOne = DateAdd(date, Literal(1, IntegerType))
     exp match {
       case _: GreaterThan =>
-        val dateAddOne = DateAdd(date, Literal(1, IntegerType))
-        GreaterThanOrEqual(fromExp, Cast(dateAddOne, TimestampType, tz, evalMode))
+        GreaterThanOrEqual(fromExp, Cast(dateAddOne, fromExp.dataType, tz, evalMode))
       case _: GreaterThanOrEqual =>
-        GreaterThanOrEqual(fromExp, Cast(date, TimestampType, tz, evalMode))
+        GreaterThanOrEqual(fromExp, Cast(date, fromExp.dataType, tz, evalMode))
       case _: LessThan =>
-        LessThan(fromExp, Cast(date, TimestampType, tz, evalMode))
+        LessThan(fromExp, Cast(date, fromExp.dataType, tz, evalMode))
       case _: LessThanOrEqual =>
-        val dateAddOne = DateAdd(date, Literal(1, IntegerType))
-        LessThan(fromExp, Cast(dateAddOne, TimestampType, tz, evalMode))
-      case _: EqualTo =>
-        val dateAddOne = DateAdd(date, Literal(1, IntegerType))
-        And(GreaterThanOrEqual(fromExp, Cast(date, TimestampType, tz, evalMode)),
-          LessThan(fromExp, Cast(dateAddOne, TimestampType, tz, evalMode)))
+        LessThan(fromExp, Cast(dateAddOne, fromExp.dataType, tz, evalMode))
+      case Equality(_, _) =>
+        And(GreaterThanOrEqual(fromExp, Cast(date, fromExp.dataType, tz, evalMode)),
+          LessThan(fromExp, Cast(dateAddOne, fromExp.dataType, tz, evalMode)))
       case _ => exp
     }
   }
@@ -396,7 +395,7 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
     case (IntegerType, FloatType) => false
     case (LongType, FloatType) => false
     case (LongType, DoubleType) => false
-    case (TimestampType, DateType) => true
+    case (TimestampType | TimestampNTZType, DateType) => true
     case _ if from.isInstanceOf[NumericType] => Cast.canUpCast(from, to)
     case _ => false
   }
