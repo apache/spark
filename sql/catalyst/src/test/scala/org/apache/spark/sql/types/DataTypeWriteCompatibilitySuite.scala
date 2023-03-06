@@ -342,7 +342,11 @@ abstract class DataTypeWriteCompatibilityBaseSuite extends SparkFunSuite {
       ),
       errorClass = "INCOMPATIBLE_DATA_TO_TABLE.UNEXPECTED_COLUMN_NAME",
       parameters = Map(
-        "expected" -> "`x`", "found" -> "`y`", "tableName" -> "``", "colPath" -> "`t`", "order" -> "0")
+        "expected" -> "`x`",
+        "found" -> "`y`",
+        "tableName" -> "``",
+        "colPath" -> "`t`",
+        "order" -> "0")
     )
   }
 
@@ -366,7 +370,11 @@ abstract class DataTypeWriteCompatibilityBaseSuite extends SparkFunSuite {
       ),
       errorClass = "INCOMPATIBLE_DATA_TO_TABLE.UNEXPECTED_COLUMN_NAME",
       parameters = Map(
-        "expected" -> "`y`", "found" -> "`z`", "tableName" -> "``", "colPath" -> "`t`", "order" -> "1")
+        "expected" -> "`y`",
+        "found" -> "`z`",
+        "tableName" -> "``",
+        "colPath" -> "`t`",
+        "order" -> "1")
     )
   }
 
