@@ -20,6 +20,7 @@ package org.apache.spark.sql
 import scala.collection.JavaConverters._
 
 import org.apache.spark.sql.connect.client.util.QueryTest
+import org.apache.spark.sql.types.{StringType, StructType}
 
 class DataFrameNaFunctionSuite extends QueryTest {
   private def createDF(): DataFrame = {
@@ -52,6 +53,17 @@ class DataFrameNaFunctionSuite extends QueryTest {
       "byte",
       "float",
       "double")
+  }
+
+  def createDFWithNestedColumns: DataFrame = {
+    val schema = new StructType()
+      .add(
+        "c1",
+        new StructType()
+          .add("c1-1", StringType)
+          .add("c1-2", StringType))
+    val data = Seq(Row(Row(null, "a2")), Row(Row("b1", "b2")), Row(null))
+    spark.createDataFrame(data.asJava, schema)
   }
 
   test("drop") {
@@ -269,6 +281,19 @@ class DataFrameNaFunctionSuite extends QueryTest {
       df.na.drop("any", Seq("*")).collect()
     }
     assert(ex.getMessage.contains("UNRESOLVED_COLUMN.WITH_SUGGESTION"))
+  }
+
+  test("fill with nested columns") {
+    val df = createDFWithNestedColumns
+    checkAnswer(df.na.fill("a1", Seq("c1.c1-1")), df)
+  }
+
+  test("drop with nested columns") {
+    val df = createDFWithNestedColumns
+
+    // Rows with the specified nested columns whose null values are dropped.
+    assert(df.count == 3)
+    checkAnswer(df.na.drop("any", Seq("c1.c1-1")), Seq(Row(Row("b1", "b2"))))
   }
 
   test("replace") {

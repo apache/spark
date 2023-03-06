@@ -90,6 +90,7 @@ class Relation(google.protobuf.message.Message):
     TO_SCHEMA_FIELD_NUMBER: builtins.int
     REPARTITION_BY_EXPRESSION_FIELD_NUMBER: builtins.int
     FRAME_MAP_FIELD_NUMBER: builtins.int
+    COLLECT_METRICS_FIELD_NUMBER: builtins.int
     FILL_NA_FIELD_NUMBER: builtins.int
     DROP_NA_FIELD_NUMBER: builtins.int
     REPLACE_FIELD_NUMBER: builtins.int
@@ -161,6 +162,8 @@ class Relation(google.protobuf.message.Message):
     @property
     def frame_map(self) -> global___FrameMap: ...
     @property
+    def collect_metrics(self) -> global___CollectMetrics: ...
+    @property
     def fill_na(self) -> global___NAFill:
         """NA functions"""
     @property
@@ -225,6 +228,7 @@ class Relation(google.protobuf.message.Message):
         to_schema: global___ToSchema | None = ...,
         repartition_by_expression: global___RepartitionByExpression | None = ...,
         frame_map: global___FrameMap | None = ...,
+        collect_metrics: global___CollectMetrics | None = ...,
         fill_na: global___NAFill | None = ...,
         drop_na: global___NADrop | None = ...,
         replace: global___NAReplace | None = ...,
@@ -249,6 +253,8 @@ class Relation(google.protobuf.message.Message):
             b"approx_quantile",
             "catalog",
             b"catalog",
+            "collect_metrics",
+            b"collect_metrics",
             "common",
             b"common",
             "corr",
@@ -340,6 +346,8 @@ class Relation(google.protobuf.message.Message):
             b"approx_quantile",
             "catalog",
             b"catalog",
+            "collect_metrics",
+            b"collect_metrics",
             "common",
             b"common",
             "corr",
@@ -452,6 +460,7 @@ class Relation(google.protobuf.message.Message):
         "to_schema",
         "repartition_by_expression",
         "frame_map",
+        "collect_metrics",
         "fill_na",
         "drop_na",
         "replace",
@@ -2702,3 +2711,43 @@ class FrameMap(google.protobuf.message.Message):
     ) -> None: ...
 
 global___FrameMap = FrameMap
+
+class CollectMetrics(google.protobuf.message.Message):
+    """Collect arbitrary (named) metrics from a dataset."""
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    INPUT_FIELD_NUMBER: builtins.int
+    NAME_FIELD_NUMBER: builtins.int
+    METRICS_FIELD_NUMBER: builtins.int
+    @property
+    def input(self) -> global___Relation:
+        """(Required) The input relation."""
+    name: builtins.str
+    """(Required) Name of the metrics."""
+    @property
+    def metrics(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+        pyspark.sql.connect.proto.expressions_pb2.Expression
+    ]:
+        """(Required) The metric sequence."""
+    def __init__(
+        self,
+        *,
+        input: global___Relation | None = ...,
+        name: builtins.str = ...,
+        metrics: collections.abc.Iterable[pyspark.sql.connect.proto.expressions_pb2.Expression]
+        | None = ...,
+    ) -> None: ...
+    def HasField(
+        self, field_name: typing_extensions.Literal["input", b"input"]
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "input", b"input", "metrics", b"metrics", "name", b"name"
+        ],
+    ) -> None: ...
+
+global___CollectMetrics = CollectMetrics

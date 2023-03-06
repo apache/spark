@@ -1,0 +1,17 @@
+{
+  "common": {
+    "planId": "1"
+  },
+  "freqItems": {
+    "input": {
+      "common": {
+        "planId": "0"
+      },
+      "localRelation": {
+        "schema": "struct\u003cid:bigint,a:int,b:double\u003e"
+      }
+    },
+    "cols": ["id", "a"],
+    "support": 0.1
+  }
+}

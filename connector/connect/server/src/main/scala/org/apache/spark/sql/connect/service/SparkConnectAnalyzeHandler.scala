@@ -140,6 +140,18 @@ private[connect] class SparkConnectAnalyzeHandler(
             .setParsed(DataTypeProtoConverter.toConnectProtoType(schema))
             .build())
 
+      case proto.AnalyzePlanRequest.AnalyzeCase.SAME_SEMANTICS =>
+        val target = Dataset.ofRows(
+          session,
+          planner.transformRelation(request.getSameSemantics.getTargetPlan.getRoot))
+        val other = Dataset.ofRows(
+          session,
+          planner.transformRelation(request.getSameSemantics.getOtherPlan.getRoot))
+        builder.setSameSemantics(
+          proto.AnalyzePlanResponse.SameSemantics
+            .newBuilder()
+            .setResult(target.sameSemantics(other)))
+
       case other => throw InvalidPlanInput(s"Unknown Analyze Method $other!")
     }
 

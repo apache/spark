@@ -109,6 +109,8 @@ object CheckConnectJvmClientCompatibility {
       IncludeByName("org.apache.spark.sql.ColumnName.*"),
       IncludeByName("org.apache.spark.sql.DataFrame.*"),
       IncludeByName("org.apache.spark.sql.DataFrameReader.*"),
+      IncludeByName("org.apache.spark.sql.DataFrameNaFunctions.*"),
+      IncludeByName("org.apache.spark.sql.DataFrameStatFunctions.*"),
       IncludeByName("org.apache.spark.sql.DataFrameWriter.*"),
       IncludeByName("org.apache.spark.sql.DataFrameWriterV2.*"),
       IncludeByName("org.apache.spark.sql.Dataset.*"),
@@ -133,6 +135,13 @@ object CheckConnectJvmClientCompatibility {
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.DataFrameReader.jdbc"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.DataFrameWriter.jdbc"),
 
+      // DataFrameNaFunctions
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.DataFrameNaFunctions.this"),
+
+      // DataFrameStatFunctions
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.DataFrameStatFunctions.bloomFilter"),
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.DataFrameStatFunctions.this"),
+
       // Dataset
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.ofRows"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.DATASET_ID_TAG"),
@@ -143,8 +152,6 @@ object CheckConnectJvmClientCompatibility {
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.queryExecution"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.encoder"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.sqlContext"),
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.na"),
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.stat"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.joinWith"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.select"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.selectUntyped"),
