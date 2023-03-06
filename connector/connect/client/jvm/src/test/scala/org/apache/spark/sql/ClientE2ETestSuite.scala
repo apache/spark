@@ -612,8 +612,8 @@ class ClientE2ETestSuite extends RemoteSparkSession {
   }
 
   test("SparkSession newSession") {
-    val oldId = spark.sql("SELECT 1").analyze.getClientId
-    val newId = spark.newSession().sql("SELECT 1").analyze.getClientId
+    val oldId = spark.sql("SELECT 1").analyze.getSessionId
+    val newId = spark.newSession().sql("SELECT 1").analyze.getSessionId
     assert(oldId != newId)
   }
 
