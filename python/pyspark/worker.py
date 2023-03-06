@@ -80,15 +80,6 @@ from pyspark.worker_util import (
 )
 
 
-def assign_cols_by_name(runner_conf):
-    return (
-        runner_conf.get(
-            "spark.sql.legacy.execution.pandas.groupedMap.assignColumnsByName", "true"
-        ).lower()
-        == "true"
-    )
-
-
 def report_times(outfile, boot, init, finish):
     write_int(SpecialLengths.TIMING_DATA, outfile)
     write_long(int(1000 * boot), outfile)
@@ -770,7 +761,10 @@ def read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index):
         raise ValueError("Unknown eval type: {}".format(eval_type))
 
 
-# Used by SQL_GROUPED_MAP_PANDAS_UDF and SQL_SCALAR_PANDAS_UDF and SQL_ARROW_BATCHED_UDF when
+# Used by SQL_GROUPED_MAP_PANDAS_UDF, SQL_GROUPED_MAP_ARROW_UDF,
+# SQL_COGROUPED_MAP_PANDAS_UDF, SQL_COGROUPED_MAP_ARROW_UDF,
+# SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE,
+# SQL_SCALAR_PANDAS_UDF and SQL_ARROW_BATCHED_UDF when
 # returning StructType
 def assign_cols_by_name(runner_conf):
     return (
@@ -1340,7 +1334,6 @@ def read_udfs(pickleSer, infile, eval_type):
             runner_conf.get("spark.sql.execution.pandas.convertToArrowArraySafely", "false").lower()
             == "true"
         )
-        # Used by SQL_GROUPED_MAP_PANDAS_UDF and SQL_SCALAR_PANDAS_UDF when returning StructType
         _assign_cols_by_name = assign_cols_by_name(runner_conf)
 
         if eval_type == PythonEvalType.SQL_COGROUPED_MAP_ARROW_UDF:
