@@ -115,7 +115,7 @@ class SparkSession private[sql] (
   private def createDataset[T](encoder: AgnosticEncoder[T], data: Iterator[T]): Dataset[T] = {
     newDataset(encoder) { builder =>
       val localRelationBuilder = builder.getLocalRelationBuilder
-        .setSchema(encoder.schema.catalogString)
+        .setSchema(encoder.schema.json)
       if (data.nonEmpty) {
         val timeZoneId = conf.get("spark.sql.session.timeZone")
         val arrowData = ConvertToArrow(encoder, data, timeZoneId, allocator)

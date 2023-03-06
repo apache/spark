@@ -373,6 +373,23 @@ class PlanMetrics:
         return self._metrics
 
 
+class PlanObservedMetrics:
+    def __init__(self, name: str, metrics: List[pb2.Expression.Literal]):
+        self._name = name
+        self._metrics = metrics
+
+    def __repr__(self) -> str:
+        return f"Plan observed({self._name}={self._metrics})"
+
+    @property
+    def name(self) -> str:
+        return self._name
+
+    @property
+    def metrics(self) -> List[pb2.Expression.Literal]:
+        return self._metrics
+
+
 class AnalyzeResult:
     def __init__(
         self,
@@ -561,6 +578,17 @@ class SparkConnectClient(object):
             for x in metrics.metrics
         ]
 
+    def _build_observed_metrics(
+        self, metrics: List["pb2.ExecutePlanResponse.ObservedMetrics"]
+    ) -> List[PlanObservedMetrics]:
+        return [
+            PlanObservedMetrics(
+                x.name,
+                [v for v in x.values],
+            )
+            for x in metrics
+        ]
+
     def to_table(self, plan: pb2.Plan) -> "pa.Table":
         """
         Return given plan as a PyArrow Table.
@@ -568,7 +596,7 @@ class SparkConnectClient(object):
         logger.info(f"Executing plan {self._proto_to_string(plan)}")
         req = self._execute_plan_request_with_metadata()
         req.plan.CopyFrom(plan)
-        table, _, _2 = self._execute_and_fetch(req)
+        table, _, _, _3 = self._execute_and_fetch(req)
         assert table is not None
         return table
 
@@ -579,7 +607,7 @@ class SparkConnectClient(object):
         logger.info(f"Executing plan {self._proto_to_string(plan)}")
         req = self._execute_plan_request_with_metadata()
         req.plan.CopyFrom(plan)
-        table, metrics, _ = self._execute_and_fetch(req)
+        table, metrics, observed_metrics, _ = self._execute_and_fetch(req)
         assert table is not None
         column_names = table.column_names
         table = table.rename_columns([f"col_{i}" for i in range(len(column_names))])
@@ -587,6 +615,8 @@ class SparkConnectClient(object):
         pdf.columns = column_names
         if len(metrics) > 0:
             pdf.attrs["metrics"] = metrics
+        if len(observed_metrics) > 0:
+            pdf.attrs["observed_metrics"] = observed_metrics
         return pdf
 
     def _proto_schema_to_pyspark_schema(self, schema: pb2.DataType) -> DataType:
@@ -654,7 +684,7 @@ class SparkConnectClient(object):
         if self._user_id:
             req.user_context.user_id = self._user_id
         req.plan.command.CopyFrom(command)
-        data, _, properties = self._execute_and_fetch(req)
+        data, _, _, properties = self._execute_and_fetch(req)
         if data is not None:
             return (data.to_pandas(), properties)
         else:
@@ -781,10 +811,11 @@ class SparkConnectClient(object):
 
     def _execute_and_fetch(
         self, req: pb2.ExecutePlanRequest
-    ) -> Tuple[Optional["pa.Table"], List[PlanMetrics], Dict[str, Any]]:
+    ) -> Tuple[Optional["pa.Table"], List[PlanMetrics], List[PlanObservedMetrics], Dict[str, Any]]:
         logger.info("ExecuteAndFetch")
 
         m: Optional[pb2.ExecutePlanResponse.Metrics] = None
+        om: List[pb2.ExecutePlanResponse.ObservedMetrics] = []
         batches: List[pa.RecordBatch] = []
         properties = {}
         try:
@@ -802,6 +833,9 @@ class SparkConnectClient(object):
                         if b.metrics is not None:
                             logger.debug("Received metric batch.")
                             m = b.metrics
+                        if b.observed_metrics is not None:
+                            logger.debug("Received observed metric batch.")
+                            om.extend(b.observed_metrics)
                         if b.HasField("sql_command_result"):
                             properties["sql_command_result"] = b.sql_command_result.relation
                         if b.HasField("arrow_batch"):
@@ -817,12 +851,13 @@ class SparkConnectClient(object):
         except grpc.RpcError as rpc_error:
             self._handle_error(rpc_error)
         metrics: List[PlanMetrics] = self._build_metrics(m) if m is not None else []
+        observed_metrics: List[PlanObservedMetrics] = self._build_observed_metrics(om)
 
         if len(batches) > 0:
             table = pa.Table.from_batches(batches=batches)
-            return table, metrics, properties
+            return table, metrics, observed_metrics, properties
         else:
-            return None, metrics, properties
+            return None, metrics, observed_metrics, properties
 
     def _config_request_with_metadata(self) -> pb2.ConfigRequest:
         req = pb2.ConfigRequest()

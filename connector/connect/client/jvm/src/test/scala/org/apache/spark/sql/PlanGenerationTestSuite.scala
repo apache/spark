@@ -1978,6 +1978,10 @@ class PlanGenerationTestSuite
     simple.groupBy(Column("id")).pivot("a").agg(functions.count(Column("b")))
   }
 
+  test("test broadcast") {
+    left.join(fn.broadcast(right), "id")
+  }
+
   test("function lit") {
     simple.select(
       fn.lit(fn.col("id")),
@@ -2078,5 +2082,17 @@ class PlanGenerationTestSuite
       .setCustomField("abc")
       .build()
     simple.select(Column(com.google.protobuf.Any.pack(extension)))
+  }
+
+  test("crosstab") {
+    simple.stat.crosstab("a", "b")
+  }
+
+  test("freqItems") {
+    simple.stat.freqItems(Array("id", "a"), 0.1)
+  }
+
+  test("sampleBy") {
+    simple.stat.sampleBy("id", Map(0 -> 0.1, 1 -> 0.2), 0L)
   }
 }
