@@ -133,6 +133,11 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
         if canImplicitlyCast(fromExp, toType, literalType) =>
       simplifyNumericComparison(be, fromExp, toType, value)
 
+    case be @ BinaryComparison(
+      Cast(fromExp, _, timeZoneId, evalMode), date @ Literal(value, DateType))
+        if fromExp.dataType == StringType && value != null =>
+      be.withNewChildren(Seq(fromExp, Cast(date, StringType, timeZoneId, evalMode)))
+
     // As the analyzer makes sure that the list of In is already of the same data type, then the
     // rule can simply check the first literal in `in.list` can implicitly cast to `toType` or not,
     // and note that:
@@ -350,7 +355,7 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
       literalType: DataType): Boolean = {
     toType.sameType(literalType) &&
       !fromExp.foldable &&
-      toType.isInstanceOf[NumericType] &&
+      (toType.isInstanceOf[NumericType] || toType.isInstanceOf[DateType]) &&
       canUnwrapCast(fromExp.dataType, toType)
   }
 
@@ -361,6 +366,7 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
     case (IntegerType, FloatType) => false
     case (LongType, FloatType) => false
     case (LongType, DoubleType) => false
+    case (StringType, DateType) => true
     case _ if from.isInstanceOf[NumericType] => Cast.canUpCast(from, to)
     case _ => false
   }

@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import java.sql.Date
+
 import scala.collection.immutable.HashSet
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
@@ -366,6 +368,35 @@ class UnwrapCastInBinaryComparisonSuite extends PlanTest with ExpressionEvalHelp
     assertEquivalent(castInt(f4) <=> t, false)
     assertEquivalent(castInt(f4) <= t, trueIfNotNull(f4))
     assertEquivalent(castInt(f4) < t, trueIfNotNull(f4))
+  }
+
+  test("SPARK-40610: Support unwrap date type to string type") {
+    val relation = LocalRelation($"a".string, $"b".string)
+    val dateLit = Literal.create(Date.valueOf("2023-01-01"), DateType)
+    val nullLit = Literal.create(null, DateType)
+
+    def assertUnwrapStringToDateType(e1: Expression, e2: Expression): Unit = {
+      val plan = relation.where(e1).analyze
+      val actual = Optimize.execute(plan)
+      val expected = relation.where(e2).analyze
+      comparePlans(actual, expected)
+    }
+
+    Seq(EqualTo, EqualNullSafe, GreaterThan, GreaterThanOrEqual, LessThan, LessThanOrEqual)
+      .foreach { binaryComparison =>
+        assertUnwrapStringToDateType(
+          binaryComparison(Cast($"a", DateType), dateLit),
+          binaryComparison($"a", Cast(dateLit, StringType)))
+      }
+
+    assertUnwrapStringToDateType(
+      dateLit =!= Cast($"a", DateType),
+      Cast(dateLit, StringType) =!= $"a")
+
+    // Null date literal should be handled by NullPropagation
+    assertUnwrapStringToDateType(
+      Cast($"a", DateType) > nullLit,
+      Literal.create(null, BooleanType))
   }
 
   private def castInt(e: Expression): Expression = Cast(e, IntegerType)
