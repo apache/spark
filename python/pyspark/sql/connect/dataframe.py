@@ -1610,8 +1610,15 @@ class DataFrame:
     def semanticHash(self, *args: Any, **kwargs: Any) -> None:
         raise NotImplementedError("semanticHash() is not implemented.")
 
-    def sameSemantics(self, *args: Any, **kwargs: Any) -> None:
-        raise NotImplementedError("sameSemantics() is not implemented.")
+    def sameSemantics(self, other: "DataFrame") -> bool:
+        assert self._plan is not None
+        assert other._plan is not None
+        return self._session.client.same_semantics(
+            plan=self._plan.to_proto(self._session.client),
+            other=other._plan.to_proto(other._session.client),
+        )
+
+    sameSemantics.__doc__ = PySparkDataFrame.sameSemantics.__doc__
 
     def writeTo(self, table: str) -> "DataFrameWriterV2":
         assert self._plan is not None

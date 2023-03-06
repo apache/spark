@@ -628,6 +628,12 @@ class ClientE2ETestSuite extends RemoteSparkSession {
     val result = spark.createDataFrame(data.asJava, schema).collect()
     assert(result === data)
   }
+
+  test("SameSemantics") {
+    val plan = spark.sql("select 1")
+    val otherPlan = spark.sql("select 1")
+    assert(plan.sameSemantics(otherPlan))
+  }
 }
 
 private[sql] case class MyType(id: Long, a: Double, b: Double)
