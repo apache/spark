@@ -31,7 +31,6 @@ import json
 import decimal
 import datetime
 import warnings
-from threading import Lock
 
 import numpy as np
 
