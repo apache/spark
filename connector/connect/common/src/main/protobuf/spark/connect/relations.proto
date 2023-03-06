@@ -23,6 +23,7 @@ import "google/protobuf/any.proto";
 import "spark/connect/expressions.proto";
 import "spark/connect/types.proto";
 import "spark/connect/catalog.proto";
+import "spark/connect/ml_common.proto";
 
 option java_multiple_files = true;
 option java_package = "org.apache.spark.connect.proto";
@@ -80,12 +81,49 @@ message Relation {
     // Catalog API (experimental / unstable)
     Catalog catalog = 200;
 
+    // ML relation
+    MlRelation ml_relation = 300;
+
     // This field is used to mark extensions to the protocol. When plugins generate arbitrary
     // relations they can add them here. During the planning the correct resolution is done.
     google.protobuf.Any extension = 998;
     Unknown unknown = 999;
   }
 }
+
+message MlRelation {
+  oneof ml_relation_type {
+    ModelTransform model_transform = 1;
+    FeatureTransform feature_transform = 2;
+    ModelAttr model_attr = 3;
+    ModelSummaryAttr model_summary_attr = 4;
+  }
+  message ModelTransform {
+    Relation input = 1;
+    int64 model_ref_id = 2;
+    Params params = 3;
+  }
+  message FeatureTransform {
+    Relation input = 1;
+    Stage transformer = 2;
+  }
+  message ModelAttr {
+    int64 model_ref_id = 1;
+    string name = 2;
+  }
+  message ModelSummaryAttr {
+    int64 model_ref_id = 1;
+    string name = 2;
+    Params params = 3;
+
+    // Evaluation dataset that it uses to computes
+    // the summary attribute
+    // If not set, get attributes from
+    // model.summary (i.e. the summary on training dataset)
+    optional Relation evaluation_dataset = 4;
+  }
+}
+
 
 // Used for testing purposes only.
 message Unknown {}

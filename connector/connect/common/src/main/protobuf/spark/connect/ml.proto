@@ -23,26 +23,11 @@ import "google/protobuf/any.proto";
 import "spark/connect/expressions.proto";
 import "spark/connect/types.proto";
 import "spark/connect/relations.proto";
+import "spark/connect/ml_common.proto";
 
 option java_multiple_files = true;
 option java_package = "org.apache.spark.connect.proto";
 
-
-message Params {
-  map<string, Expression.Literal> params = 1;
-  map<string, Expression.Literal> default_params = 2;
-}
-
-message Stage {
-  string name = 1;
-  Params params = 2;
-  string uid = 3;
-  StageType type = 4;
-  enum StageType {
-      ESTIMATOR = 0;
-      TRANSFORMER = 1;
-  }
-}
 
 message Evaluator {
   string name = 1;
@@ -50,28 +35,12 @@ message Evaluator {
   string uid = 3;
 }
 
-message ModelAttr {
-  int64 model_ref_id = 1;
-  string name = 2;
-}
-
-message ModelSummaryAttr {
-  int64 model_ref_id = 1;
-  string name = 2;
-  Params params = 3;
-
-  // Evaluation dataset that it uses to computes
-  // the summary attribute
-  // If not set, get attributes from
-  // model.summary (i.e. the summary on training dataset)
-  optional Relation evaluation_dataset = 4;
-}
 
 message MlCommand {
   oneof ml_command_type {
     Fit fit = 1;
-    ModelAttr get_model_attr = 2;
-    ModelSummaryAttr get_model_summary_attr = 3;
+    ModelAttr model_attr = 2;
+    ModelSummaryAttr model_summary_attr = 3;
     LoadModel load_model = 4;
     SaveModel save_model = 5;
     Evaluate evaluate = 6;
@@ -97,6 +66,23 @@ message MlCommand {
     bool overwrite = 3;
     map<string, string> options = 4; // saving options
   }
+
+  message ModelAttr {
+    int64 model_ref_id = 1;
+    string name = 2;
+  }
+
+  message ModelSummaryAttr {
+    int64 model_ref_id = 1;
+    string name = 2;
+    Params params = 3;
+
+    // Evaluation dataset that it uses to computes
+    // the summary attribute
+    // If not set, get attributes from
+    // model.summary (i.e. the summary on training dataset)
+    optional Relation evaluation_dataset = 4;
+  }
 }
 
 
@@ -113,24 +99,6 @@ message MlCommandResponse {
   }
 }
 
-
-message MlRelation {
-  oneof ml_relation_type {
-    ModelTransform model_transform = 1;
-    FeatureTransform feature_transform = 2;
-    ModelAttr model_attr = 3;
-    ModelSummaryAttr model_summary_attr = 4;
-  }
-  message ModelTransform {
-    Relation input = 1;
-    int64 model_ref_id = 2;
-    Params params = 3;
-  }
-  message FeatureTransform {
-    Relation input = 1;
-    Stage transformer = 2;
-  }
-}
 
 message Vector {
   oneof one_of {

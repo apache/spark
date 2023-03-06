@@ -17,8 +17,10 @@
 
 package org.apache.spark.sql.connect.ml
 
+import scala.reflect.ClassTag
+
 import org.apache.spark.connect.proto
-import org.apache.spark.ml.param.{Param, ParamMap, Params}
+import org.apache.spark.ml.param.{ParamMap, Params}
 import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.connect.planner.SparkConnectPlanner
 import org.apache.spark.sql.connect.service.SessionHolder
@@ -71,9 +73,11 @@ object MLUtils {
       val listProto = paramValueProto.getList
       val compType = paramType.getComponentType
 
-      def protoListToArray[T](listProto: proto.Expression.Literal.List): Unit = {
+      def protoListToArray[T: ClassTag](listProto: proto.Expression.Literal.List): Unit = {
         Array.tabulate[T](listProto.getElementsCount) { index =>
-          parseParamValue(classOf[T], listProto.getElements(index)).asInstanceOf[T]
+          parseParamValue(
+            implicitly[ClassTag[T]].runtimeClass,
+            listProto.getElements(index)).asInstanceOf[T]
         }
       }
 

@@ -23,6 +23,7 @@ import "google/protobuf/any.proto";
 import "spark/connect/commands.proto";
 import "spark/connect/relations.proto";
 import "spark/connect/types.proto";
+import "spark/connect/ml.proto";
 
 option java_multiple_files = true;
 option java_package = "org.apache.spark.connect.proto";
@@ -35,6 +36,7 @@ message Plan {
   oneof op_type {
     Relation root = 1;
     Command command = 2;
+    MlCommand ml_command = 3;
   }
 }
 
@@ -227,6 +229,9 @@ message ExecutePlanResponse {
 
     // Special case for executing SQL commands.
     SqlCommandResult sql_command_result = 5;
+
+    // ML command response
+    MlCommandResponse ml_command_result = 6;
 
     // Support arbitrary result objects.
     google.protobuf.Any extension = 999;

@@ -29,6 +29,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.connect.config.Connect.CONNECT_GRPC_ARROW_MAX_BATCH_SIZE
+import org.apache.spark.sql.connect.ml.MLHandler
 import org.apache.spark.sql.connect.planner.SparkConnectPlanner
 import org.apache.spark.sql.connect.service.SparkConnectStreamHandler.processAsArrowBatches
 import org.apache.spark.sql.execution.{SparkPlan, SQLExecution}
@@ -49,6 +50,8 @@ class SparkConnectStreamHandler(responseObserver: StreamObserver[ExecutePlanResp
       v.getPlan.getOpTypeCase match {
         case proto.Plan.OpTypeCase.COMMAND => handleCommand(sessionHolder, v)
         case proto.Plan.OpTypeCase.ROOT => handlePlan(sessionHolder, v)
+        case proto.Plan.OpTypeCase.ML_COMMAND =>
+          MLHandler.handleMlCommand(sessionHolder, v.getPlan.getMlCommand)
         case _ =>
           throw new UnsupportedOperationException(s"${v.getPlan.getOpTypeCase} not supported.")
       }

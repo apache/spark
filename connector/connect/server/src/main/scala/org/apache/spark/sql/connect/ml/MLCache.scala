@@ -20,7 +20,6 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 
 import org.apache.spark.ml.Model
-import org.apache.spark.sql.connect.ml.Algorithm
 
 /**
  * This class is for managing server side object that is used by spark connect
@@ -63,5 +62,5 @@ class ModelCache(
   }
 }
 
-case class MLCache(modelCache: ModelCache)
+case class MLCache(modelCache: ModelCache = new ModelCache())
 

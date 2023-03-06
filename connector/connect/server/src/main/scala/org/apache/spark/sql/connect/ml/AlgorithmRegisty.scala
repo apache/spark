@@ -22,7 +22,6 @@ import org.apache.spark.ml
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.classification.TrainingSummary
 import org.apache.spark.sql.DataFrame
-import org.apache.spark.sql.connect.ml.{Serializer, SummaryUtils}
 
 
 object AlgorithmRegistry {

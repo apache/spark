@@ -41,6 +41,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{CommandResult, Deduplicate, 
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CharVarcharUtils}
 import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, InvalidPlanInput, UdfPacket}
 import org.apache.spark.sql.connect.config.Connect.CONNECT_GRPC_ARROW_MAX_BATCH_SIZE
+import org.apache.spark.sql.connect.ml.MLHandler
 import org.apache.spark.sql.connect.planner.LiteralValueProtoConverter.{toCatalystExpression, toCatalystValue}
 import org.apache.spark.sql.connect.plugin.SparkConnectPluginRegistry
 import org.apache.spark.sql.connect.service.{SessionHolder, SparkConnectStreamHandler}
@@ -120,6 +121,12 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) {
 
       // Catalog API (internal-only)
       case proto.Relation.RelTypeCase.CATALOG => transformCatalog(rel.getCatalog)
+
+      // ML relation
+      case proto.Relation.RelTypeCase.ML_RELATION => MLHandler.transformMLRelation(
+        rel.getMlRelation,
+        sessionHolder
+      ).logicalPlan
 
       // Handle plugins for Spark Connect Relation types.
       case proto.Relation.RelTypeCase.EXTENSION =>

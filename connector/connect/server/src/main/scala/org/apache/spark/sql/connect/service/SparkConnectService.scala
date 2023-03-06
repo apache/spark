@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.connect.service
 
-import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
+import java.util.concurrent.TimeUnit
 
 import scala.annotation.tailrec
 import scala.collection.mutable.ArrayBuffer
@@ -192,7 +192,7 @@ case class SessionHolder(
   userId: String,
   sessionId: String,
   session: SparkSession,
-  mlCache: MLCache
+  mlCache: MLCache = MLCache()
 )
 
 /**

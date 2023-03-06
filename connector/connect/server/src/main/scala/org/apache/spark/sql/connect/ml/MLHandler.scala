@@ -18,7 +18,7 @@
 package org.apache.spark.sql.connect.ml
 
 import org.apache.spark.connect.proto
-import org.apache.spark.ml.{Estimator, Model}
+import org.apache.spark.ml.Model
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.connect.service.SessionHolder
@@ -26,9 +26,9 @@ import org.apache.spark.sql.connect.service.SessionHolder
 object MLHandler {
 
   def handleMlCommand(
-           mlCommand: proto.MlCommand,
-           sessionHolder: SessionHolder
-         ): proto.MlCommandResponse = {
+                       sessionHolder: SessionHolder,
+                       mlCommand: proto.MlCommand
+  ): proto.MlCommandResponse = {
     mlCommand.getMlCommandTypeCase match {
       case proto.MlCommand.MlCommandTypeCase.FIT =>
         val fitCommandProto = mlCommand.getFit
@@ -50,18 +50,22 @@ object MLHandler {
             .setModelUid(model.uid)
         ).build()
 
-      case proto.MlCommand.MlCommandTypeCase.GET_MODEL_ATTR =>
-        val getModelAttrProto = mlCommand.getGetModelAttr
-        val (model, algo) = sessionHolder.mlCache.modelCache.get(
+      case proto.MlCommand.MlCommandTypeCase.MODEL_ATTR =>
+        val getModelAttrProto = mlCommand.getModelAttr
+        val modelEntry = sessionHolder.mlCache.modelCache.get(
           getModelAttrProto.getModelRefId
         )
+        val model = modelEntry._1
+        val algo = modelEntry._2
         algo.getModelAttr(model, getModelAttrProto.getName).left.get
 
-      case proto.MlCommand.MlCommandTypeCase.GET_MODEL_SUMMARY_ATTR =>
-        val getModelSummaryAttrProto = mlCommand.getGetModelSummaryAttr
-        val (model, algo) = sessionHolder.mlCache.modelCache.get(
+      case proto.MlCommand.MlCommandTypeCase.MODEL_SUMMARY_ATTR =>
+        val getModelSummaryAttrProto = mlCommand.getModelSummaryAttr
+        val modelEntry = sessionHolder.mlCache.modelCache.get(
           getModelSummaryAttrProto.getModelRefId
         )
+        val model = modelEntry._1
+        val algo = modelEntry._2
         // Create a copied model to avoid concurrently modify model params.
         val copiedModel = model.copy(ParamMap.empty).asInstanceOf[Model[_]]
         MLUtils.setInstanceParams(copiedModel, getModelSummaryAttrProto.getParams)
@@ -79,6 +83,9 @@ object MLHandler {
           getModelSummaryAttrProto.getName,
           datasetOpt
         ).left.get
+
+      case _ =>
+        throw new IllegalArgumentException()
     }
   }
 
@@ -102,16 +109,20 @@ object MLHandler {
 
       case proto.MlRelation.MlRelationTypeCase.MODEL_ATTR =>
         val modelAttrProto = mlRelationProto.getModelAttr
-        val (model, algo) = sessionHolder.mlCache.modelCache.get(
+        val modelEntry = sessionHolder.mlCache.modelCache.get(
           modelAttrProto.getModelRefId
         )
+        val model = modelEntry._1
+        val algo = modelEntry._2
         algo.getModelAttr(model, modelAttrProto.getName).right.get
 
       case proto.MlRelation.MlRelationTypeCase.MODEL_SUMMARY_ATTR =>
         val modelSummaryAttr = mlRelationProto.getModelSummaryAttr
-        val (model, algo) = sessionHolder.mlCache.modelCache.get(
+        val modelEntry = sessionHolder.mlCache.modelCache.get(
           modelSummaryAttr.getModelRefId
         )
+        val model = modelEntry._1
+        val algo = modelEntry._2
         // Create a copied model to avoid concurrently modify model params.
         val copiedModel = model.copy(ParamMap.empty).asInstanceOf[Model[_]]
         MLUtils.setInstanceParams(copiedModel, modelSummaryAttr.getParams)
@@ -128,6 +139,9 @@ object MLHandler {
           modelSummaryAttr.getName,
           datasetOpt
         ).right.get
+
+      case _ =>
+        throw new IllegalArgumentException()
     }
   }
 }
