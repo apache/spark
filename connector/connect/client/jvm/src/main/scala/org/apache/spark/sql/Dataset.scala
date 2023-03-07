@@ -2778,11 +2778,7 @@ class Dataset[T] private[sql] (
   }
 
   def toJSON: Dataset[String] = {
-    sparkSession.newDataset(StringEncoder) { builder =>
-      builder.getProjectBuilder
-        .setInput(plan.getRoot)
-        .addExpressions(to_json(struct(Column("*"))).expr)
-    }
+    select(to_json(struct(col("*")))).as(StringEncoder)
   }
 
   private[sql] def analyze: proto.AnalyzePlanResponse = {
