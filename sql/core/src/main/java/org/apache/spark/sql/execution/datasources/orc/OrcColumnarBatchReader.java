@@ -204,7 +204,12 @@ public class OrcColumnarBatchReader extends RecordReader<Void, ColumnarBatch> {
    * by copying from ORC VectorizedRowBatch columns to Spark ColumnarBatch columns.
    */
   private boolean nextBatch() throws IOException {
-    recordReader.nextBatch(wrap.batch());
+    try {
+      recordReader.nextBatch(wrap.batch());
+    } catch (NegativeArraySizeException e) {
+      throw new NegativeArraySizeException("Cause by too many data in batch size, " +
+              "try to set spark.sql.orc.columnarReaderBatchSize less.");
+    }
     int batchSize = wrap.batch().size;
     if (batchSize == 0) {
       return false;
