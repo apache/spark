@@ -235,6 +235,9 @@ class SparkSession:
             # If no schema supplied by user then get the names of columns only
             if schema is None:
                 _cols = [str(x) if not isinstance(x, str) else x for x in data.columns]
+            elif isinstance(schema, (list, tuple)) and _num_cols < len(data.columns):
+                _cols = _cols + [f"_{i + 1}" for i in range(_num_cols, len(data.columns))]
+                _num_cols = len(_cols)
 
             # Determine arrow types to coerce data when creating batches
             if isinstance(schema, StructType):
@@ -308,6 +311,9 @@ class SparkSession:
                 _data = [[d] for d in _data]
 
             _inferred_schema = self._inferSchemaFromList(_data, _cols)
+
+            if _cols is not None and _num_cols < len(_cols):
+                _num_cols = len(_cols)
 
             if _has_nulltype(_inferred_schema):
                 # For cases like createDataFrame([("Alice", None, 80.1)], schema)
