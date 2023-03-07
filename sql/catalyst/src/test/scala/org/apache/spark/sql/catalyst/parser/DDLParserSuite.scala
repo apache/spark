@@ -1468,7 +1468,7 @@ class DDLParserSuite extends AnalysisTest {
     val sql9 = "ALTER TABLE table_name REPLACE COLUMNS (a STRING COMMENT 'x' COMMENT 'y')"
     checkError(
       exception = parseException(sql9),
-      errorClass = "ALTER_TABLE_COLUMN_OPTION_DUPLICATE",
+      errorClass = "ALTER_TABLE_COLUMN_DESCRIPTOR_DUPLICATE",
       parameters = Map(
         "type" -> "REPLACE",
         "columnName" -> "a",
@@ -2703,7 +2703,7 @@ class DDLParserSuite extends AnalysisTest {
       exception = intercept[ParseException](
         parsePlan(
           "CREATE TABLE my_tab(a INT, b STRING NOT NULL DEFAULT \"abc\" NOT NULL)")),
-      errorClass = "CREATE_TABLE_COLUMN_OPTION_DUPLICATE",
+      errorClass = "CREATE_TABLE_COLUMN_DESCRIPTOR_DUPLICATE",
       parameters = Map(
         "columnName" -> "b",
         "optionName" -> "NOT NULL"),
@@ -2713,7 +2713,7 @@ class DDLParserSuite extends AnalysisTest {
       exception = intercept[ParseException](
         parsePlan(
           "CREATE TABLE my_tab(a INT, b STRING DEFAULT \"123\" NOT NULL DEFAULT \"abc\")")),
-      errorClass = "CREATE_TABLE_COLUMN_OPTION_DUPLICATE",
+      errorClass = "CREATE_TABLE_COLUMN_DESCRIPTOR_DUPLICATE",
       parameters = Map(
         "columnName" -> "b",
         "optionName" -> "DEFAULT"),
@@ -2723,7 +2723,7 @@ class DDLParserSuite extends AnalysisTest {
       exception = intercept[ParseException](
         parsePlan(
           "CREATE TABLE my_tab(a INT, b STRING COMMENT \"abc\" NOT NULL COMMENT \"abc\")")),
-      errorClass = "CREATE_TABLE_COLUMN_OPTION_DUPLICATE",
+      errorClass = "CREATE_TABLE_COLUMN_DESCRIPTOR_DUPLICATE",
       parameters = Map(
         "columnName" -> "b",
         "optionName" -> "COMMENT"),
@@ -2752,7 +2752,7 @@ class DDLParserSuite extends AnalysisTest {
     checkError(
       exception = parseException("CREATE TABLE my_tab(a INT, " +
           "b INT GENERATED ALWAYS AS (a + 1) GENERATED ALWAYS AS (a + 2)) USING PARQUET"),
-      errorClass = "CREATE_TABLE_COLUMN_OPTION_DUPLICATE",
+      errorClass = "CREATE_TABLE_COLUMN_DESCRIPTOR_DUPLICATE",
       parameters = Map("columnName" -> "b", "optionName" -> "GENERATED ALWAYS AS"),
       context = ExpectedContext(
         fragment = "b INT GENERATED ALWAYS AS (a + 1) GENERATED ALWAYS AS (a + 2)",
@@ -2803,7 +2803,7 @@ class DDLParserSuite extends AnalysisTest {
       exception = intercept[ParseException](
         parsePlan("ALTER TABLE my_tab ADD COLUMN b STRING NOT NULL DEFAULT \"abc\" NOT NULL")
       ),
-      errorClass = "ALTER_TABLE_COLUMN_OPTION_DUPLICATE",
+      errorClass = "ALTER_TABLE_COLUMN_DESCRIPTOR_DUPLICATE",
       parameters = Map("type" -> "ADD", "columnName" -> "b", "optionName" -> "NOT NULL"),
       context = ExpectedContext(
         fragment = "b STRING NOT NULL DEFAULT \"abc\" NOT NULL",
@@ -2815,7 +2815,7 @@ class DDLParserSuite extends AnalysisTest {
       exception = intercept[ParseException](
         parsePlan("ALTER TABLE my_tab ADD COLUMN b STRING DEFAULT \"123\" NOT NULL DEFAULT \"abc\"")
       ),
-      errorClass = "ALTER_TABLE_COLUMN_OPTION_DUPLICATE",
+      errorClass = "ALTER_TABLE_COLUMN_DESCRIPTOR_DUPLICATE",
       parameters = Map("type" -> "ADD", "columnName" -> "b", "optionName" -> "DEFAULT"),
       context = ExpectedContext(
         fragment = "b STRING DEFAULT \"123\" NOT NULL DEFAULT \"abc\"",
@@ -2827,7 +2827,7 @@ class DDLParserSuite extends AnalysisTest {
       exception = intercept[ParseException](
         parsePlan("ALTER TABLE my_tab ADD COLUMN b STRING COMMENT \"abc\" NOT NULL COMMENT \"abc\"")
       ),
-      errorClass = "ALTER_TABLE_COLUMN_OPTION_DUPLICATE",
+      errorClass = "ALTER_TABLE_COLUMN_DESCRIPTOR_DUPLICATE",
       parameters = Map("type" -> "ADD", "columnName" -> "b", "optionName" -> "COMMENT"),
       context = ExpectedContext(
         fragment = "b STRING COMMENT \"abc\" NOT NULL COMMENT \"abc\"",
@@ -2839,7 +2839,7 @@ class DDLParserSuite extends AnalysisTest {
       exception = intercept[ParseException](
         parsePlan("ALTER TABLE my_tab ADD COLUMN b STRING FIRST COMMENT \"abc\" AFTER y")
       ),
-      errorClass = "ALTER_TABLE_COLUMN_OPTION_DUPLICATE",
+      errorClass = "ALTER_TABLE_COLUMN_DESCRIPTOR_DUPLICATE",
       parameters = Map("type" -> "ADD", "columnName" -> "b", "optionName" -> "FIRST|AFTER"),
       context =
         ExpectedContext(fragment = "b STRING FIRST COMMENT \"abc\" AFTER y", start = 30, stop = 65)

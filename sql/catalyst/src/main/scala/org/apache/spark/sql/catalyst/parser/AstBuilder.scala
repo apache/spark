@@ -3006,28 +3006,28 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
     ctx.colDefinitionOption().asScala.foreach { option =>
       if (option.NULL != null) {
         if (!nullable) {
-          throw QueryParsingErrors.duplicateTableColumnOption(
+          throw QueryParsingErrors.duplicateTableColumnDescriptor(
             option, colName.getText, "NOT NULL")
         }
         nullable = false
       }
       Option(option.defaultExpression()).foreach { expr =>
         if (defaultExpression.isDefined) {
-          throw QueryParsingErrors.duplicateTableColumnOption(
+          throw QueryParsingErrors.duplicateTableColumnDescriptor(
             option, colName.getText, "DEFAULT")
         }
         defaultExpression = Some(expr)
       }
       Option(option.generationExpression()).foreach { expr =>
         if (generationExpression.isDefined) {
-          throw QueryParsingErrors.duplicateTableColumnOption(
+          throw QueryParsingErrors.duplicateTableColumnDescriptor(
             option, colName.getText, "GENERATED ALWAYS AS")
         }
         generationExpression = Some(expr)
       }
       Option(option.commentSpec()).foreach { spec =>
         if (commentSpec.isDefined) {
-          throw QueryParsingErrors.duplicateTableColumnOption(
+          throw QueryParsingErrors.duplicateTableColumnDescriptor(
             option, colName.getText, "COMMENT")
         }
         commentSpec = Some(spec)
@@ -4015,28 +4015,28 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
     ctx.colDefinitionOptionWithPosition.asScala.foreach { option =>
       if (option.NULL != null) {
         if (!nullable) {
-          throw QueryParsingErrors.duplicateTableColumnOption(
+          throw QueryParsingErrors.duplicateTableColumnDescriptor(
             option, columnName, "NOT NULL", isCreate = false)
         }
         nullable = false
       }
       Option(option.defaultExpression()).foreach { expr =>
         if (defaultExpression.isDefined) {
-          throw QueryParsingErrors.duplicateTableColumnOption(
+          throw QueryParsingErrors.duplicateTableColumnDescriptor(
             option, columnName, "DEFAULT", isCreate = false)
         }
         defaultExpression = Some(expr)
       }
       Option(option.commentSpec()).foreach { spec =>
         if (commentSpec.isDefined) {
-          throw QueryParsingErrors.duplicateTableColumnOption(
+          throw QueryParsingErrors.duplicateTableColumnDescriptor(
             option, columnName, "COMMENT", isCreate = false)
         }
         commentSpec = Some(spec)
       }
       Option(option.colPosition()).foreach { spec =>
         if (colPosition.isDefined) {
-          throw QueryParsingErrors.duplicateTableColumnOption(
+          throw QueryParsingErrors.duplicateTableColumnDescriptor(
             option, columnName, "FIRST|AFTER", isCreate = false)
         }
         colPosition = Some(spec)
@@ -4230,7 +4230,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
           }
           Option(opt.commentSpec()).foreach { spec =>
             if (commentSpec.isDefined) {
-              throw QueryParsingErrors.duplicateTableColumnOption(
+              throw QueryParsingErrors.duplicateTableColumnDescriptor(
                 opt, name.last, "COMMENT", isCreate = false, alterType = "REPLACE")
             }
             commentSpec = Some(spec)

@@ -642,7 +642,7 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
     new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0059", ctx)
   }
 
-  def duplicateTableColumnOption(
+  def duplicateTableColumnDescriptor(
       ctx: ParserRuleContext,
       columnName: String,
       optionName: String,
@@ -650,9 +650,9 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
       alterType: String = "ADD"): Throwable = {
     val errorClass =
       if (isCreate) {
-        "CREATE_TABLE_COLUMN_OPTION_DUPLICATE"
+        "CREATE_TABLE_COLUMN_DESCRIPTOR_DUPLICATE"
       } else {
-        "ALTER_TABLE_COLUMN_OPTION_DUPLICATE"
+        "ALTER_TABLE_COLUMN_DESCRIPTOR_DUPLICATE"
       }
     val alterTypeMap: Map[String, String] =
       if (isCreate) {
