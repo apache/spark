@@ -1009,10 +1009,10 @@ qualifiedColTypeWithPositionList
     ;
 
 qualifiedColTypeWithPosition
-    : name=multipartIdentifier dataType colDefinitionOptionWithPosition*
+    : name=multipartIdentifier dataType colDefinitionDescriptorWithPosition*
     ;
 
-colDefinitionOptionWithPosition
+colDefinitionDescriptorWithPosition
     : NOT NULL
     | defaultExpression
     | commentSpec

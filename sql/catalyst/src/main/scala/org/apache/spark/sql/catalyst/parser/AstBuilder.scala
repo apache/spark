@@ -4012,7 +4012,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
     var commentSpec: Option[CommentSpecContext] = None
     var colPosition: Option[ColPositionContext] = None
     val columnName = name.last
-    ctx.colDefinitionOptionWithPosition.asScala.foreach { option =>
+    ctx.colDefinitionDescriptorWithPosition.asScala.foreach { option =>
       if (option.NULL != null) {
         if (!nullable) {
           throw QueryParsingErrors.duplicateTableColumnDescriptor(
@@ -4216,7 +4216,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
             "Replacing with a nested column", "REPLACE COLUMNS", ctx)
         }
         var commentSpec: Option[CommentSpecContext] = None
-        colType.colDefinitionOptionWithPosition.asScala.foreach { opt =>
+        colType.colDefinitionDescriptorWithPosition.asScala.foreach { opt =>
           if (opt.NULL != null) {
             throw QueryParsingErrors.operationInHiveStyleCommandUnsupportedError(
               "NOT NULL", "REPLACE COLUMNS", ctx)
