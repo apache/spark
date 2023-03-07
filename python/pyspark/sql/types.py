@@ -1579,7 +1579,7 @@ def _infer_schema(
                         infer_array_from_first_element,
                         prefer_timestamp_ntz,
                     ),
-                    True,
+                    False,
                 )
             )
         except TypeError as e:
