@@ -2765,6 +2765,61 @@ class AdaptiveQueryExecSuite
       checkShuffleAndSort(firstAccess = false)
     }
   }
+
+  test("SPARK-42695 - Skew join handling in stream side of broadcast hash join") {
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.ADAPTIVE_FORCE_OPTIMIZE_SKEWED_JOIN.key -> "true",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "1000",
+      SQLConf.SHUFFLE_PARTITIONS.key -> "100",
+      SQLConf.SKEW_JOIN_SKEWED_PARTITION_THRESHOLD.key -> "800") {
+      withTable("skewData1", "t1", "t2") {
+        spark
+          .range(0, 1000, 1, 10)
+          .select(
+            when('id < 250, 249)
+              .when('id >= 750, 1000)
+              .otherwise('id).as("key1"),
+            'id as "value1")
+          .write.saveAsTable("skewData1")
+
+        spark
+          .range(0, 1, 1, 10)
+          .select('id as "k1", 'id as "v1")
+          .write.saveAsTable("t1")
+
+        spark
+          .range(0, 2, 1, 10)
+          .select('id as "k2", 'id as "v2")
+          .write.saveAsTable("t2")
+
+        val sqlText =
+          s"""
+             |SELECT key1, k1, count(value1)
+             |FROM skewData1 s
+             |left join
+             |(select /*+ MERGE(t2) */ k1, k2 from t1 join t2 on v1=v2) t
+             |ON s.key1 = t.k1
+             |group by 1,2
+             |""".stripMargin
+
+        val (_, plan) = runAdaptiveAndVerifyResult(sqlText)
+
+        val bhjs = collect(plan) {
+          case bhj: BroadcastHashJoinExec => bhj
+        }
+
+        assert(bhjs.nonEmpty)
+        val skewHandlingCount = bhjs.map(bhj => if (bhj.isSkewJoin) 1 else 0).sum
+        assert(skewHandlingCount == 1)
+
+        val skewedShuffleReaders = collect(plan) {
+          case c: AQEShuffleReadExec if c.isLocalRead => c
+        }
+        assert(skewedShuffleReaders.nonEmpty)
+      }
+    }
+  }
 }
 
 /**

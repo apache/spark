@@ -21,6 +21,7 @@ import scala.collection.mutable
 
 import org.apache.commons.io.FileUtils
 
+import org.apache.spark.MapOutputStatistics
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, SortOrder}
@@ -29,7 +30,7 @@ import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.exchange.{ENSURE_REQUIREMENTS, EnsureRequirements, ValidateRequirements}
-import org.apache.spark.sql.execution.joins.{ShuffledHashJoinExec, SortMergeJoinExec}
+import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, ShuffledHashJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.Utils
 
@@ -215,6 +216,32 @@ case class OptimizeSkewedJoin(ensureRequirements: EnsureRequirements)
         case (newLeft, newRight) =>
           shj.copy(left = newLeft, right = newRight, isSkewJoin = true)
       }.getOrElse(shj)
+
+    case bhj@BroadcastHashJoinExec(_, _, joinType, _, _, ShuffleStage(s: ShuffleQueryStageExec),
+    BroadcastQueryStageExec(_, _, _), _, false) if canSplitLeftSide(joinType) =>
+      optimizeBroadcastHashJoin(s).map(newLeft => bhj.copy(left = newLeft, isSkewJoin = true))
+        .getOrElse(bhj)
+
+    case bhj@BroadcastHashJoinExec(_, _, joinType, _, _, BroadcastQueryStageExec(_, _, _),
+    ShuffleStage(s: ShuffleQueryStageExec), _, false) if canSplitRightSide(joinType) =>
+      optimizeBroadcastHashJoin(s).map(newRight => bhj.copy(right = newRight, isSkewJoin = true))
+        .getOrElse(bhj)
+  }
+
+  private def optimizeBroadcastHashJoin(shuffleStage: ShuffleQueryStageExec): Option[SparkPlan] = {
+
+    def isSkewed(stats: MapOutputStatistics): Boolean = {
+      val medSize = Utils.median(stats.bytesByPartitionId, false)
+      val skewThreshold = getSkewThreshold(medSize)
+      stats.bytesByPartitionId.exists(_ > skewThreshold)
+    }
+
+    if (!isSkewed(shuffleStage.mapStats.get)) {
+      return None
+    }
+
+    Some(SkewJoinChildWrapper(AQEShuffleReadExec(shuffleStage,
+      OptimizeShuffleWithLocalRead.getPartitionSpecs(shuffleStage, None))))
   }
 
   override def apply(plan: SparkPlan): SparkPlan = {

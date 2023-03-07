@@ -21,7 +21,7 @@ import scala.collection.mutable
 
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.plans.physical.SinglePartition
-import org.apache.spark.sql.execution.{ShufflePartitionSpec, SparkPlan, UnaryExecNode, UnionExec}
+import org.apache.spark.sql.execution.{PartialMapperPartitionSpec, ShufflePartitionSpec, SparkPlan, UnaryExecNode, UnionExec}
 import org.apache.spark.sql.execution.exchange.{ENSURE_REQUIREMENTS, REBALANCE_PARTITIONS_BY_COL, REBALANCE_PARTITIONS_BY_NONE, REPARTITION_BY_COL, ShuffleExchangeLike, ShuffleOrigin}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.Utils
@@ -99,7 +99,11 @@ case class CoalesceShufflePartitions(session: SparkSession) extends AQEShuffleRe
 
     val specsMap = mutable.HashMap.empty[Int, Seq[ShufflePartitionSpec]]
     // Coalesce partitions for each coalesce group independently.
-    coalesceGroups.zip(minNumPartitionsByGroup).foreach { case (shuffleStages, minNumPartitions) =>
+    coalesceGroups.zip(minNumPartitionsByGroup).foreach { case (shuffleStages, minNumPartitions)
+      // Skip coalesce if local shuffle read detected
+      if (!shuffleStages.map(_.partitionSpecs.getOrElse(Seq.empty))
+        .exists(_.exists(_.isInstanceOf[PartialMapperPartitionSpec]))) =>
+
       val newPartitionSpecs = ShufflePartitionsUtil.coalescePartitions(
         shuffleStages.map(_.shuffleStage.mapStats),
         shuffleStages.map(_.partitionSpecs),
@@ -112,6 +116,7 @@ case class CoalesceShufflePartitions(session: SparkSession) extends AQEShuffleRe
           specsMap.put(stageInfo.shuffleStage.id, partSpecs)
         }
       }
+    case _ =>
     }
 
     if (specsMap.nonEmpty) {

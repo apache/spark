@@ -66,7 +66,7 @@ object OptimizeShuffleWithLocalRead extends AQEShuffleReadRule {
 
   // TODO: this method assumes all shuffle blocks are the same data size. We should calculate the
   //       partition start indices based on block size to avoid data skew.
-  private def getPartitionSpecs(
+  def getPartitionSpecs(
       shuffleStage: ShuffleQueryStageExec,
       advisoryParallelism: Option[Int]): Seq[ShufflePartitionSpec] = {
     val numMappers = shuffleStage.shuffle.numMappers
@@ -122,7 +122,8 @@ object OptimizeShuffleWithLocalRead extends AQEShuffleReadRule {
 
   object BroadcastJoinWithShuffleLeft {
     def unapply(plan: SparkPlan): Option[(SparkPlan, BuildSide)] = plan match {
-      case join: BroadcastHashJoinExec if canUseLocalShuffleRead(join.left) =>
+      case join: BroadcastHashJoinExec if !join.isSkewJoin
+        && canUseLocalShuffleRead(join.left) =>
         Some((join.left, join.buildSide))
       case _ => None
     }
@@ -130,7 +131,8 @@ object OptimizeShuffleWithLocalRead extends AQEShuffleReadRule {
 
   object BroadcastJoinWithShuffleRight {
     def unapply(plan: SparkPlan): Option[(SparkPlan, BuildSide)] = plan match {
-      case join: BroadcastHashJoinExec if canUseLocalShuffleRead(join.right) =>
+      case join: BroadcastHashJoinExec if !join.isSkewJoin
+        && canUseLocalShuffleRead(join.right) =>
         Some((join.right, join.buildSide))
       case _ => None
     }
