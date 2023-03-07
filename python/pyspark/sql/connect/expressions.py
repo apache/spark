@@ -642,18 +642,20 @@ class UnresolvedExtractValue(Expression):
 
 
 class UnresolvedRegex(Expression):
-    def __init__(
-        self,
-        col_name: str,
-    ) -> None:
+    def __init__(self, col_name: str, plan_id: Optional[int] = None) -> None:
         super().__init__()
 
         assert isinstance(col_name, str)
         self.col_name = col_name
 
+        assert plan_id is None or isinstance(plan_id, int)
+        self._plan_id = plan_id
+
     def to_plan(self, session: "SparkConnectClient") -> proto.Expression:
         expr = proto.Expression()
         expr.unresolved_regex.col_name = self.col_name
+        if self._plan_id is not None:
+            expr.unresolved_regex.plan_id = self._plan_id
         return expr
 
     def __repr__(self) -> str:

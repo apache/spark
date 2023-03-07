@@ -2067,9 +2067,7 @@ Some of them are as follows.
   for more details.
 
 - Chaining multiple stateful operations on streaming Datasets is not supported with Update and Complete mode.
-  - In addition, below operations followed by other stateful operation is not supported in Append mode.
-    - stream-stream time interval join (inner/outer)
-    - flatMapGroupsWithState
+  - In addition, mapGroupsWithState/flatMapGroupsWithState operation followed by other stateful operation is not supported in Append mode.
   - A known workaround is to split your streaming query into multiple queries having a single stateful operation per each query,
     and ensure end-to-end exactly once per query. Ensuring end-to-end exactly once for the last query is optional.
 

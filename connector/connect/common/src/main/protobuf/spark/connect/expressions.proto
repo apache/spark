@@ -172,12 +172,7 @@ message Expression {
       CalendarInterval calendar_interval = 19;
       int32 year_month_interval = 20;
       int64 day_time_interval = 21;
-
-      List list = 99;
-    }
-
-    message List {
-      repeated Expression.Literal elements = 1;
+      Array array = 22;
     }
 
     message Decimal {
@@ -194,6 +189,11 @@ message Expression {
       int32 months = 1;
       int32 days = 2;
       int64 microseconds = 3;
+    }
+
+    message Array {
+      DataType elementType = 1;
+      repeated Literal element = 2;
     }
   }
 
@@ -248,6 +248,9 @@ message Expression {
   message UnresolvedRegex {
     // (Required) The column name used to extract column with regex.
     string col_name = 1;
+
+    // (Optional) The id of corresponding connect plan.
+    optional int64 plan_id = 2;
   }
 
   // Extracts a value or values from an Expression

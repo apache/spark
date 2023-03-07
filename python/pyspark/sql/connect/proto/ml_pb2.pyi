@@ -444,47 +444,45 @@ class Vector(google.protobuf.message.Message):
     class Dense(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-        VALUES_FIELD_NUMBER: builtins.int
+        VALUE_FIELD_NUMBER: builtins.int
         @property
-        def values(
+        def value(
             self,
         ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.float]: ...
         def __init__(
             self,
             *,
-            values: collections.abc.Iterable[builtins.float] | None = ...,
+            value: collections.abc.Iterable[builtins.float] | None = ...,
         ) -> None: ...
-        def ClearField(
-            self, field_name: typing_extensions.Literal["values", b"values"]
-        ) -> None: ...
+        def ClearField(self, field_name: typing_extensions.Literal["value", b"value"]) -> None: ...
 
     @typing_extensions.final
     class Sparse(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
         SIZE_FIELD_NUMBER: builtins.int
-        INDICES_FIELD_NUMBER: builtins.int
-        VALUES_FIELD_NUMBER: builtins.int
+        INDEX_FIELD_NUMBER: builtins.int
+        VALUE_FIELD_NUMBER: builtins.int
         size: builtins.int
         @property
-        def indices(
+        def index(
             self,
         ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.float]: ...
         @property
-        def values(
+        def value(
             self,
         ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.float]: ...
         def __init__(
             self,
             *,
             size: builtins.int = ...,
-            indices: collections.abc.Iterable[builtins.float] | None = ...,
-            values: collections.abc.Iterable[builtins.float] | None = ...,
+            index: collections.abc.Iterable[builtins.float] | None = ...,
+            value: collections.abc.Iterable[builtins.float] | None = ...,
         ) -> None: ...
         def ClearField(
             self,
             field_name: typing_extensions.Literal[
-                "indices", b"indices", "size", b"size", "values", b"values"
+                "index", b"index", "size", b"size", "value", b"value"
             ],
         ) -> None: ...
 
@@ -528,24 +526,34 @@ class Matrix(google.protobuf.message.Message):
 
         NUM_ROWS_FIELD_NUMBER: builtins.int
         NUM_COLS_FIELD_NUMBER: builtins.int
-        VALUES_FIELD_NUMBER: builtins.int
+        VALUE_FIELD_NUMBER: builtins.int
+        IS_TRANSPOSED_FIELD_NUMBER: builtins.int
         num_rows: builtins.int
         num_cols: builtins.int
         @property
-        def values(
+        def value(
             self,
         ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.float]: ...
+        is_transposed: builtins.bool
         def __init__(
             self,
             *,
             num_rows: builtins.int = ...,
             num_cols: builtins.int = ...,
-            values: collections.abc.Iterable[builtins.float] | None = ...,
+            value: collections.abc.Iterable[builtins.float] | None = ...,
+            is_transposed: builtins.bool = ...,
         ) -> None: ...
         def ClearField(
             self,
             field_name: typing_extensions.Literal[
-                "num_cols", b"num_cols", "num_rows", b"num_rows", "values", b"values"
+                "is_transposed",
+                b"is_transposed",
+                "num_cols",
+                b"num_cols",
+                "num_rows",
+                b"num_rows",
+                "value",
+                b"value",
             ],
         ) -> None: ...
 
@@ -555,22 +563,22 @@ class Matrix(google.protobuf.message.Message):
 
         NUM_ROWS_FIELD_NUMBER: builtins.int
         NUM_COLS_FIELD_NUMBER: builtins.int
-        COLPTRS_FIELD_NUMBER: builtins.int
-        ROW_INDICES_FIELD_NUMBER: builtins.int
-        VALUES_FIELD_NUMBER: builtins.int
+        COLPTR_FIELD_NUMBER: builtins.int
+        ROW_INDEX_FIELD_NUMBER: builtins.int
+        VALUE_FIELD_NUMBER: builtins.int
         IS_TRANSPOSED_FIELD_NUMBER: builtins.int
         num_rows: builtins.int
         num_cols: builtins.int
         @property
-        def colptrs(
+        def colptr(
             self,
         ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.float]: ...
         @property
-        def row_indices(
+        def row_index(
             self,
         ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.float]: ...
         @property
-        def values(
+        def value(
             self,
         ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.float]: ...
         is_transposed: builtins.bool
@@ -579,26 +587,26 @@ class Matrix(google.protobuf.message.Message):
             *,
             num_rows: builtins.int = ...,
             num_cols: builtins.int = ...,
-            colptrs: collections.abc.Iterable[builtins.float] | None = ...,
-            row_indices: collections.abc.Iterable[builtins.float] | None = ...,
-            values: collections.abc.Iterable[builtins.float] | None = ...,
+            colptr: collections.abc.Iterable[builtins.float] | None = ...,
+            row_index: collections.abc.Iterable[builtins.float] | None = ...,
+            value: collections.abc.Iterable[builtins.float] | None = ...,
             is_transposed: builtins.bool = ...,
         ) -> None: ...
         def ClearField(
             self,
             field_name: typing_extensions.Literal[
-                "colptrs",
-                b"colptrs",
+                "colptr",
+                b"colptr",
                 "is_transposed",
                 b"is_transposed",
                 "num_cols",
                 b"num_cols",
                 "num_rows",
                 b"num_rows",
-                "row_indices",
-                b"row_indices",
-                "values",
-                b"values",
+                "row_index",
+                b"row_index",
+                "value",
+                b"value",
             ],
         ) -> None: ...
 

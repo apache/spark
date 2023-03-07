@@ -41,15 +41,18 @@ object Serializer {
   }
 
   def serialize(data: Array[Double]): proto.MlCommandResponse = {
-    val listBuilder = proto.Expression.Literal.List.newBuilder()
+    val arrayBuilder = proto.Expression.Literal.Array.newBuilder()
     for (i <- 0 until data.length) {
-      listBuilder.setElements(
+      arrayBuilder.setElement(
         i,
         proto.Expression.Literal.newBuilder().setDouble(data(i))
       )
     }
+    arrayBuilder.setElementType(
+      proto.DataType.newBuilder().setDouble(proto.DataType.Double.newBuilder())
+    )
     proto.MlCommandResponse.newBuilder().setLiteral(
-      proto.Expression.Literal.newBuilder().setList(listBuilder)
+      proto.Expression.Literal.newBuilder().setArray(arrayBuilder)
     ).build()
   }
 
@@ -58,7 +61,7 @@ object Serializer {
     val values = data.toArray
     val denseBuilder = proto.Vector.Dense.newBuilder()
     for (i <- 0 until values.length) {
-      denseBuilder.setValues(i, values(i))
+      denseBuilder.setValue(i, values(i))
     }
 
     proto.MlCommandResponse.newBuilder().setVector(
@@ -68,16 +71,17 @@ object Serializer {
 
   def serialize(data: Matrix): proto.MlCommandResponse = {
     // TODO: Support sparse
+    // TODO: optimize transposed case
     val denseBuilder = proto.Matrix.Dense.newBuilder()
     val values = data.toArray
     for (i <- 0 until values.length) {
-      denseBuilder.setValues(i, values(i))
+      denseBuilder.setValue(i, values(i))
     }
     denseBuilder.setNumCols(data.numCols)
     denseBuilder.setNumRows(data.numRows)
+    denseBuilder.setIsTransposed(false)
     proto.MlCommandResponse.newBuilder().setMatrix(
       proto.Matrix.newBuilder().setDense(denseBuilder)
     ).build()
   }
-
 }

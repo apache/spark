@@ -367,26 +367,6 @@ class Expression(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
         @typing_extensions.final
-        class List(google.protobuf.message.Message):
-            DESCRIPTOR: google.protobuf.descriptor.Descriptor
-
-            ELEMENTS_FIELD_NUMBER: builtins.int
-            @property
-            def elements(
-                self,
-            ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
-                global___Expression.Literal
-            ]: ...
-            def __init__(
-                self,
-                *,
-                elements: collections.abc.Iterable[global___Expression.Literal] | None = ...,
-            ) -> None: ...
-            def ClearField(
-                self, field_name: typing_extensions.Literal["elements", b"elements"]
-            ) -> None: ...
-
-        @typing_extensions.final
         class Decimal(google.protobuf.message.Message):
             DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -469,6 +449,36 @@ class Expression(google.protobuf.message.Message):
                 ],
             ) -> None: ...
 
+        @typing_extensions.final
+        class Array(google.protobuf.message.Message):
+            DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+            ELEMENTTYPE_FIELD_NUMBER: builtins.int
+            ELEMENT_FIELD_NUMBER: builtins.int
+            @property
+            def elementType(self) -> pyspark.sql.connect.proto.types_pb2.DataType: ...
+            @property
+            def element(
+                self,
+            ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+                global___Expression.Literal
+            ]: ...
+            def __init__(
+                self,
+                *,
+                elementType: pyspark.sql.connect.proto.types_pb2.DataType | None = ...,
+                element: collections.abc.Iterable[global___Expression.Literal] | None = ...,
+            ) -> None: ...
+            def HasField(
+                self, field_name: typing_extensions.Literal["elementType", b"elementType"]
+            ) -> builtins.bool: ...
+            def ClearField(
+                self,
+                field_name: typing_extensions.Literal[
+                    "element", b"element", "elementType", b"elementType"
+                ],
+            ) -> None: ...
+
         NULL_FIELD_NUMBER: builtins.int
         BINARY_FIELD_NUMBER: builtins.int
         BOOLEAN_FIELD_NUMBER: builtins.int
@@ -486,7 +496,7 @@ class Expression(google.protobuf.message.Message):
         CALENDAR_INTERVAL_FIELD_NUMBER: builtins.int
         YEAR_MONTH_INTERVAL_FIELD_NUMBER: builtins.int
         DAY_TIME_INTERVAL_FIELD_NUMBER: builtins.int
-        LIST_FIELD_NUMBER: builtins.int
+        ARRAY_FIELD_NUMBER: builtins.int
         @property
         def null(self) -> pyspark.sql.connect.proto.types_pb2.DataType: ...
         binary: builtins.bytes
@@ -511,7 +521,7 @@ class Expression(google.protobuf.message.Message):
         year_month_interval: builtins.int
         day_time_interval: builtins.int
         @property
-        def list(self) -> global___Expression.Literal.List: ...
+        def array(self) -> global___Expression.Literal.Array: ...
         def __init__(
             self,
             *,
@@ -532,11 +542,13 @@ class Expression(google.protobuf.message.Message):
             calendar_interval: global___Expression.Literal.CalendarInterval | None = ...,
             year_month_interval: builtins.int = ...,
             day_time_interval: builtins.int = ...,
-            list: global___Expression.Literal.List | None = ...,
+            array: global___Expression.Literal.Array | None = ...,
         ) -> None: ...
         def HasField(
             self,
             field_name: typing_extensions.Literal[
+                "array",
+                b"array",
                 "binary",
                 b"binary",
                 "boolean",
@@ -557,8 +569,6 @@ class Expression(google.protobuf.message.Message):
                 b"float",
                 "integer",
                 b"integer",
-                "list",
-                b"list",
                 "literal_type",
                 b"literal_type",
                 "long",
@@ -580,6 +590,8 @@ class Expression(google.protobuf.message.Message):
         def ClearField(
             self,
             field_name: typing_extensions.Literal[
+                "array",
+                b"array",
                 "binary",
                 b"binary",
                 "boolean",
@@ -600,8 +612,6 @@ class Expression(google.protobuf.message.Message):
                 b"float",
                 "integer",
                 b"integer",
-                "list",
-                b"list",
                 "literal_type",
                 b"literal_type",
                 "long",
@@ -640,7 +650,7 @@ class Expression(google.protobuf.message.Message):
             "calendar_interval",
             "year_month_interval",
             "day_time_interval",
-            "list",
+            "array",
         ] | None: ...
 
     @typing_extensions.final
@@ -796,16 +806,30 @@ class Expression(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
         COL_NAME_FIELD_NUMBER: builtins.int
+        PLAN_ID_FIELD_NUMBER: builtins.int
         col_name: builtins.str
         """(Required) The column name used to extract column with regex."""
+        plan_id: builtins.int
+        """(Optional) The id of corresponding connect plan."""
         def __init__(
             self,
             *,
             col_name: builtins.str = ...,
+            plan_id: builtins.int | None = ...,
         ) -> None: ...
+        def HasField(
+            self,
+            field_name: typing_extensions.Literal["_plan_id", b"_plan_id", "plan_id", b"plan_id"],
+        ) -> builtins.bool: ...
         def ClearField(
-            self, field_name: typing_extensions.Literal["col_name", b"col_name"]
+            self,
+            field_name: typing_extensions.Literal[
+                "_plan_id", b"_plan_id", "col_name", b"col_name", "plan_id", b"plan_id"
+            ],
         ) -> None: ...
+        def WhichOneof(
+            self, oneof_group: typing_extensions.Literal["_plan_id", b"_plan_id"]
+        ) -> typing_extensions.Literal["plan_id"] | None: ...
 
     @typing_extensions.final
     class UnresolvedExtractValue(google.protobuf.message.Message):

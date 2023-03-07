@@ -29,13 +29,11 @@ from google.protobuf import symbol_database as _symbol_database
 _sym_db = _symbol_database.Default()
 
 
-from google.protobuf import any_pb2 as google_dot_protobuf_dot_any__pb2
 from pyspark.sql.connect.proto import expressions_pb2 as spark_dot_connect_dot_expressions__pb2
-from pyspark.sql.connect.proto import types_pb2 as spark_dot_connect_dot_types__pb2
 
 
 DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(
-    b'\n\x1dspark/connect/ml_common.proto\x12\rspark.connect\x1a\x19google/protobuf/any.proto\x1a\x1fspark/connect/expressions.proto\x1a\x19spark/connect/types.proto"\xd7\x02\n\x06Params\x12\x39\n\x06params\x18\x01 \x03(\x0b\x32!.spark.connect.Params.ParamsEntryR\x06params\x12O\n\x0e\x64\x65\x66\x61ult_params\x18\x02 \x03(\x0b\x32(.spark.connect.Params.DefaultParamsEntryR\rdefaultParams\x1a\\\n\x0bParamsEntry\x12\x10\n\x03key\x18\x01 \x01(\tR\x03key\x12\x37\n\x05value\x18\x02 \x01(\x0b\x32!.spark.connect.Expression.LiteralR\x05value:\x02\x38\x01\x1a\x63\n\x12\x44\x65\x66\x61ultParamsEntry\x12\x10\n\x03key\x18\x01 \x01(\tR\x03key\x12\x37\n\x05value\x18\x02 \x01(\x0b\x32!.spark.connect.Expression.LiteralR\x05value:\x02\x38\x01"\xbd\x01\n\x05Stage\x12\x12\n\x04name\x18\x01 \x01(\tR\x04name\x12-\n\x06params\x18\x02 \x01(\x0b\x32\x15.spark.connect.ParamsR\x06params\x12\x10\n\x03uid\x18\x03 \x01(\tR\x03uid\x12\x32\n\x04type\x18\x04 \x01(\x0e\x32\x1e.spark.connect.Stage.StageTypeR\x04type"+\n\tStageType\x12\r\n\tESTIMATOR\x10\x00\x12\x0f\n\x0bTRANSFORMER\x10\x01\x42"\n\x1eorg.apache.spark.connect.protoP\x01\x62\x06proto3'
+    b'\n\x1dspark/connect/ml_common.proto\x12\rspark.connect\x1a\x1fspark/connect/expressions.proto"\xd7\x02\n\x06Params\x12\x39\n\x06params\x18\x01 \x03(\x0b\x32!.spark.connect.Params.ParamsEntryR\x06params\x12O\n\x0e\x64\x65\x66\x61ult_params\x18\x02 \x03(\x0b\x32(.spark.connect.Params.DefaultParamsEntryR\rdefaultParams\x1a\\\n\x0bParamsEntry\x12\x10\n\x03key\x18\x01 \x01(\tR\x03key\x12\x37\n\x05value\x18\x02 \x01(\x0b\x32!.spark.connect.Expression.LiteralR\x05value:\x02\x38\x01\x1a\x63\n\x12\x44\x65\x66\x61ultParamsEntry\x12\x10\n\x03key\x18\x01 \x01(\tR\x03key\x12\x37\n\x05value\x18\x02 \x01(\x0b\x32!.spark.connect.Expression.LiteralR\x05value:\x02\x38\x01"\xbd\x01\n\x05Stage\x12\x12\n\x04name\x18\x01 \x01(\tR\x04name\x12-\n\x06params\x18\x02 \x01(\x0b\x32\x15.spark.connect.ParamsR\x06params\x12\x10\n\x03uid\x18\x03 \x01(\tR\x03uid\x12\x32\n\x04type\x18\x04 \x01(\x0e\x32\x1e.spark.connect.Stage.StageTypeR\x04type"+\n\tStageType\x12\r\n\tESTIMATOR\x10\x00\x12\x0f\n\x0bTRANSFORMER\x10\x01\x42"\n\x1eorg.apache.spark.connect.protoP\x01\x62\x06proto3'
 )
 
 
@@ -94,14 +92,14 @@ if _descriptor._USE_C_DESCRIPTORS == False:
     _PARAMS_PARAMSENTRY._serialized_options = b"8\001"
     _PARAMS_DEFAULTPARAMSENTRY._options = None
     _PARAMS_DEFAULTPARAMSENTRY._serialized_options = b"8\001"
-    _PARAMS._serialized_start = 136
-    _PARAMS._serialized_end = 479
-    _PARAMS_PARAMSENTRY._serialized_start = 286
-    _PARAMS_PARAMSENTRY._serialized_end = 378
-    _PARAMS_DEFAULTPARAMSENTRY._serialized_start = 380
-    _PARAMS_DEFAULTPARAMSENTRY._serialized_end = 479
-    _STAGE._serialized_start = 482
-    _STAGE._serialized_end = 671
-    _STAGE_STAGETYPE._serialized_start = 628
-    _STAGE_STAGETYPE._serialized_end = 671
+    _PARAMS._serialized_start = 82
+    _PARAMS._serialized_end = 425
+    _PARAMS_PARAMSENTRY._serialized_start = 232
+    _PARAMS_PARAMSENTRY._serialized_end = 324
+    _PARAMS_DEFAULTPARAMSENTRY._serialized_start = 326
+    _PARAMS_DEFAULTPARAMSENTRY._serialized_end = 425
+    _STAGE._serialized_start = 428
+    _STAGE._serialized_end = 617
+    _STAGE_STAGETYPE._serialized_start = 574
+    _STAGE_STAGETYPE._serialized_end = 617
 # @@protoc_insertion_point(module_scope)

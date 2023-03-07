@@ -69,15 +69,15 @@ object MLUtils {
       assert (paramValueProto.hasString)
       paramValueProto.getString
     } else if (paramType.isArray) {
-      assert (paramValueProto.hasList)
-      val listProto = paramValueProto.getList
+      assert (paramValueProto.hasArray)
+      val listProto = paramValueProto.getArray
       val compType = paramType.getComponentType
 
-      def protoListToArray[T: ClassTag](listProto: proto.Expression.Literal.List): Unit = {
-        Array.tabulate[T](listProto.getElementsCount) { index =>
+      def protoListToArray[T: ClassTag](listProto: proto.Expression.Literal.Array): Unit = {
+        Array.tabulate[T](listProto.getElementCount) { index =>
           parseParamValue(
             implicitly[ClassTag[T]].runtimeClass,
-            listProto.getElements(index)).asInstanceOf[T]
+            listProto.getElement(index)).asInstanceOf[T]
         }
       }
 
@@ -94,8 +94,8 @@ object MLUtils {
       } else if (compType == classOf[String]) {
         protoListToArray[String](listProto)
       } else if (compType.isArray) {
-        Array.tabulate(listProto.getElementsCount) { index =>
-          compType.cast(parseParamValue(compType, listProto.getElements(index)))
+        Array.tabulate(listProto.getElementCount) { index =>
+          compType.cast(parseParamValue(compType, listProto.getElement(index)))
         }
       } else {
         throw new IllegalArgumentException()

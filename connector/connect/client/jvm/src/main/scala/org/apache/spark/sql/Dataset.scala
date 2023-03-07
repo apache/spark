@@ -534,6 +534,30 @@ class Dataset[T] private[sql] (
     }
   }
 
+  /**
+   * Returns a [[DataFrameNaFunctions]] for working with missing data.
+   * {{{
+   *   // Dropping rows containing any null values.
+   *   ds.na.drop()
+   * }}}
+   *
+   * @group untypedrel
+   * @since 3.4.0
+   */
+  def na: DataFrameNaFunctions = new DataFrameNaFunctions(sparkSession, plan.getRoot)
+
+  /**
+   * Returns a [[DataFrameStatFunctions]] for working statistic functions support.
+   * {{{
+   *   // Finding frequent items in column with name 'a'.
+   *   ds.stat.freqItems(Seq("a"))
+   * }}}
+   *
+   * @group untypedrel
+   * @since 3.4.0
+   */
+  def stat: DataFrameStatFunctions = new DataFrameStatFunctions(sparkSession, plan.getRoot)
+
   private def buildJoin(right: Dataset[_])(f: proto.Join.Builder => Unit): DataFrame = {
     sparkSession.newDataFrame { builder =>
       val joinBuilder = builder.getJoinBuilder
@@ -917,6 +941,13 @@ class Dataset[T] private[sql] (
         .addAllParameters(parameters.map(p => functions.lit(p).expr).asJava)
   }
 
+  private def getPlanId: Option[Long] =
+    if (plan.getRoot.hasCommon && plan.getRoot.getCommon.hasPlanId) {
+      Option(plan.getRoot.getCommon.getPlanId)
+    } else {
+      None
+    }
+
   /**
    * Selects column based on the column name and returns it as a [[Column]].
    *
@@ -927,12 +958,7 @@ class Dataset[T] private[sql] (
    * @since 3.4.0
    */
   def col(colName: String): Column = {
-    val planId = if (plan.getRoot.hasCommon && plan.getRoot.getCommon.hasPlanId) {
-      Option(plan.getRoot.getCommon.getPlanId)
-    } else {
-      None
-    }
-    Column.apply(colName, planId)
+    Column.apply(colName, getPlanId)
   }
 
   /**
@@ -940,8 +966,11 @@ class Dataset[T] private[sql] (
    * @group untypedrel
    * @since 3.4.0
    */
-  def colRegex(colName: String): Column = Column { builder =>
-    builder.getUnresolvedRegexBuilder.setColName(colName)
+  def colRegex(colName: String): Column = {
+    Column { builder =>
+      val unresolvedRegexBuilder = builder.getUnresolvedRegexBuilder.setColName(colName)
+      getPlanId.foreach(unresolvedRegexBuilder.setPlanId)
+    }
   }
 
   /**
@@ -2724,8 +2753,23 @@ class Dataset[T] private[sql] (
     throw new UnsupportedOperationException("localCheckpoint is not implemented.")
   }
 
+  /**
+   * Returns `true` when the logical query plans inside both [[Dataset]]s are equal and therefore
+   * return same results.
+   *
+   * @note
+   *   The equality comparison here is simplified by tolerating the cosmetic differences such as
+   *   attribute names.
+   * @note
+   *   This API can compare both [[Dataset]]s but can still return `false` on the [[Dataset]] that
+   *   return the same results, for instance, from different plans. Such false negative semantic
+   *   can be useful when caching as an example. This comparison may not be fast because it will
+   *   execute a RPC call.
+   * @since 3.4.0
+   */
+  @DeveloperApi
   def sameSemantics(other: Dataset[T]): Boolean = {
-    throw new UnsupportedOperationException("sameSemantics is not implemented.")
+    sparkSession.sameSemantics(this.plan, other.plan)
   }
 
   def semanticHash(): Int = {

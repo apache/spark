@@ -19,9 +19,7 @@ syntax = 'proto3';
 
 package spark.connect;
 
-import "google/protobuf/any.proto";
 import "spark/connect/expressions.proto";
-import "spark/connect/types.proto";
 import "spark/connect/relations.proto";
 import "spark/connect/ml_common.proto";
 
@@ -106,12 +104,12 @@ message Vector {
     Sparse sparse = 2;
   }
   message Dense {
-    repeated double values = 1;
+    repeated double value = 1;
   }
   message Sparse {
     int32 size = 1;
-    repeated double indices = 2;
-    repeated double values = 3;
+    repeated double index = 2;
+    repeated double value = 3;
   }
 }
 
@@ -123,14 +121,15 @@ message Matrix {
   message Dense {
     int32 num_rows = 1;
     int32 num_cols = 2;
-    repeated double values = 3;
+    repeated double value = 3;
+    bool is_transposed = 4;
   }
   message Sparse {
     int32 num_rows = 1;
     int32 num_cols = 2;
-    repeated double colptrs = 3;
-    repeated double row_indices = 4;
-    repeated double values = 5;
+    repeated double colptr = 3;
+    repeated double row_index = 4;
+    repeated double value = 5;
     bool is_transposed = 6;
   }
 }

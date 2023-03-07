@@ -59,6 +59,7 @@ if should_test_connect:
     import grpc
     import pandas as pd
     import numpy as np
+    from pyspark.sql.connect.proto import Expression as ProtoExpression
     from pyspark.sql.connect.session import SparkSession as RemoteSparkSession
     from pyspark.sql.connect.client import ChannelBuilder
     from pyspark.sql.connect.column import Column
@@ -1631,6 +1632,57 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             self.assert_eq(relations[i].toPandas(), datasets[i].toPandas())
             i += 1
 
+    def test_observe(self):
+        # SPARK-41527: test DataFrame.observe()
+        from pyspark.sql import functions as SF
+        from pyspark.sql.connect import functions as CF
+
+        observation_name = "my_metric"
+
+        self.assert_eq(
+            self.connect.read.table(self.tbl_name)
+            .filter("id > 3")
+            .observe(observation_name, CF.min("id"), CF.max("id"), CF.sum("id"))
+            .toPandas(),
+            self.spark.read.table(self.tbl_name)
+            .filter("id > 3")
+            .observe(observation_name, SF.min("id"), SF.max("id"), SF.sum("id"))
+            .toPandas(),
+        )
+
+        from pyspark.sql.observation import Observation
+
+        observation = Observation(observation_name)
+
+        cdf = (
+            self.connect.read.table(self.tbl_name)
+            .filter("id > 3")
+            .observe(observation, CF.min("id"), CF.max("id"), CF.sum("id"))
+            .toPandas()
+        )
+        df = (
+            self.spark.read.table(self.tbl_name)
+            .filter("id > 3")
+            .observe(observation, SF.min("id"), SF.max("id"), SF.sum("id"))
+            .toPandas()
+        )
+
+        self.assert_eq(cdf, df)
+
+        observed_metrics = cdf.attrs["observed_metrics"]
+        self.assert_eq(len(observed_metrics), 1)
+        self.assert_eq(observed_metrics[0].name, observation_name)
+        self.assert_eq(len(observed_metrics[0].metrics), 3)
+        for metric in observed_metrics[0].metrics:
+            self.assertIsInstance(metric, ProtoExpression.Literal)
+        values = list(map(lambda metric: metric.long, observed_metrics[0].metrics))
+        self.assert_eq(values, [4, 99, 4944])
+
+        with self.assertRaisesRegex(ValueError, "'exprs' should not be empty"):
+            self.connect.read.table(self.tbl_name).observe(observation_name)
+        with self.assertRaisesRegex(ValueError, "all 'exprs' should be Column"):
+            self.connect.read.table(self.tbl_name).observe(observation_name, CF.lit(1), "id")
+
     def test_with_columns(self):
         # SPARK-41256: test withColumn(s).
         self.assert_eq(
@@ -2757,6 +2809,11 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             self.spark.version,
         )
 
+    def test_same_semantics(self):
+        plan = self.connect.sql("SELECT 1")
+        other = self.connect.sql("SELECT 1")
+        self.assertTrue(plan.sameSemantics(other))
+
     def test_unsupported_functions(self):
         # SPARK-41225: Disable unsupported functions.
         df = self.connect.read.table(self.tbl_name)
@@ -2766,7 +2823,6 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             "cache",
             "persist",
             "withWatermark",
-            "observe",
             "foreach",
             "foreachPartition",
             "toLocalIterator",
@@ -2774,7 +2830,6 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             "localCheckpoint",
             "_repr_html_",
             "semanticHash",
-            "sameSemantics",
         ):
             with self.assertRaises(NotImplementedError):
                 getattr(df, f)()

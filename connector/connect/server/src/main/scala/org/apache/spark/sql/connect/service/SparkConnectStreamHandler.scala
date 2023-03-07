@@ -30,6 +30,7 @@ import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.connect.config.Connect.CONNECT_GRPC_ARROW_MAX_BATCH_SIZE
 import org.apache.spark.sql.connect.ml.MLHandler
+import org.apache.spark.sql.connect.planner.LiteralValueProtoConverter.toConnectProtoValue
 import org.apache.spark.sql.connect.planner.SparkConnectPlanner
 import org.apache.spark.sql.connect.service.SparkConnectStreamHandler.processAsArrowBatches
 import org.apache.spark.sql.execution.{SparkPlan, SQLExecution}
@@ -44,7 +45,7 @@ class SparkConnectStreamHandler(responseObserver: StreamObserver[ExecutePlanResp
   def handle(v: ExecutePlanRequest): Unit = {
     val sessionHolder =
       SparkConnectService
-        .getOrCreateIsolatedSession(v.getUserContext.getUserId, v.getClientId)
+        .getOrCreateIsolatedSession(v.getUserContext.getUserId, v.getSessionId)
     val session = sessionHolder.session
     session.withActive {
       v.getPlan.getOpTypeCase match {
@@ -63,16 +64,20 @@ class SparkConnectStreamHandler(responseObserver: StreamObserver[ExecutePlanResp
     val session = sessionHolder.session
     val planner = new SparkConnectPlanner(sessionHolder)
     val dataframe = Dataset.ofRows(session, planner.transformRelation(request.getPlan.getRoot))
-    processAsArrowBatches(request.getClientId, dataframe, responseObserver)
+    processAsArrowBatches(request.getSessionId, dataframe, responseObserver)
     responseObserver.onNext(
-      SparkConnectStreamHandler.sendMetricsToResponse(request.getClientId, dataframe))
+      SparkConnectStreamHandler.sendMetricsToResponse(request.getSessionId, dataframe))
+    if (dataframe.queryExecution.observedMetrics.nonEmpty) {
+      responseObserver.onNext(
+        SparkConnectStreamHandler.sendObservedMetricsToResponse(request.getSessionId, dataframe))
+    }
     responseObserver.onCompleted()
   }
 
   private def handleCommand(sessionHolder: SessionHolder, request: ExecutePlanRequest): Unit = {
     val command = request.getPlan.getCommand
     val planner = new SparkConnectPlanner(sessionHolder)
-    planner.process(command, request.getClientId, responseObserver)
+    planner.process(command, request.getSessionId, responseObserver)
     responseObserver.onCompleted()
   }
 }
@@ -95,7 +100,7 @@ object SparkConnectStreamHandler {
   }
 
   def processAsArrowBatches(
-      clientId: String,
+      sessionId: String,
       dataframe: DataFrame,
       responseObserver: StreamObserver[ExecutePlanResponse]): Unit = {
     val spark = dataframe.sparkSession
@@ -172,7 +177,7 @@ object SparkConnectStreamHandler {
           }
 
           partition.foreach { case (bytes, count) =>
-            val response = proto.ExecutePlanResponse.newBuilder().setClientId(clientId)
+            val response = proto.ExecutePlanResponse.newBuilder().setSessionId(sessionId)
             val batch = proto.ExecutePlanResponse.ArrowBatch
               .newBuilder()
               .setRowCount(count)
@@ -190,7 +195,7 @@ object SparkConnectStreamHandler {
       // Make sure at least 1 batch will be sent.
       if (numSent == 0) {
         val bytes = ArrowConverters.createEmptyArrowBatch(schema, timeZoneId)
-        val response = proto.ExecutePlanResponse.newBuilder().setClientId(clientId)
+        val response = proto.ExecutePlanResponse.newBuilder().setSessionId(sessionId)
         val batch = proto.ExecutePlanResponse.ArrowBatch
           .newBuilder()
           .setRowCount(0L)
@@ -202,12 +207,31 @@ object SparkConnectStreamHandler {
     }
   }
 
-  def sendMetricsToResponse(clientId: String, rows: DataFrame): ExecutePlanResponse = {
+  def sendMetricsToResponse(sessionId: String, rows: DataFrame): ExecutePlanResponse = {
     // Send a last batch with the metrics
     ExecutePlanResponse
       .newBuilder()
-      .setClientId(clientId)
+      .setSessionId(sessionId)
       .setMetrics(MetricGenerator.buildMetrics(rows.queryExecution.executedPlan))
+      .build()
+  }
+
+  def sendObservedMetricsToResponse(
+      sessionId: String,
+      dataframe: DataFrame): ExecutePlanResponse = {
+    val observedMetrics = dataframe.queryExecution.observedMetrics.map { case (name, row) =>
+      val cols = (0 until row.length).map(i => toConnectProtoValue(row(i)))
+      ExecutePlanResponse.ObservedMetrics
+        .newBuilder()
+        .setName(name)
+        .addAllValues(cols.asJava)
+        .build()
+    }
+    // Prepare a response with the observed metrics.
+    ExecutePlanResponse
+      .newBuilder()
+      .setSessionId(sessionId)
+      .addAllObservedMetrics(observedMetrics.asJava)
       .build()
   }
 }
@@ -246,5 +270,4 @@ object MetricGenerator extends AdaptiveSparkPlanHelper {
       .build()
     Seq(mo) ++ transformChildren(p)
   }
-
 }
