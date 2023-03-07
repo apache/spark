@@ -99,8 +99,7 @@ class PlanGenerationTestSuite
       proto.UserContext.newBuilder().build(),
       InProcessChannelBuilder.forName("/dev/null"))
     session =
-//      new SparkSession(client, cleaner = SparkSession.cleaner, planIdGenerator = new AtomicLong)
-      SparkSession.builder().client(SparkConnectClient.builder().port(port).build()).build()
+      new SparkSession(client, cleaner = SparkSession.cleaner, planIdGenerator = new AtomicLong)
   }
 
   override protected def beforeEach(): Unit = {
