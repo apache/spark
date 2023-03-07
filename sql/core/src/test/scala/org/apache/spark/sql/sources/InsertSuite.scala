@@ -911,10 +911,16 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       spark.sessionState.catalog.createTable(newTable, false)
 
       sql("INSERT INTO TABLE test_table SELECT 1, 'a'")
-      val msg = intercept[AnalysisException] {
-        sql("INSERT INTO TABLE test_table SELECT 2, null")
-      }.getMessage
-      assert(msg.contains("Cannot write nullable values to non-null column 's'"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("INSERT INTO TABLE test_table SELECT 2, null")
+        },
+        errorClass = "INCOMPATIBLE_DATA_TO_TABLE.NULLABLE_COLUMN",
+        parameters = Map(
+          "tableName" -> "`spark_catalog`.`default`.`test_table`",
+          "colPath" -> "`s`"
+        )
+      )
     }
   }
 

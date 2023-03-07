@@ -941,8 +941,15 @@ class HiveClientSuite(version: String, allVersions: Seq[String])
         if (isPartitioned) {
           val insertStmt = s"INSERT OVERWRITE TABLE $tableName partition (ds='a') SELECT 1.3"
           if (version == "0.12" || version == "0.13") {
-            val e = intercept[AnalysisException](versionSpark.sql(insertStmt)).getMessage
-            assert(e.contains(errorMsg))
+            checkError(
+              exception = intercept[AnalysisException](versionSpark.sql(insertStmt)),
+              errorClass = "INCOMPATIBLE_DATA_TO_TABLE.CANNOT_SAFELY_CAST",
+              parameters = Map(
+                "tableName" -> "`spark_catalog`.`default`.`tab1`",
+                "colPath" -> "`f0`",
+                "from" -> "\"DECIMAL(2,1)\"",
+                "to" -> "\"BINARY\"")
+            )
           } else {
             versionSpark.sql(insertStmt)
             assert(versionSpark.table(tableName).collect() ===
