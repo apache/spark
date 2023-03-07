@@ -142,6 +142,8 @@ message Read {
     repeated string paths = 4;
 
     // (Optional) Condition in the where clause for each partition.
+    //
+    // Only work for JDBC data source.
     repeated string predicates = 5;
   }
 }

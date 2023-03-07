@@ -686,12 +686,27 @@ class SparkConnectPlanner(val session: SparkSession) {
       case proto.Read.ReadTypeCase.DATA_SOURCE =>
         val localMap = CaseInsensitiveMap[String](rel.getDataSource.getOptionsMap.asScala.toMap)
         val reader = session.read
+        if (rel.getDataSource.hasFormat) {
+          reader.format(rel.getDataSource.getFormat)
+        }
         localMap.foreach { case (key, value) => reader.option(key, value) }
 
-        if (rel.getDataSource.getPredicatesCount == 0) {
-          if (rel.getDataSource.hasFormat) {
-            reader.format(rel.getDataSource.getFormat)
+        if (rel.getDataSource.getFormat == "jdbc" && rel.getDataSource.getPredicatesCount > 0) {
+          if (!localMap.contains(JDBCOptions.JDBC_URL) ||
+            !localMap.contains(JDBCOptions.JDBC_TABLE_NAME)) {
+            throw InvalidPlanInput(s"Invalid jdbc params, please specify jdbc url and table.")
           }
+
+          val url = rel.getDataSource.getOptionsMap.get(JDBCOptions.JDBC_URL)
+          val table = rel.getDataSource.getOptionsMap.get(JDBCOptions.JDBC_TABLE_NAME)
+          val options = new JDBCOptions(url, table, localMap)
+          val predicates = rel.getDataSource.getPredicatesList.asScala.toArray
+          val parts: Array[Partition] = predicates.zipWithIndex.map { case (part, i) =>
+            JDBCPartition(part, i): Partition
+          }
+          val relation = JDBCRelation(parts, options)(session)
+          LogicalRelation(relation)
+        } else if (rel.getDataSource.getPredicatesCount == 0) {
           if (rel.getDataSource.hasSchema && rel.getDataSource.getSchema.nonEmpty) {
 
             DataType.parseTypeWithFallback(
@@ -710,22 +725,11 @@ class SparkConnectPlanner(val session: SparkSession) {
             reader.load(rel.getDataSource.getPathsList.asScala.toSeq: _*).queryExecution.analyzed
           }
         } else {
-          if (!localMap.contains(JDBCOptions.JDBC_URL) ||
-            !localMap.contains(JDBCOptions.JDBC_TABLE_NAME)) {
-            throw InvalidPlanInput(s"Invalid jdbc params, please specify jdbc url and table.")
-          }
-          val url = rel.getDataSource.getOptionsMap.get(JDBCOptions.JDBC_URL)
-          val table = rel.getDataSource.getOptionsMap.get(JDBCOptions.JDBC_TABLE_NAME)
-          val options = new JDBCOptions(url, table, localMap)
-          val predicates = rel.getDataSource.getPredicatesList.asScala.toArray
-          val parts: Array[Partition] = predicates.zipWithIndex.map { case (part, i) =>
-            JDBCPartition(part, i): Partition
-          }
-          val relation = JDBCRelation(parts, options)(session)
-          LogicalRelation(relation)
+          throw InvalidPlanInput(
+            s"Predicates are not supported for ${rel.getDataSource.getFormat} data sources.")
         }
 
-      case _ => throw InvalidPlanInput("Does not support " + rel.getReadTypeCase.name())
+      case _ => throw InvalidPlanInput(s"Does not support ${rel.getReadTypeCase.name()}")
     }
   }
 

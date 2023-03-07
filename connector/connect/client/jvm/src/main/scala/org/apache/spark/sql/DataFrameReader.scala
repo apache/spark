@@ -280,6 +280,8 @@ class DataFrameReader private[sql] (sparkSession: SparkSession) extends Logging 
       connectionProperties: Properties): DataFrame = {
     sparkSession.newDataFrame { builder =>
       val dataSourceBuilder = builder.getReadBuilder.getDataSourceBuilder
+      format("jdbc")
+      dataSourceBuilder.setFormat(source)
       predicates.foreach(predicate => dataSourceBuilder.addPredicates(predicate))
       this.extraOptions ++= Seq("url" -> url, "dbtable" -> table)
       val params = extraOptions ++ connectionProperties.asScala
