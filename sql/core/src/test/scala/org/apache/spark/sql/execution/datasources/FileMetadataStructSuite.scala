@@ -281,6 +281,53 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
     )
   }
 
+  metadataColumnsTest("metadata propagates through projections automatically",
+    schema) { (df, f0, f1) =>
+
+    checkAnswer(
+      df.select("name")
+        .withColumn("m", col("_metadata").getField("file_name")),
+      Seq(
+        Row("jack", f0(METADATA_FILE_NAME)),
+        Row("lily", f1(METADATA_FILE_NAME))
+      )
+    )
+  }
+
+  metadataColumnsTest("metadata propagates through subqueries only manually",
+    schema) { (df, f0, f1) =>
+
+    // Metadata columns do not automatically propagate through subqueries.
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.select("name").as("s").select("name")
+          .withColumn("m", col("_metadata").getField("file_name"))
+      },
+      errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+      parameters = Map("objectName" -> "`_metadata`", "proposal" -> "`s`.`name`"))
+
+    // A metadata column manually propagated through a subquery is available.
+    checkAnswer(
+      df.select("name", "_metadata").as("s").select("name")
+        .withColumn("m", col("_metadata").getField("file_name")),
+      Seq(
+        Row("jack", f0(METADATA_FILE_NAME)),
+        Row("lily", f1(METADATA_FILE_NAME))
+      )
+    )
+
+    // A metadata column manually propagated multiple subqueries is available.
+    checkAnswer(
+      df.select("name", "_metadata").as("s")
+        .select("name", "_metadata").as("t").select("name")
+        .withColumn("m", col("_metadata").getField("file_name")),
+      Seq(
+        Row("jack", f0(METADATA_FILE_NAME)),
+        Row("lily", f1(METADATA_FILE_NAME))
+      )
+    )
+  }
+
   metadataColumnsTest("alias", schema) { (df, f0, f1) =>
 
     val aliasDF = df.select(

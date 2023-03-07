@@ -1033,9 +1033,12 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         requiredAttrIds.contains(a.exprId)) =>
         s.withMetadataColumns()
       case p: Project if p.metadataOutput.exists(a => requiredAttrIds.contains(a.exprId)) =>
+        // Inject the requested metadata columns into the project's output, if not already present.
+        val missingMetadata = p.metadataOutput
+          .filterNot(a => p.projectList.exists(_.exprId == a.exprId))
         val newProj = p.copy(
           // Do not leak the qualified-access-only restriction to normal plan outputs.
-          projectList = p.projectList ++ p.metadataOutput.map(_.markAsAllowAnyAccess()),
+          projectList = p.projectList ++ missingMetadata.map(_.markAsAllowAnyAccess()),
           child = addMetadataCol(p.child, requiredAttrIds))
         newProj.copyTagsFrom(p)
         newProj
