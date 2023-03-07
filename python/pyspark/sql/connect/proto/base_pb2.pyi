@@ -350,7 +350,7 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
             ],
         ) -> None: ...
 
-    CLIENT_ID_FIELD_NUMBER: builtins.int
+    SESSION_ID_FIELD_NUMBER: builtins.int
     USER_CONTEXT_FIELD_NUMBER: builtins.int
     CLIENT_TYPE_FIELD_NUMBER: builtins.int
     SCHEMA_FIELD_NUMBER: builtins.int
@@ -362,11 +362,12 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
     SPARK_VERSION_FIELD_NUMBER: builtins.int
     DDL_PARSE_FIELD_NUMBER: builtins.int
     SAME_SEMANTICS_FIELD_NUMBER: builtins.int
-    client_id: builtins.str
+    session_id: builtins.str
     """(Required)
 
-    The client_id is set by the client to be able to collate streaming responses from
-    different queries.
+    The session_id specifies a spark session for a user id (which is specified
+    by user_context.user_id). The session_id is set by the client to be able to
+    collate streaming responses from different queries within the dedicated session.
     """
     @property
     def user_context(self) -> global___UserContext:
@@ -397,7 +398,7 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
     def __init__(
         self,
         *,
-        client_id: builtins.str = ...,
+        session_id: builtins.str = ...,
         user_context: global___UserContext | None = ...,
         client_type: builtins.str | None = ...,
         schema: global___AnalyzePlanRequest.Schema | None = ...,
@@ -448,8 +449,6 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
             b"_client_type",
             "analyze",
             b"analyze",
-            "client_id",
-            b"client_id",
             "client_type",
             b"client_type",
             "ddl_parse",
@@ -466,6 +465,8 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
             b"same_semantics",
             "schema",
             b"schema",
+            "session_id",
+            b"session_id",
             "spark_version",
             b"spark_version",
             "tree_string",
@@ -638,7 +639,7 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
             self, field_name: typing_extensions.Literal["result", b"result"]
         ) -> None: ...
 
-    CLIENT_ID_FIELD_NUMBER: builtins.int
+    SESSION_ID_FIELD_NUMBER: builtins.int
     SCHEMA_FIELD_NUMBER: builtins.int
     EXPLAIN_FIELD_NUMBER: builtins.int
     TREE_STRING_FIELD_NUMBER: builtins.int
@@ -648,7 +649,7 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
     SPARK_VERSION_FIELD_NUMBER: builtins.int
     DDL_PARSE_FIELD_NUMBER: builtins.int
     SAME_SEMANTICS_FIELD_NUMBER: builtins.int
-    client_id: builtins.str
+    session_id: builtins.str
     @property
     def schema(self) -> global___AnalyzePlanResponse.Schema: ...
     @property
@@ -670,7 +671,7 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
     def __init__(
         self,
         *,
-        client_id: builtins.str = ...,
+        session_id: builtins.str = ...,
         schema: global___AnalyzePlanResponse.Schema | None = ...,
         explain: global___AnalyzePlanResponse.Explain | None = ...,
         tree_string: global___AnalyzePlanResponse.TreeString | None = ...,
@@ -709,8 +710,6 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
     def ClearField(
         self,
         field_name: typing_extensions.Literal[
-            "client_id",
-            b"client_id",
             "ddl_parse",
             b"ddl_parse",
             "explain",
@@ -727,6 +726,8 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
             b"same_semantics",
             "schema",
             b"schema",
+            "session_id",
+            b"session_id",
             "spark_version",
             b"spark_version",
             "tree_string",
@@ -754,19 +755,24 @@ class ExecutePlanRequest(google.protobuf.message.Message):
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-    CLIENT_ID_FIELD_NUMBER: builtins.int
+    SESSION_ID_FIELD_NUMBER: builtins.int
     USER_CONTEXT_FIELD_NUMBER: builtins.int
     PLAN_FIELD_NUMBER: builtins.int
     CLIENT_TYPE_FIELD_NUMBER: builtins.int
-    client_id: builtins.str
+    session_id: builtins.str
     """(Required)
 
-    The client_id is set by the client to be able to collate streaming responses from
-    different queries.
+    The session_id specifies a spark session for a user id (which is specified
+    by user_context.user_id). The session_id is set by the client to be able to
+    collate streaming responses from different queries within the dedicated session.
     """
     @property
     def user_context(self) -> global___UserContext:
-        """(Required) User context"""
+        """(Required) User context
+
+        user_context.user_id and session+id both identify a unique remote spark session on the
+        server side.
+        """
     @property
     def plan(self) -> global___Plan:
         """(Required) The logical plan to be executed / analyzed."""
@@ -778,7 +784,7 @@ class ExecutePlanRequest(google.protobuf.message.Message):
     def __init__(
         self,
         *,
-        client_id: builtins.str = ...,
+        session_id: builtins.str = ...,
         user_context: global___UserContext | None = ...,
         plan: global___Plan | None = ...,
         client_type: builtins.str | None = ...,
@@ -801,12 +807,12 @@ class ExecutePlanRequest(google.protobuf.message.Message):
         field_name: typing_extensions.Literal[
             "_client_type",
             b"_client_type",
-            "client_id",
-            b"client_id",
             "client_type",
             b"client_type",
             "plan",
             b"plan",
+            "session_id",
+            b"session_id",
             "user_context",
             b"user_context",
         ],
@@ -819,7 +825,7 @@ global___ExecutePlanRequest = ExecutePlanRequest
 
 class ExecutePlanResponse(google.protobuf.message.Message):
     """The response of a query, can be one or more for each request. Responses belonging to the
-    same input query, carry the same `client_id`.
+    same input query, carry the same `session_id`.
     """
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
@@ -995,13 +1001,13 @@ class ExecutePlanResponse(google.protobuf.message.Message):
             self, field_name: typing_extensions.Literal["name", b"name", "values", b"values"]
         ) -> None: ...
 
-    CLIENT_ID_FIELD_NUMBER: builtins.int
+    SESSION_ID_FIELD_NUMBER: builtins.int
     ARROW_BATCH_FIELD_NUMBER: builtins.int
     SQL_COMMAND_RESULT_FIELD_NUMBER: builtins.int
     EXTENSION_FIELD_NUMBER: builtins.int
     METRICS_FIELD_NUMBER: builtins.int
     OBSERVED_METRICS_FIELD_NUMBER: builtins.int
-    client_id: builtins.str
+    session_id: builtins.str
     @property
     def arrow_batch(self) -> global___ExecutePlanResponse.ArrowBatch: ...
     @property
@@ -1025,7 +1031,7 @@ class ExecutePlanResponse(google.protobuf.message.Message):
     def __init__(
         self,
         *,
-        client_id: builtins.str = ...,
+        session_id: builtins.str = ...,
         arrow_batch: global___ExecutePlanResponse.ArrowBatch | None = ...,
         sql_command_result: global___ExecutePlanResponse.SqlCommandResult | None = ...,
         extension: google.protobuf.any_pb2.Any | None = ...,
@@ -1053,8 +1059,6 @@ class ExecutePlanResponse(google.protobuf.message.Message):
         field_name: typing_extensions.Literal[
             "arrow_batch",
             b"arrow_batch",
-            "client_id",
-            b"client_id",
             "extension",
             b"extension",
             "metrics",
@@ -1063,6 +1067,8 @@ class ExecutePlanResponse(google.protobuf.message.Message):
             b"observed_metrics",
             "response_type",
             b"response_type",
+            "session_id",
+            b"session_id",
             "sql_command_result",
             b"sql_command_result",
         ],
@@ -1310,15 +1316,16 @@ class ConfigRequest(google.protobuf.message.Message):
         ) -> None: ...
         def ClearField(self, field_name: typing_extensions.Literal["keys", b"keys"]) -> None: ...
 
-    CLIENT_ID_FIELD_NUMBER: builtins.int
+    SESSION_ID_FIELD_NUMBER: builtins.int
     USER_CONTEXT_FIELD_NUMBER: builtins.int
     OPERATION_FIELD_NUMBER: builtins.int
     CLIENT_TYPE_FIELD_NUMBER: builtins.int
-    client_id: builtins.str
+    session_id: builtins.str
     """(Required)
 
-    The client_id is set by the client to be able to collate streaming responses from
-    different queries.
+    The session_id specifies a spark session for a user id (which is specified
+    by user_context.user_id). The session_id is set by the client to be able to
+    collate streaming responses from different queries within the dedicated session.
     """
     @property
     def user_context(self) -> global___UserContext:
@@ -1334,7 +1341,7 @@ class ConfigRequest(google.protobuf.message.Message):
     def __init__(
         self,
         *,
-        client_id: builtins.str = ...,
+        session_id: builtins.str = ...,
         user_context: global___UserContext | None = ...,
         operation: global___ConfigRequest.Operation | None = ...,
         client_type: builtins.str | None = ...,
@@ -1357,12 +1364,12 @@ class ConfigRequest(google.protobuf.message.Message):
         field_name: typing_extensions.Literal[
             "_client_type",
             b"_client_type",
-            "client_id",
-            b"client_id",
             "client_type",
             b"client_type",
             "operation",
             b"operation",
+            "session_id",
+            b"session_id",
             "user_context",
             b"user_context",
         ],
@@ -1378,10 +1385,10 @@ class ConfigResponse(google.protobuf.message.Message):
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-    CLIENT_ID_FIELD_NUMBER: builtins.int
+    SESSION_ID_FIELD_NUMBER: builtins.int
     PAIRS_FIELD_NUMBER: builtins.int
     WARNINGS_FIELD_NUMBER: builtins.int
-    client_id: builtins.str
+    session_id: builtins.str
     @property
     def pairs(
         self,
@@ -1402,14 +1409,14 @@ class ConfigResponse(google.protobuf.message.Message):
     def __init__(
         self,
         *,
-        client_id: builtins.str = ...,
+        session_id: builtins.str = ...,
         pairs: collections.abc.Iterable[global___KeyValue] | None = ...,
         warnings: collections.abc.Iterable[builtins.str] | None = ...,
     ) -> None: ...
     def ClearField(
         self,
         field_name: typing_extensions.Literal[
-            "client_id", b"client_id", "pairs", b"pairs", "warnings", b"warnings"
+            "pairs", b"pairs", "session_id", b"session_id", "warnings", b"warnings"
         ],
     ) -> None: ...
 
@@ -1546,14 +1553,17 @@ class AddArtifactsRequest(google.protobuf.message.Message):
             ],
         ) -> None: ...
 
-    CLIENT_ID_FIELD_NUMBER: builtins.int
+    SESSION_ID_FIELD_NUMBER: builtins.int
     USER_CONTEXT_FIELD_NUMBER: builtins.int
     BATCH_FIELD_NUMBER: builtins.int
     BEGIN_CHUNK_FIELD_NUMBER: builtins.int
     CHUNK_FIELD_NUMBER: builtins.int
-    client_id: builtins.str
-    """The client_id is set by the client to be able to collate streaming responses from
-    different queries.
+    session_id: builtins.str
+    """(Required)
+
+    The session_id specifies a spark session for a user id (which is specified
+    by user_context.user_id). The session_id is set by the client to be able to
+    collate streaming responses from different queries within the dedicated session.
     """
     @property
     def user_context(self) -> global___UserContext:
@@ -1574,7 +1584,7 @@ class AddArtifactsRequest(google.protobuf.message.Message):
     def __init__(
         self,
         *,
-        client_id: builtins.str = ...,
+        session_id: builtins.str = ...,
         user_context: global___UserContext | None = ...,
         batch: global___AddArtifactsRequest.Batch | None = ...,
         begin_chunk: global___AddArtifactsRequest.BeginChunkedArtifact | None = ...,
@@ -1604,10 +1614,10 @@ class AddArtifactsRequest(google.protobuf.message.Message):
             b"begin_chunk",
             "chunk",
             b"chunk",
-            "client_id",
-            b"client_id",
             "payload",
             b"payload",
+            "session_id",
+            b"session_id",
             "user_context",
             b"user_context",
         ],
