@@ -157,7 +157,7 @@ object ConstantPropagation extends Rule[LogicalPlan] {
         if safeToReplace(right, nullIsFalse) =>
         e -> mutable.Map(right.canonicalized -> (left, e))
       case a @ And(left, right) =>
-        val (newLeft, equalityPredicates) =
+        val (newLeft, equalityPredicatesLeft) =
           traverse(left, replaceChildren = false, nullIsFalse)
         val (newRight, equalityPredicatesRight) =
           traverse(right, replaceChildren = false, nullIsFalse)
@@ -165,7 +165,11 @@ object ConstantPropagation extends Rule[LogicalPlan] {
         // and immediately shortcut the `And` expression to `Literal.FalseLiteral`, but that case is
         // not so common and actually it is the job of `ConstantFolding` and `BooleanSimplification`
         // rules to deal with those optimizations.
-        equalityPredicates ++= equalityPredicatesRight
+        val equalityPredicates = if (equalityPredicatesLeft.size < equalityPredicatesRight.size) {
+          equalityPredicatesRight ++= equalityPredicatesLeft
+        } else {
+          equalityPredicatesLeft ++= equalityPredicatesRight
+        }
         val newAnd = a.withNewChildren(if (equalityPredicates.nonEmpty && replaceChildren) {
           val replacedNewLeft = replaceConstants(newLeft, equalityPredicates)
           val replacedNewRight = replaceConstants(newRight, equalityPredicates)
