@@ -19,10 +19,18 @@ package org.apache.spark.sql.connect.service
 
 import java.lang.reflect.InvocationTargetException
 
+import com.google.protobuf.Message
+import com.google.protobuf.util.JsonFormat
+import io.grpc.ForwardingServerCall.SimpleForwardingServerCall
+import io.grpc.ForwardingServerCallListener.SimpleForwardingServerCallListener
+import io.grpc.Metadata
+import io.grpc.ServerCall
+import io.grpc.ServerCallHandler
 import io.grpc.ServerInterceptor
 import io.grpc.netty.NettyServerBuilder
 
 import org.apache.spark.{SparkEnv, SparkException}
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.connect.config.Connect
 import org.apache.spark.util.Utils
 
@@ -106,4 +114,40 @@ object SparkConnectInterceptorRegistry {
    */
   private def interceptor[T <: ServerInterceptor](cls: Class[T]): InterceptorBuilder =
     () => createInstance(cls)
+}
+
+class LoggingInterceptor extends ServerInterceptor with Logging {
+
+  private def logProto[T](message: T, reqOrResp: String): Unit = {
+    message match {
+      case m: Message =>
+        logInfo(s"RPC $reqOrResp ${JsonFormat.printer().print(m)}")
+      case other =>
+        logInfo(s"Unknown $reqOrResp: $other")
+    }
+  }
+
+  override def interceptCall[ReqT, RespT](
+    call: ServerCall[ReqT, RespT],
+    headers: Metadata,
+    next: ServerCallHandler[ReqT, RespT]): ServerCall.Listener[ReqT] = {
+
+    val methodName = call.getMethodDescriptor.getFullMethodName
+
+    val respLoggingCall = new SimpleForwardingServerCall[ReqT, RespT](call) {
+      override def sendMessage(message: RespT): Unit = {
+        logProto(message, s"Response for $methodName")
+        super.sendMessage(message)
+      }
+    }
+
+    val listener = next.startCall(respLoggingCall, headers)
+
+    new SimpleForwardingServerCallListener[ReqT](listener) {
+      override def onMessage(message: ReqT): Unit = {
+        logProto(message, s"Request $methodName")
+        super.onMessage(message)
+      }
+    }
+  }
 }
