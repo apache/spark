@@ -136,7 +136,7 @@ object ConstantPropagation extends Rule[LogicalPlan] {
    *                    case of `WHERE e`, null result of expression `e` means the same as if it
    *                    resulted false
    * @return A tuple including:
-   *         1. Expression: optional changed condition after traversal
+   *         1. Expression: changed condition after traversal
    *         2. EqualityPredicates: propagated mapping of attribute => constant
    */
   private def traverse(
