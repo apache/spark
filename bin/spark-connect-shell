@@ -17,16 +17,11 @@
 # limitations under the License.
 #
 
-# Start the spark-connect with server logs printed in the standard output. The script rebuild the
-# server dependencies and start the server at the default port. This can be used to debug client
-# during client development.
+# The shell script to start a spark-shell with spark connect enabled.
 
-# Go to the Spark project root directory
-FWDIR="$(cd "`dirname "$0"`"/../../..; pwd)"
-cd "$FWDIR"
-export SPARK_HOME=$FWDIR
+if [ -z "${SPARK_HOME}" ]; then
+  source "$(dirname "$0")"/find-spark-home
+fi
 
-# Build the jars needed for spark submit and spark connect
-build/sbt -Phive -Pconnect package
-
-exec "${SPARK_HOME}"/bin/spark-submit --class org.apache.spark.sql.connect.SimpleSparkConnectService "$@"
+# This requires building the spark with `-Pconnect`, e,g, `build/sbt -Pconnect package`
+exec "${SPARK_HOME}"/bin/spark-shell --conf spark.plugins=org.apache.spark.sql.connect.SparkConnectPlugin "$@"
