@@ -1850,7 +1850,7 @@ Additional details on supported joins:
 
 - You cannot use mapGroupsWithState and flatMapGroupsWithState before and after joins.
 
-In append output mode, you can construct a query having non-map-like operations before/after join.
+In append output mode, you can construct a query having non-map-like operations e.g. aggregation, deduplication, stream-stream join before/after join.
 
 For example, here's an example of time window aggregation in both streams followed by stream-stream join with event time window:
 
@@ -1893,20 +1893,17 @@ clicksWindow.join(impressionsWindow, "window", "inner");
 <div data-lang="python"  markdown="1">
 
 {% highlight python %}
-joined = impressionsWithWatermark.join(
-  clicksWithWatermark,
-  expr("""
-    clickAdId = impressionAdId AND
-    clickTime >= impressionTime AND
-    clickTime <= impressionTime + interval 1 hour
-  """),
-  "leftOuter"                 # can be "inner", "leftOuter", "rightOuter", "fullOuter", "leftSemi"
-)
-
-joined.groupBy(
-  joined.clickAdId,
-  window(joined.clickTime, "1 hour")
+clicksWindow = clicksWithWatermark.groupBy(
+  clicksWithWatermark.clickAdId,
+  window(clicksWithWatermark.clickTime, "1 hour")
 ).count()
+
+impressionsWindow = impressionsWithWatermark.groupBy(
+  impressionsWithWatermark.impressionAdId,
+  window(impressionsWithWatermark.impressionTime, "1 hour")
+).count()
+
+clicksWindow.join(impressionsWindow, "window", "inner")
 
 {% endhighlight %}
 
