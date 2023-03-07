@@ -28,10 +28,10 @@ import org.scalactic.TolerantNumerics
 
 import org.apache.spark.SPARK_VERSION
 import org.apache.spark.sql.connect.client.util.{IntegrationTestUtils, RemoteSparkSession}
-import org.apache.spark.sql.functions.{aggregate, array, col, count, lit, rand, sequence, shuffle, struct, transform, udf}
+import org.apache.spark.sql.functions.{aggregate, array, broadcast, col, count, lit, rand, sequence, shuffle, struct, transform, udf}
 import org.apache.spark.sql.types._
 
-class ClientE2ETestSuite extends RemoteSparkSession {
+class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper {
 
   // Spark Result
   test("spark result schema") {
@@ -500,6 +500,17 @@ class ClientE2ETestSuite extends RemoteSparkSession {
     assert(joined2.schema.catalogString === "struct<id:bigint,a:double>")
   }
 
+  test("broadcast join") {
+    withSQLConf("spark.sql.autoBroadcastJoinThreshold" -> "-1") {
+      val left = spark.range(100).select(col("id"), rand(10).as("a"))
+      val right = spark.range(100).select(col("id"), rand(12).as("a"))
+      val joined =
+        left.join(broadcast(right), left("id") === right("id")).select(left("id"), right("a"))
+      assert(joined.schema.catalogString === "struct<id:bigint,a:double>")
+      testCapturedStdOut(joined.explain(), "BroadcastHashJoin")
+    }
+  }
+
   test("test temp view") {
     try {
       spark.range(100).createTempView("test1")
@@ -598,9 +609,27 @@ class ClientE2ETestSuite extends RemoteSparkSession {
   }
 
   test("SparkSession newSession") {
-    val oldId = spark.sql("SELECT 1").analyze.getClientId
-    val newId = spark.newSession().sql("SELECT 1").analyze.getClientId
+    val oldId = spark.sql("SELECT 1").analyze.getSessionId
+    val newId = spark.newSession().sql("SELECT 1").analyze.getSessionId
     assert(oldId != newId)
+  }
+
+  test("createDataFrame from complex type schema") {
+    val schema = new StructType()
+      .add(
+        "c1",
+        new StructType()
+          .add("c1-1", StringType)
+          .add("c1-2", StringType))
+    val data = Seq(Row(Row(null, "a2")), Row(Row("b1", "b2")), Row(null))
+    val result = spark.createDataFrame(data.asJava, schema).collect()
+    assert(result === data)
+  }
+
+  test("SameSemantics") {
+    val plan = spark.sql("select 1")
+    val otherPlan = spark.sql("select 1")
+    assert(plan.sameSemantics(otherPlan))
   }
 }
 

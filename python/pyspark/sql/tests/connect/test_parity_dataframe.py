@@ -60,8 +60,7 @@ class DataFrameParityTests(DataFrameTestsMixin, ReusedConnectTestCase):
     def test_repr_behaviors(self):
         super().test_repr_behaviors()
 
-    # TODO(SPARK-41874): Implement DataFrame `sameSemantics`
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip("Spark Connect does not SparkContext but the tests depend on them.")
     def test_same_semantics_error(self):
         super().test_same_semantics_error()
 

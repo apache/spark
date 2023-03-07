@@ -16,6 +16,7 @@
  */
 package org.apache.spark.sql.connect.planner
 
+import scala.collection.JavaConverters._
 import scala.collection.mutable
 
 import io.grpc.StatusRuntimeException
@@ -26,6 +27,7 @@ import org.apache.arrow.vector.ipc.ArrowStreamReader
 
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.connect.dsl.MockRemoteSession
+import org.apache.spark.sql.connect.dsl.expressions._
 import org.apache.spark.sql.connect.dsl.plans._
 import org.apache.spark.sql.connect.service.{SparkConnectAnalyzeHandler, SparkConnectService}
 import org.apache.spark.sql.test.SharedSparkSession
@@ -219,7 +221,7 @@ class SparkConnectServiceSuite extends SharedSparkSession {
       .newBuilder()
       .setPlan(plan)
       .setUserContext(context)
-      .setClientId("session")
+      .setSessionId("session")
       .build()
 
     // The observer is executed inside this thread. So
@@ -291,6 +293,73 @@ class SparkConnectServiceSuite extends SharedSparkSession {
       assert(response.getExplain.getExplainString.contains("Analyzed Logical Plan"))
       assert(response.getExplain.getExplainString.contains("Optimized Logical Plan"))
       assert(response.getExplain.getExplainString.contains("Physical Plan"))
+    }
+  }
+
+  test("Test observe response") {
+    withTable("test") {
+      spark.sql("""
+                  | CREATE TABLE test (col1 INT, col2 STRING)
+                  | USING parquet
+                  |""".stripMargin)
+
+      val instance = new SparkConnectService(false)
+
+      val connect = new MockRemoteSession()
+      val context = proto.UserContext
+        .newBuilder()
+        .setUserId("c1")
+        .build()
+      val collectMetrics = proto.Relation
+        .newBuilder()
+        .setCollectMetrics(
+          proto.CollectMetrics
+            .newBuilder()
+            .setInput(connect.sql("select id, exp(id) as eid from range(0, 100, 1, 4)"))
+            .setName("my_metric")
+            .addAllMetrics(Seq(
+              proto_min("id".protoAttr).as("min_val"),
+              proto_max("id".protoAttr).as("max_val")).asJava))
+        .build()
+      val plan = proto.Plan
+        .newBuilder()
+        .setRoot(collectMetrics)
+        .build()
+      val request = proto.ExecutePlanRequest
+        .newBuilder()
+        .setPlan(plan)
+        .setUserContext(context)
+        .build()
+
+      // Execute plan.
+      @volatile var done = false
+      val responses = mutable.Buffer.empty[proto.ExecutePlanResponse]
+      instance.executePlan(
+        request,
+        new StreamObserver[proto.ExecutePlanResponse] {
+          override def onNext(v: proto.ExecutePlanResponse): Unit = responses += v
+
+          override def onError(throwable: Throwable): Unit = throw throwable
+
+          override def onCompleted(): Unit = done = true
+        })
+
+      // The current implementation is expected to be blocking. This is here to make sure it is.
+      assert(done)
+
+      assert(responses.size == 6)
+
+      // Make sure the last response is observed metrics only
+      val last = responses.last
+      assert(last.getObservedMetricsCount == 1 && !last.hasArrowBatch)
+
+      val observedMetricsList = last.getObservedMetricsList.asScala
+      val observedMetric = observedMetricsList.head
+      assert(observedMetric.getName == "my_metric")
+      assert(observedMetric.getValuesCount == 2)
+      val valuesList = observedMetric.getValuesList.asScala
+      assert(valuesList.head.hasLong && valuesList.head.getLong == 0)
+      assert(valuesList.last.hasLong && valuesList.last.getLong == 99)
     }
   }
 }

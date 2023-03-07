@@ -440,6 +440,35 @@ class Expression(google.protobuf.message.Message):
                 ],
             ) -> None: ...
 
+        class Array(google.protobuf.message.Message):
+            DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+            ELEMENTTYPE_FIELD_NUMBER: builtins.int
+            ELEMENT_FIELD_NUMBER: builtins.int
+            @property
+            def elementType(self) -> pyspark.sql.connect.proto.types_pb2.DataType: ...
+            @property
+            def element(
+                self,
+            ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+                global___Expression.Literal
+            ]: ...
+            def __init__(
+                self,
+                *,
+                elementType: pyspark.sql.connect.proto.types_pb2.DataType | None = ...,
+                element: collections.abc.Iterable[global___Expression.Literal] | None = ...,
+            ) -> None: ...
+            def HasField(
+                self, field_name: typing_extensions.Literal["elementType", b"elementType"]
+            ) -> builtins.bool: ...
+            def ClearField(
+                self,
+                field_name: typing_extensions.Literal[
+                    "element", b"element", "elementType", b"elementType"
+                ],
+            ) -> None: ...
+
         NULL_FIELD_NUMBER: builtins.int
         BINARY_FIELD_NUMBER: builtins.int
         BOOLEAN_FIELD_NUMBER: builtins.int
@@ -457,6 +486,7 @@ class Expression(google.protobuf.message.Message):
         CALENDAR_INTERVAL_FIELD_NUMBER: builtins.int
         YEAR_MONTH_INTERVAL_FIELD_NUMBER: builtins.int
         DAY_TIME_INTERVAL_FIELD_NUMBER: builtins.int
+        ARRAY_FIELD_NUMBER: builtins.int
         @property
         def null(self) -> pyspark.sql.connect.proto.types_pb2.DataType: ...
         binary: builtins.bytes
@@ -480,6 +510,8 @@ class Expression(google.protobuf.message.Message):
         def calendar_interval(self) -> global___Expression.Literal.CalendarInterval: ...
         year_month_interval: builtins.int
         day_time_interval: builtins.int
+        @property
+        def array(self) -> global___Expression.Literal.Array: ...
         def __init__(
             self,
             *,
@@ -500,10 +532,13 @@ class Expression(google.protobuf.message.Message):
             calendar_interval: global___Expression.Literal.CalendarInterval | None = ...,
             year_month_interval: builtins.int = ...,
             day_time_interval: builtins.int = ...,
+            array: global___Expression.Literal.Array | None = ...,
         ) -> None: ...
         def HasField(
             self,
             field_name: typing_extensions.Literal[
+                "array",
+                b"array",
                 "binary",
                 b"binary",
                 "boolean",
@@ -545,6 +580,8 @@ class Expression(google.protobuf.message.Message):
         def ClearField(
             self,
             field_name: typing_extensions.Literal[
+                "array",
+                b"array",
                 "binary",
                 b"binary",
                 "boolean",
@@ -603,6 +640,7 @@ class Expression(google.protobuf.message.Message):
             "calendar_interval",
             "year_month_interval",
             "day_time_interval",
+            "array",
         ] | None: ...
 
     class UnresolvedAttribute(google.protobuf.message.Message):

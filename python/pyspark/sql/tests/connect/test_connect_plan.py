@@ -31,7 +31,7 @@ if should_test_connect:
     from pyspark.sql.connect.dataframe import DataFrame
     from pyspark.sql.connect.plan import WriteOperation, Read
     from pyspark.sql.connect.readwriter import DataFrameReader
-    from pyspark.sql.connect.functions import col, lit
+    from pyspark.sql.connect.functions import col, lit, max, min, sum
     from pyspark.sql.connect.types import pyspark_types_to_proto_types
     from pyspark.sql.types import (
         StringType,
@@ -293,6 +293,68 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
 
         relations = df.filter(df.col_name > 3).randomSplit([1.0, 2.0, 3.0])
         checkRelations(relations)
+
+    def test_observe(self):
+        # SPARK-41527: test DataFrame.observe()
+        df = self.connect.readTable(table_name=self.tbl_name)
+
+        plan = (
+            df.filter(df.col_name > 3)
+            .observe("my_metric", min("id"), max("id"), sum("id"))
+            ._plan.to_proto(self.connect)
+        )
+        self.assertEqual(plan.root.collect_metrics.name, "my_metric")
+        self.assertTrue(
+            all(isinstance(c, proto.Expression) for c in plan.root.collect_metrics.metrics)
+        )
+        self.assertEqual(
+            plan.root.collect_metrics.metrics[0].unresolved_function.function_name, "min"
+        )
+        self.assertTrue(
+            len(plan.root.collect_metrics.metrics[0].unresolved_function.arguments) == 1
+        )
+        self.assertTrue(
+            all(
+                isinstance(c, proto.Expression)
+                for c in plan.root.collect_metrics.metrics[0].unresolved_function.arguments
+            )
+        )
+        self.assertEqual(
+            plan.root.collect_metrics.metrics[0]
+            .unresolved_function.arguments[0]
+            .unresolved_attribute.unparsed_identifier,
+            "id",
+        )
+
+        from pyspark.sql.observation import Observation
+
+        plan = (
+            df.filter(df.col_name > 3)
+            .observe(Observation("my_metric"), min("id"), max("id"), sum("id"))
+            ._plan.to_proto(self.connect)
+        )
+        self.assertEqual(plan.root.collect_metrics.name, "my_metric")
+        self.assertTrue(
+            all(isinstance(c, proto.Expression) for c in plan.root.collect_metrics.metrics)
+        )
+        self.assertEqual(
+            plan.root.collect_metrics.metrics[0].unresolved_function.function_name, "min"
+        )
+        self.assertTrue(
+            len(plan.root.collect_metrics.metrics[0].unresolved_function.arguments) == 1
+        )
+        self.assertTrue(
+            all(
+                isinstance(c, proto.Expression)
+                for c in plan.root.collect_metrics.metrics[0].unresolved_function.arguments
+            )
+        )
+        self.assertEqual(
+            plan.root.collect_metrics.metrics[0]
+            .unresolved_function.arguments[0]
+            .unresolved_attribute.unparsed_identifier,
+            "id",
+        )
 
     def test_summary(self):
         df = self.connect.readTable(table_name=self.tbl_name)

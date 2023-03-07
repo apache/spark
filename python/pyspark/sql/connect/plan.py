@@ -1050,6 +1050,35 @@ class Unpivot(LogicalPlan):
         return plan
 
 
+class CollectMetrics(LogicalPlan):
+    """Logical plan object for a CollectMetrics operation."""
+
+    def __init__(
+        self,
+        child: Optional["LogicalPlan"],
+        name: str,
+        exprs: List["ColumnOrName"],
+    ) -> None:
+        super().__init__(child)
+        self._name = name
+        self._exprs = exprs
+
+    def col_to_expr(self, col: "ColumnOrName", session: "SparkConnectClient") -> proto.Expression:
+        if isinstance(col, Column):
+            return col.to_plan(session)
+        else:
+            return self.unresolved_attr(col)
+
+    def plan(self, session: "SparkConnectClient") -> proto.Relation:
+        assert self._child is not None
+
+        plan = proto.Relation()
+        plan.collect_metrics.input.CopyFrom(self._child.plan(session))
+        plan.collect_metrics.name = self._name
+        plan.collect_metrics.metrics.extend([self.col_to_expr(x, session) for x in self._exprs])
+        return plan
+
+
 class NAFill(LogicalPlan):
     def __init__(
         self, child: Optional["LogicalPlan"], cols: Optional[List[str]], values: List[Any]

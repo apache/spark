@@ -63,7 +63,7 @@ private[sql] class SparkConnectClient(
       .newBuilder()
       .setPlan(plan)
       .setUserContext(userContext)
-      .setClientId(sessionId)
+      .setSessionId(sessionId)
       .setClientType(userAgent)
       .build()
     stub.executePlan(request)
@@ -78,7 +78,7 @@ private[sql] class SparkConnectClient(
     val request = proto.ConfigRequest
       .newBuilder()
       .setOperation(operation)
-      .setClientId(sessionId)
+      .setSessionId(sessionId)
       .setClientType(userAgent)
       .setUserContext(userContext)
       .build()
@@ -141,9 +141,23 @@ private[sql] class SparkConnectClient(
         builder.setSparkVersion(proto.AnalyzePlanRequest.SparkVersion.newBuilder().build())
       case other => throw new IllegalArgumentException(s"Unknown Analyze request $other")
     }
+    analyze(builder)
+  }
+
+  def sameSemantics(plan: proto.Plan, otherPlan: proto.Plan): proto.AnalyzePlanResponse = {
+    val builder = proto.AnalyzePlanRequest.newBuilder()
+    builder.setSameSemantics(
+      proto.AnalyzePlanRequest.SameSemantics
+        .newBuilder()
+        .setTargetPlan(plan)
+        .setOtherPlan(otherPlan))
+    analyze(builder)
+  }
+
+  private def analyze(builder: proto.AnalyzePlanRequest.Builder): proto.AnalyzePlanResponse = {
     val request = builder
       .setUserContext(userContext)
-      .setClientId(sessionId)
+      .setSessionId(sessionId)
       .setClientType(userAgent)
       .build()
     analyze(request)
