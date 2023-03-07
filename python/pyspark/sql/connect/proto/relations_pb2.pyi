@@ -610,6 +610,7 @@ class Read(google.protobuf.message.Message):
         SCHEMA_FIELD_NUMBER: builtins.int
         OPTIONS_FIELD_NUMBER: builtins.int
         PATHS_FIELD_NUMBER: builtins.int
+        PREDICATES_FIELD_NUMBER: builtins.int
         format: builtins.str
         """(Optional) Supported formats include: parquet, orc, text, json, parquet, csv, avro.
 
@@ -633,6 +634,14 @@ class Read(google.protobuf.message.Message):
             self,
         ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
             """(Optional) A list of path for file-system backed data sources."""
+        @property
+        def predicates(
+            self,
+        ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
+            """(Optional) Condition in the where clause for each partition.
+
+            Only work for JDBC data source.
+            """
         def __init__(
             self,
             *,
@@ -640,6 +649,7 @@ class Read(google.protobuf.message.Message):
             schema: builtins.str | None = ...,
             options: collections.abc.Mapping[builtins.str, builtins.str] | None = ...,
             paths: collections.abc.Iterable[builtins.str] | None = ...,
+            predicates: collections.abc.Iterable[builtins.str] | None = ...,
         ) -> None: ...
         def HasField(
             self,
@@ -667,6 +677,8 @@ class Read(google.protobuf.message.Message):
                 b"options",
                 "paths",
                 b"paths",
+                "predicates",
+                b"predicates",
                 "schema",
                 b"schema",
             ],
@@ -680,106 +692,33 @@ class Read(google.protobuf.message.Message):
             self, oneof_group: typing_extensions.Literal["_schema", b"_schema"]
         ) -> typing_extensions.Literal["schema"] | None: ...
 
-    class PartitionedJDBC(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
-
-        class OptionsEntry(google.protobuf.message.Message):
-            DESCRIPTOR: google.protobuf.descriptor.Descriptor
-
-            KEY_FIELD_NUMBER: builtins.int
-            VALUE_FIELD_NUMBER: builtins.int
-            key: builtins.str
-            value: builtins.str
-            def __init__(
-                self,
-                *,
-                key: builtins.str = ...,
-                value: builtins.str = ...,
-            ) -> None: ...
-            def ClearField(
-                self, field_name: typing_extensions.Literal["key", b"key", "value", b"value"]
-            ) -> None: ...
-
-        URL_FIELD_NUMBER: builtins.int
-        TABLE_FIELD_NUMBER: builtins.int
-        PREDICATES_FIELD_NUMBER: builtins.int
-        OPTIONS_FIELD_NUMBER: builtins.int
-        url: builtins.str
-        """(Required) JDBC URL."""
-        table: builtins.str
-        """(Required) Name of the table in the external database."""
-        @property
-        def predicates(
-            self,
-        ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
-            """(Optional) Condition in the where clause for each partition."""
-        @property
-        def options(
-            self,
-        ) -> google.protobuf.internal.containers.ScalarMap[builtins.str, builtins.str]:
-            """Options or connection arguments for the JDBC database.
-            The map key is case insensitive.
-            """
-        def __init__(
-            self,
-            *,
-            url: builtins.str = ...,
-            table: builtins.str = ...,
-            predicates: collections.abc.Iterable[builtins.str] | None = ...,
-            options: collections.abc.Mapping[builtins.str, builtins.str] | None = ...,
-        ) -> None: ...
-        def ClearField(
-            self,
-            field_name: typing_extensions.Literal[
-                "options", b"options", "predicates", b"predicates", "table", b"table", "url", b"url"
-            ],
-        ) -> None: ...
-
     NAMED_TABLE_FIELD_NUMBER: builtins.int
     DATA_SOURCE_FIELD_NUMBER: builtins.int
-    PARTITIONED_JDBC_FIELD_NUMBER: builtins.int
     @property
     def named_table(self) -> global___Read.NamedTable: ...
     @property
     def data_source(self) -> global___Read.DataSource: ...
-    @property
-    def partitioned_jdbc(self) -> global___Read.PartitionedJDBC: ...
     def __init__(
         self,
         *,
         named_table: global___Read.NamedTable | None = ...,
         data_source: global___Read.DataSource | None = ...,
-        partitioned_jdbc: global___Read.PartitionedJDBC | None = ...,
     ) -> None: ...
     def HasField(
         self,
         field_name: typing_extensions.Literal[
-            "data_source",
-            b"data_source",
-            "named_table",
-            b"named_table",
-            "partitioned_jdbc",
-            b"partitioned_jdbc",
-            "read_type",
-            b"read_type",
+            "data_source", b"data_source", "named_table", b"named_table", "read_type", b"read_type"
         ],
     ) -> builtins.bool: ...
     def ClearField(
         self,
         field_name: typing_extensions.Literal[
-            "data_source",
-            b"data_source",
-            "named_table",
-            b"named_table",
-            "partitioned_jdbc",
-            b"partitioned_jdbc",
-            "read_type",
-            b"read_type",
+            "data_source", b"data_source", "named_table", b"named_table", "read_type", b"read_type"
         ],
     ) -> None: ...
     def WhichOneof(
         self, oneof_group: typing_extensions.Literal["read_type", b"read_type"]
-    ) -> typing_extensions.Literal["named_table", "data_source", "partitioned_jdbc"] | None: ...
+    ) -> typing_extensions.Literal["named_table", "data_source"] | None: ...
 
 global___Read = Read
 
