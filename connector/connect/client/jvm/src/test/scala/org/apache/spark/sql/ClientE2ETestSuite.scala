@@ -18,6 +18,7 @@ package org.apache.spark.sql
 
 import java.io.{ByteArrayOutputStream, PrintStream}
 import java.nio.file.Files
+import java.util.Properties
 
 import scala.collection.JavaConverters._
 
@@ -609,6 +610,19 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper {
     checkSameResult(
       list.asScala.map(kv => Row(kv.key, kv.value)),
       session.createDataFrame(list.asScala.toSeq))
+  }
+
+  test("write jdbc") {
+    val rows = java.util.Arrays.asList[Row](Row("dave", 42), Row("mary", 222))
+    val schema = StructType(
+      StructField("name", StringType) ::
+        StructField("id", IntegerType) :: Nil)
+    val df = spark.createDataFrame(rows, schema)
+    df.write.jdbc("jdbc:h2:mem:testdb2", "TEST.BASICCREATETEST", new Properties())
+
+    checkSameResult(
+      rows.asScala.map(row => Row(row.getString(0), row.getInt(1))),
+      spark.read.jdbc("jdbc:h2:mem:testdb2", "TEST.BASICCREATETEST", new Properties()))
   }
 
   test("SparkSession newSession") {

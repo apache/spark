@@ -99,7 +99,8 @@ class PlanGenerationTestSuite
       proto.UserContext.newBuilder().build(),
       InProcessChannelBuilder.forName("/dev/null"))
     session =
-      new SparkSession(client, cleaner = SparkSession.cleaner, planIdGenerator = new AtomicLong)
+//      new SparkSession(client, cleaner = SparkSession.cleaner, planIdGenerator = new AtomicLong)
+      SparkSession.builder().client(SparkConnectClient.builder().port(port).build()).build()
   }
 
   override protected def beforeEach(): Unit = {
@@ -249,6 +250,17 @@ class PlanGenerationTestSuite
   test("read jdbc with predicates") {
     val parts = Array[String]("THEID < 2", "THEID >= 2")
     session.read.jdbc(urlWithUserAndPass, "TEST.PEOPLE", parts, new Properties())
+  }
+
+  test("write jdbc") {
+    val rows = java.util.Arrays.asList[Row](Row("dave", 42), Row("mary", 222))
+    val schema = StructType(
+      StructField("name", StringType) ::
+        StructField("id", IntegerType) :: Nil)
+    val df = session.createDataFrame(rows, schema)
+    df.write.jdbc("jdbc:h2:mem:testdb2", "TEST.BASICCREATETEST", new Properties())
+
+    session.read.jdbc("jdbc:h2:mem:testdb2", "TEST.BASICCREATETEST", new Properties())
   }
 
   test("read json") {
