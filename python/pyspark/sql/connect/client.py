@@ -712,7 +712,7 @@ class SparkConnectClient(object):
 
     def _execute_plan_request_with_metadata(self) -> pb2.ExecutePlanRequest:
         req = pb2.ExecutePlanRequest()
-        req.client_id = self._session_id
+        req.session_id = self._session_id
         req.client_type = self._builder.userAgent
         if self._user_id:
             req.user_context.user_id = self._user_id
@@ -720,7 +720,7 @@ class SparkConnectClient(object):
 
     def _analyze_plan_request_with_metadata(self) -> pb2.AnalyzePlanRequest:
         req = pb2.AnalyzePlanRequest()
-        req.client_id = self._session_id
+        req.session_id = self._session_id
         req.client_type = self._builder.userAgent
         if self._user_id:
             req.user_context.user_id = self._user_id
@@ -791,10 +791,10 @@ class SparkConnectClient(object):
             ):
                 with attempt:
                     resp = self._stub.AnalyzePlan(req, metadata=self._builder.metadata())
-                    if resp.client_id != self._session_id:
+                    if resp.session_id != self._session_id:
                         raise SparkConnectException(
                             "Received incorrect session identifier for request:"
-                            f"{resp.client_id} != {self._session_id}"
+                            f"{resp.session_id} != {self._session_id}"
                         )
                     return AnalyzeResult.fromProto(resp)
             raise SparkConnectException("Invalid state during retry exception handling.")
@@ -818,10 +818,10 @@ class SparkConnectClient(object):
             ):
                 with attempt:
                     for b in self._stub.ExecutePlan(req, metadata=self._builder.metadata()):
-                        if b.client_id != self._session_id:
+                        if b.session_id != self._session_id:
                             raise SparkConnectException(
                                 "Received incorrect session identifier for request: "
-                                f"{b.client_id} != {self._session_id}"
+                                f"{b.session_id} != {self._session_id}"
                             )
         except grpc.RpcError as rpc_error:
             self._handle_error(rpc_error)
@@ -842,10 +842,10 @@ class SparkConnectClient(object):
                 with attempt:
                     batches = []
                     for b in self._stub.ExecutePlan(req, metadata=self._builder.metadata()):
-                        if b.client_id != self._session_id:
+                        if b.session_id != self._session_id:
                             raise SparkConnectException(
                                 "Received incorrect session identifier for request: "
-                                f"{b.client_id} != {self._session_id}"
+                                f"{b.session_id} != {self._session_id}"
                             )
                         if b.metrics is not None:
                             logger.debug("Received metric batch.")
@@ -878,7 +878,7 @@ class SparkConnectClient(object):
 
     def _config_request_with_metadata(self) -> pb2.ConfigRequest:
         req = pb2.ConfigRequest()
-        req.client_id = self._session_id
+        req.session_id = self._session_id
         req.client_type = self._builder.userAgent
         if self._user_id:
             req.user_context.user_id = self._user_id
@@ -905,10 +905,10 @@ class SparkConnectClient(object):
             ):
                 with attempt:
                     resp = self._stub.Config(req, metadata=self._builder.metadata())
-                    if resp.client_id != self._session_id:
+                    if resp.session_id != self._session_id:
                         raise SparkConnectException(
                             "Received incorrect session identifier for request:"
-                            f"{resp.client_id} != {self._session_id}"
+                            f"{resp.session_id} != {self._session_id}"
                         )
                     return ConfigResult.fromProto(resp)
             raise SparkConnectException("Invalid state during retry exception handling.")

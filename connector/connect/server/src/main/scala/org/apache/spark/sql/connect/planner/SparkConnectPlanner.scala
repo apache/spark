@@ -1459,7 +1459,7 @@ class SparkConnectPlanner(val session: SparkSession) {
 
   def process(
       command: proto.Command,
-      clientId: String,
+      sessionId: String,
       responseObserver: StreamObserver[ExecutePlanResponse]): Unit = {
     command.getCommandTypeCase match {
       case proto.Command.CommandTypeCase.REGISTER_FUNCTION =>
@@ -1473,14 +1473,14 @@ class SparkConnectPlanner(val session: SparkSession) {
       case proto.Command.CommandTypeCase.EXTENSION =>
         handleCommandPlugin(command.getExtension)
       case proto.Command.CommandTypeCase.SQL_COMMAND =>
-        handleSqlCommand(command.getSqlCommand, clientId, responseObserver)
+        handleSqlCommand(command.getSqlCommand, sessionId, responseObserver)
       case _ => throw new UnsupportedOperationException(s"$command not supported.")
     }
   }
 
   def handleSqlCommand(
       getSqlCommand: SqlCommand,
-      clientId: String,
+      sessionId: String,
       responseObserver: StreamObserver[ExecutePlanResponse]): Unit = {
     // Eagerly execute commands of the provided SQL string.
     val df = session.sql(getSqlCommand.getSql, getSqlCommand.getArgsMap)
@@ -1537,12 +1537,12 @@ class SparkConnectPlanner(val session: SparkSession) {
     responseObserver.onNext(
       ExecutePlanResponse
         .newBuilder()
-        .setClientId(clientId)
+        .setSessionId(sessionId)
         .setSqlCommandResult(result)
         .build())
 
     // Send Metrics
-    SparkConnectStreamHandler.sendMetricsToResponse(clientId, df)
+    SparkConnectStreamHandler.sendMetricsToResponse(sessionId, df)
   }
 
   private def handleRegisterUserDefinedFunction(
