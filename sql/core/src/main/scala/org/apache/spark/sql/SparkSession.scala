@@ -736,13 +736,15 @@ class SparkSession private(
   }
   // scalastyle:on
 
+  def stop(): Unit = stop(0)
+
   /**
    * Stop the underlying `SparkContext`.
    *
    * @since 2.0.0
    */
-  def stop(): Unit = {
-    sparkContext.stop()
+  def stop(exitCode: Int = 0): Unit = {
+    sparkContext.stop(exitCode)
   }
 
   /**

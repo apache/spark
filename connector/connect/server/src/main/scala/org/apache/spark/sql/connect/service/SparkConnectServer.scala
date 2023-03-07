@@ -28,6 +28,7 @@ object SparkConnectServer extends Logging {
     // Set the active Spark Session, and starts SparkEnv instance (via Spark Context)
     logInfo("Starting Spark session.")
     val session = SparkSession.builder.getOrCreate()
+    var exitCode = 0
     try {
       try {
         SparkConnectService.start()
@@ -35,11 +36,12 @@ object SparkConnectServer extends Logging {
       } catch {
         case e: Exception =>
           logError("Error starting Spark Connect server", e)
-          System.exit(-1)
+          exitCode = -1
+          System.exit(exitCode)
       }
       SparkConnectService.server.awaitTermination()
     } finally {
-      session.stop()
+      session.stop(exitCode)
     }
   }
 }
