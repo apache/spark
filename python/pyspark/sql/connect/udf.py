@@ -19,7 +19,7 @@ User-defined function related classes and functions
 """
 from pyspark.sql.connect.utils import check_dependencies
 
-check_dependencies(__name__, __file__)
+check_dependencies(__name__)
 
 import sys
 import functools
@@ -120,9 +120,9 @@ class UserDefinedFunction:
         )
         return CommonInlineUserDefinedFunction(
             function_name=self._name,
+            function=py_udf,
             deterministic=self.deterministic,
             arguments=arg_exprs,
-            function=py_udf,
         )
 
     def __call__(self, *cols: "ColumnOrName") -> Column:
@@ -225,3 +225,18 @@ class UDFRegistration:
         return return_udf
 
     register.__doc__ = PySparkUDFRegistration.register.__doc__
+
+    def registerJavaFunction(
+        self,
+        name: str,
+        javaClassName: str,
+        returnType: Optional["DataTypeOrString"] = None,
+    ) -> None:
+        self.sparkSession._client.register_java(name, javaClassName, returnType)
+
+    registerJavaFunction.__doc__ = PySparkUDFRegistration.registerJavaFunction.__doc__
+
+    def registerJavaUDAF(self, name: str, javaClassName: str) -> None:
+        self.sparkSession._client.register_java(name, javaClassName, aggregate=True)
+
+    registerJavaUDAF.__doc__ = PySparkUDFRegistration.registerJavaUDAF.__doc__

@@ -17,6 +17,7 @@
 package org.apache.spark.sql
 
 import java.io.Closeable
+import java.net.URI
 import java.util.concurrent.TimeUnit._
 import java.util.concurrent.atomic.AtomicLong
 
@@ -114,7 +115,7 @@ class SparkSession private[sql] (
   private def createDataset[T](encoder: AgnosticEncoder[T], data: Iterator[T]): Dataset[T] = {
     newDataset(encoder) { builder =>
       val localRelationBuilder = builder.getLocalRelationBuilder
-        .setSchema(encoder.schema.catalogString)
+        .setSchema(encoder.schema.json)
       if (data.nonEmpty) {
         val timeZoneId = conf.get("spark.sql.session.timeZone")
         val arrowData = ConvertToArrow(encoder, data, timeZoneId, allocator)
@@ -343,7 +344,7 @@ class SparkSession private[sql] (
   // scalastyle:on
 
   def newSession(): SparkSession = {
-    throw new UnsupportedOperationException("newSession is not supported")
+    SparkSession.builder().client(client.copy()).build()
   }
 
   private def range(
@@ -399,6 +400,10 @@ class SparkSession private[sql] (
     client.analyze(method, Some(plan), explainMode)
   }
 
+  private[sql] def sameSemantics(plan: proto.Plan, otherPlan: proto.Plan): Boolean = {
+    client.sameSemantics(plan, otherPlan).getSameSemantics.getResult
+  }
+
   private[sql] def execute[T](plan: proto.Plan, encoder: AgnosticEncoder[T]): SparkResult[T] = {
     val value = client.execute(plan)
     val result = new SparkResult(value, allocator, encoder)
@@ -416,6 +421,37 @@ class SparkSession private[sql] (
     val command = proto.Command.newBuilder().setExtension(extension).build()
     execute(command)
   }
+
+  /**
+   * Add a single artifact to the client session.
+   *
+   * Currently only local files with extensions .jar and .class are supported.
+   *
+   * @since 3.4.0
+   */
+  @Experimental
+  def addArtifact(path: String): Unit = client.addArtifact(path)
+
+  /**
+   * Add a single artifact to the client session.
+   *
+   * Currently only local files with extensions .jar and .class are supported.
+   *
+   * @since 3.4.0
+   */
+  @Experimental
+  def addArtifact(uri: URI): Unit = client.addArtifact(uri)
+
+  /**
+   * Add one or more artifacts to the session.
+   *
+   * Currently only local files with extensions .jar and .class are supported.
+   *
+   * @since 3.4.0
+   */
+  @Experimental
+  @scala.annotation.varargs
+  def addArtifacts(uri: URI*): Unit = client.addArtifacts(uri)
 
   /**
    * This resets the plan id generator so we can produce plans that are comparable.

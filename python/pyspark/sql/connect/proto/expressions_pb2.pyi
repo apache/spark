@@ -440,6 +440,35 @@ class Expression(google.protobuf.message.Message):
                 ],
             ) -> None: ...
 
+        class Array(google.protobuf.message.Message):
+            DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+            ELEMENTTYPE_FIELD_NUMBER: builtins.int
+            ELEMENT_FIELD_NUMBER: builtins.int
+            @property
+            def elementType(self) -> pyspark.sql.connect.proto.types_pb2.DataType: ...
+            @property
+            def element(
+                self,
+            ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+                global___Expression.Literal
+            ]: ...
+            def __init__(
+                self,
+                *,
+                elementType: pyspark.sql.connect.proto.types_pb2.DataType | None = ...,
+                element: collections.abc.Iterable[global___Expression.Literal] | None = ...,
+            ) -> None: ...
+            def HasField(
+                self, field_name: typing_extensions.Literal["elementType", b"elementType"]
+            ) -> builtins.bool: ...
+            def ClearField(
+                self,
+                field_name: typing_extensions.Literal[
+                    "element", b"element", "elementType", b"elementType"
+                ],
+            ) -> None: ...
+
         NULL_FIELD_NUMBER: builtins.int
         BINARY_FIELD_NUMBER: builtins.int
         BOOLEAN_FIELD_NUMBER: builtins.int
@@ -457,6 +486,7 @@ class Expression(google.protobuf.message.Message):
         CALENDAR_INTERVAL_FIELD_NUMBER: builtins.int
         YEAR_MONTH_INTERVAL_FIELD_NUMBER: builtins.int
         DAY_TIME_INTERVAL_FIELD_NUMBER: builtins.int
+        ARRAY_FIELD_NUMBER: builtins.int
         @property
         def null(self) -> pyspark.sql.connect.proto.types_pb2.DataType: ...
         binary: builtins.bytes
@@ -480,6 +510,8 @@ class Expression(google.protobuf.message.Message):
         def calendar_interval(self) -> global___Expression.Literal.CalendarInterval: ...
         year_month_interval: builtins.int
         day_time_interval: builtins.int
+        @property
+        def array(self) -> global___Expression.Literal.Array: ...
         def __init__(
             self,
             *,
@@ -500,10 +532,13 @@ class Expression(google.protobuf.message.Message):
             calendar_interval: global___Expression.Literal.CalendarInterval | None = ...,
             year_month_interval: builtins.int = ...,
             day_time_interval: builtins.int = ...,
+            array: global___Expression.Literal.Array | None = ...,
         ) -> None: ...
         def HasField(
             self,
             field_name: typing_extensions.Literal[
+                "array",
+                b"array",
                 "binary",
                 b"binary",
                 "boolean",
@@ -545,6 +580,8 @@ class Expression(google.protobuf.message.Message):
         def ClearField(
             self,
             field_name: typing_extensions.Literal[
+                "array",
+                b"array",
                 "binary",
                 b"binary",
                 "boolean",
@@ -603,6 +640,7 @@ class Expression(google.protobuf.message.Message):
             "calendar_interval",
             "year_month_interval",
             "day_time_interval",
+            "array",
         ] | None: ...
 
     class UnresolvedAttribute(google.protobuf.message.Message):
@@ -753,16 +791,30 @@ class Expression(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
         COL_NAME_FIELD_NUMBER: builtins.int
+        PLAN_ID_FIELD_NUMBER: builtins.int
         col_name: builtins.str
         """(Required) The column name used to extract column with regex."""
+        plan_id: builtins.int
+        """(Optional) The id of corresponding connect plan."""
         def __init__(
             self,
             *,
             col_name: builtins.str = ...,
+            plan_id: builtins.int | None = ...,
         ) -> None: ...
+        def HasField(
+            self,
+            field_name: typing_extensions.Literal["_plan_id", b"_plan_id", "plan_id", b"plan_id"],
+        ) -> builtins.bool: ...
         def ClearField(
-            self, field_name: typing_extensions.Literal["col_name", b"col_name"]
+            self,
+            field_name: typing_extensions.Literal[
+                "_plan_id", b"_plan_id", "col_name", b"col_name", "plan_id", b"plan_id"
+            ],
         ) -> None: ...
+        def WhichOneof(
+            self, oneof_group: typing_extensions.Literal["_plan_id", b"_plan_id"]
+        ) -> typing_extensions.Literal["plan_id"] | None: ...
 
     class UnresolvedExtractValue(google.protobuf.message.Message):
         """Extracts a value or values from an Expression"""
@@ -1119,10 +1171,11 @@ class CommonInlineUserDefinedFunction(google.protobuf.message.Message):
     ARGUMENTS_FIELD_NUMBER: builtins.int
     PYTHON_UDF_FIELD_NUMBER: builtins.int
     SCALAR_SCALA_UDF_FIELD_NUMBER: builtins.int
+    JAVA_UDF_FIELD_NUMBER: builtins.int
     function_name: builtins.str
     """(Required) Name of the user-defined function."""
     deterministic: builtins.bool
-    """(Required) Indicate if the user-defined function is deterministic."""
+    """(Optional) Indicate if the user-defined function is deterministic."""
     @property
     def arguments(
         self,
@@ -1132,6 +1185,8 @@ class CommonInlineUserDefinedFunction(google.protobuf.message.Message):
     def python_udf(self) -> global___PythonUDF: ...
     @property
     def scalar_scala_udf(self) -> global___ScalarScalaUDF: ...
+    @property
+    def java_udf(self) -> global___JavaUDF: ...
     def __init__(
         self,
         *,
@@ -1140,12 +1195,15 @@ class CommonInlineUserDefinedFunction(google.protobuf.message.Message):
         arguments: collections.abc.Iterable[global___Expression] | None = ...,
         python_udf: global___PythonUDF | None = ...,
         scalar_scala_udf: global___ScalarScalaUDF | None = ...,
+        java_udf: global___JavaUDF | None = ...,
     ) -> None: ...
     def HasField(
         self,
         field_name: typing_extensions.Literal[
             "function",
             b"function",
+            "java_udf",
+            b"java_udf",
             "python_udf",
             b"python_udf",
             "scalar_scala_udf",
@@ -1163,6 +1221,8 @@ class CommonInlineUserDefinedFunction(google.protobuf.message.Message):
             b"function",
             "function_name",
             b"function_name",
+            "java_udf",
+            b"java_udf",
             "python_udf",
             b"python_udf",
             "scalar_scala_udf",
@@ -1171,7 +1231,7 @@ class CommonInlineUserDefinedFunction(google.protobuf.message.Message):
     ) -> None: ...
     def WhichOneof(
         self, oneof_group: typing_extensions.Literal["function", b"function"]
-    ) -> typing_extensions.Literal["python_udf", "scalar_scala_udf"] | None: ...
+    ) -> typing_extensions.Literal["python_udf", "scalar_scala_udf", "java_udf"] | None: ...
 
 global___CommonInlineUserDefinedFunction = CommonInlineUserDefinedFunction
 
@@ -1266,3 +1326,47 @@ class ScalarScalaUDF(google.protobuf.message.Message):
     ) -> None: ...
 
 global___ScalarScalaUDF = ScalarScalaUDF
+
+class JavaUDF(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    CLASS_NAME_FIELD_NUMBER: builtins.int
+    OUTPUT_TYPE_FIELD_NUMBER: builtins.int
+    AGGREGATE_FIELD_NUMBER: builtins.int
+    class_name: builtins.str
+    """(Required) Fully qualified name of Java class"""
+    output_type: builtins.str
+    """(Optional) Output type of the Java UDF"""
+    aggregate: builtins.bool
+    """(Required) Indicate if the Java user-defined function is an aggregate function"""
+    def __init__(
+        self,
+        *,
+        class_name: builtins.str = ...,
+        output_type: builtins.str | None = ...,
+        aggregate: builtins.bool = ...,
+    ) -> None: ...
+    def HasField(
+        self,
+        field_name: typing_extensions.Literal[
+            "_output_type", b"_output_type", "output_type", b"output_type"
+        ],
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "_output_type",
+            b"_output_type",
+            "aggregate",
+            b"aggregate",
+            "class_name",
+            b"class_name",
+            "output_type",
+            b"output_type",
+        ],
+    ) -> None: ...
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["_output_type", b"_output_type"]
+    ) -> typing_extensions.Literal["output_type"] | None: ...
+
+global___JavaUDF = JavaUDF

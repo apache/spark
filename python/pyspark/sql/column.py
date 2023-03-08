@@ -639,11 +639,70 @@ class Column:
         return Column(jc)
 
     def __getattr__(self, item: Any) -> "Column":
+        """
+        An expression that gets an item at position ``ordinal`` out of a list,
+        or gets an item by key out of a dict.
+
+        .. versionadded:: 1.3.0
+
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
+
+        Parameters
+        ----------
+        item
+            a literal value.
+
+        Returns
+        -------
+        :class:`Column`
+            Column representing the item got by key out of a dict.
+
+        Examples
+        --------
+        >>> df = spark.createDataFrame([('abcedfg', {"key": "value"})], ["l", "d"])
+        >>> df.select(df.d.key).show()
+        +------+
+        |d[key]|
+        +------+
+        | value|
+        +------+
+        """
         if item.startswith("__"):
             raise AttributeError(item)
         return self[item]
 
     def __getitem__(self, k: Any) -> "Column":
+        """
+        An expression that gets an item at position ``ordinal`` out of a list,
+        or gets an item by key out of a dict.
+
+        .. versionadded:: 1.3.0
+
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
+
+        Parameters
+        ----------
+        k
+            a literal value, or a slice object without step.
+
+        Returns
+        -------
+        :class:`Column`
+            Column representing the item got by key out of a dict, or substrings sliced by
+            the given slice object.
+
+        Examples
+        --------
+        >>> df = spark.createDataFrame([('abcedfg', {"key": "value"})], ["l", "d"])
+        >>> df.select(df.l[slice(1, 3)], df.d['key']).show()
+        +------------------+------+
+        |substring(l, 1, 3)|d[key]|
+        +------------------+------+
+        |               abc| value|
+        +------------------+------+
+        """
         if isinstance(k, slice):
             if k.step is not None:
                 raise ValueError("slice with step is not supported.")

@@ -16,7 +16,7 @@
 #
 from pyspark.sql.connect.utils import check_dependencies
 
-check_dependencies(__name__, __file__)
+check_dependencies(__name__)
 
 from typing import Any, List, Optional, Sequence, Union, cast, TYPE_CHECKING, Mapping, Dict
 import functools
@@ -1047,6 +1047,35 @@ class Unpivot(LogicalPlan):
             plan.unpivot.values.values.extend([self.col_to_expr(x, session) for x in self.values])
         plan.unpivot.variable_column_name = self.variable_column_name
         plan.unpivot.value_column_name = self.value_column_name
+        return plan
+
+
+class CollectMetrics(LogicalPlan):
+    """Logical plan object for a CollectMetrics operation."""
+
+    def __init__(
+        self,
+        child: Optional["LogicalPlan"],
+        name: str,
+        exprs: List["ColumnOrName"],
+    ) -> None:
+        super().__init__(child)
+        self._name = name
+        self._exprs = exprs
+
+    def col_to_expr(self, col: "ColumnOrName", session: "SparkConnectClient") -> proto.Expression:
+        if isinstance(col, Column):
+            return col.to_plan(session)
+        else:
+            return self.unresolved_attr(col)
+
+    def plan(self, session: "SparkConnectClient") -> proto.Relation:
+        assert self._child is not None
+
+        plan = proto.Relation()
+        plan.collect_metrics.input.CopyFrom(self._child.plan(session))
+        plan.collect_metrics.name = self._name
+        plan.collect_metrics.metrics.extend([self.col_to_expr(x, session) for x in self._exprs])
         return plan
 
 

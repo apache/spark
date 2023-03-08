@@ -24,7 +24,7 @@ import com.google.common.collect.{Lists, Maps}
 import com.google.protobuf.{Any => ProtoAny, ByteString}
 import io.grpc.stub.StreamObserver
 
-import org.apache.spark.{SparkEnv, TaskContext}
+import org.apache.spark.{Partition, SparkEnv, TaskContext}
 import org.apache.spark.api.python.{PythonEvalType, SimplePythonFunction}
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.{ExecutePlanResponse, SqlCommand}
@@ -37,7 +37,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException, ParserUtils}
 import org.apache.spark.sql.catalyst.plans.{Cross, FullOuter, Inner, JoinType, LeftAnti, LeftOuter, LeftSemi, RightOuter, UsingJoin}
 import org.apache.spark.sql.catalyst.plans.logical
-import org.apache.spark.sql.catalyst.plans.logical.{CommandResult, Deduplicate, Except, Intersect, LocalRelation, LogicalPlan, Sample, Sort, SubqueryAlias, Union, Unpivot, UnresolvedHint}
+import org.apache.spark.sql.catalyst.plans.logical.{CollectMetrics, CommandResult, Deduplicate, Except, Intersect, LocalRelation, LogicalPlan, Sample, Sort, SubqueryAlias, Union, Unpivot, UnresolvedHint}
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CharVarcharUtils}
 import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, InvalidPlanInput, UdfPacket}
 import org.apache.spark.sql.connect.config.Connect.CONNECT_GRPC_ARROW_MAX_BATCH_SIZE
@@ -48,6 +48,8 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.arrow.ArrowConverters
 import org.apache.spark.sql.execution.command.CreateViewCommand
+import org.apache.spark.sql.execution.datasources.LogicalRelation
+import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JDBCPartition, JDBCRelation}
 import org.apache.spark.sql.execution.python.UserDefinedPythonFunction
 import org.apache.spark.sql.internal.CatalogImpl
 import org.apache.spark.sql.types._
@@ -113,6 +115,8 @@ class SparkConnectPlanner(val session: SparkSession) {
         transformRepartitionByExpression(rel.getRepartitionByExpression)
       case proto.Relation.RelTypeCase.FRAME_MAP =>
         transformFrameMap(rel.getFrameMap)
+      case proto.Relation.RelTypeCase.COLLECT_METRICS =>
+        transformCollectMetrics(rel.getCollectMetrics)
       case proto.Relation.RelTypeCase.RELTYPE_NOT_SET =>
         throw new IndexOutOfBoundsException("Expected Relation to be set, but is empty.")
 
@@ -571,6 +575,14 @@ class SparkConnectPlanner(val session: SparkSession) {
       numPartitionsOpt)
   }
 
+  private def transformCollectMetrics(rel: proto.CollectMetrics): LogicalPlan = {
+    val metrics = rel.getMetricsList.asScala.toSeq.map { expr =>
+      Column(transformExpression(expr))
+    }
+
+    CollectMetrics(rel.getName, metrics.map(_.named), transformRelation(rel.getInput))
+  }
+
   private def transformDeduplicate(rel: proto.Deduplicate): LogicalPlan = {
     if (!rel.hasInput) {
       throw InvalidPlanInput("Deduplicate needs a plan input")
@@ -678,25 +690,46 @@ class SparkConnectPlanner(val session: SparkSession) {
           reader.format(rel.getDataSource.getFormat)
         }
         localMap.foreach { case (key, value) => reader.option(key, value) }
-        if (rel.getDataSource.hasSchema && rel.getDataSource.getSchema.nonEmpty) {
 
-          DataType.parseTypeWithFallback(
-            rel.getDataSource.getSchema,
-            StructType.fromDDL,
-            fallbackParser = DataType.fromJson) match {
-            case s: StructType => reader.schema(s)
-            case other => throw InvalidPlanInput(s"Invalid schema $other")
+        if (rel.getDataSource.getFormat == "jdbc" && rel.getDataSource.getPredicatesCount > 0) {
+          if (!localMap.contains(JDBCOptions.JDBC_URL) ||
+            !localMap.contains(JDBCOptions.JDBC_TABLE_NAME)) {
+            throw InvalidPlanInput(s"Invalid jdbc params, please specify jdbc url and table.")
           }
-        }
-        if (rel.getDataSource.getPathsCount == 0) {
-          reader.load().queryExecution.analyzed
-        } else if (rel.getDataSource.getPathsCount == 1) {
-          reader.load(rel.getDataSource.getPaths(0)).queryExecution.analyzed
+
+          val url = rel.getDataSource.getOptionsMap.get(JDBCOptions.JDBC_URL)
+          val table = rel.getDataSource.getOptionsMap.get(JDBCOptions.JDBC_TABLE_NAME)
+          val options = new JDBCOptions(url, table, localMap)
+          val predicates = rel.getDataSource.getPredicatesList.asScala.toArray
+          val parts: Array[Partition] = predicates.zipWithIndex.map { case (part, i) =>
+            JDBCPartition(part, i): Partition
+          }
+          val relation = JDBCRelation(parts, options)(session)
+          LogicalRelation(relation)
+        } else if (rel.getDataSource.getPredicatesCount == 0) {
+          if (rel.getDataSource.hasSchema && rel.getDataSource.getSchema.nonEmpty) {
+
+            DataType.parseTypeWithFallback(
+              rel.getDataSource.getSchema,
+              StructType.fromDDL,
+              fallbackParser = DataType.fromJson) match {
+              case s: StructType => reader.schema(s)
+              case other => throw InvalidPlanInput(s"Invalid schema $other")
+            }
+          }
+          if (rel.getDataSource.getPathsCount == 0) {
+            reader.load().queryExecution.analyzed
+          } else if (rel.getDataSource.getPathsCount == 1) {
+            reader.load(rel.getDataSource.getPaths(0)).queryExecution.analyzed
+          } else {
+            reader.load(rel.getDataSource.getPathsList.asScala.toSeq: _*).queryExecution.analyzed
+          }
         } else {
-          reader.load(rel.getDataSource.getPathsList.asScala.toSeq: _*).queryExecution.analyzed
+          throw InvalidPlanInput(
+            s"Predicates are not supported for ${rel.getDataSource.getFormat} data sources.")
         }
 
-      case _ => throw InvalidPlanInput("Does not support " + rel.getReadTypeCase.name())
+      case _ => throw InvalidPlanInput(s"Does not support ${rel.getReadTypeCase.name()}")
     }
   }
 
@@ -1173,7 +1206,11 @@ class SparkConnectPlanner(val session: SparkSession) {
       case ParserUtils.qualifiedEscapedIdentifier(nameParts, columnNameRegex) =>
         UnresolvedRegex(columnNameRegex, Some(nameParts), caseSensitive)
       case _ =>
-        UnresolvedAttribute.quotedString(regex.getColName)
+        val expr = UnresolvedAttribute.quotedString(regex.getColName)
+        if (regex.hasPlanId) {
+          expr.setTagValue(LogicalPlan.PLAN_ID_TAG, regex.getPlanId)
+        }
+        expr
     }
   }
 
@@ -1439,7 +1476,7 @@ class SparkConnectPlanner(val session: SparkSession) {
 
   def process(
       command: proto.Command,
-      clientId: String,
+      sessionId: String,
       responseObserver: StreamObserver[ExecutePlanResponse]): Unit = {
     command.getCommandTypeCase match {
       case proto.Command.CommandTypeCase.REGISTER_FUNCTION =>
@@ -1453,14 +1490,14 @@ class SparkConnectPlanner(val session: SparkSession) {
       case proto.Command.CommandTypeCase.EXTENSION =>
         handleCommandPlugin(command.getExtension)
       case proto.Command.CommandTypeCase.SQL_COMMAND =>
-        handleSqlCommand(command.getSqlCommand, clientId, responseObserver)
+        handleSqlCommand(command.getSqlCommand, sessionId, responseObserver)
       case _ => throw new UnsupportedOperationException(s"$command not supported.")
     }
   }
 
   def handleSqlCommand(
       getSqlCommand: SqlCommand,
-      clientId: String,
+      sessionId: String,
       responseObserver: StreamObserver[ExecutePlanResponse]): Unit = {
     // Eagerly execute commands of the provided SQL string.
     val df = session.sql(getSqlCommand.getSql, getSqlCommand.getArgsMap)
@@ -1488,8 +1525,10 @@ class SparkConnectPlanner(val session: SparkSession) {
         maxRecordsPerBatch,
         maxBatchSize,
         timeZoneId)
-      assert(batches.size == 1)
-      batches.next()
+      assert(batches.hasNext)
+      val bytes = batches.next()
+      assert(!batches.hasNext, s"remaining batches: ${batches.size}")
+      bytes
     }
 
     // To avoid explicit handling of the result on the client, we build the expected input
@@ -1517,12 +1556,12 @@ class SparkConnectPlanner(val session: SparkSession) {
     responseObserver.onNext(
       ExecutePlanResponse
         .newBuilder()
-        .setClientId(clientId)
+        .setSessionId(sessionId)
         .setSqlCommandResult(result)
         .build())
 
     // Send Metrics
-    SparkConnectStreamHandler.sendMetricsToResponse(clientId, df)
+    SparkConnectStreamHandler.sendMetricsToResponse(sessionId, df)
   }
 
   private def handleRegisterUserDefinedFunction(
@@ -1530,6 +1569,8 @@ class SparkConnectPlanner(val session: SparkSession) {
     fun.getFunctionCase match {
       case proto.CommonInlineUserDefinedFunction.FunctionCase.PYTHON_UDF =>
         handleRegisterPythonUDF(fun)
+      case proto.CommonInlineUserDefinedFunction.FunctionCase.JAVA_UDF =>
+        handleRegisterJavaUDF(fun)
       case _ =>
         throw InvalidPlanInput(
           s"Function with ID: ${fun.getFunctionCase.getNumber} is not supported")
@@ -1547,6 +1588,25 @@ class SparkConnectPlanner(val session: SparkSession) {
       udfDeterministic = fun.getDeterministic)
 
     session.udf.registerPython(fun.getFunctionName, udpf)
+  }
+
+  private def handleRegisterJavaUDF(fun: proto.CommonInlineUserDefinedFunction): Unit = {
+    val udf = fun.getJavaUdf
+    val dataType =
+      if (udf.hasOutputType) {
+        DataType.parseTypeWithFallback(
+          schema = udf.getOutputType,
+          parser = DataType.fromDDL,
+          fallbackParser = DataType.fromJson) match {
+          case s: DataType => s
+          case other => throw InvalidPlanInput(s"Invalid return type $other")
+        }
+      } else null
+    if (udf.getAggregate) {
+      session.udf.registerJavaUDAF(fun.getFunctionName, udf.getClassName)
+    } else {
+      session.udf.registerJava(fun.getFunctionName, udf.getClassName, dataType)
+    }
   }
 
   private def handleCommandPlugin(extension: ProtoAny): Unit = {
