@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql
 
+import java.sql.Timestamp
+
 import org.apache.spark.sql.catalyst.expressions.IntegralLiteralTestUtils.{negativeInt, positiveInt}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.Decimal
@@ -237,6 +239,28 @@ class UnwrapCastInComparisonEndToEndSuite extends QueryTest with SharedSparkSess
         df.where("cast(c1 as float) == cast(33554435 as float)")
           .select("c1"),
         Row(33554435))
+    }
+  }
+
+  test("SPARK-42597: Support unwrap date type to timestamp type") {
+    val ts1 = Timestamp.valueOf("2023-01-01 23:59:59.099999")
+    val ts2 = Timestamp.valueOf("2023-01-01 23:59:59.999998")
+    val ts3 = Timestamp.valueOf("2023-01-02 23:59:59.000008")
+
+    withTable(t) {
+      Seq(ts1, ts2, ts3).toDF("ts").write.saveAsTable(t)
+      val df = spark.table(t)
+
+      checkAnswer(
+        df.where("cast(ts as date) > cast('2023-01-01' as date)"), Seq(ts3).map(Row(_)))
+      checkAnswer(
+        df.where("cast(ts as date) >= cast('2023-01-01' as date)"), Seq(ts1, ts2, ts3).map(Row(_)))
+      checkAnswer(
+        df.where("cast(ts as date) < cast('2023-01-02' as date)"), Seq(ts1, ts2).map(Row(_)))
+      checkAnswer(
+        df.where("cast(ts as date) <= cast('2023-01-02' as date)"), Seq(ts1, ts2, ts3).map(Row(_)))
+      checkAnswer(
+        df.where("cast(ts as date) = cast('2023-01-01' as date)"), Seq(ts1, ts2).map(Row(_)))
     }
   }
 

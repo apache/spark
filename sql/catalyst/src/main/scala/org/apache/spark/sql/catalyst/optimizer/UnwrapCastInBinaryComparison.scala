@@ -43,6 +43,7 @@ import org.apache.spark.sql.types._
  *     decimal, etc) or boolean type
  *   2). `fromType` can be safely coerced to `toType` without precision loss (e.g., short to int,
  *     int to long, but not long to int, nor int to boolean)
+ *   3). `fromExp` is a timestamp type and `toType` is a date type
  *
  * If the above conditions are satisfied, the rule checks to see if the literal `value` is within
  * range `(min, max)`, where `min` and `max` are the minimum and maximum value of `fromType`,
@@ -113,7 +114,7 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
     // literal and cast side, then process the result and swap the literal and cast again to
     // restore the original order.
     case BinaryComparison(Literal(_, literalType), Cast(fromExp, toType, _, _))
-        if canImplicitlyCast(fromExp, toType, literalType) =>
+        if needToCanonicalizeExpression(fromExp, toType, literalType) =>
       def swap(e: Expression): Expression = e match {
         case GreaterThan(left, right) => LessThan(right, left)
         case GreaterThanOrEqual(left, right) => LessThanOrEqual(right, left)
@@ -135,8 +136,7 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
 
     case be @ BinaryComparison(
       Cast(fromExp, _, timeZoneId, evalMode), date @ Literal(value, DateType))
-        if (fromExp.dataType == TimestampType || fromExp.dataType == TimestampNTZType) &&
-          value != null =>
+        if AnyTimestampType.acceptsType(fromExp.dataType) && value != null =>
       unwrapDateToTimestamp(be, fromExp, date, timeZoneId, evalMode)
 
     // As the analyzer makes sure that the list of In is already of the same data type, then the
@@ -316,13 +316,13 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
         GreaterThanOrEqual(fromExp, Cast(dateAddOne, fromExp.dataType, tz, evalMode))
       case _: GreaterThanOrEqual =>
         GreaterThanOrEqual(fromExp, Cast(date, fromExp.dataType, tz, evalMode))
+      case Equality(_, _) =>
+        And(GreaterThanOrEqual(fromExp, Cast(date, fromExp.dataType, tz, evalMode)),
+          LessThan(fromExp, Cast(dateAddOne, fromExp.dataType, tz, evalMode)))
       case _: LessThan =>
         LessThan(fromExp, Cast(date, fromExp.dataType, tz, evalMode))
       case _: LessThanOrEqual =>
         LessThan(fromExp, Cast(dateAddOne, fromExp.dataType, tz, evalMode))
-      case Equality(_, _) =>
-        And(GreaterThanOrEqual(fromExp, Cast(date, fromExp.dataType, tz, evalMode)),
-          LessThan(fromExp, Cast(dateAddOne, fromExp.dataType, tz, evalMode)))
       case _ => exp
     }
   }
@@ -372,6 +372,15 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
     }
   }
 
+  private def needToCanonicalizeExpression(
+      fromExp: Expression,
+      toType: DataType,
+      literalType: DataType): Boolean = {
+    toType.sameType(literalType) &&
+      !fromExp.foldable &&
+      ((toType.isInstanceOf[NumericType] && canImplicitlyCast(fromExp, toType, literalType)) ||
+        (toType.isInstanceOf[DateType] && AnyTimestampType.acceptsType(fromExp.dataType)))
+  }
 
   /**
    * Check if the input `fromExp` can be safely cast to `toType` without any loss of precision,
@@ -384,7 +393,7 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
       literalType: DataType): Boolean = {
     toType.sameType(literalType) &&
       !fromExp.foldable &&
-      (toType.isInstanceOf[NumericType] || toType.isInstanceOf[DateType]) &&
+      toType.isInstanceOf[NumericType] &&
       canUnwrapCast(fromExp.dataType, toType)
   }
 
@@ -395,7 +404,6 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
     case (IntegerType, FloatType) => false
     case (LongType, FloatType) => false
     case (LongType, DoubleType) => false
-    case (TimestampType | TimestampNTZType, DateType) => true
     case _ if from.isInstanceOf[NumericType] => Cast.canUpCast(from, to)
     case _ => false
   }
