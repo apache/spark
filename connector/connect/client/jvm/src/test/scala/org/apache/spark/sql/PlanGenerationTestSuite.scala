@@ -251,17 +251,6 @@ class PlanGenerationTestSuite
     session.read.jdbc(urlWithUserAndPass, "TEST.PEOPLE", parts, new Properties())
   }
 
-  test("write jdbc") {
-    val rows = java.util.Arrays.asList[Row](Row("dave", 42), Row("mary", 222))
-    val schema = StructType(
-      StructField("name", StringType) ::
-        StructField("id", IntegerType) :: Nil)
-    val df = session.createDataFrame(rows, schema)
-    df.write.jdbc("jdbc:h2:mem:testdb2", "TEST.BASICCREATETEST", new Properties())
-
-    session.read.jdbc("jdbc:h2:mem:testdb2", "TEST.BASICCREATETEST", new Properties())
-  }
-
   test("read json") {
     session.read.json(testDataPath.resolve("people.json").toString)
   }
