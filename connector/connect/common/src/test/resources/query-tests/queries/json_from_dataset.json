@@ -13,7 +13,7 @@
     },
     "format": "PARSE_FORMAT_JSON",
     "options": {
-      "inferschema": "true"
+      "allowsinglequotes": "true"
     }
   }
 }

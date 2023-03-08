@@ -260,7 +260,7 @@ class PlanGenerationTestSuite
 
   test("json from dataset") {
     session.read
-      .option("inferSchema", "true")
+      .option("allowSingleQuotes", "true")
       .json(session.createDataset(Seq.empty[String])(StringEncoder))
   }
 
