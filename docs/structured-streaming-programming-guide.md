@@ -1928,12 +1928,134 @@ Additional details on supported joins:
 
 - As of Spark 2.4, you can use joins only when the query is in Append output mode. Other output modes are not yet supported.
 
-- As of Spark 2.4, you cannot use other non-map-like operations before joins. Here are a few examples of
-  what cannot be used.
+- You cannot use mapGroupsWithState and flatMapGroupsWithState before and after joins.
 
-  - Cannot use streaming aggregations before joins.
+In append output mode, you can construct a query having non-map-like operations e.g. aggregation, deduplication, stream-stream join before/after join.
 
-  - Cannot use mapGroupsWithState and flatMapGroupsWithState in Update mode before joins.
+For example, here's an example of time window aggregation in both streams followed by stream-stream join with event time window:
+
+<div class="codetabs">
+<div data-lang="scala"  markdown="1">
+
+{% highlight scala %}
+
+val clicksWindow = clicksWithWatermark
+  .groupBy(window("clickTime", "1 hour"))
+  .count()
+
+val impressionsWindow = impressionsWithWatermark
+  .groupBy(window("impressionTime", "1 hour"))
+  .count()
+
+clicksWindow.join(impressionsWindow, "window", "inner")
+
+{% endhighlight %}
+
+</div>
+<div data-lang="java"  markdown="1">
+
+{% highlight java %}
+
+Dataset<Row> clicksWindow = clicksWithWatermark
+  .groupBy(functions.window(clicksWithWatermark.col("clickTime"), "1 hour"))
+  .count();
+
+Dataset<Row> impressionsWindow = impressionsWithWatermark
+  .groupBy(functions.window(impressionsWithWatermark.col("impressionTime"), "1 hour"))
+  .count();
+
+clicksWindow.join(impressionsWindow, "window", "inner");
+
+{% endhighlight %}
+
+
+</div>
+<div data-lang="python"  markdown="1">
+
+{% highlight python %}
+clicksWindow = clicksWithWatermark.groupBy(
+  clicksWithWatermark.clickAdId,
+  window(clicksWithWatermark.clickTime, "1 hour")
+).count()
+
+impressionsWindow = impressionsWithWatermark.groupBy(
+  impressionsWithWatermark.impressionAdId,
+  window(impressionsWithWatermark.impressionTime, "1 hour")
+).count()
+
+clicksWindow.join(impressionsWindow, "window", "inner")
+
+{% endhighlight %}
+
+</div>
+</div>
+
+Here's another example of stream-stream join with time range join condition followed by time window aggregation:
+
+<div class="codetabs">
+<div data-lang="scala"  markdown="1">
+
+{% highlight scala %}
+
+val joined = impressionsWithWatermark.join(
+  clicksWithWatermark,
+  expr("""
+    clickAdId = impressionAdId AND
+    clickTime >= impressionTime AND
+    clickTime <= impressionTime + interval 1 hour
+  """),
+  joinType = "leftOuter"      // can be "inner", "leftOuter", "rightOuter", "fullOuter", "leftSemi"
+)
+
+joined
+  .groupBy($"clickAdId", window($"clickTime", "1 hour"))
+  .count()
+
+{% endhighlight %}
+
+</div>
+<div data-lang="java"  markdown="1">
+
+{% highlight java %}
+Dataset<Row> joined = impressionsWithWatermark.join(
+  clicksWithWatermark,
+  expr(
+    "clickAdId = impressionAdId AND " +
+    "clickTime >= impressionTime AND " +
+    "clickTime <= impressionTime + interval 1 hour "),
+  "leftOuter"                 // can be "inner", "leftOuter", "rightOuter", "fullOuter", "leftSemi"
+);
+
+joined
+  .groupBy(joined.col("clickAdId"), functions.window(joined.col("clickTime"), "1 hour"))
+  .count();
+
+{% endhighlight %}
+
+
+</div>
+<div data-lang="python"  markdown="1">
+
+{% highlight python %}
+joined = impressionsWithWatermark.join(
+  clicksWithWatermark,
+  expr("""
+    clickAdId = impressionAdId AND
+    clickTime >= impressionTime AND
+    clickTime <= impressionTime + interval 1 hour
+    """),
+  "leftOuter"                 # can be "inner", "leftOuter", "rightOuter", "fullOuter", "leftSemi"
+)
+
+joined.groupBy(
+  joined.clickAdId,
+  window(joined.clickTime, "1 hour")
+).count()
+
+{% endhighlight %}
+
+</div>
+</div>
 
 ### Streaming Deduplication
 You can deduplicate records in data streams using a unique identifier in the events. This is exactly same as deduplication on static using a unique identifier column. The query will store the necessary amount of data from previous records such that it can filter duplicate records. Similar to aggregations, you can use deduplication with or without watermarking.
@@ -2067,9 +2189,7 @@ Some of them are as follows.
   for more details.
 
 - Chaining multiple stateful operations on streaming Datasets is not supported with Update and Complete mode.
-  - In addition, below operations followed by other stateful operation is not supported in Append mode.
-    - stream-stream time interval join (inner/outer)
-    - flatMapGroupsWithState
+  - In addition, mapGroupsWithState/flatMapGroupsWithState operation followed by other stateful operation is not supported in Append mode.
   - A known workaround is to split your streaming query into multiple queries having a single stateful operation per each query,
     and ensure end-to-end exactly once per query. Ensuring end-to-end exactly once for the last query is optional.
 

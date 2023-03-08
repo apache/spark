@@ -58,9 +58,10 @@ message UserContext {
 message AnalyzePlanRequest {
   // (Required)
   //
-  // The client_id is set by the client to be able to collate streaming responses from
-  // different queries.
-  string client_id = 1;
+  // The session_id specifies a spark session for a user id (which is specified
+  // by user_context.user_id). The session_id is set by the client to be able to
+  // collate streaming responses from different queries within the dedicated session.
+  string session_id = 1;
 
   // (Required) User context
   UserContext user_context = 2;
@@ -161,7 +162,7 @@ message AnalyzePlanRequest {
 // Response to performing analysis of the query. Contains relevant metadata to be able to
 // reason about the performance.
 message AnalyzePlanResponse {
-  string client_id = 1;
+  string session_id = 1;
 
   oneof result {
     Schema schema = 2;
@@ -217,11 +218,15 @@ message AnalyzePlanResponse {
 message ExecutePlanRequest {
   // (Required)
   //
-  // The client_id is set by the client to be able to collate streaming responses from
-  // different queries.
-  string client_id = 1;
+  // The session_id specifies a spark session for a user id (which is specified
+  // by user_context.user_id). The session_id is set by the client to be able to
+  // collate streaming responses from different queries within the dedicated session.
+  string session_id = 1;
 
   // (Required) User context
+  //
+  // user_context.user_id and session+id both identify a unique remote spark session on the
+  // server side.
   UserContext user_context = 2;
 
   // (Required) The logical plan to be executed / analyzed.
@@ -234,9 +239,9 @@ message ExecutePlanRequest {
 }
 
 // The response of a query, can be one or more for each request. Responses belonging to the
-// same input query, carry the same `client_id`.
+// same input query, carry the same `session_id`.
 message ExecutePlanResponse {
-  string client_id = 1;
+  string session_id = 1;
 
   // Union type for the different response messages.
   oneof response_type {
@@ -304,9 +309,10 @@ message KeyValue {
 message ConfigRequest {
   // (Required)
   //
-  // The client_id is set by the client to be able to collate streaming responses from
-  // different queries.
-  string client_id = 1;
+  // The session_id specifies a spark session for a user id (which is specified
+  // by user_context.user_id). The session_id is set by the client to be able to
+  // collate streaming responses from different queries within the dedicated session.
+  string session_id = 1;
 
   // (Required) User context
   UserContext user_context = 2;
@@ -369,7 +375,7 @@ message ConfigRequest {
 
 // Response to the config request.
 message ConfigResponse {
-  string client_id = 1;
+  string session_id = 1;
 
   // (Optional) The result key-value pairs.
   //
@@ -386,9 +392,12 @@ message ConfigResponse {
 // Request to transfer client-local artifacts.
 message AddArtifactsRequest {
 
-  // The client_id is set by the client to be able to collate streaming responses from
-  // different queries.
-  string client_id = 1;
+  // (Required)
+  //
+  // The session_id specifies a spark session for a user id (which is specified
+  // by user_context.user_id). The session_id is set by the client to be able to
+  // collate streaming responses from different queries within the dedicated session.
+  string session_id = 1;
 
   // User context
   UserContext user_context = 2;

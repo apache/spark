@@ -75,11 +75,11 @@ class SparkConnectClientSuite extends ConnectFunSuite with BeforeAndAfterEach {
     client = clientBuilder(server.getPort)
     val request = AnalyzePlanRequest
       .newBuilder()
-      .setClientId("abc123")
+      .setSessionId("abc123")
       .build()
 
     val response = client.analyze(request)
-    assert(response.getClientId === "abc123")
+    assert(response.getSessionId === "abc123")
   }
 
   test("Test connection") {
@@ -99,7 +99,7 @@ class SparkConnectClientSuite extends ConnectFunSuite with BeforeAndAfterEach {
       .connectionString(s"sc://localhost:${server.getPort}/;use_ssl=true")
       .build()
 
-    val request = AnalyzePlanRequest.newBuilder().setClientId("abc123").build()
+    val request = AnalyzePlanRequest.newBuilder().setSessionId("abc123").build()
 
     // Failed the ssl handshake as the dummy server does not have any server credentials installed.
     assertThrows[StatusRuntimeException] {
@@ -201,11 +201,11 @@ class DummySparkConnectService() extends SparkConnectServiceGrpc.SparkConnectSer
       request: ExecutePlanRequest,
       responseObserver: StreamObserver[ExecutePlanResponse]): Unit = {
     // Reply with a dummy response using the same client ID
-    val requestClientId = request.getClientId
+    val requestSessionId = request.getSessionId
     inputPlan = request.getPlan
     val response = ExecutePlanResponse
       .newBuilder()
-      .setClientId(requestClientId)
+      .setSessionId(requestSessionId)
       .build()
     responseObserver.onNext(response)
     responseObserver.onCompleted()
@@ -215,7 +215,7 @@ class DummySparkConnectService() extends SparkConnectServiceGrpc.SparkConnectSer
       request: AnalyzePlanRequest,
       responseObserver: StreamObserver[AnalyzePlanResponse]): Unit = {
     // Reply with a dummy response using the same client ID
-    val requestClientId = request.getClientId
+    val requestSessionId = request.getSessionId
     request.getAnalyzeCase match {
       case proto.AnalyzePlanRequest.AnalyzeCase.SCHEMA =>
         inputPlan = request.getSchema.getPlan
@@ -233,7 +233,7 @@ class DummySparkConnectService() extends SparkConnectServiceGrpc.SparkConnectSer
     }
     val response = AnalyzePlanResponse
       .newBuilder()
-      .setClientId(requestClientId)
+      .setSessionId(requestSessionId)
       .build()
     responseObserver.onNext(response)
     responseObserver.onCompleted()

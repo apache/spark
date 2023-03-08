@@ -35,7 +35,7 @@ private[connect] class SparkConnectAnalyzeHandler(
   def handle(request: proto.AnalyzePlanRequest): Unit = {
     val session =
       SparkConnectService
-        .getOrCreateIsolatedSession(request.getUserContext.getUserId, request.getClientId)
+        .getOrCreateIsolatedSession(request.getUserContext.getUserId, request.getSessionId)
         .session
     session.withActive {
       val response = process(request, session)
@@ -155,7 +155,7 @@ private[connect] class SparkConnectAnalyzeHandler(
       case other => throw InvalidPlanInput(s"Unknown Analyze Method $other!")
     }
 
-    builder.setClientId(request.getClientId)
+    builder.setSessionId(request.getSessionId)
     builder.build()
   }
 }

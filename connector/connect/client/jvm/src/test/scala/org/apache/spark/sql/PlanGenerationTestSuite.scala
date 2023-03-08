@@ -257,6 +257,10 @@ class PlanGenerationTestSuite
     session.read.json(testDataPath.resolve("people.json").toString)
   }
 
+  test("toJSON") {
+    complex.toJSON
+  }
+
   test("read csv") {
     session.read.csv(testDataPath.resolve("people.csv").toString)
   }

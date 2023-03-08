@@ -20,9 +20,10 @@ package org.apache.spark.sql
 import scala.collection.JavaConverters._
 
 import org.apache.spark.sql.connect.client.util.QueryTest
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{StringType, StructType}
 
-class DataFrameNaFunctionSuite extends QueryTest {
+class DataFrameNaFunctionSuite extends QueryTest with SQLHelper {
   private def createDF(): DataFrame = {
     val sparkSession = spark
     import sparkSession.implicits._
@@ -386,17 +387,21 @@ class DataFrameNaFunctionSuite extends QueryTest {
   }
 
   test("replace float with nan") {
-    checkAnswer(
-      createNaNDF().na.replace("*", Map(1.0f -> Float.NaN)),
-      Row(0, 0L, 0.toShort, 0.toByte, Float.NaN, Double.NaN) ::
-        Row(0, 0L, 0.toShort, 0.toByte, Float.NaN, Double.NaN) :: Nil)
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> false.toString) {
+      checkAnswer(
+        createNaNDF().na.replace("*", Map(1.0f -> Float.NaN)),
+        Row(0, 0L, 0.toShort, 0.toByte, Float.NaN, Double.NaN) ::
+          Row(0, 0L, 0.toShort, 0.toByte, Float.NaN, Double.NaN) :: Nil)
+    }
   }
 
   test("replace double with nan") {
-    checkAnswer(
-      createNaNDF().na.replace("*", Map(1.0 -> Double.NaN)),
-      Row(0, 0L, 0.toShort, 0.toByte, Float.NaN, Double.NaN) ::
-        Row(0, 0L, 0.toShort, 0.toByte, Float.NaN, Double.NaN) :: Nil)
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> false.toString) {
+      checkAnswer(
+        createNaNDF().na.replace("*", Map(1.0 -> Double.NaN)),
+        Row(0, 0L, 0.toShort, 0.toByte, Float.NaN, Double.NaN) ::
+          Row(0, 0L, 0.toShort, 0.toByte, Float.NaN, Double.NaN) :: Nil)
+    }
   }
 
 }
