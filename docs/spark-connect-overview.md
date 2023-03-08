@@ -1,6 +1,6 @@
 ---
 layout: global
-title: Spark Connect Overview - Building client-side Spark applications
+title: Spark Connect Overview
 license: |
   Licensed to the Apache Software Foundation (ASF) under one or more
   contributor license agreements.  See the NOTICE file distributed with
@@ -17,6 +17,7 @@ license: |
   See the License for the specific language governing permissions and
   limitations under the License.
 ---
+**Building client-side Spark applications**
 
 In Apache Spark 3.4, Spark Connect introduced a decoupled client-server architecture that allows remote connectivity to Spark clusters using the DataFrame API and unresolved logical plans as the protocol. The separation between client and server allows Spark and its open ecosystem to be leveraged from everywhere. It can be embedded in modern data applications, in IDEs, Notebooks and programming languages.
 
@@ -106,5 +107,5 @@ While Spark Connect does not have built-in authentication, it is designed to wor
 
 # What is included in Spark 3.4
 
-In Spark 3.4, Spark Connect provides DataFrame API coverage for PySpark and 
+In Spark 3.4, Spark Connect provides DataFrame API coverage for PySpark.
 Spark Connect clients for other languages are planned for the future.
