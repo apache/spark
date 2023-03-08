@@ -1014,9 +1014,9 @@ private[spark] class SparkSubmit extends Logging {
         exitCode = -1
         throw findCause(t)
     } finally {
-      if (args.master.startsWith("k8s") && !isShell(args.primaryResource) &&
-          !isSqlShell(args.mainClass) && !isThriftServer(args.mainClass) &&
-          !isConnectServer(args.mainClass)) {
+      if ((args.master.startsWith("k8s") || args.master.startsWith("yarn")) &&
+        !isShell(args.primaryResource) && !isSqlShell(args.mainClass) &&
+        !isThriftServer(args.mainClass) && !isConnectServer(args.mainClass)) {
         try {
           SparkContext.getActive.foreach(_.stop(exitCode))
         } catch {
