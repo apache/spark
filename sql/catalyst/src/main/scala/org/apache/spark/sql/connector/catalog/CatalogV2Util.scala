@@ -248,8 +248,9 @@ private[sql] object CatalogV2Util {
       val (before, after) = schema.fields.splitAt(fieldIndex + 1)
       StructType(before ++ (field +: after))
     }
-    constantFoldCurrentDefaultsToExistDefaults(
+    validateTableProviderForDefaultValue(
       newSchema, tableProvider, statementType, addNewColumnToExistingTable)
+    constantFoldCurrentDefaultsToExistDefaults(newSchema, statementType)
   }
 
   private def replace(
