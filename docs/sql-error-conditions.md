@@ -415,14 +415,6 @@ SQLSTATE: none assigned
 
 Detected an incompatible DataSourceRegister. Please remove the incompatible library from classpath or upgrade it. Error: `<message>`
 
-### [INCOMPATIBLE_DATA_TO_TABLE](sql-error-conditions-incompatible-data-to-table-error-class.html)
-
-SQLSTATE: none assigned
-
-Cannot write incompatible data to table `<tableName>`:
-
- For more details see [INCOMPATIBLE_DATA_TO_TABLE](sql-error-conditions-incompatible-data-to-table-error-class.html)
-
 ### INCOMPATIBLE_JOIN_TYPES
 
 [SQLSTATE: 42613](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)

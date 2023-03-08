@@ -55,7 +55,7 @@ Thousands separators (, or G) may not appear after the decimal point in the numb
 
 ## UNEXPECTED_TOKEN
 
-Found the unexpected `<token>` in the format string; the structure of the format string must match: [MI|S] [$] [0|9|G|,]* [.|D] [0|9]* [$] [PR|MI|S].
+Found the unexpected `<token>` in the format string; the structure of the format string must match: `[MI|S]` `[$]` `[0|9|G|,]*` `[.|D]` `[0|9]*` `[$]` `[PR|MI|S]`.
 
 ## WRONG_NUM_DIGIT
 

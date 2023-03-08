@@ -39,6 +39,6 @@ expects a binary value with 16, 24 or 32 bytes, but got `<actualLength>` bytes.
 
 ## ZERO_INDEX
 
-expects %1$, %2$ and so on, but got %0$.
+expects `%1$`, `%2$` and so on, but got `%0$`.
 
 
