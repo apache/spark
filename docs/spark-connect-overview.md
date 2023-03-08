@@ -18,9 +18,11 @@ license: |
   limitations under the License.
 ---
 
-This document gives a short overview of how Spark runs on clusters, to make it easier to understand
-the components involved. Read through the [application submission guide](submitting-applications.html)
-to learn about launching applications on a cluster.
+In Apache Spark 3.4, Spark Connect introduced a decoupled client-server architecture that allows remote connectivity to Spark clusters using the DataFrame API and unresolved logical plans as the protocol. The separation between client and server allows Spark and its open ecosystem to be leveraged from everywhere. It can be embedded in modern data applications, in IDEs, Notebooks and programming languages.
+
+<p style="text-align: center;">
+  <img src="img/spark-connect-api.png" title="Spark Connect API" alt="Spark Connect API Diagram" />
+</p>
 
 # Components
 
