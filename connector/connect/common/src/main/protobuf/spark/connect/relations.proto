@@ -140,6 +140,11 @@ message Read {
 
     // (Optional) A list of path for file-system backed data sources.
     repeated string paths = 4;
+
+    // (Optional) Condition in the where clause for each partition.
+    //
+    // This is only supported by the JDBC data source.
+    repeated string predicates = 5;
   }
 }
 

@@ -24,7 +24,7 @@ import com.google.common.collect.{Lists, Maps}
 import com.google.protobuf.{Any => ProtoAny, ByteString}
 import io.grpc.stub.StreamObserver
 
-import org.apache.spark.{SparkEnv, TaskContext}
+import org.apache.spark.{Partition, SparkEnv, TaskContext}
 import org.apache.spark.api.python.{PythonEvalType, SimplePythonFunction}
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.{ExecutePlanResponse, SqlCommand}
@@ -48,6 +48,8 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.arrow.ArrowConverters
 import org.apache.spark.sql.execution.command.CreateViewCommand
+import org.apache.spark.sql.execution.datasources.LogicalRelation
+import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JDBCPartition, JDBCRelation}
 import org.apache.spark.sql.execution.python.UserDefinedPythonFunction
 import org.apache.spark.sql.internal.CatalogImpl
 import org.apache.spark.sql.types._
@@ -688,25 +690,46 @@ class SparkConnectPlanner(val session: SparkSession) {
           reader.format(rel.getDataSource.getFormat)
         }
         localMap.foreach { case (key, value) => reader.option(key, value) }
-        if (rel.getDataSource.hasSchema && rel.getDataSource.getSchema.nonEmpty) {
 
-          DataType.parseTypeWithFallback(
-            rel.getDataSource.getSchema,
-            StructType.fromDDL,
-            fallbackParser = DataType.fromJson) match {
-            case s: StructType => reader.schema(s)
-            case other => throw InvalidPlanInput(s"Invalid schema $other")
+        if (rel.getDataSource.getFormat == "jdbc" && rel.getDataSource.getPredicatesCount > 0) {
+          if (!localMap.contains(JDBCOptions.JDBC_URL) ||
+            !localMap.contains(JDBCOptions.JDBC_TABLE_NAME)) {
+            throw InvalidPlanInput(s"Invalid jdbc params, please specify jdbc url and table.")
           }
-        }
-        if (rel.getDataSource.getPathsCount == 0) {
-          reader.load().queryExecution.analyzed
-        } else if (rel.getDataSource.getPathsCount == 1) {
-          reader.load(rel.getDataSource.getPaths(0)).queryExecution.analyzed
+
+          val url = rel.getDataSource.getOptionsMap.get(JDBCOptions.JDBC_URL)
+          val table = rel.getDataSource.getOptionsMap.get(JDBCOptions.JDBC_TABLE_NAME)
+          val options = new JDBCOptions(url, table, localMap)
+          val predicates = rel.getDataSource.getPredicatesList.asScala.toArray
+          val parts: Array[Partition] = predicates.zipWithIndex.map { case (part, i) =>
+            JDBCPartition(part, i): Partition
+          }
+          val relation = JDBCRelation(parts, options)(session)
+          LogicalRelation(relation)
+        } else if (rel.getDataSource.getPredicatesCount == 0) {
+          if (rel.getDataSource.hasSchema && rel.getDataSource.getSchema.nonEmpty) {
+
+            DataType.parseTypeWithFallback(
+              rel.getDataSource.getSchema,
+              StructType.fromDDL,
+              fallbackParser = DataType.fromJson) match {
+              case s: StructType => reader.schema(s)
+              case other => throw InvalidPlanInput(s"Invalid schema $other")
+            }
+          }
+          if (rel.getDataSource.getPathsCount == 0) {
+            reader.load().queryExecution.analyzed
+          } else if (rel.getDataSource.getPathsCount == 1) {
+            reader.load(rel.getDataSource.getPaths(0)).queryExecution.analyzed
+          } else {
+            reader.load(rel.getDataSource.getPathsList.asScala.toSeq: _*).queryExecution.analyzed
+          }
         } else {
-          reader.load(rel.getDataSource.getPathsList.asScala.toSeq: _*).queryExecution.analyzed
+          throw InvalidPlanInput(
+            s"Predicates are not supported for ${rel.getDataSource.getFormat} data sources.")
         }
 
-      case _ => throw InvalidPlanInput("Does not support " + rel.getReadTypeCase.name())
+      case _ => throw InvalidPlanInput(s"Does not support ${rel.getReadTypeCase.name()}")
     }
   }
 

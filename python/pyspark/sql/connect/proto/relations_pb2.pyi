@@ -610,6 +610,7 @@ class Read(google.protobuf.message.Message):
         SCHEMA_FIELD_NUMBER: builtins.int
         OPTIONS_FIELD_NUMBER: builtins.int
         PATHS_FIELD_NUMBER: builtins.int
+        PREDICATES_FIELD_NUMBER: builtins.int
         format: builtins.str
         """(Optional) Supported formats include: parquet, orc, text, json, parquet, csv, avro.
 
@@ -633,6 +634,14 @@ class Read(google.protobuf.message.Message):
             self,
         ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
             """(Optional) A list of path for file-system backed data sources."""
+        @property
+        def predicates(
+            self,
+        ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
+            """(Optional) Condition in the where clause for each partition.
+
+            This is only supported by the JDBC data source.
+            """
         def __init__(
             self,
             *,
@@ -640,6 +649,7 @@ class Read(google.protobuf.message.Message):
             schema: builtins.str | None = ...,
             options: collections.abc.Mapping[builtins.str, builtins.str] | None = ...,
             paths: collections.abc.Iterable[builtins.str] | None = ...,
+            predicates: collections.abc.Iterable[builtins.str] | None = ...,
         ) -> None: ...
         def HasField(
             self,
@@ -667,6 +677,8 @@ class Read(google.protobuf.message.Message):
                 b"options",
                 "paths",
                 b"paths",
+                "predicates",
+                b"predicates",
                 "schema",
                 b"schema",
             ],
