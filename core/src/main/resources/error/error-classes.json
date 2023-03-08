@@ -1,4 +1,10 @@
 {
+  "ALTER_TABLE_COLUMN_DESCRIPTOR_DUPLICATE" : {
+    "message" : [
+      "ALTER TABLE <type> column <columnName> specifies descriptor \"<optionName>\" more than once, which is invalid."
+    ],
+    "sqlState" : "42710"
+  },
   "AMBIGUOUS_COLUMN_OR_FIELD" : {
     "message" : [
       "Column or field <name> is ambiguous and has <n> matches."
@@ -207,9 +213,9 @@
     ],
     "sqlState" : "22018"
   },
-  "CREATE_TABLE_COLUMN_OPTION_DUPLICATE" : {
+  "CREATE_TABLE_COLUMN_DESCRIPTOR_DUPLICATE" : {
     "message" : [
-      "CREATE TABLE column <columnName> specifies option \"<optionName>\" more than once, which is invalid."
+      "CREATE TABLE column <columnName> specifies descriptor \"<optionName>\" more than once, which is invalid."
     ],
     "sqlState" : "42710"
   },

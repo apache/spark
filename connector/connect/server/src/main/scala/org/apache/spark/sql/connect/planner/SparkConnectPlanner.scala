@@ -1479,7 +1479,7 @@ class SparkConnectPlanner(val session: SparkSession) {
 
   def process(
       command: proto.Command,
-      clientId: String,
+      sessionId: String,
       responseObserver: StreamObserver[ExecutePlanResponse]): Unit = {
     command.getCommandTypeCase match {
       case proto.Command.CommandTypeCase.REGISTER_FUNCTION =>
@@ -1493,14 +1493,14 @@ class SparkConnectPlanner(val session: SparkSession) {
       case proto.Command.CommandTypeCase.EXTENSION =>
         handleCommandPlugin(command.getExtension)
       case proto.Command.CommandTypeCase.SQL_COMMAND =>
-        handleSqlCommand(command.getSqlCommand, clientId, responseObserver)
+        handleSqlCommand(command.getSqlCommand, sessionId, responseObserver)
       case _ => throw new UnsupportedOperationException(s"$command not supported.")
     }
   }
 
   def handleSqlCommand(
       getSqlCommand: SqlCommand,
-      clientId: String,
+      sessionId: String,
       responseObserver: StreamObserver[ExecutePlanResponse]): Unit = {
     // Eagerly execute commands of the provided SQL string.
     val df = session.sql(getSqlCommand.getSql, getSqlCommand.getArgsMap)
@@ -1528,8 +1528,10 @@ class SparkConnectPlanner(val session: SparkSession) {
         maxRecordsPerBatch,
         maxBatchSize,
         timeZoneId)
-      assert(batches.size == 1)
-      batches.next()
+      assert(batches.hasNext)
+      val bytes = batches.next()
+      assert(!batches.hasNext, s"remaining batches: ${batches.size}")
+      bytes
     }
 
     // To avoid explicit handling of the result on the client, we build the expected input
@@ -1557,12 +1559,12 @@ class SparkConnectPlanner(val session: SparkSession) {
     responseObserver.onNext(
       ExecutePlanResponse
         .newBuilder()
-        .setClientId(clientId)
+        .setSessionId(sessionId)
         .setSqlCommandResult(result)
         .build())
 
     // Send Metrics
-    SparkConnectStreamHandler.sendMetricsToResponse(clientId, df)
+    SparkConnectStreamHandler.sendMetricsToResponse(sessionId, df)
   }
 
   private def handleRegisterUserDefinedFunction(
@@ -1570,6 +1572,8 @@ class SparkConnectPlanner(val session: SparkSession) {
     fun.getFunctionCase match {
       case proto.CommonInlineUserDefinedFunction.FunctionCase.PYTHON_UDF =>
         handleRegisterPythonUDF(fun)
+      case proto.CommonInlineUserDefinedFunction.FunctionCase.JAVA_UDF =>
+        handleRegisterJavaUDF(fun)
       case _ =>
         throw InvalidPlanInput(
           s"Function with ID: ${fun.getFunctionCase.getNumber} is not supported")
@@ -1593,6 +1597,25 @@ class SparkConnectPlanner(val session: SparkSession) {
       udfDeterministic = fun.getDeterministic)
 
     session.udf.registerPython(fun.getFunctionName, udpf)
+  }
+
+  private def handleRegisterJavaUDF(fun: proto.CommonInlineUserDefinedFunction): Unit = {
+    val udf = fun.getJavaUdf
+    val dataType =
+      if (udf.hasOutputType) {
+        DataType.parseTypeWithFallback(
+          schema = udf.getOutputType,
+          parser = DataType.fromDDL,
+          fallbackParser = DataType.fromJson) match {
+          case s: DataType => s
+          case other => throw InvalidPlanInput(s"Invalid return type $other")
+        }
+      } else null
+    if (udf.getAggregate) {
+      session.udf.registerJavaUDAF(fun.getFunctionName, udf.getClassName)
+    } else {
+      session.udf.registerJava(fun.getFunctionName, udf.getClassName, dataType)
+    }
   }
 
   private def handleCommandPlugin(extension: ProtoAny): Unit = {

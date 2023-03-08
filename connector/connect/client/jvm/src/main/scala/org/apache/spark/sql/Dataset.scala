@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{PrimitiveLongEnc
 import org.apache.spark.sql.catalyst.expressions.RowOrdering
 import org.apache.spark.sql.connect.client.SparkResult
 import org.apache.spark.sql.connect.common.DataTypeProtoConverter
+import org.apache.spark.sql.functions.{struct, to_json}
 import org.apache.spark.sql.types.{Metadata, StructType}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.Utils
@@ -533,6 +534,18 @@ class Dataset[T] private[sql] (
     // scalastyle:on println
     }
   }
+
+  /**
+   * Returns a [[DataFrameNaFunctions]] for working with missing data.
+   * {{{
+   *   // Dropping rows containing any null values.
+   *   ds.na.drop()
+   * }}}
+   *
+   * @group untypedrel
+   * @since 3.4.0
+   */
+  def na: DataFrameNaFunctions = new DataFrameNaFunctions(sparkSession, plan.getRoot)
 
   /**
    * Returns a [[DataFrameStatFunctions]] for working statistic functions support.
@@ -2765,7 +2778,7 @@ class Dataset[T] private[sql] (
   }
 
   def toJSON: Dataset[String] = {
-    throw new UnsupportedOperationException("toJSON is not implemented.")
+    select(to_json(struct(col("*")))).as(StringEncoder)
   }
 
   private[sql] def analyze: proto.AnalyzePlanResponse = {

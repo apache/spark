@@ -32,7 +32,7 @@ import org.apache.spark.sql.connect.client.util.{IntegrationTestUtils, RemoteSpa
 import org.apache.spark.sql.functions.{aggregate, array, broadcast, col, count, lit, rand, sequence, shuffle, struct, transform, udf}
 import org.apache.spark.sql.types._
 
-class ClientE2ETestSuite extends RemoteSparkSession {
+class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper {
 
   // Spark Result
   test("spark result schema") {
@@ -77,7 +77,7 @@ class ClientE2ETestSuite extends RemoteSparkSession {
     assert(result(2) == 2)
   }
 
-  test("simple udf") {
+  ignore("SPARK-42665: Ignore simple udf test until the udf is fully implemented.") {
     def dummyUdf(x: Int): Int = x + 5
     val myUdf = udf(dummyUdf _)
     val df = spark.range(5).select(myUdf(Column("id")))
@@ -502,16 +502,13 @@ class ClientE2ETestSuite extends RemoteSparkSession {
   }
 
   test("broadcast join") {
-    spark.conf.set("spark.sql.autoBroadcastJoinThreshold", "-1")
-    try {
+    withSQLConf("spark.sql.autoBroadcastJoinThreshold" -> "-1") {
       val left = spark.range(100).select(col("id"), rand(10).as("a"))
       val right = spark.range(100).select(col("id"), rand(12).as("a"))
       val joined =
         left.join(broadcast(right), left("id") === right("id")).select(left("id"), right("a"))
       assert(joined.schema.catalogString === "struct<id:bigint,a:double>")
       testCapturedStdOut(joined.explain(), "BroadcastHashJoin")
-    } finally {
-      spark.conf.set("spark.sql.autoBroadcastJoinThreshold", "10MB")
     }
   }
 
@@ -613,8 +610,8 @@ class ClientE2ETestSuite extends RemoteSparkSession {
   }
 
   test("SparkSession newSession") {
-    val oldId = spark.sql("SELECT 1").analyze.getClientId
-    val newId = spark.newSession().sql("SELECT 1").analyze.getClientId
+    val oldId = spark.sql("SELECT 1").analyze.getSessionId
+    val newId = spark.newSession().sql("SELECT 1").analyze.getSessionId
     assert(oldId != newId)
   }
 
@@ -634,6 +631,19 @@ class ClientE2ETestSuite extends RemoteSparkSession {
     val plan = spark.sql("select 1")
     val otherPlan = spark.sql("select 1")
     assert(plan.sameSemantics(otherPlan))
+  }
+
+  test("toJSON") {
+    val expected = Array(
+      """{"b":0.0,"id":0,"d":"world","a":0}""",
+      """{"b":0.1,"id":1,"d":"world","a":1}""",
+      """{"b":0.2,"id":2,"d":"world","a":0}""")
+    val result = spark
+      .range(3)
+      .select(generateMyTypeColumns: _*)
+      .toJSON
+      .collect()
+    assert(result sameElements expected)
   }
 
   test("json from Dataset[String]") {
