@@ -379,8 +379,7 @@ final class DataFrameWriter[T] private[sql] (ds: Dataset[T]) {
         proto.WriteOperation.SaveTable
           .newBuilder()
           .setTableName(table)
-          .setSaveMethod(
-            proto.WriteOperation.SaveTable.TableSaveMethod.TABLE_SAVE_METHOD_SAVE))
+          .setSaveMethod(proto.WriteOperation.SaveTable.TableSaveMethod.TABLE_SAVE_METHOD_SAVE))
     })
   }
 
