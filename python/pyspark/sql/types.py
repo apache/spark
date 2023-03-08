@@ -1610,6 +1610,7 @@ def _has_non_nullable(dt: DataType) -> bool:
     else:
         return False
 
+
 @overload
 def _merge_type(a: StructType, b: StructType, name: Optional[str] = None) -> StructType:
     ...

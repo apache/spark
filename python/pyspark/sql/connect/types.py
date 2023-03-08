@@ -265,6 +265,7 @@ def to_arrow_type(dt: DataType) -> "pa.DataType":
         raise TypeError("Unsupported type in conversion to Arrow: " + str(dt))
     return arrow_type
 
+
 def replace_with_arrow_column_name(schema: StructType, arrow_schema: "pa.Schema") -> "pa.Schema":
     """Replace with arrow column name"""
     import pyarrow as pa
@@ -274,6 +275,7 @@ def replace_with_arrow_column_name(schema: StructType, arrow_schema: "pa.Schema"
         for (field1, field2) in zip(schema, arrow_schema)
     ]
     return pa.schema(fields)
+
 
 def to_arrow_schema(schema: StructType) -> "pa.Schema":
     """Convert a schema from Spark to Arrow"""
