@@ -618,11 +618,11 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper {
       StructField("name", StringType) ::
         StructField("id", IntegerType) :: Nil)
     val df = spark.createDataFrame(rows, schema)
-    df.write.jdbc("jdbc:h2:mem:testdb2", "TEST.BASICCREATETEST", new Properties())
+    df.write.jdbc("jdbc:h2:mem:testdb2", "BASICCREATETEST", new Properties())
 
     checkSameResult(
       rows.asScala.map(row => Row(row.getString(0), row.getInt(1))),
-      spark.read.jdbc("jdbc:h2:mem:testdb2", "TEST.BASICCREATETEST", new Properties()))
+      spark.read.jdbc("jdbc:h2:mem:testdb2", "BASICCREATETEST", new Properties()))
   }
 
   test("SparkSession newSession") {
