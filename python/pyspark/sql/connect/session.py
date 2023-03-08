@@ -268,8 +268,9 @@ class SparkSession:
             _table = pa.Table.from_batches(
                 [ser._create_batch([(c, t) for (_, c), t in zip(data.items(), arrow_types)])]
             )
-            pa_schema = replace_with_arrow_column_name(schema, _table.schema)
-            _table = _table.cast(target_schema=pa_schema)
+            if schema is not None:
+                pa_schema = replace_with_arrow_column_name(schema, _table.schema)
+                _table = _table.cast(target_schema=pa_schema)
 
         elif isinstance(data, np.ndarray):
             if data.ndim not in [1, 2]:
