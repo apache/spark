@@ -15,4 +15,4 @@
 # limitations under the License.
 #
 
-"""Spark Connect cleint"""
+"""Spark Connect client"""
