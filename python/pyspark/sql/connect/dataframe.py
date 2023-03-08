@@ -1367,17 +1367,14 @@ class DataFrame:
 
     @property
     def schema(self) -> StructType:
-        if self._schema is None:
-            if self._plan is not None:
-                query = self._plan.to_proto(self._session.client)
-                if self._session is None:
-                    raise Exception("Cannot analyze without SparkSession.")
-                self._schema = self._session.client.schema(query)
-                return self._schema
-            else:
-                raise Exception("Empty plan.")
-        else:
+        if self._plan is not None:
+            query = self._plan.to_proto(self._session.client)
+            if self._session is None:
+                raise Exception("Cannot analyze without SparkSession.")
+            self._schema = self._session.client.schema(query)
             return self._schema
+        else:
+            raise Exception("Empty plan.")
 
     schema.__doc__ = PySparkDataFrame.schema.__doc__
 
