@@ -22,9 +22,6 @@ import java.util.Arrays;
 import org.apache.spark.sql.connector.catalog.Table;
 import org.apache.spark.sql.connector.expressions.*;
 import org.apache.spark.sql.connector.read.*;
-import org.apache.spark.sql.connector.read.partitioning.KeyGroupedPartitioning;
-import org.apache.spark.sql.connector.read.partitioning.Partitioning;
-import org.apache.spark.sql.connector.read.partitioning.UnknownPartitioning;
 import org.apache.spark.sql.util.CaseInsensitiveStringMap;
 
 public class JavaOrderAndPartitionAwareDataSource extends JavaPartitionAwareDataSource {
