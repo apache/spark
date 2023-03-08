@@ -60,13 +60,13 @@ Set SPARK_REMOTE environment variable:
 export SPARK_REMOTE="sc://localhost/"
 
 Start the PySpark CLI, for example:
-~/dev/spark/spark/bin/pyspark
+'~/dev/spark/spark/bin/pyspark'
 
 And notice that the PySpark CLI is now connected to Spark using Spark Connect as illustrated in the welcome message: “Client connected to the Spark Connect server at...”.
 
 And if you write your own Python program, create a Spark Session as shown in this example:
-from pyspark.sql import SparkSession
-spark = SparkSession.builder.getOrCreate()
+'from pyspark.sql import SparkSession'
+'spark = SparkSession.builder.getOrCreate()'
 
 Which will create a Spark Connect session by reading the SPARK_REMOTE environment variable we set above.
 
@@ -75,13 +75,13 @@ Which will create a Spark Connect session by reading the SPARK_REMOTE environmen
 You can also specify that you want to use Spark Connect when you create a Spark session explicitly.
 
 For example, when launching the PySpark CLI, simply include the remote parameter as illustrated here:
-~/dev/spark/spark/bin/pyspark --remote "sc://localhost"
+'~/dev/spark/spark/bin/pyspark --remote "sc://localhost"'
 
 And again you will notice that the PySpark welcome message tells you that you are connected to Spark using Spark Connect.
 
 Or, in your code, include the remote function with a reference to your Spark server when you create a Spark session, as in this example:
-from pyspark.sql import SparkSession
-spark = SparkSession.builder.remote("sc://localhost/").getOrCreate()
+'from pyspark.sql import SparkSession'
+'spark = SparkSession.builder.remote("sc://localhost/").getOrCreate()'
 
 # Client application authentication
 
