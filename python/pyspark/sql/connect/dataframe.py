@@ -1371,8 +1371,7 @@ class DataFrame:
             query = self._plan.to_proto(self._session.client)
             if self._session is None:
                 raise Exception("Cannot analyze without SparkSession.")
-            self._schema = self._session.client.schema(query)
-            return self._schema
+            return self._session.client.schema(query)
         else:
             raise Exception("Empty plan.")
 
