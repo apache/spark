@@ -1601,11 +1601,11 @@ def _has_nulltype(dt: DataType) -> bool:
 def _has_non_nullable(dt: DataType) -> bool:
     """Return whether there is nullable in `dt`"""
     if isinstance(dt, StructType):
-        return any(not f.nullable or _has_not_nullable(f.dataType) for f in dt.fields)
+        return any(not f.nullable or _has_non_nullable(f.dataType) for f in dt.fields)
     elif isinstance(dt, ArrayType):
-        return _has_not_nullable((dt.elementType))
+        return _has_non_nullable((dt.elementType))
     elif isinstance(dt, MapType):
-        return _has_not_nullable(dt.keyType) or _has_not_nullable(dt.valueType)
+        return _has_non_nullable(dt.keyType) or _has_non_nullable(dt.valueType)
     else:
         return False
 
