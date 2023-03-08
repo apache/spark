@@ -736,14 +736,19 @@ class SparkSession private(
   }
   // scalastyle:on
 
-  def stop(): Unit = stop(0)
-
   /**
-   * Stop the underlying `SparkContext`.
+   * Stop the underlying `SparkContext` with default exit code 0.
    *
    * @since 2.0.0
    */
-  def stop(exitCode: Int = 0): Unit = {
+  def stop(): Unit = stop(0)
+
+  /**
+   * Stop the underlying `SparkContext` with exit code that will passed to scheduler backend.
+   *
+   * @since 3.5.0
+   */
+  def stop(exitCode: Int): Unit = {
     sparkContext.stop(exitCode)
   }
 
