@@ -47,7 +47,7 @@ object MLUtils {
       if (paramValueProto.hasInteger) {
         paramValueProto.getInteger
       } else {
-        paramValueProto.getLong
+        paramValueProto.getLong.toInt
       }
     } else if (paramType == classOf[Long]) {
       assert(paramValueProto.hasLong)
@@ -57,7 +57,7 @@ object MLUtils {
       if (paramValueProto.hasFloat) {
         paramValueProto.getFloat
       } else {
-        paramValueProto.getDouble
+        paramValueProto.getDouble.toFloat
       }
     } else if (paramType == classOf[Double]) {
       assert (paramValueProto.hasDouble)

@@ -60,6 +60,7 @@ class LogisticRegressionAlgorithm extends Algorithm {
     val lorModel = model.asInstanceOf[ml.classification.LogisticRegressionModel]
     // TODO: hasSummary
     name match {
+      case "hasSummary" => Left(Serializer.serialize(lorModel.hasSummary))
       case "numClasses" => Left(Serializer.serialize(lorModel.numClasses))
       case "numFeatures" => Left(Serializer.serialize(lorModel.numFeatures))
       case "intercept" => Left(Serializer.serialize(lorModel.intercept))

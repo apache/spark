@@ -15,7 +15,10 @@
 # limitations under the License.
 #
 
+import pyspark.sql.connect.proto as pb2
 import pyspark.sql.connect.proto.ml_pb2 as ml_pb2
+
+from pyspark.ml.linalg import Vectors, Matrices
 
 
 def deserialize(ml_command_result: ml_pb2.MlCommandResponse, client):
@@ -25,11 +28,31 @@ def deserialize(ml_command_result: ml_pb2.MlCommandResponse, client):
             return literal.integer
         if literal.HasField("double"):
             return literal.double
+        if literal.HasField("array"):
+            arr = pb2.Expression.Literal.Array()
+            if arr.elementType.HasField("double"):
+                return [e.double for e in arr.element]
         raise ValueError()
 
     if ml_command_result.HasField("model_info"):
         model_info = ml_command_result.model_info
         return model_info.model_ref_id, model_info.model_uid
+
+    if ml_command_result.HasField("vector"):
+        vector_pb = ml_command_result.vector
+        if vector_pb.HasField("dense"):
+            return Vectors.dense(vector_pb.dense.value)
+        raise ValueError()
+
+    if ml_command_result.HasField("matrix"):
+        matrix_pb = ml_command_result.matrix
+        if matrix_pb.HasField("dense") and not matrix_pb.dense.is_transposed:
+            return Matrices.dense(
+                matrix_pb.dense.num_rows,
+                matrix_pb.dense.num_cols,
+                matrix_pb.dense.value,
+            )
+        raise ValueError()
 
     raise ValueError()
 

@@ -17,7 +17,7 @@
 
 from pyspark.sql import DataFrame
 from pyspark.ml import Estimator, Model
-import import pyspark.sql.connect.proto as pb2
+import pyspark.sql.connect.proto as pb2
 import pyspark.sql.connect.proto.ml_pb2 as ml_pb2
 import pyspark.sql.connect.proto.ml_common_pb2 as ml_common_pb2
 from pyspark.sql.connect.ml.serializer import deserialize
@@ -55,21 +55,63 @@ class ClientEstimator(Estimator):
 
 
 class _ModelTransformRelationPlan:
-    def __init__(self, model, dataset, client):
-        # Note: remote_java_object contains `__del__` that
-        # can trigger server side GC work when this object is no longer used.
-        self.model_ref_id = model.ref_id
-        self.dataset_proto = dataset._plan.to_proto(client)
+    def __init__(self, model, dataset):
+        self.model = model
+        self.dataset = dataset
+
+    def plan(self, session: "SparkConnectClient") -> pb2.Relation:
+        dataset_proto = self.dataset._plan.to_proto(session.client)
         # TODO: fill params
-        self.params_proto = ml_common_pb2.Params(params={}, default_params={})
+        params_proto = ml_common_pb2.Params(params={}, default_params={})
+
+        return pb2.Relation(
+            ml_relation=pb2.MlRelation(
+                model_transform=pb2.MlRelation.ModelTransform(
+                    input=dataset_proto,
+                    model_ref_id=self.model.ref_id,
+                    params=params_proto,
+                )
+            )
+        )
+
+
+class _ModelAttrRelationPlan:
+    def __init__(self, model, name):
+        self.model = model
+        self.name = name
 
     def plan(self, session: "SparkConnectClient") -> pb2.Relation:
         return pb2.Relation(
             ml_relation=pb2.MlRelation(
-                model_transform=pb2.MlRelation.ModelTransform(
-                    input=self.dataset_proto,
-                    model_ref_id=self.model_ref_id,
-                    params=self.params_proto,
+                model_transform=pb2.MlRelation.ModelAttr(
+                    model_ref_id=self.model.ref_id,
+                    name=self.name
+                )
+            )
+        )
+
+
+class _ModelSummaryAttrRelationPlan:
+    def __init__(self, model, name, dataset):
+        self.model = model
+        self.name = name
+        self.dataset = dataset
+
+    def plan(self, session: "SparkConnectClient") -> pb2.Relation:
+        if self.dataset is not None:
+            dataset_proto = self.dataset._plan.to_proto(session.client)
+        else:
+            dataset_proto = None
+        # TODO: fill params
+        params_proto = ml_common_pb2.Params(params={}, default_params={})
+
+        return pb2.Relation(
+            ml_relation=pb2.MlRelation(
+                model_summary_attr=pb2.MlRelation.ModelSummaryAttr(
+                    model_ref_id=self.model.ref_id,
+                    name=self.name,
+                    params=params_proto,
+                    evaluation_dataset=dataset_proto
                 )
             )
         )
@@ -92,7 +134,52 @@ class ClientModel(Model):
         resp = client._execute_ml(req)
         return deserialize(resp, client)
 
+    def _get_model_attr_dataframe(self, name) -> DataFrame:
+        session = SparkSession.getActiveSession()
+        plan = _ModelAttrRelationPlan(
+            self.model, name
+        )
+        return DataFrame.withPlan(plan, session)
+
     def _transform(self, dataset: DataFrame) -> DataFrame:
         session = dataset.sparkSession
         plan = _ModelTransformRelationPlan(self, dataset)
         return DataFrame.withPlan(plan, session)
+
+
+class ClientModelSummary:
+    def __init__(self, model, dataset):
+        self.model = model
+        self.dataset = dataset
+
+    def _get_summary_attr_dataframe(self, name):
+        session = SparkSession.getActiveSession()
+        plan = _ModelSummaryAttrRelationPlan(
+            self.model, name, dataset=None
+        )
+        return DataFrame.withPlan(plan, session)
+
+    def _get_summary_attr(self, name):
+        client = SparkSession.getActiveSession().client
+
+        model_summary_attr_command_proto = ml_pb2.MlCommand.ModelSummaryAttr(
+            model_ref_id=self.model.ref_id,
+            name=name,
+            # TODO: fill params
+            params=ml_common_pb2.Params(params={}, default_params={}),
+            evaluation_dataset=self.dataset._plan.to_proto(client)
+        )
+        req = client._execute_plan_request_with_metadata()
+        req.plan.ml_command.model_summary_attr.CopyFrom(model_summary_attr_command_proto)
+
+        resp = client._execute_ml(req)
+        return deserialize(resp, client)
+
+
+class HasTrainingSummary(Model):
+
+    def hasSummary(self) -> bool:
+        return self._get_model_attr("hasSummary")
+
+    def summary(self):
+        return ClientModelSummary(self, dataset=None)

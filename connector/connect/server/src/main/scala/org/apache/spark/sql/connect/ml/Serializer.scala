@@ -40,6 +40,12 @@ object Serializer {
     ).build()
   }
 
+  def serialize(data: Boolean): proto.MlCommandResponse = {
+    proto.MlCommandResponse.newBuilder().setLiteral(
+      proto.Expression.Literal.newBuilder().setBoolean(data)
+    ).build()
+  }
+
   def serialize(data: Array[Double]): proto.MlCommandResponse = {
     val arrayBuilder = proto.Expression.Literal.Array.newBuilder()
     for (i <- 0 until data.length) {

@@ -39,9 +39,14 @@ from pyspark.ml.classification import (
 )
 from pyspark.ml.common import inherit_doc
 from pyspark.ml.linalg import (Matrix, Vector)
-from pyspark.ml.util import HasTrainingSummary
 from pyspark import keyword_only, since, SparkContext, inheritable_thread_target
-from pyspark.sql.connect.ml.base import ClientEstimator
+from pyspark.sql.connect.ml.base import (
+    ClientEstimator,
+    ClientModel,
+    HasTrainingSummary,
+    ClientModelSummary
+)
+
 
 @inherit_doc
 class LogisticRegression(
@@ -157,42 +162,181 @@ class LogisticRegression(
 
 
 class LogisticRegressionModel(
+    ClientModel,
+    HasTrainingSummary,
     ProbabilisticClassificationModel,
     _LogisticRegressionParams,
-    HasTrainingSummary["LogisticRegressionTrainingSummary"],
+
 ):
-    """
-    Model fitted by LogisticRegression.
-
-    .. versionadded:: 1.3.0
-    """
-
     @property  # type: ignore[misc]
     def coefficients(self) -> Vector:
-        """
-        Model coefficients of binomial logistic regression.
-        An exception is thrown in the case of multinomial logistic regression.
-        """
-        return self._call_java("coefficients")
+        return self._get_model_attr("coefficients")
 
     @property  # type: ignore[misc]
     def intercept(self) -> float:
-        """
-        Model intercept of binomial logistic regression.
-        An exception is thrown in the case of multinomial logistic regression.
-        """
-        return self._call_java("intercept")
+        return self._get_model_attr("intercept")
 
     @property  # type: ignore[misc]
     def coefficientMatrix(self) -> Matrix:
-        """
-        Model coefficients.
-        """
-        return self._call_java("coefficientMatrix")
+        return self._get_model_attr("coefficientMatrix")
 
     @property  # type: ignore[misc]
     def interceptVector(self) -> Vector:
-        """
-        Model intercept.
-        """
-        return self._call_java("interceptVector")
+        return self._get_model_attr("interceptVector")
+
+    # TODO: Move this method to common interface shared by connect code and legacy code
+    @property  # type: ignore[misc]
+    def summary(self) -> "LogisticRegressionTrainingSummary":
+        if self.hasSummary:
+            if self.numClasses <= 2:
+                return BinaryLogisticRegressionTrainingSummary(
+                    super(LogisticRegressionModel, self).summary
+                )
+            else:
+                return LogisticRegressionTrainingSummary(
+                    super(LogisticRegressionModel, self).summary
+                )
+        else:
+            raise RuntimeError(
+                "No training summary available for this %s" % self.__class__.__name__
+            )
+
+
+class _ClassificationSummary(ClientModelSummary):
+
+    @property  # type: ignore[misc]
+    def predictions(self) -> DataFrame:
+        return self._get_summary_attr_dataframe("predictions")
+
+    @property  # type: ignore[misc]
+    def predictionCol(self) -> str:
+        return self._get_summary_attr("predictionCol")
+
+    @property  # type: ignore[misc]
+    def labelCol(self) -> str:
+        return self._get_summary_attr("labelCol")
+
+    @property  # type: ignore[misc]
+    def weightCol(self) -> str:
+        return self._get_summary_attr("weightCol")
+
+    @property
+    def labels(self) -> List[str]:
+        return self._get_summary_attr("labels")
+
+    @property  # type: ignore[misc]
+    def truePositiveRateByLabel(self) -> List[float]:
+        return self._get_summary_attr("truePositiveRateByLabel")
+
+    @property  # type: ignore[misc]
+    def falsePositiveRateByLabel(self) -> List[float]:
+        return self._get_summary_attr("falsePositiveRateByLabel")
+
+    @property  # type: ignore[misc]
+    @since("3.1.0")
+    def precisionByLabel(self) -> List[float]:
+        return self._get_summary_attr("precisionByLabel")
+
+    @property  # type: ignore[misc]
+    def recallByLabel(self) -> List[float]:
+        return self._get_summary_attr("recallByLabel")
+
+    # @property  # type: ignore[misc]
+    # def fMeasureByLabel(self, beta: float = 1.0) -> List[float]:
+    #     return self._get_summary_attr("fMeasureByLabel", beta)
+
+    @property  # type: ignore[misc]
+    def accuracy(self) -> float:
+        return self._get_summary_attr("accuracy")
+
+    @property  # type: ignore[misc]
+    def weightedTruePositiveRate(self) -> float:
+        return self._get_summary_attr("weightedTruePositiveRate")
+
+    @property  # type: ignore[misc]
+    def weightedFalsePositiveRate(self) -> float:
+        return self._get_summary_attr("weightedFalsePositiveRate")
+
+    @property  # type: ignore[misc]
+    def weightedRecall(self) -> float:
+        return self._get_summary_attr("weightedRecall")
+
+    @property  # type: ignore[misc]
+    def weightedPrecision(self) -> float:
+        return self._get_summary_attr("weightedPrecision")
+
+    # @since("3.1.0")
+    # def weightedFMeasure(self, beta: float = 1.0) -> float:
+    #     return self._get_summary_attr("weightedFMeasure", beta)
+
+
+@inherit_doc
+class _TrainingSummary(ClientModelSummary):
+
+    @property  # type: ignore[misc]
+    def objectiveHistory(self) -> List[float]:
+        return self._get_summary_attr("objectiveHistory")
+
+    @property  # type: ignore[misc]
+    def totalIterations(self) -> int:
+        return self._get_summary_attr("totalIterations")
+
+
+@inherit_doc
+class _BinaryClassificationSummary(_ClassificationSummary):
+
+    @property  # type: ignore[misc]
+    def scoreCol(self) -> str:
+        return self._get_summary_attr("scoreCol")
+
+    @property
+    def roc(self) -> DataFrame:
+        return self._get_summary_attr_dataframe("roc")
+
+    @property  # type: ignore[misc]
+    def areaUnderROC(self) -> float:
+        return self._get_summary_attr("areaUnderROC")
+
+    @property  # type: ignore[misc]
+    def pr(self) -> DataFrame:
+        return self._get_summary_attr_dataframe("pr")
+
+    @property  # type: ignore[misc]
+    def fMeasureByThreshold(self) -> DataFrame:
+        return self._get_summary_attr_dataframe("fMeasureByThreshold")
+
+    @property  # type: ignore[misc]
+    def precisionByThreshold(self) -> DataFrame:
+        return self._get_summary_attr_dataframe("precisionByThreshold")
+
+    @property  # type: ignore[misc]
+    def recallByThreshold(self) -> DataFrame:
+        return self._get_summary_attr_dataframe("recallByThreshold")
+
+
+class LogisticRegressionSummary(_ClassificationSummary):
+
+    @property  # type: ignore[misc]
+    def probabilityCol(self) -> str:
+        return self._get_summary_attr("probabilityCol")
+
+    @property  # type: ignore[misc]
+    def featuresCol(self) -> str:
+        return self._get_summary_attr("featuresCol")
+
+
+@inherit_doc
+class LogisticRegressionTrainingSummary(LogisticRegressionSummary, _TrainingSummary):
+    pass
+
+
+@inherit_doc
+class BinaryLogisticRegressionSummary(_BinaryClassificationSummary, LogisticRegressionSummary):
+    pass
+
+
+@inherit_doc
+class BinaryLogisticRegressionTrainingSummary(
+    BinaryLogisticRegressionSummary, LogisticRegressionTrainingSummary
+):
+    pass
