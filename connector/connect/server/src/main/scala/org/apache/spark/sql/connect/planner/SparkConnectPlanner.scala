@@ -1508,8 +1508,10 @@ class SparkConnectPlanner(val session: SparkSession) {
         maxRecordsPerBatch,
         maxBatchSize,
         timeZoneId)
-      assert(batches.size == 1)
-      batches.next()
+      assert(batches.hasNext)
+      val bytes = batches.next()
+      assert(!batches.hasNext, s"remaining batches: ${batches.size}")
+      bytes
     }
 
     // To avoid explicit handling of the result on the client, we build the expected input
