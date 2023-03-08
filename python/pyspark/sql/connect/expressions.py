@@ -19,6 +19,7 @@ from pyspark.sql.connect.utils import check_dependencies
 check_dependencies(__name__, __file__)
 
 from typing import (
+    cast,
     TYPE_CHECKING,
     Any,
     Union,
@@ -520,6 +521,31 @@ class PythonUDF:
         )
 
 
+class JavaUDF:
+    """Represents a Java (aggregate) user-defined function."""
+
+    def __init__(
+        self,
+        class_name: str,
+        output_type: Optional[str] = None,
+        aggregate: bool = False,
+    ) -> None:
+        self._class_name = class_name
+        self._output_type = output_type
+        self._aggregate = aggregate
+
+    def to_plan(self, session: "SparkConnectClient") -> proto.JavaUDF:
+        expr = proto.JavaUDF()
+        expr.class_name = self._class_name
+        if self._output_type is not None:
+            expr.output_type = self._output_type
+        expr.aggregate = self._aggregate
+        return expr
+
+    def __repr__(self) -> str:
+        return f"{self._class_name}, {self._output_type}"
+
+
 class CommonInlineUserDefinedFunction(Expression):
     """Represents a user-defined function with an inlined defined function body of any programming
     languages."""
@@ -527,9 +553,9 @@ class CommonInlineUserDefinedFunction(Expression):
     def __init__(
         self,
         function_name: str,
-        deterministic: bool,
-        arguments: Sequence[Expression],
-        function: PythonUDF,
+        function: Union[PythonUDF, JavaUDF],
+        deterministic: bool = False,
+        arguments: Sequence[Expression] = [],
     ):
         self._function_name = function_name
         self._deterministic = deterministic
@@ -545,7 +571,7 @@ class CommonInlineUserDefinedFunction(Expression):
                 [arg.to_plan(session) for arg in self._arguments]
             )
         expr.common_inline_user_defined_function.python_udf.CopyFrom(
-            self._function.to_plan(session)
+            cast(proto.PythonUDF, self._function.to_plan(session))
         )
         return expr
 
@@ -557,7 +583,15 @@ class CommonInlineUserDefinedFunction(Expression):
         expr.deterministic = self._deterministic
         if len(self._arguments) > 0:
             expr.arguments.extend([arg.to_plan(session) for arg in self._arguments])
-        expr.python_udf.CopyFrom(self._function.to_plan(session))
+        expr.python_udf.CopyFrom(cast(proto.PythonUDF, self._function.to_plan(session)))
+        return expr
+
+    def to_plan_judf(
+        self, session: "SparkConnectClient"
+    ) -> "proto.CommonInlineUserDefinedFunction":
+        expr = proto.CommonInlineUserDefinedFunction()
+        expr.function_name = self._function_name
+        expr.java_udf.CopyFrom(cast(proto.JavaUDF, self._function.to_plan(session)))
         return expr
 
     def __repr__(self) -> str:
