@@ -22,6 +22,7 @@ import java.util.Properties
 import scala.collection.JavaConverters._
 
 import org.apache.spark.annotation.Stable
+import org.apache.spark.connect.proto.Parse.ParseFormat
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CharVarcharUtils}
 import org.apache.spark.sql.types.StructType
@@ -283,6 +284,28 @@ class DataFrameReader private[sql] (sparkSession: SparkSession) extends Logging 
   }
 
   /**
+   * Loads a `Dataset[String]` storing JSON objects (<a href="http://jsonlines.org/">JSON Lines
+   * text format or newline-delimited JSON</a>) and returns the result as a `DataFrame`.
+   *
+   * Unless the schema is specified using `schema` function, this function goes through the input
+   * once to determine the input schema.
+   *
+   * @param jsonDataset
+   *   input Dataset with one JSON object per record
+   * @since 3.4.0
+   */
+  def json(jsonDataset: Dataset[String]): DataFrame = {
+    sparkSession.newDataFrame { builder =>
+      val parseBuilder = builder.getParseBuilder
+        .setInput(jsonDataset.plan.getRoot)
+        .setFormat(ParseFormat.PARSE_FORMAT_JSON)
+      extraOptions.foreach { case (k, v) =>
+        parseBuilder.putOptions(k, v)
+      }
+    }
+  }
+
+  /**
    * Loads a CSV file and returns the result as a `DataFrame`. See the documentation on the other
    * overloaded `csv()` method for more details.
    *
@@ -308,6 +331,37 @@ class DataFrameReader private[sql] (sparkSession: SparkSession) extends Logging 
    */
   @scala.annotation.varargs
   def csv(paths: String*): DataFrame = format("csv").load(paths: _*)
+
+  /**
+   * Loads an `Dataset[String]` storing CSV rows and returns the result as a `DataFrame`.
+   *
+   * If the schema is not specified using `schema` function and `inferSchema` option is enabled,
+   * this function goes through the input once to determine the input schema.
+   *
+   * If the schema is not specified using `schema` function and `inferSchema` option is disabled,
+   * it determines the columns as string types and it reads only the first line to determine the
+   * names and the number of fields.
+   *
+   * If the enforceSchema is set to `false`, only the CSV header in the first line is checked to
+   * conform specified or inferred schema.
+   *
+   * @note
+   *   if `header` option is set to `true` when calling this API, all lines same with the header
+   *   will be removed if exists.
+   * @param csvDataset
+   *   input Dataset with one CSV row per record
+   * @since 3.4.0
+   */
+  def csv(csvDataset: Dataset[String]): DataFrame = {
+    sparkSession.newDataFrame { builder =>
+      val parseBuilder = builder.getParseBuilder
+        .setInput(csvDataset.plan.getRoot)
+        .setFormat(ParseFormat.PARSE_FORMAT_CSV)
+      extraOptions.foreach { case (k, v) =>
+        parseBuilder.putOptions(k, v)
+      }
+    }
+  }
 
   /**
    * Loads a Parquet file, returning the result as a `DataFrame`. See the documentation on the

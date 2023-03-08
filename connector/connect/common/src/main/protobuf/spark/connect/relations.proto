@@ -62,6 +62,7 @@ message Relation {
     RepartitionByExpression repartition_by_expression = 27;
     FrameMap frame_map = 28;
     CollectMetrics collect_metrics = 29;
+    Parse parse = 30;
 
     // NA functions
     NAFill fill_na = 90;
@@ -792,4 +793,19 @@ message CollectMetrics {
 
   // (Required) The metric sequence.
   repeated Expression metrics = 3;
+}
+
+message Parse {
+  // (Required) Input relation to Parse. The input is expected to have single text column.
+  Relation input = 1;
+  // (Required) The expected format of the text.
+  ParseFormat format = 2;
+
+  // Options for the csv/json parser. The map key is case insensitive.
+  map<string, string> options = 3;
+  enum ParseFormat {
+    PARSE_FORMAT_UNSPECIFIED = 0;
+    PARSE_FORMAT_CSV = 1;
+    PARSE_FORMAT_JSON = 2;
+  }
 }

@@ -32,6 +32,7 @@ import org.apache.spark.connect.proto
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{functions => fn}
 import org.apache.spark.sql.catalyst.ScalaReflection
+import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.StringEncoder
 import org.apache.spark.sql.connect.client.SparkConnectClient
 import org.apache.spark.sql.connect.client.util.ConnectFunSuite
 import org.apache.spark.sql.expressions.Window
@@ -211,6 +212,7 @@ class PlanGenerationTestSuite
 
   // A few helper dataframes.
   private def simple: DataFrame = createLocalRelation(simpleSchemaString)
+
   private def left: DataFrame = simple
   private def right: DataFrame = createLocalRelation(otherSchemaString)
   private def complex = createLocalRelation(complexSchemaString)
@@ -257,8 +259,20 @@ class PlanGenerationTestSuite
     session.read.json(testDataPath.resolve("people.json").toString)
   }
 
+  test("json from dataset") {
+    session.read
+      .option("inferSchema", "true")
+      .json(session.createDataset(Seq.empty[String])(StringEncoder))
+  }
+
   test("read csv") {
     session.read.csv(testDataPath.resolve("people.csv").toString)
+  }
+
+  test("csv from dataset") {
+    session.read
+      .option("inferSchema", "true")
+      .csv(session.createDataset(Seq.empty[String])(StringEncoder))
   }
 
   test("read parquet") {
