@@ -373,17 +373,14 @@ final class DataFrameWriter[T] private[sql] (ds: Dataset[T]) {
     this.extraOptions ++= connectionProperties.asScala
     // explicit url and dbtable should override all
     this.extraOptions ++= Seq("url" -> url, "dbtable" -> table)
-    format("jdbc").saveAsJdbcTable(table)
-  }
-
-  private def saveAsJdbcTable(tableName: String): Unit = {
+    format("jdbc")
     executeWriteOperation(builder => {
       builder.setTable(
         proto.WriteOperation.SaveTable
           .newBuilder()
-          .setTableName(tableName)
+          .setTableName(table)
           .setSaveMethod(
-            proto.WriteOperation.SaveTable.TableSaveMethod.TABLE_SAVE_METHOD_SAVE_AS_JDBC_TABLE))
+            proto.WriteOperation.SaveTable.TableSaveMethod.TABLE_SAVE_METHOD_SAVE))
     })
   }
 

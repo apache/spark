@@ -296,11 +296,13 @@ class WriteOperation(google.protobuf.message.Message):
             TABLE_SAVE_METHOD_UNSPECIFIED: WriteOperation.SaveTable._TableSaveMethod.ValueType  # 0
             TABLE_SAVE_METHOD_SAVE_AS_TABLE: WriteOperation.SaveTable._TableSaveMethod.ValueType  # 1
             TABLE_SAVE_METHOD_INSERT_INTO: WriteOperation.SaveTable._TableSaveMethod.ValueType  # 2
+            TABLE_SAVE_METHOD_SAVE: WriteOperation.SaveTable._TableSaveMethod.ValueType  # 3
 
         class TableSaveMethod(_TableSaveMethod, metaclass=_TableSaveMethodEnumTypeWrapper): ...
         TABLE_SAVE_METHOD_UNSPECIFIED: WriteOperation.SaveTable.TableSaveMethod.ValueType  # 0
         TABLE_SAVE_METHOD_SAVE_AS_TABLE: WriteOperation.SaveTable.TableSaveMethod.ValueType  # 1
         TABLE_SAVE_METHOD_INSERT_INTO: WriteOperation.SaveTable.TableSaveMethod.ValueType  # 2
+        TABLE_SAVE_METHOD_SAVE: WriteOperation.SaveTable.TableSaveMethod.ValueType  # 3
 
         TABLE_NAME_FIELD_NUMBER: builtins.int
         SAVE_METHOD_FIELD_NUMBER: builtins.int

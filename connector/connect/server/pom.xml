@@ -199,6 +199,11 @@
       <version>${netty.version}</version>
       <scope>provided</scope>
     </dependency>
+    <dependency>
+      <groupId>com.h2database</groupId>
+      <artifactId>h2</artifactId>
+      <version>2.1.214</version>
+    </dependency>
     <dependency> <!-- necessary for Java 9+ -->
       <groupId>org.apache.tomcat</groupId>
       <artifactId>annotations-api</artifactId>

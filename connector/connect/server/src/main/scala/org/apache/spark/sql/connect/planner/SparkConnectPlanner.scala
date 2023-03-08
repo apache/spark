@@ -1741,9 +1741,8 @@ class SparkConnectPlanner(val session: SparkSession) {
             w.saveAsTable(tableName)
           case proto.WriteOperation.SaveTable.TableSaveMethod.TABLE_SAVE_METHOD_INSERT_INTO =>
             w.insertInto(tableName)
-          case proto.WriteOperation.SaveTable
-            .TableSaveMethod.TABLE_SAVE_METHOD_SAVE_AS_JDBC_TABLE =>
-            w.format("jdbc").save()
+          case proto.WriteOperation.SaveTable.TableSaveMethod.TABLE_SAVE_METHOD_SAVE =>
+            w.save()
           case _ =>
             throw new UnsupportedOperationException(
               "WriteOperation:SaveTable:TableSaveMethod not supported "
