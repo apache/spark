@@ -92,8 +92,8 @@ Example applications are also provided in R. For example,
 Spark Connect is a new client-server architecture introduced in Spark 3.4 that decouples Spark
 client applications and allows remote connectivity to Spark clusters. The separation between
 client and server allows Spark and its open ecosystem to be leveraged from anywhere, embedded
-in any application. In Spark 3.4, Spark Connect is available for Python applications and support
-for more languages are coming in the future.
+in any application. In Spark 3.4, Spark Connect provides DataFrame API coverage for PySpark and 
+Spark Connect clients for other languages are planned for the future.
 
 To learn more about Spark Connect and how to use it, visit (LINK TO SPARK CONNECT OVERVIEW PAGE GOES HERE).
 
