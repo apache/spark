@@ -1,6 +1,6 @@
 ---
 layout: global
-title: Spark Connect - Building client-side Spark applications
+title: Spark Connect Overview - Building client-side Spark applications
 license: |
   Licensed to the Apache Software Foundation (ASF) under one or more
   contributor license agreements.  See the NOTICE file distributed with
@@ -58,19 +58,24 @@ If you set the SPARK_REMOTE environment variable on the client machine where you
 
 Set SPARK_REMOTE environment variable:
 
-export SPARK_REMOTE="sc://localhost/"
+{% highlight bash %}
+    export SPARK_REMOTE="sc://localhost/"
+{% endhighlight %}
 
 Start the PySpark CLI, for example:
 
-'~/dev/spark/spark/bin/pyspark'
+{% highlight bash %}
+    ./bin/pyspark
+{% endhighlight %}
 
-And notice that the PySpark CLI is now connected to Spark using Spark Connect as illustrated in the welcome message: “Client connected to the Spark Connect server at...”.
+And notice that the PySpark CLI is now connected to Spark using Spark Connect as indicated in the welcome message: “Client connected to the Spark Connect server at...”.
 
 And if you write your own Python program, create a Spark Session as shown in this example:
 
-'from pyspark.sql import SparkSession'
-
-'spark = SparkSession.builder.getOrCreate()'
+{% highlight python %}
+    from pyspark.sql import SparkSession
+    spark = SparkSession.builder.getOrCreate()
+{% endhighlight %}
 
 Which will create a Spark Connect session by reading the SPARK_REMOTE environment variable we set above.
 
@@ -80,19 +85,24 @@ You can also specify that you want to use Spark Connect when you create a Spark 
 
 For example, when launching the PySpark CLI, simply include the remote parameter as illustrated here:
 
-'~/dev/spark/spark/bin/pyspark --remote "sc://localhost"'
+{% highlight bash %}
+    ./bin/pyspark --remote "sc://localhost"
+{% endhighlight %}
 
 And again you will notice that the PySpark welcome message tells you that you are connected to Spark using Spark Connect.
 
 Or, in your code, include the remote function with a reference to your Spark server when you create a Spark session, as in this example:
 
-'from pyspark.sql import SparkSession'
-
-'spark = SparkSession.builder.remote("sc://localhost/").getOrCreate()'
+{% highlight python %}
+    from pyspark.sql import SparkSession
+    spark = SparkSession.builder.remote("sc://localhost/").getOrCreate()
+{% endhighlight %}
 
 # Client application authentication
 
 While Spark Connect does not have built-in authentication, it is designed to work seamlessly with your existing authentication infrastructure. Its gRPC HTTP/2 interface allows for the use of authenticating proxies, which makes it possible to secure Spark Connect without having to implement authentication logic in Spark directly.
 
 # What is included in Spark 3.4
-[TBD]
+
+In Spark 3.4, Spark Connect provides DataFrame API coverage for PySpark and 
+Spark Connect clients for other languages are planned for the future.
