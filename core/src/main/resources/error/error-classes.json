@@ -1730,9 +1730,9 @@
           "Pandas user defined aggregate function in the PIVOT clause."
         ]
       },
-      "PARAMETERIZED_COMMAND" : {
+      "PARAMETER_MARKER_IN_UNEXPECTED_STATEMENT" : {
         "message" : [
-          "Query parameters in Command."
+          "Parameter markers in unexpected statement: <statement>. Parameter markers must only be used in a query, or DML statement."
         ]
       },
       "PIVOT_AFTER_GROUP_BY" : {

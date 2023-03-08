@@ -91,15 +91,23 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
       Row(15))
   }
 
-  test("parameters not allowed in commands") {
+  test("parameters in INSERT") {
+    withTable("t") {
+      sql("CREATE TABLE t (col INT) USING json")
+      spark.sql("INSERT INTO t SELECT :p", Map("p" -> "1"))
+      checkAnswer(spark.table("t"), Row(1))
+    }
+  }
+
+  test("parameters not allowed in DDL commands") {
     val sqlText = "CREATE VIEW v AS SELECT :p AS p"
     val args = Map("p" -> "1")
     checkError(
       exception = intercept[AnalysisException] {
         spark.sql(sqlText, args)
       },
-      errorClass = "UNSUPPORTED_FEATURE.PARAMETERIZED_COMMAND",
-      parameters = Map.empty,
+      errorClass = "UNSUPPORTED_FEATURE.PARAMETER_MARKER_IN_UNEXPECTED_STATEMENT",
+      parameters = Map("statement" -> "CreateView"),
       context = ExpectedContext(
         fragment = "CREATE VIEW v AS SELECT :p AS p",
         start = 0,
