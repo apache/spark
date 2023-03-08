@@ -27,7 +27,9 @@ import org.apache.commons.io.output.TeeOutputStream
 import org.scalactic.TolerantNumerics
 
 import org.apache.spark.SPARK_VERSION
+import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.StringEncoder
 import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
+import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.connect.client.util.{IntegrationTestUtils, RemoteSparkSession}
 import org.apache.spark.sql.functions.{aggregate, array, broadcast, col, count, lit, rand, sequence, shuffle, struct, transform, udf}
 import org.apache.spark.sql.types._
@@ -646,7 +648,7 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper {
     assert(result sameElements expected)
   }
 
-  test("json from Dataset[String]") {
+  test("json from Dataset[String] inferSchema") {
     val session = spark
     import session.implicits._
     val expected = Seq(
@@ -656,10 +658,26 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper {
     val ds = Seq("""{"name":"Kong","age":73,"city":'Shandong'}""").toDS()
     val result = spark.read.option("allowSingleQuotes", "true").json(ds)
     checkSameResult(expected, result)
-
   }
 
-  test("csv from Dataset[String]") {
+  test("json from Dataset[String] with schema") {
+    val session = spark
+    import session.implicits._
+    val schema = new StructType().add("city", StringType).add("name", StringType)
+    val expected = Seq(new GenericRowWithSchema(Array("Shandong", "Kong"), schema))
+    val ds = Seq("""{"name":"Kong","age":73,"city":'Shandong'}""").toDS()
+    val result = spark.read.schema(schema).option("allowSingleQuotes", "true").json(ds)
+    checkSameResult(expected, result)
+  }
+
+  test("json from Dataset[String] with invalid schema") {
+    val message = intercept[ParseException] {
+      spark.read.schema("123").json(spark.createDataset(Seq.empty[String])(StringEncoder))
+    }.getMessage
+    assert(message.contains("PARSE_SYNTAX_ERROR"))
+  }
+
+  test("csv from Dataset[String] inferSchema") {
     val session = spark
     import session.implicits._
     val expected = Seq(
@@ -672,6 +690,23 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper {
       .option("inferSchema", "true")
       .csv(ds)
     checkSameResult(expected, result)
+  }
+
+  test("csv from Dataset[String] with schema") {
+    val session = spark
+    import session.implicits._
+    val schema = new StructType().add("name", StringType).add("age", LongType)
+    val expected = Seq(new GenericRowWithSchema(Array("Meng", 84), schema))
+    val ds = Seq(""""Meng",84,"Shandong"""").toDS()
+    val result = spark.read.schema(schema).csv(ds)
+    checkSameResult(expected, result)
+  }
+
+  test("csv from Dataset[String] with invalid schema") {
+    val message = intercept[ParseException] {
+      spark.read.schema("123").csv(spark.createDataset(Seq.empty[String])(StringEncoder))
+    }.getMessage
+    assert(message.contains("PARSE_SYNTAX_ERROR"))
   }
 }
 

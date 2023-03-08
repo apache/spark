@@ -2801,12 +2801,18 @@ class Parse(google.protobuf.message.Message):
 
     INPUT_FIELD_NUMBER: builtins.int
     FORMAT_FIELD_NUMBER: builtins.int
+    SCHEMA_FIELD_NUMBER: builtins.int
     OPTIONS_FIELD_NUMBER: builtins.int
     @property
     def input(self) -> global___Relation:
         """(Required) Input relation to Parse. The input is expected to have single text column."""
     format: global___Parse.ParseFormat.ValueType
     """(Required) The expected format of the text."""
+    schema: builtins.str
+    """(Optional) If not set, Spark will infer the schema.
+
+    This schema string should be either DDL-formatted or JSON-formatted.
+    """
     @property
     def options(self) -> google.protobuf.internal.containers.ScalarMap[builtins.str, builtins.str]:
         """Options for the csv/json parser. The map key is case insensitive."""
@@ -2815,16 +2821,32 @@ class Parse(google.protobuf.message.Message):
         *,
         input: global___Relation | None = ...,
         format: global___Parse.ParseFormat.ValueType = ...,
+        schema: builtins.str | None = ...,
         options: collections.abc.Mapping[builtins.str, builtins.str] | None = ...,
     ) -> None: ...
     def HasField(
-        self, field_name: typing_extensions.Literal["input", b"input"]
+        self,
+        field_name: typing_extensions.Literal[
+            "_schema", b"_schema", "input", b"input", "schema", b"schema"
+        ],
     ) -> builtins.bool: ...
     def ClearField(
         self,
         field_name: typing_extensions.Literal[
-            "format", b"format", "input", b"input", "options", b"options"
+            "_schema",
+            b"_schema",
+            "format",
+            b"format",
+            "input",
+            b"input",
+            "options",
+            b"options",
+            "schema",
+            b"schema",
         ],
     ) -> None: ...
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["_schema", b"_schema"]
+    ) -> typing_extensions.Literal["schema"] | None: ...
 
 global___Parse = Parse

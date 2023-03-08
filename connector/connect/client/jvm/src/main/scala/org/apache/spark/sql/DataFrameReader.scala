@@ -294,16 +294,8 @@ class DataFrameReader private[sql] (sparkSession: SparkSession) extends Logging 
    *   input Dataset with one JSON object per record
    * @since 3.4.0
    */
-  def json(jsonDataset: Dataset[String]): DataFrame = {
-    sparkSession.newDataFrame { builder =>
-      val parseBuilder = builder.getParseBuilder
-        .setInput(jsonDataset.plan.getRoot)
-        .setFormat(ParseFormat.PARSE_FORMAT_JSON)
-      extraOptions.foreach { case (k, v) =>
-        parseBuilder.putOptions(k, v)
-      }
-    }
-  }
+  def json(jsonDataset: Dataset[String]): DataFrame =
+    parse(jsonDataset, ParseFormat.PARSE_FORMAT_JSON)
 
   /**
    * Loads a CSV file and returns the result as a `DataFrame`. See the documentation on the other
@@ -352,16 +344,8 @@ class DataFrameReader private[sql] (sparkSession: SparkSession) extends Logging 
    *   input Dataset with one CSV row per record
    * @since 3.4.0
    */
-  def csv(csvDataset: Dataset[String]): DataFrame = {
-    sparkSession.newDataFrame { builder =>
-      val parseBuilder = builder.getParseBuilder
-        .setInput(csvDataset.plan.getRoot)
-        .setFormat(ParseFormat.PARSE_FORMAT_CSV)
-      extraOptions.foreach { case (k, v) =>
-        parseBuilder.putOptions(k, v)
-      }
-    }
-  }
+  def csv(csvDataset: Dataset[String]): DataFrame =
+    parse(csvDataset, ParseFormat.PARSE_FORMAT_CSV)
 
   /**
    * Loads a Parquet file, returning the result as a `DataFrame`. See the documentation on the
@@ -513,6 +497,18 @@ class DataFrameReader private[sql] (sparkSession: SparkSession) extends Logging 
   private def assertSourceFormatSpecified(): Unit = {
     if (source == null) {
       throw new IllegalArgumentException("The source format must be specified.")
+    }
+  }
+
+  private def parse(ds: Dataset[String], format: ParseFormat): DataFrame = {
+    sparkSession.newDataFrame { builder =>
+      val parseBuilder = builder.getParseBuilder
+        .setInput(ds.plan.getRoot)
+        .setFormat(format)
+      userSpecifiedSchema.foreach(schema => parseBuilder.setSchema(schema.toDDL))
+      extraOptions.foreach { case (k, v) =>
+        parseBuilder.putOptions(k, v)
+      }
     }
   }
 

@@ -260,6 +260,7 @@ class PlanGenerationTestSuite
 
   test("json from dataset") {
     session.read
+      .schema(new StructType().add("c1", StringType).add("c2", IntegerType))
       .option("allowSingleQuotes", "true")
       .json(session.createDataset(Seq.empty[String])(StringEncoder))
   }
@@ -274,7 +275,8 @@ class PlanGenerationTestSuite
 
   test("csv from dataset") {
     session.read
-      .option("inferSchema", "true")
+      .schema(new StructType().add("c1", StringType).add("c2", IntegerType))
+      .option("header", "true")
       .csv(session.createDataset(Seq.empty[String])(StringEncoder))
   }
 
