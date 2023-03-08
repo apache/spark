@@ -1113,7 +1113,7 @@ private[spark] class MapOutputTrackerMaster(
       endMapIndex: Int): Seq[String] =
   {
     val shuffleStatus = shuffleStatuses.get(dep.shuffleId).orNull
-    if (shuffleStatus != null) {
+    if (shuffleStatus != null && shuffleLocalityEnabled) {
       shuffleStatus.withMapStatuses { statuses =>
         if (startMapIndex < endMapIndex &&
           (startMapIndex >= 0 && endMapIndex <= statuses.length)) {
