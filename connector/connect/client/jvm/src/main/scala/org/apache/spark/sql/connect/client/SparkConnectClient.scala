@@ -32,7 +32,8 @@ import org.apache.spark.sql.connect.common.config.ConnectCommon
 private[sql] class SparkConnectClient(
     private val userContext: proto.UserContext,
     private val channel: ManagedChannel,
-    private[client] val userAgent: String) {
+    private[client] val userAgent: String,
+    private[client] val connectString: String) {
 
   private[this] val stub = proto.SparkConnectServiceGrpc.newBlockingStub(channel)
 
@@ -164,7 +165,7 @@ private[sql] class SparkConnectClient(
   }
 
   def copy(): SparkConnectClient = {
-    new SparkConnectClient(userContext, channel, userAgent)
+    SparkConnectClient.builder().connectionString(connectString).build()
   }
 
   /**
@@ -223,6 +224,7 @@ private[sql] object SparkConnectClient {
 
     private var host: String = "localhost"
     private var port: Int = ConnectCommon.CONNECT_GRPC_BINDING_PORT
+    private var connectString: String = ""
 
     private var token: Option[String] = None
     // If no value specified for isSslEnabled, default to false
@@ -364,6 +366,7 @@ private[sql] object SparkConnectClient {
      * Note: The connection string, if used, will override any previous host/port settings.
      */
     def connectionString(connectionString: String): Builder = {
+      connectString = connectionString
       val uri = new URI(connectionString)
       verifyURI(uri)
       parseURIParams(uri)
@@ -398,7 +401,8 @@ private[sql] object SparkConnectClient {
       new SparkConnectClient(
         userContextBuilder.build(),
         channel,
-        userAgent.getOrElse(DEFAULT_USER_AGENT))
+        userAgent.getOrElse(DEFAULT_USER_AGENT),
+        connectString)
     }
   }
 
