@@ -60,7 +60,7 @@ message Relation {
     Unpivot unpivot = 25;
     ToSchema to_schema = 26;
     RepartitionByExpression repartition_by_expression = 27;
-    FrameMap frame_map = 28;
+    MapPartitions map_partitions = 28;
     CollectMetrics collect_metrics = 29;
     Parse parse = 30;
 
@@ -780,11 +780,11 @@ message RepartitionByExpression {
   optional int32 num_partitions = 3;
 }
 
-message FrameMap {
-  // (Required) Input relation for a Frame Map API: mapInPandas, mapInArrow.
+message MapPartitions {
+  // (Required) Input relation for a mapPartitions-equivalent API: mapInPandas, mapInArrow.
   Relation input = 1;
 
-  // (Required) Input user-defined function of a Frame Map API.
+  // (Required) Input user-defined function.
   CommonInlineUserDefinedFunction func = 2;
 }
 

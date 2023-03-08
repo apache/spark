@@ -1901,8 +1901,8 @@ class ListCatalogs(LogicalPlan):
         return proto.Relation(catalog=proto.Catalog(list_catalogs=proto.ListCatalogs()))
 
 
-class FrameMap(LogicalPlan):
-    """Logical plan object for a Frame Map API: mapInPandas, mapInArrow."""
+class MapPartitions(LogicalPlan):
+    """Logical plan object for a mapPartitions-equivalent API: mapInPandas, mapInArrow."""
 
     def __init__(
         self, child: Optional["LogicalPlan"], function: "UserDefinedFunction", cols: List[str]
@@ -1914,8 +1914,8 @@ class FrameMap(LogicalPlan):
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
         assert self._child is not None
         plan = self._create_proto_relation()
-        plan.frame_map.input.CopyFrom(self._child.plan(session))
-        plan.frame_map.func.CopyFrom(self._func.to_plan_udf(session))
+        plan.map_partitions.input.CopyFrom(self._child.plan(session))
+        plan.map_partitions.func.CopyFrom(self._func.to_plan_udf(session))
         return plan
 
 

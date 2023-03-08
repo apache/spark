@@ -93,12 +93,9 @@ _TOSCHEMA = DESCRIPTOR.message_types_by_name["ToSchema"]
 _REPARTITIONBYEXPRESSION = DESCRIPTOR.message_types_by_name["RepartitionByExpression"]
 _FRAMEMAP = DESCRIPTOR.message_types_by_name["FrameMap"]
 _COLLECTMETRICS = DESCRIPTOR.message_types_by_name["CollectMetrics"]
-_PARSE = DESCRIPTOR.message_types_by_name["Parse"]
-_PARSE_OPTIONSENTRY = _PARSE.nested_types_by_name["OptionsEntry"]
 _JOIN_JOINTYPE = _JOIN.enum_types_by_name["JoinType"]
 _SETOPERATION_SETOPTYPE = _SETOPERATION.enum_types_by_name["SetOpType"]
 _AGGREGATE_GROUPTYPE = _AGGREGATE.enum_types_by_name["GroupType"]
-_PARSE_PARSEFORMAT = _PARSE.enum_types_by_name["ParseFormat"]
 Relation = _reflection.GeneratedProtocolMessageType(
     "Relation",
     (_message.Message,),
@@ -651,27 +648,6 @@ CollectMetrics = _reflection.GeneratedProtocolMessageType(
 )
 _sym_db.RegisterMessage(CollectMetrics)
 
-Parse = _reflection.GeneratedProtocolMessageType(
-    "Parse",
-    (_message.Message,),
-    {
-        "OptionsEntry": _reflection.GeneratedProtocolMessageType(
-            "OptionsEntry",
-            (_message.Message,),
-            {
-                "DESCRIPTOR": _PARSE_OPTIONSENTRY,
-                "__module__": "spark.connect.relations_pb2"
-                # @@protoc_insertion_point(class_scope:spark.connect.Parse.OptionsEntry)
-            },
-        ),
-        "DESCRIPTOR": _PARSE,
-        "__module__": "spark.connect.relations_pb2"
-        # @@protoc_insertion_point(class_scope:spark.connect.Parse)
-    },
-)
-_sym_db.RegisterMessage(Parse)
-_sym_db.RegisterMessage(Parse.OptionsEntry)
-
 if _descriptor._USE_C_DESCRIPTORS == False:
 
     DESCRIPTOR._options = None
@@ -682,120 +658,112 @@ if _descriptor._USE_C_DESCRIPTORS == False:
     _READ_DATASOURCE_OPTIONSENTRY._serialized_options = b"8\001"
     _WITHCOLUMNSRENAMED_RENAMECOLUMNSMAPENTRY._options = None
     _WITHCOLUMNSRENAMED_RENAMECOLUMNSMAPENTRY._serialized_options = b"8\001"
-    _PARSE_OPTIONSENTRY._options = None
-    _PARSE_OPTIONSENTRY._serialized_options = b"8\001"
     _RELATION._serialized_start = 165
-    _RELATION._serialized_end = 2638
-    _UNKNOWN._serialized_start = 2640
-    _UNKNOWN._serialized_end = 2649
-    _RELATIONCOMMON._serialized_start = 2651
-    _RELATIONCOMMON._serialized_end = 2742
-    _SQL._serialized_start = 2745
-    _SQL._serialized_end = 2879
-    _SQL_ARGSENTRY._serialized_start = 2824
-    _SQL_ARGSENTRY._serialized_end = 2879
-    _READ._serialized_start = 2882
-    _READ._serialized_end = 3378
-    _READ_NAMEDTABLE._serialized_start = 3024
-    _READ_NAMEDTABLE._serialized_end = 3085
-    _READ_DATASOURCE._serialized_start = 3088
-    _READ_DATASOURCE._serialized_end = 3365
-    _READ_DATASOURCE_OPTIONSENTRY._serialized_start = 3285
-    _READ_DATASOURCE_OPTIONSENTRY._serialized_end = 3343
-    _PROJECT._serialized_start = 3380
-    _PROJECT._serialized_end = 3497
-    _FILTER._serialized_start = 3499
-    _FILTER._serialized_end = 3611
-    _JOIN._serialized_start = 3614
-    _JOIN._serialized_end = 4085
-    _JOIN_JOINTYPE._serialized_start = 3877
-    _JOIN_JOINTYPE._serialized_end = 4085
-    _SETOPERATION._serialized_start = 4088
-    _SETOPERATION._serialized_end = 4567
-    _SETOPERATION_SETOPTYPE._serialized_start = 4404
-    _SETOPERATION_SETOPTYPE._serialized_end = 4518
-    _LIMIT._serialized_start = 4569
-    _LIMIT._serialized_end = 4645
-    _OFFSET._serialized_start = 4647
-    _OFFSET._serialized_end = 4726
-    _TAIL._serialized_start = 4728
-    _TAIL._serialized_end = 4803
-    _AGGREGATE._serialized_start = 4806
-    _AGGREGATE._serialized_end = 5388
-    _AGGREGATE_PIVOT._serialized_start = 5145
-    _AGGREGATE_PIVOT._serialized_end = 5256
-    _AGGREGATE_GROUPTYPE._serialized_start = 5259
-    _AGGREGATE_GROUPTYPE._serialized_end = 5388
-    _SORT._serialized_start = 5391
-    _SORT._serialized_end = 5551
-    _DROP._serialized_start = 5554
-    _DROP._serialized_end = 5695
-    _DEDUPLICATE._serialized_start = 5698
-    _DEDUPLICATE._serialized_end = 5869
-    _LOCALRELATION._serialized_start = 5871
-    _LOCALRELATION._serialized_end = 5960
-    _SAMPLE._serialized_start = 5963
-    _SAMPLE._serialized_end = 6236
-    _RANGE._serialized_start = 6239
-    _RANGE._serialized_end = 6384
-    _SUBQUERYALIAS._serialized_start = 6386
-    _SUBQUERYALIAS._serialized_end = 6500
-    _REPARTITION._serialized_start = 6503
-    _REPARTITION._serialized_end = 6645
-    _SHOWSTRING._serialized_start = 6648
-    _SHOWSTRING._serialized_end = 6790
-    _STATSUMMARY._serialized_start = 6792
-    _STATSUMMARY._serialized_end = 6884
-    _STATDESCRIBE._serialized_start = 6886
-    _STATDESCRIBE._serialized_end = 6967
-    _STATCROSSTAB._serialized_start = 6969
-    _STATCROSSTAB._serialized_end = 7070
-    _STATCOV._serialized_start = 7072
-    _STATCOV._serialized_end = 7168
-    _STATCORR._serialized_start = 7171
-    _STATCORR._serialized_end = 7308
-    _STATAPPROXQUANTILE._serialized_start = 7311
-    _STATAPPROXQUANTILE._serialized_end = 7475
-    _STATFREQITEMS._serialized_start = 7477
-    _STATFREQITEMS._serialized_end = 7602
-    _STATSAMPLEBY._serialized_start = 7605
-    _STATSAMPLEBY._serialized_end = 7914
-    _STATSAMPLEBY_FRACTION._serialized_start = 7806
-    _STATSAMPLEBY_FRACTION._serialized_end = 7905
-    _NAFILL._serialized_start = 7917
-    _NAFILL._serialized_end = 8051
-    _NADROP._serialized_start = 8054
-    _NADROP._serialized_end = 8188
-    _NAREPLACE._serialized_start = 8191
-    _NAREPLACE._serialized_end = 8487
-    _NAREPLACE_REPLACEMENT._serialized_start = 8346
-    _NAREPLACE_REPLACEMENT._serialized_end = 8487
-    _TODF._serialized_start = 8489
-    _TODF._serialized_end = 8577
-    _WITHCOLUMNSRENAMED._serialized_start = 8580
-    _WITHCOLUMNSRENAMED._serialized_end = 8819
-    _WITHCOLUMNSRENAMED_RENAMECOLUMNSMAPENTRY._serialized_start = 8752
-    _WITHCOLUMNSRENAMED_RENAMECOLUMNSMAPENTRY._serialized_end = 8819
-    _WITHCOLUMNS._serialized_start = 8821
-    _WITHCOLUMNS._serialized_end = 8940
-    _HINT._serialized_start = 8943
-    _HINT._serialized_end = 9075
-    _UNPIVOT._serialized_start = 9078
-    _UNPIVOT._serialized_end = 9405
-    _UNPIVOT_VALUES._serialized_start = 9335
-    _UNPIVOT_VALUES._serialized_end = 9394
-    _TOSCHEMA._serialized_start = 9407
-    _TOSCHEMA._serialized_end = 9513
-    _REPARTITIONBYEXPRESSION._serialized_start = 9516
-    _REPARTITIONBYEXPRESSION._serialized_end = 9719
-    _FRAMEMAP._serialized_start = 9721
-    _FRAMEMAP._serialized_end = 9846
-    _COLLECTMETRICS._serialized_start = 9849
-    _COLLECTMETRICS._serialized_end = 9985
-    _PARSE._serialized_start = 9988
-    _PARSE._serialized_end = 10376
-    _PARSE_OPTIONSENTRY._serialized_start = 3285
-    _PARSE_OPTIONSENTRY._serialized_end = 3343
-    _PARSE_PARSEFORMAT._serialized_start = 10277
-    _PARSE_PARSEFORMAT._serialized_end = 10365
+    _RELATION._serialized_end = 2592
+    _UNKNOWN._serialized_start = 2594
+    _UNKNOWN._serialized_end = 2603
+    _RELATIONCOMMON._serialized_start = 2605
+    _RELATIONCOMMON._serialized_end = 2696
+    _SQL._serialized_start = 2699
+    _SQL._serialized_end = 2833
+    _SQL_ARGSENTRY._serialized_start = 2778
+    _SQL_ARGSENTRY._serialized_end = 2833
+    _READ._serialized_start = 2836
+    _READ._serialized_end = 3332
+    _READ_NAMEDTABLE._serialized_start = 2978
+    _READ_NAMEDTABLE._serialized_end = 3039
+    _READ_DATASOURCE._serialized_start = 3042
+    _READ_DATASOURCE._serialized_end = 3319
+    _READ_DATASOURCE_OPTIONSENTRY._serialized_start = 3239
+    _READ_DATASOURCE_OPTIONSENTRY._serialized_end = 3297
+    _PROJECT._serialized_start = 3334
+    _PROJECT._serialized_end = 3451
+    _FILTER._serialized_start = 3453
+    _FILTER._serialized_end = 3565
+    _JOIN._serialized_start = 3568
+    _JOIN._serialized_end = 4039
+    _JOIN_JOINTYPE._serialized_start = 3831
+    _JOIN_JOINTYPE._serialized_end = 4039
+    _SETOPERATION._serialized_start = 4042
+    _SETOPERATION._serialized_end = 4521
+    _SETOPERATION_SETOPTYPE._serialized_start = 4358
+    _SETOPERATION_SETOPTYPE._serialized_end = 4472
+    _LIMIT._serialized_start = 4523
+    _LIMIT._serialized_end = 4599
+    _OFFSET._serialized_start = 4601
+    _OFFSET._serialized_end = 4680
+    _TAIL._serialized_start = 4682
+    _TAIL._serialized_end = 4757
+    _AGGREGATE._serialized_start = 4760
+    _AGGREGATE._serialized_end = 5342
+    _AGGREGATE_PIVOT._serialized_start = 5099
+    _AGGREGATE_PIVOT._serialized_end = 5210
+    _AGGREGATE_GROUPTYPE._serialized_start = 5213
+    _AGGREGATE_GROUPTYPE._serialized_end = 5342
+    _SORT._serialized_start = 5345
+    _SORT._serialized_end = 5505
+    _DROP._serialized_start = 5508
+    _DROP._serialized_end = 5649
+    _DEDUPLICATE._serialized_start = 5652
+    _DEDUPLICATE._serialized_end = 5823
+    _LOCALRELATION._serialized_start = 5825
+    _LOCALRELATION._serialized_end = 5914
+    _SAMPLE._serialized_start = 5917
+    _SAMPLE._serialized_end = 6190
+    _RANGE._serialized_start = 6193
+    _RANGE._serialized_end = 6338
+    _SUBQUERYALIAS._serialized_start = 6340
+    _SUBQUERYALIAS._serialized_end = 6454
+    _REPARTITION._serialized_start = 6457
+    _REPARTITION._serialized_end = 6599
+    _SHOWSTRING._serialized_start = 6602
+    _SHOWSTRING._serialized_end = 6744
+    _STATSUMMARY._serialized_start = 6746
+    _STATSUMMARY._serialized_end = 6838
+    _STATDESCRIBE._serialized_start = 6840
+    _STATDESCRIBE._serialized_end = 6921
+    _STATCROSSTAB._serialized_start = 6923
+    _STATCROSSTAB._serialized_end = 7024
+    _STATCOV._serialized_start = 7026
+    _STATCOV._serialized_end = 7122
+    _STATCORR._serialized_start = 7125
+    _STATCORR._serialized_end = 7262
+    _STATAPPROXQUANTILE._serialized_start = 7265
+    _STATAPPROXQUANTILE._serialized_end = 7429
+    _STATFREQITEMS._serialized_start = 7431
+    _STATFREQITEMS._serialized_end = 7556
+    _STATSAMPLEBY._serialized_start = 7559
+    _STATSAMPLEBY._serialized_end = 7868
+    _STATSAMPLEBY_FRACTION._serialized_start = 7760
+    _STATSAMPLEBY_FRACTION._serialized_end = 7859
+    _NAFILL._serialized_start = 7871
+    _NAFILL._serialized_end = 8005
+    _NADROP._serialized_start = 8008
+    _NADROP._serialized_end = 8142
+    _NAREPLACE._serialized_start = 8145
+    _NAREPLACE._serialized_end = 8441
+    _NAREPLACE_REPLACEMENT._serialized_start = 8300
+    _NAREPLACE_REPLACEMENT._serialized_end = 8441
+    _TODF._serialized_start = 8443
+    _TODF._serialized_end = 8531
+    _WITHCOLUMNSRENAMED._serialized_start = 8534
+    _WITHCOLUMNSRENAMED._serialized_end = 8773
+    _WITHCOLUMNSRENAMED_RENAMECOLUMNSMAPENTRY._serialized_start = 8706
+    _WITHCOLUMNSRENAMED_RENAMECOLUMNSMAPENTRY._serialized_end = 8773
+    _WITHCOLUMNS._serialized_start = 8775
+    _WITHCOLUMNS._serialized_end = 8894
+    _HINT._serialized_start = 8897
+    _HINT._serialized_end = 9029
+    _UNPIVOT._serialized_start = 9032
+    _UNPIVOT._serialized_end = 9359
+    _UNPIVOT_VALUES._serialized_start = 9289
+    _UNPIVOT_VALUES._serialized_end = 9348
+    _TOSCHEMA._serialized_start = 9361
+    _TOSCHEMA._serialized_end = 9467
+    _REPARTITIONBYEXPRESSION._serialized_start = 9470
+    _REPARTITIONBYEXPRESSION._serialized_end = 9673
+    _FRAMEMAP._serialized_start = 9675
+    _FRAMEMAP._serialized_end = 9800
+    _COLLECTMETRICS._serialized_start = 9803
+    _COLLECTMETRICS._serialized_end = 9939
 # @@protoc_insertion_point(module_scope)
