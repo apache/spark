@@ -1,6 +1,6 @@
 ---
 layout: global
-title: Spark Connect Overview
+title: Spark Connect - Building client-side Spark applications
 license: |
   Licensed to the Apache Software Foundation (ASF) under one or more
   contributor license agreements.  See the NOTICE file distributed with
@@ -24,128 +24,68 @@ In Apache Spark 3.4, Spark Connect introduced a decoupled client-server architec
   <img src="img/spark-connect-api.png" title="Spark Connect API" alt="Spark Connect API Diagram" />
 </p>
 
-# Components
+# How Spark Connect Works
 
-Spark applications run as independent sets of processes on a cluster, coordinated by the `SparkContext`
-object in your main program (called the _driver program_).
+The Spark Connect client library is designed to simplify Spark application development. It is a thin API that can be embedded everywhere: in application servers, IDEs, notebooks, and programming languages. The Spark Connect API builds on Spark's DataFrame API using unresolved logical plans as a language-agnostic protocol between the client and the Spark driver.
 
-Specifically, to run on a cluster, the SparkContext can connect to several types of _cluster managers_
-(either Spark's own standalone cluster manager, Mesos, YARN or Kubernetes), which allocate resources across
-applications. Once connected, Spark acquires *executors* on nodes in the cluster, which are
-processes that run computations and store data for your application.
-Next, it sends your application code (defined by JAR or Python files passed to SparkContext) to
-the executors. Finally, SparkContext sends *tasks* to the executors to run.
+The Spark Connect client translates DataFrame operations into unresolved logical query plans which are encoded using protocol buffers. These are sent to the server using the gRPC framework.
+
+The Spark Connect endpoint embedded on the Spark Server, receives and translates unresolved logical plans into Spark's logical plan operators. This is similar to parsing a SQL query, where attributes and relations are parsed and an initial parse plan is built. From there, the standard Spark execution process kicks in, ensuring that Spark Connect leverages all of Spark's optimizations and enhancements. Results are streamed back to the client via gRPC as Apache Arrow-encoded row batches.
 
 <p style="text-align: center;">
-  <img src="img/cluster-overview.png" title="Spark cluster components" alt="Spark cluster components" />
+  <img src="img/spark-connect-communication.png" title="Spark Connect communication" alt="Spark Connect communication" />
 </p>
 
-There are several useful things to note about this architecture:
+# Operational Benefits of Spark Connect
 
-1. Each application gets its own executor processes, which stay up for the duration of the whole
-   application and run tasks in multiple threads. This has the benefit of isolating applications
-   from each other, on both the scheduling side (each driver schedules its own tasks) and executor
-   side (tasks from different applications run in different JVMs). However, it also means that
-   data cannot be shared across different Spark applications (instances of SparkContext) without
-   writing it to an external storage system.
-2. Spark is agnostic to the underlying cluster manager. As long as it can acquire executor
-   processes, and these communicate with each other, it is relatively easy to run it even on a
-   cluster manager that also supports other applications (e.g. Mesos/YARN/Kubernetes).
-3. The driver program must listen for and accept incoming connections from its executors throughout
-   its lifetime (e.g., see [spark.driver.port in the network config
-   section](configuration.html#networking)). As such, the driver program must be network
-   addressable from the worker nodes.
-4. Because the driver schedules tasks on the cluster, it should be run close to the worker
-   nodes, preferably on the same local area network. If you'd like to send requests to the
-   cluster remotely, it's better to open an RPC to the driver and have it submit operations
-   from nearby than to run a driver far away from the worker nodes.
+With this new architecture, Spark Connect mitigates several operational issues:
 
-# Cluster Manager Types
+**Stability**: Applications that use too much memory will now only impact their own environment as they can run in their own processes. Users can define their own dependencies on the client and don't need to worry about potential conflicts with the Spark driver.
 
-The system currently supports several cluster managers:
+**Upgradability**: The Spark driver can now seamlessly be upgraded independently of applications, e.g. to benefit from performance improvements and security fixes. This means applications can be forward-compatible, as long as the server-side RPC definitions are designed to be backwards compatible.
 
-* [Standalone](spark-standalone.html) -- a simple cluster manager included with Spark that makes it
-  easy to set up a cluster.
-* [Apache Mesos](running-on-mesos.html) -- a general cluster manager that can also run Hadoop MapReduce
-  and service applications. (Deprecated)
-* [Hadoop YARN](running-on-yarn.html) -- the resource manager in Hadoop 2 and 3.
-* [Kubernetes](running-on-kubernetes.html) -- an open-source system for automating deployment, scaling,
-  and management of containerized applications.
+**Debuggability and Observability**: Spark Connect enables interactive debugging during development directly from your favorite IDE. Similarly, applications can be monitored using the application's framework native metrics and logging libraries.
 
-# Submitting Applications
+# How to use Spark Connect
 
-Applications can be submitted to a cluster of any type using the `spark-submit` script.
-The [application submission guide](submitting-applications.html) describes how to do this.
+Starting with Spark 3.4, Spark Connect is available and supports PySpark applications. When creating a Spark session, you can specify that you want to use Spark Connect and there are a few ways to do that as outlined below.
 
-# Monitoring
+If you do not use one of the mechanisms outlined below, your Spark session will work just like before, without leveraging Spark Connect, and your application code will run on the Spark driver node.
 
-Each driver program has a web UI, typically on port 4040, that displays information about running
-tasks, executors, and storage usage. Simply go to `http://<driver-node>:4040` in a web browser to
-access this UI. The [monitoring guide](monitoring.html) also describes other monitoring options.
+## Set SPARK_REMOTE environment variable
 
-# Job Scheduling
+If you set the SPARK_REMOTE environment variable on the client machine where your Spark client application is running and create a new Spark Session as illustrated below, the session will be a Spark Connect session. With this approach, there is no code change needed to start using Spark Connect.
 
-Spark gives control over resource allocation both _across_ applications (at the level of the cluster
-manager) and _within_ applications (if multiple computations are happening on the same SparkContext).
-The [job scheduling overview](job-scheduling.html) describes this in more detail.
+Set SPARK_REMOTE environment variable:
+export SPARK_REMOTE="sc://localhost/"
 
-# Glossary
+Start the PySpark CLI, for example:
+~/dev/spark/spark/bin/pyspark
 
-The following table summarizes terms you'll see used to refer to cluster concepts:
+And notice that the PySpark CLI is now connected to Spark using Spark Connect as illustrated in the welcome message: “Client connected to the Spark Connect server at...”.
 
-<table class="table">
-  <thead>
-    <tr><th style="width: 130px;">Term</th><th>Meaning</th></tr>
-  </thead>
-  <tbody>
-    <tr>
-      <td>Application</td>
-      <td>User program built on Spark. Consists of a <em>driver program</em> and <em>executors</em> on the cluster.</td>
-    </tr>
-    <tr>
-      <td>Application jar</td>
-      <td>
-        A jar containing the user's Spark application. In some cases users will want to create
-        an "uber jar" containing their application along with its dependencies. The user's jar
-        should never include Hadoop or Spark libraries, however, these will be added at runtime.
-      </td>
-    </tr>
-    <tr>
-      <td>Driver program</td>
-      <td>The process running the main() function of the application and creating the SparkContext</td>
-    </tr>
-    <tr>
-      <td>Cluster manager</td>
-      <td>An external service for acquiring resources on the cluster (e.g. standalone manager, Mesos, YARN, Kubernetes)</td>
-    </tr>
-    <tr>
-      <td>Deploy mode</td>
-      <td>Distinguishes where the driver process runs. In "cluster" mode, the framework launches
-        the driver inside of the cluster. In "client" mode, the submitter launches the driver
-        outside of the cluster.</td>
-    </tr>
-    <tr>
-      <td>Worker node</td>
-      <td>Any node that can run application code in the cluster</td>
-    </tr>
-    <tr>
-      <td>Executor</td>
-      <td>A process launched for an application on a worker node, that runs tasks and keeps data in memory
-        or disk storage across them. Each application has its own executors.</td>
-    </tr>
-    <tr>
-      <td>Task</td>
-      <td>A unit of work that will be sent to one executor</td>
-    </tr>
-    <tr>
-      <td>Job</td>
-      <td>A parallel computation consisting of multiple tasks that gets spawned in response to a Spark action
-        (e.g. <code>save</code>, <code>collect</code>); you'll see this term used in the driver's logs.</td>
-    </tr>
-    <tr>
-      <td>Stage</td>
-      <td>Each job gets divided into smaller sets of tasks called <em>stages</em> that depend on each other
-        (similar to the map and reduce stages in MapReduce); you'll see this term used in the driver's logs.</td>
-    </tr>
-  </tbody>
-</table>
+And if you write your own Python program, create a Spark Session as shown in this example:
+from pyspark.sql import SparkSession
+spark = SparkSession.builder.getOrCreate()
+
+Which will create a Spark Connect session by reading the SPARK_REMOTE environment variable we set above.
+
+## Specify Spark Connect when creating Spark session
+
+You can also specify that you want to use Spark Connect when you create a Spark session explicitly.
+
+For example, when launching the PySpark CLI, simply include the remote parameter as illustrated here:
+~/dev/spark/spark/bin/pyspark --remote "sc://localhost"
+
+And again you will notice that the PySpark welcome message tells you that you are connected to Spark using Spark Connect.
+
+Or, in your code, include the remote function with a reference to your Spark server when you create a Spark session, as in this example:
+from pyspark.sql import SparkSession
+spark = SparkSession.builder.remote("sc://localhost/").getOrCreate()
+
+# Client application authentication
+
+While Spark Connect does not have built-in authentication, it is designed to work seamlessly with your existing authentication infrastructure. Its gRPC HTTP/2 interface allows for the use of authenticating proxies, which makes it possible to secure Spark Connect without having to implement authentication logic in Spark directly.
+
+# What is included in Spark 3.4
+[TBD]
