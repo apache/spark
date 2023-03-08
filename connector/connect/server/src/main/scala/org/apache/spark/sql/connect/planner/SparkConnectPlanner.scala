@@ -732,9 +732,9 @@ class SparkConnectPlanner(val session: SparkSession) {
 
     rel.getFormat match {
       case ParseFormat.PARSE_FORMAT_CSV =>
-        dataFrameReader.csv(ds).logicalPlan
+        dataFrameReader.csv(ds).queryExecution.analyzed
       case ParseFormat.PARSE_FORMAT_JSON =>
-        dataFrameReader.json(ds).logicalPlan
+        dataFrameReader.json(ds).queryExecution.analyzed
       case _ => throw InvalidPlanInput("Does not support " + rel.getFormat.name())
     }
   }
