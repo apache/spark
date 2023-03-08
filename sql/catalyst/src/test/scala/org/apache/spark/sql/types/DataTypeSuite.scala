@@ -191,7 +191,7 @@ class DataTypeSuite extends SparkFunSuite {
     assert(DataType.fromJson("\"null\"") == NullType)
   }
 
-  test("Parse timestamp_ltz as TimestampType") {
+  test("SPARK-42723: Parse timestamp_ltz as TimestampType") {
     assert(DataType.fromJson("\"timestamp_ltz\"") == TimestampType)
     val expectedStructType = StructType(Seq(StructField("ts", TimestampType)))
     assert(DataType.fromDDL("ts timestamp_ltz") == expectedStructType)
