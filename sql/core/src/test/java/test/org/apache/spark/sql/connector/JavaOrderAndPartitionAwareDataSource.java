@@ -29,52 +29,11 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap;
 
 public class JavaOrderAndPartitionAwareDataSource extends JavaPartitionAwareDataSource {
 
-  static class MyScanBuilder extends JavaPartitionAwareDataSource.MyScanBuilder
-    implements SupportsReportOrdering {
-
-    private final Partitioning partitioning;
-    private final SortOrder[] ordering;
-
-    MyScanBuilder(String partitionKeys, String orderKeys) {
-      if (partitionKeys != null) {
-        String[] keys = partitionKeys.split(",");
-        Expression[] clustering = new Transform[keys.length];
-        for (int i = 0; i < keys.length; i++) {
-          clustering[i] = Expressions.identity(keys[i]);
-        }
-        this.partitioning = new KeyGroupedPartitioning(clustering, 2);
-      } else {
-        this.partitioning = new UnknownPartitioning(2);
-      }
-
-      if (orderKeys != null) {
-        String[] keys = orderKeys.split(",");
-        this.ordering = new SortOrder[keys.length];
-        for (int i = 0; i < keys.length; i++) {
-          this.ordering[i] = new MySortOrder(keys[i]);
-        }
-      } else {
-        this.ordering = new SortOrder[0];
-      }
-    }
-
-    @Override
-    public InputPartition[] planInputPartitions() {
-      InputPartition[] partitions = new InputPartition[2];
-      partitions[0] = new SpecificInputPartition(new int[]{1, 1, 3}, new int[]{4, 5, 5});
-      partitions[1] = new SpecificInputPartition(new int[]{2, 4, 4}, new int[]{6, 1, 2});
-      return partitions;
-    }
-
-    @Override
-    public Partitioning outputPartitioning() {
-      return this.partitioning;
-    }
-
-    @Override
-    public SortOrder[] outputOrdering() {
-      return this.ordering;
-    }
+  protected InputPartition[] getPartitions() {
+    return new InputPartition[]{
+      new SpecificInputPartition(new int[]{1, 1, 3}, new int[]{4, 5, 5}),
+      new SpecificInputPartition(new int[]{2, 4, 4}, new int[]{6, 1, 2})
+    };
   }
 
   @Override
@@ -93,7 +52,8 @@ public class JavaOrderAndPartitionAwareDataSource extends JavaPartitionAwareData
 
       @Override
       public ScanBuilder newScanBuilder(CaseInsensitiveStringMap options) {
-        return new MyScanBuilder(options.get("partitionKeys"), options.get("orderKeys"));
+        return new JavaOrderAndPartitionAwareScanBuilder(
+            getPartitions(), options.get("partitionKeys"), options.get("orderKeys"));
       }
     };
   }

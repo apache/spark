@@ -18,6 +18,7 @@
 package test.org.apache.spark.sql.connector;
 
 import java.io.IOException;
+import java.util.Arrays;
 
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow;
@@ -33,26 +34,11 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap;
 
 public class JavaPartitionAwareDataSource implements TestingV2Source {
 
-  static class MyScanBuilder extends JavaSimpleScanBuilder implements SupportsReportPartitioning {
-
-    @Override
-    public InputPartition[] planInputPartitions() {
-      InputPartition[] partitions = new InputPartition[2];
-      partitions[0] = new SpecificInputPartition(new int[]{1, 1, 3}, new int[]{4, 4, 6});
-      partitions[1] = new SpecificInputPartition(new int[]{2, 4, 4}, new int[]{6, 2, 2});
-      return partitions;
-    }
-
-    @Override
-    public PartitionReaderFactory createReaderFactory() {
-      return new SpecificReaderFactory();
-    }
-
-    @Override
-    public Partitioning outputPartitioning() {
-      Expression[] clustering = new Transform[] { Expressions.identity("i") };
-      return new KeyGroupedPartitioning(clustering, 2);
-    }
+  protected InputPartition[] getPartitions() {
+    return new InputPartition[]{
+      new SpecificInputPartition(new int[]{1, 1, 3}, new int[]{4, 4, 6}),
+      new SpecificInputPartition(new int[]{2, 4, 4}, new int[]{6, 2, 2})
+    };
   }
 
   @Override
@@ -65,12 +51,12 @@ public class JavaPartitionAwareDataSource implements TestingV2Source {
 
       @Override
       public ScanBuilder newScanBuilder(CaseInsensitiveStringMap options) {
-        return new MyScanBuilder();
+        return new JavaPartitionAwareScanBuilder(getPartitions());
       }
     };
   }
 
-  static class SpecificInputPartition implements InputPartition, HasPartitionKey {
+  static class SpecificInputPartition implements InputPartition {
     int[] i;
     int[] j;
 
@@ -78,11 +64,6 @@ public class JavaPartitionAwareDataSource implements TestingV2Source {
       assert i.length == j.length;
       this.i = i;
       this.j = j;
-    }
-
-    @Override
-    public InternalRow partitionKey() {
-      return new GenericInternalRow(new Object[] {i[0]});
     }
   }
 

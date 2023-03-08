@@ -248,31 +248,73 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
 
   test("partitioning reporting") {
     import org.apache.spark.sql.functions.{count, sum}
+    Seq(classOf[PartitionAwareDataSource], classOf[JavaPartitionAwareDataSource]).foreach { cls =>
+      withClue(cls.getName) {
+        val df = spark.read.format(cls.getName).load()
+        checkAnswer(df, Seq(Row(1, 4), Row(1, 4), Row(3, 6), Row(2, 6), Row(4, 2), Row(4, 2)))
+
+        val groupByColI = df.groupBy($"i").agg(sum($"j"))
+        checkAnswer(groupByColI, Seq(Row(1, 8), Row(2, 6), Row(3, 6), Row(4, 4)))
+        assert(collectFirst(groupByColI.queryExecution.executedPlan) {
+          case e: ShuffleExchangeExec => e
+        }.isEmpty)
+
+        val groupByColIJ = df.groupBy($"i", $"j").agg(count("*"))
+        checkAnswer(groupByColIJ, Seq(Row(1, 4, 2), Row(2, 6, 1), Row(3, 6, 1), Row(4, 2, 2)))
+        assert(collectFirst(groupByColIJ.queryExecution.executedPlan) {
+          case e: ShuffleExchangeExec => e
+        }.isEmpty)
+
+        val groupByColJ = df.groupBy($"j").agg(sum($"i"))
+        checkAnswer(groupByColJ, Seq(Row(2, 8), Row(4, 2), Row(6, 5)))
+        assert(collectFirst(groupByColJ.queryExecution.executedPlan) {
+          case e: ShuffleExchangeExec => e
+        }.isDefined)
+
+        val groupByIPlusJ = df.groupBy($"i" + $"j").agg(count("*"))
+        checkAnswer(groupByIPlusJ, Seq(Row(5, 2), Row(6, 2), Row(8, 1), Row(9, 1)))
+        assert(collectFirst(groupByIPlusJ.queryExecution.executedPlan) {
+          case e: ShuffleExchangeExec => e
+        }.isDefined)
+      }
+    }
+  }
+
+  test("partitioning reporting with HasPartitionKey") {
+    import org.apache.spark.sql.functions.{count, sum}
     withSQLConf(SQLConf.V2_BUCKETING_ENABLED.key -> "true") {
-      Seq(classOf[PartitionAwareDataSource], classOf[JavaPartitionAwareDataSource]).foreach { cls =>
+      Seq(
+        classOf[PartitionAwareDataSourceWithKey],
+        classOf[JavaPartitionAwareDataSourceWithKey]
+      ).foreach { cls =>
         withClue(cls.getName) {
           val df = spark.read.format(cls.getName).load()
+          assert(df.rdd.getNumPartitions === 4)
           checkAnswer(df, Seq(Row(1, 4), Row(1, 4), Row(3, 6), Row(2, 6), Row(4, 2), Row(4, 2)))
 
           val groupByColI = df.groupBy($"i").agg(sum($"j"))
+          assert(groupByColI.rdd.getNumPartitions === 4)
           checkAnswer(groupByColI, Seq(Row(1, 8), Row(2, 6), Row(3, 6), Row(4, 4)))
           assert(collectFirst(groupByColI.queryExecution.executedPlan) {
             case e: ShuffleExchangeExec => e
           }.isEmpty)
 
           val groupByColIJ = df.groupBy($"i", $"j").agg(count("*"))
+          assert(groupByColIJ.rdd.getNumPartitions === 4)
           checkAnswer(groupByColIJ, Seq(Row(1, 4, 2), Row(2, 6, 1), Row(3, 6, 1), Row(4, 2, 2)))
           assert(collectFirst(groupByColIJ.queryExecution.executedPlan) {
             case e: ShuffleExchangeExec => e
           }.isEmpty)
 
           val groupByColJ = df.groupBy($"j").agg(sum($"i"))
+          assert(groupByColJ.rdd.getNumPartitions === 1)
           checkAnswer(groupByColJ, Seq(Row(2, 8), Row(4, 2), Row(6, 5)))
           assert(collectFirst(groupByColJ.queryExecution.executedPlan) {
             case e: ShuffleExchangeExec => e
           }.isDefined)
 
           val groupByIPlusJ = df.groupBy($"i" + $"j").agg(count("*"))
+          assert(groupByIPlusJ.rdd.getNumPartitions === 1)
           checkAnswer(groupByIPlusJ, Seq(Row(5, 2), Row(6, 2), Row(8, 1), Row(9, 1)))
           assert(collectFirst(groupByIPlusJ.queryExecution.executedPlan) {
             case e: ShuffleExchangeExec => e
@@ -994,98 +1036,102 @@ object ColumnarReaderFactory extends PartitionReaderFactory {
   }
 }
 
-class PartitionAwareDataSource extends TestingV2Source {
+class MyScanBuilder(partitions: Array[InputPartition],
+                    partitionKeys: Option[Seq[String]],
+                    orderKeys: Option[Seq[String]] = None) extends SimpleScanBuilder
+  with SupportsReportPartitioning with SupportsReportOrdering {
 
-  class MyScanBuilder extends SimpleScanBuilder
-    with SupportsReportPartitioning {
+  override def planInputPartitions(): Array[InputPartition] = partitions
 
-    override def planInputPartitions(): Array[InputPartition] = {
-      // Note that we don't have same value of column `i` across partitions.
-      Array(
-        SpecificInputPartition(Array(1, 1, 3), Array(4, 4, 6)),
-        SpecificInputPartition(Array(2, 4, 4), Array(6, 2, 2)))
-    }
-
-    override def createReaderFactory(): PartitionReaderFactory = {
-      SpecificReaderFactory
-    }
-
-    override def outputPartitioning(): Partitioning =
-      new KeyGroupedPartitioning(Array(FieldReference("i")), 2)
+  override def createReaderFactory(): PartitionReaderFactory = {
+    SpecificReaderFactory
   }
+
+  override def outputPartitioning(): Partitioning =
+    partitionKeys.map(keys =>
+      new KeyGroupedPartitioning(keys.map(FieldReference(_)).toArray, partitions.length)
+    ).getOrElse(
+      new UnknownPartitioning(partitions.length)
+    )
+
+  override def outputOrdering(): Array[SortOrder] = orderKeys.map(_.map(
+    new MySortOrder(_)
+  )).getOrElse(Seq.empty).toArray
+}
+
+class MySortOrder(columnName: String) extends SortOrder {
+  override def expression(): Expression = new MyIdentityTransform(
+    new MyNamedReference(columnName)
+  )
+  override def direction(): SortDirection = SortDirection.ASCENDING
+  override def nullOrdering(): NullOrdering = NullOrdering.NULLS_FIRST
+}
+
+class MyNamedReference(parts: String*) extends NamedReference {
+  override def fieldNames(): Array[String] = parts.toArray
+}
+
+class MyIdentityTransform(namedReference: NamedReference) extends Transform {
+  override def name(): String = "identity"
+  override def references(): Array[NamedReference] = Array.empty
+  override def arguments(): Array[Expression] = Seq(namedReference).toArray
+}
+
+class PartitionAwareDataSource extends TestingV2Source {
+  // Note that we don't have same value of column `i` across partitions.
+  val partitions: Array[InputPartition] =
+    Array(
+      new SpecificInputPartition(Array(1, 1, 3), Array(4, 4, 6)),
+      new SpecificInputPartition(Array(2, 4, 4), Array(6, 2, 2))
+    )
 
   override def getTable(options: CaseInsensitiveStringMap): Table = new SimpleBatchTable {
     override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
-      new MyScanBuilder()
+      new MyScanBuilder(partitions, Some(Seq("i")))
     }
   }
 }
 
+class PartitionAwareDataSourceWithKey extends PartitionAwareDataSource {
+  // Note that we don't have same value of column `i` across partitions.
+  // Note that we have only a single value for column `i` per partition.
+  override val partitions: Array[InputPartition] =
+    Array(
+      new SpecificInputPartitionWithKey(Array(1, 1), Array(4, 4)),
+      new SpecificInputPartitionWithKey(Array(3), Array(6)),
+      new SpecificInputPartitionWithKey(Array(2), Array(6)),
+      new SpecificInputPartitionWithKey(Array(4), Array(2)),
+      new SpecificInputPartitionWithKey(Array(4), Array(2))
+    )
+}
+
 class OrderAndPartitionAwareDataSource extends PartitionAwareDataSource {
-
-  class MyScanBuilder(
-      val partitionKeys: Option[Seq[String]],
-      val orderKeys: Seq[String])
-    extends SimpleScanBuilder
-    with SupportsReportPartitioning with SupportsReportOrdering {
-
-    override def planInputPartitions(): Array[InputPartition] = {
-      // data are partitioned by column `i` or `j`, so we can report any partitioning
-      // column `i` is not ordered globally, but within partitions, together with`j`
-      // this allows us to report ordering by [i] and [i, j]
-      Array(
-        SpecificInputPartition(Array(1, 1, 3), Array(4, 5, 5)),
-        SpecificInputPartition(Array(2, 4, 4), Array(6, 1, 2)))
-    }
-
-    override def createReaderFactory(): PartitionReaderFactory = {
-      SpecificReaderFactory
-    }
-
-    override def outputPartitioning(): Partitioning = {
-      partitionKeys.map(keys =>
-        new KeyGroupedPartitioning(keys.map(FieldReference(_)).toArray, 2)
-      ).getOrElse(
-        new UnknownPartitioning(2)
-      )
-    }
-
-    override def outputOrdering(): Array[SortOrder] = orderKeys.map(
-      new MySortOrder(_)
-    ).toArray
-  }
+  // data are partitioned by column `i` or `j`, so we can report any partitioning
+  // column `i` is not ordered globally, but within partitions, together with`j`
+  // this allows us to report ordering by [i] and [i, j]
+  override val partitions: Array[InputPartition] =
+  Array(
+    new SpecificInputPartition(Array(1, 1, 3), Array(4, 5, 5)),
+    new SpecificInputPartition(Array(2, 4, 4), Array(6, 1, 2))
+  )
 
   override def getTable(options: CaseInsensitiveStringMap): Table = new SimpleBatchTable {
     override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
       new MyScanBuilder(
+        partitions,
         Option(options.get("partitionKeys")).map(_.split(",")),
-        Option(options.get("orderKeys")).map(_.split(",").toSeq).getOrElse(Seq.empty)
+        Option(options.get("orderKeys")).map(_.split(",").toSeq)
       )
     }
   }
-
-  class MySortOrder(columnName: String) extends SortOrder {
-    override def expression(): Expression = new MyIdentityTransform(
-      new MyNamedReference(columnName)
-    )
-    override def direction(): SortDirection = SortDirection.ASCENDING
-    override def nullOrdering(): NullOrdering = NullOrdering.NULLS_FIRST
-  }
-
-  class MyNamedReference(parts: String*) extends NamedReference {
-    override def fieldNames(): Array[String] = parts.toArray
-  }
-
-  class MyIdentityTransform(namedReference: NamedReference) extends Transform {
-    override def name(): String = "identity"
-    override def references(): Array[NamedReference] = Array.empty
-    override def arguments(): Array[Expression] = Seq(namedReference).toArray
-  }
 }
 
-case class SpecificInputPartition(
-    i: Array[Int],
-    j: Array[Int]) extends InputPartition with HasPartitionKey {
+class SpecificInputPartition(val i: Array[Int], val j: Array[Int]) extends InputPartition
+
+class SpecificInputPartitionWithKey(i: Array[Int], j: Array[Int])
+  extends SpecificInputPartition(i, j) with HasPartitionKey {
+  assert(i.nonEmpty)
+  assert(i.distinct.size == 1)
   override def partitionKey(): InternalRow = PartitionInternalRow(Seq(i(0)).toArray)
 }
 
