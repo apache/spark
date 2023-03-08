@@ -18,8 +18,10 @@
 package org.apache.spark
 
 import java.util.{Collections => JCollections}
-import org.mockito.Mockito.{doNothing, mock, when}
+
 import org.mockito.ArgumentMatchers.any
+import org.mockito.Mockito.{doNothing, mock, when}
+
 import org.apache.spark.shuffle.api.{ShuffleDataIO, ShuffleDriverComponents, ShuffleExecutorComponents}
 
 /**
@@ -28,7 +30,7 @@ import org.apache.spark.shuffle.api.{ShuffleDataIO, ShuffleDriverComponents, Shu
  * Note: cannot intercept initialization of executor/driver currently.
  *
  */
-class TestShuffleDataIO(val conf: SparkConf) extends ShuffleDataIO {
+class TestShuffleDataIOWithMockedComponents(val conf: SparkConf) extends ShuffleDataIO {
 
   // ShuffleDataIO must be initialized only after spark.app.id has been configured
   assert(conf.getOption("spark.app.id").isDefined)
