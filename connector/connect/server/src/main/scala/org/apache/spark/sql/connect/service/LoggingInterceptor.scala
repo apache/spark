@@ -31,8 +31,8 @@ import io.grpc.ServerInterceptor
 import org.apache.spark.internal.Logging
 
 /**
- * This gRPC interceptor log incoming requests and responses as JSON.
- * Useful for local development. It assigns an ID for each RPC so that requests and corresponding
+ * A gRPC interceptor to log incoming requests and responses. It logs the protobufs as JSON.
+ * Useful for local development. An ID is logged for each RPC so that requests and corresponding
  * responses can be exactly matched.
  */
 class LoggingInterceptor extends ServerInterceptor with Logging {
