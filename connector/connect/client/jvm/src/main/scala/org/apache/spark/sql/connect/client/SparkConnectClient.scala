@@ -33,7 +33,7 @@ private[sql] class SparkConnectClient(
     private val userContext: proto.UserContext,
     private val channel: ManagedChannel,
     private[client] val userAgent: String,
-    private[client] val connectString: String) {
+    private val connectString: String) {
 
   private[this] val stub = proto.SparkConnectServiceGrpc.newBlockingStub(channel)
 
