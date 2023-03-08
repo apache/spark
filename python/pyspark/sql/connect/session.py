@@ -52,13 +52,14 @@ from pyspark.sql.connect.conf import RuntimeConf
 from pyspark.sql.connect.dataframe import DataFrame
 from pyspark.sql.connect.plan import SQL, Range, LocalRelation, CachedRelation
 from pyspark.sql.connect.readwriter import DataFrameReader
+from pyspark.sql.connect.types import replace_with_arrow_column_name
 from pyspark.sql.pandas.serializers import ArrowStreamPandasSerializer
 from pyspark.sql.pandas.types import to_arrow_type, _get_local_timezone
 from pyspark.sql.session import classproperty, SparkSession as PySparkSession
 from pyspark.sql.types import (
     _infer_schema,
     _has_nulltype,
-    _has_nullable,
+    _has_not_nullable,
     _merge_type,
     Row,
     DataType,
@@ -263,6 +264,8 @@ class SparkSession:
             _table = pa.Table.from_batches(
                 [ser._create_batch([(c, t) for (_, c), t in zip(data.items(), arrow_types)])]
             )
+            pa_schema = replace_with_arrow_column_name(schema, _table.schema)
+            _table = _table.cast(target_schema=pa_schema)
 
         elif isinstance(data, np.ndarray):
             if data.ndim not in [1, 2]:
@@ -323,7 +326,7 @@ class SparkSession:
                     )
                 _inferred_schema = _schema
 
-            if _has_nullable(_inferred_schema) and _schema is not None:
+            if _schema is not None and _has_not_nullable(_schema):
                 _inferred_schema = _schema
 
             from pyspark.sql.connect.conversion import LocalDataToArrowConversion
