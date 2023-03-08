@@ -2876,6 +2876,13 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             with self.assertRaises(NotImplementedError):
                 getattr(df.write, f)()
 
+    def test_inferred_schema(self):
+        schema_false = StructType([StructField("id", IntegerType(), False)])
+        cdf1 = self.connect.createDataFrame([[1]], schema=schema_false)
+        sdf1 = self.spark.createDataFrame([[1]], schema=schema_false)
+        self.assertEqual(cdf1.schema, sdf1.schema)
+        self.assertEqual(cdf1.collect(), sdf1.collect())
+
 
 @unittest.skipIf(not should_test_connect, connect_requirement_message)
 class ClientTests(unittest.TestCase):

@@ -1579,7 +1579,7 @@ def _infer_schema(
                         infer_array_from_first_element,
                         prefer_timestamp_ntz,
                     ),
-                    False,
+                    True,
                 )
             )
         except TypeError as e:
@@ -1598,6 +1598,16 @@ def _has_nulltype(dt: DataType) -> bool:
     else:
         return isinstance(dt, NullType)
 
+def _has_nullable(dt: DataType) -> bool:
+    """Return whether there is nullable in `dt`"""
+    if isinstance(dt, StructType):
+        return any(f.nullable or _has_nullable(f.dataType) for f in dt.fields)
+    elif isinstance(dt, ArrayType):
+        return _has_nullable((dt.elementType))
+    elif isinstance(dt, MapType):
+        return _has_nullable(dt.keyType) or _has_nullable(dt.valueType)
+    else:
+        return False
 
 @overload
 def _merge_type(a: StructType, b: StructType, name: Optional[str] = None) -> StructType:

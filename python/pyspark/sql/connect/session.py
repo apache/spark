@@ -58,6 +58,7 @@ from pyspark.sql.session import classproperty, SparkSession as PySparkSession
 from pyspark.sql.types import (
     _infer_schema,
     _has_nulltype,
+    _has_nullable,
     _merge_type,
     Row,
     DataType,
@@ -320,6 +321,9 @@ class SparkSession:
                         "Some of types cannot be determined after inferring, "
                         "a StructType Schema is required in this case"
                     )
+                _inferred_schema = _schema
+
+            if _has_nullable(_inferred_schema) and _schema is not None:
                 _inferred_schema = _schema
 
             from pyspark.sql.connect.conversion import LocalDataToArrowConversion
