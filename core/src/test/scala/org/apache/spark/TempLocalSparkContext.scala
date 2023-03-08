@@ -51,7 +51,7 @@ trait TempLocalSparkContext extends BeforeAndAfterEach
    */
   def sc: SparkContext = {
     if (_sc == null) {
-      _sc = new SparkContext(_conf)
+      _sc = new SparkContext(conf)
     }
     _sc
   }

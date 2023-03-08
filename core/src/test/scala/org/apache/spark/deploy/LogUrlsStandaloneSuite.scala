@@ -19,7 +19,6 @@ package org.apache.spark.deploy
 
 import java.net.URL
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.io.Source
 
@@ -61,7 +60,7 @@ class LogUrlsStandaloneSuite extends SparkFunSuite with LocalSparkContext {
 
     sc.listenerBus.waitUntilEmpty()
     val listeners = sc.listenerBus.findListenersByClass[SaveExecutorInfo]
-    assert(listeners.size === 1, s"listeners = ${sc.listenerBus.listeners.asScala.mkString(", ")}")
+    assert(listeners.size === 1)
     val listener = listeners(0)
     listener.addedExecutorInfos.values.foreach { info =>
       assert(info.logUrlMap.nonEmpty)

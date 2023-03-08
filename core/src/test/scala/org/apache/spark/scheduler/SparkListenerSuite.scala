@@ -456,9 +456,7 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
     val conf = new SparkConf().setMaster("local").setAppName("test")
       .set(EXTRA_LISTENERS, listeners.map(_.getName))
     sc = new SparkContext(conf)
-    // sc.listenerBus.listeners.asScala.count(_.isInstanceOf[BasicJobCounter]) should be (1)
-    assert(sc.listenerBus.listeners.asScala.count(_.isInstanceOf[BasicJobCounter]) == 1,
-      s"listeners = ${sc.listenerBus.listeners.asScala.mkString(", ")}")
+    sc.listenerBus.listeners.asScala.count(_.isInstanceOf[BasicJobCounter]) should be (1)
     sc.listenerBus.listeners.asScala
       .count(_.isInstanceOf[ListenerThatAcceptsSparkConf]) should be (1)
     sc.listenerBus.listeners.asScala

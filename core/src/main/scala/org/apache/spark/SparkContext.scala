@@ -593,7 +593,7 @@ class SparkContext(config: SparkConf) extends Logging {
     }
 
     // initialize after application id and attempt id has been initialized
-    _shuffleDriverComponents = ShuffleDataIOUtils.loadShuffleDataIO(config).driver()
+    _shuffleDriverComponents = ShuffleDataIOUtils.loadShuffleDataIO(_conf).driver()
     _shuffleDriverComponents.initializeApplication().asScala.foreach { case (k, v) =>
       _conf.set(ShuffleDataIOUtils.SHUFFLE_SPARK_CONF_PREFIX + k, v)
     }
