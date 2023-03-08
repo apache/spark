@@ -453,7 +453,7 @@ class SparkConnectPlanner(val session: SparkSession) {
   }
 
   private def transformToSchema(rel: proto.ToSchema): LogicalPlan = {
-    val schema = DataTypeProtoConverter.toCatalystType(rel.getSchema)
+    val schema = transformDataType(rel.getSchema)
     assert(schema.isInstanceOf[StructType])
 
     Dataset
@@ -611,6 +611,14 @@ class SparkConnectPlanner(val session: SparkSession) {
         cols
       }
       Deduplicate(groupCols, queryExecution.analyzed)
+    }
+  }
+
+  private def transformDataType(t: proto.DataType): DataType = {
+    t.getKindCase match {
+      case proto.DataType.KindCase.UNPARSED =>
+        parseDatatypeString(t.getUnparsed.getDataTypeString)
+      case _ => DataTypeProtoConverter.toCatalystType(t)
     }
   }
 
@@ -934,7 +942,7 @@ class SparkConnectPlanner(val session: SparkSession) {
     PythonUDF(
       name = fun.getFunctionName,
       func = transformPythonFunction(udf),
-      dataType = DataTypeProtoConverter.toCatalystType(udf.getOutputType),
+      dataType = transformDataType(udf.getOutputType),
       children = fun.getArgumentsList.asScala.map(transformExpression).toSeq,
       evalType = udf.getEvalType,
       udfDeterministic = fun.getDeterministic)
@@ -1188,9 +1196,7 @@ class SparkConnectPlanner(val session: SparkSession) {
   private def transformCast(cast: proto.Expression.Cast): Expression = {
     cast.getCastToTypeCase match {
       case proto.Expression.Cast.CastToTypeCase.TYPE =>
-        Cast(
-          transformExpression(cast.getExpr),
-          DataTypeProtoConverter.toCatalystType(cast.getType))
+        Cast(transformExpression(cast.getExpr), transformDataType(cast.getType))
       case _ =>
         Cast(
           transformExpression(cast.getExpr),
@@ -1583,7 +1589,7 @@ class SparkConnectPlanner(val session: SparkSession) {
     val udpf = UserDefinedPythonFunction(
       name = fun.getFunctionName,
       func = function,
-      dataType = DataTypeProtoConverter.toCatalystType(udf.getOutputType),
+      dataType = transformDataType(udf.getOutputType),
       pythonEvalType = udf.getEvalType,
       udfDeterministic = fun.getDeterministic)
 
@@ -1592,16 +1598,11 @@ class SparkConnectPlanner(val session: SparkSession) {
 
   private def handleRegisterJavaUDF(fun: proto.CommonInlineUserDefinedFunction): Unit = {
     val udf = fun.getJavaUdf
-    val dataType =
-      if (udf.hasOutputType) {
-        DataType.parseTypeWithFallback(
-          schema = udf.getOutputType,
-          parser = DataType.fromDDL,
-          fallbackParser = DataType.fromJson) match {
-          case s: DataType => s
-          case other => throw InvalidPlanInput(s"Invalid return type $other")
-        }
-      } else null
+    val dataType = if (udf.hasOutputType) {
+      transformDataType(udf.getOutputType)
+    } else {
+      null
+    }
     if (udf.getAggregate) {
       session.udf.registerJavaUDAF(fun.getFunctionName, udf.getClassName)
     } else {
@@ -1907,7 +1908,7 @@ class SparkConnectPlanner(val session: SparkSession) {
   private def transformCreateExternalTable(
       getCreateExternalTable: proto.CreateExternalTable): LogicalPlan = {
     val schema = if (getCreateExternalTable.hasSchema) {
-      val struct = DataTypeProtoConverter.toCatalystType(getCreateExternalTable.getSchema)
+      val struct = transformDataType(getCreateExternalTable.getSchema)
       assert(struct.isInstanceOf[StructType])
       struct.asInstanceOf[StructType]
     } else {
@@ -1937,7 +1938,7 @@ class SparkConnectPlanner(val session: SparkSession) {
 
   private def transformCreateTable(getCreateTable: proto.CreateTable): LogicalPlan = {
     val schema = if (getCreateTable.hasSchema) {
-      val struct = DataTypeProtoConverter.toCatalystType(getCreateTable.getSchema)
+      val struct = transformDataType(getCreateTable.getSchema)
       assert(struct.isInstanceOf[StructType])
       struct.asInstanceOf[StructType]
     } else {

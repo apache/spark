@@ -31,7 +31,6 @@ import random
 import time
 import urllib.parse
 import uuid
-import json
 import sys
 from types import TracebackType
 from typing import (
@@ -72,11 +71,7 @@ from pyspark.sql.connect.expressions import (
     CommonInlineUserDefinedFunction,
     JavaUDF,
 )
-from pyspark.sql.types import (
-    DataType,
-    StructType,
-    StructField,
-)
+from pyspark.sql.types import DataType, StructType
 from pyspark.rdd import PythonEvalType
 
 
@@ -397,7 +392,7 @@ class PlanObservedMetrics:
 class AnalyzeResult:
     def __init__(
         self,
-        schema: Optional[pb2.DataType],
+        schema: Optional[DataType],
         explain_string: Optional[str],
         tree_string: Optional[str],
         is_local: Optional[bool],
@@ -419,7 +414,7 @@ class AnalyzeResult:
 
     @classmethod
     def fromProto(cls, pb: Any) -> "AnalyzeResult":
-        schema: Optional[pb2.DataType] = None
+        schema: Optional[DataType] = None
         explain_string: Optional[str] = None
         tree_string: Optional[str] = None
         is_local: Optional[bool] = None
@@ -430,7 +425,7 @@ class AnalyzeResult:
         is_same_semantics: Optional[bool] = None
 
         if pb.HasField("schema"):
-            schema = pb.schema.schema
+            schema = types.proto_schema_to_pyspark_data_type(pb.schema.schema)
         elif pb.HasField("explain"):
             explain_string = pb.explain.explain_string
         elif pb.HasField("tree_string"):
@@ -581,18 +576,11 @@ class SparkConnectClient(object):
         return_type: Optional["DataTypeOrString"] = None,
         aggregate: bool = False,
     ) -> None:
-        # convert str return_type to DataType
-        if isinstance(return_type, str):
-            return_type = parse_data_type(return_type)
-
         # construct a JavaUDF
         if return_type is None:
             java_udf = JavaUDF(class_name=javaClassName, aggregate=aggregate)
         else:
-            java_udf = JavaUDF(
-                class_name=javaClassName,
-                output_type=return_type.json(),
-            )
+            java_udf = JavaUDF(class_name=javaClassName, output_type=return_type)
         fun = CommonInlineUserDefinedFunction(
             function_name=name,
             function=java_udf,
@@ -655,9 +643,6 @@ class SparkConnectClient(object):
             pdf.attrs["observed_metrics"] = observed_metrics
         return pdf
 
-    def _proto_schema_to_pyspark_schema(self, schema: pb2.DataType) -> DataType:
-        return types.proto_schema_to_pyspark_data_type(schema)
-
     def _proto_to_string(self, p: google.protobuf.message.Message) -> str:
         """
         Helper method to generate a one line string representation of the plan.
@@ -677,26 +662,11 @@ class SparkConnectClient(object):
         Return schema for given plan.
         """
         logger.info(f"Schema for plan: {self._proto_to_string(plan)}")
-        proto_schema = self._analyze(method="schema", plan=plan).schema
-        assert proto_schema is not None
+        schema = self._analyze(method="schema", plan=plan).schema
+        assert schema is not None
         # Server side should populate the struct field which is the schema.
-        assert proto_schema.HasField("struct")
-
-        fields = []
-        for f in proto_schema.struct.fields:
-            if f.HasField("metadata"):
-                metadata = json.loads(f.metadata)
-            else:
-                metadata = None
-            fields.append(
-                StructField(
-                    f.name,
-                    self._proto_schema_to_pyspark_schema(f.data_type),
-                    f.nullable,
-                    metadata,
-                )
-            )
-        return StructType(fields)
+        assert isinstance(schema, StructType)
+        return schema
 
     def explain_string(self, plan: pb2.Plan, explain_mode: str = "extended") -> str:
         """

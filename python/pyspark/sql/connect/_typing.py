@@ -57,7 +57,7 @@ class UserDefinedFunctionLike(Protocol):
     deterministic: bool
 
     @property
-    def returnType(self) -> DataTypeOrString:
+    def returnType(self) -> DataType:
         ...
 
     def __call__(self, *args: ColumnOrName) -> Column:

@@ -68,6 +68,7 @@ from pyspark.sql.connect.types import (
     JVM_INT_MAX,
     JVM_LONG_MIN,
     JVM_LONG_MAX,
+    UnparsedDataType,
     pyspark_types_to_proto_types,
 )
 
@@ -503,19 +504,22 @@ class PythonUDF:
         func: Callable[..., Any],
         python_ver: str,
     ) -> None:
-        self._output_type = output_type
+        self._output_type: DataType = (
+            UnparsedDataType(output_type) if isinstance(output_type, str) else output_type
+        )
         self._eval_type = eval_type
         self._func = func
         self._python_ver = python_ver
 
     def to_plan(self, session: "SparkConnectClient") -> proto.PythonUDF:
-        if isinstance(self._output_type, DataType):
-            output_type = self._output_type
-        else:
-            assert isinstance(self._output_type, str)
-            parsed = session._analyze(method="ddl_parse", ddl_string=self._output_type).parsed
+        if isinstance(self._output_type, UnparsedDataType):
+            parsed = session._analyze(
+                method="ddl_parse", ddl_string=self._output_type.data_type_string
+            ).parsed
             assert isinstance(parsed, DataType)
             output_type = parsed
+        else:
+            output_type = self._output_type
         expr = proto.PythonUDF()
         expr.output_type.CopyFrom(pyspark_types_to_proto_types(output_type))
         expr.eval_type = self._eval_type
@@ -533,18 +537,20 @@ class JavaUDF:
     def __init__(
         self,
         class_name: str,
-        output_type: Optional[str] = None,
+        output_type: Optional[Union[DataType, str]] = None,
         aggregate: bool = False,
     ) -> None:
         self._class_name = class_name
-        self._output_type = output_type
+        self._output_type: Optional[DataType] = (
+            UnparsedDataType(output_type) if isinstance(output_type, str) else output_type
+        )
         self._aggregate = aggregate
 
     def to_plan(self, session: "SparkConnectClient") -> proto.JavaUDF:
         expr = proto.JavaUDF()
         expr.class_name = self._class_name
         if self._output_type is not None:
-            expr.output_type = self._output_type
+            expr.output_type.CopyFrom(pyspark_types_to_proto_types(self._output_type))
         expr.aggregate = self._aggregate
         return expr
 

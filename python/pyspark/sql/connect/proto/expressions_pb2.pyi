@@ -1335,15 +1335,16 @@ class JavaUDF(google.protobuf.message.Message):
     AGGREGATE_FIELD_NUMBER: builtins.int
     class_name: builtins.str
     """(Required) Fully qualified name of Java class"""
-    output_type: builtins.str
-    """(Optional) Output type of the Java UDF"""
+    @property
+    def output_type(self) -> pyspark.sql.connect.proto.types_pb2.DataType:
+        """(Optional) Output type of the Java UDF"""
     aggregate: builtins.bool
     """(Required) Indicate if the Java user-defined function is an aggregate function"""
     def __init__(
         self,
         *,
         class_name: builtins.str = ...,
-        output_type: builtins.str | None = ...,
+        output_type: pyspark.sql.connect.proto.types_pb2.DataType | None = ...,
         aggregate: builtins.bool = ...,
     ) -> None: ...
     def HasField(

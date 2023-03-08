@@ -32,6 +32,7 @@ from pyspark.sql.connect.expressions import (
     CommonInlineUserDefinedFunction,
 )
 from pyspark.sql.connect.column import Column
+from pyspark.sql.connect.types import UnparsedDataType
 from pyspark.sql.types import DataType, StringType
 from pyspark.sql.udf import UDFRegistration as PySparkUDFRegistration
 
@@ -97,7 +98,9 @@ class UserDefinedFunction:
             )
 
         self.func = func
-        self._returnType = returnType
+        self._returnType: DataType = (
+            UnparsedDataType(returnType) if isinstance(returnType, str) else returnType
+        )
         self._name = name or (
             func.__name__ if hasattr(func, "__name__") else func.__class__.__name__
         )
