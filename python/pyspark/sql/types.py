@@ -1598,7 +1598,7 @@ def _has_nulltype(dt: DataType) -> bool:
     else:
         return isinstance(dt, NullType)
 
-def _has_not_nullable(dt: DataType) -> bool:
+def _has_non_nullable(dt: DataType) -> bool:
     """Return whether there is nullable in `dt`"""
     if isinstance(dt, StructType):
         return any(not f.nullable or _has_not_nullable(f.dataType) for f in dt.fields)
