@@ -17,7 +17,7 @@
 # limitations under the License.
 #
 
-SELF=$(cd $(dirname $0) && pwd)
+SELF=$(cd "$(dirname "$0")" && pwd)
 . "$SELF/util.sh"
 
 # When creating new tests for Spark SQL Hive, the HADOOP_CLASSPATH must contain the hive jars so
@@ -40,7 +40,7 @@ declare -r default_sbt_opts="-Xss64m"
 
 usage() {
  cat <<EOM
-Usage: $script_name [options]
+Usage: $(basename "$0") [options]
 
   -h | -help         print this message
   -v | -verbose      this runner is chattier
@@ -108,8 +108,8 @@ loadConfigFile() {
 }
 
 # if sbtopts files exist, prepend their contents to $@ so it can be processed by this runner
-[[ -f "$etc_sbt_opts_file" ]] && set -- $(loadConfigFile "$etc_sbt_opts_file") "$@"
-[[ -f "$sbt_opts_file" ]] && set -- $(loadConfigFile "$sbt_opts_file") "$@"
+[[ -f "$etc_sbt_opts_file" ]] && set -- "$(loadConfigFile "$etc_sbt_opts_file")" "$@"
+[[ -f "$sbt_opts_file" ]] && set -- "$(loadConfigFile "$sbt_opts_file")" "$@"
 
 exit_status=127
 saved_stty=""
