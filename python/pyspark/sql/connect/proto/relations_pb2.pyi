@@ -640,7 +640,7 @@ class Read(google.protobuf.message.Message):
         ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
             """(Optional) Condition in the where clause for each partition.
 
-            Only work for JDBC data source.
+            This is only supported by the JDBC data source.
             """
         def __init__(
             self,

@@ -143,7 +143,7 @@ message Read {
 
     // (Optional) Condition in the where clause for each partition.
     //
-    // Only work for JDBC data source.
+    // This is only supported by the JDBC data source.
     repeated string predicates = 5;
   }
 }
