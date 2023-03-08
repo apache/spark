@@ -47,6 +47,7 @@ from typing import (
     Callable,
     Generator,
     Type,
+    TYPE_CHECKING,
 )
 
 import pandas as pd
@@ -69,6 +70,7 @@ from pyspark.errors.exceptions.connect import (
 from pyspark.sql.connect.expressions import (
     PythonUDF,
     CommonInlineUserDefinedFunction,
+    JavaUDF,
 )
 from pyspark.sql.connect.types import parse_data_type
 from pyspark.sql.types import (
@@ -78,6 +80,10 @@ from pyspark.sql.types import (
 )
 from pyspark.serializers import CloudPickleSerializer
 from pyspark.rdd import PythonEvalType
+
+
+if TYPE_CHECKING:
+    from pyspark.sql.connect._typing import DataTypeOrString
 
 
 def _configure_logging() -> logging.Logger:
@@ -534,7 +540,7 @@ class SparkConnectClient(object):
     def register_udf(
         self,
         function: Any,
-        return_type: Union[str, DataType],
+        return_type: "DataTypeOrString",
         name: Optional[str] = None,
         eval_type: int = PythonEvalType.SQL_BATCHED_UDF,
         deterministic: bool = True,
@@ -561,9 +567,9 @@ class SparkConnectClient(object):
         # construct a CommonInlineUserDefinedFunction
         fun = CommonInlineUserDefinedFunction(
             function_name=name,
-            deterministic=deterministic,
             arguments=[],
             function=py_udf,
+            deterministic=deterministic,
         ).to_plan_udf(self)
 
         # construct the request
@@ -572,6 +578,35 @@ class SparkConnectClient(object):
 
         self._execute(req)
         return name
+
+    def register_java(
+        self,
+        name: str,
+        javaClassName: str,
+        return_type: Optional["DataTypeOrString"] = None,
+        aggregate: bool = False,
+    ) -> None:
+        # convert str return_type to DataType
+        if isinstance(return_type, str):
+            return_type = parse_data_type(return_type)
+
+        # construct a JavaUDF
+        if return_type is None:
+            java_udf = JavaUDF(class_name=javaClassName, aggregate=aggregate)
+        else:
+            java_udf = JavaUDF(
+                class_name=javaClassName,
+                output_type=return_type.json(),
+            )
+        fun = CommonInlineUserDefinedFunction(
+            function_name=name,
+            function=java_udf,
+        ).to_plan_judf(self)
+        # construct the request
+        req = self._execute_plan_request_with_metadata()
+        req.plan.command.register_function.CopyFrom(fun)
+
+        self._execute(req)
 
     def _build_metrics(self, metrics: "pb2.ExecutePlanResponse.Metrics") -> List[PlanMetrics]:
         return [
