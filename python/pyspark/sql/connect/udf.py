@@ -19,7 +19,7 @@ User-defined function related classes and functions
 """
 from pyspark.sql.connect.utils import check_dependencies
 
-check_dependencies(__name__, __file__)
+check_dependencies(__name__)
 
 import sys
 import functools
