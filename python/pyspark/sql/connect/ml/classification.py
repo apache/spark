@@ -155,7 +155,8 @@ class LogisticRegression(
         self.setParams(**kwargs)
         self._checkThresholdConsistency()
 
-    def _algo_name(self): str = "LogisticRegression"
+    def _algo_name(self):
+        return "LogisticRegression"
 
     def _create_model(self):
         return LogisticRegressionModel()
@@ -166,7 +167,6 @@ class LogisticRegressionModel(
     HasTrainingSummary,
     ProbabilisticClassificationModel,
     _LogisticRegressionParams,
-
 ):
     @property  # type: ignore[misc]
     def coefficients(self) -> Vector:
@@ -184,18 +184,20 @@ class LogisticRegressionModel(
     def interceptVector(self) -> Vector:
         return self._get_model_attr("interceptVector")
 
+    def evaluate(self, dataset):
+        if self.numClasses <= 2:
+            return BinaryLogisticRegressionSummary(self, dataset)
+        else:
+            return LogisticRegressionSummary(self, dataset)
+
     # TODO: Move this method to common interface shared by connect code and legacy code
     @property  # type: ignore[misc]
     def summary(self) -> "LogisticRegressionTrainingSummary":
         if self.hasSummary:
             if self.numClasses <= 2:
-                return BinaryLogisticRegressionTrainingSummary(
-                    super(LogisticRegressionModel, self).summary
-                )
+                return BinaryLogisticRegressionTrainingSummary(self, None)
             else:
-                return LogisticRegressionTrainingSummary(
-                    super(LogisticRegressionModel, self).summary
-                )
+                return LogisticRegressionTrainingSummary(self, None)
         else:
             raise RuntimeError(
                 "No training summary available for this %s" % self.__class__.__name__

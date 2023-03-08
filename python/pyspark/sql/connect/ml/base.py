@@ -15,6 +15,8 @@
 # limitations under the License.
 #
 
+from abc import ABCMeta, abstractmethod
+
 from pyspark.sql import DataFrame
 from pyspark.ml import Estimator, Model
 import pyspark.sql.connect.proto as pb2
@@ -22,13 +24,16 @@ import pyspark.sql.connect.proto.ml_pb2 as ml_pb2
 import pyspark.sql.connect.proto.ml_common_pb2 as ml_common_pb2
 from pyspark.sql.connect.ml.serializer import deserialize
 from pyspark.sql import SparkSession
+from pyspark.sql.connect.plan import LogicalPlan
 
 
-class ClientEstimator(Estimator):
+class ClientEstimator(Estimator, metaclass=ABCMeta):
 
     def _algo_name(self): str
 
-    def _create_model(self, model_ref_id, model_uid): Model
+    @abstractmethod
+    def _create_model(self, model_ref_id, model_uid):
+        raise NotImplementedError()
 
     def _fit(self, dataset: DataFrame) -> Model:
         client = dataset.sparkSession.client
@@ -54,70 +59,61 @@ class ClientEstimator(Estimator):
         return model
 
 
-class _ModelTransformRelationPlan:
-    def __init__(self, model, dataset):
+class _ModelTransformRelationPlan(LogicalPlan):
+    def __init__(self, child, model):
+        super().__init__(child)
         self.model = model
-        self.dataset = dataset
 
     def plan(self, session: "SparkConnectClient") -> pb2.Relation:
-        dataset_proto = self.dataset._plan.to_proto(session.client)
+        assert self._child is not None
+        plan = self._create_proto_relation()
+        plan.ml_relation.model_transform.input.CopyFrom(self._child.plan(session))
+        plan.ml_relation.model_transform.model_ref_id = self.model.ref_id
         # TODO: fill params
-        params_proto = ml_common_pb2.Params(params={}, default_params={})
+        plan.ml_relation.model_transform.params = \
+            ml_common_pb2.Params(params={}, default_params={})
 
-        return pb2.Relation(
-            ml_relation=pb2.MlRelation(
-                model_transform=pb2.MlRelation.ModelTransform(
-                    input=dataset_proto,
-                    model_ref_id=self.model.ref_id,
-                    params=params_proto,
-                )
-            )
-        )
+        return plan
 
 
-class _ModelAttrRelationPlan:
+class _ModelAttrRelationPlan(LogicalPlan):
     def __init__(self, model, name):
+        super().__init__(None)
         self.model = model
         self.name = name
 
     def plan(self, session: "SparkConnectClient") -> pb2.Relation:
-        return pb2.Relation(
-            ml_relation=pb2.MlRelation(
-                model_transform=pb2.MlRelation.ModelAttr(
-                    model_ref_id=self.model.ref_id,
-                    name=self.name
-                )
-            )
-        )
-
-
-class _ModelSummaryAttrRelationPlan:
-    def __init__(self, model, name, dataset):
-        self.model = model
-        self.name = name
-        self.dataset = dataset
-
-    def plan(self, session: "SparkConnectClient") -> pb2.Relation:
-        if self.dataset is not None:
-            dataset_proto = self.dataset._plan.to_proto(session.client)
-        else:
-            dataset_proto = None
+        assert self._child is None
+        plan = self._create_proto_relation()
+        plan.ml_relation.model_attr.model_ref_id = self.model.ref_id
+        plan.ml_relation.model_attr.name = self.name
         # TODO: fill params
-        params_proto = ml_common_pb2.Params(params={}, default_params={})
-
-        return pb2.Relation(
-            ml_relation=pb2.MlRelation(
-                model_summary_attr=pb2.MlRelation.ModelSummaryAttr(
-                    model_ref_id=self.model.ref_id,
-                    name=self.name,
-                    params=params_proto,
-                    evaluation_dataset=dataset_proto
-                )
-            )
-        )
+        plan.ml_relation.model_transform.params = \
+            ml_common_pb2.Params(params={}, default_params={})
+        return plan
 
 
-class ClientModel(Model):
+class _ModelSummaryAttrRelationPlan(LogicalPlan):
+    def __init__(self, child, model, name):
+        super().__init__(child)
+        self.model = model
+        self.name = name
+
+    def plan(self, session: "SparkConnectClient") -> pb2.Relation:
+        assert self._child is not None
+        plan = self._create_proto_relation()
+        plan.ml_relation.model_summary_attr.evaluation_dataset \
+            .CopyFrom(self._child.plan(session))
+        plan.ml_relation.model_summary_attr.model_ref_id = self.model.ref_id
+        plan.ml_relation.model_summary_attr.name = self.name
+        # TODO: fill params
+        plan.ml_relation.model_transform.params = \
+            ml_common_pb2.Params(params={}, default_params={})
+
+        return plan
+
+
+class ClientModel(Model, metaclass=ABCMeta):
 
     ref_id: str
     uid: str
@@ -143,11 +139,11 @@ class ClientModel(Model):
 
     def _transform(self, dataset: DataFrame) -> DataFrame:
         session = dataset.sparkSession
-        plan = _ModelTransformRelationPlan(self, dataset)
+        plan = _ModelTransformRelationPlan(dataset._plan, self)
         return DataFrame.withPlan(plan, session)
 
 
-class ClientModelSummary:
+class ClientModelSummary(metaclass=ABCMeta):
     def __init__(self, model, dataset):
         self.model = model
         self.dataset = dataset
@@ -155,7 +151,7 @@ class ClientModelSummary:
     def _get_summary_attr_dataframe(self, name):
         session = SparkSession.getActiveSession()
         plan = _ModelSummaryAttrRelationPlan(
-            self.model, name, dataset=None
+            self.dataset._plan, self.model, name
         )
         return DataFrame.withPlan(plan, session)
 
@@ -176,10 +172,11 @@ class ClientModelSummary:
         return deserialize(resp, client)
 
 
-class HasTrainingSummary(Model):
+class HasTrainingSummary(ClientModel, metaclass=ABCMeta):
 
     def hasSummary(self) -> bool:
         return self._get_model_attr("hasSummary")
 
+    @abstractmethod
     def summary(self):
-        return ClientModelSummary(self, dataset=None)
+        raise NotImplementedError()
