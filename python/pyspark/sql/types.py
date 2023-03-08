@@ -1599,7 +1599,7 @@ def _has_nulltype(dt: DataType) -> bool:
         return isinstance(dt, NullType)
 
 
-def _has_non_nullable(dt: DataType) -> bool:
+def _has_non_nullable(dt: Optional[Union[AtomicType, StructType]]) -> bool:
     """Return whether there is non-nullable in `dt`"""
     if isinstance(dt, StructType):
         return any(not f.nullable or _has_non_nullable(f.dataType) for f in dt.fields)
