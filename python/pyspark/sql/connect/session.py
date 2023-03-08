@@ -268,7 +268,7 @@ class SparkSession:
             _table = pa.Table.from_batches(
                 [ser._create_batch([(c, t) for (_, c), t in zip(data.items(), arrow_types)])]
             )
-            if schema is not None:
+            if schema is not None and _has_non_nullable(_schema):
                 pa_schema = replace_with_arrow_column_name(schema, _table.schema)
                 _table = _table.cast(target_schema=pa_schema)
 
