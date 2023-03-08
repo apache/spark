@@ -1033,9 +1033,9 @@ class MapOutputTrackerSuite extends SparkFunSuite with LocalSparkContext {
 
   test("SPARK-42719: `MapOutputTracker#getMapLocation` should respect the config option") {
     val rpcEnv = createRpcEnv("test")
-    val tracker = newTrackerMaster()
     val newConf = new SparkConf
     newConf.set(SHUFFLE_REDUCE_LOCALITY_ENABLE, false)
+    val tracker = newTrackerMaster(newConf)
     tracker.trackerEndpoint = rpcEnv.setupEndpoint(MapOutputTracker.ENDPOINT_NAME,
       new MapOutputTrackerMasterEndpoint(rpcEnv, tracker, newConf))
     tracker.registerShuffle(10, 6, 1)
