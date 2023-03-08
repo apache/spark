@@ -763,7 +763,7 @@ class DataStreamWriter:
         Examples
         --------
         >>> df = spark.readStream.format("rate").load()
-        >>> df.writeStream.outputMode('append')
+        >>> df.writeStream.output_mode('append')
         <pyspark.sql.streaming.readwriter.DataStreamWriter object ...>
 
         The example below uses Complete mode that the entire aggregated counts are printed out.
@@ -771,13 +771,13 @@ class DataStreamWriter:
         >>> import time
         >>> df = spark.readStream.format("rate").option("rowsPerSecond", 10).load()
         >>> df = df.groupby().count()
-        >>> q = df.writeStream.outputMode("complete").format("console").start()
+        >>> q = df.writeStream.output_mode("complete").format("console").start()
         >>> time.sleep(3)
         >>> q.stop()
         """
         if not outputMode or type(outputMode) != str or len(outputMode.strip()) == 0:
             raise ValueError("The output mode must be a non-empty string. Got: %s" % outputMode)
-        self._jwrite = self._jwrite.outputMode(outputMode)
+        self._jwrite = self._jwrite.output_mode(outputMode)
         return self
 
     def format(self, source: str) -> "DataStreamWriter":
@@ -948,14 +948,14 @@ class DataStreamWriter:
         --------
         >>> import time
         >>> df = spark.readStream.format("rate").load()
-        >>> q = df.writeStream.queryName("streaming_query").format("console").start()
+        >>> q = df.writeStream.query_name("streaming_query").format("console").start()
         >>> q.stop()
         >>> q.name
         'streaming_query'
         """
         if not queryName or type(queryName) != str or len(queryName.strip()) == 0:
             raise ValueError("The queryName must be a non-empty string. Got: %s" % queryName)
-        self._jwrite = self._jwrite.queryName(queryName)
+        self._jwrite = self._jwrite.query_name(queryName)
         return self
 
     @overload
@@ -1353,7 +1353,7 @@ class DataStreamWriter:
 
         Basic example.
 
-        >>> q = df.writeStream.format('memory').queryName('this_query').start()
+        >>> q = df.writeStream.format('memory').query_name('this_query').start()
         >>> q.isActive
         True
         >>> q.name

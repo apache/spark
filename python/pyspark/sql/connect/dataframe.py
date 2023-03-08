@@ -55,6 +55,7 @@ from pyspark.rdd import PythonEvalType
 import pyspark.sql.connect.plan as plan
 from pyspark.sql.connect.group import GroupedData
 from pyspark.sql.connect.readwriter import DataFrameWriter, DataFrameWriterV2
+from pyspark.sql.connect.streaming.readwriter import DataStreamWriter
 from pyspark.sql.connect.column import Column
 from pyspark.sql.connect.expressions import UnresolvedRegex
 from pyspark.sql.connect.functions import (
@@ -1366,6 +1367,7 @@ class DataFrame:
     def isStreaming(self) -> bool:
         if self._plan is None:
             raise Exception("Cannot analyze on empty plan.")
+        # TODO: Revisit this.
         query = self._plan.to_proto(self._session.client)
         result = self._session.client._analyze(method="is_streaming", plan=query).is_streaming
         assert result is not None
@@ -1518,12 +1520,14 @@ class DataFrame:
         raise NotImplementedError("persist() is not implemented.")
 
     def withWatermark(self, *args: Any, **kwargs: Any) -> None:
+        # TODO: Need to support.
         raise NotImplementedError("withWatermark() is not implemented.")
 
     def observe(self, *args: Any, **kwargs: Any) -> None:
         raise NotImplementedError("observe() is not implemented.")
 
     def foreach(self, *args: Any, **kwargs: Any) -> None:
+        # TODO: Need to support
         raise NotImplementedError("foreach() is not implemented.")
 
     def foreachPartition(self, *args: Any, **kwargs: Any) -> None:
@@ -1572,8 +1576,12 @@ class DataFrame:
     def mapInArrow(self, *args: Any, **kwargs: Any) -> None:
         raise NotImplementedError("mapInArrow() is not implemented.")
 
-    def writeStream(self, *args: Any, **kwargs: Any) -> None:
-        raise NotImplementedError("writeStream() is not implemented.")
+    @property
+    def writeStream(self) -> DataStreamWriter:
+        return DataStreamWriter(plan=self._plan, session=self._session)
+    # TODO: Move it to same relative place in sql/dataframe.py.
+
+    writeStream.__doc__ = PySparkDataFrame.writeStream.__doc__
 
     def toJSON(self, *args: Any, **kwargs: Any) -> None:
         raise NotImplementedError("toJSON() is not implemented.")

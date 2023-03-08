@@ -259,6 +259,7 @@ class DataSource(LogicalPlan):
         schema: Optional[str] = None,
         options: Optional[Mapping[str, str]] = None,
         paths: Optional[List[str]] = None,
+        is_streaming: Optional[bool] = None
     ) -> None:
         super().__init__(None)
 
@@ -278,6 +279,7 @@ class DataSource(LogicalPlan):
         self._schema = schema
         self._options = options
         self._paths = paths
+        self._is_streaming = is_streaming
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
         plan = self._create_proto_relation()
@@ -290,6 +292,8 @@ class DataSource(LogicalPlan):
                 plan.read.data_source.options[k] = v
         if self._paths is not None and len(self._paths) > 0:
             plan.read.data_source.paths.extend(self._paths)
+        if self._is_streaming is not None:
+            plan.read.is_streaming = self._is_streaming
         return plan
 
 
@@ -1522,6 +1526,41 @@ class WriteOperationV2(LogicalPlan):
             else:
                 raise ValueError(f"Unknown Mode value for DataFrame: {self.mode}")
         return plan
+
+
+class WriteStreamOperation(LogicalPlan):
+    def __init__(self, child: "LogicalPlan") -> None:
+        super(WriteStreamOperation, self).__init__(child)
+        self.source: Optional[str] = None
+        self.partitioning_columns: List["ColumnOrName"] = []
+        self.options: dict[str, Optional[str]] = {}
+        self.trigger: Optional[str] = None
+        self.output_mode: Optional[str] = None
+        self.query_name: Optional[str] = None
+        self.path: Optional[str] = None
+
+    def command(self, session: "SparkConnectClient") -> proto.Command:
+        assert self._child is not None
+        write_stream = proto.WriteStreamOperation()
+        write_stream.input.CopyFrom(self._child.plan(session))
+        if self.source:
+            write_stream.format = self.source
+        if self.partitioning_columns:
+            write_stream.partitioning_column_names.extend(self.partitioning_columns)
+        for k, v in self.options.items():
+            write_stream.options[k] = v
+        if self.trigger:
+            write_stream.trigger = self.trigger
+        if self.output_mode:
+            write_stream.output_mode = self.output_mode
+        if self.query_name:
+            write_stream.query_name = self.query_name
+        if self.path:
+            write_stream.path = self.path
+
+        cmd = proto.Command()
+        cmd.write_stream_operation.CopyFrom(write_stream)
+        return cmd
 
 
 # Catalog API (internal-only)

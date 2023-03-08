@@ -103,9 +103,9 @@ class GroupedApplyInPandasWithStateTests(ReusedSQLTestCase):
             .applyInPandasWithState(
                 func, output_type, state_type, "Update", GroupStateTimeout.NoTimeout
             )
-            .writeStream.queryName("this_query")
+            .writeStream.query_name("this_query")
             .foreachBatch(check_results)
-            .outputMode("update")
+            .output_mode("update")
             .start()
         )
 
@@ -174,9 +174,9 @@ class GroupedApplyInPandasWithStateTests(ReusedSQLTestCase):
                 .applyInPandasWithState(
                     func, output_type, state_type, "Append", GroupStateTimeout.NoTimeout
                 )
-                .writeStream.queryName("this_query")
+                .writeStream.query_name("this_query")
                 .format("json")
-                .outputMode("append")
+                .output_mode("append")
                 .option("path", output_path)
                 .option("checkpointLocation", checkpoint_loc)
                 .start()

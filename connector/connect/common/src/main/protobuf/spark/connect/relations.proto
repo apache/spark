@@ -116,6 +116,9 @@ message Read {
     DataSource data_source = 2;
   }
 
+  // (Optional) Indicates if this is a streaming read.
+  bool is_streaming = 3;
+
   message NamedTable {
     // (Required) Unparsed identifier for the table.
     string unparsed_identifier = 1;

@@ -931,7 +931,7 @@ class DataFrameTestsMixin:
 
         df = self.spark.readStream.format("rate").option("rowsPerSecond", 10).load()
         df = df.observe("metric", count(lit(1)).alias("cnt"), sum(col("value")).alias("sum"))
-        q = df.writeStream.format("noop").queryName("test").start()
+        q = df.writeStream.format("noop").query_name("test").start()
         self.assertTrue(q.isActive)
         time.sleep(10)
         q.stop()

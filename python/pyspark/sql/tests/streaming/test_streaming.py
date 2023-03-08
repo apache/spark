@@ -95,10 +95,10 @@ class StreamingTests(ReusedSQLTestCase):
         chk = os.path.join(tmpPath, "chk")
         q = (
             df.writeStream.option("checkpointLocation", chk)
-            .queryName("this_query")
+            .query_name("this_query")
             .format("parquet")
             .partitionBy("id")
-            .outputMode("append")
+            .output_mode("append")
             .option("path", out)
             .start()
         )
@@ -132,8 +132,8 @@ class StreamingTests(ReusedSQLTestCase):
                 df.writeStream.option("checkpointLocation", fake1)
                 .format("memory")
                 .option("path", fake2)
-                .queryName("fake_query")
-                .outputMode("append")
+                .query_name("fake_query")
+                .output_mode("append")
                 .start(path=out, format="parquet", queryName="this_query", checkpointLocation=chk)
             )
 
@@ -228,7 +228,7 @@ class StreamingTests(ReusedSQLTestCase):
 
     def test_stream_exception(self):
         sdf = self.spark.readStream.format("text").load("python/test_support/sql/streaming")
-        sq = sdf.writeStream.format("memory").queryName("query_explain").start()
+        sq = sdf.writeStream.format("memory").query_name("query_explain").start()
         try:
             sq.processAllAvailable()
             self.assertEqual(sq.exception(), None)
@@ -242,7 +242,7 @@ class StreamingTests(ReusedSQLTestCase):
         sq = (
             sdf.select(bad_udf(col("value")))
             .writeStream.format("memory")
-            .queryName("this_query")
+            .query_name("this_query")
             .start()
         )
         try:
@@ -629,7 +629,7 @@ class StreamingTests(ReusedSQLTestCase):
             self.spark.sql("INSERT INTO input_table VALUES ('aaa'), ('bbb'), ('ccc')")
             df = self.spark.readStream.table("input_table")
             self.assertTrue(df.isStreaming)
-            q = df.writeStream.format("memory").queryName("this_query").start()
+            q = df.writeStream.format("memory").query_name("this_query").start()
             q.processAllAvailable()
             q.stop()
             result = self.spark.sql("SELECT * FROM this_query ORDER BY value").collect()

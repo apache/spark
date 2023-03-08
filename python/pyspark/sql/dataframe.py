@@ -1098,7 +1098,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         ...     .groupBy(
         ...         window(df.timestamp, "10 minutes", "5 minutes"),
         ...         df.value)
-        ...     ).count().writeStream.outputMode("complete").format("console").start()
+        ...     ).count().writeStream.output_mode("complete").format("console").start()
         >>> time.sleep(3)
         >>> query.stop()
         """

@@ -29,6 +29,11 @@ import org.apache.spark.api.python.{PythonEvalType, SimplePythonFunction}
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.{ExecutePlanResponse, SqlCommand}
 import org.apache.spark.connect.proto.ExecutePlanResponse.SqlCommandResult
+import org.apache.spark.connect.proto.StreamingQueryCommand
+import org.apache.spark.connect.proto.StreamingQueryCommandResult
+import org.apache.spark.connect.proto.StreamingQueryStartResult
+import org.apache.spark.connect.proto.StreamingQueryStatusResult
+import org.apache.spark.connect.proto.WriteStreamOperation
 import org.apache.spark.sql.{Column, Dataset, Encoders, SparkSession}
 import org.apache.spark.sql.catalyst.{expressions, AliasIdentifier, FunctionIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{GlobalTempView, LocalTempView, MultiAlias, UnresolvedAlias, UnresolvedAttribute, UnresolvedExtractValue, UnresolvedFunction, UnresolvedRegex, UnresolvedRelation, UnresolvedStar}
@@ -50,6 +55,7 @@ import org.apache.spark.sql.execution.arrow.ArrowConverters
 import org.apache.spark.sql.execution.command.CreateViewCommand
 import org.apache.spark.sql.execution.python.UserDefinedPythonFunction
 import org.apache.spark.sql.internal.CatalogImpl
+import org.apache.spark.sql.streaming.Trigger
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
@@ -665,13 +671,25 @@ class SparkConnectPlanner(val session: SparkSession) {
   }
 
   private def transformReadRel(rel: proto.Read): LogicalPlan = {
+
+    def parseSchema(schema: String): StructType = {
+      DataType.parseTypeWithFallback(
+        rel.getDataSource.getSchema,
+        StructType.fromDDL,
+        fallbackParser = DataType.fromJson) match {
+        case s: StructType => s
+        case other => throw InvalidPlanInput(s"Invalid schema $other")
+      }
+    }
+
     rel.getReadTypeCase match {
       case proto.Read.ReadTypeCase.NAMED_TABLE =>
+        assert(!rel.getIsStreaming) // XXX
         val multipartIdentifier =
           CatalystSqlParser.parseMultipartIdentifier(rel.getNamedTable.getUnparsedIdentifier)
         UnresolvedRelation(multipartIdentifier)
 
-      case proto.Read.ReadTypeCase.DATA_SOURCE =>
+      case proto.Read.ReadTypeCase.DATA_SOURCE if !rel.getIsStreaming =>
         val localMap = CaseInsensitiveMap[String](rel.getDataSource.getOptionsMap.asScala.toMap)
         val reader = session.read
         if (rel.getDataSource.hasFormat) {
@@ -679,14 +697,7 @@ class SparkConnectPlanner(val session: SparkSession) {
         }
         localMap.foreach { case (key, value) => reader.option(key, value) }
         if (rel.getDataSource.hasSchema && rel.getDataSource.getSchema.nonEmpty) {
-
-          DataType.parseTypeWithFallback(
-            rel.getDataSource.getSchema,
-            StructType.fromDDL,
-            fallbackParser = DataType.fromJson) match {
-            case s: StructType => reader.schema(s)
-            case other => throw InvalidPlanInput(s"Invalid schema $other")
-          }
+          reader.schema(parseSchema(rel.getDataSource.getSchema))
         }
         if (rel.getDataSource.getPathsCount == 0) {
           reader.load().queryExecution.analyzed
@@ -694,6 +705,24 @@ class SparkConnectPlanner(val session: SparkSession) {
           reader.load(rel.getDataSource.getPaths(0)).queryExecution.analyzed
         } else {
           reader.load(rel.getDataSource.getPathsList.asScala.toSeq: _*).queryExecution.analyzed
+        }
+
+      case proto.Read.ReadTypeCase.DATA_SOURCE if rel.getIsStreaming =>
+        val streamSource = rel.getDataSource
+        val reader = session.readStream
+        if (streamSource.hasFormat) {
+          reader.format(streamSource.getFormat)
+        }
+        reader.options(streamSource.getOptionsMap.asScala)
+        if (streamSource.getSchema.nonEmpty) {
+          reader.schema(parseSchema(streamSource.getSchema))
+        }
+        if (streamSource.getPathsCount == 0) {
+          reader.load().queryExecution.analyzed
+        } else if (streamSource.getPathsCount == 1) {
+          reader.load(streamSource.getPaths(0)).queryExecution.analyzed
+        } else {
+          throw InvalidPlanInput(s"Multiple paths are not supported for streaming source")
         }
 
       case _ => throw InvalidPlanInput("Does not support " + rel.getReadTypeCase.name())
@@ -1460,6 +1489,10 @@ class SparkConnectPlanner(val session: SparkSession) {
         handleCommandPlugin(command.getExtension)
       case proto.Command.CommandTypeCase.SQL_COMMAND =>
         handleSqlCommand(command.getSqlCommand, clientId, responseObserver)
+      case proto.Command.CommandTypeCase.WRITE_STREAM_OPERATION =>
+        handleWriteStreamOperation(command.getWriteStreamOperation, clientId, responseObserver)
+      case proto.Command.CommandTypeCase.STREAMING_QUERY_COMMAND =>
+        handleStreanungQyeryCommand(command.getStreamingQueryCommand, clientId, responseObserver)
       case _ => throw new UnsupportedOperationException(s"$command not supported.")
     }
   }
@@ -1733,6 +1766,111 @@ class SparkConnectPlanner(val session: SparkSession) {
         throw new UnsupportedOperationException(
           s"WriteOperationV2:ModeValue not supported ${writeOperation.getModeValue}")
     }
+  }
+
+  def handleWriteStreamOperation(
+    writeOp: WriteStreamOperation,
+    clientId: String,
+    responseObserver: StreamObserver[ExecutePlanResponse]): Unit = {
+    val plan = transformRelation(writeOp.getInput)
+    val dataset = Dataset.ofRows(session, logicalPlan = plan)
+
+    val writer = dataset.writeStream
+
+    if (writeOp.getFormat.nonEmpty) {
+      writer.format(writeOp.getFormat)
+    }
+
+    writer.options(writeOp.getOptionsMap)
+
+    if (writeOp.getPartitioningColumnNamesCount > 0) {
+      writer.partitionBy(writeOp.getPartitioningColumnNamesList.asScala.toList: _*)
+    }
+
+    if (writeOp.getTrigger.nonEmpty) {
+      writer.trigger(Trigger.ProcessingTime(writeOp.getTrigger))
+    }
+
+    if (writeOp.getOutputMode.nonEmpty) {
+      writer.outputMode(writeOp.getOutputMode)
+    }
+
+    if (writeOp.getQueryName.nonEmpty) {
+      writer.queryName(writeOp.getQueryName)
+    }
+
+    val query = writeOp.getPath match {
+      case "" => writer.start()
+      case path => writer.start(path)
+    }
+
+    val result = StreamingQueryStartResult
+      .newBuilder()
+      .setId(query.id.toString)
+      .setRunId(query.runId.toString)
+      .setName(Option(query.name).getOrElse(""))
+      .build()
+
+    responseObserver.onNext(
+      ExecutePlanResponse
+        .newBuilder()
+        .setClientId(clientId)
+        .setStreamingQueryStartResult(result)
+        .build()
+    )
+  }
+
+  def handleStreanungQyeryCommand(
+    command: StreamingQueryCommand,
+    clientId: String,
+    responseObserver: StreamObserver[ExecutePlanResponse]): Unit = {
+
+    val id = command.getId
+
+    val respBuilder = StreamingQueryCommandResult
+      .newBuilder()
+      .setId(command.getId)
+
+    val query = Option(session.streams.get(command.getId)).getOrElse {
+      throw new IllegalArgumentException(s"Streaming query $id is not found")
+      // TODO: Handle this better. May be cache stopped queries for a few minutes.
+    }
+
+    command.getCommandTypeCase match {
+      case StreamingQueryCommand.CommandTypeCase.STATUS =>
+        val recentProgress: Seq[String] = command.getStatus.getRecentProgressLimit match {
+          case 0 => Seq.empty
+          case limit if limit < 0 => query.recentProgress.map(_.json) // All the cached progresses.
+          case limit => query.recentProgress.takeRight(limit).map(_.json) // Most recent
+        }
+
+        val queryStatus = query.status
+
+        val statusResult = StreamingQueryStatusResult
+          .newBuilder()
+          .setStatusMessage(queryStatus.message)
+          .setIsDataAvailable(queryStatus.isDataAvailable)
+          .setIsTriggerActive(queryStatus.isTriggerActive)
+          .setIsActive(query.isActive)
+          .addAllRecentProgressJson(recentProgress.asJava)
+          .build()
+
+        respBuilder.setStatusResult(statusResult)
+
+      case StreamingQueryCommand.CommandTypeCase.STOP =>
+        query.stop()
+
+      case StreamingQueryCommand.CommandTypeCase.COMMANDTYPE_NOT_SET =>
+        throw new IllegalArgumentException("Missing command in StreamingQueryCommand")
+    }
+
+    responseObserver.onNext(
+      ExecutePlanResponse
+        .newBuilder()
+        .setClientId(clientId)
+        .setStreamingQueryCommandResult(respBuilder.build())
+        .build()
+    )
   }
 
   private val emptyLocalRelation = LocalRelation(
