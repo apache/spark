@@ -1031,7 +1031,7 @@ class MapOutputTrackerSuite extends SparkFunSuite with LocalSparkContext {
     assert(npeCounter.intValue() == 0)
   }
 
-  test("SPARK-42719: `MapOutputTracker#getMapLocation` should respect `spark.shuffle.reduceLocality.enabled`") {
+  test("SPARK-42719: `MapOutputTracker#getMapLocation` should respect the config option") {
     val rpcEnv = createRpcEnv("test")
     val tracker = newTrackerMaster()
     val newConf = new SparkConf
