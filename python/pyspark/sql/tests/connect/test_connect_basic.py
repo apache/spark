@@ -2876,6 +2876,12 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             with self.assertRaises(NotImplementedError):
                 getattr(df.write, f)()
 
+    def test_sql_with_command(self):
+        # SPARK-42705: spark.sql should return values from the command.
+        self.assertEqual(
+            self.connect.sql("show functions").collect(), self.spark.sql("show functions").collect()
+        )
+
 
 @unittest.skipIf(not should_test_connect, connect_requirement_message)
 class ClientTests(unittest.TestCase):
