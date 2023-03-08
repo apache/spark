@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Project}
 import org.apache.spark.sql.catalyst.trees.TreePattern.PLAN_EXPRESSION
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns.BuiltInFunctionCatalog
-import org.apache.spark.sql.connector.catalog.{CatalogManager, TableCatalog, TableCatalogCapability}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, Identifier, TableCatalog, TableCatalogCapability}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, StructField, StructType}
@@ -182,12 +182,13 @@ object GeneratedColumn {
   def validateGeneratedColumns(
       schema: StructType,
       catalog: TableCatalog,
-      ident: Seq[String],
+      ident: Identifier,
       statementType: String): Unit = {
     if (hasGeneratedColumns(schema)) {
       if (!catalog.capabilities().contains(
         TableCatalogCapability.SUPPORTS_CREATE_TABLE_WITH_GENERATED_COLUMNS)) {
-        throw QueryCompilationErrors.generatedColumnsUnsupported(ident)
+        throw QueryCompilationErrors.unsupportedTableOperationError(
+          catalog, ident, "generated columns")
       }
       GeneratedColumn.verifyGeneratedColumns(schema, statementType)
     }
