@@ -467,18 +467,21 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
   /**
    * Replaces [[UnresolvedAlias]]s with concrete aliases by applying the following rules:
    *   1. Use the specified name of named expressions;
-   *   2. Derive a stable alias from the original normalized SQL text except of:
-   *     2.1. A multipart identifier (column, field, mapkey, ...) -> the right most identifier.
-   *          For example: a.b.c => c
-   *     2.2. A CAST, or try_cast -> the argument of the cast.
-   *          For example: CAST(c1 AS INT) => c1
-   *     2.3. A map lookup with a literal -> the map key.
-   *          For example: map[5] => 5
-   *     2.4. Squeezing out unwanted whitespace or comments.
-   *          For example: T.c1 + /* test */ foo( 5 ) => T.c1+foo(5)
-   *     2.5. Normalize SQL string literals when ANSI mode is enabled and the SQL config
+   *   2. Derive stable aliases from the lexer tree of the original SQL text by concatenating of
+   *      terms via a single space, and applying the additional rules:
+   *     2.0. Don't add a space between terms if at least one of them contains a char which is not
+   *          a letter and a digit.
+   *     2.1. Normalize SQL string literals when ANSI mode is enabled and the SQL config
    *          `spark.sql.ansi.doubleQuotedIdentifiers` is set to `true`.
    *          For example: "abc" => 'abc'
+   *     2.2. A multipart identifier (column, field, mapkey, ...) -> the right most identifier.
+   *          For example: a.b.c => c
+   *     2.3. A CAST, or try_cast -> the argument of the cast.
+   *          For example: CAST(c1 AS INT) => c1
+   *     2.4. A map lookup with a literal -> the map key.
+   *          For example: map[5] => 5
+   *     2.5. Squeezing out comments.
+   *          For example: T.c1 + /* test */ foo( 5 ) => T.c1+foo(5)
    */
   object ResolveAliases extends Rule[LogicalPlan] {
     private def assignAliases(exprs: Seq[NamedExpression]) = {
