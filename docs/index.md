@@ -95,7 +95,7 @@ client and server allows Spark and its open ecosystem to be leveraged from anywh
 in any application. In Spark 3.4, Spark Connect provides DataFrame API coverage for PySpark and 
 Spark Connect clients for other languages are planned for the future.
 
-To learn more about Spark Connect and how to use it, visit (LINK TO SPARK CONNECT OVERVIEW PAGE GOES HERE).
+To learn more about Spark Connect and how to use it, visit [Spark Connect Overview](spark-connect-overview.html).
 
 # Launching on a Cluster
 
