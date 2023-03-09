@@ -182,6 +182,11 @@
       <version>${io.grpc.version}</version>
     </dependency>
     <dependency>
+      <groupId>com.h2database</groupId>
+      <artifactId>h2</artifactId>
+      <version>2.1.214</version>
+    </dependency>
+    <dependency>
       <groupId>io.netty</groupId>
       <artifactId>netty-codec-http2</artifactId>
       <version>${netty.version}</version>
@@ -209,7 +214,6 @@
       <groupId>com.h2database</groupId>
       <artifactId>h2</artifactId>
       <version>2.1.214</version>
-      <scope>provided</scope>
     </dependency>
     <dependency>
       <groupId>org.scalacheck</groupId>
