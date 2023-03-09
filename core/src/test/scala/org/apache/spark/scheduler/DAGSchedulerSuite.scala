@@ -985,7 +985,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     }
   }
 
-  test("worker lost with remote shuffle service enabled should not treat shuffle files lost") {
+  test("SPARK-42689: worker loss with reliable shuffle storage") {
     // This is a variant of "worker lost without shuffle service" case from shuffleFileLossTests
     // except that spark is using a shuffle driver component which stores shuffle data reliably
     // outside of the executor - hence loss of executor does not result in any cleanup

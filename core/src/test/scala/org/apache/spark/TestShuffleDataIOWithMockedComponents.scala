@@ -47,7 +47,6 @@ class TestShuffleDataIOWithMockedComponents(val conf: SparkConf) extends Shuffle
     m
   }
 
-
   def executor: ShuffleExecutorComponents = executorMock
 
   def driver: ShuffleDriverComponents = driverMock

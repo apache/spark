@@ -1810,13 +1810,10 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
       conf: SparkConf,
       clock: Clock = new SystemClock()): ExecutorAllocationManager = {
     ResourceProfile.reInitDefaultProfile(conf)
-    val driverComponent = mock(classOf[ShuffleDriverComponents])
-    when(driverComponent.supportsReliableStorage()).thenReturn(false)
 
     rpManager = new ResourceProfileManager(conf, listenerBus)
     val manager = new ExecutorAllocationManager(client, listenerBus, conf, clock = clock,
-      resourceProfileManager = rpManager,
-      shuffleDriverComponents = driverComponent)
+      resourceProfileManager = rpManager, reliableShuffleStorage = false)
     managers += manager
     manager.start()
     manager
