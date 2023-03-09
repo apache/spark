@@ -688,9 +688,10 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
         wo.mode = "overwrite"
         wo.source = "parquet"
 
-        # Missing path or table name.
-        with self.assertRaises(AssertionError):
-            wo.command(None)
+        p = wo.command(None)
+        self.assertIsNotNone(p)
+        self.assertFalse(p.write_operation.HasField("path"))
+        self.assertFalse(p.write_operation.HasField("table"))
 
         wo.path = "path"
         p = wo.command(None)
