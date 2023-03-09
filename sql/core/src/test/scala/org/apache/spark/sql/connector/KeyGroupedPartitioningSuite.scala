@@ -97,14 +97,16 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
   }
 
   test("non-clustered distribution: no partition") {
-    val partitions: Array[Transform] = Array(bucket(32, "ts"))
-    createTable(table, schema, partitions)
+    withSQLConf(SQLConf.COALESCE_PARTITIONS_ENABLED.key -> "false") {
+      val partitions: Array[Transform] = Array(bucket(32, "ts"))
+      createTable(table, schema, partitions)
 
-    val df = sql(s"SELECT * FROM testcat.ns.$table")
-    val distribution = physical.ClusteredDistribution(
-      Seq(TransformExpression(BucketFunction, Seq(attr("ts")), Some(32))))
+      val df = sql(s"SELECT * FROM testcat.ns.$table")
+      val distribution = physical.ClusteredDistribution(
+        Seq(TransformExpression(BucketFunction, Seq(attr("ts")), Some(32))))
 
-    checkQueryPlan(df, distribution, physical.UnknownPartitioning(0))
+      checkQueryPlan(df, distribution, physical.HashPartitioning(distribution.clustering, 32))
+    }
   }
 
   test("non-clustered distribution: single partition") {
@@ -160,7 +162,8 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
   }
 
   test("non-clustered distribution: V2 bucketing disabled") {
-    withSQLConf(SQLConf.V2_BUCKETING_ENABLED.key -> "false") {
+    withSQLConf(SQLConf.V2_BUCKETING_ENABLED.key -> "false",
+      SQLConf.COALESCE_PARTITIONS_ENABLED.key -> "false") {
       val partitions: Array[Transform] = Array(bucket(32, "ts"))
       createTable(table, schema, partitions)
       sql(s"INSERT INTO testcat.ns.$table VALUES " +
@@ -172,7 +175,7 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
       val distribution = physical.ClusteredDistribution(
         Seq(TransformExpression(BucketFunction, Seq(attr("ts")), Some(32))))
 
-      checkQueryPlan(df, distribution, physical.UnknownPartitioning(0))
+      checkQueryPlan(df, distribution, physical.HashPartitioning(distribution.clustering, 32))
     }
   }
 
