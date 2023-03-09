@@ -96,7 +96,7 @@ class PlanGenerationTestSuite
     super.beforeAll()
     val client = SparkConnectClient(
       proto.UserContext.newBuilder().build(),
-      InProcessChannelBuilder.forName("/dev/null").build())
+      InProcessChannelBuilder.forName("/dev/null"))
     session =
       new SparkSession(client, cleaner = SparkSession.cleaner, planIdGenerator = new AtomicLong)
   }

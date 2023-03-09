@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.connect.client
 
-import io.grpc.{CallCredentials, CallOptions, Channel, ClientCall, ClientInterceptor, CompositeChannelCredentials, ForwardingClientCall, Grpc, InsecureChannelCredentials, ManagedChannel, Metadata, MethodDescriptor, Status, TlsChannelCredentials}
+import io.grpc.{CallCredentials, CallOptions, Channel, ClientCall, ClientInterceptor, CompositeChannelCredentials, ForwardingClientCall, Grpc, InsecureChannelCredentials, ManagedChannel, ManagedChannelBuilder, Metadata, MethodDescriptor, Status, TlsChannelCredentials}
 import java.net.URI
 import java.util.UUID
 import java.util.concurrent.Executor
@@ -31,9 +31,10 @@ import org.apache.spark.sql.connect.common.config.ConnectCommon
  */
 private[sql] class SparkConnectClient(
     private val userContext: proto.UserContext,
-    private val channel: ManagedChannel,
-    private[client] val userAgent: String,
-    private val connectString: Option[String] = None) {
+    private val channelBuilder: ManagedChannelBuilder[_],
+    private[client] val userAgent: String) {
+
+  private[this] lazy val channel: ManagedChannel = channelBuilder.build()
 
   private[this] val stub = proto.SparkConnectServiceGrpc.newBlockingStub(channel)
 
@@ -165,11 +166,7 @@ private[sql] class SparkConnectClient(
   }
 
   def copy(): SparkConnectClient = {
-    if (connectString.isDefined) {
-      SparkConnectClient.builder().connectionString(connectString.get).build()
-    } else {
-      SparkConnectClient.builder().build()
-    }
+    new SparkConnectClient(userContext, channelBuilder, userAgent)
   }
 
   /**
@@ -213,8 +210,8 @@ private[sql] object SparkConnectClient {
       "Either remove 'token' or set 'use_ssl=true'"
 
   // for internal tests
-  def apply(userContext: UserContext, channel: ManagedChannel): SparkConnectClient =
-    new SparkConnectClient(userContext, channel, DEFAULT_USER_AGENT)
+  def apply(userContext: UserContext, builder: ManagedChannelBuilder[_]): SparkConnectClient =
+    new SparkConnectClient(userContext, builder, DEFAULT_USER_AGENT)
 
   def builder(): Builder = new Builder()
 
@@ -228,7 +225,6 @@ private[sql] object SparkConnectClient {
 
     private var host: String = "localhost"
     private var port: Int = ConnectCommon.CONNECT_GRPC_BINDING_PORT
-    private var connectString: Option[String] = None
 
     private var token: Option[String] = None
     // If no value specified for isSslEnabled, default to false
@@ -370,7 +366,6 @@ private[sql] object SparkConnectClient {
      * Note: The connection string, if used, will override any previous host/port settings.
      */
     def connectionString(connectionString: String): Builder = {
-      connectString = Some(connectionString)
       val uri = new URI(connectionString)
       verifyURI(uri)
       parseURIParams(uri)
@@ -401,12 +396,10 @@ private[sql] object SparkConnectClient {
       if (metadata.nonEmpty) {
         channelBuilder.intercept(new MetadataHeaderClientInterceptor(metadata))
       }
-      val channel: ManagedChannel = channelBuilder.build()
       new SparkConnectClient(
         userContextBuilder.build(),
-        channel,
-        userAgent.getOrElse(DEFAULT_USER_AGENT),
-        connectString)
+        channelBuilder,
+        userAgent.getOrElse(DEFAULT_USER_AGENT))
     }
   }
 
