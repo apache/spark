@@ -83,7 +83,7 @@ message WriteOperation {
   // (Optional) Format value according to the Spark documentation. Examples are: text, parquet, delta.
   optional string source = 2;
 
-  // The destination of the write operation must be either a path or a table.
+  // (Optional) The destination of the write operation must be either a path or a table.
   oneof save_type {
     string path = 3;
     SaveTable table = 4;
