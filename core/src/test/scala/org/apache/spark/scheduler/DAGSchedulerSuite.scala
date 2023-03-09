@@ -985,6 +985,29 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     }
   }
 
+  test("SPARK-42689: worker loss with reliable shuffle storage") {
+    // This is a variant of "worker lost without shuffle service" case from shuffleFileLossTests
+    // except that spark is using a shuffle driver component which stores shuffle data reliably
+    // outside of the executor - hence loss of executor does not result in any cleanup
+
+    conf.set(config.SHUFFLE_IO_PLUGIN_CLASS.key,
+      classOf[TestShuffleDataIOWithMockedComponents].getName)
+    when(sc.shuffleDriverComponents.supportsReliableStorage()).thenReturn(true)
+
+    val event = ExecutorProcessLost("", Some("hostA"))
+    val shuffleMapRdd = new MyRDD(sc, 2, Nil)
+    val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(1))
+    val shuffleId = shuffleDep.shuffleId
+    val reduceRdd = new MyRDD(sc, 1, List(shuffleDep), tracker = mapOutputTracker)
+    submit(reduceRdd, Array(0))
+    completeShuffleMapStageSuccessfully(0, 0, 1)
+    runEvent(ExecutorLost("hostA-exec", event))
+    verify(blockManagerMaster, times(1)).removeExecutor("hostA-exec")
+    verify(mapOutputTracker, times(0)).removeOutputsOnExecutor("hostA-exec")
+    assert(mapOutputTracker.getMapSizesByExecutorId(shuffleId, 0).map(_._1).toSet ===
+      HashSet(makeBlockManagerId("hostA"), makeBlockManagerId("hostB")))
+  }
+
   test("SPARK-28967 properties must be cloned before posting to listener bus for 0 partition") {
     val properties = new Properties()
     val func = (context: TaskContext, it: Iterator[(_)]) => 1
