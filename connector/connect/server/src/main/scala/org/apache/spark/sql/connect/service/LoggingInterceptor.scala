@@ -49,9 +49,9 @@ class LoggingInterceptor extends ServerInterceptor with Logging {
   }
 
   override def interceptCall[ReqT, RespT](
-    call: ServerCall[ReqT, RespT],
-    headers: Metadata,
-    next: ServerCallHandler[ReqT, RespT]): ServerCall.Listener[ReqT] = {
+      call: ServerCall[ReqT, RespT],
+      headers: Metadata,
+      next: ServerCallHandler[ReqT, RespT]): ServerCall.Listener[ReqT] = {
 
     val id = Random.nextInt(Int.MaxValue) // Assign a random id for this RPC.
     val desc = s"${call.getMethodDescriptor.getFullMethodName} (id $id)"
