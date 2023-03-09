@@ -176,4 +176,31 @@ class DataFrameStatSuite extends RemoteSparkSession {
     assert(sketch.relativeError() === 0.001)
     assert(sketch.confidence() === 0.99 +- 5e-3)
   }
+
+  // This test only verifies some basic requirements, more correctness tests can be found in
+  // `BloomFilterSuite` in project spark-sketch.
+  test("Bloom filter") {
+    val df = spark.range(1000)
+    val filter1 = df.stat.bloomFilter("id", 1000, 0.03)
+    assert(filter1.expectedFpp() - 0.03 < 1e-3)
+    assert(0.until(1000).forall(filter1.mightContain))
+    val filter2 = df.stat.bloomFilter("id", 1000, 64 * 5)
+    assert(filter2.bitSize() == 64 * 5)
+    assert(0.until(1000).forall(filter2.mightContain))
+
+    val message1 = intercept[IllegalArgumentException] {
+      df.stat.bloomFilter("id", -1000, 100)
+    }.getMessage
+    assert(message1.contains("Expected insertions must be positive"))
+
+    val message2 = intercept[IllegalArgumentException] {
+      df.stat.bloomFilter("id", 1000, -100)
+    }.getMessage
+    assert(message2.contains("Number of bits must be positive"))
+
+    val message3 = intercept[IllegalArgumentException] {
+      df.stat.bloomFilter("id", 1000, -1.0)
+    }.getMessage
+    assert(message3.contains("False positive probability must be within range (0.0, 1.0)"))
+  }
 }

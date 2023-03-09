@@ -35,6 +35,7 @@ import org.apache.spark.sql.catalyst.{expressions, AliasIdentifier, FunctionIden
 import org.apache.spark.sql.catalyst.analysis.{GlobalTempView, LocalTempView, MultiAlias, UnresolvedAlias, UnresolvedAttribute, UnresolvedExtractValue, UnresolvedFunction, UnresolvedRegex, UnresolvedRelation, UnresolvedStar}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.aggregate.BloomFilterAggregate
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException, ParserUtils}
 import org.apache.spark.sql.catalyst.plans.{Cross, FullOuter, Inner, JoinType, LeftAnti, LeftOuter, LeftSemi, RightOuter, UsingJoin}
 import org.apache.spark.sql.catalyst.plans.logical
@@ -1072,6 +1073,11 @@ class SparkConnectPlanner(val session: SparkSession) {
             throw InvalidPlanInput(s"ignoreNulls should be a literal boolean, but got $other")
         }
         Some(Lead(children.head, children(1), children(2), ignoreNulls))
+
+      case "bloom_filter_agg" if fun.getArgumentsCount == 3 =>
+        val children = fun.getArgumentsList.asScala.toSeq.map(transformExpression)
+        Some(Alias(new BloomFilterAggregate(children.head, children(1), children(2))
+          .toAggregateExpression(), "bloomFilter")())
 
       case "window" if 2 <= fun.getArgumentsCount && fun.getArgumentsCount <= 4 =>
         val children = fun.getArgumentsList.asScala.toSeq.map(transformExpression)

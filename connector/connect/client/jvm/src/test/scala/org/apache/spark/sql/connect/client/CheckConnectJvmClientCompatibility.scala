@@ -138,7 +138,6 @@ object CheckConnectJvmClientCompatibility {
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.DataFrameNaFunctions.this"),
 
       // DataFrameStatFunctions
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.DataFrameStatFunctions.bloomFilter"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.DataFrameStatFunctions.this"),
 
       // Dataset
