@@ -59,20 +59,22 @@ If you do not use one of the mechanisms outlined below, your Spark session will 
 
 If you set the SPARK_REMOTE environment variable on the client machine where your Spark client application is running and create a new Spark Session as illustrated below, the session will be a Spark Connect session. With this approach, there is no code change needed to start using Spark Connect.
 
-Set SPARK_REMOTE environment variable:
+Set the SPARK_REMOTE environment variable to point to your Spark server:
 
 {% highlight bash %}
 export SPARK_REMOTE="sc://localhost/"
 {% endhighlight %}
 
+And now start the Spark shell, for example:
+
 <div class="codetabs">
 
 <div data-lang="python"  markdown="1">
-Start the PySpark CLI, for example:
-
 {% highlight bash %}
 ./bin/pyspark
 {% endhighlight %}
+
+The shell is now connected to Spark using Spark Connect as indicated in the welcome message.
 </div>
 
 <div data-lang="scala"  markdown="1">
@@ -85,14 +87,26 @@ Start the Scala shell, for example:
 
 </div>
 
-And notice that the PySpark CLI is now connected to Spark using Spark Connect as indicated in the welcome message: “Client connected to the Spark Connect server at...”.
+And if you write your own program, create a Spark Session as shown in this example:
 
-And if you write your own Python program, create a Spark Session as shown in this example:
+<div class="codetabs">
 
+<div data-lang="python"  markdown="1">
 {% highlight python %}
 from pyspark.sql import SparkSession
 spark = SparkSession.builder.getOrCreate()
 {% endhighlight %}
+</div>
+
+<div data-lang="scala"  markdown="1">
+{% highlight scala %}
+import org.apache.spark.sql.SparkSession
+
+val spark = SparkSession.builder().getOrCreate()
+{% endhighlight %}
+</div>
+
+</div>
 
 Which will create a Spark Connect session by reading the SPARK_REMOTE environment variable we set above.
 
@@ -100,11 +114,21 @@ Which will create a Spark Connect session by reading the SPARK_REMOTE environmen
 
 You can also specify that you want to use Spark Connect when you create a Spark session explicitly.
 
-For example, when launching the PySpark CLI, simply include the remote parameter as illustrated here:
+For example, when launching the PySpark or Scala CLI, simply include the remote parameter as illustrated here:
 
+<div class="codetabs">
+
+<div data-lang="python"  markdown="1">
 {% highlight bash %}
 ./bin/pyspark --remote "sc://localhost"
 {% endhighlight %}
+</div>
+
+<div data-lang="scala"  markdown="1">
+
+</div>
+
+</div>
 
 And again you will notice that the PySpark welcome message tells you that you are connected to Spark using Spark Connect.
 
@@ -119,9 +143,11 @@ spark = SparkSession.builder.remote("sc://localhost/").getOrCreate()
 
 While Spark Connect does not have built-in authentication, it is designed to work seamlessly with your existing authentication infrastructure. Its gRPC HTTP/2 interface allows for the use of authenticating proxies, which makes it possible to secure Spark Connect without having to implement authentication logic in Spark directly.
 
-# What is included in Spark 3.4
+# What is supported in Spark 3.4
 
-In Spark 3.4, Spark Connect supports most PySpark APIs, including [DataFrame](api/python/reference/pyspark.sql/dataframe.html), [Functions](api/python/reference/pyspark.sql/functions.html), and [Column](api/python/reference/pyspark.sql/column.html). However, some APIs such as [SparkContext](api/python/reference/api/pyspark.SparkContext.html) and [RDD](api/python/reference/api/pyspark.RDD.html) are not supported yet. You can check which APIs are currently
+**PySpark**: In Spark 3.4, Spark Connect supports most PySpark APIs, including [DataFrame](api/python/reference/pyspark.sql/dataframe.html), [Functions](api/python/reference/pyspark.sql/functions.html), and [Column](api/python/reference/pyspark.sql/column.html). However, some APIs such as [SparkContext](api/python/reference/api/pyspark.SparkContext.html) and [RDD](api/python/reference/api/pyspark.RDD.html) are not supported yet. You can check which APIs are currently
 supported in the [API reference](api/python/reference/index.html) documentation. Supported APIs are labeled "Supports Spark Connect" so you can check whether the APIs you are using are available before migrating existing code to Spark Connect.
+
+**Scala**: In Spark 3.4, Spark Connect supports most Scala APIs, ...
 
 Support for Spark Connect clients in other languages is planned for the future.
