@@ -25,10 +25,8 @@ if should_test_connect:
 
     sql.udf.UserDefinedFunction = UserDefinedFunction
 
-from pyspark.errors import AnalysisException
 from pyspark.sql.tests.test_udf import BaseUDFTestsMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
-from pyspark.sql.types import IntegerType
 
 
 class UDFParityTests(BaseUDFTestsMixin, ReusedConnectTestCase):
