@@ -27,7 +27,7 @@ To get started, see [Quickstart: Spark Connect](api/python/getting_started/quick
   <img src="img/spark-connect-api.png" title="Spark Connect API" alt="Spark Connect API Diagram" />
 </p>
 
-# How Spark Connect Works
+# How Spark Connect works
 
 The Spark Connect client library is designed to simplify Spark application development. It is a thin API that can be embedded everywhere: in application servers, IDEs, notebooks, and programming languages. The Spark Connect API builds on Spark's DataFrame API using unresolved logical plans as a language-agnostic protocol between the client and the Spark driver.
 
@@ -39,7 +39,7 @@ The Spark Connect endpoint embedded on the Spark Server, receives and translates
   <img src="img/spark-connect-communication.png" title="Spark Connect communication" alt="Spark Connect communication" />
 </p>
 
-# Operational Benefits of Spark Connect
+# Operational benefits of Spark Connect
 
 With this new architecture, Spark Connect mitigates several operational issues:
 
