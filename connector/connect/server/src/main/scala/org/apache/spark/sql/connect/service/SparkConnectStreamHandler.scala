@@ -52,11 +52,22 @@ class SparkConnectStreamHandler(responseObserver: StreamObserver[ExecutePlanResp
         case proto.Plan.OpTypeCase.COMMAND => handleCommand(sessionHolder, v)
         case proto.Plan.OpTypeCase.ROOT => handlePlan(sessionHolder, v)
         case proto.Plan.OpTypeCase.ML_COMMAND =>
-          MLHandler.handleMlCommand(sessionHolder, v.getPlan.getMlCommand)
+          handleMlCommand(sessionHolder, v)
         case _ =>
           throw new UnsupportedOperationException(s"${v.getPlan.getOpTypeCase} not supported.")
       }
     }
+  }
+
+  private def handleMlCommand(sessionHolder: SessionHolder, request: ExecutePlanRequest): Unit = {
+    val mlResultProto = MLHandler.handleMlCommand(sessionHolder, request.getPlan.getMlCommand)
+    responseObserver.onNext(
+      ExecutePlanResponse
+        .newBuilder()
+        .setSessionId(sessionHolder.sessionId)
+        .setMlCommandResult(mlResultProto)
+        .build()
+    )
   }
 
   private def handlePlan(sessionHolder: SessionHolder, request: ExecutePlanRequest): Unit = {

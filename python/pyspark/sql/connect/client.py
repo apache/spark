@@ -841,7 +841,7 @@ class SparkConnectClient(object):
             ):
                 with attempt:
                     for b in self._stub.ExecutePlan(req, metadata=self._builder.metadata()):
-                        if b.client_id != self._session_id:
+                        if b.session_id != self._session_id:
                             raise SparkConnectException(
                                 "Received incorrect session identifier for request: "
                                 f"{b.client_id} != {self._session_id}"

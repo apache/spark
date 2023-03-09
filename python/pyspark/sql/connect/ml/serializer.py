@@ -67,8 +67,9 @@ def serialize_ml_params(instance, client):
             for k, v in param_value_dict.items()
         }
 
-    return ml_common_pb2.Params(
+    result = ml_common_pb2.Params(
         params=gen_pb2_map(instance._paramMap),
         default_params=gen_pb2_map(instance._defaultParamMap),
     )
+    return result
 

@@ -17,7 +17,7 @@
 
 from abc import ABCMeta, abstractmethod
 
-from pyspark.sql import DataFrame
+from pyspark.sql.connect.dataframe import DataFrame
 from pyspark.ml import Estimator, Model, Predictor, PredictionModel
 from pyspark.ml.wrapper import _PredictorParams
 import pyspark.sql.connect.proto as pb2
@@ -38,15 +38,16 @@ class ClientEstimator(Estimator, metaclass=ABCMeta):
 
     def _fit(self, dataset: DataFrame) -> Model:
         client = dataset.sparkSession.client
-        dataset_proto = dataset._plan.to_proto(client)
+        dataset_relation = dataset._plan.plan(client)
         estimator_proto = ml_common_pb2.Stage(
             name=self._algo_name(),
             params=serialize_ml_params(self, client),
-            uid=self.uid
+            uid=self.uid,
+            type=ml_common_pb2.Stage.ESTIMATOR,
         )
         fit_command_proto = ml_pb2.MlCommand.Fit(
             estimator=estimator_proto,
-            dataset=dataset_proto
+            dataset=dataset_relation,
         )
         req = client._execute_plan_request_with_metadata()
         req.plan.ml_command.fit.CopyFrom(fit_command_proto)
@@ -71,7 +72,7 @@ class ClientModel(Model, metaclass=ABCMeta):
     def _get_model_attr(self, name):
         client = SparkSession.getActiveSession().client
         model_attr_command_proto = ml_pb2.MlCommand.ModelAttr(
-            model_ref_id=self.model_ref_id,
+            model_ref_id=self.ref_id,
             name=name
         )
         req = client._execute_plan_request_with_metadata()
@@ -113,7 +114,7 @@ class _ModelTransformRelationPlan(LogicalPlan):
         plan = self._create_proto_relation()
         plan.ml_relation.model_transform.input.CopyFrom(self._child.plan(session))
         plan.ml_relation.model_transform.model_ref_id = self.model.ref_id
-        plan.ml_relation.model_transform.params = serialize_ml_params(self, session.client)
+        plan.ml_relation.model_transform.params.CopyFrom(serialize_ml_params(self.model, session))
 
         return plan
 
@@ -129,7 +130,7 @@ class _ModelAttrRelationPlan(LogicalPlan):
         plan = self._create_proto_relation()
         plan.ml_relation.model_attr.model_ref_id = self.model.ref_id
         plan.ml_relation.model_attr.name = self.name
-        plan.ml_relation.model_transform.params = serialize_ml_params(self, session.client)
+        plan.ml_relation.model_transform.params.CopyFrom(serialize_ml_params(self.model, session))
         return plan
 
 
@@ -146,7 +147,7 @@ class _ModelSummaryAttrRelationPlan(LogicalPlan):
             .CopyFrom(self._child.plan(session))
         plan.ml_relation.model_summary_attr.model_ref_id = self.model.ref_id
         plan.ml_relation.model_summary_attr.name = self.name
-        plan.ml_relation.model_transform.params = serialize_ml_params(self, session.client)
+        plan.ml_relation.model_transform.params.CopyFrom(serialize_ml_params(self.model, session))
         return plan
 
 
@@ -169,7 +170,7 @@ class ClientModelSummary(metaclass=ABCMeta):
             model_ref_id=self.model.ref_id,
             name=name,
             params=serialize_ml_params(self, client),
-            evaluation_dataset=self.dataset._plan.to_proto(client)
+            evaluation_dataset=self.dataset._plan
         )
         req = client._execute_plan_request_with_metadata()
         req.plan.ml_command.model_summary_attr.CopyFrom(model_summary_attr_command_proto)
