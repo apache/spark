@@ -89,6 +89,7 @@ Example applications are also provided in R. For example,
     ./bin/spark-submit examples/src/main/r/dataframe.R
 
 ## Running Spark Client Applications Anywhere with Spark Connect
+
 Spark Connect is a new client-server architecture introduced in Spark 3.4 that decouples Spark
 client applications and allows remote connectivity to Spark clusters. The separation between
 client and server allows Spark and its open ecosystem to be leveraged from anywhere, embedded

@@ -107,5 +107,5 @@ While Spark Connect does not have built-in authentication, it is designed to wor
 
 # What is included in Spark 3.4
 
-In Spark 3.4, Spark Connect provides DataFrame API coverage for PySpark.
-Spark Connect clients for other languages are planned for the future.
+In Spark 3.4, Spark Connect supports most PySpark APIs, including [DataFrame](api/python/reference/pyspark.sql/dataframe.html), [Functions](api/python/reference/pyspark.sql/functions.html), and [Column](api/python/reference/pyspark.sql/column.html). However, some APIs such as [SparkContext](api/python/reference/api/pyspark.SparkContext.html#pyspark.SparkContext) and [RDD](api/python/reference/api/pyspark.RDD.html#pyspark.RDD) are not supported yet. You can check which APIs are currently
+supported in the [API reference](api/python/reference/index.html) documentation. Supported APIs are labeled "Supports Spark Connect" so you can check whether the APIs you are using are available before migrating existing code to Spark Connect. Support for Spark Connect clients in other languages is planned for the future.
