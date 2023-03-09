@@ -34,7 +34,6 @@ import org.apache.spark.resource.ResourceProfile.UNKNOWN_RESOURCE_PROFILE_ID
 import org.apache.spark.resource.ResourceProfileManager
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.dynalloc.ExecutorMonitor
-import org.apache.spark.shuffle.api.ShuffleDriverComponents
 import org.apache.spark.util.{Clock, SystemClock, ThreadUtils, Utils}
 
 /**
