@@ -62,13 +62,13 @@ If you set the SPARK_REMOTE environment variable on the client machine where you
 Set SPARK_REMOTE environment variable:
 
 {% highlight bash %}
-    export SPARK_REMOTE="sc://localhost/"
+export SPARK_REMOTE="sc://localhost/"
 {% endhighlight %}
 
 Start the PySpark CLI, for example:
 
 {% highlight bash %}
-    ./bin/pyspark
+./bin/pyspark
 {% endhighlight %}
 
 And notice that the PySpark CLI is now connected to Spark using Spark Connect as indicated in the welcome message: “Client connected to the Spark Connect server at...”.
@@ -76,8 +76,8 @@ And notice that the PySpark CLI is now connected to Spark using Spark Connect as
 And if you write your own Python program, create a Spark Session as shown in this example:
 
 {% highlight python %}
-    from pyspark.sql import SparkSession
-    spark = SparkSession.builder.getOrCreate()
+from pyspark.sql import SparkSession
+spark = SparkSession.builder.getOrCreate()
 {% endhighlight %}
 
 Which will create a Spark Connect session by reading the SPARK_REMOTE environment variable we set above.
@@ -89,7 +89,7 @@ You can also specify that you want to use Spark Connect when you create a Spark 
 For example, when launching the PySpark CLI, simply include the remote parameter as illustrated here:
 
 {% highlight bash %}
-    ./bin/pyspark --remote "sc://localhost"
+./bin/pyspark --remote "sc://localhost"
 {% endhighlight %}
 
 And again you will notice that the PySpark welcome message tells you that you are connected to Spark using Spark Connect.
@@ -97,8 +97,8 @@ And again you will notice that the PySpark welcome message tells you that you ar
 Or, in your code, include the remote function with a reference to your Spark server when you create a Spark session, as in this example:
 
 {% highlight python %}
-    from pyspark.sql import SparkSession
-    spark = SparkSession.builder.remote("sc://localhost/").getOrCreate()
+from pyspark.sql import SparkSession
+spark = SparkSession.builder.remote("sc://localhost/").getOrCreate()
 {% endhighlight %}
 
 # Client application authentication
