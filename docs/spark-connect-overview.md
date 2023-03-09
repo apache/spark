@@ -77,12 +77,6 @@ And now start the Spark shell as usual:
 The shell is now connected to Spark using Spark Connect as indicated in the welcome message.
 </div>
 
-<div data-lang="scala"  markdown="1">
-{% highlight bash %}
-./bin/spark-shell
-{% endhighlight %}
-</div>
-
 </div>
 
 
@@ -126,14 +120,6 @@ And again you will notice that the PySpark shell welcome message tells you that 
 Spark using Spark Connect.
 </div>
 
-<div data-lang="scala"  markdown="1">
-{% highlight bash %}
-./bin/spark-shell --remote "sc://localhost"
-{% endhighlight %}
-
-And the Scala shell is now connected to Spark using Spark Connect.
-</div>
-
 </div>
 
 Or, when writing your own code, include the remote function with a reference to your Spark server when you create
@@ -166,6 +152,6 @@ While Spark Connect does not have built-in authentication, it is designed to wor
 **PySpark**: In Spark 3.4, Spark Connect supports most PySpark APIs, including [DataFrame](api/python/reference/pyspark.sql/dataframe.html), [Functions](api/python/reference/pyspark.sql/functions.html), and [Column](api/python/reference/pyspark.sql/column.html). However, some APIs such as [SparkContext](api/python/reference/api/pyspark.SparkContext.html) and [RDD](api/python/reference/api/pyspark.RDD.html) are not supported yet. You can check which APIs are currently
 supported in the [API reference](api/python/reference/index.html) documentation. Supported APIs are labeled "Supports Spark Connect" so you can check whether the APIs you are using are available before migrating existing code to Spark Connect.
 
-**Scala**: In Spark 3.4, Spark Connect supports most Scala APIs, including [DataSet](api/scala/org/apache/spark/sql/Dataset.html), and [Column](api/scala/org/apache/spark/sql/Column.html).
+**Scala**: In Spark 3.4, Spark Connect supports most Scala APIs, including [DataSet](api/scala/org/apache/spark/sql/Dataset.html), [Functions](api/scala/org/apache/spark/sql/functions$.html), and [Column](api/scala/org/apache/spark/sql/Column.html).
 
 Support for more APIs is planned for upcoming Spark releases.
