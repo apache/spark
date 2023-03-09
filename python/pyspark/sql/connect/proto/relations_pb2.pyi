@@ -89,7 +89,7 @@ class Relation(google.protobuf.message.Message):
     UNPIVOT_FIELD_NUMBER: builtins.int
     TO_SCHEMA_FIELD_NUMBER: builtins.int
     REPARTITION_BY_EXPRESSION_FIELD_NUMBER: builtins.int
-    FRAME_MAP_FIELD_NUMBER: builtins.int
+    MAP_PARTITIONS_FIELD_NUMBER: builtins.int
     COLLECT_METRICS_FIELD_NUMBER: builtins.int
     PARSE_FIELD_NUMBER: builtins.int
     FILL_NA_FIELD_NUMBER: builtins.int
@@ -161,7 +161,7 @@ class Relation(google.protobuf.message.Message):
     @property
     def repartition_by_expression(self) -> global___RepartitionByExpression: ...
     @property
-    def frame_map(self) -> global___FrameMap: ...
+    def map_partitions(self) -> global___MapPartitions: ...
     @property
     def collect_metrics(self) -> global___CollectMetrics: ...
     @property
@@ -230,7 +230,7 @@ class Relation(google.protobuf.message.Message):
         unpivot: global___Unpivot | None = ...,
         to_schema: global___ToSchema | None = ...,
         repartition_by_expression: global___RepartitionByExpression | None = ...,
-        frame_map: global___FrameMap | None = ...,
+        map_partitions: global___MapPartitions | None = ...,
         collect_metrics: global___CollectMetrics | None = ...,
         parse: global___Parse | None = ...,
         fill_na: global___NAFill | None = ...,
@@ -281,8 +281,6 @@ class Relation(google.protobuf.message.Message):
             b"fill_na",
             "filter",
             b"filter",
-            "frame_map",
-            b"frame_map",
             "freq_items",
             b"freq_items",
             "hint",
@@ -293,6 +291,8 @@ class Relation(google.protobuf.message.Message):
             b"limit",
             "local_relation",
             b"local_relation",
+            "map_partitions",
+            b"map_partitions",
             "offset",
             b"offset",
             "parse",
@@ -376,8 +376,6 @@ class Relation(google.protobuf.message.Message):
             b"fill_na",
             "filter",
             b"filter",
-            "frame_map",
-            b"frame_map",
             "freq_items",
             b"freq_items",
             "hint",
@@ -388,6 +386,8 @@ class Relation(google.protobuf.message.Message):
             b"limit",
             "local_relation",
             b"local_relation",
+            "map_partitions",
+            b"map_partitions",
             "offset",
             b"offset",
             "parse",
@@ -467,7 +467,7 @@ class Relation(google.protobuf.message.Message):
         "unpivot",
         "to_schema",
         "repartition_by_expression",
-        "frame_map",
+        "map_partitions",
         "collect_metrics",
         "parse",
         "fill_na",
@@ -2706,17 +2706,17 @@ class RepartitionByExpression(google.protobuf.message.Message):
 
 global___RepartitionByExpression = RepartitionByExpression
 
-class FrameMap(google.protobuf.message.Message):
+class MapPartitions(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
     INPUT_FIELD_NUMBER: builtins.int
     FUNC_FIELD_NUMBER: builtins.int
     @property
     def input(self) -> global___Relation:
-        """(Required) Input relation for a Frame Map API: mapInPandas, mapInArrow."""
+        """(Required) Input relation for a mapPartitions-equivalent API: mapInPandas, mapInArrow."""
     @property
     def func(self) -> pyspark.sql.connect.proto.expressions_pb2.CommonInlineUserDefinedFunction:
-        """(Required) Input user-defined function of a Frame Map API."""
+        """(Required) Input user-defined function."""
     def __init__(
         self,
         *,
@@ -2731,7 +2731,7 @@ class FrameMap(google.protobuf.message.Message):
         self, field_name: typing_extensions.Literal["func", b"func", "input", b"input"]
     ) -> None: ...
 
-global___FrameMap = FrameMap
+global___MapPartitions = MapPartitions
 
 class CollectMetrics(google.protobuf.message.Message):
     """Collect arbitrary (named) metrics from a dataset."""
