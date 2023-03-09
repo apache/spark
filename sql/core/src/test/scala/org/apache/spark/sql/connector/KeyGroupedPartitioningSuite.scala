@@ -105,7 +105,7 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
       val distribution = physical.ClusteredDistribution(
         Seq(TransformExpression(BucketFunction, Seq(attr("ts")), Some(32))))
 
-      checkQueryPlan(df, distribution, physical.HashPartitioning(distribution.clustering, 32))
+      checkQueryPlan(df, distribution, physical.KeyGroupedPartitioning(distribution.clustering, 32))
     }
   }
 
@@ -175,7 +175,7 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
       val distribution = physical.ClusteredDistribution(
         Seq(TransformExpression(BucketFunction, Seq(attr("ts")), Some(32))))
 
-      checkQueryPlan(df, distribution, physical.HashPartitioning(distribution.clustering, 32))
+      checkQueryPlan(df, distribution, physical.KeyGroupedPartitioning(distribution.clustering, 32))
     }
   }
 
