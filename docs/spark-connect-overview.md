@@ -78,8 +78,6 @@ The shell is now connected to Spark using Spark Connect as indicated in the welc
 </div>
 
 <div data-lang="scala"  markdown="1">
-Start the Scala shell, for example:
-
 {% highlight bash %}
 ./bin/spark-shell
 {% endhighlight %}
@@ -101,7 +99,6 @@ spark = SparkSession.builder.getOrCreate()
 <div data-lang="scala"  markdown="1">
 {% highlight scala %}
 import org.apache.spark.sql.SparkSession
-
 val spark = SparkSession.builder().getOrCreate()
 {% endhighlight %}
 </div>
@@ -146,7 +143,7 @@ spark = SparkSession.builder.remote("sc://localhost/").getOrCreate()
 </div>
 
 <div data-lang="scala"  markdown="1">
-{% highlight python %}
+{% highlight scala %}
 import org.apache.spark.sql.SparkSession
 val spark = SparkSession.builder().remote("sc://localhost/").getOrCreate()
 {% endhighlight %}
