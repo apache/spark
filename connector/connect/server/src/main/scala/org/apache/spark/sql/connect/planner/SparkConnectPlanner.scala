@@ -209,8 +209,12 @@ class SparkConnectPlanner(val session: SparkSession) {
   private def transformSql(sql: proto.SQL): LogicalPlan = {
     val args = sql.getArgsMap.asScala.toMap
     val parser = session.sessionState.sqlParser
-    val parsedArgs = args.mapValues(parser.parseExpression).toMap
-    ParameterizedQuery(parser.parsePlan(sql.getQuery), parsedArgs)
+    val parsedPlan = parser.parsePlan(sql.getQuery)
+    if (args.nonEmpty) {
+      ParameterizedQuery(parsedPlan, args.mapValues(parser.parseExpression).toMap)
+    } else {
+      parsedPlan
+    }
   }
 
   private def transformSubqueryAlias(alias: proto.SubqueryAlias): LogicalPlan = {

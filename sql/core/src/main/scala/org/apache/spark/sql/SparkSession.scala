@@ -623,8 +623,12 @@ class SparkSession private(
     val tracker = new QueryPlanningTracker
     val plan = tracker.measurePhase(QueryPlanningTracker.PARSING) {
       val parser = sessionState.sqlParser
-      val parsedArgs = args.mapValues(parser.parseExpression).toMap
-      ParameterizedQuery(parser.parsePlan(sqlText), parsedArgs)
+      val parsedPlan = parser.parsePlan(sqlText)
+      if (args.nonEmpty) {
+        ParameterizedQuery(parsedPlan, args.mapValues(parser.parseExpression).toMap)
+      } else {
+        parsedPlan
+      }
     }
     Dataset.ofRows(self, plan, tracker)
   }
