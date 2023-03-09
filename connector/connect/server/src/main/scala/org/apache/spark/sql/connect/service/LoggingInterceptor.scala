@@ -67,7 +67,7 @@ class LoggingInterceptor extends ServerInterceptor with Logging {
 
     new SimpleForwardingServerCallListener[ReqT](listener) {
       override def onMessage(message: ReqT): Unit = {
-        logProto(s"Received RPC Request $desc", message)
+        logProto(s"Received RPC request $desc", message)
         super.onMessage(message)
       }
     }
