@@ -74,6 +74,9 @@ if TYPE_CHECKING:
     from pyspark.sql.connect.udf import UDFRegistration
 
 
+_active_spark_session = None
+
+
 class SparkSession:
     class Builder:
         """Builder for :class:`SparkSession`."""
@@ -119,7 +122,11 @@ class SparkSession:
             raise NotImplementedError("enableHiveSupport not implemented for Spark Connect")
 
         def getOrCreate(self) -> "SparkSession":
-            return SparkSession(connectionString=self._options["spark.remote"])
+            global _active_spark_session
+            if _active_spark_session is not None:
+                return _active_spark_session
+            _active_spark_session = SparkSession(connectionString=self._options["spark.remote"])
+            return _active_spark_session
 
     _client: SparkConnectClient
 
@@ -409,7 +416,9 @@ class SparkSession:
         # specifically in Spark Connect the Spark Connect server is designed for
         # multi-tenancy - the remote client side cannot just stop the server and stop
         # other remote clients being used from other users.
+        global _active_spark_session
         self.client.close()
+        _active_spark_session = None
 
         if "SPARK_LOCAL_REMOTE" in os.environ:
             # When local mode is in use, follow the regular Spark session's
@@ -427,7 +436,7 @@ class SparkSession:
 
     @classmethod
     def getActiveSession(cls) -> Any:
-        raise NotImplementedError("getActiveSession() is not implemented.")
+        return _active_spark_session
 
     def newSession(self) -> Any:
         raise NotImplementedError("newSession() is not implemented.")
