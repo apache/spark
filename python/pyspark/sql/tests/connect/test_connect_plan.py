@@ -18,6 +18,7 @@ import unittest
 import uuid
 import datetime
 import decimal
+import math
 
 from pyspark.testing.connectutils import (
     PlanOnlyTestFixture,
@@ -31,6 +32,7 @@ if should_test_connect:
     from pyspark.sql.connect.dataframe import DataFrame
     from pyspark.sql.connect.plan import WriteOperation, Read
     from pyspark.sql.connect.readwriter import DataFrameReader
+    from pyspark.sql.connect.expressions import LiteralExpression
     from pyspark.sql.connect.functions import col, lit, max, min, sum
     from pyspark.sql.connect.types import pyspark_types_to_proto_types
     from pyspark.sql.types import (
@@ -942,6 +944,39 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
         self.assertEqual(
             mod_fun.unresolved_function.arguments[0].unresolved_attribute.unparsed_identifier, "id"
         )
+
+    def test_literal_expression_with_arrays(self):
+        l1 = LiteralExpression._from_value([3, -3]).to_plan(None).literal
+        self.assertTrue(l1.array.element_type.HasField("integer"))
+        self.assertEqual(len(l1.array.elements), 2)
+        self.assertEqual(l1.array.elements[0].integer, 3)
+        self.assertEqual(l1.array.elements[1].integer, -3)
+
+        l2 = LiteralExpression._from_value([float("nan"), -3.0, 0.0]).to_plan(None).literal
+        self.assertTrue(l2.array.element_type.HasField("double"))
+        self.assertEqual(len(l2.array.elements), 3)
+        self.assertTrue(math.isnan(l2.array.elements[0].double))
+        self.assertEqual(l2.array.elements[1].double, -3.0)
+        self.assertEqual(l2.array.elements[2].double, 0.0)
+
+        l3 = LiteralExpression._from_value([[3, 4], [5, 6, 7]]).to_plan(None).literal
+        self.assertTrue(l3.array.element_type.HasField("array"))
+        self.assertTrue(l3.array.element_type.array.element_type.HasField("integer"))
+        self.assertEqual(len(l3.array.elements), 2)
+        self.assertEqual(len(l3.array.elements[0].array.elements), 2)
+        self.assertEqual(len(l3.array.elements[1].array.elements), 3)
+
+        l4 = (
+            LiteralExpression._from_value([[float("inf"), 0.4], [0.5, float("nan")], []])
+            .to_plan(None)
+            .literal
+        )
+        self.assertTrue(l4.array.element_type.HasField("array"))
+        self.assertTrue(l4.array.element_type.array.element_type.HasField("double"))
+        self.assertEqual(len(l4.array.elements), 3)
+        self.assertEqual(len(l4.array.elements[0].array.elements), 2)
+        self.assertEqual(len(l4.array.elements[1].array.elements), 2)
+        self.assertEqual(len(l4.array.elements[2].array.elements), 0)
 
 
 if __name__ == "__main__":

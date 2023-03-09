@@ -443,12 +443,12 @@ class Expression(google.protobuf.message.Message):
         class Array(google.protobuf.message.Message):
             DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-            ELEMENTTYPE_FIELD_NUMBER: builtins.int
-            ELEMENT_FIELD_NUMBER: builtins.int
+            ELEMENT_TYPE_FIELD_NUMBER: builtins.int
+            ELEMENTS_FIELD_NUMBER: builtins.int
             @property
-            def elementType(self) -> pyspark.sql.connect.proto.types_pb2.DataType: ...
+            def element_type(self) -> pyspark.sql.connect.proto.types_pb2.DataType: ...
             @property
-            def element(
+            def elements(
                 self,
             ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
                 global___Expression.Literal
@@ -456,16 +456,16 @@ class Expression(google.protobuf.message.Message):
             def __init__(
                 self,
                 *,
-                elementType: pyspark.sql.connect.proto.types_pb2.DataType | None = ...,
-                element: collections.abc.Iterable[global___Expression.Literal] | None = ...,
+                element_type: pyspark.sql.connect.proto.types_pb2.DataType | None = ...,
+                elements: collections.abc.Iterable[global___Expression.Literal] | None = ...,
             ) -> None: ...
             def HasField(
-                self, field_name: typing_extensions.Literal["elementType", b"elementType"]
+                self, field_name: typing_extensions.Literal["element_type", b"element_type"]
             ) -> builtins.bool: ...
             def ClearField(
                 self,
                 field_name: typing_extensions.Literal[
-                    "element", b"element", "elementType", b"elementType"
+                    "element_type", b"element_type", "elements", b"elements"
                 ],
             ) -> None: ...
 
