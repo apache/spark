@@ -114,8 +114,8 @@ class SparkConnectPlanner(val session: SparkSession) {
       case proto.Relation.RelTypeCase.UNPIVOT => transformUnpivot(rel.getUnpivot)
       case proto.Relation.RelTypeCase.REPARTITION_BY_EXPRESSION =>
         transformRepartitionByExpression(rel.getRepartitionByExpression)
-      case proto.Relation.RelTypeCase.FRAME_MAP =>
-        transformFrameMap(rel.getFrameMap)
+      case proto.Relation.RelTypeCase.MAP_PARTITIONS =>
+        transformMapPartitions(rel.getMapPartitions)
       case proto.Relation.RelTypeCase.COLLECT_METRICS =>
         transformCollectMetrics(rel.getCollectMetrics)
       case proto.Relation.RelTypeCase.PARSE => transformParse(rel.getParse)
@@ -471,7 +471,7 @@ class SparkConnectPlanner(val session: SparkSession) {
       .logicalPlan
   }
 
-  private def transformFrameMap(rel: proto.FrameMap): LogicalPlan = {
+  private def transformMapPartitions(rel: proto.MapPartitions): LogicalPlan = {
     val commonUdf = rel.getFunc
     val pythonUdf = transformPythonUDF(commonUdf)
     pythonUdf.evalType match {
