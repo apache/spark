@@ -205,6 +205,7 @@ object CheckConnectJvmClientCompatibility {
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.executeCommand"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.readStream"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.this"),
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.stop"),
 
       // RuntimeConfig
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.RuntimeConfig.this"),
