@@ -87,7 +87,7 @@ Start the Scala shell, for example:
 
 </div>
 
-And if you write your own program, create a Spark Session as shown in this example:
+And if you write your own program, create a Spark session as shown in this example:
 
 <div class="codetabs">
 
@@ -125,7 +125,9 @@ For example, when launching the PySpark or Scala CLI, simply include the remote 
 </div>
 
 <div data-lang="scala"  markdown="1">
-
+{% highlight bash %}
+./bin/spark-shell --remote "sc://localhost"
+{% endhighlight %}
 </div>
 
 </div>
@@ -134,10 +136,23 @@ And again you will notice that the PySpark welcome message tells you that you ar
 
 Or, in your code, include the remote function with a reference to your Spark server when you create a Spark session, as in this example:
 
+<div class="codetabs">
+
+<div data-lang="python"  markdown="1">
 {% highlight python %}
 from pyspark.sql import SparkSession
 spark = SparkSession.builder.remote("sc://localhost/").getOrCreate()
 {% endhighlight %}
+</div>
+
+<div data-lang="scala"  markdown="1">
+{% highlight python %}
+import org.apache.spark.sql.SparkSession
+val spark = SparkSession.builder().remote("sc://localhost/").getOrCreate()
+{% endhighlight %}
+</div>
+
+</div>
 
 # Client application authentication
 
