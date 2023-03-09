@@ -122,7 +122,8 @@ private[spark] class LocalSchedulerBackend(
    */
   def getUserClasspath(conf: SparkConf): Seq[URL] = {
     val userClassPathStr = conf.get(config.EXECUTOR_CLASS_PATH)
-    userClassPathStr.map(_.split(File.pathSeparator)).toSeq.flatten.map(new File(_).toURI.toURL)
+    userClassPathStr.filterNot(_.trim.length != 0)
+      .map(_.split(File.pathSeparator)).toSeq.flatten.map(new File(_).toURI.toURL)
   }
 
   launcherBackend.connect()

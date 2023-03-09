@@ -965,7 +965,11 @@ private[spark] class Executor(
     // Bootstrap the list of jars with the user class path.
     val now = System.currentTimeMillis()
     userClassPath.foreach { url =>
-      currentJars(url.getPath().split("/").last) = now
+      if (url.getPath.equals("/")) {
+        currentJars("/") = now
+      } else {
+        currentJars(url.getPath().split("/").last) = now
+      }
     }
 
     val currentLoader = Utils.getContextOrSparkClassLoader
