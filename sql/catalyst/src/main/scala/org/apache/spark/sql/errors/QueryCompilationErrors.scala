@@ -571,7 +571,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       messageParameters = Map.empty)
   }
 
-  def expressionWithoutWindowExpressionError(expr: Expression): Throwable = {
+  def expressionWithoutWindowExpressionError(expr: NamedExpression): Throwable = {
     new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1032",
       messageParameters = Map("expr" -> expr.toString))

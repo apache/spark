@@ -1746,7 +1746,9 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
 
       case u @ UnresolvedQualify(cond, child) if !u.resolved && child.resolved =>
         if (!u.containsPattern(WINDOW_EXPRESSION)) {
-          throw QueryCompilationErrors.expressionWithoutWindowExpressionError(cond)
+          u.failAnalysis(
+            errorClass = "QUALIFY_EXPRESSION_MUST_CONTAIN_WINDOW_FUNCTION",
+            messageParameters = Map("sqlExpr" -> cond.sql))
         } else {
           if (u.missingInput.nonEmpty) {
             val (newCond, newChild) = resolveExprsAndAddMissingAttrs(Seq(cond), child)
