@@ -807,7 +807,7 @@ message Parse {
   ParseFormat format = 2;
 
   // (Optional) DataType representing the schema. If not set, Spark will infer the schema.
-  optional DataType data_type = 3;
+  optional DataType schema = 3;
 
   // Options for the csv/json parser. The map key is case insensitive.
   map<string, string> options = 4;

@@ -549,7 +549,7 @@ class DataFrameReader private[sql] (sparkSession: SparkSession) extends Logging 
         .setInput(ds.plan.getRoot)
         .setFormat(format)
       userSpecifiedSchema.foreach(schema =>
-        parseBuilder.setDataType(DataTypeProtoConverter.toConnectProtoType(schema)))
+        parseBuilder.setSchema(DataTypeProtoConverter.toConnectProtoType(schema)))
       extraOptions.foreach { case (k, v) =>
         parseBuilder.putOptions(k, v)
       }

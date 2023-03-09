@@ -739,8 +739,8 @@ class SparkConnectPlanner(val session: SparkSession) {
     def dataFrameReader = {
       val localMap = CaseInsensitiveMap[String](rel.getOptionsMap.asScala.toMap)
       val reader = session.read
-      if (rel.hasDataType) {
-        DataTypeProtoConverter.toCatalystType(rel.getDataType) match {
+      if (rel.hasSchema) {
+        DataTypeProtoConverter.toCatalystType(rel.getSchema) match {
           case s: StructType => reader.schema(s)
           case other => throw InvalidPlanInput(s"Invalid schema dataType $other")
         }

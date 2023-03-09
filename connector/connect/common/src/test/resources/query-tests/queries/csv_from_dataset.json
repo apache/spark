@@ -12,7 +12,7 @@
       }
     },
     "format": "PARSE_FORMAT_CSV",
-    "dataType": {
+    "schema": {
       "struct": {
         "fields": [{
           "name": "c1",

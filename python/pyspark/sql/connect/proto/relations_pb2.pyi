@@ -2813,7 +2813,7 @@ class Parse(google.protobuf.message.Message):
 
     INPUT_FIELD_NUMBER: builtins.int
     FORMAT_FIELD_NUMBER: builtins.int
-    DATA_TYPE_FIELD_NUMBER: builtins.int
+    SCHEMA_FIELD_NUMBER: builtins.int
     OPTIONS_FIELD_NUMBER: builtins.int
     @property
     def input(self) -> global___Relation:
@@ -2821,7 +2821,7 @@ class Parse(google.protobuf.message.Message):
     format: global___Parse.ParseFormat.ValueType
     """(Required) The expected format of the text."""
     @property
-    def data_type(self) -> pyspark.sql.connect.proto.types_pb2.DataType:
+    def schema(self) -> pyspark.sql.connect.proto.types_pb2.DataType:
         """(Optional) DataType representing the schema. If not set, Spark will infer the schema."""
     @property
     def options(self) -> google.protobuf.internal.containers.ScalarMap[builtins.str, builtins.str]:
@@ -2831,32 +2831,32 @@ class Parse(google.protobuf.message.Message):
         *,
         input: global___Relation | None = ...,
         format: global___Parse.ParseFormat.ValueType = ...,
-        data_type: pyspark.sql.connect.proto.types_pb2.DataType | None = ...,
+        schema: pyspark.sql.connect.proto.types_pb2.DataType | None = ...,
         options: collections.abc.Mapping[builtins.str, builtins.str] | None = ...,
     ) -> None: ...
     def HasField(
         self,
         field_name: typing_extensions.Literal[
-            "_data_type", b"_data_type", "data_type", b"data_type", "input", b"input"
+            "_schema", b"_schema", "input", b"input", "schema", b"schema"
         ],
     ) -> builtins.bool: ...
     def ClearField(
         self,
         field_name: typing_extensions.Literal[
-            "_data_type",
-            b"_data_type",
-            "data_type",
-            b"data_type",
+            "_schema",
+            b"_schema",
             "format",
             b"format",
             "input",
             b"input",
             "options",
             b"options",
+            "schema",
+            b"schema",
         ],
     ) -> None: ...
     def WhichOneof(
-        self, oneof_group: typing_extensions.Literal["_data_type", b"_data_type"]
-    ) -> typing_extensions.Literal["data_type"] | None: ...
+        self, oneof_group: typing_extensions.Literal["_schema", b"_schema"]
+    ) -> typing_extensions.Literal["schema"] | None: ...
 
 global___Parse = Parse
