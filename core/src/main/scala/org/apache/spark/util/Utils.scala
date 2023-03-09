@@ -1324,7 +1324,7 @@ private[spark] object Utils extends Logging {
       // Common case, most sizes fit in 64 bits and all ops on BigInt are order(s) of magnitude
       // slower than Long/Double.
       bytesToString(size.toLong)
-    } else if (size < BigInt(2000) * EiB) {
+    } else if (size < BigInt(2L << 10) * EiB) {
       "%.1f EiB".formatLocal(Locale.US, BigDecimal(size) / EiB)
     } else {
       // The number is too large, show it in scientific notation.
