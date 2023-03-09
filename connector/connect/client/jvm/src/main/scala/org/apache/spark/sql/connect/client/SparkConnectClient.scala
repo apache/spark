@@ -21,6 +21,7 @@ import io.grpc.{CallCredentials, CallOptions, Channel, ClientCall, ClientInterce
 import java.net.URI
 import java.util.UUID
 import java.util.concurrent.Executor
+import scala.language.existentials
 
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.UserContext
