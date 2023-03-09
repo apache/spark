@@ -1220,20 +1220,22 @@ abstract class DynamicPartitionPruningSuiteBase
       withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
         val df = sql(
           """ WITH view1 as (
-            |   SELECT f.store_id FROM fact_stats f WHERE f.units_sold = 70
+            |   SELECT f.product_id FROM fact_stats f WHERE f.units_sold = 70
             | )
             |
-            | SELECT * FROM view1 v1 join view1 v2 WHERE v1.store_id = v2.store_id
+            | SELECT * FROM view1 v1 join view1 v2 WHERE v1.product_id = v2.product_id
           """.stripMargin)
 
         checkPartitionPruningPredicate(df, false, false)
         val reuseExchangeNodes = collect(df.queryExecution.executedPlan) {
           case se: ReusedExchangeExec => se
         }
+        // SPARK-42716: fact_stats is partitioned by store_id, so joining on store_id
+        // does not require an ExchangeExec in the first place, hence we join on product_id here
         assert(reuseExchangeNodes.size == 1, "Expected plan to contain 1 ReusedExchangeExec " +
           s"nodes. Found ${reuseExchangeNodes.size}")
 
-        checkAnswer(df, Row(15, 15) :: Nil)
+        checkAnswer(df, Row(3, 3) :: Nil)
       }
     }
   }
