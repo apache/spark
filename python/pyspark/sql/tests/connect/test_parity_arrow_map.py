@@ -24,6 +24,7 @@ from pyspark.testing.connectutils import ReusedConnectTestCase
 class ArrowMapParityTests(MapInArrowTestsMixin, ReusedConnectTestCase):
     pass
 
+
 if __name__ == "__main__":
     from pyspark.sql.tests.connect.test_parity_arrow_map import *  # noqa: F401
 
