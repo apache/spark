@@ -285,15 +285,14 @@ class LiteralExpression(Expression):
         elif isinstance(value, datetime.timedelta):
             return DayTimeIntervalType()
         elif isinstance(value, np.generic):
-            if isinstance(value, np.generic):
-                dt = _from_numpy_type(value.dtype)
-                if dt is not None:
-                    return dt
-                elif isinstance(value, np.bool_):
-                    return BooleanType()
+            dt = _from_numpy_type(value.dtype)
+            if dt is not None:
+                return dt
+            elif isinstance(value, np.bool_):
+                return BooleanType()
         elif isinstance(value, list):
-            # adopt the 'infer_array_from_first_element' strategy from 'sql.types._infer_type'
-            # right now, it's dedicated for mllib params like array<...>, array<array<...>>
+            # follow the 'infer_array_from_first_element' strategy in 'sql.types._infer_type'
+            # right now, it's dedicated for pyspark.ml params like array<...>, array<array<...>>
             if len(value) == 0:
                 raise TypeError("Can not infer Array Type from an empty list")
             first = value[0]
