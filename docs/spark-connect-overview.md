@@ -65,7 +65,7 @@ Set the SPARK_REMOTE environment variable to point to your Spark server:
 export SPARK_REMOTE="sc://localhost/"
 {% endhighlight %}
 
-And now start the Spark shell, for example:
+And now start the Spark shell as usual:
 
 <div class="codetabs">
 
@@ -84,6 +84,7 @@ The shell is now connected to Spark using Spark Connect as indicated in the welc
 </div>
 
 </div>
+
 
 And if you write your own program, create a Spark session as shown in this example:
 
@@ -105,7 +106,8 @@ val spark = SparkSession.builder().getOrCreate()
 
 </div>
 
-Which will create a Spark Connect session by reading the SPARK_REMOTE environment variable we set above.
+Which will create a Spark Connect session from your application by reading the SPARK_REMOTE
+environment variable we set above.
 
 ## Specify Spark Connect when creating Spark session
 
@@ -119,19 +121,23 @@ For example, when launching the PySpark or Scala CLI, simply include the remote 
 {% highlight bash %}
 ./bin/pyspark --remote "sc://localhost"
 {% endhighlight %}
+
+And again you will notice that the PySpark shell welcome message tells you that your application is connected to
+Spark using Spark Connect.
 </div>
 
 <div data-lang="scala"  markdown="1">
 {% highlight bash %}
 ./bin/spark-shell --remote "sc://localhost"
 {% endhighlight %}
+
+And the Scala shell is now connected to Spark using Spark Connect.
 </div>
 
 </div>
 
-And again you will notice that the PySpark welcome message tells you that you are connected to Spark using Spark Connect.
-
-Or, in your code, include the remote function with a reference to your Spark server when you create a Spark session, as in this example:
+Or, when writing your own code, include the remote function with a reference to your Spark server when you create
+a Spark session, as in this example:
 
 <div class="codetabs">
 
