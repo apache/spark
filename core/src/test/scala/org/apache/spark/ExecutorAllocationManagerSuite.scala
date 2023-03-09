@@ -34,7 +34,6 @@ import org.apache.spark.resource._
 import org.apache.spark.resource.ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.ExecutorInfo
-import org.apache.spark.shuffle.api.ShuffleDriverComponents
 import org.apache.spark.util.{Clock, ManualClock, SystemClock}
 
 /**
