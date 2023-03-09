@@ -34,7 +34,7 @@ from pyspark.sql import DataFrame
 from pyspark.ml.classification import (
     ProbabilisticClassifier,
     _LogisticRegressionParams,
-    _LogisticRegressionParamSetter,
+    _LogisticRegressionCommon,
     ProbabilisticClassificationModel
 )
 from pyspark.ml.common import inherit_doc
@@ -52,7 +52,7 @@ from pyspark.sql.connect.ml.base import (
 class LogisticRegression(
     ClientEstimator,
     ProbabilisticClassifier,
-    _LogisticRegressionParamSetter,
+    _LogisticRegressionCommon,
 ):
     _input_kwargs: Dict[str, Any]
 
@@ -164,9 +164,9 @@ class LogisticRegression(
 
 class LogisticRegressionModel(
     ClientModel,
-    HasTrainingSummary,
     ProbabilisticClassificationModel,
     _LogisticRegressionParams,
+    HasTrainingSummary,
 ):
     @property  # type: ignore[misc]
     def coefficients(self) -> Vector:

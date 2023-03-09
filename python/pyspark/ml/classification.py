@@ -1121,7 +1121,7 @@ class _LogisticRegressionParams(
         return self.getOrDefault(self.upperBoundsOnIntercepts)
 
 
-class _LogisticRegressionParamSetter(_LogisticRegressionParams):
+class _LogisticRegressionCommon(_LogisticRegressionParams):
     @overload
     def setParams(
             self,
@@ -1314,7 +1314,7 @@ class _LogisticRegressionParamSetter(_LogisticRegressionParams):
 @inherit_doc
 class LogisticRegression(
     _JavaProbabilisticClassifier["LogisticRegressionModel"],
-    _LogisticRegressionParamSetter,
+    _LogisticRegressionCommon,
     JavaMLWritable,
     JavaMLReadable["LogisticRegression"],
 ):

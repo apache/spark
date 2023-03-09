@@ -22,7 +22,7 @@ from pyspark.ml import Estimator, Model
 import pyspark.sql.connect.proto as pb2
 import pyspark.sql.connect.proto.ml_pb2 as ml_pb2
 import pyspark.sql.connect.proto.ml_common_pb2 as ml_common_pb2
-from pyspark.sql.connect.ml.serializer import deserialize
+from pyspark.sql.connect.ml.serializer import deserialize, serialize_ml_params
 from pyspark.sql import SparkSession
 from pyspark.sql.connect.plan import LogicalPlan
 
@@ -40,8 +40,7 @@ class ClientEstimator(Estimator, metaclass=ABCMeta):
         dataset_proto = dataset._plan.to_proto(client)
         estimator_proto = ml_common_pb2.Stage(
             name=self._algo_name(),
-            # TODO: fill params
-            params=ml_common_pb2.Params(params={}, default_params={}),
+            params=serialize_ml_params(self, client),
             uid=self.uid
         )
         fit_command_proto = ml_pb2.MlCommand.Fit(
@@ -69,9 +68,7 @@ class _ModelTransformRelationPlan(LogicalPlan):
         plan = self._create_proto_relation()
         plan.ml_relation.model_transform.input.CopyFrom(self._child.plan(session))
         plan.ml_relation.model_transform.model_ref_id = self.model.ref_id
-        # TODO: fill params
-        plan.ml_relation.model_transform.params = \
-            ml_common_pb2.Params(params={}, default_params={})
+        plan.ml_relation.model_transform.params = serialize_ml_params(self, session.client)
 
         return plan
 
@@ -87,9 +84,7 @@ class _ModelAttrRelationPlan(LogicalPlan):
         plan = self._create_proto_relation()
         plan.ml_relation.model_attr.model_ref_id = self.model.ref_id
         plan.ml_relation.model_attr.name = self.name
-        # TODO: fill params
-        plan.ml_relation.model_transform.params = \
-            ml_common_pb2.Params(params={}, default_params={})
+        plan.ml_relation.model_transform.params = serialize_ml_params(self, session.client)
         return plan
 
 
@@ -106,10 +101,7 @@ class _ModelSummaryAttrRelationPlan(LogicalPlan):
             .CopyFrom(self._child.plan(session))
         plan.ml_relation.model_summary_attr.model_ref_id = self.model.ref_id
         plan.ml_relation.model_summary_attr.name = self.name
-        # TODO: fill params
-        plan.ml_relation.model_transform.params = \
-            ml_common_pb2.Params(params={}, default_params={})
-
+        plan.ml_relation.model_transform.params = serialize_ml_params(self, session.client)
         return plan
 
 
@@ -161,8 +153,7 @@ class ClientModelSummary(metaclass=ABCMeta):
         model_summary_attr_command_proto = ml_pb2.MlCommand.ModelSummaryAttr(
             model_ref_id=self.model.ref_id,
             name=name,
-            # TODO: fill params
-            params=ml_common_pb2.Params(params={}, default_params={}),
+            params=serialize_ml_params(self, client),
             evaluation_dataset=self.dataset._plan.to_proto(client)
         )
         req = client._execute_plan_request_with_metadata()

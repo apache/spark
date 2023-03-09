@@ -17,6 +17,9 @@
 
 import pyspark.sql.connect.proto as pb2
 import pyspark.sql.connect.proto.ml_pb2 as ml_pb2
+import pyspark.sql.connect.proto.ml_common_pb2 as ml_common_pb2
+
+from pyspark.sql.connect.expressions import LiteralExpression
 
 from pyspark.ml.linalg import Vectors, Matrices
 
@@ -55,4 +58,17 @@ def deserialize(ml_command_result: ml_pb2.MlCommandResponse, client):
         raise ValueError()
 
     raise ValueError()
+
+
+def serialize_ml_params(instance, client):
+    def gen_pb2_map(param_value_dict):
+        return {
+            k: LiteralExpression._from_value(v).to_plan(client).literal
+            for k, v in param_value_dict
+        }
+
+    return ml_common_pb2.Params(
+        params=gen_pb2_map(instance._paramMap),
+        default_params=gen_pb2_map(instance._defaultParamMap),
+    )
 
