@@ -990,7 +990,8 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     // except that spark is using a shuffle driver component which stores shuffle data reliably
     // outside of the executor - hence loss of executor does not result in any cleanup
 
-    conf.set(config.SHUFFLE_IO_PLUGIN_CLASS.key, classOf[TestShuffleDataIOWithMockedComponents].getName)
+    conf.set(config.SHUFFLE_IO_PLUGIN_CLASS.key,
+      classOf[TestShuffleDataIOWithMockedComponents].getName)
     when(sc.shuffleDriverComponents.supportsReliableStorage()).thenReturn(true)
 
     val event = ExecutorProcessLost("", Some("hostA"))
