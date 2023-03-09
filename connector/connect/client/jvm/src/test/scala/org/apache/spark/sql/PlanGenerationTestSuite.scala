@@ -32,6 +32,7 @@ import org.apache.spark.connect.proto
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{functions => fn}
 import org.apache.spark.sql.catalyst.ScalaReflection
+import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.StringEncoder
 import org.apache.spark.sql.connect.client.SparkConnectClient
 import org.apache.spark.sql.connect.client.util.ConnectFunSuite
 import org.apache.spark.sql.expressions.Window
@@ -254,12 +255,26 @@ class PlanGenerationTestSuite
     session.read.json(testDataPath.resolve("people.json").toString)
   }
 
+  test("json from dataset") {
+    session.read
+      .schema(new StructType().add("c1", StringType).add("c2", IntegerType))
+      .option("allowSingleQuotes", "true")
+      .json(session.emptyDataset(StringEncoder))
+  }
+
   test("toJSON") {
     complex.toJSON
   }
 
   test("read csv") {
     session.read.csv(testDataPath.resolve("people.csv").toString)
+  }
+
+  test("csv from dataset") {
+    session.read
+      .schema(new StructType().add("c1", StringType).add("c2", IntegerType))
+      .option("header", "true")
+      .csv(session.emptyDataset(StringEncoder))
   }
 
   test("read parquet") {
