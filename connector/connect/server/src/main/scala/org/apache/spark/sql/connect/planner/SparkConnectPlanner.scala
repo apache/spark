@@ -1076,8 +1076,11 @@ class SparkConnectPlanner(val session: SparkSession) {
 
       case "bloom_filter_agg" if fun.getArgumentsCount == 3 =>
         val children = fun.getArgumentsList.asScala.toSeq.map(transformExpression)
-        Some(Alias(new BloomFilterAggregate(children.head, children(1), children(2))
-          .toAggregateExpression(), "bloomFilter")())
+        Some(
+          Alias(
+            new BloomFilterAggregate(children.head, children(1), children(2))
+              .toAggregateExpression(),
+            "bloomFilter")())
 
       case "window" if 2 <= fun.getArgumentsCount && fun.getArgumentsCount <= 4 =>
         val children = fun.getArgumentsList.asScala.toSeq.map(transformExpression)
