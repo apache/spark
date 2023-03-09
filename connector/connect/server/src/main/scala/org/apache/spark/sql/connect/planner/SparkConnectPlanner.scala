@@ -739,13 +739,10 @@ class SparkConnectPlanner(val session: SparkSession) {
     def dataFrameReader = {
       val localMap = CaseInsensitiveMap[String](rel.getOptionsMap.asScala.toMap)
       val reader = session.read
-      if (rel.hasSchema && rel.getSchema.nonEmpty) {
-        DataType.parseTypeWithFallback(
-          rel.getSchema,
-          StructType.fromDDL,
-          fallbackParser = DataType.fromJson) match {
+      if (rel.hasDataType) {
+        DataTypeProtoConverter.toCatalystType(rel.getDataType) match {
           case s: StructType => reader.schema(s)
-          case other => throw InvalidPlanInput(s"Invalid schema $other")
+          case other => throw InvalidPlanInput(s"Invalid schema dataType $other")
         }
       }
       localMap.foreach { case (key, value) => reader.option(key, value) }

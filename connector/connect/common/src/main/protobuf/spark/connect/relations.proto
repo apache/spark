@@ -806,10 +806,8 @@ message Parse {
   // (Required) The expected format of the text.
   ParseFormat format = 2;
 
-  // (Optional) If not set, Spark will infer the schema.
-  //
-  // This schema string should be either DDL-formatted or JSON-formatted.
-  optional string schema = 3;
+  // (Optional) DataType representing the schema. If not set, Spark will infer the schema.
+  optional DataType data_type = 3;
 
   // Options for the csv/json parser. The map key is case insensitive.
   map<string, string> options = 4;

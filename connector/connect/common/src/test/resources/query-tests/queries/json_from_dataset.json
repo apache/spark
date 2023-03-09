@@ -12,7 +12,25 @@
       }
     },
     "format": "PARSE_FORMAT_JSON",
-    "schema": "c1 STRING,c2 INT",
+    "dataType": {
+      "struct": {
+        "fields": [{
+          "name": "c1",
+          "dataType": {
+            "string": {
+            }
+          },
+          "nullable": true
+        }, {
+          "name": "c2",
+          "dataType": {
+            "integer": {
+            }
+          },
+          "nullable": true
+        }]
+      }
+    },
     "options": {
       "allowsinglequotes": "true"
     }

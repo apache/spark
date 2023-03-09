@@ -25,6 +25,7 @@ import org.apache.spark.annotation.Stable
 import org.apache.spark.connect.proto.Parse.ParseFormat
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CharVarcharUtils}
+import org.apache.spark.sql.connect.common.DataTypeProtoConverter
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -547,7 +548,8 @@ class DataFrameReader private[sql] (sparkSession: SparkSession) extends Logging 
       val parseBuilder = builder.getParseBuilder
         .setInput(ds.plan.getRoot)
         .setFormat(format)
-      userSpecifiedSchema.foreach(schema => parseBuilder.setSchema(schema.toDDL))
+      userSpecifiedSchema.foreach(schema =>
+        parseBuilder.setDataType(DataTypeProtoConverter.toConnectProtoType(schema)))
       extraOptions.foreach { case (k, v) =>
         parseBuilder.putOptions(k, v)
       }
