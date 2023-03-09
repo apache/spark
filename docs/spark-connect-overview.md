@@ -65,11 +65,25 @@ Set SPARK_REMOTE environment variable:
 export SPARK_REMOTE="sc://localhost/"
 {% endhighlight %}
 
+<div class="codetabs">
+
+<div data-lang="python"  markdown="1">
 Start the PySpark CLI, for example:
 
 {% highlight bash %}
 ./bin/pyspark
 {% endhighlight %}
+</div>
+
+<div data-lang="scala"  markdown="1">
+Start the Scala shell, for example:
+
+{% highlight bash %}
+./bin/spark-shell
+{% endhighlight %}
+</div>
+
+</div>
 
 And notice that the PySpark CLI is now connected to Spark using Spark Connect as indicated in the welcome message: “Client connected to the Spark Connect server at...”.
 
