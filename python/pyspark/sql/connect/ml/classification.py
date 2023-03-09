@@ -32,9 +32,12 @@ from typing import (
 
 from pyspark.sql import DataFrame
 from pyspark.ml.classification import (
+    Classifier,
+    ProbabilisticClassifier,
     ProbabilisticClassifier,
     _LogisticRegressionParams,
     _LogisticRegressionCommon,
+    ClassificationModel,
     ProbabilisticClassificationModel
 )
 from pyspark.ml.common import inherit_doc
@@ -44,14 +47,46 @@ from pyspark.sql.connect.ml.base import (
     ClientEstimator,
     ClientModel,
     HasTrainingSummary,
-    ClientModelSummary
+    ClientModelSummary,
+    ClientPredictor,
+    ClientPredictionModel,
 )
+from abc import ABCMeta, abstractmethod
+
+
+@inherit_doc
+class _ClientClassifier(Classifier, ClientPredictor, metaclass=ABCMeta):
+    pass
+
+
+@inherit_doc
+class _ClientProbabilisticClassifier(
+    ProbabilisticClassifier, _ClientClassifier, metaclass=ABCMeta
+):
+    pass
+
+
+@inherit_doc
+class _ClientClassificationModel(ClassificationModel, ClientPredictionModel):
+    @property  # type: ignore[misc]
+    def numClasses(self) -> int:
+        return self._get_model_attr("numClasses")
+
+    def predictRaw(self, value: Vector) -> Vector:
+        raise NotImplementedError()
+
+
+@inherit_doc
+class _ClientProbabilisticClassificationModel(
+    ProbabilisticClassificationModel, _ClientClassificationModel
+):
+    def predictProbability(self, value: Vector) -> Vector:
+        raise NotImplementedError()
 
 
 @inherit_doc
 class LogisticRegression(
-    ClientEstimator,
-    ProbabilisticClassifier,
+    _ClientProbabilisticClassifier,
     _LogisticRegressionCommon,
 ):
     _input_kwargs: Dict[str, Any]
@@ -148,9 +183,6 @@ class LogisticRegression(
         If the threshold and thresholds Params are both set, they must be equivalent.
         """
         super(LogisticRegression, self).__init__()
-        self._java_obj = self._new_java_obj(
-            "org.apache.spark.ml.classification.LogisticRegression", self.uid
-        )
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
         self._checkThresholdConsistency()
@@ -163,8 +195,7 @@ class LogisticRegression(
 
 
 class LogisticRegressionModel(
-    ClientModel,
-    ProbabilisticClassificationModel,
+    _ClientProbabilisticClassificationModel,
     _LogisticRegressionParams,
     HasTrainingSummary,
 ):
@@ -235,7 +266,6 @@ class _ClassificationSummary(ClientModelSummary):
         return self._get_summary_attr("falsePositiveRateByLabel")
 
     @property  # type: ignore[misc]
-    @since("3.1.0")
     def precisionByLabel(self) -> List[float]:
         return self._get_summary_attr("precisionByLabel")
 
@@ -267,7 +297,6 @@ class _ClassificationSummary(ClientModelSummary):
     def weightedPrecision(self) -> float:
         return self._get_summary_attr("weightedPrecision")
 
-    # @since("3.1.0")
     # def weightedFMeasure(self, beta: float = 1.0) -> float:
     #     return self._get_summary_attr("weightedFMeasure", beta)
 

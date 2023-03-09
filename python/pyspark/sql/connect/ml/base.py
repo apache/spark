@@ -18,12 +18,13 @@
 from abc import ABCMeta, abstractmethod
 
 from pyspark.sql import DataFrame
-from pyspark.ml import Estimator, Model
+from pyspark.ml import Estimator, Model, Predictor, PredictionModel
+from pyspark.ml.wrapper import _PredictorParams
 import pyspark.sql.connect.proto as pb2
 import pyspark.sql.connect.proto.ml_pb2 as ml_pb2
 import pyspark.sql.connect.proto.ml_common_pb2 as ml_common_pb2
 from pyspark.sql.connect.ml.serializer import deserialize, serialize_ml_params
-from pyspark.sql import SparkSession
+from pyspark.sql.connect.session import SparkSession
 from pyspark.sql.connect.plan import LogicalPlan
 
 
@@ -56,6 +57,50 @@ class ClientEstimator(Estimator, metaclass=ABCMeta):
         model._resetUid(model_uid)
         model.ref_id = model_ref_id
         return model
+
+
+class ClientPredictor(Predictor, ClientEstimator, _PredictorParams, metaclass=ABCMeta):
+    pass
+
+
+class ClientModel(Model, metaclass=ABCMeta):
+
+    ref_id: str
+    uid: str
+
+    def _get_model_attr(self, name):
+        client = SparkSession.getActiveSession().client
+        model_attr_command_proto = ml_pb2.MlCommand.ModelAttr(
+            model_ref_id=self.model_ref_id,
+            name=name
+        )
+        req = client._execute_plan_request_with_metadata()
+        req.plan.ml_command.model_attr.CopyFrom(model_attr_command_proto)
+
+        resp = client._execute_ml(req)
+        return deserialize(resp, client)
+
+    def _get_model_attr_dataframe(self, name) -> DataFrame:
+        session = SparkSession.getActiveSession()
+        plan = _ModelAttrRelationPlan(
+            self, name
+        )
+        return DataFrame.withPlan(plan, session)
+
+    def _transform(self, dataset: DataFrame) -> DataFrame:
+        session = dataset.sparkSession
+        plan = _ModelTransformRelationPlan(dataset._plan, self)
+        return DataFrame.withPlan(plan, session)
+
+
+class ClientPredictionModel(PredictionModel, ClientModel, _PredictorParams):
+    @property  # type: ignore[misc]
+    def numFeatures(self) -> int:
+        return self._get_model_attr("numFeatures")
+
+    def predict(self, value) -> float:
+        # TODO: support this.
+        raise NotImplementedError()
 
 
 class _ModelTransformRelationPlan(LogicalPlan):
@@ -103,36 +148,6 @@ class _ModelSummaryAttrRelationPlan(LogicalPlan):
         plan.ml_relation.model_summary_attr.name = self.name
         plan.ml_relation.model_transform.params = serialize_ml_params(self, session.client)
         return plan
-
-
-class ClientModel(Model, metaclass=ABCMeta):
-
-    ref_id: str
-    uid: str
-
-    def _get_model_attr(self, name):
-        client = SparkSession.getActiveSession().client
-        model_attr_command_proto = ml_pb2.MlCommand.ModelAttr(
-            model_ref_id=self.model_ref_id,
-            name=name
-        )
-        req = client._execute_plan_request_with_metadata()
-        req.plan.ml_command.model_attr.CopyFrom(model_attr_command_proto)
-
-        resp = client._execute_ml(req)
-        return deserialize(resp, client)
-
-    def _get_model_attr_dataframe(self, name) -> DataFrame:
-        session = SparkSession.getActiveSession()
-        plan = _ModelAttrRelationPlan(
-            self.model, name
-        )
-        return DataFrame.withPlan(plan, session)
-
-    def _transform(self, dataset: DataFrame) -> DataFrame:
-        session = dataset.sparkSession
-        plan = _ModelTransformRelationPlan(dataset._plan, self)
-        return DataFrame.withPlan(plan, session)
 
 
 class ClientModelSummary(metaclass=ABCMeta):

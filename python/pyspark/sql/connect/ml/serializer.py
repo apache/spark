@@ -63,8 +63,8 @@ def deserialize(ml_command_result: ml_pb2.MlCommandResponse, client):
 def serialize_ml_params(instance, client):
     def gen_pb2_map(param_value_dict):
         return {
-            k: LiteralExpression._from_value(v).to_plan(client).literal
-            for k, v in param_value_dict
+            k.name: LiteralExpression._from_value(v).to_plan(client).literal
+            for k, v in param_value_dict.items()
         }
 
     return ml_common_pb2.Params(
