@@ -24,6 +24,7 @@ import scala.io.Source
 import org.scalatest.BeforeAndAfterAll
 import sys.process._
 
+import org.apache.spark.SparkConf
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connect.client.SparkConnectClient
 import org.apache.spark.sql.connect.client.util.IntegrationTestUtils._
@@ -46,7 +47,7 @@ import org.apache.spark.util.Utils
  * from the Spark project top folder. Set system property `spark.debug.sc.jvm.client=true` to
  * print the server process output in the console to debug server start stop problems.
  */
-object SparkConnectServerUtils {
+private[connect] class SparkConnectServer(sparkConf: SparkConf) {
 
   // Server port
   private[connect] val port = ConnectCommon.CONNECT_GRPC_BINDING_PORT + util.Random.nextInt(1000)
@@ -62,6 +63,9 @@ object SparkConnectServerUtils {
       "connector/connect/server",
       "spark-connect-assembly",
       "spark-connect").getCanonicalPath
+    val additionalConfs = sparkConf.getAll.flatMap { case (key, value) =>
+      Seq("--conf", s"$key=$value")
+    }
     val builder = Process(
       Seq(
         "bin/spark-submit",
@@ -72,7 +76,7 @@ object SparkConnectServerUtils {
         "--conf",
         "spark.sql.catalog.testcat=org.apache.spark.sql.connect.catalog.InMemoryTableCatalog",
         "--conf",
-        "spark.sql.catalogImplementation=hive",
+        "spark.sql.catalogImplementation=hive") ++ additionalConfs ++ Seq(
         "--class",
         "org.apache.spark.sql.connect.SimpleSparkConnectService",
         jar),
@@ -114,19 +118,25 @@ object SparkConnectServerUtils {
 }
 
 trait RemoteSparkSession extends ConnectFunSuite with BeforeAndAfterAll {
-  import SparkConnectServerUtils._
   var spark: SparkSession = _
+  var server: SparkConnectServer = _
+
+  protected def sparkConf: SparkConf = new SparkConf(loadDefaults = false)
 
   override def beforeAll(): Unit = {
     super.beforeAll()
-    SparkConnectServerUtils.start()
-    spark = SparkSession.builder().client(SparkConnectClient.builder().port(port).build()).build()
+    server = new SparkConnectServer(sparkConf)
+    server.start()
+    spark = SparkSession
+      .builder()
+      .client(SparkConnectClient.builder().port(server.port).build())
+      .build()
 
     // Retry and wait for the server to start
     val stop = System.nanoTime() + TimeUnit.MINUTES.toNanos(1) // ~1 min
     var sleepInternalMs = TimeUnit.SECONDS.toMillis(1) // 1s with * 2 backoff
     var success = false
-    val error = new RuntimeException(s"Failed to start the test server on port $port.")
+    val error = new RuntimeException(s"Failed to start the test server on port ${server.port}.")
 
     while (!success && System.nanoTime() < stop) {
       try {
@@ -160,6 +170,12 @@ trait RemoteSparkSession extends ConnectFunSuite with BeforeAndAfterAll {
       case e: Throwable => debug(e)
     }
     spark = null
+    try {
+      if (server != null) server.stop()
+    } catch {
+      case e: Throwable => debug(e)
+    }
+    server = null
     super.afterAll()
   }
 
