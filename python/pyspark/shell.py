@@ -22,9 +22,11 @@ This file is designed to be launched as a PYTHONSTARTUP script.
 """
 
 import atexit
+import builtins
 import os
 import platform
 import warnings
+import sys
 
 import pyspark
 from pyspark.context import SparkContext
@@ -32,6 +34,16 @@ from pyspark.sql import SparkSession
 from pyspark.sql.context import SQLContext
 from pyspark.sql.utils import is_remote
 from urllib.parse import urlparse
+
+if getattr(builtins, "__IPYTHON__", False):
+    # (Only) during PYTHONSTARTUP execution, IPython temporarily adds the parent
+    # directory of the script into the Python path, which results in searching
+    # packages under `pyspark` directory.
+    # For example, `import pandas` attempts to import `pyspark.pandas`, see also SPARK-42266.
+    if "__file__" in globals():
+        parent_dir = os.path.abspath(os.path.dirname(__file__))
+        if parent_dir in sys.path:
+            sys.path.remove(parent_dir)
 
 
 if is_remote():

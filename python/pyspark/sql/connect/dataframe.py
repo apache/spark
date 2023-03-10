@@ -16,7 +16,7 @@
 #
 from pyspark.sql.connect.utils import check_dependencies
 
-check_dependencies(__name__, __file__)
+check_dependencies(__name__)
 
 from typing import (
     Any,
@@ -76,6 +76,7 @@ if TYPE_CHECKING:
         PrimitiveType,
         OptionalPrimitiveType,
         PandasMapIterFunction,
+        ArrowMapIterFunction,
     )
     from pyspark.sql.connect.session import SparkSession
 
@@ -1367,17 +1368,13 @@ class DataFrame:
 
     @property
     def schema(self) -> StructType:
-        if self._schema is None:
-            if self._plan is not None:
-                query = self._plan.to_proto(self._session.client)
-                if self._session is None:
-                    raise Exception("Cannot analyze without SparkSession.")
-                self._schema = self._session.client.schema(query)
-                return self._schema
-            else:
-                raise Exception("Empty plan.")
+        if self._plan is not None:
+            query = self._plan.to_proto(self._session.client)
+            if self._session is None:
+                raise Exception("Cannot analyze without SparkSession.")
+            return self._session.client.schema(query)
         else:
-            return self._schema
+            raise Exception("Empty plan.")
 
     schema.__doc__ = PySparkDataFrame.schema.__doc__
 
@@ -1576,8 +1573,11 @@ class DataFrame:
     def storageLevel(self, *args: Any, **kwargs: Any) -> None:
         raise NotImplementedError("storageLevel() is not implemented.")
 
-    def mapInPandas(
-        self, func: "PandasMapIterFunction", schema: Union[StructType, str]
+    def _map_partitions(
+        self,
+        func: "PandasMapIterFunction",
+        schema: Union[StructType, str],
+        evalType: int,
     ) -> "DataFrame":
         from pyspark.sql.connect.udf import UserDefinedFunction
 
@@ -1585,18 +1585,29 @@ class DataFrame:
             raise Exception("Cannot mapInPandas when self._plan is empty.")
 
         udf_obj = UserDefinedFunction(
-            func, returnType=schema, evalType=PythonEvalType.SQL_MAP_PANDAS_ITER_UDF
+            func,
+            returnType=schema,
+            evalType=evalType,
         )
 
         return DataFrame.withPlan(
-            plan.FrameMap(child=self._plan, function=udf_obj, cols=self.columns),
+            plan.MapPartitions(child=self._plan, function=udf_obj, cols=self.columns),
             session=self._session,
         )
 
+    def mapInPandas(
+        self, func: "PandasMapIterFunction", schema: Union[StructType, str]
+    ) -> "DataFrame":
+        return self._map_partitions(func, schema, PythonEvalType.SQL_MAP_PANDAS_ITER_UDF)
+
     mapInPandas.__doc__ = PySparkDataFrame.mapInPandas.__doc__
 
-    def mapInArrow(self, *args: Any, **kwargs: Any) -> None:
-        raise NotImplementedError("mapInArrow() is not implemented.")
+    def mapInArrow(
+        self, func: "ArrowMapIterFunction", schema: Union[StructType, str]
+    ) -> "DataFrame":
+        return self._map_partitions(func, schema, PythonEvalType.SQL_MAP_ARROW_ITER_UDF)
+
+    mapInArrow.__doc__ = PySparkDataFrame.mapInArrow.__doc__
 
     def writeStream(self, *args: Any, **kwargs: Any) -> None:
         raise NotImplementedError("writeStream() is not implemented.")

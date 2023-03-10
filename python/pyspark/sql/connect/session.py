@@ -16,7 +16,7 @@
 #
 from pyspark.sql.connect.utils import check_dependencies
 
-check_dependencies(__name__, __file__)
+check_dependencies(__name__)
 
 import os
 import warnings
@@ -235,6 +235,10 @@ class SparkSession:
             # If no schema supplied by user then get the names of columns only
             if schema is None:
                 _cols = [str(x) if not isinstance(x, str) else x for x in data.columns]
+            elif isinstance(schema, (list, tuple)) and cast(int, _num_cols) < len(data.columns):
+                assert isinstance(_cols, list)
+                _cols.extend([f"_{i + 1}" for i in range(cast(int, _num_cols), len(data.columns))])
+                _num_cols = len(_cols)
 
             # Determine arrow types to coerce data when creating batches
             if isinstance(schema, StructType):
@@ -309,12 +313,21 @@ class SparkSession:
 
             _inferred_schema = self._inferSchemaFromList(_data, _cols)
 
+            if _cols is not None and cast(int, _num_cols) < len(_cols):
+                _num_cols = len(_cols)
+
             if _has_nulltype(_inferred_schema):
                 # For cases like createDataFrame([("Alice", None, 80.1)], schema)
                 # we can not infer the schema from the data itself.
                 warnings.warn("failed to infer the schema from data")
                 if _schema is None and _schema_str is not None:
-                    _schema = self.createDataFrame([], schema=_schema_str).schema
+                    _parsed = self.client._analyze(
+                        method="ddl_parse", ddl_string=_schema_str
+                    ).parsed
+                    if isinstance(_parsed, StructType):
+                        _schema = _parsed
+                    elif isinstance(_parsed, DataType):
+                        _schema = StructType().add("value", _parsed)
                 if _schema is None or not isinstance(_schema, StructType):
                     raise ValueError(
                         "Some of types cannot be determined after inferring, "
