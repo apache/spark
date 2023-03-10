@@ -66,6 +66,8 @@ private[spark] class KubernetesClusterSchedulerBackend(
 
   private val shouldDeleteExecutors = conf.get(KUBERNETES_DELETE_EXECUTORS)
 
+  private val shouldDeleteUploadFile = conf.get(KUBERNETES_UPLOAD_FILE_DELETE_ON_TERMINATION)
+
   private val defaultProfile = scheduler.sc.resourceProfileManager.defaultResourceProfile
 
   private val namespace = conf.get(KUBERNETES_NAMESPACE)
@@ -165,6 +167,18 @@ private[spark] class KubernetesClusterSchedulerBackend(
             .withLabel(SPARK_APP_ID_LABEL, applicationId())
             .withLabel(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE)
             .delete()
+        }
+      }
+    }
+
+    Utils.tryLogNonFatalError {
+      if (shouldDeleteUploadFile) {
+        val uploadedUris = conf.get(KUBERNETES_FILE_UPLOADED_FAILS.key, "")
+        if (!"".equals(uploadedUris)) {
+          logInfo(s"Try to delete uris: ${uploadedUris}")
+          uploadedUris.split(",").foreach(uri =>
+            KubernetesUtils.deleteFileUri(uri, conf)
+          )
         }
       }
     }

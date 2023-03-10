@@ -167,6 +167,7 @@ private[spark] class BasicDriverFeatureStep(conf: KubernetesDriverConf)
       KUBERNETES_DRIVER_SUBMIT_CHECK.key -> "true",
       MEMORY_OVERHEAD_FACTOR.key -> defaultOverheadFactor.toString)
     // try upload local, resolvable files to a hadoop compatible file system
+    var uploadedUris: mutable.Set[String] = mutable.Set()
     Seq(JARS, FILES, ARCHIVES, SUBMIT_PYTHON_FILES).foreach { key =>
       val (localUris, remoteUris) =
         conf.get(key).partition(uri => KubernetesUtils.isLocalAndResolvable(uri))
@@ -187,6 +188,14 @@ private[spark] class BasicDriverFeatureStep(conf: KubernetesDriverConf)
           resolved
         }
         additionalProps.put(key.key, (resolvedValue ++ remoteUris).mkString(","))
+        resolvedValue.foreach(uri =>
+          uploadedUris.add(uri.substring(0, uri.lastIndexOf("/")))
+        )
+      }
+    }
+    if (conf.sparkConf.get(KUBERNETES_FILE_UPLOAD_PATH).isDefined) {
+      if (uploadedUris.nonEmpty) {
+        additionalProps.put(KUBERNETES_FILE_UPLOADED_FAILS.key, uploadedUris.mkString(","))
       }
     }
     additionalProps.toMap

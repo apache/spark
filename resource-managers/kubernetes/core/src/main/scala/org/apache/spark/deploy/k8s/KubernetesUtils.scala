@@ -306,6 +306,25 @@ object KubernetesUtils extends Logging {
     }
   }
 
+  def deleteFileUri(uri: String, conf: SparkConf): Unit = {
+    logInfo(s"Try to deleted uploaded uri: $uri")
+    val fileUri = Utils.resolveURI(uri)
+    try {
+      val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf)
+      val fs = getHadoopFileSystem(Utils.resolveURI(uri), hadoopConf)
+      val path = new Path(uri)
+      if (fs.exists(path)) {
+        fs.delete(path, true)
+        logInfo(s"Deleted uploaded uri: $uri")
+      } else {
+        logInfo(s"Uploaded uri: $uri not exists.")
+      }
+    } catch {
+      case e: Exception =>
+        throw new SparkException(s"Deleting file ${fileUri.getPath} failed...", e)
+    }
+  }
+
   @Since("3.0.0")
   def uploadFileUri(uri: String, conf: Option[SparkConf] = None): String = {
     conf match {

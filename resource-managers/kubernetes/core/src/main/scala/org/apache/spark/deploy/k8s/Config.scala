@@ -706,6 +706,22 @@ private[spark] object Config extends Logging {
       .stringConf
       .createOptional
 
+  val KUBERNETES_FILE_UPLOADED_FAILS =
+    ConfigBuilder("spark.kubernetes.uploaded.files")
+      .internal()
+      .doc("Remember all uploaded uri by spark client, used to delete uris when app finished.")
+      .version("3.1.2-internal")
+      .stringConf
+      .toSequence
+      .createWithDefault(Nil)
+
+  val KUBERNETES_UPLOAD_FILE_DELETE_ON_TERMINATION =
+    ConfigBuilder("spark.kubernetes.uploaded.file.delete.on.termination")
+      .doc("Deleting uploaded file when app finished")
+      .version("3.1.2")
+      .booleanConf
+      .createWithDefault(false)
+
   val KUBERNETES_EXECUTOR_CHECK_ALL_CONTAINERS =
     ConfigBuilder("spark.kubernetes.executor.checkAllContainers")
       .doc("If set to true, all containers in the executor pod will be checked when reporting" +
