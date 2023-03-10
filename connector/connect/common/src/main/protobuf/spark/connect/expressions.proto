@@ -192,8 +192,8 @@ message Expression {
     }
 
     message Array {
-      DataType elementType = 1;
-      repeated Literal element = 2;
+      DataType element_type = 1;
+      repeated Literal elements = 2;
     }
   }
 
