@@ -41,7 +41,7 @@ object IntegrationTestUtils {
     }
     sys.props.getOrElse("spark.test.home", sys.env("SPARK_HOME"))
   }
-  private[connect] val isDebug = System.getProperty(DEBUG_SC_JVM_CLIENT, "true").toBoolean
+  private[connect] val isDebug = System.getProperty(DEBUG_SC_JVM_CLIENT, "false").toBoolean
 
   // Log server start stop debug info into console
   // scalastyle:off println

@@ -655,7 +655,7 @@ final class DataFrameStatFunctions private[sql] (sparkSession: SparkSession, roo
     def optimalNumOfBits(n: Long, p: Double): Long =
       (-n * Math.log(p) / (Math.log(2) * Math.log(2))).toLong
 
-    val nBits = if (fpp.isNaN) {
+    val nBits = if (numBits > 0L) {
       numBits
     } else {
       if (fpp <= 0d || fpp >= 1d) {
