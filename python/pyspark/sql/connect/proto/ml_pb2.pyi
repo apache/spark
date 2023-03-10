@@ -202,6 +202,78 @@ class MlCommand(google.protobuf.message.Message):
         ) -> None: ...
 
     @typing_extensions.final
+    class LoadStage(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        NAME_FIELD_NUMBER: builtins.int
+        PATH_FIELD_NUMBER: builtins.int
+        name: builtins.str
+        path: builtins.str
+        def __init__(
+            self,
+            *,
+            name: builtins.str = ...,
+            path: builtins.str = ...,
+        ) -> None: ...
+        def ClearField(
+            self, field_name: typing_extensions.Literal["name", b"name", "path", b"path"]
+        ) -> None: ...
+
+    @typing_extensions.final
+    class SaveStage(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        @typing_extensions.final
+        class OptionsEntry(google.protobuf.message.Message):
+            DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+            KEY_FIELD_NUMBER: builtins.int
+            VALUE_FIELD_NUMBER: builtins.int
+            key: builtins.str
+            value: builtins.str
+            def __init__(
+                self,
+                *,
+                key: builtins.str = ...,
+                value: builtins.str = ...,
+            ) -> None: ...
+            def ClearField(
+                self, field_name: typing_extensions.Literal["key", b"key", "value", b"value"]
+            ) -> None: ...
+
+        STAGE_FIELD_NUMBER: builtins.int
+        PATH_FIELD_NUMBER: builtins.int
+        OVERWRITE_FIELD_NUMBER: builtins.int
+        OPTIONS_FIELD_NUMBER: builtins.int
+        @property
+        def stage(self) -> pyspark.sql.connect.proto.ml_common_pb2.Stage: ...
+        path: builtins.str
+        """saving path"""
+        overwrite: builtins.bool
+        @property
+        def options(
+            self,
+        ) -> google.protobuf.internal.containers.ScalarMap[builtins.str, builtins.str]:
+            """saving options"""
+        def __init__(
+            self,
+            *,
+            stage: pyspark.sql.connect.proto.ml_common_pb2.Stage | None = ...,
+            path: builtins.str = ...,
+            overwrite: builtins.bool = ...,
+            options: collections.abc.Mapping[builtins.str, builtins.str] | None = ...,
+        ) -> None: ...
+        def HasField(
+            self, field_name: typing_extensions.Literal["stage", b"stage"]
+        ) -> builtins.bool: ...
+        def ClearField(
+            self,
+            field_name: typing_extensions.Literal[
+                "options", b"options", "overwrite", b"overwrite", "path", b"path", "stage", b"stage"
+            ],
+        ) -> None: ...
+
+    @typing_extensions.final
     class ModelAttr(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -284,6 +356,8 @@ class MlCommand(google.protobuf.message.Message):
     LOAD_MODEL_FIELD_NUMBER: builtins.int
     SAVE_MODEL_FIELD_NUMBER: builtins.int
     EVALUATE_FIELD_NUMBER: builtins.int
+    SAVE_STAGE_FIELD_NUMBER: builtins.int
+    LOAD_STAGE_FIELD_NUMBER: builtins.int
     @property
     def fit(self) -> global___MlCommand.Fit: ...
     @property
@@ -296,6 +370,10 @@ class MlCommand(google.protobuf.message.Message):
     def save_model(self) -> global___MlCommand.SaveModel: ...
     @property
     def evaluate(self) -> global___MlCommand.Evaluate: ...
+    @property
+    def save_stage(self) -> global___MlCommand.SaveStage: ...
+    @property
+    def load_stage(self) -> global___MlCommand.LoadStage: ...
     def __init__(
         self,
         *,
@@ -305,6 +383,8 @@ class MlCommand(google.protobuf.message.Message):
         load_model: global___MlCommand.LoadModel | None = ...,
         save_model: global___MlCommand.SaveModel | None = ...,
         evaluate: global___MlCommand.Evaluate | None = ...,
+        save_stage: global___MlCommand.SaveStage | None = ...,
+        load_stage: global___MlCommand.LoadStage | None = ...,
     ) -> None: ...
     def HasField(
         self,
@@ -315,6 +395,8 @@ class MlCommand(google.protobuf.message.Message):
             b"fit",
             "load_model",
             b"load_model",
+            "load_stage",
+            b"load_stage",
             "ml_command_type",
             b"ml_command_type",
             "model_attr",
@@ -323,6 +405,8 @@ class MlCommand(google.protobuf.message.Message):
             b"model_summary_attr",
             "save_model",
             b"save_model",
+            "save_stage",
+            b"save_stage",
         ],
     ) -> builtins.bool: ...
     def ClearField(
@@ -334,6 +418,8 @@ class MlCommand(google.protobuf.message.Message):
             b"fit",
             "load_model",
             b"load_model",
+            "load_stage",
+            b"load_stage",
             "ml_command_type",
             b"ml_command_type",
             "model_attr",
@@ -342,12 +428,21 @@ class MlCommand(google.protobuf.message.Message):
             b"model_summary_attr",
             "save_model",
             b"save_model",
+            "save_stage",
+            b"save_stage",
         ],
     ) -> None: ...
     def WhichOneof(
         self, oneof_group: typing_extensions.Literal["ml_command_type", b"ml_command_type"]
     ) -> typing_extensions.Literal[
-        "fit", "model_attr", "model_summary_attr", "load_model", "save_model", "evaluate"
+        "fit",
+        "model_attr",
+        "model_summary_attr",
+        "load_model",
+        "save_model",
+        "evaluate",
+        "save_stage",
+        "load_stage",
     ] | None: ...
 
 global___MlCommand = MlCommand

@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.connect.ml
 
+import scala.collection.JavaConverters._
+
 import org.apache.spark.connect.proto
 import org.apache.spark.ml.Model
 import org.apache.spark.ml.param.ParamMap
@@ -83,6 +85,41 @@ object MLHandler {
           getModelSummaryAttrProto.getName,
           datasetOpt
         ).left.get
+
+      case proto.MlCommand.MlCommandTypeCase.LOAD_MODEL =>
+        val loadModelProto = mlCommand.getLoadModel
+        val algo = AlgorithmRegistry.get(loadModelProto.getName)
+        val model = algo.loadModel(loadModelProto.getPath)
+        val refId = sessionHolder.mlCache.modelCache.register(model, algo)
+
+        proto.MlCommandResponse.newBuilder().setModelInfo(
+          proto.MlCommandResponse.ModelInfo.newBuilder
+            .setModelRefId(refId)
+            .setModelUid(model.uid)
+        ).build()
+
+      case proto.MlCommand.MlCommandTypeCase.SAVE_MODEL =>
+        val saveModelProto = mlCommand.getSaveModel
+        val modelEntry = sessionHolder.mlCache.modelCache.get(
+          saveModelProto.getModelRefId
+        )
+        val model = modelEntry._1
+        val algo = modelEntry._2
+        algo.saveModel(
+          model,
+          saveModelProto.getPath,
+          saveModelProto.getOverwrite,
+          saveModelProto.getOptionsMap.asScala.toMap
+        )
+        proto.MlCommandResponse.newBuilder().build()
+
+      case proto.MlCommand.MlCommandTypeCase.LOAD_STAGE =>
+        // TODO: support this.
+        throw new UnsupportedOperationException()
+
+      case proto.MlCommand.MlCommandTypeCase.SAVE_STAGE =>
+        // TODO: support this.
+        throw new UnsupportedOperationException()
 
       case _ =>
         throw new IllegalArgumentException()

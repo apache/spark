@@ -22,7 +22,7 @@ import scala.reflect.ClassTag
 import org.apache.spark.connect.proto
 import org.apache.spark.ml.param.{ParamMap, Params}
 import org.apache.spark.sql.{DataFrame, Dataset}
-import org.apache.spark.sql.connect.planner.SparkConnectPlanner
+import org.apache.spark.sql.connect.planner.{LiteralValueProtoConverter, SparkConnectPlanner}
 import org.apache.spark.sql.connect.service.SessionHolder
 
 object MLUtils {
@@ -42,60 +42,34 @@ object MLUtils {
   }
 
   def parseParamValue(paramType: Class[_], paramValueProto: proto.Expression.Literal): Any = {
-    if (paramType == classOf[Int]) {
-      assert (paramValueProto.hasInteger || paramValueProto.hasLong)
-      if (paramValueProto.hasInteger) {
-        paramValueProto.getInteger
-      } else {
-        paramValueProto.getLong.toInt
-      }
-    } else if (paramType == classOf[Long]) {
-      assert(paramValueProto.hasLong)
-      paramValueProto.getLong
-    } else if (paramType == classOf[Float]) {
-      assert (paramValueProto.hasFloat || paramValueProto.hasDouble)
-      if (paramValueProto.hasFloat) {
-        paramValueProto.getFloat
-      } else {
-        paramValueProto.getDouble.toFloat
-      }
-    } else if (paramType == classOf[Double]) {
-      assert (paramValueProto.hasDouble)
-      paramValueProto.getDouble
-    } else if (paramType == classOf[Boolean]) {
-      assert (paramValueProto.hasBoolean)
-      paramValueProto.getBoolean
-    } else if (paramType == classOf[String]) {
-      assert (paramValueProto.hasString)
-      paramValueProto.getString
-    } else if (paramType.isArray) {
-      assert (paramValueProto.hasArray)
-      val listProto = paramValueProto.getArray
-      val compType = paramType.getComponentType
+    val value = LiteralValueProtoConverter.toCatalystValue(paramValueProto)
+    _convertParamValue(paramType, value)
+  }
 
-      def protoListToArray[T: ClassTag](listProto: proto.Expression.Literal.Array): Unit = {
-        Array.tabulate[T](listProto.getElementCount) { index =>
-          parseParamValue(
-            implicitly[ClassTag[T]].runtimeClass,
-            listProto.getElement(index)).asInstanceOf[T]
-        }
-      }
-
-      if (compType == classOf[Int]) {
-        protoListToArray[Int](listProto)
-      } else if (compType == classOf[Long]) {
-        protoListToArray[Long](listProto)
-      } else if (compType == classOf[Float]) {
-        protoListToArray[Float](listProto)
-      } else if (compType == classOf[Double]) {
-        protoListToArray[Double](listProto)
-      } else if (compType == classOf[Boolean]) {
-        protoListToArray[Boolean](listProto)
-      } else if (compType == classOf[String]) {
-        protoListToArray[String](listProto)
-      } else if (compType.isArray) {
-        Array.tabulate(listProto.getElementCount) { index =>
-          compType.cast(parseParamValue(compType, listProto.getElement(index)))
+  def _convertParamValue(paramType: Class[_], value: Any): Any = {
+    if (paramType.isInstance(value.asInstanceOf[Object])) {
+      value
+    } else {
+      // Some cases the param type might be mismatched with the value type.
+      // the cases includes:
+      // param type is Int but client sends a Long type.
+      // param type is Float but client sends a Double type.
+      // param type is Array[Int] but client sends a Array[Long] type.
+      // param type is Array[Float] but client sends a Array[Double] type.
+      // param type is Array[Array[Int]] but client sends a Array[Array[Long]] type.
+      // param type is Array[Array[Float]] but client sends a Array[Array[Double]] type.
+      if (paramType == classOf[Int]) {
+        value.asInstanceOf[Long].toInt
+      } else if (paramType == classOf[Float]) {
+        value.asInstanceOf[Double].toFloat
+      } else if (paramType == classOf[Array[Int]]) {
+        value.asInstanceOf[Array[Long]].map(_.toInt)
+      } else if (paramType == classOf[Array[Float]]) {
+        value.asInstanceOf[Array[Double]].map(_.toFloat)
+      } else if (paramType.isArray) {
+        val compType = paramType.getComponentType
+        value.asInstanceOf[Array[_]].map { e =>
+          _convertParamValue(compType, e)
         }
       } else {
         throw new IllegalArgumentException()

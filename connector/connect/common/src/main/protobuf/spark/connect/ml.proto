@@ -42,6 +42,8 @@ message MlCommand {
     LoadModel load_model = 4;
     SaveModel save_model = 5;
     Evaluate evaluate = 6;
+    SaveStage save_stage = 7;
+    LoadStage load_stage = 8;
   }
 
   message Fit {
@@ -60,6 +62,18 @@ message MlCommand {
 
   message SaveModel {
     int64 model_ref_id = 1;
+    string path = 2; // saving path
+    bool overwrite = 3;
+    map<string, string> options = 4; // saving options
+  }
+
+  message LoadStage {
+    string name = 1;
+    string path = 2;
+  }
+
+  message SaveStage {
+    Stage stage = 1;
     string path = 2; // saving path
     bool overwrite = 3;
     map<string, string> options = 4; // saving options

@@ -19,47 +19,23 @@ package org.apache.spark.sql.connect.ml
 
 import org.apache.spark.connect.proto
 import org.apache.spark.ml.linalg.{Matrix, Vector}
+import org.apache.spark.sql.connect.planner.LiteralValueProtoConverter
 
 object Serializer {
 
-  def serialize(data: Int): proto.MlCommandResponse = {
-    proto.MlCommandResponse.newBuilder().setLiteral(
-      proto.Expression.Literal.newBuilder().setInteger(data)
-    ).build()
-  }
+  def serialize(data: Any): proto.MlCommandResponse = {
 
-  def serialize(data: Double): proto.MlCommandResponse = {
-    proto.MlCommandResponse.newBuilder().setLiteral(
-      proto.Expression.Literal.newBuilder().setDouble(data)
-    ).build()
-  }
-
-  def serialize(data: String): proto.MlCommandResponse = {
-    proto.MlCommandResponse.newBuilder().setLiteral(
-      proto.Expression.Literal.newBuilder().setString(data)
-    ).build()
-  }
-
-  def serialize(data: Boolean): proto.MlCommandResponse = {
-    proto.MlCommandResponse.newBuilder().setLiteral(
-      proto.Expression.Literal.newBuilder().setBoolean(data)
-    ).build()
-  }
-
-  def serialize(data: Array[Double]): proto.MlCommandResponse = {
-    val arrayBuilder = proto.Expression.Literal.Array.newBuilder()
-    for (v <- data) {
-      arrayBuilder.addElement(proto.Expression.Literal.newBuilder().setDouble(v))
+    data match {
+      case v: Vector => serializeVector(v)
+      case v: Matrix => serializeMatrix(v)
+      case v @ (_: Int | _: Long | _: Float | _: Double |_: Boolean | _: String | _: Array[_]) =>
+        proto.MlCommandResponse.newBuilder().setLiteral(
+          LiteralValueProtoConverter.toConnectProtoValue(data)
+        ).build()
     }
-    arrayBuilder.setElementType(
-      proto.DataType.newBuilder().setDouble(proto.DataType.Double.newBuilder())
-    )
-    proto.MlCommandResponse.newBuilder().setLiteral(
-      proto.Expression.Literal.newBuilder().setArray(arrayBuilder)
-    ).build()
   }
 
-  def serialize(data: Vector): proto.MlCommandResponse = {
+  def serializeVector(data: Vector): proto.MlCommandResponse = {
     // TODO: Support sparse
     val values = data.toArray
     val denseBuilder = proto.Vector.Dense.newBuilder()
@@ -72,7 +48,7 @@ object Serializer {
     ).build()
   }
 
-  def serialize(data: Matrix): proto.MlCommandResponse = {
+  def serializeMatrix(data: Matrix): proto.MlCommandResponse = {
     // TODO: Support sparse
     // TODO: optimize transposed case
     val denseBuilder = proto.Matrix.Dense.newBuilder()

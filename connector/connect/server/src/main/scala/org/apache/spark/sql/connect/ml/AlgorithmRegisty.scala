@@ -21,6 +21,7 @@ import org.apache.spark.connect.proto
 import org.apache.spark.ml
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.classification.TrainingSummary
+import org.apache.spark.ml.util.MLWriter
 import org.apache.spark.sql.DataFrame
 
 
@@ -48,15 +49,67 @@ abstract class Algorithm {
     name: String,
     datasetOpt: Option[DataFrame]
   ): Either[proto.MlCommandResponse, DataFrame]
+
+  def loadModel(path: String): Model[_]
+
+  def loadEstimator(path: String): Estimator[_]
+
+  protected def getEstimatorWriter(estimator: Estimator[_]): MLWriter
+
+  protected def getModelWriter(model: Model[_]): MLWriter
+
+  def _save(
+            writer: MLWriter, path: String, overwrite: Boolean, options: Map[String, String]
+          ): Unit = {
+    if (overwrite) {
+      writer.overwrite()
+    }
+    options.map { case (k, v) => writer.option(k, v) }
+    writer.save(path)
+  }
+
+  def saveModel(
+                 model: Model[_], path: String, overwrite: Boolean, options: Map[String, String]
+               ): Unit = {
+    _save(getModelWriter(model), path, overwrite, options)
+  }
+
+  def saveEstimator(
+                     estimator: Estimator[_],
+                     path: String,
+                     overwrite: Boolean,
+                     options: Map[String, String]
+                   ): Unit = {
+    _save(getEstimatorWriter(estimator), path, overwrite, options)
+  }
 }
+
 
 class LogisticRegressionAlgorithm extends Algorithm {
 
-  def initiateEstimator(uid: String): Estimator[_] = {
+  override def initiateEstimator(uid: String): Estimator[_] = {
     new ml.classification.LogisticRegression(uid)
   }
 
-  def getModelAttr(model: Model[_], name: String): Either[proto.MlCommandResponse, DataFrame] = {
+  override def loadModel(path: String): Model[_] = {
+    ml.classification.LogisticRegressionModel.load(path)
+  }
+
+  override def loadEstimator(path: String): Estimator[_] = {
+    ml.classification.LogisticRegression.load(path)
+  }
+
+  protected override def getModelWriter(model: Model[_]): MLWriter = {
+    model.asInstanceOf[ml.classification.LogisticRegressionModel].write
+  }
+
+  protected override def getEstimatorWriter(estimator: Estimator[_]): MLWriter = {
+    estimator.asInstanceOf[ml.classification.LogisticRegression].write
+  }
+
+  override def getModelAttr(
+                             model: Model[_], name: String
+                           ): Either[proto.MlCommandResponse, DataFrame] = {
     val lorModel = model.asInstanceOf[ml.classification.LogisticRegressionModel]
     // TODO: hasSummary
     name match {
@@ -72,7 +125,7 @@ class LogisticRegressionAlgorithm extends Algorithm {
     }
   }
 
-  def getModelSummaryAttr(
+  override def getModelSummaryAttr(
                            model: Model[_],
                            name: String,
                            datasetOpt: Option[DataFrame]
