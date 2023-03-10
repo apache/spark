@@ -872,7 +872,7 @@ abstract class AvroSuite
         dfWithNull.write.format("avro")
           .option("avroSchema", avroSchema).save(s"$tempDir/${UUID.randomUUID()}")
       }
-      assertExceptionMsg[AvroTypeException](e1, "Not an enum: null")
+      assertExceptionMsg[AvroTypeException](e1, "value null is not a SuitEnumType")
 
       // Writing df containing data not in the enum will throw an exception
       val e2 = intercept[SparkException] {
@@ -1071,8 +1071,8 @@ abstract class AvroSuite
           .write.format("avro").option("avroSchema", avroSchema)
           .save(s"$tempDir/${UUID.randomUUID()}")
       }.getCause.getMessage
-      assert(message.contains("Caused by: java.lang.NullPointerException: " +
-        "null of string in string in field Name of test_schema in test_schema"))
+      assert(message.contains("Caused by: java.lang.NullPointerException: "))
+      assert(message.contains("null in string in field Name"))
     }
   }
 
