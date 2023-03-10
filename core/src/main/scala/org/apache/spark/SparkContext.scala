@@ -19,6 +19,7 @@ package org.apache.spark
 
 import java.io._
 import java.net.URI
+import java.nio.file.Files
 import java.util.{Arrays, Locale, Properties, ServiceLoader, UUID}
 import java.util.concurrent.{ConcurrentHashMap, ConcurrentMap}
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger, AtomicReference}
@@ -386,6 +387,18 @@ class SparkContext(config: SparkConf) extends Logging {
     Utils.setLogLevel(Level.toLevel(upperCased))
   }
 
+  // Local storage for transferred artifacts through Spark Connect.
+  private val _sparkConnectArtifactDirectory: File = Utils.createTempDir("artifacts")
+
+  /**
+   * :: Experimental ::
+   * Returns the directory that stores artifacts transferred through Spark Connect.
+   *
+   * @since 3.4.0
+   */
+  @Experimental
+  def sparkConnectArtifactDirectory: File = _sparkConnectArtifactDirectory
+
   try {
     _conf = config.clone()
     _conf.validateSettings()
@@ -465,9 +478,20 @@ class SparkContext(config: SparkConf) extends Logging {
     SparkEnv.set(_env)
 
     // If running the REPL, register the repl's output dir with the file server.
-    _conf.getOption("spark.repl.class.outputDir").foreach { path =>
-      val replUri = _env.rpcEnv.fileServer.addDirectory("/classes", new File(path))
-      _conf.set("spark.repl.class.uri", replUri)
+    _conf.getOption("spark.repl.class.outputDir") match {
+      case Some(path) =>
+        val replUri = _env.rpcEnv.fileServer.addDirectory("/classes", new File(path))
+        _conf.set("spark.repl.class.uri", replUri)
+      case None =>
+        // For Spark Connect, we piggyback on the existing REPL integration to load class
+        // files on the executors.
+        // This is a temporary intermediate step due to unavailable classloader isolation.
+        val classDirectory = sparkConnectArtifactDirectory.toPath.resolve("classes")
+        Files.createDirectories(classDirectory)
+        val classDirectoryUri = _env.rpcEnv.fileServer.addDirectory(
+          "/classes",
+          classDirectory.toFile)
+        _conf.set("spark.repl.class.uri", classDirectoryUri)
     }
 
     _statusTracker = new SparkStatusTracker(this, _statusStore)

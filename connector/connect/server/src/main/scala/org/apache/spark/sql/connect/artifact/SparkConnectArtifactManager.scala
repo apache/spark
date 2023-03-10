@@ -18,12 +18,12 @@
 package org.apache.spark.sql.connect.artifact
 
 import java.net.{URL, URLClassLoader}
-import java.nio.file.{Files, Path, Paths}
+import java.nio.file.{Files, Path, Paths, StandardCopyOption}
 import java.util.concurrent.CopyOnWriteArrayList
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.SparkEnv
+import org.apache.spark.{SparkContext, SparkEnv}
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.util.Utils
 
@@ -43,8 +43,13 @@ class SparkConnectArtifactManager private[connect] {
   // The base directory where all artifacts are stored.
   // Note: If a REPL is attached to the cluster, class file artifacts are stored in the
   // REPL's output directory.
-  private[connect] val artifactRootPath = Utils.createTempDir("artifacts").toPath
-  private[connect] val artifactRootURI = {
+  private[connect] lazy val artifactRootPath = SparkContext.getActive match {
+    case Some(sc) =>
+      sc.sparkConnectArtifactDirectory.toPath
+    case None =>
+      throw new RuntimeException("SparkContext is uninitialized!")
+  }
+  private[connect] lazy val artifactRootURI = {
     val fileServer = SparkEnv.get.rpcEnv.fileServer
     fileServer.addDirectory("artifacts", artifactRootPath.toFile)
   }
@@ -52,23 +57,17 @@ class SparkConnectArtifactManager private[connect] {
   // The base directory where all class files are stored.
   // Note: If a REPL is attached to the cluster, we piggyback on the existing REPL output
   // directory to store class file artifacts.
-  private[connect] val classArtifactDir = {
-    val dir = SparkEnv.get.conf
-      .getOption("spark.repl.class.outputDir")
-      .map(p => Paths.get(p))
-      .getOrElse(artifactRootPath.resolve("classes"))
-    Files.createDirectories(dir)
-    dir
-  }
-  private[connect] val classArtifactUri: String = {
-    val conf = SparkEnv.get.conf
-    // If set, piggyback on the existing repl class uri functionality that the executor uses
-    // to load class files.
-    conf.getOption("spark.repl.class.uri").getOrElse {
-      val fileServer = SparkEnv.get.rpcEnv.fileServer
-      fileServer.addDirectory(artifactRootURI + "/classes", classArtifactDir.toFile)
+  private[connect] lazy val classArtifactDir = SparkEnv.get.conf
+    .getOption("spark.repl.class.outputDir")
+    .map(p => Paths.get(p))
+    .getOrElse(artifactRootPath.resolve("classes"))
+
+  private[connect] lazy val classArtifactUri: String =
+    SparkEnv.get.conf.getOption("spark.repl.class.uri") match {
+      case Some(uri) => uri
+      case None =>
+        throw new RuntimeException("Class artifact URI had not been initialised in SparkContext!")
     }
-  }
 
   private val jarsList = new CopyOnWriteArrayList[Path]
 
@@ -96,15 +95,20 @@ class SparkConnectArtifactManager private[connect] {
       // Move class files to common location (shared among all users)
       val target = classArtifactDir.resolve(remoteRelativePath.toString.stripPrefix("classes/"))
       Files.createDirectories(target.getParent)
-      Files.move(serverLocalStagingPath, target)
+      // Allow overwriting class files to capture updates to classes.
+      Files.move(serverLocalStagingPath, target, StandardCopyOption.REPLACE_EXISTING)
     } else {
       val target = artifactRootPath.resolve(remoteRelativePath)
       Files.createDirectories(target.getParent)
-      Files.move(serverLocalStagingPath, target)
-      if (remoteRelativePath.startsWith("jars")) {
-        // Adding Jars to the underlying spark context (visible to all users)
-        session.sessionState.resourceLoader.addJar(target.toString)
-        jarsList.add(target)
+      // Disallow overwriting jars because spark doesn't support removing jars that were
+      // previously added,
+      if (!Files.exists(target)) {
+        Files.move(serverLocalStagingPath, target)
+        if (remoteRelativePath.startsWith("jars")) {
+          // Adding Jars to the underlying spark context (visible to all users)
+          session.sessionState.resourceLoader.addJar(target.toString)
+          jarsList.add(target)
+        }
       }
     }
   }
