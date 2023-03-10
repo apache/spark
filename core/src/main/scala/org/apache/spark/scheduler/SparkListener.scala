@@ -67,7 +67,8 @@ case class SparkListenerTaskEnd(
     taskInfo: TaskInfo,
     taskExecutorMetrics: ExecutorMetrics,
     // may be null if the task has failed
-    @Nullable taskMetrics: TaskMetrics)
+    @Nullable taskMetrics: TaskMetrics,
+    queryId: String = "")
   extends SparkListenerEvent
 
 @DeveloperApi

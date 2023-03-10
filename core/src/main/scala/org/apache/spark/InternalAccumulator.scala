@@ -73,6 +73,11 @@ private[spark] object InternalAccumulator {
   object input {
     val BYTES_READ = INPUT_METRICS_PREFIX + "bytesRead"
     val RECORDS_READ = INPUT_METRICS_PREFIX + "recordsRead"
+    val SKIP_BLOOM_BLOCKS = INPUT_METRICS_PREFIX + "skipBloomBlocks"
+    val SKIP_BLOOM_ROWS = INPUT_METRICS_PREFIX + "skipBloomRows"
+    val TOTAL_BLOOM_BLOCKS = INPUT_METRICS_PREFIX + "totalBloomBlocks"
+    val FOOTER_READ_TIME = INPUT_METRICS_PREFIX + "footerReadTime"
+    val FOOTER_READ_NUMBER = INPUT_METRICS_PREFIX + "footerReadNumber"
   }
 
   // scalastyle:on
