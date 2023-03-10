@@ -225,9 +225,18 @@ case class AdaptiveSparkPlanExec(
       .map(_.toLong)
   }
 
-  private lazy val needFinalPlanUpdate: Boolean = {
-    // Only the root `AdaptiveSparkPlanExec` of the main query that triggers this query execution
-    // need to do a final plan update for the UI.
+  private lazy val shouldUpdatePlan: Boolean = {
+    // There are two cases that should not update plan:
+    // 1. When executing subqueries, we can't update the query plan in the UI as the
+    //    UI doesn't support partial update yet. However, the subquery may have been
+    //    optimized into a different plan and we must let the UI know the SQL metrics
+    //    of the new plan nodes, so that it can track the valid accumulator updates later
+    //    and display SQL metrics correctly.
+    // 2. If the `QueryExecution` does not match the current execution ID, it means the execution
+    //    ID belongs to another (parent) query, and we should not call update UI in this query.
+    //
+    // That means only the root `AdaptiveSparkPlanExec` of the main query that triggers this
+    // query execution need to do a plan update for the UI.
     !isSubquery && getExecutionId.exists(SQLExecution.getQueryExecution(_) eq context.qe)
   }
 
@@ -350,7 +359,7 @@ case class AdaptiveSparkPlanExec(
     // Subqueries that don't belong to any query stage of the main query will execute after the
     // last UI update in `getFinalPhysicalPlan`, so we need to update UI here again to make sure
     // the newly generated nodes of those subqueries are updated.
-    if (needFinalPlanUpdate && currentPhysicalPlan.exists(_.subqueries.nonEmpty)) {
+    if (currentPhysicalPlan.exists(_.subqueries.nonEmpty)) {
       getExecutionId.foreach(onUpdatePlan(_, Seq.empty))
     }
     logOnLevel(s"Final plan:\n$currentPhysicalPlan")
@@ -735,12 +744,7 @@ case class AdaptiveSparkPlanExec(
    * Notify the listeners of the physical plan change.
    */
   private def onUpdatePlan(executionId: Long, newSubPlans: Seq[SparkPlan]): Unit = {
-    if (!needFinalPlanUpdate) {
-      // When executing subqueries, we can't update the query plan in the UI as the
-      // UI doesn't support partial update yet. However, the subquery may have been
-      // optimized into a different plan and we must let the UI know the SQL metrics
-      // of the new plan nodes, so that it can track the valid accumulator updates later
-      // and display SQL metrics correctly.
+    if (!shouldUpdatePlan) {
       val newMetrics = newSubPlans.flatMap { p =>
         p.flatMap(_.metrics.values.map(m => SQLPlanMetric(m.name.get, m.id, m.metricType)))
       }

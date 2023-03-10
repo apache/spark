@@ -266,7 +266,7 @@ case class TableCacheQueryStageExec(
   @transient val inMemoryTableScan = plan match {
     case i: InMemoryTableScanExec => i
     case _ =>
-      throw new IllegalStateException(s"wrong plan for in memory stage:\n ${plan.treeString}")
+      throw new IllegalStateException(s"wrong plan for table cache stage:\n ${plan.treeString}")
   }
 
   @transient
@@ -287,7 +287,7 @@ case class TableCacheQueryStageExec(
 
   override def cancel(): Unit = {
     if (!isMaterialized) {
-      logDebug(s"Skip canceling the table cache query: $id")
+      logDebug(s"Skip canceling the table cache stage: $id")
     }
   }
 

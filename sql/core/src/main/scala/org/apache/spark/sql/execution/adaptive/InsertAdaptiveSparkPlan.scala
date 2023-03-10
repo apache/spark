@@ -89,7 +89,7 @@ case class InsertAdaptiveSparkPlan(
   //   - The query may need to add exchanges. It's an overkill to run `EnsureRequirements` here, so
   //     we just check `SparkPlan.requiredChildDistribution` and see if it's possible that the
   //     the query needs to add exchanges later.
-  //   - The query contains nested `AdaptiveSparkPlanExec`
+  //   - The query contains nested `AdaptiveSparkPlanExec`.
   //   - The query contains sub-query.
   private def shouldApplyAQE(plan: SparkPlan, isSubquery: Boolean): Boolean = {
     conf.getConf(SQLConf.ADAPTIVE_EXECUTION_FORCE_APPLY) || isSubquery || {
