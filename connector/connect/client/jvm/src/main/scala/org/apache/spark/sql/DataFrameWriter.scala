@@ -368,7 +368,7 @@ final class DataFrameWriter[T] private[sql] (ds: Dataset[T]) {
    *   "READ_UNCOMMITTED", "REPEATABLE_READ", or "SERIALIZABLE", corresponding to standard
    *   transaction isolation levels defined by JDBC's Connection object, with default of
    *   "READ_UNCOMMITTED".
-   * @since 1.4.0
+   * @since 3.4.0
    */
   def jdbc(url: String, table: String, connectionProperties: Properties): Unit = {
     // connectionProperties should override settings in extraOptions.
