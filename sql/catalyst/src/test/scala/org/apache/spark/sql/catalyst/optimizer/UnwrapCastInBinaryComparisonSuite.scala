@@ -196,7 +196,7 @@ class UnwrapCastInBinaryComparisonSuite extends PlanTest with ExpressionEvalHelp
     })
   }
 
-  test("unwrap casts when literal is null") {
+  test("SPARK-42741: Do not unwrap casts in binary comparison when literal is null") {
     val intLit = Literal.create(null, IntegerType)
     val nullLit = Literal.create(null, BooleanType)
     assertEquivalent(castInt(f) > intLit, nullLit)

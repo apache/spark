@@ -129,7 +129,7 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
     // moving cast to the literal side.
     case be @ BinaryComparison(
       Cast(fromExp, toType: NumericType, _, _), Literal(value, literalType))
-        if canImplicitlyCast(fromExp, toType, literalType) =>
+        if canImplicitlyCast(fromExp, toType, literalType) && value != null =>
       Some(simplifyNumericComparison(be, fromExp, toType, value))
 
     case be @ BinaryComparison(
