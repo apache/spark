@@ -199,15 +199,16 @@ df.show()
 </div>
 
 <div data-lang="scala"  markdown="1">
-For Scala, first download and install Ammonite using the following command in a terminal
-window:
+For Scala, first download and install [Ammonite](http://ammonite.io/) using the
+following command in a terminal window:
 {% highlight bash %}
 sudo sh -c '(echo "#!/usr/bin/env sh" &&
 curl -L https://github.com/com-lihaoyi/Ammonite/releases/download/2.5.8/2.12-2.5.8) >
 /usr/local/bin/amm && chmod +x /usr/local/bin/amm' && amm
 {% endhighlight %}
 
-Then download and install a script for starting the Scala shell with this command:
+Then download and install a [script](https://gist.github.com/hvanhovell/fd8afd47632d97946084d254f4dad39c)
+for starting the Scala shell with this command:
 {% highlight bash %}
 curl -L -o spark_connect_scala_client.sc
 https://gist.githubusercontent.com/hvanhovell/fd8afd47632d97946084d254f4dad39c/raw
