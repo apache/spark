@@ -40,7 +40,7 @@
 
         <!-- This code is taken from http://twitter.github.com/bootstrap/examples/hero.html -->
 
-        <nav class="navbar navbar-expand-lg navbar-dark p-0 px-4" style="background: #1d6890;" id="topbar">
+        <nav class="navbar navbar-expand-lg navbar-dark p-0 px-4 fixed-top" style="background: #1d6890;" id="topbar">
             <div class="navbar-brand"><a href="index.html">
                 <img src="img/spark-logo-rev.svg" width="141" height="72"/></a><span class="version">{{site.SPARK_VERSION_SHORT}}</span>
             </div>
@@ -124,14 +124,20 @@
             </div>
             <div class="container position-relative">
                 <div class="row">
-                  <h1 style="max-width: 680px;">Unified engine for large-scale data analytics</h1>
+                  <h1 style="max-width: 680px;">Apache Spark - A Unified engine for large-scale data analytics</h1>
                 </div>
                 <div class="row mt-5">
                   <div class="col-12 col-lg-6 no-gutters">
-                    <strong style="font-size:1.4em;">Apache Spark</strong> is a unified analytics engine for large-scale data processing.
+                    Apache Spark is a unified analytics engine for large-scale data processing.
                     It provides high-level APIs in Java, Scala, Python and R,
                     and an optimized engine that supports general execution graphs.
-                    It also supports a rich set of higher-level tools including [Spark SQL](sql-programming-guide.html) for SQL and structured data processing, [pandas API on Spark](api/python/getting_started/quickstart_ps.html) for pandas workloads, [MLlib](ml-guide.html) for machine learning, [GraphX](graphx-programming-guide.html) for graph processing, and [Structured Streaming](structured-streaming-programming-guide.html) for incremental computation and stream processing.
+                    It also supports a rich set of higher-level tools including
+                    <a href="sql-programming-guide.html">Spark SQL</a> for SQL and structured data processing,
+                    <a href="api/python/getting_started/quickstart_ps.html">pandas API on Spark</a> for pandas workloads,
+                    <a href="ml-guide.html">MLlib</a> for machine learning,
+                    <a href="graphx-programming-guide.html">GraphX</a> for graph processing,
+                     and <a href="structured-streaming-programming-guide.html">Structured Streaming</a>
+                     for incremental computation and stream processing.
                   </div>
                 </div>
             </div>
@@ -163,14 +169,14 @@
                 </div>
             {% else %}
                 <div class="content mr-3" id="content">
-                    {% if page.displayTitle %}
-                        <h1 class="title">{{ page.displayTitle }}</h1>
-                    {% else %}
-                        <h1 class="title">{{ page.title }}</h1>
+                    {% if page.url != "/" %}
+                        {% if page.displayTitle %}
+                            <h1 class="title">{{ page.displayTitle }}</h1>
+                        {% else %}
+                            <h1 class="title">{{ page.title }}</h1>
+                        {% endif %}
                     {% endif %}
-
                     {{ content }}
-
                 </div>
             {% endif %}
              <!-- /container -->

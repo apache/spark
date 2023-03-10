@@ -29,7 +29,7 @@ function codeTabs() {
     $(this).addClass("tab-content");
 
     // Insert the tab bar
-    var tabBar = $('<ul class="nav nav-tabs mb-4" data-tabs="tabs" role="tablist"></ul>');
+    var tabBar = $('<ul class="nav nav-tabs mb-3" data-tabs="tabs" role="tablist"></ul>');
     $(this).before(tabBar);
 
     // Add each code sample to the tab bar:

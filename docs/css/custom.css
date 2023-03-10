@@ -8,6 +8,7 @@ body {
   font-weight: 400;
   overflow-wrap: anywhere;
   overflow-x: hidden;
+  padding-top: 80px;
 }
 
 a {
@@ -189,10 +190,6 @@ section {
   font-size: 17px;
   line-height: 24px;
   margin-right: 20px;
-}
-
-.nav-tabs {
-  border: none;
 }
 
 .spark-run-now {
@@ -988,7 +985,7 @@ blockquote {
   background-color: #FFF;
   max-width: 914px;
   line-height: 1.6; /* Inspired by GitHub's wiki style */
-  padding-left: 15px;
+  /*padding-left: 15px;*/
 }
 
 .content-with-sidebar {
@@ -1104,5 +1101,14 @@ label[for="nav-trigger"]:hover {
     margin-left: -215px;
   }
 
+}
+
+img {
+  max-width: 100%;
+}
+
+table {
+  width: 100%;
+  overflow-wrap: normal;
 }
 
