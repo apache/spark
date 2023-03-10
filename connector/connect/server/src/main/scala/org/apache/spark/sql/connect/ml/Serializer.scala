@@ -48,11 +48,8 @@ object Serializer {
 
   def serialize(data: Array[Double]): proto.MlCommandResponse = {
     val arrayBuilder = proto.Expression.Literal.Array.newBuilder()
-    for (i <- 0 until data.length) {
-      arrayBuilder.setElement(
-        i,
-        proto.Expression.Literal.newBuilder().setDouble(data(i))
-      )
+    for (v <- data) {
+      arrayBuilder.addElement(proto.Expression.Literal.newBuilder().setDouble(v))
     }
     arrayBuilder.setElementType(
       proto.DataType.newBuilder().setDouble(proto.DataType.Double.newBuilder())
@@ -67,7 +64,7 @@ object Serializer {
     val values = data.toArray
     val denseBuilder = proto.Vector.Dense.newBuilder()
     for (i <- 0 until values.length) {
-      denseBuilder.setValue(i, values(i))
+      denseBuilder.addValue(values(i))
     }
 
     proto.MlCommandResponse.newBuilder().setVector(
@@ -81,7 +78,7 @@ object Serializer {
     val denseBuilder = proto.Matrix.Dense.newBuilder()
     val values = data.toArray
     for (i <- 0 until values.length) {
-      denseBuilder.setValue(i, values(i))
+      denseBuilder.addValue(values(i))
     }
     denseBuilder.setNumCols(data.numCols)
     denseBuilder.setNumRows(data.numRows)

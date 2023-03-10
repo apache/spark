@@ -31,8 +31,10 @@ def deserialize(ml_command_result: ml_pb2.MlCommandResponse, client):
             return literal.integer
         if literal.HasField("double"):
             return literal.double
+        if literal.HasField("string"):
+            return literal.string
         if literal.HasField("array"):
-            arr = pb2.Expression.Literal.Array()
+            arr = literal.array
             if arr.elementType.HasField("double"):
                 return [e.double for e in arr.element]
         raise ValueError()

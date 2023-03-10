@@ -133,7 +133,9 @@ object MLHandler {
             sessionHolder
           )
           Some(evalDF)
-        } else None
+        } else {
+          None
+        }
         algo.getModelSummaryAttr(
           copiedModel,
           modelSummaryAttr.getName,

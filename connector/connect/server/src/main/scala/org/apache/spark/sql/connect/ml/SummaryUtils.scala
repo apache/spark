@@ -41,12 +41,15 @@ object SummaryUtils {
       case "recallByLabel" => Some(Left(Serializer.serialize(summary.recallByLabel)))
       // TODO: Support beta params.
       case "fMeasureByLabel" => Some(Left(Serializer.serialize(summary.fMeasureByLabel)))
-      case "accuracy" => Some(Left(Serializer.serialize(summary.labels)))
-      case "weightedTruePositiveRate" => Some(Left(Serializer.serialize(summary.labels)))
-      case "weightedRecall" => Some(Left(Serializer.serialize(summary.labels)))
-      case "weightedPrecision" => Some(Left(Serializer.serialize(summary.labels)))
+      case "accuracy" => Some(Left(Serializer.serialize(summary.accuracy)))
+      case "weightedTruePositiveRate" =>
+        Some(Left(Serializer.serialize(summary.weightedTruePositiveRate)))
+      case "weightedFalsePositiveRate" =>
+        Some(Left(Serializer.serialize(summary.weightedFalsePositiveRate)))
+      case "weightedRecall" => Some(Left(Serializer.serialize(summary.weightedRecall)))
+      case "weightedPrecision" => Some(Left(Serializer.serialize(summary.weightedPrecision)))
       // TODO: Support beta params.
-      case "weightedFMeasure" => Some(Left(Serializer.serialize(summary.labels)))
+      case "weightedFMeasure" => Some(Left(Serializer.serialize(summary.weightedFMeasure)))
       case _ => None
     }
   }

@@ -130,7 +130,7 @@ class _ModelAttrRelationPlan(LogicalPlan):
         plan = self._create_proto_relation()
         plan.ml_relation.model_attr.model_ref_id = self.model.ref_id
         plan.ml_relation.model_attr.name = self.name
-        plan.ml_relation.model_transform.params.CopyFrom(serialize_ml_params(self.model, session))
+        plan.ml_relation.model_attr.params.CopyFrom(serialize_ml_params(self.model, session))
         return plan
 
 
@@ -141,13 +141,12 @@ class _ModelSummaryAttrRelationPlan(LogicalPlan):
         self.name = name
 
     def plan(self, session: "SparkConnectClient") -> pb2.Relation:
-        assert self._child is not None
         plan = self._create_proto_relation()
-        plan.ml_relation.model_summary_attr.evaluation_dataset \
-            .CopyFrom(self._child.plan(session))
+        if self._child is not None:
+            plan.ml_relation.model_summary_attr.evaluation_dataset.CopyFrom(self._child.plan(session))
         plan.ml_relation.model_summary_attr.model_ref_id = self.model.ref_id
         plan.ml_relation.model_summary_attr.name = self.name
-        plan.ml_relation.model_transform.params.CopyFrom(serialize_ml_params(self.model, session))
+        plan.ml_relation.model_summary_attr.params.CopyFrom(serialize_ml_params(self.model, session))
         return plan
 
 
@@ -159,7 +158,8 @@ class ClientModelSummary(metaclass=ABCMeta):
     def _get_summary_attr_dataframe(self, name):
         session = SparkSession.getActiveSession()
         plan = _ModelSummaryAttrRelationPlan(
-            self.dataset._plan, self.model, name
+            (self.dataset._plan if self.dataset is not None else None),
+            self.model, name
         )
         return DataFrame.withPlan(plan, session)
 
@@ -169,8 +169,8 @@ class ClientModelSummary(metaclass=ABCMeta):
         model_summary_attr_command_proto = ml_pb2.MlCommand.ModelSummaryAttr(
             model_ref_id=self.model.ref_id,
             name=name,
-            params=serialize_ml_params(self, client),
-            evaluation_dataset=self.dataset._plan
+            params=serialize_ml_params(self.model, client),
+            evaluation_dataset=(self.dataset._plan.plan(client) if self.dataset is not None else None)
         )
         req = client._execute_plan_request_with_metadata()
         req.plan.ml_command.model_summary_attr.CopyFrom(model_summary_attr_command_proto)
