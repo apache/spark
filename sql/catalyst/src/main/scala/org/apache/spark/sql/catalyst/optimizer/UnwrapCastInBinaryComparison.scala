@@ -105,16 +105,15 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
     case l: LogicalPlan =>
       l.transformExpressionsUpWithPruning(
         _.containsAnyPattern(BINARY_COMPARISON, IN, INSET), ruleId) {
-        case e @ (BinaryComparison(_, _) | In(_, _) | InSet(_, _)) => unwrapCast(e)
+        case e @ (BinaryComparison(_, _) | In(_, _) | InSet(_, _)) => unwrapCast(e).getOrElse(e)
       }
   }
 
-  private def unwrapCast(exp: Expression): Expression = exp match {
+  private def unwrapCast(exp: Expression): Option[Expression] = exp match {
     // Not a canonical form. In this case we first canonicalize the expression by swapping the
     // literal and cast side, then process the result and swap the literal and cast again to
     // restore the original order.
-    case BinaryComparison(Literal(_, literalType), Cast(fromExp, toType, _, _))
-        if needToCanonicalizeExpression(fromExp, toType, literalType) =>
+    case BinaryComparison(_: Literal, _: Cast) =>
       def swap(e: Expression): Expression = e match {
         case GreaterThan(left, right) => LessThan(right, left)
         case GreaterThanOrEqual(left, right) => LessThanOrEqual(right, left)
@@ -125,19 +124,19 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
         case _ => e
       }
 
-      swap(unwrapCast(swap(exp)))
+      unwrapCast(swap(exp)).map(swap)
 
     // In case both sides have numeric type, optimize the comparison by removing casts or
     // moving cast to the literal side.
     case be @ BinaryComparison(
       Cast(fromExp, toType: NumericType, _, _), Literal(value, literalType))
         if canImplicitlyCast(fromExp, toType, literalType) =>
-      simplifyNumericComparison(be, fromExp, toType, value)
+      Some(simplifyNumericComparison(be, fromExp, toType, value))
 
     case be @ BinaryComparison(
       Cast(fromExp, _, timeZoneId, evalMode), date @ Literal(value, DateType))
         if AnyTimestampType.acceptsType(fromExp.dataType) && value != null =>
-      unwrapDateToTimestamp(be, fromExp, date, timeZoneId, evalMode)
+      Some(unwrapDateToTimestamp(be, fromExp, date, timeZoneId, evalMode))
 
     // As the analyzer makes sure that the list of In is already of the same data type, then the
     // rule can simply check the first literal in `in.list` can implicitly cast to `toType` or not,
@@ -157,7 +156,7 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
           val newList = nullList.map(lit => Cast(lit, fromExp.dataType)) ++ canCastList
           In(fromExp, newList.toSeq)
       }
-      simplifyIn(fromExp, toType, list, buildIn).getOrElse(exp)
+      simplifyIn(fromExp, toType, list, buildIn)
 
     // The same with `In` expression, the analyzer makes sure that the hset of InSet is already of
     // the same data type, so simply check `fromExp.dataType` can implicitly cast to `toType` and
@@ -171,9 +170,9 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
         fromExp,
         toType,
         hset.map(v => Literal.create(v, toType)).toSeq,
-        buildInSet).getOrElse(exp)
+        buildInSet)
 
-    case _ => exp
+    case _ => None
   }
 
   /**
@@ -372,15 +371,6 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
     }
   }
 
-  private def needToCanonicalizeExpression(
-      fromExp: Expression,
-      toType: DataType,
-      literalType: DataType): Boolean = {
-    toType.sameType(literalType) &&
-      !fromExp.foldable &&
-      ((toType.isInstanceOf[NumericType] && canImplicitlyCast(fromExp, toType, literalType)) ||
-        (toType.isInstanceOf[DateType] && AnyTimestampType.acceptsType(fromExp.dataType)))
-  }
 
   /**
    * Check if the input `fromExp` can be safely cast to `toType` without any loss of precision,
