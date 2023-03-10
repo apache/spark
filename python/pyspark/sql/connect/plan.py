@@ -1436,10 +1436,6 @@ class WriteOperation(LogicalPlan):
                     )
         elif self.path is not None:
             plan.write_operation.path = self.path
-        else:
-            raise AssertionError(
-                "Invalid configuration of WriteCommand, neither path or table present."
-            )
 
         if self.mode is not None:
             wm = self.mode.lower()

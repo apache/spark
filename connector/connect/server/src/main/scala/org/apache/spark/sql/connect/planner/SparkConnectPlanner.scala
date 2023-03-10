@@ -1723,6 +1723,7 @@ class SparkConnectPlanner(val session: SparkSession) {
     }
 
     writeOperation.getSaveTypeCase match {
+      case proto.WriteOperation.SaveTypeCase.SAVETYPE_NOT_SET => w.save()
       case proto.WriteOperation.SaveTypeCase.PATH => w.save(writeOperation.getPath)
       case proto.WriteOperation.SaveTypeCase.TABLE =>
         val tableName = writeOperation.getTable.getTableName
