@@ -287,7 +287,7 @@ case class TableCacheQueryStageExec(
 
   override def cancel(): Unit = {
     if (!isMaterialized) {
-      future.cancel()
+      logDebug(s"Skip canceling a table cache query: $id")
     }
   }
 
