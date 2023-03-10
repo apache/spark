@@ -175,6 +175,11 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper {
     }
   }
 
+  test("write without table or path") {
+    // Should receive no error to write noop
+    spark.range(10).write.format("noop").mode("append").save()
+  }
+
   test("writeTo with create and using") {
     // TODO (SPARK-42519): Add more test after we can set configs. See more WriteTo test cases
     //  in SparkConnectProtoSuite.
