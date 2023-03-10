@@ -54,6 +54,8 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest
   override def sparkConf: SparkConf = super.sparkConf
     .set("spark.sql.catalog.mysql", classOf[JDBCTableCatalog].getName)
     .set("spark.sql.catalog.mysql.url", db.getJdbcUrl(dockerIp, externalPort))
+    .set("spark.sql.catalog.mysql.pushDownAggregate", "true")
+    .set("spark.sql.catalog.mysql.pushDownLimit", "true")
 
   override val connectionTimeout = timeout(7.minutes)
 

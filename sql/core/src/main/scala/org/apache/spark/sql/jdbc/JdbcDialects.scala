@@ -564,19 +564,13 @@ abstract class JdbcDialect extends Serializable with Logging {
    * {@link OracleDialect.OracleSQLQueryBuilder} and
    * {@link MsSqlServerDialect.MsSqlServerSQLQueryBuilder}.
    */
-  def supportsLimit: Boolean = false
+  def supportsLimit: Boolean = true
 
   /**
    * Returns ture if dialect supports OFFSET clause.
-   *
-   * Note: Some build-in dialect supports OFFSET clause with some trick, please see:
-   * {@link OracleDialect.OracleSQLQueryBuilder}.
    */
-  def supportsOffset: Boolean = false
+  def supportsOffset: Boolean = true
 
-  /**
-   * Returns ture if dialect supports table sample.
-   */
   def supportsTableSample: Boolean = false
 
   def getTableSample(sample: TableSampleInfo): String =

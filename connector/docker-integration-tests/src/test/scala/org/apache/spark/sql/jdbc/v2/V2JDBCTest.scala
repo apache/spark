@@ -410,14 +410,13 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
     assert(sorts.isEmpty)
   }
 
-  private def offsetPushed(df: DataFrame, offset: Int): Boolean = {
+  private def checkOffsetPushed(df: DataFrame, offset: Option[Int]): Unit = {
     df.queryExecution.optimizedPlan.collect {
       case relation: DataSourceV2ScanRelation => relation.scan match {
         case v1: V1ScanWrapper =>
-          return v1.pushedDownOperators.offset == Some(offset)
+          assert(v1.pushedDownOperators.offset == offset)
       }
     }
-    false
   }
 
   test("simple scan with LIMIT") {
@@ -459,7 +458,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
     test("simple scan with OFFSET") {
       val df = sql(s"SELECT name, salary, bonus FROM $catalogAndNamespace." +
         s"${caseConvert("employee")} WHERE dept > 0 OFFSET 4")
-      assert(offsetPushed(df, 4))
+      checkOffsetPushed(df, Some(4))
       val rows = df.collect()
       assert(rows.length === 1)
       assert(rows(0).getString(0) === "jen")
@@ -473,7 +472,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
       val df = sql(s"SELECT name, salary, bonus FROM $catalogAndNamespace." +
         s"${caseConvert("employee")} WHERE dept > 0 LIMIT 1 OFFSET 2")
       assert(limitPushed(df, 3))
-      assert(offsetPushed(df, 2))
+      checkOffsetPushed(df, Some(2))
       val rows = df.collect()
       assert(rows.length === 1)
       assert(rows(0).getString(0) === "cathy")
@@ -489,7 +488,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
           s"${caseConvert("employee")}" +
           s" WHERE dept > 0 ORDER BY salary $nullOrdering, bonus LIMIT 1 OFFSET 2")
         assert(limitPushed(df1, 3))
-        assert(offsetPushed(df1, 2))
+        checkOffsetPushed(df1, Some(2))
         checkSortRemoved(df1)
         val rows1 = df1.collect()
         assert(rows1.length === 1)
@@ -501,7 +500,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
           s"${caseConvert("employee")}" +
           s" WHERE dept > 0 ORDER BY salary DESC $nullOrdering, bonus LIMIT 1 OFFSET 2")
         assert(limitPushed(df2, 3))
-        assert(offsetPushed(df2, 2))
+        checkOffsetPushed(df2, Some(2))
         checkSortRemoved(df2)
         val rows2 = df2.collect()
         assert(rows2.length === 1)
