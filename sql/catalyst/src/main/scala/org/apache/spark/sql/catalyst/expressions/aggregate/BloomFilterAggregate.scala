@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.trees.TernaryLike
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.{RUNTIME_BLOOM_FILTER_MAX_NUM_BITS, RUNTIME_BLOOM_FILTER_MAX_NUM_ITEMS}
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.sketch.BloomFilter
 
 /**
@@ -78,7 +79,7 @@ case class BloomFilterAggregate(
             "exprName" -> "estimatedNumItems or numBits"
           )
         )
-      case (LongType, LongType, LongType) =>
+      case (LongType, LongType, LongType) | (StringType, LongType, LongType) =>
         if (!estimatedNumItemsExpression.foldable) {
           DataTypeMismatch(
             errorSubClass = "NON_FOLDABLE_INPUT",
@@ -150,6 +151,11 @@ case class BloomFilterAggregate(
     Math.min(numBitsExpression.eval().asInstanceOf[Number].longValue,
       SQLConf.get.getConf(RUNTIME_BLOOM_FILTER_MAX_NUM_BITS))
 
+  private lazy val updater: BloomFilterUpdater = first.dataType match {
+    case LongType => LongUpdater
+    case StringType => BinaryUpdater
+  }
+
   override def first: Expression = child
 
   override def second: Expression = estimatedNumItemsExpression
@@ -174,7 +180,7 @@ case class BloomFilterAggregate(
     if (value == null) {
       return buffer
     }
-    buffer.putLong(value.asInstanceOf[Long])
+    updater.update(buffer, value)
     buffer
   }
 
@@ -223,4 +229,18 @@ object BloomFilterAggregate {
     in.close()
     bloomFilter
   }
+}
+
+private trait BloomFilterUpdater {
+  def update(bf: BloomFilter, v: Any)
+}
+
+private object LongUpdater extends BloomFilterUpdater {
+  override def update(bf: BloomFilter, v: Any): Unit =
+    bf.putLong(v.asInstanceOf[Long])
+}
+
+private object BinaryUpdater extends BloomFilterUpdater {
+  override def update(bf: BloomFilter, v: Any): Unit =
+    bf.putBinary(v.asInstanceOf[UTF8String].getBytes)
 }

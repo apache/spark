@@ -1086,7 +1086,7 @@ class SparkConnectPlanner(val session: SparkSession) {
         }
         val first = dt match {
           case IntegerType | ShortType | ByteType => Cast(children.head, LongType)
-          case LongType => children.head
+          case LongType | StringType => children.head
           case other =>
             throw InvalidPlanInput(
               s"Bloom filter only supports integral types, " +

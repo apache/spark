@@ -209,6 +209,14 @@ class DataFrameStatSuite extends RemoteSparkSession {
     checkBloomFilter(data, df)
   }
 
+  test("Bloom filter -- String Column") {
+    val session = spark
+    import session.implicits._
+    val data = Range(0, 1000).map(_.toString)
+    val df = data.toDF("id")
+    checkBloomFilter(data, df)
+  }
+
   private def checkBloomFilter(data: Seq[Any], df: DataFrame) = {
     val filter1 = df.stat.bloomFilter("id", 1000, 0.03)
     assert(filter1.expectedFpp() - 0.03 < 1e-3)
