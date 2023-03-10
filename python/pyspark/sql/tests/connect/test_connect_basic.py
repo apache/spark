@@ -2848,10 +2848,6 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
 
     def test_unsupported_session_functions(self):
         # SPARK-41934: Disable unsupported functions.
-
-        with self.assertRaises(NotImplementedError):
-            RemoteSparkSession.getActiveSession()
-
         with self.assertRaises(NotImplementedError):
             RemoteSparkSession.builder.enableHiveSupport()
 
