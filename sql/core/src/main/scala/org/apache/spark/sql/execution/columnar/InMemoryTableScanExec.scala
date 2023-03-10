@@ -173,7 +173,7 @@ case class InMemoryTableScanExec(
    * This method is only used by AQE which executes the actually cached RDD that without filter and
    * serialization of row/columnar.
    */
-  def executeCache(): RDD[CachedBatch] = {
+  def baseCacheRDD(): RDD[CachedBatch] = {
     relation.cacheBuilder.cachedColumnBuffers
   }
 }

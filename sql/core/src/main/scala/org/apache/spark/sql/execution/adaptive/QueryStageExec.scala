@@ -271,7 +271,7 @@ case class TableCacheQueryStageExec(
 
   @transient
   private lazy val future: FutureAction[Unit] = {
-    val rdd = inMemoryTableScan.executeCache()
+    val rdd = inMemoryTableScan.baseCacheRDD()
     sparkContext.submitJob(
       rdd,
       (_: Iterator[CachedBatch]) => (),
@@ -287,7 +287,7 @@ case class TableCacheQueryStageExec(
 
   override def cancel(): Unit = {
     if (!isMaterialized) {
-      logDebug(s"Skip canceling a table cache query: $id")
+      logDebug(s"Skip canceling the table cache query: $id")
     }
   }
 
