@@ -59,7 +59,7 @@ object LiteralProtoConverter {
     def arrayBuilder(array: Array[_]) = {
       val ab = builder.getArrayBuilder
         .setElementType(toConnectProtoType(toDataType(array.getClass.getComponentType)))
-      array.foreach(x => ab.addElement(toLiteralProto(x)))
+      array.foreach(x => ab.addElements(toLiteralProto(x)))
       ab
     }
 

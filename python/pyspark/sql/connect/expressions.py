@@ -41,6 +41,7 @@ from pyspark.serializers import CloudPickleSerializer
 from pyspark.sql.types import (
     _from_numpy_type,
     DateType,
+    ArrayType,
     NullType,
     BooleanType,
     BinaryType,
@@ -193,6 +194,7 @@ class LiteralExpression(Expression):
                 TimestampType,
                 TimestampNTZType,
                 DayTimeIntervalType,
+                ArrayType,
             ),
         )
 
@@ -247,6 +249,8 @@ class LiteralExpression(Expression):
                 assert isinstance(value, datetime.timedelta)
                 value = DayTimeIntervalType().toInternal(value)
                 assert value is not None
+            elif isinstance(dataType, ArrayType):
+                assert isinstance(value, list)
             else:
                 raise TypeError(f"Unsupported Data Type {dataType}")
 
@@ -280,14 +284,25 @@ class LiteralExpression(Expression):
             return DateType()
         elif isinstance(value, datetime.timedelta):
             return DayTimeIntervalType()
-        else:
-            if isinstance(value, np.generic):
-                dt = _from_numpy_type(value.dtype)
-                if dt is not None:
-                    return dt
-                elif isinstance(value, np.bool_):
-                    return BooleanType()
-            raise TypeError(f"Unsupported Data Type {type(value).__name__}")
+        elif isinstance(value, np.generic):
+            dt = _from_numpy_type(value.dtype)
+            if dt is not None:
+                return dt
+            elif isinstance(value, np.bool_):
+                return BooleanType()
+        elif isinstance(value, list):
+            # follow the 'infer_array_from_first_element' strategy in 'sql.types._infer_type'
+            # right now, it's dedicated for pyspark.ml params like array<...>, array<array<...>>
+            if len(value) == 0:
+                raise TypeError("Can not infer Array Type from an empty list")
+            first = value[0]
+            if first is None:
+                raise TypeError(
+                    "Can not infer Array Type from an list with None as the first element"
+                )
+            return ArrayType(LiteralExpression._infer_type(first), True)
+
+        raise TypeError(f"Unsupported Data Type {type(value).__name__}")
 
     @classmethod
     def _from_value(cls, value: Any) -> "LiteralExpression":
@@ -330,6 +345,13 @@ class LiteralExpression(Expression):
             expr.literal.timestamp_ntz = int(self._value)
         elif isinstance(self._dataType, DayTimeIntervalType):
             expr.literal.day_time_interval = int(self._value)
+        elif isinstance(self._dataType, ArrayType):
+            element_type = self._dataType.elementType
+            expr.literal.array.element_type.CopyFrom(pyspark_types_to_proto_types(element_type))
+            for v in self._value:
+                expr.literal.array.elements.append(
+                    LiteralExpression(v, element_type).to_plan(session).literal
+                )
         else:
             raise ValueError(f"Unsupported Data Type {self._dataType}")
 
