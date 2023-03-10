@@ -55,6 +55,14 @@ private[spark] object Config extends Logging {
       .stringConf
       .createWithDefault(KUBERNETES_MASTER_INTERNAL_URL)
 
+  val KUBERNETES_DRIVER_MASTER_URL_FROM_POD_ENV =
+    ConfigBuilder("spark.kubernetes.driver.master.from.pod.env")
+      .doc("If true, driver will get master url from pod env " +
+        "= https://{KUBERNETES_SERVICE_HOST}:{KUBERNETES_SERVICE_PORT_HTTPS}.")
+      .version("3.1.2")
+      .booleanConf
+      .createWithDefault(false)
+
   val KUBERNETES_DRIVER_SERVICE_DELETE_ON_TERMINATION =
     ConfigBuilder("spark.kubernetes.driver.service.deleteOnTermination")
       .doc("If true, driver service will be deleted on Spark application termination. " +

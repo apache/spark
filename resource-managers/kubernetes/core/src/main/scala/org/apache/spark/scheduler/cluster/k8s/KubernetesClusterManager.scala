@@ -79,8 +79,16 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
         Some(new File(Config.KUBERNETES_SERVICE_ACCOUNT_TOKEN_PATH)).filter(_.exists)
       val serviceAccountCaCrt =
         Some(new File(Config.KUBERNETES_SERVICE_ACCOUNT_CA_CRT_PATH)).filter(_.exists)
+      val shouldGetMasterFromEnv = sc.conf.get(KUBERNETES_DRIVER_MASTER_URL_FROM_POD_ENV)
+      val masterUrl = if (shouldGetMasterFromEnv) {
+        val masterHost = System.getenv("KUBERNETES_SERVICE_HOST")
+        val masterPort = System.getenv("KUBERNETES_SERVICE_PORT_HTTPS")
+        "https://" + masterHost + ":" + masterPort
+      } else {
+        sc.conf.get(KUBERNETES_DRIVER_MASTER_URL)
+      }
       (KUBERNETES_AUTH_DRIVER_MOUNTED_CONF_PREFIX,
-        sc.conf.get(KUBERNETES_DRIVER_MASTER_URL),
+        masterUrl,
         serviceAccountToken,
         serviceAccountCaCrt)
     } else {
