@@ -40,6 +40,7 @@ import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanExec._
 import org.apache.spark.sql.execution.bucketing.DisableUnnecessaryBucketedScan
+import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.execution.exchange._
 import org.apache.spark.sql.execution.ui.{SparkListenerSQLAdaptiveExecutionUpdate, SparkListenerSQLAdaptiveSQLMetricUpdates, SQLPlanMetric}
 import org.apache.spark.sql.internal.SQLConf
@@ -220,10 +221,28 @@ case class AdaptiveSparkPlanExec(
   }
 
   private def getExecutionId: Option[Long] = {
-    // If the `QueryExecution` does not match the current execution ID, it means the execution ID
-    // belongs to another (parent) query, and we should not call update UI in this query.
     Option(context.session.sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY))
-      .map(_.toLong).filter(SQLExecution.getQueryExecution(_) eq context.qe)
+      .map(_.toLong)
+  }
+
+  private lazy val shouldUpdatePlan: Boolean = {
+    // If the `QueryExecution` does not match the current execution ID, it means the execution ID
+    // belongs to another (parent) query, and we should call update metrics instead of plan in
+    // this query. For example:
+    //
+    //          ...
+    //           |
+    //  AdaptiveSparkPlanExec (query execution 0, no execution id)
+    //           |
+    //  InMemoryTableScanExec
+    //           |
+    //          ...
+    //           |
+    //  AdaptiveSparkPlanExec (query execution 1, execution id 0)
+    //
+    // We can not update plan for query execution 0 which may overwrite the whole query plan.
+    // Instead, we should update SQL metrics.
+    !isSubquery && getExecutionId.exists(SQLExecution.getQueryExecution(_) eq context.qe)
   }
 
   def finalPhysicalPlan: SparkPlan = withFinalPlanUpdate(identity)
@@ -345,7 +364,7 @@ case class AdaptiveSparkPlanExec(
     // Subqueries that don't belong to any query stage of the main query will execute after the
     // last UI update in `getFinalPhysicalPlan`, so we need to update UI here again to make sure
     // the newly generated nodes of those subqueries are updated.
-    if (!isSubquery && currentPhysicalPlan.exists(_.subqueries.nonEmpty)) {
+    if (shouldUpdatePlan && currentPhysicalPlan.exists(_.subqueries.nonEmpty)) {
       getExecutionId.foreach(onUpdatePlan(_, Seq.empty))
     }
     logOnLevel(s"Final plan:\n$currentPhysicalPlan")
@@ -499,12 +518,13 @@ case class AdaptiveSparkPlanExec(
           // Create a query stage only when all the child query stages are ready.
           if (result.allChildStagesMaterialized) {
             var newStage = newQueryStage(newPlan)
+            assert(newStage.isInstanceOf[ReusableQueryStageExec])
             if (conf.exchangeReuseEnabled) {
               // Check the `stageCache` again for reuse. If a match is found, ditch the new stage
               // and reuse the existing stage found in the `stageCache`, otherwise update the
               // `stageCache` with the new stage.
               val queryStage = context.stageCache.getOrElseUpdate(
-                newStage.plan.canonicalized, newStage)
+                newStage.plan.canonicalized, newStage.asInstanceOf[ReusableQueryStageExec])
               if (queryStage.ne(newStage)) {
                 newStage = reuseQueryStage(queryStage, e)
               }
@@ -519,6 +539,14 @@ case class AdaptiveSparkPlanExec(
               allChildStagesMaterialized = false, newStages = result.newStages)
           }
       }
+
+    case i: InMemoryTableScanExec =>
+      val newStage = newQueryStage(i)
+      val isMaterialized = newStage.isMaterialized
+      CreateStageResult(
+        newPlan = newStage,
+        allChildStagesMaterialized = isMaterialized,
+        newStages = if (isMaterialized) Seq.empty else Seq(newStage))
 
     case q: QueryStageExec =>
       CreateStageResult(newPlan = q,
@@ -536,10 +564,10 @@ case class AdaptiveSparkPlanExec(
       }
   }
 
-  private def newQueryStage(e: Exchange): QueryStageExec = {
-    val optimizedPlan = optimizeQueryStage(e.child, isFinalStage = false)
-    val queryStage = e match {
+  private def newQueryStage(plan: SparkPlan): QueryStageExec = {
+    val queryStage = plan match {
       case s: ShuffleExchangeLike =>
+        val optimizedPlan = optimizeQueryStage(s.child, isFinalStage = false)
         val newShuffle = applyPhysicalRules(
           s.withNewChildren(Seq(optimizedPlan)),
           postStageCreationRules(outputsColumnar = s.supportsColumnar),
@@ -550,6 +578,7 @@ case class AdaptiveSparkPlanExec(
         }
         ShuffleQueryStageExec(currentStageId, newShuffle, s.canonicalized)
       case b: BroadcastExchangeLike =>
+        val optimizedPlan = optimizeQueryStage(b.child, isFinalStage = false)
         val newBroadcast = applyPhysicalRules(
           b.withNewChildren(Seq(optimizedPlan)),
           postStageCreationRules(outputsColumnar = b.supportsColumnar),
@@ -559,13 +588,26 @@ case class AdaptiveSparkPlanExec(
             "Custom columnar rules cannot transform broadcast node to something else.")
         }
         BroadcastQueryStageExec(currentStageId, newBroadcast, b.canonicalized)
+      case i: InMemoryTableScanExec =>
+        val newInMemoryTableScan = applyPhysicalRules(
+          i,
+          postStageCreationRules(outputsColumnar = i.supportsColumnar),
+          Some((planChangeLogger, "AQE Post Stage Creation")))
+        if (!newInMemoryTableScan.isInstanceOf[InMemoryTableScanExec]) {
+          throw new IllegalStateException("Custom columnar rules cannot transform " +
+            "`InMemoryTableScanExec` node to something else.")
+        }
+        TableCacheQueryStageExec(
+          currentStageId, newInMemoryTableScan.asInstanceOf[InMemoryTableScanExec])
     }
     currentStageId += 1
-    setLogicalLinkForNewQueryStage(queryStage, e)
+    setLogicalLinkForNewQueryStage(queryStage, plan)
     queryStage
   }
 
-  private def reuseQueryStage(existing: QueryStageExec, exchange: Exchange): QueryStageExec = {
+  private def reuseQueryStage(
+      existing: ReusableQueryStageExec,
+      exchange: Exchange): QueryStageExec = {
     val queryStage = existing.newReuseInstance(currentStageId, exchange.output)
     currentStageId += 1
     setLogicalLinkForNewQueryStage(queryStage, exchange)
@@ -707,7 +749,7 @@ case class AdaptiveSparkPlanExec(
    * Notify the listeners of the physical plan change.
    */
   private def onUpdatePlan(executionId: Long, newSubPlans: Seq[SparkPlan]): Unit = {
-    if (isSubquery) {
+    if (!shouldUpdatePlan) {
       // When executing subqueries, we can't update the query plan in the UI as the
       // UI doesn't support partial update yet. However, the subquery may have been
       // optimized into a different plan and we must let the UI know the SQL metrics
@@ -814,8 +856,8 @@ case class AdaptiveExecutionContext(session: SparkSession, qe: QueryExecution) {
   /**
    * The exchange-reuse map shared across the entire query, including sub-queries.
    */
-  val stageCache: TrieMap[SparkPlan, QueryStageExec] =
-    new TrieMap[SparkPlan, QueryStageExec]()
+  val stageCache: TrieMap[SparkPlan, ReusableQueryStageExec] =
+    new TrieMap[SparkPlan, ReusableQueryStageExec]()
 }
 
 /**
