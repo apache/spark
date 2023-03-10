@@ -18,7 +18,6 @@ package org.apache.spark.sql
 
 import java.io.{ByteArrayOutputStream, PrintStream}
 import java.nio.file.Files
-import java.sql.DriverManager
 import java.util.Properties
 
 import scala.collection.JavaConverters._
@@ -35,26 +34,8 @@ import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.connect.client.util.{IntegrationTestUtils, RemoteSparkSession}
 import org.apache.spark.sql.functions.{aggregate, array, broadcast, col, count, lit, rand, sequence, shuffle, struct, transform, udf}
 import org.apache.spark.sql.types._
-import org.apache.spark.util.Utils
 
 class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper {
-
-  val url = "jdbc:h2:mem:testdb2"
-  var conn: java.sql.Connection = null
-
-  override def beforeAll(): Unit = {
-    super.beforeAll()
-
-    Utils.classForName("org.h2.Driver")
-    conn = DriverManager.getConnection(url)
-    conn.prepareStatement("create schema test").executeUpdate()
-    conn.commit()
-  }
-
-  override def afterAll(): Unit = {
-    conn.close()
-    super.afterAll()
-  }
 
   // Spark Result
   test("spark result schema") {
