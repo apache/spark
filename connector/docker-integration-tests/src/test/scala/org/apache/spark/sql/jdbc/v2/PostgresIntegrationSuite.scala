@@ -52,6 +52,7 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCT
     .set("spark.sql.catalog.postgresql.pushDownTableSample", "true")
     .set("spark.sql.catalog.postgresql.pushDownLimit", "true")
     .set("spark.sql.catalog.postgresql.pushDownAggregate", "true")
+    .set("spark.sql.catalog.postgresql.pushDownOffset", "true")
 
   override def tablePreparation(connection: Connection): Unit = {
     connection.prepareStatement(
