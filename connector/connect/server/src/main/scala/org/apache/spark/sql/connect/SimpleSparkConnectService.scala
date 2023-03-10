@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.connect
 
-import java.sql.DriverManager
 import java.util.concurrent.TimeUnit
 
 import scala.io.StdIn
@@ -26,7 +25,6 @@ import scala.sys.exit
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connect.service.SparkConnectService
-import org.apache.spark.util.Utils
 
 /**
  * A simple main class method to start the spark connect server as a service for client tests
@@ -39,23 +37,11 @@ import org.apache.spark.util.Utils
 private[sql] object SimpleSparkConnectService {
   private val stopCommand = "q"
 
-  val url = "jdbc:h2:mem:testdb2"
-  var conn: java.sql.Connection = null
-
-  private def createTestSchema(): Unit = {
-    Utils.classForName("org.h2.Driver")
-    conn = DriverManager.getConnection(url)
-    conn.prepareStatement("create schema test").executeUpdate()
-    conn.commit()
-    conn.close()
-  }
-
   def main(args: Array[String]): Unit = {
     while (true) {
       val conf = new SparkConf()
       val sparkSession = SparkSession.builder().config(conf).getOrCreate()
       val sparkContext = sparkSession.sparkContext // init spark context
-      createTestSchema()
       SparkConnectService.start()
       // scalastyle:off println
       println("Ready for client connections.")
