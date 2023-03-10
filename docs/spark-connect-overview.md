@@ -96,7 +96,8 @@ tar -xvf spark-3.4.0-bin-hadoop3.tgz
 {% endhighlight %}
 
 You need to also download the following Spark Connect package file from
-[this folder](https://dlcdn.apache.org/spark/spark-3.4.0/) and save it on the computer
+[this folder](https://dlcdn.apache.org/spark/spark-3.4.0/), making sure to choose the 
+same version as the Spark verion you downloded before, and save it on the computer
 where you will run your Spark server with Spark Connect:\
 `spark-connect_2.12-3.4.0.jar`
 
