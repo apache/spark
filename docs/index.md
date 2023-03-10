@@ -55,7 +55,7 @@ Spark comes with several sample programs. Python, Scala, Java and R examples are
 To run Spark interactively in a Python interpreter, use
 `bin/pyspark`:
 
-    ./bin/pyspark
+    ./bin/pyspark --master "local[2]"
 
 Sample applications are provided in Python. For example:
 
@@ -72,7 +72,7 @@ launching applications). For example,
 You can also run Spark interactively through a modified version of the Scala shell. This is a
 great way to learn the framework.
 
-    ./bin/spark-shell
+    ./bin/spark-shell --master "local[2]"
 
 The `--master` option specifies the
 [master URL for a distributed cluster](submitting-applications.html#master-urls), or `local` to run
@@ -82,7 +82,7 @@ locally with one thread, or `local[N]` to run locally with N threads. You should
 Spark also provides an [R API](sparkr.html) since 1.4 (only DataFrame APIs are included).
 To run Spark interactively in an R interpreter, use `bin/sparkR`:
 
-    ./bin/sparkR
+    ./bin/sparkR --master "local[2]"
 
 Example applications are also provided in R. For example,
 
