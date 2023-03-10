@@ -202,14 +202,14 @@ your Spark server when you create a Spark session, as in this example:
 <div data-lang="python"  markdown="1">
 {% highlight python %}
 from pyspark.sql import SparkSession
-spark = SparkSession.builder.remote("sc://localhost/").getOrCreate()
+spark = SparkSession.builder.remote("sc://localhost").getOrCreate()
 {% endhighlight %}
 </div>
 
 <div data-lang="scala"  markdown="1">
 {% highlight scala %}
 import org.apache.spark.sql.SparkSession
-val spark = SparkSession.builder().remote("sc://localhost/").getOrCreate()
+val spark = SparkSession.builder().remote("sc://localhost").getOrCreate()
 {% endhighlight %}
 </div>
 
