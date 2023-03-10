@@ -1076,9 +1076,6 @@ class SparkConnectPlanner(val session: SparkSession) {
 
       case "bloom_filter_agg" if fun.getArgumentsCount == 5 =>
         // [col, catalogString: String, expectedNumItems: Long, numBits: Long, fpp: Double]
-        def optimalNumOfBits(n: Long, p: Double): Long =
-          (-n * Math.log(p) / (Math.log(2) * Math.log(2))).toLong
-
         val children = fun.getArgumentsList.asScala.toSeq.map(transformExpression)
         val dt = {
           val ddl = children(1) match {
@@ -1097,44 +1094,62 @@ class SparkConnectPlanner(val session: SparkSession) {
                 s"and does not support type $other.")
         }
 
-        val expectedNumItems = children(2)
-        val n = expectedNumItems match {
-          case Literal(l: Long, LongType) if l > 0L => l
+        val fpp = children(4) match {
+          case DoubleLiteral(d) => d
           case _ =>
-            throw InvalidPlanInput("Expected insertions must be positive long literal.")
+            throw InvalidPlanInput("False positive must be double literal.")
         }
 
-        val numBits = children(3)
-        numBits match {
-          case Literal(l: Long, LongType) =>
-            if (l > 0L) {
-              Some(
-                new BloomFilterAggregate(col, expectedNumItems, numBits)
-                  .toAggregateExpression())
-            } else {
-              val fpp = children(4)
-              val p = fpp match {
-                case DoubleLiteral(d) => d
-                case _ =>
-                  throw InvalidPlanInput("False positive must be double literal.")
-              }
-              // if `p.isNaN` and numBits less than zero, throw `numBits` related exception first.
-              if (p.isNaN) {
-                throw InvalidPlanInput("Number of bits must be positive")
-              }
-              if (p <= 0d || p >= 1d) {
-                throw InvalidPlanInput(
-                  "False positive probability must be within range (0.0, 1.0)")
-              }
-              val opNumOfBits = optimalNumOfBits(n, p)
-              if (opNumOfBits < 0L) {
-                throw InvalidPlanInput("Number of bits must be positive")
-              }
-              Some(
-                new BloomFilterAggregate(col, expectedNumItems, Literal(opNumOfBits, LongType))
-                  .toAggregateExpression())
-            }
-          case _ => throw InvalidPlanInput("Number of bits must be long literal.")
+        if (fpp.isNaN) { // use expectedNumItems and numBits
+          val expectedNumItemsExpr = children(2)
+          val expectedNumItems = expectedNumItemsExpr match {
+            case Literal(l: Long, LongType) => l
+            case _ =>
+              throw InvalidPlanInput("Expected insertions must be long literal.")
+          }
+          if (expectedNumItems <= 0L) {
+            throw InvalidPlanInput("Expected insertions must be positive.")
+          }
+
+          val numBitsExpr = children(3)
+          val numBits = numBitsExpr match {
+            case Literal(l: Long, LongType) => l
+            case _ =>
+              throw InvalidPlanInput("Number of bits must be long literal.")
+          }
+          if (numBits <= 0L) {
+            throw InvalidPlanInput("Number of bits must be positive.")
+          }
+
+          Some(
+            new BloomFilterAggregate(col, expectedNumItemsExpr, numBitsExpr)
+              .toAggregateExpression())
+
+        } else { // use expectedNumItems and fpp
+          def optimalNumOfBits(n: Long, p: Double): Long =
+            (-n * Math.log(p) / (Math.log(2) * Math.log(2))).toLong
+
+          val expectedNumItemsExpr = children(2)
+          val expectedNumItems = expectedNumItemsExpr match {
+            case Literal(l: Long, LongType) => l
+            case _ =>
+              throw InvalidPlanInput("Expected insertions must be long literal.")
+          }
+          if (expectedNumItems <= 0L) {
+            throw InvalidPlanInput("Expected insertions must be positive.")
+          }
+
+          if (fpp <= 0d || fpp >= 1d) {
+            throw InvalidPlanInput("False positive probability must be within range (0.0, 1.0)")
+          }
+
+          val numBits = optimalNumOfBits(expectedNumItems, fpp)
+          if (numBits <= 0L) {
+            throw InvalidPlanInput("Number of bits must be positive")
+          }
+          Some(
+            new BloomFilterAggregate(col, expectedNumItemsExpr, Literal(numBits, LongType))
+              .toAggregateExpression())
         }
 
       case "window" if 2 <= fun.getArgumentsCount && fun.getArgumentsCount <= 4 =>
