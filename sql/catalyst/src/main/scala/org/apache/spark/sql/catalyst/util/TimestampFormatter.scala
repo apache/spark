@@ -525,6 +525,14 @@ object TimestampFormatter {
     getFormatter(Some(format), zoneId, isParsing = isParsing)
   }
 
+  def apply(
+      format: String,
+      zoneId: ZoneId,
+      isParsing: Boolean,
+      forTimestampNTZ: Boolean): TimestampFormatter = {
+    getFormatter(Some(format), zoneId, isParsing = isParsing, forTimestampNTZ = forTimestampNTZ)
+  }
+
   def apply(zoneId: ZoneId): TimestampFormatter = {
     getFormatter(None, zoneId, isParsing = false)
   }
