@@ -243,7 +243,7 @@ spark = SparkSession.builder.remote("sc://localhost").getOrCreate()
 <div data-lang="scala"  markdown="1">
 {% highlight scala %}
 import org.apache.spark.sql.SparkSession
-val spark = SparkSession.builder().remote("sc://localhost").getOrCreate()
+val spark = SparkSession.builder().remote("http://localhost").build()
 {% endhighlight %}
 </div>
 
