@@ -57,7 +57,8 @@ case class PartitionedFile(
     length: Long,
     @transient locations: Array[String] = Array.empty,
     modificationTime: Long = 0L,
-    fileSize: Long = 0L) {
+    fileSize: Long = 0L,
+    @transient var queryMetrics: Array[Long] = new Array[Long](4)) {
   override def toString: String = {
     s"path: $filePath, range: $start-${start + length}, partition values: $partitionValues"
   }
@@ -76,6 +77,7 @@ class FileScanRDD(
 
   private val ignoreCorruptFiles = sparkSession.sessionState.conf.ignoreCorruptFiles
   private val ignoreMissingFiles = sparkSession.sessionState.conf.ignoreMissingFiles
+  private val collectQueryMetricsEnabled = sparkSession.sessionState.conf.collectQueryMetricsEnabled
 
   override def compute(split: RDDPartition, context: TaskContext): Iterator[InternalRow] = {
     val currTaskLocality = context.getLocalProperty("SAMetrics.taskLocality")
@@ -275,6 +277,23 @@ class FileScanRDD(
             }
           } else {
             currentIterator = readCurrentFile()
+            if (collectQueryMetricsEnabled) {
+              try {
+                if (currentFile != null
+                  && currentFile.queryMetrics != null) {
+                  inputMetrics.incFooterReadTime(currentFile.queryMetrics(3))
+                  inputMetrics.incFooterReadNumber(1L)
+                  if (currentFile.queryMetrics(0) > 0) {
+                    inputMetrics.incTotalBloomBlocks(currentFile.queryMetrics(0))
+                    inputMetrics.incSkipBloomBlocks(currentFile.queryMetrics(1))
+                    inputMetrics.incSkipRows(currentFile.queryMetrics(2))
+                  }
+                }
+              } catch {
+                case e: Throwable =>
+                  logWarning("Error when collect query status", e)
+              }
+            }
           }
 
           try {

@@ -1645,10 +1645,15 @@ private[spark] class DAGScheduler(
       } else {
         null
       }
-
+    var queryId = ""
+    if(event.task != null
+      && event.task.localProperties != null
+      && event.task.localProperties.containsKey("kylin.query.id")) {
+      queryId = event.task.localProperties.getProperty("kylin.query.id")
+    }
     listenerBus.post(SparkListenerTaskEnd(event.task.stageId, event.task.stageAttemptId,
       Utils.getFormattedClassName(event.task), event.reason, event.taskInfo,
-      new ExecutorMetrics(event.metricPeaks), taskMetrics))
+      new ExecutorMetrics(event.metricPeaks), taskMetrics, queryId))
   }
 
   /**

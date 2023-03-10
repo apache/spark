@@ -241,6 +241,7 @@ class ParquetFileFormat
     val resultSchema = StructType(partitionSchema.fields ++ requiredSchema.fields)
     val sqlConf = sparkSession.sessionState.conf
     val enableOffHeapColumnVector = sqlConf.offHeapColumnVectorEnabled
+    val collectQueryMetricsEnabled = sqlConf.collectQueryMetricsEnabled
     val enableVectorizedReader: Boolean =
       ParquetUtils.isBatchReadSupportedForSchema(sqlConf, resultSchema)
     val enableRecordFilter: Boolean = sqlConf.parquetRecordFilterEnabled
@@ -268,6 +269,7 @@ class ParquetFileFormat
       val sharedConf = broadcastedHadoopConf.value.value
 
       S3FileUtils.tryOpenClose(sharedConf, filePath)
+      val startTime = System.currentTimeMillis()
       lazy val footerFileMetaData =
         ParquetFooterReader.readFooter(sharedConf, filePath, SKIP_ROW_GROUPS).getFileMetaData
       val datetimeRebaseSpec = DataSourceUtils.datetimeRebaseSpec(
@@ -324,6 +326,7 @@ class ParquetFileFormat
         ParquetInputFormat.setFilterPredicate(hadoopAttemptContext.getConfiguration, pushed.get)
       }
       val taskContext = Option(TaskContext.get())
+      val firstFooterEndTime = System.currentTimeMillis()
       if (enableVectorizedReader) {
         val vectorizedReader = new VectorizedParquetRecordReader(
           convertTz.orNull,
@@ -347,6 +350,27 @@ class ParquetFileFormat
           vectorizedReader.initBatch(partitionSchema, file.partitionValues)
           if (returningBatch) {
             vectorizedReader.enableReturningBatches()
+          }
+          val secondFooterEndTime = System.currentTimeMillis()
+          if ((secondFooterEndTime - startTime) > 100) {
+            logWarning(s"Reading parquet footer cost much time: ${firstFooterEndTime - startTime} ms "
+              + s"and ${secondFooterEndTime - firstFooterEndTime} ms")
+          }
+          try {
+            if (collectQueryMetricsEnabled) {
+              // we should init here (even if it had initial value)
+              file.queryMetrics = new Array[Long](4)
+              val info = vectorizedReader.reader.getFileReader.queryMetrics
+              if (info.getTotalBloomBlocks != 0) {
+                file.queryMetrics(0) = info.getTotalBloomBlocks
+                file.queryMetrics(1) = info.getSkipBloomBlocks
+                file.queryMetrics(2) = info.getSkipBloomRows
+              }
+              file.queryMetrics(3) = secondFooterEndTime - startTime
+            }
+          } catch {
+            case e: Throwable =>
+              logWarning(s"Error when record the statics for bloom", e)
           }
 
           // UnsafeRowParquetRecordReader appends the columns internally to avoid another copy.
@@ -378,6 +402,11 @@ class ParquetFileFormat
 
           val fullSchema = requiredSchema.toAttributes ++ partitionSchema.toAttributes
           val unsafeProjection = GenerateUnsafeProjection.generate(fullSchema, fullSchema)
+          val footerEndTime = System.currentTimeMillis()
+          if ((footerEndTime - startTime) > 100) {
+            logWarning(s"Reading parquet footer may cost much time: "
+              + s"${firstFooterEndTime - startTime} ms and ${footerEndTime - firstFooterEndTime} ms")
+        }
 
           if (partitionSchema.length == 0) {
             // There is no partition columns
