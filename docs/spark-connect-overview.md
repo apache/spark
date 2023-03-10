@@ -95,7 +95,7 @@ Now extract the Spark package you just downloaded on your computer, for example:
 tar -xvf spark-3.4.0-bin-hadoop3.tgz
 {% endhighlight %}
 
-In a terminal window, now go to the `spark` folder in the location where you extracted
+In a terminal window, go to the `spark` folder in the location where you extracted
 Spark before and run the `start-connect-server.sh` script to start Spark server with
 Spark Connect, like in this example:
 
@@ -128,14 +128,14 @@ Spark client application is running and create a new Spark Session as illustrate
 below, the session will be a Spark Connect session. With this approach, there is
 no code change needed to start using Spark Connect.
 
-Set the `SPARK_REMOTE` environment variable to point to the Spark server we started
-above:
+In a terminal window, set the `SPARK_REMOTE` environment variable to point to the
+Spark server we started above:
 
 {% highlight bash %}
-export SPARK_REMOTE="sc://localhost/"
+export SPARK_REMOTE="sc://localhost"
 {% endhighlight %}
 
-And now start the Spark shell as usual:
+And start the Spark shell as usual:
 
 <div class="codetabs">
 
@@ -144,7 +144,7 @@ And now start the Spark shell as usual:
 ./bin/pyspark
 {% endhighlight %}
 
-The shell is now connected to Spark using Spark Connect as indicated in the welcome
+The PySpark shell is now connected to Spark using Spark Connect as indicated in the welcome
 message.
 </div>
 
