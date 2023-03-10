@@ -946,6 +946,13 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
         )
 
     def test_literal_expression_with_arrays(self):
+        l0 = LiteralExpression._from_value(["x", "y", "z"]).to_plan(None).literal
+        self.assertTrue(l0.array.element_type.HasField("string"))
+        self.assertEqual(len(l0.array.elements), 3)
+        self.assertEqual(l0.array.elements[0].string, "x")
+        self.assertEqual(l0.array.elements[1].string, "y")
+        self.assertEqual(l0.array.elements[2].string, "z")
+
         l1 = LiteralExpression._from_value([3, -3]).to_plan(None).literal
         self.assertTrue(l1.array.element_type.HasField("integer"))
         self.assertEqual(len(l1.array.elements), 2)
