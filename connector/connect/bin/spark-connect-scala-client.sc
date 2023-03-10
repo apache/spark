@@ -22,6 +22,7 @@ val sessionBuilder = SparkSession.builder()
 val spark = if (conStr.isEmpty) sessionBuilder.build() else sessionBuilder.remote(conStr).build()
 import spark.implicits._
 import spark.sql
+println("Spark session available as 'spark'.")
 println(
   """
     |   _____                  __      ______                            __

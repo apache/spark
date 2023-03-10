@@ -105,6 +105,7 @@ object LiteralValueProtoConverter {
         expressions.Literal.create(
           toArrayData(lit.getArray),
           ArrayType(DataTypeProtoConverter.toCatalystType(lit.getArray.getElementType)))
+
       case _ =>
         throw InvalidPlanInput(
           s"Unsupported Literal Type: ${lit.getLiteralTypeCase.getNumber}" +
@@ -143,7 +144,7 @@ object LiteralValueProtoConverter {
     def makeArrayData[T](converter: proto.Expression.Literal => T)(implicit
         tag: ClassTag[T]): Array[T] = {
       val builder = mutable.ArrayBuilder.make[T]
-      val elementList = array.getElementList
+      val elementList = array.getElementsList
       builder.sizeHint(elementList.size())
       val iter = elementList.iterator()
       while (iter.hasNext) {

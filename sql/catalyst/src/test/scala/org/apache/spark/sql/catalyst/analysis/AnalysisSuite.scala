@@ -1346,17 +1346,21 @@ class AnalysisSuite extends AnalysisTest with Matchers {
   }
 
   test("SPARK-41271: bind named parameters to literals") {
-    comparePlans(
-      Parameter.bind(
-        plan = parsePlan("SELECT * FROM a LIMIT :limitA"),
-        args = Map("limitA" -> Literal(10))),
-      parsePlan("SELECT * FROM a LIMIT 10"))
+    CTERelationDef.curId.set(0)
+    val actual1 = ParameterizedQuery(
+      child = parsePlan("WITH a AS (SELECT 1 c) SELECT * FROM a LIMIT :limitA"),
+      args = Map("limitA" -> Literal(10))).analyze
+    CTERelationDef.curId.set(0)
+    val expected1 = parsePlan("WITH a AS (SELECT 1 c) SELECT * FROM a LIMIT 10").analyze
+    comparePlans(actual1, expected1)
     // Ignore unused arguments
-    comparePlans(
-      Parameter.bind(
-        plan = parsePlan("SELECT c FROM a WHERE c < :param2"),
-        args = Map("param1" -> Literal(10), "param2" -> Literal(20))),
-      parsePlan("SELECT c FROM a WHERE c < 20"))
+    CTERelationDef.curId.set(0)
+    val actual2 = ParameterizedQuery(
+      child = parsePlan("WITH a AS (SELECT 1 c) SELECT c FROM a WHERE c < :param2"),
+      args = Map("param1" -> Literal(10), "param2" -> Literal(20))).analyze
+    CTERelationDef.curId.set(0)
+    val expected2 = parsePlan("WITH a AS (SELECT 1 c) SELECT c FROM a WHERE c < 20").analyze
+    comparePlans(actual2, expected2)
   }
 
   test("SPARK-41489: type of filter expression should be a bool") {

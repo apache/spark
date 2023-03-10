@@ -17,6 +17,7 @@
 
 import shutil
 import tempfile
+import uuid
 
 from pyspark.sql import Row
 from pyspark.sql.types import IntegerType, StructField, StructType, LongType, StringType
@@ -191,6 +192,23 @@ class DataSourcesTestsMixin:
             self.assertEqual(readback.schema, schema)
         finally:
             shutil.rmtree(path)
+
+    def test_jdbc(self):
+        db = f"memory:{uuid.uuid4()}"
+        url = f"jdbc:derby:{db}"
+        dbtable = "test_table"
+
+        try:
+            df = self.spark.range(10)
+            df.write.format("jdbc").options(url=f"{url};create=true", dbtable=dbtable).save()
+            readback = self.spark.read.format("jdbc").options(url=url, dbtable=dbtable).load()
+            self.assertEqual(sorted(df.collect()), sorted(readback.collect()))
+        finally:
+            # Clean up.
+            with self.assertRaisesRegex(Exception, f"Database '{db}' dropped."):
+                self.spark.read.format("jdbc").options(
+                    url=f"{url};drop=true", dbtable=dbtable
+                ).load().collect()
 
 
 class DataSourcesTests(DataSourcesTestsMixin, ReusedSQLTestCase):

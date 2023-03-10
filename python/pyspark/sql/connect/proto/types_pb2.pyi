@@ -741,6 +741,22 @@ class DataType(google.protobuf.message.Message):
             ],
         ) -> typing_extensions.Literal["serialized_python_class"] | None: ...
 
+    @typing_extensions.final
+    class Unparsed(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        DATA_TYPE_STRING_FIELD_NUMBER: builtins.int
+        data_type_string: builtins.str
+        """(Required) The unparsed data type string"""
+        def __init__(
+            self,
+            *,
+            data_type_string: builtins.str = ...,
+        ) -> None: ...
+        def ClearField(
+            self, field_name: typing_extensions.Literal["data_type_string", b"data_type_string"]
+        ) -> None: ...
+
     NULL_FIELD_NUMBER: builtins.int
     BINARY_FIELD_NUMBER: builtins.int
     BOOLEAN_FIELD_NUMBER: builtins.int
@@ -764,6 +780,7 @@ class DataType(google.protobuf.message.Message):
     STRUCT_FIELD_NUMBER: builtins.int
     MAP_FIELD_NUMBER: builtins.int
     UDT_FIELD_NUMBER: builtins.int
+    UNPARSED_FIELD_NUMBER: builtins.int
     @property
     def null(self) -> global___DataType.NULL: ...
     @property
@@ -816,6 +833,9 @@ class DataType(google.protobuf.message.Message):
     @property
     def udt(self) -> global___DataType.UDT:
         """UserDefinedType"""
+    @property
+    def unparsed(self) -> global___DataType.Unparsed:
+        """UnparsedDataType"""
     def __init__(
         self,
         *,
@@ -842,6 +862,7 @@ class DataType(google.protobuf.message.Message):
         struct: global___DataType.Struct | None = ...,
         map: global___DataType.Map | None = ...,
         udt: global___DataType.UDT | None = ...,
+        unparsed: global___DataType.Unparsed | None = ...,
     ) -> None: ...
     def HasField(
         self,
@@ -890,6 +911,8 @@ class DataType(google.protobuf.message.Message):
             b"timestamp_ntz",
             "udt",
             b"udt",
+            "unparsed",
+            b"unparsed",
             "var_char",
             b"var_char",
             "year_month_interval",
@@ -943,6 +966,8 @@ class DataType(google.protobuf.message.Message):
             b"timestamp_ntz",
             "udt",
             b"udt",
+            "unparsed",
+            b"unparsed",
             "var_char",
             b"var_char",
             "year_month_interval",
@@ -975,6 +1000,7 @@ class DataType(google.protobuf.message.Message):
         "struct",
         "map",
         "udt",
+        "unparsed",
     ] | None: ...
 
 global___DataType = DataType
