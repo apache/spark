@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql
 
-import java.sql.Timestamp
+import java.time.LocalDateTime
 
 import org.apache.spark.sql.catalyst.expressions.IntegralLiteralTestUtils.{negativeInt, positiveInt}
 import org.apache.spark.sql.test.SharedSparkSession
@@ -243,24 +243,24 @@ class UnwrapCastInComparisonEndToEndSuite extends QueryTest with SharedSparkSess
   }
 
   test("SPARK-42597: Support unwrap date type to timestamp type") {
-    val ts1 = Timestamp.valueOf("2023-01-01 23:59:59.099999")
-    val ts2 = Timestamp.valueOf("2023-01-01 23:59:59.999998")
-    val ts3 = Timestamp.valueOf("2023-01-02 23:59:59.000008")
+    val ts1 = LocalDateTime.of(2023, 1, 1, 23, 59, 59, 99999000)
+    val ts2 = LocalDateTime.of(2023, 1, 1, 23, 59, 59, 999998000)
+    val ts3 = LocalDateTime.of(2023, 1, 2, 23, 59, 59, 8000)
 
     withTable(t) {
       Seq(ts1, ts2, ts3).toDF("ts").write.saveAsTable(t)
       val df = spark.table(t)
 
       checkAnswer(
-        df.where("cast(ts as date) > cast('2023-01-01' as date)"), Seq(ts3).map(Row(_)))
+        df.where("cast(ts as date) > date'2023-01-01'"), Seq(ts3).map(Row(_)))
       checkAnswer(
-        df.where("cast(ts as date) >= cast('2023-01-01' as date)"), Seq(ts1, ts2, ts3).map(Row(_)))
+        df.where("cast(ts as date) >= date'2023-01-01'"), Seq(ts1, ts2, ts3).map(Row(_)))
       checkAnswer(
-        df.where("cast(ts as date) < cast('2023-01-02' as date)"), Seq(ts1, ts2).map(Row(_)))
+        df.where("cast(ts as date) < date'2023-01-02'"), Seq(ts1, ts2).map(Row(_)))
       checkAnswer(
-        df.where("cast(ts as date) <= cast('2023-01-02' as date)"), Seq(ts1, ts2, ts3).map(Row(_)))
+        df.where("cast(ts as date) <= date'2023-01-02'"), Seq(ts1, ts2, ts3).map(Row(_)))
       checkAnswer(
-        df.where("cast(ts as date) = cast('2023-01-01' as date)"), Seq(ts1, ts2).map(Row(_)))
+        df.where("cast(ts as date) = date'2023-01-01'"), Seq(ts1, ts2).map(Row(_)))
     }
   }
 
