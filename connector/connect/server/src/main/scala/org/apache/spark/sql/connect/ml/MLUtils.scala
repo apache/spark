@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.connect.ml
 
-import scala.reflect.ClassTag
-
 import org.apache.spark.connect.proto
 import org.apache.spark.ml.param.{ParamMap, Params}
 import org.apache.spark.sql.{DataFrame, Dataset}
@@ -46,8 +44,19 @@ object MLUtils {
     _convertParamValue(paramType, value)
   }
 
+  val _primitiveTypeToboxedTypeMap = Map[Class[_], Class[_]](
+    classOf[Int] -> classOf[java.lang.Integer],
+    classOf[Long] -> classOf[java.lang.Long],
+    classOf[Float] -> classOf[java.lang.Float],
+    classOf[Double] -> classOf[java.lang.Double],
+    classOf[Boolean] -> classOf[java.lang.Boolean],
+    classOf[Int] -> classOf[java.lang.Integer]
+  )
+
   def _convertParamValue(paramType: Class[_], value: Any): Any = {
-    if (paramType.isInstance(value.asInstanceOf[Object])) {
+    if (paramType.isPrimitive && _primitiveTypeToboxedTypeMap(paramType).isInstance(value)) {
+      value
+    } else if (paramType.isInstance(value)) {
       value
     } else {
       // Some cases the param type might be mismatched with the value type.
