@@ -234,6 +234,7 @@ case class AdaptiveSparkPlanExec(
     //    and display SQL metrics correctly.
     // 2. If the `QueryExecution` does not match the current execution ID, it means the execution
     //    ID belongs to another (parent) query, and we should not call update UI in this query.
+    //    e.g., the a nested `AdaptiveSparkPlanExec` in `InMemoryTableScanExec`.
     //
     // That means only the root `AdaptiveSparkPlanExec` of the main query that triggers this
     // query execution need to do a plan update for the UI.
