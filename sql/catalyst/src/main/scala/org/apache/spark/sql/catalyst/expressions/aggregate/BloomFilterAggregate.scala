@@ -232,15 +232,15 @@ object BloomFilterAggregate {
 }
 
 private trait BloomFilterUpdater {
-  def update(bf: BloomFilter, v: Any)
+  def update(bf: BloomFilter, v: Any): Boolean
 }
 
 private object LongUpdater extends BloomFilterUpdater {
-  override def update(bf: BloomFilter, v: Any): Unit =
+  override def update(bf: BloomFilter, v: Any): Boolean =
     bf.putLong(v.asInstanceOf[Long])
 }
 
 private object BinaryUpdater extends BloomFilterUpdater {
-  override def update(bf: BloomFilter, v: Any): Unit =
+  override def update(bf: BloomFilter, v: Any): Boolean =
     bf.putBinary(v.asInstanceOf[UTF8String].getBytes)
 }
