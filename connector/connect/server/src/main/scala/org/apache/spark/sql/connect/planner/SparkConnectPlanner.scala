@@ -1074,10 +1074,26 @@ class SparkConnectPlanner(val session: SparkSession) {
         }
         Some(Lead(children.head, children(1), children(2), ignoreNulls))
 
-      case "bloom_filter_agg" if fun.getArgumentsCount == 3 =>
+      case "bloom_filter_agg" if fun.getArgumentsCount == 4 =>
         val children = fun.getArgumentsList.asScala.toSeq.map(transformExpression)
+        val dt = {
+          val ddl = children.last match {
+            case StringLiteral(s) => s
+            case other =>
+              throw InvalidPlanInput(s"col dataType should be a literal string, but got $other")
+          }
+          DataType.fromDDL(ddl)
+        }
+        val first = dt match {
+          case IntegerType | ShortType | ByteType => Cast(children.head, LongType)
+          case LongType => children.head
+          case other =>
+            throw InvalidPlanInput(
+              s"Bloom filter only supports integral types, " +
+                s"and does not support type $other.")
+        }
         Some(
-          new BloomFilterAggregate(children.head, children(1), children(2))
+          new BloomFilterAggregate(first, children(1), children(2))
             .toAggregateExpression())
 
       case "window" if 2 <= fun.getArgumentsCount && fun.getArgumentsCount <= 4 =>

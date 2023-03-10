@@ -177,17 +177,49 @@ class DataFrameStatSuite extends RemoteSparkSession {
     assert(sketch.confidence() === 0.99 +- 5e-3)
   }
 
-  // This test only verifies some basic requirements, more correctness tests can be found in
-  // `BloomFilterSuite` in project spark-sketch.
-  test("Bloom filter") {
-    val df = spark.range(1000)
+  test("Bloom filter -- Long Column") {
+    val session = spark
+    import session.implicits._
+    val data = Range(0, 1000).map(_.toLong)
+    val df = data.toDF("id")
+    checkBloomFilter(data, df)
+  }
+
+  test("Bloom filter -- Int Column") {
+    val session = spark
+    import session.implicits._
+    val data = Range(0, 1000)
+    val df = data.toDF("id")
+    checkBloomFilter(data, df)
+  }
+
+  test("Bloom filter -- Short Column") {
+    val session = spark
+    import session.implicits._
+    val data = Range(0, 1000).map(_.toShort)
+    val df = data.toDF("id")
+    checkBloomFilter(data, df)
+  }
+
+  test("Bloom filter -- Byte Column") {
+    val session = spark
+    import session.implicits._
+    val data = Range(0, 1000).map(_.toByte)
+    val df = data.toDF("id")
+    checkBloomFilter(data, df)
+  }
+
+  private def checkBloomFilter(data: Seq[Any], df: DataFrame) = {
     val filter1 = df.stat.bloomFilter("id", 1000, 0.03)
     assert(filter1.expectedFpp() - 0.03 < 1e-3)
-    assert(0.until(1000).forall(filter1.mightContain))
+    assert(data.forall(filter1.mightContain))
     val filter2 = df.stat.bloomFilter("id", 1000, 64 * 5)
     assert(filter2.bitSize() == 64 * 5)
-    assert(0.until(1000).forall(filter2.mightContain))
+    assert(data.forall(filter2.mightContain))
+  }
 
+  test("Bloom filter test invalid inputs") {
+    val df = spark.emptyDataFrame
     val message1 = intercept[IllegalArgumentException] {
       df.stat.bloomFilter("id", -1000, 100)
     }.getMessage

@@ -672,7 +672,22 @@ final class DataFrameStatFunctions private[sql] (sparkSession: SparkSession, roo
       throw new IllegalArgumentException("Number of bits must be positive")
     }
 
-    val agg = Column.fn("bloom_filter_agg", col, lit(expectedNumItems), lit(nBits))
+    val dataType = sparkSession
+      .newDataFrame { builder =>
+        builder.getProjectBuilder
+          .setInput(root)
+          .addExpressions(col.expr)
+      }
+      .schema
+      .head
+      .dataType
+
+    val agg = Column.fn(
+      "bloom_filter_agg",
+      col,
+      lit(expectedNumItems),
+      lit(nBits),
+      lit(dataType.catalogString))
     val ds = sparkSession.newDataset(BinaryEncoder) { builder =>
       builder.getProjectBuilder
         .setInput(root)
