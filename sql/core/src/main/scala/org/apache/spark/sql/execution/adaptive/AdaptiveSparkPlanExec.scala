@@ -226,22 +226,8 @@ case class AdaptiveSparkPlanExec(
   }
 
   private lazy val shouldUpdatePlan: Boolean = {
-    // If the `QueryExecution` does not match the current execution ID, it means the execution ID
-    // belongs to another (parent) query, and we should call update metrics instead of plan in
-    // this query. For example:
-    //
-    //          ...
-    //           |
-    //  AdaptiveSparkPlanExec (query execution 0, no execution id)
-    //           |
-    //  InMemoryTableScanExec
-    //           |
-    //          ...
-    //           |
-    //  AdaptiveSparkPlanExec (query execution 1, execution id 0)
-    //
-    // We can not update plan for query execution 0 which may overwrite the whole query plan.
-    // Instead, we should update SQL metrics.
+    // Only the root `AdaptiveSparkPlanExec` of the main query that triggers this query execution
+    // should update UI.
     !isSubquery && getExecutionId.exists(SQLExecution.getQueryExecution(_) eq context.qe)
   }
 
