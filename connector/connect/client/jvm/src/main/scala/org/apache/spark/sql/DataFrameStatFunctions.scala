@@ -652,26 +652,6 @@ final class DataFrameStatFunctions private[sql] (sparkSession: SparkSession, roo
       numBits: Long,
       fpp: Double): BloomFilter = {
 
-    def optimalNumOfBits(n: Long, p: Double): Long =
-      (-n * Math.log(p) / (Math.log(2) * Math.log(2))).toLong
-
-    val nBits = if (numBits > 0L) {
-      numBits
-    } else {
-      if (fpp <= 0d || fpp >= 1d) {
-        throw new IllegalArgumentException(
-          "False positive probability must be within range (0.0, 1.0)")
-      }
-      optimalNumOfBits(expectedNumItems, fpp)
-    }
-
-    if (expectedNumItems <= 0) {
-      throw new IllegalArgumentException("Expected insertions must be positive")
-    }
-    if (nBits <= 0) {
-      throw new IllegalArgumentException("Number of bits must be positive")
-    }
-
     val dataType = sparkSession
       .newDataFrame { builder =>
         builder.getProjectBuilder
@@ -685,9 +665,10 @@ final class DataFrameStatFunctions private[sql] (sparkSession: SparkSession, roo
     val agg = Column.fn(
       "bloom_filter_agg",
       col,
+      lit(dataType.catalogString),
       lit(expectedNumItems),
-      lit(nBits),
-      lit(dataType.catalogString))
+      lit(numBits),
+      lit(fpp))
     val ds = sparkSession.newDataset(BinaryEncoder) { builder =>
       builder.getProjectBuilder
         .setInput(root)

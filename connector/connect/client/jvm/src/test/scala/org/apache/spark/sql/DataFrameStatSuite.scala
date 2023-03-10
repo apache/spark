@@ -227,18 +227,18 @@ class DataFrameStatSuite extends RemoteSparkSession {
   }
 
   test("Bloom filter test invalid inputs") {
-    val df = spark.emptyDataFrame
-    val message1 = intercept[IllegalArgumentException] {
+    val df = spark.range(1000).toDF("id")
+    val message1 = intercept[StatusRuntimeException] {
       df.stat.bloomFilter("id", -1000, 100)
     }.getMessage
     assert(message1.contains("Expected insertions must be positive"))
 
-    val message2 = intercept[IllegalArgumentException] {
+    val message2 = intercept[StatusRuntimeException] {
       df.stat.bloomFilter("id", 1000, -100)
     }.getMessage
     assert(message2.contains("Number of bits must be positive"))
 
-    val message3 = intercept[IllegalArgumentException] {
+    val message3 = intercept[StatusRuntimeException] {
       df.stat.bloomFilter("id", 1000, -1.0)
     }.getMessage
     assert(message3.contains("False positive probability must be within range (0.0, 1.0)"))

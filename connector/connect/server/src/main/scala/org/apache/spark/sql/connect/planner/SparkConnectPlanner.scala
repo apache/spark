@@ -1074,17 +1074,21 @@ class SparkConnectPlanner(val session: SparkSession) {
         }
         Some(Lead(children.head, children(1), children(2), ignoreNulls))
 
-      case "bloom_filter_agg" if fun.getArgumentsCount == 4 =>
+      case "bloom_filter_agg" if fun.getArgumentsCount == 5 =>
+        // [col, catalogString: String, expectedNumItems: Long, numBits: Long, fpp: Double]
+        def optimalNumOfBits(n: Long, p: Double): Long =
+          (-n * Math.log(p) / (Math.log(2) * Math.log(2))).toLong
+
         val children = fun.getArgumentsList.asScala.toSeq.map(transformExpression)
         val dt = {
-          val ddl = children.last match {
+          val ddl = children(1) match {
             case StringLiteral(s) => s
             case other =>
               throw InvalidPlanInput(s"col dataType should be a literal string, but got $other")
           }
           DataType.fromDDL(ddl)
         }
-        val first = dt match {
+        val col = dt match {
           case IntegerType | ShortType | ByteType => Cast(children.head, LongType)
           case LongType | StringType => children.head
           case other =>
@@ -1092,9 +1096,46 @@ class SparkConnectPlanner(val session: SparkSession) {
               s"Bloom filter only supports integral types, " +
                 s"and does not support type $other.")
         }
-        Some(
-          new BloomFilterAggregate(first, children(1), children(2))
-            .toAggregateExpression())
+
+        val expectedNumItems = children(2)
+        val n = expectedNumItems match {
+          case Literal(l: Long, LongType) if l > 0L => l
+          case _ =>
+            throw InvalidPlanInput("Expected insertions must be positive long literal.")
+        }
+
+        val numBits = children(3)
+        numBits match {
+          case Literal(l: Long, LongType) =>
+            if (l > 0L) {
+              Some(
+                new BloomFilterAggregate(col, expectedNumItems, numBits)
+                  .toAggregateExpression())
+            } else {
+              val fpp = children(4)
+              val p = fpp match {
+                case DoubleLiteral(d) => d
+                case _ =>
+                  throw InvalidPlanInput("False positive must be double literal.")
+              }
+              // if `p.isNaN` and numBits less than zero, throw `numBits` related exception first.
+              if (p.isNaN) {
+                throw InvalidPlanInput("Number of bits must be positive")
+              }
+              if (p <= 0d || p >= 1d) {
+                throw InvalidPlanInput(
+                  "False positive probability must be within range (0.0, 1.0)")
+              }
+              val opNumOfBits = optimalNumOfBits(n, p)
+              if (opNumOfBits < 0L) {
+                throw InvalidPlanInput("Number of bits must be positive")
+              }
+              Some(
+                new BloomFilterAggregate(col, expectedNumItems, Literal(opNumOfBits, LongType))
+                  .toAggregateExpression())
+            }
+          case _ => throw InvalidPlanInput("Number of bits must be long literal.")
+        }
 
       case "window" if 2 <= fun.getArgumentsCount && fun.getArgumentsCount <= 4 =>
         val children = fun.getArgumentsList.asScala.toSeq.map(transformExpression)
