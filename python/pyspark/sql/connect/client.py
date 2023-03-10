@@ -423,6 +423,7 @@ class AnalyzeResult:
         spark_version: Optional[str] = None
         parsed: Optional[DataType] = None
         is_same_semantics: Optional[bool] = None
+        semantic_hash: Optional[int] = None
 
         if pb.HasField("schema"):
             schema = types.proto_schema_to_pyspark_data_type(pb.schema.schema)
@@ -442,6 +443,8 @@ class AnalyzeResult:
             parsed = types.proto_schema_to_pyspark_data_type(pb.ddl_parse.parsed)
         elif pb.HasField("same_semantics"):
             is_same_semantics = pb.same_semantics.result
+        elif pb.HasField("semantic_hash"):
+            semantic_hash = pb.semantic_hash.result
         else:
             raise SparkConnectException("No analyze result found!")
 
@@ -455,6 +458,7 @@ class AnalyzeResult:
             spark_version,
             parsed,
             is_same_semantics,
+            semantic_hash,
         )
 
 
@@ -704,6 +708,14 @@ class SparkConnectClient(object):
         assert result is not None
         return result
 
+    def semantic_hash(self, plan: pb2.Plan) -> int:
+        """
+        returns a `hashCode` of the logical query plan.
+        """
+        result = self._analyze(method="semantic_hash", plan=plan).semantic_hash
+        assert result is not None
+        return result
+
     def close(self) -> None:
         """
         Close the channel.
@@ -782,6 +794,8 @@ class SparkConnectClient(object):
         elif method == "same_semantics":
             req.same_semantics.target_plan.CopyFrom(cast(pb2.Plan, kwargs.get("plan")))
             req.same_semantics.other_plan.CopyFrom(cast(pb2.Plan, kwargs.get("other")))
+        elif method == "semantic_hash":
+            req.semantic_hash.plan.CopyFrom(cast(pb2.Plan, kwargs.get("plan")))
         else:
             raise ValueError(f"Unknown Analyze method: {method}")
 
