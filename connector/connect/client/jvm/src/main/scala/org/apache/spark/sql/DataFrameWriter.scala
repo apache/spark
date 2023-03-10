@@ -229,8 +229,8 @@ final class DataFrameWriter[T] private[sql] (ds: Dataset[T]) {
     // Set path or table
     f(builder)
 
-    // Cannot both be set, hasPath or hasTable or nothing
-    require(builder.hasPath || builder.hasTable || (!builder.hasPath && !builder.hasTable))
+    // Cannot both be set
+    require(!(builder.hasPath && builder.hasTable))
 
     builder.setMode(mode match {
       case SaveMode.Append => proto.WriteOperation.SaveMode.SAVE_MODE_APPEND
