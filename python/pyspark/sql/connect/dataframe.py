@@ -1344,9 +1344,9 @@ class DataFrame:
         if self._session is None:
             raise Exception("Cannot collect on empty session.")
         query = self._plan.to_proto(self._session.client)
-        table = self._session.client.to_table(query)
+        table, schema = self._session.client.to_table(query)
 
-        schema = from_arrow_schema(table.schema)
+        schema = schema or from_arrow_schema(table.schema)
 
         assert schema is not None and isinstance(schema, StructType)
 

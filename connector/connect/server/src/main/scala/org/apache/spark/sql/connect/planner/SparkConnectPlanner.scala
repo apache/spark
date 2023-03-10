@@ -38,7 +38,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException, ParserUtils}
 import org.apache.spark.sql.catalyst.plans.{Cross, FullOuter, Inner, JoinType, LeftAnti, LeftOuter, LeftSemi, RightOuter, UsingJoin}
 import org.apache.spark.sql.catalyst.plans.logical
-import org.apache.spark.sql.catalyst.plans.logical.{CollectMetrics, CommandResult, Deduplicate, Except, Intersect, LocalRelation, LogicalPlan, Sample, Sort, SubqueryAlias, Union, Unpivot, UnresolvedHint}
+import org.apache.spark.sql.catalyst.plans.logical.{CollectMetrics, CommandResult, Deduplicate, Except, Intersect, LocalRelation, LogicalPlan, Project, Sample, Sort, SubqueryAlias, Union, Unpivot, UnresolvedHint}
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CharVarcharUtils}
 import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, InvalidPlanInput, UdfPacket}
 import org.apache.spark.sql.connect.config.Connect.CONNECT_GRPC_ARROW_MAX_BATCH_SIZE
@@ -674,17 +674,36 @@ class SparkConnectPlanner(val session: SparkSession) {
         throw InvalidPlanInput(s"Input data for LocalRelation does not produce a schema.")
       }
       val attributes = structType.toAttributes
-      val proj = UnsafeProjection.create(attributes, attributes)
-      val relation = logical.LocalRelation(attributes, rows.map(r => proj(r).copy()).toSeq)
 
       if (schema == null) {
-        relation
+        val proj = UnsafeProjection.create(attributes, attributes)
+        logical.LocalRelation(attributes, rows.map(r => proj(r).copy()).toSeq)
       } else {
-        Dataset
-          .ofRows(session, logicalPlan = relation)
-          .toDF(schema.names: _*)
-          .to(schema)
+        def udtToSqlType(dt: DataType): DataType = dt match {
+          case udt: UserDefinedType[_] => udt.sqlType
+          case StructType(fields) =>
+            val newFields = fields.map { case StructField(name, dataType, nullable, metadata) =>
+              StructField(name, udtToSqlType(dataType), nullable, metadata)
+            }
+            StructType(newFields)
+          case ArrayType(elementType, containsNull) =>
+            ArrayType(udtToSqlType(elementType), containsNull)
+          case MapType(keyType, valueType, valueContainsNull) =>
+            MapType(udtToSqlType(keyType), udtToSqlType(valueType), valueContainsNull)
+          case _ => dt
+        }
+
+        val sqlTypeOnlySchema = udtToSqlType(schema).asInstanceOf[StructType]
+
+        val project = Dataset
+          .ofRows(session, logicalPlan = logical.LocalRelation(attributes))
+          .toDF(sqlTypeOnlySchema.names: _*)
+          .to(sqlTypeOnlySchema)
           .logicalPlan
+          .asInstanceOf[Project]
+
+        val proj = UnsafeProjection.create(project.projectList, project.child.output)
+        logical.LocalRelation(schema.toAttributes, rows.map(r => proj(r).copy()).toSeq)
       }
     } else {
       if (schema == null) {
