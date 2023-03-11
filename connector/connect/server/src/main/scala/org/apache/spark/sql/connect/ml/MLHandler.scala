@@ -35,7 +35,7 @@ object MLHandler {
       case proto.MlCommand.MlCommandTypeCase.FIT =>
         val fitCommandProto = mlCommand.getFit
         val estimatorProto = fitCommandProto.getEstimator
-        assert(estimatorProto.getType == proto.Stage.StageType.ESTIMATOR)
+        assert(estimatorProto.getType == proto.MlStage.StageType.ESTIMATOR)
 
         val algoName = fitCommandProto.getEstimator.getName
         val algo = AlgorithmRegistry.get(algoName)
@@ -52,8 +52,8 @@ object MLHandler {
             .setModelUid(model.uid)
         ).build()
 
-      case proto.MlCommand.MlCommandTypeCase.MODEL_ATTR =>
-        val getModelAttrProto = mlCommand.getModelAttr
+      case proto.MlCommand.MlCommandTypeCase.FETCH_MODEL_ATTR =>
+        val getModelAttrProto = mlCommand.getFetchModelAttr
         val modelEntry = sessionHolder.mlCache.modelCache.get(
           getModelAttrProto.getModelRefId
         )
@@ -61,8 +61,8 @@ object MLHandler {
         val algo = modelEntry._2
         algo.getModelAttr(model, getModelAttrProto.getName).left.get
 
-      case proto.MlCommand.MlCommandTypeCase.MODEL_SUMMARY_ATTR =>
-        val getModelSummaryAttrProto = mlCommand.getModelSummaryAttr
+      case proto.MlCommand.MlCommandTypeCase.FETCH_MODEL_SUMMARY_ATTR =>
+        val getModelSummaryAttrProto = mlCommand.getFetchModelSummaryAttr
         val modelEntry = sessionHolder.mlCache.modelCache.get(
           getModelSummaryAttrProto.getModelRefId
         )

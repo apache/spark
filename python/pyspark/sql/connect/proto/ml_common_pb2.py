@@ -33,73 +33,73 @@ from pyspark.sql.connect.proto import expressions_pb2 as spark_dot_connect_dot_e
 
 
 DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(
-    b'\n\x1dspark/connect/ml_common.proto\x12\rspark.connect\x1a\x1fspark/connect/expressions.proto"\xd7\x02\n\x06Params\x12\x39\n\x06params\x18\x01 \x03(\x0b\x32!.spark.connect.Params.ParamsEntryR\x06params\x12O\n\x0e\x64\x65\x66\x61ult_params\x18\x02 \x03(\x0b\x32(.spark.connect.Params.DefaultParamsEntryR\rdefaultParams\x1a\\\n\x0bParamsEntry\x12\x10\n\x03key\x18\x01 \x01(\tR\x03key\x12\x37\n\x05value\x18\x02 \x01(\x0b\x32!.spark.connect.Expression.LiteralR\x05value:\x02\x38\x01\x1a\x63\n\x12\x44\x65\x66\x61ultParamsEntry\x12\x10\n\x03key\x18\x01 \x01(\tR\x03key\x12\x37\n\x05value\x18\x02 \x01(\x0b\x32!.spark.connect.Expression.LiteralR\x05value:\x02\x38\x01"\xbd\x01\n\x05Stage\x12\x12\n\x04name\x18\x01 \x01(\tR\x04name\x12-\n\x06params\x18\x02 \x01(\x0b\x32\x15.spark.connect.ParamsR\x06params\x12\x10\n\x03uid\x18\x03 \x01(\tR\x03uid\x12\x32\n\x04type\x18\x04 \x01(\x0e\x32\x1e.spark.connect.Stage.StageTypeR\x04type"+\n\tStageType\x12\r\n\tESTIMATOR\x10\x00\x12\x0f\n\x0bTRANSFORMER\x10\x01\x42"\n\x1eorg.apache.spark.connect.protoP\x01\x62\x06proto3'
+    b'\n\x1dspark/connect/ml_common.proto\x12\rspark.connect\x1a\x1fspark/connect/expressions.proto"\xdd\x02\n\x08MlParams\x12;\n\x06params\x18\x01 \x03(\x0b\x32#.spark.connect.MlParams.ParamsEntryR\x06params\x12Q\n\x0e\x64\x65\x66\x61ult_params\x18\x02 \x03(\x0b\x32*.spark.connect.MlParams.DefaultParamsEntryR\rdefaultParams\x1a\\\n\x0bParamsEntry\x12\x10\n\x03key\x18\x01 \x01(\tR\x03key\x12\x37\n\x05value\x18\x02 \x01(\x0b\x32!.spark.connect.Expression.LiteralR\x05value:\x02\x38\x01\x1a\x63\n\x12\x44\x65\x66\x61ultParamsEntry\x12\x10\n\x03key\x18\x01 \x01(\tR\x03key\x12\x37\n\x05value\x18\x02 \x01(\x0b\x32!.spark.connect.Expression.LiteralR\x05value:\x02\x38\x01"\xc3\x01\n\x07MlStage\x12\x12\n\x04name\x18\x01 \x01(\tR\x04name\x12/\n\x06params\x18\x02 \x01(\x0b\x32\x17.spark.connect.MlParamsR\x06params\x12\x10\n\x03uid\x18\x03 \x01(\tR\x03uid\x12\x34\n\x04type\x18\x04 \x01(\x0e\x32 .spark.connect.MlStage.StageTypeR\x04type"+\n\tStageType\x12\r\n\tESTIMATOR\x10\x00\x12\x0f\n\x0bTRANSFORMER\x10\x01\x42"\n\x1eorg.apache.spark.connect.protoP\x01\x62\x06proto3'
 )
 
 
-_PARAMS = DESCRIPTOR.message_types_by_name["Params"]
-_PARAMS_PARAMSENTRY = _PARAMS.nested_types_by_name["ParamsEntry"]
-_PARAMS_DEFAULTPARAMSENTRY = _PARAMS.nested_types_by_name["DefaultParamsEntry"]
-_STAGE = DESCRIPTOR.message_types_by_name["Stage"]
-_STAGE_STAGETYPE = _STAGE.enum_types_by_name["StageType"]
-Params = _reflection.GeneratedProtocolMessageType(
-    "Params",
+_MLPARAMS = DESCRIPTOR.message_types_by_name["MlParams"]
+_MLPARAMS_PARAMSENTRY = _MLPARAMS.nested_types_by_name["ParamsEntry"]
+_MLPARAMS_DEFAULTPARAMSENTRY = _MLPARAMS.nested_types_by_name["DefaultParamsEntry"]
+_MLSTAGE = DESCRIPTOR.message_types_by_name["MlStage"]
+_MLSTAGE_STAGETYPE = _MLSTAGE.enum_types_by_name["StageType"]
+MlParams = _reflection.GeneratedProtocolMessageType(
+    "MlParams",
     (_message.Message,),
     {
         "ParamsEntry": _reflection.GeneratedProtocolMessageType(
             "ParamsEntry",
             (_message.Message,),
             {
-                "DESCRIPTOR": _PARAMS_PARAMSENTRY,
+                "DESCRIPTOR": _MLPARAMS_PARAMSENTRY,
                 "__module__": "spark.connect.ml_common_pb2"
-                # @@protoc_insertion_point(class_scope:spark.connect.Params.ParamsEntry)
+                # @@protoc_insertion_point(class_scope:spark.connect.MlParams.ParamsEntry)
             },
         ),
         "DefaultParamsEntry": _reflection.GeneratedProtocolMessageType(
             "DefaultParamsEntry",
             (_message.Message,),
             {
-                "DESCRIPTOR": _PARAMS_DEFAULTPARAMSENTRY,
+                "DESCRIPTOR": _MLPARAMS_DEFAULTPARAMSENTRY,
                 "__module__": "spark.connect.ml_common_pb2"
-                # @@protoc_insertion_point(class_scope:spark.connect.Params.DefaultParamsEntry)
+                # @@protoc_insertion_point(class_scope:spark.connect.MlParams.DefaultParamsEntry)
             },
         ),
-        "DESCRIPTOR": _PARAMS,
+        "DESCRIPTOR": _MLPARAMS,
         "__module__": "spark.connect.ml_common_pb2"
-        # @@protoc_insertion_point(class_scope:spark.connect.Params)
+        # @@protoc_insertion_point(class_scope:spark.connect.MlParams)
     },
 )
-_sym_db.RegisterMessage(Params)
-_sym_db.RegisterMessage(Params.ParamsEntry)
-_sym_db.RegisterMessage(Params.DefaultParamsEntry)
+_sym_db.RegisterMessage(MlParams)
+_sym_db.RegisterMessage(MlParams.ParamsEntry)
+_sym_db.RegisterMessage(MlParams.DefaultParamsEntry)
 
-Stage = _reflection.GeneratedProtocolMessageType(
-    "Stage",
+MlStage = _reflection.GeneratedProtocolMessageType(
+    "MlStage",
     (_message.Message,),
     {
-        "DESCRIPTOR": _STAGE,
+        "DESCRIPTOR": _MLSTAGE,
         "__module__": "spark.connect.ml_common_pb2"
-        # @@protoc_insertion_point(class_scope:spark.connect.Stage)
+        # @@protoc_insertion_point(class_scope:spark.connect.MlStage)
     },
 )
-_sym_db.RegisterMessage(Stage)
+_sym_db.RegisterMessage(MlStage)
 
 if _descriptor._USE_C_DESCRIPTORS == False:
 
     DESCRIPTOR._options = None
     DESCRIPTOR._serialized_options = b"\n\036org.apache.spark.connect.protoP\001"
-    _PARAMS_PARAMSENTRY._options = None
-    _PARAMS_PARAMSENTRY._serialized_options = b"8\001"
-    _PARAMS_DEFAULTPARAMSENTRY._options = None
-    _PARAMS_DEFAULTPARAMSENTRY._serialized_options = b"8\001"
-    _PARAMS._serialized_start = 82
-    _PARAMS._serialized_end = 425
-    _PARAMS_PARAMSENTRY._serialized_start = 232
-    _PARAMS_PARAMSENTRY._serialized_end = 324
-    _PARAMS_DEFAULTPARAMSENTRY._serialized_start = 326
-    _PARAMS_DEFAULTPARAMSENTRY._serialized_end = 425
-    _STAGE._serialized_start = 428
-    _STAGE._serialized_end = 617
-    _STAGE_STAGETYPE._serialized_start = 574
-    _STAGE_STAGETYPE._serialized_end = 617
+    _MLPARAMS_PARAMSENTRY._options = None
+    _MLPARAMS_PARAMSENTRY._serialized_options = b"8\001"
+    _MLPARAMS_DEFAULTPARAMSENTRY._options = None
+    _MLPARAMS_DEFAULTPARAMSENTRY._serialized_options = b"8\001"
+    _MLPARAMS._serialized_start = 82
+    _MLPARAMS._serialized_end = 431
+    _MLPARAMS_PARAMSENTRY._serialized_start = 238
+    _MLPARAMS_PARAMSENTRY._serialized_end = 330
+    _MLPARAMS_DEFAULTPARAMSENTRY._serialized_start = 332
+    _MLPARAMS_DEFAULTPARAMSENTRY._serialized_end = 431
+    _MLSTAGE._serialized_start = 434
+    _MLSTAGE._serialized_end = 629
+    _MLSTAGE_STAGETYPE._serialized_start = 586
+    _MLSTAGE_STAGETYPE._serialized_end = 629
 # @@protoc_insertion_point(module_scope)

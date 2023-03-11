@@ -27,9 +27,9 @@ option java_multiple_files = true;
 option java_package = "org.apache.spark.connect.proto";
 
 
-message Evaluator {
+message MlEvaluator {
   string name = 1;
-  Params params = 2;
+  MlParams params = 2;
   string uid = 3;
 }
 
@@ -37,22 +37,24 @@ message Evaluator {
 message MlCommand {
   oneof ml_command_type {
     Fit fit = 1;
-    ModelAttr model_attr = 2;
-    ModelSummaryAttr model_summary_attr = 3;
+    FetchModelAttr fetch_model_attr = 2;
+    FetchModelSummaryAttr fetch_model_summary_attr = 3;
     LoadModel load_model = 4;
     SaveModel save_model = 5;
     Evaluate evaluate = 6;
     SaveStage save_stage = 7;
     LoadStage load_stage = 8;
+    SaveEvaluator save_evaluator = 9;
+    LoadEvaluator load_evaluator = 10;
   }
 
   message Fit {
-    Stage estimator = 1;
+    MlStage estimator = 1;
     Relation dataset = 2;
   }
 
   message Evaluate {
-    Evaluator evaluator = 1;
+    MlEvaluator evaluator = 1;
   }
 
   message LoadModel {
@@ -73,21 +75,33 @@ message MlCommand {
   }
 
   message SaveStage {
-    Stage stage = 1;
+    MlStage stage = 1;
     string path = 2; // saving path
     bool overwrite = 3;
     map<string, string> options = 4; // saving options
   }
 
-  message ModelAttr {
+  message LoadEvaluator {
+    string name = 1;
+    string path = 2;
+  }
+
+  message SaveEvaluator {
+    MlEvaluator evaluator = 1;
+    string path = 2; // saving path
+    bool overwrite = 3;
+    map<string, string> options = 4; // saving options
+  }
+
+  message FetchModelAttr {
     int64 model_ref_id = 1;
     string name = 2;
   }
 
-  message ModelSummaryAttr {
+  message FetchModelSummaryAttr {
     int64 model_ref_id = 1;
     string name = 2;
-    Params params = 3;
+    MlParams params = 3;
 
     // Evaluation dataset that it uses to computes
     // the summary attribute

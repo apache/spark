@@ -515,13 +515,13 @@ class MlRelation(google.protobuf.message.Message):
         def input(self) -> global___Relation: ...
         model_ref_id: builtins.int
         @property
-        def params(self) -> pyspark.sql.connect.proto.ml_common_pb2.Params: ...
+        def params(self) -> pyspark.sql.connect.proto.ml_common_pb2.MlParams: ...
         def __init__(
             self,
             *,
             input: global___Relation | None = ...,
             model_ref_id: builtins.int = ...,
-            params: pyspark.sql.connect.proto.ml_common_pb2.Params | None = ...,
+            params: pyspark.sql.connect.proto.ml_common_pb2.MlParams | None = ...,
         ) -> None: ...
         def HasField(
             self, field_name: typing_extensions.Literal["input", b"input", "params", b"params"]
@@ -542,12 +542,12 @@ class MlRelation(google.protobuf.message.Message):
         @property
         def input(self) -> global___Relation: ...
         @property
-        def transformer(self) -> pyspark.sql.connect.proto.ml_common_pb2.Stage: ...
+        def transformer(self) -> pyspark.sql.connect.proto.ml_common_pb2.MlStage: ...
         def __init__(
             self,
             *,
             input: global___Relation | None = ...,
-            transformer: pyspark.sql.connect.proto.ml_common_pb2.Stage | None = ...,
+            transformer: pyspark.sql.connect.proto.ml_common_pb2.MlStage | None = ...,
         ) -> None: ...
         def HasField(
             self,
@@ -588,7 +588,7 @@ class MlRelation(google.protobuf.message.Message):
         model_ref_id: builtins.int
         name: builtins.str
         @property
-        def params(self) -> pyspark.sql.connect.proto.ml_common_pb2.Params: ...
+        def params(self) -> pyspark.sql.connect.proto.ml_common_pb2.MlParams: ...
         @property
         def evaluation_dataset(self) -> global___Relation:
             """Evaluation dataset that it uses to computes
@@ -601,7 +601,7 @@ class MlRelation(google.protobuf.message.Message):
             *,
             model_ref_id: builtins.int = ...,
             name: builtins.str = ...,
-            params: pyspark.sql.connect.proto.ml_common_pb2.Params | None = ...,
+            params: pyspark.sql.connect.proto.ml_common_pb2.MlParams | None = ...,
             evaluation_dataset: global___Relation | None = ...,
         ) -> None: ...
         def HasField(

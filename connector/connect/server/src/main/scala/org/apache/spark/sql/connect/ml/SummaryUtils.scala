@@ -60,6 +60,7 @@ object SummaryUtils {
                                         ): Option[Either[proto.MlCommandResponse, DataFrame]] = {
     getClassificationSummaryAttr(summary, name).orElse(
       name match {
+        case "scoreCol" => Some(Left(Serializer.serialize(summary.scoreCol)))
         case "roc" => Some(Right(summary.roc))
         case "areaUnderROC" => Some(Left(Serializer.serialize(summary.areaUnderROC)))
         case "pr" => Some(Right(summary.pr))

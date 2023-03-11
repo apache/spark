@@ -25,14 +25,14 @@ option java_multiple_files = true;
 option java_package = "org.apache.spark.connect.proto";
 
 
-message Params {
+message MlParams {
   map<string, Expression.Literal> params = 1;
   map<string, Expression.Literal> default_params = 2;
 }
 
-message Stage {
+message MlStage {
   string name = 1;
-  Params params = 2;
+  MlParams params = 2;
   string uid = 3;
   StageType type = 4;
   enum StageType {

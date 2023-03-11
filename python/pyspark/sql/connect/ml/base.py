@@ -39,11 +39,11 @@ class ClientEstimator(Estimator, metaclass=ABCMeta):
     def _fit(self, dataset: DataFrame) -> Model:
         client = dataset.sparkSession.client
         dataset_relation = dataset._plan.plan(client)
-        estimator_proto = ml_common_pb2.Stage(
+        estimator_proto = ml_common_pb2.MlStage(
             name=self._algo_name(),
             params=serialize_ml_params(self, client),
             uid=self.uid,
-            type=ml_common_pb2.Stage.ESTIMATOR,
+            type=ml_common_pb2.MlStage.ESTIMATOR,
         )
         fit_command_proto = ml_pb2.MlCommand.Fit(
             estimator=estimator_proto,
@@ -71,12 +71,12 @@ class ClientModel(Model, metaclass=ABCMeta):
 
     def _get_model_attr(self, name):
         client = SparkSession.getActiveSession().client
-        model_attr_command_proto = ml_pb2.MlCommand.ModelAttr(
+        model_attr_command_proto = ml_pb2.MlCommand.FetchModelAttr(
             model_ref_id=self.ref_id,
             name=name
         )
         req = client._execute_plan_request_with_metadata()
-        req.plan.ml_command.model_attr.CopyFrom(model_attr_command_proto)
+        req.plan.ml_command.fetch_model_attr.CopyFrom(model_attr_command_proto)
 
         resp = client._execute_ml(req)
         return deserialize(resp, client)
@@ -166,14 +166,14 @@ class ClientModelSummary(metaclass=ABCMeta):
     def _get_summary_attr(self, name):
         client = SparkSession.getActiveSession().client
 
-        model_summary_attr_command_proto = ml_pb2.MlCommand.ModelSummaryAttr(
+        model_summary_attr_command_proto = ml_pb2.MlCommand.FetchModelSummaryAttr(
             model_ref_id=self.model.ref_id,
             name=name,
             params=serialize_ml_params(self.model, client),
             evaluation_dataset=(self.dataset._plan.plan(client) if self.dataset is not None else None)
         )
         req = client._execute_plan_request_with_metadata()
-        req.plan.ml_command.model_summary_attr.CopyFrom(model_summary_attr_command_proto)
+        req.plan.ml_command.fetch_model_summary_attr.CopyFrom(model_summary_attr_command_proto)
 
         resp = client._execute_ml(req)
         return deserialize(resp, client)

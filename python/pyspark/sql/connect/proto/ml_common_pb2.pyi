@@ -51,7 +51,7 @@ else:
 DESCRIPTOR: google.protobuf.descriptor.FileDescriptor
 
 @typing_extensions.final
-class Params(google.protobuf.message.Message):
+class MlParams(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
     @typing_extensions.final
@@ -131,10 +131,10 @@ class Params(google.protobuf.message.Message):
         ],
     ) -> None: ...
 
-global___Params = Params
+global___MlParams = MlParams
 
 @typing_extensions.final
-class Stage(google.protobuf.message.Message):
+class MlStage(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
     class _StageType:
@@ -142,16 +142,16 @@ class Stage(google.protobuf.message.Message):
         V: typing_extensions.TypeAlias = ValueType
 
     class _StageTypeEnumTypeWrapper(
-        google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[Stage._StageType.ValueType],
+        google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[MlStage._StageType.ValueType],
         builtins.type,
     ):  # noqa: F821
         DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
-        ESTIMATOR: Stage._StageType.ValueType  # 0
-        TRANSFORMER: Stage._StageType.ValueType  # 1
+        ESTIMATOR: MlStage._StageType.ValueType  # 0
+        TRANSFORMER: MlStage._StageType.ValueType  # 1
 
     class StageType(_StageType, metaclass=_StageTypeEnumTypeWrapper): ...
-    ESTIMATOR: Stage.StageType.ValueType  # 0
-    TRANSFORMER: Stage.StageType.ValueType  # 1
+    ESTIMATOR: MlStage.StageType.ValueType  # 0
+    TRANSFORMER: MlStage.StageType.ValueType  # 1
 
     NAME_FIELD_NUMBER: builtins.int
     PARAMS_FIELD_NUMBER: builtins.int
@@ -159,16 +159,16 @@ class Stage(google.protobuf.message.Message):
     TYPE_FIELD_NUMBER: builtins.int
     name: builtins.str
     @property
-    def params(self) -> global___Params: ...
+    def params(self) -> global___MlParams: ...
     uid: builtins.str
-    type: global___Stage.StageType.ValueType
+    type: global___MlStage.StageType.ValueType
     def __init__(
         self,
         *,
         name: builtins.str = ...,
-        params: global___Params | None = ...,
+        params: global___MlParams | None = ...,
         uid: builtins.str = ...,
-        type: global___Stage.StageType.ValueType = ...,
+        type: global___MlStage.StageType.ValueType = ...,
     ) -> None: ...
     def HasField(
         self, field_name: typing_extensions.Literal["params", b"params"]
@@ -180,4 +180,4 @@ class Stage(google.protobuf.message.Message):
         ],
     ) -> None: ...
 
-global___Stage = Stage
+global___MlStage = MlStage

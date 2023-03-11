@@ -26,6 +26,8 @@ from pyspark.ml.linalg import Vectors, Matrices
 
 def deserialize(ml_command_result: ml_pb2.MlCommandResponse, client):
     if ml_command_result.HasField("literal"):
+        # TODO: Spark connect provides a util function to deserialize Literal proto to python values
+        #  and make the code here to call it.
         literal = ml_command_result.literal
         if literal.HasField("integer"):
             return literal.integer
@@ -69,7 +71,7 @@ def serialize_ml_params(instance, client):
             for k, v in param_value_dict.items()
         }
 
-    result = ml_common_pb2.Params(
+    result = ml_common_pb2.MlParams(
         params=gen_pb2_map(instance._paramMap),
         default_params=gen_pb2_map(instance._defaultParamMap),
     )

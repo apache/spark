@@ -51,7 +51,7 @@ else:
 DESCRIPTOR: google.protobuf.descriptor.FileDescriptor
 
 @typing_extensions.final
-class Evaluator(google.protobuf.message.Message):
+class MlEvaluator(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
     NAME_FIELD_NUMBER: builtins.int
@@ -59,13 +59,13 @@ class Evaluator(google.protobuf.message.Message):
     UID_FIELD_NUMBER: builtins.int
     name: builtins.str
     @property
-    def params(self) -> pyspark.sql.connect.proto.ml_common_pb2.Params: ...
+    def params(self) -> pyspark.sql.connect.proto.ml_common_pb2.MlParams: ...
     uid: builtins.str
     def __init__(
         self,
         *,
         name: builtins.str = ...,
-        params: pyspark.sql.connect.proto.ml_common_pb2.Params | None = ...,
+        params: pyspark.sql.connect.proto.ml_common_pb2.MlParams | None = ...,
         uid: builtins.str = ...,
     ) -> None: ...
     def HasField(
@@ -76,7 +76,7 @@ class Evaluator(google.protobuf.message.Message):
         field_name: typing_extensions.Literal["name", b"name", "params", b"params", "uid", b"uid"],
     ) -> None: ...
 
-global___Evaluator = Evaluator
+global___MlEvaluator = MlEvaluator
 
 @typing_extensions.final
 class MlCommand(google.protobuf.message.Message):
@@ -89,13 +89,13 @@ class MlCommand(google.protobuf.message.Message):
         ESTIMATOR_FIELD_NUMBER: builtins.int
         DATASET_FIELD_NUMBER: builtins.int
         @property
-        def estimator(self) -> pyspark.sql.connect.proto.ml_common_pb2.Stage: ...
+        def estimator(self) -> pyspark.sql.connect.proto.ml_common_pb2.MlStage: ...
         @property
         def dataset(self) -> pyspark.sql.connect.proto.relations_pb2.Relation: ...
         def __init__(
             self,
             *,
-            estimator: pyspark.sql.connect.proto.ml_common_pb2.Stage | None = ...,
+            estimator: pyspark.sql.connect.proto.ml_common_pb2.MlStage | None = ...,
             dataset: pyspark.sql.connect.proto.relations_pb2.Relation | None = ...,
         ) -> None: ...
         def HasField(
@@ -113,11 +113,11 @@ class MlCommand(google.protobuf.message.Message):
 
         EVALUATOR_FIELD_NUMBER: builtins.int
         @property
-        def evaluator(self) -> global___Evaluator: ...
+        def evaluator(self) -> global___MlEvaluator: ...
         def __init__(
             self,
             *,
-            evaluator: global___Evaluator | None = ...,
+            evaluator: global___MlEvaluator | None = ...,
         ) -> None: ...
         def HasField(
             self, field_name: typing_extensions.Literal["evaluator", b"evaluator"]
@@ -246,7 +246,7 @@ class MlCommand(google.protobuf.message.Message):
         OVERWRITE_FIELD_NUMBER: builtins.int
         OPTIONS_FIELD_NUMBER: builtins.int
         @property
-        def stage(self) -> pyspark.sql.connect.proto.ml_common_pb2.Stage: ...
+        def stage(self) -> pyspark.sql.connect.proto.ml_common_pb2.MlStage: ...
         path: builtins.str
         """saving path"""
         overwrite: builtins.bool
@@ -258,7 +258,7 @@ class MlCommand(google.protobuf.message.Message):
         def __init__(
             self,
             *,
-            stage: pyspark.sql.connect.proto.ml_common_pb2.Stage | None = ...,
+            stage: pyspark.sql.connect.proto.ml_common_pb2.MlStage | None = ...,
             path: builtins.str = ...,
             overwrite: builtins.bool = ...,
             options: collections.abc.Mapping[builtins.str, builtins.str] | None = ...,
@@ -274,7 +274,86 @@ class MlCommand(google.protobuf.message.Message):
         ) -> None: ...
 
     @typing_extensions.final
-    class ModelAttr(google.protobuf.message.Message):
+    class LoadEvaluator(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        NAME_FIELD_NUMBER: builtins.int
+        PATH_FIELD_NUMBER: builtins.int
+        name: builtins.str
+        path: builtins.str
+        def __init__(
+            self,
+            *,
+            name: builtins.str = ...,
+            path: builtins.str = ...,
+        ) -> None: ...
+        def ClearField(
+            self, field_name: typing_extensions.Literal["name", b"name", "path", b"path"]
+        ) -> None: ...
+
+    @typing_extensions.final
+    class SaveEvaluator(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        @typing_extensions.final
+        class OptionsEntry(google.protobuf.message.Message):
+            DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+            KEY_FIELD_NUMBER: builtins.int
+            VALUE_FIELD_NUMBER: builtins.int
+            key: builtins.str
+            value: builtins.str
+            def __init__(
+                self,
+                *,
+                key: builtins.str = ...,
+                value: builtins.str = ...,
+            ) -> None: ...
+            def ClearField(
+                self, field_name: typing_extensions.Literal["key", b"key", "value", b"value"]
+            ) -> None: ...
+
+        EVALUATOR_FIELD_NUMBER: builtins.int
+        PATH_FIELD_NUMBER: builtins.int
+        OVERWRITE_FIELD_NUMBER: builtins.int
+        OPTIONS_FIELD_NUMBER: builtins.int
+        @property
+        def evaluator(self) -> global___MlEvaluator: ...
+        path: builtins.str
+        """saving path"""
+        overwrite: builtins.bool
+        @property
+        def options(
+            self,
+        ) -> google.protobuf.internal.containers.ScalarMap[builtins.str, builtins.str]:
+            """saving options"""
+        def __init__(
+            self,
+            *,
+            evaluator: global___MlEvaluator | None = ...,
+            path: builtins.str = ...,
+            overwrite: builtins.bool = ...,
+            options: collections.abc.Mapping[builtins.str, builtins.str] | None = ...,
+        ) -> None: ...
+        def HasField(
+            self, field_name: typing_extensions.Literal["evaluator", b"evaluator"]
+        ) -> builtins.bool: ...
+        def ClearField(
+            self,
+            field_name: typing_extensions.Literal[
+                "evaluator",
+                b"evaluator",
+                "options",
+                b"options",
+                "overwrite",
+                b"overwrite",
+                "path",
+                b"path",
+            ],
+        ) -> None: ...
+
+    @typing_extensions.final
+    class FetchModelAttr(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
         MODEL_REF_ID_FIELD_NUMBER: builtins.int
@@ -293,7 +372,7 @@ class MlCommand(google.protobuf.message.Message):
         ) -> None: ...
 
     @typing_extensions.final
-    class ModelSummaryAttr(google.protobuf.message.Message):
+    class FetchModelSummaryAttr(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
         MODEL_REF_ID_FIELD_NUMBER: builtins.int
@@ -303,7 +382,7 @@ class MlCommand(google.protobuf.message.Message):
         model_ref_id: builtins.int
         name: builtins.str
         @property
-        def params(self) -> pyspark.sql.connect.proto.ml_common_pb2.Params: ...
+        def params(self) -> pyspark.sql.connect.proto.ml_common_pb2.MlParams: ...
         @property
         def evaluation_dataset(self) -> pyspark.sql.connect.proto.relations_pb2.Relation:
             """Evaluation dataset that it uses to computes
@@ -316,7 +395,7 @@ class MlCommand(google.protobuf.message.Message):
             *,
             model_ref_id: builtins.int = ...,
             name: builtins.str = ...,
-            params: pyspark.sql.connect.proto.ml_common_pb2.Params | None = ...,
+            params: pyspark.sql.connect.proto.ml_common_pb2.MlParams | None = ...,
             evaluation_dataset: pyspark.sql.connect.proto.relations_pb2.Relation | None = ...,
         ) -> None: ...
         def HasField(
@@ -351,19 +430,21 @@ class MlCommand(google.protobuf.message.Message):
         ) -> typing_extensions.Literal["evaluation_dataset"] | None: ...
 
     FIT_FIELD_NUMBER: builtins.int
-    MODEL_ATTR_FIELD_NUMBER: builtins.int
-    MODEL_SUMMARY_ATTR_FIELD_NUMBER: builtins.int
+    FETCH_MODEL_ATTR_FIELD_NUMBER: builtins.int
+    FETCH_MODEL_SUMMARY_ATTR_FIELD_NUMBER: builtins.int
     LOAD_MODEL_FIELD_NUMBER: builtins.int
     SAVE_MODEL_FIELD_NUMBER: builtins.int
     EVALUATE_FIELD_NUMBER: builtins.int
     SAVE_STAGE_FIELD_NUMBER: builtins.int
     LOAD_STAGE_FIELD_NUMBER: builtins.int
+    SAVE_EVALUATOR_FIELD_NUMBER: builtins.int
+    LOAD_EVALUATOR_FIELD_NUMBER: builtins.int
     @property
     def fit(self) -> global___MlCommand.Fit: ...
     @property
-    def model_attr(self) -> global___MlCommand.ModelAttr: ...
+    def fetch_model_attr(self) -> global___MlCommand.FetchModelAttr: ...
     @property
-    def model_summary_attr(self) -> global___MlCommand.ModelSummaryAttr: ...
+    def fetch_model_summary_attr(self) -> global___MlCommand.FetchModelSummaryAttr: ...
     @property
     def load_model(self) -> global___MlCommand.LoadModel: ...
     @property
@@ -374,35 +455,45 @@ class MlCommand(google.protobuf.message.Message):
     def save_stage(self) -> global___MlCommand.SaveStage: ...
     @property
     def load_stage(self) -> global___MlCommand.LoadStage: ...
+    @property
+    def save_evaluator(self) -> global___MlCommand.SaveEvaluator: ...
+    @property
+    def load_evaluator(self) -> global___MlCommand.LoadEvaluator: ...
     def __init__(
         self,
         *,
         fit: global___MlCommand.Fit | None = ...,
-        model_attr: global___MlCommand.ModelAttr | None = ...,
-        model_summary_attr: global___MlCommand.ModelSummaryAttr | None = ...,
+        fetch_model_attr: global___MlCommand.FetchModelAttr | None = ...,
+        fetch_model_summary_attr: global___MlCommand.FetchModelSummaryAttr | None = ...,
         load_model: global___MlCommand.LoadModel | None = ...,
         save_model: global___MlCommand.SaveModel | None = ...,
         evaluate: global___MlCommand.Evaluate | None = ...,
         save_stage: global___MlCommand.SaveStage | None = ...,
         load_stage: global___MlCommand.LoadStage | None = ...,
+        save_evaluator: global___MlCommand.SaveEvaluator | None = ...,
+        load_evaluator: global___MlCommand.LoadEvaluator | None = ...,
     ) -> None: ...
     def HasField(
         self,
         field_name: typing_extensions.Literal[
             "evaluate",
             b"evaluate",
+            "fetch_model_attr",
+            b"fetch_model_attr",
+            "fetch_model_summary_attr",
+            b"fetch_model_summary_attr",
             "fit",
             b"fit",
+            "load_evaluator",
+            b"load_evaluator",
             "load_model",
             b"load_model",
             "load_stage",
             b"load_stage",
             "ml_command_type",
             b"ml_command_type",
-            "model_attr",
-            b"model_attr",
-            "model_summary_attr",
-            b"model_summary_attr",
+            "save_evaluator",
+            b"save_evaluator",
             "save_model",
             b"save_model",
             "save_stage",
@@ -414,18 +505,22 @@ class MlCommand(google.protobuf.message.Message):
         field_name: typing_extensions.Literal[
             "evaluate",
             b"evaluate",
+            "fetch_model_attr",
+            b"fetch_model_attr",
+            "fetch_model_summary_attr",
+            b"fetch_model_summary_attr",
             "fit",
             b"fit",
+            "load_evaluator",
+            b"load_evaluator",
             "load_model",
             b"load_model",
             "load_stage",
             b"load_stage",
             "ml_command_type",
             b"ml_command_type",
-            "model_attr",
-            b"model_attr",
-            "model_summary_attr",
-            b"model_summary_attr",
+            "save_evaluator",
+            b"save_evaluator",
             "save_model",
             b"save_model",
             "save_stage",
@@ -436,13 +531,15 @@ class MlCommand(google.protobuf.message.Message):
         self, oneof_group: typing_extensions.Literal["ml_command_type", b"ml_command_type"]
     ) -> typing_extensions.Literal[
         "fit",
-        "model_attr",
-        "model_summary_attr",
+        "fetch_model_attr",
+        "fetch_model_summary_attr",
         "load_model",
         "save_model",
         "evaluate",
         "save_stage",
         "load_stage",
+        "save_evaluator",
+        "load_evaluator",
     ] | None: ...
 
 global___MlCommand = MlCommand

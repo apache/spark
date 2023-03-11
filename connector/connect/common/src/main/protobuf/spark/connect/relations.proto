@@ -103,11 +103,11 @@ message MlRelation {
   message ModelTransform {
     Relation input = 1;
     int64 model_ref_id = 2;
-    Params params = 3;
+    MlParams params = 3;
   }
   message FeatureTransform {
     Relation input = 1;
-    Stage transformer = 2;
+    MlStage transformer = 2;
   }
   message ModelAttr {
     int64 model_ref_id = 1;
@@ -116,7 +116,7 @@ message MlRelation {
   message ModelSummaryAttr {
     int64 model_ref_id = 1;
     string name = 2;
-    Params params = 3;
+    MlParams params = 3;
 
     // Evaluation dataset that it uses to computes
     // the summary attribute

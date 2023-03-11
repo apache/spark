@@ -25,7 +25,7 @@ import org.apache.spark.sql.connect.service.SessionHolder
 
 object MLUtils {
 
-  def setInstanceParams(instance: Params, paramsProto: proto.Params): Unit = {
+  def setInstanceParams(instance: Params, paramsProto: proto.MlParams): Unit = {
     import scala.collection.JavaConverters._
     paramsProto.getParamsMap.asScala.foreach { case (paramName, paramValueProto) =>
       val paramDef = instance.getParam(paramName)
