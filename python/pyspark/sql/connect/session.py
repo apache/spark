@@ -52,12 +52,14 @@ from pyspark.sql.connect.conf import RuntimeConf
 from pyspark.sql.connect.dataframe import DataFrame
 from pyspark.sql.connect.plan import SQL, Range, LocalRelation, CachedRelation
 from pyspark.sql.connect.readwriter import DataFrameReader
+from pyspark.sql.connect.types import replace_with_arrow_column_name
 from pyspark.sql.pandas.serializers import ArrowStreamPandasSerializer
 from pyspark.sql.pandas.types import to_arrow_type, _get_local_timezone
 from pyspark.sql.session import classproperty, SparkSession as PySparkSession
 from pyspark.sql.types import (
     _infer_schema,
     _has_nulltype,
+    _has_non_nullable,
     _merge_type,
     Row,
     DataType,
@@ -240,10 +242,12 @@ class SparkSession:
                 _cols.extend([f"_{i + 1}" for i in range(cast(int, _num_cols), len(data.columns))])
                 _num_cols = len(_cols)
 
+            _target_schema: Optional[StructType] = None
             # Determine arrow types to coerce data when creating batches
             if isinstance(schema, StructType):
                 arrow_types = [to_arrow_type(f.dataType) for f in schema.fields]
                 _cols = [str(x) if not isinstance(x, str) else x for x in schema.fieldNames()]
+                _target_schema = schema
             elif isinstance(schema, DataType):
                 raise ValueError("Single data type %s is not supported with Arrow" % str(schema))
             else:
@@ -266,6 +270,9 @@ class SparkSession:
             _table = pa.Table.from_batches(
                 [ser._create_batch([(c, t) for (_, c), t in zip(data.items(), arrow_types)])]
             )
+            if _target_schema is not None and _has_non_nullable(_target_schema):
+                pa_schema = replace_with_arrow_column_name(_target_schema, _table.schema)
+                _table = _table.cast(target_schema=pa_schema)
 
         elif isinstance(data, np.ndarray):
             if data.ndim not in [1, 2]:
@@ -334,6 +341,10 @@ class SparkSession:
                         "a StructType Schema is required in this case"
                     )
                 _inferred_schema = _schema
+
+            if _schema is not None and _has_non_nullable(_schema):
+                if isinstance(_schema, StructType):
+                    _inferred_schema = _schema
 
             from pyspark.sql.connect.conversion import LocalDataToArrowConversion
 
