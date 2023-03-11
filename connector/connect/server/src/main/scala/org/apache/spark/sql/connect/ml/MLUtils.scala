@@ -44,45 +44,36 @@ object MLUtils {
     _convertParamValue(paramType, value)
   }
 
-  val _primitiveTypeToboxedTypeMap = Map[Class[_], Class[_]](
-    classOf[Int] -> classOf[java.lang.Integer],
-    classOf[Long] -> classOf[java.lang.Long],
-    classOf[Float] -> classOf[java.lang.Float],
-    classOf[Double] -> classOf[java.lang.Double],
-    classOf[Boolean] -> classOf[java.lang.Boolean],
-    classOf[Int] -> classOf[java.lang.Integer]
-  )
-
   def _convertParamValue(paramType: Class[_], value: Any): Any = {
-    if (paramType.isPrimitive && _primitiveTypeToboxedTypeMap(paramType).isInstance(value)) {
-      value
-    } else if (paramType.isInstance(value)) {
-      value
-    } else {
-      // Some cases the param type might be mismatched with the value type.
-      // the cases includes:
-      // param type is Int but client sends a Long type.
-      // param type is Float but client sends a Double type.
-      // param type is Array[Int] but client sends a Array[Long] type.
-      // param type is Array[Float] but client sends a Array[Double] type.
-      // param type is Array[Array[Int]] but client sends a Array[Array[Long]] type.
-      // param type is Array[Array[Float]] but client sends a Array[Array[Double]] type.
-      if (paramType == classOf[Int]) {
-        value.asInstanceOf[Long].toInt
-      } else if (paramType == classOf[Float]) {
-        value.asInstanceOf[Double].toFloat
-      } else if (paramType == classOf[Array[Int]]) {
-        value.asInstanceOf[Array[Long]].map(_.toInt)
-      } else if (paramType == classOf[Array[Float]]) {
-        value.asInstanceOf[Array[Double]].map(_.toFloat)
-      } else if (paramType.isArray) {
-        val compType = paramType.getComponentType
-        value.asInstanceOf[Array[_]].map { e =>
-          _convertParamValue(compType, e)
-        }
-      } else {
-        throw new IllegalArgumentException()
+    // Some cases the param type might be mismatched with the value type.
+    // Because in python side we only have int / float type for numeric params.
+    // e.g.:
+    // param type is Int but client sends a Long type.
+    // param type is Long but client sends a Int type.
+    // param type is Float but client sends a Double type.
+    // param type is Array[Int] but client sends a Array[Long] type.
+    // param type is Array[Float] but client sends a Array[Double] type.
+    // param type is Array[Array[Int]] but client sends a Array[Array[Long]] type.
+    // param type is Array[Array[Float]] but client sends a Array[Array[Double]] type.
+    if (paramType == classOf[Byte]) {
+      value.asInstanceOf[java.lang.Number].byteValue()
+    } else if (paramType == classOf[Short]) {
+      value.asInstanceOf[java.lang.Number].shortValue()
+    } else if (paramType == classOf[Int]) {
+      value.asInstanceOf[java.lang.Number].intValue()
+    } else if (paramType == classOf[Long]) {
+      value.asInstanceOf[java.lang.Number].longValue()
+    } else if (paramType == classOf[Float]) {
+      value.asInstanceOf[java.lang.Number].floatValue()
+    } else if (paramType == classOf[Double]) {
+      value.asInstanceOf[java.lang.Number].doubleValue()
+    } else if (paramType.isArray) {
+      val compType = paramType.getComponentType
+      value.asInstanceOf[Array[_]].map { e =>
+        _convertParamValue(compType, e)
       }
+    } else {
+      value
     }
   }
 
