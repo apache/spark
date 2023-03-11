@@ -152,6 +152,15 @@ private[connect] class SparkConnectAnalyzeHandler(
             .newBuilder()
             .setResult(target.sameSemantics(other)))
 
+      case proto.AnalyzePlanRequest.AnalyzeCase.SEMANTIC_HASH =>
+        val semanticHash = Dataset
+          .ofRows(session, planner.transformRelation(request.getSemanticHash.getPlan.getRoot))
+          .semanticHash()
+        builder.setSemanticHash(
+          proto.AnalyzePlanResponse.SemanticHash
+            .newBuilder()
+            .setResult(semanticHash))
+
       case other => throw InvalidPlanInput(s"Unknown Analyze Method $other!")
     }
 
