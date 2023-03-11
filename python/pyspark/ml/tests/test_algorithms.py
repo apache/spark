@@ -68,6 +68,41 @@ class LogisticRegressionTest(SparkSessionTestCase):
         self.assertTrue(
             np.allclose(model.interceptVector.toArray(), [-0.9057, -1.1392, -0.0033], atol=1E-4))
 
+    def test_logistic_regression_with_threshold(self):
+
+        df = self.spark.createDataFrame(
+            [
+                (1.0, 1.0, Vectors.dense(0.0, 5.0)),
+                (0.0, 2.0, Vectors.dense(1.0, 2.0)),
+                (1.0, 3.0, Vectors.dense(2.0, 1.0)),
+                (0.0, 4.0, Vectors.dense(3.0, 3.0)),
+            ],
+            ["label", "weight", "features"],
+        )
+
+        lor = LogisticRegression(weightCol="weight")
+        model = lor.fit(df)
+
+        # status changes 1
+        for t in [0.0, 0.1, 0.2, 0.5, 1.0]:
+            model.setThreshold(t).transform(df)
+
+        # status changes 2
+        [model.setThreshold(t).predict(Vectors.dense(0.0, 5.0)) for t in [0.0, 0.1, 0.2, 0.5, 1.0]]
+
+        self.assertEqual(
+            [row.prediction for row in model.setThreshold(0.0).transform(df).collect()],
+            [1.0, 1.0, 1.0, 1.0],
+        )
+        self.assertEqual(
+            [row.prediction for row in model.setThreshold(0.5).transform(df).collect()],
+            [0.0, 1.0, 1.0, 0.0],
+        )
+        self.assertEqual(
+            [row.prediction for row in model.setThreshold(1.0).transform(df).collect()],
+            [0.0, 0.0, 0.0, 0.0],
+        )
+
 
 class MultilayerPerceptronClassifierTest(SparkSessionTestCase):
 

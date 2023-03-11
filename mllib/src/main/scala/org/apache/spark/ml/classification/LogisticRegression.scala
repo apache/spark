@@ -1106,46 +1106,36 @@ class LogisticRegressionModel private[spark] (
     _intercept
   }
 
-  private lazy val _intercept = interceptVector(0)
-  private lazy val _interceptVector = interceptVector.toDense
-  private lazy val _binaryThresholdArray = {
-    val array = Array(Double.NaN, Double.NaN)
-    updateBinaryThresholds(array)
-    array
-  }
-  private def _threshold: Double = _binaryThresholdArray(0)
-  private def _rawThreshold: Double = _binaryThresholdArray(1)
+  private val _interceptVector = if (isMultinomial) interceptVector.toDense else null
+  private val _intercept = if (!isMultinomial) interceptVector(0) else Double.NaN
+  // Array(0.5, 0.0) is the value for default threshold (0.5) and thresholds (unset)
+  private var _binaryThresholds: Array[Double] = if (!isMultinomial) Array(0.5, 0.0) else null
 
-  private def updateBinaryThresholds(array: Array[Double]): Unit = {
-    if (!isMultinomial) {
-      val _threshold = getThreshold
-      array(0) = _threshold
-      if (_threshold == 0.0) {
-        array(1) = Double.NegativeInfinity
-      } else if (_threshold == 1.0) {
-        array(1) = Double.PositiveInfinity
+  private[ml] override def onParamChange(param: Param[_]): Unit = {
+    if (!isMultinomial && (param.name == "threshold" || param.name == "thresholds")) {
+      if (isDefined(threshold) || isDefined(thresholds)) {
+        val _threshold = getThreshold
+        if (_threshold == 0.0) {
+          _binaryThresholds = Array(_threshold, Double.NegativeInfinity)
+        } else if (_threshold == 1.0) {
+          _binaryThresholds = Array(_threshold, Double.PositiveInfinity)
+        } else {
+          _binaryThresholds = Array(_threshold, math.log(_threshold / (1.0 - _threshold)))
+        }
       } else {
-        array(1) = math.log(_threshold / (1.0 - _threshold))
+        _binaryThresholds = null
       }
     }
   }
 
   @Since("1.5.0")
-  override def setThreshold(value: Double): this.type = {
-    super.setThreshold(value)
-    updateBinaryThresholds(_binaryThresholdArray)
-    this
-  }
+  override def setThreshold(value: Double): this.type = super.setThreshold(value)
 
   @Since("1.5.0")
   override def getThreshold: Double = super.getThreshold
 
   @Since("1.5.0")
-  override def setThresholds(value: Array[Double]): this.type = {
-    super.setThresholds(value)
-    updateBinaryThresholds(_binaryThresholdArray)
-    this
-  }
+  override def setThresholds(value: Array[Double]): this.type = super.setThresholds(value)
 
   @Since("1.5.0")
   override def getThresholds: Array[Double] = super.getThresholds
@@ -1217,7 +1207,7 @@ class LogisticRegressionModel private[spark] (
     super.predict(features)
   } else {
     // Note: We should use _threshold instead of $(threshold) since getThreshold is overridden.
-    if (score(features) > _threshold) 1 else 0
+    if (score(features) > _binaryThresholds(0)) 1 else 0
   }
 
   override protected def raw2probabilityInPlace(rawPrediction: Vector): Vector = {
@@ -1259,7 +1249,7 @@ class LogisticRegressionModel private[spark] (
       super.raw2prediction(rawPrediction)
     } else {
       // Note: We should use _threshold instead of $(threshold) since getThreshold is overridden.
-      if (rawPrediction(1) > _rawThreshold) 1.0 else 0.0
+      if (rawPrediction(1) > _binaryThresholds(1)) 1.0 else 0.0
     }
   }
 
@@ -1268,7 +1258,7 @@ class LogisticRegressionModel private[spark] (
       super.probability2prediction(probability)
     } else {
       // Note: We should use _threshold instead of $(threshold) since getThreshold is overridden.
-      if (probability(1) > _threshold) 1.0 else 0.0
+      if (probability(1) > _binaryThresholds(0)) 1.0 else 0.0
     }
   }
 
