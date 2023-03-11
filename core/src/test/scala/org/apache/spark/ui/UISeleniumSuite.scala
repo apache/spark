@@ -700,7 +700,14 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers {
       parseDate(attempts(0) \ "startTime") should be (sc.startTime)
       parseDate(attempts(0) \ "endTime") should be (-1)
       val oneAppJsonAst = getJson(sc.ui.get, "")
-      oneAppJsonAst should be (appListJsonAst.children(0))
+      val duration = attempts(0) \ "duration"
+      oneAppJsonAst \\ "duration" should not be duration
+      // SPARK-42697: duration will increase as the app is running
+      // Replace the duration before we compare the full JObjects
+      val durationAdjusted = oneAppJsonAst.transformField {
+        case ("duration", _) => ("duration", duration)
+      }
+      durationAdjusted should be (appListJsonAst.children(0))
     }
   }
 

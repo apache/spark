@@ -1119,10 +1119,10 @@ class DataFrameTestsMixin:
         pdf = self._to_pandas()
         types = pdf.dtypes
         self.assertEqual(types[0], np.int32)
-        self.assertEqual(types[1], np.object)
-        self.assertEqual(types[2], np.bool)
+        self.assertEqual(types[1], object)
+        self.assertEqual(types[2], bool)
         self.assertEqual(types[3], np.float32)
-        self.assertEqual(types[4], np.object)  # datetime.date
+        self.assertEqual(types[4], object)  # datetime.date
         self.assertEqual(types[5], "datetime64[ns]")
         self.assertEqual(types[6], "datetime64[ns]")
         self.assertEqual(types[7], "timedelta64[ns]")
@@ -1181,7 +1181,7 @@ class DataFrameTestsMixin:
         df = self.spark.createDataFrame(data, schema)
         types = df.toPandas().dtypes
         self.assertEqual(types[0], np.float64)  # doesn't convert to np.int32 due to NaN value.
-        self.assertEqual(types[1], np.object)
+        self.assertEqual(types[1], object)
         self.assertEqual(types[2], np.float64)
 
     @unittest.skipIf(not have_pandas, pandas_requirement_message)  # type: ignore
@@ -1242,8 +1242,8 @@ class DataFrameTestsMixin:
                 self.assertEqual(types[3], np.float64)
                 self.assertEqual(types[4], np.float32)
                 self.assertEqual(types[5], np.float64)
-                self.assertEqual(types[6], np.object)
-                self.assertEqual(types[7], np.object)
+                self.assertEqual(types[6], object)
+                self.assertEqual(types[7], object)
                 self.assertTrue(np.can_cast(np.datetime64, types[8]))
                 self.assertTrue(np.can_cast(np.datetime64, types[9]))
                 self.assertTrue(np.can_cast(np.timedelta64, types[10]))

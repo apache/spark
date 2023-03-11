@@ -73,7 +73,7 @@ abstract class InMemoryBaseTable(
 
   // purposely exposes a metadata column that conflicts with a data column in some tests
   override val metadataColumns: Array[MetadataColumn] = Array(IndexColumn, PartitionKeyColumn)
-  private lazy val metadataColumnNames = metadataColumns.map(_.name).toSet -- schema.map(_.name)
+  private val metadataColumnNames = metadataColumns.map(_.name).toSet -- schema.map(_.name)
 
   private val allowUnsupportedTransforms =
     properties.getOrDefault("allow-unsupported-transforms", "false").toBoolean

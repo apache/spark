@@ -24,7 +24,7 @@ import org.apache.spark.connect.proto._
 import org.apache.spark.connect.proto.Expression.ExpressionString
 import org.apache.spark.connect.proto.Join.JoinType
 import org.apache.spark.connect.proto.SetOperation.SetOpType
-import org.apache.spark.sql.SaveMode
+import org.apache.spark.sql.{Observation, SaveMode}
 import org.apache.spark.sql.connect.common.DataTypeProtoConverter
 import org.apache.spark.sql.connect.planner.{SaveModeConverter, TableSaveMethodConverter}
 import org.apache.spark.sql.connect.planner.LiteralValueProtoConverter.toConnectProtoValue
@@ -139,6 +139,20 @@ package object dsl {
         .newBuilder()
         .setUnresolvedFunction(
           Expression.UnresolvedFunction.newBuilder().setFunctionName("min").addArguments(e))
+        .build()
+
+    def proto_max(e: Expression): Expression =
+      Expression
+        .newBuilder()
+        .setUnresolvedFunction(
+          Expression.UnresolvedFunction.newBuilder().setFunctionName("max").addArguments(e))
+        .build()
+
+    def proto_sum(e: Expression): Expression =
+      Expression
+        .newBuilder()
+        .setUnresolvedFunction(
+          Expression.UnresolvedFunction.newBuilder().setFunctionName("sum").addArguments(e))
         .build()
 
     def proto_explode(e: Expression): Expression =
@@ -1060,6 +1074,30 @@ package object dsl {
 
       def randomSplit(weights: Array[Double]): Array[Relation] =
         randomSplit(weights, Utils.random.nextLong)
+
+      def observe(name: String, expr: Expression, exprs: Expression*): Relation = {
+        Relation
+          .newBuilder()
+          .setCollectMetrics(
+            CollectMetrics
+              .newBuilder()
+              .setInput(logicalPlan)
+              .setName(name)
+              .addAllMetrics((expr +: exprs).asJava))
+          .build()
+      }
+
+      def observe(observation: Observation, expr: Expression, exprs: Expression*): Relation = {
+        Relation
+          .newBuilder()
+          .setCollectMetrics(
+            CollectMetrics
+              .newBuilder()
+              .setInput(logicalPlan)
+              .setName(observation.name)
+              .addAllMetrics((expr +: exprs).asJava))
+          .build()
+      }
 
       private def createSetOperation(
           left: Relation,

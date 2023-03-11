@@ -64,6 +64,9 @@ message DataType {
 
     // UserDefinedType
     UDT udt = 23;
+
+    // UnparsedDataType
+    Unparsed unparsed = 24;
   }
 
   message Boolean {
@@ -182,5 +185,10 @@ message DataType {
     optional string python_class = 3;
     optional string serialized_python_class = 4;
     DataType sql_type = 5;
+  }
+
+  message Unparsed {
+    // (Required) The unparsed data type string
+    string data_type_string = 1;
   }
 }

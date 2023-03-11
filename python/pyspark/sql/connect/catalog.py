@@ -16,7 +16,7 @@
 #
 from pyspark.sql.connect.utils import check_dependencies
 
-check_dependencies(__name__, __file__)
+check_dependencies(__name__)
 
 from typing import Any, Callable, List, Optional, TYPE_CHECKING
 

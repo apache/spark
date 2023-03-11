@@ -749,13 +749,28 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       messageParameters = Map.empty)
   }
 
-  def operationOnlySupportedWithV2TableError(
-      nameParts: Seq[String],
+  def unsupportedTableOperationError(
+      catalog: CatalogPlugin,
+      ident: Identifier,
+      operation: String): Throwable = {
+    unsupportedTableOperationError(
+      catalog.name +: ident.namespace :+ ident.name, operation)
+  }
+
+  def unsupportedTableOperationError(
+      ident: TableIdentifier,
+      operation: String): Throwable = {
+    unsupportedTableOperationError(
+      Seq(ident.catalog.get, ident.database.get, ident.table), operation)
+  }
+
+  private def unsupportedTableOperationError(
+      qualifiedTableName: Seq[String],
       operation: String): Throwable = {
     new AnalysisException(
       errorClass = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
       messageParameters = Map(
-        "tableName" -> toSQLId(nameParts),
+        "tableName" -> toSQLId(qualifiedTableName),
         "operation" -> operation))
   }
 
@@ -3403,16 +3418,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
           messageParameters = Map("funcName" -> toSQLId(funcName)),
           cause = Option(other))
     }
-  }
-
-  def generatedColumnsUnsupported(nameParts: Seq[String]): AnalysisException = {
-    new AnalysisException(
-      errorClass = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
-      messageParameters = Map(
-        "tableName" -> toSQLId(nameParts),
-        "operation" -> "generated columns"
-      )
-    )
   }
 
   def ambiguousLateralColumnAliasError(name: String, numOfMatches: Int): Throwable = {

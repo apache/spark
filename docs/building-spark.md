@@ -119,6 +119,10 @@ For instance, you can build the Spark Streaming module using:
 
 where `spark-streaming_{{site.SCALA_BINARY_VERSION}}` is the `artifactId` as defined in `streaming/pom.xml` file.
 
+## Building with Spark Connect support
+
+    ./build/mvn -Pconnect -DskipTests clean package
+
 ## Continuous Compilation
 
 We use the scala-maven-plugin which supports incremental and continuous compilation. E.g.

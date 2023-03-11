@@ -661,11 +661,13 @@ object CatalogColumnStat extends Logging {
   def getTimestampFormatter(
       isParsing: Boolean,
       format: String = "yyyy-MM-dd HH:mm:ss.SSSSSS",
-      zoneId: ZoneId = ZoneOffset.UTC): TimestampFormatter = {
+      zoneId: ZoneId = ZoneOffset.UTC,
+      forTimestampNTZ: Boolean = false): TimestampFormatter = {
     TimestampFormatter(
       format = format,
       zoneId = zoneId,
-      isParsing = isParsing)
+      isParsing = isParsing,
+      forTimestampNTZ = forTimestampNTZ)
   }
 
   /**
@@ -702,6 +704,9 @@ object CatalogColumnStat extends Logging {
     val externalValue = dataType match {
       case DateType => DateFormatter().format(v.asInstanceOf[Int])
       case TimestampType => getTimestampFormatter(isParsing = false).format(v.asInstanceOf[Long])
+      case TimestampNTZType =>
+        getTimestampFormatter(isParsing = false, forTimestampNTZ = true)
+          .format(v.asInstanceOf[Long])
       case BooleanType | _: IntegralType | FloatType | DoubleType => v
       case _: DecimalType => v.asInstanceOf[Decimal].toJavaBigDecimal
       // This version of Spark does not use min/max for binary/string types so we ignore it.
