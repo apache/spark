@@ -754,8 +754,9 @@ The following configurations are optional:
   <td>Whether to include the Kafka headers in the row.</td>
 </tr>
 </table>
-
 ### Creating a Kafka Sink for Streaming Queries
+
+Note that the key and value in the line line `.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)") `need to be replaced with the specific column in your dataframe. If you want to pack all the columns into json to write to kafka, you can use `df.select(to_json(struct("*")).alias("value1"))`
 
 <div class="codetabs">
 
@@ -946,15 +947,15 @@ default value is "spark-kafka-source". You can also set "kafka.group.id" to forc
 group id, however, please read warnings for this option and use it with caution.
 - **auto.offset.reset**: Set the source option `startingOffsets` to specify
  where to start instead. Structured Streaming manages which offsets are consumed internally, rather
- than rely on the kafka Consumer to do it. This will ensure that no data is missed when new
- topics/partitions are dynamically subscribed. Note that `startingOffsets` only applies when a new
- streaming query is started, and that resuming will always pick up from where the query left off. Note
- that when the offsets consumed by a streaming application no longer exist in Kafka (e.g., topics are deleted,
- offsets are out of range, or offsets are removed after retention period), the offsets will not be reset
- and the streaming application will see data loss. In extreme cases, for example the throughput of the
- streaming application cannot catch up the retention speed of Kafka, the input rows of a batch might be
- gradually reduced until zero when the offset ranges of the batch are completely not in Kafka. Enabling
- `failOnDataLoss` option can ask Structured Streaming to fail the query for such cases.
+  than rely on the kafka Consumer to do it. This will ensure that no data is missed when new
+  topics/partitions are dynamically subscribed. Note that `startingOffsets` only applies when a new
+  streaming query is started, and that resuming will always pick up from where the query left off. Note
+  that when the offsets consumed by a streaming application no longer exist in Kafka (e.g., topics are deleted,
+  offsets are out of range, or offsets are removed after retention period), the offsets will not be reset
+  and the streaming application will see data loss. In extreme cases, for example the throughput of the
+  streaming application cannot catch up the retention speed of Kafka, the input rows of a batch might be
+  gradually reduced until zero when the offset ranges of the batch are completely not in Kafka. Enabling
+  `failOnDataLoss` option can ask Structured Streaming to fail the query for such cases.
 - **key.deserializer**: Keys are always deserialized as byte arrays with ByteArrayDeserializer. Use
  DataFrame operations to explicitly deserialize the keys.
 - **value.deserializer**: Values are always deserialized as byte arrays with ByteArrayDeserializer.
