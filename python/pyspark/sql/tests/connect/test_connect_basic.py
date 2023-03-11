@@ -2814,6 +2814,14 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         other = self.connect.sql("SELECT 1")
         self.assertTrue(plan.sameSemantics(other))
 
+    def test_semantic_hash(self):
+        plan = self.connect.sql("SELECT 1")
+        other = self.connect.sql("SELECT 1")
+        self.assertEqual(
+            plan.semanticHash(),
+            other.semanticHash(),
+        )
+
     def test_unsupported_functions(self):
         # SPARK-41225: Disable unsupported functions.
         df = self.connect.read.table(self.tbl_name)
@@ -2829,7 +2837,6 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             "checkpoint",
             "localCheckpoint",
             "_repr_html_",
-            "semanticHash",
         ):
             with self.assertRaises(NotImplementedError):
                 getattr(df, f)()

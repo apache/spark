@@ -157,6 +157,15 @@ private[sql] class SparkConnectClient(
     analyze(builder)
   }
 
+  def semanticHash(plan: proto.Plan): proto.AnalyzePlanResponse = {
+    val builder = proto.AnalyzePlanRequest.newBuilder()
+    builder.setSemanticHash(
+      proto.AnalyzePlanRequest.SemanticHash
+        .newBuilder()
+        .setPlan(plan))
+    analyze(builder)
+  }
+
   private def analyze(builder: proto.AnalyzePlanRequest.Builder): proto.AnalyzePlanResponse = {
     val request = builder
       .setUserContext(userContext)
