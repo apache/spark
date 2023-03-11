@@ -214,8 +214,8 @@ curl -L -o spark_connect_scala_client.sc
 https://gist.githubusercontent.com/hvanhovell/fd8afd47632d97946084d254f4dad39c/raw
 {% endhighlight %}
 
-And now you can start a Scala shell using Spark Connect to connect to your Spark server
-with Ammonite like this:
+And now you can start an Ammonite Scala shell using Spark Connect to connect to your Spark server
+like this:
 {% highlight bash %}
 amm --class-based -p spark_connect_scala_client.sc
 {% endhighlight %}
