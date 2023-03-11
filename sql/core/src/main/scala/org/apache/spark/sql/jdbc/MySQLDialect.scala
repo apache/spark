@@ -301,10 +301,9 @@ private case object MySQLDialect extends JdbcDialect with SQLConfHelper {
         // official website, in order to retrieve all rows from a certain offset up to the end of
         // the result set, you can use some large number for the second parameter. Please refer:
         // https://dev.mysql.com/doc/refman/8.0/en/select.html
-        val offsetClause = dialect.getOffsetClause(offset)
         options.prepareQuery +
           s"SELECT $columnList FROM ${options.tableOrQuery} $tableSampleClause" +
-          s" $whereClause $groupByClause $orderByClause LIMIT 18446744073709551610 $offsetClause"
+          s" $whereClause $groupByClause $orderByClause LIMIT $offset, 18446744073709551615"
       } else {
         super.build()
       }
