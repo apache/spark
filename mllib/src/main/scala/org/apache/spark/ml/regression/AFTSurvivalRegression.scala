@@ -369,25 +369,29 @@ class AFTSurvivalRegressionModel private[ml] (
 
   /** @group setParam */
   @Since("1.6.0")
-  def setQuantileProbabilities(value: Array[Double]): this.type = {
-    set(quantileProbabilities, value)
-    _quantiles(0) = $(quantileProbabilities).map(q => math.exp(math.log(-math.log1p(-q)) * scale))
-    this
-  }
+  def setQuantileProbabilities(value: Array[Double]): this.type = set(quantileProbabilities, value)
 
   /** @group setParam */
   @Since("1.6.0")
   def setQuantilesCol(value: String): this.type = set(quantilesCol, value)
 
-  private lazy val _quantiles = {
-    Array($(quantileProbabilities).map(q => math.exp(math.log(-math.log1p(-q)) * scale)))
+  private var _quantiles: Vector = _
+
+  private[ml] override def onParamChange(param: Param[_]): Unit = {
+    if (param.name == "quantileProbabilities") {
+      if (isDefined(quantileProbabilities)) {
+        _quantiles = Vectors.dense(
+          $(quantileProbabilities).map(q => math.exp(math.log(-math.log1p(-q)) * scale)))
+      } else {
+        _quantiles = null
+      }
+    }
   }
 
   private def lambda2Quantiles(lambda: Double): Vector = {
-    val quantiles = _quantiles(0).clone()
-    var i = 0
-    while (i < quantiles.length) { quantiles(i) *= lambda; i += 1 }
-    Vectors.dense(quantiles)
+    val quantiles = _quantiles.copy
+    BLAS.scal(lambda, quantiles)
+    quantiles
   }
 
   @Since("2.0.0")
