@@ -986,6 +986,32 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
         self.assertEqual(len(l4.array.elements[1].array.elements), 2)
         self.assertEqual(len(l4.array.elements[2].array.elements), 0)
 
+    def test_literal_to_any_conversion(self):
+        for value in [
+            b"binary\0\0asas",
+            True,
+            False,
+            0,
+            12,
+            -1,
+            0.0,
+            1.234567,
+            decimal.Decimal(0.0),
+            decimal.Decimal(1.234567),
+            "sss",
+            datetime.date(2022, 12, 13),
+            datetime.datetime.now(),
+            datetime.timedelta(1, 2, 3),
+            [1, 2, 3, 4, 5, 6],
+            [-1.0, 2.0, 3.0],
+            ["x", "y", "z"],
+            [[1.0, 2.0, 3.0], [4.0, 5.0], [6.0]],
+        ]:
+            lit = LiteralExpression._from_value(value)
+            proto_lit = lit.to_plan(None).literal
+            value2 = LiteralExpression._to_value(proto_lit)
+            self.assertEqual(value, value2)
+
 
 if __name__ == "__main__":
     from pyspark.sql.tests.connect.test_connect_plan import *  # noqa: F401

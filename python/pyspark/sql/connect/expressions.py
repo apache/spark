@@ -308,6 +308,43 @@ class LiteralExpression(Expression):
     def _from_value(cls, value: Any) -> "LiteralExpression":
         return LiteralExpression(value=value, dataType=LiteralExpression._infer_type(value))
 
+    @classmethod
+    def _to_value(cls, literal: "proto.Expression.Literal") -> Any:
+        if literal.HasField("null"):
+            return None
+        elif literal.HasField("binary"):
+            return literal.binary
+        elif literal.HasField("boolean"):
+            return literal.boolean
+        elif literal.HasField("byte"):
+            return literal.byte
+        elif literal.HasField("short"):
+            return literal.short
+        elif literal.HasField("integer"):
+            return literal.integer
+        elif literal.HasField("long"):
+            return literal.long
+        elif literal.HasField("float"):
+            return literal.float
+        elif literal.HasField("double"):
+            return literal.double
+        elif literal.HasField("decimal"):
+            return decimal.Decimal(literal.decimal.value)
+        elif literal.HasField("string"):
+            return literal.string
+        elif literal.HasField("date"):
+            return DateType().fromInternal(literal.date)
+        elif literal.HasField("timestamp"):
+            return TimestampType().fromInternal(literal.timestamp)
+        elif literal.HasField("timestamp_ntz"):
+            return TimestampNTZType().fromInternal(literal.timestamp_ntz)
+        elif literal.HasField("day_time_interval"):
+            return DayTimeIntervalType().fromInternal(literal.day_time_interval)
+        elif literal.HasField("array"):
+            return [LiteralExpression._to_value(v) for v in literal.array.elements]
+
+        raise TypeError(f"Unsupported Literal Value {literal}")
+
     def to_plan(self, session: "SparkConnectClient") -> "proto.Expression":
         """Converts the literal expression to the literal in proto."""
 
