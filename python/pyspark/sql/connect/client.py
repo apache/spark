@@ -401,6 +401,7 @@ class AnalyzeResult:
         spark_version: Optional[str],
         parsed: Optional[DataType],
         is_same_semantics: Optional[bool],
+        semantic_hash: Optional[int],
     ):
         self.schema = schema
         self.explain_string = explain_string
@@ -411,6 +412,7 @@ class AnalyzeResult:
         self.spark_version = spark_version
         self.parsed = parsed
         self.is_same_semantics = is_same_semantics
+        self.semantic_hash = semantic_hash
 
     @classmethod
     def fromProto(cls, pb: Any) -> "AnalyzeResult":
