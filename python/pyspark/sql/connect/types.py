@@ -309,9 +309,12 @@ def to_arrow_type(dt: DataType) -> "pa.DataType":
     elif type(dt) == DayTimeIntervalType:
         arrow_type = pa.duration("us")
     elif type(dt) == ArrayType:
-        arrow_type = pa.list_(to_arrow_type(dt.elementType))
+        field = pa.field("element", to_arrow_type(dt.elementType), nullable=dt.containsNull)
+        arrow_type = pa.list_(field)
     elif type(dt) == MapType:
-        arrow_type = pa.map_(to_arrow_type(dt.keyType), to_arrow_type(dt.valueType))
+        key_field = pa.field("key", to_arrow_type(dt.keyType), nullable=False)
+        value_field = pa.field("value", to_arrow_type(dt.valueType), nullable=dt.valueContainsNull)
+        arrow_type = pa.map_(key_field, value_field)
     elif type(dt) == StructType:
         fields = [
             pa.field(field.name, to_arrow_type(field.dataType), nullable=field.nullable)
@@ -323,17 +326,6 @@ def to_arrow_type(dt: DataType) -> "pa.DataType":
     else:
         raise TypeError("Unsupported type in conversion to Arrow: " + str(dt))
     return arrow_type
-
-
-def replace_with_arrow_column_name(schema: StructType, arrow_schema: "pa.Schema") -> "pa.Schema":
-    """Replace with arrow column name"""
-    import pyarrow as pa
-
-    fields = [
-        pa.field(field2.name, to_arrow_type(field1.dataType), nullable=field1.nullable)
-        for (field1, field2) in zip(schema, arrow_schema)
-    ]
-    return pa.schema(fields)
 
 
 def to_arrow_schema(schema: StructType) -> "pa.Schema":
