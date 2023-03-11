@@ -160,6 +160,26 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper {
     }
   }
 
+  test("textFile") {
+    val testDataPath = java.nio.file.Paths
+      .get(
+        IntegrationTestUtils.sparkHome,
+        "connector",
+        "connect",
+        "common",
+        "src",
+        "test",
+        "resources",
+        "query-tests",
+        "test-data",
+        "people.txt")
+      .toAbsolutePath
+    val result = spark.read.textFile(testDataPath.toString).collect()
+    val expected = Array("Michael, 29", "Andy, 30", "Justin, 19")
+    assert(result.length == 3)
+    assert(result === expected)
+  }
+
   test("write table") {
     withTable("myTable") {
       val df = spark.range(10).limit(3)

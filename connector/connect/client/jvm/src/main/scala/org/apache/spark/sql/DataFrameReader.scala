@@ -531,10 +531,7 @@ class DataFrameReader private[sql] (sparkSession: SparkSession) extends Logging 
    */
   @scala.annotation.varargs
   def textFile(paths: String*): Dataset[String] = {
-    // scalastyle:off throwerror
-    // TODO: this method can be supported and should be included in the client API.
-    throw new NotImplementedError()
-    // scalastyle:on throwerror
+    text(paths: _*).select("value").as[String](sparkSession.implicits.newStringEncoder)
   }
 
   private def assertSourceFormatSpecified(): Unit = {
