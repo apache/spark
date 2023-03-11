@@ -613,11 +613,6 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper {
   }
 
   test("write jdbc") {
-    spark.sql("CREATE NAMESPACE IF NOT EXISTS h2.TEST")
-    checkSameResult(
-      Seq(Row("INFORMATION_SCHEMA"), Row("PUBLIC"), Row("TEST")),
-      spark.sql("SHOW NAMESPACES FROM h2"))
-
     val rows = java.util.Arrays.asList[Row](Row("dave", 42), Row("mary", 222))
     val schema = StructType(
       StructField("name", StringType) ::

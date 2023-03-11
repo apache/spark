@@ -18,13 +18,13 @@
 package org.apache.spark.sql.connect
 
 import java.util.concurrent.TimeUnit
-
 import scala.io.StdIn
 import scala.sys.exit
-
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connect.service.SparkConnectService
+import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcUtils}
+import org.apache.spark.sql.jdbc.JdbcDialects
 
 /**
  * A simple main class method to start the spark connect server as a service for client tests
@@ -37,11 +37,24 @@ import org.apache.spark.sql.connect.service.SparkConnectService
 private[sql] object SimpleSparkConnectService {
   private val stopCommand = "q"
 
+  private def createJDBCTestSchema(): Unit = {
+    val url = "jdbc:h2:mem:testdb2"
+    val dialect = JdbcDialects.get(url)
+    val options = new JDBCOptions(Map("url" -> url, "driver" -> "org.h2.Driver"))
+    val db = "TEST"
+    JdbcUtils.withConnection(options) { conn =>
+      JdbcUtils.classifyException(s"Failed create name space: $db", dialect) {
+        JdbcUtils.createSchema(conn, options, db, "")
+      }
+    }
+  }
+
   def main(args: Array[String]): Unit = {
     while (true) {
       val conf = new SparkConf()
       val sparkSession = SparkSession.builder().config(conf).getOrCreate()
       val sparkContext = sparkSession.sparkContext // init spark context
+      createJDBCTestSchema()
       SparkConnectService.start()
       // scalastyle:off println
       println("Ready for client connections.")
