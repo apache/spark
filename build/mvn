@@ -120,28 +120,29 @@ install_mvn() {
     local MVN_DETECTED_VERSION="$(mvn --version | head -n1 | awk '{print $3}')"
   fi
   if [ $(version $MVN_DETECTED_VERSION) -ne $(version $MVN_VERSION) ]; then
-    local MVN_TARBALL="apache-maven-${MVN_VERSION}-bin.tar.gz"
-    local FILE_PATH="maven/maven-3/${MVN_VERSION}/binaries/${MVN_TARBALL}"
-    local APACHE_MIRROR=${APACHE_MIRROR:-'https://www.apache.org/dyn/closer.lua'}
-    local MIRROR_URL_QUERY="?action=download"
+    if [ ! -d "${_DIR}/apache-maven-${MVN_VERSION}" ]; then
+      local MVN_TARBALL="apache-maven-${MVN_VERSION}-bin.tar.gz"
+      local FILE_PATH="maven/maven-3/${MVN_VERSION}/binaries/${MVN_TARBALL}"
+      local APACHE_MIRROR=${APACHE_MIRROR:-'https://www.apache.org/dyn/closer.lua'}
+      local MIRROR_URL_QUERY="?action=download"
 
-    if [ $(command -v curl) ]; then
-      if ! curl -L --output /dev/null --silent --head --fail "${APACHE_MIRROR}/${FILE_PATH}${MIRROR_URL_QUERY}" ; then
-        # Fall back to archive.apache.org for older Maven
-        echo "Falling back to archive.apache.org to download Maven"
-        APACHE_MIRROR="https://archive.apache.org/dist"
-        MIRROR_URL_QUERY=""
+      if [ $(command -v curl) ]; then
+        if ! curl -L --output /dev/null --silent --head --fail "${APACHE_MIRROR}/${FILE_PATH}${MIRROR_URL_QUERY}" ; then
+          # Fall back to archive.apache.org for older Maven
+          echo "Falling back to archive.apache.org to download Maven"
+          APACHE_MIRROR="https://archive.apache.org/dist"
+          MIRROR_URL_QUERY=""
+        fi
       fi
+
+      install_app \
+        "${APACHE_MIRROR}" \
+        "${FILE_PATH}" \
+        "${MIRROR_URL_QUERY}" \
+        "sha512" \
+        "${MVN_TARBALL}" \
+        "apache-maven-${MVN_VERSION}/bin/mvn"
     fi
-
-    install_app \
-      "${APACHE_MIRROR}" \
-      "${FILE_PATH}" \
-      "${MIRROR_URL_QUERY}" \
-      "sha512" \
-      "${MVN_TARBALL}" \
-      "apache-maven-${MVN_VERSION}/bin/mvn"
-
     MVN_BIN="${_DIR}/apache-maven-${MVN_VERSION}/bin/mvn"
   fi
 }
