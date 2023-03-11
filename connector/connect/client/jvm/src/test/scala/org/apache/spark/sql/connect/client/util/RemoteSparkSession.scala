@@ -74,7 +74,7 @@ object SparkConnectServerUtils {
         "--conf",
         "spark.sql.catalog.h2=org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog",
         "--conf",
-        "spark.sql.catalog.h2.url=jdbc:h2:mem:testdb2;user=testUser;password=testPass",
+        "spark.sql.catalog.h2.url=jdbc:h2:mem:testdb2",
         "--conf",
         "spark.sql.catalog.h2.driver=org.h2.Driver",
         "--conf",
