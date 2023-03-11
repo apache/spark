@@ -296,7 +296,7 @@ private case object MySQLDialect extends JdbcDialect with SQLConfHelper {
     extends JdbcSQLQueryBuilder(dialect, options) {
 
     override def build(): String = {
-      if (limit < 1 && offset > 0) {
+      if (limit < 0 && offset > 0) {
         // MySQL doesn't support OFFSET without LIMIT. According to the suggestion of MySQL
         // official website, in order to retrieve all rows from a certain offset up to the end of
         // the result set, you can use some large number for the second parameter. Please refer:
