@@ -404,6 +404,10 @@ class SparkSession private[sql] (
     client.sameSemantics(plan, otherPlan).getSameSemantics.getResult
   }
 
+  private[sql] def semanticHash(plan: proto.Plan): Int = {
+    client.semanticHash(plan).getSemanticHash.getResult
+  }
+
   private[sql] def execute[T](plan: proto.Plan, encoder: AgnosticEncoder[T]): SparkResult[T] = {
     val value = client.execute(plan)
     val result = new SparkResult(value, allocator, encoder)
