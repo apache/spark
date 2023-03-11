@@ -23,11 +23,11 @@ import scala.reflect.ClassTag
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.util.{DateTimeUtils, IntervalUtils}
-import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, InvalidPlanInput}
+import org.apache.spark.sql.connect.common.DataTypeProtoConverter
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
-object LiteralValueProtoConverter {
+object LiteralExpressionProtoConverter {
 
   /**
    * Transforms the protocol buffers literals into the appropriate Catalyst literal expression.
@@ -107,7 +107,7 @@ object LiteralValueProtoConverter {
           ArrayType(DataTypeProtoConverter.toCatalystType(lit.getArray.getElementType)))
 
       case _ =>
-        throw InvalidPlanInput(
+        throw new UnsupportedOperationException(
           s"Unsupported Literal Type: ${lit.getLiteralTypeCase.getNumber}" +
             s"(${lit.getLiteralTypeCase.name})")
     }
@@ -118,25 +118,6 @@ object LiteralValueProtoConverter {
       case proto.Expression.Literal.LiteralTypeCase.STRING => lit.getString
 
       case _ => toCatalystExpression(lit).value
-    }
-  }
-
-  def toConnectProtoValue(value: Any): proto.Expression.Literal = {
-    value match {
-      case null =>
-        proto.Expression.Literal
-          .newBuilder()
-          .setNull(DataTypeProtoConverter.toConnectProtoType(NullType))
-          .build()
-      case b: Boolean => proto.Expression.Literal.newBuilder().setBoolean(b).build()
-      case b: Byte => proto.Expression.Literal.newBuilder().setByte(b).build()
-      case s: Short => proto.Expression.Literal.newBuilder().setShort(s).build()
-      case i: Int => proto.Expression.Literal.newBuilder().setInteger(i).build()
-      case l: Long => proto.Expression.Literal.newBuilder().setLong(l).build()
-      case f: Float => proto.Expression.Literal.newBuilder().setFloat(f).build()
-      case d: Double => proto.Expression.Literal.newBuilder().setDouble(d).build()
-      case s: String => proto.Expression.Literal.newBuilder().setString(s).build()
-      case o => throw new Exception(s"Unsupported value type: $o")
     }
   }
 
@@ -192,8 +173,7 @@ object LiteralValueProtoConverter {
     } else if (elementType.hasArray) {
       makeArrayData(v => toArrayData(v.getArray))
     } else {
-      throw InvalidPlanInput(s"Unsupported Literal Type: $elementType)")
+      throw new UnsupportedOperationException(s"Unsupported Literal Type: $elementType)")
     }
   }
-
 }

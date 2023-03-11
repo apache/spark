@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, UnsafeProjection}
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.connect.common.InvalidPlanInput
-import org.apache.spark.sql.connect.planner.LiteralValueProtoConverter.toConnectProtoValue
+import org.apache.spark.sql.connect.common.LiteralValueProtoConverter.toLiteralProto
 import org.apache.spark.sql.execution.arrow.ArrowConverters
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
@@ -608,7 +608,7 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
             .setInput(input)
             .setName("REPARTITION")
             .addParameters(
-              proto.Expression.newBuilder().setLiteral(toConnectProtoValue(10000)).build()))
+              proto.Expression.newBuilder().setLiteral(toLiteralProto(10000)).build()))
         .build())
 
     val df = Dataset.ofRows(spark, logical)
@@ -654,7 +654,7 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
             .setInput(input)
             .setName("REPARTITION")
             .addParameters(
-              proto.Expression.newBuilder().setLiteral(toConnectProtoValue("id")).build()))
+              proto.Expression.newBuilder().setLiteral(toLiteralProto("id")).build()))
         .build())
     assert(10 === Dataset.ofRows(spark, logical).count())
   }
@@ -677,7 +677,7 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
             .setInput(input)
             .setName("REPARTITION")
             .addParameters(
-              proto.Expression.newBuilder().setLiteral(toConnectProtoValue(true)).build()))
+              proto.Expression.newBuilder().setLiteral(toLiteralProto(true)).build()))
         .build())
     intercept[AnalysisException](Dataset.ofRows(spark, logical))
   }
