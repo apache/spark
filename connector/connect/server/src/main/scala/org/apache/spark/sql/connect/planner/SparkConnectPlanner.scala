@@ -1563,7 +1563,7 @@ class SparkConnectPlanner(val session: SparkSession) {
       case proto.Command.CommandTypeCase.WRITE_STREAM_OPERATION =>
         handleWriteStreamOperation(command.getWriteStreamOperation, sessionId, responseObserver)
       case proto.Command.CommandTypeCase.STREAMING_QUERY_COMMAND =>
-        handleStreanungQyeryCommand(command.getStreamingQueryCommand, sessionId, responseObserver)
+        handleStreamingQyeryCommand(command.getStreamingQueryCommand, sessionId, responseObserver)
       case _ => throw new UnsupportedOperationException(s"$command not supported.")
     }
   }
@@ -1854,7 +1854,7 @@ class SparkConnectPlanner(val session: SparkSession) {
 
   def handleWriteStreamOperation(
     writeOp: WriteStreamOperation,
-    clientId: String,
+    sessionId: String,
     responseObserver: StreamObserver[ExecutePlanResponse]): Unit = {
     val plan = transformRelation(writeOp.getInput)
     val dataset = Dataset.ofRows(session, logicalPlan = plan)
@@ -1898,15 +1898,15 @@ class SparkConnectPlanner(val session: SparkSession) {
     responseObserver.onNext(
       ExecutePlanResponse
         .newBuilder()
-        .setClientId(clientId)
+        .setSessionId(sessionId)
         .setStreamingQueryStartResult(result)
         .build()
     )
   }
 
-  def handleStreanungQyeryCommand(
+  def handleStreamingQyeryCommand(
     command: StreamingQueryCommand,
-    clientId: String,
+    sessionId: String,
     responseObserver: StreamObserver[ExecutePlanResponse]): Unit = {
 
     val id = command.getId
@@ -1951,7 +1951,7 @@ class SparkConnectPlanner(val session: SparkSession) {
     responseObserver.onNext(
       ExecutePlanResponse
         .newBuilder()
-        .setClientId(clientId)
+        .setSessionId(sessionId)
         .setStreamingQueryCommandResult(respBuilder.build())
         .build()
     )
