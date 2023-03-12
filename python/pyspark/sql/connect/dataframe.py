@@ -721,6 +721,33 @@ class DataFrame:
 
     melt = unpivot
 
+    def withWatermark(self, eventTime: str, delayThreshold: str) -> "DataFrame":
+        # TODO: reuse error handling code sql.DataFrame.
+        if not eventTime or type(eventTime) is not str:
+            raise PySparkTypeError(
+                error_class="NOT_STR",
+                message_parameters={"arg_name": "eventTime", "arg_type": type(eventTime).__name__},
+            )
+        if not delayThreshold or type(delayThreshold) is not str:
+            raise PySparkTypeError(
+                error_class="NOT_STR",
+                message_parameters={
+                    "arg_name": "delayThreshold",
+                    "arg_type": type(delayThreshold).__name__,
+                },
+            )
+
+        return DataFrame.withPlan(
+            plan.WithWatermark(
+                self._plan,
+                event_time=eventTime,
+                delay_threshold=delayThreshold,
+            ),
+            session=self._session,
+        )
+
+    withWatermark.__doc__ = PySparkDataFrame.withWatermark.__doc__
+
     def hint(
         self, name: str, *parameters: Union["PrimitiveType", List["PrimitiveType"]]
     ) -> "DataFrame":
@@ -1544,10 +1571,6 @@ class DataFrame:
 
     def persist(self, *args: Any, **kwargs: Any) -> None:
         raise NotImplementedError("persist() is not implemented.")
-
-    def withWatermark(self, *args: Any, **kwargs: Any) -> None:
-        # TODO: Need to support.
-        raise NotImplementedError("withWatermark() is not implemented.")
 
     def foreach(self, *args: Any, **kwargs: Any) -> None:
         # TODO: Need to support

@@ -116,6 +116,7 @@ class SparkConnectPlanner(val session: SparkSession) {
       case proto.Relation.RelTypeCase.WITH_COLUMNS_RENAMED =>
         transformWithColumnsRenamed(rel.getWithColumnsRenamed)
       case proto.Relation.RelTypeCase.WITH_COLUMNS => transformWithColumns(rel.getWithColumns)
+      case proto.Relation.RelTypeCase.WITH_WATERMARK => transformWithWatermark(rel.getWithWatermark)
       case proto.Relation.RelTypeCase.HINT => transformHint(rel.getHint)
       case proto.Relation.RelTypeCase.UNPIVOT => transformUnpivot(rel.getUnpivot)
       case proto.Relation.RelTypeCase.REPARTITION_BY_EXPRESSION =>
@@ -527,6 +528,13 @@ class SparkConnectPlanner(val session: SparkSession) {
     Dataset
       .ofRows(session, transformRelation(rel.getInput))
       .withColumns(colNames, cols, metadata)
+      .logicalPlan
+  }
+
+  private def transformWithWatermark(rel: proto.WithWatermark): LogicalPlan = {
+    Dataset
+      .ofRows(session, transformRelation(rel.getInput))
+      .withWatermark(rel.getEventTime, rel.getDelayThreshold)
       .logicalPlan
   }
 

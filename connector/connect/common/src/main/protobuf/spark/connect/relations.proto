@@ -63,6 +63,7 @@ message Relation {
     MapPartitions map_partitions = 28;
     CollectMetrics collect_metrics = 29;
     Parse parse = 30;
+    WithWatermark with_watermark = 31;
 
     // NA functions
     NAFill fill_na = 90;
@@ -722,6 +723,18 @@ message WithColumns {
   //
   // An exception is thrown when duplicated names are present in the mapping.
   repeated Expression.Alias aliases = 2;
+}
+
+message WithWatermark {
+
+  // (Required) The input relation
+  Relation input = 1;
+
+  // (Required)
+  string event_time = 2;
+
+  // (Required)
+  string delay_threshold = 3;
 }
 
 // Specify a hint over a relation. Hint should have a name and optional parameters.

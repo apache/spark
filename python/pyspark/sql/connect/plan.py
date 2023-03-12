@@ -466,6 +466,21 @@ class WithColumns(LogicalPlan):
         return plan
 
 
+class WithWatermark(LogicalPlan):
+    """Logical plan object for a WithWatermark operation."""
+    def __init__(self, child: Optional["LogicalPlan"], event_time: str,  delay_threshold: str):
+        super().__init__(child)
+        self._event_time = event_time
+        self._delay_threshold = delay_threshold
+
+    def plan(self, session: "SparkConnectClient") -> proto.Relation:
+        plan = self._create_proto_relation()
+        plan.with_watermark.input.CopyFrom(self._child.plan(session))
+        plan.with_watermark.event_time = self._event_time
+        plan.with_watermark.delay_threshold = self._delay_threshold
+        return plan
+
+
 class Hint(LogicalPlan):
     """Logical plan object for a Hint operation."""
 
