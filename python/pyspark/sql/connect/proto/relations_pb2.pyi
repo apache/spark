@@ -92,6 +92,7 @@ class Relation(google.protobuf.message.Message):
     MAP_PARTITIONS_FIELD_NUMBER: builtins.int
     COLLECT_METRICS_FIELD_NUMBER: builtins.int
     PARSE_FIELD_NUMBER: builtins.int
+    WITH_WATERMARK_FIELD_NUMBER: builtins.int
     FILL_NA_FIELD_NUMBER: builtins.int
     DROP_NA_FIELD_NUMBER: builtins.int
     REPLACE_FIELD_NUMBER: builtins.int
@@ -167,6 +168,8 @@ class Relation(google.protobuf.message.Message):
     @property
     def parse(self) -> global___Parse: ...
     @property
+    def with_watermark(self) -> global___WithWatermark: ...
+    @property
     def fill_na(self) -> global___NAFill:
         """NA functions"""
     @property
@@ -233,6 +236,7 @@ class Relation(google.protobuf.message.Message):
         map_partitions: global___MapPartitions | None = ...,
         collect_metrics: global___CollectMetrics | None = ...,
         parse: global___Parse | None = ...,
+        with_watermark: global___WithWatermark | None = ...,
         fill_na: global___NAFill | None = ...,
         drop_na: global___NADrop | None = ...,
         replace: global___NAReplace | None = ...,
@@ -341,6 +345,8 @@ class Relation(google.protobuf.message.Message):
             b"with_columns",
             "with_columns_renamed",
             b"with_columns_renamed",
+            "with_watermark",
+            b"with_watermark",
         ],
     ) -> builtins.bool: ...
     def ClearField(
@@ -436,6 +442,8 @@ class Relation(google.protobuf.message.Message):
             b"with_columns",
             "with_columns_renamed",
             b"with_columns_renamed",
+            "with_watermark",
+            b"with_watermark",
         ],
     ) -> None: ...
     def WhichOneof(
@@ -470,6 +478,7 @@ class Relation(google.protobuf.message.Message):
         "map_partitions",
         "collect_metrics",
         "parse",
+        "with_watermark",
         "fill_na",
         "drop_na",
         "replace",
@@ -703,15 +712,19 @@ class Read(google.protobuf.message.Message):
 
     NAMED_TABLE_FIELD_NUMBER: builtins.int
     DATA_SOURCE_FIELD_NUMBER: builtins.int
+    IS_STREAMING_FIELD_NUMBER: builtins.int
     @property
     def named_table(self) -> global___Read.NamedTable: ...
     @property
     def data_source(self) -> global___Read.DataSource: ...
+    is_streaming: builtins.bool
+    """(Optional) Indicates if this is a streaming read."""
     def __init__(
         self,
         *,
         named_table: global___Read.NamedTable | None = ...,
         data_source: global___Read.DataSource | None = ...,
+        is_streaming: builtins.bool = ...,
     ) -> None: ...
     def HasField(
         self,
@@ -722,7 +735,14 @@ class Read(google.protobuf.message.Message):
     def ClearField(
         self,
         field_name: typing_extensions.Literal[
-            "data_source", b"data_source", "named_table", b"named_table", "read_type", b"read_type"
+            "data_source",
+            b"data_source",
+            "is_streaming",
+            b"is_streaming",
+            "named_table",
+            b"named_table",
+            "read_type",
+            b"read_type",
         ],
     ) -> None: ...
     def WhichOneof(
@@ -2487,6 +2507,38 @@ class WithColumns(google.protobuf.message.Message):
     ) -> None: ...
 
 global___WithColumns = WithColumns
+
+class WithWatermark(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    INPUT_FIELD_NUMBER: builtins.int
+    EVENT_TIME_FIELD_NUMBER: builtins.int
+    DELAY_THRESHOLD_FIELD_NUMBER: builtins.int
+    @property
+    def input(self) -> global___Relation:
+        """(Required) The input relation"""
+    event_time: builtins.str
+    """(Required)"""
+    delay_threshold: builtins.str
+    """(Required)"""
+    def __init__(
+        self,
+        *,
+        input: global___Relation | None = ...,
+        event_time: builtins.str = ...,
+        delay_threshold: builtins.str = ...,
+    ) -> None: ...
+    def HasField(
+        self, field_name: typing_extensions.Literal["input", b"input"]
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "delay_threshold", b"delay_threshold", "event_time", b"event_time", "input", b"input"
+        ],
+    ) -> None: ...
+
+global___WithWatermark = WithWatermark
 
 class Hint(google.protobuf.message.Message):
     """Specify a hint over a relation. Hint should have a name and optional parameters."""
