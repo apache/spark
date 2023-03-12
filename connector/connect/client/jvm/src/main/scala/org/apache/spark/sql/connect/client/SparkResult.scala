@@ -179,6 +179,14 @@ private[sql] class SparkResult[T](
   }
 
   /**
+   * Returns an destructive iterator over the contents of the result.
+   */
+  def destructiveIterator: java.util.Iterator[T] with AutoCloseable = {
+    // TODO: implementation
+    iterator
+  }
+
+  /**
    * Close this result, freeing any underlying resources.
    */
   override def close(): Unit = {
