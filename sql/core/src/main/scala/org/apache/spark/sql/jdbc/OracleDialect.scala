@@ -196,7 +196,8 @@ private case object OracleDialect extends JdbcDialect {
         s" $whereClause $groupByClause $orderByClause"
       val finalSelectStmt = if (limit > 0) {
         if (offset > 0) {
-          // If we not give an alias for rownum and using it directly, e.g.
+          // Because the rownum is calculated when the value is returned,
+          // if we not give an alias for rownum and using it directly, e.g.
           // SELECT $columnList FROM ($selectStmt) tab WHERE rownum > $offset AND
           // rownum <= ${limit + offset}. The result is incorrect.
           s"SELECT $columnList FROM (SELECT tab.*, rownum rn FROM ($selectStmt) tab)" +
