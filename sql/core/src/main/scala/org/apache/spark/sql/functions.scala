@@ -308,6 +308,29 @@ object functions {
   }
 
   /**
+   * Aggregate function: returns the approximate number of distinct items in a group,
+   * using a Datasketches HllSketch instance with default configuration.
+   *
+   * @group agg_funcs
+   * @since 3.2.1
+   */
+  def hllsketch_eval(e: Column): Column = withAggregateFunction {
+    DatasketchesHllSketch(e.expr)
+  }
+
+
+  /**
+   * Aggregate function: returns the approximate number of distinct items in a group,
+   * using a Datasketches HllSketch instance with default configuration.
+   *
+   * @group agg_funcs
+   * @since 3.2.1
+   */
+  def hllsketch_eval(columnName: String): Column = {
+    hllsketch_eval(Column(columnName))
+  }
+
+  /**
    * Aggregate function: returns the average of the values in a group.
    *
    * @group agg_funcs
