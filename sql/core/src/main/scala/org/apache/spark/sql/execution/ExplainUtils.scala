@@ -98,11 +98,9 @@ object ExplainUtils extends AdaptiveSparkPlanHelper {
       case _: WholeStageCodegenExec =>
       case _: InputAdapter =>
       case p: AdaptiveSparkPlanExec =>
-        if (p.executedPlan.fastEquals(p.initialPlan)) {
-          processReusedExchanges(p.initialPlanForExplain, operators, reusedExchanges)
-        } else {
-          processReusedExchanges(p.executedPlan, operators, reusedExchanges)
-          processReusedExchanges(p.initialPlanForExplain, operators, reusedExchanges)
+        processReusedExchanges(p.executedPlan, operators, reusedExchanges)
+        if (!p.executedPlan.fastEquals(p.initialPlan)) {
+          processReusedExchanges(p.initialPlan, operators, reusedExchanges)
         }
         addOperator(p)
       case p: QueryStageExec =>
@@ -197,9 +195,9 @@ object ExplainUtils extends AdaptiveSparkPlanHelper {
    *                 for an edge case in SPARK-42753 to overwrite any potential existing IDs on a
    *                 ReusedExchange child subtree that were generated from previous AQE iteration.
    * @param overwriteExclusions These are operators to avoid overwriting. Only takes effect if
-   *                            overwrite = true. This is needed for an edge case in SPARK-42753 where
-   *                            some nodes in the subtree need to be overwritten and others don't
-   *                            because they are already correctly ID'd in the current plan
+   *                            overwrite = true. This is needed for an edge case in SPARK-42753
+   *                            where some nodes in the subtree need to be overwritten and others
+   *                            don't because they are already correctly ID'd in the current plan
    *                            iteration.
    * @return The last generated operation id for this input plan. This is to ensure we always
    *         assign incrementing unique id to each operator.
@@ -226,18 +224,21 @@ object ExplainUtils extends AdaptiveSparkPlanHelper {
       case _: WholeStageCodegenExec =>
       case _: InputAdapter =>
       case p: AdaptiveSparkPlanExec =>
-        currentOperationID = generateOperatorIDs(p.executedPlan, currentOperationID)
+        currentOperationID = generateOperatorIDs(p.executedPlan, currentOperationID,
+          overwrite, overwriteExclusions)
         if (!p.executedPlan.fastEquals(p.initialPlan)) {
-          currentOperationID = generateOperatorIDs(p.initialPlan, currentOperationID)
+          currentOperationID = generateOperatorIDs(p.initialPlan, currentOperationID,
+            overwrite, overwriteExclusions)
         }
         setOpId(p)
       case p: QueryStageExec =>
-        currentOperationID = generateOperatorIDs(p.plan, currentOperationID)
+        currentOperationID = generateOperatorIDs(p.plan, currentOperationID,
+          overwrite, overwriteExclusions)
         setOpId(p)
       case other: QueryPlan[_] =>
         setOpId(other)
         currentOperationID = other.innerChildren.foldLeft(currentOperationID) {
-          (curId, plan) => generateOperatorIDs(plan, curId)
+          (curId, plan) => generateOperatorIDs(plan, curId, overwrite, overwriteExclusions)
         }
     }
     currentOperationID
