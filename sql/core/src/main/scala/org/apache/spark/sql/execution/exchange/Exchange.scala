@@ -31,8 +31,8 @@ import org.apache.spark.sql.vectorized.ColumnarBatch
  * Base class for operators that exchange data among multiple threads or processes.
  *
  * Exchanges are the key class of operators that enable parallelism. Although the implementation
- * differs significantly, the concept is similar to the exchange operator described in "Volcano --
- * An Extensible and Parallel Query Evaluation System" by Goetz Graefe.
+ * differs significantly, the concept is similar to the exchange operator described in
+ * "Volcano -- An Extensible and Parallel Query Evaluation System" by Goetz Graefe.
  */
 abstract class Exchange extends UnaryExecNode {
   override def output: Seq[Attribute] = child.output
@@ -47,7 +47,7 @@ abstract class Exchange extends UnaryExecNode {
  * preserve the original ids because they're what downstream operators are expecting.
  */
 case class ReusedExchangeExec(override val output: Seq[Attribute], child: Exchange)
-    extends LeafExecNode {
+  extends LeafExecNode {
   val UNKNOWN_CHILD_ID = TreeNodeTag[Unit]("UNKNOWN_CHILD_ID")
 
   override def supportsColumnar: Boolean = child.supportsColumnar
@@ -71,10 +71,9 @@ case class ReusedExchangeExec(override val output: Seq[Attribute], child: Exchan
   // to update the attribute ids in `outputPartitioning` and `outputOrdering`.
   private[sql] lazy val updateAttr: Expression => Expression = {
     val originalAttrToNewAttr = AttributeMap(child.output.zip(output))
-    e =>
-      e.transform { case attr: Attribute =>
-        originalAttrToNewAttr.getOrElse(attr, attr)
-      }
+    e => e.transform {
+      case attr: Attribute => originalAttrToNewAttr.getOrElse(attr, attr)
+    }
   }
 
   override def outputPartitioning: Partitioning = child.outputPartitioning match {
@@ -95,38 +94,23 @@ case class ReusedExchangeExec(override val output: Seq[Attribute], child: Exchan
   }
 
   override def generateTreeString(
-      depth: Int,
-      lastChildren: Seq[Boolean],
-      append: String => Unit,
-      verbose: Boolean,
-      prefix: String = "",
-      addSuffix: Boolean = false,
-      maxFields: Int,
-      printNodeId: Boolean,
-      indent: Int = 0): Unit = {
-    super.generateTreeString(
-      depth,
-      lastChildren,
-      append,
-      verbose,
-      prefix,
-      addSuffix,
-      maxFields,
-      printNodeId,
-      indent)
-    // SPARK-42753 Recursively append subtree of the child if that child is an UNKNOWN child
-    // whereby that child has not been printed anywhere else
-    if (this.getTagValue(UNKNOWN_CHILD_ID).isDefined) {
-      child.generateTreeString(
-        depth + 1,
-        lastChildren :+ true,
-        append,
-        verbose,
-        prefix,
-        addSuffix,
-        maxFields,
-        printNodeId = printNodeId,
-        indent = indent)
-    }
+    depth: Int,
+    lastChildren: Seq[Boolean],
+    append: String => Unit,
+    verbose: Boolean,
+    prefix: String = "",
+    addSuffix: Boolean = false,
+    maxFields: Int,
+    printNodeId: Boolean,
+    indent: Int = 0): Unit = {
+      super.generateTreeString(depth, lastChildren, append, verbose, prefix, addSuffix,
+        maxFields, printNodeId, indent)
+      // SPARK-42753 Recursively append subtree of the child if that child is an UNKNOWN child
+      // whereby that child has not been printed anywhere else
+      if (this.getTagValue(UNKNOWN_CHILD_ID).isDefined) {
+        child.generateTreeString(
+          depth + 1, lastChildren :+ true, append, verbose, prefix, addSuffix,
+          maxFields, printNodeId = printNodeId, indent = indent)
+      }
   }
 }
