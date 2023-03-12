@@ -774,7 +774,7 @@ class ExplainSuiteAE extends ExplainSuiteHelper with EnableAdaptiveExecutionSuit
       statistics)
   }
 
-  test("SC-122182: Process subtree for ReusedExchange with unknown child") {
+  test("SPARK-42753: Process subtree for ReusedExchange with unknown child") {
     // Simulate a simplified subtree with a ReusedExchange pointing to an Exchange node that has
     // no ID. This is a rare edge cases that could arise during AQE if there are multiple
     // ReusedExchanges. We check to make sure the child Exchange gets an ID and gets printed

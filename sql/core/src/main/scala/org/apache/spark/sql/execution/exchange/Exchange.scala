@@ -105,7 +105,8 @@ case class ReusedExchangeExec(override val output: Seq[Attribute], child: Exchan
     indent: Int = 0): Unit = {
       super.generateTreeString(depth, lastChildren, append, verbose, prefix, addSuffix,
         maxFields, printNodeId, indent)
-      // Recursively append subtree of the child if that child has not been appended anywhere else
+      // SPARK-42753 Recursively append subtree of the child if that child is an UNKNOWN child
+      // whereby that child has not been printed anywhere else
       if (this.getTagValue(UNKNOWN_CHILD_ID).isDefined) {
         child.generateTreeString(
           depth + 1, lastChildren :+ true, append, verbose, prefix, addSuffix,

@@ -69,7 +69,7 @@ object ExplainUtils extends AdaptiveSparkPlanHelper {
   }
 
   /**
-   * This function is part of a fix for SC-122182: process subtree for ReusedExchange with unknown
+   * This function is part of a fix for SPARK-42753: process subtree for ReusedExchange with unknown
    * child. It traverses the input plan and adds visited nodes to HashSet of Operators and Hashset
    * of Reused Exchanges.
    * @param plan Input query plan
@@ -133,7 +133,7 @@ object ExplainUtils extends AdaptiveSparkPlanHelper {
           HashSet.empty[QueryPlan[_]])
       }
 
-      // SC-122182: Process subtree for a ReusedExchange with unknown child
+      // SPARK-42753: Process subtree for a ReusedExchange with unknown child
       // Get all the operators and ReusedExchanges that have generated ID
       val reusedExchanges = HashSet.empty[ReusedExchangeExec]
       val operators = HashSet.empty[QueryPlan[_]]
@@ -194,10 +194,10 @@ object ExplainUtils extends AdaptiveSparkPlanHelper {
    * @param startOperatorID The start value of operation id. The subsequent operations will be
    *                        assigned higher value.
    * @param overwrite Whether to overwrite existing IDs if they already exist. This is needed
-   *                 for an edge case in SC-122182 to overwrite any potential existing IDs on a
+   *                 for an edge case in SPARK-42753 to overwrite any potential existing IDs on a
    *                 ReusedExchange child subtree that were generated from previous AQE iteration.
    * @param overwriteExclusions These are operators to avoid overwriting. Only takes effect if
-   *                            overwrite = true. This is needed for an edge case in SC-122182 where
+   *                            overwrite = true. This is needed for an edge case in SPARK-42753 where
    *                            some nodes in the subtree need to be overwritten and others don't
    *                            because they are already correctly ID'd in the current plan
    *                            iteration.
