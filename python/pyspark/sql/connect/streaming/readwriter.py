@@ -17,10 +17,10 @@
 
 from pyspark.sql.connect.utils import check_dependencies
 
-check_dependencies(__name__, __file__)
+check_dependencies(__name__)
 
 import sys
-from typing import cast, overload, Any, Callable, Dict, List, Optional, TYPE_CHECKING, Union
+from typing import cast, overload, Callable, Dict, List, Optional, TYPE_CHECKING, Union
 
 from pyspark.sql.connect.plan import DataSource, LogicalPlan, WriteStreamOperation
 import pyspark.sql.connect.proto as pb2
@@ -347,7 +347,7 @@ class DataStreamWriter:
                     "Value for processingTime must be a non empty string. Got: %s" % processingTime
                 )
             interval = processingTime.strip()
-            # XXX Trigger
+            trigger = interval
 
         elif once is not None:
             if once is not True:
