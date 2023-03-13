@@ -63,6 +63,7 @@ message Relation {
     MapPartitions map_partitions = 28;
     CollectMetrics collect_metrics = 29;
     Parse parse = 30;
+    GroupMap group_map = 31;
 
     // NA functions
     NAFill fill_na = 90;
