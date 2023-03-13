@@ -58,7 +58,8 @@ client via gRPC as Apache Arrow-encoded row batches.
 
 # Operational benefits of Spark Connect
 
-With this new architecture, Spark Connect mitigates several operational issues:
+With this new architecture, Spark Connect mitigates several multi-tenant
+operational issues:
 
 **Stability**: Applications that use too much memory will now only impact their
 own environment as they can run in their own processes. Users can define their
