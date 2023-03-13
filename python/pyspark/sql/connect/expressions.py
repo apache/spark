@@ -71,6 +71,7 @@ from pyspark.sql.connect.types import (
     JVM_LONG_MAX,
     UnparsedDataType,
     pyspark_types_to_proto_types,
+    proto_schema_to_pyspark_data_type,
 )
 
 if TYPE_CHECKING:
@@ -307,6 +308,63 @@ class LiteralExpression(Expression):
     @classmethod
     def _from_value(cls, value: Any) -> "LiteralExpression":
         return LiteralExpression(value=value, dataType=LiteralExpression._infer_type(value))
+
+    @classmethod
+    def _to_value(
+        cls, literal: "proto.Expression.Literal", dataType: Optional[DataType] = None
+    ) -> Any:
+        if literal.HasField("null"):
+            return None
+        elif literal.HasField("binary"):
+            assert dataType is None or isinstance(dataType, BinaryType)
+            return literal.binary
+        elif literal.HasField("boolean"):
+            assert dataType is None or isinstance(dataType, BooleanType)
+            return literal.boolean
+        elif literal.HasField("byte"):
+            assert dataType is None or isinstance(dataType, ByteType)
+            return literal.byte
+        elif literal.HasField("short"):
+            assert dataType is None or isinstance(dataType, ShortType)
+            return literal.short
+        elif literal.HasField("integer"):
+            assert dataType is None or isinstance(dataType, IntegerType)
+            return literal.integer
+        elif literal.HasField("long"):
+            assert dataType is None or isinstance(dataType, LongType)
+            return literal.long
+        elif literal.HasField("float"):
+            assert dataType is None or isinstance(dataType, FloatType)
+            return literal.float
+        elif literal.HasField("double"):
+            assert dataType is None or isinstance(dataType, DoubleType)
+            return literal.double
+        elif literal.HasField("decimal"):
+            assert dataType is None or isinstance(dataType, DecimalType)
+            return decimal.Decimal(literal.decimal.value)
+        elif literal.HasField("string"):
+            assert dataType is None or isinstance(dataType, StringType)
+            return literal.string
+        elif literal.HasField("date"):
+            assert dataType is None or isinstance(dataType, DataType)
+            return DateType().fromInternal(literal.date)
+        elif literal.HasField("timestamp"):
+            assert dataType is None or isinstance(dataType, TimestampType)
+            return TimestampType().fromInternal(literal.timestamp)
+        elif literal.HasField("timestamp_ntz"):
+            assert dataType is None or isinstance(dataType, TimestampNTZType)
+            return TimestampNTZType().fromInternal(literal.timestamp_ntz)
+        elif literal.HasField("day_time_interval"):
+            assert dataType is None or isinstance(dataType, DayTimeIntervalType)
+            return DayTimeIntervalType().fromInternal(literal.day_time_interval)
+        elif literal.HasField("array"):
+            elementType = proto_schema_to_pyspark_data_type(literal.array.element_type)
+            if dataType is not None:
+                assert isinstance(dataType, ArrayType)
+                assert elementType == dataType.elementType
+            return [LiteralExpression._to_value(v, elementType) for v in literal.array.elements]
+
+        raise TypeError(f"Unsupported Literal Value {literal}")
 
     def to_plan(self, session: "SparkConnectClient") -> "proto.Expression":
         """Converts the literal expression to the literal in proto."""
