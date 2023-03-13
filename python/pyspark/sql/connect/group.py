@@ -30,6 +30,7 @@ from typing import (
     cast,
 )
 
+from pyspark.rdd import PythonEvalType
 from pyspark.sql.group import GroupedData as PySparkGroupedData
 from pyspark.sql.types import NumericType
 
@@ -38,8 +39,9 @@ from pyspark.sql.connect.column import Column
 from pyspark.sql.connect.functions import _invoke_function, col, lit
 
 if TYPE_CHECKING:
-    from pyspark.sql.connect._typing import LiteralType
+    from pyspark.sql.connect._typing import LiteralType, PandasGroupedMapFunction
     from pyspark.sql.connect.dataframe import DataFrame
+    from pyspark.sql.types import StructType
 
 
 class GroupedData:
@@ -206,8 +208,28 @@ class GroupedData:
     def apply(self, *args: Any, **kwargs: Any) -> None:
         raise NotImplementedError("apply() is not implemented.")
 
-    def applyInPandas(self, *args: Any, **kwargs: Any) -> None:
-        raise NotImplementedError("applyInPandas() is not implemented.")
+    def applyInPandas(
+        self, func: "PandasGroupedMapFunction", schema: Union["StructType", str]
+    ) -> "DataFrame":
+        from pyspark.sql.connect.udf import UserDefinedFunction
+
+        udf_obj = UserDefinedFunction(
+            func,
+            returnType=schema,
+            evalType=PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
+        )
+
+        return DataFrame.withPlan(
+            plan.GroupMap(
+                child=self._df._plan,
+                grouping_cols=self._grouping_cols,
+                function=udf_obj,
+                cols=self._df.columns,
+            ),
+            session=self._df._session,
+        )
+
+    applyInPandas.__doc__ = PySparkGroupedData.applyInPandas.__doc__
 
     def applyInPandasWithState(self, *args: Any, **kwargs: Any) -> None:
         raise NotImplementedError("applyInPandasWithState() is not implemented.")

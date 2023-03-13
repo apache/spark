@@ -53,6 +53,11 @@ PandasMapIterFunction = Callable[[Iterable[DataFrameLike]], Iterable[DataFrameLi
 
 ArrowMapIterFunction = Callable[[Iterable[pyarrow.RecordBatch]], Iterable[pyarrow.RecordBatch]]
 
+PandasGroupedMapFunction = Union[
+    Callable[[DataFrameLike], DataFrameLike],
+    Callable[[Any, DataFrameLike], DataFrameLike],
+]
+
 
 class UserDefinedFunctionLike(Protocol):
     func: Callable[..., Any]

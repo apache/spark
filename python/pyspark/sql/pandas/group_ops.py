@@ -128,6 +128,9 @@ class PandasGroupedOpsMixin:
 
         .. versionadded:: 3.0.0
 
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
+
         Parameters
         ----------
         func : function
