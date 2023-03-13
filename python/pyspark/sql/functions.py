@@ -7626,7 +7626,7 @@ def array_prepend(col: "ColumnOrName", value: Any) -> Column:
     well as all elements from array. The new element is positioned
     at the beginning of the array.
 
-    .. versionadded:: 3.4.0
+    .. versionadded:: 3.5.0
 
     Parameters
     ----------
