@@ -17,14 +17,13 @@
 
 package org.apache.spark.sql.hive.execution
 
-import scala.collection.JavaConverters._
 import scala.util.Random
 
 import test.org.apache.spark.sql.MyDoubleAvg
 import test.org.apache.spark.sql.MyDoubleSum
 
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.expressions.{CodegenObjectFactoryMode, UnsafeRow}
+import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode
 import org.apache.spark.sql.expressions.{MutableAggregationBuffer, UserDefinedAggregateFunction}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.hive.test.TestHiveSingleton
