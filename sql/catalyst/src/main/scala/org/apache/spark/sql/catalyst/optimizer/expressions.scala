@@ -113,7 +113,8 @@ object ConstantFolding extends Rule[LogicalPlan] {
 object ConstantPropagation extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformUpWithPruning(
     _.containsAllPatterns(LITERAL, FILTER), ruleId) {
-    case f: Filter => f.mapExpressions(traverse(_, replaceChildren = true, nullIsFalse = true)._1)
+    case f: Filter =>
+      f.mapExpressions(traverse(_, replaceChildren = true, nullIsFalse = true, None))
   }
 
   // The keys are always canonicalized `AttributeReference`s, but it is easier to use `Expression`
@@ -135,58 +136,58 @@ object ConstantPropagation extends Rule[LogicalPlan] {
    * @param nullIsFalse whether a boolean expression result can be considered to false e.g. in the
    *                    case of `WHERE e`, null result of expression `e` means the same as if it
    *                    resulted false
-   * @return A tuple including:
-   *         1. Expression: changed condition after traversal
-   *         2. EqualityPredicates: propagated mapping of attribute => constant
+   * @param equalityPredicates optional [[EqualityPredicates]] map to collect attribute => constant
+   *                           mapping in adjacent [[And]]]s
+   * @return changed condition after traversal
    */
   private def traverse(
       condition: Expression,
       replaceChildren: Boolean,
-      nullIsFalse: Boolean): (Expression, EqualityPredicates) =
+      nullIsFalse: Boolean,
+      equalityPredicates: Option[EqualityPredicates]): Expression =
     condition match {
       case e @ EqualTo(left: AttributeReference, right: Literal)
         if safeToReplace(left, nullIsFalse) =>
-        e -> mutable.Map(left.canonicalized -> (right, e))
+        equalityPredicates.foreach(_ += left.canonicalized -> (right, e))
+        e
       case e @ EqualTo(left: Literal, right: AttributeReference)
         if safeToReplace(right, nullIsFalse) =>
-        e -> mutable.Map(right.canonicalized -> (left, e))
+        equalityPredicates.foreach(_ += right.canonicalized -> (left, e))
+        e
       case e @ EqualNullSafe(left: AttributeReference, right: Literal)
         if safeToReplace(left, nullIsFalse) =>
-        e -> mutable.Map(left.canonicalized -> (right, e))
+        equalityPredicates.foreach(_ += left.canonicalized -> (right, e))
+        e
       case e @ EqualNullSafe(left: Literal, right: AttributeReference)
         if safeToReplace(right, nullIsFalse) =>
-        e -> mutable.Map(right.canonicalized -> (left, e))
+        equalityPredicates.foreach(_ += right.canonicalized -> (left, e))
+        e
       case a @ And(left, right) =>
-        val (newLeft, equalityPredicatesLeft) =
-          traverse(left, replaceChildren = false, nullIsFalse)
-        val (newRight, equalityPredicatesRight) =
-          traverse(right, replaceChildren = false, nullIsFalse)
+        val newEqualityPredicates: Option[EqualityPredicates] = if (replaceChildren) {
+          Some(mutable.Map.empty)
+        } else {
+          equalityPredicates
+        }
+        val newLeft = traverse(left, replaceChildren = false, nullIsFalse, newEqualityPredicates)
+        val newRight = traverse(right, replaceChildren = false, nullIsFalse, newEqualityPredicates)
         // We could recognize when conflicting constants are coming from the left and right sides
         // and immediately shortcut the `And` expression to `Literal.FalseLiteral`, but that case is
         // not so common and actually it is the job of `ConstantFolding` and `BooleanSimplification`
         // rules to deal with those optimizations.
-        val equalityPredicates = if (equalityPredicatesLeft.size < equalityPredicatesRight.size) {
-          equalityPredicatesRight ++= equalityPredicatesLeft
-        } else {
-          equalityPredicatesLeft ++= equalityPredicatesRight
-        }
-        val newAnd = a.withNewChildren(if (equalityPredicates.nonEmpty && replaceChildren) {
-          val replacedNewLeft = replaceConstants(newLeft, equalityPredicates)
-          val replacedNewRight = replaceConstants(newRight, equalityPredicates)
+        a.withNewChildren(if (newEqualityPredicates.get.nonEmpty && replaceChildren) {
+          val replacedNewLeft = replaceConstants(newLeft, newEqualityPredicates.get)
+          val replacedNewRight = replaceConstants(newRight, newEqualityPredicates.get)
           Seq(replacedNewLeft, replacedNewRight)
         } else {
           Seq(newLeft, newRight)
         })
-        newAnd -> equalityPredicates
       case o: Or =>
         // Ignore the EqualityPredicates from children since they are only propagated through And.
-        val newOr = o.mapChildren(traverse(_, replaceChildren = true, nullIsFalse)._1)
-        newOr -> mutable.Map.empty
+        o.mapChildren(traverse(_, replaceChildren = true, nullIsFalse, None))
       case n: Not =>
         // Ignore the EqualityPredicates from children since they are only propagated through And.
-        val newNot = n.mapChildren(traverse(_, replaceChildren = true, nullIsFalse = false)._1)
-        newNot -> mutable.Map.empty
-      case o => o -> mutable.Map.empty
+        n.mapChildren(traverse(_, replaceChildren = true, nullIsFalse = false, None))
+      case o => o
     }
 
   // We need to take into account if an attribute is nullable and the context of the conjunctive
