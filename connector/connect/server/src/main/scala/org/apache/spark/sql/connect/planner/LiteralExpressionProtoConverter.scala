@@ -23,7 +23,7 @@ import scala.reflect.ClassTag
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.util.{DateTimeUtils, IntervalUtils}
-import org.apache.spark.sql.connect.common.DataTypeProtoConverter
+import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, InvalidPlanInput}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
@@ -107,7 +107,7 @@ object LiteralExpressionProtoConverter {
           ArrayType(DataTypeProtoConverter.toCatalystType(lit.getArray.getElementType)))
 
       case _ =>
-        throw new UnsupportedOperationException(
+        throw InvalidPlanInput(
           s"Unsupported Literal Type: ${lit.getLiteralTypeCase.getNumber}" +
             s"(${lit.getLiteralTypeCase.name})")
     }

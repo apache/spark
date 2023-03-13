@@ -602,13 +602,11 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
     val logical = transform(
       proto.Relation
         .newBuilder()
-        .setHint(
-          proto.Hint
-            .newBuilder()
-            .setInput(input)
-            .setName("REPARTITION")
-            .addParameters(
-              proto.Expression.newBuilder().setLiteral(toLiteralProto(10000)).build()))
+        .setHint(proto.Hint
+          .newBuilder()
+          .setInput(input)
+          .setName("REPARTITION")
+          .addParameters(proto.Expression.newBuilder().setLiteral(toLiteralProto(10000)).build()))
         .build())
 
     val df = Dataset.ofRows(spark, logical)
@@ -648,13 +646,11 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
     val logical = transform(
       proto.Relation
         .newBuilder()
-        .setHint(
-          proto.Hint
-            .newBuilder()
-            .setInput(input)
-            .setName("REPARTITION")
-            .addParameters(
-              proto.Expression.newBuilder().setLiteral(toLiteralProto("id")).build()))
+        .setHint(proto.Hint
+          .newBuilder()
+          .setInput(input)
+          .setName("REPARTITION")
+          .addParameters(proto.Expression.newBuilder().setLiteral(toLiteralProto("id")).build()))
         .build())
     assert(10 === Dataset.ofRows(spark, logical).count())
   }
@@ -671,13 +667,11 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
     val logical = transform(
       proto.Relation
         .newBuilder()
-        .setHint(
-          proto.Hint
-            .newBuilder()
-            .setInput(input)
-            .setName("REPARTITION")
-            .addParameters(
-              proto.Expression.newBuilder().setLiteral(toLiteralProto(true)).build()))
+        .setHint(proto.Hint
+          .newBuilder()
+          .setInput(input)
+          .setName("REPARTITION")
+          .addParameters(proto.Expression.newBuilder().setLiteral(toLiteralProto(true)).build()))
         .build())
     intercept[AnalysisException](Dataset.ofRows(spark, logical))
   }
