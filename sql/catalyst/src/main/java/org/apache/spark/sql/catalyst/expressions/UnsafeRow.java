@@ -32,6 +32,7 @@ import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
 
 import org.apache.spark.sql.catalyst.InternalRow;
+import org.apache.spark.sql.catalyst.types.*;
 import org.apache.spark.sql.types.*;
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.array.ByteArrayMethods;
@@ -73,48 +74,44 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
   /**
    * Field types that can be updated in place in UnsafeRows (e.g. we support set() for these types)
    */
-  public static final Set<DataType> mutableFieldTypes;
+  public static final Set<PhysicalDataType> mutableFieldTypes;
 
   // DecimalType, DayTimeIntervalType and YearMonthIntervalType are also mutable
   static {
     mutableFieldTypes = Collections.unmodifiableSet(
       new HashSet<>(
         Arrays.asList(
-          NullType,
-          BooleanType,
-          ByteType,
-          ShortType,
-          IntegerType,
-          LongType,
-          FloatType,
-          DoubleType,
-          DateType,
-          TimestampType,
-          TimestampNTZType
+          PhysicalNullType$.MODULE$,
+          PhysicalBooleanType$.MODULE$,
+          PhysicalByteType$.MODULE$,
+          PhysicalShortType$.MODULE$,
+          PhysicalIntegerType$.MODULE$,
+          PhysicalLongType$.MODULE$,
+          PhysicalFloatType$.MODULE$,
+          PhysicalDoubleType$.MODULE$
         )));
   }
 
   public static boolean isFixedLength(DataType dt) {
     if (dt instanceof UserDefinedType) {
-      return isFixedLength(((UserDefinedType) dt).sqlType());
+      return isFixedLength(((UserDefinedType<?>) dt).sqlType());
     }
-
-    if (dt instanceof DecimalType) {
+    PhysicalDataType pdt = dt.physicalDataType();
+    if (pdt instanceof PhysicalDecimalType) {
       return ((DecimalType) dt).precision() <= Decimal.MAX_LONG_DIGITS();
     } else {
-      return dt instanceof DayTimeIntervalType || dt instanceof YearMonthIntervalType ||
-        mutableFieldTypes.contains(dt);
+      return mutableFieldTypes.contains(pdt);
     }
   }
 
   public static boolean isMutable(DataType dt) {
     if (dt instanceof UserDefinedType) {
-      return isMutable(((UserDefinedType) dt).sqlType());
+      return isMutable(((UserDefinedType<?>) dt).sqlType());
     }
+    PhysicalDataType pdt = dt.physicalDataType();
 
-    return mutableFieldTypes.contains(dt) || dt instanceof DecimalType ||
-      dt instanceof CalendarIntervalType || dt instanceof DayTimeIntervalType ||
-      dt instanceof YearMonthIntervalType;
+    return mutableFieldTypes.contains(pdt) || pdt instanceof PhysicalDecimalType ||
+      pdt instanceof PhysicalCalendarIntervalType;
   }
 
   //////////////////////////////////////////////////////////////////////////////
