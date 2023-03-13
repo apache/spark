@@ -733,6 +733,7 @@ trait Params extends Identifiable with Serializable {
   protected final def set(paramPair: ParamPair[_]): this.type = {
     shouldOwn(paramPair.param)
     paramMap.put(paramPair)
+    onParamChange(paramPair.param)
     this
   }
 
@@ -750,6 +751,7 @@ trait Params extends Identifiable with Serializable {
   final def clear(param: Param[_]): this.type = {
     shouldOwn(param)
     paramMap.remove(param)
+    onParamChange(param)
     this
   }
 
@@ -774,8 +776,9 @@ trait Params extends Identifiable with Serializable {
    *               this method gets called.
    * @param value  the default value
    */
-  protected final def setDefault[T](param: Param[T], value: T): this.type = {
+  protected[ml] final def setDefault[T](param: Param[T], value: T): this.type = {
     defaultParamMap.put(param -> value)
+    onParamChange(param)
     this
   }
 
@@ -881,7 +884,7 @@ trait Params extends Identifiable with Serializable {
     params.foreach { param =>
       // copy default Params
       if (defaultParamMap.contains(param) && to.hasParam(param.name)) {
-        to.defaultParamMap.put(to.getParam(param.name), defaultParamMap(param))
+        to.setDefault(to.getParam(param.name), defaultParamMap(param))
       }
       // copy explicitly set Params
       if (map.contains(param) && to.hasParam(param.name)) {
@@ -890,15 +893,8 @@ trait Params extends Identifiable with Serializable {
     }
     to
   }
-}
 
-private[ml] object Params {
-  /**
-   * Sets a default param value for a `Params`.
-   */
-  private[ml] final def setDefault[T](params: Params, param: Param[T], value: T): Unit = {
-    params.defaultParamMap.put(param -> value)
-  }
+  private[ml] def onParamChange(param: Param[_]): Unit = {}
 }
 
 /**

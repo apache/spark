@@ -603,6 +603,7 @@ class MlCommandResponse(google.protobuf.message.Message):
     MODEL_INFO_FIELD_NUMBER: builtins.int
     VECTOR_FIELD_NUMBER: builtins.int
     MATRIX_FIELD_NUMBER: builtins.int
+    STAGE_FIELD_NUMBER: builtins.int
     @property
     def literal(self) -> pyspark.sql.connect.proto.expressions_pb2.Expression.Literal: ...
     @property
@@ -611,6 +612,8 @@ class MlCommandResponse(google.protobuf.message.Message):
     def vector(self) -> global___Vector: ...
     @property
     def matrix(self) -> global___Matrix: ...
+    @property
+    def stage(self) -> pyspark.sql.connect.proto.ml_common_pb2.MlStage: ...
     def __init__(
         self,
         *,
@@ -618,6 +621,7 @@ class MlCommandResponse(google.protobuf.message.Message):
         model_info: global___MlCommandResponse.ModelInfo | None = ...,
         vector: global___Vector | None = ...,
         matrix: global___Matrix | None = ...,
+        stage: pyspark.sql.connect.proto.ml_common_pb2.MlStage | None = ...,
     ) -> None: ...
     def HasField(
         self,
@@ -630,6 +634,8 @@ class MlCommandResponse(google.protobuf.message.Message):
             b"ml_command_response_type",
             "model_info",
             b"model_info",
+            "stage",
+            b"stage",
             "vector",
             b"vector",
         ],
@@ -645,6 +651,8 @@ class MlCommandResponse(google.protobuf.message.Message):
             b"ml_command_response_type",
             "model_info",
             b"model_info",
+            "stage",
+            b"stage",
             "vector",
             b"vector",
         ],
@@ -654,7 +662,7 @@ class MlCommandResponse(google.protobuf.message.Message):
         oneof_group: typing_extensions.Literal[
             "ml_command_response_type", b"ml_command_response_type"
         ],
-    ) -> typing_extensions.Literal["literal", "model_info", "vector", "matrix"] | None: ...
+    ) -> typing_extensions.Literal["literal", "model_info", "vector", "matrix", "stage"] | None: ...
 
 global___MlCommandResponse = MlCommandResponse
 
