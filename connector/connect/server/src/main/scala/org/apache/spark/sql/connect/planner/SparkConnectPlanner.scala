@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql.connect.planner
 
+import java.sql.DriverManager
+import java.util.Properties
+
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 
@@ -1742,6 +1745,7 @@ class SparkConnectPlanner(val session: SparkSession) {
           case proto.WriteOperation.SaveTable.TableSaveMethod.TABLE_SAVE_METHOD_INSERT_INTO =>
             w.insertInto(tableName)
           case proto.WriteOperation.SaveTable.TableSaveMethod.TABLE_SAVE_METHOD_SAVE =>
+            createJDBCTestSchema()
             w.save()
           case _ =>
             throw new UnsupportedOperationException(
@@ -1753,6 +1757,20 @@ class SparkConnectPlanner(val session: SparkSession) {
           "WriteOperation:SaveTypeCase not supported "
             + s"${writeOperation.getSaveTypeCase.getNumber}")
     }
+  }
+
+  private def createJDBCTestSchema(): Unit = {
+    Utils.classForName("org.h2.Driver")
+    // Extra properties that will be specified for our database. We need these to test
+    // usage of parameters from OPTIONS clause in queries.
+    val properties = new Properties()
+    properties.setProperty("user", "testUser")
+    properties.setProperty("password", "testPass")
+
+    val conn = DriverManager.getConnection("jdbc:h2:mem:testdb2", properties)
+    conn.prepareStatement("create schema test").executeUpdate()
+    conn.commit()
+    conn.close()
   }
 
   /**
