@@ -7118,10 +7118,9 @@ def bit_length(col: "ColumnOrName") -> Column:
 
 @try_remote_functions
 def translate(srcCol: "ColumnOrName", matching: str, replace: str) -> Column:
-    """A function translate any character in the `srcCol` by a character in `matching`.
-    The characters in `replace` is corresponding to the characters in `matching`.
-    Translation will happen whenever any character in the string is matching with the character
-    in the `matching`.
+    """Finds characters in `srcCol` that are in the `matching` argument and replaces them by the
+    corresponding character in `replace`. If the length of `matching` is greater than the length of
+    `replace`, the extra characters are removed (translated by nothing).
 
     .. versionadded:: 1.5.0
 
