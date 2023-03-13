@@ -17,6 +17,7 @@
 package org.apache.spark.sql.connect.client.util
 
 import java.io.File
+import java.nio.file.{Files, Paths}
 
 import scala.util.Properties.versionNumberString
 
@@ -27,13 +28,14 @@ object IntegrationTestUtils {
   // System properties used for testing and debugging
   private val DEBUG_SC_JVM_CLIENT = "spark.debug.sc.jvm.client"
 
-  private[sql] lazy val scalaDir = {
-    val version = versionNumberString.split('.') match {
+  private[sql] lazy val scalaVersion = {
+    versionNumberString.split('.') match {
       case Array(major, minor, _*) => major + "." + minor
       case _ => versionNumberString
     }
-    "scala-" + version
   }
+
+  private[sql] lazy val scalaDir = s"scala-$scalaVersion"
 
   private[sql] lazy val sparkHome: String = {
     if (!(sys.props.contains("spark.test.home") || sys.env.contains("SPARK_HOME"))) {
@@ -83,5 +85,11 @@ object IntegrationTestUtils {
   private def recursiveListFiles(f: File): Array[File] = {
     val these = f.listFiles
     these ++ these.filter(_.isDirectory).flatMap(recursiveListFiles)
+  }
+
+  private def sparkHiveAvailable(): Boolean = {
+    val filePath = s"$sparkHome/assembly/$scalaDir/jars/" +
+      s"spark-hive_$scalaVersion-${org.apache.spark.SPARK_VERSION}.jar"
+    Files.exists(Paths.get(filePath))
   }
 }
