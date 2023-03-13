@@ -42,6 +42,7 @@ if should_test_connect:
         IntegerType,
         MapType,
         ArrayType,
+        DoubleType,
     )
 
 
@@ -1011,6 +1012,29 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
             proto_lit = lit.to_plan(None).literal
             value2 = LiteralExpression._to_value(proto_lit)
             self.assertEqual(value, value2)
+
+        with self.assertRaises(AssertionError):
+            lit = LiteralExpression._from_value(1.234567)
+            proto_lit = lit.to_plan(None).literal
+            LiteralExpression._to_value(proto_lit, StringType())
+
+        with self.assertRaises(AssertionError):
+            lit = LiteralExpression._from_value("1.234567")
+            proto_lit = lit.to_plan(None).literal
+            LiteralExpression._to_value(proto_lit, DoubleType())
+
+        with self.assertRaises(AssertionError):
+            # build a array<string> proto literal, but with incorrect elements
+            proto_lit = proto.Expression().literal
+            proto_lit.array.element_type.CopyFrom(pyspark_types_to_proto_types(StringType()))
+            proto_lit.array.elements.append(
+                LiteralExpression("string", StringType()).to_plan(None).literal
+            )
+            proto_lit.array.elements.append(
+                LiteralExpression(1.234, DoubleType()).to_plan(None).literal
+            )
+
+            LiteralExpression._to_value(proto_lit, DoubleType)
 
 
 if __name__ == "__main__":
