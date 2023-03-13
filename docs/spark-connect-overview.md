@@ -192,10 +192,10 @@ you have connected to Spark using Spark Connect.
 Now you can run PySpark code in the shell to see Spark Connect in action:
 
 {% highlight python %}
-columns = ["id","name"]
-data = [(1,"Sarah"),(2,"Maria")]
-df = spark.createDataFrame(data).toDF(*columns)
-df.show()
+>>> columns = ["id","name"]
+>>> data = [(1,"Sarah"),(2,"Maria")]
+>>> df = spark.createDataFrame(data).toDF(*columns)
+>>> df.show()
 {% endhighlight %}
 </div>
 
