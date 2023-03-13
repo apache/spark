@@ -27,7 +27,7 @@ import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, InvalidPlanI
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
-object LiteralValueProtoConverter {
+object LiteralExpressionProtoConverter {
 
   /**
    * Transforms the protocol buffers literals into the appropriate Catalyst literal expression.
@@ -121,25 +121,6 @@ object LiteralValueProtoConverter {
     }
   }
 
-  def toConnectProtoValue(value: Any): proto.Expression.Literal = {
-    value match {
-      case null =>
-        proto.Expression.Literal
-          .newBuilder()
-          .setNull(DataTypeProtoConverter.toConnectProtoType(NullType))
-          .build()
-      case b: Boolean => proto.Expression.Literal.newBuilder().setBoolean(b).build()
-      case b: Byte => proto.Expression.Literal.newBuilder().setByte(b).build()
-      case s: Short => proto.Expression.Literal.newBuilder().setShort(s).build()
-      case i: Int => proto.Expression.Literal.newBuilder().setInteger(i).build()
-      case l: Long => proto.Expression.Literal.newBuilder().setLong(l).build()
-      case f: Float => proto.Expression.Literal.newBuilder().setFloat(f).build()
-      case d: Double => proto.Expression.Literal.newBuilder().setDouble(d).build()
-      case s: String => proto.Expression.Literal.newBuilder().setString(s).build()
-      case o => throw new Exception(s"Unsupported value type: $o")
-    }
-  }
-
   private def toArrayData(array: proto.Expression.Literal.Array): Any = {
     def makeArrayData[T](converter: proto.Expression.Literal => T)(implicit
         tag: ClassTag[T]): Array[T] = {
@@ -195,5 +176,4 @@ object LiteralValueProtoConverter {
       throw InvalidPlanInput(s"Unsupported Literal Type: $elementType)")
     }
   }
-
 }
