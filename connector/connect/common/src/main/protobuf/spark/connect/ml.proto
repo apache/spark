@@ -129,6 +129,7 @@ message MlCommandResponse {
   message ModelInfo {
     int64 model_ref_id = 1;
     string model_uid = 2;
+    MlParams params = 3;
   }
 }
 

@@ -18,8 +18,8 @@
 package org.apache.spark.sql.connect.ml
 
 import scala.collection.JavaConverters._
+
 import org.apache.spark.connect.proto
-import org.apache.spark.connect.proto.{Expression, MlCommandResponse}
 import org.apache.spark.ml.Model
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.sql.DataFrame
@@ -96,6 +96,7 @@ object MLHandler {
           proto.MlCommandResponse.ModelInfo.newBuilder
             .setModelRefId(refId)
             .setModelUid(model.uid)
+            .setParams(MLUtils.convertInstanceParamsToProto(model))
         ).build()
 
       case proto.MlCommand.MlCommandTypeCase.SAVE_MODEL =>

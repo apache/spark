@@ -30,7 +30,14 @@ def deserialize(ml_command_result: ml_pb2.MlCommandResponse, client, **kwargs):
 
     if ml_command_result.HasField("model_info"):
         model_info = ml_command_result.model_info
-        return model_info.model_ref_id, model_info.model_uid
+        assert "clazz" in kwargs
+        clazz = kwargs["clazz"]
+
+        model = clazz()
+        model._resetUid(model_info.model_uid)
+        _set_instance_params(model, model_info.params)
+        model.ref_id = model_info.model_ref_id
+        return model
 
     if ml_command_result.HasField("vector"):
         vector_pb = ml_command_result.vector
@@ -52,23 +59,24 @@ def deserialize(ml_command_result: ml_pb2.MlCommandResponse, client, **kwargs):
         assert "clazz" in kwargs
         clazz = kwargs["clazz"]
         stage_pb = ml_command_result.stage
-        return _deserialize_stage(stage_pb, clazz)
+        stage = clazz()
+        stage._resetUid(stage_pb.uid)
+        _set_instance_params(stage, stage_pb.params)
+        return stage
 
     raise ValueError()
 
 
-def _deserialize_stage(stage_pb, clazz):
-    stage = clazz()
-    stage._resetUid(stage_pb.uid)
+def _set_instance_params(instance, params_proto):
+    instance._set(**{
+        k: LiteralExpression._to_value(v_pb)
+        for k, v_pb in params_proto.params.items()
+    })
+    instance._setDefault(**{
+        k: LiteralExpression._to_value(v_pb)
+        for k, v_pb in params_proto.params.items()
+    })
 
-    for k, v_pb in stage_pb.params.params.items():
-        v = LiteralExpression._to_value(v_pb)
-        stage.set(stage.getParam(k), v)
-    for k, v_pb in stage_pb.params.default_params.items():
-        v = LiteralExpression._to_value(v_pb)
-        stage._setDefault(stage.getParam(k), v)
-
-    return stage
 
 def serialize_ml_params(instance, client):
     def gen_pb2_map(param_value_dict):

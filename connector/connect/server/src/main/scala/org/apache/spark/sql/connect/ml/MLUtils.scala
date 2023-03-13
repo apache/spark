@@ -18,7 +18,7 @@
 package org.apache.spark.sql.connect.ml
 
 import org.apache.spark.connect.proto
-import org.apache.spark.ml.param.{ParamMap, Params}
+import org.apache.spark.ml.param.Params
 import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.connect.planner.{LiteralValueProtoConverter, SparkConnectPlanner}
 import org.apache.spark.sql.connect.service.SessionHolder
@@ -90,7 +90,7 @@ object MLUtils {
       }
       if (defaultValueOpt.isDefined) {
         val defaultValueProto = LiteralValueProtoConverter.toConnectProtoValue(defaultValueOpt.get)
-        builder.putParams(name, defaultValueProto)
+        builder.putDefaultParams(name, defaultValueProto)
       }
     }
     builder.build()

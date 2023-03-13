@@ -195,8 +195,9 @@ class LogisticRegression(
     def _algo_name(cls):
         return "LogisticRegression"
 
-    def _create_model(self):
-        return LogisticRegressionModel()
+    @classmethod
+    def _model_class(cls):
+        return LogisticRegressionModel
 
 
 class LogisticRegressionModel(

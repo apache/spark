@@ -31,10 +31,12 @@ from pyspark.sql.connect.plan import LogicalPlan
 
 class ClientEstimator(Estimator, metaclass=ABCMeta):
 
-    def _algo_name(self): str
+    @classmethod
+    def _algo_name(cls):
+        raise NotImplementedError()
 
-    @abstractmethod
-    def _create_model(self, model_ref_id, model_uid):
+    @classmethod
+    def _model_class(cls):
         raise NotImplementedError()
 
     def _fit(self, dataset: DataFrame) -> Model:
@@ -54,12 +56,7 @@ class ClientEstimator(Estimator, metaclass=ABCMeta):
         req.plan.ml_command.fit.CopyFrom(fit_command_proto)
 
         resp = client._execute_ml(req)
-        model_ref_id, model_uid = deserialize(resp, client)
-        model = self._create_model()
-        model._resetUid(model_uid)
-        self._copyValues(model)
-        model.ref_id = model_ref_id
-        return model
+        return deserialize(resp, client, clazz=self._model_class())
 
 
 class ClientPredictor(Predictor, ClientEstimator, _PredictorParams, metaclass=ABCMeta):
@@ -69,6 +66,14 @@ class ClientPredictor(Predictor, ClientEstimator, _PredictorParams, metaclass=AB
 class ClientModel(Model, metaclass=ABCMeta):
 
     ref_id: str = None
+
+    @classmethod
+    def _algo_name(cls):
+        raise NotImplementedError()
+
+    @classmethod
+    def _model_class(cls):
+        raise NotImplementedError()
 
     def _get_model_attr(self, name):
         client = SparkSession.getActiveSession().client
@@ -226,13 +231,17 @@ class ClientMLWriter(MLWriter):
             )
             req.plan.ml_command.save_model.CopyFrom(save_cmd_proto)
         elif isinstance(self.instance, Estimator):
+            stage_pb = ml_common_pb2.MlStage(
+                name=self.instance._algo_name(),
+                params=serialize_ml_params(self.instance, client),
+                uid=self.instance.uid,
+                type=ml_common_pb2.MlStage.ESTIMATOR,
+            )
             save_cmd_proto = ml_pb2.MlCommand.SaveStage(
-                ml_common_pb2.MlStage(
-                    name=self._algo_name(),
-                    params=serialize_ml_params(self, client),
-                    uid=self.uid,
-                    type=ml_common_pb2.MlStage.ESTIMATOR,
-                )
+                stage=stage_pb,
+                path=path,
+                overwrite=self.shouldOverwrite,
+                options=self.optionMap
             )
             req.plan.ml_command.save_stage.CopyFrom(save_cmd_proto)
         else:
@@ -259,7 +268,6 @@ class ClientMLReader(MLReader):
     def load(self, path: str):
         client = SparkSession.getActiveSession().client
         req = client._execute_plan_request_with_metadata()
-        extra_kwargs = {}
 
         name = self.clazz._algo_name()
         if issubclass(self.clazz, ClientModel):
@@ -268,17 +276,20 @@ class ClientMLReader(MLReader):
                 path=path
             )
             req.plan.ml_command.load_model.CopyFrom(load_model_proto)
-            extra_kwargs["clazz"] = self.clazz
+            resp = client._execute_ml(req)
+            return deserialize(resp, client, clazz=self.clazz)
+
         elif issubclass(self.clazz, ClientEstimator):
             load_estimator_proto = ml_pb2.MlCommand.LoadStage(
                 name=name,
                 path=path,
                 type=ml_common_pb2.MlStage.ESTIMATOR
             )
-            req.plan.ml_command.load_estimator.CopyFrom(load_estimator_proto)
-
-        resp = client._execute_ml(req)
-        return deserialize(resp, client, **extra_kwargs)
+            req.plan.ml_command.load_stage.CopyFrom(load_estimator_proto)
+            resp = client._execute_ml(req)
+            return deserialize(resp, client, clazz=self.clazz)
+        else:
+            raise NotImplementedError()
 
 
 class ClientMLReadable(MLReadable):

@@ -43,22 +43,22 @@ class ObjectCache[T](
 
 class ModelCache(
     val cachedModel: ObjectCache[Model[_]] = new ObjectCache[Model[_]](),
-    val modelTohandlerMap: ConcurrentHashMap[Long, Algorithm] =
+    val modelToHandlerMap: ConcurrentHashMap[Long, Algorithm] =
     new ConcurrentHashMap[Long, Algorithm]()
 ) {
   def register(model: Model[_], algorithm: Algorithm): Long = {
     val refId = cachedModel.register(model)
-    modelTohandlerMap.put(refId, algorithm)
+    modelToHandlerMap.put(refId, algorithm)
     refId
   }
 
   def get(refId: Long): (Model[_], Algorithm) = {
-    (cachedModel.get(refId), modelTohandlerMap.get(refId))
+    (cachedModel.get(refId), modelToHandlerMap.get(refId))
   }
 
   def remove(refId: Long): Unit = {
     cachedModel.remove(refId)
-    modelTohandlerMap.remove(refId)
+    modelToHandlerMap.remove(refId)
   }
 }
 

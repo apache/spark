@@ -584,18 +584,25 @@ class MlCommandResponse(google.protobuf.message.Message):
 
         MODEL_REF_ID_FIELD_NUMBER: builtins.int
         MODEL_UID_FIELD_NUMBER: builtins.int
+        PARAMS_FIELD_NUMBER: builtins.int
         model_ref_id: builtins.int
         model_uid: builtins.str
+        @property
+        def params(self) -> pyspark.sql.connect.proto.ml_common_pb2.MlParams: ...
         def __init__(
             self,
             *,
             model_ref_id: builtins.int = ...,
             model_uid: builtins.str = ...,
+            params: pyspark.sql.connect.proto.ml_common_pb2.MlParams | None = ...,
         ) -> None: ...
+        def HasField(
+            self, field_name: typing_extensions.Literal["params", b"params"]
+        ) -> builtins.bool: ...
         def ClearField(
             self,
             field_name: typing_extensions.Literal[
-                "model_ref_id", b"model_ref_id", "model_uid", b"model_uid"
+                "model_ref_id", b"model_ref_id", "model_uid", b"model_uid", "params", b"params"
             ],
         ) -> None: ...
 
