@@ -21,6 +21,7 @@ package spark.connect;
 
 import "google/protobuf/any.proto";
 import "spark/connect/commands.proto";
+import "spark/connect/expressions.proto";
 import "spark/connect/relations.proto";
 import "spark/connect/types.proto";
 
@@ -57,9 +58,10 @@ message UserContext {
 message AnalyzePlanRequest {
   // (Required)
   //
-  // The client_id is set by the client to be able to collate streaming responses from
-  // different queries.
-  string client_id = 1;
+  // The session_id specifies a spark session for a user id (which is specified
+  // by user_context.user_id). The session_id is set by the client to be able to
+  // collate streaming responses from different queries within the dedicated session.
+  string session_id = 1;
 
   // (Required) User context
   UserContext user_context = 2;
@@ -78,6 +80,8 @@ message AnalyzePlanRequest {
     InputFiles input_files = 9;
     SparkVersion spark_version = 10;
     DDLParse ddl_parse = 11;
+    SameSemantics same_semantics = 12;
+    SemanticHash semantic_hash = 13;
   }
 
   message Schema {
@@ -144,12 +148,27 @@ message AnalyzePlanRequest {
     // (Required) The DDL formatted string to be parsed.
     string ddl_string = 1;
   }
+
+
+  // Returns `true` when the logical query plans  are equal and therefore return same results.
+  message SameSemantics {
+    // (Required) The plan to be compared.
+    Plan target_plan = 1;
+
+    // (Required) The other plan to be compared.
+    Plan other_plan = 2;
+  }
+
+  message SemanticHash {
+    // (Required) The logical plan to get a hashCode.
+    Plan plan = 1;
+  }
 }
 
 // Response to performing analysis of the query. Contains relevant metadata to be able to
 // reason about the performance.
 message AnalyzePlanResponse {
-  string client_id = 1;
+  string session_id = 1;
 
   oneof result {
     Schema schema = 2;
@@ -160,6 +179,8 @@ message AnalyzePlanResponse {
     InputFiles input_files = 7;
     SparkVersion spark_version = 8;
     DDLParse ddl_parse = 9;
+    SameSemantics same_semantics = 10;
+    SemanticHash semantic_hash = 11;
   }
 
   message Schema {
@@ -194,17 +215,29 @@ message AnalyzePlanResponse {
   message DDLParse {
     DataType parsed = 1;
   }
+
+  message SameSemantics {
+    bool result = 1;
+  }
+
+  message SemanticHash {
+    int32 result = 1;
+  }
 }
 
 // A request to be executed by the service.
 message ExecutePlanRequest {
   // (Required)
   //
-  // The client_id is set by the client to be able to collate streaming responses from
-  // different queries.
-  string client_id = 1;
+  // The session_id specifies a spark session for a user id (which is specified
+  // by user_context.user_id). The session_id is set by the client to be able to
+  // collate streaming responses from different queries within the dedicated session.
+  string session_id = 1;
 
   // (Required) User context
+  //
+  // user_context.user_id and session+id both identify a unique remote spark session on the
+  // server side.
   UserContext user_context = 2;
 
   // (Required) The logical plan to be executed / analyzed.
@@ -217,9 +250,9 @@ message ExecutePlanRequest {
 }
 
 // The response of a query, can be one or more for each request. Responses belonging to the
-// same input query, carry the same `client_id`.
+// same input query, carry the same `session_id`.
 message ExecutePlanResponse {
-  string client_id = 1;
+  string session_id = 1;
 
   // Union type for the different response messages.
   oneof response_type {
@@ -235,6 +268,9 @@ message ExecutePlanResponse {
   // Metrics for the query execution. Typically, this field is only present in the last
   // batch of results and then represent the overall state of the query execution.
   Metrics metrics = 4;
+
+  // The metrics observed during the execution of the query plan.
+  repeated ObservedMetrics observed_metrics = 6;
 
   // A SQL command returns an opaque Relation that can be directly used as input for the next
   // call.
@@ -265,6 +301,11 @@ message ExecutePlanResponse {
       string metric_type = 3;
     }
   }
+
+  message ObservedMetrics {
+    string name = 1;
+    repeated Expression.Literal values = 2;
+  }
 }
 
 // The key-value pair for the config request and response.
@@ -279,9 +320,10 @@ message KeyValue {
 message ConfigRequest {
   // (Required)
   //
-  // The client_id is set by the client to be able to collate streaming responses from
-  // different queries.
-  string client_id = 1;
+  // The session_id specifies a spark session for a user id (which is specified
+  // by user_context.user_id). The session_id is set by the client to be able to
+  // collate streaming responses from different queries within the dedicated session.
+  string session_id = 1;
 
   // (Required) User context
   UserContext user_context = 2;
@@ -344,7 +386,7 @@ message ConfigRequest {
 
 // Response to the config request.
 message ConfigResponse {
-  string client_id = 1;
+  string session_id = 1;
 
   // (Optional) The result key-value pairs.
   //
@@ -361,9 +403,12 @@ message ConfigResponse {
 // Request to transfer client-local artifacts.
 message AddArtifactsRequest {
 
-  // The client_id is set by the client to be able to collate streaming responses from
-  // different queries.
-  string client_id = 1;
+  // (Required)
+  //
+  // The session_id specifies a spark session for a user id (which is specified
+  // by user_context.user_id). The session_id is set by the client to be able to
+  // collate streaming responses from different queries within the dedicated session.
+  string session_id = 1;
 
   // User context
   UserContext user_context = 2;

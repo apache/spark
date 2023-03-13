@@ -627,11 +627,16 @@ class TorchDistributor(Distributor):
         with TorchDistributor._setup_files(train_fn, *args) as (train_file_path, output_file_path):
             args = []  # type: ignore
             TorchDistributor._run_training_on_pytorch_file(input_params, train_file_path, *args)
-            try:
-                output = TorchDistributor._get_pickled_output(output_file_path)
-            except FileNotFoundError as e:
+            if not os.path.exists(output_file_path):
                 raise RuntimeError(
                     "TorchDistributor failed during training. "
+                    "View stdout logs for detailed error message."
+                )
+            try:
+                output = TorchDistributor._get_pickled_output(output_file_path)
+            except Exception as e:
+                raise RuntimeError(
+                    "TorchDistributor failed due to a pickling error. "
                     "View stdout logs for detailed error message."
                 ) from e
         return output

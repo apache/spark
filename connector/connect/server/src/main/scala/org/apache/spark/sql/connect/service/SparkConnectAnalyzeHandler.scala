@@ -35,12 +35,13 @@ private[connect] class SparkConnectAnalyzeHandler(
   def handle(request: proto.AnalyzePlanRequest): Unit = {
     val session =
       SparkConnectService
-        .getOrCreateIsolatedSession(request.getUserContext.getUserId, request.getClientId)
+        .getOrCreateIsolatedSession(request.getUserContext.getUserId, request.getSessionId)
         .session
-
-    val response = process(request, session)
-    responseObserver.onNext(response)
-    responseObserver.onCompleted()
+    session.withActive {
+      val response = process(request, session)
+      responseObserver.onNext(response)
+      responseObserver.onCompleted()
+    }
   }
 
   def process(
@@ -139,10 +140,31 @@ private[connect] class SparkConnectAnalyzeHandler(
             .setParsed(DataTypeProtoConverter.toConnectProtoType(schema))
             .build())
 
+      case proto.AnalyzePlanRequest.AnalyzeCase.SAME_SEMANTICS =>
+        val target = Dataset.ofRows(
+          session,
+          planner.transformRelation(request.getSameSemantics.getTargetPlan.getRoot))
+        val other = Dataset.ofRows(
+          session,
+          planner.transformRelation(request.getSameSemantics.getOtherPlan.getRoot))
+        builder.setSameSemantics(
+          proto.AnalyzePlanResponse.SameSemantics
+            .newBuilder()
+            .setResult(target.sameSemantics(other)))
+
+      case proto.AnalyzePlanRequest.AnalyzeCase.SEMANTIC_HASH =>
+        val semanticHash = Dataset
+          .ofRows(session, planner.transformRelation(request.getSemanticHash.getPlan.getRoot))
+          .semanticHash()
+        builder.setSemanticHash(
+          proto.AnalyzePlanResponse.SemanticHash
+            .newBuilder()
+            .setResult(semanticHash))
+
       case other => throw InvalidPlanInput(s"Unknown Analyze Method $other!")
     }
 
-    builder.setClientId(request.getClientId)
+    builder.setSessionId(request.getSessionId)
     builder.build()
   }
 }

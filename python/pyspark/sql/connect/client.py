@@ -23,7 +23,7 @@ import string
 
 from pyspark.sql.connect.utils import check_dependencies
 
-check_dependencies(__name__, __file__)
+check_dependencies(__name__)
 
 import logging
 import os
@@ -31,7 +31,6 @@ import random
 import time
 import urllib.parse
 import uuid
-import json
 import sys
 from types import TracebackType
 from typing import (
@@ -47,6 +46,7 @@ from typing import (
     Callable,
     Generator,
     Type,
+    TYPE_CHECKING,
 )
 
 import pandas as pd
@@ -69,15 +69,14 @@ from pyspark.errors.exceptions.connect import (
 from pyspark.sql.connect.expressions import (
     PythonUDF,
     CommonInlineUserDefinedFunction,
+    JavaUDF,
 )
-from pyspark.sql.connect.types import parse_data_type
-from pyspark.sql.types import (
-    DataType,
-    StructType,
-    StructField,
-)
-from pyspark.serializers import CloudPickleSerializer
+from pyspark.sql.types import DataType, StructType
 from pyspark.rdd import PythonEvalType
+
+
+if TYPE_CHECKING:
+    from pyspark.sql.connect._typing import DataTypeOrString
 
 
 def _configure_logging() -> logging.Logger:
@@ -373,17 +372,36 @@ class PlanMetrics:
         return self._metrics
 
 
+class PlanObservedMetrics:
+    def __init__(self, name: str, metrics: List[pb2.Expression.Literal]):
+        self._name = name
+        self._metrics = metrics
+
+    def __repr__(self) -> str:
+        return f"Plan observed({self._name}={self._metrics})"
+
+    @property
+    def name(self) -> str:
+        return self._name
+
+    @property
+    def metrics(self) -> List[pb2.Expression.Literal]:
+        return self._metrics
+
+
 class AnalyzeResult:
     def __init__(
         self,
-        schema: Optional[pb2.DataType],
+        schema: Optional[DataType],
         explain_string: Optional[str],
         tree_string: Optional[str],
         is_local: Optional[bool],
         is_streaming: Optional[bool],
         input_files: Optional[List[str]],
         spark_version: Optional[str],
-        parsed: Optional[pb2.DataType],
+        parsed: Optional[DataType],
+        is_same_semantics: Optional[bool],
+        semantic_hash: Optional[int],
     ):
         self.schema = schema
         self.explain_string = explain_string
@@ -393,20 +411,24 @@ class AnalyzeResult:
         self.input_files = input_files
         self.spark_version = spark_version
         self.parsed = parsed
+        self.is_same_semantics = is_same_semantics
+        self.semantic_hash = semantic_hash
 
     @classmethod
     def fromProto(cls, pb: Any) -> "AnalyzeResult":
-        schema: Optional[pb2.DataType] = None
+        schema: Optional[DataType] = None
         explain_string: Optional[str] = None
         tree_string: Optional[str] = None
         is_local: Optional[bool] = None
         is_streaming: Optional[bool] = None
         input_files: Optional[List[str]] = None
         spark_version: Optional[str] = None
-        parsed: Optional[pb2.DataType] = None
+        parsed: Optional[DataType] = None
+        is_same_semantics: Optional[bool] = None
+        semantic_hash: Optional[int] = None
 
         if pb.HasField("schema"):
-            schema = pb.schema.schema
+            schema = types.proto_schema_to_pyspark_data_type(pb.schema.schema)
         elif pb.HasField("explain"):
             explain_string = pb.explain.explain_string
         elif pb.HasField("tree_string"):
@@ -420,7 +442,11 @@ class AnalyzeResult:
         elif pb.HasField("spark_version"):
             spark_version = pb.spark_version.version
         elif pb.HasField("ddl_parse"):
-            parsed = pb.ddl_parse.parsed
+            parsed = types.proto_schema_to_pyspark_data_type(pb.ddl_parse.parsed)
+        elif pb.HasField("same_semantics"):
+            is_same_semantics = pb.same_semantics.result
+        elif pb.HasField("semantic_hash"):
+            semantic_hash = pb.semantic_hash.result
         else:
             raise SparkConnectException("No analyze result found!")
 
@@ -433,6 +459,8 @@ class AnalyzeResult:
             input_files,
             spark_version,
             parsed,
+            is_same_semantics,
+            semantic_hash,
         )
 
 
@@ -511,7 +539,7 @@ class SparkConnectClient(object):
     def register_udf(
         self,
         function: Any,
-        return_type: Union[str, DataType],
+        return_type: "DataTypeOrString",
         name: Optional[str] = None,
         eval_type: int = PythonEvalType.SQL_BATCHED_UDF,
         deterministic: bool = True,
@@ -524,23 +552,20 @@ class SparkConnectClient(object):
         if name is None:
             name = f"fun_{uuid.uuid4().hex}"
 
-        # convert str return_type to DataType
-        if isinstance(return_type, str):
-            return_type = parse_data_type(return_type)
         # construct a PythonUDF
         py_udf = PythonUDF(
-            output_type=return_type.json(),
+            output_type=return_type,
             eval_type=eval_type,
-            command=CloudPickleSerializer().dumps((function, return_type)),
+            func=function,
             python_ver="%d.%d" % sys.version_info[:2],
         )
 
         # construct a CommonInlineUserDefinedFunction
         fun = CommonInlineUserDefinedFunction(
             function_name=name,
-            deterministic=deterministic,
             arguments=[],
             function=py_udf,
+            deterministic=deterministic,
         ).to_plan_udf(self)
 
         # construct the request
@@ -549,6 +574,28 @@ class SparkConnectClient(object):
 
         self._execute(req)
         return name
+
+    def register_java(
+        self,
+        name: str,
+        javaClassName: str,
+        return_type: Optional["DataTypeOrString"] = None,
+        aggregate: bool = False,
+    ) -> None:
+        # construct a JavaUDF
+        if return_type is None:
+            java_udf = JavaUDF(class_name=javaClassName, aggregate=aggregate)
+        else:
+            java_udf = JavaUDF(class_name=javaClassName, output_type=return_type)
+        fun = CommonInlineUserDefinedFunction(
+            function_name=name,
+            function=java_udf,
+        ).to_plan_judf(self)
+        # construct the request
+        req = self._execute_plan_request_with_metadata()
+        req.plan.command.register_function.CopyFrom(fun)
+
+        self._execute(req)
 
     def _build_metrics(self, metrics: "pb2.ExecutePlanResponse.Metrics") -> List[PlanMetrics]:
         return [
@@ -561,6 +608,17 @@ class SparkConnectClient(object):
             for x in metrics.metrics
         ]
 
+    def _build_observed_metrics(
+        self, metrics: List["pb2.ExecutePlanResponse.ObservedMetrics"]
+    ) -> List[PlanObservedMetrics]:
+        return [
+            PlanObservedMetrics(
+                x.name,
+                [v for v in x.values],
+            )
+            for x in metrics
+        ]
+
     def to_table(self, plan: pb2.Plan) -> "pa.Table":
         """
         Return given plan as a PyArrow Table.
@@ -568,7 +626,7 @@ class SparkConnectClient(object):
         logger.info(f"Executing plan {self._proto_to_string(plan)}")
         req = self._execute_plan_request_with_metadata()
         req.plan.CopyFrom(plan)
-        table, _, _2 = self._execute_and_fetch(req)
+        table, _, _, _3 = self._execute_and_fetch(req)
         assert table is not None
         return table
 
@@ -579,7 +637,7 @@ class SparkConnectClient(object):
         logger.info(f"Executing plan {self._proto_to_string(plan)}")
         req = self._execute_plan_request_with_metadata()
         req.plan.CopyFrom(plan)
-        table, metrics, _ = self._execute_and_fetch(req)
+        table, metrics, observed_metrics, _ = self._execute_and_fetch(req)
         assert table is not None
         column_names = table.column_names
         table = table.rename_columns([f"col_{i}" for i in range(len(column_names))])
@@ -587,10 +645,9 @@ class SparkConnectClient(object):
         pdf.columns = column_names
         if len(metrics) > 0:
             pdf.attrs["metrics"] = metrics
+        if len(observed_metrics) > 0:
+            pdf.attrs["observed_metrics"] = observed_metrics
         return pdf
-
-    def _proto_schema_to_pyspark_schema(self, schema: pb2.DataType) -> DataType:
-        return types.proto_schema_to_pyspark_data_type(schema)
 
     def _proto_to_string(self, p: google.protobuf.message.Message) -> str:
         """
@@ -611,26 +668,11 @@ class SparkConnectClient(object):
         Return schema for given plan.
         """
         logger.info(f"Schema for plan: {self._proto_to_string(plan)}")
-        proto_schema = self._analyze(method="schema", plan=plan).schema
-        assert proto_schema is not None
+        schema = self._analyze(method="schema", plan=plan).schema
+        assert schema is not None
         # Server side should populate the struct field which is the schema.
-        assert proto_schema.HasField("struct")
-
-        fields = []
-        for f in proto_schema.struct.fields:
-            if f.HasField("metadata"):
-                metadata = json.loads(f.metadata)
-            else:
-                metadata = None
-            fields.append(
-                StructField(
-                    f.name,
-                    self._proto_schema_to_pyspark_schema(f.data_type),
-                    f.nullable,
-                    metadata,
-                )
-            )
-        return StructType(fields)
+        assert isinstance(schema, StructType)
+        return schema
 
     def explain_string(self, plan: pb2.Plan, explain_mode: str = "extended") -> str:
         """
@@ -654,11 +696,27 @@ class SparkConnectClient(object):
         if self._user_id:
             req.user_context.user_id = self._user_id
         req.plan.command.CopyFrom(command)
-        data, _, properties = self._execute_and_fetch(req)
+        data, _, _, properties = self._execute_and_fetch(req)
         if data is not None:
             return (data.to_pandas(), properties)
         else:
             return (None, properties)
+
+    def same_semantics(self, plan: pb2.Plan, other: pb2.Plan) -> bool:
+        """
+        return if two plans have the same semantics.
+        """
+        result = self._analyze(method="same_semantics", plan=plan, other=other).is_same_semantics
+        assert result is not None
+        return result
+
+    def semantic_hash(self, plan: pb2.Plan) -> int:
+        """
+        returns a `hashCode` of the logical query plan.
+        """
+        result = self._analyze(method="semantic_hash", plan=plan).semantic_hash
+        assert result is not None
+        return result
 
     def close(self) -> None:
         """
@@ -668,7 +726,7 @@ class SparkConnectClient(object):
 
     def _execute_plan_request_with_metadata(self) -> pb2.ExecutePlanRequest:
         req = pb2.ExecutePlanRequest()
-        req.client_id = self._session_id
+        req.session_id = self._session_id
         req.client_type = self._builder.userAgent
         if self._user_id:
             req.user_context.user_id = self._user_id
@@ -676,7 +734,7 @@ class SparkConnectClient(object):
 
     def _analyze_plan_request_with_metadata(self) -> pb2.AnalyzePlanRequest:
         req = pb2.AnalyzePlanRequest()
-        req.client_id = self._session_id
+        req.session_id = self._session_id
         req.client_type = self._builder.userAgent
         if self._user_id:
             req.user_context.user_id = self._user_id
@@ -735,6 +793,11 @@ class SparkConnectClient(object):
             req.spark_version.SetInParent()
         elif method == "ddl_parse":
             req.ddl_parse.ddl_string = cast(str, kwargs.get("ddl_string"))
+        elif method == "same_semantics":
+            req.same_semantics.target_plan.CopyFrom(cast(pb2.Plan, kwargs.get("plan")))
+            req.same_semantics.other_plan.CopyFrom(cast(pb2.Plan, kwargs.get("other")))
+        elif method == "semantic_hash":
+            req.semantic_hash.plan.CopyFrom(cast(pb2.Plan, kwargs.get("plan")))
         else:
             raise ValueError(f"Unknown Analyze method: {method}")
 
@@ -744,10 +807,10 @@ class SparkConnectClient(object):
             ):
                 with attempt:
                     resp = self._stub.AnalyzePlan(req, metadata=self._builder.metadata())
-                    if resp.client_id != self._session_id:
+                    if resp.session_id != self._session_id:
                         raise SparkConnectException(
                             "Received incorrect session identifier for request:"
-                            f"{resp.client_id} != {self._session_id}"
+                            f"{resp.session_id} != {self._session_id}"
                         )
                     return AnalyzeResult.fromProto(resp)
             raise SparkConnectException("Invalid state during retry exception handling.")
@@ -771,20 +834,21 @@ class SparkConnectClient(object):
             ):
                 with attempt:
                     for b in self._stub.ExecutePlan(req, metadata=self._builder.metadata()):
-                        if b.client_id != self._session_id:
+                        if b.session_id != self._session_id:
                             raise SparkConnectException(
                                 "Received incorrect session identifier for request: "
-                                f"{b.client_id} != {self._session_id}"
+                                f"{b.session_id} != {self._session_id}"
                             )
         except grpc.RpcError as rpc_error:
             self._handle_error(rpc_error)
 
     def _execute_and_fetch(
         self, req: pb2.ExecutePlanRequest
-    ) -> Tuple[Optional["pa.Table"], List[PlanMetrics], Dict[str, Any]]:
+    ) -> Tuple[Optional["pa.Table"], List[PlanMetrics], List[PlanObservedMetrics], Dict[str, Any]]:
         logger.info("ExecuteAndFetch")
 
         m: Optional[pb2.ExecutePlanResponse.Metrics] = None
+        om: List[pb2.ExecutePlanResponse.ObservedMetrics] = []
         batches: List[pa.RecordBatch] = []
         properties = {}
         try:
@@ -794,14 +858,17 @@ class SparkConnectClient(object):
                 with attempt:
                     batches = []
                     for b in self._stub.ExecutePlan(req, metadata=self._builder.metadata()):
-                        if b.client_id != self._session_id:
+                        if b.session_id != self._session_id:
                             raise SparkConnectException(
                                 "Received incorrect session identifier for request: "
-                                f"{b.client_id} != {self._session_id}"
+                                f"{b.session_id} != {self._session_id}"
                             )
                         if b.metrics is not None:
                             logger.debug("Received metric batch.")
                             m = b.metrics
+                        if b.observed_metrics is not None:
+                            logger.debug("Received observed metric batch.")
+                            om.extend(b.observed_metrics)
                         if b.HasField("sql_command_result"):
                             properties["sql_command_result"] = b.sql_command_result.relation
                         if b.HasField("arrow_batch"):
@@ -817,16 +884,17 @@ class SparkConnectClient(object):
         except grpc.RpcError as rpc_error:
             self._handle_error(rpc_error)
         metrics: List[PlanMetrics] = self._build_metrics(m) if m is not None else []
+        observed_metrics: List[PlanObservedMetrics] = self._build_observed_metrics(om)
 
         if len(batches) > 0:
             table = pa.Table.from_batches(batches=batches)
-            return table, metrics, properties
+            return table, metrics, observed_metrics, properties
         else:
-            return None, metrics, properties
+            return None, metrics, observed_metrics, properties
 
     def _config_request_with_metadata(self) -> pb2.ConfigRequest:
         req = pb2.ConfigRequest()
-        req.client_id = self._session_id
+        req.session_id = self._session_id
         req.client_type = self._builder.userAgent
         if self._user_id:
             req.user_context.user_id = self._user_id
@@ -853,10 +921,10 @@ class SparkConnectClient(object):
             ):
                 with attempt:
                     resp = self._stub.Config(req, metadata=self._builder.metadata())
-                    if resp.client_id != self._session_id:
+                    if resp.session_id != self._session_id:
                         raise SparkConnectException(
                             "Received incorrect session identifier for request:"
-                            f"{resp.client_id} != {self._session_id}"
+                            f"{resp.session_id} != {self._session_id}"
                         )
                     return ConfigResult.fromProto(resp)
             raise SparkConnectException("Invalid state during retry exception handling.")

@@ -191,6 +191,12 @@ class DataTypeSuite extends SparkFunSuite {
     assert(DataType.fromJson("\"null\"") == NullType)
   }
 
+  test("SPARK-42723: Parse timestamp_ltz as TimestampType") {
+    assert(DataType.fromJson("\"timestamp_ltz\"") == TimestampType)
+    val expectedStructType = StructType(Seq(StructField("ts", TimestampType)))
+    assert(DataType.fromDDL("ts timestamp_ltz") == expectedStructType)
+  }
+
   def checkDataTypeFromJson(dataType: DataType): Unit = {
     test(s"from Json - $dataType") {
       assert(DataType.fromJson(dataType.json) === dataType)
@@ -240,6 +246,9 @@ class DataTypeSuite extends SparkFunSuite {
 
   checkDataTypeFromJson(TimestampType)
   checkDataTypeFromDDL(TimestampType)
+
+  checkDataTypeFromJson(TimestampNTZType)
+  checkDataTypeFromDDL(TimestampNTZType)
 
   checkDataTypeFromJson(StringType)
   checkDataTypeFromDDL(StringType)

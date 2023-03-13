@@ -737,15 +737,16 @@ def main(infile, outfile):
                 lineno = (
                     getframeinfo(currentframe()).lineno + 1 if currentframe() is not None else 0
                 )
-                print(
-                    warnings.formatwarning(
-                        "Failed to set memory limit: {0}".format(e),
-                        ResourceWarning,
-                        __file__,
-                        lineno,
-                    ),
-                    file=sys.stderr,
-                )
+                if "__file__" in globals():
+                    print(
+                        warnings.formatwarning(
+                            "Failed to set memory limit: {0}".format(e),
+                            ResourceWarning,
+                            __file__,
+                            lineno,
+                        ),
+                        file=sys.stderr,
+                    )
 
         # initialize global state
         taskContext = None

@@ -1305,41 +1305,30 @@ private[spark] object Utils extends Logging {
     (JavaUtils.byteStringAsBytes(str) / 1024 / 1024).toInt
   }
 
+  private[this] val siByteSizes =
+    Array(1L << 60, 1L << 50, 1L << 40, 1L << 30, 1L << 20, 1L << 10, 1)
+  private[this] val siByteSuffixes =
+    Array("EiB", "PiB", "TiB", "GiB", "MiB", "KiB", "B")
   /**
    * Convert a quantity in bytes to a human-readable string such as "4.0 MiB".
    */
-  def bytesToString(size: Long): String = bytesToString(BigInt(size))
+  def bytesToString(size: Long): String = {
+    var i = 0
+    while (i < siByteSizes.length - 1 && size < 2 * siByteSizes(i)) i += 1
+    "%.1f %s".formatLocal(Locale.US, size.toDouble / siByteSizes(i), siByteSuffixes(i))
+  }
 
   def bytesToString(size: BigInt): String = {
     val EiB = 1L << 60
-    val PiB = 1L << 50
-    val TiB = 1L << 40
-    val GiB = 1L << 30
-    val MiB = 1L << 20
-    val KiB = 1L << 10
-
-    if (size >= BigInt(1L << 11) * EiB) {
+    if (size.isValidLong) {
+      // Common case, most sizes fit in 64 bits and all ops on BigInt are order(s) of magnitude
+      // slower than Long/Double.
+      bytesToString(size.toLong)
+    } else if (size < BigInt(2L << 10) * EiB) {
+      "%.1f EiB".formatLocal(Locale.US, BigDecimal(size) / EiB)
+    } else {
       // The number is too large, show it in scientific notation.
       BigDecimal(size, new MathContext(3, RoundingMode.HALF_UP)).toString() + " B"
-    } else {
-      val (value, unit) = {
-        if (size >= 2 * EiB) {
-          (BigDecimal(size) / EiB, "EiB")
-        } else if (size >= 2 * PiB) {
-          (BigDecimal(size) / PiB, "PiB")
-        } else if (size >= 2 * TiB) {
-          (BigDecimal(size) / TiB, "TiB")
-        } else if (size >= 2 * GiB) {
-          (BigDecimal(size) / GiB, "GiB")
-        } else if (size >= 2 * MiB) {
-          (BigDecimal(size) / MiB, "MiB")
-        } else if (size >= 2 * KiB) {
-          (BigDecimal(size) / KiB, "KiB")
-        } else {
-          (BigDecimal(size), "B")
-        }
-      }
-      "%.1f %s".formatLocal(Locale.US, value, unit)
     }
   }
 

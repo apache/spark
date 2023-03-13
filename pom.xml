@@ -152,7 +152,7 @@
     If you changes codahale.metrics.version, you also need to change
     the link to metrics.dropwizard.io in docs/monitoring.md.
     -->
-    <codahale.metrics.version>4.2.15</codahale.metrics.version>
+    <codahale.metrics.version>4.2.17</codahale.metrics.version>
     <!-- Should be consistent with SparkBuild.scala and docs -->
     <avro.version>1.11.1</avro.version>
     <aws.kinesis.client.version>1.12.0</aws.kinesis.client.version>
@@ -177,7 +177,7 @@
       See: SPARK-36547, SPARK-38394.
        -->
     <scala-maven-plugin.version>4.8.0</scala-maven-plugin.version>
-    <versions-maven-plugin.version>2.14.2</versions-maven-plugin.version>
+    <versions-maven-plugin.version>2.15.0</versions-maven-plugin.version>
     <!-- for now, not running scalafmt as part of default verify pipeline -->
     <scalafmt.skip>true</scalafmt.skip>
     <scalafmt.validateOnly>true</scalafmt.validateOnly>
@@ -223,7 +223,7 @@
     <arrow.version>11.0.0</arrow.version>
     <!-- org.fusesource.leveldbjni will be used except on arm64 platform. -->
     <leveldbjni.group>org.fusesource.leveldbjni</leveldbjni.group>
-    <kubernetes-client.version>6.4.1</kubernetes-client.version>
+    <kubernetes-client.version>6.5.0</kubernetes-client.version>
 
     <test.java.home>${java.home}</test.java.home>
 
@@ -697,7 +697,7 @@
       <dependency>
         <groupId>org.rocksdb</groupId>
         <artifactId>rocksdbjni</artifactId>
-        <version>7.9.2</version>
+        <version>7.10.2</version>
       </dependency>
       <dependency>
         <groupId>${leveldbjni.group}</groupId>
@@ -1086,11 +1086,6 @@
         </exclusions>
       </dependency>
       <dependency>
-        <groupId>com.chuusai</groupId>
-        <artifactId>shapeless_${scala.binary.version}</artifactId>
-        <version>2.3.9</version>
-      </dependency>
-      <dependency>
         <groupId>org.json4s</groupId>
         <artifactId>json4s-jackson_${scala.binary.version}</artifactId>
         <version>3.7.0-M11</version>
@@ -1217,7 +1212,7 @@
       <dependency>
         <groupId>com.mysql</groupId>
         <artifactId>mysql-connector-j</artifactId>
-        <version>8.0.31</version>
+        <version>8.0.32</version>
         <scope>test</scope>
       </dependency>
       <dependency>
@@ -2945,7 +2940,7 @@
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-surefire-plugin</artifactId>
-          <version>3.0.0-M8</version>
+          <version>3.0.0-M9</version>
           <!-- Note config is repeated in scalatest config -->
           <configuration>
             <includes>
@@ -2968,7 +2963,7 @@
               <JAVA_HOME>${test.java.home}</JAVA_HOME>
               <SPARK_BEELINE_OPTS>-DmyKey=yourValue</SPARK_BEELINE_OPTS>
             </environmentVariables>
-            <systemProperties>
+            <systemPropertyVariables>
               <log4j.configurationFile>file:src/test/resources/log4j2.properties</log4j.configurationFile>
               <derby.system.durability>test</derby.system.durability>
               <java.awt.headless>true</java.awt.headless>
@@ -2983,7 +2978,7 @@
               <spark.hadoop.hadoop.security.key.provider.path>test:///</spark.hadoop.hadoop.security.key.provider.path>
               <!-- Needed by sql/hive tests. -->
               <test.src.tables>src</test.src.tables>
-            </systemProperties>
+            </systemPropertyVariables>
             <failIfNoTests>false</failIfNoTests>
             <failIfNoSpecifiedTests>false</failIfNoSpecifiedTests>
             <excludedGroups>${test.exclude.tags}</excludedGroups>
