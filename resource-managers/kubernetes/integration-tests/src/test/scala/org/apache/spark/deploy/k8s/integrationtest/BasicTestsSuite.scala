@@ -160,7 +160,7 @@ private[spark] trait BasicTestsSuite { k8sSuite: KubernetesSuite =>
     }
   }
 
-  test("SPARK-42769: All executor pods have ENV_DRIVER_POD_IP env variable", k8sTestTag) {
+  test("SPARK-42769: All executor pods have SPARK_DRIVER_POD_IP env variable", k8sTestTag) {
     runSparkPiAndVerifyCompletion(
       executorPodChecker = (executorPod: Pod) => {
         doBasicExecutorPodCheck(executorPod)
