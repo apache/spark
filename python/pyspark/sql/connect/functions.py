@@ -2467,7 +2467,7 @@ udf.__doc__ = pysparkfuncs.udf.__doc__
 
 
 def pandas_udf(*args: Any, **kwargs: Any) -> None:
-    raise NotImplementedError("pandas_udf() is not implemented.")
+    raise NotImplementedError("Please import pandas_udf from pyspark.sql.functions.")
 
 
 def _test() -> None:

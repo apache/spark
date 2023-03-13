@@ -2393,14 +2393,13 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
             sdf.withColumn("A", sfun(sdf.c)).toPandas(),
         )
 
-    def test_unsupported_functions(self):
-        # SPARK-41928: Disable unsupported functions.
-
+    def test_pandas_udf_import(self):
         from pyspark.sql.connect import functions as CF
 
-        for f in ("pandas_udf",):
-            with self.assertRaises(NotImplementedError):
-                getattr(CF, f)()
+        with self.assertRaisesRegex(
+            NotImplementedError, "Please import pandas_udf from pyspark.sql.functions"
+        ):
+            getattr(CF, "pandas_udf")()
 
 
 if __name__ == "__main__":
