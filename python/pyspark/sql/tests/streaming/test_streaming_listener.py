@@ -109,7 +109,7 @@ class StreamingListenerTests(ReusedSQLTestCase):
             self.spark.streams.addListener(test_listener)
 
             df = self.spark.readStream.format("rate").option("rowsPerSecond", 10).load()
-            q = df.writeStream.format("noop").query_name("test").start()
+            q = df.writeStream.format("noop").queryName("test").start()
             self.assertTrue(q.isActive)
             time.sleep(10)
             q.stop()

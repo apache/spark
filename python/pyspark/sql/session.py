@@ -1558,7 +1558,7 @@ class SparkSession(SparkConversionMixin):
         Get the list of active streaming queries
 
         >>> sq = spark.readStream.format(
-        ...     "rate").load().writeStream.format('memory').query_name('this_query').start()
+        ...     "rate").load().writeStream.format('memory').queryName('this_query').start()
         >>> sqm = spark.streams
         >>> [q.name for q in sqm.active]
         ['this_query']

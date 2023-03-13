@@ -64,7 +64,7 @@ class StreamingQuery:
         Examples
         --------
         >>> sdf = spark.readStream.format("rate").load()
-        >>> sq = sdf.writeStream.format('memory').query_name('this_query').start()
+        >>> sq = sdf.writeStream.format('memory').queryName('this_query').start()
 
         Get the unique id of this query that persists across restarts from checkpoint data
 
@@ -91,7 +91,7 @@ class StreamingQuery:
         Examples
         --------
         >>> sdf = spark.readStream.format("rate").load()
-        >>> sq = sdf.writeStream.format('memory').query_name('this_query').start()
+        >>> sq = sdf.writeStream.format('memory').queryName('this_query').start()
 
         Get the unique id of this query that does not persist across restarts
 
@@ -120,7 +120,7 @@ class StreamingQuery:
         Examples
         --------
         >>> sdf = spark.readStream.format("rate").load()
-        >>> sq = sdf.writeStream.format('memory').query_name('this_query').start()
+        >>> sq = sdf.writeStream.format('memory').queryName('this_query').start()
 
         Get the user-specified name of the query, or null if not specified.
 
@@ -146,7 +146,7 @@ class StreamingQuery:
         Examples
         --------
         >>> sdf = spark.readStream.format("rate").load()
-        >>> sq = sdf.writeStream.format('memory').query_name('this_query').start()
+        >>> sq = sdf.writeStream.format('memory').queryName('this_query').start()
         >>> sq.isActive
         True
 
@@ -184,7 +184,7 @@ class StreamingQuery:
         Examples
         --------
         >>> sdf = spark.readStream.format("rate").load()
-        >>> sq = sdf.writeStream.format('memory').query_name('query_awaitTermination').start()
+        >>> sq = sdf.writeStream.format('memory').queryName('query_awaitTermination').start()
 
         Return whether the query has terminated or not within 5 seconds
 
@@ -215,7 +215,7 @@ class StreamingQuery:
         Examples
         --------
         >>> sdf = spark.readStream.format("rate").load()
-        >>> sq = sdf.writeStream.format('memory').query_name('this_query').start()
+        >>> sq = sdf.writeStream.format('memory').queryName('this_query').start()
 
         Get the current status of the query
 
@@ -244,7 +244,7 @@ class StreamingQuery:
         Examples
         --------
         >>> sdf = spark.readStream.format("rate").load()
-        >>> sq = sdf.writeStream.format('memory').query_name('this_query').start()
+        >>> sq = sdf.writeStream.format('memory').queryName('this_query').start()
 
         Get an array of the most recent query progress updates for this query
 
@@ -272,7 +272,7 @@ class StreamingQuery:
         Examples
         --------
         >>> sdf = spark.readStream.format("rate").load()
-        >>> sq = sdf.writeStream.format('memory').query_name('this_query').start()
+        >>> sq = sdf.writeStream.format('memory').queryName('this_query').start()
 
         Get the most recent query progress updates for this query
 
@@ -302,7 +302,7 @@ class StreamingQuery:
         Examples
         --------
         >>> sdf = spark.readStream.format("rate").load()
-        >>> sq = sdf.writeStream.format('memory').query_name('this_query').start()
+        >>> sq = sdf.writeStream.format('memory').queryName('this_query').start()
 
         Blocks query until all available data in the source
         has been processed and committed to the sink
@@ -323,7 +323,7 @@ class StreamingQuery:
         Examples
         --------
         >>> sdf = spark.readStream.format("rate").load()
-        >>> sq = sdf.writeStream.format('memory').query_name('this_query').start()
+        >>> sq = sdf.writeStream.format('memory').queryName('this_query').start()
         >>> sq.isActive
         True
 
@@ -354,7 +354,7 @@ class StreamingQuery:
           |-- timestamp: timestamp (nullable = true)
           |-- value: long (nullable = true)
 
-        >>> sq = sdf.writeStream.format('memory').query_name('query_explain').start()
+        >>> sq = sdf.writeStream.format('memory').queryName('query_explain').start()
         >>> sq.processAllAvailable() # Wait a bit to generate the runtime plans.
 
         Explain the runtime plans
@@ -428,7 +428,7 @@ class StreamingQueryManager:
           |-- timestamp: timestamp (nullable = true)
           |-- value: long (nullable = true)
 
-        >>> sq = sdf.writeStream.format('memory').query_name('this_query').start()
+        >>> sq = sdf.writeStream.format('memory').queryName('this_query').start()
         >>> sqm = spark.streams
 
         Get the list of active streaming queries
@@ -467,7 +467,7 @@ class StreamingQueryManager:
           |-- timestamp: timestamp (nullable = true)
           |-- value: long (nullable = true)
 
-        >>> sq = sdf.writeStream.format('memory').query_name('this_query').start()
+        >>> sq = sdf.writeStream.format('memory').queryName('this_query').start()
         >>> sq.name
         'this_query'
 
@@ -518,7 +518,7 @@ class StreamingQueryManager:
         Examples
         --------
         >>> sdf = spark.readStream.format("rate").load()
-        >>> sq = sdf.writeStream.format('memory').query_name('this_query').start()
+        >>> sq = sdf.writeStream.format('memory').queryName('this_query').start()
 
         Return whether any of the query on the associated SparkSession
         has terminated or not within 5 seconds
