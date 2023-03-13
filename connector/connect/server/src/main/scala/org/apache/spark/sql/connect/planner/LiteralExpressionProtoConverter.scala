@@ -173,7 +173,7 @@ object LiteralExpressionProtoConverter {
     } else if (elementType.hasArray) {
       makeArrayData(v => toArrayData(v.getArray))
     } else {
-      throw new UnsupportedOperationException(s"Unsupported Literal Type: $elementType)")
+      throw InvalidPlanInput(s"Unsupported Literal Type: $elementType)")
     }
   }
 }
