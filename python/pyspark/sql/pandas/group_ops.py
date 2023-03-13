@@ -391,8 +391,8 @@ class PandasGroupedOpsMixin:
         Examples
         --------
         >>> from pyspark.sql.functions import ceil
-        >>> import pyarrow
-        >>> import pyarrow.compute as pc
+        >>> import pyarrow  # doctest: +SKIP
+        >>> import pyarrow.compute as pc  # doctest: +SKIP
         >>> df = spark.createDataFrame(
         ...     [(1, 1.0), (1, 2.0), (2, 3.0), (2, 5.0), (2, 10.0)],
         ...     ("id", "v"))  # doctest: +SKIP
@@ -656,7 +656,7 @@ class PandasCogroupedOps:
 
         Examples
         --------
-        >>> import pyarrow
+        >>> import pyarrow  # doctest: +SKIP
         >>> df1 = spark.createDataFrame([(1, 1.0), (2, 2.0), (1, 3.0), (2, 4.0)], ("id", "v1"))
         >>> df2 = spark.createDataFrame([(1, "x"), (2, "y")], ("id", "v2"))
         >>> def summarize(l, r):
