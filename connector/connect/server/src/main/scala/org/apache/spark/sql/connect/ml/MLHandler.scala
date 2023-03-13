@@ -172,6 +172,14 @@ object MLHandler {
         proto.MlCommandResponse.newBuilder().setLiteral(
           proto.Expression.Literal.newBuilder().setLong(refId)
         ).build()
+
+      case proto.MlCommand.MlCommandTypeCase.DELETE_MODEL =>
+        val modelRefId = mlCommand.getDeleteModel.getModelRefId
+        sessionHolder.mlCache.modelCache.remove(modelRefId)
+        proto.MlCommandResponse.newBuilder().setLiteral(
+          LiteralValueProtoConverter.toLiteralProto(null)
+        ).build()
+
       case _ =>
         throw new IllegalArgumentException()
     }

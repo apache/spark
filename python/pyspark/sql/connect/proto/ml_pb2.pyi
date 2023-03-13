@@ -450,6 +450,21 @@ class MlCommand(google.protobuf.message.Message):
             self, field_name: typing_extensions.Literal["model_ref_id", b"model_ref_id"]
         ) -> None: ...
 
+    @typing_extensions.final
+    class DeleteModel(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        MODEL_REF_ID_FIELD_NUMBER: builtins.int
+        model_ref_id: builtins.int
+        def __init__(
+            self,
+            *,
+            model_ref_id: builtins.int = ...,
+        ) -> None: ...
+        def ClearField(
+            self, field_name: typing_extensions.Literal["model_ref_id", b"model_ref_id"]
+        ) -> None: ...
+
     FIT_FIELD_NUMBER: builtins.int
     FETCH_MODEL_ATTR_FIELD_NUMBER: builtins.int
     FETCH_MODEL_SUMMARY_ATTR_FIELD_NUMBER: builtins.int
@@ -461,6 +476,7 @@ class MlCommand(google.protobuf.message.Message):
     SAVE_EVALUATOR_FIELD_NUMBER: builtins.int
     LOAD_EVALUATOR_FIELD_NUMBER: builtins.int
     COPY_MODEL_FIELD_NUMBER: builtins.int
+    DELETE_MODEL_FIELD_NUMBER: builtins.int
     @property
     def fit(self) -> global___MlCommand.Fit: ...
     @property
@@ -483,6 +499,8 @@ class MlCommand(google.protobuf.message.Message):
     def load_evaluator(self) -> global___MlCommand.LoadEvaluator: ...
     @property
     def copy_model(self) -> global___MlCommand.CopyModel: ...
+    @property
+    def delete_model(self) -> global___MlCommand.DeleteModel: ...
     def __init__(
         self,
         *,
@@ -497,12 +515,15 @@ class MlCommand(google.protobuf.message.Message):
         save_evaluator: global___MlCommand.SaveEvaluator | None = ...,
         load_evaluator: global___MlCommand.LoadEvaluator | None = ...,
         copy_model: global___MlCommand.CopyModel | None = ...,
+        delete_model: global___MlCommand.DeleteModel | None = ...,
     ) -> None: ...
     def HasField(
         self,
         field_name: typing_extensions.Literal[
             "copy_model",
             b"copy_model",
+            "delete_model",
+            b"delete_model",
             "evaluate",
             b"evaluate",
             "fetch_model_attr",
@@ -532,6 +553,8 @@ class MlCommand(google.protobuf.message.Message):
         field_name: typing_extensions.Literal[
             "copy_model",
             b"copy_model",
+            "delete_model",
+            b"delete_model",
             "evaluate",
             b"evaluate",
             "fetch_model_attr",
@@ -570,6 +593,7 @@ class MlCommand(google.protobuf.message.Message):
         "save_evaluator",
         "load_evaluator",
         "copy_model",
+        "delete_model",
     ] | None: ...
 
 global___MlCommand = MlCommand

@@ -67,6 +67,15 @@ class ClientModel(Model, metaclass=ABCMeta):
 
     ref_id: str = None
 
+    def __del__(self):
+        client = SparkSession.getActiveSession().client
+        del_model_proto = ml_pb2.MlCommand.DeleteModel(
+            model_ref_id=self.ref_id,
+        )
+        req = client._execute_plan_request_with_metadata()
+        req.plan.ml_command.delete_model.CopyFrom(del_model_proto)
+        client._execute_ml(req)
+
     @classmethod
     def _algo_name(cls):
         raise NotImplementedError()

@@ -47,6 +47,7 @@ message MlCommand {
     SaveEvaluator save_evaluator = 9;
     LoadEvaluator load_evaluator = 10;
     CopyModel copy_model = 11;
+    DeleteModel delete_model = 12;
   }
 
   message Fit {
@@ -113,6 +114,10 @@ message MlCommand {
   }
 
   message CopyModel {
+    int64 model_ref_id = 1;
+  }
+
+  message DeleteModel {
     int64 model_ref_id = 1;
   }
 }
