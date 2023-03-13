@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.json._
-import org.apache.spark.sql.catalyst.trees.TreePattern.{JSON_TO_STRUCT, TreePattern}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{GET_JSON_OBJECT, JSON_TO_STRUCT, TreePattern}
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
 import org.apache.spark.sql.internal.SQLConf
@@ -139,6 +139,8 @@ case class GetJsonObject(json: Expression, path: Expression)
   override def dataType: DataType = StringType
   override def nullable: Boolean = true
   override def prettyName: String = "get_json_object"
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(GET_JSON_OBJECT)
 
   @transient private lazy val parsedPath = parsePath(path.eval().asInstanceOf[UTF8String])
 
@@ -335,6 +337,24 @@ case class GetJsonObject(json: Expression, path: Expression)
       case _ =>
         p.skipChildren()
         false
+    }
+  }
+
+  /**
+   * Used to rewrite GetJsonObject to JsonTuple
+   */
+  private[sql] lazy val rewrittenPathName: Option[Expression] = {
+    if (path.foldable) {
+      parsedPath.flatMap {
+        _.filter(_.isInstanceOf[PathInstruction.Named]) match {
+          case PathInstruction.Named(name) :: Nil =>
+            Some(Literal.create(name, StringType))
+          case _ =>
+            None
+        }
+      }
+    } else {
+      None
     }
   }
 
