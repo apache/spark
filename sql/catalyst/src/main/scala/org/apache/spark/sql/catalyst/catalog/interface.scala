@@ -681,6 +681,8 @@ object CatalogColumnStat extends Logging {
       case TimestampType if version == 1 =>
         DateTimeUtils.fromJavaTimestamp(java.sql.Timestamp.valueOf(s))
       case TimestampType => getTimestampFormatter(isParsing = true).parse(s)
+      case TimestampNTZType =>
+        getTimestampFormatter(isParsing = true, forTimestampNTZ = true).parse(s)
       case ByteType => s.toByte
       case ShortType => s.toShort
       case IntegerType => s.toInt
