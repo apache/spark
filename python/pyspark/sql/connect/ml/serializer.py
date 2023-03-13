@@ -24,22 +24,9 @@ from pyspark.sql.connect.expressions import LiteralExpression
 from pyspark.ml.linalg import Vectors, Matrices
 
 
-def deserialize(ml_command_result: ml_pb2.MlCommandResponse, client):
+def deserialize(ml_command_result: ml_pb2.MlCommandResponse, client, **kwargs):
     if ml_command_result.HasField("literal"):
-        # TODO: Spark connect provides a util function to deserialize Literal proto to python values
-        #  and make the code here to call it.
-        literal = ml_command_result.literal
-        if literal.HasField("integer"):
-            return literal.integer
-        if literal.HasField("double"):
-            return literal.double
-        if literal.HasField("string"):
-            return literal.string
-        if literal.HasField("array"):
-            arr = literal.array
-            if arr.element_type.HasField("double"):
-                return [e.double for e in arr.elements]
-        raise ValueError()
+        return LiteralExpression._to_value(ml_command_result.literal)
 
     if ml_command_result.HasField("model_info"):
         model_info = ml_command_result.model_info
@@ -62,10 +49,26 @@ def deserialize(ml_command_result: ml_pb2.MlCommandResponse, client):
         raise ValueError()
 
     if ml_command_result.HasField("stage"):
-        raise ValueError()
+        assert "clazz" in kwargs
+        clazz = kwargs["clazz"]
+        stage_pb = ml_command_result.stage
+        return _deserialize_stage(stage_pb, clazz)
 
     raise ValueError()
 
+
+def _deserialize_stage(stage_pb, clazz):
+    stage = clazz()
+    stage._resetUid(stage_pb.uid)
+
+    for k, v_pb in stage_pb.params.params.items():
+        v = LiteralExpression._to_value(v_pb)
+        stage.set(stage.getParam(k), v)
+    for k, v_pb in stage_pb.params.default_params.items():
+        v = LiteralExpression._to_value(v_pb)
+        stage._setDefault(stage.getParam(k), v)
+
+    return stage
 
 def serialize_ml_params(instance, client):
     def gen_pb2_map(param_value_dict):

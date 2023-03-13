@@ -96,8 +96,6 @@ object MLUtils {
     builder.build()
   }
 
-  def copyInstance(instance: Params): Params = instance.copy(ParamMap.empty)
-
   def parseRelationProto(relationProto: proto.Relation, sessionHolder: SessionHolder): DataFrame = {
     val relationalPlanner = new SparkConnectPlanner(sessionHolder)
     val plan = relationalPlanner.transformRelation(relationProto)

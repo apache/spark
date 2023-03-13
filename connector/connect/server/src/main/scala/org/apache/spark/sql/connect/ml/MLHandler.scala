@@ -18,8 +18,8 @@
 package org.apache.spark.sql.connect.ml
 
 import scala.collection.JavaConverters._
-
 import org.apache.spark.connect.proto
+import org.apache.spark.connect.proto.{Expression, MlCommandResponse}
 import org.apache.spark.ml.Model
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.sql.DataFrame
@@ -155,7 +155,18 @@ object MLHandler {
             throw new UnsupportedOperationException()
         }
 
-
+      case proto.MlCommand.MlCommandTypeCase.COPY_MODEL =>
+        val copyModelProto = mlCommand.getCopyModel
+        val modelEntry = sessionHolder.mlCache.modelCache.get(
+          copyModelProto.getModelRefId
+        )
+        val model = modelEntry._1
+        val algo = modelEntry._2
+        val copiedModel = model.copy(ParamMap.empty).asInstanceOf[Model[_]]
+        val refId = sessionHolder.mlCache.modelCache.register(copiedModel, algo)
+        proto.MlCommandResponse.newBuilder().setLiteral(
+          proto.Expression.Literal.newBuilder().setLong(refId)
+        ).build()
       case _ =>
         throw new IllegalArgumentException()
     }

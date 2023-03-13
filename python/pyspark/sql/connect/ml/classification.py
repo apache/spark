@@ -50,6 +50,8 @@ from pyspark.sql.connect.ml.base import (
     ClientModelSummary,
     ClientPredictor,
     ClientPredictionModel,
+    ClientMLWritable,
+    ClientMLReadable,
 )
 from abc import ABCMeta, abstractmethod
 
@@ -88,6 +90,8 @@ class _ClientProbabilisticClassificationModel(
 class LogisticRegression(
     _ClientProbabilisticClassifier,
     _LogisticRegressionCommon,
+    ClientMLWritable,
+    ClientMLReadable,
 ):
     _input_kwargs: Dict[str, Any]
 
@@ -199,6 +203,8 @@ class LogisticRegressionModel(
     _ClientProbabilisticClassificationModel,
     _LogisticRegressionParams,
     HasTrainingSummary,
+    ClientMLWritable,
+    ClientMLReadable,
 ):
     @classmethod
     def _algo_name(cls):

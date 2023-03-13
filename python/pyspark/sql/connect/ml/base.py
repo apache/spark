@@ -56,8 +56,8 @@ class ClientEstimator(Estimator, metaclass=ABCMeta):
         resp = client._execute_ml(req)
         model_ref_id, model_uid = deserialize(resp, client)
         model = self._create_model()
-        # TODO: copy all estimator params to model
         model._resetUid(model_uid)
+        self._copyValues(model)
         model.ref_id = model_ref_id
         return model
 
@@ -68,8 +68,7 @@ class ClientPredictor(Predictor, ClientEstimator, _PredictorParams, metaclass=AB
 
 class ClientModel(Model, metaclass=ABCMeta):
 
-    ref_id: str
-    uid: str
+    ref_id: str = None
 
     def _get_model_attr(self, name):
         client = SparkSession.getActiveSession().client
@@ -94,6 +93,23 @@ class ClientModel(Model, metaclass=ABCMeta):
         session = dataset.sparkSession
         plan = _ModelTransformRelationPlan(dataset._plan, self)
         return DataFrame.withPlan(plan, session)
+
+    def copy(self, extra=None):
+        copied_model = super(ClientModel, self).copy(extra)
+
+        client = SparkSession.getActiveSession().client
+        copy_model_proto = ml_pb2.MlCommand.CopyModel(
+            model_ref_id=self.ref_id,
+        )
+        req = client._execute_plan_request_with_metadata()
+        req.plan.ml_command.copy_model.CopyFrom(copy_model_proto)
+
+        resp = client._execute_ml(req)
+        new_ref_id = deserialize(resp, client)
+
+        copied_model.ref_id = new_ref_id
+
+        return copied_model
 
 
 class ClientPredictionModel(PredictionModel, ClientModel, _PredictorParams):
@@ -243,19 +259,26 @@ class ClientMLReader(MLReader):
     def load(self, path: str):
         client = SparkSession.getActiveSession().client
         req = client._execute_plan_request_with_metadata()
+        extra_kwargs = {}
 
         name = self.clazz._algo_name()
         if issubclass(self.clazz, ClientModel):
-            load_cmd_proto = ml_pb2.MlCommand.LoadModel(
+            load_model_proto = ml_pb2.MlCommand.LoadModel(
                 name=name,
                 path=path
             )
+            req.plan.ml_command.load_model.CopyFrom(load_model_proto)
+            extra_kwargs["clazz"] = self.clazz
         elif issubclass(self.clazz, ClientEstimator):
-            load_cmd_proto = ml_pb2.MlCommand.LoadStage(
+            load_estimator_proto = ml_pb2.MlCommand.LoadStage(
                 name=name,
                 path=path,
                 type=ml_common_pb2.MlStage.ESTIMATOR
             )
+            req.plan.ml_command.load_estimator.CopyFrom(load_estimator_proto)
+
+        resp = client._execute_ml(req)
+        return deserialize(resp, client, **extra_kwargs)
 
 
 class ClientMLReadable(MLReadable):
