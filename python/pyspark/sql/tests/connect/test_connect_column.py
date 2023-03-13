@@ -23,7 +23,6 @@ from pyspark.sql.types import (
     Row,
     StructField,
     StructType,
-    ArrayType,
     MapType,
     NullType,
     DateType,
@@ -41,6 +40,7 @@ from pyspark.sql.types import (
     DecimalType,
     BooleanType,
 )
+from pyspark.errors import PySparkTypeError
 from pyspark.errors.exceptions.connect import SparkConnectException
 from pyspark.testing.connectutils import should_test_connect
 from pyspark.sql.tests.connect.test_connect_basic import SparkConnectSQLTestCase
@@ -131,6 +131,33 @@ class SparkConnectColumnTests(SparkConnectSQLTestCase):
         self.assert_eq(
             df3.filter(df3.name.isNotNull()).toPandas(),
             df4.filter(df4.name.isNotNull()).toPandas(),
+        )
+
+        # check error
+        with self.assertRaises(PySparkTypeError) as pe:
+            df.name.substr(df.id, 10)
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_SAME_TYPE",
+            message_parameters={
+                "arg_name1": "startPos",
+                "arg_name2": "length",
+                "arg_type1": "Column",
+                "arg_type2": "int",
+            },
+        )
+
+        with self.assertRaises(PySparkTypeError) as pe:
+            df.name.substr(10.5, 10.5)
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_COLUMN_OR_INT",
+            message_parameters={
+                "arg_name": "length",
+                "arg_type": "float",
+            },
         )
 
     def test_column_with_null(self):
@@ -409,7 +436,6 @@ class SparkConnectColumnTests(SparkConnectSQLTestCase):
             (0.1, DecimalType()),
             (datetime.date(2022, 12, 13), TimestampType()),
             (datetime.timedelta(1, 2, 3), DateType()),
-            ([1, 2, 3], ArrayType(IntegerType())),
             ({1: 2}, MapType(IntegerType(), IntegerType())),
             (
                 {"a": "xyz", "b": 1},
@@ -446,7 +472,6 @@ class SparkConnectColumnTests(SparkConnectSQLTestCase):
         for value, dataType in [
             ("123", NullType()),
             (123, NullType()),
-            (None, ArrayType(IntegerType())),
             (None, MapType(IntegerType(), IntegerType())),
             (None, StructType([StructField("a", StringType())])),
         ]:
@@ -531,6 +556,15 @@ class SparkConnectColumnTests(SparkConnectSQLTestCase):
             self.assert_eq(
                 df.select(df.id.cast(x)).toPandas(), df2.select(df2.id.cast(x)).toPandas()
             )
+
+        with self.assertRaises(PySparkTypeError) as pe:
+            df.id.cast(10)
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_DATATYPE_OR_STR",
+            message_parameters={"arg_name": "dataType", "arg_type": "int"},
+        )
 
     def test_isin(self):
         # SPARK-41526: test Column.isin
@@ -893,23 +927,32 @@ class SparkConnectColumnTests(SparkConnectSQLTestCase):
         with self.assertRaises(SparkConnectException):
             cdf.select(cdf.x.dropFields("a", "b", "c", "d")).show()
 
-        with self.assertRaisesRegex(
-            TypeError,
-            "fieldName should be a string",
-        ):
+        with self.assertRaises(PySparkTypeError) as pe:
             cdf.select(cdf.x.withField(CF.col("a"), cdf.e)).show()
 
-        with self.assertRaisesRegex(
-            TypeError,
-            "col should be a Column",
-        ):
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_STR",
+            message_parameters={"arg_name": "fieldName", "arg_type": "Column"},
+        )
+
+        with self.assertRaises(PySparkTypeError) as pe:
             cdf.select(cdf.x.withField("a", 2)).show()
 
-        with self.assertRaisesRegex(
-            TypeError,
-            "fieldName should be a string",
-        ):
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_COLUMN",
+            message_parameters={"arg_name": "col", "arg_type": "int"},
+        )
+
+        with self.assertRaises(PySparkTypeError) as pe:
             cdf.select(cdf.x.dropFields("a", 1, 2)).show()
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_STR",
+            message_parameters={"arg_name": "fieldName", "arg_type": "int"},
+        )
 
         with self.assertRaisesRegex(
             ValueError,

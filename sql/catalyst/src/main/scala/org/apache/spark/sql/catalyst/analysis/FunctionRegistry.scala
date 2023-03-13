@@ -452,6 +452,7 @@ object FunctionRegistry {
     expressionBuilder("try_sum", TrySumExpressionBuilder, setAlias = true),
     expression[TryToBinary]("try_to_binary"),
     expressionBuilder("try_to_timestamp", TryToTimestampExpressionBuilder, setAlias = true),
+    expression[TryAesDecrypt]("try_aes_decrypt"),
 
     // aggregate functions
     expression[HyperLogLogPlusPlus]("approx_count_distinct"),
@@ -987,7 +988,11 @@ object TableFunctionRegistry {
     generator[Explode]("explode"),
     generator[Explode]("explode_outer", outer = true),
     generator[Inline]("inline"),
-    generator[Inline]("inline_outer", outer = true)
+    generator[Inline]("inline_outer", outer = true),
+    generator[JsonTuple]("json_tuple"),
+    generator[PosExplode]("posexplode"),
+    generator[PosExplode]("posexplode_outer", outer = true),
+    generator[Stack]("stack")
   )
 
   val builtin: SimpleTableFunctionRegistry = {

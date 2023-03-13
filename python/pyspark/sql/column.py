@@ -35,6 +35,7 @@ from py4j.java_gateway import JavaObject
 
 from pyspark import copy_func
 from pyspark.context import SparkContext
+from pyspark.errors import PySparkTypeError
 from pyspark.sql.types import DataType
 
 if TYPE_CHECKING:
@@ -555,10 +556,16 @@ class Column:
         +---+
         """
         if not isinstance(fieldName, str):
-            raise TypeError("fieldName should be a string")
+            raise PySparkTypeError(
+                error_class="NOT_STR",
+                message_parameters={"arg_name": "fieldName", "arg_type": type(fieldName).__name__},
+            )
 
         if not isinstance(col, Column):
-            raise TypeError("col should be a Column")
+            raise PySparkTypeError(
+                error_class="NOT_COLUMN",
+                message_parameters={"arg_name": "col", "arg_type": type(col).__name__},
+            )
 
         return Column(self._jc.withField(fieldName, col._jc))
 
@@ -632,11 +639,70 @@ class Column:
         return Column(jc)
 
     def __getattr__(self, item: Any) -> "Column":
+        """
+        An expression that gets an item at position ``ordinal`` out of a list,
+        or gets an item by key out of a dict.
+
+        .. versionadded:: 1.3.0
+
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
+
+        Parameters
+        ----------
+        item
+            a literal value.
+
+        Returns
+        -------
+        :class:`Column`
+            Column representing the item got by key out of a dict.
+
+        Examples
+        --------
+        >>> df = spark.createDataFrame([('abcedfg', {"key": "value"})], ["l", "d"])
+        >>> df.select(df.d.key).show()
+        +------+
+        |d[key]|
+        +------+
+        | value|
+        +------+
+        """
         if item.startswith("__"):
             raise AttributeError(item)
         return self[item]
 
     def __getitem__(self, k: Any) -> "Column":
+        """
+        An expression that gets an item at position ``ordinal`` out of a list,
+        or gets an item by key out of a dict.
+
+        .. versionadded:: 1.3.0
+
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
+
+        Parameters
+        ----------
+        k
+            a literal value, or a slice object without step.
+
+        Returns
+        -------
+        :class:`Column`
+            Column representing the item got by key out of a dict, or substrings sliced by
+            the given slice object.
+
+        Examples
+        --------
+        >>> df = spark.createDataFrame([('abcedfg', {"key": "value"})], ["l", "d"])
+        >>> df.select(df.l[slice(1, 3)], df.d['key']).show()
+        +------------------+------+
+        |substring(l, 1, 3)|d[key]|
+        +------------------+------+
+        |               abc| value|
+        +------------------+------+
+        """
         if isinstance(k, slice):
             if k.step is not None:
                 raise ValueError("slice with step is not supported.")
@@ -844,12 +910,14 @@ class Column:
         [Row(col='Ali'), Row(col='Bob')]
         """
         if type(startPos) != type(length):
-            raise TypeError(
-                "startPos and length must be the same type. "
-                "Got {startPos_t} and {length_t}, respectively.".format(
-                    startPos_t=type(startPos),
-                    length_t=type(length),
-                )
+            raise PySparkTypeError(
+                error_class="NOT_SAME_TYPE",
+                message_parameters={
+                    "arg_name1": "startPos",
+                    "arg_name2": "length",
+                    "arg_type1": type(startPos).__name__,
+                    "arg_type2": type(length).__name__,
+                },
             )
         if isinstance(startPos, int):
             jc = self._jc.substr(startPos, length)

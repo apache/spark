@@ -551,11 +551,6 @@ class SparkContext(config: SparkConf) extends Logging {
       executorEnvs.put("OMP_NUM_THREADS", _conf.get("spark.task.cpus", "1"))
     }
 
-    _shuffleDriverComponents = ShuffleDataIOUtils.loadShuffleDataIO(config).driver()
-    _shuffleDriverComponents.initializeApplication().asScala.foreach { case (k, v) =>
-      _conf.set(ShuffleDataIOUtils.SHUFFLE_SPARK_CONF_PREFIX + k, v)
-    }
-
     // We need to register "HeartbeatReceiver" before "createTaskScheduler" because Executor will
     // retrieve "HeartbeatReceiver" in the constructor. (SPARK-6640)
     _heartbeatReceiver = env.rpcEnv.setupEndpoint(
@@ -596,6 +591,13 @@ class SparkContext(config: SparkConf) extends Logging {
       _conf.set(APP_ATTEMPT_ID, attemptId)
       _env.blockManager.blockStoreClient.setAppAttemptId(attemptId)
     }
+
+    // initialize after application id and attempt id has been initialized
+    _shuffleDriverComponents = ShuffleDataIOUtils.loadShuffleDataIO(_conf).driver()
+    _shuffleDriverComponents.initializeApplication().asScala.foreach { case (k, v) =>
+      _conf.set(ShuffleDataIOUtils.SHUFFLE_SPARK_CONF_PREFIX + k, v)
+    }
+
     if (_conf.get(UI_REVERSE_PROXY)) {
       val proxyUrl = _conf.get(UI_REVERSE_PROXY_URL).getOrElse("").stripSuffix("/")
       System.setProperty("spark.ui.proxyBase", proxyUrl + "/proxy/" + _applicationId)
@@ -635,7 +637,8 @@ class SparkContext(config: SparkConf) extends Logging {
           case b: ExecutorAllocationClient =>
             Some(new ExecutorAllocationManager(
               schedulerBackend.asInstanceOf[ExecutorAllocationClient], listenerBus, _conf,
-              cleaner = cleaner, resourceProfileManager = resourceProfileManager))
+              cleaner = cleaner, resourceProfileManager = resourceProfileManager,
+              reliableShuffleStorage = _shuffleDriverComponents.supportsReliableStorage()))
           case _ =>
             None
         }
@@ -2149,16 +2152,16 @@ class SparkContext(config: SparkConf) extends Logging {
     Utils.tryLogNonFatalError {
       _eventLogger.foreach(_.stop())
     }
+    if (_shuffleDriverComponents != null) {
+      Utils.tryLogNonFatalError {
+        _shuffleDriverComponents.cleanupApplication()
+      }
+    }
     if (_heartbeater != null) {
       Utils.tryLogNonFatalError {
         _heartbeater.stop()
       }
       _heartbeater = null
-    }
-    if (_shuffleDriverComponents != null) {
-      Utils.tryLogNonFatalError {
-        _shuffleDriverComponents.cleanupApplication()
-      }
     }
     if (env != null && _heartbeatReceiver != null) {
       Utils.tryLogNonFatalError {

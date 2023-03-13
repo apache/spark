@@ -17,10 +17,11 @@
 
 package org.apache.spark.sql.connect.client
 
-import io.grpc.{CallCredentials, CallOptions, Channel, ClientCall, ClientInterceptor, CompositeChannelCredentials, ForwardingClientCall, Grpc, InsecureChannelCredentials, ManagedChannel, Metadata, MethodDescriptor, Status, TlsChannelCredentials}
+import io.grpc.{CallCredentials, CallOptions, Channel, ClientCall, ClientInterceptor, CompositeChannelCredentials, ForwardingClientCall, Grpc, InsecureChannelCredentials, ManagedChannel, ManagedChannelBuilder, Metadata, MethodDescriptor, Status, TlsChannelCredentials}
 import java.net.URI
 import java.util.UUID
 import java.util.concurrent.Executor
+import scala.language.existentials
 
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.UserContext
@@ -31,10 +32,14 @@ import org.apache.spark.sql.connect.common.config.ConnectCommon
  */
 private[sql] class SparkConnectClient(
     private val userContext: proto.UserContext,
-    private val channel: ManagedChannel,
+    private val channelBuilder: ManagedChannelBuilder[_],
     private[client] val userAgent: String) {
 
+  private[this] lazy val channel: ManagedChannel = channelBuilder.build()
+
   private[this] val stub = proto.SparkConnectServiceGrpc.newBlockingStub(channel)
+
+  private[client] val artifactManager: ArtifactManager = new ArtifactManager(userContext, channel)
 
   /**
    * Placeholder method.
@@ -61,10 +66,26 @@ private[sql] class SparkConnectClient(
       .newBuilder()
       .setPlan(plan)
       .setUserContext(userContext)
-      .setClientId(sessionId)
+      .setSessionId(sessionId)
       .setClientType(userAgent)
       .build()
     stub.executePlan(request)
+  }
+
+  /**
+   * Dispatch the [[proto.ConfigRequest]] to the Spark Connect server.
+   * @return
+   *   A [[proto.ConfigResponse]] from the Spark Connect server.
+   */
+  def config(operation: proto.ConfigRequest.Operation): proto.ConfigResponse = {
+    val request = proto.ConfigRequest
+      .newBuilder()
+      .setOperation(operation)
+      .setSessionId(sessionId)
+      .setClientType(userAgent)
+      .setUserContext(userContext)
+      .build()
+    stub.config(request)
   }
 
   /**
@@ -73,17 +94,111 @@ private[sql] class SparkConnectClient(
    * @return
    *   A [[proto.AnalyzePlanResponse]] from the Spark Connect server.
    */
-  def analyze(plan: proto.Plan, mode: proto.Explain.ExplainMode): proto.AnalyzePlanResponse = {
-    val request = proto.AnalyzePlanRequest
-      .newBuilder()
-      .setPlan(plan)
-      .setExplain(proto.Explain.newBuilder().setExplainMode(mode))
+  def analyze(
+      method: proto.AnalyzePlanRequest.AnalyzeCase,
+      plan: Option[proto.Plan] = None,
+      explainMode: Option[proto.AnalyzePlanRequest.Explain.ExplainMode] = None)
+      : proto.AnalyzePlanResponse = {
+    val builder = proto.AnalyzePlanRequest.newBuilder()
+    method match {
+      case proto.AnalyzePlanRequest.AnalyzeCase.SCHEMA =>
+        assert(plan.isDefined)
+        builder.setSchema(
+          proto.AnalyzePlanRequest.Schema
+            .newBuilder()
+            .setPlan(plan.get)
+            .build())
+      case proto.AnalyzePlanRequest.AnalyzeCase.EXPLAIN =>
+        if (explainMode.isEmpty) {
+          throw new IllegalArgumentException(s"ExplainMode is required in Explain request")
+        }
+        assert(plan.isDefined)
+        builder.setExplain(
+          proto.AnalyzePlanRequest.Explain
+            .newBuilder()
+            .setPlan(plan.get)
+            .setExplainMode(explainMode.get)
+            .build())
+      case proto.AnalyzePlanRequest.AnalyzeCase.IS_LOCAL =>
+        assert(plan.isDefined)
+        builder.setIsLocal(
+          proto.AnalyzePlanRequest.IsLocal
+            .newBuilder()
+            .setPlan(plan.get)
+            .build())
+      case proto.AnalyzePlanRequest.AnalyzeCase.IS_STREAMING =>
+        assert(plan.isDefined)
+        builder.setIsStreaming(
+          proto.AnalyzePlanRequest.IsStreaming
+            .newBuilder()
+            .setPlan(plan.get)
+            .build())
+      case proto.AnalyzePlanRequest.AnalyzeCase.INPUT_FILES =>
+        assert(plan.isDefined)
+        builder.setInputFiles(
+          proto.AnalyzePlanRequest.InputFiles
+            .newBuilder()
+            .setPlan(plan.get)
+            .build())
+      case proto.AnalyzePlanRequest.AnalyzeCase.SPARK_VERSION =>
+        builder.setSparkVersion(proto.AnalyzePlanRequest.SparkVersion.newBuilder().build())
+      case other => throw new IllegalArgumentException(s"Unknown Analyze request $other")
+    }
+    analyze(builder)
+  }
+
+  def sameSemantics(plan: proto.Plan, otherPlan: proto.Plan): proto.AnalyzePlanResponse = {
+    val builder = proto.AnalyzePlanRequest.newBuilder()
+    builder.setSameSemantics(
+      proto.AnalyzePlanRequest.SameSemantics
+        .newBuilder()
+        .setTargetPlan(plan)
+        .setOtherPlan(otherPlan))
+    analyze(builder)
+  }
+
+  def semanticHash(plan: proto.Plan): proto.AnalyzePlanResponse = {
+    val builder = proto.AnalyzePlanRequest.newBuilder()
+    builder.setSemanticHash(
+      proto.AnalyzePlanRequest.SemanticHash
+        .newBuilder()
+        .setPlan(plan))
+    analyze(builder)
+  }
+
+  private def analyze(builder: proto.AnalyzePlanRequest.Builder): proto.AnalyzePlanResponse = {
+    val request = builder
       .setUserContext(userContext)
-      .setClientId(sessionId)
+      .setSessionId(sessionId)
       .setClientType(userAgent)
       .build()
     analyze(request)
   }
+
+  def copy(): SparkConnectClient = {
+    new SparkConnectClient(userContext, channelBuilder, userAgent)
+  }
+
+  /**
+   * Add a single artifact to the client session.
+   *
+   * Currently only local files with extensions .jar and .class are supported.
+   */
+  def addArtifact(path: String): Unit = artifactManager.addArtifact(path)
+
+  /**
+   * Add a single artifact to the client session.
+   *
+   * Currently only local files with extensions .jar and .class are supported.
+   */
+  def addArtifact(uri: URI): Unit = artifactManager.addArtifact(uri)
+
+  /**
+   * Add multiple artifacts to the session.
+   *
+   * Currently only local files with extensions .jar and .class are supported.
+   */
+  def addArtifacts(uri: Seq[URI]): Unit = artifactManager.addArtifacts(uri)
 
   /**
    * Shutdown the client's connection to the server.
@@ -105,8 +220,8 @@ private[sql] object SparkConnectClient {
       "Either remove 'token' or set 'use_ssl=true'"
 
   // for internal tests
-  def apply(userContext: UserContext, channel: ManagedChannel): SparkConnectClient =
-    new SparkConnectClient(userContext, channel, DEFAULT_USER_AGENT)
+  def apply(userContext: UserContext, builder: ManagedChannelBuilder[_]): SparkConnectClient =
+    new SparkConnectClient(userContext, builder, DEFAULT_USER_AGENT)
 
   def builder(): Builder = new Builder()
 
@@ -291,10 +406,9 @@ private[sql] object SparkConnectClient {
       if (metadata.nonEmpty) {
         channelBuilder.intercept(new MetadataHeaderClientInterceptor(metadata))
       }
-      val channel: ManagedChannel = channelBuilder.build()
       new SparkConnectClient(
         userContextBuilder.build(),
-        channel,
+        channelBuilder,
         userAgent.getOrElse(DEFAULT_USER_AGENT))
     }
   }

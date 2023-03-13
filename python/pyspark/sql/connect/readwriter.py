@@ -16,7 +16,7 @@
 #
 from pyspark.sql.connect.utils import check_dependencies
 
-check_dependencies(__name__, __file__)
+check_dependencies(__name__)
 
 from typing import Dict
 from typing import Optional, Union, List, overload, Tuple, cast, Any
@@ -691,9 +691,6 @@ def _test() -> None:
     import pyspark.sql.connect.readwriter
 
     globs = pyspark.sql.connect.readwriter.__dict__.copy()
-
-    # TODO(SPARK-42458): createDataFrame should support DDL string as schema
-    del pyspark.sql.connect.readwriter.DataFrameWriter.option.__doc__
 
     globs["spark"] = (
         PySparkSession.builder.appName("sql.connect.readwriter tests")

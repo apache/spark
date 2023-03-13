@@ -41,7 +41,7 @@ class DatasetSuite extends ConnectFunSuite with BeforeAndAfterEach {
   private def newSparkSession(): SparkSession = {
     val client = new SparkConnectClient(
       proto.UserContext.newBuilder().build(),
-      InProcessChannelBuilder.forName(getClass.getName).directExecutor().build(),
+      InProcessChannelBuilder.forName(getClass.getName).directExecutor(),
       "test")
     new SparkSession(client, cleaner = SparkSession.cleaner, planIdGenerator = new AtomicLong)
   }
@@ -69,7 +69,7 @@ class DatasetSuite extends ConnectFunSuite with BeforeAndAfterEach {
   }
 
   test("write") {
-    val df = ss.newDataset(_ => ()).limit(10)
+    val df = ss.newDataFrame(_ => ()).limit(10)
 
     val builder = proto.WriteOperation.newBuilder()
     builder
@@ -101,7 +101,7 @@ class DatasetSuite extends ConnectFunSuite with BeforeAndAfterEach {
   }
 
   test("write V2") {
-    val df = ss.newDataset(_ => ()).limit(10)
+    val df = ss.newDataFrame(_ => ()).limit(10)
 
     val builder = proto.WriteOperationV2.newBuilder()
     builder
@@ -129,9 +129,21 @@ class DatasetSuite extends ConnectFunSuite with BeforeAndAfterEach {
   }
 
   test("Pivot") {
-    val df = ss.newDataset(_ => ())
+    val df = ss.newDataFrame(_ => ())
     intercept[IllegalArgumentException] {
       df.groupBy().pivot(Column("c"), Seq(Column("col")))
     }
+  }
+
+  test("command extension") {
+    val extension = proto.ExamplePluginCommand.newBuilder().setCustomField("abc").build()
+    val command = proto.Command
+      .newBuilder()
+      .setExtension(com.google.protobuf.Any.pack(extension))
+      .build()
+    val expectedPlan = proto.Plan.newBuilder().setCommand(command).build()
+    ss.execute(com.google.protobuf.Any.pack(extension))
+    val actualPlan = service.getAndClearLatestInputPlan()
+    assert(actualPlan.equals(expectedPlan))
   }
 }

@@ -158,7 +158,11 @@ private[sql] object ArrowConverters extends Logging {
             rowCountInLastBatch < maxRecordsPerBatch)) {
           val row = rowIter.next()
           arrowWriter.write(row)
-          estimatedBatchSize += row.asInstanceOf[UnsafeRow].getSizeInBytes
+          estimatedBatchSize += (row match {
+            case ur: UnsafeRow => ur.getSizeInBytes
+            // Trying to estimate the size of the current row, assuming 16 bytes per value.
+            case ir: InternalRow => ir.numFields * 16
+          })
           rowCountInLastBatch += 1
         }
         arrowWriter.finish()

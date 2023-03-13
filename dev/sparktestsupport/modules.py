@@ -273,7 +273,7 @@ sql_kafka = Module(
 
 connect = Module(
     name="connect",
-    dependencies=[sql],
+    dependencies=[hive],
     source_file_regexes=[
         "connector/connect",
     ],
@@ -535,6 +535,7 @@ pyspark_connect = Module(
         "pyspark.sql.tests.connect.test_parity_udf",
         "pyspark.sql.tests.connect.test_parity_pandas_udf",
         "pyspark.sql.tests.connect.test_parity_pandas_map",
+        "pyspark.sql.tests.connect.test_parity_arrow_map",
     ],
     excluded_python_implementations=[
         "PyPy"  # Skip these tests under PyPy since they require numpy, pandas, and pyarrow and
