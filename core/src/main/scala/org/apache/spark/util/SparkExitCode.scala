@@ -44,4 +44,8 @@ private[spark] object SparkExitCode {
 
   /** Exception indicate command not found. */
   val ERROR_COMMAND_NOT_FOUND = 127
+
+  /** If the executor register failed due to excluded node, exit code will be 53. */
+  val REGISTER_EXCLUDED_EXECUTOR = 53
+
 }

@@ -26,7 +26,7 @@ import scala.concurrent.Future
 
 import org.apache.hadoop.security.UserGroupInformation
 
-import org.apache.spark.{ExecutorAllocationClient, SparkEnv, TaskState}
+import org.apache.spark.{ExecutorAllocationClient, RegisterDuplicateExecutorException, RegisterExcludedExecutorException, SparkEnv, TaskState}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.security.HadoopDelegationTokenManager
 import org.apache.spark.errors.SparkCoreErrors
@@ -234,15 +234,16 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       case RegisterExecutor(executorId, executorRef, hostname, cores, logUrls,
           attributes, resources, resourceProfileId) =>
         if (executorDataMap.contains(executorId)) {
-          context.sendFailure(new IllegalStateException(s"Duplicate executor ID: $executorId"))
+          context.sendFailure(new RegisterDuplicateExecutorException(
+            s"Duplicate executor ID: $executorId"))
         } else if (scheduler.excludedNodes.contains(hostname) ||
             isExecutorExcluded(executorId, hostname)) {
           // If the cluster manager gives us an executor on an excluded node (because it
           // already started allocating those resources before we informed it of our exclusion,
           // or if it ignored our exclusion), then we reject that executor immediately.
           logInfo(s"Rejecting $executorId as it has been excluded.")
-          context.sendFailure(
-            new IllegalStateException(s"Executor is excluded due to failures: $executorId"))
+          context.sendFailure(new RegisterExcludedExecutorException(
+              s"Executor is excluded due to failures: $executorId"))
         } else {
           // If the executor's rpc env is not listening for incoming connections, `hostPort`
           // will be null, and the client connection should be used to contact the executor.

@@ -355,3 +355,9 @@ private[spark] class SparkSQLFeatureNotSupportedException(
 
   override def getErrorClass: String = errorClass
 }
+
+private[spark] class RegisterExcludedExecutorException(message: String)
+  extends SparkException(message)
+
+private[spark] class RegisterDuplicateExecutorException(message: String)
+  extends SparkException(message)

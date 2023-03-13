@@ -46,7 +46,7 @@ import org.apache.spark.rpc.{RpcCallContext, RpcEndpointRef}
 import org.apache.spark.scheduler.{ExecutorExited, ExecutorLossReason}
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.{DecommissionExecutorsOnHost, RemoveExecutor, RetrieveLastAllocatedExecutorId}
 import org.apache.spark.scheduler.cluster.SchedulerBackendUtils
-import org.apache.spark.util.{Clock, SystemClock, ThreadUtils}
+import org.apache.spark.util.{Clock, SparkExitCode, SystemClock, ThreadUtils}
 
 /**
  * YarnAllocator is charged with requesting containers from the YARN ResourceManager and deciding
@@ -108,7 +108,7 @@ private[yarn] class YarnAllocator(
   // Maintain loss reasons for already released executors, it will be added when executor loss
   // reason is got from AM-RM call, and be removed after querying this loss reason.
   @GuardedBy("this")
-  private val releasedExecutorLossReasons = new HashMap[String, ExecutorLossReason]
+  private[yarn] val releasedExecutorLossReasons = new HashMap[String, ExecutorLossReason]
 
   // Keep track of which container is running which executor to remove the executors later
   // Visible for testing.
@@ -155,7 +155,7 @@ private[yarn] class YarnAllocator(
    * @see SPARK-12864
    */
   @GuardedBy("this")
-  private var executorIdCounter: Int =
+  private[yarn] var executorIdCounter: Int =
     driverRef.askSync[Int](RetrieveLastAllocatedExecutorId)
 
   private[spark] val failureTracker = new FailureTracker(sparkConf, clock)
@@ -686,6 +686,8 @@ private[yarn] class YarnAllocator(
     containersToUse = containersToUse.filter(container => {
       val nodeExcluded = allocatorNodeHealthTracker.nodeIsExcluded(container.getNodeId.getHost)
       if (nodeExcluded) {
+        logDebug(s"${container.getId} will not start and will be released due to" +
+          s" ${container.getNodeId.getHost} excluded")
         internalReleaseContainer(container)
       }
       !nodeExcluded
@@ -1025,6 +1027,7 @@ private object YarnAllocator {
     ContainerExitStatus.KILLED_BY_APPMASTER,
     ContainerExitStatus.KILLED_AFTER_APP_COMPLETION,
     ContainerExitStatus.ABORTED,
-    ContainerExitStatus.DISKS_FAILED
+    ContainerExitStatus.DISKS_FAILED,
+    SparkExitCode.REGISTER_EXCLUDED_EXECUTOR
   )
 }

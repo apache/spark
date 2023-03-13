@@ -521,7 +521,7 @@ class StandaloneDynamicAllocationSuite
         val e = intercept[SparkException] {
           scheduler.driverEndpoint.askSync[Boolean](message)
         }
-        assert(e.getCause().isInstanceOf[IllegalStateException])
+        assert(e.getCause().isInstanceOf[RegisterExcludedExecutorException])
         assert(scheduler.getExecutorIds().isEmpty)
       } finally {
         scheduler.stop()

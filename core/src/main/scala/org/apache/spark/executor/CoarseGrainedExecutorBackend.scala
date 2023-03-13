@@ -45,6 +45,7 @@ import org.apache.spark.rpc._
 import org.apache.spark.scheduler.{ExecutorLossMessage, ExecutorLossReason, TaskDescription}
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
 import org.apache.spark.util.{ChildFirstURLClassLoader, MutableURLClassLoader, SignalUtils, ThreadUtils, Utils}
+import org.apache.spark.util.SparkExitCode.REGISTER_EXCLUDED_EXECUTOR
 
 private[spark] class CoarseGrainedExecutorBackend(
     override val rpcEnv: RpcEnv,
@@ -111,7 +112,14 @@ private[spark] class CoarseGrainedExecutorBackend(
       case Success(_) =>
         self.send(RegisteredExecutor)
       case Failure(e) =>
-        exitExecutor(1, s"Cannot register with driver: $driverUrl", e, notifyDriver = false)
+        e match {
+          case exception: RegisterExcludedExecutorException =>
+            exitExecutor(REGISTER_EXCLUDED_EXECUTOR, s"Cannot register with driver: $driverUrl",
+              exception, notifyDriver = false)
+          case _ =>
+            exitExecutor(1, s"Cannot register with driver: $driverUrl",
+              _, notifyDriver = false)
+        }
     }(ThreadUtils.sameThread)
   }
 

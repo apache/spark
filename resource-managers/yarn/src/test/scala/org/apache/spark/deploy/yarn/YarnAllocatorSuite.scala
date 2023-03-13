@@ -45,9 +45,9 @@ import org.apache.spark.resource.{ExecutorResourceRequests, ResourceProfile, Tas
 import org.apache.spark.resource.ResourceUtils.{AMOUNT, GPU}
 import org.apache.spark.resource.TestResourceIDs._
 import org.apache.spark.rpc.RpcEndpointRef
-import org.apache.spark.scheduler.SplitInfo
+import org.apache.spark.scheduler.{ExecutorExited, SplitInfo}
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.DecommissionExecutorsOnHost
-import org.apache.spark.util.{ManualClock, VersionUtils}
+import org.apache.spark.util.{ManualClock, SparkExitCode, VersionUtils}
 
 class MockResolver extends SparkRackResolver(SparkHadoopUtil.get.conf) {
 
@@ -869,5 +869,32 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers {
     handler.handleAllocatedContainers(Array(container3, container4))
     handler.getNumExecutorsRunning should be(3)
     handler.getNumReleasedContainers should be(1)
+  }
+
+  test("SPARK-42766:: Executor Registered failure due to node excluded should not be count") {
+    val rmClientSpy = spy(rmClient)
+    val maxExecutors = 1
+
+    val (handler, _) = createAllocator(
+      maxExecutors,
+      rmClientSpy,
+      Map(
+        YARN_EXECUTOR_LAUNCH_EXCLUDE_ON_FAILURE_ENABLED.key -> "true",
+        MAX_FAILED_EXEC_PER_NODE.key -> "0"))
+    handler.updateResourceRequests()
+
+    val hosts = (99 to 100).map(i => s"host$i")
+    val ids = 0 to 1
+    val containers = createContainers(hosts, ids)
+    val nonExcludedStatuses = Seq(SparkExitCode.REGISTER_EXCLUDED_EXECUTOR)
+    val nonExcludedContainerStatuses = nonExcludedStatuses.zipWithIndex.map {
+      case (exitStatus, idx) => createContainerStatus(containers(idx).getId, exitStatus)
+    }
+
+    handler.handleAllocatedContainers(containers.slice(0, 1))
+    handler.processCompletedContainers(nonExcludedContainerStatuses)
+
+    assert(!handler.releasedExecutorLossReasons(handler.executorIdCounter.toString)
+      .asInstanceOf[ExecutorExited].exitCausedByApp)
   }
 }
