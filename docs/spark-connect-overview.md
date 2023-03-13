@@ -179,19 +179,19 @@ illustrated here.
 
 <div data-lang="python"  markdown="1">
 To launch the PySpark shell with Spark Connect, simply include the `remote`
-parameter and specify the location of your Spark server, we are using `localhost`
-in this example.
+parameter and specify the location of your Spark server. We are using `localhost`
+in this example to connect to the local Spark server we started above.
 
 {% highlight bash %}
 ./bin/pyspark --remote "sc://localhost"
 {% endhighlight %}
 
 And you will notice that the PySpark shell welcome message tells you that
-your have connected to Spark using Spark Connect.
+you have connected to Spark using Spark Connect.
 
-And now you can run PySpark code in the shell to see Spark Connect in action:
+Now you can run PySpark code in the shell to see Spark Connect in action:
 
-{% highlight bash %}
+{% highlight python %}
 columns = ["id","name"]
 data = [(1,"Sarah"),(2,"Maria")]
 df = spark.createDataFrame(data).toDF(*columns)
