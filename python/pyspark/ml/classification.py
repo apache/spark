@@ -1121,7 +1121,7 @@ class _LogisticRegressionParams(
         return self.getOrDefault(self.upperBoundsOnIntercepts)
 
 
-class _LogisticRegressionCommon(_LogisticRegressionParams):
+class _LogisticRegressionCommon(ProbabilisticClassifier, _LogisticRegressionParams):
     @overload
     def setParams(
             self,

@@ -61,6 +61,9 @@ def deserialize(ml_command_result: ml_pb2.MlCommandResponse, client):
             )
         raise ValueError()
 
+    if ml_command_result.HasField("stage"):
+        raise ValueError()
+
     raise ValueError()
 
 

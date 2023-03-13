@@ -187,7 +187,8 @@ class LogisticRegression(
         self.setParams(**kwargs)
         self._checkThresholdConsistency()
 
-    def _algo_name(self):
+    @classmethod
+    def _algo_name(cls):
         return "LogisticRegression"
 
     def _create_model(self):
@@ -199,6 +200,10 @@ class LogisticRegressionModel(
     _LogisticRegressionParams,
     HasTrainingSummary,
 ):
+    @classmethod
+    def _algo_name(cls):
+        return "LogisticRegression"
+
     @property  # type: ignore[misc]
     def coefficients(self) -> Vector:
         return self._get_model_attr("coefficients")

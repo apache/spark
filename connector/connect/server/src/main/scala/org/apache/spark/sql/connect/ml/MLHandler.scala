@@ -114,12 +114,47 @@ object MLHandler {
         proto.MlCommandResponse.newBuilder().build()
 
       case proto.MlCommand.MlCommandTypeCase.LOAD_STAGE =>
-        // TODO: support this.
-        throw new UnsupportedOperationException()
+        val loadStageProto = mlCommand.getLoadStage
+        val name = loadStageProto.getName
+        loadStageProto.getType match {
+          case proto.MlStage.StageType.ESTIMATOR =>
+            val algo = AlgorithmRegistry.get(name)
+            val estimator = algo.loadEstimator(loadStageProto.getPath)
+
+            proto.MlCommandResponse.newBuilder().setStage(
+              proto.MlStage.newBuilder()
+                .setName(name)
+                .setType(proto.MlStage.StageType.ESTIMATOR)
+                .setUid(estimator.uid)
+                .setParams(MLUtils.convertInstanceParamsToProto(estimator))
+            ).build()
+          case _ =>
+            throw new UnsupportedOperationException()
+        }
 
       case proto.MlCommand.MlCommandTypeCase.SAVE_STAGE =>
-        // TODO: support this.
-        throw new UnsupportedOperationException()
+        val saveStageProto = mlCommand.getSaveStage
+        val stageProto = saveStageProto.getStage
+
+        stageProto.getType match {
+          case proto.MlStage.StageType.ESTIMATOR =>
+            val name = stageProto.getName
+            proto.MlCommandResponse.newBuilder().build()
+            val algo = AlgorithmRegistry.get(name)
+            val estimator = algo.initiateEstimator(stageProto.getUid)
+            MLUtils.setInstanceParams(estimator, stageProto.getParams)
+            algo.saveEstimator(
+              estimator,
+              saveStageProto.getPath,
+              saveStageProto.getOverwrite,
+              saveStageProto.getOptionsMap.asScala.toMap
+            )
+            proto.MlCommandResponse.newBuilder().build()
+
+          case _ =>
+            throw new UnsupportedOperationException()
+        }
+
 
       case _ =>
         throw new IllegalArgumentException()

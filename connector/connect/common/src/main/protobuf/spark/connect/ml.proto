@@ -46,6 +46,7 @@ message MlCommand {
     LoadStage load_stage = 8;
     SaveEvaluator save_evaluator = 9;
     LoadEvaluator load_evaluator = 10;
+    CopyModel copy_model = 11;
   }
 
   message Fit {
@@ -72,6 +73,7 @@ message MlCommand {
   message LoadStage {
     string name = 1;
     string path = 2;
+    MlStage.StageType type = 3;
   }
 
   message SaveStage {
@@ -109,6 +111,10 @@ message MlCommand {
     // model.summary (i.e. the summary on training dataset)
     optional Relation evaluation_dataset = 4;
   }
+
+  message CopyModel {
+    int64 model_ref_id = 1;
+  }
 }
 
 
@@ -118,6 +124,7 @@ message MlCommandResponse {
     ModelInfo model_info = 2;
     Vector vector = 3;
     Matrix matrix = 4;
+    MlStage stage = 5;
   }
   message ModelInfo {
     int64 model_ref_id = 1;

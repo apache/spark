@@ -77,6 +77,25 @@ object MLUtils {
     }
   }
 
+  def convertInstanceParamsToProto(instance: Params): proto.MlParams = {
+    val builder = proto.MlParams.newBuilder()
+    instance.params.foreach { param =>
+      val name = param.name
+      val valueOpt = instance.get(param)
+      val defaultValueOpt = instance.getDefault(param)
+
+      if (valueOpt.isDefined) {
+        val valueProto = LiteralValueProtoConverter.toConnectProtoValue(valueOpt.get)
+        builder.putParams(name, valueProto)
+      }
+      if (defaultValueOpt.isDefined) {
+        val defaultValueProto = LiteralValueProtoConverter.toConnectProtoValue(defaultValueOpt.get)
+        builder.putParams(name, defaultValueProto)
+      }
+    }
+    builder.build()
+  }
+
   def copyInstance(instance: Params): Params = instance.copy(ParamMap.empty)
 
   def parseRelationProto(relationProto: proto.Relation, sessionHolder: SessionHolder): DataFrame = {

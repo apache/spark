@@ -207,16 +207,22 @@ class MlCommand(google.protobuf.message.Message):
 
         NAME_FIELD_NUMBER: builtins.int
         PATH_FIELD_NUMBER: builtins.int
+        TYPE_FIELD_NUMBER: builtins.int
         name: builtins.str
         path: builtins.str
+        type: pyspark.sql.connect.proto.ml_common_pb2.MlStage.StageType.ValueType
         def __init__(
             self,
             *,
             name: builtins.str = ...,
             path: builtins.str = ...,
+            type: pyspark.sql.connect.proto.ml_common_pb2.MlStage.StageType.ValueType = ...,
         ) -> None: ...
         def ClearField(
-            self, field_name: typing_extensions.Literal["name", b"name", "path", b"path"]
+            self,
+            field_name: typing_extensions.Literal[
+                "name", b"name", "path", b"path", "type", b"type"
+            ],
         ) -> None: ...
 
     @typing_extensions.final
@@ -429,6 +435,21 @@ class MlCommand(google.protobuf.message.Message):
             oneof_group: typing_extensions.Literal["_evaluation_dataset", b"_evaluation_dataset"],
         ) -> typing_extensions.Literal["evaluation_dataset"] | None: ...
 
+    @typing_extensions.final
+    class CopyModel(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        MODEL_REF_ID_FIELD_NUMBER: builtins.int
+        model_ref_id: builtins.int
+        def __init__(
+            self,
+            *,
+            model_ref_id: builtins.int = ...,
+        ) -> None: ...
+        def ClearField(
+            self, field_name: typing_extensions.Literal["model_ref_id", b"model_ref_id"]
+        ) -> None: ...
+
     FIT_FIELD_NUMBER: builtins.int
     FETCH_MODEL_ATTR_FIELD_NUMBER: builtins.int
     FETCH_MODEL_SUMMARY_ATTR_FIELD_NUMBER: builtins.int
@@ -439,6 +460,7 @@ class MlCommand(google.protobuf.message.Message):
     LOAD_STAGE_FIELD_NUMBER: builtins.int
     SAVE_EVALUATOR_FIELD_NUMBER: builtins.int
     LOAD_EVALUATOR_FIELD_NUMBER: builtins.int
+    COPY_MODEL_FIELD_NUMBER: builtins.int
     @property
     def fit(self) -> global___MlCommand.Fit: ...
     @property
@@ -459,6 +481,8 @@ class MlCommand(google.protobuf.message.Message):
     def save_evaluator(self) -> global___MlCommand.SaveEvaluator: ...
     @property
     def load_evaluator(self) -> global___MlCommand.LoadEvaluator: ...
+    @property
+    def copy_model(self) -> global___MlCommand.CopyModel: ...
     def __init__(
         self,
         *,
@@ -472,10 +496,13 @@ class MlCommand(google.protobuf.message.Message):
         load_stage: global___MlCommand.LoadStage | None = ...,
         save_evaluator: global___MlCommand.SaveEvaluator | None = ...,
         load_evaluator: global___MlCommand.LoadEvaluator | None = ...,
+        copy_model: global___MlCommand.CopyModel | None = ...,
     ) -> None: ...
     def HasField(
         self,
         field_name: typing_extensions.Literal[
+            "copy_model",
+            b"copy_model",
             "evaluate",
             b"evaluate",
             "fetch_model_attr",
@@ -503,6 +530,8 @@ class MlCommand(google.protobuf.message.Message):
     def ClearField(
         self,
         field_name: typing_extensions.Literal[
+            "copy_model",
+            b"copy_model",
             "evaluate",
             b"evaluate",
             "fetch_model_attr",
@@ -540,6 +569,7 @@ class MlCommand(google.protobuf.message.Message):
         "load_stage",
         "save_evaluator",
         "load_evaluator",
+        "copy_model",
     ] | None: ...
 
 global___MlCommand = MlCommand
