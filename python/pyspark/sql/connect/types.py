@@ -309,9 +309,12 @@ def to_arrow_type(dt: DataType) -> "pa.DataType":
     elif type(dt) == DayTimeIntervalType:
         arrow_type = pa.duration("us")
     elif type(dt) == ArrayType:
-        arrow_type = pa.list_(to_arrow_type(dt.elementType))
+        field = pa.field("element", to_arrow_type(dt.elementType), nullable=dt.containsNull)
+        arrow_type = pa.list_(field)
     elif type(dt) == MapType:
-        arrow_type = pa.map_(to_arrow_type(dt.keyType), to_arrow_type(dt.valueType))
+        key_field = pa.field("key", to_arrow_type(dt.keyType), nullable=False)
+        value_field = pa.field("value", to_arrow_type(dt.valueType), nullable=dt.valueContainsNull)
+        arrow_type = pa.map_(key_field, value_field)
     elif type(dt) == StructType:
         fields = [
             pa.field(field.name, to_arrow_type(field.dataType), nullable=field.nullable)
