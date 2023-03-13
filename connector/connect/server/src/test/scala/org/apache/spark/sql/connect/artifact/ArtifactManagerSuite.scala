@@ -20,6 +20,7 @@ import java.nio.file.Paths
 
 import org.apache.commons.io.FileUtils
 
+import org.apache.spark.SparkConf
 import org.apache.spark.sql.connect.ResourceHelper
 import org.apache.spark.sql.connect.service.SparkConnectService
 import org.apache.spark.sql.functions.col
@@ -27,6 +28,11 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.util.Utils
 
 class ArtifactManagerSuite extends SharedSparkSession with ResourceHelper {
+
+  override protected def sparkConf: SparkConf = {
+    val conf = super.sparkConf
+    conf.set("spark.plugins", "org.apache.spark.sql.connect.SparkConnectPlugin")
+  }
 
   private val artifactPath = commonResourcePath.resolve("artifact-tests")
   private lazy val artifactManager = SparkConnectArtifactManager.getOrCreateArtifactManager

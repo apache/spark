@@ -483,15 +483,19 @@ class SparkContext(config: SparkConf) extends Logging {
         val replUri = _env.rpcEnv.fileServer.addDirectory("/classes", new File(path))
         _conf.set("spark.repl.class.uri", replUri)
       case None =>
-        // For Spark Connect, we piggyback on the existing REPL integration to load class
-        // files on the executors.
-        // This is a temporary intermediate step due to unavailable classloader isolation.
-        val classDirectory = sparkConnectArtifactDirectory.toPath.resolve("classes")
-        Files.createDirectories(classDirectory)
-        val classDirectoryUri = _env.rpcEnv.fileServer.addDirectory(
-          "/classes",
-          classDirectory.toFile)
-        _conf.set("spark.repl.class.uri", classDirectoryUri)
+        val plugins = _conf.get(PLUGINS)
+        if (plugins.contains("org.apache.spark.sql.connect.SparkConnectPlugin")) {
+          // For Spark Connect, we piggyback on the existing REPL integration to load class
+          // files on the executors.
+          // This is a temporary intermediate step due to unavailable classloader isolation.
+          val classDirectory = sparkConnectArtifactDirectory.toPath.resolve("classes")
+          Files.createDirectories(classDirectory)
+          val classDirectoryUri = _env.rpcEnv.fileServer.addDirectory(
+            "/classes",
+            classDirectory.toFile)
+          _conf.set("spark.repl.class.uri", classDirectoryUri)
+          logDebug(s"Spark Connect is enabled, setting spark.repl.class.uri to $classDirectoryUri")
+        }
     }
 
     _statusTracker = new SparkStatusTracker(this, _statusStore)
