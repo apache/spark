@@ -116,7 +116,8 @@ class SparkConnectPlanner(val session: SparkSession) {
       case proto.Relation.RelTypeCase.WITH_COLUMNS_RENAMED =>
         transformWithColumnsRenamed(rel.getWithColumnsRenamed)
       case proto.Relation.RelTypeCase.WITH_COLUMNS => transformWithColumns(rel.getWithColumns)
-      case proto.Relation.RelTypeCase.WITH_WATERMARK => transformWithWatermark(rel.getWithWatermark)
+      case proto.Relation.RelTypeCase.WITH_WATERMARK =>
+        transformWithWatermark(rel.getWithWatermark)
       case proto.Relation.RelTypeCase.HINT => transformHint(rel.getHint)
       case proto.Relation.RelTypeCase.UNPIVOT => transformUnpivot(rel.getUnpivot)
       case proto.Relation.RelTypeCase.REPARTITION_BY_EXPRESSION =>
@@ -1861,9 +1862,9 @@ class SparkConnectPlanner(val session: SparkSession) {
   }
 
   def handleWriteStreamOperation(
-    writeOp: WriteStreamOperation,
-    sessionId: String,
-    responseObserver: StreamObserver[ExecutePlanResponse]): Unit = {
+      writeOp: WriteStreamOperation,
+      sessionId: String,
+      responseObserver: StreamObserver[ExecutePlanResponse]): Unit = {
     val plan = transformRelation(writeOp.getInput)
     val dataset = Dataset.ofRows(session, logicalPlan = plan)
 
@@ -1908,14 +1909,13 @@ class SparkConnectPlanner(val session: SparkSession) {
         .newBuilder()
         .setSessionId(sessionId)
         .setStreamingQueryStartResult(result)
-        .build()
-    )
+        .build())
   }
 
   def handleStreamingQyeryCommand(
-    command: StreamingQueryCommand,
-    sessionId: String,
-    responseObserver: StreamObserver[ExecutePlanResponse]): Unit = {
+      command: StreamingQueryCommand,
+      sessionId: String,
+      responseObserver: StreamObserver[ExecutePlanResponse]): Unit = {
 
     val id = command.getId
 
@@ -1932,7 +1932,8 @@ class SparkConnectPlanner(val session: SparkSession) {
       case StreamingQueryCommand.CommandTypeCase.STATUS =>
         val recentProgress: Seq[String] = command.getStatus.getRecentProgressLimit match {
           case 0 => Seq.empty
-          case limit if limit < 0 => query.recentProgress.map(_.json) // All the cached progresses.
+          case limit if limit < 0 =>
+            query.recentProgress.map(_.json) // All the cached progresses.
           case limit => query.recentProgress.takeRight(limit).map(_.json) // Most recent
         }
 
@@ -1961,8 +1962,7 @@ class SparkConnectPlanner(val session: SparkSession) {
         .newBuilder()
         .setSessionId(sessionId)
         .setStreamingQueryCommandResult(respBuilder.build())
-        .build()
-    )
+        .build())
   }
 
   private val emptyLocalRelation = LocalRelation(
