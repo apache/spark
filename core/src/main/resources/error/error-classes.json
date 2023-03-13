@@ -1730,6 +1730,11 @@
           "Pandas user defined aggregate function in the PIVOT clause."
         ]
       },
+      "PARAMETER_MARKER_IN_UNEXPECTED_STATEMENT" : {
+        "message" : [
+          "Parameter markers in unexpected statement: <statement>. Parameter markers must only be used in a query, or DML statement."
+        ]
+      },
       "PIVOT_AFTER_GROUP_BY" : {
         "message" : [
           "PIVOT clause following a GROUP BY clause. Consider pushing the GROUP BY into a subquery."

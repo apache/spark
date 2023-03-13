@@ -554,7 +554,8 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
       parameters = Map("columnName" -> "`duplicatedcol`"))
   }
 
-  test("Writes fails without path or table") {
+  // TODO(SPARK-42733): Writes without path or table should work.
+  ignore("Writes fails without path or table") {
     assertThrows[UnsupportedOperationException] {
       transform(localRelation.write())
     }

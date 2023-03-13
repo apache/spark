@@ -2679,4 +2679,20 @@ class SubquerySuite extends QueryTest
         Row(8, 6))
     }
   }
+
+  test("SPARK-42745: Improved AliasAwareOutputExpression works with DSv2") {
+    withSQLConf(
+      SQLConf.USE_V1_SOURCE_LIST.key -> "") {
+      withTempPath { path =>
+        spark.range(0)
+          .write
+          .mode("overwrite")
+          .parquet(path.getCanonicalPath)
+        withTempView("t1") {
+          spark.read.parquet(path.toString).createOrReplaceTempView("t1")
+          checkAnswer(sql("select (select sum(id) from t1)"), Row(null))
+        }
+      }
+    }
+  }
 }

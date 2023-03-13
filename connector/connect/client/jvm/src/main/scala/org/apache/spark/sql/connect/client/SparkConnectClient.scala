@@ -17,10 +17,11 @@
 
 package org.apache.spark.sql.connect.client
 
-import io.grpc.{CallCredentials, CallOptions, Channel, ClientCall, ClientInterceptor, CompositeChannelCredentials, ForwardingClientCall, Grpc, InsecureChannelCredentials, ManagedChannel, Metadata, MethodDescriptor, Status, TlsChannelCredentials}
+import io.grpc.{CallCredentials, CallOptions, Channel, ClientCall, ClientInterceptor, CompositeChannelCredentials, ForwardingClientCall, Grpc, InsecureChannelCredentials, ManagedChannel, ManagedChannelBuilder, Metadata, MethodDescriptor, Status, TlsChannelCredentials}
 import java.net.URI
 import java.util.UUID
 import java.util.concurrent.Executor
+import scala.language.existentials
 
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.UserContext
@@ -31,8 +32,10 @@ import org.apache.spark.sql.connect.common.config.ConnectCommon
  */
 private[sql] class SparkConnectClient(
     private val userContext: proto.UserContext,
-    private val channel: ManagedChannel,
+    private val channelBuilder: ManagedChannelBuilder[_],
     private[client] val userAgent: String) {
+
+  private[this] lazy val channel: ManagedChannel = channelBuilder.build()
 
   private[this] val stub = proto.SparkConnectServiceGrpc.newBlockingStub(channel)
 
@@ -154,6 +157,15 @@ private[sql] class SparkConnectClient(
     analyze(builder)
   }
 
+  def semanticHash(plan: proto.Plan): proto.AnalyzePlanResponse = {
+    val builder = proto.AnalyzePlanRequest.newBuilder()
+    builder.setSemanticHash(
+      proto.AnalyzePlanRequest.SemanticHash
+        .newBuilder()
+        .setPlan(plan))
+    analyze(builder)
+  }
+
   private def analyze(builder: proto.AnalyzePlanRequest.Builder): proto.AnalyzePlanResponse = {
     val request = builder
       .setUserContext(userContext)
@@ -164,7 +176,7 @@ private[sql] class SparkConnectClient(
   }
 
   def copy(): SparkConnectClient = {
-    new SparkConnectClient(userContext, channel, userAgent)
+    new SparkConnectClient(userContext, channelBuilder, userAgent)
   }
 
   /**
@@ -208,8 +220,8 @@ private[sql] object SparkConnectClient {
       "Either remove 'token' or set 'use_ssl=true'"
 
   // for internal tests
-  def apply(userContext: UserContext, channel: ManagedChannel): SparkConnectClient =
-    new SparkConnectClient(userContext, channel, DEFAULT_USER_AGENT)
+  def apply(userContext: UserContext, builder: ManagedChannelBuilder[_]): SparkConnectClient =
+    new SparkConnectClient(userContext, builder, DEFAULT_USER_AGENT)
 
   def builder(): Builder = new Builder()
 
@@ -394,10 +406,9 @@ private[sql] object SparkConnectClient {
       if (metadata.nonEmpty) {
         channelBuilder.intercept(new MetadataHeaderClientInterceptor(metadata))
       }
-      val channel: ManagedChannel = channelBuilder.build()
       new SparkConnectClient(
         userContextBuilder.build(),
-        channel,
+        channelBuilder,
         userAgent.getOrElse(DEFAULT_USER_AGENT))
     }
   }

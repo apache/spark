@@ -41,7 +41,7 @@ class DatasetSuite extends ConnectFunSuite with BeforeAndAfterEach {
   private def newSparkSession(): SparkSession = {
     val client = new SparkConnectClient(
       proto.UserContext.newBuilder().build(),
-      InProcessChannelBuilder.forName(getClass.getName).directExecutor().build(),
+      InProcessChannelBuilder.forName(getClass.getName).directExecutor(),
       "test")
     new SparkSession(client, cleaner = SparkSession.cleaner, planIdGenerator = new AtomicLong)
   }

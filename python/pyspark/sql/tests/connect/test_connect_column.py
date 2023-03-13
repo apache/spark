@@ -23,7 +23,6 @@ from pyspark.sql.types import (
     Row,
     StructField,
     StructType,
-    ArrayType,
     MapType,
     NullType,
     DateType,
@@ -437,7 +436,6 @@ class SparkConnectColumnTests(SparkConnectSQLTestCase):
             (0.1, DecimalType()),
             (datetime.date(2022, 12, 13), TimestampType()),
             (datetime.timedelta(1, 2, 3), DateType()),
-            ([1, 2, 3], ArrayType(IntegerType())),
             ({1: 2}, MapType(IntegerType(), IntegerType())),
             (
                 {"a": "xyz", "b": 1},
@@ -474,7 +472,6 @@ class SparkConnectColumnTests(SparkConnectSQLTestCase):
         for value, dataType in [
             ("123", NullType()),
             (123, NullType()),
-            (None, ArrayType(IntegerType())),
             (None, MapType(IntegerType(), IntegerType())),
             (None, StructType([StructField("a", StringType())])),
         ]:

@@ -336,7 +336,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
           case p: Parameter =>
             p.failAnalysis(
               errorClass = "UNBOUND_SQL_PARAMETER",
-              messageParameters = Map("name" -> toSQLId(p.name)))
+              messageParameters = Map("name" -> p.name))
 
           case _ =>
         })

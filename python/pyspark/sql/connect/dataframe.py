@@ -76,6 +76,7 @@ if TYPE_CHECKING:
         PrimitiveType,
         OptionalPrimitiveType,
         PandasMapIterFunction,
+        ArrowMapIterFunction,
     )
     from pyspark.sql.connect.session import SparkSession
 
@@ -1572,8 +1573,11 @@ class DataFrame:
     def storageLevel(self, *args: Any, **kwargs: Any) -> None:
         raise NotImplementedError("storageLevel() is not implemented.")
 
-    def mapInPandas(
-        self, func: "PandasMapIterFunction", schema: Union[StructType, str]
+    def _map_partitions(
+        self,
+        func: "PandasMapIterFunction",
+        schema: Union[StructType, str],
+        evalType: int,
     ) -> "DataFrame":
         from pyspark.sql.connect.udf import UserDefinedFunction
 
@@ -1581,7 +1585,9 @@ class DataFrame:
             raise Exception("Cannot mapInPandas when self._plan is empty.")
 
         udf_obj = UserDefinedFunction(
-            func, returnType=schema, evalType=PythonEvalType.SQL_MAP_PANDAS_ITER_UDF
+            func,
+            returnType=schema,
+            evalType=evalType,
         )
 
         return DataFrame.withPlan(
@@ -1589,10 +1595,19 @@ class DataFrame:
             session=self._session,
         )
 
+    def mapInPandas(
+        self, func: "PandasMapIterFunction", schema: Union[StructType, str]
+    ) -> "DataFrame":
+        return self._map_partitions(func, schema, PythonEvalType.SQL_MAP_PANDAS_ITER_UDF)
+
     mapInPandas.__doc__ = PySparkDataFrame.mapInPandas.__doc__
 
-    def mapInArrow(self, *args: Any, **kwargs: Any) -> None:
-        raise NotImplementedError("mapInArrow() is not implemented.")
+    def mapInArrow(
+        self, func: "ArrowMapIterFunction", schema: Union[StructType, str]
+    ) -> "DataFrame":
+        return self._map_partitions(func, schema, PythonEvalType.SQL_MAP_ARROW_ITER_UDF)
+
+    mapInArrow.__doc__ = PySparkDataFrame.mapInArrow.__doc__
 
     def writeStream(self, *args: Any, **kwargs: Any) -> None:
         raise NotImplementedError("writeStream() is not implemented.")
@@ -1603,9 +1618,6 @@ class DataFrame:
     def _repr_html_(self, *args: Any, **kwargs: Any) -> None:
         raise NotImplementedError("_repr_html_() is not implemented.")
 
-    def semanticHash(self, *args: Any, **kwargs: Any) -> None:
-        raise NotImplementedError("semanticHash() is not implemented.")
-
     def sameSemantics(self, other: "DataFrame") -> bool:
         assert self._plan is not None
         assert other._plan is not None
@@ -1615,6 +1627,14 @@ class DataFrame:
         )
 
     sameSemantics.__doc__ = PySparkDataFrame.sameSemantics.__doc__
+
+    def semanticHash(self) -> int:
+        assert self._plan is not None
+        return self._session.client.semantic_hash(
+            plan=self._plan.to_proto(self._session.client),
+        )
+
+    semanticHash.__doc__ = PySparkDataFrame.semanticHash.__doc__
 
     def writeTo(self, table: str) -> "DataFrameWriterV2":
         assert self._plan is not None

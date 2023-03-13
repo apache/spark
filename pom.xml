@@ -223,7 +223,7 @@
     <arrow.version>11.0.0</arrow.version>
     <!-- org.fusesource.leveldbjni will be used except on arm64 platform. -->
     <leveldbjni.group>org.fusesource.leveldbjni</leveldbjni.group>
-    <kubernetes-client.version>6.4.1</kubernetes-client.version>
+    <kubernetes-client.version>6.5.0</kubernetes-client.version>
 
     <test.java.home>${java.home}</test.java.home>
 
@@ -686,7 +686,7 @@
       <dependency>
         <groupId>org.rocksdb</groupId>
         <artifactId>rocksdbjni</artifactId>
-        <version>7.9.2</version>
+        <version>7.10.2</version>
       </dependency>
       <dependency>
         <groupId>${leveldbjni.group}</groupId>
@@ -1073,11 +1073,6 @@
             <artifactId>commons-math3</artifactId>
           </exclusion>
         </exclusions>
-      </dependency>
-      <dependency>
-        <groupId>com.chuusai</groupId>
-        <artifactId>shapeless_${scala.binary.version}</artifactId>
-        <version>2.3.9</version>
       </dependency>
       <dependency>
         <groupId>org.json4s</groupId>
@@ -2934,7 +2929,7 @@
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-surefire-plugin</artifactId>
-          <version>3.0.0-M8</version>
+          <version>3.0.0-M9</version>
           <!-- Note config is repeated in scalatest config -->
           <configuration>
             <includes>
@@ -2957,7 +2952,7 @@
               <JAVA_HOME>${test.java.home}</JAVA_HOME>
               <SPARK_BEELINE_OPTS>-DmyKey=yourValue</SPARK_BEELINE_OPTS>
             </environmentVariables>
-            <systemProperties>
+            <systemPropertyVariables>
               <log4j.configurationFile>file:src/test/resources/log4j2.properties</log4j.configurationFile>
               <derby.system.durability>test</derby.system.durability>
               <java.awt.headless>true</java.awt.headless>
@@ -2972,7 +2967,7 @@
               <spark.hadoop.hadoop.security.key.provider.path>test:///</spark.hadoop.hadoop.security.key.provider.path>
               <!-- Needed by sql/hive tests. -->
               <test.src.tables>src</test.src.tables>
-            </systemProperties>
+            </systemPropertyVariables>
             <failIfNoTests>false</failIfNoTests>
             <failIfNoSpecifiedTests>false</failIfNoSpecifiedTests>
             <excludedGroups>${test.exclude.tags}</excludedGroups>
