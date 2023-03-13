@@ -1417,7 +1417,7 @@ case class ArrayContains(left: Expression, right: Expression)
        NULL
   """,
   group = "array_funcs",
-  since = "3.4.0")
+  since = "3.5.0")
 case class ArrayPrepend(left: Expression, right: Expression)
   extends BinaryExpression
     with ImplicitCastInputTypes

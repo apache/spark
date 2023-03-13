@@ -4048,7 +4048,7 @@ object functions {
      * positioned at the beginning of the array.
      *
      * @group collection_funcs
-     * @since 3.4.0
+     * @since 3.5.0
      */
   def array_prepend(column: Column, element: Any): Column = withExpr {
     ArrayPrepend(column.expr, lit(element).expr)
