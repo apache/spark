@@ -40,7 +40,6 @@ private[spark] class DriverServiceFeatureStep(
       "managed via a Kubernetes service.")
 
   private val preferredServiceName = s"${kubernetesConf.resourceNamePrefix}$DRIVER_SVC_POSTFIX"
-  // VisibleForTesting
   private[k8s] val resolvedServiceName: String = if (preferredServiceName.length <= MAX_SERVICE_NAME_LENGTH) {
     preferredServiceName
   } else {
