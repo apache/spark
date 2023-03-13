@@ -2467,6 +2467,8 @@ udf.__doc__ = pysparkfuncs.udf.__doc__
 
 
 def pandas_udf(*args: Any, **kwargs: Any) -> None:
+    # The implementation of pandas_udf is embedded in pyspark.sql.function.pandas_udf
+    # for code reuse.
     raise NotImplementedError("Please import pandas_udf from pyspark.sql.functions.")
 
 
