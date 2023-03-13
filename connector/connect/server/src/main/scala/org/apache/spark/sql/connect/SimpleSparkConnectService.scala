@@ -48,7 +48,7 @@ private[sql] object SimpleSparkConnectService {
     properties.setProperty("user", "testUser")
     properties.setProperty("password", "testPass")
 
-    val conn = DriverManager.getConnection("jdbc:h2:mem:testdb0", properties)
+    val conn = DriverManager.getConnection("jdbc:h2:mem:testdb2", properties)
     conn.prepareStatement("create schema test").executeUpdate()
     conn.commit()
     conn.close()
