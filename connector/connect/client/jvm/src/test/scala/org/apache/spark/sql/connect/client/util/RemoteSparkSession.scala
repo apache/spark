@@ -66,10 +66,11 @@ object SparkConnectServerUtils {
       "hive"
     } else {
       // scalastyle:off println
-      println("Will start Spark Connect server with `spark.sql.catalogImplementation=in-memory`, " +
-        "some tests that rely on Hive will be ignored. If you don't want to skip them:\n" +
-        "1. Test with maven: run `build/mvn package -Phive` before testing\n" +
-        "2. Test with sbt: run test with `-Phive`")
+      println(
+        "Will start Spark Connect server with `spark.sql.catalogImplementation=in-memory`, " +
+          "some tests that rely on Hive will be ignored. If you don't want to skip them:\n" +
+          "1. Test with maven: run `build/mvn package -Phive` before testing\n" +
+          "2. Test with sbt: run test with `-Phive`")
       // scalastyle:on println
       "in-memory"
     }
