@@ -25,6 +25,7 @@ import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.k8s.{KubernetesTestConf, SparkPod}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
+import org.apache.spark.deploy.k8s.features.DriverServiceFeatureStep.KUBERNETES_DRIVER_SERVICE_NAME
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.util.ManualClock
@@ -226,6 +227,20 @@ class DriverServiceFeatureStepSuite extends SparkFunSuite {
         assert(driverService.getSpec.getIpFamilies === answer.asJava)
       }
     }
+  }
+
+  test("[SPARK-40763] Spark Pod Additional Properties contain driver service name") {
+    val sparkConf = new SparkConf(false)
+      .set(DRIVER_PORT, 9000)
+      .set(DRIVER_BLOCK_MANAGER_PORT, 8080)
+    val kconf = KubernetesTestConf.createDriverConf(
+      sparkConf = sparkConf,
+      labels = DRIVER_LABELS)
+    val configurationStep = new DriverServiceFeatureStep(kconf)
+    val pod = configurationStep.configurePod(SparkPod.initialPod())
+    assert(pod.pod.getAdditionalProperties.containsKey(KUBERNETES_DRIVER_SERVICE_NAME))
+    assert(pod.pod.getAdditionalProperties.get(KUBERNETES_DRIVER_SERVICE_NAME)
+      .equals(configurationStep.resolvedServiceName))
   }
 
   private def verifyService(

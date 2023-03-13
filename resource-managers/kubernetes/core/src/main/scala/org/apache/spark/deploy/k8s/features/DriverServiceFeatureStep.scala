@@ -40,7 +40,8 @@ private[spark] class DriverServiceFeatureStep(
       "managed via a Kubernetes service.")
 
   private val preferredServiceName = s"${kubernetesConf.resourceNamePrefix}$DRIVER_SVC_POSTFIX"
-  private val resolvedServiceName = if (preferredServiceName.length <= MAX_SERVICE_NAME_LENGTH) {
+  // VisibleForTesting
+  val resolvedServiceName: String = if (preferredServiceName.length <= MAX_SERVICE_NAME_LENGTH) {
     preferredServiceName
   } else {
     val randomServiceId = KubernetesUtils.uniqueID(clock = clock)
@@ -61,7 +62,10 @@ private[spark] class DriverServiceFeatureStep(
     config.DRIVER_BLOCK_MANAGER_PORT.key, DEFAULT_BLOCKMANAGER_PORT)
   private val  driverUIPort = kubernetesConf.get(config.UI.UI_PORT)
 
-  override def configurePod(pod: SparkPod): SparkPod = pod
+  override def configurePod(pod: SparkPod): SparkPod = {
+    pod.pod.setAdditionalProperty(KUBERNETES_DRIVER_SERVICE_NAME, resolvedServiceName)
+    pod
+  }
 
   override def getAdditionalPodSystemProperties(): Map[String, String] = {
     val driverHostname = s"$resolvedServiceName.${kubernetesConf.namespace}.svc"
@@ -109,4 +113,5 @@ private[spark] object DriverServiceFeatureStep {
   val DRIVER_HOST_KEY = config.DRIVER_HOST_ADDRESS.key
   val DRIVER_SVC_POSTFIX = "-driver-svc"
   val MAX_SERVICE_NAME_LENGTH = KUBERNETES_DNS_LABEL_NAME_MAX_LENGTH
+  val KUBERNETES_DRIVER_SERVICE_NAME = "spark.kubernetes.driver.service.name"
 }
