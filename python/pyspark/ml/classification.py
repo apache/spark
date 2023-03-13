@@ -94,6 +94,7 @@ from pyspark.sql import DataFrame, Row
 from pyspark.sql.functions import udf, when
 from pyspark.sql.types import ArrayType, DoubleType
 from pyspark.storagelevel import StorageLevel
+from pyspark.sql.connect.ml.utils import try_remote_ml_class
 
 
 if TYPE_CHECKING:
@@ -1311,6 +1312,7 @@ class _LogisticRegressionCommon(ProbabilisticClassifier, _LogisticRegressionPara
         return self._set(maxBlockSizeInMB=value)
 
 
+@try_remote_ml_class
 @inherit_doc
 class LogisticRegression(
     _JavaProbabilisticClassifier["LogisticRegressionModel"],
@@ -1516,6 +1518,7 @@ class LogisticRegression(
         return LogisticRegressionModel(java_model)
 
 
+@try_remote_ml_class
 class LogisticRegressionModel(
     _JavaProbabilisticClassificationModel[Vector],
     _LogisticRegressionParams,

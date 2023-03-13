@@ -28,6 +28,8 @@ from pyspark.ml.common import inherit_doc
 from pyspark.sql import SparkSession
 from pyspark.util import VersionUtils
 
+from pyspark.sql.connect.ml.utils import try_remote_ml_classmethod
+
 if TYPE_CHECKING:
     from py4j.java_gateway import JavaGateway, JavaObject
     from pyspark.ml._typing import PipelineStage
@@ -360,6 +362,7 @@ class JavaMLReadable(MLReadable[RL]):
     """
 
     @classmethod
+    @try_remote_ml_classmethod
     def read(cls) -> JavaMLReader[RL]:
         """Returns an MLReader instance for this class."""
         return JavaMLReader(cls)
