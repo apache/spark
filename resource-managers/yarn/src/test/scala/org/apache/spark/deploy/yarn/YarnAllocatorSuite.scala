@@ -838,4 +838,36 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers {
     verify(rpcEndPoint, times(1)).
       send(DecommissionExecutorsOnHost(org.mockito.ArgumentMatchers.any()))
   }
+
+  test("SPARK-42766: handleAllocatedContainers should exclude yarn excluded node") {
+    val (handler, _) = createAllocator(4)
+    handler.updateResourceRequests()
+    handler.getNumExecutorsRunning should be(0)
+    handler.getNumContainersPendingAllocate should be(4)
+
+    var resourceProfileToTotalExecs = mutable.HashMap(defaultRP -> 3)
+    var numLocalityAwareTasksPerResourceProfileId = mutable.HashMap(defaultRPId -> 0)
+    handler.requestTotalExecutorsWithPreferredLocalities(resourceProfileToTotalExecs.toMap,
+      numLocalityAwareTasksPerResourceProfileId.toMap, Map.empty, Set("hostA"))
+    handler.updateResourceRequests()
+    handler.getNumContainersPendingAllocate should be(3)
+
+    val container1 = createContainer("hostA")
+    val container2 = createContainer("hostB")
+    handler.handleAllocatedContainers(Array(container1, container2))
+    handler.getNumExecutorsRunning should be(1)
+    handler.getNumReleasedContainers should be(1)
+
+    resourceProfileToTotalExecs = mutable.HashMap(defaultRP -> 3)
+    numLocalityAwareTasksPerResourceProfileId = mutable.HashMap(defaultRPId -> 0)
+    handler.requestTotalExecutorsWithPreferredLocalities(resourceProfileToTotalExecs.toMap,
+      numLocalityAwareTasksPerResourceProfileId.toMap, Map.empty, Set("hostD"))
+    handler.updateResourceRequests()
+    handler.getNumContainersPendingAllocate should be(2)
+    val container3 = createContainer("hostC")
+    val container4 = createContainer("hostB")
+    handler.handleAllocatedContainers(Array(container3, container4))
+    handler.getNumExecutorsRunning should be(3)
+    handler.getNumReleasedContainers should be(1)
+  }
 }

@@ -623,7 +623,7 @@ private[yarn] class YarnAllocator(
    * Visible for testing.
    */
   def handleAllocatedContainers(allocatedContainers: Seq[Container]): Unit = {
-    val containersToUse = new ArrayBuffer[Container](allocatedContainers.size)
+    var containersToUse = new ArrayBuffer[Container](allocatedContainers.size)
 
     // Match incoming requests by host
     val remainingAfterHostMatches = new ArrayBuffer[Container]
@@ -682,6 +682,14 @@ private[yarn] class YarnAllocator(
         internalReleaseContainer(container)
       }
     }
+
+    containersToUse = containersToUse.filter(container => {
+      val nodeExcluded = allocatorNodeHealthTracker.nodeIsExcluded(container.getNodeId.getHost)
+      if (nodeExcluded) {
+        internalReleaseContainer(container)
+      }
+      !nodeExcluded
+    })
 
     runAllocatedContainers(containersToUse)
 

@@ -144,6 +144,10 @@ private[spark] class YarnAllocatorNodeHealthTracker(
     val now = failureTracker.clock.getTimeMillis()
     allocatorExcludedNodeList.retain { (_, expiryTime) => expiryTime > now }
   }
+
+  def nodeIsExcluded(nodeHost: String): Boolean = {
+    currentExcludededYarnNodes.contains(nodeHost)
+  }
 }
 
 /**
