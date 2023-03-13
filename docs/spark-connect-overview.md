@@ -196,6 +196,14 @@ Now you can run PySpark code in the shell to see Spark Connect in action:
 >>> data = [(1,"Sarah"),(2,"Maria")]
 >>> df = spark.createDataFrame(data).toDF(*columns)
 >>> df.show()
++---+-----+
+| id| name|
++---+-----+
+|  1|Sarah|
+|  2|Maria|
++---+-----+
+
+>>>
 {% endhighlight %}
 </div>
 
