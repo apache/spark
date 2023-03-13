@@ -674,10 +674,11 @@ class SparkConnectPlanner(val session: SparkSession) {
         throw InvalidPlanInput(s"Input data for LocalRelation does not produce a schema.")
       }
       val attributes = structType.toAttributes
+      val proj = UnsafeProjection.create(attributes, attributes)
+      val data = rows.map(proj)
 
       if (schema == null) {
-        val proj = UnsafeProjection.create(attributes, attributes)
-        logical.LocalRelation(attributes, rows.map(r => proj(r).copy()).toSeq)
+        logical.LocalRelation(attributes, data.map(_.copy()).toSeq)
       } else {
         def udtToSqlType(dt: DataType): DataType = dt match {
           case udt: UserDefinedType[_] => udt.sqlType
@@ -703,7 +704,7 @@ class SparkConnectPlanner(val session: SparkSession) {
           .asInstanceOf[Project]
 
         val proj = UnsafeProjection.create(project.projectList, project.child.output)
-        logical.LocalRelation(schema.toAttributes, rows.map(r => proj(r).copy()).toSeq)
+        logical.LocalRelation(schema.toAttributes, data.map(proj).map(_.copy()).toSeq)
       }
     } else {
       if (schema == null) {
