@@ -23,6 +23,7 @@ import org.apache.spark.connect.proto
 import org.apache.spark.ml.Model
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.connect.common.LiteralValueProtoConverter
 import org.apache.spark.sql.connect.service.SessionHolder
 
 object MLHandler {
@@ -112,7 +113,9 @@ object MLHandler {
           saveModelProto.getOverwrite,
           saveModelProto.getOptionsMap.asScala.toMap
         )
-        proto.MlCommandResponse.newBuilder().build()
+        proto.MlCommandResponse.newBuilder().setLiteral(
+          LiteralValueProtoConverter.toLiteralProto(null)
+        ).build()
 
       case proto.MlCommand.MlCommandTypeCase.LOAD_STAGE =>
         val loadStageProto = mlCommand.getLoadStage
@@ -140,7 +143,6 @@ object MLHandler {
         stageProto.getType match {
           case proto.MlStage.StageType.ESTIMATOR =>
             val name = stageProto.getName
-            proto.MlCommandResponse.newBuilder().build()
             val algo = AlgorithmRegistry.get(name)
             val estimator = algo.initiateEstimator(stageProto.getUid)
             MLUtils.setInstanceParams(estimator, stageProto.getParams)
@@ -150,7 +152,9 @@ object MLHandler {
               saveStageProto.getOverwrite,
               saveStageProto.getOptionsMap.asScala.toMap
             )
-            proto.MlCommandResponse.newBuilder().build()
+            proto.MlCommandResponse.newBuilder().setLiteral(
+              LiteralValueProtoConverter.toLiteralProto(null)
+            ).build()
 
           case _ =>
             throw new UnsupportedOperationException()

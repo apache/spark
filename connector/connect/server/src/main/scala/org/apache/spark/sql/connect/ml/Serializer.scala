@@ -19,9 +19,7 @@ package org.apache.spark.sql.connect.ml
 
 import org.apache.spark.connect.proto
 import org.apache.spark.ml.linalg.{Matrix, Vector}
-import org.apache.spark.sql.connect.common.DataTypeProtoConverter
-import org.apache.spark.sql.connect.planner.LiteralValueProtoConverter
-import org.apache.spark.sql.types
+import org.apache.spark.sql.connect.common.LiteralValueProtoConverter
 
 
 object Serializer {
@@ -30,30 +28,10 @@ object Serializer {
     data match {
       case v: Vector => serializeVector(v)
       case v: Matrix => serializeMatrix(v)
-      case v: Array[_] =>
-        // TODO: Make `LiteralValueProtoConverter.toConnectProtoValue` support it.
-        val arrayProto = proto.Expression.Literal.Array.newBuilder()
-        for (e <- v) {
-          arrayProto.addElements(LiteralValueProtoConverter.toConnectProtoValue(e))
-        }
-        arrayProto.setElementType(
-          DataTypeProtoConverter.toConnectProtoType(v(0) match {
-            case _: Byte => types.ByteType
-            case _: Short => types.ShortType
-            case _: Int => types.IntegerType
-            case _: Long => types.LongType
-            case _: Float => types.FloatType
-            case _: Double => types.DoubleType
-            case _ => throw new UnsupportedOperationException()
-          })
-        )
+      case _: Byte | _: Short | _: Int | _: Long | _: Float |
+           _: Double |_: Boolean | _: String | _: Array[_] =>
         proto.MlCommandResponse.newBuilder().setLiteral(
-          proto.Expression.Literal.newBuilder()
-            .setArray(arrayProto)
-        ).build()
-      case _: Byte | _: Short | _: Int | _: Long | _: Float | _: Double |_: Boolean | _: String =>
-        proto.MlCommandResponse.newBuilder().setLiteral(
-          LiteralValueProtoConverter.toConnectProtoValue(data)
+          LiteralValueProtoConverter.toLiteralProto(data)
         ).build()
     }
   }

@@ -20,7 +20,9 @@ package org.apache.spark.sql.connect.ml
 import org.apache.spark.connect.proto
 import org.apache.spark.ml.param.Params
 import org.apache.spark.sql.{DataFrame, Dataset}
-import org.apache.spark.sql.connect.planner.{LiteralValueProtoConverter, SparkConnectPlanner}
+import org.apache.spark.sql.connect.common.LiteralValueProtoConverter
+import org.apache.spark.sql.connect.planner.LiteralExpressionProtoConverter
+import org.apache.spark.sql.connect.planner.SparkConnectPlanner
 import org.apache.spark.sql.connect.service.SessionHolder
 
 object MLUtils {
@@ -40,7 +42,7 @@ object MLUtils {
   }
 
   def parseParamValue(paramType: Class[_], paramValueProto: proto.Expression.Literal): Any = {
-    val value = LiteralValueProtoConverter.toCatalystValue(paramValueProto)
+    val value = LiteralExpressionProtoConverter.toCatalystValue(paramValueProto)
     _convertParamValue(paramType, value)
   }
 
@@ -85,11 +87,11 @@ object MLUtils {
       val defaultValueOpt = instance.getDefault(param)
 
       if (valueOpt.isDefined) {
-        val valueProto = LiteralValueProtoConverter.toConnectProtoValue(valueOpt.get)
+        val valueProto = LiteralValueProtoConverter.toLiteralProto(valueOpt.get)
         builder.putParams(name, valueProto)
       }
       if (defaultValueOpt.isDefined) {
-        val defaultValueProto = LiteralValueProtoConverter.toConnectProtoValue(defaultValueOpt.get)
+        val defaultValueProto = LiteralValueProtoConverter.toLiteralProto(defaultValueOpt.get)
         builder.putDefaultParams(name, defaultValueProto)
       }
     }
