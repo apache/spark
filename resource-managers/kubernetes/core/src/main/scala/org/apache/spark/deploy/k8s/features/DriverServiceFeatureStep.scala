@@ -41,7 +41,7 @@ private[spark] class DriverServiceFeatureStep(
 
   private val preferredServiceName = s"${kubernetesConf.resourceNamePrefix}$DRIVER_SVC_POSTFIX"
   // VisibleForTesting
-  val resolvedServiceName: String = if (preferredServiceName.length <= MAX_SERVICE_NAME_LENGTH) {
+  private[k8s] val resolvedServiceName: String = if (preferredServiceName.length <= MAX_SERVICE_NAME_LENGTH) {
     preferredServiceName
   } else {
     val randomServiceId = KubernetesUtils.uniqueID(clock = clock)
