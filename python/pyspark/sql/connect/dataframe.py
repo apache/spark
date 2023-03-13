@@ -1618,9 +1618,6 @@ class DataFrame:
     def _repr_html_(self, *args: Any, **kwargs: Any) -> None:
         raise NotImplementedError("_repr_html_() is not implemented.")
 
-    def semanticHash(self, *args: Any, **kwargs: Any) -> None:
-        raise NotImplementedError("semanticHash() is not implemented.")
-
     def sameSemantics(self, other: "DataFrame") -> bool:
         assert self._plan is not None
         assert other._plan is not None
@@ -1630,6 +1627,14 @@ class DataFrame:
         )
 
     sameSemantics.__doc__ = PySparkDataFrame.sameSemantics.__doc__
+
+    def semanticHash(self) -> int:
+        assert self._plan is not None
+        return self._session.client.semantic_hash(
+            plan=self._plan.to_proto(self._session.client),
+        )
+
+    semanticHash.__doc__ = PySparkDataFrame.semanticHash.__doc__
 
     def writeTo(self, table: str) -> "DataFrameWriterV2":
         assert self._plan is not None

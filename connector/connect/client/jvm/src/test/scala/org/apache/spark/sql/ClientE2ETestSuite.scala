@@ -635,6 +635,21 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper {
     assert(plan.sameSemantics(otherPlan))
   }
 
+  test("sameSemantics and semanticHash") {
+    val df1 = spark.createDataFrame(Seq((1, 2), (4, 5)))
+    val df2 = spark.createDataFrame(Seq((1, 2), (4, 5)))
+    val df3 = spark.createDataFrame(Seq((0, 2), (4, 5)))
+    val df4 = spark.createDataFrame(Seq((0, 2), (4, 5)))
+
+    assert(df1.sameSemantics(df2) === true)
+    assert(df1.sameSemantics(df3) === false)
+    assert(df3.sameSemantics(df4) === true)
+
+    assert(df1.semanticHash === df2.semanticHash)
+    assert(df1.semanticHash !== df3.semanticHash)
+    assert(df3.semanticHash === df4.semanticHash)
+  }
+
   test("toJSON") {
     val expected = Array(
       """{"b":0.0,"id":0,"d":"world","a":0}""",

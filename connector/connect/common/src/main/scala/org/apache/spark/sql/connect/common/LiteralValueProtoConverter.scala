@@ -14,7 +14,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.expressions
+
+package org.apache.spark.sql.connect.common
 
 import java.lang.{Boolean => JBoolean, Byte => JByte, Character => JChar, Double => JDouble, Float => JFloat, Integer => JInteger, Long => JLong, Short => JShort}
 import java.math.{BigDecimal => JBigDecimal}
@@ -25,12 +26,11 @@ import com.google.protobuf.ByteString
 
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.catalyst.util.{DateTimeUtils, IntervalUtils}
-import org.apache.spark.sql.connect.client.unsupported
 import org.apache.spark.sql.connect.common.DataTypeProtoConverter._
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
 
-object LiteralProtoConverter {
+object LiteralValueProtoConverter {
 
   private lazy val nullType =
     proto.DataType.newBuilder().setNull(proto.DataType.NULL.getDefaultInstance).build()
@@ -93,7 +93,7 @@ object LiteralProtoConverter {
       case v: CalendarInterval =>
         builder.setCalendarInterval(calendarIntervalBuilder(v.months, v.days, v.microseconds))
       case null => builder.setNull(nullType)
-      case _ => unsupported(s"literal $literal not supported (yet).")
+      case _ => throw new UnsupportedOperationException(s"literal $literal not supported (yet).")
     }
   }
 
@@ -103,7 +103,7 @@ object LiteralProtoConverter {
    * @return
    *   proto.Expression.Literal
    */
-  private def toLiteralProto(literal: Any): proto.Expression.Literal =
+  def toLiteralProto(literal: Any): proto.Expression.Literal =
     toLiteralProtoBuilder(literal).build()
 
   private def toDataType(clz: Class[_]): DataType = clz match {

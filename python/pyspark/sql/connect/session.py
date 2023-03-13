@@ -53,7 +53,7 @@ from pyspark.sql.connect.dataframe import DataFrame
 from pyspark.sql.connect.plan import SQL, Range, LocalRelation, CachedRelation
 from pyspark.sql.connect.readwriter import DataFrameReader
 from pyspark.sql.pandas.serializers import ArrowStreamPandasSerializer
-from pyspark.sql.pandas.types import to_arrow_type, _get_local_timezone
+from pyspark.sql.pandas.types import to_arrow_schema, to_arrow_type, _get_local_timezone
 from pyspark.sql.session import classproperty, SparkSession as PySparkSession
 from pyspark.sql.types import (
     _infer_schema,
@@ -241,8 +241,10 @@ class SparkSession:
                 _num_cols = len(_cols)
 
             # Determine arrow types to coerce data when creating batches
+            arrow_schema: Optional[pa.Schema] = None
             if isinstance(schema, StructType):
-                arrow_types = [to_arrow_type(f.dataType) for f in schema.fields]
+                arrow_schema = to_arrow_schema(schema)
+                arrow_types = [field.type for field in arrow_schema]
                 _cols = [str(x) if not isinstance(x, str) else x for x in schema.fieldNames()]
             elif isinstance(schema, DataType):
                 raise ValueError("Single data type %s is not supported with Arrow" % str(schema))
@@ -266,6 +268,10 @@ class SparkSession:
             _table = pa.Table.from_batches(
                 [ser._create_batch([(c, t) for (_, c), t in zip(data.items(), arrow_types)])]
             )
+
+            if isinstance(schema, StructType):
+                assert arrow_schema is not None
+                _table = _table.rename_columns(schema.names).cast(arrow_schema)
 
         elif isinstance(data, np.ndarray):
             if data.ndim not in [1, 2]:
@@ -311,29 +317,35 @@ class SparkSession:
                 # we need to convert it to [[1], [2], [3]] to be able to infer schema.
                 _data = [[d] for d in _data]
 
-            _inferred_schema = self._inferSchemaFromList(_data, _cols)
+            if _schema is not None:
+                if isinstance(_schema, StructType):
+                    _inferred_schema = _schema
+                else:
+                    _inferred_schema = StructType().add("value", _schema)
+            else:
+                _inferred_schema = self._inferSchemaFromList(_data, _cols)
 
-            if _cols is not None and cast(int, _num_cols) < len(_cols):
-                _num_cols = len(_cols)
+                if _cols is not None and cast(int, _num_cols) < len(_cols):
+                    _num_cols = len(_cols)
 
-            if _has_nulltype(_inferred_schema):
-                # For cases like createDataFrame([("Alice", None, 80.1)], schema)
-                # we can not infer the schema from the data itself.
-                warnings.warn("failed to infer the schema from data")
-                if _schema is None and _schema_str is not None:
-                    _parsed = self.client._analyze(
-                        method="ddl_parse", ddl_string=_schema_str
-                    ).parsed
-                    if isinstance(_parsed, StructType):
-                        _schema = _parsed
-                    elif isinstance(_parsed, DataType):
-                        _schema = StructType().add("value", _parsed)
-                if _schema is None or not isinstance(_schema, StructType):
-                    raise ValueError(
-                        "Some of types cannot be determined after inferring, "
-                        "a StructType Schema is required in this case"
-                    )
-                _inferred_schema = _schema
+                if _has_nulltype(_inferred_schema):
+                    # For cases like createDataFrame([("Alice", None, 80.1)], schema)
+                    # we can not infer the schema from the data itself.
+                    warnings.warn("failed to infer the schema from data")
+                    if _schema is None and _schema_str is not None:
+                        _parsed = self.client._analyze(
+                            method="ddl_parse", ddl_string=_schema_str
+                        ).parsed
+                        if isinstance(_parsed, StructType):
+                            _schema = _parsed
+                        elif isinstance(_parsed, DataType):
+                            _schema = StructType().add("value", _parsed)
+                    if _schema is None or not isinstance(_schema, StructType):
+                        raise ValueError(
+                            "Some of types cannot be determined after inferring, "
+                            "a StructType Schema is required in this case"
+                        )
+                    _inferred_schema = _schema
 
             from pyspark.sql.connect.conversion import LocalDataToArrowConversion
 
