@@ -291,4 +291,33 @@ private case object MySQLDialect extends JdbcDialect with SQLConfHelper {
       throw QueryExecutionErrors.unsupportedDropNamespaceRestrictError()
     }
   }
+
+  class MySQLSQLQueryBuilder(dialect: JdbcDialect, options: JDBCOptions)
+    extends JdbcSQLQueryBuilder(dialect, options) {
+
+    override def build(): String = {
+      val limitOrOffsetStmt = if (limit > 0) {
+        if (offset > 0) {
+          s"LIMIT $offset, $limit"
+        } else {
+          dialect.getLimitClause(limit)
+        }
+      } else if (offset > 0) {
+        // MySQL doesn't support OFFSET without LIMIT. According to the suggestion of MySQL
+        // official website, in order to retrieve all rows from a certain offset up to the end of
+        // the result set, you can use some large number for the second parameter. Please refer:
+        // https://dev.mysql.com/doc/refman/8.0/en/select.html
+        s"LIMIT $offset, 18446744073709551615"
+      } else {
+        ""
+      }
+
+      options.prepareQuery +
+        s"SELECT $columnList FROM ${options.tableOrQuery} $tableSampleClause" +
+        s" $whereClause $groupByClause $orderByClause $limitOrOffsetStmt"
+    }
+  }
+
+  override def getJdbcSQLQueryBuilder(options: JDBCOptions): JdbcSQLQueryBuilder =
+    new MySQLSQLQueryBuilder(this, options)
 }

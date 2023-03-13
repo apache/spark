@@ -405,13 +405,13 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     mapOutputTracker = spy(new MyMapOutputTrackerMaster(sc.getConf, broadcastManager))
     blockManagerMaster = spy(new MyBlockManagerMaster(sc.getConf))
     doNothing().when(blockManagerMaster).updateRDDBlockVisibility(any(), any())
-    scheduler = new MyDAGScheduler(
+    scheduler = spy(new MyDAGScheduler(
       sc,
       taskScheduler,
       sc.listenerBus,
       mapOutputTracker,
       blockManagerMaster,
-      sc.env)
+      sc.env))
 
     dagEventProcessLoopTester = new DAGSchedulerEventProcessLoopTester(scheduler)
   }
@@ -4592,6 +4592,58 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
       assert(sentHosts.asScala.toSeq === Seq("hostB"))
       completeLatch.await()
       assert(hostAInterrupted)
+    }
+  }
+
+  test("SPARK-42577: fail the job if a shuffle map stage attempts beyond the limitation") {
+    setupStageAbortTest(sc)
+    doAnswer(_ => 2).when(scheduler).maxStageAttempts
+
+    val shuffleMapRdd = new MyRDD(sc, 2, Nil)
+    val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(1))
+    val shuffleId = shuffleDep.shuffleId
+    val reduceRdd = new MyRDD(sc, 1, List(shuffleDep), tracker = mapOutputTracker)
+    submit(reduceRdd, Array(0))
+
+    // Stage 0 got scheduled with 2 tasks.
+    assert(taskSets.size === 1 && taskSets(0).tasks.length === 2)
+    assert(taskSets(0).stageId === 0)
+    val stage0 = scheduler.stageIdToStage(0)
+
+    // Task 0 of stage 0 finished successfully on hostA and then executor on hostA got killed and
+    // shuffle data got lost. Then task 1 of stage 0 finished successfully on hostB.  Stage 0 will
+    // be resubmitted due to shuffle data lost.
+    runEvent(makeCompletionEvent(taskSets(0).tasks(0), Success,
+      makeMapStatus("hostA", reduces = 1, mapTaskId = 0),
+      Seq.empty, Array.empty, createFakeTaskInfoWithId(0)))
+    runEvent(ExecutorLost("hostA-exec", ExecutorKilled))
+    runEvent(makeCompletionEvent(taskSets(0).tasks(1), Success,
+      makeMapStatus("hostB", reduces = 1, mapTaskId = 1),
+      Seq.empty, Array.empty, createFakeTaskInfoWithId(1)))
+    assert(taskSets.size === 2 && taskSets(1).tasks.length === 1)
+    assert(taskSets(1).stageId === 0 && taskSets(1).stageAttemptId === 1)
+
+    // Executor on hostB got killed so that shuffle data from task 1 will be lost, after the
+    // resubmitted task completes stage 0 will be resubmitted again due to shuffle data missing.
+    // While because of the 2 times stage max attempts limitation, the job should be aborted.
+    runEvent(ExecutorLost("hostB-exec", ExecutorKilled))
+    runEvent(makeCompletionEvent(taskSets(1).tasks(0), Success,
+      makeMapStatus("hostC", reduces = 1, mapTaskId = 2),
+      Seq.empty, Array.empty, createFakeTaskInfoWithId(2)))
+
+    // Stage should have been aborted and removed from running stages
+    assertDataStructuresEmpty()
+    sc.listenerBus.waitUntilEmpty()
+    assert(ended)
+
+    val expectedMsg = s"$stage0 (name=${stage0.name}) has been resubmitted for the maximum " +
+      s"allowable number of times: 2, which is the max value of " +
+      s"config `spark.stage.maxAttempts` and `spark.stage.maxConsecutiveAttempts`."
+
+    jobResult match {
+      case JobFailed(reason) =>
+        assert(reason.getMessage.contains(expectedMsg))
+      case other => fail(s"expected JobFailed, not $other")
     }
   }
 
