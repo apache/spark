@@ -52,7 +52,7 @@ object IntegrationTestUtils {
   private[connect] def debug(error: Throwable): Unit = if (isDebug) error.printStackTrace()
 
   private[sql] lazy val sparkHiveJarAvailable: Boolean = {
-    val filePath = s"$sparkHome/assembly/$scalaDir/jars/" +
+    val filePath = s"$sparkHome/assembly/target/$scalaDir/jars/" +
       s"spark-hive_$scalaVersion-${org.apache.spark.SPARK_VERSION}.jar"
     Files.exists(Paths.get(filePath))
   }
