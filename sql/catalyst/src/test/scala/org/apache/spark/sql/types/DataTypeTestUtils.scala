@@ -69,6 +69,19 @@ object DataTypeTestUtils {
     YearMonthIntervalType(YEAR),
     YearMonthIntervalType(MONTH))
 
+  val unsafeRowMutableFieldTypes: Seq[DataType] = Seq(
+    NullType,
+    BooleanType,
+    ShortType,
+    IntegerType,
+    LongType,
+    FloatType,
+    DoubleType,
+    DateType,
+    TimestampType,
+    TimestampNTZType
+  )
+
   /**
    * Instances of all [[NumericType]]s and [[CalendarIntervalType]]
    */
