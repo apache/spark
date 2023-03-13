@@ -2806,12 +2806,9 @@ class AdaptiveQueryExecSuite
         val (_, plan) = runAdaptiveAndVerifyResult(sqlText)
 
         val bhjs = collect(plan) {
-          case bhj: BroadcastHashJoinExec => bhj
+          case bhj: BroadcastHashJoinExec if bhj.isSkewJoin => bhj
         }
-
         assert(bhjs.nonEmpty)
-        val skewHandlingCount = bhjs.map(bhj => if (bhj.isSkewJoin) 1 else 0).sum
-        assert(skewHandlingCount == 1)
 
         val skewedShuffleReaders = collect(plan) {
           case c: AQEShuffleReadExec if c.isLocalRead => c

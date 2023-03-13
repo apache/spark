@@ -217,12 +217,12 @@ case class OptimizeSkewedJoin(ensureRequirements: EnsureRequirements)
           shj.copy(left = newLeft, right = newRight, isSkewJoin = true)
       }.getOrElse(shj)
 
-    case bhj@BroadcastHashJoinExec(_, _, joinType, _, _, ShuffleStage(s: ShuffleQueryStageExec),
+    case bhj @ BroadcastHashJoinExec(_, _, joinType, _, _, ShuffleStage(s: ShuffleQueryStageExec),
     BroadcastQueryStageExec(_, _, _), _, false) if canSplitLeftSide(joinType) =>
       optimizeBroadcastHashJoin(s).map(newLeft => bhj.copy(left = newLeft, isSkewJoin = true))
         .getOrElse(bhj)
 
-    case bhj@BroadcastHashJoinExec(_, _, joinType, _, _, BroadcastQueryStageExec(_, _, _),
+    case bhj @ BroadcastHashJoinExec(_, _, joinType, _, _, BroadcastQueryStageExec(_, _, _),
     ShuffleStage(s: ShuffleQueryStageExec), _, false) if canSplitRightSide(joinType) =>
       optimizeBroadcastHashJoin(s).map(newRight => bhj.copy(right = newRight, isSkewJoin = true))
         .getOrElse(bhj)
@@ -236,7 +236,7 @@ case class OptimizeSkewedJoin(ensureRequirements: EnsureRequirements)
       stats.bytesByPartitionId.exists(_ > skewThreshold)
     }
 
-    if (!isSkewed(shuffleStage.mapStats.get)) {
+    if (!shuffleStage.mapStats.forall(isSkewed(_))) {
       return None
     }
 
