@@ -354,7 +354,14 @@
     </repository>
     <repository>
       <id>google-maven-repository</id>
+      <name>Google Maven Repository</name>
       <url>https://maven.google.com</url>
+      <releases>
+        <enabled>true</enabled>
+      </releases>
+      <snapshots>
+        <enabled>false</enabled>
+      </snapshots>
     </repository>
   </repositories>
   <pluginRepositories>
