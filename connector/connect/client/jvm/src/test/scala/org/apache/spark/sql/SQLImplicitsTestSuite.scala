@@ -18,6 +18,7 @@ package org.apache.spark.sql
 
 import java.sql.{Date, Timestamp}
 import java.time.{Duration, Instant, LocalDate, LocalDateTime, Period}
+import java.time.temporal.ChronoUnit
 import java.util.concurrent.atomic.AtomicLong
 
 import io.grpc.inprocess.InProcessChannelBuilder
@@ -130,9 +131,9 @@ class SQLImplicitsTestSuite extends ConnectFunSuite with BeforeAndAfterAll {
     testImplicit(BigDecimal(decimal))
     testImplicit(Date.valueOf(LocalDate.now()))
     testImplicit(LocalDate.now())
-    testImplicit(LocalDateTime.now())
-    testImplicit(Instant.now())
-    testImplicit(Timestamp.from(Instant.now()))
+    testImplicit(LocalDateTime.now().truncatedTo(ChronoUnit.MICROS))
+    testImplicit(Instant.now().truncatedTo(ChronoUnit.MICROS))
+    testImplicit(Timestamp.from(Instant.now().truncatedTo(ChronoUnit.MICROS)))
     testImplicit(Period.ofYears(2))
     testImplicit(Duration.ofMinutes(77))
     testImplicit(SaveMode.Append)
