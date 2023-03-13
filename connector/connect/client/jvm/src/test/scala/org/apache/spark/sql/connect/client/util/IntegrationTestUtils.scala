@@ -51,6 +51,12 @@ object IntegrationTestUtils {
   // scalastyle:on println
   private[connect] def debug(error: Throwable): Unit = if (isDebug) error.printStackTrace()
 
+  private[sql] lazy val sparkHiveJarAvailable: Boolean = {
+    val filePath = s"$sparkHome/assembly/$scalaDir/jars/" +
+      s"spark-hive_$scalaVersion-${org.apache.spark.SPARK_VERSION}.jar"
+    Files.exists(Paths.get(filePath))
+  }
+
   /**
    * Find a jar in the Spark project artifacts. It requires a build first (e.g. build/sbt package,
    * build/mvn clean install -DskipTests) so that this method can find the jar in the target
@@ -85,11 +91,5 @@ object IntegrationTestUtils {
   private def recursiveListFiles(f: File): Array[File] = {
     val these = f.listFiles
     these ++ these.filter(_.isDirectory).flatMap(recursiveListFiles)
-  }
-
-  private def sparkHiveAvailable(): Boolean = {
-    val filePath = s"$sparkHome/assembly/$scalaDir/jars/" +
-      s"spark-hive_$scalaVersion-${org.apache.spark.SPARK_VERSION}.jar"
-    Files.exists(Paths.get(filePath))
   }
 }
