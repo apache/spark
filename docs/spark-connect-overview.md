@@ -171,8 +171,8 @@ Which will create a Spark Connect session from your application by reading the
 You can also specify that you want to use Spark Connect explicitly when you
 create a Spark session.
 
-For example, you can launch the PySpark or Scala shell with Spark Connect
-as illustrated here.
+For example, you can launch the PySpark shell with Spark Connect as
+illustrated here.
 
 <div class="codetabs">
 
@@ -195,34 +195,6 @@ columns = ["id","name"]
 data = [(1,"Sarah"),(2,"Maria")]
 df = spark.createDataFrame(data).toDF(*columns)
 df.show()
-{% endhighlight %}
-</div>
-
-<div data-lang="scala"  markdown="1">
-For Scala, first download and install [Ammonite](http://ammonite.io/) using the
-following command in a terminal window:
-{% highlight bash %}
-sudo sh -c '(echo "#!/usr/bin/env sh" &&
-curl -L https://github.com/com-lihaoyi/Ammonite/releases/download/2.5.8/2.12-2.5.8) >
-/usr/local/bin/amm && chmod +x /usr/local/bin/amm' && amm
-{% endhighlight %}
-
-Then download and install a [script](https://gist.github.com/hvanhovell/fd8afd47632d97946084d254f4dad39c)
-for starting the Scala shell with this command:
-{% highlight bash %}
-curl -L -o spark_connect_scala_client.sc
-https://gist.githubusercontent.com/hvanhovell/fd8afd47632d97946084d254f4dad39c/raw
-{% endhighlight %}
-
-And now you can start an Ammonite Scala shell using Spark Connect to connect to your Spark server
-like this:
-{% highlight bash %}
-amm --class-based -p spark_connect_scala_client.sc
-{% endhighlight %}
-
-And run Scala code in the shell to see Spark Connect in action:
-{% highlight scala %}
-spark.range(10).count
 {% endhighlight %}
 </div>
 
