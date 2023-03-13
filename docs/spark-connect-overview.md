@@ -78,7 +78,7 @@ be monitored using the application's framework native metrics and logging librar
 # How to use Spark Connect
 
 Starting with Spark 3.4, Spark Connect is available and supports PySpark and Scala
-applications. we will walk through how to run an Apache Spark server with Spark
+applications. We will walk through how to run an Apache Spark server with Spark
 Connect and connect to it from a client application using the Spark Connect client
 library.
 
@@ -130,7 +130,7 @@ below, the session will be a Spark Connect session. With this approach, there is
 no code change needed to start using Spark Connect.
 
 In a terminal window, set the `SPARK_REMOTE` environment variable to point to the
-Spark server we started above:
+local Spark server you started on your computer above:
 
 {% highlight bash %}
 export SPARK_REMOTE="sc://localhost"
