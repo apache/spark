@@ -44,7 +44,7 @@ class Window:
     .. versionadded:: 1.4.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Notes
     -----
@@ -366,7 +366,7 @@ class WindowSpec:
     .. versionadded:: 1.4.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
     """
 
     def __init__(self, jspec: JavaObject) -> None:
