@@ -410,6 +410,15 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
     assert(sorts.isEmpty)
   }
 
+  private def checkOffsetPushed(df: DataFrame, offset: Option[Int]): Unit = {
+    df.queryExecution.optimizedPlan.collect {
+      case relation: DataSourceV2ScanRelation => relation.scan match {
+        case v1: V1ScanWrapper =>
+          assert(v1.pushedDownOperators.offset == offset)
+      }
+    }
+  }
+
   test("simple scan with LIMIT") {
     val df = sql(s"SELECT name, salary, bonus FROM $catalogAndNamespace." +
       s"${caseConvert("employee")} WHERE dept > 0 LIMIT 1")
@@ -442,6 +451,63 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
       assert(rows2(0).getString(0) === "david")
       assert(rows2(0).getDecimal(1) === new java.math.BigDecimal("10000.00"))
       assert(rows2(0).getDouble(2) === 1300d)
+    }
+  }
+
+  protected def testOffset(): Unit = {
+    test("simple scan with OFFSET") {
+      val df = sql(s"SELECT name, salary, bonus FROM $catalogAndNamespace." +
+        s"${caseConvert("employee")} WHERE dept > 0 OFFSET 4")
+      checkOffsetPushed(df, Some(4))
+      val rows = df.collect()
+      assert(rows.length === 1)
+      assert(rows(0).getString(0) === "jen")
+      assert(rows(0).getDecimal(1) === new java.math.BigDecimal("12000.00"))
+      assert(rows(0).getDouble(2) === 1200d)
+    }
+  }
+
+  protected def testLimitAndOffset(): Unit = {
+    test("simple scan with LIMIT and OFFSET") {
+      val df = sql(s"SELECT name, salary, bonus FROM $catalogAndNamespace." +
+        s"${caseConvert("employee")} WHERE dept > 0 LIMIT 1 OFFSET 2")
+      assert(limitPushed(df, 3))
+      checkOffsetPushed(df, Some(2))
+      val rows = df.collect()
+      assert(rows.length === 1)
+      assert(rows(0).getString(0) === "cathy")
+      assert(rows(0).getDecimal(1) === new java.math.BigDecimal("9000.00"))
+      assert(rows(0).getDouble(2) === 1200d)
+    }
+  }
+
+  protected def testPaging(): Unit = {
+    test("simple scan with paging: top N and OFFSET") {
+      Seq(NullOrdering.values()).flatten.foreach { nullOrdering =>
+        val df1 = sql(s"SELECT name, salary, bonus FROM $catalogAndNamespace." +
+          s"${caseConvert("employee")}" +
+          s" WHERE dept > 0 ORDER BY salary $nullOrdering, bonus LIMIT 1 OFFSET 2")
+        assert(limitPushed(df1, 3))
+        checkOffsetPushed(df1, Some(2))
+        checkSortRemoved(df1)
+        val rows1 = df1.collect()
+        assert(rows1.length === 1)
+        assert(rows1(0).getString(0) === "david")
+        assert(rows1(0).getDecimal(1) === new java.math.BigDecimal("10000.00"))
+        assert(rows1(0).getDouble(2) === 1300d)
+
+        val df2 = sql(s"SELECT name, salary, bonus FROM $catalogAndNamespace." +
+          s"${caseConvert("employee")}" +
+          s" WHERE dept > 0 ORDER BY salary DESC $nullOrdering, bonus LIMIT 1 OFFSET 2")
+        assert(limitPushed(df2, 3))
+        checkOffsetPushed(df2, Some(2))
+        checkSortRemoved(df2)
+        val rows2 = df2.collect()
+        assert(rows2.length === 1)
+        assert(rows2(0).getString(0) === "amy")
+        assert(rows2(0).getDecimal(1) === new java.math.BigDecimal("10000.00"))
+        assert(rows2(0).getDouble(2) === 1000d)
+      }
     }
   }
 
