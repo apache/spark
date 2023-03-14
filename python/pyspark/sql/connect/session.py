@@ -74,6 +74,8 @@ if TYPE_CHECKING:
     from pyspark.sql.connect.udf import UDFRegistration
 
 
+# `_active_spark_session` stores the active spark connect session created by
+# `SparkSession.builder.getOrCreate`. It is used by ML code.
 _active_spark_session = None
 
 
