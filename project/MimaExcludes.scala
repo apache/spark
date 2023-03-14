@@ -55,6 +55,8 @@ object MimaExcludes {
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ml.attribute.UnresolvedAttribute$"),
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ml.attribute.AttributeType"),
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ml.attribute.AttributeType$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ml.feature.LabeledPoint"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ml.feature.LabeledPoint$"),
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ml.linalg.JsonMatrixConverter"),
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ml.linalg.JsonVectorConverter"),
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ml.linalg.MatrixUDT"),
@@ -78,9 +80,6 @@ object MimaExcludes {
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ml.param.StringArrayParam"),
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ml.param.DoubleArrayParam"),
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ml.param.DoubleArrayArrayParam"),
-    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ml.util.Identifiable"),
-    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ml.util.Identifiable$"),
-    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ml.util.SchemaUtils"),
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ml.param.shared.HasAggregationDepth"),
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ml.param.shared.HasBlockSize"),
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ml.param.shared.HasCheckpointInterval"),
@@ -116,7 +115,10 @@ object MimaExcludes {
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ml.param.shared.HasWeightCol"),
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ml.PredictorParams"),
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ml.classification.ClassifierParams"),
-    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ml.classification.ProbabilisticClassifierParams")
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ml.classification.ProbabilisticClassifierParams"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ml.util.Identifiable"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ml.util.Identifiable$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ml.util.SchemaUtils")
   )
 
   // Exclude rules for 3.4.x from 3.3.0
