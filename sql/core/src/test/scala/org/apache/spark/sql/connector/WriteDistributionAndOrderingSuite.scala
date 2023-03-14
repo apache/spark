@@ -117,8 +117,10 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
     Seq(true, false).foreach { distributionStrictlyRequired =>
       Seq(true, false).foreach { dataSkewed =>
         Seq(true, false).foreach { coalesce =>
-          checkOrderedDistributionAndSortWithSameExprs(
-            cmd, None, distributionStrictlyRequired, dataSkewed, coalesce)
+          partitionSizes(dataSkewed, coalesce).foreach { partitionSize =>
+            checkOrderedDistributionAndSortWithSameExprs(
+              cmd, None, partitionSize, distributionStrictlyRequired, dataSkewed, coalesce)
+          }
         }
       }
     }
@@ -127,6 +129,7 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
   private def checkOrderedDistributionAndSortWithSameExprs(
       command: String,
       targetNumPartitions: Option[Int] = None,
+      targetPartitionSize: Option[Long] = None,
       distributionStrictlyRequired: Boolean = true,
       dataSkewed: Boolean = false,
       coalesce: Boolean = false): Unit = {
@@ -153,6 +156,7 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
       tableDistribution,
       tableOrdering,
       targetNumPartitions,
+      targetPartitionSize,
       expectedWritePartitioning = writePartitioning,
       expectedWriteOrdering = writeOrdering,
       writeCommand = command,
@@ -213,8 +217,10 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
     Seq(true, false).foreach { distributionStrictlyRequired =>
       Seq(true, false).foreach { dataSkewed =>
         Seq(true, false).foreach { coalesce =>
-          checkClusteredDistributionAndSortWithSameExprs(
-            cmd, None, distributionStrictlyRequired, dataSkewed, coalesce)
+          partitionSizes(dataSkewed, coalesce).foreach { partitionSize =>
+            checkClusteredDistributionAndSortWithSameExprs(
+              cmd, None, partitionSize, distributionStrictlyRequired, dataSkewed, coalesce)
+          }
         }
       }
     }
@@ -223,6 +229,7 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
   private def checkClusteredDistributionAndSortWithSameExprs(
       command: String,
       targetNumPartitions: Option[Int] = None,
+      targetPartitionSize: Option[Long] = None,
       distributionStrictlyRequired: Boolean = true,
       dataSkewed: Boolean = false,
       coalesce: Boolean = false): Unit = {
@@ -258,6 +265,7 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
       tableDistribution,
       tableOrdering,
       targetNumPartitions,
+      targetPartitionSize,
       expectedWritePartitioning = writePartitioning,
       expectedWriteOrdering = writeOrdering,
       writeCommand = command,
@@ -322,8 +330,10 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
     Seq(true, false).foreach { distributionStrictlyRequired =>
       Seq(true, false).foreach { dataSkewed =>
         Seq(true, false).foreach { coalesce =>
-          checkClusteredDistributionAndSortWithExtendedExprs(
-            cmd, None, distributionStrictlyRequired, dataSkewed, coalesce)
+          partitionSizes(dataSkewed, coalesce).foreach { partitionSize =>
+            checkClusteredDistributionAndSortWithExtendedExprs(
+              cmd, None, partitionSize, distributionStrictlyRequired, dataSkewed, coalesce)
+          }
         }
       }
     }
@@ -332,6 +342,7 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
   private def checkClusteredDistributionAndSortWithExtendedExprs(
       command: String,
       targetNumPartitions: Option[Int] = None,
+      targetPartitionSize: Option[Long] = None,
       distributionStrictlyRequired: Boolean = true,
       dataSkewed: Boolean = false,
       coalesce: Boolean = false): Unit = {
@@ -367,6 +378,7 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
       tableDistribution,
       tableOrdering,
       targetNumPartitions,
+      targetPartitionSize,
       expectedWritePartitioning = writePartitioning,
       expectedWriteOrdering = writeOrdering,
       writeCommand = command,
@@ -558,8 +570,10 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
     Seq(true, false).foreach { distributionStrictlyRequired =>
       Seq(true, false).foreach { dataSkewed =>
         Seq(true, false).foreach { coalesce =>
-          checkOrderedDistributionAndSortWithManualGlobalSort(
-            cmd, None, distributionStrictlyRequired, dataSkewed, coalesce)
+          partitionSizes(dataSkewed, coalesce).foreach { partitionSize =>
+            checkOrderedDistributionAndSortWithManualGlobalSort(
+              cmd, None, partitionSize, distributionStrictlyRequired, dataSkewed, coalesce)
+          }
         }
       }
     }
@@ -568,6 +582,7 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
   private def checkOrderedDistributionAndSortWithManualGlobalSort(
       command: String,
       targetNumPartitions: Option[Int] = None,
+      targetPartitionSize: Option[Long] = None,
       distributionStrictlyRequired: Boolean = true,
       dataSkewed: Boolean = false,
       coalesce: Boolean = false): Unit = {
@@ -601,6 +616,7 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
       tableDistribution,
       tableOrdering,
       targetNumPartitions,
+      targetPartitionSize,
       expectedWritePartitioning = writePartitioning,
       expectedWriteOrdering = writeOrdering,
       writeTransform = df => df.orderBy("data", "id"),
@@ -641,8 +657,10 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
     Seq(true, false).foreach { distributionStrictlyRequired =>
       Seq(true, false).foreach { dataSkewed =>
         Seq(true, false).foreach { coalesce =>
-          checkOrderedDistributionAndSortWithIncompatibleGlobalSort(
-            cmd, None, distributionStrictlyRequired, dataSkewed, coalesce)
+          partitionSizes(dataSkewed, coalesce).foreach { partitionSize =>
+            checkOrderedDistributionAndSortWithIncompatibleGlobalSort(
+              cmd, None, partitionSize, distributionStrictlyRequired, dataSkewed, coalesce)
+          }
         }
       }
     }
@@ -651,6 +669,7 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
   private def checkOrderedDistributionAndSortWithIncompatibleGlobalSort(
       command: String,
       targetNumPartitions: Option[Int] = None,
+      targetPartitionSize: Option[Long] = None,
       distributionStrictlyRequired: Boolean = true,
       dataSkewed: Boolean = false,
       coalesce: Boolean = false): Unit = {
@@ -684,6 +703,7 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
       tableDistribution,
       tableOrdering,
       targetNumPartitions,
+      targetPartitionSize,
       expectedWritePartitioning = writePartitioning,
       expectedWriteOrdering = writeOrdering,
       writeTransform = df => df.orderBy(df("data").desc, df("id").asc),
@@ -722,8 +742,10 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
     Seq(true, false).foreach { distributionStrictlyRequired =>
       Seq(true, false).foreach { dataSkewed =>
         Seq(true, false).foreach { coalesce =>
-          checkOrderedDistributionAndSortWithManualLocalSort(
-            cmd, None, distributionStrictlyRequired, dataSkewed, coalesce)
+          partitionSizes(dataSkewed, coalesce).foreach { partitionSize =>
+            checkOrderedDistributionAndSortWithManualLocalSort(
+              cmd, None, partitionSize, distributionStrictlyRequired, dataSkewed, coalesce)
+          }
         }
       }
     }
@@ -732,6 +754,7 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
   private def checkOrderedDistributionAndSortWithManualLocalSort(
       command: String,
       targetNumPartitions: Option[Int] = None,
+      targetPartitionSize: Option[Long] = None,
       distributionStrictlyRequired: Boolean = true,
       dataSkewed: Boolean = false,
       coalesce: Boolean = false): Unit = {
@@ -765,6 +788,7 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
       tableDistribution,
       tableOrdering,
       targetNumPartitions,
+      targetPartitionSize,
       expectedWritePartitioning = writePartitioning,
       expectedWriteOrdering = writeOrdering,
       writeTransform = df => df.sortWithinPartitions("data", "id"),
@@ -805,8 +829,10 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
     Seq(true, false).foreach { distributionStrictlyRequired =>
       Seq(true, false).foreach { dataSkewed =>
         Seq(true, false).foreach { coalesce =>
-          checkClusteredDistributionAndLocalSortWithManualGlobalSort(
-            cmd, None, distributionStrictlyRequired, dataSkewed, coalesce)
+          partitionSizes(dataSkewed, coalesce).foreach { partitionSize =>
+            checkClusteredDistributionAndLocalSortWithManualGlobalSort(
+              cmd, None, partitionSize, distributionStrictlyRequired, dataSkewed, coalesce)
+          }
         }
       }
     }
@@ -815,6 +841,7 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
   private def checkClusteredDistributionAndLocalSortWithManualGlobalSort(
       command: String,
       targetNumPartitions: Option[Int] = None,
+      targetPartitionSize: Option[Long] = None,
       distributionStrictlyRequired: Boolean = true,
       dataSkewed: Boolean = false,
       coalesce: Boolean = false): Unit = {
@@ -849,6 +876,7 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
       tableDistribution,
       tableOrdering,
       targetNumPartitions,
+      targetPartitionSize,
       expectedWritePartitioning = writePartitioning,
       expectedWriteOrdering = writeOrdering,
       writeTransform = df => df.orderBy("data", "id"),
@@ -889,8 +917,10 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
     Seq(true, false).foreach { distributionStrictlyRequired =>
       Seq(true, false).foreach { dataSkewed =>
         Seq(true, false).foreach { coalesce =>
-          checkClusteredDistributionAndLocalSortWithManualLocalSort(
-            cmd, None, distributionStrictlyRequired, dataSkewed, coalesce)
+          partitionSizes(dataSkewed, coalesce).foreach { partitionSize =>
+            checkClusteredDistributionAndLocalSortWithManualLocalSort(
+              cmd, None, partitionSize, distributionStrictlyRequired, dataSkewed, coalesce)
+          }
         }
       }
     }
@@ -899,6 +929,7 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
   private def checkClusteredDistributionAndLocalSortWithManualLocalSort(
       command: String,
       targetNumPartitions: Option[Int] = None,
+      targetPartitionSize: Option[Long] = None,
       distributionStrictlyRequired: Boolean = true,
       dataSkewed: Boolean = false,
       coalesce: Boolean = false): Unit = {
@@ -933,6 +964,7 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
       tableDistribution,
       tableOrdering,
       targetNumPartitions,
+      targetPartitionSize,
       expectedWritePartitioning = writePartitioning,
       expectedWriteOrdering = writeOrdering,
       writeTransform = df => df.sortWithinPartitions("data", "id"),
@@ -948,7 +980,7 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
     )
     val distribution = Distributions.ordered(ordering)
 
-    catalog.createTable(ident, schema, Array.empty, emptyProps, distribution, ordering, None)
+    catalog.createTable(ident, schema, Array.empty, emptyProps, distribution, ordering, None, None)
 
     withTempDir { checkpointDir =>
       val inputData = ContinuousMemoryStream[(Long, String)]
@@ -1028,8 +1060,10 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
     Seq(true, false).foreach { distributionStrictlyRequired =>
       Seq(true, false).foreach { dataSkewed =>
         Seq(true, false).foreach { coalesce =>
-          checkClusteredDistributionAndLocalSortContainsV2Function(
-            cmd, None, distributionStrictlyRequired, dataSkewed, coalesce)
+          partitionSizes(dataSkewed, coalesce).foreach { partitionSize =>
+            checkClusteredDistributionAndLocalSortContainsV2Function(
+              cmd, None, partitionSize, distributionStrictlyRequired, dataSkewed, coalesce)
+          }
         }
       }
     }
@@ -1038,6 +1072,7 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
   private def checkClusteredDistributionAndLocalSortContainsV2Function(
       command: String,
       targetNumPartitions: Option[Int] = None,
+      targetPartitionSize: Option[Long] = None,
       distributionStrictlyRequired: Boolean = true,
       dataSkewed: Boolean = false,
       coalesce: Boolean = false): Unit = {
@@ -1094,6 +1129,7 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
       tableDistribution,
       tableOrdering,
       targetNumPartitions,
+      targetPartitionSize,
       expectedWritePartitioning = writePartitioning,
       expectedWriteOrdering = writeOrdering,
       writeCommand = command,
@@ -1107,6 +1143,7 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
       tableDistribution: Distribution,
       tableOrdering: Array[SortOrder],
       tableNumPartitions: Option[Int],
+      tablePartitionSize: Option[Long] = None,
       expectedWritePartitioning: physical.Partitioning,
       expectedWriteOrdering: Seq[catalyst.expressions.SortOrder],
       writeTransform: DataFrame => DataFrame = df => df,
@@ -1121,6 +1158,7 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
         tableDistribution,
         tableOrdering,
         tableNumPartitions,
+        tablePartitionSize,
         expectedWritePartitioning,
         expectedWriteOrdering,
         writeTransform,
@@ -1131,6 +1169,7 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
         tableDistribution,
         tableOrdering,
         tableNumPartitions,
+        tablePartitionSize,
         expectedWritePartitioning,
         expectedWriteOrdering,
         writeTransform,
@@ -1147,6 +1186,7 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
       tableDistribution: Distribution,
       tableOrdering: Array[SortOrder],
       tableNumPartitions: Option[Int],
+      tablePartitionSize: Option[Long],
       expectedWritePartitioning: physical.Partitioning,
       expectedWriteOrdering: Seq[catalyst.expressions.SortOrder],
       writeTransform: DataFrame => DataFrame = df => df,
@@ -1158,7 +1198,8 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
     // scalastyle:on argcount
 
     catalog.createTable(ident, schema, Array.empty, emptyProps, tableDistribution,
-      tableOrdering, tableNumPartitions, distributionStrictlyRequired)
+      tableOrdering, tableNumPartitions, tablePartitionSize,
+      distributionStrictlyRequired)
 
     val df = if (!dataSkewed) {
       spark.createDataFrame(Seq((1, "a"), (2, "b"), (3, "c"))).toDF("id", "data")
@@ -1181,16 +1222,31 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
       }
     } else {
       if (coalesce) {
-        val executedPlan = executeCommand()
-        val read = collect(executedPlan) {
-          case r: AQEShuffleReadExec => r
+        // if the partition size is configured for the table, set the SQL conf to something small
+        // so that the overriding behavior is tested
+        val defaultAdvisoryPartitionSize = if (tablePartitionSize.isDefined) "15" else "32MB"
+        withSQLConf(
+          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+          SQLConf.COALESCE_PARTITIONS_ENABLED.key -> "true",
+          SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+          SQLConf.SHUFFLE_PARTITIONS.key -> "5",
+          SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> defaultAdvisoryPartitionSize,
+          SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_NUM.key -> "1") {
+
+          val executedPlan = executeCommand()
+          val read = collect(executedPlan) {
+            case r: AQEShuffleReadExec => r
+          }
+          assert(read.size == 1)
+          assert(read.head.partitionSpecs.size == 1)
+          checkPartitioningAndOrdering(
+            // num of partition in expectedWritePartitioning is 1
+            executedPlan, expectedWritePartitioning, expectedWriteOrdering, 1)
         }
-        assert(read.size == 1)
-        assert(read.head.partitionSpecs.size == 1)
-        checkPartitioningAndOrdering(
-          // num of partition in expectedWritePartitioning is 1
-          executedPlan, expectedWritePartitioning, expectedWriteOrdering, 1)
       } else {
+        // if the partition size is configured for the table, set the SQL conf to something big
+        // so that the overriding behavior is tested
+        val defaultAdvisoryPartitionSize = if (tablePartitionSize.isDefined) "64MB" else "100"
         if (dataSkewed && !distributionStrictlyRequired) {
           withSQLConf(
             SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
@@ -1198,7 +1254,7 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
             SQLConf.ADAPTIVE_OPTIMIZE_SKEWS_IN_REBALANCE_PARTITIONS_ENABLED.key -> "true",
             SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
             SQLConf.SHUFFLE_PARTITIONS.key -> "5",
-            SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "100",
+            SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> defaultAdvisoryPartitionSize,
             SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_NUM.key -> "1") {
             val executedPlan = executeCommand()
             val read = collect(executedPlan) {
@@ -1231,6 +1287,7 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
       tableDistribution: Distribution,
       tableOrdering: Array[SortOrder],
       tableNumPartitions: Option[Int],
+      tablePartitionSize: Option[Long],
       expectedWritePartitioning: physical.Partitioning,
       expectedWriteOrdering: Seq[catalyst.expressions.SortOrder],
       writeTransform: DataFrame => DataFrame = df => df,
@@ -1238,7 +1295,7 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
       expectAnalysisException: Boolean = false): Unit = {
 
     catalog.createTable(ident, schema, Array.empty, emptyProps, tableDistribution,
-      tableOrdering, tableNumPartitions)
+      tableOrdering, tableNumPartitions, tablePartitionSize)
 
     withTempDir { checkpointDir =>
       val inputData = MemoryStream[(Long, String)]
@@ -1376,5 +1433,15 @@ class WriteDistributionAndOrderingSuite extends DistributionAndOrderingSuiteBase
       targetNumPartitions: Option[Int]): physical.Partitioning = {
     HashPartitioning(writePartitioningExprs,
       targetNumPartitions.getOrElse(conf.numShufflePartitions))
+  }
+
+  private def partitionSizes(dataSkew: Boolean, coalesce: Boolean): Seq[Option[Long]] = {
+    if (coalesce) {
+      Seq(Some(1000L), None)
+    } else if (dataSkew) {
+      Seq(Some(100L), None)
+    } else {
+      Seq(None)
+    }
   }
 }
