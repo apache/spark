@@ -17,6 +17,7 @@
 import datetime
 import warnings
 from functools import partial
+from pydoc import doc
 from typing import Any, Optional, Union, cast, no_type_check
 
 import pandas as pd
@@ -25,6 +26,8 @@ from pandas.tseries.offsets import DateOffset
 from pyspark._globals import _NoValue
 
 from pyspark import pandas as ps
+from pyspark.pandas import DataFrame
+from pyspark.pandas.datetimes import DatetimeMethods
 from pyspark.pandas.indexes.base import Index
 from pyspark.pandas.missing.indexes import MissingPandasLikeDatetimeIndex
 from pyspark.pandas.series import Series, first_series
@@ -254,6 +257,9 @@ class DatetimeIndex(Index):
         return Index(self.to_series().dt.weekofyear)
 
     weekofyear.__doc__ = week.__doc__
+
+    def isocalendar(self) -> DataFrame:
+        return self.to_series().dt.isocalendar()
 
     @property
     def dayofweek(self) -> Index:
