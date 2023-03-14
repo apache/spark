@@ -267,6 +267,10 @@ class DatetimeIndexTestsMixin:
         mapper_pser = pd.Series([1, 2, 3], index=pidx)
         self.assert_eq(psidx.map(mapper_pser), pidx.map(mapper_pser))
 
+    def test_isocalendar(self):
+        for psidx, pidx in self.idx_pairs:
+            self.assert_eq(psidx.isocalendar().astype(int), pidx.isocalendar().astype(int))
+
 
 class DatetimeIndexTests(DatetimeIndexTestsMixin, PandasOnSparkTestCase, TestUtils):
     pass

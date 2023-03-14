@@ -214,6 +214,9 @@ class SeriesDateTimeTestsMixin:
     def test_dayofweek(self):
         self.check_func(lambda x: x.dt.dayofweek)
 
+    def test_isocalendar(self):
+        self.check_func(lambda x: x.dt.isocalendar().astype(np.int64))
+
     def test_weekday(self):
         self.check_func(lambda x: x.dt.weekday)
 
