@@ -183,8 +183,10 @@ class Distributor:
                 task_gpu_amount = int(self.sc.getConf().get(key, "0"))
                 if task_gpu_amount < 1:
                     raise RuntimeError(f"'{key}' was unset, so gpu usage is unavailable.")
-                # TODO(SPARK-41916): Address situation when spark.task.resource.gpu.amount > 1
-                return math.ceil(self.num_processes / task_gpu_amount)
+                self.task_gpu_amount = task_gpu_amount
+                if self.num_processes % self.task_gpu_amount != 0:
+                    raise RuntimeError(f"'{key}' does not evenly divide the num_processes value of {self.num_processes}, please satisfy this requirement.")
+                return self.num_processes // self.task_gpu_amount
             else:
                 key = "spark.driver.resource.gpu.amount"
                 if "gpu" not in self.sc.resources:
@@ -366,6 +368,7 @@ class TorchDistributor(Distributor):
     ) -> List[str]:
         local_mode = input_params["local_mode"]
         num_processes = input_params["num_processes"]
+        task_gpu_amount = input_params.get("task_gpu_amount", 1)
 
         if local_mode:
             torchrun_args = ["--standalone", "--nnodes=1"]
@@ -374,12 +377,12 @@ class TorchDistributor(Distributor):
             master_addr, master_port = os.environ["MASTER_ADDR"], os.environ["MASTER_PORT"]
             node_rank = os.environ["RANK"]
             torchrun_args = [
-                f"--nnodes={num_processes}",
+                f"--nnodes={num_processes // task_gpu_amount}",
                 f"--node_rank={node_rank}",
                 f"--rdzv_endpoint={master_addr}:{master_port}",
                 "--rdzv_id=0",
             ]  # TODO: setup random ID that is gleaned from env variables
-            processes_per_node = 1
+            processes_per_node = task_gpu_amount
 
         args_string = list(map(str, args))  # converting all args to strings
 
