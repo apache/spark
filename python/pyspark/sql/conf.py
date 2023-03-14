@@ -30,7 +30,7 @@ class RuntimeConfig:
     Options set here are automatically propagated to the Hadoop configuration during I/O.
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
     """
 
     def __init__(self, jconf: JavaObject) -> None:
@@ -42,7 +42,7 @@ class RuntimeConfig:
         """Sets the given Spark runtime configuration property.
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
         """
         self._jconf.set(key, value)
 
@@ -54,7 +54,7 @@ class RuntimeConfig:
         assuming it is set.
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
         """
         self._checkType(key, "key")
         if default is _NoValue:
@@ -69,7 +69,7 @@ class RuntimeConfig:
         """Resets the configuration property for the given key.
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
         """
         self._jconf.unset(key)
 
@@ -86,7 +86,7 @@ class RuntimeConfig:
         is modifiable in the current session.
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
         """
         return self._jconf.isModifiable(key)
 
