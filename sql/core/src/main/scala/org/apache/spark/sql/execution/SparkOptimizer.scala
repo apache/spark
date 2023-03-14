@@ -84,6 +84,15 @@ class SparkOptimizer(
       PushPredicateThroughNonJoin,
       PushProjectionThroughLimit,
       RemoveNoopOperators) :+
+    Batch("Infer window group limit", Once,
+      InferWindowGroupLimit,
+      PushProjectionThroughLimit,
+      LimitPushDown,
+      LimitPushDownThroughWindow,
+      CollapseProject,
+      EliminateLimits,
+      EliminateSorts,
+      ConvertToLocalRelation) :+
     Batch("User Provided Optimizers", fixedPoint, experimentalMethods.extraOptimizations: _*) :+
     Batch("Replace CTE with Repartition", Once, ReplaceCTERefWithRepartition)
 

@@ -84,11 +84,11 @@ object InferWindowGroupLimit extends Rule[LogicalPlan] with PredicateHelper {
           }
           // Pick a rank-like function with the smallest limit
           selectedLimits.minBy(_._1) match {
-            case (limit, rankLikeFunction) if limit <= conf.windowGroupLimitThreshold =>
+            case (limit, rankLikeFunction) if limit <= conf.windowGroupLimitThreshold &&
+              child.maxRows.forall(_ > limit) =>
               if (limit > 0) {
                 val newFilterChild = if (rankLikeFunction.isInstanceOf[RowNumber] &&
-                  partitionSpec.isEmpty && child.maxRows.forall(_ > limit) &&
-                  limit < conf.topKSortFallbackThreshold) {
+                  partitionSpec.isEmpty && limit < conf.topKSortFallbackThreshold) {
                   // Top n (Limit + Sort) have better performance than WindowGroupLimit if the
                   // window function is RowNumber and Window partitionSpec is empty.
                   Limit(Literal(limit), window)
