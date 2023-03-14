@@ -401,7 +401,7 @@ class UnwrapCastInBinaryComparisonSuite extends PlanTest with ExpressionEvalHelp
 
     // Null date literal should be handled by NullPropagation
     assertEquivalent(castDate(f5) > nullLit || castDate(f6) > nullLit,
-      Literal.create(null, BooleanType) || Literal.create(null, BooleanType))
+      castDate(f5) > nullLit || castDate(f6) > nullLit)
   }
 
   private val ts1 = LocalDateTime.of(2023, 1, 1, 23, 59, 59, 99999000)
@@ -412,7 +412,8 @@ class UnwrapCastInBinaryComparisonSuite extends PlanTest with ExpressionEvalHelp
   private def castInt(e: Expression): Expression = Cast(e, IntegerType)
   private def castDouble(e: Expression): Expression = Cast(e, DoubleType)
   private def castDecimal2(e: Expression): Expression = Cast(e, DecimalType(10, 4))
-  private def castDate(e: Expression): Expression = Cast(e, DateType)
+  private def castDate(e: Expression): Expression =
+    Cast(e, DateType, Some(conf.sessionLocalTimeZone))
   private def castTimestamp(e: Expression): Expression =
     Cast(e, TimestampType, Some(conf.sessionLocalTimeZone))
   private def castTimestampNTZ(e: Expression): Expression =
