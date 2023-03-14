@@ -245,7 +245,7 @@ logic in Spark directly.
 [Functions](api/python/reference/pyspark.sql/functions.html), and
 [Column](api/python/reference/pyspark.sql/column.html). However,
 some APIs such as [SparkContext](api/python/reference/api/pyspark.SparkContext.html)
-and [RDD](api/python/reference/api/pyspark.RDD.html) are not supported yet.
+and [RDD](api/python/reference/api/pyspark.RDD.html) are not supported.
 You can check which APIs are currently
 supported in the [API reference](api/python/reference/index.html) documentation.
 Supported APIs are labeled "Supports Spark Connect" so you can check whether the
