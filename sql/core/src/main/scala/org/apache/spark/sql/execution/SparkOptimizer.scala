@@ -89,6 +89,7 @@ class SparkOptimizer(
       PushProjectionThroughLimit,
       LimitPushDown,
       LimitPushDownThroughWindow,
+      CollapseProject,
       EliminateLimits,
       ConvertToLocalRelation) :+
     Batch("User Provided Optimizers", fixedPoint, experimentalMethods.extraOptimizations: _*) :+
