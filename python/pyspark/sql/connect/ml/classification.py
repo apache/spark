@@ -53,34 +53,53 @@ from pyspark.sql.connect.ml.base import (
     ClientMLReadable,
 )
 from abc import ABCMeta, abstractmethod
+from pyspark.ml.util import inherit_doc
+from pyspark.ml.classification import (
+    LogisticRegression as PySparkLogisticRegression,
+    LogisticRegressionModel as PySparkLogisticRegressionModel,
+    _ClassificationSummary as _PySparkClassificationSummary,
+    _TrainingSummary as _PySparkTrainingSummary,
+    _BinaryClassificationSummary as _PySparkBinaryClassificationSummary,
+    LogisticRegressionSummary as PySparkLogisticRegressionSummary,
+    LogisticRegressionTrainingSummary as PySparkLogisticRegressionTrainingSummary,
+    BinaryLogisticRegressionSummary as PySparkBinaryLogisticRegressionSummary,
+    BinaryLogisticRegressionTrainingSummary as PySparkBinaryLogisticRegressionTrainingSummary,
+)
 
 
+@inherit_doc
 class _ClientClassifier(Classifier, ClientPredictor, metaclass=ABCMeta):
     pass
 
 
+@inherit_doc
 class _ClientProbabilisticClassifier(
     ProbabilisticClassifier, _ClientClassifier, metaclass=ABCMeta
 ):
     pass
 
 
+@inherit_doc
 class _ClientClassificationModel(ClassificationModel, ClientPredictionModel):
     @property  # type: ignore[misc]
     def numClasses(self) -> int:
         return self._get_model_attr("numClasses")
 
     def predictRaw(self, value: Vector) -> Vector:
+        # TODO: support this.
         raise NotImplementedError()
 
 
+@inherit_doc
 class _ClientProbabilisticClassificationModel(
     ProbabilisticClassificationModel, _ClientClassificationModel
 ):
     def predictProbability(self, value: Vector) -> Vector:
+        # TODO: support this.
         raise NotImplementedError()
 
 
+@inherit_doc
 class LogisticRegression(
     _ClientProbabilisticClassifier,
     _LogisticRegressionCommon,
@@ -194,6 +213,10 @@ class LogisticRegression(
         return LogisticRegressionModel
 
 
+LogisticRegression.__doc__ = PySparkLogisticRegression.__doc__
+
+
+@inherit_doc
 class LogisticRegressionModel(
     _ClientProbabilisticClassificationModel,
     _LogisticRegressionParams,
@@ -241,70 +264,108 @@ class LogisticRegressionModel(
             )
 
 
+LogisticRegressionModel.__doc__ = PySparkLogisticRegressionModel.__doc__
+
+
+@inherit_doc
 class _ClassificationSummary(ClientModelSummary):
 
     @property  # type: ignore[misc]
     def predictions(self) -> DataFrame:
         return self._get_summary_attr_dataframe("predictions")
 
+    predictions.__doc__ = _PySparkClassificationSummary.predictions.__doc__
+
     @property  # type: ignore[misc]
     def predictionCol(self) -> str:
         return self._get_summary_attr("predictionCol")
+
+    predictionCol.__doc__ = _PySparkClassificationSummary.predictionCol.__doc__
 
     @property  # type: ignore[misc]
     def labelCol(self) -> str:
         return self._get_summary_attr("labelCol")
 
+    labelCol.__doc__ = _PySparkClassificationSummary.labelCol.__doc__
+
     @property  # type: ignore[misc]
     def weightCol(self) -> str:
         return self._get_summary_attr("weightCol")
+
+    weightCol.__doc__ = _PySparkClassificationSummary.weightCol.__doc__
 
     @property
     def labels(self) -> List[str]:
         return self._get_summary_attr("labels")
 
+    labels.__doc__ = _PySparkClassificationSummary.labels.__doc__
+
     @property  # type: ignore[misc]
     def truePositiveRateByLabel(self) -> List[float]:
         return self._get_summary_attr("truePositiveRateByLabel")
+
+    truePositiveRateByLabel.__doc__ = _PySparkClassificationSummary.truePositiveRateByLabel.__doc__
 
     @property  # type: ignore[misc]
     def falsePositiveRateByLabel(self) -> List[float]:
         return self._get_summary_attr("falsePositiveRateByLabel")
 
+    falsePositiveRateByLabel.__doc__ = _PySparkClassificationSummary.falsePositiveRateByLabel.__doc__
+
     @property  # type: ignore[misc]
     def precisionByLabel(self) -> List[float]:
         return self._get_summary_attr("precisionByLabel")
+
+    precisionByLabel.__doc__ = _PySparkClassificationSummary.precisionByLabel.__doc__
 
     @property  # type: ignore[misc]
     def recallByLabel(self) -> List[float]:
         return self._get_summary_attr("recallByLabel")
 
-    # @property  # type: ignore[misc]
-    # def fMeasureByLabel(self, beta: float = 1.0) -> List[float]:
-    #     return self._get_summary_attr("fMeasureByLabel", beta)
+    recallByLabel.__doc__ = _PySparkClassificationSummary.recallByLabel.__doc__
+
+    @property  # type: ignore[misc]
+    def fMeasureByLabel(self, beta: float = 1.0) -> List[float]:
+        # TODO: support this.
+        raise NotImplementedError()
+
+    fMeasureByLabel.__doc__ = _PySparkClassificationSummary.fMeasureByLabel.__doc__
 
     @property  # type: ignore[misc]
     def accuracy(self) -> float:
         return self._get_summary_attr("accuracy")
 
+    accuracy.__doc__ = _PySparkClassificationSummary.accuracy.__doc__
+
     @property  # type: ignore[misc]
     def weightedTruePositiveRate(self) -> float:
         return self._get_summary_attr("weightedTruePositiveRate")
+
+    weightedTruePositiveRate.__doc__ = _PySparkClassificationSummary.weightedTruePositiveRate.__doc__
 
     @property  # type: ignore[misc]
     def weightedFalsePositiveRate(self) -> float:
         return self._get_summary_attr("weightedFalsePositiveRate")
 
+    weightedFalsePositiveRate.__doc__ = _PySparkClassificationSummary.weightedFalsePositiveRate.__doc__
+
     @property  # type: ignore[misc]
     def weightedRecall(self) -> float:
         return self._get_summary_attr("weightedRecall")
+
+    weightedRecall.__doc__ = _PySparkClassificationSummary.weightedRecall.__doc__
 
     @property  # type: ignore[misc]
     def weightedPrecision(self) -> float:
         return self._get_summary_attr("weightedPrecision")
 
-    # def weightedFMeasure(self, beta: float = 1.0) -> float:
-    #     return self._get_summary_attr("weightedFMeasure", beta)
+    weightedPrecision.__doc__ = _PySparkClassificationSummary.weightedPrecision.__doc__
+
+    def weightedFMeasure(self, beta: float = 1.0) -> float:
+        # TODO: support this.
+        raise NotImplementedError()
+
+    weightedFMeasure.__doc__ = _PySparkClassificationSummary.weightedFMeasure.__doc__
 
 
 @inherit_doc
@@ -314,9 +375,13 @@ class _TrainingSummary(ClientModelSummary):
     def objectiveHistory(self) -> List[float]:
         return self._get_summary_attr("objectiveHistory")
 
+    objectiveHistory.__doc__ = _PySparkTrainingSummary.objectiveHistory.__doc__
+
     @property  # type: ignore[misc]
     def totalIterations(self) -> int:
         return self._get_summary_attr("totalIterations")
+
+    totalIterations.__doc__ = _PySparkTrainingSummary.totalIterations.__doc__
 
 
 @inherit_doc
@@ -326,54 +391,88 @@ class _BinaryClassificationSummary(_ClassificationSummary):
     def scoreCol(self) -> str:
         return self._get_summary_attr("scoreCol")
 
+    scoreCol.__doc__ = _PySparkBinaryClassificationSummary.scoreCol.__doc__
+
     @property
     def roc(self) -> DataFrame:
         return self._get_summary_attr_dataframe("roc")
+
+    roc.__doc__ = _PySparkBinaryClassificationSummary.roc.__doc__
 
     @property  # type: ignore[misc]
     def areaUnderROC(self) -> float:
         return self._get_summary_attr("areaUnderROC")
 
+    areaUnderROC.__doc__ = _PySparkBinaryClassificationSummary.areaUnderROC.__doc__
+
     @property  # type: ignore[misc]
     def pr(self) -> DataFrame:
         return self._get_summary_attr_dataframe("pr")
+
+    pr.__doc__ = _PySparkBinaryClassificationSummary.pr.__doc__
 
     @property  # type: ignore[misc]
     def fMeasureByThreshold(self) -> DataFrame:
         return self._get_summary_attr_dataframe("fMeasureByThreshold")
 
+    fMeasureByThreshold.__doc__ = _PySparkBinaryClassificationSummary.fMeasureByThreshold.__doc__
+
     @property  # type: ignore[misc]
     def precisionByThreshold(self) -> DataFrame:
         return self._get_summary_attr_dataframe("precisionByThreshold")
+
+    precisionByThreshold.__doc__ = _PySparkBinaryClassificationSummary.precisionByThreshold.__doc__
 
     @property  # type: ignore[misc]
     def recallByThreshold(self) -> DataFrame:
         return self._get_summary_attr_dataframe("recallByThreshold")
 
+    recallByThreshold.__doc__ = _PySparkBinaryClassificationSummary.recallByThreshold.__doc__
 
+
+@inherit_doc
 class LogisticRegressionSummary(_ClassificationSummary):
 
     @property  # type: ignore[misc]
     def probabilityCol(self) -> str:
         return self._get_summary_attr("probabilityCol")
 
+    probabilityCol.__doc__ = PySparkLogisticRegressionSummary.probabilityCol.__doc__
+
     @property  # type: ignore[misc]
     def featuresCol(self) -> str:
         return self._get_summary_attr("featuresCol")
 
+    featuresCol.__doc__ = PySparkLogisticRegressionSummary.featuresCol.__doc__
 
+
+LogisticRegressionSummary.__doc__ = PySparkLogisticRegressionSummary.__doc__
+
+
+@inherit_doc
 class LogisticRegressionTrainingSummary(LogisticRegressionSummary, _TrainingSummary):
     pass
 
 
+LogisticRegressionTrainingSummary.__doc__ = PySparkLogisticRegressionTrainingSummary.__doc__
+
+
+@inherit_doc
 class BinaryLogisticRegressionSummary(_BinaryClassificationSummary, LogisticRegressionSummary):
     pass
 
 
+BinaryLogisticRegressionSummary.__doc__ = PySparkBinaryLogisticRegressionSummary.__doc__
+
+
+@inherit_doc
 class BinaryLogisticRegressionTrainingSummary(
     BinaryLogisticRegressionSummary, LogisticRegressionTrainingSummary
 ):
     pass
+
+
+BinaryLogisticRegressionTrainingSummary.__doc__ = PySparkBinaryLogisticRegressionTrainingSummary.__doc__
 
 
 def _test() -> None:

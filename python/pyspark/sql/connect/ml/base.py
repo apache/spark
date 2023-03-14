@@ -28,7 +28,11 @@ from pyspark.sql.connect.ml.serializer import deserialize, serialize_ml_params
 from pyspark.sql.connect.session import SparkSession
 from pyspark.sql.connect.plan import LogicalPlan
 
+from pyspark.ml.util import inherit_doc
+from pyspark.ml.util import HasTrainingSummary as PySparkHasTrainingSummary
 
+
+@inherit_doc
 class ClientEstimator(Estimator, metaclass=ABCMeta):
 
     @classmethod
@@ -59,10 +63,12 @@ class ClientEstimator(Estimator, metaclass=ABCMeta):
         return deserialize(resp, client, clazz=self._model_class())
 
 
+@inherit_doc
 class ClientPredictor(Predictor, ClientEstimator, _PredictorParams, metaclass=ABCMeta):
     pass
 
 
+@inherit_doc
 class ClientModel(Model, metaclass=ABCMeta):
 
     ref_id: str = None
@@ -126,6 +132,7 @@ class ClientModel(Model, metaclass=ABCMeta):
         return copied_model
 
 
+@inherit_doc
 class ClientPredictionModel(PredictionModel, ClientModel, _PredictorParams):
     @property  # type: ignore[misc]
     def numFeatures(self) -> int:
@@ -211,16 +218,25 @@ class ClientModelSummary(metaclass=ABCMeta):
         return deserialize(resp, client)
 
 
+@inherit_doc
 class HasTrainingSummary(ClientModel, metaclass=ABCMeta):
 
     def hasSummary(self) -> bool:
         return self._get_model_attr("hasSummary")
 
+    hasSummary.__doc__ = PySparkHasTrainingSummary.hasSummary.__doc__
+
     @abstractmethod
     def summary(self):
         raise NotImplementedError()
 
+    summary.__doc__ = PySparkHasTrainingSummary.summary.__doc__
 
+
+HasTrainingSummary.__doc__ = PySparkHasTrainingSummary.__doc__
+
+
+@inherit_doc
 class ClientMLWriter(MLWriter):
 
     def __init__(self, instance: "ClientMLWritable"):
@@ -259,6 +275,7 @@ class ClientMLWriter(MLWriter):
         client._execute_ml(req)
 
 
+@inherit_doc
 class ClientMLWritable(MLWritable):
     """
     (Private) Mixin for ML instances that provide :py:class:`JavaMLWriter`.
@@ -269,6 +286,7 @@ class ClientMLWritable(MLWritable):
         return ClientMLWriter(self)
 
 
+@inherit_doc
 class ClientMLReader(MLReader):
 
     def __init__(self, clazz):
@@ -301,6 +319,7 @@ class ClientMLReader(MLReader):
             raise NotImplementedError()
 
 
+@inherit_doc
 class ClientMLReadable(MLReadable):
     @classmethod
     def read(cls) -> ClientMLReader:
