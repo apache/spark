@@ -307,6 +307,41 @@ class PlanGenerationTestSuite
     simple.select(fn.struct(fn.col("id"), fn.col("a")).as(encoder))
   }
 
+  test("select typed 2-arg") {
+    val encoder = ScalaReflection.encoderFor[(Long, Int)]
+    val encoder2 = ScalaReflection.encoderFor[(Double, Double)]
+    val col = fn.struct(fn.col("id"), fn.col("a"))
+    val col2 = fn.struct(fn.col("a"), fn.col("b"))
+    simple.select(col.as(encoder), col2.as(encoder2))
+  }
+
+  test("select typed 3-arg") {
+    val encoder = ScalaReflection.encoderFor[(Long, Int)]
+    val encoder2 = ScalaReflection.encoderFor[(Double, Double)]
+    val col = fn.struct(fn.col("id"), fn.col("a"))
+    val col2 = fn.struct(fn.col("a"), fn.col("b"))
+    simple.select(col.as(encoder), col2.as(encoder2), col.as(encoder))
+  }
+
+  test("select typed 4-arg") {
+    val encoder = ScalaReflection.encoderFor[(Long, Int)]
+    val col = fn.struct(fn.col("id"), fn.col("a"))
+    simple.select(col.as(encoder), col.as(encoder), col.as(encoder), col.as(encoder))
+  }
+
+  test("select typed 5-arg") {
+    val encoder = ScalaReflection.encoderFor[(Long, Int)]
+    val encoder2 = ScalaReflection.encoderFor[(Double, Double)]
+    val col = fn.struct(fn.col("id"), fn.col("a"))
+    val col2 = fn.struct(fn.col("a"), fn.col("b"))
+    simple.select(
+      col.as(encoder),
+      col2.as(encoder2),
+      col.as(encoder),
+      col.as(encoder),
+      col2.as(encoder2))
+  }
+
   test("limit") {
     simple.limit(10)
   }

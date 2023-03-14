@@ -1089,7 +1089,7 @@ class Dataset[T] private[sql] (
    * code reuse, we do this without the help of the type system and then use helper functions that
    * cast appropriately for the user facing interface.
    */
-  protected def selectUntyped(columns: TypedColumn[_, _]*): Dataset[_] = {
+  private def selectUntyped(columns: TypedColumn[_, _]*): Dataset[_] = {
     val encoder = ProductEncoder.tuple(columns.map(_.encoder))
     sparkSession.newDataset(encoder) { builder =>
       builder.getProjectBuilder
