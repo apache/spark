@@ -499,11 +499,12 @@ class SparkConnectPlanner(val session: SparkSession) {
 
   private def transformGroupMap(rel: proto.GroupMap): LogicalPlan = {
     val pythonUdf = transformPythonUDF(rel.getFunc)
-    val groupingExprs = rel.getGroupingExpressionsList.asScala.toSeq.map(transformExpression)
+    val cols =
+      rel.getGroupingExpressionsList.asScala.toSeq.map(expr => Column(transformExpression(expr)))
 
     Dataset
       .ofRows(session, transformRelation(rel.getInput))
-      .groupBy(groupingExprs)
+      .groupBy(cols)
       .flatMapGroupsInPandas(pythonUdf)
       .logicalPlan
   }
