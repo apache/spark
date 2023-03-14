@@ -1761,13 +1761,8 @@ class SparkConnectPlanner(val session: SparkSession) {
 
   private def createJDBCTestSchema(): Unit = {
     Utils.classForName("org.h2.Driver")
-    // Extra properties that will be specified for our database. We need these to test
-    // usage of parameters from OPTIONS clause in queries.
-    val properties = new Properties()
-    properties.setProperty("user", "testUser")
-    properties.setProperty("password", "testPass")
 
-    val conn = DriverManager.getConnection("jdbc:h2:mem:testdb2", properties)
+    val conn = DriverManager.getConnection("jdbc:h2:mem:testdb2")
     conn.prepareStatement("create schema test").executeUpdate()
     conn.commit()
     conn.close()
