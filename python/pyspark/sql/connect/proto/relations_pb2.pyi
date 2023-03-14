@@ -92,6 +92,7 @@ class Relation(google.protobuf.message.Message):
     MAP_PARTITIONS_FIELD_NUMBER: builtins.int
     COLLECT_METRICS_FIELD_NUMBER: builtins.int
     PARSE_FIELD_NUMBER: builtins.int
+    GROUP_MAP_FIELD_NUMBER: builtins.int
     FILL_NA_FIELD_NUMBER: builtins.int
     DROP_NA_FIELD_NUMBER: builtins.int
     REPLACE_FIELD_NUMBER: builtins.int
@@ -167,6 +168,8 @@ class Relation(google.protobuf.message.Message):
     @property
     def parse(self) -> global___Parse: ...
     @property
+    def group_map(self) -> global___GroupMap: ...
+    @property
     def fill_na(self) -> global___NAFill:
         """NA functions"""
     @property
@@ -233,6 +236,7 @@ class Relation(google.protobuf.message.Message):
         map_partitions: global___MapPartitions | None = ...,
         collect_metrics: global___CollectMetrics | None = ...,
         parse: global___Parse | None = ...,
+        group_map: global___GroupMap | None = ...,
         fill_na: global___NAFill | None = ...,
         drop_na: global___NADrop | None = ...,
         replace: global___NAReplace | None = ...,
@@ -283,6 +287,8 @@ class Relation(google.protobuf.message.Message):
             b"filter",
             "freq_items",
             b"freq_items",
+            "group_map",
+            b"group_map",
             "hint",
             b"hint",
             "join",
@@ -378,6 +384,8 @@ class Relation(google.protobuf.message.Message):
             b"filter",
             "freq_items",
             b"freq_items",
+            "group_map",
+            b"group_map",
             "hint",
             b"hint",
             "join",
@@ -470,6 +478,7 @@ class Relation(google.protobuf.message.Message):
         "map_partitions",
         "collect_metrics",
         "parse",
+        "group_map",
         "fill_na",
         "drop_na",
         "replace",
