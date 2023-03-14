@@ -44,7 +44,7 @@ import org.apache.spark.unsafe.types.UTF8String
  */
 trait SparkConnectPlanTest extends SharedSparkSession {
 
-  val sessionHolder = SessionHolder("user1", "session1", spark)
+  def sessionHolder: SessionHolder = SessionHolder("user1", "session1", spark)
 
   class MockObserver extends StreamObserver[proto.ExecutePlanResponse] {
     override def onNext(value: ExecutePlanResponse): Unit = {}

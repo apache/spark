@@ -39,7 +39,7 @@ import org.apache.spark.sql.test.SharedSparkSession
  */
 class SparkConnectServiceSuite extends SharedSparkSession {
 
-  val sessionHolder = SessionHolder("user1", "session1", spark)
+  def sessionHolder: SessionHolder = SessionHolder("user1", "session1", spark)
 
   test("Test schema in analyze response") {
     withTable("test") {

@@ -61,7 +61,7 @@ import org.apache.spark.util.Utils
 // scalastyle:on
 class ProtoToParsedPlanTestSuite extends SparkFunSuite with SharedSparkSession {
 
-  val sessionHolder = SessionHolder("user1", "session1", spark)
+  def sessionHolder: SessionHolder = SessionHolder("user1", "session1", spark)
 
   val url = "jdbc:h2:mem:testdb0"
   var conn: java.sql.Connection = null
