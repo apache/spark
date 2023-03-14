@@ -138,7 +138,17 @@ object ScalarUserDefinedFunction {
     ScalarUserDefinedFunction(
       function = function,
       inputEncoders = parameterTypes.map(tag => ScalaReflection.encoderFor(tag)),
-      outputEncoder = ScalaReflection.encoderFor(returnType),
+      outputEncoder = ScalaReflection.encoderFor(returnType))
+  }
+
+  private[sql] def apply(
+      function: AnyRef,
+      inputEncoders: Seq[AgnosticEncoder[_]],
+      outputEncoder: AgnosticEncoder[_]): ScalarUserDefinedFunction = {
+    ScalarUserDefinedFunction(
+      function = function,
+      inputEncoders = inputEncoders,
+      outputEncoder = outputEncoder,
       name = None,
       nullable = true,
       deterministic = true)
