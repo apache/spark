@@ -49,8 +49,19 @@ For Java 11, `-Dio.netty.tryReflectionSetAccessible=true` is required additional
 
 # Running the Examples and Shell
 
-Spark comes with several sample programs.  Scala, Java, Python and R examples are in the
-`examples/src/main` directory. To run one of the Java or Scala sample programs, use
+Spark comes with several sample programs. Python, Scala, Java and R examples are in the
+`examples/src/main` directory.
+
+To run Spark interactively in a Python interpreter, use
+`bin/pyspark`:
+
+    ./bin/pyspark --master "local[2]"
+
+Sample applications are provided in Python. For example:
+
+    ./bin/spark-submit examples/src/main/python/pi.py 10
+
+To run one of the Scala or Java sample programs, use
 `bin/run-example <class> [params]` in the top-level Spark directory. (Behind the scenes, this
 invokes the more general
 [`spark-submit` script](submitting-applications.html) for
@@ -61,30 +72,31 @@ launching applications). For example,
 You can also run Spark interactively through a modified version of the Scala shell. This is a
 great way to learn the framework.
 
-    ./bin/spark-shell --master local[2]
+    ./bin/spark-shell --master "local[2]"
 
 The `--master` option specifies the
 [master URL for a distributed cluster](submitting-applications.html#master-urls), or `local` to run
 locally with one thread, or `local[N]` to run locally with N threads. You should start by using
 `local` for testing. For a full list of options, run Spark shell with the `--help` option.
 
-Spark also provides a Python API. To run Spark interactively in a Python interpreter, use
-`bin/pyspark`:
-
-    ./bin/pyspark --master local[2]
-
-Example applications are also provided in Python. For example,
-
-    ./bin/spark-submit examples/src/main/python/pi.py 10
-
-Spark also provides an [R API](sparkr.html) since 1.4 (only DataFrames APIs included).
+Spark also provides an [R API](sparkr.html) since 1.4 (only DataFrame APIs are included).
 To run Spark interactively in an R interpreter, use `bin/sparkR`:
 
-    ./bin/sparkR --master local[2]
+    ./bin/sparkR --master "local[2]"
 
 Example applications are also provided in R. For example,
 
     ./bin/spark-submit examples/src/main/r/dataframe.R
+
+## Running Spark Client Applications Anywhere with Spark Connect
+
+Spark Connect is a new client-server architecture introduced in Spark 3.4 that decouples Spark
+client applications and allows remote connectivity to Spark clusters. The separation between
+client and server allows Spark and its open ecosystem to be leveraged from anywhere, embedded
+in any application. In Spark 3.4, Spark Connect provides DataFrame API coverage for PySpark and
+DataFrame/Dataset API support in Scala.
+
+To learn more about Spark Connect and how to use it, see [Spark Connect Overview](spark-connect-overview.html).
 
 # Launching on a Cluster
 
