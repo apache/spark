@@ -330,6 +330,27 @@ object ScalaReflection extends ScalaReflection {
         expressions.Literal.create(null, dt),
         NewInstance(cls, arguments, dt, propagateNull = false))
 
+    case TupleEncoder(encoders, tag) =>
+      val cls = tag.runtimeClass
+      val dt = ObjectType(cls)
+
+      val arguments = encoders.zipWithIndex.map {
+        case (encoder, i) =>
+          val name = s"_${i + 1}"
+          val newTypePath = walkedTypePath.recordField(
+            encoder.clsTag.runtimeClass.getName,
+            name)
+          val getter = addToPathOrdinal(path, i, encoder.dataType, newTypePath)
+          expressionWithNullSafety(
+            deserializerFor(encoder, getter, newTypePath),
+            encoder.nullable,
+            newTypePath)
+      }
+      expressions.If(
+        IsNull(path),
+        expressions.Literal.create(null, dt),
+        NewInstance(cls, arguments, dt, propagateNull = false))
+
     case RowEncoder(fields) =>
       val convertedFields = fields.zipWithIndex.map { case (f, i) =>
         val newTypePath = walkedTypePath.recordField(
@@ -495,6 +516,31 @@ object ScalaReflection extends ScalaReflection {
           AssertNotNull(fieldValue)
         }
         field.name -> convertedField
+      }
+      createSerializerForObject(input, serializedFields)
+
+    case TupleEncoder(encoders, _) =>
+      val serializedFields = encoders.zipWithIndex.map { case (encoder, index) =>
+        val name = s"_${index + 1}"
+        val fieldValue = serializerFor(
+          encoder,
+          ValidateExternalType(
+            GetExternalRowField(input, index, name),
+            encoder.dataType,
+            lenientExternalDataTypeFor(encoder)))
+
+        val convertedField = if (encoder.nullable) {
+          exprs.If(
+            Invoke(input, "isNullAt", BooleanType, exprs.Literal(index) :: Nil),
+            // Because we strip UDTs, `field.dataType` can be different from `fieldValue.dataType`.
+            // We should use `fieldValue.dataType` here.
+            exprs.Literal.create(null, fieldValue.dataType),
+            fieldValue
+          )
+        } else {
+          AssertNotNull(fieldValue)
+        }
+        name -> convertedField
       }
       createSerializerForObject(input, serializedFields)
 

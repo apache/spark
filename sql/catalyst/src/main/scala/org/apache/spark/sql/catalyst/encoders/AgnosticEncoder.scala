@@ -25,6 +25,7 @@ import scala.reflect.{classTag, ClassTag}
 import org.apache.spark.sql.{Encoder, Row}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
+import org.apache.spark.util.Utils
 
 /**
  * A non implementation specific encoder. This encoder containers all the information needed
@@ -105,6 +106,51 @@ object AgnosticEncoders {
     override def isPrimitive: Boolean = false
     override val schema: StructType = StructType(fields.map(_.structField))
     override def dataType: DataType = schema
+  }
+
+  case class TupleEncoder[T](
+    encoders: Seq[AgnosticEncoder[T]],
+    override val clsTag: ClassTag[T]) extends AgnosticEncoder[T] {
+    override def isPrimitive: Boolean = false
+    override val schema: StructType = StructType(encoders.zipWithIndex.map {
+      case (e, id) => StructField(s"_${id + 1}", e.dataType, e.nullable)
+    })
+    override def dataType: DataType = schema
+  }
+
+  object TupleEncoder {
+    def tuple(encoders: Seq[AgnosticEncoder[_]]): AgnosticEncoder[_] = {
+      val cls = Utils.getContextOrSparkClassLoader.loadClass(s"scala.Tuple${encoders.size}")
+      TupleEncoder[Any](encoders.map(_.asInstanceOf[AgnosticEncoder[Any]]), ClassTag(cls))
+    }
+
+    def tuple[T](e: AgnosticEncoder[T]): AgnosticEncoder[Tuple1[T]] =
+      tuple(Seq(e)).asInstanceOf[AgnosticEncoder[Tuple1[T]]]
+
+    def tuple[T1, T2](e1: AgnosticEncoder[T1], e2: AgnosticEncoder[T2]): AgnosticEncoder[(T1, T2)] =
+      tuple(Seq(e1, e2)).asInstanceOf[AgnosticEncoder[(T1, T2)]]
+
+    def tuple[T1, T2, T3](
+        e1: AgnosticEncoder[T1],
+        e2 : AgnosticEncoder[T2],
+        e3: AgnosticEncoder[T3]): AgnosticEncoder[(T1, T2, T3)] =
+      tuple(Seq(e1, e2, e3)).asInstanceOf[AgnosticEncoder[(T1, T2, T3)]]
+
+    def tuple[T1, T2, T3, T4](
+        e1: AgnosticEncoder[T1],
+        e2: AgnosticEncoder[T2],
+        e3: AgnosticEncoder[T3],
+        e4: AgnosticEncoder[T4]): AgnosticEncoder[(T1, T2, T3, T4)] =
+      tuple(Seq(e1, e2, e3, e4)).asInstanceOf[AgnosticEncoder[(T1, T2, T3, T4)]]
+
+    def tuple[T1, T2, T3, T4, T5](
+        e1: AgnosticEncoder[T1],
+        e2: AgnosticEncoder[T2],
+        e3: AgnosticEncoder[T3],
+        e4: AgnosticEncoder[T4],
+        e5: AgnosticEncoder[T5]):
+    ExpressionEncoder[(T1, T2, T3, T4, T5)] =
+      tuple(Seq(e1, e2, e3, e4, e5)).asInstanceOf[ExpressionEncoder[(T1, T2, T3, T4, T5)]]
   }
 
   abstract class BaseRowEncoder extends AgnosticEncoder[Row] {
