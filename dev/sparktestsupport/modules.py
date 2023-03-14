@@ -300,6 +300,7 @@ connect = Module(
     source_file_regexes=[
         "connector/connect",
     ],
+    build_profile_flags=["-Pconnect"],
     sbt_test_goals=[
         "connect/test",
         "connect-client-jvm/test",
