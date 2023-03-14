@@ -29,7 +29,7 @@ import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent, SparkListe
 import org.apache.spark.sql.{Dataset, QueryTest, Row, SparkSession, Strategy}
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan}
-import org.apache.spark.sql.execution.{CollectLimitExec, LocalTableScanExec, PartialReducerPartitionSpec, QueryExecution, ReusedSubqueryExec, ShuffledRowRDD, SortExec, SparkPlan, SparkPlanInfo, UnionExec}
+import org.apache.spark.sql.execution.{CollectLimitExec, ColumnarToRowExec, LocalTableScanExec, PartialReducerPartitionSpec, QueryExecution, ReusedSubqueryExec, ShuffledRowRDD, SortExec, SparkPlan, SparkPlanInfo, UnionExec}
 import org.apache.spark.sql.execution.aggregate.BaseAggregateExec
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.execution.command.DataWritingCommandExec
@@ -2713,6 +2713,20 @@ class AdaptiveQueryExecSuite
       val df2 = spark.range(1).selectExpr("id as c2")
       val df = df1.join(df2, col("c1") === col("c2")).repartition(3, col("c1"))
       assert(df.rdd.getNumPartitions == 3)
+    }
+  }
+
+  test("SPARK-42778: QueryStageExec should respect supportsRowBased") {
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_FORCE_APPLY.key -> "true") {
+      withTempView("t") {
+        Seq(1).toDF("c1").createOrReplaceTempView("t")
+        spark.catalog.cacheTable("t")
+        val df = spark.table("t")
+        df.collect()
+        assert(collect(df.queryExecution.executedPlan) {
+          case c: ColumnarToRowExec => c
+        }.isEmpty)
+      }
     }
   }
 
