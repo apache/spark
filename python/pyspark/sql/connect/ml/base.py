@@ -25,7 +25,7 @@ import pyspark.sql.connect.proto as pb2
 import pyspark.sql.connect.proto.ml_pb2 as ml_pb2
 import pyspark.sql.connect.proto.ml_common_pb2 as ml_common_pb2
 from pyspark.sql.connect.ml.serializer import deserialize, serialize_ml_params
-from pyspark.sql.connect.session import SparkSession
+from pyspark.sql.connect import session as pyspark_session
 from pyspark.sql.connect.plan import LogicalPlan
 
 from pyspark.ml.util import inherit_doc
@@ -74,7 +74,7 @@ class ClientModel(Model, metaclass=ABCMeta):
     ref_id: str = None
 
     def __del__(self):
-        client = SparkSession.getActiveSession().client
+        client = pyspark_session._active_spark_session.client
         del_model_proto = ml_pb2.MlCommand.DeleteModel(
             model_ref_id=self.ref_id,
         )
@@ -91,7 +91,7 @@ class ClientModel(Model, metaclass=ABCMeta):
         raise NotImplementedError()
 
     def _get_model_attr(self, name):
-        client = SparkSession.getActiveSession().client
+        client = pyspark_session._active_spark_session.client
         model_attr_command_proto = ml_pb2.MlCommand.FetchModelAttr(
             model_ref_id=self.ref_id,
             name=name
@@ -103,7 +103,7 @@ class ClientModel(Model, metaclass=ABCMeta):
         return deserialize(resp, client)
 
     def _get_model_attr_dataframe(self, name) -> DataFrame:
-        session = SparkSession.getActiveSession()
+        session = pyspark_session._active_spark_session
         plan = _ModelAttrRelationPlan(
             self, name
         )
@@ -117,7 +117,7 @@ class ClientModel(Model, metaclass=ABCMeta):
     def copy(self, extra=None):
         copied_model = super(ClientModel, self).copy(extra)
 
-        client = SparkSession.getActiveSession().client
+        client = pyspark_session._active_spark_session.client
         copy_model_proto = ml_pb2.MlCommand.CopyModel(
             model_ref_id=self.ref_id,
         )
@@ -195,7 +195,7 @@ class ClientModelSummary(metaclass=ABCMeta):
         self.dataset = dataset
 
     def _get_summary_attr_dataframe(self, name):
-        session = SparkSession.getActiveSession()
+        session = pyspark_session._active_spark_session
         plan = _ModelSummaryAttrRelationPlan(
             (self.dataset._plan if self.dataset is not None else None),
             self.model, name
@@ -203,7 +203,7 @@ class ClientModelSummary(metaclass=ABCMeta):
         return DataFrame.withPlan(plan, session)
 
     def _get_summary_attr(self, name):
-        client = SparkSession.getActiveSession().client
+        client = pyspark_session._active_spark_session.client
 
         model_summary_attr_command_proto = ml_pb2.MlCommand.FetchModelSummaryAttr(
             model_ref_id=self.model.ref_id,
@@ -244,7 +244,7 @@ class ClientMLWriter(MLWriter):
         self.instance = instance
 
     def save(self, path: str) -> None:
-        client = SparkSession.getActiveSession().client
+        client = pyspark_session._active_spark_session.client
         req = client._execute_plan_request_with_metadata()
 
         if isinstance(self.instance, ClientModel):
@@ -293,7 +293,7 @@ class ClientMLReader(MLReader):
         self.clazz = clazz
 
     def load(self, path: str):
-        client = SparkSession.getActiveSession().client
+        client = pyspark_session._active_spark_session.client
         req = client._execute_plan_request_with_metadata()
 
         name = self.clazz._algo_name()
