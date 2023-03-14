@@ -40,16 +40,17 @@ private[spark] class DriverServiceFeatureStep(
       "managed via a Kubernetes service.")
 
   private val preferredServiceName = s"${kubernetesConf.resourceNamePrefix}$DRIVER_SVC_POSTFIX"
-  private[k8s] val resolvedServiceName: String = if (preferredServiceName.length <= MAX_SERVICE_NAME_LENGTH) {
-    preferredServiceName
-  } else {
-    val randomServiceId = KubernetesUtils.uniqueID(clock = clock)
-    val shorterServiceName = s"spark-$randomServiceId$DRIVER_SVC_POSTFIX"
-    logWarning(s"Driver's hostname would preferably be $preferredServiceName, but this is " +
-      s"too long (must be <= $MAX_SERVICE_NAME_LENGTH characters). Falling back to use " +
-      s"$shorterServiceName as the driver service's name.")
-    shorterServiceName
-  }
+  private[k8s] val resolvedServiceName: String =
+    if (preferredServiceName.length <= MAX_SERVICE_NAME_LENGTH) {
+      preferredServiceName
+    } else {
+      val randomServiceId = KubernetesUtils.uniqueID(clock = clock)
+      val shorterServiceName = s"spark-$randomServiceId$DRIVER_SVC_POSTFIX"
+      logWarning(s"Driver's hostname would preferably be $preferredServiceName, but this is " +
+        s"too long (must be <= $MAX_SERVICE_NAME_LENGTH characters). Falling back to use " +
+        s"$shorterServiceName as the driver service's name.")
+      shorterServiceName
+    }
   private val ipFamilyPolicy =
     kubernetesConf.sparkConf.get(KUBERNETES_DRIVER_SERVICE_IP_FAMILY_POLICY)
   private val ipFamilies =
