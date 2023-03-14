@@ -436,7 +436,7 @@ class SparkSession:
 
     @classmethod
     def getActiveSession(cls) -> Any:
-        return _active_spark_session
+        raise NotImplementedError("getActiveSession() is not implemented.")
 
     def newSession(self) -> Any:
         raise NotImplementedError("newSession() is not implemented.")
