@@ -81,7 +81,7 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
       expected)
   }
 
-  test("SPARK-42782: Port get_json_object's tests from the Apache Hive project") {
+  test("SPARK-42782: Hive compatibility check for get_json_object") {
     val book0 = "{\"author\":\"Nigel Rees\",\"title\":\"Sayings of the Century\"" +
       ",\"category\":\"reference\",\"price\":8.95}"
     val backet0 = "[1,2,{\"b\":\"y\",\"a\":\"x\"}]"
