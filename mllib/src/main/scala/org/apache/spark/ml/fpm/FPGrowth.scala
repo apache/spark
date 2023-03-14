@@ -274,20 +274,27 @@ class FPGrowthModel private[ml] (
   @Since("2.2.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
-    val arrayType = associationRules.schema("consequent").dataType
+    val spark = associationRules.sparkSession
 
-    dataset.crossJoin(
-      broadcast(
-        associationRules
-          .where(not(isnull(col("antecedent"))) &&
-            not(isnull(col("consequent"))))
-          .select(
-            collect_list(
-              struct("antecedent", "consequent")
-            ).as($(predictionCol))
-          )
-      )
-    ).withColumn(
+    val inputTableName = s"${Identifiable.randomUID(uid)}_${System.currentTimeMillis}_input_dataset"
+    dataset.drop($(predictionCol)).createOrReplaceTempView(inputTableName)
+
+    val modelTableName = s"${Identifiable.randomUID(uid)}_${System.currentTimeMillis}_fpm_model"
+    associationRules
+      .select("antecedent", "consequent")
+      .where(not(isnull(col("antecedent"))) &&
+        not(isnull(col("consequent"))))
+      .createOrReplaceTempView(modelTableName)
+
+    val query = s"""
+       | SELECT *,
+       |   (SELECT COLLECT_SET(STRUCT(antecedent, consequent)) FROM $modelTableName)
+       |    AS ${$(predictionCol)}
+       | FROM $inputTableName
+       |""".stripMargin
+
+    val arrayType = associationRules.schema("consequent").dataType
+    val output = spark.sql(query).withColumn(
       $(predictionCol),
       when(not(isnull(col($(itemsCol)))),
         aggregate(
@@ -302,6 +309,10 @@ class FPGrowthModel private[ml] (
         )
       ).otherwise(array().cast(arrayType))
     )
+
+    spark.catalog.dropTempView(inputTableName)
+    spark.catalog.dropTempView(modelTableName)
+    output
   }
 
   @Since("2.2.0")
