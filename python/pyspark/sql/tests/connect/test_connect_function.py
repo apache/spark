@@ -2395,11 +2395,9 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
 
     def test_pandas_udf_import(self):
         from pyspark.sql.connect import functions as CF
+        from pyspark.sql import functions as SF
 
-        with self.assertRaisesRegex(
-            NotImplementedError, "Please import pandas_udf from pyspark.sql.functions"
-        ):
-            getattr(CF, "pandas_udf")()
+        self.assert_eq(getattr(CF, "pandas_udf"), getattr(SF, "pandas_udf"))
 
 
 if __name__ == "__main__":
