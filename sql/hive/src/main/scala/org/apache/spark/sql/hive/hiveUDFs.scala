@@ -131,22 +131,23 @@ private[hive] case class HiveGenericUDF(
   extends Expression
   with UserDefinedExpression {
 
-  private[hive] lazy val helper = new HiveGenericUDFHelper(funcWrapper, children)
-
   override def nullable: Boolean = true
 
-  override lazy val deterministic: Boolean = helper.deterministic
+  override lazy val deterministic: Boolean = evaluator.deterministic
 
-  override def foldable: Boolean = helper.foldable
+  override def foldable: Boolean = evaluator.foldable
 
-  override lazy val dataType: DataType = helper.dataType
+  override lazy val dataType: DataType = evaluator.dataType
+
+  @transient
+  private[hive] lazy val evaluator = new HiveGenericUDFEvaluator(funcWrapper, children)
 
   override def eval(input: InternalRow): Any = {
     children.zipWithIndex.map {
       case (child, idx) =>
-        helper.setArg(idx, child.eval(input))
+        evaluator.setArg(idx, child.eval(input))
     }
-    helper.evaluate()
+    evaluator.evaluate()
   }
 
   override def prettyName: String = name
@@ -166,9 +167,9 @@ private[hive] case class HiveGenericUDF(
       case (eval, i) =>
         s"""
            |if (${eval.isNull}) {
-           |  $refTerm.helper().setArg($i, null);
+           |  $refTerm.evaluator().setArg($i, null);
            |} else {
-           |  $refTerm.helper().setArg($i, ${eval.value});
+           |  $refTerm.evaluator().setArg($i, ${eval.value});
            |}
            |""".stripMargin
     }
@@ -182,7 +183,7 @@ private[hive] case class HiveGenericUDF(
          |$resultType $resultTerm = null;
          |boolean ${ev.isNull} = false;
          |try {
-         |  $resultTerm = ($resultType) $refTerm.helper().evaluate();
+         |  $resultTerm = ($resultType) $refTerm.evaluator().evaluate();
          |  ${ev.isNull} = $resultTerm == null;
          |} catch (Throwable e) {
          |  throw QueryExecutionErrors.failedExecuteUserDefinedFunctionError(
@@ -200,11 +201,27 @@ private[hive] case class HiveGenericUDF(
   }
 }
 
-class HiveGenericUDFHelper(
+class HiveGenericUDFEvaluator(
     funcWrapper: HiveFunctionWrapper, children: Seq[Expression])
   extends HiveInspectors
-  with Serializable
-  with Logging {
+  with Serializable {
+
+  @transient
+  private val function = funcWrapper.createFunction[GenericUDF]()
+
+  @transient
+  private val isUDFDeterministic = {
+    val udfType = function.getClass.getAnnotation(classOf[HiveUDFType])
+    udfType != null && udfType.deterministic() && !udfType.stateful()
+  }
+
+  @transient
+  private val argumentInspectors = children.map(toInspector)
+
+  @transient
+  private val returnInspector = {
+    function.initializeAndFoldConstants(argumentInspectors.toArray)
+  }
 
   @transient
   private[hive] val deterministic = isUDFDeterministic && children.forall(_.deterministic)
@@ -217,37 +234,17 @@ class HiveGenericUDFHelper(
   private[hive] val dataType: DataType = inspectorToDataType(returnInspector)
 
   @transient
-  private lazy val function = funcWrapper.createFunction[GenericUDF]()
-
-  @transient
-  private lazy val isUDFDeterministic = {
-    val udfType = function.getClass.getAnnotation(classOf[HiveUDFType])
-    udfType != null && udfType.deterministic() && !udfType.stateful()
-  }
-
-  @transient
-  private lazy val argumentInspectors = children.map(toInspector)
-
-  @transient
-  private lazy val deferredObjects: Array[DeferredObject] = argumentInspectors.zip(children).map {
+  private val deferredObjects: Array[DeferredObject] = argumentInspectors.zip(children).map {
     case (inspect, child) => new DeferredObjectAdapter(inspect, child.dataType)
   }.toArray[DeferredObject]
 
   @transient
-  private lazy val returnInspector = {
-    function.initializeAndFoldConstants(argumentInspectors.toArray)
-  }
-
-  @transient
-  private lazy val unwrapper: Any => Any = unwrapperFor(returnInspector)
+  private val unwrapper: Any => Any = unwrapperFor(returnInspector)
 
   private[hive] def setArg(index: Int, arg: Any): Unit =
     deferredObjects(index).asInstanceOf[DeferredObjectAdapter].set(arg)
 
-  private[hive] def evaluate(): Any = {
-    returnInspector // Make sure initialized.
-    unwrapper(function.evaluate(deferredObjects))
-  }
+  private[hive] def evaluate(): Any = unwrapper(function.evaluate(deferredObjects))
 }
 
 /**
