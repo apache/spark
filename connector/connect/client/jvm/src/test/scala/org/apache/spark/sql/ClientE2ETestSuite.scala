@@ -22,6 +22,7 @@ import java.nio.file.Files
 import scala.collection.JavaConverters._
 
 import io.grpc.StatusRuntimeException
+import java.util.Properties
 import org.apache.commons.io.FileUtils
 import org.apache.commons.io.output.TeeOutputStream
 import org.scalactic.TolerantNumerics
@@ -172,6 +173,26 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper {
       assert(result(2).getLong(0) == 1)
       assert(result(3).getLong(0) == 1)
       assert(result(4).getLong(0) == 2)
+    }
+  }
+
+  test("write without table or path") {
+    // Should receive no error to write noop
+    spark.range(10).write.format("noop").mode("append").save()
+  }
+
+  test("write jdbc") {
+    val url = "jdbc:derby:memory:1234"
+    val table = "t1"
+    try {
+      spark.range(10).write.jdbc(url = s"$url;create=true", table, new Properties())
+      val result = spark.read.jdbc(url = url, table, new Properties()).collect()
+      assert(result.length == 10)
+    } finally {
+      // clean up
+      assertThrows[StatusRuntimeException] {
+        spark.read.jdbc(url = s"$url;drop=true", table, new Properties()).collect()
+      }
     }
   }
 
