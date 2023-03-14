@@ -17,7 +17,6 @@
 import datetime
 import warnings
 from functools import partial
-from pydoc import doc
 from typing import Any, Optional, Union, cast, no_type_check
 
 import pandas as pd
