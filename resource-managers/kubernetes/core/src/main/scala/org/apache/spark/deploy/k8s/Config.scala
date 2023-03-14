@@ -710,7 +710,7 @@ private[spark] object Config extends Logging {
     ConfigBuilder("spark.kubernetes.uploaded.files")
       .internal()
       .doc("Remember all uploaded uri by spark client, used to delete uris when app finished.")
-      .version("3.1.2-internal")
+      .version("3.5.0")
       .stringConf
       .toSequence
       .createWithDefault(Nil)
@@ -718,7 +718,7 @@ private[spark] object Config extends Logging {
   val KUBERNETES_UPLOAD_FILE_DELETE_ON_TERMINATION =
     ConfigBuilder("spark.kubernetes.uploaded.file.delete.on.termination")
       .doc("Deleting uploaded file when app finished")
-      .version("3.1.2")
+      .version("3.5.0")
       .booleanConf
       .createWithDefault(false)
 
