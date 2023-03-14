@@ -25,7 +25,7 @@ import scala.util.control.NonFatal
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
-import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{PrimitiveLongEncoder, StringEncoder, TupleEncoder, UnboundRowEncoder}
+import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{PrimitiveLongEncoder, ProductEncoder, StringEncoder, UnboundRowEncoder}
 import org.apache.spark.sql.catalyst.expressions.RowOrdering
 import org.apache.spark.sql.connect.client.SparkResult
 import org.apache.spark.sql.connect.common.DataTypeProtoConverter
@@ -1090,7 +1090,7 @@ class Dataset[T] private[sql] (
    * cast appropriately for the user facing interface.
    */
   protected def selectUntyped(columns: TypedColumn[_, _]*): Dataset[_] = {
-    val encoder = TupleEncoder.tuple(columns.map(_.encoder))
+    val encoder = ProductEncoder.tuple(columns.map(_.encoder))
     sparkSession.newDataset(encoder) { builder =>
       builder.getProjectBuilder
         .setInput(plan.getRoot)
