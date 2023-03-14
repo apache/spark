@@ -271,9 +271,32 @@ sql_kafka = Module(
     ],
 )
 
+mllib_local = Module(
+    name="mllib-local",
+    dependencies=[tags, core],
+    source_file_regexes=[
+        "mllib/local",
+    ],
+    sbt_test_goals=[
+        "mllib-local/test",
+    ],
+)
+
+
+mllib_common = Module(
+    name="mllib-common",
+    dependencies=[tags, mllib_local, sql],
+    source_file_regexes=[
+        "mllib/common",
+    ],
+    sbt_test_goals=[
+        "mllib-common/test",
+    ],
+)
+
 connect = Module(
     name="connect",
-    dependencies=[hive],
+    dependencies=[hive, mllib_common],
     source_file_regexes=[
         "connector/connect",
     ],
@@ -358,24 +381,12 @@ streaming_kafka_0_10 = Module(
 )
 
 
-mllib_local = Module(
-    name="mllib-local",
-    dependencies=[tags, core],
-    source_file_regexes=[
-        "mllib-local",
-    ],
-    sbt_test_goals=[
-        "mllib-local/test",
-    ],
-)
-
-
 mllib = Module(
     name="mllib",
-    dependencies=[mllib_local, streaming, sql],
+    dependencies=[mllib_local, mllib_common, streaming, sql],
     source_file_regexes=[
         "data/mllib/",
-        "mllib/",
+        "mllib/core/",
     ],
     sbt_test_goals=[
         "mllib/test",
