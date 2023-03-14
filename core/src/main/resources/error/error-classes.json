@@ -1068,6 +1068,11 @@
       "The requested write distribution is invalid."
     ],
     "subClass" : {
+      "PARTITION_NUM_AND_SIZE" : {
+        "message" : [
+          "The number and advisory partition size can't be specified at the same time."
+        ]
+      },
       "PARTITION_NUM_WITH_UNSPECIFIED_DISTRIBUTION" : {
         "message" : [
           "The number of partitions can't be specified with unspecified distribution."
@@ -1076,11 +1081,6 @@
       "PARTITION_SIZE_WITH_UNSPECIFIED_DISTRIBUTION" : {
         "message" : [
           "The advisory partition size can't be specified with unspecified distribution."
-        ]
-      },
-      "PARTITION_NUM_AND_SIZE" : {
-        "message" : [
-          "The number and advisory partition size can't be specified at the same time."
         ]
       }
     }
