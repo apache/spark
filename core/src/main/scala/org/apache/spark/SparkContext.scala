@@ -41,8 +41,7 @@ import org.apache.hadoop.mapred.{FileInputFormat, InputFormat, JobConf, Sequence
 import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat, Job => NewHadoopJob}
 import org.apache.hadoop.mapreduce.lib.input.{FileInputFormat => NewFileInputFormat}
 import org.apache.logging.log4j.Level
-
-import org.apache.spark.annotation.{DeveloperApi, Experimental}
+import org.apache.spark.annotation.{DeveloperApi, Experimental, Private}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.deploy.{LocalSparkCluster, SparkHadoopUtil}
 import org.apache.spark.executor.{Executor, ExecutorMetrics, ExecutorMetricsSource}
@@ -387,17 +386,12 @@ class SparkContext(config: SparkConf) extends Logging {
     Utils.setLogLevel(Level.toLevel(upperCased))
   }
 
-  // Local storage for transferred artifacts through Spark Connect.
-  private val _sparkConnectArtifactDirectory: File = Utils.createTempDir("artifacts")
-
   /**
-   * :: Experimental ::
+   * :: Private ::
    * Returns the directory that stores artifacts transferred through Spark Connect.
-   *
-   * @since 3.4.0
    */
-  @Experimental
-  def sparkConnectArtifactDirectory: File = _sparkConnectArtifactDirectory
+  @Private
+  lazy val sparkConnectArtifactDirectory: File = Utils.createTempDir("artifacts")
 
   try {
     _conf = config.clone()
