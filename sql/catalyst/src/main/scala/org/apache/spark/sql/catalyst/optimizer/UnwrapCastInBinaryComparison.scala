@@ -129,7 +129,7 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
     // moving cast to the literal side.
     case be @ BinaryComparison(
       Cast(fromExp, toType: NumericType, _, _), Literal(value, literalType))
-        if canImplicitlyCast(fromExp, toType, literalType) =>
+        if canImplicitlyCast(fromExp, toType, literalType) && value != null =>
       Some(simplifyNumericComparison(be, fromExp, toType, value))
 
     case be @ BinaryComparison(
@@ -145,14 +145,14 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
     // 2. this rule only handles the case when both `fromExp` and value in `in.list` are of numeric
     // type.
     // 3. this rule doesn't optimize In when `in.list` contains an expression that is not literal.
-    case in @ In(Cast(fromExp, toType: NumericType, _, _), list @ Seq(firstLit, _*))
+    case in @ In(Cast(fromExp, toType: NumericType, tz, mode), list @ Seq(firstLit, _*))
       if canImplicitlyCast(fromExp, toType, firstLit.dataType) && in.inSetConvertible =>
 
       val buildIn = {
         (nullList: ArrayBuffer[Literal], canCastList: ArrayBuffer[Literal]) =>
           // cast null value to fromExp.dataType, to make sure the new return list is in the same
           // data type.
-          val newList = nullList.map(lit => Cast(lit, fromExp.dataType)) ++ canCastList
+          val newList = nullList.map(lit => Cast(lit, fromExp.dataType, tz, mode)) ++ canCastList
           In(fromExp, newList.toSeq)
       }
       simplifyIn(fromExp, toType, list, buildIn)

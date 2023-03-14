@@ -41,8 +41,8 @@ class SQLLiveEntitiesEventFilterSuite extends SparkFunSuite {
     val acceptFn = filter.acceptFn().lift
 
     // Verifying with finished SQL execution 1
-    assert(Some(false) === acceptFn(SparkListenerSQLExecutionStart(1, 1, "description1", "details1",
-      "plan", null, 0, Map.empty)))
+    assert(Some(false) === acceptFn(SparkListenerSQLExecutionStart(1, Some(1),
+      "description1", "details1", "plan", null, 0, Map.empty)))
     assert(Some(false) === acceptFn(SparkListenerSQLExecutionEnd(1, 0)))
     assert(Some(false) === acceptFn(SparkListenerSQLAdaptiveExecutionUpdate(1, "plan", null)))
     assert(Some(false) === acceptFn(SparkListenerDriverAccumUpdates(1, Seq.empty)))
@@ -88,8 +88,8 @@ class SQLLiveEntitiesEventFilterSuite extends SparkFunSuite {
     }
 
     // Verifying with live SQL execution 2
-    assert(Some(true) === acceptFn(SparkListenerSQLExecutionStart(2, 2, "description2", "details2",
-      "plan", null, 0, Map.empty)))
+    assert(Some(true) === acceptFn(SparkListenerSQLExecutionStart(2, Some(2),
+      "description2", "details2", "plan", null, 0, Map.empty)))
     assert(Some(true) === acceptFn(SparkListenerSQLExecutionEnd(2, 0)))
     assert(Some(true) === acceptFn(SparkListenerSQLAdaptiveExecutionUpdate(2, "plan", null)))
     assert(Some(true) === acceptFn(SparkListenerDriverAccumUpdates(2, Seq.empty)))
