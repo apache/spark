@@ -89,9 +89,7 @@ class SparkOptimizer(
       PushProjectionThroughLimit,
       LimitPushDown,
       LimitPushDownThroughWindow,
-      CollapseProject,
       EliminateLimits,
-      EliminateSorts,
       ConvertToLocalRelation) :+
     Batch("User Provided Optimizers", fixedPoint, experimentalMethods.extraOptimizations: _*) :+
     Batch("Replace CTE with Repartition", Once, ReplaceCTERefWithRepartition)
