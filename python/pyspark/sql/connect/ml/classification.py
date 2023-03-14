@@ -40,7 +40,6 @@ from pyspark.ml.classification import (
     ClassificationModel,
     ProbabilisticClassificationModel
 )
-from pyspark.ml.common import inherit_doc
 from pyspark.ml.linalg import (Matrix, Vector)
 from pyspark import keyword_only, since, SparkContext, inheritable_thread_target
 from pyspark.sql.connect.ml.base import (
@@ -56,19 +55,16 @@ from pyspark.sql.connect.ml.base import (
 from abc import ABCMeta, abstractmethod
 
 
-@inherit_doc
 class _ClientClassifier(Classifier, ClientPredictor, metaclass=ABCMeta):
     pass
 
 
-@inherit_doc
 class _ClientProbabilisticClassifier(
     ProbabilisticClassifier, _ClientClassifier, metaclass=ABCMeta
 ):
     pass
 
 
-@inherit_doc
 class _ClientClassificationModel(ClassificationModel, ClientPredictionModel):
     @property  # type: ignore[misc]
     def numClasses(self) -> int:
@@ -78,7 +74,6 @@ class _ClientClassificationModel(ClassificationModel, ClientPredictionModel):
         raise NotImplementedError()
 
 
-@inherit_doc
 class _ClientProbabilisticClassificationModel(
     ProbabilisticClassificationModel, _ClientClassificationModel
 ):
@@ -86,7 +81,6 @@ class _ClientProbabilisticClassificationModel(
         raise NotImplementedError()
 
 
-@inherit_doc
 class LogisticRegression(
     _ClientProbabilisticClassifier,
     _LogisticRegressionCommon,
@@ -368,18 +362,50 @@ class LogisticRegressionSummary(_ClassificationSummary):
         return self._get_summary_attr("featuresCol")
 
 
-@inherit_doc
 class LogisticRegressionTrainingSummary(LogisticRegressionSummary, _TrainingSummary):
     pass
 
 
-@inherit_doc
 class BinaryLogisticRegressionSummary(_BinaryClassificationSummary, LogisticRegressionSummary):
     pass
 
 
-@inherit_doc
 class BinaryLogisticRegressionTrainingSummary(
     BinaryLogisticRegressionSummary, LogisticRegressionTrainingSummary
 ):
     pass
+
+
+def _test() -> None:
+    import os
+    import sys
+    import doctest
+    from pyspark.sql import SparkSession as PySparkSession
+    import pyspark.sql.connect.ml.classification
+
+    os.chdir(os.environ["SPARK_HOME"])
+
+    globs = pyspark.sql.connect.dataframe.__dict__.copy()
+
+    globs["spark"] = (
+        PySparkSession.builder.appName("sql.connect.ml.classification tests")
+            .remote("local[4]")
+            .getOrCreate()
+    )
+
+    (failure_count, test_count) = doctest.testmod(
+        pyspark.sql.connect.ml.classification,
+        globs=globs,
+        optionflags=doctest.ELLIPSIS
+                    | doctest.NORMALIZE_WHITESPACE
+                    | doctest.IGNORE_EXCEPTION_DETAIL,
+    )
+
+    globs["spark"].stop()
+
+    if failure_count:
+        sys.exit(-1)
+
+
+if __name__ == "__main__":
+    _test()

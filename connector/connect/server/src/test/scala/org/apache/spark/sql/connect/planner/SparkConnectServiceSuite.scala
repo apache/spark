@@ -29,9 +29,7 @@ import org.apache.spark.connect.proto
 import org.apache.spark.sql.connect.dsl.MockRemoteSession
 import org.apache.spark.sql.connect.dsl.expressions._
 import org.apache.spark.sql.connect.dsl.plans._
-import org.apache.spark.sql.connect.service.{
-  SessionHolder, SparkConnectAnalyzeHandler, SparkConnectService
-}
+import org.apache.spark.sql.connect.service.{SessionHolder, SparkConnectAnalyzeHandler, SparkConnectService}
 import org.apache.spark.sql.test.SharedSparkSession
 
 /**

@@ -107,7 +107,7 @@ trait SparkConnectPlanTest extends SharedSparkSession {
 class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
 
   test("Simple Limit") {
-    assertThrows[IndexOutOfBoundsException] {
+    assertThrows[NullPointerException] {
       new SparkConnectPlanner(None.orNull)
         .transformRelation(
           proto.Relation.newBuilder
@@ -118,7 +118,7 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
 
   test("InvalidInputs") {
     // No Relation Set
-    intercept[IndexOutOfBoundsException](
+    intercept[NullPointerException](
       new SparkConnectPlanner(None.orNull).transformRelation(proto.Relation.newBuilder().build()))
 
     intercept[InvalidPlanInput](
