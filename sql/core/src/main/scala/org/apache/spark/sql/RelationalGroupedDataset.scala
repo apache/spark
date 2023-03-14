@@ -91,7 +91,8 @@ class RelationalGroupedDataset protected[sql](
       UnresolvedAlias(a, Some(Column.generateAlias))
     case ag: UnresolvedFunction if (containsStar(Seq(ag))) || ag.isDistinct =>
              UnresolvedAlias(expr, None)
-    case expr: Expression =>  if (containsStar(Seq(expr))) {
+    case expr: Expression =>
+       if (containsStar(Seq(expr))) {
             UnresolvedAlias(expr, None)
         } else {
           Alias(expr, toPrettySQL(expr))()
