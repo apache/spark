@@ -129,18 +129,27 @@ private[hive] class DeferredObjectAdapter(oi: ObjectInspector, dataType: DataTyp
 private[hive] case class HiveGenericUDF(
     name: String, funcWrapper: HiveFunctionWrapper, children: Seq[Expression])
   extends Expression
+  with HiveInspectors
   with UserDefinedExpression {
 
   override def nullable: Boolean = true
 
-  override lazy val deterministic: Boolean = evaluator.deterministic
+  override lazy val deterministic: Boolean =
+    isUDFDeterministic && children.forall(_.deterministic)
 
-  override def foldable: Boolean = evaluator.foldable
+  override def foldable: Boolean = isUDFDeterministic &&
+    evaluator.returnInspector.isInstanceOf[ConstantObjectInspector]
 
-  override lazy val dataType: DataType = evaluator.dataType
+  override lazy val dataType: DataType = inspectorToDataType(evaluator.returnInspector)
 
   @transient
   private lazy val evaluator = new HiveGenericUDFEvaluator(funcWrapper, children)
+
+  @transient
+  private val isUDFDeterministic = {
+    val udfType = evaluator.getUDFType
+    udfType != null && udfType.deterministic() && !udfType.stateful()
+  }
 
   override def eval(input: InternalRow): Any = {
     children.zipWithIndex.map {
@@ -210,28 +219,15 @@ class HiveGenericUDFEvaluator(
   private lazy val function = funcWrapper.createFunction[GenericUDF]()
 
   @transient
-  private val isUDFDeterministic = {
-    val udfType = function.getClass.getAnnotation(classOf[HiveUDFType])
-    udfType != null && udfType.deterministic() && !udfType.stateful()
-  }
+  private[hive] val getUDFType = function.getClass.getAnnotation(classOf[HiveUDFType])
 
   @transient
-  private lazy val argumentInspectors = children.map(toInspector)
+  private[hive] lazy val argumentInspectors = children.map(toInspector)
 
   @transient
-  private lazy val returnInspector = {
+  private[hive] lazy val returnInspector = {
     function.initializeAndFoldConstants(argumentInspectors.toArray)
   }
-
-  @transient
-  private[hive] val deterministic = isUDFDeterministic && children.forall(_.deterministic)
-
-  @transient
-  private[hive] val foldable =
-    isUDFDeterministic && returnInspector.isInstanceOf[ConstantObjectInspector]
-
-  @transient
-  private[hive] val dataType: DataType = inspectorToDataType(returnInspector)
 
   @transient
   private lazy val deferredObjects: Array[DeferredObject] = argumentInspectors.zip(children).map {
