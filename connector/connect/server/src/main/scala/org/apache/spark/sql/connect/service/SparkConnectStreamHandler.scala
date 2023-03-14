@@ -58,10 +58,8 @@ class SparkConnectStreamHandler(responseObserver: StreamObserver[ExecutePlanResp
   private def handlePlan(sessionHolder: SessionHolder, request: ExecutePlanRequest): Unit = {
     // Extract the plan from the request and convert it to a logical plan
     val planner = new SparkConnectPlanner(sessionHolder)
-    val dataframe = Dataset.ofRows(
-      sessionHolder.session,
-      planner.transformRelation(request.getPlan.getRoot)
-    )
+    val dataframe =
+      Dataset.ofRows(sessionHolder.session, planner.transformRelation(request.getPlan.getRoot))
     processAsArrowBatches(request.getClientId, dataframe)
   }
 

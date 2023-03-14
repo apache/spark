@@ -35,8 +35,7 @@ object SparkMLPlanner {
   def buildRemoteCallResponse(
       request: ExecutePlanRequest,
       responseObserver: StreamObserver[ExecutePlanResponse],
-      returnValueOpt: Option[RemoteCall.ArgValue]
-  ): Unit = {
+      returnValueOpt: Option[RemoteCall.ArgValue]): Unit = {
     val response = proto.ExecutePlanResponse.newBuilder
       .setClientId(request.getClientId)
 
@@ -46,7 +45,9 @@ object SparkMLPlanner {
     responseObserver.onCompleted()
   }
 
-  def loadInputRelation(sessionHolder: SessionHolder, inputRelation: proto.Relation): DataFrame = {
+  def loadInputRelation(
+      sessionHolder: SessionHolder,
+      inputRelation: proto.Relation): DataFrame = {
     val relationalPlanner = new SparkConnectPlanner(sessionHolder)
     val plan = relationalPlanner.transformRelation(inputRelation)
     Dataset.ofRows(sessionHolder.session, plan)
@@ -88,8 +89,7 @@ object SparkMLPlanner {
    */
   def parseArgs(
       protoArgList: List[proto.RemoteCall.ArgValue],
-      sessionHolder: SessionHolder
-  ): Array[Object] = {
+      sessionHolder: SessionHolder): Array[Object] = {
     val argValues = new Array[Object](protoArgList.size)
 
     for (i <- 0 until protoArgList.size) {
@@ -140,11 +140,11 @@ object SparkMLPlanner {
         val instanceId = sessionHolder.serverSideObjectManager.registerObject(v)
         val className = v.getClass.getName
         protoBuilder.setRemoteObject(
-          RemoteCall.RemoteObject.newBuilder()
+          RemoteCall.RemoteObject
+            .newBuilder()
             .setId(instanceId)
             .setClassName(className)
-            .build()
-        )
+            .build())
     }
     protoBuilder.build()
   }
@@ -152,7 +152,8 @@ object SparkMLPlanner {
   def _checkArgTypeMatch(argType: Class[_], argValue: Object): Boolean = {
     argValue match {
       case _: lang.Integer | _: lang.Long => argType == classOf[Int] || argType == classOf[Long]
-      case _: lang.Float | _: lang.Double => argType == classOf[Float] || argType == classOf[Double]
+      case _: lang.Float | _: lang.Double =>
+        argType == classOf[Float] || argType == classOf[Double]
       case _: lang.Boolean => argType == classOf[Boolean]
       case _: Object => argType.isInstance(argValue)
     }
@@ -173,17 +174,20 @@ object SparkMLPlanner {
   }
 
   def invokeMethod(
-        instance: Object,
-        methodName: String,
-        argsProto: List[RemoteCall.ArgValue],
-        sessionHolder: SessionHolder): Option[RemoteCall.ArgValue] = {
+      instance: Object,
+      methodName: String,
+      argsProto: List[RemoteCall.ArgValue],
+      sessionHolder: SessionHolder): Option[RemoteCall.ArgValue] = {
     val argValues = parseArgs(argsProto, sessionHolder)
-    val method = instance.getClass.getMethods().find { method =>
-      method.getName == methodName &&
-        method.getParameterTypes().zip(argValues).forall {
-          case (clazz, argValue) => _checkArgTypeMatch(clazz, argValue)
+    val method = instance.getClass
+      .getMethods()
+      .find { method =>
+        method.getName == methodName &&
+        method.getParameterTypes().zip(argValues).forall { case (clazz, argValue) =>
+          _checkArgTypeMatch(clazz, argValue)
         }
-    }.get
+      }
+      .get
     val castedArgValues = method.getParameterTypes().zip(argValues).map {
       case (clazz, argValue) => _castArgValue(clazz, argValue)
     }
@@ -197,8 +201,7 @@ object SparkMLPlanner {
   def handleRemoteCall(
       sessionHolder: SessionHolder,
       request: ExecutePlanRequest,
-      responseObserver: StreamObserver[ExecutePlanResponse]
-  ): Unit = {
+      responseObserver: StreamObserver[ExecutePlanResponse]): Unit = {
     import scala.collection.JavaConverters._
     val remoteCallProto = request.getPlan.getRemoteCall
 
@@ -209,11 +212,14 @@ object SparkMLPlanner {
         val clazz = Utils.classForName(className)
         val argValues = parseArgs(argsProto, sessionHolder)
         // TODO: primitive type checking.
-        val ctor = clazz.getConstructors().find { ctor =>
-          ctor.getParameterTypes().zip(argValues).forall {
-            case (clazz, argValue) => _checkArgTypeMatch(clazz, argValue)
+        val ctor = clazz
+          .getConstructors()
+          .find { ctor =>
+            ctor.getParameterTypes().zip(argValues).forall { case (clazz, argValue) =>
+              _checkArgTypeMatch(clazz, argValue)
+            }
           }
-        }.get
+          .get
         val castedArgValues = ctor.getParameterTypes().zip(argValues).map {
           case (clazz, argValue) => _castArgValue(clazz, argValue)
         }
@@ -234,7 +240,8 @@ object SparkMLPlanner {
         val methodName = remoteCallProto.getCallMethod.getMethodName
         val instance = sessionHolder.serverSideObjectManager.getObject(objectId)
 
-        val serializedReturnValueOpt = invokeMethod(instance, methodName, argsProto, sessionHolder)
+        val serializedReturnValueOpt =
+          invokeMethod(instance, methodName, argsProto, sessionHolder)
 
         buildRemoteCallResponse(request, responseObserver, serializedReturnValueOpt)
 
@@ -245,9 +252,8 @@ object SparkMLPlanner {
         val argsProto = remoteCallProto.getCallFunction.getArgValuesList.asScala.toList
         val functionName = remoteCallProto.getCallFunction.getFunctionName
 
-        val serializedReturnValueOpt = invokeMethod(
-          objectInstance, functionName, argsProto, sessionHolder
-        )
+        val serializedReturnValueOpt =
+          invokeMethod(objectInstance, functionName, argsProto, sessionHolder)
 
         buildRemoteCallResponse(request, responseObserver, serializedReturnValueOpt)
 

@@ -214,15 +214,12 @@ class SparkConnectService(debug: Boolean)
   }
 }
 
-
 /**
- * This class is for managing server side object that is used by spark connect
- * client side code.
+ * This class is for managing server side object that is used by spark connect client side code.
  */
 class ServerSideObjectManager(
     val objectMap: ConcurrentHashMap[Long, Object] = new ConcurrentHashMap[Long, Object](),
-    val idGen: AtomicLong = new AtomicLong(0)
-) {
+    val idGen: AtomicLong = new AtomicLong(0)) {
   def registerObject(obj: Object): Long = {
     val objectId = idGen.getAndIncrement()
     objectMap.put(objectId, obj)
@@ -234,7 +231,6 @@ class ServerSideObjectManager(
   def removeObject(id: Long): Object = objectMap.remove(id)
 }
 
-
 /**
  * Object used for referring to SparkSessions in the SessionCache.
  *
@@ -245,8 +241,7 @@ case class SessionHolder(
     userId: String,
     sessionId: String,
     session: SparkSession,
-    serverSideObjectManager: ServerSideObjectManager = new ServerSideObjectManager()
-)
+    serverSideObjectManager: ServerSideObjectManager = new ServerSideObjectManager())
 
 /**
  * Static instance of the SparkConnectService.

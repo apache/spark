@@ -114,7 +114,8 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
   test("InvalidInputs") {
     // No Relation Set
     intercept[IndexOutOfBoundsException](
-      new SparkConnectPlanner(sessionHolder).transformRelation(proto.Relation.newBuilder().build()))
+      new SparkConnectPlanner(sessionHolder).transformRelation(
+        proto.Relation.newBuilder().build()))
 
     intercept[InvalidPlanInput](
       new SparkConnectPlanner(sessionHolder)

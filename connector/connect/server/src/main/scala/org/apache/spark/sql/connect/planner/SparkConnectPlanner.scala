@@ -117,8 +117,10 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) {
       case proto.Relation.RelTypeCase.REPARTITION_BY_EXPRESSION =>
         transformRepartitionByExpression(rel.getRepartitionByExpression)
       case proto.Relation.RelTypeCase.SERVER_SIDE_DATAFRAME_ID =>
-        sessionHolder.serverSideObjectManager.getObject(rel.getServerSideDataframeId)
-          .asInstanceOf[Dataset[Any]].logicalPlan
+        sessionHolder.serverSideObjectManager
+          .getObject(rel.getServerSideDataframeId)
+          .asInstanceOf[Dataset[Any]]
+          .logicalPlan
       case proto.Relation.RelTypeCase.RELTYPE_NOT_SET =>
         throw new IndexOutOfBoundsException("Expected Relation to be set, but is empty.")
 

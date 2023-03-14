@@ -30,21 +30,29 @@ object SparkConnectUtils {
     } else if (paramType == classOf[Double]) {
       java.lang.Double.valueOf(paramValue.asInstanceOf[java.lang.Number].doubleValue())
     } else if (paramType == classOf[Array[Int]]) {
-      paramValue.asInstanceOf[List[Object]]
+      paramValue
+        .asInstanceOf[List[Object]]
         .map(castParamValue(classOf[Int], _).asInstanceOf[java.lang.Integer])
-        .map(_.intValue()).toArray
+        .map(_.intValue())
+        .toArray
     } else if (paramType == classOf[Array[Long]]) {
-      paramValue.asInstanceOf[List[Object]]
+      paramValue
+        .asInstanceOf[List[Object]]
         .map(castParamValue(classOf[Long], _).asInstanceOf[java.lang.Long])
-        .map(_.longValue()).toArray
+        .map(_.longValue())
+        .toArray
     } else if (paramType == classOf[Array[Float]]) {
-      paramValue.asInstanceOf[List[Object]]
+      paramValue
+        .asInstanceOf[List[Object]]
         .map(castParamValue(classOf[Float], _).asInstanceOf[java.lang.Float])
-        .map(_.floatValue()).toArray
+        .map(_.floatValue())
+        .toArray
     } else if (paramType == classOf[Array[Double]]) {
-      paramValue.asInstanceOf[List[Object]]
+      paramValue
+        .asInstanceOf[List[Object]]
         .map(castParamValue(classOf[Double], _).asInstanceOf[java.lang.Double])
-        .map(_.doubleValue()).toArray
+        .map(_.doubleValue())
+        .toArray
     } else if (paramType == classOf[Array[Boolean]]) {
       paramValue.asInstanceOf[List[java.lang.Boolean]].map(_.booleanValue()).toArray
     } else if (paramType == classOf[Array[String]]) {
@@ -55,18 +63,18 @@ object SparkConnectUtils {
   }
 
   private def makeParamPair(
-                             instance: Params, paramName: String, paramValue: Object
-                           ): (Param[Any], Object) = {
+      instance: Params,
+      paramName: String,
+      paramValue: Object): (Param[Any], Object) = {
     val param = instance.getParam(paramName)
     val castedValue = castParamValue(param.paramValueClassTag.runtimeClass, paramValue)
     (param, castedValue)
   }
 
   def setInstanceParams(
-                         instance: Params,
-                         paramMap: Map[String, Object],
-                         defaultParamMap: Map[String, Object]
-                       ): Unit = {
+      instance: Params,
+      paramMap: Map[String, Object],
+      defaultParamMap: Map[String, Object]): Unit = {
     paramMap.foreach { case (paramName, paramValue) =>
       val (param, castedValue) = makeParamPair(instance, paramName, paramValue)
       instance.set(param, castedValue)

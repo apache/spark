@@ -56,7 +56,10 @@ class SparkConnectServiceSuite extends SharedSparkSession {
         .build()
 
       val response =
-        instance.handleAnalyzePlanRequest(relation, sessionHolder, ExplainMode.fromString("simple"))
+        instance.handleAnalyzePlanRequest(
+          relation,
+          sessionHolder,
+          ExplainMode.fromString("simple"))
 
       assert(response.getSchema.hasStruct)
       val schema = response.getSchema.getStruct
