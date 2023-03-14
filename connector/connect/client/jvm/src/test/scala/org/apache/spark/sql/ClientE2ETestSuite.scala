@@ -185,8 +185,7 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper {
     val url = "jdbc:derby:memory:1234"
     val table = "t1"
     try {
-      spark.range(10).write.
-      (url = s"$url;create=true", table, new Properties())
+      spark.range(10).write.jdbc(url = s"$url;create=true", table, new Properties())
       val result = spark.read.jdbc(url = url, table, new Properties()).collect()
       assert(result.length == 10)
     } finally {
