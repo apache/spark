@@ -151,7 +151,7 @@ case class BloomFilterAggregate(
     Math.min(numBitsExpression.eval().asInstanceOf[Number].longValue,
       SQLConf.get.getConf(RUNTIME_BLOOM_FILTER_MAX_NUM_BITS))
 
-  private lazy val updater: BloomFilterUpdater = first.dataType match {
+  private val updater: BloomFilterUpdater = first.dataType match {
     case LongType => LongUpdater
     case StringType => BinaryUpdater
   }
