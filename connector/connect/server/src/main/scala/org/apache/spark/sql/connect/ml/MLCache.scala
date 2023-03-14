@@ -22,14 +22,11 @@ import java.util.concurrent.atomic.AtomicLong
 import org.apache.spark.ml.Model
 
 /**
- * This class is for managing server side object that is used by spark connect
- * client side code.
+ * This class is for managing server side object that is used by spark connect client side code.
  */
 class ObjectCache[T](
-    val objectMap: ConcurrentHashMap[Long, T] =
-    new ConcurrentHashMap[Long, T](),
-    val idGen: AtomicLong = new AtomicLong(0)
-) {
+    val objectMap: ConcurrentHashMap[Long, T] = new ConcurrentHashMap[Long, T](),
+    val idGen: AtomicLong = new AtomicLong(0)) {
   def register(obj: T): Long = {
     val objectId = idGen.getAndIncrement()
     objectMap.put(objectId, obj)
@@ -44,8 +41,7 @@ class ObjectCache[T](
 class ModelCache(
     val cachedModel: ObjectCache[Model[_]] = new ObjectCache[Model[_]](),
     val modelToHandlerMap: ConcurrentHashMap[Long, Algorithm] =
-    new ConcurrentHashMap[Long, Algorithm]()
-) {
+      new ConcurrentHashMap[Long, Algorithm]()) {
   def register(model: Model[_], algorithm: Algorithm): Long = {
     val refId = cachedModel.register(model)
     modelToHandlerMap.put(refId, algorithm)
@@ -63,4 +59,3 @@ class ModelCache(
 }
 
 case class MLCache(modelCache: ModelCache = new ModelCache())
-

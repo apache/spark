@@ -24,9 +24,8 @@ import org.apache.spark.sql.DataFrame
 object SummaryUtils {
 
   def getClassificationSummaryAttr(
-                                    summary: ClassificationSummary,
-                                    name: String
-                                  ): Option[Either[proto.MlCommandResponse, DataFrame]] = {
+      summary: ClassificationSummary,
+      name: String): Option[Either[proto.MlCommandResponse, DataFrame]] = {
     name match {
       case "predictions" => Some(Right(summary.predictions))
       case "predictionCol" => Some(Left(Serializer.serialize(summary.predictionCol)))
@@ -55,27 +54,23 @@ object SummaryUtils {
   }
 
   def getBinaryClassificationSummaryAttr(
-                                          summary: BinaryClassificationSummary,
-                                          name: String
-                                        ): Option[Either[proto.MlCommandResponse, DataFrame]] = {
-    getClassificationSummaryAttr(summary, name).orElse(
-      name match {
-        case "scoreCol" => Some(Left(Serializer.serialize(summary.scoreCol)))
-        case "roc" => Some(Right(summary.roc))
-        case "areaUnderROC" => Some(Left(Serializer.serialize(summary.areaUnderROC)))
-        case "pr" => Some(Right(summary.pr))
-        case "fMeasureByThreshold" => Some(Right(summary.fMeasureByThreshold))
-        case "precisionByThreshold" => Some(Right(summary.precisionByThreshold))
-        case "recallByThreshold" => Some(Right(summary.recallByThreshold))
-        case _ => None
-      }
-    )
+      summary: BinaryClassificationSummary,
+      name: String): Option[Either[proto.MlCommandResponse, DataFrame]] = {
+    getClassificationSummaryAttr(summary, name).orElse(name match {
+      case "scoreCol" => Some(Left(Serializer.serialize(summary.scoreCol)))
+      case "roc" => Some(Right(summary.roc))
+      case "areaUnderROC" => Some(Left(Serializer.serialize(summary.areaUnderROC)))
+      case "pr" => Some(Right(summary.pr))
+      case "fMeasureByThreshold" => Some(Right(summary.fMeasureByThreshold))
+      case "precisionByThreshold" => Some(Right(summary.precisionByThreshold))
+      case "recallByThreshold" => Some(Right(summary.recallByThreshold))
+      case _ => None
+    })
   }
 
   def getTrainingSummaryAttr(
-                              summary: TrainingSummary,
-                              name: String
-                            ): Option[Either[proto.MlCommandResponse, DataFrame]] = {
+      summary: TrainingSummary,
+      name: String): Option[Either[proto.MlCommandResponse, DataFrame]] = {
     name match {
       case "objectiveHistory" => Some(Left(Serializer.serialize(summary.objectiveHistory)))
       case "totalIterations" => Some(Left(Serializer.serialize(summary.totalIterations)))

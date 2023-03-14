@@ -66,8 +66,7 @@ class SparkConnectStreamHandler(responseObserver: StreamObserver[ExecutePlanResp
         .newBuilder()
         .setSessionId(sessionHolder.sessionId)
         .setMlCommandResult(mlResultProto)
-        .build()
-    )
+        .build())
   }
 
   private def handlePlan(sessionHolder: SessionHolder, request: ExecutePlanRequest): Unit = {

@@ -24,7 +24,6 @@ import org.apache.spark.ml.classification.TrainingSummary
 import org.apache.spark.ml.util.MLWriter
 import org.apache.spark.sql.DataFrame
 
-
 object AlgorithmRegistry {
 
   def get(name: String): Algorithm = {
@@ -37,7 +36,6 @@ object AlgorithmRegistry {
 
 }
 
-
 abstract class Algorithm {
 
   def initiateEstimator(uid: String): Estimator[_]
@@ -45,10 +43,9 @@ abstract class Algorithm {
   def getModelAttr(model: Model[_], name: String): Either[proto.MlCommandResponse, DataFrame]
 
   def getModelSummaryAttr(
-    model: Model[_],
-    name: String,
-    datasetOpt: Option[DataFrame]
-  ): Either[proto.MlCommandResponse, DataFrame]
+      model: Model[_],
+      name: String,
+      datasetOpt: Option[DataFrame]): Either[proto.MlCommandResponse, DataFrame]
 
   def loadModel(path: String): Model[_]
 
@@ -59,8 +56,10 @@ abstract class Algorithm {
   protected def getModelWriter(model: Model[_]): MLWriter
 
   def _save(
-            writer: MLWriter, path: String, overwrite: Boolean, options: Map[String, String]
-          ): Unit = {
+      writer: MLWriter,
+      path: String,
+      overwrite: Boolean,
+      options: Map[String, String]): Unit = {
     if (overwrite) {
       writer.overwrite()
     }
@@ -69,21 +68,21 @@ abstract class Algorithm {
   }
 
   def saveModel(
-                 model: Model[_], path: String, overwrite: Boolean, options: Map[String, String]
-               ): Unit = {
+      model: Model[_],
+      path: String,
+      overwrite: Boolean,
+      options: Map[String, String]): Unit = {
     _save(getModelWriter(model), path, overwrite, options)
   }
 
   def saveEstimator(
-                     estimator: Estimator[_],
-                     path: String,
-                     overwrite: Boolean,
-                     options: Map[String, String]
-                   ): Unit = {
+      estimator: Estimator[_],
+      path: String,
+      overwrite: Boolean,
+      options: Map[String, String]): Unit = {
     _save(getEstimatorWriter(estimator), path, overwrite, options)
   }
 }
-
 
 class LogisticRegressionAlgorithm extends Algorithm {
 
@@ -108,8 +107,8 @@ class LogisticRegressionAlgorithm extends Algorithm {
   }
 
   override def getModelAttr(
-                             model: Model[_], name: String
-                           ): Either[proto.MlCommandResponse, DataFrame] = {
+      model: Model[_],
+      name: String): Either[proto.MlCommandResponse, DataFrame] = {
     val lorModel = model.asInstanceOf[ml.classification.LogisticRegressionModel]
     // TODO: hasSummary
     name match {
@@ -126,10 +125,9 @@ class LogisticRegressionAlgorithm extends Algorithm {
   }
 
   override def getModelSummaryAttr(
-                           model: Model[_],
-                           name: String,
-                           datasetOpt: Option[DataFrame]
-                         ): Either[proto.MlCommandResponse, DataFrame] = {
+      model: Model[_],
+      name: String,
+      datasetOpt: Option[DataFrame]): Either[proto.MlCommandResponse, DataFrame] = {
     val lorModel = model.asInstanceOf[ml.classification.LogisticRegressionModel]
     val summary = if (datasetOpt.isDefined) {
       lorModel.evaluate(datasetOpt.get)
@@ -141,18 +139,19 @@ class LogisticRegressionAlgorithm extends Algorithm {
     } else {
       SummaryUtils.getClassificationSummaryAttr(summary, name)
     }
-    attrValueOpt.orElse(
-      if (datasetOpt.isEmpty) {
+    attrValueOpt
+      .orElse(if (datasetOpt.isEmpty) {
         SummaryUtils.getTrainingSummaryAttr(summary.asInstanceOf[TrainingSummary], name)
-      } else None
-    ).orElse {
-      val lorSummary = summary
-      name match {
-        case "probabilityCol" => Some(Left(Serializer.serialize(lorSummary.probabilityCol)))
-        case "featuresCol" => Some(Left(Serializer.serialize(lorSummary.featuresCol)))
-        case _ =>
-          throw new IllegalArgumentException()
+      } else None)
+      .orElse {
+        val lorSummary = summary
+        name match {
+          case "probabilityCol" => Some(Left(Serializer.serialize(lorSummary.probabilityCol)))
+          case "featuresCol" => Some(Left(Serializer.serialize(lorSummary.featuresCol)))
+          case _ =>
+            throw new IllegalArgumentException()
+        }
       }
-    }.get
+      .get
   }
 }

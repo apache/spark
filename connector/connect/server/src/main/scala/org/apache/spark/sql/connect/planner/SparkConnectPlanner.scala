@@ -129,10 +129,8 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) {
       case proto.Relation.RelTypeCase.CATALOG => transformCatalog(rel.getCatalog)
 
       // ML relation
-      case proto.Relation.RelTypeCase.ML_RELATION => MLHandler.transformMLRelation(
-        rel.getMlRelation,
-        sessionHolder
-      ).logicalPlan
+      case proto.Relation.RelTypeCase.ML_RELATION =>
+        MLHandler.transformMLRelation(rel.getMlRelation, sessionHolder).logicalPlan
 
       // Handle plugins for Spark Connect Relation types.
       case proto.Relation.RelTypeCase.EXTENSION =>

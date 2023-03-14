@@ -212,11 +212,10 @@ class SparkConnectService(debug: Boolean)
  * @param session
  */
 case class SessionHolder(
-  userId: String,
-  sessionId: String,
-  session: SparkSession,
-  mlCache: MLCache = MLCache()
-)
+    userId: String,
+    sessionId: String,
+    session: SparkSession,
+    mlCache: MLCache = MLCache())
 
 /**
  * Static instance of the SparkConnectService.

@@ -98,7 +98,9 @@ object MLUtils {
     builder.build()
   }
 
-  def parseRelationProto(relationProto: proto.Relation, sessionHolder: SessionHolder): DataFrame = {
+  def parseRelationProto(
+      relationProto: proto.Relation,
+      sessionHolder: SessionHolder): DataFrame = {
     val relationalPlanner = new SparkConnectPlanner(sessionHolder)
     val plan = relationalPlanner.transformRelation(relationProto)
     Dataset.ofRows(sessionHolder.session, plan)

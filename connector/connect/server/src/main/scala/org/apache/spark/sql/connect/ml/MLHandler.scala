@@ -29,9 +29,8 @@ import org.apache.spark.sql.connect.service.SessionHolder
 object MLHandler {
 
   def handleMlCommand(
-                       sessionHolder: SessionHolder,
-                       mlCommand: proto.MlCommand
-  ): proto.MlCommandResponse = {
+      sessionHolder: SessionHolder,
+      mlCommand: proto.MlCommand): proto.MlCommandResponse = {
     mlCommand.getMlCommandTypeCase match {
       case proto.MlCommand.MlCommandTypeCase.FIT =>
         val fitCommandProto = mlCommand.getFit
@@ -47,26 +46,25 @@ object MLHandler {
         val model = estimator.fit(dataset).asInstanceOf[Model[_]]
         val refId = sessionHolder.mlCache.modelCache.register(model, algo)
 
-        proto.MlCommandResponse.newBuilder().setModelInfo(
-          proto.MlCommandResponse.ModelInfo.newBuilder
-            .setModelRefId(refId)
-            .setModelUid(model.uid)
-        ).build()
+        proto.MlCommandResponse
+          .newBuilder()
+          .setModelInfo(
+            proto.MlCommandResponse.ModelInfo.newBuilder
+              .setModelRefId(refId)
+              .setModelUid(model.uid))
+          .build()
 
       case proto.MlCommand.MlCommandTypeCase.FETCH_MODEL_ATTR =>
         val getModelAttrProto = mlCommand.getFetchModelAttr
-        val modelEntry = sessionHolder.mlCache.modelCache.get(
-          getModelAttrProto.getModelRefId
-        )
+        val modelEntry = sessionHolder.mlCache.modelCache.get(getModelAttrProto.getModelRefId)
         val model = modelEntry._1
         val algo = modelEntry._2
         algo.getModelAttr(model, getModelAttrProto.getName).left.get
 
       case proto.MlCommand.MlCommandTypeCase.FETCH_MODEL_SUMMARY_ATTR =>
         val getModelSummaryAttrProto = mlCommand.getFetchModelSummaryAttr
-        val modelEntry = sessionHolder.mlCache.modelCache.get(
-          getModelSummaryAttrProto.getModelRefId
-        )
+        val modelEntry =
+          sessionHolder.mlCache.modelCache.get(getModelSummaryAttrProto.getModelRefId)
         val model = modelEntry._1
         val algo = modelEntry._2
         // Create a copied model to avoid concurrently modify model params.
@@ -76,16 +74,14 @@ object MLHandler {
         val datasetOpt = if (getModelSummaryAttrProto.hasEvaluationDataset) {
           val evalDF = MLUtils.parseRelationProto(
             getModelSummaryAttrProto.getEvaluationDataset,
-            sessionHolder
-          )
+            sessionHolder)
           Some(evalDF)
         } else None
 
-        algo.getModelSummaryAttr(
-          copiedModel,
-          getModelSummaryAttrProto.getName,
-          datasetOpt
-        ).left.get
+        algo
+          .getModelSummaryAttr(copiedModel, getModelSummaryAttrProto.getName, datasetOpt)
+          .left
+          .get
 
       case proto.MlCommand.MlCommandTypeCase.LOAD_MODEL =>
         val loadModelProto = mlCommand.getLoadModel
@@ -93,29 +89,29 @@ object MLHandler {
         val model = algo.loadModel(loadModelProto.getPath)
         val refId = sessionHolder.mlCache.modelCache.register(model, algo)
 
-        proto.MlCommandResponse.newBuilder().setModelInfo(
-          proto.MlCommandResponse.ModelInfo.newBuilder
-            .setModelRefId(refId)
-            .setModelUid(model.uid)
-            .setParams(MLUtils.convertInstanceParamsToProto(model))
-        ).build()
+        proto.MlCommandResponse
+          .newBuilder()
+          .setModelInfo(
+            proto.MlCommandResponse.ModelInfo.newBuilder
+              .setModelRefId(refId)
+              .setModelUid(model.uid)
+              .setParams(MLUtils.convertInstanceParamsToProto(model)))
+          .build()
 
       case proto.MlCommand.MlCommandTypeCase.SAVE_MODEL =>
         val saveModelProto = mlCommand.getSaveModel
-        val modelEntry = sessionHolder.mlCache.modelCache.get(
-          saveModelProto.getModelRefId
-        )
+        val modelEntry = sessionHolder.mlCache.modelCache.get(saveModelProto.getModelRefId)
         val model = modelEntry._1
         val algo = modelEntry._2
         algo.saveModel(
           model,
           saveModelProto.getPath,
           saveModelProto.getOverwrite,
-          saveModelProto.getOptionsMap.asScala.toMap
-        )
-        proto.MlCommandResponse.newBuilder().setLiteral(
-          LiteralValueProtoConverter.toLiteralProto(null)
-        ).build()
+          saveModelProto.getOptionsMap.asScala.toMap)
+        proto.MlCommandResponse
+          .newBuilder()
+          .setLiteral(LiteralValueProtoConverter.toLiteralProto(null))
+          .build()
 
       case proto.MlCommand.MlCommandTypeCase.LOAD_STAGE =>
         val loadStageProto = mlCommand.getLoadStage
@@ -125,13 +121,16 @@ object MLHandler {
             val algo = AlgorithmRegistry.get(name)
             val estimator = algo.loadEstimator(loadStageProto.getPath)
 
-            proto.MlCommandResponse.newBuilder().setStage(
-              proto.MlStage.newBuilder()
-                .setName(name)
-                .setType(proto.MlStage.StageType.ESTIMATOR)
-                .setUid(estimator.uid)
-                .setParams(MLUtils.convertInstanceParamsToProto(estimator))
-            ).build()
+            proto.MlCommandResponse
+              .newBuilder()
+              .setStage(
+                proto.MlStage
+                  .newBuilder()
+                  .setName(name)
+                  .setType(proto.MlStage.StageType.ESTIMATOR)
+                  .setUid(estimator.uid)
+                  .setParams(MLUtils.convertInstanceParamsToProto(estimator)))
+              .build()
           case _ =>
             throw new UnsupportedOperationException()
         }
@@ -150,11 +149,11 @@ object MLHandler {
               estimator,
               saveStageProto.getPath,
               saveStageProto.getOverwrite,
-              saveStageProto.getOptionsMap.asScala.toMap
-            )
-            proto.MlCommandResponse.newBuilder().setLiteral(
-              LiteralValueProtoConverter.toLiteralProto(null)
-            ).build()
+              saveStageProto.getOptionsMap.asScala.toMap)
+            proto.MlCommandResponse
+              .newBuilder()
+              .setLiteral(LiteralValueProtoConverter.toLiteralProto(null))
+              .build()
 
           case _ =>
             throw new UnsupportedOperationException()
@@ -162,23 +161,23 @@ object MLHandler {
 
       case proto.MlCommand.MlCommandTypeCase.COPY_MODEL =>
         val copyModelProto = mlCommand.getCopyModel
-        val modelEntry = sessionHolder.mlCache.modelCache.get(
-          copyModelProto.getModelRefId
-        )
+        val modelEntry = sessionHolder.mlCache.modelCache.get(copyModelProto.getModelRefId)
         val model = modelEntry._1
         val algo = modelEntry._2
         val copiedModel = model.copy(ParamMap.empty).asInstanceOf[Model[_]]
         val refId = sessionHolder.mlCache.modelCache.register(copiedModel, algo)
-        proto.MlCommandResponse.newBuilder().setLiteral(
-          proto.Expression.Literal.newBuilder().setLong(refId)
-        ).build()
+        proto.MlCommandResponse
+          .newBuilder()
+          .setLiteral(proto.Expression.Literal.newBuilder().setLong(refId))
+          .build()
 
       case proto.MlCommand.MlCommandTypeCase.DELETE_MODEL =>
         val modelRefId = mlCommand.getDeleteModel.getModelRefId
         sessionHolder.mlCache.modelCache.remove(modelRefId)
-        proto.MlCommandResponse.newBuilder().setLiteral(
-          LiteralValueProtoConverter.toLiteralProto(null)
-        ).build()
+        proto.MlCommandResponse
+          .newBuilder()
+          .setLiteral(LiteralValueProtoConverter.toLiteralProto(null))
+          .build()
 
       case _ =>
         throw new IllegalArgumentException()
@@ -186,37 +185,30 @@ object MLHandler {
   }
 
   def transformMLRelation(
-                           mlRelationProto: proto.MlRelation,
-                           sessionHolder: SessionHolder): DataFrame = {
+      mlRelationProto: proto.MlRelation,
+      sessionHolder: SessionHolder): DataFrame = {
     mlRelationProto.getMlRelationTypeCase match {
       case proto.MlRelation.MlRelationTypeCase.MODEL_TRANSFORM =>
         val modelTransformRelationProto = mlRelationProto.getModelTransform
-        val (model, _) = sessionHolder.mlCache.modelCache.get(
-          modelTransformRelationProto.getModelRefId
-        )
+        val (model, _) =
+          sessionHolder.mlCache.modelCache.get(modelTransformRelationProto.getModelRefId)
         // Create a copied model to avoid concurrently modify model params.
         val copiedModel = model.copy(ParamMap.empty).asInstanceOf[Model[_]]
         MLUtils.setInstanceParams(copiedModel, modelTransformRelationProto.getParams)
-        val inputDF = MLUtils.parseRelationProto(
-          modelTransformRelationProto.getInput,
-          sessionHolder
-        )
+        val inputDF =
+          MLUtils.parseRelationProto(modelTransformRelationProto.getInput, sessionHolder)
         copiedModel.transform(inputDF)
 
       case proto.MlRelation.MlRelationTypeCase.MODEL_ATTR =>
         val modelAttrProto = mlRelationProto.getModelAttr
-        val modelEntry = sessionHolder.mlCache.modelCache.get(
-          modelAttrProto.getModelRefId
-        )
+        val modelEntry = sessionHolder.mlCache.modelCache.get(modelAttrProto.getModelRefId)
         val model = modelEntry._1
         val algo = modelEntry._2
         algo.getModelAttr(model, modelAttrProto.getName).right.get
 
       case proto.MlRelation.MlRelationTypeCase.MODEL_SUMMARY_ATTR =>
         val modelSummaryAttr = mlRelationProto.getModelSummaryAttr
-        val modelEntry = sessionHolder.mlCache.modelCache.get(
-          modelSummaryAttr.getModelRefId
-        )
+        val modelEntry = sessionHolder.mlCache.modelCache.get(modelSummaryAttr.getModelRefId)
         val model = modelEntry._1
         val algo = modelEntry._2
         // Create a copied model to avoid concurrently modify model params.
@@ -224,19 +216,13 @@ object MLHandler {
         MLUtils.setInstanceParams(copiedModel, modelSummaryAttr.getParams)
 
         val datasetOpt = if (modelSummaryAttr.hasEvaluationDataset) {
-          val evalDF = MLUtils.parseRelationProto(
-            modelSummaryAttr.getEvaluationDataset,
-            sessionHolder
-          )
+          val evalDF =
+            MLUtils.parseRelationProto(modelSummaryAttr.getEvaluationDataset, sessionHolder)
           Some(evalDF)
         } else {
           None
         }
-        algo.getModelSummaryAttr(
-          copiedModel,
-          modelSummaryAttr.getName,
-          datasetOpt
-        ).right.get
+        algo.getModelSummaryAttr(copiedModel, modelSummaryAttr.getName, datasetOpt).right.get
 
       case _ =>
         throw new IllegalArgumentException()

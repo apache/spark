@@ -21,18 +21,18 @@ import org.apache.spark.connect.proto
 import org.apache.spark.ml.linalg.{Matrix, Vector}
 import org.apache.spark.sql.connect.common.LiteralValueProtoConverter
 
-
 object Serializer {
 
   def serialize(data: Any): proto.MlCommandResponse = {
     data match {
       case v: Vector => serializeVector(v)
       case v: Matrix => serializeMatrix(v)
-      case _: Byte | _: Short | _: Int | _: Long | _: Float |
-           _: Double |_: Boolean | _: String | _: Array[_] =>
-        proto.MlCommandResponse.newBuilder().setLiteral(
-          LiteralValueProtoConverter.toLiteralProto(data)
-        ).build()
+      case _: Byte | _: Short | _: Int | _: Long | _: Float | _: Double | _: Boolean | _: String |
+          _: Array[_] =>
+        proto.MlCommandResponse
+          .newBuilder()
+          .setLiteral(LiteralValueProtoConverter.toLiteralProto(data))
+          .build()
     }
   }
 
@@ -44,9 +44,10 @@ object Serializer {
       denseBuilder.addValue(values(i))
     }
 
-    proto.MlCommandResponse.newBuilder().setVector(
-      proto.Vector.newBuilder().setDense(denseBuilder)
-    ).build()
+    proto.MlCommandResponse
+      .newBuilder()
+      .setVector(proto.Vector.newBuilder().setDense(denseBuilder))
+      .build()
   }
 
   def serializeMatrix(data: Matrix): proto.MlCommandResponse = {
@@ -60,8 +61,9 @@ object Serializer {
     denseBuilder.setNumCols(data.numCols)
     denseBuilder.setNumRows(data.numRows)
     denseBuilder.setIsTransposed(false)
-    proto.MlCommandResponse.newBuilder().setMatrix(
-      proto.Matrix.newBuilder().setDense(denseBuilder)
-    ).build()
+    proto.MlCommandResponse
+      .newBuilder()
+      .setMatrix(proto.Matrix.newBuilder().setDense(denseBuilder))
+      .build()
   }
 }
