@@ -140,7 +140,7 @@ private[hive] case class HiveGenericUDF(
   override lazy val dataType: DataType = evaluator.dataType
 
   @transient
-  private[hive] lazy val evaluator = new HiveGenericUDFEvaluator(funcWrapper, children)
+  private lazy val evaluator = new HiveGenericUDFEvaluator(funcWrapper, children)
 
   override def eval(input: InternalRow): Any = {
     children.zipWithIndex.map {
@@ -160,16 +160,16 @@ private[hive] case class HiveGenericUDF(
     copy(children = newChildren)
 
   protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val refTerm = ctx.addReferenceObj("this", this)
+    val refEvaluator = ctx.addReferenceObj("evaluator", evaluator)
     val evals = children.map(_.genCode(ctx))
 
     val setValues = evals.zipWithIndex.map {
       case (eval, i) =>
         s"""
            |if (${eval.isNull}) {
-           |  $refTerm.evaluator().setArg($i, null);
+           |  $refEvaluator.setArg($i, null);
            |} else {
-           |  $refTerm.evaluator().setArg($i, ${eval.value});
+           |  $refEvaluator.setArg($i, ${eval.value});
            |}
            |""".stripMargin
     }
@@ -183,7 +183,7 @@ private[hive] case class HiveGenericUDF(
          |$resultType $resultTerm = null;
          |boolean ${ev.isNull} = false;
          |try {
-         |  $resultTerm = ($resultType) $refTerm.evaluator().evaluate();
+         |  $resultTerm = ($resultType) $refEvaluator.evaluate();
          |  ${ev.isNull} = $resultTerm == null;
          |} catch (Throwable e) {
          |  throw QueryExecutionErrors.failedExecuteUserDefinedFunctionError(
@@ -207,7 +207,7 @@ class HiveGenericUDFEvaluator(
   with Serializable {
 
   @transient
-  private val function = funcWrapper.createFunction[GenericUDF]()
+  private lazy val function = funcWrapper.createFunction[GenericUDF]()
 
   @transient
   private val isUDFDeterministic = {
@@ -216,10 +216,10 @@ class HiveGenericUDFEvaluator(
   }
 
   @transient
-  private val argumentInspectors = children.map(toInspector)
+  private lazy val argumentInspectors = children.map(toInspector)
 
   @transient
-  private val returnInspector = {
+  private lazy val returnInspector = {
     function.initializeAndFoldConstants(argumentInspectors.toArray)
   }
 
@@ -234,12 +234,12 @@ class HiveGenericUDFEvaluator(
   private[hive] val dataType: DataType = inspectorToDataType(returnInspector)
 
   @transient
-  private val deferredObjects: Array[DeferredObject] = argumentInspectors.zip(children).map {
+  private lazy val deferredObjects: Array[DeferredObject] = argumentInspectors.zip(children).map {
     case (inspect, child) => new DeferredObjectAdapter(inspect, child.dataType)
   }.toArray[DeferredObject]
 
   @transient
-  private val unwrapper: Any => Any = unwrapperFor(returnInspector)
+  private lazy val unwrapper: Any => Any = unwrapperFor(returnInspector)
 
   private[hive] def setArg(index: Int, arg: Any): Unit =
     deferredObjects(index).asInstanceOf[DeferredObjectAdapter].set(arg)
