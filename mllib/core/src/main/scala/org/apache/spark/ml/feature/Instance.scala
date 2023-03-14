@@ -23,16 +23,6 @@ import org.apache.spark.ml.linalg._
 import org.apache.spark.rdd.RDD
 
 /**
- * Class that represents an instance of weighted data point with label and features.
- *
- * @param label Label for this data point.
- * @param weight The weight of this instance.
- * @param features The vector of features for this data point.
- */
-private[spark] case class Instance(label: Double, weight: Double, features: Vector)
-
-
-/**
  * Class that represents an block of instance.
  * If all weights are 1, then an empty array is stored.
  */

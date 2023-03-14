@@ -17,25 +17,13 @@
 
 package org.apache.spark.ml.feature
 
-import org.apache.spark.annotation.Since
-import org.apache.spark.ml.linalg.Vector
+import org.apache.spark.ml.linalg._
 
 /**
- * Class that represents the features and label of a data point.
+ * Class that represents an instance of weighted data point with label and features.
  *
- * @param label
- *   Label for this data point.
- * @param features
- *   List of features for this data point.
+ * @param label Label for this data point.
+ * @param weight The weight of this instance.
+ * @param features The vector of features for this data point.
  */
-@Since("3.5.0")
-case class LabeledPoint(label: Double, features: Vector) {
-
-  def getLabel: Double = label
-
-  def getFeatures: Vector = features
-
-  override def toString: String = {
-    s"($label,$features)"
-  }
-}
+private[spark] case class Instance(label: Double, weight: Double, features: Vector)

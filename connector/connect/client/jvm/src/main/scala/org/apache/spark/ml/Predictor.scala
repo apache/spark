@@ -61,7 +61,7 @@ abstract class Predictor[
   @Since("3.5.0")
   override def fit(dataset: Dataset[_]): M = {
     // TODO: should send the id of the input dataset and the latest params to the server,
-    //  then invoke the 'transform' method of the remote model
+    //  then invoke the 'fit' method of the remote predictor
     throw new NotImplementedError
   }
 

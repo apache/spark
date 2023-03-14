@@ -24,21 +24,6 @@ import org.apache.spark.sql.types._
 
 class VectorUDTSuite extends SparkFunSuite {
 
-  test("preloaded VectorUDT") {
-    val dv1 = Vectors.dense(Array.empty[Double])
-    val dv2 = Vectors.dense(1.0, 2.0)
-    val sv1 = Vectors.sparse(2, Array.empty, Array.empty)
-    val sv2 = Vectors.sparse(2, Array(1), Array(2.0))
-
-    for (v <- Seq(dv1, dv2, sv1, sv2)) {
-      val udt = UDTRegistration.getUDTFor(v.getClass.getName).get.getConstructor().newInstance()
-        .asInstanceOf[VectorUDT]
-      assert(v === udt.deserialize(udt.serialize(v)))
-      assert(udt.typeName == "vector")
-      assert(udt.simpleString == "vector")
-    }
-  }
-
   test("JavaTypeInference with VectorUDT") {
     val (dataType, _) = JavaTypeInference.inferDataType(classOf[LabeledPoint])
     assert(dataType.asInstanceOf[StructType].fields.map(_.dataType)
