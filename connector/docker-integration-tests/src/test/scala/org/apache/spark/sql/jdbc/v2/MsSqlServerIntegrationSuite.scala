@@ -39,8 +39,27 @@ import org.apache.spark.tags.DockerTest
 @DockerTest
 class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest {
 
-  override val catalogName: String = "mssql"
+  override def excluded: Seq[String] = Seq(
+    "simple scan with OFFSET",
+    "simple scan with LIMIT and OFFSET",
+    "simple scan with paging: top N and OFFSET",
+    "scan with aggregate push-down: VAR_POP with DISTINCT",
+    "scan with aggregate push-down: COVAR_POP with DISTINCT",
+    "scan with aggregate push-down: COVAR_POP without DISTINCT",
+    "scan with aggregate push-down: COVAR_SAMP with DISTINCT",
+    "scan with aggregate push-down: COVAR_SAMP without DISTINCT",
+    "scan with aggregate push-down: CORR with DISTINCT",
+    "scan with aggregate push-down: CORR without DISTINCT",
+    "scan with aggregate push-down: REGR_INTERCEPT with DISTINCT",
+    "scan with aggregate push-down: REGR_INTERCEPT without DISTINCT",
+    "scan with aggregate push-down: REGR_SLOPE with DISTINCT",
+    "scan with aggregate push-down: REGR_SLOPE without DISTINCT",
+    "scan with aggregate push-down: REGR_R2 with DISTINCT",
+    "scan with aggregate push-down: REGR_R2 without DISTINCT",
+    "scan with aggregate push-down: REGR_SXY with DISTINCT",
+    "scan with aggregate push-down: REGR_SXY without DISTINCT")
 
+  override val catalogName: String = "mssql"
   override val db = new DatabaseOnDocker {
     override val imageName = sys.env.getOrElse("MSSQLSERVER_DOCKER_IMAGE_NAME",
       "mcr.microsoft.com/mssql/server:2019-CU13-ubuntu-20.04")
@@ -97,13 +116,4 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JD
 
     assert(msg.contains("UpdateColumnNullability is not supported"))
   }
-
-  testVarPop()
-  testVarPop(true)
-  testVarSamp()
-  testVarSamp(true)
-  testStddevPop()
-  testStddevPop(true)
-  testStddevSamp()
-  testStddevSamp(true)
 }

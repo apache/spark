@@ -21,23 +21,21 @@ import java.io.File
 import java.nio.charset.StandardCharsets.UTF_8
 import java.nio.file.{Files, Path}
 import java.util.{Locale, TimeZone}
-
 import scala.annotation.tailrec
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
-
 import org.apache.commons.io.FileUtils
 import org.apache.logging.log4j._
 import org.apache.logging.log4j.core.{LogEvent, Logger, LoggerContext}
 import org.apache.logging.log4j.core.appender.AbstractAppender
 import org.apache.logging.log4j.core.config.Property
-import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll, BeforeAndAfterEach, Failed, Outcome}
-import org.scalatest.funsuite.AnyFunSuite // scalastyle:ignore funsuite
-
+import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll, BeforeAndAfterEach, Failed, Outcome, Tag}
+import org.scalatest.funsuite.AnyFunSuite
 import org.apache.spark.deploy.LocalSparkCluster
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.util.{AccumulatorContext, Utils}
+import org.scalactic.source.Position
 
 /**
  * Base abstract class for all unit tests in Spark for handling common functionality.
@@ -135,6 +133,19 @@ abstract class SparkFunSuite
     }
     val sparkHome = sys.props.getOrElse("spark.test.home", sys.env("SPARK_HOME"))
     java.nio.file.Paths.get(sparkHome, first +: more: _*)
+  }
+
+  // subclasses can override this to exclude certain tests by name
+  // useful when inheriting a test suite but do not want to run all tests in it
+  protected def excluded: Seq[String] = Seq.empty
+
+  override def test(testName: String, testTags: Tag*)(testBody: => Any)
+    (implicit pos: Position): Unit = {
+    if (excluded.contains(testName)) {
+      ignore(s"$testName [enable by remove from $excluded]")(testBody)
+    } else {
+      super.test(testName, testTags: _*)(testBody)
+    }
   }
 
   /**
