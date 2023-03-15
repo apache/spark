@@ -20,7 +20,6 @@ syntax = 'proto3';
 import "google/protobuf/any.proto";
 import "spark/connect/expressions.proto";
 import "spark/connect/relations.proto";
-import "spark/connect/types.proto";
 
 package spark.connect;
 
@@ -84,7 +83,11 @@ message WriteOperation {
   // (Optional) Format value according to the Spark documentation. Examples are: text, parquet, delta.
   optional string source = 2;
 
-  // The destination of the write operation must be either a path or a table.
+  // (Optional)
+  //
+  // The destination of the write operation can be either a path or a table.
+  // If the destination is neither a path nor a table, such as jdbc and noop,
+  // the `save_type` should not be set.
   oneof save_type {
     string path = 3;
     SaveTable table = 4;

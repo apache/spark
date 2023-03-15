@@ -200,7 +200,6 @@ private object MsSqlServerDialect extends JdbcDialect {
   class MsSqlServerSQLQueryBuilder(dialect: JdbcDialect, options: JDBCOptions)
     extends JdbcSQLQueryBuilder(dialect, options) {
 
-    // TODO[SPARK-42289]: DS V2 pushdown could let JDBC dialect decide to push down offset
     override def build(): String = {
       val limitClause = dialect.getLimitClause(limit)
 
@@ -212,4 +211,6 @@ private object MsSqlServerDialect extends JdbcDialect {
 
   override def getJdbcSQLQueryBuilder(options: JDBCOptions): JdbcSQLQueryBuilder =
     new MsSqlServerSQLQueryBuilder(this, options)
+
+  override def supportsOffset: Boolean = false
 }

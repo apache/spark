@@ -27,6 +27,8 @@ import scala.collection.mutable.HashMap
 import scala.util.Try
 
 import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.Path
+import org.apache.hadoop.hive.common.FileUtils
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hadoop.hive.ql.session.SessionState
@@ -49,6 +51,7 @@ import org.apache.spark.util.Utils
 
 
 private[spark] object HiveUtils extends Logging {
+  private val PATTERN_FOR_KEY_EQ_VAL = "(.+)=(.+)".r
 
   /** The version of hive used internally by Spark SQL. */
   val builtinHiveVersion: String = HiveVersionInfo.getVersion
@@ -560,6 +563,16 @@ private[spark] object HiveUtils extends Logging {
       val partCols = hiveTable.getPartCols.asScala.map(HiveClientImpl.fromHiveColumn)
       val dataCols = hiveTable.getCols.asScala.map(HiveClientImpl.fromHiveColumn)
       table.copy(schema = StructType((dataCols ++ partCols).toArray))
+    }
+  }
+
+  /**
+   * Extract the partition values from a partition name, e.g., if a partition name is
+   * "region=US/dt=2023-02-18", then we will return an array of values ("US", "2023-02-18").
+   */
+  def partitionNameToValues(name: String): Array[String] = {
+    name.split(Path.SEPARATOR).map {
+      case PATTERN_FOR_KEY_EQ_VAL(_, v) => FileUtils.unescapePathName(v)
     }
   }
 }
