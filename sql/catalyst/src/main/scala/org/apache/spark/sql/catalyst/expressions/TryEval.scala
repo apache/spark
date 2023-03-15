@@ -70,7 +70,7 @@ case class TryEval(child: Expression) extends UnaryExpression with NullIntoleran
       > SELECT _FUNC_(timestamp'2021-01-01 00:00:00', interval 1 day);
        2021-01-02 00:00:00
       > SELECT _FUNC_(interval 1 year, interval 2 year);
-       3-0
+       INTERVAL '3' YEAR
   """,
   since = "3.2.0",
   group = "math_funcs")
@@ -106,7 +106,7 @@ case class TryAdd(left: Expression, right: Expression, replacement: Expression)
       > SELECT _FUNC_(1, 0);
        NULL
       > SELECT _FUNC_(interval 2 month, 2);
-       0-1
+       INTERVAL '0-1' YEAR TO MONTH
       > SELECT _FUNC_(interval 2 month, 0);
        NULL
   """,
@@ -148,7 +148,7 @@ case class TryDivide(left: Expression, right: Expression, replacement: Expressio
       > SELECT _FUNC_(timestamp'2021-01-02 00:00:00', interval 1 day);
        2021-01-01 00:00:00
       > SELECT _FUNC_(interval 2 year, interval 1 year);
-       1-0
+       INTERVAL '1' YEAR
   """,
   since = "3.3.0",
   group = "math_funcs")
@@ -180,7 +180,7 @@ case class TrySubtract(left: Expression, right: Expression, replacement: Express
       > SELECT _FUNC_(-2147483648, 10);
        NULL
       > SELECT _FUNC_(interval 2 year, 3);
-       6-0
+       INTERVAL '6-0' YEAR TO MONTH
   """,
   since = "3.3.0",
   group = "math_funcs")
@@ -208,7 +208,7 @@ case class TryMultiply(left: Expression, right: Expression, replacement: Express
   examples = """
     Examples:
       > SELECT _FUNC_('abc', 'utf-8');
-       abc
+       [61 62 63]
       > select _FUNC_('a!', 'base64');
        NULL
       > select _FUNC_('abc', 'invalidFormat');

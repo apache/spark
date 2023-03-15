@@ -180,10 +180,6 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite with SharedThriftServ
             || d.sql.toUpperCase(Locale.ROOT).startsWith("DESCRIBE ")
             || d.sql.toUpperCase(Locale.ROOT).startsWith("DESCRIBE\n") =>
 
-          // Skip show command, see HiveResult.hiveResultString
-          case s if s.sql.toUpperCase(Locale.ROOT).startsWith("SHOW ")
-            || s.sql.toUpperCase(Locale.ROOT).startsWith("SHOW\n") =>
-
           case _ if output.output.startsWith(classOf[NoSuchTableException].getPackage.getName) =>
             assert(expected.output.startsWith(classOf[NoSuchTableException].getPackage.getName),
               s"Exception did not match for query #$i\n${expected.sql}, " +

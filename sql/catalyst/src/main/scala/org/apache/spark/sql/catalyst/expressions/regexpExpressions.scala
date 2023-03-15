@@ -515,11 +515,11 @@ case class RLike(left: Expression, right: Expression) extends StringRegexExpress
   examples = """
     Examples:
       > SELECT _FUNC_('oneAtwoBthreeC', '[ABC]');
-       ["one","two","three",""]
+       [one, two, three, ]
       > SELECT _FUNC_('oneAtwoBthreeC', '[ABC]', -1);
-       ["one","two","three",""]
+       [one, two, three, ]
       > SELECT _FUNC_('oneAtwoBthreeC', '[ABC]', 2);
-       ["one","twoBthreeC"]
+       [one, twoBthreeC]
   """,
   since = "1.5.0",
   group = "string_funcs")
@@ -936,7 +936,7 @@ case class RegExpExtract(subject: Expression, regexp: Expression, idx: Expressio
   examples = """
     Examples:
       > SELECT _FUNC_('100-200, 300-400', '(\\d+)-(\\d+)', 1);
-       ["100","300"]
+       [100, 300]
   """,
   since = "3.1.0",
   group = "string_funcs")

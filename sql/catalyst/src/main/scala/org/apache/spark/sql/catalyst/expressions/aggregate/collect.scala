@@ -91,7 +91,7 @@ abstract class Collect[T <: Growable[Any] with Iterable[Any]] extends TypedImper
   examples = """
     Examples:
       > SELECT _FUNC_(col) FROM VALUES (1), (2), (1) AS tab(col);
-       [1,2,1]
+       [1, 2, 1]
   """,
   note = """
     The function is non-deterministic because the order of collected results depends
@@ -136,7 +136,7 @@ case class CollectList(
   examples = """
     Examples:
       > SELECT _FUNC_(col) FROM VALUES (1), (2), (1) AS tab(col);
-       [1,2]
+       [1, 2]
   """,
   note = """
     The function is non-deterministic because the order of collected results depends

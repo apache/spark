@@ -8945,11 +8945,11 @@ def map_entries(col: "ColumnOrName") -> Column:
     >>> df = spark.sql("SELECT map(1, 'a', 2, 'b') as data")
     >>> df = df.select(map_entries("data").alias("entries"))
     >>> df.show()
-    +----------------+
-    |         entries|
-    +----------------+
-    |[{1, a}, {2, b}]|
-    +----------------+
+    +--------------------+
+    |             entries|
+    +--------------------+
+    |[{"key":1, "value...|
+    +--------------------+
     >>> df.printSchema()
     root
      |-- entries: array (nullable = false)
@@ -9056,11 +9056,11 @@ def arrays_zip(*cols: "ColumnOrName") -> Column:
     >>> df = spark.createDataFrame([(([1, 2, 3], [2, 4, 6], [3, 6]))], ['vals1', 'vals2', 'vals3'])
     >>> df = df.select(arrays_zip(df.vals1, df.vals2, df.vals3).alias('zipped'))
     >>> df.show(truncate=False)
-    +------------------------------------+
-    |zipped                              |
-    +------------------------------------+
-    |[{1, 2, 3}, {2, 4, 6}, {3, 6, NULL}]|
-    +------------------------------------+
+    +----------------------------------------------------------------------------------------------------+  # noqa
+    |zipped                                                                                              |  # noqa
+    +----------------------------------------------------------------------------------------------------+  # noqa
+    |[{"vals1":1, "vals2":2, "vals3":3}, {"vals1":2, "vals2":4, "vals3":6}, {"vals1":3, "vals2":6, NULL}]|  # noqa
+    +----------------------------------------------------------------------------------------------------+  # noqa
     >>> df.printSchema()
     root
      |-- zipped: array (nullable = true)

@@ -270,31 +270,14 @@ class Dataset[T] private[sql](
    */
   private[sql] def getRows(
       numRows: Int,
-      truncate: Int): Seq[Seq[String]] = {
-    val newDf = toDF()
-    val castCols = newDf.logicalPlan.output.map { col =>
-      // Since binary types in top-level schema fields have a specific format to print,
-      // so we do not cast them to strings here.
-      if (col.dataType == BinaryType) {
-        Column(col)
-      } else {
-        Column(col).cast(StringType)
-      }
-    }
-    val data = newDf.select(castCols: _*).take(numRows + 1)
+      truncate: Int): Seq[Seq[String]] =
+    withAction("show", limit(numRows + 1).queryExecution) { plan: SparkPlan =>
+      val dataTypes = queryExecution.executedPlan.output.map(_.dataType)
+      val data = plan.executeCollect().map(_.toSeq(dataTypes)).toSeq
 
-    // For array values, replace Seq and Array with square brackets
-    // For cells that are beyond `truncate` characters, replace it with the
-    // first `truncate-3` and "..."
-    schema.fieldNames.map(SchemaUtils.escapeMetaCharacters).toSeq +: data.map { row =>
-      row.toSeq.map { cell =>
-        val str = cell match {
-          case null => "NULL"
-          case binary: Array[Byte] => binary.map("%02X".format(_)).mkString("[", " ", "]")
-          case _ =>
-            // Escapes meta-characters not to break the `showString` format
-            SchemaUtils.escapeMetaCharacters(cell.toString)
-        }
+      schema.fieldNames.map(SchemaUtils.escapeMetaCharacters).toSeq +: data.map { row =>
+      row.zip(dataTypes).map { cell =>
+        val str = SparkResult.toSparkString(cell)
         if (truncate > 0 && str.length > truncate) {
           // do not show ellipses for strings shorter than 4 characters.
           if (truncate < 4) str.substring(0, truncate)

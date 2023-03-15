@@ -684,6 +684,7 @@ case class Cast(
           if (row.isNullAt(0)) {
             if (!legacyCastToStr) builder.append("NULL")
           } else {
+            builder.append(s""""${fields.head.name}\":""")
             builder.append(toUTF8StringFuncs(0)(row.get(0, st(0))).asInstanceOf[UTF8String])
           }
           var i = 1
@@ -693,6 +694,7 @@ case class Cast(
               if (!legacyCastToStr) builder.append(" NULL")
             } else {
               builder.append(" ")
+              builder.append(s""""${fields(i).name}\":""")
               builder.append(toUTF8StringFuncs(i)(row.get(i, st(i))).asInstanceOf[UTF8String])
             }
             i += 1
@@ -1500,10 +1502,11 @@ case class Cast(
   }
 
   private def writeStructToStringBuilder(
-      st: Seq[DataType],
+      fields: Array[StructField],
       row: ExprValue,
       buffer: ExprValue,
       ctx: CodegenContext): Block = {
+    val st = fields.map(_.dataType)
     val structToStringCode = st.zipWithIndex.map { case (ft, i) =>
       val fieldToStringCode = castToStringCode(ft, ctx)
       val field = ctx.freshVariable("field", ft)
@@ -1520,6 +1523,7 @@ case class Cast(
          |  $javaType $field = ${CodeGenerator.getValue(row, ft, s"$i")};
          |  UTF8String $fieldStr = null;
          |  ${fieldToStringCode(field, fieldStr, null /* resultIsNull won't be used */)}
+         |  $buffer.append("\\"${fields(i).name}\\":");
          |  $buffer.append($fieldStr);
          |}
        """.stripMargin
@@ -1587,7 +1591,7 @@ case class Cast(
           val row = ctx.freshVariable("row", classOf[InternalRow])
           val buffer = ctx.freshVariable("buffer", classOf[UTF8StringBuilder])
           val bufferClass = JavaCode.javaType(classOf[UTF8StringBuilder])
-          val writeStructCode = writeStructToStringBuilder(fields.map(_.dataType), row, buffer, ctx)
+          val writeStructCode = writeStructToStringBuilder(fields, row, buffer, ctx)
           code"""
              |InternalRow $row = $c;
              |$bufferClass $buffer = new $bufferClass();

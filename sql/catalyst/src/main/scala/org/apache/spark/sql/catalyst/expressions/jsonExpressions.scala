@@ -528,11 +528,11 @@ case class JsonTuple(children: Seq[Expression])
   examples = """
     Examples:
       > SELECT _FUNC_('{"a":1, "b":0.8}', 'a INT, b DOUBLE');
-       {"a":1,"b":0.8}
+       {"a":1, "b":0.8}
       > SELECT _FUNC_('{"time":"26/08/2015"}', 'time Timestamp', map('timestampFormat', 'dd/MM/yyyy'));
        {"time":2015-08-26 00:00:00}
       > SELECT _FUNC_('{"teacher": "Alice", "student": [{"name": "Bob", "rank": 1}, {"name": "Charlie", "rank": 2}]}', 'STRUCT<teacher: STRING, student: ARRAY<STRUCT<name: STRING, rank: INT>>>');
-       {"teacher":"Alice","student":[{"name":"Bob","rank":1},{"name":"Charlie","rank":2}]}
+       {"teacher":Alice, "student":[{"name":Bob, "rank":1}, {"name":Charlie, "rank":2}]}
   """,
   group = "json_funcs",
   since = "2.2.0")
@@ -924,9 +924,9 @@ case class LengthOfJsonArray(child: Expression) extends UnaryExpression
       > SELECT _FUNC_('{}');
         []
       > SELECT _FUNC_('{"key": "value"}');
-        ["key"]
+        [key]
       > SELECT _FUNC_('{"f1":"abc","f2":{"f3":"a", "f4":"b"}}');
-        ["f1","f2"]
+        [f1, f2]
   """,
   group = "json_funcs",
   since = "3.1.0"

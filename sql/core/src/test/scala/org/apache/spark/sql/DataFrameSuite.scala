@@ -1504,7 +1504,7 @@ class DataFrameSuite extends QueryTest
       """+-------------------------------------------------------+
         ||named_struct(v, aaa\nbbb\tccc\rddd\feee\bfff\vggg\ahhh)|
         |+-------------------------------------------------------+
-        ||{aaa\nbbb\tccc\rddd\feee\bfff\vggg\ahhh}               |
+        ||{"v":aaa\nbbb\tccc\rddd\feee\bfff\vggg\ahhh}           |
         |+-------------------------------------------------------+
         |""".stripMargin)
   }
@@ -1600,12 +1600,12 @@ class DataFrameSuite extends QueryTest
          |""".stripMargin)
     val df3 = Seq(((1, "a"), 0), ((2, "b"), 0)).toDF("a", "b")
     assert(df3.showString(10) ===
-      s"""+------+---+
-         ||     a|  b|
-         |+------+---+
-         ||{1, a}|  0|
-         ||{2, b}|  0|
-         |+------+---+
+      s"""+----------------+---+
+         ||               a|  b|
+         |+----------------+---+
+         ||{"_1":1, "_2":a}|  0|
+         ||{"_1":2, "_2":b}|  0|
+         |+----------------+---+
          |""".stripMargin)
   }
 

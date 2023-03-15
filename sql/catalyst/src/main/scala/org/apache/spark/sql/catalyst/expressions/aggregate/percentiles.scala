@@ -266,11 +266,11 @@ abstract class PercentileBase
       > SELECT _FUNC_(col, 0.3) FROM VALUES (0), (10) AS tab(col);
        3.0
       > SELECT _FUNC_(col, array(0.25, 0.75)) FROM VALUES (0), (10) AS tab(col);
-       [2.5,7.5]
+       [2.5, 7.5]
       > SELECT _FUNC_(col, 0.5) FROM VALUES (INTERVAL '0' MONTH), (INTERVAL '10' MONTH) AS tab(col);
-       0-5
+       INTERVAL '0-5' YEAR TO MONTH
       > SELECT _FUNC_(col, array(0.2, 0.5)) FROM VALUES (INTERVAL '0' SECOND), (INTERVAL '10' SECOND) AS tab(col);
-       [0 00:00:02.000000000,0 00:00:05.000000000]
+       [INTERVAL '0 00:00:02' DAY TO SECOND, INTERVAL '0 00:00:05' DAY TO SECOND]
   """,
   group = "agg_funcs",
   since = "2.1.0")
@@ -330,7 +330,7 @@ case class Percentile(
       > SELECT _FUNC_(col) FROM VALUES (0), (10) AS tab(col);
        5.0
       > SELECT _FUNC_(col) FROM VALUES (INTERVAL '0' MONTH), (INTERVAL '10' MONTH) AS tab(col);
-       0-5
+       INTERVAL '0-5' YEAR TO MONTH
   """,
   group = "agg_funcs",
   since = "3.4.0")

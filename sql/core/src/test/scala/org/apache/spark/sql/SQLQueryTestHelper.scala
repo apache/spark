@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.HiveResult.hiveResultString
 import org.apache.spark.sql.execution.SQLExecution
-import org.apache.spark.sql.execution.command.{DescribeColumnCommand, DescribeCommandBase}
+import org.apache.spark.sql.execution.command.{DescribeColumnCommand, DescribeCommandBase, ShowColumnsCommand, ShowTablesCommand, ShowViewsCommand}
 import org.apache.spark.sql.types.{DateType, StructType, TimestampType}
 
 trait SQLQueryTestHelper extends Logging {
@@ -107,6 +107,10 @@ trait SQLQueryTestHelper extends Logging {
           | _: DescribeColumnCommand
           | _: DescribeRelation
           | _: DescribeColumn => true
+      case _: ShowTables
+          | _: ShowTablesCommand
+          | _: ShowViewsCommand
+          | _: ShowColumnsCommand => true
       case PhysicalOperation(_, _, Sort(_, true, _)) => true
       case _ => plan.children.iterator.exists(isSorted)
     }

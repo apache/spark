@@ -55,7 +55,7 @@ trait NoThrow
   examples = """
     Examples:
       > SELECT _FUNC_(1, 2, 3);
-       [1,2,3]
+       [1, 2, 3]
   """,
   since = "1.1.0",
   group = "array_funcs")
@@ -177,7 +177,7 @@ private [sql] object GenArrayData {
   examples = """
     Examples:
       > SELECT _FUNC_(1.0, '2', 3.0, '4');
-       {1.0:"2",3.0:"4"}
+       {1.0 -> 2, 3.0 -> 4}
   """,
   since = "2.0.0",
   group = "map_funcs")
@@ -291,7 +291,7 @@ object CreateMap {
   examples = """
     Examples:
       > SELECT _FUNC_(array(1.0, 3.0), array('2', '4'));
-       {1.0:"2",3.0:"4"}
+       {1.0 -> 2, 3.0 -> 4}
   """,
   since = "2.4.0",
   group = "map_funcs")
@@ -402,7 +402,7 @@ object CreateStruct {
       """
         |    Examples:
         |      > SELECT _FUNC_(1, 2, 3);
-        |       {"col1":1,"col2":2,"col3":3}
+        |       {"col1":1, "col2":2, "col3":3}
         |  """.stripMargin,
       "",
       "struct_funcs",
@@ -424,7 +424,7 @@ object CreateStruct {
   examples = """
     Examples:
       > SELECT _FUNC_("a", 1, "b", 2, "c", 3);
-       {"a":1,"b":2,"c":3}
+       {"a":1, "b":2, "c":3}
   """,
   since = "1.5.0",
   group = "struct_funcs")
@@ -544,9 +544,9 @@ case class CreateNamedStruct(children: Seq[Expression]) extends Expression with 
   examples = """
     Examples:
       > SELECT _FUNC_('a:1,b:2,c:3', ',', ':');
-       {"a":"1","b":"2","c":"3"}
+       {a -> 1, b -> 2, c -> 3}
       > SELECT _FUNC_('a');
-       {"a":null}
+       {a -> NULL}
   """,
   since = "2.0.1",
   group = "map_funcs")

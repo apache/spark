@@ -31,16 +31,15 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.plans.logical.CommandResult
 import org.apache.spark.sql.execution.{QueryExecution, SQLExecution}
-import org.apache.spark.sql.execution.HiveResult.hiveResultString
+import org.apache.spark.sql.execution.SparkResult.sparkResultString
 import org.apache.spark.sql.internal.{SQLConf, VariableSubstitution}
-
 
 private[hive] class SparkSQLDriver(val context: SQLContext = SparkSQLEnv.sqlContext)
   extends Driver
   with Logging {
 
   private[hive] var tableSchema: Schema = _
-  private[hive] var hiveResponse: Seq[String] = _
+  private[hive] var result: Seq[String] = _
 
   override def init(): Unit = {
   }
@@ -70,10 +69,10 @@ private[hive] class SparkSQLDriver(val context: SQLContext = SparkSQLEnv.sqlCont
       // wrap it again with a new execution ID when getting Hive result.
       execution.logical match {
         case _: CommandResult =>
-          hiveResponse = hiveResultString(execution.executedPlan)
+          result = sparkResultString(execution)
         case _ =>
-          hiveResponse = SQLExecution.withNewExecutionId(execution, Some("cli")) {
-            hiveResultString(execution.executedPlan)
+          result = SQLExecution.withNewExecutionId(execution, Some("cli")) {
+            sparkResultString(execution)
           }
       }
       tableSchema = getResultSetSchema(execution)
@@ -89,17 +88,17 @@ private[hive] class SparkSQLDriver(val context: SQLContext = SparkSQLEnv.sqlCont
   }
 
   override def close(): Int = {
-    hiveResponse = null
+    result = null
     tableSchema = null
     0
   }
 
   override def getResults(res: JList[_]): Boolean = {
-    if (hiveResponse == null) {
+    if (result == null) {
       false
     } else {
-      res.asInstanceOf[JArrayList[String]].addAll(hiveResponse.asJava)
-      hiveResponse = null
+      res.asInstanceOf[JArrayList[String]].addAll(result.asJava)
+      result = null
       true
     }
   }
@@ -108,7 +107,7 @@ private[hive] class SparkSQLDriver(val context: SQLContext = SparkSQLEnv.sqlCont
 
   override def destroy(): Unit = {
     super.destroy()
-    hiveResponse = null
+    result = null
     tableSchema = null
   }
 }

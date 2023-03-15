@@ -1392,12 +1392,12 @@ class DatasetSuite extends QueryTest
     ).toDS()
 
     val expected =
-      """+--------+
-        ||       f|
-        |+--------+
-        ||{foo, 1}|
-        ||{bar, 2}|
-        |+--------+
+      """+----------------+
+        ||               f|
+        |+----------------+
+        ||{"a":foo, "b":1}|
+        ||{"a":bar, "b":2}|
+        |+----------------+
         |""".stripMargin
 
     checkShowString(ds, expected)

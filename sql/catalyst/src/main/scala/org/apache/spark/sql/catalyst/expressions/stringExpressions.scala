@@ -758,13 +758,13 @@ object Overlay {
       > SELECT _FUNC_('Spark SQL' PLACING 'tructured' FROM 2 FOR 4);
        Structured SQL
       > SELECT _FUNC_(encode('Spark SQL', 'utf-8') PLACING encode('_', 'utf-8') FROM 6);
-       Spark_SQL
+       [53 70 61 72 6B 5F 53 51 4C]
       > SELECT _FUNC_(encode('Spark SQL', 'utf-8') PLACING encode('CORE', 'utf-8') FROM 7);
-       Spark CORE
+       [53 70 61 72 6B 20 43 4F 52 45]
       > SELECT _FUNC_(encode('Spark SQL', 'utf-8') PLACING encode('ANSI ', 'utf-8') FROM 7 FOR 0);
-       Spark ANSI SQL
+       [53 70 61 72 6B 20 41 4E 53 49 20 53 51 4C]
       > SELECT _FUNC_(encode('Spark SQL', 'utf-8') PLACING encode('tructured', 'utf-8') FROM 2 FOR 4);
-       Structured SQL
+       [53 74 72 75 63 74 75 72 65 64 20 53 51 4C]
   """,
   since = "3.0.0",
   group = "string_funcs")
@@ -1899,7 +1899,7 @@ case class StringSpace(child: Expression)
       > SELECT _FUNC_('Spark SQL' FROM 5 FOR 1);
        k
       > SELECT _FUNC_(encode('Spark SQL', 'utf-8'), 5);
-       k SQL
+       [6B 20 53 51 4C]
   """,
   since = "1.5.0",
   group = "string_funcs")
@@ -1992,7 +1992,7 @@ case class Right(str: Expression, len: Expression) extends RuntimeReplaceable
       > SELECT _FUNC_('Spark SQL', 3);
        Spa
       > SELECT _FUNC_(encode('Spark SQL', 'utf-8'), 3);
-       Spa
+       [53 70 61]
   """,
   since = "2.3.0",
   group = "string_funcs")
@@ -2327,7 +2327,7 @@ case class Base64(child: Expression)
   examples = """
     Examples:
       > SELECT _FUNC_('U3BhcmsgU1FM');
-       Spark SQL
+       [53 70 61 72 6B 20 53 51 4C]
   """,
   since = "1.5.0",
   group = "string_funcs")
@@ -2554,7 +2554,7 @@ case class StringDecode(bin: Expression, charset: Expression)
   examples = """
     Examples:
       > SELECT _FUNC_('abc', 'utf-8');
-       abc
+       [61 62 63]
   """,
   since = "1.5.0",
   group = "string_funcs")
@@ -2599,7 +2599,7 @@ case class Encode(value: Expression, charset: Expression)
   examples = """
     Examples:
       > SELECT _FUNC_('abc', 'utf-8');
-       abc
+       [61 62 63]
   """,
   since = "3.3.0",
   group = "string_funcs")
@@ -2886,7 +2886,7 @@ case class FormatNumber(x: Expression, d: Expression)
   examples = """
     Examples:
       > SELECT _FUNC_('Hi there! Good morning.');
-       [["Hi","there"],["Good","morning"]]
+       [[Hi, there], [Good, morning]]
   """,
   since = "2.0.0",
   group = "string_funcs")

@@ -158,7 +158,7 @@ case class UnaryPositive(child: Expression)
       > SELECT _FUNC_(-1);
        1
       > SELECT _FUNC_(INTERVAL -'1-1' YEAR TO MONTH);
-       1-1
+       INTERVAL '1-1' YEAR TO MONTH
   """,
   since = "1.2.0",
   group = "math_funcs")

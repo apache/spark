@@ -32,7 +32,7 @@ import org.apache.spark.util.collection.OpenHashMap
       > SELECT _FUNC_(col) FROM VALUES (0), (10), (10) AS tab(col);
        10
       > SELECT _FUNC_(col) FROM VALUES (INTERVAL '0' MONTH), (INTERVAL '10' MONTH), (INTERVAL '10' MONTH) AS tab(col);
-       0-10
+       INTERVAL '10' MONTH
       > SELECT _FUNC_(col) FROM VALUES (0), (10), (10), (null), (null), (null) AS tab(col);
        10
   """,

@@ -52,8 +52,8 @@ SHOW COLUMNS IN showcolumn1
 -- !query schema
 struct<col_name:string>
 -- !query output
-col 2
 col1
+col 2
 
 
 -- !query
@@ -61,8 +61,8 @@ SHOW COLUMNS IN showdb.showcolumn1
 -- !query schema
 struct<col_name:string>
 -- !query output
-col 2
 col1
+col 2
 
 
 -- !query
@@ -70,8 +70,8 @@ SHOW COLUMNS IN showcolumn1 FROM showdb
 -- !query schema
 struct<col_name:string>
 -- !query output
-col 2
 col1
+col 2
 
 
 -- !query
@@ -79,10 +79,10 @@ SHOW COLUMNS IN showcolumn2 IN showdb
 -- !query schema
 struct<col_name:string>
 -- !query output
-month
 price
 qty
 year
+month
 
 
 -- !query
@@ -112,8 +112,8 @@ SHOW COLUMNS IN showdb.showcolumn1 from SHOWDB
 -- !query schema
 struct<col_name:string>
 -- !query output
-col 2
 col1
+col 2
 
 
 -- !query
@@ -136,8 +136,8 @@ SHOW COLUMNS IN showcolumn3
 -- !query schema
 struct<col_name:string>
 -- !query output
-col 4
 col3
+col 4
 
 
 -- !query
@@ -211,8 +211,8 @@ SHOW COLUMNS IN global_temp.showcolumn4
 -- !query schema
 struct<col_name:string>
 -- !query output
-col 5
 col1
+col 5
 
 
 -- !query
@@ -220,8 +220,8 @@ SHOW COLUMNS IN showcolumn4 FROM global_temp
 -- !query schema
 struct<col_name:string>
 -- !query output
-col 5
 col1
+col 5
 
 
 -- !query

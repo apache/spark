@@ -180,7 +180,7 @@ case class ArraySize(child: Expression)
   examples = """
     Examples:
       > SELECT _FUNC_(map(1, 'a', 2, 'b'));
-       [1,2]
+       [1, 2]
   """,
   group = "map_funcs",
   since = "2.0.0")
@@ -277,9 +277,9 @@ case class MapContainsKey(left: Expression, right: Expression)
   examples = """
     Examples:
       > SELECT _FUNC_(array(1, 2, 3), array(2, 3, 4));
-       [{"0":1,"1":2},{"0":2,"1":3},{"0":3,"1":4}]
+       [{"0":1, "1":2}, {"0":2, "1":3}, {"0":3, "1":4}]
       > SELECT _FUNC_(array(1, 2), array(2, 3), array(3, 4));
-       [{"0":1,"1":2,"2":3},{"0":2,"1":3,"2":4}]
+       [{"0":1, "1":2, "2":3}, {"0":2, "1":3, "2":4}]
   """,
   group = "array_funcs",
   since = "2.4.0")
@@ -470,7 +470,7 @@ object ArraysZip {
   examples = """
     Examples:
       > SELECT _FUNC_(map(1, 'a', 2, 'b'));
-       ["a","b"]
+       [a, b]
   """,
   group = "map_funcs",
   since = "2.0.0")
@@ -503,7 +503,7 @@ case class MapValues(child: Expression)
   examples = """
     Examples:
       > SELECT _FUNC_(map(1, 'a', 2, 'b'));
-       [{"key":1,"value":"a"},{"key":2,"value":"b"}]
+       [{"key":1, "value":a}, {"key":2, "value":b}]
   """,
   group = "map_funcs",
   since = "3.0.0")
@@ -677,7 +677,7 @@ case class MapEntries(child: Expression)
   examples = """
     Examples:
       > SELECT _FUNC_(map(1, 'a', 2, 'b'), map(3, 'c'));
-       {1:"a",2:"b",3:"c"}
+       {1 -> a, 2 -> b, 3 -> c}
   """,
   group = "map_funcs",
   since = "2.4.0")
@@ -804,7 +804,7 @@ case class MapConcat(children: Seq[Expression])
   examples = """
     Examples:
       > SELECT _FUNC_(array(struct(1, 'a'), struct(2, 'b')));
-       {1:"a",2:"b"}
+       {1 -> a, 2 -> b}
   """,
   group = "map_funcs",
   since = "2.4.0")
@@ -1039,7 +1039,7 @@ object ArraySortLike {
   examples = """
     Examples:
       > SELECT _FUNC_(array('b', 'd', null, 'c', 'a'), true);
-       [null,"a","b","c","d"]
+       [NULL, a, b, c, d]
   """,
   group = "array_funcs",
   since = "1.5.0")
@@ -1208,7 +1208,7 @@ case class Shuffle(child: Expression, randomSeed: Option[Long] = None) extends U
       > SELECT _FUNC_('Spark SQL');
        LQS krapS
       > SELECT _FUNC_(array(2, 1, 4, 3));
-       [3,4,1,2]
+       [3, 4, 1, 2]
   """,
   group = "collection_funcs",
   since = "1.5.0",
@@ -1408,9 +1408,9 @@ case class ArrayContains(left: Expression, right: Expression)
   examples = """
     Examples:
       > SELECT _FUNC_(array('b', 'd', 'c', 'a'), 'd');
-       ["d","b","d","c","a"]
+       [d, b, d, c, a]
       > SELECT _FUNC_(array(1, 2, 3, null), null);
-       [null,1,2,3,null]
+       [NULL, 1, 2, 3, NULL]
       > SELECT _FUNC_(CAST(null as Array<Int>), 2);
        NULL
   """,
@@ -1776,9 +1776,9 @@ case class ArraysOverlap(left: Expression, right: Expression)
   examples = """
     Examples:
       > SELECT _FUNC_(array(1, 2, 3, 4), 2, 2);
-       [2,3]
+       [2, 3]
       > SELECT _FUNC_(array(1, 2, 3, 4), -2, 2);
-       [3,4]
+       [3, 4]
   """,
   group = "array_funcs",
   since = "2.4.0")
@@ -2621,7 +2621,7 @@ case class TryElementAt(left: Expression, right: Expression, replacement: Expres
       > SELECT _FUNC_('Spark', 'SQL');
        SparkSQL
       > SELECT _FUNC_(array(1, 2, 3), array(4, 5), array(6));
-       [1,2,3,4,5,6]
+       [1, 2, 3, 4, 5, 6]
   """,
   note = """
     Concat logic for arrays is available since 2.4.0.
@@ -2836,7 +2836,7 @@ case class Concat(children: Seq[Expression]) extends ComplexTypeMergingExpressio
   examples = """
     Examples:
       > SELECT _FUNC_(array(array(1, 2), array(3, 4)));
-       [1,2,3,4]
+       [1, 2, 3, 4]
   """,
   group = "array_funcs",
   since = "2.4.0")
@@ -2972,13 +2972,13 @@ case class Flatten(child: Expression) extends UnaryExpression with NullIntoleran
   examples = """
     Examples:
       > SELECT _FUNC_(1, 5);
-       [1,2,3,4,5]
+       [1, 2, 3, 4, 5]
       > SELECT _FUNC_(5, 1);
-       [5,4,3,2,1]
+       [5, 4, 3, 2, 1]
       > SELECT _FUNC_(to_date('2018-01-01'), to_date('2018-03-01'), interval 1 month);
-       [2018-01-01,2018-02-01,2018-03-01]
+       [2018-01-01, 2018-02-01, 2018-03-01]
       > SELECT _FUNC_(to_date('2018-01-01'), to_date('2018-03-01'), interval '0-1' year to month);
-       [2018-01-01,2018-02-01,2018-03-01]
+       [2018-01-01, 2018-02-01, 2018-03-01]
   """,
   group = "array_funcs",
   since = "2.4.0"
@@ -3570,7 +3570,7 @@ object Sequence {
   examples = """
     Examples:
       > SELECT _FUNC_('123', 2);
-       ["123","123"]
+       [123, 123]
   """,
   group = "array_funcs",
   since = "2.4.0")
@@ -3693,7 +3693,7 @@ case class ArrayRepeat(left: Expression, right: Expression)
   examples = """
     Examples:
       > SELECT _FUNC_(array(1, 2, 3, null, 3), 3);
-       [1,2,null]
+       [1, 2, NULL]
   """,
   group = "array_funcs",
   since = "2.4.0")
@@ -3903,7 +3903,7 @@ trait ArraySetLike {
   examples = """
     Examples:
       > SELECT _FUNC_(array(1, 2, 3, null, 3));
-       [1,2,3,null]
+       [1, 2, 3, NULL]
   """,
   group = "array_funcs",
   since = "2.4.0")
@@ -4103,7 +4103,7 @@ object ArrayBinaryLike {
   examples = """
     Examples:
       > SELECT _FUNC_(array(1, 2, 3), array(1, 3, 5));
-       [1,2,3,5]
+       [1, 2, 3, 5]
   """,
   group = "array_funcs",
   since = "2.4.0")
@@ -4316,7 +4316,7 @@ object ArrayUnion {
   examples = """
     Examples:
       > SELECT _FUNC_(array(1, 2, 3), array(1, 3, 5));
-       [1,3]
+       [1, 3]
   """,
   group = "array_funcs",
   since = "2.4.0")
@@ -4758,9 +4758,9 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryL
   examples = """
     Examples:
       > SELECT _FUNC_(array(1, 2, 3, 4), 5, 5);
-       [1,2,3,4,5]
+       [1, 2, 3, 4, 5]
       > SELECT _FUNC_(array(5, 3, 2, 1), -3, 4);
-       [5,4,3,2,1]
+       [5, 4, 3, 2, 1]
   """,
   group = "array_funcs",
   since = "3.4.0")
@@ -5018,9 +5018,9 @@ case class ArrayInsert(srcArrayExpr: Expression, posExpr: Expression, itemExpr: 
   examples = """
     Examples:
       > SELECT _FUNC_(array(1, 2, 3, null));
-       [1,2,3]
+       [1, 2, 3]
       > SELECT _FUNC_(array("a", "b", "c"));
-       ["a","b","c"]
+       [a, b, c]
   """,
   group = "array_funcs",
   since = "3.4.0")
@@ -5057,9 +5057,9 @@ case class ArrayCompact(child: Expression)
   examples = """
     Examples:
       > SELECT _FUNC_(array('b', 'd', 'c', 'a'), 'd');
-       ["b","d","c","a","d"]
+       [b, d, c, a, d]
       > SELECT _FUNC_(array(1, 2, 3, null), null);
-       [1,2,3,null,null]
+       [1, 2, 3, NULL, NULL]
       > SELECT _FUNC_(CAST(null as Array<Int>), 2);
        NULL
   """,

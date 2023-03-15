@@ -54,7 +54,7 @@ import org.apache.spark.sql.util.NumericHistogram
   examples = """
     Examples:
       > SELECT _FUNC_(col, 5) FROM VALUES (0), (1), (2), (10) AS tab(col);
-       [{"x":0,"y":1.0},{"x":1,"y":1.0},{"x":2,"y":1.0},{"x":10,"y":1.0}]
+       [{"x":0, "y":1.0}, {"x":1, "y":1.0}, {"x":2, "y":1.0}, {"x":10, "y":1.0}]
   """,
   group = "agg_funcs",
   since = "3.3.0")

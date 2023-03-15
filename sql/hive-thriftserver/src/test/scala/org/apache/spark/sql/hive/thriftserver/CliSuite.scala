@@ -30,11 +30,14 @@ import scala.concurrent.duration._
 
 import org.apache.hadoop.hive.cli.CliSessionState
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
+import org.apache.hadoop.hive.metastore.api.{FieldSchema, Schema}
 import org.apache.hadoop.hive.ql.session.SessionState
 
 import org.apache.spark.{ErrorMessageFormat, SparkConf, SparkContext, SparkFunSuite}
 import org.apache.spark.ProcessTestUtils.ProcessOutputCapturer
 import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.sql.{SparkSession, SQLContext}
+import org.apache.spark.sql.catalyst.plans.logical.{ShowTables, ShowViews}
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
 import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.HiveUtils._
@@ -354,7 +357,7 @@ class CliSuite extends SparkFunSuite {
       "INSERT INTO TABLE t1 SELECT key, val FROM sourceTable;"
         -> "",
       "SELECT collect_list(array(val)) FROM t1;"
-        -> """[["val_238"],["val_86"],["val_311"],["val_27"],["val_165"]]""",
+        -> """[["val_238"], ["val_86"], ["val_311"], ["val_27"], ["val_165"]]""",
       "DROP TABLE t1;"
         -> "",
       "DROP TABLE sourceTable;"
@@ -380,7 +383,7 @@ class CliSuite extends SparkFunSuite {
       "INSERT INTO TABLE addJarWithHiveAux SELECT key, val FROM sourceTableForWithHiveAux;"
         -> "",
       "SELECT collect_list(array(val)) FROM addJarWithHiveAux;"
-        -> """[["val_238"],["val_86"],["val_311"],["val_27"],["val_165"]]""",
+        -> """[["val_238"], ["val_86"], ["val_311"], ["val_27"], ["val_165"]]""",
       "DROP TABLE addJarWithHiveAux;"
         -> "",
       "DROP TABLE sourceTableForWithHiveAux;"
@@ -499,7 +502,7 @@ class CliSuite extends SparkFunSuite {
       "INSERT INTO TABLE addJarWithSQL SELECT key, val FROM sourceTableForWithSQL;"
         -> "",
       "SELECT collect_list(array(val)) FROM addJarWithSQL;"
-        -> """[["val_238"],["val_86"],["val_311"],["val_27"],["val_165"]]""",
+        -> """[["val_238"], ["val_86"], ["val_311"], ["val_27"], ["val_165"]]""",
       "DROP TABLE addJarWithSQL;"
         -> "",
       "DROP TABLE sourceTableForWithSQL;"
@@ -831,5 +834,33 @@ class CliSuite extends SparkFunSuite {
         Seq("--conf", s"spark.sql.defaultCatalog=$catalogName", "--database", "SYS"))(
       "SELECT CURRENT_CATALOG();" -> catalogName,
       "SELECT CURRENT_SCHEMA();" -> "SYS")
+  }
+
+  test("SPARK-41259: SparkSQLDriver Output schema and result string should be consistent") {
+    val sparkConf = new SparkConf(loadDefaults = true)
+      .setMaster("local")
+      .setAppName("SPARK-41259")
+    val sparkSession = SparkSession.builder().config(sparkConf).getOrCreate()
+    val sparkContext = sparkSession.sparkContext
+    val sqlContext = new SQLContext(sparkSession)
+    SparkSQLEnv.sparkContext = sparkContext
+    SparkSQLEnv.sqlContext = sqlContext
+    val driver = new SparkSQLDriver()
+
+    driver.run("show tables")
+    val stSchema = driver.getSchema
+
+    val showTablesFieldSchemas = ShowTables.getOutputAttrs
+      .map(a => new FieldSchema(a.name, a.dataType.catalogString, ""))
+    assert(stSchema == new Schema(showTablesFieldSchemas.asJava, null))
+
+    driver.run("show views")
+    val swSchema = driver.getSchema
+
+    val showViewsFieldSchemas = ShowViews.getOutputAttrs
+      .map(a => new FieldSchema(a.name, a.dataType.catalogString, ""))
+    assert(swSchema == new Schema(showViewsFieldSchemas.asJava, null))
+
+    SparkSQLEnv.stop()
   }
 }

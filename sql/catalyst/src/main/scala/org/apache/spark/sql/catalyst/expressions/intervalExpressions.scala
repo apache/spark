@@ -379,9 +379,9 @@ case class MakeInterval(
   examples = """
     Examples:
       > SELECT _FUNC_(1, 12, 30, 01.001001);
-       1 12:30:01.001001000
+       INTERVAL '1 12:30:01.001001' DAY TO SECOND
       > SELECT _FUNC_(2);
-       2 00:00:00.000000000
+       INTERVAL '2 00:00:00' DAY TO SECOND
       > SELECT _FUNC_(100, null, 3);
        NULL
   """,
@@ -455,13 +455,13 @@ case class MakeDTInterval(
   examples = """
     Examples:
       > SELECT _FUNC_(1, 2);
-       1-2
+       INTERVAL '1-2' YEAR TO MONTH
       > SELECT _FUNC_(1, 0);
-       1-0
+       INTERVAL '1-0' YEAR TO MONTH
       > SELECT _FUNC_(-1, 1);
-       -0-11
+       INTERVAL '-0-11' YEAR TO MONTH
       > SELECT _FUNC_(2);
-       2-0
+       INTERVAL '2-0' YEAR TO MONTH
   """,
   since = "3.2.0",
   group = "datetime_funcs")

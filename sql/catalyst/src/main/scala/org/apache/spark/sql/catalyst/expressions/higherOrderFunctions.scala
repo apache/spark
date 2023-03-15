@@ -299,9 +299,9 @@ trait MapBasedSimpleHigherOrderFunction extends SimpleHigherOrderFunction {
   examples = """
     Examples:
       > SELECT _FUNC_(array(1, 2, 3), x -> x + 1);
-       [2,3,4]
+       [2, 3, 4]
       > SELECT _FUNC_(array(1, 2, 3), (x, i) -> x + i);
-       [1,3,5]
+       [1, 3, 5]
   """,
   since = "2.4.0",
   group = "lambda_funcs")
@@ -376,11 +376,11 @@ case class ArrayTransform(
   examples = """
     Examples:
       > SELECT _FUNC_(array(5, 6, 1), (left, right) -> case when left < right then -1 when left > right then 1 else 0 end);
-       [1,5,6]
+       [1, 5, 6]
       > SELECT _FUNC_(array('bc', 'ab', 'dc'), (left, right) -> case when left is null and right is null then 0 when left is null then -1 when right is null then 1 when left < right then 1 when left > right then -1 else 0 end);
-       ["dc","bc","ab"]
+       [dc, bc, ab]
       > SELECT _FUNC_(array('b', 'd', null, 'c', 'a'));
-       ["a","b","c","d",null]
+       [a, b, c, d, NULL]
   """,
   since = "2.4.0",
   group = "lambda_funcs")
@@ -507,7 +507,7 @@ object ArraySort {
   examples = """
     Examples:
       > SELECT _FUNC_(map(1, 0, 2, 2, 3, -1), (k, v) -> k > v);
-       {1:0,3:-1}
+       {1 -> 0, 3 -> -1}
   """,
   since = "3.0.0",
   group = "lambda_funcs")
@@ -563,11 +563,11 @@ case class MapFilter(
   examples = """
     Examples:
       > SELECT _FUNC_(array(1, 2, 3), x -> x % 2 == 1);
-       [1,3]
+       [1, 3]
       > SELECT _FUNC_(array(0, 2, 3), (x, i) -> x > i);
-       [2,3]
+       [2, 3]
       > SELECT _FUNC_(array(0, null, 2, 3, null), x -> x IS NOT NULL);
-       [0,2,3]
+       [0, 2, 3]
   """,
   since = "2.4.0",
   group = "lambda_funcs",
@@ -903,9 +903,9 @@ case class ArrayAggregate(
   examples = """
     Examples:
       > SELECT _FUNC_(map_from_arrays(array(1, 2, 3), array(1, 2, 3)), (k, v) -> k + 1);
-       {2:1,3:2,4:3}
+       {2 -> 1, 3 -> 2, 4 -> 3}
       > SELECT _FUNC_(map_from_arrays(array(1, 2, 3), array(1, 2, 3)), (k, v) -> k + v);
-       {2:1,4:2,6:3}
+       {2 -> 1, 4 -> 2, 6 -> 3}
   """,
   since = "3.0.0",
   group = "lambda_funcs")
@@ -961,9 +961,9 @@ case class TransformKeys(
   examples = """
     Examples:
       > SELECT _FUNC_(map_from_arrays(array(1, 2, 3), array(1, 2, 3)), (k, v) -> v + 1);
-       {1:2,2:3,3:4}
+       {1 -> 2, 2 -> 3, 3 -> 4}
       > SELECT _FUNC_(map_from_arrays(array(1, 2, 3), array(1, 2, 3)), (k, v) -> k + v);
-       {1:2,2:4,3:6}
+       {1 -> 2, 2 -> 4, 3 -> 6}
   """,
   since = "3.0.0",
   group = "lambda_funcs")
@@ -1021,9 +1021,9 @@ case class TransformValues(
   examples = """
     Examples:
       > SELECT _FUNC_(map(1, 'a', 2, 'b'), map(1, 'x', 2, 'y'), (k, v1, v2) -> concat(v1, v2));
-       {1:"ax",2:"by"}
+       {1 -> ax, 2 -> by}
       > SELECT _FUNC_(map('a', 1, 'b', 2), map('b', 3, 'c', 4), (k, v1, v2) -> coalesce(v1, 0) + coalesce(v2, 0));
-       {"a":1,"b":5,"c":4}
+       {a -> 1, b -> 5, c -> 4}
   """,
   since = "3.0.0",
   group = "lambda_funcs")
@@ -1214,11 +1214,11 @@ case class MapZipWith(left: Expression, right: Expression, function: Expression)
   examples = """
     Examples:
       > SELECT _FUNC_(array(1, 2, 3), array('a', 'b', 'c'), (x, y) -> (y, x));
-       [{"y":"a","x":1},{"y":"b","x":2},{"y":"c","x":3}]
+       [{"y":a, "x":1}, {"y":b, "x":2}, {"y":c, "x":3}]
       > SELECT _FUNC_(array(1, 2), array(3, 4), (x, y) -> x + y);
-       [4,6]
+       [4, 6]
       > SELECT _FUNC_(array('a', 'b', 'c'), array('d', 'e', 'f'), (x, y) -> concat(x, y));
-       ["ad","be","cf"]
+       [ad, be, cf]
   """,
   since = "2.4.0",
   group = "lambda_funcs")

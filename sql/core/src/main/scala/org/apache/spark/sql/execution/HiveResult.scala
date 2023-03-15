@@ -50,8 +50,7 @@ object HiveResult {
   }
 
   /**
-   * Returns the result as a hive compatible sequence of strings. This is used in tests and
-   * `SparkSQLDriver` for CLI applications.
+   * Returns the result as a hive compatible sequence of strings. This is used in tests.
    */
   def hiveResultString(executedPlan: SparkPlan): Seq[String] =
     stripRootCommandResult(executedPlan) match {

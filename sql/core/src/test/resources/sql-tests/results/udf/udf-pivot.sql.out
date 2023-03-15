@@ -307,7 +307,7 @@ PIVOT (
   FOR (course, year) IN (('dotNET', 2012), ('Java', 2013))
 )
 -- !query schema
-struct<s:int,{dotNET, 2012}:bigint,{Java, 2013}:bigint>
+struct<s:int,{"col1":dotNET, "col2":2012}:bigint,{"col1":Java, "col2":2013}:bigint>
 -- !query output
 1	15000	NULL
 2	NULL	30000
@@ -429,7 +429,7 @@ PIVOT (
   FOR (course, a) IN (('dotNET', array(1, 1)), ('Java', array(2, 2)))
 )
 -- !query schema
-struct<year:int,{dotNET, [1, 1]}:bigint,{Java, [2, 2]}:bigint>
+struct<year:int,{"col1":dotNET, "col2":[1, 1]}:bigint,{"col1":Java, "col2":[2, 2]}:bigint>
 -- !query output
 2012	15000	NULL
 2013	NULL	30000
@@ -446,7 +446,7 @@ PIVOT (
   FOR s IN ((1, 'a'), (2, 'b'))
 )
 -- !query schema
-struct<year:int,{1, a}:bigint,{2, b}:bigint>
+struct<year:int,{"col1":1, "col2":a}:bigint,{"col1":2, "col2":b}:bigint>
 -- !query output
 2012	35000	NULL
 2013	NULL	78000
@@ -463,7 +463,7 @@ PIVOT (
   FOR (course, s) IN (('dotNET', (1, 'a')), ('Java', (2, 'b')))
 )
 -- !query schema
-struct<year:int,{dotNET, {1, a}}:bigint,{Java, {2, b}}:bigint>
+struct<year:int,{"col1":dotNET, "col2":{"col1":1, "col2":a}}:bigint,{"col1":Java, "col2":{"col1":2, "col2":b}}:bigint>
 -- !query output
 2012	15000	NULL
 2013	NULL	30000

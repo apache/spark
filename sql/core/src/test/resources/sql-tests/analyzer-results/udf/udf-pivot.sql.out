@@ -421,8 +421,8 @@ PIVOT (
   FOR (course, year) IN (('dotNET', 2012), ('Java', 2013))
 )
 -- !query analysis
-Project [s#x, {dotNET, 2012}#xL, {Java, 2013}#xL]
-+- Project [s#x, __pivot_CAST(udf(cast(sum(earnings) as string)) AS BIGINT) AS `CAST(udf(cast(sum(earnings) as string)) AS BIGINT)`#x[0] AS {dotNET, 2012}#xL, __pivot_CAST(udf(cast(sum(earnings) as string)) AS BIGINT) AS `CAST(udf(cast(sum(earnings) as string)) AS BIGINT)`#x[1] AS {Java, 2013}#xL]
+Project [s#x, {"col1":dotNET, "col2":2012}#xL, {"col1":Java, "col2":2013}#xL]
++- Project [s#x, __pivot_CAST(udf(cast(sum(earnings) as string)) AS BIGINT) AS `CAST(udf(cast(sum(earnings) as string)) AS BIGINT)`#x[0] AS {"col1":dotNET, "col2":2012}#xL, __pivot_CAST(udf(cast(sum(earnings) as string)) AS BIGINT) AS `CAST(udf(cast(sum(earnings) as string)) AS BIGINT)`#x[1] AS {"col1":Java, "col2":2013}#xL]
    +- Aggregate [s#x], [s#x, pivotfirst(__pivot_col#x, CAST(udf(cast(sum(earnings) as string)) AS BIGINT)#xL, [dotNET,2012], [Java,2013], 0, 0) AS __pivot_CAST(udf(cast(sum(earnings) as string)) AS BIGINT) AS `CAST(udf(cast(sum(earnings) as string)) AS BIGINT)`#x]
       +- Aggregate [s#x, named_struct(course, course#x, year, year#x)], [s#x, named_struct(course, course#x, year, year#x) AS __pivot_col#x, cast(udf(cast(sum(earnings#x) as string)) as bigint) AS CAST(udf(cast(sum(earnings) as string)) AS BIGINT)#xL]
          +- SubqueryAlias __auto_generated_subquery_name
@@ -582,8 +582,8 @@ PIVOT (
   FOR (course, a) IN (('dotNET', array(1, 1)), ('Java', array(2, 2)))
 )
 -- !query analysis
-Project [year#x, {dotNET, [1, 1]}#xL, {Java, [2, 2]}#xL]
-+- Project [year#x, __pivot_CAST(udf(cast(sum(earnings) as string)) AS BIGINT) AS `CAST(udf(cast(sum(earnings) as string)) AS BIGINT)`#x[0] AS {dotNET, [1, 1]}#xL, __pivot_CAST(udf(cast(sum(earnings) as string)) AS BIGINT) AS `CAST(udf(cast(sum(earnings) as string)) AS BIGINT)`#x[1] AS {Java, [2, 2]}#xL]
+Project [year#x, {"col1":dotNET, "col2":[1, 1]}#xL, {"col1":Java, "col2":[2, 2]}#xL]
++- Project [year#x, __pivot_CAST(udf(cast(sum(earnings) as string)) AS BIGINT) AS `CAST(udf(cast(sum(earnings) as string)) AS BIGINT)`#x[0] AS {"col1":dotNET, "col2":[1, 1]}#xL, __pivot_CAST(udf(cast(sum(earnings) as string)) AS BIGINT) AS `CAST(udf(cast(sum(earnings) as string)) AS BIGINT)`#x[1] AS {"col1":Java, "col2":[2, 2]}#xL]
    +- Aggregate [year#x], [year#x, pivotfirst(__pivot_col#x, CAST(udf(cast(sum(earnings) as string)) AS BIGINT)#xL, [dotNET,[1,1]], [Java,[2,2]], 0, 0) AS __pivot_CAST(udf(cast(sum(earnings) as string)) AS BIGINT) AS `CAST(udf(cast(sum(earnings) as string)) AS BIGINT)`#x]
       +- Aggregate [year#x, named_struct(course, course#x, a, a#x)], [year#x, named_struct(course, course#x, a, a#x) AS __pivot_col#x, cast(udf(cast(sum(earnings#x) as string)) as bigint) AS CAST(udf(cast(sum(earnings) as string)) AS BIGINT)#xL]
          +- SubqueryAlias __auto_generated_subquery_name
@@ -614,8 +614,8 @@ PIVOT (
   FOR s IN ((1, 'a'), (2, 'b'))
 )
 -- !query analysis
-Project [year#x, {1, a}#xL, {2, b}#xL]
-+- Project [year#x, __pivot_CAST(udf(cast(sum(earnings) as string)) AS BIGINT) AS `CAST(udf(cast(sum(earnings) as string)) AS BIGINT)`#x[0] AS {1, a}#xL, __pivot_CAST(udf(cast(sum(earnings) as string)) AS BIGINT) AS `CAST(udf(cast(sum(earnings) as string)) AS BIGINT)`#x[1] AS {2, b}#xL]
+Project [year#x, {"col1":1, "col2":a}#xL, {"col1":2, "col2":b}#xL]
++- Project [year#x, __pivot_CAST(udf(cast(sum(earnings) as string)) AS BIGINT) AS `CAST(udf(cast(sum(earnings) as string)) AS BIGINT)`#x[0] AS {"col1":1, "col2":a}#xL, __pivot_CAST(udf(cast(sum(earnings) as string)) AS BIGINT) AS `CAST(udf(cast(sum(earnings) as string)) AS BIGINT)`#x[1] AS {"col1":2, "col2":b}#xL]
    +- Aggregate [year#x], [year#x, pivotfirst(s#x, CAST(udf(cast(sum(earnings) as string)) AS BIGINT)#xL, [1,a], [2,b], 0, 0) AS __pivot_CAST(udf(cast(sum(earnings) as string)) AS BIGINT) AS `CAST(udf(cast(sum(earnings) as string)) AS BIGINT)`#x]
       +- Aggregate [year#x, s#x], [year#x, s#x, cast(udf(cast(sum(earnings#x) as string)) as bigint) AS CAST(udf(cast(sum(earnings) as string)) AS BIGINT)#xL]
          +- SubqueryAlias __auto_generated_subquery_name
@@ -646,8 +646,8 @@ PIVOT (
   FOR (course, s) IN (('dotNET', (1, 'a')), ('Java', (2, 'b')))
 )
 -- !query analysis
-Project [year#x, {dotNET, {1, a}}#xL, {Java, {2, b}}#xL]
-+- Project [year#x, __pivot_CAST(udf(cast(sum(earnings) as string)) AS BIGINT) AS `CAST(udf(cast(sum(earnings) as string)) AS BIGINT)`#x[0] AS {dotNET, {1, a}}#xL, __pivot_CAST(udf(cast(sum(earnings) as string)) AS BIGINT) AS `CAST(udf(cast(sum(earnings) as string)) AS BIGINT)`#x[1] AS {Java, {2, b}}#xL]
+Project [year#x, {"col1":dotNET, "col2":{"col1":1, "col2":a}}#xL, {"col1":Java, "col2":{"col1":2, "col2":b}}#xL]
++- Project [year#x, __pivot_CAST(udf(cast(sum(earnings) as string)) AS BIGINT) AS `CAST(udf(cast(sum(earnings) as string)) AS BIGINT)`#x[0] AS {"col1":dotNET, "col2":{"col1":1, "col2":a}}#xL, __pivot_CAST(udf(cast(sum(earnings) as string)) AS BIGINT) AS `CAST(udf(cast(sum(earnings) as string)) AS BIGINT)`#x[1] AS {"col1":Java, "col2":{"col1":2, "col2":b}}#xL]
    +- Aggregate [year#x], [year#x, pivotfirst(__pivot_col#x, CAST(udf(cast(sum(earnings) as string)) AS BIGINT)#xL, [dotNET,[1,a]], [Java,[2,b]], 0, 0) AS __pivot_CAST(udf(cast(sum(earnings) as string)) AS BIGINT) AS `CAST(udf(cast(sum(earnings) as string)) AS BIGINT)`#x]
       +- Aggregate [year#x, named_struct(course, course#x, s, s#x)], [year#x, named_struct(course, course#x, s, s#x) AS __pivot_col#x, cast(udf(cast(sum(earnings#x) as string)) as bigint) AS CAST(udf(cast(sum(earnings) as string)) AS BIGINT)#xL]
          +- SubqueryAlias __auto_generated_subquery_name

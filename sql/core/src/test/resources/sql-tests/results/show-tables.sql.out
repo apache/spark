@@ -119,15 +119,6 @@ SHOW TABLE EXTENDED LIKE 'show_t*'
 -- !query schema
 struct<namespace:string,tableName:string,isTemporary:boolean,information:string>
 -- !query output
-	show_t3	true	Table: show_t3
-Created Time [not included in comparison]
-Last Access [not included in comparison]
-Created By [not included in comparison]
-Type: VIEW
-Schema: root
- |-- e: integer (nullable = true)
-
-
 showdb	show_t1	false	Catalog: spark_catalog
 Database: showdb
 Table: show_t1
@@ -158,6 +149,15 @@ Location [not included in comparison]/{warehouse_dir}/showdb.db/show_t2
 Schema: root
  |-- b: string (nullable = true)
  |-- d: integer (nullable = true)
+
+
+	show_t3	true	Table: show_t3
+Created Time [not included in comparison]
+Last Access [not included in comparison]
+Created By [not included in comparison]
+Type: VIEW
+Schema: root
+ |-- e: integer (nullable = true)
 
 
 -- !query

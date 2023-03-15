@@ -170,7 +170,7 @@ case class NullIf(left: Expression, right: Expression, replacement: Expression)
   examples = """
     Examples:
       > SELECT _FUNC_(NULL, array('2'));
-       ["2"]
+       [2]
   """,
   since = "2.0.0",
   group = "conditional_funcs")

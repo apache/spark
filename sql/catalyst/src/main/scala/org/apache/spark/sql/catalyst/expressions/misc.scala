@@ -394,13 +394,13 @@ case class AesEncrypt(
   examples = """
     Examples:
       > SELECT _FUNC_(unhex('83F16B2AA704794132802D248E6BFD4E380078182D1544813898AC97E709B28A94'), '0000111122223333');
-       Spark
+       [53 70 61 72 6B]
       > SELECT _FUNC_(unhex('6E7CA17BBB468D3084B5744BCA729FB7B2B7BCB8E4472847D02670489D95FA97DBBA7D3210'), '0000111122223333', 'GCM');
-       Spark SQL
+       [53 70 61 72 6B 20 53 51 4C]
       > SELECT _FUNC_(unbase64('3lmwu+Mw0H3fi5NDvcu9lg=='), '1234567890abcdef', 'ECB', 'PKCS');
-       Spark SQL
+       [53 70 61 72 6B 20 53 51 4C]
       > SELECT _FUNC_(unbase64('U2FsdGVkX18JQ84pfRUwonUrFzpWQ46vKu4+MkJVFGM='), '1234567890abcdef', 'CBC');
-       Apache Spark
+       [41 70 61 63 68 65 20 53 70 61 72 6B]
   """,
   since = "3.3.0",
   group = "misc_funcs")
@@ -442,7 +442,7 @@ case class AesDecrypt(
   examples = """
     Examples:
       > SELECT _FUNC_(unhex('6E7CA17BBB468D3084B5744BCA729FB7B2B7BCB8E4472847D02670489D95FA97DBBA7D3210'), '0000111122223333', 'GCM');
-       Spark SQL
+       [53 70 61 72 6B 20 53 51 4C]
       > SELECT _FUNC_(unhex('----------468D3084B5744BCA729FB7B2B7BCB8E4472847D02670489D95FA97DBBA7D3210'), '0000111122223333', 'GCM');
        NULL
   """,
