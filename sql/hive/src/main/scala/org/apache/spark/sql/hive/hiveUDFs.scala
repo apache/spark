@@ -147,7 +147,7 @@ private[hive] case class HiveGenericUDF(
 
   @transient
   private val isUDFDeterministic = {
-    val udfType = evaluator.getUDFType
+    val udfType = evaluator.function.getClass.getAnnotation(classOf[HiveUDFType])
     udfType != null && udfType.deterministic() && !udfType.stateful()
   }
 
@@ -216,10 +216,7 @@ class HiveGenericUDFEvaluator(
   with Serializable {
 
   @transient
-  private lazy val function = funcWrapper.createFunction[GenericUDF]()
-
-  @transient
-  private[hive] val getUDFType = function.getClass.getAnnotation(classOf[HiveUDFType])
+  private[hive] lazy val function = funcWrapper.createFunction[GenericUDF]()
 
   @transient
   private[hive] lazy val argumentInspectors = children.map(toInspector)
