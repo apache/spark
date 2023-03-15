@@ -288,7 +288,8 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
       // We might need to do some query canonicalization in the future.
       QueryOutput(
         sql = sql,
-        schema = schema,
+        schema = Some(schema),
+        outputHeader = "query output",
         output = output.mkString("\n").replaceAll("\\s+$", ""))
     }
 
@@ -328,8 +329,10 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
         s"${testCase.name}${System.lineSeparator()}"
     }
 
+    def makeOutput(sql: String, schema: String, output: String): QueryOutput =
+      QueryOutput(sql = sql, schema = Some(schema), outputHeader = "query output", output = output)
     withClue(clue) {
-      readGoldenFileAndCompareResults(testCase.resultFile, outputs)
+      readGoldenFileAndCompareResults(testCase.resultFile, outputs, makeOutput)
     }
   }
 

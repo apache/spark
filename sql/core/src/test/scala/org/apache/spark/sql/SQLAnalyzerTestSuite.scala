@@ -153,11 +153,12 @@ class SQLAnalyzerTestSuite extends QueryTest with SharedSparkSession with SQLHel
 
     // Analyze the SQL queries preparing them for comparison.
     val outputs: Seq[QueryOutput] = queries.map { sql =>
-      val (schema, output) = handleExceptions(getNormalizedAnalyzerOutput(localSparkSession, sql))
+      val (_, output) = handleExceptions(getNormalizedAnalyzerOutput(localSparkSession, sql))
       // We might need to do some query canonicalization in the future.
       QueryOutput(
         sql = sql,
-        schema = schema,
+        schema = None,
+        outputHeader = "results",
         output = output.mkString("\n").replaceAll("\\s+$", ""))
     }
 
@@ -182,8 +183,10 @@ class SQLAnalyzerTestSuite extends QueryTest with SharedSparkSession with SQLHel
     // cases so the version information related to Python was also added.
     val clue: String = s"${testCase.name}${System.lineSeparator()}"
 
+    def makeOutput(sql: String, schema: String, output: String): QueryOutput =
+      QueryOutput(sql = sql, schema = None, outputHeader = "results", output = output)
     withClue(clue) {
-      readGoldenFileAndCompareResults(testCase.resultFile, outputs)
+      readGoldenFileAndCompareResults(testCase.resultFile, outputs, makeOutput)
     }
   }
 

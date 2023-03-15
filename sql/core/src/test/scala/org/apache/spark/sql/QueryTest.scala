@@ -231,14 +231,21 @@ abstract class QueryTest extends PlanTest {
   }
 
   /** A single SQL query's output. */
-  protected case class QueryOutput(sql: String, schema: String, output: String) {
+  protected case class QueryOutput(
+      sql: String,
+      schema: Option[String],
+      outputHeader: String,
+      output: String) {
     override def toString: String = {
       // We are explicitly not using multi-line string due to stripMargin removing "|" in output.
+      val schemaString = schema.map { str =>
+        s"-- !query schema\n" +
+          str + "\n"
+      }.getOrElse("")
       s"-- !query\n" +
         sql + "\n" +
-        s"-- !query schema\n" +
-        schema + "\n" +
-        s"-- !query output\n" +
+        schemaString +
+        s"-- !$outputHeader\n" +
         output
     }
   }
@@ -247,7 +254,10 @@ abstract class QueryTest extends PlanTest {
    * Consumes contents from a single golden file and compares the expected results against the
    * output of running a query.
    */
-  def readGoldenFileAndCompareResults(resultFile: String, outputs: Seq[QueryOutput]): Unit = {
+  def readGoldenFileAndCompareResults(
+      resultFile: String,
+      outputs: Seq[QueryOutput],
+      makeOutput: (String, String, String) => QueryOutput): Unit = {
     // Read back the golden file.
     val expectedOutputs: Seq[QueryOutput] = {
       val goldenOutput = fileToString(new File(resultFile))
@@ -258,11 +268,10 @@ abstract class QueryTest extends PlanTest {
         s"Expected ${outputs.size * 3 + 1} blocks in result file but got ${segments.size}. " +
           s"Try regenerate the result files.")
       Seq.tabulate(outputs.size) { i =>
-        QueryOutput(
-          sql = segments(i * 3 + 1).trim,
-          schema = segments(i * 3 + 2).trim,
-          output = segments(i * 3 + 3).replaceAll("\\s+$", "")
-        )
+        makeOutput(
+          segments(i * 3 + 1).trim, // SQL
+          segments(i * 3 + 2).trim, // Schema
+          segments(i * 3 + 3).replaceAll("\\s+$", "")) // Output
       }
     }
 
