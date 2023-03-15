@@ -1832,8 +1832,10 @@ abstract class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter 
     var stderr = "http:yarnAmHost:2453/con2/stderr"
     var logUrlMap: Map[String, String] = Map("stdout" -> stdout,
       "stderr" -> stderr)
+    var attributesMap: Map[String, String] = Map("CLUSTER_ID" -> "yarn-1",
+      "USER" -> "a", "NM_HOST" -> "yarnAmHost", "NM_PORT" -> "2453")
     var hostport = "yarnAmHost:2453"
-    var info = new MiscellaneousProcessDetails(hostport, 1, logUrlMap)
+    var info = new MiscellaneousProcessDetails(hostport, 1, logUrlMap, attributesMap)
     listener.onOtherEvent(SparkListenerMiscellaneousProcessAdded(123678L, processId, info))
     checkInfoPopulated(listener, logUrlMap, processId)
 
@@ -1843,8 +1845,10 @@ abstract class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter 
     stderr = "http:yarnAmHost:2451/con2/stderr"
     logUrlMap = Map("stdout" -> stdout,
       "stderr" -> stderr)
+    attributesMap = Map("CLUSTER_ID" -> "yarn-1",
+      "USER" -> "a", "NM_HOST" -> "yarnAmHost", "NM_PORT" -> "2451")
     hostport = "yarnAmHost:2451"
-    info = new MiscellaneousProcessDetails(hostport, 1, logUrlMap)
+    info = new MiscellaneousProcessDetails(hostport, 1, logUrlMap, attributesMap)
     listener.onOtherEvent(SparkListenerMiscellaneousProcessAdded(123678L, processId, info))
     checkInfoPopulated(listener, logUrlMap, processId)
   }

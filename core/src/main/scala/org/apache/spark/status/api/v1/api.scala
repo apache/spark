@@ -542,4 +542,5 @@ class ProcessSummary private[spark](
      val totalCores: Int,
      val addTime: Date,
      val removeTime: Option[Date],
-     val processLogs: Map[String, String])
+     val processLogs: Map[String, String],
+     val attributes: Map[String, String] = Map.empty)

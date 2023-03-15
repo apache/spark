@@ -346,6 +346,7 @@ message ProcessSummary {
   int64 add_time = 5;
   optional int64 remove_time = 6;
   map<string, string> process_logs = 7;
+  map<string, string> attributes = 8;
 }
 
 message ProcessSummaryWrapper {

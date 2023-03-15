@@ -51,6 +51,15 @@ private[spark] class HistoryAppStatusStore(
     }
   }
 
+  override def miscellaneousProcessList(activeOnly: Boolean): Seq[v1.ProcessSummary] = {
+    val processList = super.miscellaneousProcessList(activeOnly)
+    if (logUrlPattern.nonEmpty) {
+      processList.map(replaceProcessLogUrls)
+    } else {
+      processList
+    }
+  }
+
   override def executorSummary(executorId: String): v1.ExecutorSummary = {
     val execSummary = super.executorSummary(executorId)
     if (logUrlPattern.nonEmpty) {
@@ -78,4 +87,15 @@ private[spark] class HistoryAppStatusStore(
       source.resourceProfileId, source.isExcluded, source.excludedInStages)
   }
 
+  private def replaceProcessLogUrls(process: v1.ProcessSummary): v1.ProcessSummary = {
+    val newLogUrlMap = logUrlHandler.applyPattern(process.processLogs, process.attributes)
+    replaceProcessLogs(process, newLogUrlMap)
+  }
+
+  private def replaceProcessLogs(
+      source: v1.ProcessSummary,
+      newProcessLogs: Map[String, String]): v1.ProcessSummary = {
+    new v1.ProcessSummary(source.id, source.hostPort, source.isActive, source.totalCores,
+      source.addTime, source.removeTime, newProcessLogs, source.attributes)
+  }
 }

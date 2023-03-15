@@ -53,6 +53,9 @@ class ProcessSummaryWrapperSerializer extends ProtobufSerDe[ProcessSummaryWrappe
     info.processLogs.foreach { case (k, v) =>
       builder.putProcessLogs(k, v)
     }
+    info.attributes.foreach { case (k, v) =>
+      builder.putAttributes(k, v)
+    }
     builder.build()
   }
 
@@ -65,7 +68,12 @@ class ProcessSummaryWrapperSerializer extends ProtobufSerDe[ProcessSummaryWrappe
       totalCores = info.getTotalCores,
       addTime = new Date(info.getAddTime),
       removeTime = removeTime,
-      processLogs = info.getProcessLogsMap.asScala.toMap
+      processLogs = info.getProcessLogsMap.asScala.toMap,
+      attributes = if (info.getAttributes != null) {
+        info.getAttributes.asScala.toMap
+      } else {
+        Map.empty
+      }
     )
   }
 }

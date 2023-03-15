@@ -1029,6 +1029,7 @@ private[spark] class LiveMiscellaneousProcess(val processId: String,
   var totalCores = 0
   val addTime = new Date(creationTime)
   var processLogs = Map[String, String]()
+  var attributes = Map[String, String]()
 
   override protected def doUpdate(): Any = {
 
@@ -1039,7 +1040,8 @@ private[spark] class LiveMiscellaneousProcess(val processId: String,
       totalCores,
       addTime,
       None,
-      processLogs)
+      processLogs,
+      attributes)
     new ProcessSummaryWrapper(info)
   }
 }

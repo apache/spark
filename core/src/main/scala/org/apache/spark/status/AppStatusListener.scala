@@ -1441,6 +1441,7 @@ private[spark] class AppStatusListener(
     val miscellaneousProcess =
       getOrCreateOtherProcess(processInfoEvent.processId, processInfoEvent.time)
     miscellaneousProcess.processLogs = processInfo.logUrlInfo
+    miscellaneousProcess.attributes = processInfo.attributes
     miscellaneousProcess.hostPort = processInfo.hostPort
     miscellaneousProcess.isActive = true
     miscellaneousProcess.totalCores = processInfo.cores
