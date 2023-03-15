@@ -114,7 +114,7 @@ object ConstantPropagation extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformUpWithPruning(
     _.containsAllPatterns(LITERAL, FILTER), ruleId) {
     case f: Filter =>
-      f.mapExpressions(traverse(_, replaceChildren = true, nullIsFalse = true, None))
+      f.mapExpressions(traverse(_, nullIsFalse = true, None))
   }
 
   // The keys are always canonicalized `AttributeReference`s, but it is easier to use `Expression`
@@ -132,7 +132,6 @@ object ConstantPropagation extends Rule[LogicalPlan] {
    * - On matching [[Or]] or [[Not]], recursively traverse each children, propagate empty mapping.
    * - Otherwise, stop traversal and propagate empty mapping.
    * @param condition condition to be traversed
-   * @param replaceChildren whether to replace attributes with constant values in children
    * @param nullIsFalse whether a boolean expression result can be considered to false e.g. in the
    *                    case of `WHERE e`, null result of expression `e` means the same as if it
    *                    resulted false
@@ -142,7 +141,6 @@ object ConstantPropagation extends Rule[LogicalPlan] {
    */
   private def traverse(
       condition: Expression,
-      replaceChildren: Boolean,
       nullIsFalse: Boolean,
       equalityPredicates: Option[EqualityPredicates]): Expression =
     condition match {
@@ -163,18 +161,15 @@ object ConstantPropagation extends Rule[LogicalPlan] {
         equalityPredicates.foreach(_ += right.canonicalized -> (left, e))
         e
       case a @ And(left, right) =>
-        val newEqualityPredicates: Option[EqualityPredicates] = if (replaceChildren) {
-          Some(mutable.Map.empty)
-        } else {
-          equalityPredicates
-        }
-        val newLeft = traverse(left, replaceChildren = false, nullIsFalse, newEqualityPredicates)
-        val newRight = traverse(right, replaceChildren = false, nullIsFalse, newEqualityPredicates)
+        val newEqualityPredicates: Option[EqualityPredicates] =
+          equalityPredicates.orElse(Some(mutable.Map.empty))
+        val newLeft = traverse(left, nullIsFalse, newEqualityPredicates)
+        val newRight = traverse(right, nullIsFalse, newEqualityPredicates)
         // We could recognize when conflicting constants are coming from the left and right sides
         // and immediately shortcut the `And` expression to `Literal.FalseLiteral`, but that case is
         // not so common and actually it is the job of `ConstantFolding` and `BooleanSimplification`
         // rules to deal with those optimizations.
-        a.withNewChildren(if (newEqualityPredicates.get.nonEmpty && replaceChildren) {
+        a.withNewChildren(if (equalityPredicates.isEmpty && newEqualityPredicates.get.nonEmpty) {
           val replacedNewLeft = replaceConstants(newLeft, newEqualityPredicates.get)
           val replacedNewRight = replaceConstants(newRight, newEqualityPredicates.get)
           Seq(replacedNewLeft, replacedNewRight)
@@ -183,10 +178,10 @@ object ConstantPropagation extends Rule[LogicalPlan] {
         })
       case o: Or =>
         // Ignore the EqualityPredicates from children since they are only propagated through And.
-        o.mapChildren(traverse(_, replaceChildren = true, nullIsFalse, None))
+        o.mapChildren(traverse(_, nullIsFalse, None))
       case n: Not =>
         // Ignore the EqualityPredicates from children since they are only propagated through And.
-        n.mapChildren(traverse(_, replaceChildren = true, nullIsFalse = false, None))
+        n.mapChildren(traverse(_, nullIsFalse = false, None))
       case o => o
     }
 
