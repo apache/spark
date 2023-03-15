@@ -126,6 +126,7 @@ class DatetimeMethods:
         -------
         DataFrame
             With columns year, week and day.
+
         Examples
         --------
         >>> dfs = ps.from_pandas(pd.date_range(start='2019-12-29', freq='D', periods=4).to_series())
