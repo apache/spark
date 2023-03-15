@@ -236,7 +236,7 @@ class HiveGenericUDFEvaluator(
   private[hive] def setArg(index: Int, arg: Any): Unit =
     deferredObjects(index).asInstanceOf[DeferredObjectAdapter].set(arg)
 
-  private[hive] def evaluate(): Any = unwrapper(function.evaluate(deferredObjects))
+  def evaluate(): Any = unwrapper(function.evaluate(deferredObjects))
 }
 
 /**
