@@ -47,6 +47,13 @@ object Connect {
       .bytesConf(ByteUnit.MiB)
       .createWithDefaultString("4m")
 
+  val CONNECT_GRPC_MAX_INBOUND_MESSAGE_SIZE =
+    ConfigBuilder("spark.connect.grpc.maxInboundMessageSize")
+      .doc("Set the default inbound message size for the GRPC requests.")
+      .version("3.4.0")
+      .bytesConf(ByteUnit.MiB)
+      .createWithDefault(ConnectCommon.CONNECT_GRPC_MAX_MESSAGE_SIZE)
+
   val CONNECT_EXTENSIONS_RELATION_CLASSES =
     ConfigBuilder("spark.connect.extensions.relation.classes")
       .doc("""
