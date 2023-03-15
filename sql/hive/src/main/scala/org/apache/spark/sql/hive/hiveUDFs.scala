@@ -153,8 +153,7 @@ private[hive] case class HiveGenericUDF(
 
   override def eval(input: InternalRow): Any = {
     children.zipWithIndex.map {
-      case (child, idx) =>
-        evaluator.setArg(idx, child.eval(input))
+      case (child, idx) => evaluator.setArg(idx, child.eval(input))
     }
     evaluator.evaluate()
   }
