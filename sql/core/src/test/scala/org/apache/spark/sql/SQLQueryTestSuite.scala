@@ -311,19 +311,17 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
           val (_, output) =
             handleExceptions(getNormalizedQueryAnalysisResult(localSparkSession, sql))
           // We might need to do some query canonicalization in the future.
-          QueryOutput(
+          AnalyzerOutput(
             sql = sql,
             schema = None,
-            outputHeader = "query analysis",
             output = output.mkString("\n").replaceAll("\\s+$", ""))
         case _ =>
           val (schema, output) =
             handleExceptions(getNormalizedQueryExecutionResult(localSparkSession, sql))
           // We might need to do some query canonicalization in the future.
-          QueryOutput(
+          ExecutionOutput(
             sql = sql,
             schema = Some(schema),
-            outputHeader = "query output",
             output = output.mkString("\n").replaceAll("\\s+$", ""))
       }
     }
@@ -364,11 +362,13 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
         s"${testCase.name}${System.lineSeparator()}"
     }
 
-    def makeOutput(sql: String, schema: String, output: String): QueryOutput =
-      QueryOutput(sql = sql, schema = Some(schema), outputHeader = "query output", output = output)
     withClue(clue) {
-      readGoldenFileAndCompareResults(
-        testCase.resultFile, outputs, makeOutput, includeSchema = true)
+      testCase match {
+        case _: AnalyzerTestCase =>
+          readGoldenFileAndCompareResults(testCase.resultFile, outputs, AnalyzerOutput)
+        case _ =>
+          readGoldenFileAndCompareResults(testCase.resultFile, outputs, ExecutionOutput)
+      }
     }
   }
 

@@ -231,23 +231,43 @@ abstract class QueryTest extends PlanTest {
   }
 
   /** A single SQL query's output. */
-  protected case class QueryOutput(
+  protected trait QueryOutput {
+    def sql: String
+    def schema: Option[String]
+    def output: String
+    def numSegments: Int
+  }
+
+  /** A single SQL query's output. */
+  protected case class ExecutionOutput(
       sql: String,
       schema: Option[String],
-      outputHeader: String,
-      output: String) {
+      output: String) extends QueryOutput {
     override def toString: String = {
       // We are explicitly not using multi-line string due to stripMargin removing "|" in output.
-      val schemaString = schema.map { str =>
-        s"-- !query schema\n" +
-          str + "\n"
-      }.getOrElse("")
       s"-- !query\n" +
-        sql + "\n" +
-        schemaString +
-        s"-- !$outputHeader\n" +
-        output
+      sql + "\n" +
+      s"-- !query schema\n" +
+      schema.get + "\n" +
+      s"-- !query output\n" +
+      output
     }
+    override def numSegments: Int = 3
+  }
+
+  /** A single SQL query's analysis results. */
+  protected case class AnalyzerOutput(
+      sql: String,
+      schema: Option[String],
+      output: String) extends QueryOutput {
+    override def toString: String = {
+      // We are explicitly not using multi-line string due to stripMargin removing "|" in output.
+      s"-- !query\n" +
+      sql + "\n" +
+      s"-- !query analysis\n" +
+      output
+    }
+    override def numSegments: Int = 2
   }
 
   /**
@@ -257,30 +277,31 @@ abstract class QueryTest extends PlanTest {
   def readGoldenFileAndCompareResults(
       resultFile: String,
       outputs: Seq[QueryOutput],
-      makeOutput: (String, String, String) => QueryOutput,
-      includeSchema: Boolean): Unit = {
+      makeOutput: (String, Option[String], String) => QueryOutput): Unit = {
     // Read back the golden file.
     val expectedOutputs: Seq[QueryOutput] = {
       val goldenOutput = fileToString(new File(resultFile))
       val segments = goldenOutput.split("-- !query.*\n")
 
-      // each query has 3 segments if there is a schema section, else 2, plus the header
-      val numSegments = if (includeSchema) 3 else 2
-      assert(segments.size == outputs.size * numSegments + 1,
-        s"Expected ${outputs.size * numSegments + 1} blocks in result file but got " +
+      val numSegments = outputs.map(_.numSegments).sum + 1
+      assert(segments.size == numSegments,
+        s"Expected $numSegments blocks in result file but got " +
           s"${segments.size}. Try regenerate the result files.")
-      Seq.tabulate(outputs.size) { i =>
-        if (includeSchema) {
+      var curSegment = 0
+      outputs.map { output =>
+        val result = if (output.numSegments == 3) {
           makeOutput(
-            segments(i * numSegments + 1).trim, // SQL
-            segments(i * numSegments + 2).trim, // Schema
-            segments(i * numSegments + 3).replaceAll("\\s+$", "")) // Output
+            segments(curSegment + 1).trim, // SQL
+            Some(segments(curSegment + 2).trim), // Schema
+            segments(curSegment + 3).replaceAll("\\s+$", "")) // Output
         } else {
           makeOutput(
-            segments(i * numSegments + 1).trim, // SQL
-            "", // Schema
-            segments(i * numSegments + 2).replaceAll("\\s+$", "")) // Output
+            segments(curSegment + 1).trim, // SQL
+            None, // Schema
+            segments(curSegment + 2).replaceAll("\\s+$", "")) // Output
         }
+        curSegment += output.numSegments
+        result
       }
     }
 
