@@ -20,8 +20,9 @@ package org.apache.spark.sql
 import java.io.File
 import java.util.TimeZone
 
-import org.scalatest.Assertions
 import scala.collection.JavaConverters._
+
+import org.scalatest.Assertions
 
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.util._
