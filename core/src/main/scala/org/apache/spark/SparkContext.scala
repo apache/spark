@@ -475,6 +475,9 @@ class SparkContext(config: SparkConf) extends Logging {
     // If running the REPL, register the repl's output dir with the file server.
     _conf.getOption("spark.repl.class.outputDir").orElse {
       if (_conf.get(PLUGINS).contains("org.apache.spark.sql.connect.SparkConnectPlugin")) {
+        // For Spark Connect, we piggyback on the existing REPL integration to load class
+        // files on the executors.
+        // This is a temporary intermediate step due to unavailable classloader isolation.
         val classDirectory = sparkConnectArtifactDirectory.toPath.resolve("classes")
         Files.createDirectories(classDirectory)
         Some(classDirectory.toString)
