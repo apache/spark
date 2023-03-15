@@ -544,6 +544,8 @@ class RocksDBSuite extends SparkFunSuite {
       assert(metrics.nativeOpsMetrics("writerStallDuration") >= 0)
       assert(metrics.nativeOpsMetrics("totalBytesReadByCompaction") >= 0)
       assert(metrics.nativeOpsMetrics("totalBytesWrittenByCompaction") >=0)
+
+      assert(metrics.nativeOpsMetrics("totalBytesWrittenByFlush") >= 0)
     }
 
     withTempDir { dir =>
