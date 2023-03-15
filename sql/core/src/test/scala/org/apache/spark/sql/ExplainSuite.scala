@@ -18,10 +18,12 @@
 package org.apache.spark.sql
 
 import org.apache.spark.sql.catalyst.plans.physical.UnknownPartitioning
+import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.adaptive.{DisableAdaptiveExecutionSuite, EnableAdaptiveExecutionSuite}
 import org.apache.spark.sql.execution.datasources.SaveIntoDataSourceCommand
 import org.apache.spark.sql.execution.exchange.{ReusedExchangeExec, ShuffleExchangeExec}
+import org.apache.spark.sql.execution.joins.SortMergeJoinExec
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.TestOptionsSource
@@ -795,6 +797,107 @@ class ExplainSuiteAE extends ExplainSuiteHelper with EnableAdaptiveExecutionSuit
 
     assert(results.contains(expectedTree))
     assert(results.contains("(1) ReusedExchange [Reuses operator id: 3]"))
+  }
+
+  test("SPARK-42753: Two ReusedExchange Sharing Same Subtree") {
+    // Simulate a simplified subtree with a two ReusedExchange reusing the same exchange
+    // Only one exchange node should be printed
+    val exchange = ShuffleExchangeExec(UnknownPartitioning(10),
+      RangeExec(org.apache.spark.sql.catalyst.plans.logical.Range(0, 1000, 1, 10)))
+    val reused1 = ReusedExchangeExec(Seq.empty, exchange)
+    val reused2 = ReusedExchangeExec(Seq.empty, exchange)
+    val join = SortMergeJoinExec(Seq.empty, Seq.empty, Inner, None, reused1, reused2)
+
+    var results = ""
+    def appendStr(str: String): Unit = {
+      results = results + str
+    }
+
+    ExplainUtils.processPlan[SparkPlan](join, appendStr(_))
+
+    val expectedTree = """|SortMergeJoin Inner (3)
+                          |:- ReusedExchange (1)
+                          |:  +- Exchange (5)
+                          |:     +- Range (4)
+                          |+- ReusedExchange (2)
+                          |
+                          |
+                          |(1) ReusedExchange [Reuses operator id: 5]
+                          |Output: []
+                          |
+                          |(4) Range
+                          |Output [1]: [id#0L]
+                          |Arguments: Range (0, 1000, step=1, splits=Some(10))
+                          |
+                          |(5) Exchange
+                          |Input [1]: [id#0L]
+                          |Arguments: UnknownPartitioning(10), ENSURE_REQUIREMENTS, [plan_id=1]
+                          |
+                          |(2) ReusedExchange [Reuses operator id: 5]
+                          |Output: []
+                          |
+                          |(3) SortMergeJoin
+                          |Join type: Inner
+                          |Join condition: None
+                          |""".stripMargin
+    assert(results == expectedTree)
+  }
+
+  test("SPARK-42753: Correctly separate two ReusedExchange not sharing subtree") {
+    // Simulate two ReusedExchanges reusing two different Exchanges that appear similar
+    // The two exchanges should have separate IDs and printed separately
+    val exchange1 = ShuffleExchangeExec(UnknownPartitioning(10),
+      RangeExec(org.apache.spark.sql.catalyst.plans.logical.Range(0, 1000, 1, 10)))
+    val reused1 = ReusedExchangeExec(Seq.empty, exchange1)
+    val exchange2 = ShuffleExchangeExec(UnknownPartitioning(10),
+      RangeExec(org.apache.spark.sql.catalyst.plans.logical.Range(0, 1000, 1, 10)))
+    val reused2 = ReusedExchangeExec(Seq.empty, exchange2)
+    val join = SortMergeJoinExec(Seq.empty, Seq.empty, Inner, None, reused1, reused2)
+
+    var results = ""
+    def appendStr(str: String): Unit = {
+      results = results + str
+    }
+
+    ExplainUtils.processPlan[SparkPlan](join, appendStr(_))
+
+    val expectedTree = """|SortMergeJoin Inner (3)
+                          |:- ReusedExchange (1)
+                          |:  +- Exchange (7)
+                          |:     +- Range (6)
+                          |+- ReusedExchange (2)
+                          |   +- Exchange (5)
+                          |      +- Range (4)
+                          |
+                          |
+                          |(1) ReusedExchange [Reuses operator id: 7]
+                          |Output: []
+                          |
+                          |(6) Range
+                          |Output [1]: [id#0L]
+                          |Arguments: Range (0, 1000, step=1, splits=Some(10))
+                          |
+                          |(7) Exchange
+                          |Input [1]: [id#0L]
+                          |Arguments: UnknownPartitioning(10), ENSURE_REQUIREMENTS, [plan_id=1]
+                          |
+                          |(2) ReusedExchange [Reuses operator id: 5]
+                          |Output: []
+                          |
+                          |(4) Range
+                          |Output [1]: [id#1L]
+                          |Arguments: Range (0, 1000, step=1, splits=Some(10))
+                          |
+                          |(5) Exchange
+                          |Input [1]: [id#1L]
+                          |Arguments: UnknownPartitioning(10), ENSURE_REQUIREMENTS, [plan_id=4]
+                          |
+                          |(3) SortMergeJoin
+                          |Join type: Inner
+                          |Join condition: None
+                          |""".stripMargin
+
+    assert(results == expectedTree)
   }
 }
 
