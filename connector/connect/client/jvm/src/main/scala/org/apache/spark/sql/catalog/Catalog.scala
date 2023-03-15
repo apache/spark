@@ -79,7 +79,7 @@ abstract class Catalog {
    * Returns a list of functions registered in the specified database (namespace) (the name can be
    * qualified with catalog). This includes all built-in and temporary functions.
    *
-   * @since 2.0.0
+   * @since 3.4.0
    */
   @throws[AnalysisException]("database does not exist")
   def listFunctions(dbName: String): Dataset[Function]
@@ -601,7 +601,7 @@ abstract class Catalog {
    * that contains the given data source path. Path matching is by prefix, i.e. "/" would
    * invalidate everything that is cached.
    *
-   * @since 2.0.0
+   * @since 3.4.0
    */
   def refreshByPath(path: String): Unit
 
