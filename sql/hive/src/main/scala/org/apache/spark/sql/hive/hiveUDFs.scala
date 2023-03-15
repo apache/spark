@@ -233,7 +233,7 @@ class HiveGenericUDFEvaluator(
   @transient
   private lazy val unwrapper: Any => Any = unwrapperFor(returnInspector)
 
-  private[hive] def setArg(index: Int, arg: Any): Unit =
+  def setArg(index: Int, arg: Any): Unit =
     deferredObjects(index).asInstanceOf[DeferredObjectAdapter].set(arg)
 
   def evaluate(): Any = unwrapper(function.evaluate(deferredObjects))
