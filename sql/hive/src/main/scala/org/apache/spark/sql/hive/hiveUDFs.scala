@@ -31,7 +31,6 @@ import org.apache.hadoop.hive.ql.udf.generic.GenericUDFUtils.ConversionHelper
 import org.apache.hadoop.hive.serde2.objectinspector.{ConstantObjectInspector, ObjectInspector, ObjectInspectorFactory}
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorFactory.ObjectInspectorOptions
 
-import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
@@ -102,14 +101,7 @@ abstract class HiveUDFEvaluatorBase[UDFType <: AnyRef](
 
   def setArg(index: Int, arg: Any): Unit
 
-  def unwrapper: Any => Any
-
-  def result: Any
-
-  final def evaluate(): Any = {
-    val ret = result
-    unwrapper(ret)
-  }
+  def evaluate(): Any
 
   final def doGenCode(ctx: CodegenContext, ev: ExprCode, dataType: DataType): ExprCode = {
     val refEvaluator = ctx.addReferenceObj("evaluator", this)
@@ -178,15 +170,17 @@ class HiveSimpleUDFEvaluator(
     inputs(index) = wrappers(index)(arg).asInstanceOf[AnyRef]
   }
 
-  override def unwrapper: Any => Any =
+  @transient
+  private lazy val unwrapper: Any => Any =
     unwrapperFor(ObjectInspectorFactory.getReflectionObjectInspector(
       method.getGenericReturnType, ObjectInspectorOptions.JAVA))
 
-  override def result: Any = {
-    FunctionRegistry.invoke(
+  override def evaluate(): Any = {
+    val ret = FunctionRegistry.invoke(
       method,
       function,
       conversionHelper.convertIfNecessary(inputs: _*): _*)
+    unwrapper(ret)
   }
 }
 
@@ -245,54 +239,13 @@ private[hive] case class HiveGenericUDF(
     copy(children = newChildren)
 
   protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val refEvaluator = ctx.addReferenceObj("evaluator", evaluator)
-    val evals = children.map(_.genCode(ctx))
-
-    val setValues = evals.zipWithIndex.map {
-      case (eval, i) =>
-        s"""
-           |if (${eval.isNull}) {
-           |  $refEvaluator.setArg($i, null);
-           |} else {
-           |  $refEvaluator.setArg($i, ${eval.value});
-           |}
-           |""".stripMargin
-    }
-
-    val resultType = CodeGenerator.boxedType(dataType)
-    val resultTerm = ctx.freshName("result")
-    ev.copy(code =
-      code"""
-         |${evals.map(_.code).mkString("\n")}
-         |${setValues.mkString("\n")}
-         |$resultType $resultTerm = null;
-         |boolean ${ev.isNull} = false;
-         |try {
-         |  $resultTerm = ($resultType) $refEvaluator.evaluate();
-         |  ${ev.isNull} = $resultTerm == null;
-         |} catch (Throwable e) {
-         |  throw QueryExecutionErrors.failedExecuteUserDefinedFunctionError(
-         |    "${funcWrapper.functionClassName}",
-         |    "${children.map(_.dataType.catalogString).mkString(", ")}",
-         |    "${dataType.catalogString}",
-         |    e);
-         |}
-         |${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
-         |if (!${ev.isNull}) {
-         |  ${ev.value} = $resultTerm;
-         |}
-         |""".stripMargin
-    )
+    evaluator.doGenCode(ctx, ev, dataType)
   }
 }
 
 class HiveGenericUDFEvaluator(
     funcWrapper: HiveFunctionWrapper, children: Seq[Expression])
-  extends HiveInspectors
-  with Serializable {
-
-  @transient
-  lazy val function = funcWrapper.createFunction[GenericUDF]()
+  extends HiveUDFEvaluatorBase[GenericUDF](funcWrapper, children) {
 
   @transient
   private lazy val argumentInspectors = children.map(toInspector)
@@ -313,7 +266,7 @@ class HiveGenericUDFEvaluator(
   def setArg(index: Int, arg: Any): Unit =
     deferredObjects(index).asInstanceOf[DeferredObjectAdapter].set(arg)
 
-  def evaluate(): Any = unwrapper(function.evaluate(deferredObjects))
+  override def evaluate(): Any = unwrapper(function.evaluate(deferredObjects))
 }
 
 /**
