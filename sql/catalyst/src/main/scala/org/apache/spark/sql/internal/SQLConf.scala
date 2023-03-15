@@ -1227,6 +1227,14 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val HIVE_METASTORE_DROP_PARTITION_BY_NAME =
+    buildConf("spark.sql.hive.dropPartitionByName.enabled")
+      .doc("When true, Spark will get partition name rather than partition object " +
+           "to drop partition, which can improve the performance of drop partition.")
+      .version("3.4.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val HIVE_METASTORE_PARTITION_PRUNING =
     buildConf("spark.sql.hive.metastorePartitionPruning")
       .doc("When true, some predicates will be pushed down into the Hive metastore so that " +
@@ -4482,6 +4490,8 @@ class SQLConf extends Serializable with Logging {
   def isOrcSchemaMergingEnabled: Boolean = getConf(ORC_SCHEMA_MERGING_ENABLED)
 
   def verifyPartitionPath: Boolean = getConf(HIVE_VERIFY_PARTITION_PATH)
+
+  def metastoreDropPartitionsByName: Boolean = getConf(HIVE_METASTORE_DROP_PARTITION_BY_NAME)
 
   def metastorePartitionPruning: Boolean = getConf(HIVE_METASTORE_PARTITION_PRUNING)
 

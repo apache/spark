@@ -40,7 +40,7 @@ import org.apache.spark.sql.types._
  *
  * Currently this only handles cases where:
  *   1). `fromType` (of `fromExp`) and `toType` are of numeric types (i.e., short, int, float,
- *     decimal, etc) or boolean type
+ *     decimal, etc), boolean type or datetime type
  *   2). `fromType` can be safely coerced to `toType` without precision loss (e.g., short to int,
  *     int to long, but not long to int, nor int to boolean)
  *
@@ -104,16 +104,15 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
     case l: LogicalPlan =>
       l.transformExpressionsUpWithPruning(
         _.containsAnyPattern(BINARY_COMPARISON, IN, INSET), ruleId) {
-        case e @ (BinaryComparison(_, _) | In(_, _) | InSet(_, _)) => unwrapCast(e)
+        case e @ (BinaryComparison(_, _) | In(_, _) | InSet(_, _)) => unwrapCast(e).getOrElse(e)
       }
   }
 
-  private def unwrapCast(exp: Expression): Expression = exp match {
+  private def unwrapCast(exp: Expression): Option[Expression] = exp match {
     // Not a canonical form. In this case we first canonicalize the expression by swapping the
     // literal and cast side, then process the result and swap the literal and cast again to
     // restore the original order.
-    case BinaryComparison(Literal(_, literalType), Cast(fromExp, toType, _, _))
-        if canImplicitlyCast(fromExp, toType, literalType) =>
+    case BinaryComparison(_: Literal, _: Cast) =>
       def swap(e: Expression): Expression = e match {
         case GreaterThan(left, right) => LessThan(right, left)
         case GreaterThanOrEqual(left, right) => LessThanOrEqual(right, left)
@@ -124,14 +123,19 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
         case _ => e
       }
 
-      swap(unwrapCast(swap(exp)))
+      unwrapCast(swap(exp)).map(swap)
 
     // In case both sides have numeric type, optimize the comparison by removing casts or
     // moving cast to the literal side.
     case be @ BinaryComparison(
       Cast(fromExp, toType: NumericType, _, _), Literal(value, literalType))
-        if canImplicitlyCast(fromExp, toType, literalType) =>
-      simplifyNumericComparison(be, fromExp, toType, value)
+        if canImplicitlyCast(fromExp, toType, literalType) && value != null =>
+      Some(simplifyNumericComparison(be, fromExp, toType, value))
+
+    case be @ BinaryComparison(
+      Cast(fromExp, _, timeZoneId, evalMode), date @ Literal(value, DateType))
+        if AnyTimestampType.acceptsType(fromExp.dataType) && value != null =>
+      Some(unwrapDateToTimestamp(be, fromExp, date, timeZoneId, evalMode))
 
     // As the analyzer makes sure that the list of In is already of the same data type, then the
     // rule can simply check the first literal in `in.list` can implicitly cast to `toType` or not,
@@ -141,17 +145,17 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
     // 2. this rule only handles the case when both `fromExp` and value in `in.list` are of numeric
     // type.
     // 3. this rule doesn't optimize In when `in.list` contains an expression that is not literal.
-    case in @ In(Cast(fromExp, toType: NumericType, _, _), list @ Seq(firstLit, _*))
+    case in @ In(Cast(fromExp, toType: NumericType, tz, mode), list @ Seq(firstLit, _*))
       if canImplicitlyCast(fromExp, toType, firstLit.dataType) && in.inSetConvertible =>
 
       val buildIn = {
         (nullList: ArrayBuffer[Literal], canCastList: ArrayBuffer[Literal]) =>
           // cast null value to fromExp.dataType, to make sure the new return list is in the same
           // data type.
-          val newList = nullList.map(lit => Cast(lit, fromExp.dataType)) ++ canCastList
+          val newList = nullList.map(lit => Cast(lit, fromExp.dataType, tz, mode)) ++ canCastList
           In(fromExp, newList.toSeq)
       }
-      simplifyIn(fromExp, toType, list, buildIn).getOrElse(exp)
+      simplifyIn(fromExp, toType, list, buildIn)
 
     // The same with `In` expression, the analyzer makes sure that the hset of InSet is already of
     // the same data type, so simply check `fromExp.dataType` can implicitly cast to `toType` and
@@ -165,9 +169,9 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
         fromExp,
         toType,
         hset.map(v => Literal.create(v, toType)).toSeq,
-        buildInSet).getOrElse(exp)
+        buildInSet)
 
-    case _ => exp
+    case _ => None
   }
 
   /**
@@ -290,6 +294,34 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
         case LessThan(_, _) | LessThanOrEqual(_, _) => LessThanOrEqual(fromExp, lit)
         case _ => exp
       }
+    }
+  }
+
+  /**
+   * Move the cast to the literal side, because we can only get the minimum value of timestamp,
+   * so some BinaryComparison needs to be changed,
+   * such as CAST(ts AS date) > DATE '2023-01-01' ===> ts >= TIMESTAMP '2023-01-02 00:00:00'
+   */
+  private def unwrapDateToTimestamp(
+      exp: BinaryComparison,
+      fromExp: Expression,
+      date: Literal,
+      tz: Option[String],
+      evalMode: EvalMode.Value): Expression = {
+    val dateAddOne = DateAdd(date, Literal(1, IntegerType))
+    exp match {
+      case _: GreaterThan =>
+        GreaterThanOrEqual(fromExp, Cast(dateAddOne, fromExp.dataType, tz, evalMode))
+      case _: GreaterThanOrEqual =>
+        GreaterThanOrEqual(fromExp, Cast(date, fromExp.dataType, tz, evalMode))
+      case Equality(_, _) =>
+        And(GreaterThanOrEqual(fromExp, Cast(date, fromExp.dataType, tz, evalMode)),
+          LessThan(fromExp, Cast(dateAddOne, fromExp.dataType, tz, evalMode)))
+      case _: LessThan =>
+        LessThan(fromExp, Cast(date, fromExp.dataType, tz, evalMode))
+      case _: LessThanOrEqual =>
+        LessThan(fromExp, Cast(dateAddOne, fromExp.dataType, tz, evalMode))
+      case _ => exp
     }
   }
 

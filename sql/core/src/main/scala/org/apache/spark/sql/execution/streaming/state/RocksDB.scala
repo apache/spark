@@ -403,7 +403,9 @@ class RocksDB(
       /** Number of bytes read during compaction */
       "totalBytesReadByCompaction" -> COMPACT_READ_BYTES,
       /** Number of bytes written during compaction */
-      "totalBytesWrittenByCompaction" -> COMPACT_WRITE_BYTES
+      "totalBytesWrittenByCompaction" -> COMPACT_WRITE_BYTES,
+      /** Number of bytes written during flush */
+      "totalBytesWrittenByFlush" -> FLUSH_WRITE_BYTES
     ).toMap
     val nativeOpsMetrics = nativeOpsMetricTickers.mapValues { typ =>
       nativeStats.getTickerCount(typ)
@@ -580,7 +582,8 @@ object RocksDBConf {
   private val COMPACT_ON_COMMIT_CONF = SQLConfEntry("compactOnCommit", "false")
   private val BLOCK_SIZE_KB_CONF = SQLConfEntry("blockSizeKB", "4")
   private val BLOCK_CACHE_SIZE_MB_CONF = SQLConfEntry("blockCacheSizeMB", "8")
-  private val LOCK_ACQUIRE_TIMEOUT_MS_CONF = SQLConfEntry("lockAcquireTimeoutMs", "60000")
+  // See SPARK-42794 for details.
+  private val LOCK_ACQUIRE_TIMEOUT_MS_CONF = SQLConfEntry("lockAcquireTimeoutMs", "120000")
   private val RESET_STATS_ON_LOAD = SQLConfEntry("resetStatsOnLoad", "true")
   // Config to specify the number of open files that can be used by the DB. Value of -1 means
   // that files opened are always kept open.

@@ -16,7 +16,7 @@
 #
 from pyspark.sql.connect.utils import check_dependencies
 
-check_dependencies(__name__, __file__)
+check_dependencies(__name__)
 
 import inspect
 import warnings
@@ -53,6 +53,11 @@ from pyspark.sql.connect.expressions import (
 from pyspark.sql.connect.udf import _create_udf
 from pyspark.sql import functions as pysparkfuncs
 from pyspark.sql.types import _from_numpy_type, DataType, StructType, ArrayType, StringType
+
+# The implementation of pandas_udf is embedded in pyspark.sql.function.pandas_udf
+# for code reuse.
+from pyspark.sql.functions import pandas_udf  # noqa: F401
+
 
 if TYPE_CHECKING:
     from pyspark.sql.connect._typing import (
@@ -2464,10 +2469,6 @@ def udf(
 
 
 udf.__doc__ = pysparkfuncs.udf.__doc__
-
-
-def pandas_udf(*args: Any, **kwargs: Any) -> None:
-    raise NotImplementedError("pandas_udf() is not implemented.")
 
 
 def _test() -> None:

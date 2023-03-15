@@ -28,6 +28,11 @@ import org.mockito.Mockito.{mock, spy, when}
 
 import org.apache.spark._
 import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, QueryTest, Row, SaveMode}
+import org.apache.spark.sql.catalyst.FunctionIdentifier
+import org.apache.spark.sql.catalyst.analysis.{Parameter, UnresolvedGenerator}
+import org.apache.spark.sql.catalyst.expressions.{Grouping, Literal}
+import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
+import org.apache.spark.sql.catalyst.expressions.objects.InitializeJavaBean
 import org.apache.spark.sql.catalyst.util.BadRecordException
 import org.apache.spark.sql.execution.datasources.jdbc.{DriverRegistry, JDBCOptions}
 import org.apache.spark.sql.execution.datasources.jdbc.connection.ConnectionProvider
@@ -764,6 +769,58 @@ class QueryExecutionErrorsSuite
         )
       )
     }
+  }
+
+  test("INTERNAL_ERROR: Calling eval on Unevaluable expression") {
+    val e = intercept[SparkException] {
+      Parameter("foo").eval()
+    }
+    checkError(
+      exception = e,
+      errorClass = "INTERNAL_ERROR",
+      parameters = Map("message" -> "Cannot evaluate expression: parameter(foo)"),
+      sqlState = "XX000")
+  }
+
+  test("INTERNAL_ERROR: Calling doGenCode on unresolved") {
+    val e = intercept[SparkException] {
+      val ctx = new CodegenContext
+      Grouping(Parameter("foo")).genCode(ctx)
+    }
+    checkError(
+      exception = e,
+      errorClass = "INTERNAL_ERROR",
+      parameters = Map(
+        "message" -> ("Cannot generate code for expression: " +
+          "grouping(parameter(foo))")),
+      sqlState = "XX000")
+  }
+
+  test("INTERNAL_ERROR: Calling terminate on UnresolvedGenerator") {
+    val e = intercept[SparkException] {
+      UnresolvedGenerator(FunctionIdentifier("foo"), Seq.empty).terminate()
+    }
+    checkError(
+      exception = e,
+      errorClass = "INTERNAL_ERROR",
+      parameters = Map("message" -> "Cannot terminate expression: 'foo()"),
+      sqlState = "XX000")
+  }
+
+  test("INTERNAL_ERROR: Initializing JavaBean with non existing method") {
+    val e = intercept[SparkException] {
+      val initializeWithNonexistingMethod = InitializeJavaBean(
+        Literal.fromObject(new java.util.LinkedList[Int]),
+        Map("nonexistent" -> Literal(1)))
+      initializeWithNonexistingMethod.eval()
+    }
+    checkError(
+      exception = e,
+      errorClass = "INTERNAL_ERROR",
+      parameters = Map(
+        "message" -> ("""A method named "nonexistent" is not declared in """ +
+          "any enclosing class nor any supertype")),
+      sqlState = "XX000")
   }
 }
 

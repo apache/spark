@@ -44,22 +44,7 @@ Since `spark-avro` module is external, there is no `.avro` API in
 
 To load/save data in Avro format, you need to specify the data source option `format` as `avro`(or `org.apache.spark.sql.avro`).
 <div class="codetabs">
-<div data-lang="scala" markdown="1">
-{% highlight scala %}
 
-val usersDF = spark.read.format("avro").load("examples/src/main/resources/users.avro")
-usersDF.select("name", "favorite_color").write.format("avro").save("namesAndFavColors.avro")
-
-{% endhighlight %}
-</div>
-<div data-lang="java" markdown="1">
-{% highlight java %}
-
-Dataset<Row> usersDF = spark.read().format("avro").load("examples/src/main/resources/users.avro");
-usersDF.select("name", "favorite_color").write().format("avro").save("namesAndFavColors.avro");
-
-{% endhighlight %}
-</div>
 <div data-lang="python" markdown="1">
 {% highlight python %}
 
@@ -68,6 +53,25 @@ df.select("name", "favorite_color").write.format("avro").save("namesAndFavColors
 
 {% endhighlight %}
 </div>
+
+<div data-lang="scala" markdown="1">
+{% highlight scala %}
+
+val usersDF = spark.read.format("avro").load("examples/src/main/resources/users.avro")
+usersDF.select("name", "favorite_color").write.format("avro").save("namesAndFavColors.avro")
+
+{% endhighlight %}
+</div>
+
+<div data-lang="java" markdown="1">
+{% highlight java %}
+
+Dataset<Row> usersDF = spark.read().format("avro").load("examples/src/main/resources/users.avro");
+usersDF.select("name", "favorite_color").write().format("avro").save("namesAndFavColors.avro");
+
+{% endhighlight %}
+</div>
+
 <div data-lang="r" markdown="1">
 {% highlight r %}
 
@@ -76,6 +80,7 @@ write.df(select(df, "name", "favorite_color"), "namesAndFavColors.avro", "avro")
 
 {% endhighlight %}
 </div>
+
 </div>
 
 ## to_avro() and from_avro()
@@ -89,6 +94,39 @@ Kafka key-value record will be augmented with some metadata, such as the ingesti
 * `to_avro()` can be used to turn structs into Avro records. This method is particularly useful when you would like to re-encode multiple columns into a single one when writing data out to Kafka.
 
 <div class="codetabs">
+
+<div data-lang="python" markdown="1">
+{% highlight python %}
+from pyspark.sql.avro.functions import from_avro, to_avro
+
+# `from_avro` requires Avro schema in JSON string format.
+jsonFormatSchema = open("examples/src/main/resources/user.avsc", "r").read()
+
+df = spark\
+  .readStream\
+  .format("kafka")\
+  .option("kafka.bootstrap.servers", "host1:port1,host2:port2")\
+  .option("subscribe", "topic1")\
+  .load()
+
+# 1. Decode the Avro data into a struct;
+# 2. Filter by column `favorite_color`;
+# 3. Encode the column `name` in Avro format.
+output = df\
+  .select(from_avro("value", jsonFormatSchema).alias("user"))\
+  .where('user.favorite_color == "red"')\
+  .select(to_avro("user.name").alias("value"))
+
+query = output\
+  .writeStream\
+  .format("kafka")\
+  .option("kafka.bootstrap.servers", "host1:port1,host2:port2")\
+  .option("topic", "topic2")\
+  .start()
+
+{% endhighlight %}
+</div>
+
 <div data-lang="scala" markdown="1">
 {% highlight scala %}
 import org.apache.spark.sql.avro.functions._
@@ -120,6 +158,7 @@ val query = output
 
 {% endhighlight %}
 </div>
+
 <div data-lang="java" markdown="1">
 {% highlight java %}
 import static org.apache.spark.sql.functions.col;
@@ -152,37 +191,7 @@ StreamingQuery query = output
 
 {% endhighlight %}
 </div>
-<div data-lang="python" markdown="1">
-{% highlight python %}
-from pyspark.sql.avro.functions import from_avro, to_avro
 
-# `from_avro` requires Avro schema in JSON string format.
-jsonFormatSchema = open("examples/src/main/resources/user.avsc", "r").read()
-
-df = spark\
-  .readStream\
-  .format("kafka")\
-  .option("kafka.bootstrap.servers", "host1:port1,host2:port2")\
-  .option("subscribe", "topic1")\
-  .load()
-
-# 1. Decode the Avro data into a struct;
-# 2. Filter by column `favorite_color`;
-# 3. Encode the column `name` in Avro format.
-output = df\
-  .select(from_avro("value", jsonFormatSchema).alias("user"))\
-  .where('user.favorite_color == "red"')\
-  .select(to_avro("user.name").alias("value"))
-
-query = output\
-  .writeStream\
-  .format("kafka")\
-  .option("kafka.bootstrap.servers", "host1:port1,host2:port2")\
-  .option("topic", "topic2")\
-  .start()
-
-{% endhighlight %}
-</div>
 <div data-lang="r" markdown="1">
 {% highlight r %}
 
@@ -215,6 +224,7 @@ write.stream(
 )
 {% endhighlight %}
 </div>
+
 </div>
 
 ## Data Source Option

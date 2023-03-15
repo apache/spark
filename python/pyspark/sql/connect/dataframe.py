@@ -16,7 +16,7 @@
 #
 from pyspark.sql.connect.utils import check_dependencies
 
-check_dependencies(__name__, __file__)
+check_dependencies(__name__)
 
 from typing import (
     Any,
@@ -42,6 +42,7 @@ from collections.abc import Iterable
 
 from pyspark import _NoValue
 from pyspark._globals import _NoValueType
+from pyspark.sql.observation import Observation
 from pyspark.sql.types import Row, StructType
 from pyspark.sql.dataframe import (
     DataFrame as PySparkDataFrame,
@@ -75,6 +76,7 @@ if TYPE_CHECKING:
         PrimitiveType,
         OptionalPrimitiveType,
         PandasMapIterFunction,
+        ArrowMapIterFunction,
     )
     from pyspark.sql.connect.session import SparkSession
 
@@ -153,7 +155,10 @@ class DataFrame:
                 error_class="NOT_STR",
                 message_parameters={"arg_name": "colName", "arg_type": type(colName).__name__},
             )
-        return Column(UnresolvedRegex(colName))
+        if self._plan is not None:
+            return Column(UnresolvedRegex(colName, self._plan._plan_id))
+        else:
+            return Column(UnresolvedRegex(colName))
 
     colRegex.__doc__ = PySparkDataFrame.colRegex.__doc__
 
@@ -780,6 +785,31 @@ class DataFrame:
 
     randomSplit.__doc__ = PySparkDataFrame.randomSplit.__doc__
 
+    def observe(
+        self,
+        observation: Union["Observation", str],
+        *exprs: Column,
+    ) -> "DataFrame":
+        if len(exprs) == 0:
+            raise ValueError("'exprs' should not be empty")
+        if not all(isinstance(c, Column) for c in exprs):
+            raise ValueError("all 'exprs' should be Column")
+
+        if isinstance(observation, Observation):
+            return DataFrame.withPlan(
+                plan.CollectMetrics(self._plan, str(observation._name), list(exprs)),
+                self._session,
+            )
+        elif isinstance(observation, str):
+            return DataFrame.withPlan(
+                plan.CollectMetrics(self._plan, observation, list(exprs)),
+                self._session,
+            )
+        else:
+            raise ValueError("'observation' should be either `Observation` or `str`.")
+
+    observe.__doc__ = PySparkDataFrame.observe.__doc__
+
     def show(self, n: int = 20, truncate: Union[bool, int] = True, vertical: bool = False) -> None:
         print(self._show_string(n, truncate, vertical))
 
@@ -1338,17 +1368,13 @@ class DataFrame:
 
     @property
     def schema(self) -> StructType:
-        if self._schema is None:
-            if self._plan is not None:
-                query = self._plan.to_proto(self._session.client)
-                if self._session is None:
-                    raise Exception("Cannot analyze without SparkSession.")
-                self._schema = self._session.client.schema(query)
-                return self._schema
-            else:
-                raise Exception("Empty plan.")
+        if self._plan is not None:
+            query = self._plan.to_proto(self._session.client)
+            if self._session is None:
+                raise Exception("Cannot analyze without SparkSession.")
+            return self._session.client.schema(query)
         else:
-            return self._schema
+            raise Exception("Empty plan.")
 
     schema.__doc__ = PySparkDataFrame.schema.__doc__
 
@@ -1520,9 +1546,6 @@ class DataFrame:
     def withWatermark(self, *args: Any, **kwargs: Any) -> None:
         raise NotImplementedError("withWatermark() is not implemented.")
 
-    def observe(self, *args: Any, **kwargs: Any) -> None:
-        raise NotImplementedError("observe() is not implemented.")
-
     def foreach(self, *args: Any, **kwargs: Any) -> None:
         raise NotImplementedError("foreach() is not implemented.")
 
@@ -1550,8 +1573,11 @@ class DataFrame:
     def storageLevel(self, *args: Any, **kwargs: Any) -> None:
         raise NotImplementedError("storageLevel() is not implemented.")
 
-    def mapInPandas(
-        self, func: "PandasMapIterFunction", schema: Union[StructType, str]
+    def _map_partitions(
+        self,
+        func: "PandasMapIterFunction",
+        schema: Union[StructType, str],
+        evalType: int,
     ) -> "DataFrame":
         from pyspark.sql.connect.udf import UserDefinedFunction
 
@@ -1559,18 +1585,29 @@ class DataFrame:
             raise Exception("Cannot mapInPandas when self._plan is empty.")
 
         udf_obj = UserDefinedFunction(
-            func, returnType=schema, evalType=PythonEvalType.SQL_MAP_PANDAS_ITER_UDF
+            func,
+            returnType=schema,
+            evalType=evalType,
         )
 
         return DataFrame.withPlan(
-            plan.FrameMap(child=self._plan, function=udf_obj, cols=self.columns),
+            plan.MapPartitions(child=self._plan, function=udf_obj, cols=self.columns),
             session=self._session,
         )
 
+    def mapInPandas(
+        self, func: "PandasMapIterFunction", schema: Union[StructType, str]
+    ) -> "DataFrame":
+        return self._map_partitions(func, schema, PythonEvalType.SQL_MAP_PANDAS_ITER_UDF)
+
     mapInPandas.__doc__ = PySparkDataFrame.mapInPandas.__doc__
 
-    def mapInArrow(self, *args: Any, **kwargs: Any) -> None:
-        raise NotImplementedError("mapInArrow() is not implemented.")
+    def mapInArrow(
+        self, func: "ArrowMapIterFunction", schema: Union[StructType, str]
+    ) -> "DataFrame":
+        return self._map_partitions(func, schema, PythonEvalType.SQL_MAP_ARROW_ITER_UDF)
+
+    mapInArrow.__doc__ = PySparkDataFrame.mapInArrow.__doc__
 
     def writeStream(self, *args: Any, **kwargs: Any) -> None:
         raise NotImplementedError("writeStream() is not implemented.")
@@ -1581,11 +1618,23 @@ class DataFrame:
     def _repr_html_(self, *args: Any, **kwargs: Any) -> None:
         raise NotImplementedError("_repr_html_() is not implemented.")
 
-    def semanticHash(self, *args: Any, **kwargs: Any) -> None:
-        raise NotImplementedError("semanticHash() is not implemented.")
+    def sameSemantics(self, other: "DataFrame") -> bool:
+        assert self._plan is not None
+        assert other._plan is not None
+        return self._session.client.same_semantics(
+            plan=self._plan.to_proto(self._session.client),
+            other=other._plan.to_proto(other._session.client),
+        )
 
-    def sameSemantics(self, *args: Any, **kwargs: Any) -> None:
-        raise NotImplementedError("sameSemantics() is not implemented.")
+    sameSemantics.__doc__ = PySparkDataFrame.sameSemantics.__doc__
+
+    def semanticHash(self) -> int:
+        assert self._plan is not None
+        return self._session.client.semantic_hash(
+            plan=self._plan.to_proto(self._session.client),
+        )
+
+    semanticHash.__doc__ = PySparkDataFrame.semanticHash.__doc__
 
     def writeTo(self, table: str) -> "DataFrameWriterV2":
         assert self._plan is not None
@@ -1726,6 +1775,9 @@ def _test() -> None:
 
     # TODO(SPARK-41625): Support Structured Streaming
     del pyspark.sql.connect.dataframe.DataFrame.isStreaming.__doc__
+
+    # TODO(SPARK-41888): Support StreamingQueryListener for DataFrame.observe
+    del pyspark.sql.connect.dataframe.DataFrame.observe.__doc__
 
     globs["spark"] = (
         PySparkSession.builder.appName("sql.connect.dataframe tests")

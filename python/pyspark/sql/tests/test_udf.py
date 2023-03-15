@@ -74,6 +74,7 @@ class BaseUDFTestsMixin(object):
         [row] = self.spark.sql("SELECT twoArgs('test', 1)").collect()
         self.assertEqual(row[0], 5)
 
+    def test_udf_on_sql_context(self):
         # This is to check if a deprecated 'SQLContext.registerFunction' can call its alias.
         sqlContext = SQLContext.getOrCreate(self.spark.sparkContext)
         sqlContext.registerFunction("oneArg", lambda x: len(x), IntegerType())
@@ -369,6 +370,9 @@ class BaseUDFTestsMixin(object):
             df.select(add_three("id").alias("plus_three")).collect(),
         )
 
+    def test_udf_registration_returns_udf_on_sql_context(self):
+        df = self.spark.range(10)
+
         # This is to check if a 'SQLContext.udf' can call its alias.
         sqlContext = SQLContext.getOrCreate(self.spark.sparkContext)
         add_four = sqlContext.udf.register("add_four", lambda x: x + 4, IntegerType())
@@ -416,6 +420,7 @@ class BaseUDFTestsMixin(object):
             lambda: spark.udf.registerJavaFunction("udf1", "non_existed_udf"),
         )
 
+    def test_non_existed_udf_with_sql_context(self):
         # This is to check if a deprecated 'SQLContext.registerJavaFunction' can call its alias.
         sqlContext = SQLContext.getOrCreate(self.spark.sparkContext)
         self.assertRaisesRegex(

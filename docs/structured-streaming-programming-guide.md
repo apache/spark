@@ -35,6 +35,22 @@ Let’s say you want to maintain a running word count of text data received from
 And if you [download Spark](https://spark.apache.org/downloads.html), you can directly [run the example](index.html#running-the-examples-and-shell). In any case, let’s walk through the example step-by-step and understand how it works. First, we have to import the necessary classes and create a local SparkSession, the starting point of all functionalities related to Spark.
 
 <div class="codetabs">
+
+<div data-lang="python"  markdown="1">
+
+{% highlight python %}
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import explode
+from pyspark.sql.functions import split
+
+spark = SparkSession \
+    .builder \
+    .appName("StructuredNetworkWordCount") \
+    .getOrCreate()
+{% endhighlight %}
+
+</div>
+
 <div data-lang="scala"  markdown="1">
 
 {% highlight scala %}
@@ -50,6 +66,7 @@ import spark.implicits._
 {% endhighlight %}
 
 </div>
+
 <div data-lang="java"  markdown="1">
 
 {% highlight java %}
@@ -67,20 +84,7 @@ SparkSession spark = SparkSession
 {% endhighlight %}
 
 </div>
-<div data-lang="python"  markdown="1">
 
-{% highlight python %}
-from pyspark.sql import SparkSession
-from pyspark.sql.functions import explode
-from pyspark.sql.functions import split
-
-spark = SparkSession \
-    .builder \
-    .appName("StructuredNetworkWordCount") \
-    .getOrCreate()
-{% endhighlight %}
-
-</div>
 <div data-lang="r"  markdown="1">
 
 {% highlight r %}
@@ -93,49 +97,7 @@ sparkR.session(appName = "StructuredNetworkWordCount")
 Next, let’s create a streaming DataFrame that represents text data received from a server listening on localhost:9999, and transform the DataFrame to calculate word counts.
 
 <div class="codetabs">
-<div data-lang="scala"  markdown="1">
 
-{% highlight scala %}
-// Create DataFrame representing the stream of input lines from connection to localhost:9999
-val lines = spark.readStream
-  .format("socket")
-  .option("host", "localhost")
-  .option("port", 9999)
-  .load()
-
-// Split the lines into words
-val words = lines.as[String].flatMap(_.split(" "))
-
-// Generate running word count
-val wordCounts = words.groupBy("value").count()
-{% endhighlight %}
-
-This `lines` DataFrame represents an unbounded table containing the streaming text data. This table contains one column of strings named "value", and each line in the streaming text data becomes a row in the table. Note, that this is not currently receiving any data as we are just setting up the transformation, and have not yet started it. Next, we have converted the DataFrame to a  Dataset of String using `.as[String]`, so that we can apply the `flatMap` operation to split each line into multiple words. The resultant `words` Dataset contains all the words. Finally, we have defined the `wordCounts` DataFrame by grouping by the unique values in the Dataset and counting them. Note that this is a streaming DataFrame which represents the running word counts of the stream.
-
-</div>
-<div data-lang="java"  markdown="1">
-
-{% highlight java %}
-// Create DataFrame representing the stream of input lines from connection to localhost:9999
-Dataset<Row> lines = spark
-  .readStream()
-  .format("socket")
-  .option("host", "localhost")
-  .option("port", 9999)
-  .load();
-
-// Split the lines into words
-Dataset<String> words = lines
-  .as(Encoders.STRING())
-  .flatMap((FlatMapFunction<String, String>) x -> Arrays.asList(x.split(" ")).iterator(), Encoders.STRING());
-
-// Generate running word count
-Dataset<Row> wordCounts = words.groupBy("value").count();
-{% endhighlight %}
-
-This `lines` DataFrame represents an unbounded table containing the streaming text data. This table contains one column of strings named "value", and each line in the streaming text data becomes a row in the table. Note, that this is not currently receiving any data as we are just setting up the transformation, and have not yet started it. Next, we have converted the DataFrame to a  Dataset of String using `.as(Encoders.STRING())`, so that we can apply the `flatMap` operation to split each line into multiple words. The resultant `words` Dataset contains all the words. Finally, we have defined the `wordCounts` DataFrame by grouping by the unique values in the Dataset and counting them. Note that this is a streaming DataFrame which represents the running word counts of the stream.
-
-</div>
 <div data-lang="python"  markdown="1">
 
 {% highlight python %}
@@ -161,6 +123,52 @@ wordCounts = words.groupBy("word").count()
 This `lines` DataFrame represents an unbounded table containing the streaming text data. This table contains one column of strings named "value", and each line in the streaming text data becomes a row in the table. Note, that this is not currently receiving any data as we are just setting up the transformation, and have not yet started it. Next, we have used two built-in SQL functions - split and explode, to split each line into multiple rows with a word each. In addition, we use the function `alias` to name the new column as "word". Finally, we have defined the `wordCounts` DataFrame by grouping by the unique values in the Dataset and counting them. Note that this is a streaming DataFrame which represents the running word counts of the stream.
 
 </div>
+
+<div data-lang="scala"  markdown="1">
+
+{% highlight scala %}
+// Create DataFrame representing the stream of input lines from connection to localhost:9999
+val lines = spark.readStream
+  .format("socket")
+  .option("host", "localhost")
+  .option("port", 9999)
+  .load()
+
+// Split the lines into words
+val words = lines.as[String].flatMap(_.split(" "))
+
+// Generate running word count
+val wordCounts = words.groupBy("value").count()
+{% endhighlight %}
+
+This `lines` DataFrame represents an unbounded table containing the streaming text data. This table contains one column of strings named "value", and each line in the streaming text data becomes a row in the table. Note, that this is not currently receiving any data as we are just setting up the transformation, and have not yet started it. Next, we have converted the DataFrame to a  Dataset of String using `.as[String]`, so that we can apply the `flatMap` operation to split each line into multiple words. The resultant `words` Dataset contains all the words. Finally, we have defined the `wordCounts` DataFrame by grouping by the unique values in the Dataset and counting them. Note that this is a streaming DataFrame which represents the running word counts of the stream.
+
+</div>
+
+<div data-lang="java"  markdown="1">
+
+{% highlight java %}
+// Create DataFrame representing the stream of input lines from connection to localhost:9999
+Dataset<Row> lines = spark
+  .readStream()
+  .format("socket")
+  .option("host", "localhost")
+  .option("port", 9999)
+  .load();
+
+// Split the lines into words
+Dataset<String> words = lines
+  .as(Encoders.STRING())
+  .flatMap((FlatMapFunction<String, String>) x -> Arrays.asList(x.split(" ")).iterator(), Encoders.STRING());
+
+// Generate running word count
+Dataset<Row> wordCounts = words.groupBy("value").count();
+{% endhighlight %}
+
+This `lines` DataFrame represents an unbounded table containing the streaming text data. This table contains one column of strings named "value", and each line in the streaming text data becomes a row in the table. Note, that this is not currently receiving any data as we are just setting up the transformation, and have not yet started it. Next, we have converted the DataFrame to a  Dataset of String using `.as(Encoders.STRING())`, so that we can apply the `flatMap` operation to split each line into multiple words. The resultant `words` Dataset contains all the words. Finally, we have defined the `wordCounts` DataFrame by grouping by the unique values in the Dataset and counting them. Note that this is a streaming DataFrame which represents the running word counts of the stream.
+
+</div>
+
 <div data-lang="r"  markdown="1">
 
 {% highlight r %}
@@ -177,37 +185,13 @@ wordCounts <- count(group_by(words, "word"))
 This `lines` SparkDataFrame represents an unbounded table containing the streaming text data. This table contains one column of strings named "value", and each line in the streaming text data becomes a row in the table. Note, that this is not currently receiving any data as we are just setting up the transformation, and have not yet started it. Next, we have a SQL expression with two SQL functions - split and explode, to split each line into multiple rows with a word each. In addition, we name the new column as "word". Finally, we have defined the `wordCounts` SparkDataFrame by grouping by the unique values in the SparkDataFrame and counting them. Note that this is a streaming SparkDataFrame which represents the running word counts of the stream.
 
 </div>
+
 </div>
 
 We have now set up the query on the streaming data. All that is left is to actually start receiving data and computing the counts. To do this, we set it up to print the complete set of counts (specified by `outputMode("complete")`) to the console every time they are updated. And then start the streaming computation using `start()`.
 
 <div class="codetabs">
-<div data-lang="scala"  markdown="1">
 
-{% highlight scala %}
-// Start running the query that prints the running counts to the console
-val query = wordCounts.writeStream
-  .outputMode("complete")
-  .format("console")
-  .start()
-
-query.awaitTermination()
-{% endhighlight %}
-
-</div>
-<div data-lang="java"  markdown="1">
-
-{% highlight java %}
-// Start running the query that prints the running counts to the console
-StreamingQuery query = wordCounts.writeStream()
-  .outputMode("complete")
-  .format("console")
-  .start();
-
-query.awaitTermination();
-{% endhighlight %}
-
-</div>
 <div data-lang="python"  markdown="1">
 
 {% highlight python %}
@@ -222,6 +206,35 @@ query.awaitTermination()
 {% endhighlight %}
 
 </div>
+
+<div data-lang="scala"  markdown="1">
+
+{% highlight scala %}
+// Start running the query that prints the running counts to the console
+val query = wordCounts.writeStream
+  .outputMode("complete")
+  .format("console")
+  .start()
+
+query.awaitTermination()
+{% endhighlight %}
+
+</div>
+
+<div data-lang="java"  markdown="1">
+
+{% highlight java %}
+// Start running the query that prints the running counts to the console
+StreamingQuery query = wordCounts.writeStream()
+  .outputMode("complete")
+  .format("console")
+  .start();
+
+query.awaitTermination();
+{% endhighlight %}
+
+</div>
+
 <div data-lang="r"  markdown="1">
 
 {% highlight r %}
@@ -232,6 +245,7 @@ awaitTermination(query)
 {% endhighlight %}
 
 </div>
+
 </div>
 
 After this code is executed, the streaming computation will have started in the background. The `query` object is a handle to that active streaming query, and we have decided to wait for the termination of the query using `awaitTermination()` to prevent the process from exiting while the query is active.
@@ -246,26 +260,31 @@ To actually execute this example code, you can either compile the code in your o
 Then, in a different terminal, you can start the example by using
 
 <div class="codetabs">
-<div data-lang="scala"  markdown="1">
-{% highlight bash %}
-$ ./bin/run-example org.apache.spark.examples.sql.streaming.StructuredNetworkWordCount localhost 9999
-{% endhighlight %}
-</div>
-<div data-lang="java"  markdown="1">
-{% highlight bash %}
-$ ./bin/run-example org.apache.spark.examples.sql.streaming.JavaStructuredNetworkWordCount localhost 9999
-{% endhighlight %}
-</div>
+
 <div data-lang="python"  markdown="1">
 {% highlight bash %}
 $ ./bin/spark-submit examples/src/main/python/sql/streaming/structured_network_wordcount.py localhost 9999
 {% endhighlight %}
 </div>
+
+<div data-lang="scala"  markdown="1">
+{% highlight bash %}
+$ ./bin/run-example org.apache.spark.examples.sql.streaming.StructuredNetworkWordCount localhost 9999
+{% endhighlight %}
+</div>
+
+<div data-lang="java"  markdown="1">
+{% highlight bash %}
+$ ./bin/run-example org.apache.spark.examples.sql.streaming.JavaStructuredNetworkWordCount localhost 9999
+{% endhighlight %}
+</div>
+
 <div data-lang="r"  markdown="1">
 {% highlight bash %}
 $ ./bin/spark-submit examples/src/main/r/streaming/structured_network_wordcount.R localhost 9999
 {% endhighlight %}
 </div>
+
 </div>
 
 Then, any lines typed in the terminal running the netcat server will be counted and printed on screen every second. It will look something like the following.
@@ -304,6 +323,36 @@ apache hadoop
     <td width="2%"></td>
     <td>
 <div class="codetabs">
+
+<div data-lang="python" markdown="1">
+{% highlight bash %}
+# TERMINAL 2: RUNNING structured_network_wordcount.py
+
+$ ./bin/spark-submit examples/src/main/python/sql/streaming/structured_network_wordcount.py localhost 9999
+
+-------------------------------------------
+Batch: 0
+-------------------------------------------
++------+-----+
+| value|count|
++------+-----+
+|apache|    1|
+| spark|    1|
++------+-----+
+
+-------------------------------------------
+Batch: 1
+-------------------------------------------
++------+-----+
+| value|count|
++------+-----+
+|apache|    2|
+| spark|    1|
+|hadoop|    1|
++------+-----+
+...
+{% endhighlight %}
+</div>
 
 <div data-lang="scala" markdown="1">
 {% highlight bash %}
@@ -364,35 +413,7 @@ Batch: 1
 ...
 {% endhighlight %}
 </div>
-<div data-lang="python" markdown="1">
-{% highlight bash %}
-# TERMINAL 2: RUNNING structured_network_wordcount.py
 
-$ ./bin/spark-submit examples/src/main/python/sql/streaming/structured_network_wordcount.py localhost 9999
-
--------------------------------------------
-Batch: 0
--------------------------------------------
-+------+-----+
-| value|count|
-+------+-----+
-|apache|    1|
-| spark|    1|
-+------+-----+
-
--------------------------------------------
-Batch: 1
--------------------------------------------
-+------+-----+
-| value|count|
-+------+-----+
-|apache|    2|
-| spark|    1|
-|hadoop|    1|
-+------+-----+
-...
-{% endhighlight %}
-</div>
 <div data-lang="r" markdown="1">
 {% highlight bash %}
 # TERMINAL 2: RUNNING structured_network_wordcount.R
@@ -621,60 +642,7 @@ Here are the details of all the sources in Spark.
 Here are some examples.
 
 <div class="codetabs">
-<div data-lang="scala"  markdown="1">
 
-{% highlight scala %}
-val spark: SparkSession = ...
-
-// Read text from socket
-val socketDF = spark
-  .readStream
-  .format("socket")
-  .option("host", "localhost")
-  .option("port", 9999)
-  .load()
-
-socketDF.isStreaming    // Returns True for DataFrames that have streaming sources
-
-socketDF.printSchema
-
-// Read all the csv files written atomically in a directory
-val userSchema = new StructType().add("name", "string").add("age", "integer")
-val csvDF = spark
-  .readStream
-  .option("sep", ";")
-  .schema(userSchema)      // Specify schema of the csv files
-  .csv("/path/to/directory")    // Equivalent to format("csv").load("/path/to/directory")
-{% endhighlight %}
-
-</div>
-<div data-lang="java"  markdown="1">
-
-{% highlight java %}
-SparkSession spark = ...
-
-// Read text from socket
-Dataset<Row> socketDF = spark
-  .readStream()
-  .format("socket")
-  .option("host", "localhost")
-  .option("port", 9999)
-  .load();
-
-socketDF.isStreaming();    // Returns True for DataFrames that have streaming sources
-
-socketDF.printSchema();
-
-// Read all the csv files written atomically in a directory
-StructType userSchema = new StructType().add("name", "string").add("age", "integer");
-Dataset<Row> csvDF = spark
-  .readStream()
-  .option("sep", ";")
-  .schema(userSchema)      // Specify schema of the csv files
-  .csv("/path/to/directory");    // Equivalent to format("csv").load("/path/to/directory")
-{% endhighlight %}
-
-</div>
 <div data-lang="python"  markdown="1">
 
 {% highlight python %}
@@ -702,6 +670,63 @@ csvDF = spark \
 {% endhighlight %}
 
 </div>
+
+<div data-lang="scala"  markdown="1">
+
+{% highlight scala %}
+val spark: SparkSession = ...
+
+// Read text from socket
+val socketDF = spark
+  .readStream
+  .format("socket")
+  .option("host", "localhost")
+  .option("port", 9999)
+  .load()
+
+socketDF.isStreaming    // Returns True for DataFrames that have streaming sources
+
+socketDF.printSchema
+
+// Read all the csv files written atomically in a directory
+val userSchema = new StructType().add("name", "string").add("age", "integer")
+val csvDF = spark
+  .readStream
+  .option("sep", ";")
+  .schema(userSchema)      // Specify schema of the csv files
+  .csv("/path/to/directory")    // Equivalent to format("csv").load("/path/to/directory")
+{% endhighlight %}
+
+</div>
+
+<div data-lang="java"  markdown="1">
+
+{% highlight java %}
+SparkSession spark = ...
+
+// Read text from socket
+Dataset<Row> socketDF = spark
+  .readStream()
+  .format("socket")
+  .option("host", "localhost")
+  .option("port", 9999)
+  .load();
+
+socketDF.isStreaming();    // Returns True for DataFrames that have streaming sources
+
+socketDF.printSchema();
+
+// Read all the csv files written atomically in a directory
+StructType userSchema = new StructType().add("name", "string").add("age", "integer");
+Dataset<Row> csvDF = spark
+  .readStream()
+  .option("sep", ";")
+  .schema(userSchema)      // Specify schema of the csv files
+  .csv("/path/to/directory");    // Equivalent to format("csv").load("/path/to/directory")
+{% endhighlight %}
+
+</div>
+
 <div data-lang="r"  markdown="1">
 
 {% highlight r %}
@@ -740,6 +765,20 @@ You can apply all kinds of operations on streaming DataFrames/Datasets – rangi
 Most of the common operations on DataFrame/Dataset are supported for streaming. The few operations that are not supported are [discussed later](#unsupported-operations) in this section.
 
 <div class="codetabs">
+
+<div data-lang="python"  markdown="1">
+
+{% highlight python %}
+df = ...  # streaming DataFrame with IOT device data with schema { device: string, deviceType: string, signal: double, time: DateType }
+
+# Select the devices which have signal more than 10
+df.select("device").where("signal > 10")
+
+# Running count of the number of updates for each device type
+df.groupBy("deviceType").count()
+{% endhighlight %}
+</div>
+
 <div data-lang="scala"  markdown="1">
 
 {% highlight scala %}
@@ -761,6 +800,7 @@ ds.groupByKey(_.deviceType).agg(typed.avg(_.signal))    // using typed API
 {% endhighlight %}
 
 </div>
+
 <div data-lang="java"  markdown="1">
 
 {% highlight java %}
@@ -796,18 +836,7 @@ ds.groupByKey((MapFunction<DeviceData, String>) value -> value.getDeviceType(), 
 
 
 </div>
-<div data-lang="python"  markdown="1">
 
-{% highlight python %}
-df = ...  # streaming DataFrame with IOT device data with schema { device: string, deviceType: string, signal: double, time: DateType }
-
-# Select the devices which have signal more than 10
-df.select("device").where("signal > 10")
-
-# Running count of the number of updates for each device type
-df.groupBy("deviceType").count()
-{% endhighlight %}
-</div>
 <div data-lang="r"  markdown="1">
 
 {% highlight r %}
@@ -820,60 +849,71 @@ select(where(df, "signal > 10"), "device")
 count(groupBy(df, "deviceType"))
 {% endhighlight %}
 </div>
+
 </div>
 
 You can also register a streaming DataFrame/Dataset as a temporary view and then apply SQL commands on it.
 
 <div class="codetabs">
-<div data-lang="scala"  markdown="1">
-{% highlight scala %}
-df.createOrReplaceTempView("updates")
-spark.sql("select count(*) from updates")  // returns another streaming DF
-{% endhighlight %}
-</div>
-<div data-lang="java"  markdown="1">  
-{% highlight java %}
-df.createOrReplaceTempView("updates");
-spark.sql("select count(*) from updates");  // returns another streaming DF
-{% endhighlight %}
-</div>
+
 <div data-lang="python"  markdown="1">  
 {% highlight python %}
 df.createOrReplaceTempView("updates")
 spark.sql("select count(*) from updates")  # returns another streaming DF
 {% endhighlight %}
 </div>
+
+<div data-lang="scala"  markdown="1">
+{% highlight scala %}
+df.createOrReplaceTempView("updates")
+spark.sql("select count(*) from updates")  // returns another streaming DF
+{% endhighlight %}
+</div>
+
+<div data-lang="java"  markdown="1">  
+{% highlight java %}
+df.createOrReplaceTempView("updates");
+spark.sql("select count(*) from updates");  // returns another streaming DF
+{% endhighlight %}
+</div>
+
 <div data-lang="r"  markdown="1">
 {% highlight r %}
 createOrReplaceTempView(df, "updates")
 sql("select count(*) from updates")
 {% endhighlight %}
 </div>
+
 </div>
 
 Note, you can identify whether a DataFrame/Dataset has streaming data or not by using `df.isStreaming`.
 
 <div class="codetabs">
-<div data-lang="scala"  markdown="1">
-{% highlight scala %}
-df.isStreaming
-{% endhighlight %}
-</div>
-<div data-lang="java"  markdown="1">
-{% highlight java %}
-df.isStreaming()
-{% endhighlight %}
-</div>
+
 <div data-lang="python"  markdown="1">
 {% highlight python %}
 df.isStreaming()
 {% endhighlight %}
 </div>
+
+<div data-lang="scala"  markdown="1">
+{% highlight scala %}
+df.isStreaming
+{% endhighlight %}
+</div>
+
+<div data-lang="java"  markdown="1">
+{% highlight java %}
+df.isStreaming()
+{% endhighlight %}
+</div>
+
 <div data-lang="r"  markdown="1">
 {% highlight r %}
 isStreaming(df)
 {% endhighlight %}
 </div>
+
 </div>
 
 You may want to check the query plan of the query, as Spark could inject stateful operations during interpret of SQL statement against streaming dataset. Once stateful operations are injected in the query plan, you may need to check your query with considerations in stateful operations. (e.g. output mode, watermark, state store size maintenance, etc.)
@@ -891,6 +931,20 @@ Since this windowing is similar to grouping, in code, you can use `groupBy()` an
 [Scala]({{site.SPARK_GITHUB_URL}}/blob/v{{site.SPARK_VERSION_SHORT}}/examples/src/main/scala/org/apache/spark/examples/sql/streaming/StructuredNetworkWordCountWindowed.scala)/[Java]({{site.SPARK_GITHUB_URL}}/blob/v{{site.SPARK_VERSION_SHORT}}/examples/src/main/java/org/apache/spark/examples/sql/streaming/JavaStructuredNetworkWordCountWindowed.java)/[Python]({{site.SPARK_GITHUB_URL}}/blob/v{{site.SPARK_VERSION_SHORT}}/examples/src/main/python/sql/streaming/structured_network_wordcount_windowed.py).
 
 <div class="codetabs">
+
+<div data-lang="python"  markdown="1">
+{% highlight python %}
+words = ...  # streaming DataFrame of schema { timestamp: Timestamp, word: String }
+
+# Group the data by window and word and compute the count of each group
+windowedCounts = words.groupBy(
+    window(words.timestamp, "10 minutes", "5 minutes"),
+    words.word
+).count()
+{% endhighlight %}
+
+</div>
+
 <div data-lang="scala"  markdown="1">
 
 {% highlight scala %}
@@ -906,6 +960,7 @@ val windowedCounts = words.groupBy(
 {% endhighlight %}
 
 </div>
+
 <div data-lang="java"  markdown="1">
 
 {% highlight java %}
@@ -919,18 +974,7 @@ Dataset<Row> windowedCounts = words.groupBy(
 {% endhighlight %}
 
 </div>
-<div data-lang="python"  markdown="1">
-{% highlight python %}
-words = ...  # streaming DataFrame of schema { timestamp: Timestamp, word: String }
 
-# Group the data by window and word and compute the count of each group
-windowedCounts = words.groupBy(
-    window(words.timestamp, "10 minutes", "5 minutes"),
-    words.word
-).count()
-{% endhighlight %}
-
-</div>
 <div data-lang="r"  markdown="1">
 {% highlight r %}
 words <- ...  # streaming DataFrame of schema { timestamp: Timestamp, word: String }
@@ -944,6 +988,7 @@ windowedCounts <- count(
 {% endhighlight %}
 
 </div>
+
 </div>
 
 
@@ -974,6 +1019,22 @@ in the section for the exact guarantees). Let's understand this with an example.
 easily define watermarking on the previous example using `withWatermark()` as shown below.
 
 <div class="codetabs">
+
+<div data-lang="python"  markdown="1">
+{% highlight python %}
+words = ...  # streaming DataFrame of schema { timestamp: Timestamp, word: String }
+
+# Group the data by window and word and compute the count of each group
+windowedCounts = words \
+    .withWatermark("timestamp", "10 minutes") \
+    .groupBy(
+        window(words.timestamp, "10 minutes", "5 minutes"),
+        words.word) \
+    .count()
+{% endhighlight %}
+
+</div>
+
 <div data-lang="scala"  markdown="1">
 
 {% highlight scala %}
@@ -991,6 +1052,7 @@ val windowedCounts = words
 {% endhighlight %}
 
 </div>
+
 <div data-lang="java"  markdown="1">
 
 {% highlight java %}
@@ -1006,20 +1068,7 @@ Dataset<Row> windowedCounts = words
 {% endhighlight %}
 
 </div>
-<div data-lang="python"  markdown="1">
-{% highlight python %}
-words = ...  # streaming DataFrame of schema { timestamp: Timestamp, word: String }
 
-# Group the data by window and word and compute the count of each group
-windowedCounts = words \
-    .withWatermark("timestamp", "10 minutes") \
-    .groupBy(
-        window(words.timestamp, "10 minutes", "5 minutes"),
-        words.word) \
-    .count()
-{% endhighlight %}
-
-</div>
 <div data-lang="r"  markdown="1">
 {% highlight r %}
 words <- ...  # streaming DataFrame of schema { timestamp: Timestamp, word: String }
@@ -1035,6 +1084,7 @@ windowedCounts <- count(
 {% endhighlight %}
 
 </div>
+
 </div>
 
 In this example, we are defining the watermark of the query on the value of the column "timestamp", 
@@ -1099,6 +1149,22 @@ there's no input received within gap duration after receiving the latest input.
 Session window uses `session_window` function. The usage of the function is similar to the `window` function.
 
 <div class="codetabs">
+
+<div data-lang="python"  markdown="1">
+{% highlight python %}
+events = ...  # streaming DataFrame of schema { timestamp: Timestamp, userId: String }
+
+# Group the data by session window and userId, and compute the count of each group
+sessionizedCounts = events \
+    .withWatermark("timestamp", "10 minutes") \
+    .groupBy(
+        session_window(events.timestamp, "5 minutes"),
+        events.userId) \
+    .count()
+{% endhighlight %}
+
+</div>
+
 <div data-lang="scala"  markdown="1">
 
 {% highlight scala %}
@@ -1116,6 +1182,7 @@ val sessionizedCounts = events
 {% endhighlight %}
 
 </div>
+
 <div data-lang="java"  markdown="1">
 
 {% highlight java %}
@@ -1131,20 +1198,7 @@ Dataset<Row> sessionizedCounts = events
 {% endhighlight %}
 
 </div>
-<div data-lang="python"  markdown="1">
-{% highlight python %}
-events = ...  # streaming DataFrame of schema { timestamp: Timestamp, userId: String }
 
-# Group the data by session window and userId, and compute the count of each group
-sessionizedCounts = events \
-    .withWatermark("timestamp", "10 minutes") \
-    .groupBy(
-        session_window(events.timestamp, "5 minutes"),
-        events.userId) \
-    .count()
-{% endhighlight %}
-
-</div>
 </div>
 
 Instead of static value, we can also provide an expression to specify gap duration dynamically
@@ -1156,6 +1210,28 @@ anymore. A session window's range is the union of all events' ranges which are d
 event start time and evaluated gap duration during the query execution.
 
 <div class="codetabs">
+
+<div data-lang="python"  markdown="1">
+{% highlight python %}
+from pyspark.sql import functions as F
+
+events = ...  # streaming DataFrame of schema { timestamp: Timestamp, userId: String }
+
+session_window = session_window(events.timestamp, \
+    F.when(events.userId == "user1", "5 seconds") \
+    .when(events.userId == "user2", "20 seconds").otherwise("5 minutes"))
+
+# Group the data by session window and userId, and compute the count of each group
+sessionizedCounts = events \
+    .withWatermark("timestamp", "10 minutes") \
+    .groupBy(
+        session_window,
+        events.userId) \
+    .count()
+{% endhighlight %}
+
+</div>
+
 <div data-lang="scala"  markdown="1">
 
 {% highlight scala %}
@@ -1177,6 +1253,7 @@ val sessionizedCounts = events
 {% endhighlight %}
 
 </div>
+
 <div data-lang="java"  markdown="1">
 
 {% highlight java %}
@@ -1196,26 +1273,7 @@ Dataset<Row> sessionizedCounts = events
 {% endhighlight %}
 
 </div>
-<div data-lang="python"  markdown="1">
-{% highlight python %}
-from pyspark.sql import functions as F
 
-events = ...  # streaming DataFrame of schema { timestamp: Timestamp, userId: String }
-
-session_window = session_window(events.timestamp, \
-    F.when(events.userId == "user1", "5 seconds") \
-    .when(events.userId == "user2", "20 seconds").otherwise("5 minutes"))
-
-# Group the data by session window and userId, and compute the count of each group
-sessionizedCounts = events \
-    .withWatermark("timestamp", "10 minutes") \
-    .groupBy(
-        session_window,
-        events.userId) \
-    .count()
-{% endhighlight %}
-
-</div>
 </div>
 
 Note that there are some restrictions when you use session window in streaming query, like below:
@@ -1246,6 +1304,26 @@ There are two ways to achieve this, like below:
 User can pass the result to the parameter of `window` function (or anywhere requiring timestamp) to perform operation(s) with time window which requires timestamp.
 
 <div class="codetabs">
+
+<div data-lang="python"  markdown="1">
+{% highlight python %}
+words = ...  # streaming DataFrame of schema { timestamp: Timestamp, word: String }
+
+# Group the data by window and word and compute the count of each group
+windowedCounts = words.groupBy(
+    window(words.timestamp, "10 minutes", "5 minutes"),
+    words.word
+).count()
+
+# Group the windowed data by another window and word and compute the count of each group
+anotherWindowedCounts = windowedCounts.groupBy(
+    window(window_time(windowedCounts.window), "1 hour"),
+    windowedCounts.word
+).count()
+{% endhighlight %}
+
+</div>
+
 <div data-lang="scala"  markdown="1">
 
 {% highlight scala %}
@@ -1267,6 +1345,7 @@ val anotherWindowedCounts = windowedCounts.groupBy(
 {% endhighlight %}
 
 </div>
+
 <div data-lang="java"  markdown="1">
 
 {% highlight java %}
@@ -1286,6 +1365,13 @@ Dataset<Row> anotherWindowedCounts = windowedCounts.groupBy(
 {% endhighlight %}
 
 </div>
+
+</div>
+
+`window` function does not only take timestamp column, but also take the time window column. This is specifically useful for cases where users want to apply chained time window aggregations.
+
+<div class="codetabs">
+
 <div data-lang="python"  markdown="1">
 {% highlight python %}
 words = ...  # streaming DataFrame of schema { timestamp: Timestamp, word: String }
@@ -1298,17 +1384,13 @@ windowedCounts = words.groupBy(
 
 # Group the windowed data by another window and word and compute the count of each group
 anotherWindowedCounts = windowedCounts.groupBy(
-    window(window_time(windowedCounts.window), "1 hour"),
+    window(windowedCounts.window, "1 hour"),
     windowedCounts.word
 ).count()
 {% endhighlight %}
 
 </div>
-</div>
 
-`window` function does not only take timestamp column, but also take the time window column. This is specifically useful for cases where users want to apply chained time window aggregations.
-
-<div class="codetabs">
 <div data-lang="scala"  markdown="1">
 
 {% highlight scala %}
@@ -1330,6 +1412,7 @@ val anotherWindowedCounts = windowedCounts.groupBy(
 {% endhighlight %}
 
 </div>
+
 <div data-lang="java"  markdown="1">
 
 {% highlight java %}
@@ -1349,24 +1432,7 @@ Dataset<Row> anotherWindowedCounts = windowedCounts.groupBy(
 {% endhighlight %}
 
 </div>
-<div data-lang="python"  markdown="1">
-{% highlight python %}
-words = ...  # streaming DataFrame of schema { timestamp: Timestamp, word: String }
 
-# Group the data by window and word and compute the count of each group
-windowedCounts = words.groupBy(
-    window(words.timestamp, "10 minutes", "5 minutes"),
-    words.word
-).count()
-
-# Group the windowed data by another window and word and compute the count of each group
-anotherWindowedCounts = windowedCounts.groupBy(
-    window(windowedCounts.window, "1 hour"),
-    windowedCounts.word
-).count()
-{% endhighlight %}
-
-</div>
 </div>
 
 ##### Conditions for watermarking to clean aggregation state
@@ -1418,6 +1484,18 @@ Since the introduction in Spark 2.0, Structured Streaming has supported joins (i
 type of outer joins) between a streaming and a static DataFrame/Dataset. Here is a simple example.
 
 <div class="codetabs">
+
+<div data-lang="python"  markdown="1">
+
+{% highlight python %}
+staticDf = spark.read. ...
+streamingDf = spark.readStream. ...
+streamingDf.join(staticDf, "type")  # inner equi-join with a static DF
+streamingDf.join(staticDf, "type", "left_outer")  # left outer join with a static DF
+{% endhighlight %}
+
+</div>
+
 <div data-lang="scala"  markdown="1">
 
 {% highlight scala %}
@@ -1430,6 +1508,7 @@ streamingDf.join(staticDf, "type", "left_outer")  // left outer join with a stat
 {% endhighlight %}
 
 </div>
+
 <div data-lang="java"  markdown="1">
 
 {% highlight java %}
@@ -1439,16 +1518,6 @@ streamingDf.join(staticDf, "type");         // inner equi-join with a static DF
 streamingDf.join(staticDf, "type", "left_outer");  // left outer join with a static DF
 {% endhighlight %}
 
-
-</div>
-<div data-lang="python"  markdown="1">
-
-{% highlight python %}
-staticDf = spark.read. ...
-streamingDf = spark.readStream. ...
-streamingDf.join(staticDf, "type")  # inner equi-join with a static DF
-streamingDf.join(staticDf, "type", "left_outer")  # left outer join with a static DF
-{% endhighlight %}
 
 </div>
 
@@ -1466,6 +1535,7 @@ joined <- join(
 {% endhighlight %}
 
 </div>
+
 </div>
 
 Note that stream-static joins are not stateful, so no state management is necessary.
@@ -1518,56 +1588,7 @@ after the corresponding impression.
 The code would look like this.
 
 <div class="codetabs">
-<div data-lang="scala"  markdown="1">
 
-{% highlight scala %}
-import org.apache.spark.sql.functions.expr
-
-val impressions = spark.readStream. ...
-val clicks = spark.readStream. ...
-
-// Apply watermarks on event-time columns
-val impressionsWithWatermark = impressions.withWatermark("impressionTime", "2 hours")
-val clicksWithWatermark = clicks.withWatermark("clickTime", "3 hours")
-
-// Join with event-time constraints
-impressionsWithWatermark.join(
-  clicksWithWatermark,
-  expr("""
-    clickAdId = impressionAdId AND
-    clickTime >= impressionTime AND
-    clickTime <= impressionTime + interval 1 hour
-    """)
-)
-
-{% endhighlight %}
-
-</div>
-<div data-lang="java"  markdown="1">
-
-{% highlight java %}
-import static org.apache.spark.sql.functions.expr
-
-Dataset<Row> impressions = spark.readStream(). ...
-Dataset<Row> clicks = spark.readStream(). ...
-
-// Apply watermarks on event-time columns
-Dataset<Row> impressionsWithWatermark = impressions.withWatermark("impressionTime", "2 hours");
-Dataset<Row> clicksWithWatermark = clicks.withWatermark("clickTime", "3 hours");
-
-// Join with event-time constraints
-impressionsWithWatermark.join(
-  clicksWithWatermark,
-  expr(
-    "clickAdId = impressionAdId AND " +
-    "clickTime >= impressionTime AND " +
-    "clickTime <= impressionTime + interval 1 hour ")
-);
-
-{% endhighlight %}
-
-
-</div>
 <div data-lang="python"  markdown="1">
 
 {% highlight python %}
@@ -1593,6 +1614,59 @@ impressionsWithWatermark.join(
 {% endhighlight %}
 
 </div>
+
+<div data-lang="scala"  markdown="1">
+
+{% highlight scala %}
+import org.apache.spark.sql.functions.expr
+
+val impressions = spark.readStream. ...
+val clicks = spark.readStream. ...
+
+// Apply watermarks on event-time columns
+val impressionsWithWatermark = impressions.withWatermark("impressionTime", "2 hours")
+val clicksWithWatermark = clicks.withWatermark("clickTime", "3 hours")
+
+// Join with event-time constraints
+impressionsWithWatermark.join(
+  clicksWithWatermark,
+  expr("""
+    clickAdId = impressionAdId AND
+    clickTime >= impressionTime AND
+    clickTime <= impressionTime + interval 1 hour
+    """)
+)
+
+{% endhighlight %}
+
+</div>
+
+<div data-lang="java"  markdown="1">
+
+{% highlight java %}
+import static org.apache.spark.sql.functions.expr
+
+Dataset<Row> impressions = spark.readStream(). ...
+Dataset<Row> clicks = spark.readStream(). ...
+
+// Apply watermarks on event-time columns
+Dataset<Row> impressionsWithWatermark = impressions.withWatermark("impressionTime", "2 hours");
+Dataset<Row> clicksWithWatermark = clicks.withWatermark("clickTime", "3 hours");
+
+// Join with event-time constraints
+impressionsWithWatermark.join(
+  clicksWithWatermark,
+  expr(
+    "clickAdId = impressionAdId AND " +
+    "clickTime >= impressionTime AND " +
+    "clickTime <= impressionTime + interval 1 hour ")
+);
+
+{% endhighlight %}
+
+
+</div>
+
 <div data-lang="r"  markdown="1">
 
 {% highlight r %}
@@ -1617,6 +1691,7 @@ joined <- join(
 {% endhighlight %}
 
 </div>
+
 </div>
 
 ###### Semantic Guarantees of Stream-stream Inner Joins with Watermarking
@@ -1634,6 +1709,24 @@ a query with outer-join will look quite like the ad-monetization example earlier
 there will be an additional parameter specifying it to be an outer-join.
 
 <div class="codetabs">
+
+<div data-lang="python"  markdown="1">
+
+{% highlight python %}
+impressionsWithWatermark.join(
+  clicksWithWatermark,
+  expr("""
+    clickAdId = impressionAdId AND
+    clickTime >= impressionTime AND
+    clickTime <= impressionTime + interval 1 hour
+    """),
+  "leftOuter"                 # can be "inner", "leftOuter", "rightOuter", "fullOuter", "leftSemi"
+)
+
+{% endhighlight %}
+
+</div>
+
 <div data-lang="scala"  markdown="1">
 
 {% highlight scala %}
@@ -1651,6 +1744,7 @@ impressionsWithWatermark.join(
 {% endhighlight %}
 
 </div>
+
 <div data-lang="java"  markdown="1">
 
 {% highlight java %}
@@ -1667,22 +1761,7 @@ impressionsWithWatermark.join(
 
 
 </div>
-<div data-lang="python"  markdown="1">
 
-{% highlight python %}
-impressionsWithWatermark.join(
-  clicksWithWatermark,
-  expr("""
-    clickAdId = impressionAdId AND
-    clickTime >= impressionTime AND
-    clickTime <= impressionTime + interval 1 hour
-    """),
-  "leftOuter"                 # can be "inner", "leftOuter", "rightOuter", "fullOuter", "leftSemi"
-)
-
-{% endhighlight %}
-
-</div>
 <div data-lang="r"  markdown="1">
 
 {% highlight r %}
@@ -1700,6 +1779,7 @@ joined <- join(
 {% endhighlight %}
 
 </div>
+
 </div>
 
 
@@ -1848,12 +1928,134 @@ Additional details on supported joins:
 
 - As of Spark 2.4, you can use joins only when the query is in Append output mode. Other output modes are not yet supported.
 
-- As of Spark 2.4, you cannot use other non-map-like operations before joins. Here are a few examples of
-  what cannot be used.
+- You cannot use mapGroupsWithState and flatMapGroupsWithState before and after joins.
 
-  - Cannot use streaming aggregations before joins.
+In append output mode, you can construct a query having non-map-like operations e.g. aggregation, deduplication, stream-stream join before/after join.
 
-  - Cannot use mapGroupsWithState and flatMapGroupsWithState in Update mode before joins.
+For example, here's an example of time window aggregation in both streams followed by stream-stream join with event time window:
+
+<div class="codetabs">
+<div data-lang="scala"  markdown="1">
+
+{% highlight scala %}
+
+val clicksWindow = clicksWithWatermark
+  .groupBy(window("clickTime", "1 hour"))
+  .count()
+
+val impressionsWindow = impressionsWithWatermark
+  .groupBy(window("impressionTime", "1 hour"))
+  .count()
+
+clicksWindow.join(impressionsWindow, "window", "inner")
+
+{% endhighlight %}
+
+</div>
+<div data-lang="java"  markdown="1">
+
+{% highlight java %}
+
+Dataset<Row> clicksWindow = clicksWithWatermark
+  .groupBy(functions.window(clicksWithWatermark.col("clickTime"), "1 hour"))
+  .count();
+
+Dataset<Row> impressionsWindow = impressionsWithWatermark
+  .groupBy(functions.window(impressionsWithWatermark.col("impressionTime"), "1 hour"))
+  .count();
+
+clicksWindow.join(impressionsWindow, "window", "inner");
+
+{% endhighlight %}
+
+
+</div>
+<div data-lang="python"  markdown="1">
+
+{% highlight python %}
+clicksWindow = clicksWithWatermark.groupBy(
+  clicksWithWatermark.clickAdId,
+  window(clicksWithWatermark.clickTime, "1 hour")
+).count()
+
+impressionsWindow = impressionsWithWatermark.groupBy(
+  impressionsWithWatermark.impressionAdId,
+  window(impressionsWithWatermark.impressionTime, "1 hour")
+).count()
+
+clicksWindow.join(impressionsWindow, "window", "inner")
+
+{% endhighlight %}
+
+</div>
+</div>
+
+Here's another example of stream-stream join with time range join condition followed by time window aggregation:
+
+<div class="codetabs">
+<div data-lang="scala"  markdown="1">
+
+{% highlight scala %}
+
+val joined = impressionsWithWatermark.join(
+  clicksWithWatermark,
+  expr("""
+    clickAdId = impressionAdId AND
+    clickTime >= impressionTime AND
+    clickTime <= impressionTime + interval 1 hour
+  """),
+  joinType = "leftOuter"      // can be "inner", "leftOuter", "rightOuter", "fullOuter", "leftSemi"
+)
+
+joined
+  .groupBy($"clickAdId", window($"clickTime", "1 hour"))
+  .count()
+
+{% endhighlight %}
+
+</div>
+<div data-lang="java"  markdown="1">
+
+{% highlight java %}
+Dataset<Row> joined = impressionsWithWatermark.join(
+  clicksWithWatermark,
+  expr(
+    "clickAdId = impressionAdId AND " +
+    "clickTime >= impressionTime AND " +
+    "clickTime <= impressionTime + interval 1 hour "),
+  "leftOuter"                 // can be "inner", "leftOuter", "rightOuter", "fullOuter", "leftSemi"
+);
+
+joined
+  .groupBy(joined.col("clickAdId"), functions.window(joined.col("clickTime"), "1 hour"))
+  .count();
+
+{% endhighlight %}
+
+
+</div>
+<div data-lang="python"  markdown="1">
+
+{% highlight python %}
+joined = impressionsWithWatermark.join(
+  clicksWithWatermark,
+  expr("""
+    clickAdId = impressionAdId AND
+    clickTime >= impressionTime AND
+    clickTime <= impressionTime + interval 1 hour
+    """),
+  "leftOuter"                 # can be "inner", "leftOuter", "rightOuter", "fullOuter", "leftSemi"
+)
+
+joined.groupBy(
+  joined.clickAdId,
+  window(joined.clickTime, "1 hour")
+).count()
+
+{% endhighlight %}
+
+</div>
+</div>
 
 ### Streaming Deduplication
 You can deduplicate records in data streams using a unique identifier in the events. This is exactly same as deduplication on static using a unique identifier column. The query will store the necessary amount of data from previous records such that it can filter duplicate records. Similar to aggregations, you can use deduplication with or without watermarking.
@@ -1863,6 +2065,23 @@ You can deduplicate records in data streams using a unique identifier in the eve
 - *Without watermark* - Since there are no bounds on when a duplicate record may arrive, the query stores the data from all the past records as state.
 
 <div class="codetabs">
+
+<div data-lang="python"  markdown="1">
+
+{% highlight python %}
+streamingDf = spark.readStream. ...
+
+# Without watermark using guid column
+streamingDf.dropDuplicates("guid")
+
+# With watermark using guid and eventTime columns
+streamingDf \
+  .withWatermark("eventTime", "10 seconds") \
+  .dropDuplicates("guid", "eventTime")
+{% endhighlight %}
+
+</div>
+
 <div data-lang="scala"  markdown="1">
 
 {% highlight scala %}
@@ -1878,6 +2097,7 @@ streamingDf
 {% endhighlight %}
 
 </div>
+
 <div data-lang="java"  markdown="1">
 
 {% highlight java %}
@@ -1894,21 +2114,7 @@ streamingDf
 
 
 </div>
-<div data-lang="python"  markdown="1">
 
-{% highlight python %}
-streamingDf = spark.readStream. ...
-
-# Without watermark using guid column
-streamingDf.dropDuplicates("guid")
-
-# With watermark using guid and eventTime columns
-streamingDf \
-  .withWatermark("eventTime", "10 seconds") \
-  .dropDuplicates("guid", "eventTime")
-{% endhighlight %}
-
-</div>
 <div data-lang="r"  markdown="1">
 
 {% highlight r %}
@@ -1923,6 +2129,7 @@ streamingDf <- dropDuplicates(streamingDf, "guid", "eventTime")
 {% endhighlight %}
 
 </div>
+
 </div>
 
 ### Policy for handling multiple watermarks
@@ -1982,9 +2189,7 @@ Some of them are as follows.
   for more details.
 
 - Chaining multiple stateful operations on streaming Datasets is not supported with Update and Complete mode.
-  - In addition, below operations followed by other stateful operation is not supported in Append mode.
-    - stream-stream time interval join (inner/outer)
-    - flatMapGroupsWithState
+  - In addition, mapGroupsWithState/flatMapGroupsWithState operation followed by other stateful operation is not supported in Append mode.
   - A known workaround is to split your streaming query into multiple queries having a single stateful operation per each query,
     and ensure end-to-end exactly once per query. Ensuring end-to-end exactly once for the last query is optional.
 
@@ -2369,90 +2574,7 @@ Note that you have to call `start()` to actually start the execution of the quer
 
 
 <div class="codetabs">
-<div data-lang="scala"  markdown="1">
 
-{% highlight scala %}
-// ========== DF with no aggregations ==========
-val noAggDF = deviceDataDf.select("device").where("signal > 10")   
-
-// Print new data to console
-noAggDF
-  .writeStream
-  .format("console")
-  .start()
-
-// Write new data to Parquet files
-noAggDF
-  .writeStream
-  .format("parquet")
-  .option("checkpointLocation", "path/to/checkpoint/dir")
-  .option("path", "path/to/destination/dir")
-  .start()
-
-// ========== DF with aggregation ==========
-val aggDF = df.groupBy("device").count()
-
-// Print updated aggregations to console
-aggDF
-  .writeStream
-  .outputMode("complete")
-  .format("console")
-  .start()
-
-// Have all the aggregates in an in-memory table
-aggDF
-  .writeStream
-  .queryName("aggregates")    // this query name will be the table name
-  .outputMode("complete")
-  .format("memory")
-  .start()
-
-spark.sql("select * from aggregates").show()   // interactively query in-memory table
-{% endhighlight %}
-
-</div>
-<div data-lang="java"  markdown="1">
-
-{% highlight java %}
-// ========== DF with no aggregations ==========
-Dataset<Row> noAggDF = deviceDataDf.select("device").where("signal > 10");
-
-// Print new data to console
-noAggDF
-  .writeStream()
-  .format("console")
-  .start();
-
-// Write new data to Parquet files
-noAggDF
-  .writeStream()
-  .format("parquet")
-  .option("checkpointLocation", "path/to/checkpoint/dir")
-  .option("path", "path/to/destination/dir")
-  .start();
-
-// ========== DF with aggregation ==========
-Dataset<Row> aggDF = df.groupBy("device").count();
-
-// Print updated aggregations to console
-aggDF
-  .writeStream()
-  .outputMode("complete")
-  .format("console")
-  .start();
-
-// Have all the aggregates in an in-memory table
-aggDF
-  .writeStream()
-  .queryName("aggregates")    // this query name will be the table name
-  .outputMode("complete")
-  .format("memory")
-  .start();
-
-spark.sql("select * from aggregates").show();   // interactively query in-memory table
-{% endhighlight %}
-
-</div>
 <div data-lang="python"  markdown="1">
 
 {% highlight python %}
@@ -2495,6 +2617,93 @@ spark.sql("select * from aggregates").show()   # interactively query in-memory t
 {% endhighlight %}
 
 </div>
+
+<div data-lang="scala"  markdown="1">
+
+{% highlight scala %}
+// ========== DF with no aggregations ==========
+val noAggDF = deviceDataDf.select("device").where("signal > 10")   
+
+// Print new data to console
+noAggDF
+  .writeStream
+  .format("console")
+  .start()
+
+// Write new data to Parquet files
+noAggDF
+  .writeStream
+  .format("parquet")
+  .option("checkpointLocation", "path/to/checkpoint/dir")
+  .option("path", "path/to/destination/dir")
+  .start()
+
+// ========== DF with aggregation ==========
+val aggDF = df.groupBy("device").count()
+
+// Print updated aggregations to console
+aggDF
+  .writeStream
+  .outputMode("complete")
+  .format("console")
+  .start()
+
+// Have all the aggregates in an in-memory table
+aggDF
+  .writeStream
+  .queryName("aggregates")    // this query name will be the table name
+  .outputMode("complete")
+  .format("memory")
+  .start()
+
+spark.sql("select * from aggregates").show()   // interactively query in-memory table
+{% endhighlight %}
+
+</div>
+
+<div data-lang="java"  markdown="1">
+
+{% highlight java %}
+// ========== DF with no aggregations ==========
+Dataset<Row> noAggDF = deviceDataDf.select("device").where("signal > 10");
+
+// Print new data to console
+noAggDF
+  .writeStream()
+  .format("console")
+  .start();
+
+// Write new data to Parquet files
+noAggDF
+  .writeStream()
+  .format("parquet")
+  .option("checkpointLocation", "path/to/checkpoint/dir")
+  .option("path", "path/to/destination/dir")
+  .start();
+
+// ========== DF with aggregation ==========
+Dataset<Row> aggDF = df.groupBy("device").count();
+
+// Print updated aggregations to console
+aggDF
+  .writeStream()
+  .outputMode("complete")
+  .format("console")
+  .start();
+
+// Have all the aggregates in an in-memory table
+aggDF
+  .writeStream()
+  .queryName("aggregates")    // this query name will be the table name
+  .outputMode("complete")
+  .format("memory")
+  .start();
+
+spark.sql("select * from aggregates").show();   // interactively query in-memory table
+{% endhighlight %}
+
+</div>
+
 <div data-lang="r"  markdown="1">
 
 {% highlight r %}
@@ -2524,6 +2733,7 @@ head(sql("select * from aggregates"))
 {% endhighlight %}
 
 </div>
+
 </div>
 
 ##### Using Foreach and ForeachBatch
@@ -2538,6 +2748,19 @@ the output data of every micro-batch of a streaming query. Since Spark 2.4, this
 It takes two parameters: a DataFrame or Dataset that has the output data of a micro-batch and the unique ID of the micro-batch.
 
 <div class="codetabs">
+
+<div data-lang="python"  markdown="1">
+
+{% highlight python %}
+def foreach_batch_function(df, epoch_id):
+    # Transform and write batchDF
+    pass
+  
+streamingDF.writeStream.foreachBatch(foreach_batch_function).start()   
+{% endhighlight %}
+
+</div>
+
 <div data-lang="scala"  markdown="1">
 
 {% highlight scala %}
@@ -2547,6 +2770,7 @@ streamingDF.writeStream.foreachBatch { (batchDF: DataFrame, batchId: Long) =>
 {% endhighlight %}
 
 </div>
+
 <div data-lang="java"  markdown="1">
 
 {% highlight java %}
@@ -2560,20 +2784,11 @@ streamingDatasetOfString.writeStream().foreachBatch(
 {% endhighlight %}
 
 </div>
-<div data-lang="python"  markdown="1">
 
-{% highlight python %}
-def foreach_batch_function(df, epoch_id):
-    # Transform and write batchDF
-    pass
-  
-streamingDF.writeStream.foreachBatch(foreach_batch_function).start()   
-{% endhighlight %}
-
-</div>
 <div data-lang="r"  markdown="1">
 R is not yet supported.
 </div>
+
 </div>
 
 With `foreachBatch`, you can do the following.
@@ -2619,54 +2834,7 @@ Specifically, you can express the data writing logic by dividing it into three m
 Since Spark 2.4, `foreach` is available in Scala, Java and Python. 
 
 <div class="codetabs">
-<div data-lang="scala"  markdown="1">
 
-In Scala, you have to extend the class `ForeachWriter` ([docs](api/scala/org/apache/spark/sql/ForeachWriter.html)).
-
-{% highlight scala %}
-streamingDatasetOfString.writeStream.foreach(
-  new ForeachWriter[String] {
-
-    def open(partitionId: Long, version: Long): Boolean = {
-      // Open connection
-    }
-
-    def process(record: String): Unit = {
-      // Write string to connection
-    }
-
-    def close(errorOrNull: Throwable): Unit = {
-      // Close the connection
-    }
-  }
-).start()
-{% endhighlight %}
-
-</div>
-<div data-lang="java"  markdown="1">
-
-In Java, you have to extend the class `ForeachWriter` ([docs](api/java/org/apache/spark/sql/ForeachWriter.html)).
-{% highlight java %}
-streamingDatasetOfString.writeStream().foreach(
-  new ForeachWriter<String>() {
-
-    @Override public boolean open(long partitionId, long version) {
-      // Open connection
-    }
-
-    @Override public void process(String record) {
-      // Write string to connection
-    }
-
-    @Override public void close(Throwable errorOrNull) {
-      // Close the connection
-    }
-  }
-).start();
-
-{% endhighlight %}
-
-</div>
 <div data-lang="python"  markdown="1">
 
 In Python, you can invoke foreach in two ways: in a function or in an object. 
@@ -2704,9 +2872,61 @@ query = streamingDF.writeStream.foreach(ForeachWriter()).start()
 {% endhighlight %}
 
 </div>
+
+<div data-lang="scala"  markdown="1">
+
+In Scala, you have to extend the class `ForeachWriter` ([docs](api/scala/org/apache/spark/sql/ForeachWriter.html)).
+
+{% highlight scala %}
+streamingDatasetOfString.writeStream.foreach(
+  new ForeachWriter[String] {
+
+    def open(partitionId: Long, version: Long): Boolean = {
+      // Open connection
+    }
+
+    def process(record: String): Unit = {
+      // Write string to connection
+    }
+
+    def close(errorOrNull: Throwable): Unit = {
+      // Close the connection
+    }
+  }
+).start()
+{% endhighlight %}
+
+</div>
+
+<div data-lang="java"  markdown="1">
+
+In Java, you have to extend the class `ForeachWriter` ([docs](api/java/org/apache/spark/sql/ForeachWriter.html)).
+{% highlight java %}
+streamingDatasetOfString.writeStream().foreach(
+  new ForeachWriter<String>() {
+
+    @Override public boolean open(long partitionId, long version) {
+      // Open connection
+    }
+
+    @Override public void process(String record) {
+      // Write string to connection
+    }
+
+    @Override public void close(Throwable errorOrNull) {
+      // Close the connection
+    }
+  }
+).start();
+
+{% endhighlight %}
+
+</div>
+
 <div data-lang="r"  markdown="1">
 R is not yet supported.
 </div>
+
 </div>
 
 
@@ -2745,6 +2965,41 @@ When the streaming query is started, Spark calls the function or the object’s 
 Since Spark 3.1, you can also use `DataStreamReader.table()` to read tables as streaming DataFrames and use `DataStreamWriter.toTable()` to write streaming DataFrames as tables:
 
 <div class="codetabs">
+
+<div data-lang="python"  markdown="1">
+
+{% highlight python %}
+spark = ...  # spark session
+
+# Create a streaming DataFrame
+df = spark.readStream \
+    .format("rate") \
+    .option("rowsPerSecond", 10) \
+    .load()
+
+# Write the streaming DataFrame to a table
+df.writeStream \
+    .option("checkpointLocation", "path/to/checkpoint/dir") \
+    .toTable("myTable")
+
+# Check the table result
+spark.read.table("myTable").show()
+
+# Transform the source dataset and write to a new table
+spark.readStream \
+    .table("myTable") \
+    .select("value") \
+    .writeStream \
+    .option("checkpointLocation", "path/to/checkpoint/dir") \
+    .format("parquet") \
+    .toTable("newTable")
+
+# Check the new table result
+spark.read.table("newTable").show()
+{% endhighlight %}
+
+</div>
+
 <div data-lang="scala"  markdown="1">
 
 {% highlight scala %}
@@ -2813,43 +3068,10 @@ spark.read().table("newTable").show();
 
 </div>
 
-<div data-lang="python"  markdown="1">
-
-{% highlight python %}
-spark = ...  # spark session
-
-# Create a streaming DataFrame
-df = spark.readStream \
-    .format("rate") \
-    .option("rowsPerSecond", 10) \
-    .load()
-
-# Write the streaming DataFrame to a table
-df.writeStream \
-    .option("checkpointLocation", "path/to/checkpoint/dir") \
-    .toTable("myTable")
-
-# Check the table result
-spark.read.table("myTable").show()
-
-# Transform the source dataset and write to a new table
-spark.readStream \
-    .table("myTable") \
-    .select("value") \
-    .writeStream \
-    .option("checkpointLocation", "path/to/checkpoint/dir") \
-    .format("parquet") \
-    .toTable("newTable")
-
-# Check the new table result
-spark.read.table("newTable").show()
-{% endhighlight %}
-
-</div>
-
 <div data-lang="r"  markdown="1">
 Not available in R.
 </div>
+
 </div>
 
 For more details, please check the docs for DataStreamReader ([Scala](api/scala/org/apache/spark/sql/streaming/DataStreamReader.html)/[Java](api/java/org/apache/spark/sql/streaming/DataStreamReader.html)/[Python](api/python/reference/pyspark.ss/api/pyspark.sql.streaming.DataStreamReader.html#pyspark.sql.streaming.DataStreamReader) docs) and DataStreamWriter ([Scala](api/scala/org/apache/spark/sql/streaming/DataStreamWriter.html)/[Java](api/java/org/apache/spark/sql/streaming/DataStreamWriter.html)/[Python](api/python/reference/pyspark.ss/api/pyspark.sql.streaming.DataStreamWriter.html#pyspark.sql.streaming.DataStreamWriter) docs).
@@ -2931,81 +3153,7 @@ Here are the different kinds of triggers that are supported.
 Here are a few code examples.
 
 <div class="codetabs">
-<div data-lang="scala"  markdown="1">
 
-{% highlight scala %}
-import org.apache.spark.sql.streaming.Trigger
-
-// Default trigger (runs micro-batch as soon as it can)
-df.writeStream
-  .format("console")
-  .start()
-
-// ProcessingTime trigger with two-seconds micro-batch interval
-df.writeStream
-  .format("console")
-  .trigger(Trigger.ProcessingTime("2 seconds"))
-  .start()
-
-// One-time trigger (Deprecated, encouraged to use Available-now trigger)
-df.writeStream
-  .format("console")
-  .trigger(Trigger.Once())
-  .start()
-
-// Available-now trigger
-df.writeStream
-  .format("console")
-  .trigger(Trigger.AvailableNow())
-  .start()
-
-// Continuous trigger with one-second checkpointing interval
-df.writeStream
-  .format("console")
-  .trigger(Trigger.Continuous("1 second"))
-  .start()
-
-{% endhighlight %}
-
-
-</div>
-<div data-lang="java"  markdown="1">
-
-{% highlight java %}
-import org.apache.spark.sql.streaming.Trigger
-
-// Default trigger (runs micro-batch as soon as it can)
-df.writeStream
-  .format("console")
-  .start();
-
-// ProcessingTime trigger with two-seconds micro-batch interval
-df.writeStream
-  .format("console")
-  .trigger(Trigger.ProcessingTime("2 seconds"))
-  .start();
-
-// One-time trigger (Deprecated, encouraged to use Available-now trigger)
-df.writeStream
-  .format("console")
-  .trigger(Trigger.Once())
-  .start();
-
-// Available-now trigger
-df.writeStream
-  .format("console")
-  .trigger(Trigger.AvailableNow())
-  .start();
-
-// Continuous trigger with one-second checkpointing interval
-df.writeStream
-  .format("console")
-  .trigger(Trigger.Continuous("1 second"))
-  .start();
-
-{% endhighlight %}
-
-</div>
 <div data-lang="python"  markdown="1">
 
 {% highlight python %}
@@ -3041,6 +3189,84 @@ df.writeStream
 
 {% endhighlight %}
 </div>
+
+<div data-lang="scala"  markdown="1">
+
+{% highlight scala %}
+import org.apache.spark.sql.streaming.Trigger
+
+// Default trigger (runs micro-batch as soon as it can)
+df.writeStream
+  .format("console")
+  .start()
+
+// ProcessingTime trigger with two-seconds micro-batch interval
+df.writeStream
+  .format("console")
+  .trigger(Trigger.ProcessingTime("2 seconds"))
+  .start()
+
+// One-time trigger (Deprecated, encouraged to use Available-now trigger)
+df.writeStream
+  .format("console")
+  .trigger(Trigger.Once())
+  .start()
+
+// Available-now trigger
+df.writeStream
+  .format("console")
+  .trigger(Trigger.AvailableNow())
+  .start()
+
+// Continuous trigger with one-second checkpointing interval
+df.writeStream
+  .format("console")
+  .trigger(Trigger.Continuous("1 second"))
+  .start()
+
+{% endhighlight %}
+
+
+</div>
+
+<div data-lang="java"  markdown="1">
+
+{% highlight java %}
+import org.apache.spark.sql.streaming.Trigger
+
+// Default trigger (runs micro-batch as soon as it can)
+df.writeStream
+  .format("console")
+  .start();
+
+// ProcessingTime trigger with two-seconds micro-batch interval
+df.writeStream
+  .format("console")
+  .trigger(Trigger.ProcessingTime("2 seconds"))
+  .start();
+
+// One-time trigger (Deprecated, encouraged to use Available-now trigger)
+df.writeStream
+  .format("console")
+  .trigger(Trigger.Once())
+  .start();
+
+// Available-now trigger
+df.writeStream
+  .format("console")
+  .trigger(Trigger.AvailableNow())
+  .start();
+
+// Continuous trigger with one-second checkpointing interval
+df.writeStream
+  .format("console")
+  .trigger(Trigger.Continuous("1 second"))
+  .start();
+
+{% endhighlight %}
+
+</div>
+
 <div data-lang="r"  markdown="1">
 
 {% highlight r %}
@@ -3056,6 +3282,7 @@ write.stream(df, "console", trigger.once = TRUE)
 # Continuous trigger is not yet supported
 {% endhighlight %}
 </div>
+
 </div>
 
 
@@ -3063,58 +3290,7 @@ write.stream(df, "console", trigger.once = TRUE)
 The `StreamingQuery` object created when a query is started can be used to monitor and manage the query. 
 
 <div class="codetabs">
-<div data-lang="scala"  markdown="1">
 
-{% highlight scala %}
-val query = df.writeStream.format("console").start()   // get the query object
-
-query.id          // get the unique identifier of the running query that persists across restarts from checkpoint data
-
-query.runId       // get the unique id of this run of the query, which will be generated at every start/restart
-
-query.name        // get the name of the auto-generated or user-specified name
-
-query.explain()   // print detailed explanations of the query
-
-query.stop()      // stop the query
-
-query.awaitTermination()   // block until query is terminated, with stop() or with error
-
-query.exception       // the exception if the query has been terminated with error
-
-query.recentProgress  // an array of the most recent progress updates for this query
-
-query.lastProgress    // the most recent progress update of this streaming query
-{% endhighlight %}
-
-
-</div>
-<div data-lang="java"  markdown="1">
-
-{% highlight java %}
-StreamingQuery query = df.writeStream().format("console").start();   // get the query object
-
-query.id();          // get the unique identifier of the running query that persists across restarts from checkpoint data
-
-query.runId();       // get the unique id of this run of the query, which will be generated at every start/restart
-
-query.name();        // get the name of the auto-generated or user-specified name
-
-query.explain();   // print detailed explanations of the query
-
-query.stop();      // stop the query
-
-query.awaitTermination();   // block until query is terminated, with stop() or with error
-
-query.exception();       // the exception if the query has been terminated with error
-
-query.recentProgress();  // an array of the most recent progress updates for this query
-
-query.lastProgress();    // the most recent progress update of this streaming query
-
-{% endhighlight %}
-
-</div>
 <div data-lang="python"  markdown="1">
 
 {% highlight python %}
@@ -3141,6 +3317,61 @@ query.lastProgress    # the most recent progress update of this streaming query
 {% endhighlight %}
 
 </div>
+
+<div data-lang="scala"  markdown="1">
+
+{% highlight scala %}
+val query = df.writeStream.format("console").start()   // get the query object
+
+query.id          // get the unique identifier of the running query that persists across restarts from checkpoint data
+
+query.runId       // get the unique id of this run of the query, which will be generated at every start/restart
+
+query.name        // get the name of the auto-generated or user-specified name
+
+query.explain()   // print detailed explanations of the query
+
+query.stop()      // stop the query
+
+query.awaitTermination()   // block until query is terminated, with stop() or with error
+
+query.exception       // the exception if the query has been terminated with error
+
+query.recentProgress  // an array of the most recent progress updates for this query
+
+query.lastProgress    // the most recent progress update of this streaming query
+{% endhighlight %}
+
+
+</div>
+
+<div data-lang="java"  markdown="1">
+
+{% highlight java %}
+StreamingQuery query = df.writeStream().format("console").start();   // get the query object
+
+query.id();          // get the unique identifier of the running query that persists across restarts from checkpoint data
+
+query.runId();       // get the unique id of this run of the query, which will be generated at every start/restart
+
+query.name();        // get the name of the auto-generated or user-specified name
+
+query.explain();   // print detailed explanations of the query
+
+query.stop();      // stop the query
+
+query.awaitTermination();   // block until query is terminated, with stop() or with error
+
+query.exception();       // the exception if the query has been terminated with error
+
+query.recentProgress();  // an array of the most recent progress updates for this query
+
+query.lastProgress();    // the most recent progress update of this streaming query
+
+{% endhighlight %}
+
+</div>
+
 <div data-lang="r"  markdown="1">
 
 {% highlight r %}
@@ -3159,6 +3390,7 @@ lastProgress(query)       # the most recent progress update of this streaming qu
 {% endhighlight %}
 
 </div>
+
 </div>
 
 You can start any number of queries in a single SparkSession. They will all be running concurrently sharing the cluster resources. You can use `sparkSession.streams()` to get the `StreamingQueryManager`
@@ -3166,32 +3398,7 @@ You can start any number of queries in a single SparkSession. They will all be r
 that can be used to manage the currently active queries.
 
 <div class="codetabs">
-<div data-lang="scala"  markdown="1">
 
-{% highlight scala %}
-val spark: SparkSession = ...
-
-spark.streams.active    // get the list of currently active streaming queries
-
-spark.streams.get(id)   // get a query object by its unique id
-
-spark.streams.awaitAnyTermination()   // block until any one of them terminates
-{% endhighlight %}
-
-</div>
-<div data-lang="java"  markdown="1">
-
-{% highlight java %}
-SparkSession spark = ...
-
-spark.streams().active();    // get the list of currently active streaming queries
-
-spark.streams().get(id);   // get a query object by its unique id
-
-spark.streams().awaitAnyTermination();   // block until any one of them terminates
-{% endhighlight %}
-
-</div>
 <div data-lang="python"  markdown="1">
 
 {% highlight python %}
@@ -3205,12 +3412,42 @@ spark.streams.awaitAnyTermination()  # block until any one of them terminates
 {% endhighlight %}
 
 </div>
+
+<div data-lang="scala"  markdown="1">
+
+{% highlight scala %}
+val spark: SparkSession = ...
+
+spark.streams.active    // get the list of currently active streaming queries
+
+spark.streams.get(id)   // get a query object by its unique id
+
+spark.streams.awaitAnyTermination()   // block until any one of them terminates
+{% endhighlight %}
+
+</div>
+
+<div data-lang="java"  markdown="1">
+
+{% highlight java %}
+SparkSession spark = ...
+
+spark.streams().active();    // get the list of currently active streaming queries
+
+spark.streams().get(id);   // get a query object by its unique id
+
+spark.streams().awaitAnyTermination();   // block until any one of them terminates
+{% endhighlight %}
+
+</div>
+
 <div data-lang="r"  markdown="1">
 {% highlight bash %}
 Not available in R.
 {% endhighlight %}
 
 </div>
+
 </div>
 
 
@@ -3238,6 +3475,29 @@ what the query is immediately doing - is a trigger active, is data being process
 Here are a few examples.
 
 <div class="codetabs">
+
+<div data-lang="python"  markdown="1">
+
+{% highlight python %}
+query = ...  # a StreamingQuery
+print(query.lastProgress)
+
+'''
+Will print something like the following.
+
+{u'stateOperators': [], u'eventTime': {u'watermark': u'2016-12-14T18:45:24.873Z'}, u'name': u'MyQuery', u'timestamp': u'2016-12-14T18:45:24.873Z', u'processedRowsPerSecond': 200.0, u'inputRowsPerSecond': 120.0, u'numInputRows': 10, u'sources': [{u'description': u'KafkaSource[Subscribe[topic-0]]', u'endOffset': {u'topic-0': {u'1': 134, u'0': 534, u'3': 21, u'2': 0, u'4': 115}}, u'processedRowsPerSecond': 200.0, u'inputRowsPerSecond': 120.0, u'numInputRows': 10, u'startOffset': {u'topic-0': {u'1': 1, u'0': 1, u'3': 1, u'2': 0, u'4': 1}}}], u'durationMs': {u'getOffset': 2, u'triggerExecution': 3}, u'runId': u'88e2ff94-ede0-45a8-b687-6316fbef529a', u'id': u'ce011fdc-8762-4dcb-84eb-a77333e28109', u'sink': {u'description': u'MemorySink'}}
+'''
+
+print(query.status)
+''' 
+Will print something like the following.
+
+{u'message': u'Waiting for data to arrive', u'isTriggerActive': False, u'isDataAvailable': False}
+'''
+{% endhighlight %}
+
+</div>
+
 <div data-lang="scala"  markdown="1">
 
 {% highlight scala %}
@@ -3306,6 +3566,7 @@ println(query.status)
 {% endhighlight %}
 
 </div>
+
 <div data-lang="java"  markdown="1">
 
 {% highlight java %}
@@ -3372,27 +3633,7 @@ System.out.println(query.status());
 {% endhighlight %}
 
 </div>
-<div data-lang="python"  markdown="1">
 
-{% highlight python %}
-query = ...  # a StreamingQuery
-print(query.lastProgress)
-
-'''
-Will print something like the following.
-
-{u'stateOperators': [], u'eventTime': {u'watermark': u'2016-12-14T18:45:24.873Z'}, u'name': u'MyQuery', u'timestamp': u'2016-12-14T18:45:24.873Z', u'processedRowsPerSecond': 200.0, u'inputRowsPerSecond': 120.0, u'numInputRows': 10, u'sources': [{u'description': u'KafkaSource[Subscribe[topic-0]]', u'endOffset': {u'topic-0': {u'1': 134, u'0': 534, u'3': 21, u'2': 0, u'4': 115}}, u'processedRowsPerSecond': 200.0, u'inputRowsPerSecond': 120.0, u'numInputRows': 10, u'startOffset': {u'topic-0': {u'1': 1, u'0': 1, u'3': 1, u'2': 0, u'4': 1}}}], u'durationMs': {u'getOffset': 2, u'triggerExecution': 3}, u'runId': u'88e2ff94-ede0-45a8-b687-6316fbef529a', u'id': u'ce011fdc-8762-4dcb-84eb-a77333e28109', u'sink': {u'description': u'MemorySink'}}
-'''
-
-print(query.status)
-''' 
-Will print something like the following.
-
-{u'message': u'Waiting for data to arrive', u'isTriggerActive': False, u'isDataAvailable': False}
-'''
-{% endhighlight %}
-
-</div>
 <div data-lang="r"  markdown="1">
 
 {% highlight r %}
@@ -3445,6 +3686,7 @@ Will print something like the following.
 {% endhighlight %}
 
 </div>
+
 </div>
 
 ### Reporting Metrics programmatically using Asynchronous APIs
@@ -3457,6 +3699,27 @@ Once you attach your custom `StreamingQueryListener` object with
 stopped and when there is progress made in an active query. Here is an example,
 
 <div class="codetabs">
+
+<div data-lang="python"  markdown="1">
+{% highlight python %}
+spark = ...
+
+class Listener(StreamingQueryListener):
+    def onQueryStarted(self, event):
+        print("Query started: " + queryStarted.id)
+
+    def onQueryProgress(self, event):
+        println("Query terminated: " + queryTerminated.id)
+
+    def onQueryTerminated(self, event):
+        println("Query made progress: " + queryProgress.progress)
+
+
+spark.streams.addListener(Listener())
+{% endhighlight %}
+
+</div>
+
 <div data-lang="scala"  markdown="1">
 
 {% highlight scala %}
@@ -3476,6 +3739,7 @@ spark.streams.addListener(new StreamingQueryListener() {
 {% endhighlight %}
 
 </div>
+
 <div data-lang="java"  markdown="1">
 
 {% highlight java %}
@@ -3498,51 +3762,21 @@ spark.streams().addListener(new StreamingQueryListener() {
 {% endhighlight %}
 
 </div>
-<div data-lang="python"  markdown="1">
-{% highlight python %}
-spark = ...
 
-class Listener(StreamingQueryListener):
-    def onQueryStarted(self, event):
-        print("Query started: " + queryStarted.id)
-
-    def onQueryProgress(self, event):
-        println("Query terminated: " + queryTerminated.id)
-
-    def onQueryTerminated(self, event):
-        println("Query made progress: " + queryProgress.progress)
-
-
-spark.streams.addListener(Listener())
-{% endhighlight %}
-
-</div>
 <div data-lang="r"  markdown="1">
 {% highlight bash %}
 Not available in R.
 {% endhighlight %}
 
 </div>
+
 </div>
 
 ### Reporting Metrics using Dropwizard 
 Spark supports reporting metrics using the [Dropwizard Library](monitoring.html#metrics). To enable metrics of Structured Streaming queries to be reported as well, you have to explicitly enable the configuration `spark.sql.streaming.metricsEnabled` in the SparkSession. 
 
 <div class="codetabs">
-<div data-lang="scala"  markdown="1">
-{% highlight scala %}
-spark.conf.set("spark.sql.streaming.metricsEnabled", "true")
-// or
-spark.sql("SET spark.sql.streaming.metricsEnabled=true")
-{% endhighlight %}
-</div>
-<div data-lang="java"  markdown="1">  
-{% highlight java %}
-spark.conf().set("spark.sql.streaming.metricsEnabled", "true");
-// or
-spark.sql("SET spark.sql.streaming.metricsEnabled=true");
-{% endhighlight %}
-</div>
+
 <div data-lang="python"  markdown="1">  
 {% highlight python %}
 spark.conf.set("spark.sql.streaming.metricsEnabled", "true")
@@ -3550,11 +3784,29 @@ spark.conf.set("spark.sql.streaming.metricsEnabled", "true")
 spark.sql("SET spark.sql.streaming.metricsEnabled=true")
 {% endhighlight %}
 </div>
+
+<div data-lang="scala"  markdown="1">
+{% highlight scala %}
+spark.conf.set("spark.sql.streaming.metricsEnabled", "true")
+// or
+spark.sql("SET spark.sql.streaming.metricsEnabled=true")
+{% endhighlight %}
+</div>
+
+<div data-lang="java"  markdown="1">  
+{% highlight java %}
+spark.conf().set("spark.sql.streaming.metricsEnabled", "true");
+// or
+spark.sql("SET spark.sql.streaming.metricsEnabled=true");
+{% endhighlight %}
+</div>
+
 <div data-lang="r"  markdown="1">
 {% highlight r %}
 sql("SET spark.sql.streaming.metricsEnabled=true")
 {% endhighlight %}
 </div>
+
 </div>
 
 
@@ -3564,30 +3816,7 @@ All queries started in the SparkSession after this configuration has been enable
 In case of a failure or intentional shutdown, you can recover the previous progress and state of a previous query, and continue where it left off. This is done using checkpointing and write-ahead logs. You can configure a query with a checkpoint location, and the query will save all the progress information (i.e. range of offsets processed in each trigger) and the running aggregates (e.g. word counts in the [quick example](#quick-example)) to the checkpoint location. This checkpoint location has to be a path in an HDFS compatible file system, and can be set as an option in the DataStreamWriter when [starting a query](#starting-streaming-queries).
 
 <div class="codetabs">
-<div data-lang="scala"  markdown="1">
 
-{% highlight scala %}
-aggDF
-  .writeStream
-  .outputMode("complete")
-  .option("checkpointLocation", "path/to/HDFS/dir")
-  .format("memory")
-  .start()
-{% endhighlight %}
-
-</div>
-<div data-lang="java"  markdown="1">
-
-{% highlight java %}
-aggDF
-  .writeStream()
-  .outputMode("complete")
-  .option("checkpointLocation", "path/to/HDFS/dir")
-  .format("memory")
-  .start();
-{% endhighlight %}
-
-</div>
 <div data-lang="python"  markdown="1">
 
 {% highlight python %}
@@ -3600,6 +3829,33 @@ aggDF \
 {% endhighlight %}
 
 </div>
+
+<div data-lang="scala"  markdown="1">
+
+{% highlight scala %}
+aggDF
+  .writeStream
+  .outputMode("complete")
+  .option("checkpointLocation", "path/to/HDFS/dir")
+  .format("memory")
+  .start()
+{% endhighlight %}
+
+</div>
+
+<div data-lang="java"  markdown="1">
+
+{% highlight java %}
+aggDF
+  .writeStream()
+  .outputMode("complete")
+  .option("checkpointLocation", "path/to/HDFS/dir")
+  .format("memory")
+  .start();
+{% endhighlight %}
+
+</div>
+
 <div data-lang="r"  markdown="1">
 
 {% highlight r %}
@@ -3607,6 +3863,7 @@ write.stream(aggDF, "memory", outputMode = "complete", checkpointLocation = "pat
 {% endhighlight %}
 
 </div>
+
 </div>
 
 
@@ -3746,6 +4003,26 @@ This is caused by the fact that when async progress tracking is enabled, the fra
 To run a supported query in continuous processing mode, all you need to do is specify a **continuous trigger** with the desired checkpoint interval as a parameter. For example, 
 
 <div class="codetabs">
+
+<div data-lang="python"  markdown="1">  
+{% highlight python %}
+spark \
+  .readStream \
+  .format("kafka") \
+  .option("kafka.bootstrap.servers", "host1:port1,host2:port2") \
+  .option("subscribe", "topic1") \
+  .load() \
+  .selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)") \
+  .writeStream \
+  .format("kafka") \
+  .option("kafka.bootstrap.servers", "host1:port1,host2:port2") \
+  .option("topic", "topic1") \
+  .trigger(continuous="1 second") \     # only change in query
+  .start()
+
+{% endhighlight %}
+</div>
+
 <div data-lang="scala"  markdown="1">
 {% highlight scala %}
 import org.apache.spark.sql.streaming.Trigger
@@ -3765,6 +4042,7 @@ spark
   .start()
 {% endhighlight %}
 </div>
+
 <div data-lang="java"  markdown="1">  
 {% highlight java %}
 import org.apache.spark.sql.streaming.Trigger;
@@ -3784,24 +4062,7 @@ spark
   .start();
 {% endhighlight %}
 </div>
-<div data-lang="python"  markdown="1">  
-{% highlight python %}
-spark \
-  .readStream \
-  .format("kafka") \
-  .option("kafka.bootstrap.servers", "host1:port1,host2:port2") \
-  .option("subscribe", "topic1") \
-  .load() \
-  .selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)") \
-  .writeStream \
-  .format("kafka") \
-  .option("kafka.bootstrap.servers", "host1:port1,host2:port2") \
-  .option("topic", "topic1") \
-  .trigger(continuous="1 second") \     # only change in query
-  .start()
 
-{% endhighlight %}
-</div>
 </div>
 
 A checkpoint interval of 1 second means that the continuous processing engine will record the progress of the query every second. The resulting checkpoints are in a format compatible with the micro-batch engine, hence any query can be restarted with any trigger. For example, a supported query started with the micro-batch mode can be restarted in continuous mode, and vice versa. Note that any time you switch to continuous mode, you will get at-least-once fault-tolerance guarantees.
