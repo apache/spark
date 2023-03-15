@@ -70,7 +70,7 @@ object SparkConnectServerUtils {
         "--conf",
         s"spark.connect.grpc.binding.port=$port",
         "--conf",
-        "spark.sql.catalog.testcat=org.apache.spark.sql.connect.catalog.InMemoryTableCatalog",
+        "spark.sql.catalog.testcat=org.apache.spark.sql.connector.catalog.InMemoryTableCatalog",
         "--conf",
         "spark.sql.catalogImplementation=hive",
         "--class",

@@ -21,7 +21,6 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset}
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.storage.StorageLevel
 
 /**
  * Catalog interface for Spark. To access this, use `SparkSession.catalog`.
@@ -237,31 +236,6 @@ abstract class Catalog {
    * @since 3.4.0
    */
   def functionExists(dbName: String, functionName: String): Boolean
-
-  /**
-   * Creates a table from the given path and returns the corresponding DataFrame. It will use the
-   * default data source configured by spark.sql.sources.default.
-   *
-   * @param tableName
-   *   is either a qualified or unqualified name that designates a table. If no database
-   *   identifier is provided, it refers to a table in the current database.
-   * @since 3.4.0
-   */
-  @deprecated("use createTable instead.", "2.2.0")
-  def createExternalTable(tableName: String, path: String): DataFrame = {
-    createTable(tableName, path)
-  }
-
-  /**
-   * Creates a table from the given path and returns the corresponding DataFrame. It will use the
-   * default data source configured by spark.sql.sources.default.
-   *
-   * @param tableName
-   *   is either a qualified or unqualified name that designates a table. If no database
-   *   identifier is provided, it refers to a table in the current database.
-   * @since 3.4.0
-   */
-  def createTable(tableName: String, path: String): DataFrame
 
   /**
    * Creates a table from the given path based on a data source and returns the corresponding
@@ -561,19 +535,6 @@ abstract class Catalog {
    * @since 3.4.0
    */
   def cacheTable(tableName: String): Unit
-
-  /**
-   * Caches the specified table with the given storage level.
-   *
-   * @param tableName
-   *   is either a qualified or unqualified name that designates a table/view. If no database
-   *   identifier is provided, it refers to a temporary view or a table/view in the current
-   *   database.
-   * @param storageLevel
-   *   storage level to cache table.
-   * @since 3.4.0
-   */
-  def cacheTable(tableName: String, storageLevel: StorageLevel): Unit
 
   /**
    * Removes the specified table from the in-memory cache.

@@ -105,6 +105,7 @@ object CheckConnectJvmClientCompatibility {
     val mima = new MiMaLib(Seq(clientJar, sqlJar))
     val allProblems = mima.collectProblems(sqlJar, clientJar, List.empty)
     val includedRules = Seq(
+      IncludeByName("org.apache.spark.sql.catalog.Catalog.*"),
       IncludeByName("org.apache.spark.sql.Column.*"),
       IncludeByName("org.apache.spark.sql.ColumnName.*"),
       IncludeByName("org.apache.spark.sql.DataFrame.*"),
@@ -128,6 +129,11 @@ object CheckConnectJvmClientCompatibility {
       // Skip all shaded dependencies and proto files in the client.
       ProblemFilters.exclude[Problem]("org.sparkproject.*"),
       ProblemFilters.exclude[Problem]("org.apache.spark.connect.proto.*"),
+
+      // Catalog
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.catalog.Catalog.createTable"),
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.catalog.Catalog.createExternalTable"),
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.catalog.Catalog.cacheTable"),
 
       // DataFrame Reader & Writer
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.DataFrameReader.json"), // deprecated

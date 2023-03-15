@@ -16,6 +16,12 @@
  */
 package org.apache.spark.sql
 
+import java.util.UUID
+
+import org.scalatest.Assertions.fail
+
+import org.apache.spark.sql.catalyst.catalog.SessionCatalog.DEFAULT_DATABASE
+
 trait SQLHelper {
 
   def spark: SparkSession
@@ -47,6 +53,31 @@ trait SQLHelper {
         case (key, Some(value)) => spark.conf.set(key, value)
         case (key, None) => spark.conf.unset(key)
       }
+    }
+  }
+
+  /**
+   * Creates a temporary database and switches current database to it before executing `f`. This
+   * database is dropped after `f` returns.
+   *
+   * Note that this method doesn't switch current database before executing `f`.
+   */
+  protected def withTempDatabase(f: String => Unit): Unit = {
+    val dbName = s"db_${UUID.randomUUID().toString.replace('-', '_')}"
+
+    try {
+      spark.sql(s"CREATE DATABASE $dbName")
+    } catch {
+      case cause: Throwable =>
+        fail("Failed to create temporary database", cause)
+    }
+
+    try f(dbName)
+    finally {
+      if (spark.catalog.currentDatabase == dbName) {
+        spark.sql(s"USE $DEFAULT_DATABASE")
+      }
+      spark.sql(s"DROP DATABASE $dbName CASCADE")
     }
   }
 }

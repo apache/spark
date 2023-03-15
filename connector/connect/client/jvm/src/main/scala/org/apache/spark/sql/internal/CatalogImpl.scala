@@ -17,11 +17,13 @@
 
 package org.apache.spark.sql.internal
 
-import org.apache.spark.sql.{catalog, DataFrame, Dataset, SparkSession}
-import org.apache.spark.sql.catalog.{Catalog, CatalogMetadata, Column, Database, Table}
-import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.StringEncoder
+import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
+import org.apache.spark.sql.catalog.{Catalog, CatalogMetadata, Column, Database, Function, Table}
+import org.apache.spark.sql.catalyst.ScalaReflection
+import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
+import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{PrimitiveBooleanEncoder, StringEncoder}
+import org.apache.spark.sql.connect.common.DataTypeProtoConverter
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.storage.StorageLevel
 
 class CatalogImpl(sparkSession: SparkSession) extends Catalog {
 
@@ -31,23 +33,38 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    * @since 3.4.0
    */
   override def currentDatabase: String =
-    sparkSession.newDataset(StringEncoder) { builder =>
-      builder.getCatalogBuilder.getCurrentDatabaseBuilder.build()
-    }.head()
+    sparkSession
+      .newDataset(StringEncoder) { builder =>
+        builder.getCatalogBuilder.getCurrentDatabaseBuilder
+      }
+      .head()
 
   /**
    * Sets the current database (namespace) in this session.
    *
    * @since 3.4.0
    */
-  override def setCurrentDatabase(dbName: String): Unit = throw UnsupportedOperationException
+  override def setCurrentDatabase(dbName: String): Unit = {
+    // we assume `dbName` will not include the catalog name. e.g. if you call
+    // `setCurrentDatabase("catalog.db")`, it will search for a database 'catalog.db' in the current
+    // catalog.
+    sparkSession
+      .newDataFrame { builder =>
+        builder.getCatalogBuilder.getSetCurrentDatabaseBuilder.setDbName(dbName)
+      }
+      .count()
+  }
 
   /**
    * Returns a list of databases (namespaces) available within the current catalog.
    *
    * @since 3.4.0
    */
-  override def listDatabases(): Dataset[Database] = throw UnsupportedOperationException
+  override def listDatabases(): Dataset[Database] = {
+    sparkSession.newDataset(CatalogImpl.databaseEncoder) { builder =>
+      builder.getCatalogBuilder.getListDatabasesBuilder
+    }
+  }
 
   /**
    * Returns a list of tables/views in the current database (namespace). This includes all
@@ -55,7 +72,9 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    *
    * @since 3.4.0
    */
-  override def listTables(): Dataset[Table] = throw UnsupportedOperationException
+  override def listTables(): Dataset[Table] = {
+    listTables(currentDatabase)
+  }
 
   /**
    * Returns a list of tables/views in the specified database (namespace) (the name can be
@@ -63,7 +82,11 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    *
    * @since 3.4.0
    */
-  override def listTables(dbName: String): Dataset[Table] = throw UnsupportedOperationException
+  override def listTables(dbName: String): Dataset[Table] = {
+    sparkSession.newDataset(CatalogImpl.tableEncoder) { builder =>
+      builder.getCatalogBuilder.getListTablesBuilder.setDbName(dbName)
+    }
+  }
 
   /**
    * Returns a list of functions registered in the current database (namespace). This includes all
@@ -71,7 +94,9 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    *
    * @since 3.4.0
    */
-  override def listFunctions(): Dataset[catalog.Function] = throw UnsupportedOperationException
+  override def listFunctions(): Dataset[Function] = {
+    listFunctions(currentDatabase)
+  }
 
   /**
    * Returns a list of functions registered in the specified database (namespace) (the name can be
@@ -79,8 +104,11 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    *
    * @since 3.4.0
    */
-  override def listFunctions(dbName: String): Dataset[catalog.Function] =
-    throw UnsupportedOperationException
+  override def listFunctions(dbName: String): Dataset[Function] = {
+    sparkSession.newDataset(CatalogImpl.functionEncoder) { builder =>
+      builder.getCatalogBuilder.getListFunctionsBuilder.setDbName(dbName)
+    }
+  }
 
   /**
    * Returns a list of columns for the given table/view or temporary view.
@@ -91,8 +119,11 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    *   database (namespace).
    * @since 3.4.0
    */
-  override def listColumns(tableName: String): Dataset[Column] =
-    throw UnsupportedOperationException
+  override def listColumns(tableName: String): Dataset[Column] = {
+    sparkSession.newDataset(CatalogImpl.columnEncoder) { builder =>
+      builder.getCatalogBuilder.getListColumnsBuilder.setTableName(tableName)
+    }
+  }
 
   /**
    * Returns a list of columns for the given table/view in the specified database under the Hive
@@ -107,8 +138,13 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    *   is an unqualified name that designates a table/view.
    * @since 3.4.0
    */
-  override def listColumns(dbName: String, tableName: String): Dataset[Column] =
-    throw UnsupportedOperationException
+  override def listColumns(dbName: String, tableName: String): Dataset[Column] = {
+    sparkSession.newDataset(CatalogImpl.columnEncoder) { builder =>
+      builder.getCatalogBuilder.getListColumnsBuilder
+        .setTableName(tableName)
+        .setDbName(dbName)
+    }
+  }
 
   /**
    * Get the database (namespace) with the specified name (can be qualified with catalog). This
@@ -116,7 +152,13 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    *
    * @since 3.4.0
    */
-  override def getDatabase(dbName: String): Database = throw UnsupportedOperationException
+  override def getDatabase(dbName: String): Database = {
+    sparkSession
+      .newDataset(CatalogImpl.databaseEncoder) { builder =>
+        builder.getCatalogBuilder.getGetDatabaseBuilder.setDbName(dbName)
+      }
+      .head()
+  }
 
   /**
    * Get the table or view with the specified name. This table can be a temporary view or a
@@ -128,7 +170,13 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    *   database (namespace).
    * @since 3.4.0
    */
-  override def getTable(tableName: String): Table = throw UnsupportedOperationException
+  override def getTable(tableName: String): Table = {
+    sparkSession
+      .newDataset(CatalogImpl.tableEncoder) { builder =>
+        builder.getCatalogBuilder.getGetTableBuilder.setTableName(tableName)
+      }
+      .head()
+  }
 
   /**
    * Get the table or view with the specified name in the specified database under the Hive
@@ -139,8 +187,15 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    *
    * @since 3.4.0
    */
-  override def getTable(dbName: String, tableName: String): Table =
-    throw UnsupportedOperationException
+  override def getTable(dbName: String, tableName: String): Table = {
+    sparkSession
+      .newDataset(CatalogImpl.tableEncoder) { builder =>
+        builder.getCatalogBuilder.getGetTableBuilder
+          .setTableName(tableName)
+          .setDbName(dbName)
+      }
+      .head()
+  }
 
   /**
    * Get the function with the specified name. This function can be a temporary function or a
@@ -152,8 +207,13 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    *   current database (namespace).
    * @since 3.4.0
    */
-  override def getFunction(functionName: String): catalog.Function =
-    throw UnsupportedOperationException
+  override def getFunction(functionName: String): Function = {
+    sparkSession
+      .newDataset(CatalogImpl.functionEncoder) { builder =>
+        builder.getCatalogBuilder.getGetFunctionBuilder.setFunctionName(functionName)
+      }
+      .head()
+  }
 
   /**
    * Get the function with the specified name in the specified database under the Hive Metastore.
@@ -168,8 +228,15 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    *   is an unqualified name that designates a function in the specified database
    * @since 3.4.0
    */
-  override def getFunction(dbName: String, functionName: String): catalog.Function =
-    throw UnsupportedOperationException
+  override def getFunction(dbName: String, functionName: String): Function = {
+    sparkSession
+      .newDataset(CatalogImpl.functionEncoder) { builder =>
+        builder.getCatalogBuilder.getGetFunctionBuilder
+          .setFunctionName(functionName)
+          .setDbName(dbName)
+      }
+      .head()
+  }
 
   /**
    * Check if the database (namespace) with the specified name exists (the name can be qualified
@@ -177,7 +244,13 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    *
    * @since 3.4.0
    */
-  override def databaseExists(dbName: String): Boolean = throw UnsupportedOperationException
+  override def databaseExists(dbName: String): Boolean = {
+    sparkSession
+      .newDataset(PrimitiveBooleanEncoder) { builder =>
+        builder.getCatalogBuilder.getDatabaseExistsBuilder.setDbName(dbName)
+      }
+      .head()
+  }
 
   /**
    * Check if the table or view with the specified name exists. This can either be a temporary
@@ -189,7 +262,13 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    *   database (namespace).
    * @since 3.4.0
    */
-  override def tableExists(tableName: String): Boolean = throw UnsupportedOperationException
+  override def tableExists(tableName: String): Boolean = {
+    sparkSession
+      .newDataset(PrimitiveBooleanEncoder) { builder =>
+        builder.getCatalogBuilder.getTableExistsBuilder.setTableName(tableName)
+      }
+      .head()
+  }
 
   /**
    * Check if the table or view with the specified name exists in the specified database under the
@@ -204,8 +283,15 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    *   is an unqualified name that designates a table.
    * @since 3.4.0
    */
-  override def tableExists(dbName: String, tableName: String): Boolean =
-    throw UnsupportedOperationException
+  override def tableExists(dbName: String, tableName: String): Boolean = {
+    sparkSession
+      .newDataset(PrimitiveBooleanEncoder) { builder =>
+        builder.getCatalogBuilder.getTableExistsBuilder
+          .setTableName(tableName)
+          .setDbName(dbName)
+      }
+      .head()
+  }
 
   /**
    * Check if the function with the specified name exists. This can either be a temporary function
@@ -217,7 +303,13 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    *   current database (namespace).
    * @since 3.4.0
    */
-  override def functionExists(functionName: String): Boolean = throw UnsupportedOperationException
+  override def functionExists(functionName: String): Boolean = {
+    sparkSession
+      .newDataset(PrimitiveBooleanEncoder) { builder =>
+        builder.getCatalogBuilder.getFunctionExistsBuilder.setFunctionName(functionName)
+      }
+      .head()
+  }
 
   /**
    * Check if the function with the specified name exists in the specified database under the Hive
@@ -232,20 +324,15 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    *   is an unqualified name that designates a function.
    * @since 3.4.0
    */
-  override def functionExists(dbName: String, functionName: String): Boolean =
-    throw UnsupportedOperationException
-
-  /**
-   * Creates a table from the given path and returns the corresponding DataFrame. It will use the
-   * default data source configured by spark.sql.sources.default.
-   *
-   * @param tableName
-   *   is either a qualified or unqualified name that designates a table. If no database
-   *   identifier is provided, it refers to a table in the current database.
-   * @since 3.4.0
-   */
-  override def createTable(tableName: String, path: String): DataFrame =
-    throw UnsupportedOperationException
+  override def functionExists(dbName: String, functionName: String): Boolean = {
+    sparkSession
+      .newDataset(PrimitiveBooleanEncoder) { builder =>
+        builder.getCatalogBuilder.getFunctionExistsBuilder
+          .setFunctionName(functionName)
+          .setDbName(dbName)
+      }
+      .head()
+  }
 
   /**
    * Creates a table from the given path based on a data source and returns the corresponding
@@ -256,8 +343,9 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    *   identifier is provided, it refers to a table in the current database.
    * @since 3.4.0
    */
-  override def createTable(tableName: String, path: String, source: String): DataFrame =
-    throw UnsupportedOperationException
+  override def createTable(tableName: String, path: String, source: String): DataFrame = {
+    createTable(tableName, source, Map("path" -> path))
+  }
 
   /**
    * (Scala-specific) Creates a table based on the dataset in a data source and a set of options.
@@ -271,7 +359,9 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
   override def createTable(
       tableName: String,
       source: String,
-      options: Map[String, String]): DataFrame = throw UnsupportedOperationException
+      options: Map[String, String]): DataFrame = {
+    createTable(tableName, source, new StructType, options)
+  }
 
   /**
    * (Scala-specific) Creates a table based on the dataset in a data source and a set of options.
@@ -286,7 +376,9 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
       tableName: String,
       source: String,
       description: String,
-      options: Map[String, String]): DataFrame = throw UnsupportedOperationException
+      options: Map[String, String]): DataFrame = {
+    createTable(tableName, source, new StructType, description, options)
+  }
 
   /**
    * (Scala-specific) Create a table based on the dataset in a data source, a schema and a set of
@@ -301,7 +393,14 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
       tableName: String,
       source: String,
       schema: StructType,
-      options: Map[String, String]): DataFrame = throw UnsupportedOperationException
+      options: Map[String, String]): DataFrame = {
+    createTable(
+      tableName = tableName,
+      source = source,
+      schema = schema,
+      description = "",
+      options = options)
+  }
 
   /**
    * (Scala-specific) Create a table based on the dataset in a data source, a schema and a set of
@@ -317,7 +416,18 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
       source: String,
       schema: StructType,
       description: String,
-      options: Map[String, String]): DataFrame = throw UnsupportedOperationException
+      options: Map[String, String]): DataFrame = {
+    sparkSession.newDataFrame { builder =>
+      val createTableBuilder = builder.getCatalogBuilder.getCreateTableBuilder
+        .setTableName(tableName)
+        .setSource(source)
+        .setSchema(DataTypeProtoConverter.toConnectProtoType(schema))
+        .setDescription(description)
+      options.foreach { case (k, v) =>
+        createTableBuilder.putOptions(k, v)
+      }
+    }
+  }
 
   /**
    * Drops the local temporary view with the given view name in the catalog. If the view has been
@@ -336,7 +446,13 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    *   true if the view is dropped successfully, false otherwise.
    * @since 3.4.0
    */
-  override def dropTempView(viewName: String): Boolean = throw UnsupportedOperationException
+  override def dropTempView(viewName: String): Boolean = {
+    sparkSession
+      .newDataset(PrimitiveBooleanEncoder) { builder =>
+        builder.getCatalogBuilder.getDropTempViewBuilder.setViewName(viewName)
+      }
+      .head()
+  }
 
   /**
    * Drops the global temporary view with the given view name in the catalog. If the view has been
@@ -354,7 +470,13 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    *   true if the view is dropped successfully, false otherwise.
    * @since 3.4.0
    */
-  override def dropGlobalTempView(viewName: String): Boolean = throw UnsupportedOperationException
+  override def dropGlobalTempView(viewName: String): Boolean = {
+    sparkSession
+      .newDataset(PrimitiveBooleanEncoder) { builder =>
+        builder.getCatalogBuilder.getDropGlobalTempViewBuilder.setViewName(viewName)
+      }
+      .head()
+  }
 
   /**
    * Recovers all the partitions in the directory of a table and update the catalog. Only works
@@ -363,9 +485,15 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    * @param tableName
    *   is either a qualified or unqualified name that designates a table. If no database
    *   identifier is provided, it refers to a table in the current database.
-   * @since 2.1.1
+   * @since 3.4.0
    */
-  override def recoverPartitions(tableName: String): Unit = throw UnsupportedOperationException
+  override def recoverPartitions(tableName: String): Unit = {
+    sparkSession
+      .newDataFrame { builder =>
+        builder.getCatalogBuilder.getRecoverPartitionsBuilder.setTableName(tableName)
+      }
+      .count()
+  }
 
   /**
    * Returns true if the table is currently cached in-memory.
@@ -376,7 +504,13 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    *   database.
    * @since 3.4.0
    */
-  override def isCached(tableName: String): Boolean = throw UnsupportedOperationException
+  override def isCached(tableName: String): Boolean = {
+    sparkSession
+      .newDataset(PrimitiveBooleanEncoder) { builder =>
+        builder.getCatalogBuilder.getIsCachedBuilder.setTableName(tableName)
+      }
+      .head()
+  }
 
   /**
    * Caches the specified table in-memory.
@@ -387,21 +521,13 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    *   database.
    * @since 3.4.0
    */
-  override def cacheTable(tableName: String): Unit = throw UnsupportedOperationException
-
-  /**
-   * Caches the specified table with the given storage level.
-   *
-   * @param tableName
-   *   is either a qualified or unqualified name that designates a table/view. If no database
-   *   identifier is provided, it refers to a temporary view or a table/view in the current
-   *   database.
-   * @param storageLevel
-   *   storage level to cache table.
-   * @since 3.4.0
-   */
-  override def cacheTable(tableName: String, storageLevel: StorageLevel): Unit =
-    throw UnsupportedOperationException
+  override def cacheTable(tableName: String): Unit = {
+    sparkSession
+      .newDataFrame { builder =>
+        builder.getCatalogBuilder.getCacheTableBuilder.setTableName(tableName)
+      }
+      .count()
+  }
 
   /**
    * Removes the specified table from the in-memory cache.
@@ -412,14 +538,26 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    *   database.
    * @since 3.4.0
    */
-  override def uncacheTable(tableName: String): Unit = throw UnsupportedOperationException
+  override def uncacheTable(tableName: String): Unit = {
+    sparkSession
+      .newDataFrame { builder =>
+        builder.getCatalogBuilder.getUncacheTableBuilder.setTableName(tableName)
+      }
+      .count()
+  }
 
   /**
    * Removes all cached tables from the in-memory cache.
    *
    * @since 3.4.0
    */
-  override def clearCache(): Unit = throw UnsupportedOperationException
+  override def clearCache(): Unit = {
+    sparkSession
+      .newDataFrame { builder =>
+        builder.getCatalogBuilder.getClearCacheBuilder
+      }
+      .count()
+  }
 
   /**
    * Invalidates and refreshes all the cached data and metadata of the given table. For
@@ -436,7 +574,13 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    *   database.
    * @since 3.4.0
    */
-  override def refreshTable(tableName: String): Unit = throw UnsupportedOperationException
+  override def refreshTable(tableName: String): Unit = {
+    sparkSession
+      .newDataFrame { builder =>
+        builder.getCatalogBuilder.getRefreshTableBuilder
+      }
+      .count()
+  }
 
   /**
    * Invalidates and refreshes all the cached data (and the associated metadata) for any `Dataset`
@@ -445,26 +589,67 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    *
    * @since 3.4.0
    */
-  override def refreshByPath(path: String): Unit = throw UnsupportedOperationException
+  override def refreshByPath(path: String): Unit = {
+    sparkSession
+      .newDataFrame { builder =>
+        builder.getCatalogBuilder.getRefreshByPathBuilder.setPath(path)
+      }
+      .count()
+  }
 
   /**
    * Returns the current catalog in this session.
    *
    * @since 3.4.0
    */
-  override def currentCatalog(): String = throw UnsupportedOperationException
+  override def currentCatalog(): String = sparkSession
+    .newDataset(StringEncoder) { builder =>
+      builder.getCatalogBuilder.getCurrentCatalogBuilder
+    }
+    .head()
 
   /**
    * Sets the current catalog in this session.
    *
    * @since 3.4.0
    */
-  override def setCurrentCatalog(catalogName: String): Unit = throw UnsupportedOperationException
+  override def setCurrentCatalog(catalogName: String): Unit =
+    sparkSession
+      .newDataFrame { builder =>
+        builder.getCatalogBuilder.getSetCurrentCatalogBuilder.setCatalogName(catalogName)
+      }
+      .count()
 
   /**
    * Returns a list of catalogs available in this session.
    *
    * @since 3.4.0
    */
-  override def listCatalogs(): Dataset[CatalogMetadata] = throw UnsupportedOperationException
+  override def listCatalogs(): Dataset[CatalogMetadata] =
+    sparkSession
+      .newDataset(CatalogImpl.catalogEncoder) { builder =>
+        builder.getCatalogBuilder.getListCatalogsBuilder
+      }
+}
+
+private object CatalogImpl {
+  private val databaseEncoder: AgnosticEncoder[Database] = ScalaReflection
+    .encoderFor(ScalaReflection.localTypeOf[Database])
+    .asInstanceOf[AgnosticEncoder[Database]]
+
+  private val catalogEncoder: AgnosticEncoder[CatalogMetadata] = ScalaReflection
+    .encoderFor(ScalaReflection.localTypeOf[CatalogMetadata])
+    .asInstanceOf[AgnosticEncoder[CatalogMetadata]]
+
+  private val tableEncoder: AgnosticEncoder[Table] = ScalaReflection
+    .encoderFor(ScalaReflection.localTypeOf[Table])
+    .asInstanceOf[AgnosticEncoder[Table]]
+
+  private val functionEncoder: AgnosticEncoder[Function] = ScalaReflection
+    .encoderFor(ScalaReflection.localTypeOf[Function])
+    .asInstanceOf[AgnosticEncoder[Function]]
+
+  private val columnEncoder: AgnosticEncoder[Column] = ScalaReflection
+    .encoderFor(ScalaReflection.localTypeOf[Column])
+    .asInstanceOf[AgnosticEncoder[Column]]
 }

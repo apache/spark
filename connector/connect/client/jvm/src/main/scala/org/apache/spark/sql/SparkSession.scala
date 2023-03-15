@@ -275,8 +275,8 @@ class SparkSession private[sql] (
   def read: DataFrameReader = new DataFrameReader(this)
 
   /**
-   * Interface through which the user may create, drop, alter or query underlying
-   * databases, tables, functions etc.
+   * Interface through which the user may create, drop, alter or query underlying databases,
+   * tables, functions etc.
    *
    * @since 3.4.0
    */
