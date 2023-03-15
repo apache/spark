@@ -14,6 +14,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import warnings
+
 from pyspark.sql.connect.utils import check_dependencies
 
 check_dependencies(__name__)
@@ -205,8 +207,30 @@ class GroupedData:
 
     pivot.__doc__ = PySparkGroupedData.pivot.__doc__
 
-    def apply(self, *args: Any, **kwargs: Any) -> None:
-        raise NotImplementedError("apply() is not implemented.")
+    def apply(self, udf: "GroupedMapPandasUserDefinedFunction") -> DataFrame:
+        # Columns are special because hasattr always return True
+        if (
+            isinstance(udf, Column)
+            or not hasattr(udf, "func")
+            or (
+                udf.evalType  # type: ignore[attr-defined]
+                != PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF
+            )
+        ):
+            raise ValueError(
+                "Invalid udf: the udf argument must be a pandas_udf of type " "GROUPED_MAP."
+            )
+
+        warnings.warn(
+            "It is preferred to use 'applyInPandas' over this "
+            "API. This API will be deprecated in the future releases. See SPARK-28264 for "
+            "more details.",
+            UserWarning,
+        )
+
+        return self.applyInPandas(udf.func, schema=udf.returnType)  # type: ignore[attr-defined]
+
+    apply.__doc__ = PySparkGroupedData.apply.__doc__
 
     def applyInPandas(
         self, func: "PandasGroupedMapFunction", schema: Union["StructType", str]

@@ -22,7 +22,8 @@ if sys.version_info >= (3, 8):
 else:
     from typing_extensions import Protocol
 
-from typing import Any, Callable, Iterable, Union, Optional
+from types import FunctionType
+from typing import Any, Callable, Iterable, Union, Optional, NewType
 import datetime
 import decimal
 
@@ -57,6 +58,8 @@ PandasGroupedMapFunction = Union[
     Callable[[DataFrameLike], DataFrameLike],
     Callable[[Any, DataFrameLike], DataFrameLike],
 ]
+
+GroupedMapPandasUserDefinedFunction = NewType("GroupedMapPandasUserDefinedFunction", FunctionType)
 
 
 class UserDefinedFunctionLike(Protocol):
