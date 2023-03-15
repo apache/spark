@@ -221,7 +221,7 @@ class HiveGenericUDFEvaluator(
   private[hive] lazy val argumentInspectors = children.map(toInspector)
 
   @transient
-  private[hive] lazy val returnInspector = {
+  lazy val returnInspector = {
     function.initializeAndFoldConstants(argumentInspectors.toArray)
   }
 
