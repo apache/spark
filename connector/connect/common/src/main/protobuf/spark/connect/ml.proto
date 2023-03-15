@@ -27,26 +27,43 @@ option java_multiple_files = true;
 option java_package = "org.apache.spark.connect.proto";
 
 
+// MlEvaluator represents a ML Evaluator.
 message MlEvaluator {
+  // The name of the evaluator in the registry
   string name = 1;
+  // param settings for the evaluator
   MlParams params = 2;
+  // unique id of the evaluator
   string uid = 3;
 }
 
 
+// a MlCommand is a type container that has exactly one ML command set
 message MlCommand {
   oneof ml_command_type {
+    // call `estimator.fit` and returns a model
     Fit fit = 1;
+    // get model attribute
     FetchModelAttr fetch_model_attr = 2;
+    // get model summary attribute
     FetchModelSummaryAttr fetch_model_summary_attr = 3;
+    // load model
     LoadModel load_model = 4;
+    // save model
     SaveModel save_model = 5;
+    // call `evaluator.evaluate`
     Evaluate evaluate = 6;
+    // save estimator or transformer
     SaveStage save_stage = 7;
+    // load estimator or transformer
     LoadStage load_stage = 8;
+    // save estimator
     SaveEvaluator save_evaluator = 9;
+    // load estimator
     LoadEvaluator load_evaluator = 10;
+    // copy model, returns new model reference id
     CopyModel copy_model = 11;
+    // delete server side model object by model reference id
     DeleteModel delete_model = 12;
   }
 

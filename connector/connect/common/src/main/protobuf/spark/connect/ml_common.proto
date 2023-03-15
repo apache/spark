@@ -25,18 +25,27 @@ option java_multiple_files = true;
 option java_package = "org.apache.spark.connect.proto";
 
 
+// MlParams stores param settings for
+// ML Estimator / Transformer / Model / Evaluator
 message MlParams {
+  // user-supplied params
   map<string, Expression.Literal> params = 1;
+  // default params
   map<string, Expression.Literal> default_params = 2;
 }
 
+// MlStage stores ML stage data (Estimator or Transformer)
 message MlStage {
+  // The name of the stage in the registry
   string name = 1;
+  // param settings for the stage
   MlParams params = 2;
+  // unique id of the stage
   string uid = 3;
   StageType type = 4;
   enum StageType {
-    ESTIMATOR = 0;
-    TRANSFORMER = 1;
+    UNSPECIFIED = 0;
+    ESTIMATOR = 1;
+    TRANSFORMER = 2;
   }
 }
