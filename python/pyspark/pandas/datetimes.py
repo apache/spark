@@ -121,6 +121,7 @@ class DatetimeMethods:
     def isocalendar(self) -> "ps.DataFrame":
         """
         Calculate year, week, and day according to the ISO 8601 standard.
+
         Returns
         -------
         DataFrame
