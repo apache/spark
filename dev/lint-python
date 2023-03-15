@@ -175,9 +175,8 @@ function flake8_test {
     local FLAKE8_STATUS=
 
     if ! hash "$FLAKE8_BUILD" 2> /dev/null; then
-        echo "The flake8 command was not found."
-        echo "flake8 checks failed."
-        exit 1
+        echo "The flake8 command was not found. Skipping for now."
+        return
     fi
 
     _FLAKE8_VERSION=($($FLAKE8_BUILD --version))
@@ -220,7 +219,7 @@ function black_test {
     fi
 
     echo "starting black test..."
-    BLACK_REPORT=$( ($BLACK_BUILD  --config dev/pyproject.toml --check python/pyspark dev) 2>&1)
+    BLACK_REPORT=$( ($BLACK_BUILD  --config dev/pyproject.toml --check python/pyspark dev python/setup.py) 2>&1)
     BLACK_STATUS=$?
 
     if [ "$BLACK_STATUS" -ne 0 ]; then

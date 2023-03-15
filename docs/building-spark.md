@@ -27,7 +27,7 @@ license: |
 ## Apache Maven
 
 The Maven-based build is the build of reference for Apache Spark.
-Building Spark using Maven requires Maven 3.8.6 and Java 8.
+Building Spark using Maven requires Maven 3.8.7 and Java 8.
 Spark requires Scala 2.12/2.13; support for Scala 2.11 was removed in Spark 3.0.0.
 
 ### Setting up Maven's Memory Usage
@@ -118,6 +118,10 @@ For instance, you can build the Spark Streaming module using:
     ./build/mvn -pl :spark-streaming_{{site.SCALA_BINARY_VERSION}} clean install
 
 where `spark-streaming_{{site.SCALA_BINARY_VERSION}}` is the `artifactId` as defined in `streaming/pom.xml` file.
+
+## Building with Spark Connect support
+
+    ./build/mvn -Pconnect -DskipTests clean package
 
 ## Continuous Compilation
 

@@ -23,6 +23,7 @@ import java.time.{Instant, LocalDate, LocalDateTime}
 import java.util.{Calendar, GregorianCalendar, Properties, TimeZone}
 
 import scala.collection.JavaConverters._
+import scala.util.Random
 
 import org.mockito.ArgumentMatchers._
 import org.mockito.Mockito._
@@ -275,6 +276,20 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
     conn.prepareStatement(
       "INSERT INTO test.datetime VALUES ('2018-07-12', '2018-07-12 09:51:15.0')").executeUpdate()
     conn.commit()
+
+    conn.prepareStatement(
+      "CREATE TABLE test.composite_name (`last name` TEXT(32) NOT NULL, id INTEGER NOT NULL)")
+      .executeUpdate()
+    conn.prepareStatement("INSERT INTO test.composite_name VALUES ('smith', 1)").executeUpdate()
+    conn.prepareStatement("INSERT INTO test.composite_name VALUES ('jones', 2)").executeUpdate()
+    conn.commit()
+
+    sql(
+      s"""
+        |CREATE OR REPLACE TEMPORARY VIEW composite_name
+        |USING org.apache.spark.sql.jdbc
+        |OPTIONS (url '$url', dbtable 'TEST.COMPOSITE_NAME', user 'testUser', password 'testPass')
+       """.stripMargin.replaceAll("\n", " "))
 
     // Untested: IDENTITY, OTHER, UUID, ARRAY, and GEOMETRY types.
   }
@@ -944,6 +959,19 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
       Some(TimestampType))
   }
 
+  test("SPARK-42469: OracleDialect Limit query test") {
+    // JDBC url is a required option but is not used in this test.
+    val options = new JDBCOptions(Map("url" -> "jdbc:h2://host:port", "dbtable" -> "test"))
+    assert(
+      OracleDialect
+        .getJdbcSQLQueryBuilder(options)
+        .withColumns(Array("a", "b"))
+        .withLimit(123)
+        .build()
+        .trim() ==
+      "SELECT tab.* FROM (SELECT a,b FROM test    ) tab WHERE rownum <= 123")
+  }
+
   test("MsSqlServerDialect jdbc type mapping") {
     val msSqlServerDialect = JdbcDialects.get("jdbc:sqlserver")
     assert(msSqlServerDialect.getJDBCType(TimestampType).map(_.databaseTypeDefinition).get ==
@@ -966,7 +994,7 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("SPARK-28152 MsSqlServerDialect catalyst type mapping") {
+  test("SPARK-28152: MsSqlServerDialect catalyst type mapping") {
     val msSqlServerDialect = JdbcDialects.get("jdbc:sqlserver")
     val metadata = new MetadataBuilder().putLong("scale", 1)
 
@@ -985,6 +1013,32 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
         }
       }
     }
+  }
+
+  test("SPARK-42469: MsSqlServerDialect Limit query test") {
+    // JDBC url is a required option but is not used in this test.
+    val options = new JDBCOptions(Map("url" -> "jdbc:h2://host:port", "dbtable" -> "test"))
+    assert(
+      MsSqlServerDialect
+        .getJdbcSQLQueryBuilder(options)
+        .withColumns(Array("a", "b"))
+        .withLimit(123)
+        .build()
+        .trim() ==
+      "SELECT TOP (123) a,b FROM test")
+  }
+
+  test("SPARK-42534: DB2Dialect Limit query test") {
+    // JDBC url is a required option but is not used in this test.
+    val options = new JDBCOptions(Map("url" -> "jdbc:db2://host:port", "dbtable" -> "test"))
+    assert(
+      DB2Dialect
+        .getJdbcSQLQueryBuilder(options)
+        .withColumns(Array("a", "b"))
+        .withLimit(123)
+        .build()
+        .trim() ==
+      "SELECT a,b FROM test      FETCH FIRST 123 ROWS ONLY")
   }
 
   test("table exists query by jdbc dialect") {
@@ -1921,13 +1975,30 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
       .option("url", urlWithUserAndPass)
       .option("dbtable", tableName).save()
 
-    val res = spark.read.format("jdbc")
-      .option("inferTimestampNTZType", "true")
+    val readDf = spark.read.format("jdbc")
       .option("url", urlWithUserAndPass)
       .option("dbtable", tableName)
-      .load()
 
-    checkAnswer(res, Seq(Row(null)))
+    val timestampTypes = Seq(
+      SQLConf.TimestampTypes.TIMESTAMP_NTZ.toString,
+      SQLConf.TimestampTypes.TIMESTAMP_LTZ.toString)
+
+    timestampTypes.foreach { timestampType =>
+      val inferTimestampNTZ = timestampType == SQLConf.TimestampTypes.TIMESTAMP_NTZ.toString
+      val tsType = if (inferTimestampNTZ) {
+        TimestampNTZType
+      } else {
+        TimestampType
+      }
+      val res = readDf.option("preferTimestampNTZ", inferTimestampNTZ).load()
+      checkAnswer(res, Seq(Row(null)))
+      assert(res.schema.fields.head.dataType == tsType)
+      withSQLConf(SQLConf.TIMESTAMP_TYPE.key -> timestampType) {
+        val res2 = readDf.load()
+        checkAnswer(res2, Seq(Row(null)))
+        assert(res2.schema.fields.head.dataType == tsType)
+      }
+    }
   }
 
   test("SPARK-39339: TimestampNTZType with different local time zones") {
@@ -1947,20 +2018,33 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
             .option("url", urlWithUserAndPass)
             .option("dbtable", tableName)
             .save()
+          val zoneId = DateTimeTestUtils.outstandingZoneIds(
+          Random.nextInt(DateTimeTestUtils.outstandingZoneIds.length))
+          DateTimeTestUtils.withDefaultTimeZone(zoneId) {
+            // Infer TimestmapNTZ column with data source option
+            val res = spark.read.format("jdbc")
+              .option("preferTimestampNTZ", "true")
+              .option("url", urlWithUserAndPass)
+              .option("dbtable", tableName)
+              .load()
+            checkAnswer(res, df)
 
-          DateTimeTestUtils.outstandingZoneIds.foreach { zoneId =>
-            DateTimeTestUtils.withDefaultTimeZone(zoneId) {
-              val res = spark.read.format("jdbc")
-                .option("inferTimestampNTZType", "true")
+            withSQLConf(
+              SQLConf.TIMESTAMP_TYPE.key -> SQLConf.TimestampTypes.TIMESTAMP_NTZ.toString) {
+              val res2 = spark.read.format("jdbc")
                 .option("url", urlWithUserAndPass)
                 .option("dbtable", tableName)
                 .load()
-
-              checkAnswer(res, df)
+              checkAnswer(res2, df)
             }
           }
         }
       }
     }
+  }
+
+  test("SPARK-41990: Filter with composite name") {
+    val df = sql("SELECT * FROM composite_name WHERE `last name` = 'smith'")
+    assert(df.collect.toSet === Set(Row("smith", 1)))
   }
 }

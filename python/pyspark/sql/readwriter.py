@@ -31,7 +31,7 @@ if TYPE_CHECKING:
     from pyspark.sql.dataframe import DataFrame
     from pyspark.sql.streaming import StreamingQuery
 
-__all__ = ["DataFrameReader", "DataFrameWriter"]
+__all__ = ["DataFrameReader", "DataFrameWriter", "DataFrameWriterV2"]
 
 PathOrPaths = Union[str, List[str]]
 TupleOrListOfString = Union[List[str], Tuple[str, ...]]
@@ -62,7 +62,7 @@ class DataFrameReader(OptionUtils):
     .. versionadded:: 1.4.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
     """
 
     def __init__(self, spark: "SparkSession"):
@@ -80,7 +80,7 @@ class DataFrameReader(OptionUtils):
         .. versionadded:: 1.4.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -90,7 +90,7 @@ class DataFrameReader(OptionUtils):
         Examples
         --------
         >>> spark.read.format('json')
-        <pyspark.sql.readwriter.DataFrameReader object ...>
+        <...readwriter.DataFrameReader object ...>
 
         Write a DataFrame into a JSON file and read it back.
 
@@ -122,7 +122,7 @@ class DataFrameReader(OptionUtils):
         .. versionadded:: 1.4.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -133,7 +133,7 @@ class DataFrameReader(OptionUtils):
         Examples
         --------
         >>> spark.read.schema("col0 INT, col1 DOUBLE")
-        <pyspark.sql.readwriter.DataFrameReader object ...>
+        <...readwriter.DataFrameReader object ...>
 
         Specify the schema with reading a CSV file.
 
@@ -163,7 +163,7 @@ class DataFrameReader(OptionUtils):
         .. versionadded:: 1.5.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -174,10 +174,8 @@ class DataFrameReader(OptionUtils):
 
         Examples
         --------
-        >>> from pyspark.sql import SparkSession
-        >>> spark = SparkSession.builder.master("local").getOrCreate()
         >>> spark.read.option("key", "value")
-        <pyspark.sql.readwriter.DataFrameReader object ...>
+        <...readwriter.DataFrameReader object ...>
 
         Specify the option 'nullValue' with reading a CSV file.
 
@@ -206,7 +204,7 @@ class DataFrameReader(OptionUtils):
         .. versionadded:: 1.4.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -216,7 +214,7 @@ class DataFrameReader(OptionUtils):
         Examples
         --------
         >>> spark.read.option("key", "value")
-        <pyspark.sql.readwriter.DataFrameReader object ...>
+        <...readwriter.DataFrameReader object ...>
 
         Specify the option 'nullValue' and 'header' with reading a CSV file.
 
@@ -254,7 +252,7 @@ class DataFrameReader(OptionUtils):
         .. versionadded:: 1.4.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -348,7 +346,7 @@ class DataFrameReader(OptionUtils):
         .. versionadded:: 1.4.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -442,7 +440,7 @@ class DataFrameReader(OptionUtils):
         .. versionadded:: 1.4.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -479,7 +477,7 @@ class DataFrameReader(OptionUtils):
         .. versionadded:: 1.4.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -551,6 +549,9 @@ class DataFrameReader(OptionUtils):
         By default, each line in the text file is a new row in the resulting DataFrame.
 
         .. versionadded:: 1.6.0
+
+        .. versionchanged:: 3.4.0
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -644,6 +645,9 @@ class DataFrameReader(OptionUtils):
         ``inferSchema`` option or specify the schema explicitly using ``schema``.
 
         .. versionadded:: 2.0.0
+
+        .. versionchanged:: 3.4.0
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -757,6 +761,9 @@ class DataFrameReader(OptionUtils):
         """Loads ORC files, returning the result as a :class:`DataFrame`.
 
         .. versionadded:: 1.5.0
+
+        .. versionchanged:: 3.4.0
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -926,7 +933,7 @@ class DataFrameWriter(OptionUtils):
     .. versionadded:: 1.4.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
     """
 
     def __init__(self, df: "DataFrame"):
@@ -952,7 +959,7 @@ class DataFrameWriter(OptionUtils):
         .. versionadded:: 1.4.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Examples
         --------
@@ -962,10 +969,10 @@ class DataFrameWriter(OptionUtils):
         >>> with tempfile.TemporaryDirectory() as d:
         ...     spark.createDataFrame(
         ...         [{"age": 80, "name": "Xinrong Meng"}]
-        ...     ).write.mode("error").format("parquet").save(d)
+        ...     ).write.mode("error").format("parquet").save(d) # doctest: +SKIP
         Traceback (most recent call last):
             ...
-        pyspark.sql.utils.AnalysisException: ...
+        ...AnalysisException: ...
 
         Write a Parquet file back with various options, and read it back.
 
@@ -1006,7 +1013,7 @@ class DataFrameWriter(OptionUtils):
         .. versionadded:: 1.4.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -1016,7 +1023,7 @@ class DataFrameWriter(OptionUtils):
         Examples
         --------
         >>> spark.range(1).write.format('parquet')
-        <pyspark.sql.readwriter.DataFrameWriter object ...>
+        <...readwriter.DataFrameWriter object ...>
 
         Write a DataFrame into a Parquet file and read it back.
 
@@ -1045,7 +1052,7 @@ class DataFrameWriter(OptionUtils):
         .. versionadded:: 1.5.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -1057,7 +1064,7 @@ class DataFrameWriter(OptionUtils):
         Examples
         --------
         >>> spark.range(1).write.option("key", "value")
-        <pyspark.sql.readwriter.DataFrameWriter object ...>
+        <...readwriter.DataFrameWriter object ...>
 
         Specify the option 'nullValue' with writing a CSV file.
 
@@ -1086,7 +1093,7 @@ class DataFrameWriter(OptionUtils):
         .. versionadded:: 1.4.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -1096,7 +1103,7 @@ class DataFrameWriter(OptionUtils):
         Examples
         --------
         >>> spark.range(1).write.option("key", "value")
-        <pyspark.sql.readwriter.DataFrameWriter object ...>
+        <...readwriter.DataFrameWriter object ...>
 
         Specify the option 'nullValue' and 'header' with writing a CSV file.
 
@@ -1142,7 +1149,7 @@ class DataFrameWriter(OptionUtils):
         .. versionadded:: 1.4.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -1203,7 +1210,7 @@ class DataFrameWriter(OptionUtils):
         .. versionadded:: 2.3.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -1274,7 +1281,7 @@ class DataFrameWriter(OptionUtils):
         .. versionadded:: 2.3.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -1337,7 +1344,7 @@ class DataFrameWriter(OptionUtils):
         .. versionadded:: 1.4.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -1396,7 +1403,7 @@ class DataFrameWriter(OptionUtils):
         .. versionadded:: 1.4.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -1460,7 +1467,7 @@ class DataFrameWriter(OptionUtils):
         .. versionadded:: 1.4.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Notes
         -----
@@ -1528,7 +1535,7 @@ class DataFrameWriter(OptionUtils):
         .. versionadded:: 1.4.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -1594,7 +1601,7 @@ class DataFrameWriter(OptionUtils):
         .. versionadded:: 1.4.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -1654,7 +1661,7 @@ class DataFrameWriter(OptionUtils):
         .. versionadded:: 1.6.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -1724,7 +1731,7 @@ class DataFrameWriter(OptionUtils):
         .. versionadded:: 2.0.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -1800,7 +1807,7 @@ class DataFrameWriter(OptionUtils):
         .. versionadded:: 1.5.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -1912,6 +1919,9 @@ class DataFrameWriterV2:
     to external storage using the v2 API.
 
     .. versionadded:: 3.1.0
+
+    .. versionchanged:: 3.4.0
+        Supports Spark Connect.
     """
 
     def __init__(self, df: "DataFrame", table: str):

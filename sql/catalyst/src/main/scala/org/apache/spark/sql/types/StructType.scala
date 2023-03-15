@@ -392,8 +392,7 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
     findField(this, fieldNames, Nil)
   }
 
-  protected[sql] def toAttributes: Seq[AttributeReference] =
-    map(f => AttributeReference(f.name, f.dataType, f.nullable, f.metadata)())
+  protected[sql] def toAttributes: Seq[AttributeReference] = map(field => field.toAttribute)
 
   def treeString: String = treeString(Int.MaxValue)
 
@@ -613,7 +612,8 @@ object StructType extends AbstractDataType {
                   nullable = leftNullable || rightNullable)
               } catch {
                 case NonFatal(e) =>
-                  throw QueryExecutionErrors.failedMergingFieldsError(leftName, rightName, e)
+                  throw QueryExecutionErrors.cannotMergeIncompatibleDataTypesError(
+                    leftType, rightType)
               }
             }
             .orElse {

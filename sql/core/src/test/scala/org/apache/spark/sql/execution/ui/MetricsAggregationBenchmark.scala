@@ -75,6 +75,7 @@ object MetricsAggregationBenchmark extends BenchmarkBase {
     val executionId = idgen.incrementAndGet()
     val executionStart = SparkListenerSQLExecutionStart(
       executionId,
+      Some(executionId),
       getClass().getName(),
       getClass().getName(),
       getClass().getName(),

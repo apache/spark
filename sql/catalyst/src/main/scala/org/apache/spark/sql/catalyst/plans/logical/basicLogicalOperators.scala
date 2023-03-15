@@ -69,6 +69,7 @@ object Subquery {
 case class Project(projectList: Seq[NamedExpression], child: LogicalPlan)
     extends OrderPreservingUnaryNode {
   override def output: Seq[Attribute] = projectList.map(_.toAttribute)
+  override protected def outputExpressions: Seq[NamedExpression] = projectList
   override def maxRows: Option[Long] = child.maxRows
   override def maxRowsPerPartition: Option[Long] = child.maxRowsPerPartition
 
@@ -130,7 +131,7 @@ object Project {
 
       case (ArrayType(et, containsNull), expected: ArrayType) =>
         if (containsNull & !expected.containsNull) {
-          throw QueryCompilationErrors.nullableArrayOrMapElementError(columnPath)
+          throw QueryCompilationErrors.notNullConstraintViolationArrayElementError(columnPath)
         }
         val param = NamedLambdaVariable("x", et, containsNull)
         val reconciledElement = reconcileColumnType(
@@ -140,7 +141,7 @@ object Project {
 
       case (MapType(kt, vt, valueContainsNull), expected: MapType) =>
         if (valueContainsNull & !expected.valueContainsNull) {
-          throw QueryCompilationErrors.nullableArrayOrMapElementError(columnPath)
+          throw QueryCompilationErrors.notNullConstraintViolationMapValueError(columnPath)
         }
         val keyParam = NamedLambdaVariable("key", kt, nullable = false)
         val valueParam = NamedLambdaVariable("value", vt, valueContainsNull)
@@ -449,54 +450,22 @@ case class Union(
       AttributeSet.fromAttributeSets(children.map(_.outputSet)).size
   }
 
-  /**
-   * Merges a sequence of attributes to have a common datatype and updates the
-   * nullability to be consistent with the attributes being merged.
-   */
-  private def mergeAttributes(attributes: Seq[Attribute]): Attribute = {
-    val firstAttr = attributes.head
-    val nullable = attributes.exists(_.nullable)
-    val newDt = attributes.map(_.dataType).reduce(StructType.unionLikeMerge)
-    if (firstAttr.dataType == newDt) {
-      firstAttr.withNullability(nullable)
-    } else {
-      AttributeReference(firstAttr.name, newDt, nullable, firstAttr.metadata)(
-        firstAttr.exprId, firstAttr.qualifier)
+  // updating nullability to make all the children consistent
+  override def output: Seq[Attribute] = {
+    children.map(_.output).transpose.map { attrs =>
+      val firstAttr = attrs.head
+      val nullable = attrs.exists(_.nullable)
+      val newDt = attrs.map(_.dataType).reduce(StructType.unionLikeMerge)
+      if (firstAttr.dataType == newDt) {
+        firstAttr.withNullability(nullable)
+      } else {
+        AttributeReference(firstAttr.name, newDt, nullable, firstAttr.metadata)(
+          firstAttr.exprId, firstAttr.qualifier)
+      }
     }
   }
 
-  override def output: Seq[Attribute] = children.map(_.output).transpose.map(mergeAttributes)
-
-  override def metadataOutput: Seq[Attribute] = {
-    val childrenMetadataOutput = children.map(_.metadataOutput)
-    // This follows similar code in `CheckAnalysis` to check if the output of a Union is correct,
-    // but just silently doesn't return an output instead of throwing an error. It also ensures
-    // that the attribute and data type names are the same.
-    val refDataTypes = childrenMetadataOutput.head.map(_.dataType)
-    val refAttrNames = childrenMetadataOutput.head.map(_.name)
-    childrenMetadataOutput.tail.foreach { childMetadataOutput =>
-      // We can only propagate the metadata output correctly if every child has the same
-      // number of columns
-      if (childMetadataOutput.length != refDataTypes.length) return Nil
-      // Check if the data types match by name and type
-      val childDataTypes = childMetadataOutput.map(_.dataType)
-      childDataTypes.zip(refDataTypes).foreach { case (dt1, dt2) =>
-        if (!DataType.equalsStructurally(dt1, dt2, true) ||
-           !DataType.equalsStructurallyByName(dt1, dt2, conf.resolver)) {
-          return Nil
-        }
-      }
-      // Check that the names of the attributes match
-      val childAttrNames = childMetadataOutput.map(_.name)
-      childAttrNames.zip(refAttrNames).foreach { case (attrName1, attrName2) =>
-        if (!conf.resolver(attrName1, attrName2)) {
-          return Nil
-        }
-      }
-    }
-    // If the metadata output matches, merge the attributes and return them
-    childrenMetadataOutput.transpose.map(mergeAttributes)
-  }
+  override def metadataOutput: Seq[Attribute] = Nil
 
   override lazy val resolved: Boolean = {
     // allChildrenCompatible needs to be evaluated after childrenResolved
@@ -1229,6 +1198,22 @@ case class Window(
     copy(child = newChild)
 }
 
+case class WindowGroupLimit(
+    partitionSpec: Seq[Expression],
+    orderSpec: Seq[SortOrder],
+    rankLikeFunction: Expression,
+    limit: Int,
+    child: LogicalPlan) extends UnaryNode {
+  assert(orderSpec.nonEmpty && limit > 0)
+
+  override def output: Seq[Attribute] = child.output
+  override def maxRows: Option[Long] = child.maxRows
+  override def maxRowsPerPartition: Option[Long] = child.maxRowsPerPartition
+  final override val nodePatterns: Seq[TreePattern] = Seq(WINDOW_GROUP_LIMIT)
+  override protected def withNewChildInternal(newChild: LogicalPlan): WindowGroupLimit =
+    copy(child = newChild)
+}
+
 object Expand {
   /**
    * Build bit mask from attributes of selected grouping set. A bit in the bitmask is corresponding
@@ -1664,15 +1649,7 @@ case class SubqueryAlias(
 
   override def output: Seq[Attribute] = {
     val qualifierList = identifier.qualifier :+ alias
-    child.output.map { attr =>
-      // `SubqueryAlias` sets a new qualifier for its output columns. It doesn't make sense to still
-      // restrict the hidden columns of natural/using join to be accessed by qualified name only.
-      if (attr.qualifiedAccessOnly) {
-        attr.markAsAllowAnyAccess().withQualifier(qualifierList)
-      } else {
-        attr.withQualifier(qualifierList)
-      }
-    }
+    child.output.map(_.withQualifier(qualifierList))
   }
 
   override def metadataOutput: Seq[Attribute] = {

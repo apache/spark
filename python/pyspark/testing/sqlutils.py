@@ -24,7 +24,7 @@ from contextlib import contextmanager
 
 from pyspark.sql import SparkSession
 from pyspark.sql.types import ArrayType, DoubleType, UserDefinedType, Row
-from pyspark.testing.utils import ReusedPySparkTestCase
+from pyspark.testing.utils import ReusedPySparkTestCase, PySparkErrorTestUtils
 
 
 pandas_requirement_message = None
@@ -202,7 +202,7 @@ class SQLTestUtils:
             yield
         finally:
             for db in databases:
-                self.spark.sql("DROP DATABASE IF EXISTS %s CASCADE" % db).collect()
+                self.spark.sql("DROP DATABASE IF EXISTS %s CASCADE" % db)
             self.spark.catalog.setCurrentDatabase("default")
 
     @contextmanager
@@ -217,7 +217,7 @@ class SQLTestUtils:
             yield
         finally:
             for t in tables:
-                self.spark.sql("DROP TABLE IF EXISTS %s" % t).collect()
+                self.spark.sql("DROP TABLE IF EXISTS %s" % t)
 
     @contextmanager
     def tempView(self, *views):
@@ -245,16 +245,16 @@ class SQLTestUtils:
             yield
         finally:
             for f in functions:
-                self.spark.sql("DROP FUNCTION IF EXISTS %s" % f).collect()
+                self.spark.sql("DROP FUNCTION IF EXISTS %s" % f)
 
     @staticmethod
     def assert_close(a, b):
         c = [j[0] for j in b]
         diff = [abs(v - c[k]) < 1e-6 if math.isfinite(v) else v == c[k] for k, v in enumerate(a)]
-        return sum(diff) == len(a)
+        assert sum(diff) == len(a), f"sum: {sum(diff)}, len: {len(a)}"
 
 
-class ReusedSQLTestCase(ReusedPySparkTestCase, SQLTestUtils):
+class ReusedSQLTestCase(ReusedPySparkTestCase, SQLTestUtils, PySparkErrorTestUtils):
     @classmethod
     def setUpClass(cls):
         super(ReusedSQLTestCase, cls).setUpClass()

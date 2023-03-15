@@ -193,12 +193,15 @@ private[spark] object TestUtils {
       baseClass: String = null,
       classpathUrls: Seq[URL] = Seq.empty,
       implementsClasses: Seq[String] = Seq.empty,
-      extraCodeBody: String = ""): File = {
+      extraCodeBody: String = "",
+      packageName: Option[String] = None): File = {
     val extendsText = Option(baseClass).map { c => s" extends ${c}" }.getOrElse("")
     val implementsText =
       "implements " + (implementsClasses :+ "java.io.Serializable").mkString(", ")
+    val packageText = packageName.map(p => s"package $p;\n").getOrElse("")
     val sourceFile = new JavaSourceFromString(className,
       s"""
+         |$packageText
          |public class $className $extendsText $implementsText {
          |  @Override public String toString() { return "$toStringValue"; }
          |

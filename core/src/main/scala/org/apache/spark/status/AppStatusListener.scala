@@ -507,7 +507,6 @@ private[spark] class AppStatusListener(
             stage.status = v1.StageStatus.SKIPPED
             job.skippedStages += stage.info.stageId
             job.skippedTasks += stage.info.numTasks
-            job.activeStages -= 1
 
             pools.get(stage.schedulingPool).foreach { pool =>
               pool.stageIds = pool.stageIds - stage.info.stageId

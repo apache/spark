@@ -91,7 +91,8 @@ class CliSuite extends SparkFunSuite {
       errorResponses: Seq[String] = Seq("Error:"),
       maybeWarehouse: Option[File] = Some(warehousePath),
       useExternalHiveFile: Boolean = false,
-      metastore: File = metastorePath)(
+      metastore: File = metastorePath,
+      prompt: String = "spark-sql>")(
       queriesAndExpectedAnswers: (String, String)*): Unit = {
 
     // Explicitly adds ENTER for each statement to make sure they are actually entered into the CLI.
@@ -105,7 +106,7 @@ class CliSuite extends SparkFunSuite {
         } else {
           // spark-sql echoes the submitted queries
           val xs = query.split("\n").toList
-          val queryEcho = s"spark-sql> ${xs.head}" :: xs.tail.map(l => s"         > $l")
+          val queryEcho = s"$prompt ${xs.head}" :: xs.tail.map(l => s"         > $l")
           // longer lines sometimes get split in the output,
           // match the first 60 characters of each query line
           queryEcho.map(_.take(60)) :+ answer
@@ -127,6 +128,7 @@ class CliSuite extends SparkFunSuite {
          |  --driver-java-options -Dderby.system.durability=test
          |  $extraHive
          |  --conf spark.ui.enabled=false
+         |  --conf ${SQLConf.LEGACY_EMPTY_CURRENT_DB_IN_CLI.key}=true
          |  --hiveconf ${ConfVars.METASTORECONNECTURLKEY}=$jdbcUrl
          |  --hiveconf ${ConfVars.SCRATCHDIR}=$scratchDirPath
          |  --hiveconf conf1=conftest
@@ -560,7 +562,7 @@ class CliSuite extends SparkFunSuite {
       extraArgs = Seq("--hiveconf", "hive.session.silent=false",
         "-e", "select from_json('a', 'a INT', map('mode', 'FAILFAST'));"),
       errorResponses = Seq("JsonParseException"))(
-      ("", "SparkException: Malformed records are detected in record parsing"),
+      ("", "SparkException: [MALFORMED_RECORD_IN_PARSING]"),
       ("", "JsonParseException: Unrecognized token 'a'"))
     // If it is in silent mode, will print the error message only
     runCliWithin(
@@ -568,7 +570,7 @@ class CliSuite extends SparkFunSuite {
       extraArgs = Seq("--conf", "spark.hive.session.silent=true",
         "-e", "select from_json('a', 'a INT', map('mode', 'FAILFAST'));"),
       errorResponses = Seq("SparkException"))(
-      ("", "SparkException: Malformed records are detected in record parsing"))
+      ("", "SparkException: [MALFORMED_RECORD_IN_PARSING]"))
   }
 
   test("SPARK-30808: use Java 8 time API in Thrift SQL CLI by default") {
@@ -641,7 +643,7 @@ class CliSuite extends SparkFunSuite {
 
   test("SPARK-37694: delete [jar|file|archive] shall use spark sql processor") {
     runCliWithin(2.minute, errorResponses = Seq("ParseException"))(
-      "delete jar dummy.jar;" -> "Syntax error at or near 'jar': missing 'FROM'(line 1, pos 7)")
+      "delete jar dummy.jar;" -> "Syntax error at or near 'jar': missing 'FROM'.(line 1, pos 7)")
   }
 
   test("SPARK-37906: Spark SQL CLI should not pass final comment") {
@@ -787,5 +789,21 @@ class CliSuite extends SparkFunSuite {
       Seq("--conf", s"${StaticSQLConf.WAREHOUSE_PATH.key}=${sparkWareHouseDir}",
           "--conf", s"${StaticSQLConf.CATALOG_DEFAULT_DATABASE.key}=spark_35242"))(
       "show tables;" -> "spark_test")
+  }
+
+  test("SPARK-42448: Print correct database in prompt") {
+    runCliWithin(
+      2.minute,
+      Seq("--conf", s"${SQLConf.LEGACY_EMPTY_CURRENT_DB_IN_CLI.key}=false"),
+      prompt = "spark-sql (default)>")(
+      "set abc;" -> "abc\t<undefined>",
+      "create database spark_42448;" -> "")
+
+    runCliWithin(
+      2.minute,
+      Seq("--conf", s"${SQLConf.LEGACY_EMPTY_CURRENT_DB_IN_CLI.key}=false", "--database",
+        "spark_42448"),
+      prompt = "spark-sql (spark_42448)>")(
+      "select current_database();" -> "spark_42448")
   }
 }

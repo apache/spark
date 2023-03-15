@@ -434,15 +434,21 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
 
     // Invalid merge cases:
 
-    var e = intercept[SparkException] {
-      StructType.fromDDL("c1 DECIMAL(10, 5)").merge(StructType.fromDDL("c1 DECIMAL(12, 2)"))
-    }
-    assert(e.getMessage.contains("Failed to merge decimal types"))
+    checkError(
+      exception = intercept[SparkException] {
+        StructType.fromDDL("c1 DECIMAL(10, 5)").merge(StructType.fromDDL("c1 DECIMAL(12, 2)"))
+      },
+      errorClass = "CANNOT_MERGE_INCOMPATIBLE_DATA_TYPE",
+      parameters = Map("left" -> "\"DECIMAL(10,5)\"", "right" -> "\"DECIMAL(12,2)\"")
+    )
 
-    e = intercept[SparkException] {
-      StructType.fromDDL("c1 DECIMAL(12, 5)").merge(StructType.fromDDL("c1 DECIMAL(12, 2)"))
-    }
-    assert(e.getMessage.contains("Failed to merge decimal types"))
+    checkError(
+      exception = intercept[SparkException] {
+        StructType.fromDDL("c1 DECIMAL(12, 5)").merge(StructType.fromDDL("c1 DECIMAL(12, 2)"))
+      },
+      errorClass = "CANNOT_MERGE_INCOMPATIBLE_DATA_TYPE",
+      parameters = Map("left" -> "\"DECIMAL(12,5)\"", "right" -> "\"DECIMAL(12,2)\"")
+    )
   }
 
   test("SPARK-39143: Test parsing default column values out of struct types") {

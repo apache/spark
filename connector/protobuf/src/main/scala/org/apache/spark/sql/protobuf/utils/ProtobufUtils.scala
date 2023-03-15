@@ -100,7 +100,7 @@ private[sql] object ProtobufUtils extends Logging {
      */
     def validateNoExtraRequiredProtoFields(): Unit = {
       val extraFields = protoFieldArray.toSet -- matchedFields.map(_.fieldDescriptor)
-      extraFields.filterNot(isNullable).foreach { extraField =>
+      extraFields.filter(_.isRequired).foreach { extraField =>
         throw QueryCompilationErrors.cannotFindProtobufFieldInCatalystError(
           toFieldStr(protoPath :+ extraField.getName()))
       }
@@ -229,7 +229,7 @@ private[sql] object ProtobufUtils extends Logging {
       fileDescriptorSet = DescriptorProtos.FileDescriptorSet.parseFrom(dscFile)
     } catch {
       case ex: InvalidProtocolBufferException =>
-        throw QueryCompilationErrors.descrioptorParseError(descFilePath, ex)
+        throw QueryCompilationErrors.descriptorParseError(descFilePath, ex)
       case ex: IOException =>
         throw QueryCompilationErrors.cannotFindDescriptorFileError(descFilePath, ex)
     }
@@ -283,9 +283,4 @@ private[sql] object ProtobufUtils extends Logging {
     case Seq() => "top-level record"
     case n => s"field '${n.mkString(".")}'"
   }
-
-  /** Return true if `fieldDescriptor` is optional. */
-  private[protobuf] def isNullable(fieldDescriptor: FieldDescriptor): Boolean =
-    !fieldDescriptor.isOptional
-
 }

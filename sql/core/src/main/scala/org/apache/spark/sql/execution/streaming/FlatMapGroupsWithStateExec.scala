@@ -90,18 +90,23 @@ trait FlatMapGroupsWithStateExecBase
 
   override def shortName: String = "flatMapGroupsWithState"
 
-  override def shouldRunAnotherBatch(newMetadata: OffsetSeqMetadata): Boolean = {
+  override def shouldRunAnotherBatch(newInputWatermark: Long): Boolean = {
     timeoutConf match {
       case ProcessingTimeTimeout =>
         true  // Always run batches to process timeouts
       case EventTimeTimeout =>
         // Process another non-data batch only if the watermark has changed in this executed plan
         eventTimeWatermarkForEviction.isDefined &&
-          newMetadata.batchWatermarkMs > eventTimeWatermarkForEviction.get
+          newInputWatermark > eventTimeWatermarkForEviction.get
       case _ =>
         false
     }
   }
+
+  // There is no guarantee that any of the column in the output is bound to the watermark. The
+  // user function is quite flexible. Hence Spark does not support the stateful operator(s) after
+  // (flat)MapGroupsWithState.
+  override def produceOutputWatermark(inputWatermarkMs: Long): Option[Long] = None
 
   /**
    * Process data by applying the user defined function on a per partition basis.
@@ -510,12 +515,12 @@ object FlatMapGroupsWithStateExec {
       }
       CoGroupExec(
         func, keyDeserializer, valueDeserializer, initialStateDeserializer, groupingAttributes,
-        initialStateGroupAttrs, dataAttributes, initialStateDataAttrs, outputObjAttr,
-        child, initialState)
+        initialStateGroupAttrs, dataAttributes, initialStateDataAttrs, Seq.empty, Seq.empty,
+        outputObjAttr, child, initialState)
     } else {
       MapGroupsExec(
         userFunc, keyDeserializer, valueDeserializer, groupingAttributes,
-        dataAttributes, outputObjAttr, timeoutConf, child)
+        dataAttributes, Seq.empty, outputObjAttr, timeoutConf, child)
     }
   }
 }

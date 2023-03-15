@@ -39,6 +39,50 @@ For experimenting on `spark-shell`, you need to add this above library and its d
 ### Creating a Kafka Source for Streaming Queries
 
 <div class="codetabs">
+
+<div data-lang="python" markdown="1">
+{% highlight python %}
+
+# Subscribe to 1 topic
+df = spark \
+  .readStream \
+  .format("kafka") \
+  .option("kafka.bootstrap.servers", "host1:port1,host2:port2") \
+  .option("subscribe", "topic1") \
+  .load()
+df.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
+
+# Subscribe to 1 topic, with headers
+df = spark \
+  .readStream \
+  .format("kafka") \
+  .option("kafka.bootstrap.servers", "host1:port1,host2:port2") \
+  .option("subscribe", "topic1") \
+  .option("includeHeaders", "true") \
+  .load()
+df.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)", "headers")
+
+# Subscribe to multiple topics
+df = spark \
+  .readStream \
+  .format("kafka") \
+  .option("kafka.bootstrap.servers", "host1:port1,host2:port2") \
+  .option("subscribe", "topic1,topic2") \
+  .load()
+df.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
+
+# Subscribe to a pattern
+df = spark \
+  .readStream \
+  .format("kafka") \
+  .option("kafka.bootstrap.servers", "host1:port1,host2:port2") \
+  .option("subscribePattern", "topic.*") \
+  .load()
+df.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
+
+{% endhighlight %}
+</div>
+
 <div data-lang="scala" markdown="1">
 {% highlight scala %}
 
@@ -85,6 +129,7 @@ df.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
 
 {% endhighlight %}
 </div>
+
 <div data-lang="java" markdown="1">
 {% highlight java %}
 
@@ -127,48 +172,7 @@ df.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)");
 
 {% endhighlight %}
 </div>
-<div data-lang="python" markdown="1">
-{% highlight python %}
 
-# Subscribe to 1 topic
-df = spark \
-  .readStream \
-  .format("kafka") \
-  .option("kafka.bootstrap.servers", "host1:port1,host2:port2") \
-  .option("subscribe", "topic1") \
-  .load()
-df.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
-
-# Subscribe to 1 topic, with headers
-df = spark \
-  .readStream \
-  .format("kafka") \
-  .option("kafka.bootstrap.servers", "host1:port1,host2:port2") \
-  .option("subscribe", "topic1") \
-  .option("includeHeaders", "true") \
-  .load()
-df.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)", "headers")
-
-# Subscribe to multiple topics
-df = spark \
-  .readStream \
-  .format("kafka") \
-  .option("kafka.bootstrap.servers", "host1:port1,host2:port2") \
-  .option("subscribe", "topic1,topic2") \
-  .load()
-df.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
-
-# Subscribe to a pattern
-df = spark \
-  .readStream \
-  .format("kafka") \
-  .option("kafka.bootstrap.servers", "host1:port1,host2:port2") \
-  .option("subscribePattern", "topic.*") \
-  .load()
-df.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
-
-{% endhighlight %}
-</div>
 </div>
 
 ### Creating a Kafka Source for Batch Queries
@@ -176,6 +180,43 @@ If you have a use case that is better suited to batch processing,
 you can create a Dataset/DataFrame for a defined range of offsets.
 
 <div class="codetabs">
+
+<div data-lang="python" markdown="1">
+{% highlight python %}
+
+# Subscribe to 1 topic defaults to the earliest and latest offsets
+df = spark \
+  .read \
+  .format("kafka") \
+  .option("kafka.bootstrap.servers", "host1:port1,host2:port2") \
+  .option("subscribe", "topic1") \
+  .load()
+df.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
+
+# Subscribe to multiple topics, specifying explicit Kafka offsets
+df = spark \
+  .read \
+  .format("kafka") \
+  .option("kafka.bootstrap.servers", "host1:port1,host2:port2") \
+  .option("subscribe", "topic1,topic2") \
+  .option("startingOffsets", """{"topic1":{"0":23,"1":-2},"topic2":{"0":-2}}""") \
+  .option("endingOffsets", """{"topic1":{"0":50,"1":-1},"topic2":{"0":-1}}""") \
+  .load()
+df.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
+
+# Subscribe to a pattern, at the earliest and latest offsets
+df = spark \
+  .read \
+  .format("kafka") \
+  .option("kafka.bootstrap.servers", "host1:port1,host2:port2") \
+  .option("subscribePattern", "topic.*") \
+  .option("startingOffsets", "earliest") \
+  .option("endingOffsets", "latest") \
+  .load()
+df.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
+{% endhighlight %}
+</div>
+
 <div data-lang="scala" markdown="1">
 {% highlight scala %}
 
@@ -215,6 +256,7 @@ df.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
 
 {% endhighlight %}
 </div>
+
 <div data-lang="java" markdown="1">
 {% highlight java %}
 
@@ -251,41 +293,7 @@ df.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)");
 
 {% endhighlight %}
 </div>
-<div data-lang="python" markdown="1">
-{% highlight python %}
 
-# Subscribe to 1 topic defaults to the earliest and latest offsets
-df = spark \
-  .read \
-  .format("kafka") \
-  .option("kafka.bootstrap.servers", "host1:port1,host2:port2") \
-  .option("subscribe", "topic1") \
-  .load()
-df.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
-
-# Subscribe to multiple topics, specifying explicit Kafka offsets
-df = spark \
-  .read \
-  .format("kafka") \
-  .option("kafka.bootstrap.servers", "host1:port1,host2:port2") \
-  .option("subscribe", "topic1,topic2") \
-  .option("startingOffsets", """{"topic1":{"0":23,"1":-2},"topic2":{"0":-2}}""") \
-  .option("endingOffsets", """{"topic1":{"0":50,"1":-1},"topic2":{"0":-1}}""") \
-  .load()
-df.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
-
-# Subscribe to a pattern, at the earliest and latest offsets
-df = spark \
-  .read \
-  .format("kafka") \
-  .option("kafka.bootstrap.servers", "host1:port1,host2:port2") \
-  .option("subscribePattern", "topic.*") \
-  .option("startingOffsets", "earliest") \
-  .option("endingOffsets", "latest") \
-  .load()
-df.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
-{% endhighlight %}
-</div>
 </div>
 
 Each row in the source has the following schema:
@@ -750,50 +758,7 @@ The following configurations are optional:
 ### Creating a Kafka Sink for Streaming Queries
 
 <div class="codetabs">
-<div data-lang="scala" markdown="1">
-{% highlight scala %}
 
-// Write key-value data from a DataFrame to a specific Kafka topic specified in an option
-val ds = df
-  .selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
-  .writeStream
-  .format("kafka")
-  .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
-  .option("topic", "topic1")
-  .start()
-
-// Write key-value data from a DataFrame to Kafka using a topic specified in the data
-val ds = df
-  .selectExpr("topic", "CAST(key AS STRING)", "CAST(value AS STRING)")
-  .writeStream
-  .format("kafka")
-  .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
-  .start()
-
-{% endhighlight %}
-</div>
-<div data-lang="java" markdown="1">
-{% highlight java %}
-
-// Write key-value data from a DataFrame to a specific Kafka topic specified in an option
-StreamingQuery ds = df
-  .selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
-  .writeStream()
-  .format("kafka")
-  .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
-  .option("topic", "topic1")
-  .start();
-
-// Write key-value data from a DataFrame to Kafka using a topic specified in the data
-StreamingQuery ds = df
-  .selectExpr("topic", "CAST(key AS STRING)", "CAST(value AS STRING)")
-  .writeStream()
-  .format("kafka")
-  .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
-  .start();
-
-{% endhighlight %}
-</div>
 <div data-lang="python" markdown="1">
 {% highlight python %}
 
@@ -816,51 +781,59 @@ ds = df \
 
 {% endhighlight %}
 </div>
+
+<div data-lang="scala" markdown="1">
+{% highlight scala %}
+
+// Write key-value data from a DataFrame to a specific Kafka topic specified in an option
+val ds = df
+  .selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
+  .writeStream
+  .format("kafka")
+  .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
+  .option("topic", "topic1")
+  .start()
+
+// Write key-value data from a DataFrame to Kafka using a topic specified in the data
+val ds = df
+  .selectExpr("topic", "CAST(key AS STRING)", "CAST(value AS STRING)")
+  .writeStream
+  .format("kafka")
+  .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
+  .start()
+
+{% endhighlight %}
+</div>
+
+<div data-lang="java" markdown="1">
+{% highlight java %}
+
+// Write key-value data from a DataFrame to a specific Kafka topic specified in an option
+StreamingQuery ds = df
+  .selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
+  .writeStream()
+  .format("kafka")
+  .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
+  .option("topic", "topic1")
+  .start();
+
+// Write key-value data from a DataFrame to Kafka using a topic specified in the data
+StreamingQuery ds = df
+  .selectExpr("topic", "CAST(key AS STRING)", "CAST(value AS STRING)")
+  .writeStream()
+  .format("kafka")
+  .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
+  .start();
+
+{% endhighlight %}
+</div>
+
 </div>
 
 ### Writing the output of Batch Queries to Kafka
 
 <div class="codetabs">
-<div data-lang="scala" markdown="1">
-{% highlight scala %}
 
-// Write key-value data from a DataFrame to a specific Kafka topic specified in an option
-df.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
-  .write
-  .format("kafka")
-  .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
-  .option("topic", "topic1")
-  .save()
-
-// Write key-value data from a DataFrame to Kafka using a topic specified in the data
-df.selectExpr("topic", "CAST(key AS STRING)", "CAST(value AS STRING)")
-  .write
-  .format("kafka")
-  .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
-  .save()
-
-{% endhighlight %}
-</div>
-<div data-lang="java" markdown="1">
-{% highlight java %}
-
-// Write key-value data from a DataFrame to a specific Kafka topic specified in an option
-df.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
-  .write()
-  .format("kafka")
-  .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
-  .option("topic", "topic1")
-  .save();
-
-// Write key-value data from a DataFrame to Kafka using a topic specified in the data
-df.selectExpr("topic", "CAST(key AS STRING)", "CAST(value AS STRING)")
-  .write()
-  .format("kafka")
-  .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
-  .save();
-
-{% endhighlight %}
-</div>
 <div data-lang="python" markdown="1">
 {% highlight python %}
 
@@ -881,6 +854,49 @@ df.selectExpr("topic", "CAST(key AS STRING)", "CAST(value AS STRING)") \
 
 {% endhighlight %}
 </div>
+
+<div data-lang="scala" markdown="1">
+{% highlight scala %}
+
+// Write key-value data from a DataFrame to a specific Kafka topic specified in an option
+df.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
+  .write
+  .format("kafka")
+  .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
+  .option("topic", "topic1")
+  .save()
+
+// Write key-value data from a DataFrame to Kafka using a topic specified in the data
+df.selectExpr("topic", "CAST(key AS STRING)", "CAST(value AS STRING)")
+  .write
+  .format("kafka")
+  .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
+  .save()
+
+{% endhighlight %}
+</div>
+
+<div data-lang="java" markdown="1">
+{% highlight java %}
+
+// Write key-value data from a DataFrame to a specific Kafka topic specified in an option
+df.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
+  .write()
+  .format("kafka")
+  .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
+  .option("topic", "topic1")
+  .save();
+
+// Write key-value data from a DataFrame to Kafka using a topic specified in the data
+df.selectExpr("topic", "CAST(key AS STRING)", "CAST(value AS STRING)")
+  .write()
+  .format("kafka")
+  .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
+  .save();
+
+{% endhighlight %}
+</div>
+
 </div>
 
 ### Producer Caching

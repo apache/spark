@@ -1112,6 +1112,8 @@ private[spark] class MapOutputTrackerMaster(
       startMapIndex: Int,
       endMapIndex: Int): Seq[String] =
   {
+    if (!shuffleLocalityEnabled) return Nil
+
     val shuffleStatus = shuffleStatuses.get(dep.shuffleId).orNull
     if (shuffleStatus != null) {
       shuffleStatus.withMapStatuses { statuses =>
@@ -1207,7 +1209,7 @@ private[spark] class MapOutputTrackerMaster(
 
   // This method is only called in local-mode.
   override def getShufflePushMergerLocations(shuffleId: Int): Seq[BlockManagerId] = {
-    shuffleStatuses(shuffleId).getShufflePushMergerLocations
+    shuffleStatuses.get(shuffleId).map(_.getShufflePushMergerLocations).getOrElse(Seq.empty)
   }
 
   override def stop(): Unit = {

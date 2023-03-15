@@ -988,6 +988,8 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
 
         .. versionadded:: 3.4.0
 
+        .. deprecated:: 3.4.0
+
         Examples
         --------
         >>> df = ps.DataFrame({"A": [1, 2, 1, 1], "B": [True, False, False, True],
@@ -1010,6 +1012,11 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         pyspark.pandas.Series.groupby
         pyspark.pandas.DataFrame.groupby
         """
+        warnings.warn(
+            "The 'mad' method is deprecated and will be removed in a future version. "
+            "To compute the same result, you may do `(group_df - group_df.mean()).abs().mean()`.",
+            FutureWarning,
+        )
         groupkey_names = [SPARK_INDEX_NAME_FORMAT(i) for i in range(len(self._groupkeys))]
         internal, agg_columns, sdf = self._prepare_reduce(
             groupkey_names=groupkey_names,
@@ -1916,7 +1923,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
 
         In case of Series, it works as below.
 
-        >>> def plus_max(x) -> ps.Series[np.int]:
+        >>> def plus_max(x) -> ps.Series[int]:
         ...     return x + x.max()
         >>> df.B.groupby(df.A).apply(plus_max).sort_index()  # doctest: +SKIP
         0    6
@@ -1934,7 +1941,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
 
         You can also return a scalar value as an aggregated value of the group:
 
-        >>> def plus_length(x) -> np.int:
+        >>> def plus_length(x) -> int:
         ...     return len(x)
         >>> df.B.groupby(df.A).apply(plus_length).sort_index()  # doctest: +SKIP
         0    1
@@ -1943,7 +1950,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
 
         The extra arguments to the function can be passed as below.
 
-        >>> def calculation(x, y, z) -> np.int:
+        >>> def calculation(x, y, z) -> int:
         ...     return len(x) + y * z
         >>> df.B.groupby(df.A).apply(calculation, 5, z=10).sort_index()  # doctest: +SKIP
         0    51
@@ -2644,7 +2651,19 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         """
         return self.fillna(method="bfill", limit=limit)
 
-    backfill = bfill
+    def backfill(self, limit: Optional[int] = None) -> FrameLike:
+        """
+        Alias for bfill.
+
+        .. deprecated:: 3.4.0
+        """
+        warnings.warn(
+            "The GroupBy.backfill method is deprecated "
+            "and will be removed in a future version. "
+            "Use GroupBy.bfill instead.",
+            FutureWarning,
+        )
+        return self.bfill(limit=limit)
 
     def ffill(self, limit: Optional[int] = None) -> FrameLike:
         """
@@ -2695,7 +2714,19 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         """
         return self.fillna(method="ffill", limit=limit)
 
-    pad = ffill
+    def pad(self, limit: Optional[int] = None) -> FrameLike:
+        """
+        Alias for ffill.
+
+        .. deprecated:: 3.4.0
+        """
+        warnings.warn(
+            "The GroupBy.pad method is deprecated "
+            "and will be removed in a future version. "
+            "Use GroupBy.ffill instead.",
+            FutureWarning,
+        )
+        return self.ffill(limit=limit)
 
     def _limit(self, n: int, asc: bool) -> FrameLike:
         """
@@ -3046,7 +3077,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         1  a string 2  a string 6
         2  a string 3  a string 5
 
-        >>> def plus_max(x) -> ps.Series[np.int]:
+        >>> def plus_max(x) -> ps.Series[int]:
         ...     return x + x.max()
         >>> g.transform(plus_max)  # doctest: +NORMALIZE_WHITESPACE
            B   C
@@ -3080,7 +3111,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
 
         You can also specify extra arguments to pass to the function.
 
-        >>> def calculation(x, y, z) -> ps.Series[np.int]:
+        >>> def calculation(x, y, z) -> ps.Series[int]:
         ...     return x + x.min() + y + z
         >>> g.transform(calculation, 5, z=20)  # doctest: +NORMALIZE_WHITESPACE
             B   C

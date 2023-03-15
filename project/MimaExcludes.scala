@@ -34,6 +34,93 @@ import com.typesafe.tools.mima.core.ProblemFilters._
  */
 object MimaExcludes {
 
+  // Exclude rules for 3.5.x
+  lazy val v35excludes = v34excludes ++ Seq(
+    // [SPARK-42508][CONNECT][ML] Extract the common .ml classes to mllib-common
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ml.attribute.package"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ml.attribute.package$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ml.attribute.AttributeGroup"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ml.attribute.AttributeGroup$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ml.attribute.AttributeKeys"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ml.attribute.Attribute"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ml.attribute.Attribute$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ml.attribute.AttributeFactory"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ml.attribute.NumericAttribute"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ml.attribute.NumericAttribute$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ml.attribute.NominalAttribute"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ml.attribute.NominalAttribute$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ml.attribute.BinaryAttribute"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ml.attribute.BinaryAttribute$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ml.attribute.UnresolvedAttribute"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ml.attribute.UnresolvedAttribute$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ml.attribute.AttributeType"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ml.attribute.AttributeType$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ml.feature.LabeledPoint"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ml.feature.LabeledPoint$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ml.linalg.JsonMatrixConverter"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ml.linalg.JsonVectorConverter"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ml.linalg.MatrixUDT"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ml.linalg.VectorUDT"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ml.linalg.SQLDataTypes"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ml.linalg.SQLDataTypes$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ml.param.Param"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ml.param.ParamPair"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ml.param.ParamPair$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ml.param.JavaParams"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ml.param.ParamMap"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ml.param.ParamMap$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ml.param.ParamValidators"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ml.param.ParamValidators$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ml.param.DoubleParam"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ml.param.IntParam"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ml.param.FloatParam"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ml.param.LongParam"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ml.param.BooleanParam"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ml.param.IntArrayParam"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ml.param.StringArrayParam"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ml.param.DoubleArrayParam"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ml.param.DoubleArrayArrayParam"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ml.param.shared.HasAggregationDepth"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ml.param.shared.HasBlockSize"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ml.param.shared.HasCheckpointInterval"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ml.param.shared.HasCollectSubModels"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ml.param.shared.HasDistanceMeasure"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ml.param.shared.HasElasticNetParam"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ml.param.shared.HasFeaturesCol"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ml.param.shared.HasFitIntercept"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ml.param.shared.HasHandleInvalid"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ml.param.shared.HasInputCol"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ml.param.shared.HasInputCols"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ml.param.shared.HasLabelCol"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ml.param.shared.HasLoss"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ml.param.shared.HasMaxBlockSizeInMB"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ml.param.shared.HasMaxIter"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ml.param.shared.HasNumFeatures"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ml.param.shared.HasOutputCol"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ml.param.shared.HasOutputCols"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ml.param.shared.HasPredictionCol"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ml.param.shared.HasProbabilityCol"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ml.param.shared.HasRawPredictionCol"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ml.param.shared.HasRegParam"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ml.param.shared.HasRelativeError"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ml.param.shared.HasSeed"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ml.param.shared.HasSolver"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ml.param.shared.HasStandardization"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ml.param.shared.HasStepSize"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ml.param.shared.HasThreshold"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ml.param.shared.HasThresholds"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ml.param.shared.HasTol"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ml.param.shared.HasValidationIndicatorCol"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ml.param.shared.HasVarianceCol"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ml.param.shared.HasWeightCol"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ml.PredictorParams"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ml.classification.ClassifierParams"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ml.classification.ProbabilisticClassifierParams"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ml.util.Identifiable"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ml.util.Identifiable$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ml.util.SchemaUtils")
+  )
+
   // Exclude rules for 3.4.x from 3.3.0
   lazy val v34excludes = defaultExcludes ++ Seq(
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.ml.recommendation.ALS.checkedCast"),
@@ -51,8 +138,6 @@ object MimaExcludes {
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.ml.classification.Classifier.extractLabeledPoints"),
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.ml.classification.Classifier.validateNumClasses"),
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.ml.classification.Classifier.validateLabel"),
-    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.ml.classification.Classifier.getNumClasses"),
-    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.ml.classification.Classifier.getNumClasses$default$2"),
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.ml.classification.OneVsRest.extractInstances"),
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.ml.classification.OneVsRestModel.extractInstances"),
 
@@ -86,6 +171,11 @@ object MimaExcludes {
 
     // [SPARK-36511][MINOR][SQL] Remove ColumnIOUtil
     ProblemFilters.exclude[MissingClassProblem]("org.apache.parquet.io.ColumnIOUtil"),
+
+    // [SPARK-36620] [SHUFFLE] Expose shuffle push metrics
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.status.api.v1.ShuffleReadMetricDistributions.this"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.status.api.v1.ShuffleReadMetrics.this"),
+    ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.status.api.v1.StageData.this"),
 
     // [SPARK-40324][SQL] Provide query context in AnalysisException
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.AnalysisException.copy"),
@@ -148,8 +238,23 @@ object MimaExcludes {
     ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.status.api.v1.RDDPartitionInfo.executors"),
     ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.status.api.v1.RDDPartitionInfo.this"),
     ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.status.api.v1.TaskData.accumulatorUpdates"),
-    ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.status.api.v1.TaskData.this")
+    ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.status.api.v1.TaskData.this"),
 
+    // [SPARK-41423][CORE] Protobuf serializer for StageDataWrapper for Scala 2.13
+    ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.status.api.v1.StageData.rddIds"),
+    ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.status.api.v1.StageData.accumulatorUpdates"),
+    ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.status.api.v1.StageData.this"),
+
+    // [SPARK-41890][CORE][SQL][UI] Reduce `toSeq` in `RDDOperationGraphWrapperSerializer`/`SparkPlanGraphWrapperSerializer` for Scala 2.13
+    ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.status.api.v1.sql.ExecutionData.nodes"),
+    ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.status.api.v1.sql.ExecutionData.edges"),
+    ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.status.api.v1.sql.ExecutionData.this"),
+    ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.status.api.v1.sql.Node.apply"),
+    ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.status.api.v1.sql.Node.metrics"),
+    ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.status.api.v1.sql.Node.copy"),
+    ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.status.api.v1.sql.Node.copy$default$4"),
+    ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.status.api.v1.sql.Node.this"),
+    ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.status.api.v1.sql.Node.apply")
   )
 
   // Defulat exclude rules
@@ -182,6 +287,7 @@ object MimaExcludes {
   )
 
   def excludes(version: String) = version match {
+    case v if v.startsWith("3.5") => v35excludes
     case v if v.startsWith("3.4") => v34excludes
     case _ => Seq()
   }

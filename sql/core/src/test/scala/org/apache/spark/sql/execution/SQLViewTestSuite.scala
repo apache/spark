@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog.CatalogFunction
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.logical.Repartition
+import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.withDefaultTimeZone
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.internal.SQLConf._
@@ -584,8 +585,17 @@ class PersistedViewTestSuite extends SQLViewTestSuite with SharedSparkSession {
         val e = intercept[AnalysisException] {
           sql(s"SELECT * FROM test_view")
         }
-        assert(e.getMessage.contains("re-create the view by running: CREATE OR REPLACE"))
-        val ddl = e.getMessage.split(": ").last
+        checkError(
+          exception = e,
+          errorClass = "INCOMPATIBLE_VIEW_SCHEMA_CHANGE",
+          parameters = Map(
+            "viewName" -> "`spark_catalog`.`default`.`test_view`",
+            "suggestion" ->
+              "CREATE OR REPLACE VIEW spark_catalog.default.test_view  AS SELECT * FROM t",
+            "actualCols" -> "[]", "colName" -> "col_j",
+            "expectedNum" -> "1")
+        )
+        val ddl = e.getMessageParameters.get("suggestion")
         sql(ddl)
         checkAnswer(sql("select * FROM test_view"), Row(1))
       }
@@ -600,22 +610,30 @@ class PersistedViewTestSuite extends SQLViewTestSuite with SharedSparkSession {
         withTempView("v2") {
           sql("CREATE VIEW v1 AS SELECT * FROM t")
           sql("CREATE TEMPORARY VIEW v2 AS  SELECT * FROM t")
-          var e = intercept[AnalysisException] {
-            sql("ALTER VIEW v1 AS SELECT * FROM v2")
-          }.getMessage
-          assert(e.contains("Not allowed to create a permanent view " +
-            s"`$SESSION_CATALOG_NAME`.`default`.`v1` by " +
-            "referencing a temporary view v2"))
+          checkError(
+            exception = intercept[AnalysisException] {
+              sql("ALTER VIEW v1 AS SELECT * FROM v2")
+            },
+            errorClass = "INVALID_TEMP_OBJ_REFERENCE",
+            parameters = Map(
+              "obj" -> "VIEW",
+              "objName" -> s"`$SESSION_CATALOG_NAME`.`default`.`v1`",
+              "tempObj" -> "VIEW",
+              "tempObjName" -> "`v2`"))
           val tempFunctionName = "temp_udf"
           val functionClass = "test.org.apache.spark.sql.MyDoubleAvg"
           withUserDefinedFunction(tempFunctionName -> true) {
             sql(s"CREATE TEMPORARY FUNCTION $tempFunctionName AS '$functionClass'")
-            e = intercept[AnalysisException] {
-              sql(s"ALTER VIEW v1 AS SELECT $tempFunctionName(id) from t")
-            }.getMessage
-            assert(e.contains("Not allowed to create a permanent view " +
-              s"`$SESSION_CATALOG_NAME`.`default`.`v1` by " +
-              s"referencing a temporary function `$tempFunctionName`"))
+            checkError(
+              exception = intercept[AnalysisException] {
+                sql(s"ALTER VIEW v1 AS SELECT $tempFunctionName(id) from t")
+              },
+              errorClass = "INVALID_TEMP_OBJ_REFERENCE",
+              parameters = Map(
+                "obj" -> "VIEW",
+                "objName" -> s"`$SESSION_CATALOG_NAME`.`default`.`v1`",
+                "tempObj" -> "FUNCTION",
+                "tempObjName" -> s"`$tempFunctionName`"))
           }
         }
       }
@@ -693,6 +711,22 @@ class PersistedViewTestSuite extends SQLViewTestSuite with SharedSparkSession {
           " TBLPROPERTIES ( 'prop1' = 'value1', 'prop2' = 'value2')" +
           " AS SELECT 1 AS c1, '2' AS c2"
         assert(getShowCreateDDL(formattedViewName(viewName), serde) == expected)
+      }
+    }
+  }
+
+  test("capture the session time zone config while creating a view") {
+    val viewName = "v1_capture_test"
+    withView(viewName) {
+      assert(get.sessionLocalTimeZone === "America/Los_Angeles")
+      createView(viewName,
+        """select hour(ts) as H from (
+          |  select cast('2022-01-01T00:00:00.000 America/Los_Angeles' as timestamp) as ts
+          |)""".stripMargin, Seq("H"))
+      withDefaultTimeZone(java.time.ZoneId.of("UTC-09:00")) {
+        withSQLConf(SESSION_LOCAL_TIMEZONE.key -> "UTC-10:00") {
+          checkAnswer(sql(s"select H from $viewName"), Row(0))
+        }
       }
     }
   }

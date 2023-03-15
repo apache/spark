@@ -21,10 +21,12 @@ import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
+import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util.quoteIfNeeded
 import org.apache.spark.sql.connector.expressions.{BucketTransform, FieldReference, IdentityTransform, LogicalExpressions, Transform}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
+import org.apache.spark.sql.types.StructType
 
 /**
  * Conversion helpers for working with v2 [[CatalogPlugin]].
@@ -130,22 +132,20 @@ private[sql] object CatalogV2Implicits {
       }
     }
 
+    def original: String = ident.namespace() :+ ident.name() mkString "."
+
     def asMultipartIdentifier: Seq[String] = ident.namespace :+ ident.name
 
     def asTableIdentifier: TableIdentifier = ident.namespace match {
       case ns if ns.isEmpty => TableIdentifier(ident.name)
       case Array(dbName) => TableIdentifier(ident.name, Some(dbName))
-      case _ =>
-        throw QueryCompilationErrors.identifierHavingMoreThanTwoNamePartsError(
-          quoted, "TableIdentifier")
+      case _ => throw QueryCompilationErrors.identifierTooManyNamePartsError(original)
     }
 
     def asFunctionIdentifier: FunctionIdentifier = ident.namespace() match {
       case ns if ns.isEmpty => FunctionIdentifier(ident.name())
       case Array(dbName) => FunctionIdentifier(ident.name(), Some(dbName))
-      case _ =>
-        throw QueryCompilationErrors.identifierHavingMoreThanTwoNamePartsError(
-          quoted, "FunctionIdentifier")
+      case _ => throw QueryCompilationErrors.identifierTooManyNamePartsError(original)
     }
   }
 
@@ -159,20 +159,18 @@ private[sql] object CatalogV2Implicits {
     def asTableIdentifier: TableIdentifier = parts match {
       case Seq(tblName) => TableIdentifier(tblName)
       case Seq(dbName, tblName) => TableIdentifier(tblName, Some(dbName))
-      case _ =>
-        throw QueryCompilationErrors.identifierHavingMoreThanTwoNamePartsError(
-          quoted, "TableIdentifier")
+      case _ => throw QueryCompilationErrors.identifierTooManyNamePartsError(original)
     }
 
     def asFunctionIdentifier: FunctionIdentifier = parts match {
       case Seq(funcName) => FunctionIdentifier(funcName)
       case Seq(dbName, funcName) => FunctionIdentifier(funcName, Some(dbName))
-      case _ =>
-        throw QueryCompilationErrors.identifierHavingMoreThanTwoNamePartsError(
-          quoted, "FunctionIdentifier")
+      case _ => throw QueryCompilationErrors.identifierTooManyNamePartsError(original)
     }
 
     def quoted: String = parts.map(quoteIfNeeded).mkString(".")
+
+    def original: String = parts.mkString(".")
   }
 
   implicit class TableIdentifierHelper(identifier: TableIdentifier) {
@@ -185,6 +183,11 @@ private[sql] object CatalogV2Implicits {
 
       }
     }
+  }
+
+  implicit class ColumnsHelper(columns: Array[Column]) {
+    def asSchema: StructType = CatalogV2Util.v2ColumnsToStructType(columns)
+    def toAttributes: Seq[AttributeReference] = asSchema.toAttributes
   }
 
   def parseColumnPath(name: String): Seq[String] = {

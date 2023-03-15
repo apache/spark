@@ -18,16 +18,14 @@
 package org.apache.spark.status.protobuf
 
 import org.apache.spark.status.CachedQuantile
+import org.apache.spark.status.protobuf.Utils.{getStringField, setStringField}
 
-class CachedQuantileSerializer extends ProtobufSerDe {
-  override val supportClass: Class[_] = classOf[CachedQuantile]
+class CachedQuantileSerializer extends ProtobufSerDe[CachedQuantile] {
 
-  override def serialize(input: Any): Array[Byte] = {
-    val data = input.asInstanceOf[CachedQuantile]
+  override def serialize(data: CachedQuantile): Array[Byte] = {
     val builder = StoreTypes.CachedQuantile.newBuilder()
       .setStageId(data.stageId.toLong)
       .setStageAttemptId(data.stageAttemptId)
-      .setQuantile(data.quantile)
       .setTaskCount(data.taskCount)
       .setDuration(data.duration)
       .setExecutorDeserializeTime(data.executorDeserializeTime)
@@ -54,9 +52,20 @@ class CachedQuantileSerializer extends ProtobufSerDe {
       .setShuffleRemoteBytesRead(data.shuffleRemoteBytesRead)
       .setShuffleRemoteBytesReadToDisk(data.shuffleRemoteBytesReadToDisk)
       .setShuffleTotalBlocksFetched(data.shuffleTotalBlocksFetched)
+      .setShuffleCorruptMergedBlockChunks(data.shuffleCorruptMergedBlockChunks)
+      .setShuffleMergedFetchFallbackCount(data.shuffleMergedFetchFallbackCount)
+      .setShuffleMergedRemoteBlocksFetched(data.shuffleMergedRemoteBlocksFetched)
+      .setShuffleMergedLocalBlocksFetched(data.shuffleMergedLocalBlocksFetched)
+      .setShuffleMergedRemoteChunksFetched(data.shuffleMergedRemoteChunksFetched)
+      .setShuffleMergedLocalChunksFetched(data.shuffleMergedLocalChunksFetched)
+      .setShuffleMergedRemoteBytesRead(data.shuffleMergedRemoteBytesRead)
+      .setShuffleMergedLocalBytesRead(data.shuffleMergedLocalBytesRead)
+      .setShuffleRemoteReqsDuration(data.shuffleRemoteReqsDuration)
+      .setShuffleMergedRemoteReqsDuration(data.shuffleMergedRemoteReqsDuration)
       .setShuffleWriteBytes(data.shuffleWriteBytes)
       .setShuffleWriteRecords(data.shuffleWriteRecords)
       .setShuffleWriteTime(data.shuffleWriteTime)
+    setStringField(data.quantile, builder.setQuantile)
     builder.build().toByteArray
   }
 
@@ -65,7 +74,7 @@ class CachedQuantileSerializer extends ProtobufSerDe {
     new CachedQuantile(
       stageId = binary.getStageId.toInt,
       stageAttemptId = binary.getStageAttemptId,
-      quantile = binary.getQuantile,
+      quantile = getStringField(binary.hasQuantile, binary.getQuantile),
       taskCount = binary.getTaskCount,
       duration = binary.getDuration,
       executorDeserializeTime = binary.getExecutorDeserializeTime,
@@ -92,6 +101,16 @@ class CachedQuantileSerializer extends ProtobufSerDe {
       shuffleRemoteBytesRead = binary.getShuffleRemoteBytesRead,
       shuffleRemoteBytesReadToDisk = binary.getShuffleRemoteBytesReadToDisk,
       shuffleTotalBlocksFetched = binary.getShuffleTotalBlocksFetched,
+      shuffleCorruptMergedBlockChunks = binary.getShuffleCorruptMergedBlockChunks,
+      shuffleMergedFetchFallbackCount = binary.getShuffleMergedFetchFallbackCount,
+      shuffleMergedRemoteBlocksFetched = binary.getShuffleMergedRemoteBlocksFetched,
+      shuffleMergedLocalBlocksFetched = binary.getShuffleMergedLocalBlocksFetched,
+      shuffleMergedRemoteChunksFetched = binary.getShuffleMergedRemoteChunksFetched,
+      shuffleMergedLocalChunksFetched = binary.getShuffleMergedLocalChunksFetched,
+      shuffleMergedRemoteBytesRead = binary.getShuffleMergedRemoteBytesRead,
+      shuffleMergedLocalBytesRead = binary.getShuffleMergedLocalBytesRead,
+      shuffleRemoteReqsDuration = binary.getShuffleRemoteReqsDuration,
+      shuffleMergedRemoteReqsDuration = binary.getShuffleMergedRemoteReqsDuration,
       shuffleWriteBytes = binary.getShuffleWriteBytes,
       shuffleWriteRecords = binary.getShuffleWriteRecords,
       shuffleWriteTime = binary.getShuffleWriteTime)

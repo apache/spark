@@ -21,10 +21,11 @@ import org.apache.logging.log4j.Level
 
 import org.apache.spark.sql.{AnalysisException, DataFrame}
 import org.apache.spark.sql.catalyst.analysis.{IndexAlreadyExistsException, NoSuchIndexException, UnresolvedAttribute}
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, Sample}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, Sample, Sort}
 import org.apache.spark.sql.catalyst.util.quoteIdentifier
 import org.apache.spark.sql.connector.catalog.{Catalogs, Identifier, TableCatalog}
 import org.apache.spark.sql.connector.catalog.index.SupportsIndex
+import org.apache.spark.sql.connector.expressions.NullOrdering
 import org.apache.spark.sql.connector.expressions.aggregate.GeneralAggregateFunc
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2ScanRelation, V1ScanWrapper}
 import org.apache.spark.sql.jdbc.DockerIntegrationFunSuite
@@ -253,10 +254,13 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
         // This should pass without exception
         sql(s"CREATE index IF NOT EXISTS i1 ON $catalogName.new_table (col1)")
 
-        m = intercept[IndexAlreadyExistsException] {
-          sql(s"CREATE index i1 ON $catalogName.new_table (col1)")
-        }.getMessage
-        assert(m.contains("Failed to create index i1 in new_table"))
+        checkError(
+          exception = intercept[IndexAlreadyExistsException] {
+            sql(s"CREATE index i1 ON $catalogName.new_table (col1)")
+          },
+          errorClass = "INDEX_ALREADY_EXISTS",
+          parameters = Map("indexName" -> "i1", "tableName" -> "new_table")
+        )
 
         sql(s"DROP index i1 ON $catalogName.new_table")
         assert(jdbcTable.indexExists("i1") == false)
@@ -275,10 +279,13 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
         // This should pass without exception
         sql(s"DROP index IF EXISTS i1 ON $catalogName.new_table")
 
-        m = intercept[NoSuchIndexException] {
-          sql(s"DROP index i1 ON $catalogName.new_table")
-        }.getMessage
-        assert(m.contains("Failed to drop index i1 in new_table"))
+        checkError(
+          exception = intercept[NoSuchIndexException] {
+            sql(s"DROP index i1 ON $catalogName.new_table")
+          },
+          errorClass = "INDEX_NOT_FOUND",
+          parameters = Map("indexName" -> "i1", "tableName" -> "new_table")
+        )
       }
     }
   }
@@ -396,7 +403,115 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
     }
   }
 
-  protected def checkAggregateRemoved(df: DataFrame): Unit = {
+  private def checkSortRemoved(df: DataFrame): Unit = {
+    val sorts = df.queryExecution.optimizedPlan.collect {
+      case s: Sort => s
+    }
+    assert(sorts.isEmpty)
+  }
+
+  private def checkOffsetPushed(df: DataFrame, offset: Option[Int]): Unit = {
+    df.queryExecution.optimizedPlan.collect {
+      case relation: DataSourceV2ScanRelation => relation.scan match {
+        case v1: V1ScanWrapper =>
+          assert(v1.pushedDownOperators.offset == offset)
+      }
+    }
+  }
+
+  test("simple scan with LIMIT") {
+    val df = sql(s"SELECT name, salary, bonus FROM $catalogAndNamespace." +
+      s"${caseConvert("employee")} WHERE dept > 0 LIMIT 1")
+    assert(limitPushed(df, 1))
+    val rows = df.collect()
+    assert(rows.length === 1)
+    assert(rows(0).getString(0) === "amy")
+    assert(rows(0).getDecimal(1) === new java.math.BigDecimal("10000.00"))
+    assert(rows(0).getDouble(2) === 1000d)
+  }
+
+  test("simple scan with top N") {
+    Seq(NullOrdering.values()).flatten.foreach { nullOrdering =>
+      val df1 = sql(s"SELECT name, salary, bonus FROM $catalogAndNamespace." +
+        s"${caseConvert("employee")} WHERE dept > 0 ORDER BY salary $nullOrdering LIMIT 1")
+      assert(limitPushed(df1, 1))
+      checkSortRemoved(df1)
+      val rows1 = df1.collect()
+      assert(rows1.length === 1)
+      assert(rows1(0).getString(0) === "cathy")
+      assert(rows1(0).getDecimal(1) === new java.math.BigDecimal("9000.00"))
+      assert(rows1(0).getDouble(2) === 1200d)
+
+      val df2 = sql(s"SELECT name, salary, bonus FROM $catalogAndNamespace." +
+        s"${caseConvert("employee")} WHERE dept > 0 ORDER BY bonus DESC $nullOrdering LIMIT 1")
+      assert(limitPushed(df2, 1))
+      checkSortRemoved(df2)
+      val rows2 = df2.collect()
+      assert(rows2.length === 1)
+      assert(rows2(0).getString(0) === "david")
+      assert(rows2(0).getDecimal(1) === new java.math.BigDecimal("10000.00"))
+      assert(rows2(0).getDouble(2) === 1300d)
+    }
+  }
+
+  protected def testOffset(): Unit = {
+    test("simple scan with OFFSET") {
+      val df = sql(s"SELECT name, salary, bonus FROM $catalogAndNamespace." +
+        s"${caseConvert("employee")} WHERE dept > 0 OFFSET 4")
+      checkOffsetPushed(df, Some(4))
+      val rows = df.collect()
+      assert(rows.length === 1)
+      assert(rows(0).getString(0) === "jen")
+      assert(rows(0).getDecimal(1) === new java.math.BigDecimal("12000.00"))
+      assert(rows(0).getDouble(2) === 1200d)
+    }
+  }
+
+  protected def testLimitAndOffset(): Unit = {
+    test("simple scan with LIMIT and OFFSET") {
+      val df = sql(s"SELECT name, salary, bonus FROM $catalogAndNamespace." +
+        s"${caseConvert("employee")} WHERE dept > 0 LIMIT 1 OFFSET 2")
+      assert(limitPushed(df, 3))
+      checkOffsetPushed(df, Some(2))
+      val rows = df.collect()
+      assert(rows.length === 1)
+      assert(rows(0).getString(0) === "cathy")
+      assert(rows(0).getDecimal(1) === new java.math.BigDecimal("9000.00"))
+      assert(rows(0).getDouble(2) === 1200d)
+    }
+  }
+
+  protected def testPaging(): Unit = {
+    test("simple scan with paging: top N and OFFSET") {
+      Seq(NullOrdering.values()).flatten.foreach { nullOrdering =>
+        val df1 = sql(s"SELECT name, salary, bonus FROM $catalogAndNamespace." +
+          s"${caseConvert("employee")}" +
+          s" WHERE dept > 0 ORDER BY salary $nullOrdering, bonus LIMIT 1 OFFSET 2")
+        assert(limitPushed(df1, 3))
+        checkOffsetPushed(df1, Some(2))
+        checkSortRemoved(df1)
+        val rows1 = df1.collect()
+        assert(rows1.length === 1)
+        assert(rows1(0).getString(0) === "david")
+        assert(rows1(0).getDecimal(1) === new java.math.BigDecimal("10000.00"))
+        assert(rows1(0).getDouble(2) === 1300d)
+
+        val df2 = sql(s"SELECT name, salary, bonus FROM $catalogAndNamespace." +
+          s"${caseConvert("employee")}" +
+          s" WHERE dept > 0 ORDER BY salary DESC $nullOrdering, bonus LIMIT 1 OFFSET 2")
+        assert(limitPushed(df2, 3))
+        checkOffsetPushed(df2, Some(2))
+        checkSortRemoved(df2)
+        val rows2 = df2.collect()
+        assert(rows2.length === 1)
+        assert(rows2(0).getString(0) === "amy")
+        assert(rows2(0).getDecimal(1) === new java.math.BigDecimal("10000.00"))
+        assert(rows2(0).getDouble(2) === 1000d)
+      }
+    }
+  }
+
+  private def checkAggregateRemoved(df: DataFrame): Unit = {
     val aggregates = df.queryExecution.optimizedPlan.collect {
       case agg: Aggregate => agg
     }

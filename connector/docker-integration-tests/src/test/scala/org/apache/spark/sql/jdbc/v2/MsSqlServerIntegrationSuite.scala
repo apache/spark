@@ -59,6 +59,7 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JD
     .set("spark.sql.catalog.mssql", classOf[JDBCTableCatalog].getName)
     .set("spark.sql.catalog.mssql.url", db.getJdbcUrl(dockerIp, externalPort))
     .set("spark.sql.catalog.mssql.pushDownAggregate", "true")
+    .set("spark.sql.catalog.mssql.pushDownLimit", "true")
 
   override val connectionTimeout = timeout(7.minutes)
 

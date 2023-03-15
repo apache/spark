@@ -51,6 +51,12 @@ select transform(zs, z -> aggregate(z, 1, (acc, val) -> acc * val * size(z))) as
 -- Aggregate a null array
 select aggregate(cast(null as array<int>), 0, (a, y) -> a + y + 1, a -> a + 2) as v;
 
+-- alias for Aggregate.
+select reduce(ys, 0, (y, a) -> y + a + x) as v from nested;
+select reduce(ys, (0 as sum, 0 as n), (acc, x) -> (acc.sum + x, acc.n + 1), acc -> acc.sum / acc.n) as v from nested;
+select transform(zs, z -> reduce(z, 1, (acc, val) -> acc * val * size(z))) as v from nested;
+select reduce(cast(null as array<int>), 0, (a, y) -> a + y + 1, a -> a + 2) as v;
+
 -- Check for element existence
 select exists(ys, y -> y > 30) as v from nested;
 

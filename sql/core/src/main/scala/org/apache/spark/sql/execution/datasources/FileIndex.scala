@@ -61,6 +61,7 @@ trait FileIndex {
   /**
    * Returns the list of files that will be read when scanning this relation. This call may be
    * very expensive for large tables.
+   * The strings returned are expected to be url-encoded paths.
    */
   def inputFiles: Array[String]
 
@@ -82,4 +83,6 @@ trait FileIndex {
    * to update the metrics.
    */
   def metadataOpsTimeNs: Option[Long] = None
+
+  override def toString: String = s"${getClass.getName}(${rootPaths.mkString(",")})"
 }

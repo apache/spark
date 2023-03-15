@@ -140,7 +140,7 @@ public interface TableChange {
       boolean isNullable,
       String comment,
       ColumnPosition position,
-      String defaultValue) {
+      ColumnDefaultValue defaultValue) {
     return new AddColumn(fieldNames, dataType, isNullable, comment, position, defaultValue);
   }
 
@@ -228,7 +228,7 @@ public interface TableChange {
    * If the field does not exist, the change will result in an {@link IllegalArgumentException}.
    *
    * @param fieldNames field names of the column to update
-   * @param newDefaultValue the new default value
+   * @param newDefaultValue the new default value SQL string (Spark SQL dialect).
    * @return a TableChange for the update
    */
   static TableChange updateColumnDefaultValue(String[] fieldNames, String newDefaultValue) {
@@ -383,7 +383,9 @@ public interface TableChange {
   }
 
   /**
-   * A TableChange to add a field.
+   * A TableChange to add a field. The implementation may need to back-fill all the existing data
+   * to add this new column, or remember the column default value specified here and let the reader
+   * fill the column value when reading existing data that do not have this new column.
    * <p>
    * If the field already exists, the change must result in an {@link IllegalArgumentException}.
    * If the new field is nested and its parent does not exist or is not a struct, the change must
@@ -395,7 +397,7 @@ public interface TableChange {
     private final boolean isNullable;
     private final String comment;
     private final ColumnPosition position;
-    private final String defaultValue;
+    private final ColumnDefaultValue defaultValue;
 
     private AddColumn(
         String[] fieldNames,
@@ -403,7 +405,7 @@ public interface TableChange {
         boolean isNullable,
         String comment,
         ColumnPosition position,
-        String defaultValue) {
+        ColumnDefaultValue defaultValue) {
       this.fieldNames = fieldNames;
       this.dataType = dataType;
       this.isNullable = isNullable;
@@ -436,7 +438,7 @@ public interface TableChange {
     }
 
     @Nullable
-    public String defaultValue() { return defaultValue; }
+    public ColumnDefaultValue defaultValue() { return defaultValue; }
 
     @Override
     public boolean equals(Object o) {
@@ -691,6 +693,12 @@ public interface TableChange {
       return fieldNames;
     }
 
+    /**
+     * Returns the column default value SQL string (Spark SQL dialect). The default value literal
+     * is not provided as updating column default values does not need to back-fill existing data.
+     * Null means dropping the column default value.
+     */
+    @Nullable
     public String newDefaultValue() { return newDefaultValue; }
 
     @Override

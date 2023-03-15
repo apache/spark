@@ -195,22 +195,28 @@ class DataFrameJoinSuite extends QueryTest
     val df1 = Seq((1, "1"), (2, "2")).toDF("key", "value")
     val df2 = Seq((1, "1"), (2, "2")).toDF("key", "value")
 
-    // equijoin - should be converted into broadcast join
-    val plan1 = df1.join(broadcast(df2), "key").queryExecution.sparkPlan
-    assert(plan1.collect { case p: BroadcastHashJoinExec => p }.size === 1)
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      // equijoin - should not be converted into broadcast join without hint
+      val plan1 = df1.join(df2, "key").queryExecution.sparkPlan
+      assert(plan1.collect { case p: BroadcastHashJoinExec => p }.size === 0)
 
-    // no join key -- should not be a broadcast join
-    val plan2 = df1.crossJoin(broadcast(df2)).queryExecution.sparkPlan
-    assert(plan2.collect { case p: BroadcastHashJoinExec => p }.size === 0)
+      // equijoin - should be converted into broadcast join with hint
+      val plan2 = df1.join(broadcast(df2), "key").queryExecution.sparkPlan
+      assert(plan2.collect { case p: BroadcastHashJoinExec => p }.size === 1)
 
-    // planner should not crash without a join
-    broadcast(df1).queryExecution.sparkPlan
+      // no join key -- should not be a broadcast join
+      val plan3 = df1.crossJoin(broadcast(df2)).queryExecution.sparkPlan
+      assert(plan3.collect { case p: BroadcastHashJoinExec => p }.size === 0)
 
-    // SPARK-12275: no physical plan for BroadcastHint in some condition
-    withTempPath { path =>
-      df1.write.parquet(path.getCanonicalPath)
-      val pf1 = spark.read.parquet(path.getCanonicalPath)
-      assert(df1.crossJoin(broadcast(pf1)).count() === 4)
+      // planner should not crash without a join
+      broadcast(df1).queryExecution.sparkPlan
+
+      // SPARK-12275: no physical plan for BroadcastHint in some condition
+      withTempPath { path =>
+        df1.write.parquet(path.getCanonicalPath)
+        val pf1 = spark.read.parquet(path.getCanonicalPath)
+        assert(df1.crossJoin(broadcast(pf1)).count() === 4)
+      }
     }
   }
 
@@ -341,6 +347,24 @@ class DataFrameJoinSuite extends QueryTest
           LogicalPlanWithDatasetId(_, rightId), _, _, _) =>
           assert(leftId === rightId)
       }
+    }
+  }
+
+  Seq("left_semi", "left_anti").foreach { joinType =>
+    test(s"SPARK-41162: $joinType self-joined aggregated dataframe") {
+      // aggregated dataframe
+      val ids = Seq(1, 2, 3).toDF("id").distinct()
+
+      // self-joined via joinType
+      val result = ids.withColumn("id", $"id" + 1)
+        .join(ids, "id", joinType).collect()
+
+      val expected = joinType match {
+        case "left_semi" => 2
+        case "left_anti" => 1
+        case _ => -1  // unsupported test type, test will always fail
+      }
+      assert(result.length == expected)
     }
   }
 

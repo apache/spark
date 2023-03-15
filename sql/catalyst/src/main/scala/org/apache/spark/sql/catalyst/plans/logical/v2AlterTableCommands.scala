@@ -120,7 +120,7 @@ case class AddColumns(
         col.nullable,
         col.comment.orNull,
         col.position.map(_.position).orNull,
-        col.default.orNull)
+        col.getV2Default)
     }
   }
 
@@ -156,7 +156,7 @@ case class ReplaceColumns(
         col.nullable,
         col.comment.orNull,
         null,
-        col.default.orNull)
+        col.getV2Default)
     }
     deleteChanges ++ addChanges
   }

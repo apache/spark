@@ -24,7 +24,7 @@ import java.time.format.DateTimeFormatter
 
 import scala.collection.mutable.{ArrayBuffer, WrappedArray}
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SPARK_DOC_ROOT, SparkException}
 import org.apache.spark.sql.api.java._
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.encoders.{ExpressionEncoder, OuterScopes}
@@ -105,11 +105,12 @@ class UDFSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         df.selectExpr("substr('abcd', 2, 3, 4)")
       },
-      errorClass = "WRONG_NUM_ARGS.WITH_SUGGESTION",
+      errorClass = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
       parameters = Map(
         "functionName" -> toSQLId("substr"),
         "expectedNum" -> "[2, 3]",
-        "actualNum" -> "4"
+        "actualNum" -> "4",
+        "docroot" -> SPARK_DOC_ROOT
       ),
       context = ExpectedContext(
         fragment = "substr('abcd', 2, 3, 4)",
@@ -125,11 +126,12 @@ class UDFSuite extends QueryTest with SharedSparkSession {
         spark.udf.register("foo", (_: String).length)
         df.selectExpr("foo(2, 3, 4)")
       },
-      errorClass = "WRONG_NUM_ARGS.WITH_SUGGESTION",
+      errorClass = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
       parameters = Map(
         "functionName" -> toSQLId("foo"),
         "expectedNum" -> "1",
-        "actualNum" -> "3"
+        "actualNum" -> "3",
+        "docroot" -> SPARK_DOC_ROOT
       ),
       context = ExpectedContext(
         fragment = "foo(2, 3, 4)",
