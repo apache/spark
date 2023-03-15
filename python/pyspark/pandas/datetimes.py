@@ -18,7 +18,6 @@
 """
 Date/Time related functions on pandas-on-Spark Series
 """
-import warnings
 from typing import Any, Optional, Union, no_type_check
 
 import numpy as np

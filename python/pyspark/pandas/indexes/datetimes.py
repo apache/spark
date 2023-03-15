@@ -26,7 +26,6 @@ from pyspark._globals import _NoValue
 
 from pyspark import pandas as ps
 from pyspark.pandas import DataFrame
-from pyspark.pandas.datetimes import DatetimeMethods
 from pyspark.pandas.indexes.base import Index
 from pyspark.pandas.missing.indexes import MissingPandasLikeDatetimeIndex
 from pyspark.pandas.series import Series, first_series
