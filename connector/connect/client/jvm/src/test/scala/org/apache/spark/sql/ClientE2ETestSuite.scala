@@ -632,7 +632,7 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper {
       session.createDataFrame(list.asScala.toSeq))
   }
 
-  test("write jdbc") {
+  test("write jdbc2") {
     val rows = java.util.Arrays.asList[Row](Row("dave", 42), Row("mary", 222))
     val schema = StructType(
       StructField("name", StringType) ::
