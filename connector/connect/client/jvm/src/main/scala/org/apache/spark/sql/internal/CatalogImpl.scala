@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.internal
 
-import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
+import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.catalog.{Catalog, CatalogMetadata, Column, Database, Function, Table}
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
@@ -44,6 +44,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    *
    * @since 3.4.0
    */
+  @throws[AnalysisException]("database does not exist")
   override def setCurrentDatabase(dbName: String): Unit = {
     // we assume `dbName` will not include the catalog name. e.g. if you call
     // `setCurrentDatabase("catalog.db")`, it will search for a database 'catalog.db' in the current
@@ -82,6 +83,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    *
    * @since 3.4.0
    */
+  @throws[AnalysisException]("database does not exist")
   override def listTables(dbName: String): Dataset[Table] = {
     sparkSession.newDataset(CatalogImpl.tableEncoder) { builder =>
       builder.getCatalogBuilder.getListTablesBuilder.setDbName(dbName)
@@ -104,6 +106,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    *
    * @since 3.4.0
    */
+  @throws[AnalysisException]("database does not exist")
   override def listFunctions(dbName: String): Dataset[Function] = {
     sparkSession.newDataset(CatalogImpl.functionEncoder) { builder =>
       builder.getCatalogBuilder.getListFunctionsBuilder.setDbName(dbName)
@@ -119,6 +122,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    *   database (namespace).
    * @since 3.4.0
    */
+  @throws[AnalysisException]("database or table does not exist")
   override def listColumns(tableName: String): Dataset[Column] = {
     sparkSession.newDataset(CatalogImpl.columnEncoder) { builder =>
       builder.getCatalogBuilder.getListColumnsBuilder.setTableName(tableName)
@@ -138,6 +142,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    *   is an unqualified name that designates a table/view.
    * @since 3.4.0
    */
+  @throws[AnalysisException]("database does not exist")
   override def listColumns(dbName: String, tableName: String): Dataset[Column] = {
     sparkSession.newDataset(CatalogImpl.columnEncoder) { builder =>
       builder.getCatalogBuilder.getListColumnsBuilder
