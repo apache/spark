@@ -20,6 +20,7 @@ package org.apache.spark.sql
 import java.sql.{Date, Timestamp}
 import java.time.{Duration, LocalDateTime, Period}
 
+import org.apache.spark.{SparkArithmeticException, SparkException}
 import org.apache.spark.sql.catalyst.expressions.aggregate.ApproximatePercentile
 import org.apache.spark.sql.catalyst.expressions.aggregate.ApproximatePercentile.DEFAULT_PERCENTILE_ACCURACY
 import org.apache.spark.sql.catalyst.expressions.aggregate.ApproximatePercentile.PercentileDigest
@@ -335,6 +336,21 @@ class ApproximatePercentileQuerySuite extends QueryTest with SharedSparkSession 
                |FROM $table
            """.stripMargin),
           Row(Period.ofMonths(200).normalized(), null, Duration.ofSeconds(200L)))
+    }
+  }
+
+  test("SPARK-42775: large decimal should overflow") {
+    withTempView(table) {
+      spark.sql("SELECT 9999999999999999999 as col").createOrReplaceTempView(table)
+      val ex = intercept[SparkException] {
+        checkAnswer(
+          spark.sql(s"SELECT percentile_approx(col, 0.5) FROM $table"),
+          Row(null)
+        )
+      }
+      assert(ex.getCause.isInstanceOf[SparkArithmeticException])
+      assert(ex.getCause.asInstanceOf[SparkArithmeticException].getErrorClass ==
+        "NUMERIC_VALUE_OUT_OF_RANGE")
     }
   }
 }

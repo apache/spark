@@ -203,7 +203,8 @@ case class ApproximatePercentile(
       case LongType => doubleResult.map(_.toLong)
       case FloatType => doubleResult.map(_.toFloat)
       case DoubleType => doubleResult
-      case _: DecimalType => doubleResult.map(Decimal(_))
+      case dt: DecimalType =>
+        doubleResult.map(Decimal(_).toPrecision(dt.precision, dt.scale, nullOnOverflow = false))
       case other: DataType =>
         throw QueryExecutionErrors.dataTypeUnexpectedError(other)
     }
