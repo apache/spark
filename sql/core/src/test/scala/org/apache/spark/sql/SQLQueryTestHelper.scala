@@ -18,7 +18,6 @@
 package org.apache.spark.sql
 
 import java.io.File
-import java.net.URI
 
 import scala.collection.mutable.ArrayBuffer
 import scala.util.control.NonFatal
@@ -33,12 +32,9 @@ import org.apache.spark.sql.catalyst.util.fileToString
 import org.apache.spark.sql.execution.HiveResult.hiveResultString
 import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.command.{DescribeColumnCommand, DescribeCommandBase}
-import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.util.Utils
 
-trait SQLQueryTestHelper extends Logging with SQLTestUtils {
+trait SQLQueryTestHelper extends Logging {
 
   private val notIncludedMsg = "[not included in comparison]"
   private val clsName = this.getClass.getCanonicalName
@@ -61,8 +57,21 @@ trait SQLQueryTestHelper extends Logging with SQLTestUtils {
   }
 
 
+  /**
+   * Analyzes a query and returns the result as (schema of the output, normalized resolved plan
+   * tree string representation).
+   */
+  protected def getNormalizedQueryAnalysisResult(
+      session: SparkSession, sql: String): (String, Seq[String]) = {
+    val df = session.sql(sql)
+    val schema = df.schema.catalogString
+    // Get the answer, but also get rid of the #1234 expression IDs that show up in analyzer plans.
+    (schema, Seq(replaceNotIncludedMsg(df.queryExecution.analyzed.toString)))
+  }
+
   /** Executes a query and returns the result as (schema of the output, normalized output). */
-  protected def getNormalizedResult(session: SparkSession, sql: String): (String, Seq[String]) = {
+  protected def getNormalizedQueryExecutionResult(
+      session: SparkSession, sql: String): (String, Seq[String]) = {
     // Returns true if the plan is supposed to be sorted.
     def isSorted(plan: LogicalPlan): Boolean = plan match {
       case _: Join | _: Aggregate | _: Generate | _: Sample | _: Distinct => false
@@ -126,17 +135,6 @@ trait SQLQueryTestHelper extends Logging with SQLTestUtils {
     val inputFile: String
     val resultFile: String
   }
-
-  /** A regular test case. */
-  protected case class RegularTestCase(
-    name: String, inputFile: String, resultFile: String) extends TestCase
-
-  /** An ANSI-related test case. */
-  protected case class AnsiTestCase(
-    name: String, inputFile: String, resultFile: String) extends TestCase with AnsiTest
-
-  /** Trait that indicates ANSI-related tests with the ANSI mode enabled. */
-  protected trait AnsiTest
 
   /** Run a test case. */
   protected def runTest(
@@ -257,115 +255,5 @@ trait SQLQueryTestHelper extends Logging with SQLTestUtils {
     // by vi (.swp), Mac (.DS_Store) etc.
     val filteredFiles = files.filter(_.getName.endsWith(validFileExtensions))
     filteredFiles ++ dirs.flatMap(listFilesRecursively)
-  }
-
-  /** Load built-in test tables into the SparkSession. */
-  protected def createTestTables(session: SparkSession, conf: SQLConf): Unit = {
-    import session.implicits._
-
-    // Before creating test tables, deletes orphan directories in warehouse dir
-    Seq("testdata", "arraydata", "mapdata", "aggtest", "onek", "tenk1").foreach { dirName =>
-      val f = new File(new URI(s"${conf.warehousePath}/$dirName"))
-      if (f.exists()) {
-        Utils.deleteRecursively(f)
-      }
-    }
-
-    (1 to 100).map(i => (i, i.toString)).toDF("key", "value")
-      .repartition(1)
-      .write
-      .format("parquet")
-      .saveAsTable("testdata")
-
-    ((Seq(1, 2, 3), Seq(Seq(1, 2, 3))) :: (Seq(2, 3, 4), Seq(Seq(2, 3, 4))) :: Nil)
-      .toDF("arraycol", "nestedarraycol")
-      .write
-      .format("parquet")
-      .saveAsTable("arraydata")
-
-    (Tuple1(Map(1 -> "a1", 2 -> "b1", 3 -> "c1", 4 -> "d1", 5 -> "e1")) ::
-      Tuple1(Map(1 -> "a2", 2 -> "b2", 3 -> "c2", 4 -> "d2")) ::
-      Tuple1(Map(1 -> "a3", 2 -> "b3", 3 -> "c3")) ::
-      Tuple1(Map(1 -> "a4", 2 -> "b4")) ::
-      Tuple1(Map(1 -> "a5")) :: Nil)
-      .toDF("mapcol")
-      .write
-      .format("parquet")
-      .saveAsTable("mapdata")
-
-    session
-      .read
-      .format("csv")
-      .options(Map("delimiter" -> "\t", "header" -> "false"))
-      .schema("a int, b float")
-      .load(testFile("test-data/postgresql/agg.data"))
-      .write
-      .format("parquet")
-      .saveAsTable("aggtest")
-
-    session
-      .read
-      .format("csv")
-      .options(Map("delimiter" -> "\t", "header" -> "false"))
-      .schema(
-        """
-          |unique1 int,
-          |unique2 int,
-          |two int,
-          |four int,
-          |ten int,
-          |twenty int,
-          |hundred int,
-          |thousand int,
-          |twothousand int,
-          |fivethous int,
-          |tenthous int,
-          |odd int,
-          |even int,
-          |stringu1 string,
-          |stringu2 string,
-          |string4 string
-        """.stripMargin)
-      .load(testFile("test-data/postgresql/onek.data"))
-      .write
-      .format("parquet")
-      .saveAsTable("onek")
-
-    session
-      .read
-      .format("csv")
-      .options(Map("delimiter" -> "\t", "header" -> "false"))
-      .schema(
-        """
-          |unique1 int,
-          |unique2 int,
-          |two int,
-          |four int,
-          |ten int,
-          |twenty int,
-          |hundred int,
-          |thousand int,
-          |twothousand int,
-          |fivethous int,
-          |tenthous int,
-          |odd int,
-          |even int,
-          |stringu1 string,
-          |stringu2 string,
-          |string4 string
-        """.stripMargin)
-      .load(testFile("test-data/postgresql/tenk.data"))
-      .write
-      .format("parquet")
-      .saveAsTable("tenk1")
-  }
-
-  protected def removeTestTables(session: SparkSession): Unit = {
-    session.sql("DROP TABLE IF EXISTS testdata")
-    session.sql("DROP TABLE IF EXISTS arraydata")
-    session.sql("DROP TABLE IF EXISTS mapdata")
-    session.sql("DROP TABLE IF EXISTS aggtest")
-    session.sql("DROP TABLE IF EXISTS onek")
-    session.sql("DROP TABLE IF EXISTS tenk1")
   }
 }

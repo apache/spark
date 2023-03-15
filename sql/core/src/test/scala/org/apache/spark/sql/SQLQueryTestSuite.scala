@@ -118,6 +118,15 @@ import org.apache.spark.util.Utils
  *
  * Therefore, UDF test cases should have single input and output files but executed by three
  * different types of UDFs. See 'udf/udf-inner-join.sql' as an example.
+ *
+ * This test suite also implements end-to-end test cases using golden files for the purposes of
+ * exercising the analysis of SQL queries. The output of each test case for this suite is the string
+ * representation of the logical plan returned as output from the analyzer, rather than the result
+ * data from executing the query end-to-end.
+ *
+ * Each case has a golden result file in "spark/sql/core/src/test/resources/sql-tests/analyzer-results".
+ * Only input filenames in the "analyzerTestCaseList" below are included for this type of testing.
+ * In the future, we may expand the coverage to all of the input test files instead.
  */
 // scalastyle:on line.size.limit
 @ExtendedSQLTest
@@ -135,6 +144,8 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
 
   protected val inputFilePath = new File(baseResourcePath, "inputs").getAbsolutePath
   protected val goldenFilePath = new File(baseResourcePath, "results").getAbsolutePath
+  protected val analyzerGoldenFilePath =
+    new File(baseResourcePath, "analyzer-results").getAbsolutePath
 
   protected override def sparkConf: SparkConf = super.sparkConf
     // Fewer shuffle partitions to speed up testing.
@@ -157,20 +168,39 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
   // Create all the test cases.
   listTestCases.foreach(createScalaTestCase)
 
+  /** List of test cases to perform analyzer tests for. */
+  protected def analyzerTestCaseList = Seq("array.sql")
+
   /**
    * traits that indicate UDF or PgSQL to trigger the code path specific to each. For instance,
    * PgSQL tests require to register some UDF functions.
    */
   protected trait PgSQLTest
 
-  /**
-   * traits that indicate the default timestamp type is TimestampNTZType.
-   */
+  /** Trait that indicates ANSI-related tests with the ANSI mode enabled. */
+  protected trait AnsiTest
+
+  /** Trait that indicates an analyzer test that shows the analyzed plan string as output. */
+  protected trait AnalyzerTest
+
+  /** Trait that indicates the default timestamp type is TimestampNTZType. */
   protected trait TimestampNTZTest
 
   protected trait UDFTest {
     val udf: TestUDF
   }
+
+  /** A regular test case. */
+  protected case class RegularTestCase(
+      name: String, inputFile: String, resultFile: String) extends TestCase
+
+  /** An ANSI-related test case. */
+  protected case class AnsiTestCase(
+      name: String, inputFile: String, resultFile: String) extends TestCase with AnsiTest
+
+  /** An analyzer test that shows the analyzed plan string as output. */
+  protected case class AnalyzerTestCase(
+      name: String, inputFile: String, resultFile: String) extends TestCase with AnalyzerTest
 
   /** A PostgreSQL test case. */
   protected case class PgSQLTestCase(
@@ -276,13 +306,26 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
 
     // Run the SQL queries preparing them for comparison.
     val outputs: Seq[QueryOutput] = queries.map { sql =>
-      val (schema, output) = handleExceptions(getNormalizedResult(localSparkSession, sql))
-      // We might need to do some query canonicalization in the future.
-      QueryOutput(
-        sql = sql,
-        schema = Some(schema),
-        outputHeader = "query output",
-        output = output.mkString("\n").replaceAll("\\s+$", ""))
+      testCase match {
+        case _: AnalyzerTest =>
+          val result = getNormalizedQueryAnalysisResult(localSparkSession, sql)
+          val (_, output) = handleExceptions(result)
+          // We might need to do some query canonicalization in the future.
+          QueryOutput(
+            sql = sql,
+            schema = None,
+            outputHeader = "query analysis",
+            output = output.mkString("\n").replaceAll("\\s+$", ""))
+        case _ =>
+          val result = getNormalizedQueryExecutionResult(localSparkSession, sql)
+          val (schema, output) = handleExceptions(result)
+          // We might need to do some query canonicalization in the future.
+          QueryOutput(
+            sql = sql,
+            schema = Some(schema),
+            outputHeader = "query output",
+            output = output.mkString("\n").replaceAll("\\s+$", ""))
+      }
     }
 
     if (regenerateGoldenFiles) {
@@ -332,8 +375,11 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
   protected lazy val listTestCases: Seq[TestCase] = {
     listFilesRecursively(new File(inputFilePath)).flatMap { file =>
       val resultFile = file.getAbsolutePath.replace(inputFilePath, goldenFilePath) + ".out"
+      val analyzerResultFile =
+        file.getAbsolutePath.replace(inputFilePath, analyzerGoldenFilePath) + ".out"
       val absPath = file.getAbsolutePath
       val testCaseName = absPath.stripPrefix(inputFilePath).stripPrefix(File.separator)
+      val analyzerTestCaseName = s"${testCaseName}_analyzer_test"
 
       if (file.getAbsolutePath.startsWith(
         s"$inputFilePath${File.separator}udf${File.separator}postgreSQL")) {
@@ -357,15 +403,129 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
         AnsiTestCase(testCaseName, absPath, resultFile) :: Nil
       } else if (file.getAbsolutePath.startsWith(s"$inputFilePath${File.separator}timestampNTZ")) {
         TimestampNTZTestCase(testCaseName, absPath, resultFile) :: Nil
+      } else if (analyzerTestCaseList.contains(file.getName.toLowerCase(Locale.ROOT))) {
+        Seq(
+          AnalyzerTestCase(analyzerTestCaseName, absPath, analyzerResultFile),
+          RegularTestCase(testCaseName, absPath, resultFile))
       } else {
         RegularTestCase(testCaseName, absPath, resultFile) :: Nil
       }
     }.sortBy(_.name)
   }
 
+  /** Load built-in test tables into the SparkSession. */
+  protected def createTestTables(session: SparkSession): Unit = {
+    import session.implicits._
+
+    // Before creating test tables, deletes orphan directories in warehouse dir
+    Seq("testdata", "arraydata", "mapdata", "aggtest", "onek", "tenk1").foreach { dirName =>
+      val f = new File(new URI(s"${conf.warehousePath}/$dirName"))
+      if (f.exists()) {
+        Utils.deleteRecursively(f)
+      }
+    }
+
+    (1 to 100).map(i => (i, i.toString)).toDF("key", "value")
+      .repartition(1)
+      .write
+      .format("parquet")
+      .saveAsTable("testdata")
+
+    ((Seq(1, 2, 3), Seq(Seq(1, 2, 3))) :: (Seq(2, 3, 4), Seq(Seq(2, 3, 4))) :: Nil)
+      .toDF("arraycol", "nestedarraycol")
+      .write
+      .format("parquet")
+      .saveAsTable("arraydata")
+
+    (Tuple1(Map(1 -> "a1", 2 -> "b1", 3 -> "c1", 4 -> "d1", 5 -> "e1")) ::
+      Tuple1(Map(1 -> "a2", 2 -> "b2", 3 -> "c2", 4 -> "d2")) ::
+      Tuple1(Map(1 -> "a3", 2 -> "b3", 3 -> "c3")) ::
+      Tuple1(Map(1 -> "a4", 2 -> "b4")) ::
+      Tuple1(Map(1 -> "a5")) :: Nil)
+      .toDF("mapcol")
+      .write
+      .format("parquet")
+      .saveAsTable("mapdata")
+
+    session
+      .read
+      .format("csv")
+      .options(Map("delimiter" -> "\t", "header" -> "false"))
+      .schema("a int, b float")
+      .load(testFile("test-data/postgresql/agg.data"))
+      .write
+      .format("parquet")
+      .saveAsTable("aggtest")
+
+    session
+      .read
+      .format("csv")
+      .options(Map("delimiter" -> "\t", "header" -> "false"))
+      .schema(
+        """
+          |unique1 int,
+          |unique2 int,
+          |two int,
+          |four int,
+          |ten int,
+          |twenty int,
+          |hundred int,
+          |thousand int,
+          |twothousand int,
+          |fivethous int,
+          |tenthous int,
+          |odd int,
+          |even int,
+          |stringu1 string,
+          |stringu2 string,
+          |string4 string
+        """.stripMargin)
+      .load(testFile("test-data/postgresql/onek.data"))
+      .write
+      .format("parquet")
+      .saveAsTable("onek")
+
+    session
+      .read
+      .format("csv")
+      .options(Map("delimiter" -> "\t", "header" -> "false"))
+      .schema(
+        """
+          |unique1 int,
+          |unique2 int,
+          |two int,
+          |four int,
+          |ten int,
+          |twenty int,
+          |hundred int,
+          |thousand int,
+          |twothousand int,
+          |fivethous int,
+          |tenthous int,
+          |odd int,
+          |even int,
+          |stringu1 string,
+          |stringu2 string,
+          |string4 string
+        """.stripMargin)
+      .load(testFile("test-data/postgresql/tenk.data"))
+      .write
+      .format("parquet")
+      .saveAsTable("tenk1")
+  }
+
+  protected def removeTestTables(session: SparkSession): Unit = {
+    session.sql("DROP TABLE IF EXISTS testdata")
+    session.sql("DROP TABLE IF EXISTS arraydata")
+    session.sql("DROP TABLE IF EXISTS mapdata")
+    session.sql("DROP TABLE IF EXISTS aggtest")
+    session.sql("DROP TABLE IF EXISTS onek")
+    session.sql("DROP TABLE IF EXISTS tenk1")
+  }
+
   override def beforeAll(): Unit = {
     super.beforeAll()
-    createTestTables(spark, conf)
+    createTestTables(spark)
     RuleExecutor.resetMetrics()
     CodeGenerator.resetCompileTime()
     WholeStageCodegenExec.resetCodeGenTime()
