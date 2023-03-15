@@ -142,7 +142,7 @@ abstract class SparkFunSuite
   // useful when inheriting a test suite but do not want to run all tests in it
   protected def excluded: Seq[String] = Seq.empty
 
-  override def test(testName: String, testTags: Tag*)(testBody: => Any)
+  override protected def test(testName: String, testTags: Tag*)(testBody: => Any)
     (implicit pos: Position): Unit = {
     if (excluded.contains(testName)) {
       ignore(s"$testName [enable by remove from $excluded]")(testBody)
