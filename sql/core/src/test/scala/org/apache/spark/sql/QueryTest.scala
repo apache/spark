@@ -20,9 +20,8 @@ package org.apache.spark.sql
 import java.io.File
 import java.util.TimeZone
 
-import scala.collection.JavaConverters._
-
 import org.scalatest.Assertions
+import scala.collection.JavaConverters._
 
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.util._
@@ -257,21 +256,30 @@ abstract class QueryTest extends PlanTest {
   def readGoldenFileAndCompareResults(
       resultFile: String,
       outputs: Seq[QueryOutput],
-      makeOutput: (String, String, String) => QueryOutput): Unit = {
+      makeOutput: (String, String, String) => QueryOutput,
+      includeSchema: Boolean): Unit = {
     // Read back the golden file.
     val expectedOutputs: Seq[QueryOutput] = {
       val goldenOutput = fileToString(new File(resultFile))
       val segments = goldenOutput.split("-- !query.*\n")
 
-      // each query has 3 segments, plus the header
-      assert(segments.size == outputs.size * 3 + 1,
-        s"Expected ${outputs.size * 3 + 1} blocks in result file but got ${segments.size}. " +
-          s"Try regenerate the result files.")
+      // each query has 3 segments if there is a schema section, else 2, plus the header
+      val numSegments = if (includeSchema) 3 else 2
+      assert(segments.size == outputs.size * numSegments + 1,
+        s"Expected ${outputs.size * numSegments + 1} blocks in result file but got " +
+          s"${segments.size}. Try regenerate the result files.")
       Seq.tabulate(outputs.size) { i =>
-        makeOutput(
-          segments(i * 3 + 1).trim, // SQL
-          segments(i * 3 + 2).trim, // Schema
-          segments(i * 3 + 3).replaceAll("\\s+$", "")) // Output
+        if (includeSchema) {
+          makeOutput(
+            segments(i * numSegments + 1).trim, // SQL
+            segments(i * numSegments + 2).trim, // Schema
+            segments(i * numSegments + 3).replaceAll("\\s+$", "")) // Output
+        } else {
+          makeOutput(
+            segments(i * numSegments + 1).trim, // SQL
+            "", // Schema
+            segments(i * numSegments + 2).replaceAll("\\s+$", "")) // Output
+        }
       }
     }
 

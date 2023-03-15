@@ -332,7 +332,8 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
     def makeOutput(sql: String, schema: String, output: String): QueryOutput =
       QueryOutput(sql = sql, schema = Some(schema), outputHeader = "query output", output = output)
     withClue(clue) {
-      readGoldenFileAndCompareResults(testCase.resultFile, outputs, makeOutput)
+      readGoldenFileAndCompareResults(
+        testCase.resultFile, outputs, makeOutput, includeSchema = true)
     }
   }
 

@@ -89,7 +89,7 @@ import org.apache.spark.tags.ExtendedSQLTest
  *
  *   -- !query
  *   select 1
- *   -- !result
+ *   -- !query analysis
  *   Project [1 AS 1#x]
  *   +- OneRowRelation
  *
@@ -184,9 +184,10 @@ class SQLAnalyzerTestSuite extends QueryTest with SharedSparkSession with SQLHel
     val clue: String = s"${testCase.name}${System.lineSeparator()}"
 
     def makeOutput(sql: String, schema: String, output: String): QueryOutput =
-      QueryOutput(sql = sql, schema = None, outputHeader = "results", output = output)
+      QueryOutput(sql = sql, schema = None, outputHeader = "query analysis", output = output)
     withClue(clue) {
-      readGoldenFileAndCompareResults(testCase.resultFile, outputs, makeOutput)
+      readGoldenFileAndCompareResults(
+        testCase.resultFile, outputs, makeOutput, includeSchema = false)
     }
   }
 
