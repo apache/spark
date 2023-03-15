@@ -187,7 +187,20 @@ in this example to connect to the local Spark server we started previously.
 {% endhighlight %}
 
 And you will notice that the PySpark shell welcome message tells you that
-you have connected to Spark using Spark Connect.
+you have connected to Spark using Spark Connect:
+
+{% highlight python %}
+Client connected to the Spark Connect server at localhost
+{% endhighlight %}
+
+You can also check the Spark session type. If it includes `.connect.` you
+are using Spark Connect as shown in this example:
+
+{% highlight python %}
+SparkSession available as 'spark'.
+>>> type(spark)
+<class 'pyspark.sql.connect.session.SparkSession'>
+{% endhighlight %}
 
 Now you can run PySpark code in the shell to see Spark Connect in action:
 
@@ -202,8 +215,6 @@ Now you can run PySpark code in the shell to see Spark Connect in action:
 |  1|Sarah|
 |  2|Maria|
 +---+-----+
-
->>>
 {% endhighlight %}
 </div>
 
