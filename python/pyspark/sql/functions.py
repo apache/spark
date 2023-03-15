@@ -134,7 +134,7 @@ def lit(col: Any) -> Column:
     .. versionadded:: 1.3.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -193,7 +193,7 @@ def col(col: str) -> Column:
     .. versionadded:: 1.3.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -226,7 +226,7 @@ def asc(col: "ColumnOrName") -> Column:
     .. versionadded:: 1.3.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -279,7 +279,7 @@ def desc(col: "ColumnOrName") -> Column:
     .. versionadded:: 1.3.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -317,7 +317,7 @@ def sqrt(col: "ColumnOrName") -> Column:
     .. versionadded:: 1.3.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -350,7 +350,7 @@ def abs(col: "ColumnOrName") -> Column:
     .. versionadded:: 1.3.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -383,7 +383,7 @@ def mode(col: "ColumnOrName") -> Column:
     .. versionadded:: 3.4.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -421,7 +421,7 @@ def max(col: "ColumnOrName") -> Column:
     .. versionadded:: 1.3.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -454,7 +454,7 @@ def min(col: "ColumnOrName") -> Column:
     .. versionadded:: 1.3.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -487,7 +487,7 @@ def max_by(col: "ColumnOrName", ord: "ColumnOrName") -> Column:
     .. versionadded:: 3.3.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -526,7 +526,7 @@ def min_by(col: "ColumnOrName", ord: "ColumnOrName") -> Column:
     .. versionadded:: 3.3.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -565,7 +565,7 @@ def count(col: "ColumnOrName") -> Column:
     .. versionadded:: 1.3.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -600,7 +600,7 @@ def sum(col: "ColumnOrName") -> Column:
     .. versionadded:: 1.3.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -633,7 +633,7 @@ def avg(col: "ColumnOrName") -> Column:
     .. versionadded:: 1.3.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -667,7 +667,7 @@ def mean(col: "ColumnOrName") -> Column:
     .. versionadded:: 1.4.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -700,7 +700,7 @@ def median(col: "ColumnOrName") -> Column:
     .. versionadded:: 3.4.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -738,7 +738,7 @@ def sumDistinct(col: "ColumnOrName") -> Column:
     .. versionadded:: 1.3.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     .. deprecated:: 3.2.0
         Use :func:`sum_distinct` instead.
@@ -755,7 +755,7 @@ def sum_distinct(col: "ColumnOrName") -> Column:
     .. versionadded:: 3.2.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -788,7 +788,7 @@ def product(col: "ColumnOrName") -> Column:
     .. versionadded:: 3.2.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -824,7 +824,7 @@ def acos(col: "ColumnOrName") -> Column:
     .. versionadded:: 1.4.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -858,7 +858,7 @@ def acosh(col: "ColumnOrName") -> Column:
     .. versionadded:: 3.1.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -892,7 +892,7 @@ def asin(col: "ColumnOrName") -> Column:
     .. versionadded:: 1.4.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -926,7 +926,7 @@ def asinh(col: "ColumnOrName") -> Column:
     .. versionadded:: 3.1.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -959,7 +959,7 @@ def atan(col: "ColumnOrName") -> Column:
     .. versionadded:: 1.4.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -992,7 +992,7 @@ def atanh(col: "ColumnOrName") -> Column:
     .. versionadded:: 3.1.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -1026,7 +1026,7 @@ def cbrt(col: "ColumnOrName") -> Column:
     .. versionadded:: 1.4.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -1059,7 +1059,7 @@ def ceil(col: "ColumnOrName") -> Column:
     .. versionadded:: 1.4.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -1092,7 +1092,7 @@ def cos(col: "ColumnOrName") -> Column:
     .. versionadded:: 1.4.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -1122,7 +1122,7 @@ def cosh(col: "ColumnOrName") -> Column:
     .. versionadded:: 1.4.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -1151,7 +1151,7 @@ def cot(col: "ColumnOrName") -> Column:
     .. versionadded:: 3.3.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -1181,7 +1181,7 @@ def csc(col: "ColumnOrName") -> Column:
     .. versionadded:: 3.3.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -1211,7 +1211,7 @@ def exp(col: "ColumnOrName") -> Column:
     .. versionadded:: 1.4.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -1244,7 +1244,7 @@ def expm1(col: "ColumnOrName") -> Column:
     .. versionadded:: 1.4.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -1273,7 +1273,7 @@ def floor(col: "ColumnOrName") -> Column:
     .. versionadded:: 1.4.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -1306,7 +1306,7 @@ def log(col: "ColumnOrName") -> Column:
     .. versionadded:: 1.4.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -1336,7 +1336,7 @@ def log10(col: "ColumnOrName") -> Column:
     .. versionadded:: 1.4.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -1369,7 +1369,7 @@ def log1p(col: "ColumnOrName") -> Column:
     .. versionadded:: 1.4.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -1405,7 +1405,7 @@ def rint(col: "ColumnOrName") -> Column:
     .. versionadded:: 1.4.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -1445,7 +1445,7 @@ def sec(col: "ColumnOrName") -> Column:
     .. versionadded:: 3.3.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -1474,7 +1474,7 @@ def signum(col: "ColumnOrName") -> Column:
     .. versionadded:: 1.4.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -1514,7 +1514,7 @@ def sin(col: "ColumnOrName") -> Column:
     .. versionadded:: 1.4.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -1544,7 +1544,7 @@ def sinh(col: "ColumnOrName") -> Column:
     .. versionadded:: 1.4.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -1574,7 +1574,7 @@ def tan(col: "ColumnOrName") -> Column:
     .. versionadded:: 1.4.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -1604,7 +1604,7 @@ def tanh(col: "ColumnOrName") -> Column:
     .. versionadded:: 1.4.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -1633,7 +1633,7 @@ def toDegrees(col: "ColumnOrName") -> Column:
     .. versionadded:: 1.4.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     .. deprecated:: 2.1.0
         Use :func:`degrees` instead.
@@ -1648,7 +1648,7 @@ def toRadians(col: "ColumnOrName") -> Column:
     .. versionadded:: 1.4.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     .. deprecated:: 2.1.0
         Use :func:`radians` instead.
@@ -1665,7 +1665,7 @@ def bitwiseNOT(col: "ColumnOrName") -> Column:
     .. versionadded:: 1.4.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     .. deprecated:: 3.2.0
         Use :func:`bitwise_not` instead.
@@ -1682,7 +1682,7 @@ def bitwise_not(col: "ColumnOrName") -> Column:
     .. versionadded:: 3.2.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -1722,7 +1722,7 @@ def asc_nulls_first(col: "ColumnOrName") -> Column:
     .. versionadded:: 2.4.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -1765,7 +1765,7 @@ def asc_nulls_last(col: "ColumnOrName") -> Column:
     .. versionadded:: 2.4.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -1806,7 +1806,7 @@ def desc_nulls_first(col: "ColumnOrName") -> Column:
     .. versionadded:: 2.4.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -1849,7 +1849,7 @@ def desc_nulls_last(col: "ColumnOrName") -> Column:
     .. versionadded:: 2.4.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -1891,7 +1891,7 @@ def stddev(col: "ColumnOrName") -> Column:
     .. versionadded:: 1.6.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -1921,7 +1921,7 @@ def stddev_samp(col: "ColumnOrName") -> Column:
     .. versionadded:: 1.6.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -1951,7 +1951,7 @@ def stddev_pop(col: "ColumnOrName") -> Column:
     .. versionadded:: 1.6.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -1980,7 +1980,7 @@ def variance(col: "ColumnOrName") -> Column:
     .. versionadded:: 1.6.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -2014,7 +2014,7 @@ def var_samp(col: "ColumnOrName") -> Column:
     .. versionadded:: 1.6.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -2047,7 +2047,7 @@ def var_pop(col: "ColumnOrName") -> Column:
     .. versionadded:: 1.6.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -2076,7 +2076,7 @@ def skewness(col: "ColumnOrName") -> Column:
     .. versionadded:: 1.6.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -2105,7 +2105,7 @@ def kurtosis(col: "ColumnOrName") -> Column:
     .. versionadded:: 1.6.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -2138,7 +2138,7 @@ def collect_list(col: "ColumnOrName") -> Column:
     .. versionadded:: 1.6.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Notes
     -----
@@ -2172,7 +2172,7 @@ def collect_set(col: "ColumnOrName") -> Column:
     .. versionadded:: 1.6.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Notes
     -----
@@ -2207,7 +2207,7 @@ def degrees(col: "ColumnOrName") -> Column:
     .. versionadded:: 2.1.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -2238,7 +2238,7 @@ def radians(col: "ColumnOrName") -> Column:
     .. versionadded:: 2.1.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -2265,7 +2265,7 @@ def atan2(col1: Union["ColumnOrName", float], col2: Union["ColumnOrName", float]
     .. versionadded:: 1.4.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -2300,7 +2300,7 @@ def hypot(col1: Union["ColumnOrName", float], col2: Union["ColumnOrName", float]
     .. versionadded:: 1.4.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -2331,7 +2331,7 @@ def pow(col1: Union["ColumnOrName", float], col2: Union["ColumnOrName", float]) 
     .. versionadded:: 1.4.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -2362,7 +2362,7 @@ def pmod(dividend: Union["ColumnOrName", float], divisor: Union["ColumnOrName", 
     .. versionadded:: 3.4.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -2410,7 +2410,7 @@ def row_number() -> Column:
     .. versionadded:: 1.6.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Returns
     -------
@@ -2450,7 +2450,7 @@ def dense_rank() -> Column:
     .. versionadded:: 1.6.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Returns
     -------
@@ -2493,7 +2493,7 @@ def rank() -> Column:
     .. versionadded:: 1.6.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Returns
     -------
@@ -2529,7 +2529,7 @@ def cume_dist() -> Column:
     .. versionadded:: 1.6.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Returns
     -------
@@ -2563,7 +2563,7 @@ def percent_rank() -> Column:
     .. versionadded:: 1.6.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Returns
     -------
@@ -2596,7 +2596,7 @@ def approxCountDistinct(col: "ColumnOrName", rsd: Optional[float] = None) -> Col
     .. versionadded:: 1.3.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     .. deprecated:: 2.1.0
         Use :func:`approx_count_distinct` instead.
@@ -2613,10 +2613,10 @@ def approx_count_distinct(col: "ColumnOrName", rsd: Optional[float] = None) -> C
     .. versionadded:: 2.1.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -2654,7 +2654,7 @@ def broadcast(df: DataFrame) -> DataFrame:
     .. versionadded:: 1.6.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Returns
     -------
@@ -2688,7 +2688,7 @@ def coalesce(*cols: "ColumnOrName") -> Column:
     .. versionadded:: 1.4.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -2741,7 +2741,7 @@ def corr(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
     .. versionadded:: 1.6.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -2774,7 +2774,7 @@ def covar_pop(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
     .. versionadded:: 2.0.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -2807,7 +2807,7 @@ def covar_samp(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
     .. versionadded:: 2.0.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -2842,7 +2842,7 @@ def countDistinct(col: "ColumnOrName", *cols: "ColumnOrName") -> Column:
     .. versionadded:: 1.3.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
     """
     return count_distinct(col, *cols)
 
@@ -2854,7 +2854,7 @@ def count_distinct(col: "ColumnOrName", *cols: "ColumnOrName") -> Column:
     .. versionadded:: 3.2.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -2908,7 +2908,7 @@ def first(col: "ColumnOrName", ignorenulls: bool = False) -> Column:
     .. versionadded:: 1.3.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Notes
     -----
@@ -2961,7 +2961,7 @@ def grouping(col: "ColumnOrName") -> Column:
     .. versionadded:: 2.0.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -2998,7 +2998,7 @@ def grouping_id(*cols: "ColumnOrName") -> Column:
     .. versionadded:: 2.0.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Notes
     -----
@@ -3044,7 +3044,7 @@ def input_file_name() -> Column:
     .. versionadded:: 1.6.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Returns
     -------
@@ -3069,7 +3069,7 @@ def isnan(col: "ColumnOrName") -> Column:
     .. versionadded:: 1.6.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -3102,7 +3102,7 @@ def isnull(col: "ColumnOrName") -> Column:
     .. versionadded:: 1.6.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -3138,7 +3138,7 @@ def last(col: "ColumnOrName", ignorenulls: bool = False) -> Column:
     .. versionadded:: 1.3.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Notes
     -----
@@ -3194,7 +3194,7 @@ def monotonically_increasing_id() -> Column:
     .. versionadded:: 1.6.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Notes
     -----
@@ -3227,7 +3227,7 @@ def nanvl(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
     .. versionadded:: 1.6.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -3264,7 +3264,7 @@ def percentile_approx(
     .. versionadded:: 3.1.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -3336,7 +3336,7 @@ def rand(seed: Optional[int] = None) -> Column:
     .. versionadded:: 1.4.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Notes
     -----
@@ -3377,7 +3377,7 @@ def randn(seed: Optional[int] = None) -> Column:
     .. versionadded:: 1.4.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Notes
     -----
@@ -3419,7 +3419,7 @@ def round(col: "ColumnOrName", scale: int = 0) -> Column:
     .. versionadded:: 1.5.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -3450,7 +3450,7 @@ def bround(col: "ColumnOrName", scale: int = 0) -> Column:
     .. versionadded:: 2.0.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -3479,7 +3479,7 @@ def shiftLeft(col: "ColumnOrName", numBits: int) -> Column:
     .. versionadded:: 1.5.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     .. deprecated:: 3.2.0
         Use :func:`shiftleft` instead.
@@ -3495,7 +3495,7 @@ def shiftleft(col: "ColumnOrName", numBits: int) -> Column:
     .. versionadded:: 3.2.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -3524,7 +3524,7 @@ def shiftRight(col: "ColumnOrName", numBits: int) -> Column:
     .. versionadded:: 1.5.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     .. deprecated:: 3.2.0
         Use :func:`shiftright` instead.
@@ -3540,7 +3540,7 @@ def shiftright(col: "ColumnOrName", numBits: int) -> Column:
     .. versionadded:: 3.2.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -3569,7 +3569,7 @@ def shiftRightUnsigned(col: "ColumnOrName", numBits: int) -> Column:
     .. versionadded:: 1.5.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     .. deprecated:: 3.2.0
         Use :func:`shiftrightunsigned` instead.
@@ -3585,7 +3585,7 @@ def shiftrightunsigned(col: "ColumnOrName", numBits: int) -> Column:
     .. versionadded:: 3.2.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -3615,7 +3615,7 @@ def spark_partition_id() -> Column:
     .. versionadded:: 1.6.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Notes
     -----
@@ -3642,7 +3642,7 @@ def expr(str: str) -> Column:
     .. versionadded:: 1.5.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -3687,7 +3687,7 @@ def struct(
     .. versionadded:: 1.4.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -3721,7 +3721,7 @@ def greatest(*cols: "ColumnOrName") -> Column:
     .. versionadded:: 1.5.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -3756,7 +3756,7 @@ def least(*cols: "ColumnOrName") -> Column:
     .. versionadded:: 1.5.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -3791,7 +3791,7 @@ def when(condition: Column, value: Any) -> Column:
     .. versionadded:: 1.4.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -3856,7 +3856,7 @@ def log(arg1: Union["ColumnOrName", float], arg2: Optional["ColumnOrName"] = Non
     .. versionadded:: 1.5.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -3906,7 +3906,7 @@ def log2(col: "ColumnOrName") -> Column:
     .. versionadded:: 1.5.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -3939,7 +3939,7 @@ def conv(col: "ColumnOrName", fromBase: int, toBase: int) -> Column:
     .. versionadded:: 1.5.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -3972,7 +3972,7 @@ def factorial(col: "ColumnOrName") -> Column:
     .. versionadded:: 1.5.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -4008,7 +4008,7 @@ def lag(col: "ColumnOrName", offset: int = 1, default: Optional[Any] = None) -> 
     .. versionadded:: 1.4.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -4089,7 +4089,7 @@ def lead(col: "ColumnOrName", offset: int = 1, default: Optional[Any] = None) ->
     .. versionadded:: 1.4.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -4172,7 +4172,7 @@ def nth_value(col: "ColumnOrName", offset: int, ignoreNulls: Optional[bool] = Fa
     .. versionadded:: 3.1.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -4245,7 +4245,7 @@ def ntile(n: int) -> Column:
     .. versionadded:: 1.4.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -4302,7 +4302,7 @@ def current_date() -> Column:
     .. versionadded:: 1.5.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Returns
     -------
@@ -4331,7 +4331,7 @@ def current_timestamp() -> Column:
     .. versionadded:: 1.5.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Returns
     -------
@@ -4361,7 +4361,7 @@ def localtimestamp() -> Column:
     .. versionadded:: 3.4.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Returns
     -------
@@ -4395,7 +4395,7 @@ def date_format(date: "ColumnOrName", format: str) -> Column:
     .. versionadded:: 1.5.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Notes
     -----
@@ -4430,7 +4430,7 @@ def year(col: "ColumnOrName") -> Column:
     .. versionadded:: 1.5.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -4459,7 +4459,7 @@ def quarter(col: "ColumnOrName") -> Column:
     .. versionadded:: 1.5.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -4488,7 +4488,7 @@ def month(col: "ColumnOrName") -> Column:
     .. versionadded:: 1.5.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -4518,7 +4518,7 @@ def dayofweek(col: "ColumnOrName") -> Column:
     .. versionadded:: 2.3.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -4547,7 +4547,7 @@ def dayofmonth(col: "ColumnOrName") -> Column:
     .. versionadded:: 1.5.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -4576,7 +4576,7 @@ def dayofyear(col: "ColumnOrName") -> Column:
     .. versionadded:: 1.5.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -4605,7 +4605,7 @@ def hour(col: "ColumnOrName") -> Column:
     .. versionadded:: 1.5.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -4635,7 +4635,7 @@ def minute(col: "ColumnOrName") -> Column:
     .. versionadded:: 1.5.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -4665,7 +4665,7 @@ def second(col: "ColumnOrName") -> Column:
     .. versionadded:: 1.5.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -4697,7 +4697,7 @@ def weekofyear(col: "ColumnOrName") -> Column:
     .. versionadded:: 1.5.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -4726,7 +4726,7 @@ def make_date(year: "ColumnOrName", month: "ColumnOrName", day: "ColumnOrName") 
     .. versionadded:: 3.3.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -4760,7 +4760,7 @@ def date_add(start: "ColumnOrName", days: Union["ColumnOrName", int]) -> Column:
     .. versionadded:: 1.5.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -4798,7 +4798,7 @@ def date_sub(start: "ColumnOrName", days: Union["ColumnOrName", int]) -> Column:
     .. versionadded:: 1.5.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -4835,7 +4835,7 @@ def datediff(end: "ColumnOrName", start: "ColumnOrName") -> Column:
     .. versionadded:: 1.5.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -4867,7 +4867,7 @@ def add_months(start: "ColumnOrName", months: Union["ColumnOrName", int]) -> Col
     .. versionadded:: 1.5.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -4908,7 +4908,7 @@ def months_between(date1: "ColumnOrName", date2: "ColumnOrName", roundOff: bool 
     .. versionadded:: 1.5.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -4949,7 +4949,7 @@ def to_date(col: "ColumnOrName", format: Optional[str] = None) -> Column:
     .. versionadded:: 2.2.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -5001,7 +5001,7 @@ def to_timestamp(col: "ColumnOrName", format: Optional[str] = None) -> Column:
     .. versionadded:: 2.2.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -5039,7 +5039,7 @@ def trunc(date: "ColumnOrName", format: str) -> Column:
     .. versionadded:: 1.5.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -5074,7 +5074,7 @@ def date_trunc(format: str, timestamp: "ColumnOrName") -> Column:
     .. versionadded:: 2.3.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -5112,7 +5112,7 @@ def next_day(date: "ColumnOrName", dayOfWeek: str) -> Column:
     .. versionadded:: 1.5.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -5144,7 +5144,7 @@ def last_day(date: "ColumnOrName") -> Column:
     .. versionadded:: 1.5.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -5175,7 +5175,7 @@ def from_unixtime(timestamp: "ColumnOrName", format: str = "yyyy-MM-dd HH:mm:ss"
     .. versionadded:: 1.5.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -5224,7 +5224,7 @@ def unix_timestamp(
     .. versionadded:: 1.5.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -5270,7 +5270,7 @@ def from_utc_timestamp(timestamp: "ColumnOrName", tz: "ColumnOrName") -> Column:
     .. versionadded:: 1.5.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -5324,7 +5324,7 @@ def to_utc_timestamp(timestamp: "ColumnOrName", tz: "ColumnOrName") -> Column:
     .. versionadded:: 1.5.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -5368,7 +5368,7 @@ def timestamp_seconds(col: "ColumnOrName") -> Column:
     .. versionadded:: 3.1.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -5428,7 +5428,7 @@ def window(
     .. versionadded:: 2.0.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -5507,7 +5507,7 @@ def window_time(
     .. versionadded:: 3.4.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -5565,7 +5565,7 @@ def session_window(timeColumn: "ColumnOrName", gapDuration: Union[Column, str]) 
     .. versionadded:: 3.2.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -5618,7 +5618,7 @@ def crc32(col: "ColumnOrName") -> Column:
     returns the value as a bigint.
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -5647,7 +5647,7 @@ def md5(col: "ColumnOrName") -> Column:
     .. versionadded:: 1.5.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -5674,7 +5674,7 @@ def sha1(col: "ColumnOrName") -> Column:
     .. versionadded:: 1.5.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -5703,7 +5703,7 @@ def sha2(col: "ColumnOrName", numBits: int) -> Column:
     .. versionadded:: 1.5.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -5739,7 +5739,7 @@ def hash(*cols: "ColumnOrName") -> Column:
     .. versionadded:: 2.0.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -5784,7 +5784,7 @@ def xxhash64(*cols: "ColumnOrName") -> Column:
     .. versionadded:: 3.0.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -5830,7 +5830,7 @@ def assert_true(col: "ColumnOrName", errMsg: Optional[Union[Column, str]] = None
     .. versionadded:: 3.1.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -5880,7 +5880,7 @@ def raise_error(errMsg: Union[Column, str]) -> Column:
     .. versionadded:: 3.1.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -5923,7 +5923,7 @@ def upper(col: "ColumnOrName") -> Column:
     .. versionadded:: 1.5.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -5958,7 +5958,7 @@ def lower(col: "ColumnOrName") -> Column:
     .. versionadded:: 1.5.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -5993,7 +5993,7 @@ def ascii(col: "ColumnOrName") -> Column:
     .. versionadded:: 1.5.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -6028,7 +6028,7 @@ def base64(col: "ColumnOrName") -> Column:
     .. versionadded:: 1.5.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -6063,7 +6063,7 @@ def unbase64(col: "ColumnOrName") -> Column:
     .. versionadded:: 1.5.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -6100,7 +6100,7 @@ def ltrim(col: "ColumnOrName") -> Column:
     .. versionadded:: 1.5.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -6135,7 +6135,7 @@ def rtrim(col: "ColumnOrName") -> Column:
     .. versionadded:: 1.5.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -6170,7 +6170,7 @@ def trim(col: "ColumnOrName") -> Column:
     .. versionadded:: 1.5.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -6206,7 +6206,7 @@ def concat_ws(sep: str, *cols: "ColumnOrName") -> Column:
     .. versionadded:: 1.5.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -6240,7 +6240,7 @@ def decode(col: "ColumnOrName", charset: str) -> Column:
     .. versionadded:: 1.5.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -6276,7 +6276,7 @@ def encode(col: "ColumnOrName", charset: str) -> Column:
     .. versionadded:: 1.5.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -6312,7 +6312,7 @@ def format_number(col: "ColumnOrName", d: int) -> Column:
     .. versionadded:: 1.5.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -6340,7 +6340,7 @@ def format_string(format: str, *cols: "ColumnOrName") -> Column:
     .. versionadded:: 1.5.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -6374,7 +6374,7 @@ def instr(str: "ColumnOrName", substr: str) -> Column:
     .. versionadded:: 1.5.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Notes
     -----
@@ -6416,7 +6416,7 @@ def overlay(
     .. versionadded:: 3.0.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -6475,7 +6475,7 @@ def sentences(
     .. versionadded:: 3.2.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -6526,7 +6526,7 @@ def substring(str: "ColumnOrName", pos: int, len: int) -> Column:
     .. versionadded:: 1.5.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Notes
     -----
@@ -6566,7 +6566,7 @@ def substring_index(str: "ColumnOrName", delim: str, count: int) -> Column:
     .. versionadded:: 1.5.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -6600,7 +6600,7 @@ def levenshtein(left: "ColumnOrName", right: "ColumnOrName") -> Column:
     .. versionadded:: 1.5.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -6631,7 +6631,7 @@ def locate(substr: str, str: "ColumnOrName", pos: int = 1) -> Column:
     .. versionadded:: 1.5.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -6669,7 +6669,7 @@ def lpad(col: "ColumnOrName", len: int, pad: str) -> Column:
     .. versionadded:: 1.5.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -6702,7 +6702,7 @@ def rpad(col: "ColumnOrName", len: int, pad: str) -> Column:
     .. versionadded:: 1.5.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -6735,7 +6735,7 @@ def repeat(col: "ColumnOrName", n: int) -> Column:
     .. versionadded:: 1.5.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -6766,7 +6766,7 @@ def split(str: "ColumnOrName", pattern: str, limit: int = -1) -> Column:
     .. versionadded:: 1.5.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -6811,7 +6811,7 @@ def regexp_extract(str: "ColumnOrName", pattern: str, idx: int) -> Column:
     .. versionadded:: 1.5.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -6851,7 +6851,7 @@ def regexp_replace(
     .. versionadded:: 1.5.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -6893,7 +6893,7 @@ def initcap(col: "ColumnOrName") -> Column:
     .. versionadded:: 1.5.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -6921,7 +6921,7 @@ def soundex(col: "ColumnOrName") -> Column:
     .. versionadded:: 1.5.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -6949,7 +6949,7 @@ def bin(col: "ColumnOrName") -> Column:
     .. versionadded:: 1.5.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -6979,7 +6979,7 @@ def hex(col: "ColumnOrName") -> Column:
     .. versionadded:: 1.5.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -7007,7 +7007,7 @@ def unhex(col: "ColumnOrName") -> Column:
     .. versionadded:: 1.5.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -7036,7 +7036,7 @@ def length(col: "ColumnOrName") -> Column:
     .. versionadded:: 1.5.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -7064,7 +7064,7 @@ def octet_length(col: "ColumnOrName") -> Column:
     .. versionadded:: 3.3.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -7094,7 +7094,7 @@ def bit_length(col: "ColumnOrName") -> Column:
     .. versionadded:: 3.3.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -7126,7 +7126,7 @@ def translate(srcCol: "ColumnOrName", matching: str, replace: str) -> Column:
     .. versionadded:: 1.5.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -7174,7 +7174,7 @@ def create_map(
     .. versionadded:: 2.0.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -7202,7 +7202,7 @@ def map_from_arrays(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
     .. versionadded:: 2.4.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -7254,7 +7254,7 @@ def array(
     .. versionadded:: 1.4.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -7293,7 +7293,7 @@ def array_contains(col: "ColumnOrName", value: Any) -> Column:
     .. versionadded:: 1.5.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -7329,7 +7329,7 @@ def arrays_overlap(a1: "ColumnOrName", a2: "ColumnOrName") -> Column:
     .. versionadded:: 2.4.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Returns
     -------
@@ -7356,7 +7356,7 @@ def slice(
     .. versionadded:: 2.4.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -7395,7 +7395,7 @@ def array_join(
     .. versionadded:: 2.4.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -7436,7 +7436,7 @@ def concat(*cols: "ColumnOrName") -> Column:
     .. versionadded:: 1.5.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -7480,7 +7480,7 @@ def array_position(col: "ColumnOrName", value: Any) -> Column:
     .. versionadded:: 2.4.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Notes
     -----
@@ -7519,7 +7519,7 @@ def element_at(col: "ColumnOrName", extraction: Any) -> Column:
     .. versionadded:: 2.4.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -7566,7 +7566,7 @@ def get(col: "ColumnOrName", index: Union["ColumnOrName", int]) -> Column:
     .. versionadded:: 3.4.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -7639,7 +7639,7 @@ def array_remove(col: "ColumnOrName", element: Any) -> Column:
     .. versionadded:: 2.4.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -7670,7 +7670,7 @@ def array_distinct(col: "ColumnOrName") -> Column:
     .. versionadded:: 2.4.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -7702,7 +7702,7 @@ def array_insert(arr: "ColumnOrName", pos: Union["ColumnOrName", int], value: An
     .. versionadded:: 3.4.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -7744,7 +7744,7 @@ def array_intersect(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
     .. versionadded:: 2.4.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -7777,7 +7777,7 @@ def array_union(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
     .. versionadded:: 2.4.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -7810,7 +7810,7 @@ def array_except(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
     .. versionadded:: 2.4.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -7842,7 +7842,7 @@ def array_compact(col: "ColumnOrName") -> Column:
     .. versionadded:: 3.4.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -7872,7 +7872,7 @@ def array_append(col: "ColumnOrName", value: Any) -> Column:
     .. versionadded:: 3.4.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -7908,7 +7908,7 @@ def explode(col: "ColumnOrName") -> Column:
     .. versionadded:: 1.4.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -7953,7 +7953,7 @@ def posexplode(col: "ColumnOrName") -> Column:
     .. versionadded:: 2.1.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -7990,7 +7990,7 @@ def inline(col: "ColumnOrName") -> Column:
     .. versionadded:: 3.4.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -8032,7 +8032,7 @@ def explode_outer(col: "ColumnOrName") -> Column:
     .. versionadded:: 2.3.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -8083,7 +8083,7 @@ def posexplode_outer(col: "ColumnOrName") -> Column:
     .. versionadded:: 2.3.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -8131,7 +8131,7 @@ def inline_outer(col: "ColumnOrName") -> Column:
     .. versionadded:: 3.4.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -8176,7 +8176,7 @@ def get_json_object(col: "ColumnOrName", path: str) -> Column:
     .. versionadded:: 1.6.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -8208,7 +8208,7 @@ def json_tuple(col: "ColumnOrName", *fields: str) -> Column:
     .. versionadded:: 1.6.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -8248,7 +8248,7 @@ def from_json(
     .. versionadded:: 2.1.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -8312,7 +8312,7 @@ def to_json(col: "ColumnOrName", options: Optional[Dict[str, str]] = None) -> Co
     .. versionadded:: 2.1.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -8369,7 +8369,7 @@ def schema_of_json(json: "ColumnOrName", options: Optional[Dict[str, str]] = Non
     .. versionadded:: 2.4.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -8420,7 +8420,7 @@ def schema_of_csv(csv: "ColumnOrName", options: Optional[Dict[str, str]] = None)
     .. versionadded:: 3.0.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -8468,7 +8468,7 @@ def to_csv(col: "ColumnOrName", options: Optional[Dict[str, str]] = None) -> Col
     .. versionadded:: 3.0.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -8506,7 +8506,7 @@ def size(col: "ColumnOrName") -> Column:
     .. versionadded:: 1.5.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -8535,7 +8535,7 @@ def array_min(col: "ColumnOrName") -> Column:
     .. versionadded:: 2.4.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -8564,7 +8564,7 @@ def array_max(col: "ColumnOrName") -> Column:
     .. versionadded:: 2.4.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -8596,7 +8596,7 @@ def sort_array(col: "ColumnOrName", asc: bool = True) -> Column:
     .. versionadded:: 1.5.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -8636,7 +8636,7 @@ def array_sort(
         Can take a `comparator` function.
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -8680,7 +8680,7 @@ def shuffle(col: "ColumnOrName") -> Column:
     .. versionadded:: 2.4.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Notes
     -----
@@ -8713,7 +8713,7 @@ def reverse(col: "ColumnOrName") -> Column:
     .. versionadded:: 1.5.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -8747,7 +8747,7 @@ def flatten(col: "ColumnOrName") -> Column:
     .. versionadded:: 2.4.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -8788,7 +8788,7 @@ def map_contains_key(col: "ColumnOrName", value: Any) -> Column:
     .. versionadded:: 3.4.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -8830,7 +8830,7 @@ def map_keys(col: "ColumnOrName") -> Column:
     .. versionadded:: 2.3.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -8864,7 +8864,7 @@ def map_values(col: "ColumnOrName") -> Column:
     .. versionadded:: 2.3.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -8898,7 +8898,7 @@ def map_entries(col: "ColumnOrName") -> Column:
     .. versionadded:: 3.0.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -8940,7 +8940,7 @@ def map_from_entries(col: "ColumnOrName") -> Column:
     .. versionadded:: 2.4.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -8974,7 +8974,7 @@ def array_repeat(col: "ColumnOrName", count: Union["ColumnOrName", int]) -> Colu
     .. versionadded:: 2.4.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -9009,7 +9009,7 @@ def arrays_zip(*cols: "ColumnOrName") -> Column:
     .. versionadded:: 2.4.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -9062,7 +9062,7 @@ def map_concat(
     .. versionadded:: 2.4.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -9102,7 +9102,7 @@ def sequence(
     .. versionadded:: 2.4.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -9146,7 +9146,7 @@ def from_csv(
     .. versionadded:: 3.0.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -9203,7 +9203,7 @@ def _unresolved_named_lambda_variable(*name_parts: Any) -> Column:
     convert it to o.s.sql.Column and wrap in Python `Column`
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -9332,7 +9332,7 @@ def transform(
     .. versionadded:: 3.1.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -9386,7 +9386,7 @@ def exists(col: "ColumnOrName", f: Callable[[Column], Column]) -> Column:
     .. versionadded:: 3.1.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -9427,7 +9427,7 @@ def forall(col: "ColumnOrName", f: Callable[[Column], Column]) -> Column:
     .. versionadded:: 3.1.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -9485,7 +9485,7 @@ def filter(
     .. versionadded:: 3.1.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -9550,7 +9550,7 @@ def aggregate(
     .. versionadded:: 3.1.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -9619,7 +9619,7 @@ def zip_with(
     .. versionadded:: 3.1.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -9669,7 +9669,7 @@ def transform_keys(col: "ColumnOrName", f: Callable[[Column, Column], Column]) -
     .. versionadded:: 3.1.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -9709,7 +9709,7 @@ def transform_values(col: "ColumnOrName", f: Callable[[Column, Column], Column])
     .. versionadded:: 3.1.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -9748,7 +9748,7 @@ def map_filter(col: "ColumnOrName", f: Callable[[Column, Column], Column]) -> Co
     .. versionadded:: 3.1.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -9790,7 +9790,7 @@ def map_zip_with(
     .. versionadded:: 3.1.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -9838,7 +9838,7 @@ def years(col: "ColumnOrName") -> Column:
     .. versionadded:: 3.1.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -9875,7 +9875,7 @@ def months(col: "ColumnOrName") -> Column:
     .. versionadded:: 3.1.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -9912,7 +9912,7 @@ def days(col: "ColumnOrName") -> Column:
     .. versionadded:: 3.1.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -9949,7 +9949,7 @@ def hours(col: "ColumnOrName") -> Column:
     .. versionadded:: 3.1.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -9986,7 +9986,7 @@ def bucket(numBuckets: Union[Column, int], col: "ColumnOrName") -> Column:
     .. versionadded:: 3.1.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Examples
     --------
@@ -10083,7 +10083,7 @@ def unwrap_udt(col: "ColumnOrName") -> Column:
     .. versionadded:: 3.4.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
     """
     return _invoke_function("unwrap_udt", _to_java_column(col))
 
@@ -10131,7 +10131,7 @@ def udf(
     .. versionadded:: 1.3.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------

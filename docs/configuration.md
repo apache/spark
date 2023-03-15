@@ -3138,6 +3138,69 @@ like shuffle, just replace "rpc" with "shuffle" in the property names except
 The default value for number of thread-related config keys is the minimum of the number of cores requested for 
 the driver or executor, or, in the absence of that value, the number of cores available for the JVM (with a hardcoded upper limit of 8).
 
+### Spark Connect
+
+#### Server Configuration
+
+Server configurations are set in Spark Connect server, for example, when you start the Spark Connect server with `./sbin/start-connect-server.sh`.
+They are typically set via the config file and command-lineoptions with `--conf/-c`.
+
+<table class="table">
+<tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr>
+<tr>
+  <td><code>spark.connect.grpc.binding.port</code></td>
+  <td>
+    15002
+  </td>
+  <td>Port for Spark Connect server to bind.</td>
+  <td>3.4.0</td>
+</tr>
+<tr>
+  <td><code>spark.connect.grpc.interceptor.classes</code></td>
+  <td>
+    (none)
+  </td>
+  <td>Comma separated list of class names that must implement the <code>io.grpc.ServerInterceptor</code> interface</td>
+  <td>3.4.0</td>
+</tr>
+<tr>
+  <td><code>spark.connect.grpc.arrow.maxBatchSize</code></td>
+  <td>
+    4m
+  </td>
+  <td>When using Apache Arrow, limit the maximum size of one arrow batch that can be sent from server side to client side. Currently, we conservatively use 70% of it because the size is not accurate but estimated.</td>
+  <td>3.4.0</td>
+</tr>
+<tr>
+  <td><code>spark.connect.extensions.relation.classes</code></td>
+  <td>
+    (none)
+  </td>
+  <td>Comma separated list of classes that implement the trait <code>org.apache.spark.sql.connect.plugin.RelationPlugin</code> to support custom
+Relation types in proto.</td>
+  <td>3.4.0</td>
+</tr>
+<tr>
+  <td><code>spark.connect.extensions.expression.classes</code></td>
+  <td>
+    (none)
+  </td>
+  <td>Comma separated list of classes that implement the trait
+<code>org.apache.spark.sql.connect.plugin.ExpressionPlugin</code> to support custom
+Expression types in proto.</td>
+  <td>3.4.0</td>
+</tr>
+<tr>
+  <td><code>spark.connect.extensions.command.classes</code></td>
+  <td>
+    (none)
+  </td>
+  <td>Comma separated list of classes that implement the trait
+<code>org.apache.spark.sql.connect.plugin.CommandPlugin</code> to support custom
+Command types in proto.</td>
+  <td>3.4.0</td>
+</tr>
+</table>
     
 ### Security
 

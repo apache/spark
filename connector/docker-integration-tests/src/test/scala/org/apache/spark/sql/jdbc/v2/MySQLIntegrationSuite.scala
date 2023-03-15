@@ -56,6 +56,7 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest
     .set("spark.sql.catalog.mysql.url", db.getJdbcUrl(dockerIp, externalPort))
     .set("spark.sql.catalog.mysql.pushDownAggregate", "true")
     .set("spark.sql.catalog.mysql.pushDownLimit", "true")
+    .set("spark.sql.catalog.mysql.pushDownOffset", "true")
 
   override val connectionTimeout = timeout(7.minutes)
 
@@ -123,6 +124,10 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest
   override def supportListIndexes: Boolean = true
 
   override def indexOptions: String = "KEY_BLOCK_SIZE=10"
+
+  testOffset()
+  testLimitAndOffset()
+  testPaging()
 
   testVarPop()
   testVarSamp()

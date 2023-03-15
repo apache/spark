@@ -2479,4 +2479,14 @@ package object config {
       .version("3.5.0")
       .booleanConf
       .createWithDefault(false)
+
+  private[spark] val STAGE_MAX_ATTEMPTS =
+    ConfigBuilder("spark.stage.maxAttempts")
+      .doc("Specify the max attempts for a stage - the spark job will be aborted if any of its " +
+        "stages is resubmitted multiple times beyond the max retries limitation. The maximum " +
+        "number of stage retries is the maximum of `spark.stage.maxAttempts` and " +
+        "`spark.stage.maxConsecutiveAttempts`.")
+      .version("3.5.0")
+      .intConf
+      .createWithDefault(Int.MaxValue)
 }

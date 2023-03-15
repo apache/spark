@@ -65,8 +65,15 @@ class CapturedException(PySparkException):
         assert SparkContext._jvm is not None
 
         jvm = SparkContext._jvm
-        sql_conf = jvm.org.apache.spark.sql.internal.SQLConf.get()
-        debug_enabled = sql_conf.pysparkJVMStacktraceEnabled()
+
+        # SPARK-42752: default to True to see issues with initialization
+        debug_enabled = True
+        try:
+            sql_conf = jvm.org.apache.spark.sql.internal.SQLConf.get()
+            debug_enabled = sql_conf.pysparkJVMStacktraceEnabled()
+        except BaseException:
+            pass
+
         desc = self.desc
         if debug_enabled:
             desc = desc + "\n\nJVM stacktrace:\n%s" % self.stackTrace
