@@ -218,7 +218,7 @@ class HiveGenericUDFEvaluator(
   lazy val function = funcWrapper.createFunction[GenericUDF]()
 
   @transient
-  private[hive] lazy val argumentInspectors = children.map(toInspector)
+  private lazy val argumentInspectors = children.map(toInspector)
 
   @transient
   lazy val returnInspector = {
