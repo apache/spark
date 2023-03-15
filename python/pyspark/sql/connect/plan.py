@@ -1927,14 +1927,20 @@ class GroupMap(LogicalPlan):
     """Logical plan object for a Group Map API: apply, applyInPandas."""
 
     def __init__(
-        self, grouping_cols: Sequence[Column], function: "UserDefinedFunction", cols: List[str]
+        self,
+        child: Optional["LogicalPlan"],
+        grouping_cols: Sequence[Column],
+        function: "UserDefinedFunction",
+        cols: List[str],
     ):
         assert isinstance(grouping_cols, list) and all(isinstance(c, Column) for c in grouping_cols)
 
+        super().__init__(child)
         self._grouping_cols = grouping_cols
         self._func = function._build_common_inline_user_defined_function(*cols)
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
+        assert self._child is not None
         plan = self._create_proto_relation()
         plan.group_map.input.CopyFrom(self._child.plan(session))
         plan.group_map.grouping_expressions.extend(

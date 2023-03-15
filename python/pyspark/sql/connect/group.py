@@ -212,6 +212,7 @@ class GroupedData:
         self, func: "PandasGroupedMapFunction", schema: Union["StructType", str]
     ) -> "DataFrame":
         from pyspark.sql.connect.udf import UserDefinedFunction
+        from pyspark.sql.connect.dataframe import DataFrame
 
         udf_obj = UserDefinedFunction(
             func,
