@@ -308,8 +308,8 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
     val outputs: Seq[QueryOutput] = queries.map { sql =>
       testCase match {
         case _: AnalyzerTest =>
-          val result = getNormalizedQueryAnalysisResult(localSparkSession, sql)
-          val (_, output) = handleExceptions(result)
+          val (_, output) =
+            handleExceptions(getNormalizedQueryAnalysisResult(localSparkSession, sql))
           // We might need to do some query canonicalization in the future.
           QueryOutput(
             sql = sql,
@@ -317,8 +317,8 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
             outputHeader = "query analysis",
             output = output.mkString("\n").replaceAll("\\s+$", ""))
         case _ =>
-          val result = getNormalizedQueryExecutionResult(localSparkSession, sql)
-          val (schema, output) = handleExceptions(result)
+          val (schema, output) =
+            handleExceptions(getNormalizedQueryExecutionResult(localSparkSession, sql))
           // We might need to do some query canonicalization in the future.
           QueryOutput(
             sql = sql,
