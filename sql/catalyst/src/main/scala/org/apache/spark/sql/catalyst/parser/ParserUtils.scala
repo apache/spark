@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.parser
 import java.lang.{Long => JLong}
 import java.nio.CharBuffer
 import java.util
+import java.util.Locale
 
 import scala.collection.mutable.{ArrayBuffer, StringBuilder}
 
@@ -261,8 +262,11 @@ object ParserUtils {
   }
 
   /**
-   * Converts to the given parse tree to an alias. It adds a gap between two terms
-   * when both contains only either letters or digits.
+   * Converts the given parse tree to an alias by
+   * - Adding a gap between two terms when both contains only either letters or digits.
+   * - Upper casing keywords and numeric literals.
+   * - Converting double quoted string literals to single quoted.
+   *
    * @param normalizeStringLiterals When set to `true`, convert double quoted string literals
    *                                to single quoted. For example: "abc" -> 'abc'
    */
@@ -279,13 +283,18 @@ object ParserUtils {
     getTerms(ctx, terms)
     val sb = new StringBuilder()
     for (i <- 0 until terms.length) {
-      val current = terms(i).getText
-      val currentNormalized = if (normalizeStringLiterals && current.startsWith("\"")) {
-        "'" + current.stripSuffix("\"").stripPrefix("\"") + "'"
+      val term = terms(i)
+      val termText = term.getText
+      val tt = term.getSymbol.getType
+      val current = if ((SqlBaseParser.ADD <= tt && tt <= SqlBaseParser.ZONE) ||
+          (SqlBaseParser.BIGINT_LITERAL <= tt && tt <= SqlBaseParser.BIGDECIMAL_LITERAL)) {
+        termText.toUpperCase(Locale.ROOT)
+      } else if (normalizeStringLiterals && tt == SqlBaseParser.DOUBLEQUOTED_STRING) {
+        "'" + termText.stripSuffix("\"").stripPrefix("\"") + "'"
       } else {
-        current
+        termText
       }
-      sb.append(currentNormalized)
+      sb.append(current)
       if (i < terms.length - 1) {
         val next = terms(i + 1).getText
         if (current.forall(_.isLetterOrDigit) && next.forall(_.isLetterOrDigit)) {
