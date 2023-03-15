@@ -61,6 +61,9 @@ class DB2IntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest {
   override def sparkConf: SparkConf = super.sparkConf
     .set("spark.sql.catalog.db2", classOf[JDBCTableCatalog].getName)
     .set("spark.sql.catalog.db2.url", db.getJdbcUrl(dockerIp, externalPort))
+    .set("spark.sql.catalog.db2.pushDownAggregate", "true")
+    .set("spark.sql.catalog.db2.pushDownLimit", "true")
+    .set("spark.sql.catalog.db2.pushDownOffset", "true")
 
   override def tablePreparation(connection: Connection): Unit = {
     connection.prepareStatement(
