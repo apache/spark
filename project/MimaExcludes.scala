@@ -254,7 +254,11 @@ object MimaExcludes {
     ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.status.api.v1.sql.Node.copy"),
     ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.status.api.v1.sql.Node.copy$default$4"),
     ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.status.api.v1.sql.Node.this"),
-    ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.status.api.v1.sql.Node.apply")
+    ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.status.api.v1.sql.Node.apply"),
+
+    // [SPARK-42807][CORE] Apply custom log URL pattern for yarn-client AM log URL in SHS
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.scheduler.MiscellaneousProcessDetails.this"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.status.api.v1.ProcessSummary.this")
   )
 
   // Defulat exclude rules
