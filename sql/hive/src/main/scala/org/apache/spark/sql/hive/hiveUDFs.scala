@@ -53,15 +53,15 @@ private[hive] case class HiveSimpleUDF(
   @transient
   private lazy val evaluator = new HiveSimpleUDFEvaluator(funcWrapper, children)
 
+  override lazy val deterministic: Boolean = isUDFDeterministic && children.forall(_.deterministic)
+
+  override def nullable: Boolean = true
+
   @transient
   private val isUDFDeterministic = {
     val udfType = evaluator.function.getClass.getAnnotation(classOf[HiveUDFType])
     udfType != null && udfType.deterministic() && !udfType.stateful()
   }
-
-  override lazy val deterministic: Boolean = isUDFDeterministic && children.forall(_.deterministic)
-
-  override def nullable: Boolean = true
 
   override def foldable: Boolean = isUDFDeterministic && children.forall(_.foldable)
 
