@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql
 
+import java.io.File
 import java.util.TimeZone
 
 import scala.collection.JavaConverters._
@@ -227,6 +228,62 @@ abstract class QueryTest extends PlanTest {
       s"The optimized logical plan has missing inputs:\n${query.queryExecution.optimizedPlan}")
     assert(query.queryExecution.executedPlan.missingInput.isEmpty,
       s"The physical plan has missing inputs:\n${query.queryExecution.executedPlan}")
+  }
+
+  /** A single SQL query's output. */
+  protected case class QueryOutput(sql: String, schema: String, output: String) {
+    override def toString: String = {
+      // We are explicitly not using multi-line string due to stripMargin removing "|" in output.
+      s"-- !query\n" +
+        sql + "\n" +
+        s"-- !query schema\n" +
+        schema + "\n" +
+        s"-- !query output\n" +
+        output
+    }
+  }
+
+  /**
+   * Consumes contents from a single golden file and compares the expected results against the
+   * output of running a query.
+   */
+  def readGoldenFileAndCompareResults(resultFile: String, outputs: Seq[QueryOutput]): Unit = {
+    // Read back the golden file.
+    val expectedOutputs: Seq[QueryOutput] = {
+      val goldenOutput = fileToString(new File(resultFile))
+      val segments = goldenOutput.split("-- !query.*\n")
+
+      // each query has 3 segments, plus the header
+      assert(segments.size == outputs.size * 3 + 1,
+        s"Expected ${outputs.size * 3 + 1} blocks in result file but got ${segments.size}. " +
+          s"Try regenerate the result files.")
+      Seq.tabulate(outputs.size) { i =>
+        QueryOutput(
+          sql = segments(i * 3 + 1).trim,
+          schema = segments(i * 3 + 2).trim,
+          output = segments(i * 3 + 3).replaceAll("\\s+$", "")
+        )
+      }
+    }
+
+    // Compare results.
+    assertResult(expectedOutputs.size, s"Number of queries should be ${expectedOutputs.size}") {
+      outputs.size
+    }
+
+    outputs.zip(expectedOutputs).zipWithIndex.foreach { case ((output, expected), i) =>
+      assertResult(expected.sql, s"SQL query did not match for query #$i\n${expected.sql}") {
+        output.sql
+      }
+      assertResult(expected.schema,
+        s"Schema did not match for query #$i\n${expected.sql}: $output") {
+        output.schema
+      }
+      assertResult(expected.output, s"Result did not match" +
+        s" for query #$i\n${expected.sql}") {
+        output.output
+      }
+    }
   }
 }
 

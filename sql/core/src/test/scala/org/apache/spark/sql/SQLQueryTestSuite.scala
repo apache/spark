@@ -21,14 +21,12 @@ import java.io.File
 import java.net.URI
 import java.util.Locale
 
-import scala.collection.mutable.ArrayBuffer
-
 import org.apache.spark.{SparkConf, TestUtils}
 import org.apache.spark.sql.catalyst.expressions.codegen.CodeGenerator
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
-import org.apache.spark.sql.catalyst.util.{fileToString, stringToFile}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.NANOS_PER_SECOND
+import org.apache.spark.sql.catalyst.util.stringToFile
 import org.apache.spark.sql.execution.WholeStageCodegenExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.TimestampTypes
@@ -138,8 +136,6 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
   protected val inputFilePath = new File(baseResourcePath, "inputs").getAbsolutePath
   protected val goldenFilePath = new File(baseResourcePath, "results").getAbsolutePath
 
-  protected val validFileExtensions = ".sql"
-
   protected override def sparkConf: SparkConf = super.sparkConf
     // Fewer shuffle partitions to speed up testing.
     .set(SQLConf.SHUFFLE_PARTITIONS, 4)
@@ -161,26 +157,6 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
   // Create all the test cases.
   listTestCases.foreach(createScalaTestCase)
 
-  /** A single SQL query's output. */
-  protected case class QueryOutput(sql: String, schema: String, output: String) {
-    override def toString: String = {
-      // We are explicitly not using multi-line string due to stripMargin removing "|" in output.
-      s"-- !query\n" +
-        sql + "\n" +
-        s"-- !query schema\n" +
-        schema + "\n" +
-        s"-- !query output\n" +
-        output
-    }
-  }
-
-  /** A test case. */
-  protected trait TestCase {
-    val name: String
-    val inputFile: String
-    val resultFile: String
-  }
-
   /**
    * traits that indicate UDF or PgSQL to trigger the code path specific to each. For instance,
    * PgSQL tests require to register some UDF functions.
@@ -200,10 +176,6 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
   protected trait UDFTest {
     val udf: TestUDF
   }
-
-  /** A regular test case. */
-  protected case class RegularTestCase(
-      name: String, inputFile: String, resultFile: String) extends TestCase
 
   /** A PostgreSQL test case. */
   protected case class PgSQLTestCase(
@@ -266,111 +238,8 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
       case _ =>
         // Create a test case to run this case.
         test(testCase.name) {
-          runTest(testCase)
+          runTest(testCase, listTestCases, runQueries)
         }
-    }
-  }
-
-  /** Run a test case. */
-  protected def runTest(testCase: TestCase): Unit = {
-    def splitWithSemicolon(seq: Seq[String]) = {
-      seq.mkString("\n").split("(?<=[^\\\\]);")
-    }
-
-    def splitCommentsAndCodes(input: String) = input.split("\n").partition { line =>
-      val newLine = line.trim
-      newLine.startsWith("--") && !newLine.startsWith("--QUERY-DELIMITER")
-    }
-
-    val input = fileToString(new File(testCase.inputFile))
-
-    val (comments, code) = splitCommentsAndCodes(input)
-
-    // If `--IMPORT` found, load code from another test case file, then insert them
-    // into the head in this test.
-    val importedTestCaseName = comments.filter(_.startsWith("--IMPORT ")).map(_.substring(9))
-    val importedCode = importedTestCaseName.flatMap { testCaseName =>
-      listTestCases.find(_.name == testCaseName).map { testCase =>
-        val input = fileToString(new File(testCase.inputFile))
-        val (_, code) = splitCommentsAndCodes(input)
-        code
-      }
-    }.flatten
-
-    val allCode = importedCode ++ code
-    val tempQueries = if (allCode.exists(_.trim.startsWith("--QUERY-DELIMITER"))) {
-      // Although the loop is heavy, only used for bracketed comments test.
-      val queries = new ArrayBuffer[String]
-      val otherCodes = new ArrayBuffer[String]
-      var tempStr = ""
-      var start = false
-      for (c <- allCode) {
-        if (c.trim.startsWith("--QUERY-DELIMITER-START")) {
-          start = true
-          queries ++= splitWithSemicolon(otherCodes.toSeq)
-          otherCodes.clear()
-        } else if (c.trim.startsWith("--QUERY-DELIMITER-END")) {
-          start = false
-          queries += s"\n${tempStr.stripSuffix(";")}"
-          tempStr = ""
-        } else if (start) {
-          tempStr += s"\n$c"
-        } else {
-          otherCodes += c
-        }
-      }
-      if (otherCodes.nonEmpty) {
-        queries ++= splitWithSemicolon(otherCodes.toSeq)
-      }
-      queries.toSeq
-    } else {
-      splitWithSemicolon(allCode).toSeq
-    }
-
-    // List of SQL queries to run
-    val queries = tempQueries.map(_.trim).filter(_ != "").toSeq
-      // Fix misplacement when comment is at the end of the query.
-      .map(_.split("\n").filterNot(_.startsWith("--")).mkString("\n")).map(_.trim).filter(_ != "")
-
-    val settingLines = comments.filter(_.startsWith("--SET ")).map(_.substring(6))
-    val settings = settingLines.flatMap(_.split(",").map { kv =>
-      val (conf, value) = kv.span(_ != '=')
-      conf.trim -> value.substring(1).trim
-    })
-
-    if (regenerateGoldenFiles) {
-      runQueries(queries, testCase, settings)
-    } else {
-      // A config dimension has multiple config sets, and a config set has multiple configs.
-      // - config dim:     Seq[Seq[(String, String)]]
-      //   - config set:   Seq[(String, String)]
-      //     - config:     (String, String))
-      // We need to do cartesian product for all the config dimensions, to get a list of
-      // config sets, and run the query once for each config set.
-      val configDimLines = comments.filter(_.startsWith("--CONFIG_DIM")).map(_.substring(12))
-      val configDims = configDimLines.groupBy(_.takeWhile(_ != ' ')).mapValues { lines =>
-        lines.map(_.dropWhile(_ != ' ').substring(1)).map(_.split(",").map { kv =>
-          val (conf, value) = kv.span(_ != '=')
-          conf.trim -> value.substring(1).trim
-        }.toSeq).toSeq
-      }
-
-      val configSets = configDims.values.foldLeft(Seq(Seq[(String, String)]())) { (res, dim) =>
-        dim.flatMap { configSet => res.map(_ ++ configSet) }
-      }
-
-      configSets.foreach { configSet =>
-        try {
-          runQueries(queries, testCase, settings ++ configSet)
-        } catch {
-          case e: Throwable =>
-            val configs = configSet.map {
-              case (k, v) => s"$k=$v"
-            }
-            logError(s"Error using configs: ${configs.mkString(",")}")
-            throw e
-        }
-      }
     }
   }
 
@@ -460,40 +329,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
     }
 
     withClue(clue) {
-      // Read back the golden file.
-      val expectedOutputs: Seq[QueryOutput] = {
-        val goldenOutput = fileToString(new File(testCase.resultFile))
-        val segments = goldenOutput.split("-- !query.*\n")
-
-        // each query has 3 segments, plus the header
-        assert(segments.size == outputs.size * 3 + 1,
-          s"Expected ${outputs.size * 3 + 1} blocks in result file but got ${segments.size}. " +
-            s"Try regenerate the result files.")
-        Seq.tabulate(outputs.size) { i =>
-          QueryOutput(
-            sql = segments(i * 3 + 1).trim,
-            schema = segments(i * 3 + 2).trim,
-            output = segments(i * 3 + 3).replaceAll("\\s+$", "")
-          )
-        }
-      }
-
-      // Compare results.
-      assertResult(expectedOutputs.size, s"Number of queries should be ${expectedOutputs.size}") {
-        outputs.size
-      }
-
-      outputs.zip(expectedOutputs).zipWithIndex.foreach { case ((output, expected), i) =>
-        assertResult(expected.sql, s"SQL query did not match for query #$i\n${expected.sql}") {
-          output.sql
-        }
-        assertResult(expected.schema,
-          s"Schema did not match for query #$i\n${expected.sql}: $output") {
-          output.schema
-        }
-        assertResult(expected.output, s"Result did not match" +
-          s" for query #$i\n${expected.sql}") { output.output }
-      }
+      readGoldenFileAndCompareResults(testCase.resultFile, outputs)
     }
   }
 
@@ -529,15 +365,6 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
         RegularTestCase(testCaseName, absPath, resultFile) :: Nil
       }
     }.sortBy(_.name)
-  }
-
-  /** Returns all the files (not directories) in a directory, recursively. */
-  protected def listFilesRecursively(path: File): Seq[File] = {
-    val (dirs, files) = path.listFiles().partition(_.isDirectory)
-    // Filter out test files with invalid extensions such as temp files created
-    // by vi (.swp), Mac (.DS_Store) etc.
-    val filteredFiles = files.filter(_.getName.endsWith(validFileExtensions))
-    filteredFiles ++ dirs.flatMap(listFilesRecursively)
   }
 
   /** Load built-in test tables into the SparkSession. */

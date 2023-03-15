@@ -17,23 +17,30 @@
 
 package org.apache.spark.sql
 
+import java.io.File
+
+import scala.collection.mutable.ArrayBuffer
 import scala.util.control.NonFatal
 
 import org.apache.spark.{SparkException, SparkThrowable}
 import org.apache.spark.ErrorMessageFormat.MINIMAL
 import org.apache.spark.SparkThrowableHelper.getMessage
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.util.fileToString
 import org.apache.spark.sql.execution.HiveResult.hiveResultString
 import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.command.{DescribeColumnCommand, DescribeCommandBase}
 import org.apache.spark.sql.types.StructType
 
-trait SQLQueryTestHelper {
+trait SQLQueryTestHelper extends Logging {
 
   private val notIncludedMsg = "[not included in comparison]"
   private val clsName = this.getClass.getCanonicalName
   protected val emptySchema = StructType(Seq.empty).catalogString
+
+  protected val validFileExtensions = ".sql"
 
   protected def replaceNotIncludedMsg(line: String): String = {
     line.replaceAll("#\\d+", "#x")
@@ -107,5 +114,137 @@ trait SQLQueryTestHelper {
         // If there is an exception, put the exception class followed by the message.
         (emptySchema, Seq(e.getClass.getName, e.getMessage))
     }
+  }
+
+  /** A test case. */
+  protected trait TestCase {
+    val name: String
+    val inputFile: String
+    val resultFile: String
+  }
+
+  /** A regular test case. */
+  protected case class RegularTestCase(
+    name: String, inputFile: String, resultFile: String) extends TestCase
+
+  /** Run a test case. */
+  protected def runTest(
+      testCase: TestCase,
+      listTestCases: Seq[TestCase],
+      runQueries: (
+        Seq[String], // queries
+          TestCase, // test case
+          Seq[(String, String)] // config set
+        ) => Unit): Unit = {
+    val input = fileToString(new File(testCase.inputFile))
+
+    val (comments, code) = splitCommentsAndCodes(input)
+
+    // If `--IMPORT` found, load code from another test case file, then insert them
+    // into the head in this test.
+    val importedTestCaseName = comments.filter(_.startsWith("--IMPORT ")).map(_.substring(9))
+    val importedCode = importedTestCaseName.flatMap { testCaseName =>
+      listTestCases.find(_.name == testCaseName).map { testCase =>
+        val input = fileToString(new File(testCase.inputFile))
+        val (_, code) = splitCommentsAndCodes(input)
+        code
+      }
+    }.flatten
+
+    val allCode = importedCode ++ code
+    val tempQueries = if (allCode.exists(_.trim.startsWith("--QUERY-DELIMITER"))) {
+      // Although the loop is heavy, only used for bracketed comments test.
+      val queries = new ArrayBuffer[String]
+      val otherCodes = new ArrayBuffer[String]
+      var tempStr = ""
+      var start = false
+      for (c <- allCode) {
+        if (c.trim.startsWith("--QUERY-DELIMITER-START")) {
+          start = true
+          queries ++= splitWithSemicolon(otherCodes)
+          otherCodes.clear()
+        } else if (c.trim.startsWith("--QUERY-DELIMITER-END")) {
+          start = false
+          queries += s"\n${tempStr.stripSuffix(";")}"
+          tempStr = ""
+        } else if (start) {
+          tempStr += s"\n$c"
+        } else {
+          otherCodes += c
+        }
+      }
+      if (otherCodes.nonEmpty) {
+        queries ++= splitWithSemicolon(otherCodes)
+      }
+      queries
+    } else {
+      splitWithSemicolon(allCode).toSeq
+    }
+
+    // List of SQL queries to run
+    val queries = tempQueries.map(_.trim).filter(_ != "")
+      // Fix misplacement when comment is at the end of the query.
+      .map(_.split("\n").filterNot(_.startsWith("--")).mkString("\n")).map(_.trim).filter(_ != "")
+
+    val settingLines = comments.filter(_.startsWith("--SET ")).map(_.substring(6))
+    val settings = settingLines.flatMap(_.split(",").map { kv =>
+      val (conf, value) = kv.span(_ != '=')
+      conf.trim -> value.substring(1).trim
+    })
+
+    val regenerateGoldenFiles: Boolean = System.getenv("SPARK_GENERATE_GOLDEN_FILES") == "1"
+    if (regenerateGoldenFiles) {
+      runQueries(queries, testCase, settings)
+    } else {
+      // A config dimension has multiple config sets, and a config set has multiple configs.
+      // - config dim:     Seq[Seq[(String, String)]]
+      //   - config set:   Seq[(String, String)]
+      //     - config:     (String, String))
+      // We need to do cartesian product for all the config dimensions, to get a list of
+      // config sets, and run the query once for each config set.
+      val configDimLines = comments.filter(_.startsWith("--CONFIG_DIM")).map(_.substring(12))
+      val configDims = configDimLines.groupBy(_.takeWhile(_ != ' ')).mapValues { lines =>
+        lines.map(_.dropWhile(_ != ' ').substring(1)).map(_.split(",").map { kv =>
+          val (conf, value) = kv.span(_ != '=')
+          conf.trim -> value.substring(1).trim
+        }.toSeq).toSeq
+      }
+
+      val configSets = configDims.values.foldLeft(Seq(Seq[(String, String)]())) { (res, dim) =>
+        dim.flatMap { configSet => res.map(_ ++ configSet) }
+      }
+
+      configSets.foreach { configSet =>
+        try {
+          runQueries(queries, testCase, settings ++ configSet)
+        } catch {
+          case e: Throwable =>
+            val configs = configSet.map {
+              case (k, v) => s"$k=$v"
+            }
+            logError(s"Error using configs: ${configs.mkString(",")}")
+            throw e
+        }
+      }
+    }
+  }
+
+  protected def splitWithSemicolon(seq: Seq[String]): Array[String] = {
+    seq.mkString("\n").split("(?<=[^\\\\]);")
+  }
+
+  protected def splitCommentsAndCodes(input: String): (Array[String], Array[String]) =
+    input.split("\n").partition { line =>
+      val newLine = line.trim
+      newLine.startsWith("--") && !newLine.startsWith("--QUERY-DELIMITER")
+    }
+
+  /** Returns all the files (not directories) in a directory, recursively. */
+  protected def listFilesRecursively(path: File): Seq[File] = {
+    val (dirs, files) = path.listFiles().partition(_.isDirectory)
+    // Filter out test files with invalid extensions such as temp files created
+    // by vi (.swp), Mac (.DS_Store) etc.
+    val filteredFiles = files.filter(_.getName.endsWith(validFileExtensions))
+    filteredFiles ++ dirs.flatMap(listFilesRecursively)
   }
 }

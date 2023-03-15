@@ -76,7 +76,7 @@ class ExpressionsSchemaSuite extends QueryTest with SharedSparkSession {
   private val resultFile = new File(baseResourcePath, "sql-expression-schema.md")
 
   /** A single SQL query's SQL and schema. */
-  protected case class QueryOutput(
+  protected case class ExpressionSQLOutput(
       className: String,
       funcName: String,
       sql: String = "N/A",
@@ -96,7 +96,7 @@ class ExpressionsSchemaSuite extends QueryTest with SharedSparkSession {
       case (className, infos) => (className, infos.sortBy(_.getName))
     }
     val outputBuffer = new ArrayBuffer[String]
-    val outputs = new ArrayBuffer[QueryOutput]
+    val outputs = new ArrayBuffer[ExpressionSQLOutput]
     val missingExamples = new ArrayBuffer[String]
 
     classFunsMap.foreach { kv =>
@@ -105,7 +105,7 @@ class ExpressionsSchemaSuite extends QueryTest with SharedSparkSession {
         val example = funInfo.getExamples
         val funcName = funInfo.getName.replaceAll("\\|", "&#124;")
         if (example == "") {
-          val queryOutput = QueryOutput(className, funcName)
+          val queryOutput = ExpressionSQLOutput(className, funcName)
           outputBuffer += queryOutput.toString
           outputs += queryOutput
           missingExamples += funcName
@@ -121,7 +121,7 @@ class ExpressionsSchemaSuite extends QueryTest with SharedSparkSession {
             val df = spark.sql(sql)
             val escapedSql = sql.replaceAll("\\|", "&#124;")
             val schema = df.schema.catalogString.replaceAll("\\|", "&#124;")
-            val queryOutput = QueryOutput(className, funcName, escapedSql, schema)
+            val queryOutput = ExpressionSQLOutput(className, funcName, escapedSql, schema)
             outputBuffer += queryOutput.toString
             outputs += queryOutput
           case _ =>
@@ -167,7 +167,7 @@ class ExpressionsSchemaSuite extends QueryTest with SharedSparkSession {
 
       Seq.tabulate(outputSize) { i =>
         val segments = lines(i + headerSize).split('|')
-        QueryOutput(
+        ExpressionSQLOutput(
           className = segments(1).trim,
           funcName = segments(2).trim,
           sql = segments(3).trim,
