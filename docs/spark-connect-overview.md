@@ -145,8 +145,11 @@ And start the Spark shell as usual:
 ./bin/pyspark
 {% endhighlight %}
 
-The PySpark shell is now connected to Spark using Spark Connect as indicated in the welcome
-message.
+The PySpark shell is now connected to Spark using Spark Connect as indicated in the welcome message:
+
+{% highlight python %}
+Client connected to the Spark Connect server at localhost
+{% endhighlight %}
 </div>
 
 </div>
@@ -180,14 +183,27 @@ illustrated here.
 <div data-lang="python"  markdown="1">
 To launch the PySpark shell with Spark Connect, simply include the `remote`
 parameter and specify the location of your Spark server. We are using `localhost`
-in this example to connect to the local Spark server we started previously.
+in this example to connect to the local Spark server we started previously:
 
 {% highlight bash %}
 ./bin/pyspark --remote "sc://localhost"
 {% endhighlight %}
 
 And you will notice that the PySpark shell welcome message tells you that
-you have connected to Spark using Spark Connect.
+you have connected to Spark using Spark Connect:
+
+{% highlight python %}
+Client connected to the Spark Connect server at localhost
+{% endhighlight %}
+
+You can also check the Spark session type. If it includes `.connect.` you
+are using Spark Connect as shown in this example:
+
+{% highlight python %}
+SparkSession available as 'spark'.
+>>> type(spark)
+<class 'pyspark.sql.connect.session.SparkSession'>
+{% endhighlight %}
 
 Now you can run PySpark code in the shell to see Spark Connect in action:
 
@@ -202,8 +218,6 @@ Now you can run PySpark code in the shell to see Spark Connect in action:
 |  1|Sarah|
 |  2|Maria|
 +---+-----+
-
->>>
 {% endhighlight %}
 </div>
 
