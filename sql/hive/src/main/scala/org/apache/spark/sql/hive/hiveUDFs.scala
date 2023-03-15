@@ -48,18 +48,25 @@ import org.apache.spark.sql.types._
 private[hive] case class HiveSimpleUDF(
     name: String, funcWrapper: HiveFunctionWrapper, children: Seq[Expression])
   extends Expression
+  with HiveInspectors
   with UserDefinedExpression {
 
   @transient
   private lazy val evaluator = new HiveSimpleUDFEvaluator(funcWrapper, children)
 
-  override lazy val deterministic: Boolean = evaluator.deterministic
+  @transient
+  private val isUDFDeterministic = {
+    val udfType = evaluator.function.getClass.getAnnotation(classOf[HiveUDFType])
+    udfType != null && udfType.deterministic() && !udfType.stateful()
+  }
+
+  override lazy val deterministic: Boolean = isUDFDeterministic && children.forall(_.deterministic)
 
   override def nullable: Boolean = true
 
-  override def foldable: Boolean = evaluator.foldable
+  override def foldable: Boolean = isUDFDeterministic && children.forall(_.foldable)
 
-  override lazy val dataType = evaluator.dataType
+  override lazy val dataType: DataType = javaTypeToDataType(evaluator.method.getGenericReturnType)
 
   // TODO: Finish input output types.
   override def eval(input: InternalRow): Any = {
@@ -82,41 +89,29 @@ private[hive] case class HiveSimpleUDF(
     copy(children = newChildren)
 
   protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    evaluator.doGenCode(ctx, ev)
+    evaluator.doGenCode(ctx, ev, dataType)
   }
 }
 
-abstract class HiveUDFEvaluatorBase(
+abstract class HiveUDFEvaluatorBase[UDFType <: AnyRef](
     funcWrapper: HiveFunctionWrapper, children: Seq[Expression])
   extends HiveInspectors with Serializable {
 
-  def foldable: Boolean
-
-  def dataType: DataType
-
-  def functionClass: Class[_ <: AnyRef]
-
   @transient
-  val isUDFDeterministic = {
-    val udfType = functionClass.getAnnotation(classOf[HiveUDFType])
-    udfType != null && udfType.deterministic() && !udfType.stateful()
-  }
+  lazy val function = funcWrapper.createFunction[UDFType]()
 
-  @transient
-  val deterministic: Boolean = isUDFDeterministic && children.forall(_.deterministic)
-
-  private[hive] def setArg(index: Int, arg: Any): Unit
+  def setArg(index: Int, arg: Any): Unit
 
   def unwrapper: Any => Any
 
   def result: Any
 
-  final private[hive] def evaluate(): Any = {
+  final def evaluate(): Any = {
     val ret = result
     unwrapper(ret)
   }
 
-  final def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+  final def doGenCode(ctx: CodegenContext, ev: ExprCode, dataType: DataType): ExprCode = {
     val refEvaluator = ctx.addReferenceObj("evaluator", this)
     val evals = children.map(_.genCode(ctx))
 
@@ -160,20 +155,11 @@ abstract class HiveUDFEvaluatorBase(
 
 class HiveSimpleUDFEvaluator(
     funcWrapper: HiveFunctionWrapper, children: Seq[Expression])
-  extends HiveUDFEvaluatorBase(funcWrapper: HiveFunctionWrapper, children) {
-
-  override def foldable: Boolean = isUDFDeterministic && children.forall(_.foldable)
-
-  override def dataType: DataType = javaTypeToDataType(method.getGenericReturnType)
+  extends HiveUDFEvaluatorBase[UDF](funcWrapper, children) {
 
   @transient
-  private lazy val function = funcWrapper.createFunction[UDF]()
-
-  override def functionClass: Class[_ <: AnyRef] = function.getClass
-
-  @transient
-  private lazy val method =
-    function.getResolver.getEvalMethod(children.map(_.dataType.toTypeInfo).asJava)
+  lazy val method = function.getResolver.
+    getEvalMethod(children.map(_.dataType.toTypeInfo).asJava)
 
   @transient
   private lazy val wrappers = children.map(x => wrapperFor(toInspector(x), x.dataType)).toArray
@@ -188,7 +174,7 @@ class HiveSimpleUDFEvaluator(
   @transient
   private lazy val inputs: Array[AnyRef] = new Array[AnyRef](children.length)
 
-  override private[hive] def setArg(index: Int, arg: Any): Unit = {
+  override def setArg(index: Int, arg: Any): Unit = {
     inputs(index) = wrappers(index)(arg).asInstanceOf[AnyRef]
   }
 
