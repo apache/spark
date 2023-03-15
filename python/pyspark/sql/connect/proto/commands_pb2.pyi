@@ -52,7 +52,6 @@ else:
 
 DESCRIPTOR: google.protobuf.descriptor.FileDescriptor
 
-@typing_extensions.final
 class Command(google.protobuf.message.Message):
     """A [[Command]] is an operation that is executed by the server that does not directly consume or
     produce a relational result.
@@ -145,7 +144,6 @@ class Command(google.protobuf.message.Message):
 
 global___Command = Command
 
-@typing_extensions.final
 class SqlCommand(google.protobuf.message.Message):
     """A SQL Command is used to trigger the eager evaluation of SQL commands in Spark.
 
@@ -157,7 +155,6 @@ class SqlCommand(google.protobuf.message.Message):
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-    @typing_extensions.final
     class ArgsEntry(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -194,7 +191,6 @@ class SqlCommand(google.protobuf.message.Message):
 
 global___SqlCommand = SqlCommand
 
-@typing_extensions.final
 class CreateDataFrameViewCommand(google.protobuf.message.Message):
     """A command that can create DataFrame global temp view or local temp view."""
 
@@ -237,7 +233,6 @@ class CreateDataFrameViewCommand(google.protobuf.message.Message):
 
 global___CreateDataFrameViewCommand = CreateDataFrameViewCommand
 
-@typing_extensions.final
 class WriteOperation(google.protobuf.message.Message):
     """As writes are not directly handled during analysis and planning, they are modeled as commands."""
 
@@ -267,7 +262,6 @@ class WriteOperation(google.protobuf.message.Message):
     SAVE_MODE_ERROR_IF_EXISTS: WriteOperation.SaveMode.ValueType  # 3
     SAVE_MODE_IGNORE: WriteOperation.SaveMode.ValueType  # 4
 
-    @typing_extensions.final
     class OptionsEntry(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -285,7 +279,6 @@ class WriteOperation(google.protobuf.message.Message):
             self, field_name: typing_extensions.Literal["key", b"key", "value", b"value"]
         ) -> None: ...
 
-    @typing_extensions.final
     class SaveTable(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -328,7 +321,6 @@ class WriteOperation(google.protobuf.message.Message):
             ],
         ) -> None: ...
 
-    @typing_extensions.final
     class BucketBy(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -459,7 +451,6 @@ class WriteOperation(google.protobuf.message.Message):
 
 global___WriteOperation = WriteOperation
 
-@typing_extensions.final
 class WriteOperationV2(google.protobuf.message.Message):
     """As writes are not directly handled during analysis and planning, they are modeled as commands."""
 
@@ -493,7 +484,6 @@ class WriteOperationV2(google.protobuf.message.Message):
     MODE_REPLACE: WriteOperationV2.Mode.ValueType  # 5
     MODE_CREATE_OR_REPLACE: WriteOperationV2.Mode.ValueType  # 6
 
-    @typing_extensions.final
     class OptionsEntry(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -511,7 +501,6 @@ class WriteOperationV2(google.protobuf.message.Message):
             self, field_name: typing_extensions.Literal["key", b"key", "value", b"value"]
         ) -> None: ...
 
-    @typing_extensions.final
     class TablePropertiesEntry(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 

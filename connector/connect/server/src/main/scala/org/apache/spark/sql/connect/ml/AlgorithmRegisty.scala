@@ -129,10 +129,10 @@ class LogisticRegressionAlgorithm extends Algorithm {
       name: String,
       datasetOpt: Option[DataFrame]): Either[proto.MlCommandResponse, DataFrame] = {
     val lorModel = model.asInstanceOf[ml.classification.LogisticRegressionModel]
-    val summary = if (datasetOpt.isDefined) {
-      lorModel.evaluate(datasetOpt.get)
-    } else {
-      lorModel.summary
+
+    val summary = datasetOpt match {
+      case Some(dataset) => lorModel.evaluate(dataset)
+      case None => lorModel.summary
     }
     val attrValueOpt = if (lorModel.numClasses <= 2) {
       SummaryUtils.getBinaryClassificationSummaryAttr(summary.asBinary, name)

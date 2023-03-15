@@ -18,6 +18,7 @@
 package org.apache.spark.sql.connect.ml
 
 import scala.collection.JavaConverters._
+import scala.language.existentials
 
 import org.apache.spark.connect.proto
 import org.apache.spark.ml.Model
@@ -56,17 +57,14 @@ object MLHandler {
 
       case proto.MlCommand.MlCommandTypeCase.FETCH_MODEL_ATTR =>
         val getModelAttrProto = mlCommand.getFetchModelAttr
-        val modelEntry = sessionHolder.mlCache.modelCache.get(getModelAttrProto.getModelRefId)
-        val model = modelEntry._1
-        val algo = modelEntry._2
+        val (model, algo) =
+          sessionHolder.mlCache.modelCache.get(getModelAttrProto.getModelRefId)
         algo.getModelAttr(model, getModelAttrProto.getName).left.get
 
       case proto.MlCommand.MlCommandTypeCase.FETCH_MODEL_SUMMARY_ATTR =>
         val getModelSummaryAttrProto = mlCommand.getFetchModelSummaryAttr
-        val modelEntry =
+        val (model, algo) =
           sessionHolder.mlCache.modelCache.get(getModelSummaryAttrProto.getModelRefId)
-        val model = modelEntry._1
-        val algo = modelEntry._2
         // Create a copied model to avoid concurrently modify model params.
         val copiedModel = model.copy(ParamMap.empty).asInstanceOf[Model[_]]
         MLUtils.setInstanceParams(copiedModel, getModelSummaryAttrProto.getParams)
@@ -100,9 +98,8 @@ object MLHandler {
 
       case proto.MlCommand.MlCommandTypeCase.SAVE_MODEL =>
         val saveModelProto = mlCommand.getSaveModel
-        val modelEntry = sessionHolder.mlCache.modelCache.get(saveModelProto.getModelRefId)
-        val model = modelEntry._1
-        val algo = modelEntry._2
+        val (model, algo) =
+          sessionHolder.mlCache.modelCache.get(saveModelProto.getModelRefId)
         algo.saveModel(
           model,
           saveModelProto.getPath,
@@ -161,9 +158,8 @@ object MLHandler {
 
       case proto.MlCommand.MlCommandTypeCase.COPY_MODEL =>
         val copyModelProto = mlCommand.getCopyModel
-        val modelEntry = sessionHolder.mlCache.modelCache.get(copyModelProto.getModelRefId)
-        val model = modelEntry._1
-        val algo = modelEntry._2
+        val (model, algo) =
+          sessionHolder.mlCache.modelCache.get(copyModelProto.getModelRefId)
         val copiedModel = model.copy(ParamMap.empty).asInstanceOf[Model[_]]
         val refId = sessionHolder.mlCache.modelCache.register(copiedModel, algo)
         proto.MlCommandResponse
@@ -201,16 +197,14 @@ object MLHandler {
 
       case proto.MlRelation.MlRelationTypeCase.MODEL_ATTR =>
         val modelAttrProto = mlRelationProto.getModelAttr
-        val modelEntry = sessionHolder.mlCache.modelCache.get(modelAttrProto.getModelRefId)
-        val model = modelEntry._1
-        val algo = modelEntry._2
+        val (model, algo) =
+          sessionHolder.mlCache.modelCache.get(modelAttrProto.getModelRefId)
         algo.getModelAttr(model, modelAttrProto.getName).right.get
 
       case proto.MlRelation.MlRelationTypeCase.MODEL_SUMMARY_ATTR =>
         val modelSummaryAttr = mlRelationProto.getModelSummaryAttr
-        val modelEntry = sessionHolder.mlCache.modelCache.get(modelSummaryAttr.getModelRefId)
-        val model = modelEntry._1
-        val algo = modelEntry._2
+        val (model, algo) =
+          sessionHolder.mlCache.modelCache.get(modelSummaryAttr.getModelRefId)
         // Create a copied model to avoid concurrently modify model params.
         val copiedModel = model.copy(ParamMap.empty).asInstanceOf[Model[_]]
         MLUtils.setInstanceParams(copiedModel, modelSummaryAttr.getParams)

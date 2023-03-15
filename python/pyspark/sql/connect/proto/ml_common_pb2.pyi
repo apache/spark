@@ -50,11 +50,13 @@ else:
 
 DESCRIPTOR: google.protobuf.descriptor.FileDescriptor
 
-@typing_extensions.final
 class MlParams(google.protobuf.message.Message):
+    """MlParams stores param settings for
+    ML Estimator / Transformer / Model / Evaluator
+    """
+
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-    @typing_extensions.final
     class ParamsEntry(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -76,7 +78,6 @@ class MlParams(google.protobuf.message.Message):
             self, field_name: typing_extensions.Literal["key", b"key", "value", b"value"]
         ) -> None: ...
 
-    @typing_extensions.final
     class DefaultParamsEntry(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -105,13 +106,15 @@ class MlParams(google.protobuf.message.Message):
         self,
     ) -> google.protobuf.internal.containers.MessageMap[
         builtins.str, pyspark.sql.connect.proto.expressions_pb2.Expression.Literal
-    ]: ...
+    ]:
+        """user-supplied params"""
     @property
     def default_params(
         self,
     ) -> google.protobuf.internal.containers.MessageMap[
         builtins.str, pyspark.sql.connect.proto.expressions_pb2.Expression.Literal
-    ]: ...
+    ]:
+        """default params"""
     def __init__(
         self,
         *,
@@ -133,8 +136,9 @@ class MlParams(google.protobuf.message.Message):
 
 global___MlParams = MlParams
 
-@typing_extensions.final
 class MlStage(google.protobuf.message.Message):
+    """MlStage stores ML stage data (Estimator or Transformer)"""
+
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
     class _StageType:
@@ -146,21 +150,26 @@ class MlStage(google.protobuf.message.Message):
         builtins.type,
     ):  # noqa: F821
         DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
-        ESTIMATOR: MlStage._StageType.ValueType  # 0
-        TRANSFORMER: MlStage._StageType.ValueType  # 1
+        UNSPECIFIED: MlStage._StageType.ValueType  # 0
+        ESTIMATOR: MlStage._StageType.ValueType  # 1
+        TRANSFORMER: MlStage._StageType.ValueType  # 2
 
     class StageType(_StageType, metaclass=_StageTypeEnumTypeWrapper): ...
-    ESTIMATOR: MlStage.StageType.ValueType  # 0
-    TRANSFORMER: MlStage.StageType.ValueType  # 1
+    UNSPECIFIED: MlStage.StageType.ValueType  # 0
+    ESTIMATOR: MlStage.StageType.ValueType  # 1
+    TRANSFORMER: MlStage.StageType.ValueType  # 2
 
     NAME_FIELD_NUMBER: builtins.int
     PARAMS_FIELD_NUMBER: builtins.int
     UID_FIELD_NUMBER: builtins.int
     TYPE_FIELD_NUMBER: builtins.int
     name: builtins.str
+    """The name of the stage in the registry"""
     @property
-    def params(self) -> global___MlParams: ...
+    def params(self) -> global___MlParams:
+        """param settings for the stage"""
     uid: builtins.str
+    """unique id of the stage"""
     type: global___MlStage.StageType.ValueType
     def __init__(
         self,

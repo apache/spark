@@ -36,10 +36,12 @@ from pyspark.ml.util import HasTrainingSummary as PySparkHasTrainingSummary
 class ClientEstimator(Estimator, metaclass=ABCMeta):
 
     @classmethod
+    @abstractmethod
     def _algo_name(cls):
         raise NotImplementedError()
 
     @classmethod
+    @abstractmethod
     def _model_class(cls):
         raise NotImplementedError()
 
@@ -83,11 +85,8 @@ class ClientModel(Model, metaclass=ABCMeta):
         client._execute_ml(req)
 
     @classmethod
+    @abstractmethod
     def _algo_name(cls):
-        raise NotImplementedError()
-
-    @classmethod
-    def _model_class(cls):
         raise NotImplementedError()
 
     def _get_model_attr(self, name):
@@ -321,6 +320,7 @@ class ClientMLReader(MLReader):
 
 @inherit_doc
 class ClientMLReadable(MLReadable):
+
     @classmethod
     def read(cls) -> ClientMLReader:
         """Returns an MLReader instance for this class."""

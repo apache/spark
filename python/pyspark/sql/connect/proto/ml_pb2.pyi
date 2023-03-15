@@ -50,17 +50,21 @@ else:
 
 DESCRIPTOR: google.protobuf.descriptor.FileDescriptor
 
-@typing_extensions.final
 class MlEvaluator(google.protobuf.message.Message):
+    """MlEvaluator represents a ML Evaluator"""
+
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
     NAME_FIELD_NUMBER: builtins.int
     PARAMS_FIELD_NUMBER: builtins.int
     UID_FIELD_NUMBER: builtins.int
     name: builtins.str
+    """The name of the evaluator in the registry"""
     @property
-    def params(self) -> pyspark.sql.connect.proto.ml_common_pb2.MlParams: ...
+    def params(self) -> pyspark.sql.connect.proto.ml_common_pb2.MlParams:
+        """param settings for the evaluator"""
     uid: builtins.str
+    """unique id of the evaluator"""
     def __init__(
         self,
         *,
@@ -78,11 +82,11 @@ class MlEvaluator(google.protobuf.message.Message):
 
 global___MlEvaluator = MlEvaluator
 
-@typing_extensions.final
 class MlCommand(google.protobuf.message.Message):
+    """a MlCommand is a type container that has exactly one ML command set"""
+
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-    @typing_extensions.final
     class Fit(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -107,7 +111,6 @@ class MlCommand(google.protobuf.message.Message):
             field_name: typing_extensions.Literal["dataset", b"dataset", "estimator", b"estimator"],
         ) -> None: ...
 
-    @typing_extensions.final
     class Evaluate(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -126,7 +129,6 @@ class MlCommand(google.protobuf.message.Message):
             self, field_name: typing_extensions.Literal["evaluator", b"evaluator"]
         ) -> None: ...
 
-    @typing_extensions.final
     class LoadModel(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -144,11 +146,9 @@ class MlCommand(google.protobuf.message.Message):
             self, field_name: typing_extensions.Literal["name", b"name", "path", b"path"]
         ) -> None: ...
 
-    @typing_extensions.final
     class SaveModel(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-        @typing_extensions.final
         class OptionsEntry(google.protobuf.message.Message):
             DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -201,7 +201,6 @@ class MlCommand(google.protobuf.message.Message):
             ],
         ) -> None: ...
 
-    @typing_extensions.final
     class LoadStage(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -225,11 +224,9 @@ class MlCommand(google.protobuf.message.Message):
             ],
         ) -> None: ...
 
-    @typing_extensions.final
     class SaveStage(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-        @typing_extensions.final
         class OptionsEntry(google.protobuf.message.Message):
             DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -279,7 +276,6 @@ class MlCommand(google.protobuf.message.Message):
             ],
         ) -> None: ...
 
-    @typing_extensions.final
     class LoadEvaluator(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -297,11 +293,9 @@ class MlCommand(google.protobuf.message.Message):
             self, field_name: typing_extensions.Literal["name", b"name", "path", b"path"]
         ) -> None: ...
 
-    @typing_extensions.final
     class SaveEvaluator(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-        @typing_extensions.final
         class OptionsEntry(google.protobuf.message.Message):
             DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -358,7 +352,6 @@ class MlCommand(google.protobuf.message.Message):
             ],
         ) -> None: ...
 
-    @typing_extensions.final
     class FetchModelAttr(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -377,7 +370,6 @@ class MlCommand(google.protobuf.message.Message):
             field_name: typing_extensions.Literal["model_ref_id", b"model_ref_id", "name", b"name"],
         ) -> None: ...
 
-    @typing_extensions.final
     class FetchModelSummaryAttr(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -435,7 +427,6 @@ class MlCommand(google.protobuf.message.Message):
             oneof_group: typing_extensions.Literal["_evaluation_dataset", b"_evaluation_dataset"],
         ) -> typing_extensions.Literal["evaluation_dataset"] | None: ...
 
-    @typing_extensions.final
     class CopyModel(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -450,7 +441,6 @@ class MlCommand(google.protobuf.message.Message):
             self, field_name: typing_extensions.Literal["model_ref_id", b"model_ref_id"]
         ) -> None: ...
 
-    @typing_extensions.final
     class DeleteModel(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -478,29 +468,41 @@ class MlCommand(google.protobuf.message.Message):
     COPY_MODEL_FIELD_NUMBER: builtins.int
     DELETE_MODEL_FIELD_NUMBER: builtins.int
     @property
-    def fit(self) -> global___MlCommand.Fit: ...
+    def fit(self) -> global___MlCommand.Fit:
+        """call `estimator.fit` and returns a model"""
     @property
-    def fetch_model_attr(self) -> global___MlCommand.FetchModelAttr: ...
+    def fetch_model_attr(self) -> global___MlCommand.FetchModelAttr:
+        """get model attribute"""
     @property
-    def fetch_model_summary_attr(self) -> global___MlCommand.FetchModelSummaryAttr: ...
+    def fetch_model_summary_attr(self) -> global___MlCommand.FetchModelSummaryAttr:
+        """get model summary attribute"""
     @property
-    def load_model(self) -> global___MlCommand.LoadModel: ...
+    def load_model(self) -> global___MlCommand.LoadModel:
+        """load model"""
     @property
-    def save_model(self) -> global___MlCommand.SaveModel: ...
+    def save_model(self) -> global___MlCommand.SaveModel:
+        """save model"""
     @property
-    def evaluate(self) -> global___MlCommand.Evaluate: ...
+    def evaluate(self) -> global___MlCommand.Evaluate:
+        """call `evaluator.evaluate`"""
     @property
-    def save_stage(self) -> global___MlCommand.SaveStage: ...
+    def save_stage(self) -> global___MlCommand.SaveStage:
+        """save estimator or transformer"""
     @property
-    def load_stage(self) -> global___MlCommand.LoadStage: ...
+    def load_stage(self) -> global___MlCommand.LoadStage:
+        """load estimator or transformer"""
     @property
-    def save_evaluator(self) -> global___MlCommand.SaveEvaluator: ...
+    def save_evaluator(self) -> global___MlCommand.SaveEvaluator:
+        """save estimator"""
     @property
-    def load_evaluator(self) -> global___MlCommand.LoadEvaluator: ...
+    def load_evaluator(self) -> global___MlCommand.LoadEvaluator:
+        """load estimator"""
     @property
-    def copy_model(self) -> global___MlCommand.CopyModel: ...
+    def copy_model(self) -> global___MlCommand.CopyModel:
+        """copy model, returns new model reference id"""
     @property
-    def delete_model(self) -> global___MlCommand.DeleteModel: ...
+    def delete_model(self) -> global___MlCommand.DeleteModel:
+        """delete server side model object by model reference id"""
     def __init__(
         self,
         *,
@@ -598,11 +600,9 @@ class MlCommand(google.protobuf.message.Message):
 
 global___MlCommand = MlCommand
 
-@typing_extensions.final
 class MlCommandResponse(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-    @typing_extensions.final
     class ModelInfo(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -697,11 +697,9 @@ class MlCommandResponse(google.protobuf.message.Message):
 
 global___MlCommandResponse = MlCommandResponse
 
-@typing_extensions.final
 class Vector(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-    @typing_extensions.final
     class Dense(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -717,7 +715,6 @@ class Vector(google.protobuf.message.Message):
         ) -> None: ...
         def ClearField(self, field_name: typing_extensions.Literal["value", b"value"]) -> None: ...
 
-    @typing_extensions.final
     class Sparse(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -777,11 +774,9 @@ class Vector(google.protobuf.message.Message):
 
 global___Vector = Vector
 
-@typing_extensions.final
 class Matrix(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-    @typing_extensions.final
     class Dense(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -818,7 +813,6 @@ class Matrix(google.protobuf.message.Message):
             ],
         ) -> None: ...
 
-    @typing_extensions.final
     class Sparse(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 

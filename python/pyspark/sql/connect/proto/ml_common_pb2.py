@@ -33,7 +33,7 @@ from pyspark.sql.connect.proto import expressions_pb2 as spark_dot_connect_dot_e
 
 
 DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(
-    b'\n\x1dspark/connect/ml_common.proto\x12\rspark.connect\x1a\x1fspark/connect/expressions.proto"\xdd\x02\n\x08MlParams\x12;\n\x06params\x18\x01 \x03(\x0b\x32#.spark.connect.MlParams.ParamsEntryR\x06params\x12Q\n\x0e\x64\x65\x66\x61ult_params\x18\x02 \x03(\x0b\x32*.spark.connect.MlParams.DefaultParamsEntryR\rdefaultParams\x1a\\\n\x0bParamsEntry\x12\x10\n\x03key\x18\x01 \x01(\tR\x03key\x12\x37\n\x05value\x18\x02 \x01(\x0b\x32!.spark.connect.Expression.LiteralR\x05value:\x02\x38\x01\x1a\x63\n\x12\x44\x65\x66\x61ultParamsEntry\x12\x10\n\x03key\x18\x01 \x01(\tR\x03key\x12\x37\n\x05value\x18\x02 \x01(\x0b\x32!.spark.connect.Expression.LiteralR\x05value:\x02\x38\x01"\xc3\x01\n\x07MlStage\x12\x12\n\x04name\x18\x01 \x01(\tR\x04name\x12/\n\x06params\x18\x02 \x01(\x0b\x32\x17.spark.connect.MlParamsR\x06params\x12\x10\n\x03uid\x18\x03 \x01(\tR\x03uid\x12\x34\n\x04type\x18\x04 \x01(\x0e\x32 .spark.connect.MlStage.StageTypeR\x04type"+\n\tStageType\x12\r\n\tESTIMATOR\x10\x00\x12\x0f\n\x0bTRANSFORMER\x10\x01\x42"\n\x1eorg.apache.spark.connect.protoP\x01\x62\x06proto3'
+    b'\n\x1dspark/connect/ml_common.proto\x12\rspark.connect\x1a\x1fspark/connect/expressions.proto"\xdd\x02\n\x08MlParams\x12;\n\x06params\x18\x01 \x03(\x0b\x32#.spark.connect.MlParams.ParamsEntryR\x06params\x12Q\n\x0e\x64\x65\x66\x61ult_params\x18\x02 \x03(\x0b\x32*.spark.connect.MlParams.DefaultParamsEntryR\rdefaultParams\x1a\\\n\x0bParamsEntry\x12\x10\n\x03key\x18\x01 \x01(\tR\x03key\x12\x37\n\x05value\x18\x02 \x01(\x0b\x32!.spark.connect.Expression.LiteralR\x05value:\x02\x38\x01\x1a\x63\n\x12\x44\x65\x66\x61ultParamsEntry\x12\x10\n\x03key\x18\x01 \x01(\tR\x03key\x12\x37\n\x05value\x18\x02 \x01(\x0b\x32!.spark.connect.Expression.LiteralR\x05value:\x02\x38\x01"\xd4\x01\n\x07MlStage\x12\x12\n\x04name\x18\x01 \x01(\tR\x04name\x12/\n\x06params\x18\x02 \x01(\x0b\x32\x17.spark.connect.MlParamsR\x06params\x12\x10\n\x03uid\x18\x03 \x01(\tR\x03uid\x12\x34\n\x04type\x18\x04 \x01(\x0e\x32 .spark.connect.MlStage.StageTypeR\x04type"<\n\tStageType\x12\x0f\n\x0bUNSPECIFIED\x10\x00\x12\r\n\tESTIMATOR\x10\x01\x12\x0f\n\x0bTRANSFORMER\x10\x02\x42"\n\x1eorg.apache.spark.connect.protoP\x01\x62\x06proto3'
 )
 
 
@@ -99,7 +99,7 @@ if _descriptor._USE_C_DESCRIPTORS == False:
     _MLPARAMS_DEFAULTPARAMSENTRY._serialized_start = 332
     _MLPARAMS_DEFAULTPARAMSENTRY._serialized_end = 431
     _MLSTAGE._serialized_start = 434
-    _MLSTAGE._serialized_end = 629
+    _MLSTAGE._serialized_end = 646
     _MLSTAGE_STAGETYPE._serialized_start = 586
-    _MLSTAGE_STAGETYPE._serialized_end = 629
+    _MLSTAGE_STAGETYPE._serialized_end = 646
 # @@protoc_insertion_point(module_scope)
