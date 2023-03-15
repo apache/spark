@@ -191,7 +191,7 @@ class Column:
     .. versionadded:: 1.3.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Examples
     --------
@@ -286,7 +286,7 @@ class Column:
     .. versionadded:: 2.3.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -365,7 +365,7 @@ class Column:
     Compute bitwise OR of this expression with another expression.
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -384,7 +384,7 @@ class Column:
     Compute bitwise AND of this expression with another expression.
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -403,7 +403,7 @@ class Column:
     Compute bitwise XOR of this expression with another expression.
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -431,7 +431,7 @@ class Column:
         .. versionadded:: 1.3.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -473,7 +473,7 @@ class Column:
         .. versionadded:: 1.3.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -521,7 +521,7 @@ class Column:
         .. versionadded:: 3.1.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -577,7 +577,7 @@ class Column:
         .. versionadded:: 3.1.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -646,7 +646,7 @@ class Column:
         .. versionadded:: 1.3.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -680,7 +680,7 @@ class Column:
         .. versionadded:: 1.3.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -718,7 +718,7 @@ class Column:
     Contains the other element. Returns a boolean :class:`Column` based on a string match.
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -736,7 +736,7 @@ class Column:
     String starts with. Returns a boolean :class:`Column` based on a string match.
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -756,7 +756,7 @@ class Column:
     String ends with. Returns a boolean :class:`Column` based on a string match.
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -782,7 +782,7 @@ class Column:
         SQL like expression. Returns a boolean :class:`Column` based on a SQL LIKE match.
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -815,7 +815,7 @@ class Column:
         match.
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -846,7 +846,7 @@ class Column:
         .. versionadded:: 3.3.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -888,7 +888,7 @@ class Column:
         .. versionadded:: 1.3.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -935,7 +935,7 @@ class Column:
         .. versionadded:: 1.5.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -972,7 +972,7 @@ class Column:
     Returns a sort expression based on the ascending order of the column.
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Examples
     --------
@@ -988,7 +988,7 @@ class Column:
     .. versionadded:: 2.4.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Examples
     --------
@@ -1005,7 +1005,7 @@ class Column:
     .. versionadded:: 2.4.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Examples
     --------
@@ -1021,7 +1021,7 @@ class Column:
     .. versionadded:: 2.4.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Examples
     --------
@@ -1037,7 +1037,7 @@ class Column:
     .. versionadded:: 2.4.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Examples
     --------
@@ -1054,7 +1054,7 @@ class Column:
     .. versionadded:: 2.4.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Examples
     --------
@@ -1075,7 +1075,7 @@ class Column:
     True if the current expression is null.
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Examples
     --------
@@ -1088,7 +1088,7 @@ class Column:
     True if the current expression is NOT null.
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Examples
     --------
@@ -1109,7 +1109,7 @@ class Column:
         .. versionadded:: 1.3.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -1167,7 +1167,7 @@ class Column:
         .. versionadded:: 1.3.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -1215,7 +1215,7 @@ class Column:
         .. versionadded:: 1.3.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -1252,7 +1252,7 @@ class Column:
         .. versionadded:: 1.4.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -1297,7 +1297,7 @@ class Column:
         .. versionadded:: 1.4.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -1337,7 +1337,7 @@ class Column:
         .. versionadded:: 1.4.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------

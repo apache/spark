@@ -28,8 +28,8 @@ import org.apache.spark.connect.proto.{ExecutePlanRequest, ExecutePlanResponse}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.connect.common.LiteralValueProtoConverter.toLiteralProto
 import org.apache.spark.sql.connect.config.Connect.CONNECT_GRPC_ARROW_MAX_BATCH_SIZE
-import org.apache.spark.sql.connect.planner.LiteralValueProtoConverter.toConnectProtoValue
 import org.apache.spark.sql.connect.planner.SparkConnectPlanner
 import org.apache.spark.sql.connect.service.SparkConnectStreamHandler.processAsArrowBatches
 import org.apache.spark.sql.execution.{SparkPlan, SQLExecution}
@@ -216,7 +216,7 @@ object SparkConnectStreamHandler {
       sessionId: String,
       dataframe: DataFrame): ExecutePlanResponse = {
     val observedMetrics = dataframe.queryExecution.observedMetrics.map { case (name, row) =>
-      val cols = (0 until row.length).map(i => toConnectProtoValue(row(i)))
+      val cols = (0 until row.length).map(i => toLiteralProto(row(i)))
       ExecutePlanResponse.ObservedMetrics
         .newBuilder()
         .setName(name)
