@@ -335,6 +335,25 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
   }
 
   /**
+   * Creates a table from the given path and returns the corresponding DataFrame. It will use the
+   * default data source configured by spark.sql.sources.default.
+   *
+   * @param tableName
+   *   is either a qualified or unqualified name that designates a table. If no database
+   *   identifier is provided, it refers to a table in the current database.
+   * @since 3.4.0
+   */
+  override def createTable(tableName: String, path: String): DataFrame = {
+    sparkSession.newDataFrame { builder =>
+      builder.getCatalogBuilder.getCreateTableBuilder
+        .setTableName(tableName)
+        .setSchema(DataTypeProtoConverter.toConnectProtoType(new StructType))
+        .setDescription("")
+        .putOptions("path", path)
+    }
+  }
+
+  /**
    * Creates a table from the given path based on a data source and returns the corresponding
    * DataFrame.
    *

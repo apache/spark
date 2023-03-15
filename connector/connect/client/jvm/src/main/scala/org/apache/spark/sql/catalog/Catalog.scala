@@ -238,6 +238,31 @@ abstract class Catalog {
   def functionExists(dbName: String, functionName: String): Boolean
 
   /**
+   * Creates a table from the given path and returns the corresponding DataFrame. It will use the
+   * default data source configured by spark.sql.sources.default.
+   *
+   * @param tableName
+   *   is either a qualified or unqualified name that designates a table. If no database
+   *   identifier is provided, it refers to a table in the current database.
+   * @since 3.4.0
+   */
+  @deprecated("use createTable instead.", "2.2.0")
+  def createExternalTable(tableName: String, path: String): DataFrame = {
+    createTable(tableName, path)
+  }
+
+  /**
+   * Creates a table from the given path and returns the corresponding DataFrame. It will use the
+   * default data source configured by spark.sql.sources.default.
+   *
+   * @param tableName
+   *   is either a qualified or unqualified name that designates a table. If no database
+   *   identifier is provided, it refers to a table in the current database.
+   * @since 3.4.0
+   */
+  def createTable(tableName: String, path: String): DataFrame
+
+  /**
    * Creates a table from the given path based on a data source and returns the corresponding
    * DataFrame.
    *

@@ -131,8 +131,6 @@ object CheckConnectJvmClientCompatibility {
       ProblemFilters.exclude[Problem]("org.apache.spark.connect.proto.*"),
 
       // Catalog
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.catalog.Catalog.createTable"),
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.catalog.Catalog.createExternalTable"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.catalog.Catalog.cacheTable"),
 
       // DataFrame Reader & Writer
