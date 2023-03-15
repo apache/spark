@@ -62,7 +62,7 @@ object SparkConnectServerUtils {
       "connector/connect/server",
       "spark-connect-assembly",
       "spark-connect").getCanonicalPath
-    val catalogImplementation = if (IntegrationTestUtils.sparkHiveJarAvailable) {
+    val catalogImplementation = if (IntegrationTestUtils.isSparkHiveJarAvailable) {
       "hive"
     } else {
       // scalastyle:off println
