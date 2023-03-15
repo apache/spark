@@ -66,6 +66,9 @@ def vector_to_array(col: Column, dtype: str = "float64") -> Column:
 
     .. versionadded:: 3.0.0
 
+    .. versionchanged:: 3.5.0
+        Supports Spark Connect.
+
     Parameters
     ----------
     col : :py:class:`pyspark.sql.Column` or str
@@ -118,6 +121,9 @@ def array_to_vector(col: Column) -> Column:
     instances
 
     .. versionadded:: 3.1.0
+
+    .. versionchanged:: 3.5.0
+        Supports Spark Connect.
 
     Parameters
     ----------
