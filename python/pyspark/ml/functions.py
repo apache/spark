@@ -35,6 +35,7 @@ from pyspark.sql.types import (
     StringType,
     StructType,
 )
+from pyspark.ml.util import try_remote_functions
 from typing import Any, Callable, Iterator, List, Mapping, TYPE_CHECKING, Tuple, Union, Optional
 
 if TYPE_CHECKING:
@@ -60,6 +61,7 @@ PredictBatchFunction = Callable[
 ]
 
 
+@try_remote_functions
 def vector_to_array(col: Column, dtype: str = "float64") -> Column:
     """
     Converts a column of MLlib sparse/dense vectors into a column of dense arrays.
@@ -115,6 +117,7 @@ def vector_to_array(col: Column, dtype: str = "float64") -> Column:
     )
 
 
+@try_remote_functions
 def array_to_vector(col: Column) -> Column:
     """
     Converts a column of array of numeric type into a column of pyspark.ml.linalg.DenseVector

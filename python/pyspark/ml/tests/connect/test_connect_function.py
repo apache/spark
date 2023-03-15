@@ -18,6 +18,8 @@ import os
 import unittest
 
 from pyspark.sql import SparkSession as PySparkSession
+from pyspark.sql.dataframe import DataFrame as SDF
+from pyspark.ml import functions as SF
 
 from pyspark.testing.sqlutils import SQLTestUtils
 from pyspark.testing.connectutils import (
@@ -27,10 +29,8 @@ from pyspark.testing.connectutils import (
 from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 
 if should_test_connect:
-    from pyspark.ml import functions as SF
-    from pyspark.sql.connect.ml import functions as CF
-    from pyspark.sql.dataframe import DataFrame as SDF
     from pyspark.sql.connect.dataframe import DataFrame as CDF
+    from pyspark.ml.connect import functions as CF
 
 
 class SparkConnectMLFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, SQLTestUtils):
@@ -102,11 +102,7 @@ class SparkConnectMLFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils,
 
 
 if __name__ == "__main__":
-    import os
-    from pyspark.sql.tests.connect.ml.test_connect_ml_function import *  # noqa: F401
-
-    # TODO(SPARK-41547): Enable ANSI mode in this file.
-    os.environ["SPARK_ANSI_SQL_MODE"] = "false"
+    from pyspark.ml.tests.connect.test_connect_function import *  # noqa: F401
 
     try:
         import xmlrunner  # type: ignore
