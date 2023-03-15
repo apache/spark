@@ -139,6 +139,7 @@ class DatetimeMethods:
         2019-12-30     1
         2019-12-31     1
         2020-01-01     1
+        Name: week, dtype: int64
         """
 
         return_types = [self._data.index.dtype] + [int, int, int]
