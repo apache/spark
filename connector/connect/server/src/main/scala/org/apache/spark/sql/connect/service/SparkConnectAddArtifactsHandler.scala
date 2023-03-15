@@ -50,19 +50,18 @@ class SparkConnectAddArtifactsHandler(val responseObserver: StreamObserver[AddAr
 
   override def onNext(req: AddArtifactsRequest): Unit = {
     if (this.holder == null) {
-      val holder = SparkConnectService.getOrCreateIsolatedSession(
+      this.holder = SparkConnectService.getOrCreateIsolatedSession(
         req.getUserContext.getUserId,
         req.getSessionId)
-      this.holder = holder
     }
 
     if (req.hasBeginChunk) {
       // The beginning of a multi-chunk artifact.
       require(chunkedArtifact == null)
-      chunkedArtifact = writeDepToFile(req.getBeginChunk)
+      chunkedArtifact = writeArtifactToFile(req.getBeginChunk)
     } else if (req.hasChunk) {
       // We are currently processing a multi-chunk artifact
-      require(chunkedArtifact != null && chunkedArtifact.getRemainingChunks > 0)
+      require(chunkedArtifact != null && !chunkedArtifact.isFinished)
       chunkedArtifact.write(req.getChunk)
 
       if (chunkedArtifact.isFinished) {
@@ -71,15 +70,10 @@ class SparkConnectAddArtifactsHandler(val responseObserver: StreamObserver[AddAr
         chunkedArtifact = null
       }
     } else if (req.hasBatch) {
-      req.getBatch.getArtifactsList.forEach { artifact =>
-        // Each artifact in the batch is single-chunked.
-        val out = writeDepToFile(artifact)
-        out.close()
-      }
+      // Each artifact in the batch is single-chunked.
+      req.getBatch.getArtifactsList.forEach(artifact => writeArtifactToFile(artifact).close())
     } else {
-      throw new UnsupportedOperationException(
-        s"$req could not be processed due to unsupported" +
-          s" data transfer mechanism")
+      throw new UnsupportedOperationException(s"Unsupported data transfer request: $req")
     }
   }
 
@@ -98,6 +92,7 @@ class SparkConnectAddArtifactsHandler(val responseObserver: StreamObserver[AddAr
    * @return
    */
   protected def flushStagedArtifacts(): Seq[ArtifactSummary] = {
+    // Non-lazy transformation when using Buffer.
     stagedArtifacts.map { artifact =>
       // We do not store artifacts that fail the CRC. The failure is reported in the artifact
       // summary and it is up to the client to decide whether to retry sending the artifact.
@@ -126,7 +121,7 @@ class SparkConnectAddArtifactsHandler(val responseObserver: StreamObserver[AddAr
   /**
    * Create a (temporary) file for a single-chunk artifact.
    */
-  private def writeDepToFile(
+  private def writeArtifactToFile(
       artifact: proto.AddArtifactsRequest.SingleChunkArtifact): StagedArtifact = {
     val stagedDep = new StagedArtifact(artifact.getName)
     stagedArtifacts += stagedDep
@@ -138,7 +133,7 @@ class SparkConnectAddArtifactsHandler(val responseObserver: StreamObserver[AddAr
    * Create a (temporary) file for the multi-chunk artifact and write the initial chunk. Further
    * chunks can be appended to the file.
    */
-  private def writeDepToFile(
+  private def writeArtifactToFile(
       artifact: proto.AddArtifactsRequest.BeginChunkedArtifact): StagedChunkedArtifact = {
     val stagedChunkedArtifact =
       new StagedChunkedArtifact(artifact.getName, artifact.getNumChunks, artifact.getTotalBytes)
@@ -210,8 +205,6 @@ class SparkConnectAddArtifactsHandler(val responseObserver: StreamObserver[AddAr
     private var remainingChunks = numChunks
     private var totalBytesProcessed = 0L
     private var isFirstCrcUpdate = true
-
-    def getRemainingChunks: Long = remainingChunks
 
     def isFinished: Boolean = remainingChunks == 0
 

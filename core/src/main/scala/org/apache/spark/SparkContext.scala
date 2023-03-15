@@ -392,7 +392,7 @@ class SparkContext(config: SparkConf) extends Logging {
    * Returns the directory that stores artifacts transferred through Spark Connect.
    */
   @Private
-  lazy val sparkConnectArtifactDirectory: File = Utils.createTempDir("artifacts")
+  private[spark] lazy val sparkConnectArtifactDirectory: File = Utils.createTempDir("artifacts")
 
   try {
     _conf = config.clone()
@@ -473,24 +473,17 @@ class SparkContext(config: SparkConf) extends Logging {
     SparkEnv.set(_env)
 
     // If running the REPL, register the repl's output dir with the file server.
-    _conf.getOption("spark.repl.class.outputDir") match {
-      case Some(path) =>
-        val replUri = _env.rpcEnv.fileServer.addDirectory("/classes", new File(path))
-        _conf.set("spark.repl.class.uri", replUri)
-      case None =>
-        val plugins = _conf.get(PLUGINS)
-        if (plugins.contains("org.apache.spark.sql.connect.SparkConnectPlugin")) {
-          // For Spark Connect, we piggyback on the existing REPL integration to load class
-          // files on the executors.
-          // This is a temporary intermediate step due to unavailable classloader isolation.
-          val classDirectory = sparkConnectArtifactDirectory.toPath.resolve("classes")
-          Files.createDirectories(classDirectory)
-          val classDirectoryUri = _env.rpcEnv.fileServer.addDirectory(
-            "/classes",
-            classDirectory.toFile)
-          _conf.set("spark.repl.class.uri", classDirectoryUri)
-          logDebug(s"Spark Connect is enabled, setting spark.repl.class.uri to $classDirectoryUri")
-        }
+    _conf.getOption("spark.repl.class.outputDir").orElse {
+      if (_conf.get(PLUGINS).contains("org.apache.spark.sql.connect.SparkConnectPlugin")) {
+        val classDirectory = sparkConnectArtifactDirectory.toPath.resolve("classes")
+        Files.createDirectories(classDirectory)
+        Some(classDirectory.toString)
+      } else {
+        None
+      }
+    }.foreach { path =>
+      val replUri = _env.rpcEnv.fileServer.addDirectory("/classes", new File(path))
+      _conf.set("spark.repl.class.uri", replUri)
     }
 
     _statusTracker = new SparkStatusTracker(this, _statusStore)
