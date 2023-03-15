@@ -164,11 +164,6 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
   protected trait PgSQLTest
 
   /**
-   * traits that indicate ANSI-related tests with the ANSI mode enabled.
-   */
-  protected trait AnsiTest
-
-  /**
    * traits that indicate the default timestamp type is TimestampNTZType.
    */
   protected trait TimestampNTZTest
@@ -201,10 +196,6 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
       inputFile: String,
       resultFile: String,
       udf: TestUDF) extends TestCase with UDFTest with PgSQLTest
-
-  /** An ANSI-related test case. */
-  protected case class AnsiTestCase(
-      name: String, inputFile: String, resultFile: String) extends TestCase with AnsiTest
 
   /** An date time test case with default timestamp as TimestampNTZType */
   protected case class TimestampNTZTestCase(
@@ -281,6 +272,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
       logInfo(s"Setting configs: ${setOperations.mkString(", ")}")
       setOperations.foreach(localSparkSession.sql)
     }
+    conf
 
     // Run the SQL queries preparing them for comparison.
     val outputs: Seq[QueryOutput] = queries.map { sql =>
@@ -371,119 +363,9 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
     }.sortBy(_.name)
   }
 
-  /** Load built-in test tables into the SparkSession. */
-  private def createTestTables(session: SparkSession): Unit = {
-    import session.implicits._
-
-    // Before creating test tables, deletes orphan directories in warehouse dir
-    Seq("testdata", "arraydata", "mapdata", "aggtest", "onek", "tenk1").foreach { dirName =>
-      val f = new File(new URI(s"${conf.warehousePath}/$dirName"))
-      if (f.exists()) {
-        Utils.deleteRecursively(f)
-      }
-    }
-
-    (1 to 100).map(i => (i, i.toString)).toDF("key", "value")
-      .repartition(1)
-      .write
-      .format("parquet")
-      .saveAsTable("testdata")
-
-    ((Seq(1, 2, 3), Seq(Seq(1, 2, 3))) :: (Seq(2, 3, 4), Seq(Seq(2, 3, 4))) :: Nil)
-      .toDF("arraycol", "nestedarraycol")
-      .write
-      .format("parquet")
-      .saveAsTable("arraydata")
-
-    (Tuple1(Map(1 -> "a1", 2 -> "b1", 3 -> "c1", 4 -> "d1", 5 -> "e1")) ::
-      Tuple1(Map(1 -> "a2", 2 -> "b2", 3 -> "c2", 4 -> "d2")) ::
-      Tuple1(Map(1 -> "a3", 2 -> "b3", 3 -> "c3")) ::
-      Tuple1(Map(1 -> "a4", 2 -> "b4")) ::
-      Tuple1(Map(1 -> "a5")) :: Nil)
-      .toDF("mapcol")
-      .write
-      .format("parquet")
-      .saveAsTable("mapdata")
-
-    session
-      .read
-      .format("csv")
-      .options(Map("delimiter" -> "\t", "header" -> "false"))
-      .schema("a int, b float")
-      .load(testFile("test-data/postgresql/agg.data"))
-      .write
-      .format("parquet")
-      .saveAsTable("aggtest")
-
-    session
-      .read
-      .format("csv")
-      .options(Map("delimiter" -> "\t", "header" -> "false"))
-      .schema(
-        """
-          |unique1 int,
-          |unique2 int,
-          |two int,
-          |four int,
-          |ten int,
-          |twenty int,
-          |hundred int,
-          |thousand int,
-          |twothousand int,
-          |fivethous int,
-          |tenthous int,
-          |odd int,
-          |even int,
-          |stringu1 string,
-          |stringu2 string,
-          |string4 string
-        """.stripMargin)
-      .load(testFile("test-data/postgresql/onek.data"))
-      .write
-      .format("parquet")
-      .saveAsTable("onek")
-
-    session
-      .read
-      .format("csv")
-      .options(Map("delimiter" -> "\t", "header" -> "false"))
-      .schema(
-        """
-          |unique1 int,
-          |unique2 int,
-          |two int,
-          |four int,
-          |ten int,
-          |twenty int,
-          |hundred int,
-          |thousand int,
-          |twothousand int,
-          |fivethous int,
-          |tenthous int,
-          |odd int,
-          |even int,
-          |stringu1 string,
-          |stringu2 string,
-          |string4 string
-        """.stripMargin)
-      .load(testFile("test-data/postgresql/tenk.data"))
-      .write
-      .format("parquet")
-      .saveAsTable("tenk1")
-  }
-
-  private def removeTestTables(session: SparkSession): Unit = {
-    session.sql("DROP TABLE IF EXISTS testdata")
-    session.sql("DROP TABLE IF EXISTS arraydata")
-    session.sql("DROP TABLE IF EXISTS mapdata")
-    session.sql("DROP TABLE IF EXISTS aggtest")
-    session.sql("DROP TABLE IF EXISTS onek")
-    session.sql("DROP TABLE IF EXISTS tenk1")
-  }
-
   override def beforeAll(): Unit = {
     super.beforeAll()
-    createTestTables(spark)
+    createTestTables(spark, conf)
     RuleExecutor.resetMetrics()
     CodeGenerator.resetCompileTime()
     WholeStageCodegenExec.resetCodeGenTime()

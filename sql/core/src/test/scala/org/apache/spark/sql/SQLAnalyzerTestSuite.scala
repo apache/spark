@@ -130,7 +130,11 @@ class SQLAnalyzerTestSuite extends QueryTest with SharedSparkSession with SQLHel
       val absPath = file.getAbsolutePath
       val testCaseName = absPath.stripPrefix(inputFilePath).stripPrefix(File.separator)
 
-      RegularTestCase(testCaseName, absPath, resultFile) :: Nil
+      if (file.getAbsolutePath.startsWith(s"$inputFilePath${File.separator}ansi")) {
+        AnsiTestCase(testCaseName, absPath, resultFile) :: Nil
+      } else {
+        RegularTestCase(testCaseName, absPath, resultFile) :: Nil
+      }
     }.sortBy(_.name)
   }
 
@@ -142,7 +146,12 @@ class SQLAnalyzerTestSuite extends QueryTest with SharedSparkSession with SQLHel
     // This does not isolate catalog changes.
     val localSparkSession = spark.newSession()
 
-    localSparkSession.conf.set(SQLConf.ANSI_ENABLED.key, false)
+    testCase match {
+      case _: AnsiTest =>
+        localSparkSession.conf.set(SQLConf.ANSI_ENABLED.key, true)
+      case _ =>
+        localSparkSession.conf.set(SQLConf.ANSI_ENABLED.key, false)
+    }
 
     if (configSet.nonEmpty) {
       // Execute the list of set operations in order to add the desired configurations.
@@ -200,5 +209,18 @@ class SQLAnalyzerTestSuite extends QueryTest with SharedSparkSession with SQLHel
     val schema = df.schema.catalogString
     // Get the output, but also get rid of the #1234 expression IDs that show up in plan strings.
     (schema, Seq(replaceNotIncludedMsg(df.queryExecution.analyzed.toString)))
+  }
+
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    createTestTables(spark)
+  }
+
+  override def afterAll(): Unit = {
+    try {
+      removeTestTables(spark)
+    } finally {
+      super.afterAll()
+    }
   }
 }
