@@ -64,7 +64,7 @@ class MockService:
     def ExecutePlan(self, req: proto.ExecutePlanRequest, metadata):
         self.req = req
         resp = proto.ExecutePlanResponse()
-        resp.client_id = self._session_id
+        resp.session_id = self._session_id
 
         pdf = pd.DataFrame(data={"col1": [1, 2]})
         schema = pa.Schema.from_pandas(pdf)

@@ -191,7 +191,7 @@ abstract class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTes
 
     listener.onOtherEvent(SparkListenerSQLExecutionStart(
       executionId,
-      executionId,
+      Some(executionId),
       "test",
       "test",
       df.queryExecution.toString,
@@ -382,7 +382,7 @@ abstract class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTes
     val df = createTestDataFrame
     listener.onOtherEvent(SparkListenerSQLExecutionStart(
       executionId,
-      executionId,
+      Some(executionId),
       "test",
       "test",
       df.queryExecution.toString,
@@ -413,7 +413,7 @@ abstract class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTes
     val df = createTestDataFrame
     listener.onOtherEvent(SparkListenerSQLExecutionStart(
       executionId,
-      executionId,
+      Some(executionId),
       "test",
       "test",
       df.queryExecution.toString,
@@ -455,7 +455,7 @@ abstract class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTes
     val df = createTestDataFrame
     listener.onOtherEvent(SparkListenerSQLExecutionStart(
       executionId,
-      executionId,
+      Some(executionId),
       "test",
       "test",
       df.queryExecution.toString,
@@ -486,7 +486,7 @@ abstract class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTes
     val df = createTestDataFrame
     listener.onOtherEvent(SparkListenerSQLExecutionStart(
       executionId,
-      executionId,
+      Some(executionId),
       "test",
       "test",
       df.queryExecution.toString,
@@ -518,7 +518,7 @@ abstract class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTes
     val df = createTestDataFrame
     listener.onOtherEvent(SparkListenerSQLExecutionStart(
       executionId,
-      executionId,
+      Some(executionId),
       "test",
       "test",
       df.queryExecution.toString,
@@ -659,7 +659,7 @@ abstract class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTes
     time += 1
     listener.onOtherEvent(SparkListenerSQLExecutionStart(
       1,
-      1,
+      Some(1),
       "test",
       "test",
       df.queryExecution.toString,
@@ -669,7 +669,7 @@ abstract class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTes
     time += 1
     listener.onOtherEvent(SparkListenerSQLExecutionStart(
       2,
-      2,
+      Some(2),
       "test",
       "test",
       df.queryExecution.toString,
@@ -687,7 +687,7 @@ abstract class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTes
     time += 1
     listener.onOtherEvent(SparkListenerSQLExecutionStart(
       3,
-      3,
+      Some(3),
       "test",
       "test",
       df.queryExecution.toString,
@@ -724,7 +724,7 @@ abstract class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTes
 
     listener.onOtherEvent(SparkListenerSQLExecutionStart(
       executionId,
-      executionId,
+      Some(executionId),
       "test",
       "test",
       df.queryExecution.toString,

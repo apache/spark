@@ -172,7 +172,10 @@ class BasicInMemoryTableCatalog extends TableCatalog {
 class InMemoryTableCatalog extends BasicInMemoryTableCatalog with SupportsNamespaces {
 
   override def capabilities: java.util.Set[TableCatalogCapability] = {
-    Set(TableCatalogCapability.SUPPORTS_CREATE_TABLE_WITH_GENERATED_COLUMNS).asJava
+    Set(
+      TableCatalogCapability.SUPPORT_COLUMN_DEFAULT_VALUE,
+      TableCatalogCapability.SUPPORTS_CREATE_TABLE_WITH_GENERATED_COLUMNS
+    ).asJava
   }
 
   protected def allNamespaces: Seq[Seq[String]] = {
