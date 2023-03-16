@@ -53,7 +53,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
       .newDataFrame { builder =>
         builder.getCatalogBuilder.getSetCurrentDatabaseBuilder.setDbName(dbName)
       }
-      .count()
+      .withResult(_.length)
   }
 
   /**
@@ -516,7 +516,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
       .newDataFrame { builder =>
         builder.getCatalogBuilder.getRecoverPartitionsBuilder.setTableName(tableName)
       }
-      .count()
+      .withResult(_.length)
   }
 
   /**
@@ -550,7 +550,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
       .newDataFrame { builder =>
         builder.getCatalogBuilder.getCacheTableBuilder.setTableName(tableName)
       }
-      .count()
+      .withResult(_.length)
   }
 
   /**
@@ -567,7 +567,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
       .newDataFrame { builder =>
         builder.getCatalogBuilder.getUncacheTableBuilder.setTableName(tableName)
       }
-      .count()
+      .withResult(_.length)
   }
 
   /**
@@ -580,7 +580,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
       .newDataFrame { builder =>
         builder.getCatalogBuilder.getClearCacheBuilder
       }
-      .count()
+      .withResult(_.length)
   }
 
   /**
@@ -603,7 +603,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
       .newDataFrame { builder =>
         builder.getCatalogBuilder.getRefreshTableBuilder.setTableName(tableName)
       }
-      .count()
+      .withResult(_.length)
   }
 
   /**
@@ -618,7 +618,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
       .newDataFrame { builder =>
         builder.getCatalogBuilder.getRefreshByPathBuilder.setPath(path)
       }
-      .count()
+      .withResult(_.length)
   }
 
   /**
@@ -642,7 +642,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
       .newDataFrame { builder =>
         builder.getCatalogBuilder.getSetCurrentCatalogBuilder.setCatalogName(catalogName)
       }
-      .count()
+      .withResult(_.length)
 
   /**
    * Returns a list of catalogs available in this session.
