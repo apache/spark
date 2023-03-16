@@ -1,0 +1,19 @@
+{
+  "common": {
+    "planId": "0"
+  },
+  "catalog": {
+    "createTable": {
+      "tableName": "text_table",
+      "source": "text",
+      "description": "",
+      "schema": {
+        "struct": {
+        }
+      },
+      "options": {
+        "path": "/invalidPath"
+      }
+    }
+  }
+}

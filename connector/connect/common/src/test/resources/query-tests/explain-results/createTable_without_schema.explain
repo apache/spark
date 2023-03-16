@@ -1,0 +1,2 @@
+SubqueryAlias spark_catalog.default.text_table
++- Relation spark_catalog.default.text_table[value#0] text

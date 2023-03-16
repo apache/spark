@@ -194,12 +194,14 @@ class CatalogSuite extends RemoteSparkSession with SQLHelper {
     val tableName = "test"
     withTable(tableName) {
       withTempPath { dir =>
-        spark.range(5).selectExpr("id as fieldOne", "id as partCol").write
+        spark
+          .range(5)
+          .selectExpr("id as fieldOne", "id as partCol")
+          .write
           .partitionBy("partCol")
           .mode("overwrite")
           .save(dir.getAbsolutePath)
-        spark.sql(
-          s"""
+        spark.sql(s"""
              |create table $tableName (fieldOne long, partCol int)
              |using parquet
              |options (path "${dir.toURI}")
@@ -217,8 +219,7 @@ class CatalogSuite extends RemoteSparkSession with SQLHelper {
       val tableName = "spark_catalog.default.my_table"
       withTable(tableName) {
         try {
-          spark.sql(
-            s"""
+          spark.sql(s"""
                | CREATE TABLE $tableName(col STRING) USING TEXT
                | LOCATION '${dir.getAbsolutePath}'
                |""".stripMargin)
@@ -243,8 +244,7 @@ class CatalogSuite extends RemoteSparkSession with SQLHelper {
       val tableName = "spark_catalog.default.my_table"
       withTable(tableName) {
         try {
-          spark.sql(
-            s"""
+          spark.sql(s"""
                | CREATE TABLE $tableName(col STRING) USING TEXT
                | LOCATION '${dir.getAbsolutePath}'
                |""".stripMargin)
@@ -253,9 +253,12 @@ class CatalogSuite extends RemoteSparkSession with SQLHelper {
           assert(spark.table(tableName).collect().length == 1)
 
           // delete one
-          new File(dir.getAbsolutePath).listFiles(new FilenameFilter() {
-            override def accept(dir: File, name: String): Boolean = name.endsWith(".txt")
-          }).head.delete()
+          new File(dir.getAbsolutePath)
+            .listFiles(new FilenameFilter() {
+              override def accept(dir: File, name: String): Boolean = name.endsWith(".txt")
+            })
+            .head
+            .delete()
 
           assert(spark.table(tableName).collect().length == 1)
 
