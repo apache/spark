@@ -52,7 +52,7 @@ class CatalogMetadata(
  * @param catalog name of the catalog that the table belongs to.
  * @param description description of the database.
  * @param locationUri path (in the form of a uri) to data files.
- * @since 3.4.0
+ * @since 2.0.0
  */
 @Stable
 class Database(
@@ -86,7 +86,7 @@ class Database(
  * @param description description of the table.
  * @param tableType type of the table (e.g. view, table).
  * @param isTemporary whether the table is a temporary table.
- * @since 3.4.0
+ * @since 2.0.0
  */
 @Stable
 class Table(
@@ -138,7 +138,7 @@ class Table(
  * @param nullable whether the column is nullable.
  * @param isPartition whether the column is a partition column.
  * @param isBucket whether the column is a bucket column.
- * @since 3.4.0
+ * @since 2.0.0
  */
 @Stable
 class Column(
@@ -172,7 +172,7 @@ class Column(
  * @param description description of the function; description can be null.
  * @param className the fully qualified class name of the function.
  * @param isTemporary whether the function is a temporary function or not.
- * @since 3.4.0
+ * @since 2.0.0
  */
 @Stable
 class Function(

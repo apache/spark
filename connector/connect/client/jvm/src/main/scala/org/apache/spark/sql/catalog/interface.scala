@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.DefinedByConstructorParams
  *   name of the catalog
  * @param description
  *   description of the catalog
- * @since 3.4.0
+ * @since 3.5.0
  */
 class CatalogMetadata(val name: String, @Nullable val description: String)
     extends DefinedByConstructorParams {
@@ -54,7 +54,7 @@ class CatalogMetadata(val name: String, @Nullable val description: String)
  *   description of the database.
  * @param locationUri
  *   path (in the form of a uri) to data files.
- * @since 3.4.0
+ * @since 3.5.0
  */
 class Database(
     val name: String,
@@ -92,7 +92,7 @@ class Database(
  *   type of the table (e.g. view, table).
  * @param isTemporary
  *   whether the table is a temporary table.
- * @since 3.4.0
+ * @since 3.5.0
  */
 class Table(
     val name: String,
@@ -153,7 +153,7 @@ class Table(
  *   whether the column is a partition column.
  * @param isBucket
  *   whether the column is a bucket column.
- * @since 3.4.0
+ * @since 3.5.0
  */
 class Column(
     val name: String,
@@ -191,7 +191,7 @@ class Column(
  *   the fully qualified class name of the function.
  * @param isTemporary
  *   whether the function is a temporary function or not.
- * @since 3.4.0
+ * @since 3.5.0
  */
 class Function(
     val name: String,

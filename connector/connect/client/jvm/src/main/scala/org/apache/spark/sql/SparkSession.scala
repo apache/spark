@@ -278,7 +278,7 @@ class SparkSession private[sql] (
    * Interface through which the user may create, drop, alter or query underlying databases,
    * tables, functions etc.
    *
-   * @since 3.4.0
+   * @since 3.5.0
    */
   lazy val catalog: Catalog = new CatalogImpl(this)
 

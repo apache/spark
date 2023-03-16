@@ -30,7 +30,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
   /**
    * Returns the current default database in this session.
    *
-   * @since 3.4.0
+   * @since 3.5.0
    */
   override def currentDatabase: String =
     sparkSession
@@ -42,7 +42,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
   /**
    * Sets the current database (namespace) in this session.
    *
-   * @since 3.4.0
+   * @since 3.5.0
    */
   @throws[AnalysisException]("database does not exist")
   override def setCurrentDatabase(dbName: String): Unit = {
@@ -59,7 +59,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
   /**
    * Returns a list of databases (namespaces) available within the current catalog.
    *
-   * @since 3.4.0
+   * @since 3.5.0
    */
   override def listDatabases(): Dataset[Database] = {
     sparkSession.newDataset(CatalogImpl.databaseEncoder) { builder =>
@@ -71,7 +71,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    * Returns a list of tables/views in the current database (namespace). This includes all
    * temporary views.
    *
-   * @since 3.4.0
+   * @since 3.5.0
    */
   override def listTables(): Dataset[Table] = {
     listTables(currentDatabase)
@@ -81,7 +81,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    * Returns a list of tables/views in the specified database (namespace) (the name can be
    * qualified with catalog). This includes all temporary views.
    *
-   * @since 3.4.0
+   * @since 3.5.0
    */
   @throws[AnalysisException]("database does not exist")
   override def listTables(dbName: String): Dataset[Table] = {
@@ -94,7 +94,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    * Returns a list of functions registered in the current database (namespace). This includes all
    * temporary functions.
    *
-   * @since 3.4.0
+   * @since 3.5.0
    */
   override def listFunctions(): Dataset[Function] = {
     listFunctions(currentDatabase)
@@ -104,7 +104,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    * Returns a list of functions registered in the specified database (namespace) (the name can be
    * qualified with catalog). This includes all built-in and temporary functions.
    *
-   * @since 3.4.0
+   * @since 3.5.0
    */
   @throws[AnalysisException]("database does not exist")
   override def listFunctions(dbName: String): Dataset[Function] = {
@@ -120,7 +120,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    *   is either a qualified or unqualified name that designates a table/view. It follows the same
    *   resolution rule with SQL: search for temp views first then table/views in the current
    *   database (namespace).
-   * @since 3.4.0
+   * @since 3.5.0
    */
   @throws[AnalysisException]("database or table does not exist")
   override def listColumns(tableName: String): Dataset[Column] = {
@@ -140,7 +140,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    *   is an unqualified name that designates a database.
    * @param tableName
    *   is an unqualified name that designates a table/view.
-   * @since 3.4.0
+   * @since 3.5.0
    */
   @throws[AnalysisException]("database does not exist")
   override def listColumns(dbName: String, tableName: String): Dataset[Column] = {
@@ -155,7 +155,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    * Get the database (namespace) with the specified name (can be qualified with catalog). This
    * throws an AnalysisException when the database (namespace) cannot be found.
    *
-   * @since 3.4.0
+   * @since 3.5.0
    */
   override def getDatabase(dbName: String): Database = {
     sparkSession
@@ -173,7 +173,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    *   is either a qualified or unqualified name that designates a table/view. It follows the same
    *   resolution rule with SQL: search for temp views first then table/views in the current
    *   database (namespace).
-   * @since 3.4.0
+   * @since 3.5.0
    */
   override def getTable(tableName: String): Table = {
     sparkSession
@@ -190,7 +190,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    * To get table/view in other catalogs, please use `getTable(tableName)` with qualified
    * table/view name instead.
    *
-   * @since 3.4.0
+   * @since 3.5.0
    */
   override def getTable(dbName: String, tableName: String): Table = {
     sparkSession
@@ -210,7 +210,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    *   is either a qualified or unqualified name that designates a function. It follows the same
    *   resolution rule with SQL: search for built-in/temp functions first then functions in the
    *   current database (namespace).
-   * @since 3.4.0
+   * @since 3.5.0
    */
   override def getFunction(functionName: String): Function = {
     sparkSession
@@ -231,7 +231,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    *   is an unqualified name that designates a database.
    * @param functionName
    *   is an unqualified name that designates a function in the specified database
-   * @since 3.4.0
+   * @since 3.5.0
    */
   override def getFunction(dbName: String, functionName: String): Function = {
     sparkSession
@@ -247,7 +247,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    * Check if the database (namespace) with the specified name exists (the name can be qualified
    * with catalog).
    *
-   * @since 3.4.0
+   * @since 3.5.0
    */
   override def databaseExists(dbName: String): Boolean = {
     sparkSession
@@ -265,7 +265,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    *   is either a qualified or unqualified name that designates a table/view. It follows the same
    *   resolution rule with SQL: search for temp views first then table/views in the current
    *   database (namespace).
-   * @since 3.4.0
+   * @since 3.5.0
    */
   override def tableExists(tableName: String): Boolean = {
     sparkSession
@@ -286,7 +286,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    *   is an unqualified name that designates a database.
    * @param tableName
    *   is an unqualified name that designates a table.
-   * @since 3.4.0
+   * @since 3.5.0
    */
   override def tableExists(dbName: String, tableName: String): Boolean = {
     sparkSession
@@ -306,7 +306,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    *   is either a qualified or unqualified name that designates a function. It follows the same
    *   resolution rule with SQL: search for built-in/temp functions first then functions in the
    *   current database (namespace).
-   * @since 3.4.0
+   * @since 3.5.0
    */
   override def functionExists(functionName: String): Boolean = {
     sparkSession
@@ -327,7 +327,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    *   is an unqualified name that designates a database.
    * @param functionName
    *   is an unqualified name that designates a function.
-   * @since 3.4.0
+   * @since 3.5.0
    */
   override def functionExists(dbName: String, functionName: String): Boolean = {
     sparkSession
@@ -346,7 +346,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    * @param tableName
    *   is either a qualified or unqualified name that designates a table. If no database
    *   identifier is provided, it refers to a table in the current database.
-   * @since 3.4.0
+   * @since 3.5.0
    */
   override def createTable(tableName: String, path: String): DataFrame = {
     sparkSession.newDataFrame { builder =>
@@ -365,7 +365,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    * @param tableName
    *   is either a qualified or unqualified name that designates a table. If no database
    *   identifier is provided, it refers to a table in the current database.
-   * @since 3.4.0
+   * @since 3.5.0
    */
   override def createTable(tableName: String, path: String, source: String): DataFrame = {
     createTable(tableName, source, Map("path" -> path))
@@ -378,7 +378,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    * @param tableName
    *   is either a qualified or unqualified name that designates a table. If no database
    *   identifier is provided, it refers to a table in the current database.
-   * @since 3.4.0
+   * @since 3.5.0
    */
   override def createTable(
       tableName: String,
@@ -394,7 +394,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    * @param tableName
    *   is either a qualified or unqualified name that designates a table. If no database
    *   identifier is provided, it refers to a table in the current database.
-   * @since 3.4.0
+   * @since 3.5.0
    */
   override def createTable(
       tableName: String,
@@ -411,7 +411,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    * @param tableName
    *   is either a qualified or unqualified name that designates a table. If no database
    *   identifier is provided, it refers to a table in the current database.
-   * @since 3.4.0
+   * @since 3.5.0
    */
   override def createTable(
       tableName: String,
@@ -433,7 +433,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    * @param tableName
    *   is either a qualified or unqualified name that designates a table. If no database
    *   identifier is provided, it refers to a table in the current database.
-   * @since 3.4.0
+   * @since 3.5.0
    */
   override def createTable(
       tableName: String,
@@ -468,7 +468,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    *   the name of the temporary view to be dropped.
    * @return
    *   true if the view is dropped successfully, false otherwise.
-   * @since 3.4.0
+   * @since 3.5.0
    */
   override def dropTempView(viewName: String): Boolean = {
     sparkSession
@@ -492,7 +492,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    *   the unqualified name of the temporary view to be dropped.
    * @return
    *   true if the view is dropped successfully, false otherwise.
-   * @since 3.4.0
+   * @since 3.5.0
    */
   override def dropGlobalTempView(viewName: String): Boolean = {
     sparkSession
@@ -509,7 +509,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    * @param tableName
    *   is either a qualified or unqualified name that designates a table. If no database
    *   identifier is provided, it refers to a table in the current database.
-   * @since 3.4.0
+   * @since 3.5.0
    */
   override def recoverPartitions(tableName: String): Unit = {
     sparkSession
@@ -526,7 +526,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    *   is either a qualified or unqualified name that designates a table/view. If no database
    *   identifier is provided, it refers to a temporary view or a table/view in the current
    *   database.
-   * @since 3.4.0
+   * @since 3.5.0
    */
   override def isCached(tableName: String): Boolean = {
     sparkSession
@@ -543,7 +543,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    *   is either a qualified or unqualified name that designates a table/view. If no database
    *   identifier is provided, it refers to a temporary view or a table/view in the current
    *   database.
-   * @since 3.4.0
+   * @since 3.5.0
    */
   override def cacheTable(tableName: String): Unit = {
     sparkSession
@@ -560,7 +560,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    *   is either a qualified or unqualified name that designates a table/view. If no database
    *   identifier is provided, it refers to a temporary view or a table/view in the current
    *   database.
-   * @since 3.4.0
+   * @since 3.5.0
    */
   override def uncacheTable(tableName: String): Unit = {
     sparkSession
@@ -573,7 +573,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
   /**
    * Removes all cached tables from the in-memory cache.
    *
-   * @since 3.4.0
+   * @since 3.5.0
    */
   override def clearCache(): Unit = {
     sparkSession
@@ -596,7 +596,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    *   is either a qualified or unqualified name that designates a table/view. If no database
    *   identifier is provided, it refers to a temporary view or a table/view in the current
    *   database.
-   * @since 3.4.0
+   * @since 3.5.0
    */
   override def refreshTable(tableName: String): Unit = {
     sparkSession
@@ -611,7 +611,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    * that contains the given data source path. Path matching is by prefix, i.e. "/" would
    * invalidate everything that is cached.
    *
-   * @since 3.4.0
+   * @since 3.5.0
    */
   override def refreshByPath(path: String): Unit = {
     sparkSession
@@ -624,7 +624,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
   /**
    * Returns the current catalog in this session.
    *
-   * @since 3.4.0
+   * @since 3.5.0
    */
   override def currentCatalog(): String = sparkSession
     .newDataset(StringEncoder) { builder =>
@@ -635,7 +635,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
   /**
    * Sets the current catalog in this session.
    *
-   * @since 3.4.0
+   * @since 3.5.0
    */
   override def setCurrentCatalog(catalogName: String): Unit =
     sparkSession
@@ -647,7 +647,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
   /**
    * Returns a list of catalogs available in this session.
    *
-   * @since 3.4.0
+   * @since 3.5.0
    */
   override def listCatalogs(): Dataset[CatalogMetadata] =
     sparkSession
