@@ -499,7 +499,7 @@ private[spark] class ApplicationMaster(
     // the allocator is ready to service requests.
     rpcEnv.setupEndpoint("YarnAM", new AMEndpoint(rpcEnv, driverRef))
     if (_sparkConf.get(SHUFFLE_SERVICE_ENABLED)) {
-      logInfo(s"Initializing service data for shuffle service using name '" +
+      logInfo("Initializing service data for shuffle service using name '" +
         s"${_sparkConf.get(SHUFFLE_SERVICE_NAME)}'")
     }
     allocator.allocateResources()
