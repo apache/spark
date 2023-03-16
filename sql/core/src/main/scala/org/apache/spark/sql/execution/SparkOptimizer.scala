@@ -90,7 +90,9 @@ class SparkOptimizer(
       LimitPushDownThroughWindow,
       EliminateLimits) :+
     Batch("User Provided Optimizers", fixedPoint, experimentalMethods.extraOptimizations: _*) :+
-    Batch("Replace CTE with Repartition", Once, ReplaceCTERefWithRepartition)
+    Batch("Replace CTE with Repartition", Once, ReplaceCTERefWithRepartition) :+
+    Batch("Replace DistributedSequenceID with AttachDistributedSequence",
+      Once, ReplaceDistributedSequenceID)
 
   override def nonExcludableRules: Seq[String] = super.nonExcludableRules :+
     ExtractPythonUDFFromJoinCondition.ruleName :+

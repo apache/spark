@@ -2451,6 +2451,13 @@ class DataFrameSuite extends QueryTest
     assert(d.size == d.distinct.size)
   }
 
+  test("11copy results for sampling with replacement") {
+    val df = Seq((1, 0), (2, 0), (3, 0)).toDF("a", "b")
+    val sampleDf = df.sample(true, 2.00)
+    val d = sampleDf.withColumn("c", distributed_sequence_id).select($"c").collect
+    assert(d.size == d.distinct.size)
+  }
+
   private def verifyNullabilityInFilterExec(
       df: DataFrame,
       expr: String,

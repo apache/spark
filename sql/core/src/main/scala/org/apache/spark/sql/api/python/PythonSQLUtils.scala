@@ -196,6 +196,8 @@ private[sql] object PythonSQLUtils extends Logging {
   def pandasCovar(col1: Column, col2: Column, ddof: Int): Column = {
     Column(PandasCovar(col1.expr, col2.expr, ddof).toAggregateExpression(false))
   }
+
+  def distributedSequenceId(): Column = Column(DistributedSequenceID())
 }
 
 /**
