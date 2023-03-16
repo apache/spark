@@ -1426,6 +1426,10 @@
         <scope>test</scope>
       </dependency>
       <!-- Managed up to match Hadoop in HADOOP-16530 -->
+      <!--
+        When upgrading `xercesImpl` version, also need to change
+        the version definition in `SparkBuild#DependencyOverrides`.
+      -->
       <dependency>
         <groupId>xerces</groupId>
         <artifactId>xercesImpl</artifactId>
