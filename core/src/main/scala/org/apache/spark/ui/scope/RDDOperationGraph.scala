@@ -18,6 +18,7 @@
 package org.apache.spark.ui.scope
 
 import java.util.Objects
+import java.util.concurrent.ConcurrentHashMap
 
 import scala.collection.mutable
 import scala.collection.mutable.{ListBuffer, StringBuilder}
@@ -29,6 +30,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.DeterministicLevel
 import org.apache.spark.scheduler.StageInfo
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.util.IdGenerator
 
 /**
  * A representation of a generic cluster graph used for storing information on RDD operations.
@@ -115,6 +117,9 @@ private[spark] class RDDOperationCluster(
 private[spark] object RDDOperationGraph extends Logging {
 
   val STAGE_CLUSTER_PREFIX = "stage_"
+  // Tracks the Repeat identifier ID for cached RDDOperationNodes on the Stages page.
+  private val inMemoryTableIdentifier = new ConcurrentHashMap[RDDOperationNode, Int]()
+  private val idGenerator: IdGenerator = new IdGenerator()
 
   /**
    * Construct a RDDOperationGraph for a given stage.
@@ -221,6 +226,24 @@ private[spark] object RDDOperationGraph extends Logging {
     RDDOperationGraph(internalEdges.toSeq, outgoingEdges.toSeq, incomingEdges.toSeq, rootCluster)
   }
 
+  def getRepeatIdentifier(node: RDDOperationNode): String = {
+    // Clearing the Hashmap to prevent it from taking too much memory
+    // This should rarely trigger and not be a issue in most cases.
+    if (inMemoryTableIdentifier.size() > 1024) {
+      inMemoryTableIdentifier.clear()
+    }
+    if (inMemoryTableIdentifier.containsKey(node)) {
+      val id = inMemoryTableIdentifier.get(node)
+      "(Repeat Identifier: " +
+        s"$id)"
+    } else {
+      val id = idGenerator.next
+      inMemoryTableIdentifier.put(node, id)
+      "(Repeat Identifier: " +
+        s"$id)"
+    }
+  }
+
   /**
    * Generate the content of a dot file that describes the specified graph.
    *
@@ -249,6 +272,11 @@ private[spark] object RDDOperationGraph extends Logging {
     } else {
       ""
     }
+    val repeatIdentifier = if (node.cached) {
+      getRepeatIdentifier(node)
+    } else {
+      ""
+    }
     val isBarrier = if (node.barrier) {
       " [Barrier]"
     } else {
@@ -262,7 +290,7 @@ private[spark] object RDDOperationGraph extends Logging {
     }
     val escapedCallsite = Utility.escape(node.callsite)
     val label = s"${node.name} [${node.id}]$isCached$isBarrier$outputDeterministicLevel" +
-      s"<br>${escapedCallsite}"
+      s"<br>${escapedCallsite}<b>${repeatIdentifier}"
     s"""${node.id} [labelType="html" label="${StringEscapeUtils.escapeJava(label)}"]"""
   }
 
