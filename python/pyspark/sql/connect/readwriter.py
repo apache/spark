@@ -19,7 +19,7 @@ from pyspark.sql.connect.utils import check_dependencies
 check_dependencies(__name__)
 
 from typing import Dict
-from typing import Optional, Union, List, overload, Tuple, cast, Any
+from typing import Optional, Union, List, overload, Tuple, cast
 from typing import TYPE_CHECKING
 
 from pyspark.sql.connect.plan import Read, DataSource, LogicalPlan, WriteOperation, WriteOperationV2
@@ -339,8 +339,83 @@ class DataFrameReader(OptionUtils):
 
     orc.__doc__ = PySparkDataFrameReader.orc.__doc__
 
-    def jdbc(self, *args: Any, **kwargs: Any) -> None:
-        raise NotImplementedError("jdbc() not supported for DataFrameWriter")
+    @overload
+    def jdbc(
+        self, url: str, table: str, *, properties: Optional[Dict[str, str]] = None
+    ) -> "DataFrame":
+        ...
+
+    @overload
+    def jdbc(
+        self,
+        url: str,
+        table: str,
+        column: str,
+        lowerBound: Union[int, str],
+        upperBound: Union[int, str],
+        numPartitions: int,
+        *,
+        properties: Optional[Dict[str, str]] = None,
+    ) -> "DataFrame":
+        ...
+
+    @overload
+    def jdbc(
+        self,
+        url: str,
+        table: str,
+        *,
+        predicates: List[str],
+        properties: Optional[Dict[str, str]] = None,
+    ) -> "DataFrame":
+        ...
+
+    def jdbc(
+        self,
+        url: str,
+        table: str,
+        column: Optional[str] = None,
+        lowerBound: Optional[Union[int, str]] = None,
+        upperBound: Optional[Union[int, str]] = None,
+        numPartitions: Optional[int] = None,
+        predicates: Optional[List[str]] = None,
+        properties: Optional[Dict[str, str]] = None,
+    ) -> "DataFrame":
+        if properties is None:
+            properties = dict()
+
+        self.format("jdbc")
+
+        if column is not None:
+            assert lowerBound is not None, "lowerBound can not be None when ``column`` is specified"
+            assert upperBound is not None, "upperBound can not be None when ``column`` is specified"
+            assert (
+                numPartitions is not None
+            ), "numPartitions can not be None when ``column`` is specified"
+            self.options(
+                partitionColumn=column,
+                lowerBound=lowerBound,
+                upperBound=upperBound,
+                numPartitions=numPartitions,
+            )
+            self.options(**properties)
+            self.options(url=url, dbtable=table)
+            return self.load()
+        else:
+            self.options(**properties)
+            self.options(url=url, dbtable=table)
+            if predicates is not None:
+                plan = DataSource(
+                    format=self._format,
+                    schema=self._schema,
+                    options=self._options,
+                    predicates=predicates,
+                )
+                return self._df(plan)
+            else:
+                return self.load()
+
+    jdbc.__doc__ = PySparkDataFrameReader.jdbc.__doc__
 
 
 DataFrameReader.__doc__ = PySparkDataFrameReader.__doc__
@@ -603,8 +678,19 @@ class DataFrameWriter(OptionUtils):
 
     orc.__doc__ = PySparkDataFrameWriter.orc.__doc__
 
-    def jdbc(self, *args: Any, **kwargs: Any) -> None:
-        raise NotImplementedError("jdbc() not supported for DataFrameWriter")
+    def jdbc(
+        self,
+        url: str,
+        table: str,
+        mode: Optional[str] = None,
+        properties: Optional[Dict[str, str]] = None,
+    ) -> None:
+        if properties is None:
+            properties = dict()
+
+        self.format("jdbc").mode(mode).options(**properties).options(url=url, dbtable=table).save()
+
+    jdbc.__doc__ = PySparkDataFrameWriter.jdbc.__doc__
 
 
 class DataFrameWriterV2(OptionUtils):
