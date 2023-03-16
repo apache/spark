@@ -314,14 +314,13 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
     }
   }
 
-  private def limitPushed(df: DataFrame, limit: Int): Boolean = {
+  private def checkLimitPushed(df: DataFrame, limit: Option[Int]): Unit = {
     df.queryExecution.optimizedPlan.collect {
       case relation: DataSourceV2ScanRelation => relation.scan match {
         case v1: V1ScanWrapper =>
-          return v1.pushedDownOperators.limit == Some(limit)
+          assert(v1.pushedDownOperators.limit == limit)
       }
     }
-    false
   }
 
   private def checkColumnPruned(df: DataFrame, col: String): Unit = {
@@ -354,7 +353,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
         val df3 = sql(s"SELECT col1 FROM $catalogName.new_table TABLESAMPLE (BUCKET 6 OUT OF 10)" +
           " LIMIT 2")
         checkSamplePushed(df3)
-        assert(limitPushed(df3, 2))
+        checkLimitPushed(df3, Some(2))
         checkColumnPruned(df3, "col1")
         assert(df3.collect().length <= 2)
 
@@ -362,7 +361,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
         val df4 = sql(s"SELECT col1 FROM $catalogName.new_table" +
           " TABLESAMPLE (50 PERCENT) REPEATABLE (12345) LIMIT 2")
         checkSamplePushed(df4)
-        assert(limitPushed(df4, 2))
+        checkLimitPushed(df4, Some(2))
         checkColumnPruned(df4, "col1")
         assert(df4.collect().length <= 2)
 
@@ -371,7 +370,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
           " TABLESAMPLE (BUCKET 6 OUT OF 10) WHERE col1 > 0 LIMIT 2")
         checkSamplePushed(df5)
         checkFilterPushed(df5)
-        assert(limitPushed(df5, 2))
+        checkLimitPushed(df5, Some(2))
         assert(df5.collect().length <= 2)
 
         // sample + filter + limit + column pruning
@@ -381,7 +380,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
           " TABLESAMPLE (BUCKET 6 OUT OF 10) WHERE col1 > 0 LIMIT 2")
         checkSamplePushed(df6)
         checkFilterPushed(df6, false)
-        assert(!limitPushed(df6, 2))
+        checkLimitPushed(df6, None)
         checkColumnPruned(df6, "col1")
         assert(df6.collect().length <= 2)
 
@@ -390,7 +389,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
         // only limit is pushed down because in this test sample is after limit
         val df7 = spark.read.table(s"$catalogName.new_table").limit(2).sample(0.5)
         checkSamplePushed(df7, false)
-        assert(limitPushed(df7, 2))
+        checkLimitPushed(df7, Some(2))
 
         // sample + filter
         // Push down order is sample -> filter -> limit
@@ -422,7 +421,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
   test("simple scan with LIMIT") {
     val df = sql(s"SELECT name, salary, bonus FROM $catalogAndNamespace." +
       s"${caseConvert("employee")} WHERE dept > 0 LIMIT 1")
-    assert(limitPushed(df, 1))
+    checkLimitPushed(df, Some(1))
     val rows = df.collect()
     assert(rows.length === 1)
     assert(rows(0).getString(0) === "amy")
@@ -434,7 +433,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
     Seq(NullOrdering.values()).flatten.foreach { nullOrdering =>
       val df1 = sql(s"SELECT name, salary, bonus FROM $catalogAndNamespace." +
         s"${caseConvert("employee")} WHERE dept > 0 ORDER BY salary $nullOrdering LIMIT 1")
-      assert(limitPushed(df1, 1))
+      checkLimitPushed(df1, Some(1))
       checkSortRemoved(df1)
       val rows1 = df1.collect()
       assert(rows1.length === 1)
@@ -444,7 +443,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
 
       val df2 = sql(s"SELECT name, salary, bonus FROM $catalogAndNamespace." +
         s"${caseConvert("employee")} WHERE dept > 0 ORDER BY bonus DESC $nullOrdering LIMIT 1")
-      assert(limitPushed(df2, 1))
+      checkLimitPushed(df2, Some(1))
       checkSortRemoved(df2)
       val rows2 = df2.collect()
       assert(rows2.length === 1)
@@ -471,7 +470,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
     test("simple scan with LIMIT and OFFSET") {
       val df = sql(s"SELECT name, salary, bonus FROM $catalogAndNamespace." +
         s"${caseConvert("employee")} WHERE dept > 0 LIMIT 1 OFFSET 2")
-      assert(limitPushed(df, 3))
+      checkLimitPushed(df, Some(3))
       checkOffsetPushed(df, Some(2))
       val rows = df.collect()
       assert(rows.length === 1)
@@ -487,7 +486,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
         val df1 = sql(s"SELECT name, salary, bonus FROM $catalogAndNamespace." +
           s"${caseConvert("employee")}" +
           s" WHERE dept > 0 ORDER BY salary $nullOrdering, bonus LIMIT 1 OFFSET 2")
-        assert(limitPushed(df1, 3))
+        checkLimitPushed(df1, Some(3))
         checkOffsetPushed(df1, Some(2))
         checkSortRemoved(df1)
         val rows1 = df1.collect()
@@ -499,7 +498,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
         val df2 = sql(s"SELECT name, salary, bonus FROM $catalogAndNamespace." +
           s"${caseConvert("employee")}" +
           s" WHERE dept > 0 ORDER BY salary DESC $nullOrdering, bonus LIMIT 1 OFFSET 2")
-        assert(limitPushed(df2, 3))
+        checkLimitPushed(df2, Some(3))
         checkOffsetPushed(df2, Some(2))
         checkSortRemoved(df2)
         val rows2 = df2.collect()
