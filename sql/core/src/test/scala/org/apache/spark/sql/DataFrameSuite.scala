@@ -2451,13 +2451,6 @@ class DataFrameSuite extends QueryTest
     assert(d.size == d.distinct.size)
   }
 
-  test("11copy results for sampling with replacement") {
-    val df = Seq((1, 0), (2, 0), (3, 0)).toDF("a", "b")
-    val sampleDf = df.sample(true, 2.00)
-    val d = sampleDf.withColumn("c", distributed_sequence_id).select($"c").collect
-    assert(d.size == d.distinct.size)
-  }
-
   private def verifyNullabilityInFilterExec(
       df: DataFrame,
       expr: String,
@@ -3323,9 +3316,9 @@ class DataFrameSuite extends QueryTest
   }
 
   test("SPARK-36338: DataFrame.withSequenceColumn should append unique sequence IDs") {
-    val ids = spark.range(10).repartition(5)
-      .withSequenceColumn("default_index").collect().map(_.getLong(0))
-    assert(ids.toSet === Range(0, 10).toSet)
+    val ids = spark.range(10).repartition(5).withSequenceColumn("default_index")
+    assert(ids.collect().map(_.getLong(0)).toSet === Range(0, 10).toSet)
+    assert(ids.take(5).map(_.getLong(0)).toSet === Range(0, 5).toSet)
   }
 
   test("SPARK-35320: Reading JSON with key type different to String in a map should fail") {

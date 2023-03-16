@@ -22,16 +22,15 @@ import org.apache.spark.sql.types.{DataType, LongType}
 
 /**
  * Returns increasing 64-bit integers consecutive from 0.
- *
  * The generated ID is guaranteed to be increasing consecutive started from 0.
+ *
+ * @note this expression is dedicated for Pandas API on Spark to use.
  */
-case class DistributedSequenceID() extends Expression with Unevaluable with NonSQLExpression {
+case class DistributedSequenceID() extends LeafExpression with Unevaluable with NonSQLExpression {
 
   override def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Expression = {
     DistributedSequenceID()
   }
-
-  override def children: Seq[Expression] = Seq.empty
 
   override def nullable: Boolean = false
 
