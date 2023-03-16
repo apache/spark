@@ -56,6 +56,7 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper {
   }
 
   test("eager execution of sql") {
+    assume(IntegrationTestUtils.isSparkHiveJarAvailable)
     withTable("test_martin") {
       // Fails, because table does not exist.
       assertThrows[StatusRuntimeException] {
@@ -250,6 +251,7 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper {
   // TODO (SPARK-42519): Revisit this test after we can set configs.
   //  e.g. spark.conf.set("spark.sql.catalog.testcat", classOf[InMemoryTableCatalog].getName)
   test("writeTo with create") {
+    assume(IntegrationTestUtils.isSparkHiveJarAvailable)
     withTable("myTableV2") {
       // Failed to create as Hive support is required.
       spark.range(3).writeTo("myTableV2").create()
