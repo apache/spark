@@ -67,6 +67,7 @@ from pyspark.sql.types import (
     TimestampType,
 )
 from pyspark.sql.utils import to_str
+from pyspark.errors import PySparkAttributeError
 
 if TYPE_CHECKING:
     from pyspark.sql.connect._typing import OptionalPrimitiveType
@@ -483,6 +484,31 @@ class SparkSession:
     @property
     def readStream(self) -> Any:
         raise NotImplementedError("readStream() is not implemented.")
+
+    @property
+    def _jsc(self) -> None:
+        raise PySparkAttributeError(
+            error_class="JVM_ATTRIBUTE_NOT_SUPPORTED", message_parameters={"attr_name": "_jsc"}
+        )
+
+    @property
+    def _jconf(self) -> None:
+        raise PySparkAttributeError(
+            error_class="JVM_ATTRIBUTE_NOT_SUPPORTED", message_parameters={"attr_name": "_jconf"}
+        )
+
+    @property
+    def _jvm(self) -> None:
+        raise PySparkAttributeError(
+            error_class="JVM_ATTRIBUTE_NOT_SUPPORTED", message_parameters={"attr_name": "_jvm"}
+        )
+
+    @property
+    def _jsparkSession(self) -> None:
+        raise PySparkAttributeError(
+            error_class="JVM_ATTRIBUTE_NOT_SUPPORTED",
+            message_parameters={"attr_name": "_jsparkSession"},
+        )
 
     @property
     def udf(self) -> "UDFRegistration":

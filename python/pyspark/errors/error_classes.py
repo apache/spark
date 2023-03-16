@@ -39,6 +39,11 @@ ERROR_CLASSES_JSON = """
       "Function `<func_name>` should return Column, got <return_type>."
     ]
   },
+  "JVM_ATTRIBUTE_NOT_SUPPORTED" : {
+    "message" : [
+      "Attribute `<attr_name>` is not supported in Spark Connect as it depends on the JVM."
+    ]
+  },
   "NOT_BOOL" : {
     "message" : [
       "Argument `<arg_name>` should be a bool, got <arg_type>."

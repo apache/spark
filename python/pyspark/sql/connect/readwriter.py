@@ -21,6 +21,7 @@ check_dependencies(__name__)
 from typing import Dict
 from typing import Optional, Union, List, overload, Tuple, cast
 from typing import TYPE_CHECKING
+from typing import Any
 
 from pyspark.sql.connect.plan import Read, DataSource, LogicalPlan, WriteOperation, WriteOperationV2
 from pyspark.sql.types import StructType
@@ -30,6 +31,7 @@ from pyspark.sql.readwriter import (
     DataFrameReader as PySparkDataFrameReader,
     DataFrameWriterV2 as PySparkDataFrameWriterV2,
 )
+from pyspark.errors import PySparkAttributeError
 
 if TYPE_CHECKING:
     from pyspark.sql.connect.dataframe import DataFrame
@@ -416,6 +418,12 @@ class DataFrameReader(OptionUtils):
                 return self.load()
 
     jdbc.__doc__ = PySparkDataFrameReader.jdbc.__doc__
+
+    @property
+    def _jreader(self) -> None:
+        raise PySparkAttributeError(
+            error_class="JVM_ATTRIBUTE_NOT_SUPPORTED", message_parameters={"attr_name": "_jreader"}
+        )
 
 
 DataFrameReader.__doc__ = PySparkDataFrameReader.__doc__

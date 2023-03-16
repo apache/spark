@@ -50,7 +50,7 @@ from pyspark.sql.dataframe import (
     DataFrameStatFunctions as PySparkDataFrameStatFunctions,
 )
 
-from pyspark.errors import PySparkTypeError
+from pyspark.errors import PySparkTypeError, PySparkAttributeError
 from pyspark.errors.exceptions.connect import SparkConnectException
 from pyspark.rdd import PythonEvalType
 import pyspark.sql.connect.plan as plan
@@ -1304,6 +1304,14 @@ class DataFrame:
         return None
 
     def __getattr__(self, name: str) -> "Column":
+        if name in ["_jseq", "_jdf", "_jmap", "_jcols"]:
+            raise PySparkAttributeError(
+                error_class="JVM_ATTRIBUTE_NOT_SUPPORTED", message_parameters={"attr_name": name}
+            )
+        if name not in self.columns:
+            raise AttributeError(
+                "'%s' object has no attribute '%s'" % (self.__class__.__name__, name)
+            )
         return self[name]
 
     @overload
