@@ -72,7 +72,21 @@ class RocksDB(
   tableFormatConfig.setFilterPolicy(bloomFilter)
   tableFormatConfig.setFormatVersion(conf.formatVersion)
 
-  private val dbOptions = new Options() // options to open the RocksDB
+  private val columnFamilyOptions = new ColumnFamilyOptions()
+
+  private val dbOptions =
+    new Options(new DBOptions(), columnFamilyOptions) // options to open the RocksDB
+
+  // Set RocksDB options around MemTable memory usage. By default, we let RocksDB
+  // use its internal default values for these settings.
+  if (conf.writeBufferSizeMB > 0L) {
+    columnFamilyOptions.setWriteBufferSize(conf.writeBufferSizeMB * 1024 * 1024)
+  }
+
+  if (conf.maxWriteBufferNumber > 0L) {
+    columnFamilyOptions.setMaxWriteBufferNumber(conf.maxWriteBufferNumber)
+  }
+
   dbOptions.setCreateIfMissing(true)
   dbOptions.setTableFormatConfig(tableFormatConfig)
   dbOptions.setMaxOpenFiles(conf.maxOpenFiles)
@@ -558,7 +572,9 @@ case class RocksDBConf(
     resetStatsOnLoad : Boolean,
     formatVersion: Int,
     trackTotalNumberOfRows: Boolean,
-    maxOpenFiles: Int)
+    maxOpenFiles: Int,
+    writeBufferSizeMB: Long,
+    maxWriteBufferNumber: Int)
 
 object RocksDBConf {
   /** Common prefix of all confs in SQLConf that affects RocksDB */
@@ -609,6 +625,15 @@ object RocksDBConf {
   // again when you really need the know the number for observability/debuggability.
   private val TRACK_TOTAL_NUMBER_OF_ROWS = SQLConfEntry("trackTotalNumberOfRows", "true")
 
+  // Configuration to control maximum size of MemTable in RocksDB
+  private val WRITE_BUFFER_SIZE_MB_CONF = SQLConfEntry("writeBufferSizeMB", "-1")
+
+  // Configuration to set maximum number of MemTables in RocksDB, both active and immutable.
+  // If the active MemTable fills up and the total number of MemTables is larger than
+  // maxWriteBufferNumber, then RocksDB will stall further writes.
+  // This may happen if the flush process is slower than the write rate.
+  private val MAX_WRITE_BUFFER_NUMBER_CONF = SQLConfEntry("maxWriteBufferNumber", "-1")
+
   def apply(storeConf: StateStoreConf): RocksDBConf = {
     val sqlConfs = CaseInsensitiveMap[String](storeConf.sqlConfs)
     val extraConfs = CaseInsensitiveMap[String](storeConf.extraOptions)
@@ -630,6 +655,14 @@ object RocksDBConf {
       Try { getConfigMap(conf).getOrElse(conf.fullName, conf.default).toInt } getOrElse {
         throw new IllegalArgumentException(s"Invalid value for '${conf.fullName}', " +
           "must be an integer")
+      }
+    }
+
+    def getLongConf(conf: ConfEntry): Long = {
+      Try { getConfigMap(conf).getOrElse(conf.fullName, conf.default).toLong } getOrElse {
+        throw new IllegalArgumentException(
+          s"Invalid value for '${conf.fullName}', must be a long"
+        )
       }
     }
 
@@ -660,7 +693,9 @@ object RocksDBConf {
       getBooleanConf(RESET_STATS_ON_LOAD),
       getPositiveIntConf(FORMAT_VERSION),
       getBooleanConf(TRACK_TOTAL_NUMBER_OF_ROWS),
-      getIntConf(MAX_OPEN_FILES_CONF))
+      getIntConf(MAX_OPEN_FILES_CONF),
+      getLongConf(WRITE_BUFFER_SIZE_MB_CONF),
+      getIntConf(MAX_WRITE_BUFFER_NUMBER_CONF))
   }
 
   def apply(): RocksDBConf = apply(new StateStoreConf())

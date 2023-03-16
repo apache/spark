@@ -660,6 +660,33 @@ class RocksDBSuite extends SparkFunSuite {
     }
   }
 
+  Seq("1", "2", "3").foreach { maxWriteBufferNumber =>
+    Seq("16", "32", "64").foreach {writeBufferSizeMB =>
+      test(s"SPARK-42819: configure memtable memory usage with " +
+        s"maxWriteBufferNumber=$maxWriteBufferNumber and writeBufferSize=$writeBufferSizeMB") {
+        withTempDir { dir =>
+          val sqlConf = new SQLConf
+          sqlConf.setConfString("spark.sql.streaming.stateStore.rocksdb.maxWriteBufferNumber",
+            maxWriteBufferNumber)
+          sqlConf.setConfString("spark.sql.streaming.stateStore.rocksdb.writeBufferSizeMB",
+            writeBufferSizeMB)
+          val dbConf = RocksDBConf(StateStoreConf(sqlConf))
+          assert(dbConf.maxWriteBufferNumber === maxWriteBufferNumber.toInt)
+          assert(dbConf.writeBufferSizeMB === writeBufferSizeMB.toInt)
+
+          val remoteDir = dir.getCanonicalPath
+          withDB(remoteDir, conf = dbConf) { db =>
+            // Do some DB ops
+            db.load(0)
+            db.put("a", "1")
+            db.commit()
+            assert(toStr(db.get("a")) === "1")
+          }
+        }
+      }
+    }
+  }
+
   test("SPARK-37224: flipping option 'trackTotalNumberOfRows' during restart") {
     withTempDir { dir =>
       val remoteDir = dir.getCanonicalPath
