@@ -233,6 +233,7 @@ class ClientModelSummary(metaclass=ABCMeta):
 @inherit_doc
 class HasTrainingSummary(ClientModel, metaclass=ABCMeta):
 
+    @property  # type: ignore[misc]
     def hasSummary(self) -> bool:
         return self._get_model_attr("hasSummary")
 
