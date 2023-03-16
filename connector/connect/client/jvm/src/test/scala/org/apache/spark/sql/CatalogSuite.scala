@@ -148,7 +148,6 @@ class CatalogSuite extends RemoteSparkSession with SQLHelper {
     }
   }
 
-  // scalastyle:off
   test("TempView APIs") {
     val viewName = "view1"
     val globalViewName = "g_view1"
@@ -169,5 +168,22 @@ class CatalogSuite extends RemoteSparkSession with SQLHelper {
       assert(!spark.catalog.tableExists(viewName))
       assert(!spark.catalog.tableExists(globalViewName))
     }
+  }
+
+  test("Function API") {
+    val dbName = spark.catalog.currentDatabase
+    val functions1 = spark.catalog.listFunctions().collect()
+    assert(functions1.nonEmpty)
+    val functions2 = spark.catalog.listFunctions(dbName).collect()
+    assert(functions1.map(_.name) sameElements functions2.map(_.name))
+    val absFunctionName = "abs"
+    assert(spark.catalog.functionExists(absFunctionName))
+    assert(spark.catalog.getFunction(absFunctionName).name == absFunctionName)
+    val notExistsFunction = "notExists"
+    assert(!spark.catalog.functionExists(notExistsFunction))
+    val message = intercept[StatusRuntimeException] {
+      spark.catalog.getFunction(notExistsFunction)
+    }.getMessage
+    assert(message.contains("UNRESOLVED_ROUTINE"))
   }
 }
