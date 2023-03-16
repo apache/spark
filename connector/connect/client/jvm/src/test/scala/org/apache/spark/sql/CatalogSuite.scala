@@ -17,7 +17,10 @@
 
 package org.apache.spark.sql
 
+import java.io.{File, FilenameFilter}
+
 import io.grpc.StatusRuntimeException
+import org.apache.commons.io.FileUtils
 
 import org.apache.spark.sql.connect.client.util.RemoteSparkSession
 import org.apache.spark.sql.types.{DoubleType, LongType, StructType}
@@ -185,5 +188,83 @@ class CatalogSuite extends RemoteSparkSession with SQLHelper {
       spark.catalog.getFunction(notExistsFunction)
     }.getMessage
     assert(message.contains("UNRESOLVED_ROUTINE"))
+  }
+
+  test("recoverPartitions") {
+    val tableName = "test"
+    withTable(tableName) {
+      withTempPath { dir =>
+        spark.range(5).selectExpr("id as fieldOne", "id as partCol").write
+          .partitionBy("partCol")
+          .mode("overwrite")
+          .save(dir.getAbsolutePath)
+        spark.sql(
+          s"""
+             |create table $tableName (fieldOne long, partCol int)
+             |using parquet
+             |options (path "${dir.toURI}")
+             |partitioned by (partCol)""".stripMargin)
+        spark.sql(s"show partitions $tableName").count()
+        assert(spark.sql(s"select * from $tableName").count() == 0)
+        spark.catalog.recoverPartitions(tableName)
+        assert(spark.sql(s"select * from $tableName").count() == 5)
+      }
+    }
+  }
+
+  test("refreshTable") {
+    withTempPath { dir =>
+      val tableName = "spark_catalog.default.my_table"
+      withTable(tableName) {
+        try {
+          spark.sql(
+            s"""
+               | CREATE TABLE $tableName(col STRING) USING TEXT
+               | LOCATION '${dir.getAbsolutePath}'
+               |""".stripMargin)
+          spark.sql(s"""INSERT INTO $tableName SELECT 'abc'""".stripMargin)
+          spark.catalog.cacheTable(tableName)
+          assert(spark.table(tableName).collect().length == 1)
+
+          FileUtils.deleteDirectory(dir)
+          assert(spark.table(tableName).collect().length == 1)
+
+          spark.catalog.refreshTable(tableName)
+          assert(spark.table(tableName).collect().length == 0)
+        } finally {
+          spark.catalog.clearCache()
+        }
+      }
+    }
+  }
+
+  test("refreshByPath") {
+    withTempPath { dir =>
+      val tableName = "spark_catalog.default.my_table"
+      withTable(tableName) {
+        try {
+          spark.sql(
+            s"""
+               | CREATE TABLE $tableName(col STRING) USING TEXT
+               | LOCATION '${dir.getAbsolutePath}'
+               |""".stripMargin)
+          spark.sql(s"""INSERT INTO $tableName SELECT 'abc'""".stripMargin)
+          spark.catalog.cacheTable(tableName)
+          assert(spark.table(tableName).collect().length == 1)
+
+          // delete one
+          new File(dir.getAbsolutePath).listFiles(new FilenameFilter() {
+            override def accept(dir: File, name: String): Boolean = name.endsWith(".txt")
+          }).head.delete()
+
+          assert(spark.table(tableName).collect().length == 1)
+
+          spark.catalog.refreshByPath(dir.getAbsolutePath)
+          assert(spark.table(tableName).collect().length == 0)
+        } finally {
+          spark.catalog.clearCache()
+        }
+      }
+    }
   }
 }
