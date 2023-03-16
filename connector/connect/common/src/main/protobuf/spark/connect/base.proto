@@ -413,6 +413,11 @@ message AddArtifactsRequest {
   // User context
   UserContext user_context = 2;
 
+  // Provides optional information about the client sending the request. This field
+  // can be used for language or version specific information and is only intended for
+  // logging purposes and will not be interpreted by the server.
+  optional string client_type = 6;
+
   // A chunk of an Artifact.
   message ArtifactChunk {
     // Data chunk.
