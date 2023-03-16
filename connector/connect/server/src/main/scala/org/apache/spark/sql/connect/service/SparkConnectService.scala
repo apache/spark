@@ -33,8 +33,6 @@ import io.grpc.protobuf.StatusProto
 import io.grpc.protobuf.services.ProtoReflectionService
 import io.grpc.stub.StreamObserver
 import org.apache.commons.lang3.StringUtils
-import org.json4s.JsonDSL._
-import org.json4s.jackson.JsonMethods.{compact, render}
 
 import org.apache.spark.{SparkEnv, SparkException, SparkThrowable}
 import org.apache.spark.api.python.PythonException
@@ -43,6 +41,7 @@ import org.apache.spark.connect.proto.{AddArtifactsRequest, AddArtifactsResponse
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connect.config.Connect.CONNECT_GRPC_BINDING_PORT
+import org.apache.spark.util.JacksonUtils
 
 /**
  * The SparkConnectService implementation.
@@ -83,7 +82,9 @@ class SparkConnectService(debug: Boolean)
             .newBuilder()
             .setReason(st.getClass.getName)
             .setDomain("org.apache.spark")
-            .putMetadata("classes", compact(render(allClasses(st.getClass).map(_.getName))))
+            .putMetadata(
+              "classes",
+              JacksonUtils.writeValueAsString(allClasses(st.getClass).map(_.getName)))
             .build()))
       .setMessage(StringUtils.abbreviate(st.getMessage, 2048))
       .build()
