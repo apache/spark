@@ -40,11 +40,7 @@ abstract class SQLImplicits extends LowPrioritySQLImplicits {
    */
   implicit class StringToColumn(val sc: StringContext) {
     def $(args: Any*): ColumnName = {
-      if (sc.parts.length == 1 && sc.parts.contains("*")) {
-        new ColumnName("*")
-      } else {
         new ColumnName(sc.s(args: _*))
-      }
     }
   }
 
