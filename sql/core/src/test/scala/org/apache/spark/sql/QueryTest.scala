@@ -30,7 +30,6 @@ import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.storage.StorageLevel
 
-
 abstract class QueryTest extends PlanTest {
 
   protected def spark: SparkSession
@@ -228,46 +227,6 @@ abstract class QueryTest extends PlanTest {
       s"The optimized logical plan has missing inputs:\n${query.queryExecution.optimizedPlan}")
     assert(query.queryExecution.executedPlan.missingInput.isEmpty,
       s"The physical plan has missing inputs:\n${query.queryExecution.executedPlan}")
-  }
-
-  /** A single SQL query's output. */
-  protected trait QueryTestOutput {
-    def sql: String
-    def schema: Option[String]
-    def output: String
-    def numSegments: Int
-  }
-
-  /** A single SQL query's output. */
-  protected case class ExecutionOutput(
-      sql: String,
-      schema: Option[String],
-      output: String) extends QueryTestOutput {
-    override def toString: String = {
-      // We are explicitly not using multi-line string due to stripMargin removing "|" in output.
-      s"-- !query\n" +
-      sql + "\n" +
-      s"-- !query schema\n" +
-      schema.get + "\n" +
-      s"-- !query output\n" +
-      output
-    }
-    override def numSegments: Int = 3
-  }
-
-  /** A single SQL query's analysis results. */
-  protected case class AnalyzerOutput(
-      sql: String,
-      schema: Option[String],
-      output: String) extends QueryTestOutput {
-    override def toString: String = {
-      // We are explicitly not using multi-line string due to stripMargin removing "|" in output.
-      s"-- !query\n" +
-      sql + "\n" +
-      s"-- !query analysis\n" +
-      output
-    }
-    override def numSegments: Int = 2
   }
 
   /**
@@ -519,6 +478,46 @@ object QueryTest extends Assertions {
       case None =>
     }
   }
+}
+
+/** A single SQL query's output. */
+trait QueryTestOutput {
+  def sql: String
+  def schema: Option[String]
+  def output: String
+  def numSegments: Int
+}
+
+/** A single SQL query's output. */
+protected case class ExecutionOutput(
+  sql: String,
+  schema: Option[String],
+  output: String) extends QueryTestOutput {
+  override def toString: String = {
+    // We are explicitly not using multi-line string due to stripMargin removing "|" in output.
+    s"-- !query\n" +
+      sql + "\n" +
+      s"-- !query schema\n" +
+      schema.get + "\n" +
+      s"-- !query output\n" +
+      output
+  }
+  override def numSegments: Int = 3
+}
+
+/** A single SQL query's analysis results. */
+protected case class AnalyzerOutput(
+  sql: String,
+  schema: Option[String],
+  output: String) extends QueryTestOutput {
+  override def toString: String = {
+    // We are explicitly not using multi-line string due to stripMargin removing "|" in output.
+    s"-- !query\n" +
+      sql + "\n" +
+      s"-- !query analysis\n" +
+      output
+  }
+  override def numSegments: Int = 2
 }
 
 class QueryTestSuite extends QueryTest with test.SharedSparkSession {
