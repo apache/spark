@@ -305,7 +305,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
     conf
 
     // Run the SQL queries preparing them for comparison.
-    val outputs: Seq[QueryOutput] = queries.map { sql =>
+    val outputs: Seq[QueryTestOutput] = queries.map { sql =>
       testCase match {
         case _: AnalyzerTest =>
           val (_, output) =

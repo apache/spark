@@ -170,7 +170,7 @@ trait SQLQueryTestHelper extends Logging {
       for (c <- allCode) {
         if (c.trim.startsWith("--QUERY-DELIMITER-START")) {
           start = true
-          queries ++= splitWithSemicolon(otherCodes)
+          queries ++= splitWithSemicolon(otherCodes.toSeq)
           otherCodes.clear()
         } else if (c.trim.startsWith("--QUERY-DELIMITER-END")) {
           start = false
@@ -183,11 +183,11 @@ trait SQLQueryTestHelper extends Logging {
         }
       }
       if (otherCodes.nonEmpty) {
-        queries ++= splitWithSemicolon(otherCodes)
+        queries ++= splitWithSemicolon(otherCodes.toSeq)
       }
       queries
     } else {
-      splitWithSemicolon(allCode).toSeq
+      splitWithSemicolon(allCode.toSeq).toSeq
     }
 
     // List of SQL queries to run

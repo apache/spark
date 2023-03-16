@@ -231,7 +231,7 @@ abstract class QueryTest extends PlanTest {
   }
 
   /** A single SQL query's output. */
-  protected trait QueryOutput {
+  protected trait QueryTestOutput {
     def sql: String
     def schema: Option[String]
     def output: String
@@ -242,7 +242,7 @@ abstract class QueryTest extends PlanTest {
   protected case class ExecutionOutput(
       sql: String,
       schema: Option[String],
-      output: String) extends QueryOutput {
+      output: String) extends QueryTestOutput {
     override def toString: String = {
       // We are explicitly not using multi-line string due to stripMargin removing "|" in output.
       s"-- !query\n" +
@@ -259,7 +259,7 @@ abstract class QueryTest extends PlanTest {
   protected case class AnalyzerOutput(
       sql: String,
       schema: Option[String],
-      output: String) extends QueryOutput {
+      output: String) extends QueryTestOutput {
     override def toString: String = {
       // We are explicitly not using multi-line string due to stripMargin removing "|" in output.
       s"-- !query\n" +
@@ -276,10 +276,10 @@ abstract class QueryTest extends PlanTest {
    */
   def readGoldenFileAndCompareResults(
       resultFile: String,
-      outputs: Seq[QueryOutput],
-      makeOutput: (String, Option[String], String) => QueryOutput): Unit = {
+      outputs: Seq[QueryTestOutput],
+      makeOutput: (String, Option[String], String) => QueryTestOutput): Unit = {
     // Read back the golden file.
-    val expectedOutputs: Seq[QueryOutput] = {
+    val expectedOutputs: Seq[QueryTestOutput] = {
       val goldenOutput = fileToString(new File(resultFile))
       val segments = goldenOutput.split("-- !query.*\n")
 
