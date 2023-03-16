@@ -7,5 +7,16 @@
   "processLogs" : {
     "stdout" : "http://192.168.1.19:8042/node/containerlogs/container_1555004656427_0144_01_000001/test/stdout?start=-4096",
     "stderr" : "http://192.168.1.19:8042/node/containerlogs/container_1555004656427_0144_01_000001/test/stderr?start=-4096"
+  },
+  "attributes" : {
+    "NM_HTTP_ADDRESS" : "tomg-test:8042",
+    "USER" : "tgraves",
+    "LOG_FILES" : "stderr,stdout",
+    "NM_HTTP_PORT" : "8042",
+    "CLUSTER_ID" : "",
+    "NM_PORT" : "43125",
+    "HTTP_SCHEME" : "http://",
+    "NM_HOST" : "tomg-test",
+    "CONTAINER_ID" : "container_1555004656427_0144_01_000001"
   }
 } ]
