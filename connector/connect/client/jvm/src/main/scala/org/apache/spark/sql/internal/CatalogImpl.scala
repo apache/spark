@@ -601,7 +601,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
   override def refreshTable(tableName: String): Unit = {
     sparkSession
       .newDataFrame { builder =>
-        builder.getCatalogBuilder.getRefreshTableBuilder
+        builder.getCatalogBuilder.getRefreshTableBuilder.setTableName(tableName)
       }
       .count()
   }

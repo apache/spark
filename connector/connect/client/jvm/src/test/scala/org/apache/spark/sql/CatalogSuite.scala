@@ -97,7 +97,7 @@ class CatalogSuite extends RemoteSparkSession with SQLHelper {
           spark.catalog
             .createTable(jsonTableName, "json", schema, Map.empty[String, String])
             .collect()
-          val jsonTable = spark.catalog.getTable(jsonTableName)
+          val jsonTable = spark.catalog.getTable("default", jsonTableName)
           assert(!jsonTable.isTemporary)
           assert(jsonTable.name == jsonTableName)
           assert(jsonTable.tableType == "MANAGED")
@@ -114,7 +114,60 @@ class CatalogSuite extends RemoteSparkSession with SQLHelper {
         assert(spark.catalog.listTables().collect().map(_.name).toSet == Set(parquetTableName))
       }
     }
+    val message = intercept[StatusRuntimeException] {
+      spark.catalog.getTable(parquetTableName)
+    }.getMessage
+    assert(message.contains("TABLE_OR_VIEW_NOT_FOUND"))
+
     assert(spark.catalog.listTables().collect().isEmpty)
   }
 
+  test("Cache Table APIs") {
+    val parquetTableName = "parquet_table"
+    val jsonTableName = "json_table"
+    withTable(parquetTableName, jsonTableName) {
+      withTempPath { table1Dir =>
+        val session = spark
+        import session.implicits._
+        val df1 = Seq("Bob", "Alice", "Nico", "Bob", "Alice").toDF("name")
+        df1.write.parquet(table1Dir.getPath)
+        spark.catalog.createTable(parquetTableName, table1Dir.getPath).collect()
+
+        // Test cache and uncacheTable
+        spark.catalog.cacheTable(parquetTableName)
+        assert(spark.catalog.isCached(parquetTableName))
+        spark.catalog.uncacheTable(parquetTableName)
+        assert(!spark.catalog.isCached(parquetTableName))
+
+        // Test clearCache
+        spark.catalog.cacheTable(parquetTableName)
+        assert(spark.catalog.isCached(parquetTableName))
+        spark.catalog.clearCache()
+        assert(!spark.catalog.isCached(parquetTableName))
+      }
+    }
+  }
+
+  // scalastyle:off
+  test("TempView APIs") {
+    val viewName = "view1"
+    val globalViewName = "g_view1"
+    try {
+      spark.range(100).createTempView(viewName)
+      val view = spark.catalog.getTable(viewName)
+      assert(view.name == viewName)
+      assert(view.isTemporary)
+      assert(view.tableType == "TEMPORARY")
+      spark.range(100).createGlobalTempView(globalViewName)
+      val globalView = spark.catalog.getTable(s"global_temp.$globalViewName")
+      assert(globalView.name == globalViewName)
+      assert(globalView.isTemporary)
+      assert(globalView.tableType == "TEMPORARY")
+    } finally {
+      spark.catalog.dropTempView(viewName)
+      spark.catalog.dropGlobalTempView(globalViewName)
+      assert(!spark.catalog.tableExists(viewName))
+      assert(!spark.catalog.tableExists(globalViewName))
+    }
+  }
 }
