@@ -72,6 +72,7 @@ private[spark] class AppStatusListener(
   // Keep track of live entities, so that task metrics can be efficiently updated (without
   // causing too many writes to the underlying store, and other expensive operations).
   private val liveStages = new ConcurrentHashMap[(Int, Int), LiveStage]()
+  private val skippedStages = new ConcurrentHashMap[Seq[RDDOperationCluster], Int]()
   private val liveJobs = new HashMap[Int, LiveJob]()
   private[spark] val liveExecutors = new HashMap[String, LiveExecutor]()
   private[spark] val deadExecutors = new HashMap[String, LiveExecutor]()
@@ -472,6 +473,19 @@ private[spark] class AppStatusListener(
         graph.incomingEdges,
         newRDDOperationCluster(graph.rootCluster))
       kvstore.write(uigraph)
+      if (skippedStages.containsKey(graph.rootCluster.childClusters)) {
+        val skippedStage = new SkippedStageData(stage.stageId,
+          skippedStages.get(graph.rootCluster.childClusters))
+        kvstore.write(skippedStage)
+      } else {
+        skippedStages.put(graph.rootCluster.childClusters, stage.stageId)
+      }
+    }
+    // kvstore.trigger not quite working so using following implementation
+    // for cleanup.
+    val skipcount = kvstore.count(classOf[SkippedStageData])
+    if (skipcount > conf.get(MAX_RETAINED_STAGES)) {
+      cleanupSkippedStages(skipcount)
     }
   }
 
@@ -1343,7 +1357,19 @@ private[spark] class AppStatusListener(
       key
     }
   }
+  private def cleanupSkippedStages(count: Long): Unit = {
+    skippedStages.clear()
+    val countToDelete = calculateNumberToRemove(count, conf.get(MAX_RETAINED_STAGES))
+    if (countToDelete <= 0L) {
+      return
+    }
 
+    val view = kvstore.view(classOf[SkippedStageData]).index("id").first(0)
+    val toDelete = KVUtils.viewToSeq(view, countToDelete.toInt) { j =>
+      j.stage > -1
+    }
+    toDelete.foreach { j => kvstore.delete(j.getClass(), j.stage) }
+  }
   private def cleanupStages(count: Long): Unit = {
     val countToDelete = calculateNumberToRemove(count, conf.get(MAX_RETAINED_STAGES))
     if (countToDelete <= 0L) {

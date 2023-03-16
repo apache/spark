@@ -506,6 +506,13 @@ private[spark] class RDDOperationClusterWrapper(
 
 }
 
+private[spark] class SkippedStageData(
+ @KVIndexParam val stage: Int,
+ val originalStage: Int) {
+  @JsonIgnore
+  @KVIndex("id")
+  private def id: Int = stage
+}
 private[spark] class RDDOperationGraphWrapper(
     @KVIndexParam val stageId: Int,
     val edges: collection.Seq[RDDOperationEdge],

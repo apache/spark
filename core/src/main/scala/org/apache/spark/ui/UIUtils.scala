@@ -519,7 +519,12 @@ private[spark] object UIUtils extends Logging {
           graphs.map { g =>
             val stageId = g.rootCluster.id.replaceAll(RDDOperationGraph.STAGE_CLUSTER_PREFIX, "")
             val skipped = g.rootCluster.name.contains("skipped").toString
-            <div class="stage-metadata" stage-id={stageId} skipped={skipped}>
+            val skipStage = if (skipped == "true") {
+              g.rootCluster.name.split("Original Stage:")(1).trim
+            } else {
+              ""
+            }
+            <div class="stage-metadata" stage-id={stageId} skipped={skipped} skipStage={skipStage}>
               <div class="dot-file">{RDDOperationGraph.makeDotFile(g)}</div>
               { g.incomingEdges.map { e => <div class="incoming-edge">{e.fromId},{e.toId}</div> } }
               { g.outgoingEdges.map { e => <div class="outgoing-edge">{e.fromId},{e.toId}</div> } }

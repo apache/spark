@@ -789,8 +789,14 @@ private[spark] class AppStatusStore(
 
     stages.map { id =>
       val g = store.read(classOf[RDDOperationGraphWrapper], id).toRDDOperationGraph()
+      val original = try {
+        store.read(classOf[SkippedStageData], id).originalStage
+      } catch {
+        case _: NoSuchElementException => -1
+      }
       if (job.skippedStages.contains(id) && !g.rootCluster.name.contains("skipped")) {
-        g.rootCluster.setName(g.rootCluster.name + " (skipped)")
+        g.rootCluster.setName(g.rootCluster.name + " (skipped)"
+          + "\nOriginal Stage: " + original)
       }
       g
     }

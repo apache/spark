@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.ui
 
+import java.io.{ByteArrayOutputStream, PrintStream}
 import java.util.Properties
 
 import scala.collection.mutable.{ArrayBuffer, ListBuffer}
@@ -1024,6 +1025,26 @@ abstract class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTes
       createProperties(executionId)))
 
     assertJobs(statusStore.execution(executionId), running = Seq(0))
+  }
+
+  test("SPARK-42830 Check that cleaning Skipped Stages throws no exception") {
+    val byteOutput = new ByteArrayOutputStream
+    val out = new PrintStream(byteOutput)
+    val standard: PrintStream = System.out
+    try {
+      System.setOut(out)
+      for (i <- 0 until 15) {
+        val d = spark.sparkContext.parallelize(0 until 2).map(i => (i % 2, i)).cache
+        val c = d.rightOuterJoin(d.reduceByKey(_ + _))
+        c.count
+        c.collect // skipped, shuffled
+      }
+      val output = byteOutput.toString()
+      assert(!output.contains("threw an exception"))
+    } finally {
+      System.setOut(standard)
+      out.close()
+    }
   }
 }
 

@@ -229,14 +229,26 @@ function renderDagVizForJob(svgContainer) {
     var isSkipped = metadata.attr("skipped") === "true";
     var container;
     if (isSkipped) {
-      container = svgContainer
+      var attemptId = 0;
+      if (metadata.attr("skipStage") != -1){
+        stageId = metadata.attr("skipStage")
+        var stageLink = uiRoot + appBasePath + "/stages/stage/?id=" + stageId + "&attempt=" + attemptId;
+        container = svgContainer
+            .append("a")
+            .attr("xlink:href", stageLink)
+            .append("g")
+            .attr("id", containerId)
+            .attr("skipped", "true");
+      } else {
+        container = svgContainer
         .append("g")
         .attr("id", containerId)
         .attr("skipped", "true");
+      }
     } else {
       // Link each graph to the corresponding stage page (TODO: handle stage attempts)
-      var attemptId = 0;
-      var stageLink = uiRoot + appBasePath + "/stages/stage/?id=" + stageId + "&attempt=" + attemptId;
+      attemptId = 0;
+      stageLink = uiRoot + appBasePath + "/stages/stage/?id=" + stageId + "&attempt=" + attemptId;
       container = svgContainer
         .append("a")
         .attr("xlink:href", stageLink)
