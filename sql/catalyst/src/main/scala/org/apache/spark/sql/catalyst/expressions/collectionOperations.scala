@@ -1403,7 +1403,7 @@ case class ArrayContains(left: Expression, right: Expression)
 @ExpressionDescription(
   usage = """
       _FUNC_(array, element) - Add the element at the beginning of the array passed as first
-      argument. Type of element should be similar to type of the elements of the array.
+      argument. Type of element should be the same as the type of the elements of the array.
       Null element is also prepended to the array. But if the array passed is NULL
       output is NULL
     """,
@@ -1453,7 +1453,7 @@ case class ArrayPrepend(left: Expression, right: Expression)
     val leftGen = left.genCode(ctx)
     val rightGen = right.genCode(ctx)
     val f = (arr: String, value: String) => {
-      val newArraySize = ctx.freshName("newArraySize")
+      val newArraySize = s"$arr.numElements() + 1"
       val newArray = ctx.freshName("newArray")
       val i = ctx.freshName("i")
       val iPlus1 = s"$i+1"
@@ -1468,7 +1468,6 @@ case class ArrayPrepend(left: Expression, right: Expression)
       val newElemAssignment =
         CodeGenerator.setArrayElement(newArray, elementType, zero, value, Some(rightGen.isNull))
       s"""
-         |int $newArraySize = $arr.numElements() + 1;
          |$allocation
          |$newElemAssignment
          |for (int $i = 0; $i < $arr.numElements(); $i ++) {
@@ -1487,17 +1486,19 @@ case class ArrayPrepend(left: Expression, right: Expression)
       }
       ev.copy(code =
         code"""
-        boolean ${ev.isNull} = true;
-        ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
-        $nullSafeEval
-      """)
+          |boolean ${ev.isNull} = true;
+          |${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+          |$nullSafeEval
+        """.stripMargin
+      )
     } else {
       ev.copy(code =
         code"""
-            ${leftGen.code}
-            ${rightGen.code}
-            ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
-            $resultCode""", isNull = FalseLiteral)
+          |${leftGen.code}
+          |${rightGen.code}
+          |${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+          |$resultCode
+        """.stripMargin, isNull = FalseLiteral)
     }
   }
 
