@@ -41,7 +41,7 @@ ERROR_CLASSES_JSON = """
   },
   "JVM_ATTRIBUTE_NOT_SUPPORTED" : {
     "message" : [
-      "Attribute `<attr_name>` is not supported in Spark Connect as it depends on the JVM. If you need to use this attribute, use the original PySpark instead of Spark Connect."
+      "Attribute `<attr_name>` is not supported in Spark Connect as it depends on the JVM. If you need to use this attribute, do not use Spark Connect when creating your session."
     ]
   },
   "NOT_BOOL" : {
