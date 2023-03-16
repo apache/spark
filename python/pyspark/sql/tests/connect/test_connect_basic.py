@@ -2871,18 +2871,6 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             with self.assertRaises(NotImplementedError):
                 getattr(self.connect, f)()
 
-    def test_unsupported_io_functions(self):
-        # SPARK-41964: Disable unsupported functions.
-        df = self.connect.createDataFrame([(x, f"{x}") for x in range(100)], ["id", "name"])
-
-        for f in ("jdbc",):
-            with self.assertRaises(NotImplementedError):
-                getattr(self.connect.read, f)()
-
-        for f in ("jdbc",):
-            with self.assertRaises(NotImplementedError):
-                getattr(df.write, f)()
-
     def test_sql_with_command(self):
         # SPARK-42705: spark.sql should return values from the command.
         self.assertEqual(

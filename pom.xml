@@ -84,8 +84,9 @@
     <module>common/tags</module>
     <module>core</module>
     <module>graphx</module>
-    <module>mllib</module>
-    <module>mllib-local</module>
+    <module>mllib/core</module>
+    <module>mllib/common</module>
+    <module>mllib/local</module>
     <module>tools</module>
     <module>streaming</module>
     <module>sql/catalyst</module>
@@ -176,7 +177,7 @@
       errors building different Hadoop versions.
       See: SPARK-36547, SPARK-38394.
        -->
-    <scala-maven-plugin.version>4.8.0</scala-maven-plugin.version>
+    <scala-maven-plugin.version>4.8.1</scala-maven-plugin.version>
     <versions-maven-plugin.version>2.15.0</versions-maven-plugin.version>
     <!-- for now, not running scalafmt as part of default verify pipeline -->
     <scalafmt.skip>true</scalafmt.skip>
