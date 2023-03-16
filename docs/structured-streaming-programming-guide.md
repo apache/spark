@@ -2289,6 +2289,16 @@ Here are the configs regarding to RocksDB instance of the state store provider:
     <td>Whether we track the total number of rows in state store. Please refer the details in <a href="#performance-aspect-considerations">Performance-aspect considerations</a>.</td>
     <td>True</td>
   </tr>
+  <tr>
+    <td>spark.sql.streaming.stateStore.rocksdb.writeBufferSizeMB</td>
+    <td>The maximum size of MemTable in RocksDB. Value of -1 means that RocksDB internal default values will be used</td>
+    <td>-1</td>
+  </tr>
+  <tr>
+    <td>spark.sql.streaming.stateStore.rocksdb.maxWriteBufferNumber</td>
+    <td>The maximum number of MemTables in RocksDB, both active and immutable. Value of -1 means that RocksDB internal default values will be used</td>
+    <td>-1</td>
+  </tr>
 </table>
 
 ##### Performance-aspect considerations
