@@ -137,7 +137,7 @@ trait SQLQueryTestHelper extends Logging {
   }
 
   /** Run a test case. */
-  protected def runTest(
+  protected def runSqlTestCase(
       testCase: TestCase,
       listTestCases: Seq[TestCase],
       runQueries: (

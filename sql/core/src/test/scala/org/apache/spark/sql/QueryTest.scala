@@ -228,7 +228,6 @@ abstract class QueryTest extends PlanTest {
     assert(query.queryExecution.executedPlan.missingInput.isEmpty,
       s"The physical plan has missing inputs:\n${query.queryExecution.executedPlan}")
   }
-
 }
 
 object QueryTest extends Assertions {
@@ -425,7 +424,6 @@ object QueryTest extends Assertions {
     }
   }
 }
-
 
 class QueryTestSuite extends QueryTest with test.SharedSparkSession {
   test("SPARK-16940: checkAnswer should raise TestFailedException for wrong results") {

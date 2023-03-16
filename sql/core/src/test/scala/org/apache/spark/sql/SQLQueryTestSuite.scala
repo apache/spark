@@ -259,7 +259,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
       case _ =>
         // Create a test case to run this case.
         test(testCase.name) {
-          runTest(testCase, listTestCases, runQueries)
+          runSqlTestCase(testCase, listTestCases, runQueries)
         }
     }
   }

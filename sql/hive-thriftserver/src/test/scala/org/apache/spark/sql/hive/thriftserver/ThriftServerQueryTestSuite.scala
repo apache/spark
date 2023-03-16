@@ -235,7 +235,7 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite with SharedThriftServ
     } else {
       // Create a test case to run this case.
       test(testCase.name) {
-        runTest(testCase)
+        runSqlTestCase(testCase, Seq.empty, runQueries)
       }
     }
   }
