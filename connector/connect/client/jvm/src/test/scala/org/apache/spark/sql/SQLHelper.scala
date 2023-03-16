@@ -16,11 +16,13 @@
  */
 package org.apache.spark.sql
 
+import java.io.File
 import java.util.UUID
 
 import org.scalatest.Assertions.fail
 
 import org.apache.spark.sql.catalyst.catalog.SessionCatalog.DEFAULT_DATABASE
+import org.apache.spark.util.Utils
 
 trait SQLHelper {
 
@@ -79,5 +81,15 @@ trait SQLHelper {
       }
       spark.sql(s"DROP DATABASE $dbName CASCADE")
     }
+  }
+
+  /**
+   * Generates a temporary path without creating the actual file/directory, then pass it to `f`. If
+   * a file/directory is created there by `f`, it will be delete after `f` returns.
+   */
+  protected def withTempPath(f: File => Unit): Unit = {
+    val path = Utils.createTempDir()
+    path.delete()
+    try f(path) finally Utils.deleteRecursively(path)
   }
 }
