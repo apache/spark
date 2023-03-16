@@ -413,7 +413,6 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
       logInfo(s"Setting configs: ${setOperations.mkString(", ")}")
       setOperations.foreach(localSparkSession.sql)
     }
-    conf
 
     // Run the SQL queries preparing them for comparison.
     val outputs: Seq[QueryTestOutput] = queries.map { sql =>
