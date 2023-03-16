@@ -862,6 +862,9 @@ class DataFrameReader(OptionUtils):
 
         .. versionadded:: 1.4.0
 
+        .. versionchanged:: 3.4.0
+            Supports Spark Connect.
+
         Parameters
         ----------
         table : str
@@ -1868,6 +1871,9 @@ class DataFrameWriter(OptionUtils):
         """Saves the content of the :class:`DataFrame` to an external database table via JDBC.
 
         .. versionadded:: 1.4.0
+
+        .. versionchanged:: 3.4.0
+            Supports Spark Connect.
 
         Parameters
         ----------
