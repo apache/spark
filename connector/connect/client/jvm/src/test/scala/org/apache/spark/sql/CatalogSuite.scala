@@ -88,16 +88,25 @@ class CatalogSuite extends RemoteSparkSession with SQLHelper {
             assert(!orcTable.isTemporary)
             assert(orcTable.name == orcTableName)
             assert(orcTable.tableType == "EXTERNAL")
-            assert(spark.catalog.listColumns(orcTableName).collect().map(_.name).toSet == Set("name", "id"))
+            assert(
+              spark.catalog.listColumns(orcTableName).collect().map(_.name).toSet == Set(
+                "name",
+                "id"))
           }
           val schema = new StructType().add("id", LongType).add("a", DoubleType)
-          spark.catalog.createTable(jsonTableName, "json", schema, Map.empty[String, String]).collect()
+          spark.catalog
+            .createTable(jsonTableName, "json", schema, Map.empty[String, String])
+            .collect()
           val jsonTable = spark.catalog.getTable(jsonTableName)
           assert(!jsonTable.isTemporary)
           assert(jsonTable.name == jsonTableName)
           assert(jsonTable.tableType == "MANAGED")
           assert(spark.catalog.tableExists(jsonTableName))
-          assert(spark.catalog.listTables().collect().map(_.name).toSet == Set(parquetTableName, orcTableName, jsonTableName))
+          assert(
+            spark.catalog.listTables().collect().map(_.name).toSet == Set(
+              parquetTableName,
+              orcTableName,
+              jsonTableName))
         }
         assert(spark.catalog.tableExists(parquetTableName))
         assert(!spark.catalog.tableExists(orcTableName))
@@ -107,6 +116,5 @@ class CatalogSuite extends RemoteSparkSession with SQLHelper {
     }
     assert(spark.catalog.listTables().collect().isEmpty)
   }
-
 
 }
