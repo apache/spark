@@ -123,7 +123,6 @@ class ChannelBuilder:
     PARAM_USER_ID = "user_id"
     PARAM_USER_AGENT = "user_agent"
     MAX_MESSAGE_LENGTH = 128 * 1024 * 1024
-    MAX_METADATA_LENGTH = 16 * 1024 * 1024
 
     @staticmethod
     def default_port() -> int:
