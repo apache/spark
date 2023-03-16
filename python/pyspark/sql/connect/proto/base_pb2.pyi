@@ -1080,7 +1080,7 @@ class ExecutePlanResponse(google.protobuf.message.Message):
         """The metrics observed during the execution of the query plan."""
     @property
     def schema(self) -> pyspark.sql.connect.proto.types_pb2.DataType:
-        """The Spark schema"""
+        """(Optional) The Spark schema. This field is available when `collect` is called."""
     def __init__(
         self,
         *,
