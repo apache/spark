@@ -1819,13 +1819,15 @@ regarding watermark delays and whether data will be dropped or not.
 
 ##### Support matrix for joins in streaming queries
 
-<table class ="table">
+<table class="table table-striped">
+<thead>
   <tr>
     <th>Left Input</th>
     <th>Right Input</th>
     <th>Join Type</th>
     <th></th>
   </tr>
+</thead>
   <tr>
       <td style="vertical-align: middle;">Static</td>
       <td style="vertical-align: middle;">Static</td>
