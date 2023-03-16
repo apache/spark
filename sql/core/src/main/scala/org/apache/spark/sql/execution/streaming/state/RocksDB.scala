@@ -403,7 +403,9 @@ class RocksDB(
       /** Number of bytes read during compaction */
       "totalBytesReadByCompaction" -> COMPACT_READ_BYTES,
       /** Number of bytes written during compaction */
-      "totalBytesWrittenByCompaction" -> COMPACT_WRITE_BYTES
+      "totalBytesWrittenByCompaction" -> COMPACT_WRITE_BYTES,
+      /** Number of bytes written during flush */
+      "totalBytesWrittenByFlush" -> FLUSH_WRITE_BYTES
     ).toMap
     val nativeOpsMetrics = nativeOpsMetricTickers.mapValues { typ =>
       nativeStats.getTickerCount(typ)

@@ -192,19 +192,19 @@ class JDBCOptions(
 
   // An option to allow/disallow pushing down aggregate into JDBC data source
   // This only applies to Data Source V2 JDBC
-  val pushDownAggregate = parameters.getOrElse(JDBC_PUSHDOWN_AGGREGATE, "false").toBoolean
+  val pushDownAggregate = parameters.getOrElse(JDBC_PUSHDOWN_AGGREGATE, "true").toBoolean
 
   // An option to allow/disallow pushing down LIMIT into V2 JDBC data source
   // This only applies to Data Source V2 JDBC
-  val pushDownLimit = parameters.getOrElse(JDBC_PUSHDOWN_LIMIT, "false").toBoolean
+  val pushDownLimit = parameters.getOrElse(JDBC_PUSHDOWN_LIMIT, "true").toBoolean
 
   // An option to allow/disallow pushing down OFFSET into V2 JDBC data source
   // This only applies to Data Source V2 JDBC
-  val pushDownOffset = parameters.getOrElse(JDBC_PUSHDOWN_OFFSET, "false").toBoolean
+  val pushDownOffset = parameters.getOrElse(JDBC_PUSHDOWN_OFFSET, "true").toBoolean
 
   // An option to allow/disallow pushing down TABLESAMPLE into JDBC data source
   // This only applies to Data Source V2 JDBC
-  val pushDownTableSample = parameters.getOrElse(JDBC_PUSHDOWN_TABLESAMPLE, "false").toBoolean
+  val pushDownTableSample = parameters.getOrElse(JDBC_PUSHDOWN_TABLESAMPLE, "true").toBoolean
 
   // The local path of user's keytab file, which is assumed to be pre-uploaded to all nodes either
   // by --files option of spark-submit or manually
