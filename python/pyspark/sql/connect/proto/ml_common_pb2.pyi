@@ -190,3 +190,20 @@ class MlStage(google.protobuf.message.Message):
     ) -> None: ...
 
 global___MlStage = MlStage
+
+class ModelRef(google.protobuf.message.Message):
+    """ModelRef represents a reference to server side `Model` instance"""
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    ID_FIELD_NUMBER: builtins.int
+    id: builtins.str
+    """The ID is used to lookup the model instance in server side."""
+    def __init__(
+        self,
+        *,
+        id: builtins.str = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing_extensions.Literal["id", b"id"]) -> None: ...
+
+global___ModelRef = ModelRef

@@ -506,27 +506,31 @@ class MlRelation(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
         INPUT_FIELD_NUMBER: builtins.int
-        MODEL_REF_ID_FIELD_NUMBER: builtins.int
+        MODEL_REF_FIELD_NUMBER: builtins.int
         PARAMS_FIELD_NUMBER: builtins.int
         @property
         def input(self) -> global___Relation: ...
-        model_ref_id: builtins.int
+        @property
+        def model_ref(self) -> pyspark.sql.connect.proto.ml_common_pb2.ModelRef: ...
         @property
         def params(self) -> pyspark.sql.connect.proto.ml_common_pb2.MlParams: ...
         def __init__(
             self,
             *,
             input: global___Relation | None = ...,
-            model_ref_id: builtins.int = ...,
+            model_ref: pyspark.sql.connect.proto.ml_common_pb2.ModelRef | None = ...,
             params: pyspark.sql.connect.proto.ml_common_pb2.MlParams | None = ...,
         ) -> None: ...
         def HasField(
-            self, field_name: typing_extensions.Literal["input", b"input", "params", b"params"]
+            self,
+            field_name: typing_extensions.Literal[
+                "input", b"input", "model_ref", b"model_ref", "params", b"params"
+            ],
         ) -> builtins.bool: ...
         def ClearField(
             self,
             field_name: typing_extensions.Literal[
-                "input", b"input", "model_ref_id", b"model_ref_id", "params", b"params"
+                "input", b"input", "model_ref", b"model_ref", "params", b"params"
             ],
         ) -> None: ...
 
@@ -557,29 +561,33 @@ class MlRelation(google.protobuf.message.Message):
     class ModelAttr(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-        MODEL_REF_ID_FIELD_NUMBER: builtins.int
+        MODEL_REF_FIELD_NUMBER: builtins.int
         NAME_FIELD_NUMBER: builtins.int
-        model_ref_id: builtins.int
+        @property
+        def model_ref(self) -> pyspark.sql.connect.proto.ml_common_pb2.ModelRef: ...
         name: builtins.str
         def __init__(
             self,
             *,
-            model_ref_id: builtins.int = ...,
+            model_ref: pyspark.sql.connect.proto.ml_common_pb2.ModelRef | None = ...,
             name: builtins.str = ...,
         ) -> None: ...
+        def HasField(
+            self, field_name: typing_extensions.Literal["model_ref", b"model_ref"]
+        ) -> builtins.bool: ...
         def ClearField(
-            self,
-            field_name: typing_extensions.Literal["model_ref_id", b"model_ref_id", "name", b"name"],
+            self, field_name: typing_extensions.Literal["model_ref", b"model_ref", "name", b"name"]
         ) -> None: ...
 
     class ModelSummaryAttr(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-        MODEL_REF_ID_FIELD_NUMBER: builtins.int
+        MODEL_REF_FIELD_NUMBER: builtins.int
         NAME_FIELD_NUMBER: builtins.int
         PARAMS_FIELD_NUMBER: builtins.int
         EVALUATION_DATASET_FIELD_NUMBER: builtins.int
-        model_ref_id: builtins.int
+        @property
+        def model_ref(self) -> pyspark.sql.connect.proto.ml_common_pb2.ModelRef: ...
         name: builtins.str
         @property
         def params(self) -> pyspark.sql.connect.proto.ml_common_pb2.MlParams: ...
@@ -593,7 +601,7 @@ class MlRelation(google.protobuf.message.Message):
         def __init__(
             self,
             *,
-            model_ref_id: builtins.int = ...,
+            model_ref: pyspark.sql.connect.proto.ml_common_pb2.ModelRef | None = ...,
             name: builtins.str = ...,
             params: pyspark.sql.connect.proto.ml_common_pb2.MlParams | None = ...,
             evaluation_dataset: global___Relation | None = ...,
@@ -605,6 +613,8 @@ class MlRelation(google.protobuf.message.Message):
                 b"_evaluation_dataset",
                 "evaluation_dataset",
                 b"evaluation_dataset",
+                "model_ref",
+                b"model_ref",
                 "params",
                 b"params",
             ],
@@ -616,8 +626,8 @@ class MlRelation(google.protobuf.message.Message):
                 b"_evaluation_dataset",
                 "evaluation_dataset",
                 b"evaluation_dataset",
-                "model_ref_id",
-                b"model_ref_id",
+                "model_ref",
+                b"model_ref",
                 "name",
                 b"name",
                 "params",

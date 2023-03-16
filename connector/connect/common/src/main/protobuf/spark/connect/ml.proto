@@ -82,7 +82,7 @@ message MlCommand {
   }
 
   message SaveModel {
-    int64 model_ref_id = 1;
+    ModelRef model_ref = 1;
     string path = 2; // saving path
     bool overwrite = 3;
     map<string, string> options = 4; // saving options
@@ -114,12 +114,12 @@ message MlCommand {
   }
 
   message FetchModelAttr {
-    int64 model_ref_id = 1;
+    ModelRef model_ref = 1;
     string name = 2;
   }
 
   message FetchModelSummaryAttr {
-    int64 model_ref_id = 1;
+    ModelRef model_ref = 1;
     string name = 2;
     MlParams params = 3;
 
@@ -131,11 +131,11 @@ message MlCommand {
   }
 
   message CopyModel {
-    int64 model_ref_id = 1;
+    ModelRef model_ref = 1;
   }
 
   message DeleteModel {
-    int64 model_ref_id = 1;
+    ModelRef model_ref = 1;
   }
 }
 
@@ -147,9 +147,10 @@ message MlCommandResponse {
     Vector vector = 3;
     Matrix matrix = 4;
     MlStage stage = 5;
+    ModelRef model_ref = 6;
   }
   message ModelInfo {
-    int64 model_ref_id = 1;
+    ModelRef model_ref = 1;
     string model_uid = 2;
     MlParams params = 3;
   }

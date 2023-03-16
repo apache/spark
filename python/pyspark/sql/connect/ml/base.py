@@ -32,6 +32,28 @@ from pyspark.ml.util import inherit_doc
 from pyspark.ml.util import HasTrainingSummary as PySparkHasTrainingSummary
 
 
+class ModelRef:
+
+    def __init__(self, ref_id):
+        self.ref_id = ref_id
+
+    def to_proto(self):
+        return ml_common_pb2.ModelRef(id=self.ref_id)
+
+    @classmethod
+    def from_proto(cls, model_ref_pb: ml_common_pb2.ModelRef):
+        return ModelRef(ref_id=model_ref_pb.id)
+
+    def __del__(self):
+        client = pyspark_session._active_spark_session.client
+        del_model_proto = ml_pb2.MlCommand.DeleteModel(
+            model_ref=self.to_proto(),
+        )
+        req = client._execute_plan_request_with_metadata()
+        req.plan.ml_command.delete_model.CopyFrom(del_model_proto)
+        client._execute_ml(req)
+
+
 @inherit_doc
 class ClientEstimator(Estimator, metaclass=ABCMeta):
 
@@ -73,16 +95,7 @@ class ClientPredictor(Predictor, ClientEstimator, _PredictorParams, metaclass=AB
 @inherit_doc
 class ClientModel(Model, metaclass=ABCMeta):
 
-    ref_id: str = None
-
-    def __del__(self):
-        client = pyspark_session._active_spark_session.client
-        del_model_proto = ml_pb2.MlCommand.DeleteModel(
-            model_ref_id=self.ref_id,
-        )
-        req = client._execute_plan_request_with_metadata()
-        req.plan.ml_command.delete_model.CopyFrom(del_model_proto)
-        client._execute_ml(req)
+    model_ref: ModelRef = None
 
     @classmethod
     @abstractmethod
@@ -92,7 +105,7 @@ class ClientModel(Model, metaclass=ABCMeta):
     def _get_model_attr(self, name):
         client = pyspark_session._active_spark_session.client
         model_attr_command_proto = ml_pb2.MlCommand.FetchModelAttr(
-            model_ref_id=self.ref_id,
+            model_ref=self.model_ref.to_proto(),
             name=name
         )
         req = client._execute_plan_request_with_metadata()
@@ -118,15 +131,15 @@ class ClientModel(Model, metaclass=ABCMeta):
 
         client = pyspark_session._active_spark_session.client
         copy_model_proto = ml_pb2.MlCommand.CopyModel(
-            model_ref_id=self.ref_id,
+            model_ref=self.model_ref.to_proto()
         )
         req = client._execute_plan_request_with_metadata()
         req.plan.ml_command.copy_model.CopyFrom(copy_model_proto)
 
         resp = client._execute_ml(req)
-        new_ref_id = deserialize(resp, client)
+        new_model_ref = deserialize(resp, client)
 
-        copied_model.ref_id = new_ref_id
+        copied_model.model_ref = new_model_ref
 
         return copied_model
 
@@ -151,7 +164,7 @@ class _ModelTransformRelationPlan(LogicalPlan):
         assert self._child is not None
         plan = self._create_proto_relation()
         plan.ml_relation.model_transform.input.CopyFrom(self._child.plan(session))
-        plan.ml_relation.model_transform.model_ref_id = self.model.ref_id
+        plan.ml_relation.model_transform.model_ref.CopyFrom(self.model.model_ref.to_proto())
         plan.ml_relation.model_transform.params.CopyFrom(serialize_ml_params(self.model, session))
 
         return plan
@@ -166,7 +179,7 @@ class _ModelAttrRelationPlan(LogicalPlan):
     def plan(self, session: "SparkConnectClient") -> pb2.Relation:
         assert self._child is None
         plan = self._create_proto_relation()
-        plan.ml_relation.model_attr.model_ref_id = self.model.ref_id
+        plan.ml_relation.model_attr.model_ref.CopyFrom(self.model.model_ref.to_proto)
         plan.ml_relation.model_attr.name = self.name
         plan.ml_relation.model_attr.params.CopyFrom(serialize_ml_params(self.model, session))
         return plan
@@ -182,7 +195,7 @@ class _ModelSummaryAttrRelationPlan(LogicalPlan):
         plan = self._create_proto_relation()
         if self._child is not None:
             plan.ml_relation.model_summary_attr.evaluation_dataset.CopyFrom(self._child.plan(session))
-        plan.ml_relation.model_summary_attr.model_ref_id = self.model.ref_id
+        plan.ml_relation.model_summary_attr.model_ref.CopyFrom(self.model.model_ref.to_proto())
         plan.ml_relation.model_summary_attr.name = self.name
         plan.ml_relation.model_summary_attr.params.CopyFrom(serialize_ml_params(self.model, session))
         return plan
@@ -205,7 +218,7 @@ class ClientModelSummary(metaclass=ABCMeta):
         client = pyspark_session._active_spark_session.client
 
         model_summary_attr_command_proto = ml_pb2.MlCommand.FetchModelSummaryAttr(
-            model_ref_id=self.model.ref_id,
+            model_ref=self.model.model_ref.to_proto(),
             name=name,
             params=serialize_ml_params(self.model, client),
             evaluation_dataset=(self.dataset._plan.plan(client) if self.dataset is not None else None)
@@ -248,7 +261,7 @@ class ClientMLWriter(MLWriter):
 
         if isinstance(self.instance, ClientModel):
             save_cmd_proto = ml_pb2.MlCommand.SaveModel(
-                model_ref_id=self.instance.ref_id,
+                model_ref=self.instance.model_ref.to_proto(),
                 path=path,
                 overwrite=self.shouldOverwrite,
                 options=self.optionMap

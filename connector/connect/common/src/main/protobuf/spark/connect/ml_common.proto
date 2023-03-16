@@ -49,3 +49,9 @@ message MlStage {
     TRANSFORMER = 2;
   }
 }
+
+// ModelRef represents a reference to server side `Model` instance
+message ModelRef {
+  // The ID is used to lookup the model instance in server side.
+  string id = 1;
+}

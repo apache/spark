@@ -102,7 +102,7 @@ message MlRelation {
   }
   message ModelTransform {
     Relation input = 1;
-    int64 model_ref_id = 2;
+    ModelRef model_ref = 2;
     MlParams params = 3;
   }
   message FeatureTransform {
@@ -110,11 +110,11 @@ message MlRelation {
     MlStage transformer = 2;
   }
   message ModelAttr {
-    int64 model_ref_id = 1;
+    ModelRef model_ref = 1;
     string name = 2;
   }
   message ModelSummaryAttr {
-    int64 model_ref_id = 1;
+    ModelRef model_ref = 1;
     string name = 2;
     MlParams params = 3;
 

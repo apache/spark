@@ -25,6 +25,8 @@ from pyspark.ml.linalg import Vectors, Matrices
 
 
 def deserialize(ml_command_result: ml_pb2.MlCommandResponse, client, **kwargs):
+    from pyspark.sql.connect.ml.base import ModelRef
+
     if ml_command_result.HasField("literal"):
         return LiteralExpression._to_value(ml_command_result.literal)
 
@@ -36,8 +38,11 @@ def deserialize(ml_command_result: ml_pb2.MlCommandResponse, client, **kwargs):
         model = clazz()
         model._resetUid(model_info.model_uid)
         _set_instance_params(model, model_info.params)
-        model.ref_id = model_info.model_ref_id
+        model.model_ref = ModelRef.from_proto(model_info.model_ref)
         return model
+
+    if ml_command_result.HasField("model_ref"):
+        return ModelRef.from_proto(ml_command_result.model_ref)
 
     if ml_command_result.HasField("vector"):
         vector_pb = ml_command_result.vector

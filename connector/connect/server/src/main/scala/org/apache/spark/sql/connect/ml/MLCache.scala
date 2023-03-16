@@ -16,8 +16,8 @@
  */
 package org.apache.spark.sql.connect.ml
 
+import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.atomic.AtomicLong
 
 import org.apache.spark.ml.Model
 
@@ -25,34 +25,34 @@ import org.apache.spark.ml.Model
  * This class is for managing server side object that is used by spark connect client side code.
  */
 class ObjectCache[T](
-    val objectMap: ConcurrentHashMap[Long, T] = new ConcurrentHashMap[Long, T](),
-    val idGen: AtomicLong = new AtomicLong(0)) {
-  def register(obj: T): Long = {
-    val objectId = idGen.getAndIncrement()
+    val objectMap: ConcurrentHashMap[String, T] = new ConcurrentHashMap[String, T]()
+) {
+  def register(obj: T): String = {
+    val objectId = UUID.randomUUID().toString.takeRight(12)
     objectMap.put(objectId, obj)
     objectId
   }
 
-  def get(id: Long): T = objectMap.get(id)
+  def get(id: String): T = objectMap.get(id)
 
-  def remove(id: Long): T = objectMap.remove(id)
+  def remove(id: String): T = objectMap.remove(id)
 }
 
 class ModelCache(
     val cachedModel: ObjectCache[Model[_]] = new ObjectCache[Model[_]](),
-    val modelToHandlerMap: ConcurrentHashMap[Long, Algorithm] =
-      new ConcurrentHashMap[Long, Algorithm]()) {
-  def register(model: Model[_], algorithm: Algorithm): Long = {
+    val modelToHandlerMap: ConcurrentHashMap[String, Algorithm] =
+      new ConcurrentHashMap[String, Algorithm]()) {
+  def register(model: Model[_], algorithm: Algorithm): String = {
     val refId = cachedModel.register(model)
     modelToHandlerMap.put(refId, algorithm)
     refId
   }
 
-  def get(refId: Long): (Model[_], Algorithm) = {
+  def get(refId: String): (Model[_], Algorithm) = {
     (cachedModel.get(refId), modelToHandlerMap.get(refId))
   }
 
-  def remove(refId: Long): Unit = {
+  def remove(refId: String): Unit = {
     cachedModel.remove(refId)
     modelToHandlerMap.remove(refId)
   }
