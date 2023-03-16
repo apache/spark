@@ -1195,7 +1195,7 @@ class SparkConnectPlanner(val session: SparkSession) {
           case Literal(s, StringType) if s != null => s.toString
           case other =>
             throw InvalidPlanInput(
-              s"dtype in vector_to_array should be literal strings, but got $other")
+              s"dtype in vector_to_array should be a literal string, but got $other")
         }
         dtype match {
           case "float64" =>
@@ -1215,9 +1215,8 @@ class SparkConnectPlanner(val session: SparkSession) {
   }
 
   /**
-   * There are some built-in yet not registered UDFs, for example,
-   * org.apache.spark.ml.function.{array_to_vector, vector_to_array}. This method is to convert
-   * them to ScalaUDF.
+   * There are some built-in yet not registered UDFs, for example, 'ml.function.array_to_vector'.
+   * This method is to convert them to ScalaUDF expressions.
    */
   private def transformUnregisteredUDF(
       fun: org.apache.spark.sql.expressions.UserDefinedFunction,
