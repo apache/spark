@@ -705,7 +705,6 @@ case class FileSourceScanExec(
             // the fix for PARQUET-2161 is available.
             !RowIndexUtil.isNeededForSchema(requiredSchema)
           PartitionedFileUtil.splitFiles(
-            sparkSession = relation.sparkSession,
             file = file,
             filePath = filePath,
             isSplitable = isSplitable,

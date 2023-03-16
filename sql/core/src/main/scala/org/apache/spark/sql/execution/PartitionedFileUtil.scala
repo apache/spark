@@ -26,7 +26,6 @@ import org.apache.spark.sql.execution.datasources._
 
 object PartitionedFileUtil {
   def splitFiles(
-      sparkSession: SparkSession,
       file: FileStatus,
       filePath: Path,
       isSplitable: Boolean,
