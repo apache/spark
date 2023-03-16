@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql
 
-import java.io.File
 import java.util.TimeZone
 
 import scala.collection.JavaConverters._
@@ -29,6 +28,7 @@ import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.storage.StorageLevel
+
 
 abstract class QueryTest extends PlanTest {
 
@@ -229,60 +229,6 @@ abstract class QueryTest extends PlanTest {
       s"The physical plan has missing inputs:\n${query.queryExecution.executedPlan}")
   }
 
-  /**
-   * Consumes contents from a single golden file and compares the expected results against the
-   * output of running a query.
-   */
-  def readGoldenFileAndCompareResults(
-      resultFile: String,
-      outputs: Seq[QueryTestOutput],
-      makeOutput: (String, Option[String], String) => QueryTestOutput): Unit = {
-    // Read back the golden file.
-    val expectedOutputs: Seq[QueryTestOutput] = {
-      val goldenOutput = fileToString(new File(resultFile))
-      val segments = goldenOutput.split("-- !query.*\n")
-
-      val numSegments = outputs.map(_.numSegments).sum + 1
-      assert(segments.size == numSegments,
-        s"Expected $numSegments blocks in result file but got " +
-          s"${segments.size}. Try regenerate the result files.")
-      var curSegment = 0
-      outputs.map { output =>
-        val result = if (output.numSegments == 3) {
-          makeOutput(
-            segments(curSegment + 1).trim, // SQL
-            Some(segments(curSegment + 2).trim), // Schema
-            segments(curSegment + 3).replaceAll("\\s+$", "")) // Output
-        } else {
-          makeOutput(
-            segments(curSegment + 1).trim, // SQL
-            None, // Schema
-            segments(curSegment + 2).replaceAll("\\s+$", "")) // Output
-        }
-        curSegment += output.numSegments
-        result
-      }
-    }
-
-    // Compare results.
-    assertResult(expectedOutputs.size, s"Number of queries should be ${expectedOutputs.size}") {
-      outputs.size
-    }
-
-    outputs.zip(expectedOutputs).zipWithIndex.foreach { case ((output, expected), i) =>
-      assertResult(expected.sql, s"SQL query did not match for query #$i\n${expected.sql}") {
-        output.sql
-      }
-      assertResult(expected.schema,
-        s"Schema did not match for query #$i\n${expected.sql}: $output") {
-        output.schema
-      }
-      assertResult(expected.output, s"Result did not match" +
-        s" for query #$i\n${expected.sql}") {
-        output.output
-      }
-    }
-  }
 }
 
 object QueryTest extends Assertions {
@@ -480,45 +426,6 @@ object QueryTest extends Assertions {
   }
 }
 
-/** A single SQL query's output. */
-trait QueryTestOutput {
-  def sql: String
-  def schema: Option[String]
-  def output: String
-  def numSegments: Int
-}
-
-/** A single SQL query's output. */
-protected case class ExecutionOutput(
-  sql: String,
-  schema: Option[String],
-  output: String) extends QueryTestOutput {
-  override def toString: String = {
-    // We are explicitly not using multi-line string due to stripMargin removing "|" in output.
-    s"-- !query\n" +
-      sql + "\n" +
-      s"-- !query schema\n" +
-      schema.get + "\n" +
-      s"-- !query output\n" +
-      output
-  }
-  override def numSegments: Int = 3
-}
-
-/** A single SQL query's analysis results. */
-protected case class AnalyzerOutput(
-  sql: String,
-  schema: Option[String],
-  output: String) extends QueryTestOutput {
-  override def toString: String = {
-    // We are explicitly not using multi-line string due to stripMargin removing "|" in output.
-    s"-- !query\n" +
-      sql + "\n" +
-      s"-- !query analysis\n" +
-      output
-  }
-  override def numSegments: Int = 2
-}
 
 class QueryTestSuite extends QueryTest with test.SharedSparkSession {
   test("SPARK-16940: checkAnswer should raise TestFailedException for wrong results") {

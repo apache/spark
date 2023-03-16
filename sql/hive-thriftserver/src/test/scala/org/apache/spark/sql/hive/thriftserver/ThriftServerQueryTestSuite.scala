@@ -26,7 +26,6 @@ import scala.util.control.NonFatal
 import org.apache.commons.lang3.exception.ExceptionUtils
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.{ExecutionOutput, QueryTestOutput}
 import org.apache.spark.sql.SQLQueryTestSuite
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 import org.apache.spark.sql.catalyst.util.fileToString
