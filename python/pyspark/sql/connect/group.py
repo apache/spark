@@ -41,7 +41,11 @@ from pyspark.sql.connect.column import Column
 from pyspark.sql.connect.functions import _invoke_function, col, lit
 
 if TYPE_CHECKING:
-    from pyspark.sql.connect._typing import LiteralType, PandasGroupedMapFunction
+    from pyspark.sql.connect._typing import (
+        LiteralType,
+        PandasGroupedMapFunction,
+        GroupedMapPandasUserDefinedFunction,
+    )
     from pyspark.sql.connect.dataframe import DataFrame
     from pyspark.sql.types import StructType
 
@@ -207,7 +211,7 @@ class GroupedData:
 
     pivot.__doc__ = PySparkGroupedData.pivot.__doc__
 
-    def apply(self, udf: "GroupedMapPandasUserDefinedFunction") -> DataFrame:
+    def apply(self, udf: "GroupedMapPandasUserDefinedFunction") -> "DataFrame":
         # Columns are special because hasattr always return True
         if (
             isinstance(udf, Column)
