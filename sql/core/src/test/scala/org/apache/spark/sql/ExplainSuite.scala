@@ -793,10 +793,23 @@ class ExplainSuiteAE extends ExplainSuiteHelper with EnableAdaptiveExecutionSuit
 
     val expectedTree = """|ReusedExchange (1)
                           |+- Exchange (3)
-                          |   +- Range (2)""".stripMargin
+                          |   +- Range (2)
+                          |
+                          |
+                          |(1) ReusedExchange [Reuses operator id: 3]
+                          |Output: []
+                          |
+                          |(2) Range
+                          |Output [1]: [id#xL]
+                          |Arguments: Range (0, 1000, step=1, splits=Some(10))
+                          |
+                          |(3) Exchange
+                          |Input [1]: [id#xL]
+                          |Arguments: UnknownPartitioning(10), ENSURE_REQUIREMENTS, [plan_id=x]
+                          |""".stripMargin
 
-    assert(results.contains(expectedTree))
-    assert(results.contains("(1) ReusedExchange [Reuses operator id: 3]"))
+    results = results.replaceAll("#\\d+", "#x").replaceAll("plan_id=\\d+", "plan_id=x")
+    assert(results == expectedTree)
   }
 
   test("SPARK-42753: Two ReusedExchange Sharing Same Subtree") {
@@ -826,12 +839,12 @@ class ExplainSuiteAE extends ExplainSuiteHelper with EnableAdaptiveExecutionSuit
                           |Output: []
                           |
                           |(4) Range
-                          |Output [1]: [id#0L]
+                          |Output [1]: [id#xL]
                           |Arguments: Range (0, 1000, step=1, splits=Some(10))
                           |
                           |(5) Exchange
-                          |Input [1]: [id#0L]
-                          |Arguments: UnknownPartitioning(10), ENSURE_REQUIREMENTS, [plan_id=1]
+                          |Input [1]: [id#xL]
+                          |Arguments: UnknownPartitioning(10), ENSURE_REQUIREMENTS, [plan_id=x]
                           |
                           |(2) ReusedExchange [Reuses operator id: 5]
                           |Output: []
@@ -840,6 +853,7 @@ class ExplainSuiteAE extends ExplainSuiteHelper with EnableAdaptiveExecutionSuit
                           |Join type: Inner
                           |Join condition: None
                           |""".stripMargin
+    results = results.replaceAll("#\\d+", "#x").replaceAll("plan_id=\\d+", "plan_id=x")
     assert(results == expectedTree)
   }
 
@@ -874,29 +888,29 @@ class ExplainSuiteAE extends ExplainSuiteHelper with EnableAdaptiveExecutionSuit
                           |Output: []
                           |
                           |(6) Range
-                          |Output [1]: [id#0L]
+                          |Output [1]: [id#xL]
                           |Arguments: Range (0, 1000, step=1, splits=Some(10))
                           |
                           |(7) Exchange
-                          |Input [1]: [id#0L]
-                          |Arguments: UnknownPartitioning(10), ENSURE_REQUIREMENTS, [plan_id=1]
+                          |Input [1]: [id#xL]
+                          |Arguments: UnknownPartitioning(10), ENSURE_REQUIREMENTS, [plan_id=x]
                           |
                           |(2) ReusedExchange [Reuses operator id: 5]
                           |Output: []
                           |
                           |(4) Range
-                          |Output [1]: [id#1L]
+                          |Output [1]: [id#xL]
                           |Arguments: Range (0, 1000, step=1, splits=Some(10))
                           |
                           |(5) Exchange
-                          |Input [1]: [id#1L]
-                          |Arguments: UnknownPartitioning(10), ENSURE_REQUIREMENTS, [plan_id=4]
+                          |Input [1]: [id#xL]
+                          |Arguments: UnknownPartitioning(10), ENSURE_REQUIREMENTS, [plan_id=x]
                           |
                           |(3) SortMergeJoin
                           |Join type: Inner
                           |Join condition: None
                           |""".stripMargin
-
+    results = results.replaceAll("#\\d+", "#x").replaceAll("plan_id=\\d+", "plan_id=x")
     assert(results == expectedTree)
   }
 }
