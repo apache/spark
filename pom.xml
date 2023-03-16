@@ -142,7 +142,7 @@
     <!-- After 10.15.1.3, the minimum required version is JDK9 -->
     <derby.version>10.14.2.0</derby.version>
     <parquet.version>1.12.3</parquet.version>
-    <orc.version>1.8.2</orc.version>
+    <orc.version>1.8.3</orc.version>
     <orc.classifier>shaded-protobuf</orc.classifier>
     <jetty.version>9.4.51.v20230217</jetty.version>
     <jakartaservlet.version>4.0.3</jakartaservlet.version>
@@ -177,7 +177,7 @@
       errors building different Hadoop versions.
       See: SPARK-36547, SPARK-38394.
        -->
-    <scala-maven-plugin.version>4.8.0</scala-maven-plugin.version>
+    <scala-maven-plugin.version>4.8.1</scala-maven-plugin.version>
     <versions-maven-plugin.version>2.15.0</versions-maven-plugin.version>
     <!-- for now, not running scalafmt as part of default verify pipeline -->
     <scalafmt.skip>true</scalafmt.skip>
@@ -1426,6 +1426,10 @@
         <scope>test</scope>
       </dependency>
       <!-- Managed up to match Hadoop in HADOOP-16530 -->
+      <!--
+        When upgrading `xercesImpl` version, also need to change
+        the version definition in `SparkBuild#DependencyOverrides`.
+      -->
       <dependency>
         <groupId>xerces</groupId>
         <artifactId>xercesImpl</artifactId>
