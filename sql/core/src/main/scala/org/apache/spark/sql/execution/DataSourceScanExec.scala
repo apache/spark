@@ -674,7 +674,7 @@ case class FileSourceScanExec(
    * @param fsRelation [[HadoopFsRelation]] associated with the read.
    */
   private def createReadRDD(
-      readFile: (PartitionedFile) => Iterator[InternalRow],
+      readFile: PartitionedFile => Iterator[InternalRow],
       selectedPartitions: Array[PartitionDirectory],
       fsRelation: HadoopFsRelation): RDD[InternalRow] = {
     val openCostInBytes = fsRelation.sparkSession.sessionState.conf.filesOpenCostInBytes
