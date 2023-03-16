@@ -42,7 +42,7 @@ from pyspark.ml.classification import (
 )
 from pyspark.ml.linalg import (Matrix, Vector)
 from pyspark import keyword_only, since, SparkContext, inheritable_thread_target
-from pyspark.sql.connect.ml.base import (
+from pyspark.ml.connect.base import (
     ClientEstimator,
     ClientModel,
     HasTrainingSummary,

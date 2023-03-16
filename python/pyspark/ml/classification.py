@@ -94,7 +94,7 @@ from pyspark.sql import DataFrame, Row
 from pyspark.sql.functions import udf, when
 from pyspark.sql.types import ArrayType, DoubleType
 from pyspark.storagelevel import StorageLevel
-from pyspark.sql.connect.ml.utils import try_remote_ml_class
+from pyspark.ml.connect.utils import try_remote_ml_class
 
 
 if TYPE_CHECKING:

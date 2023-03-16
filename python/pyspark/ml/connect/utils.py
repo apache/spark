@@ -20,7 +20,7 @@ import os
 
 
 def _get_remote_ml_class(cls):
-    remote_module = "pyspark.sql.connect.ml." + cls.__module__[len("pyspark.ml."):]
+    remote_module = "pyspark.ml.connect." + cls.__module__[len("pyspark.ml."):]
     cls_name = cls.__name__
     m = __import__(remote_module, fromlist=[cls_name])
     remote_cls = getattr(m, cls_name)

@@ -24,7 +24,7 @@ from pyspark.ml.util import MLWritable, MLWriter, MLReadable, MLReader
 import pyspark.sql.connect.proto as pb2
 import pyspark.sql.connect.proto.ml_pb2 as ml_pb2
 import pyspark.sql.connect.proto.ml_common_pb2 as ml_common_pb2
-from pyspark.sql.connect.ml.serializer import deserialize, serialize_ml_params
+from pyspark.ml.connect.serializer import deserialize, serialize_ml_params
 from pyspark.sql.connect import session as pyspark_session
 from pyspark.sql.connect.plan import LogicalPlan
 
