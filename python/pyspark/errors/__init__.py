@@ -31,6 +31,7 @@ from pyspark.errors.exceptions.base import (  # noqa: F401
     SparkUpgradeException,
     PySparkTypeError,
     PySparkValueError,
+    PySparkAttributeError,
 )
 
 
@@ -47,4 +48,5 @@ __all__ = [
     "SparkUpgradeException",
     "PySparkTypeError",
     "PySparkValueError",
+    "PySparkAttributeError",
 ]
