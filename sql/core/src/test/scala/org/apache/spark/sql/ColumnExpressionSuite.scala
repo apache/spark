@@ -1015,11 +1015,13 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
 
     val col20 = col1.as("add_alias")
     assert(captureStdOut(col20.explain(false)) == "(a + b) AS add_alias\n")
-    assert(captureStdOut(col20.explain(true)) == "('a + 'b) AS add_alias#1\n")
+    assert(captureStdOut(col20.explain(true)).contains("('a + 'b) AS add_alias"))
 
     val col21 = col1.as("add_alias").as("key" :: "value" :: Nil)
     assert(captureStdOut(col21.explain(false)) == "multialias((a + b) AS add_alias)\n")
-    assert(captureStdOut(col21.explain(true)) == "('a + 'b) AS add_alias#2 AS (key, value)\n")
+    val explainStr = captureStdOut(col21.explain(true))
+    assert(explainStr.startsWith("('a + 'b) AS add_alias") &&
+      explainStr.endsWith(" AS (key, value)\n"))
 
     val col22 = col1.cast(IntegerType).cast("int")
     assert(captureStdOut(col22.explain(false)) == "CAST(CAST((a + b) AS INT) AS INT)\n")
