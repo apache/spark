@@ -988,6 +988,21 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       }
     }
 
+    // Delete log files whose modification time is
+    // less than or equal to the current time minus the configured max age.
+    def shouldDelete(fileStatus: FileStatus): Boolean = {
+      val maxRetentionTime = clock.getTimeMillis() - conf.get(MAX_LOG_AGE_S) * 1000
+      fileStatus.getModificationTime <= maxRetentionTime
+    }
+
+    Option(fs.listStatus(new Path(logDir))).map(_.toSeq).getOrElse(Nil)
+      .filter { entry => isAccessible(entry.getPath) && shouldDelete(entry) }
+      .toList.foreach { entry =>
+      logInfo(s"Deleting event logs ${entry.getPath.toString} that exceed the configured max age")
+      deleteLog(fs, entry.getPath)
+      listing.delete(classOf[LogInfo], entry.getPath)
+    }
+
     // If the number of files is bigger than MAX_LOG_NUM,
     // clean up all completed attempts per application one by one.
     val num = listing.view(classOf[LogInfo]).index("lastProcessed").asScala.size
