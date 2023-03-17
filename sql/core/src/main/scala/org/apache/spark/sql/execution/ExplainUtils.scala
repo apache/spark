@@ -17,8 +17,11 @@
 
 package org.apache.spark.sql.execution
 
-import scala.collection.mutable.{ArrayBuffer, BitSet, HashSet}
-import scala.collection.mutable
+import java.util.Collections.newSetFromMap
+import java.util.IdentityHashMap
+import java.util.Set
+
+import scala.collection.mutable.{ArrayBuffer, BitSet}
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions.{Expression, PlanExpression}
@@ -69,91 +72,40 @@ object ExplainUtils extends AdaptiveSparkPlanHelper {
   }
 
   /**
-   * This function is part of a fix for SPARK-42753: process subtree for ReusedExchange with unknown
-   * child. It traverses the input plan and adds visited nodes to HashSet of Operators and Hashset
-   * of Reused Exchanges.
-   * @param plan Input query plan
-   * @param operators HashSet of operators traversed
-   * @param reusedExchanges HashSet of ReusedExchanges traversed
-   */
-  private def processReusedExchanges(
-      plan: QueryPlan[_],
-      operators: mutable.HashSet[QueryPlan[_]],
-      reusedExchanges: mutable.HashSet[ReusedExchangeExec]): Unit = {
-    if (plan.isInstanceOf[BaseSubqueryExec]) {
-      return
-    }
-
-    def addOperator(plan: QueryPlan[_]): Unit = {
-      plan match {
-        case r: ReusedExchangeExec =>
-          reusedExchanges += r
-          operators += r
-        case other: QueryPlan[_] =>
-          operators += other
-      }
-    }
-
-    plan.foreachUp {
-      case _: WholeStageCodegenExec =>
-      case _: InputAdapter =>
-      case p: AdaptiveSparkPlanExec =>
-        processReusedExchanges(p.executedPlan, operators, reusedExchanges)
-        if (!p.executedPlan.fastEquals(p.initialPlan)) {
-          processReusedExchanges(p.initialPlan, operators, reusedExchanges)
-        }
-        addOperator(p)
-      case p: QueryStageExec =>
-        processReusedExchanges(p.plan, operators, reusedExchanges)
-        addOperator(p)
-      case other: QueryPlan[_] =>
-        addOperator(other)
-        other.innerChildren.foreach(processReusedExchanges(_, operators, reusedExchanges))
-    }
-  }
-
-  /**
    * Given a input physical plan, performs the following tasks.
    *   1. Generates the explain output for the input plan excluding the subquery plans.
    *   2. Generates the explain output for each subquery referenced in the plan.
    */
   def processPlan[T <: QueryPlan[T]](plan: T, append: String => Unit): Unit = {
     try {
+      // Initialize a reference-unique set of Operators to avoid accidental ID overwrites
+      val operators = newSetFromMap[QueryPlan[_]](new IdentityHashMap())
+      // Initialize a reference-unique set of ReusedExchanges to help find Adaptively Optimized Out
+      // Exchanges as part of SPARK-42753
+      val reusedExchanges = newSetFromMap[ReusedExchangeExec](new IdentityHashMap())
+
       var currentOperatorID = 0
-      currentOperatorID = generateOperatorIDs(plan, currentOperatorID, false,
-        HashSet.empty[QueryPlan[_]])
+      currentOperatorID = generateOperatorIDs(plan, currentOperatorID, operators, reusedExchanges)
 
       val subqueries = ArrayBuffer.empty[(SparkPlan, Expression, BaseSubqueryExec)]
       getSubqueries(plan, subqueries)
 
       currentOperatorID = subqueries.foldLeft(currentOperatorID) {
-        (curId, plan) => generateOperatorIDs(plan._3.child, curId, false,
-          HashSet.empty[QueryPlan[_]])
+        (curId, plan) => generateOperatorIDs(plan._3.child, curId, operators, reusedExchanges)
       }
 
       // SPARK-42753: Process subtree for a ReusedExchange with unknown child
       // Get all the operators and ReusedExchanges that have generated ID
-      val reusedExchanges = HashSet.empty[ReusedExchangeExec]
-      val operators = HashSet.empty[QueryPlan[_]]
-
-      processReusedExchanges(plan, operators, reusedExchanges)
-      subqueries.foreach(sub => processReusedExchanges(sub._3.child, operators, reusedExchanges))
-
-      // Find ReusedExchanges that have a child that has not been processed so far.
-      // Then generate IDs for the subtree of that ReusedExchange child.
-      currentOperatorID = reusedExchanges
-        .filter(r => !operators.contains(r.child))
-        .map { r =>
-          // Add a tag so when generateTreeString is called, the function will be recursively
-          // called on the child subtree.
-          r.setTagValue(r.UNKNOWN_CHILD_ID, ())
-          r
+      val reusedIterator = reusedExchanges.iterator()
+      while (reusedIterator.hasNext()) {
+        val reusedExchange = reusedIterator.next()
+        val child = reusedExchange.child
+        if (!operators.contains(child)) {
+          reusedExchange.setTagValue(reusedExchange.UNKNOWN_CHILD_ID, ())
+          currentOperatorID = generateOperatorIDs(child, currentOperatorID, operators,
+            reusedExchanges)
         }
-        .foldLeft(currentOperatorID) {
-          (curId, r) =>
-            assert(curId >= currentOperatorID)
-            generateOperatorIDs(r.child, curId, true, operators)
-        }
+      }
 
       val collectedOperators = BitSet.empty
       processPlanSkippingSubqueries(plan, append, collectedOperators)
@@ -205,17 +157,21 @@ object ExplainUtils extends AdaptiveSparkPlanHelper {
   private def generateOperatorIDs(
       plan: QueryPlan[_],
       startOperatorID: Int,
-      overwrite: Boolean,
-      overwriteExclusions: HashSet[QueryPlan[_]]): Int = {
+      visited: Set[QueryPlan[_]],
+      reusedExchanges: Set[ReusedExchangeExec]): Int = {
     var currentOperationID = startOperatorID
     // Skip the subqueries as they are not printed as part of main query block.
     if (plan.isInstanceOf[BaseSubqueryExec]) {
       return currentOperationID
     }
 
-    def setOpId(plan: QueryPlan[_]): Unit =
-      if ((overwrite && !overwriteExclusions.contains(plan)) ||
-        plan.getTagValue(QueryPlan.OP_ID_TAG).isEmpty) {
+    def setOpId(plan: QueryPlan[_]): Unit = if (!visited.contains(plan)) {
+      plan match {
+        case r: ReusedExchangeExec =>
+          reusedExchanges.add(r)
+        case _ =>
+      }
+      visited.add(plan)
       currentOperationID += 1
       plan.setTagValue(QueryPlan.OP_ID_TAG, currentOperationID)
     }
@@ -224,21 +180,21 @@ object ExplainUtils extends AdaptiveSparkPlanHelper {
       case _: WholeStageCodegenExec =>
       case _: InputAdapter =>
       case p: AdaptiveSparkPlanExec =>
-        currentOperationID = generateOperatorIDs(p.executedPlan, currentOperationID,
-          overwrite, overwriteExclusions)
+        currentOperationID = generateOperatorIDs(p.executedPlan, currentOperationID, visited,
+          reusedExchanges)
         if (!p.executedPlan.fastEquals(p.initialPlan)) {
-          currentOperationID = generateOperatorIDs(p.initialPlan, currentOperationID,
-            overwrite, overwriteExclusions)
+          currentOperationID = generateOperatorIDs(p.initialPlan, currentOperationID, visited,
+            reusedExchanges)
         }
         setOpId(p)
       case p: QueryStageExec =>
-        currentOperationID = generateOperatorIDs(p.plan, currentOperationID,
-          overwrite, overwriteExclusions)
+        currentOperationID = generateOperatorIDs(p.plan, currentOperationID, visited,
+          reusedExchanges)
         setOpId(p)
       case other: QueryPlan[_] =>
         setOpId(other)
         currentOperationID = other.innerChildren.foldLeft(currentOperationID) {
-          (curId, plan) => generateOperatorIDs(plan, curId, overwrite, overwriteExclusions)
+          (curId, plan) => generateOperatorIDs(plan, curId, visited, reusedExchanges)
         }
     }
     currentOperationID
