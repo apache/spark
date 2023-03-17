@@ -132,12 +132,17 @@ case class ObjectHashAggregateExec(
     val allAggregateExpressions = aggregateExpressions
     val keyString = truncatedString(groupingExpressions, "[", ", ", "]", maxFields)
     val functionString = truncatedString(allAggregateExpressions, "[", ", ", "]", maxFields)
-    val outputString = truncatedString(output, "[", ", ", "]", maxFields)
-    if (verbose) {
-      s"ObjectHashAggregate(keys=$keyString, functions=$functionString, output=$outputString)"
+    val outputString = if (verbose) {
+      ", output=" + truncatedString(output, "[", ", ", "]", maxFields)
     } else {
-      s"ObjectHashAggregate(keys=$keyString, functions=$functionString)"
+      ""
     }
+    val resultString = if (resultExpressions.nonEmpty) {
+      s", results=${resultExpressions.mkString("[", ", ", "]")}"
+    } else {
+      ""
+    }
+    s"ObjectHashAggregate(keys=$keyString, functions=$functionString$resultString$outputString)"
   }
 
   override protected def withNewChildInternal(newChild: SparkPlan): ObjectHashAggregateExec =

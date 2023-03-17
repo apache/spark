@@ -871,12 +871,17 @@ case class HashAggregateExec(
       case None =>
         val keyString = truncatedString(groupingExpressions, "[", ", ", "]", maxFields)
         val functionString = truncatedString(allAggregateExpressions, "[", ", ", "]", maxFields)
-        val outputString = truncatedString(output, "[", ", ", "]", maxFields)
-        if (verbose) {
-          s"HashAggregate(keys=$keyString, functions=$functionString, output=$outputString)"
+        val outputString = if (verbose) {
+          ", output=" + truncatedString(output, "[", ", ", "]", maxFields)
         } else {
-          s"HashAggregate(keys=$keyString, functions=$functionString)"
+          ""
         }
+        val resultString = if (resultExpressions.nonEmpty) {
+          s", results=${resultExpressions.mkString("[", ", ", "]")}"
+        } else {
+          ""
+        }
+        s"HashAggregate(keys=$keyString, functions=$functionString$resultString$outputString)"
       case Some(fallbackStartsAt) =>
         s"HashAggregateWithControlledFallback $groupingExpressions " +
           s"$allAggregateExpressions $resultExpressions fallbackStartsAt=$fallbackStartsAt"
