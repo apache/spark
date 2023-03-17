@@ -100,31 +100,31 @@ class ResolveAliasesSuite extends AnalysisTest {
       Seq(
         // Literals
         "' 1'" -> "' 1'",
-        """"abc"""" -> "'abc'",
+        """"abc"""" -> """"abc"""",
         """'\t\n xyz \t\r'""" -> """'\t\n xyz \t\r'""",
         "1l" -> "1L", "1S" -> "1S",
         "date'-0001-1-28'" -> "date'-0001-1-28'",
-        "interval 3 year 1 month" -> "INTERVAL 3 YEAR 1 MONTH",
+        "interval 3 year 1 month" -> "INTERVAL3YEAR1MONTH",
         "x'00'" -> "x'00'",
         // Preserve case
-        "CAST(1 as tinyint)" -> "CAST(1 AS tinyint)",
+        "CAST(1 as tinyint)" -> "CAST(1AStinyint)",
         // Brackets
         "getbit(11L, 2 + 1)" -> "getbit(11L,2+1)",
         "string(int(shiftleft(int(-1), 31))+1)" -> "string(int(shiftleft(int(-1),31))+1)",
         "map(1, 'a') [ 5 ]" -> "map(1,'a')[5]",
         // Preserve type
-        "CAST('123.a' AS long)" -> "CAST('123.a'AS long)",
+        "CAST('123.a' AS long)" -> "CAST('123.a'ASlong)",
         // Spaces
         "'1' = 1" -> "'1'=1",
         "upper('a') = upper('A')" -> "upper('a')=upper('A')",
         "FLOOR(5, 0)" -> "FLOOR(5,0)",
         "-1" -> "-1",
-        "1 in (1.0)" -> "1 IN(1.0)",
-        "CAST(null AS ARRAY<String>)" -> "CAST(NULL AS ARRAY<String>)",
+        "1 in (1.0)" -> "1IN(1.0)",
+        "CAST(null AS ARRAY<String>)" -> "CAST(NULLASARRAY<String>)",
         """(
           |  WITH t AS (SELECT 1)
           |  SELECT * FROM t
-          |)""".stripMargin -> "(WITH t AS(SELECT 1)SELECT*FROM t)",
+          |)""".stripMargin -> "(WITHtAS(SELECT1)SELECT*FROMt)",
         // Function invokes
         "like('a', 'Spark_')" -> "like('a','Spark_')",
         "substring('abcdef', 2)" -> "substring('abcdef',2)",

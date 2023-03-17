@@ -671,7 +671,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
 
   private def getAliasFunc(ctx: ParseTree): Option[Expression => String] = {
     if (conf.getConf(SQLConf.STABLE_DERIVED_COLUMN_ALIAS_ENABLED)) {
-      Some(_ => toExprAlias(ctx, !conf.doubleQuotedIdentifiers))
+      Some(_ => toExprAlias(ctx))
     } else {
       None
     }

@@ -21,8 +21,6 @@ import java.nio.CharBuffer
 import java.util
 import java.util.Locale
 
-import scala.collection.mutable.{ArrayBuffer, StringBuilder}
-
 import org.antlr.v4.runtime.{ParserRuleContext, Token}
 import org.antlr.v4.runtime.misc.Interval
 import org.antlr.v4.runtime.tree.{ParseTree, TerminalNode, TerminalNodeImpl}
@@ -262,46 +260,30 @@ object ParserUtils {
   }
 
   /**
-   * Converts the given parse tree to an alias by
-   * - Adding a gap between two terms when both contains only either letters or digits.
-   * - Upper casing keywords and numeric literals.
-   * - Converting double quoted string literals to single quoted.
-   *
-   * @param normalizeStringLiterals When set to `true`, convert double quoted string literals
-   *                                to single quoted. For example: "abc" -> 'abc'
+   * Normalizes the expression parser tree to a SQL string which will be used to generate
+   * the expression alias. In particular, it concatenates terminal nodes of the tree and
+   * upper casts keywords and numeric literals.
    */
-  def toExprAlias(ctx: ParseTree, normalizeStringLiterals: Boolean): String = {
-    def getTerms(ctx: ParseTree, terms: ArrayBuffer[TerminalNodeImpl]): Unit = {
+  def toExprAlias(ctx: ParseTree): String = {
+    val sb = new StringBuilder()
+    def concatTerms(ctx: ParseTree): Unit = {
       for (i <- 0 until ctx.getChildCount) {
         ctx.getChild(i) match {
-          case term: TerminalNodeImpl => terms += term
-          case child => getTerms(child, terms)
+          case term: TerminalNodeImpl =>
+            val termText = term.getText
+            val tt = term.getSymbol.getType
+            val current = if ((SqlBaseParser.ADD <= tt && tt <= SqlBaseParser.ZONE) ||
+              (SqlBaseParser.BIGINT_LITERAL <= tt && tt <= SqlBaseParser.BIGDECIMAL_LITERAL)) {
+              termText.toUpperCase(Locale.ROOT)
+            } else {
+              termText
+            }
+            sb.append(current)
+          case child => concatTerms(child)
         }
       }
     }
-    val terms = new ArrayBuffer[TerminalNodeImpl]()
-    getTerms(ctx, terms)
-    val sb = new StringBuilder()
-    for (i <- 0 until terms.length) {
-      val term = terms(i)
-      val termText = term.getText
-      val tt = term.getSymbol.getType
-      val current = if ((SqlBaseParser.ADD <= tt && tt <= SqlBaseParser.ZONE) ||
-          (SqlBaseParser.BIGINT_LITERAL <= tt && tt <= SqlBaseParser.BIGDECIMAL_LITERAL)) {
-        termText.toUpperCase(Locale.ROOT)
-      } else if (normalizeStringLiterals && tt == SqlBaseParser.DOUBLEQUOTED_STRING) {
-        "'" + termText.stripSuffix("\"").stripPrefix("\"") + "'"
-      } else {
-        termText
-      }
-      sb.append(current)
-      if (i < terms.length - 1) {
-        val next = terms(i + 1).getText
-        if (current.forall(_.isLetterOrDigit) && next.forall(_.isLetterOrDigit)) {
-          sb.append(" ")
-        }
-      }
-    }
+    concatTerms(ctx)
     sb.toString()
   }
 }
