@@ -85,13 +85,15 @@ object ExplainUtils extends AdaptiveSparkPlanHelper {
       val reusedExchanges = newSetFromMap[ReusedExchangeExec](new IdentityHashMap())
 
       var currentOperatorID = 0
-      currentOperatorID = generateOperatorIDs(plan, currentOperatorID, operators, reusedExchanges)
+      currentOperatorID = generateOperatorIDs(plan, currentOperatorID, operators, reusedExchanges,
+        true)
 
       val subqueries = ArrayBuffer.empty[(SparkPlan, Expression, BaseSubqueryExec)]
       getSubqueries(plan, subqueries)
 
       currentOperatorID = subqueries.foldLeft(currentOperatorID) {
-        (curId, plan) => generateOperatorIDs(plan._3.child, curId, operators, reusedExchanges)
+        (curId, plan) => generateOperatorIDs(plan._3.child, curId, operators, reusedExchanges,
+          true)
       }
 
       // SPARK-42753: Process subtree for a ReusedExchange with unknown child
@@ -103,7 +105,7 @@ object ExplainUtils extends AdaptiveSparkPlanHelper {
         if (!operators.contains(child)) {
           reusedExchange.setTagValue(reusedExchange.UNKNOWN_CHILD_ID, ())
           currentOperatorID = generateOperatorIDs(child, currentOperatorID, operators,
-            reusedExchanges)
+            reusedExchanges, false)
         }
       }
 
@@ -143,14 +145,18 @@ object ExplainUtils extends AdaptiveSparkPlanHelper {
    * @param plan Input query plan to process
    * @param startOperatorID The start value of operation id. The subsequent operations will be
    *                        assigned higher value.
-   * @param overwrite Whether to overwrite existing IDs if they already exist. This is needed
-   *                 for an edge case in SPARK-42753 to overwrite any potential existing IDs on a
-   *                 ReusedExchange child subtree that were generated from previous AQE iteration.
-   * @param overwriteExclusions These are operators to avoid overwriting. Only takes effect if
-   *                            overwrite = true. This is needed for an edge case in SPARK-42753
-   *                            where some nodes in the subtree need to be overwritten and others
-   *                            don't because they are already correctly ID'd in the current plan
-   *                            iteration.
+   * @param visited A unique set of operators visited by generateOperatorIds. The set is scoped
+   *                at the callsite function processPlan. It serves two purpose: Firstly, it is
+   *                used to avoid accidentally overwriting existing IDs that were generated in
+   *                the same processPlan call. Secondly, it is used to allow for intentional ID
+   *                overwriting as part of SPARK-42753 where an Adaptively Optimized Out Exchange
+   *                and its subtree may contain IDs that were generated in a previous AQE
+   *                iteration's processPlan call which would result in incorrect IDs.
+   * @param reusedExchanges A unique set of ReusedExchange nodes visited which will be used to
+   *                        idenitfy adaptively optimized out exchanges in SPARK-42753.
+   * @param addReusedExchanges Whether to add ReusedExchange nodes to reusedExchanges set. We set it
+   *                           to false to avoid processing more nested ReusedExchanges nodes in the
+   *                           subtree of an Adpatively Optimized Out Exchange.
    * @return The last generated operation id for this input plan. This is to ensure we always
    *         assign incrementing unique id to each operator.
    */
@@ -158,7 +164,8 @@ object ExplainUtils extends AdaptiveSparkPlanHelper {
       plan: QueryPlan[_],
       startOperatorID: Int,
       visited: Set[QueryPlan[_]],
-      reusedExchanges: Set[ReusedExchangeExec]): Int = {
+      reusedExchanges: Set[ReusedExchangeExec],
+      addReusedExchanges: Boolean): Int = {
     var currentOperationID = startOperatorID
     // Skip the subqueries as they are not printed as part of main query block.
     if (plan.isInstanceOf[BaseSubqueryExec]) {
@@ -167,7 +174,7 @@ object ExplainUtils extends AdaptiveSparkPlanHelper {
 
     def setOpId(plan: QueryPlan[_]): Unit = if (!visited.contains(plan)) {
       plan match {
-        case r: ReusedExchangeExec =>
+        case r: ReusedExchangeExec if addReusedExchanges =>
           reusedExchanges.add(r)
         case _ =>
       }
@@ -181,20 +188,21 @@ object ExplainUtils extends AdaptiveSparkPlanHelper {
       case _: InputAdapter =>
       case p: AdaptiveSparkPlanExec =>
         currentOperationID = generateOperatorIDs(p.executedPlan, currentOperationID, visited,
-          reusedExchanges)
+          reusedExchanges, addReusedExchanges)
         if (!p.executedPlan.fastEquals(p.initialPlan)) {
           currentOperationID = generateOperatorIDs(p.initialPlan, currentOperationID, visited,
-            reusedExchanges)
+            reusedExchanges, addReusedExchanges)
         }
         setOpId(p)
       case p: QueryStageExec =>
         currentOperationID = generateOperatorIDs(p.plan, currentOperationID, visited,
-          reusedExchanges)
+          reusedExchanges, addReusedExchanges)
         setOpId(p)
       case other: QueryPlan[_] =>
         setOpId(other)
         currentOperationID = other.innerChildren.foldLeft(currentOperationID) {
-          (curId, plan) => generateOperatorIDs(plan, curId, visited, reusedExchanges)
+          (curId, plan) => generateOperatorIDs(plan, curId, visited, reusedExchanges,
+            addReusedExchanges)
         }
     }
     currentOperationID
