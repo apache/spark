@@ -425,6 +425,14 @@ class SparkSession private[sql] (
     result
   }
 
+  private[sql] def execute(f: proto.Relation.Builder => Unit): Unit = {
+    val builder = proto.Relation.newBuilder()
+    f(builder)
+    builder.getCommonBuilder.setPlanId(planIdGenerator.getAndIncrement())
+    val plan = proto.Plan.newBuilder().setRoot(builder).build()
+    client.execute(plan).asScala.foreach(_ => ())
+  }
+
   private[sql] def execute(command: proto.Command): Unit = {
     val plan = proto.Plan.newBuilder().setCommand(command).build()
     client.execute(plan).asScala.foreach(_ => ())

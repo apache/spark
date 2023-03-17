@@ -49,11 +49,9 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
     // we assume `dbName` will not include the catalog name. e.g. if you call
     // `setCurrentDatabase("catalog.db")`, it will search for a database 'catalog.db' in the current
     // catalog.
-    sparkSession
-      .newDataFrame { builder =>
-        builder.getCatalogBuilder.getSetCurrentDatabaseBuilder.setDbName(dbName)
-      }
-      .withResult(_.length)
+    sparkSession.execute { builder =>
+      builder.getCatalogBuilder.getSetCurrentDatabaseBuilder.setDbName(dbName)
+    }
   }
 
   /**
@@ -512,11 +510,9 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    * @since 3.5.0
    */
   override def recoverPartitions(tableName: String): Unit = {
-    sparkSession
-      .newDataFrame { builder =>
-        builder.getCatalogBuilder.getRecoverPartitionsBuilder.setTableName(tableName)
-      }
-      .withResult(_.length)
+    sparkSession.execute { builder =>
+      builder.getCatalogBuilder.getRecoverPartitionsBuilder.setTableName(tableName)
+    }
   }
 
   /**
@@ -546,11 +542,9 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    * @since 3.5.0
    */
   override def cacheTable(tableName: String): Unit = {
-    sparkSession
-      .newDataFrame { builder =>
-        builder.getCatalogBuilder.getCacheTableBuilder.setTableName(tableName)
-      }
-      .withResult(_.length)
+    sparkSession.execute { builder =>
+      builder.getCatalogBuilder.getCacheTableBuilder.setTableName(tableName)
+    }
   }
 
   /**
@@ -563,11 +557,9 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    * @since 3.5.0
    */
   override def uncacheTable(tableName: String): Unit = {
-    sparkSession
-      .newDataFrame { builder =>
-        builder.getCatalogBuilder.getUncacheTableBuilder.setTableName(tableName)
-      }
-      .withResult(_.length)
+    sparkSession.execute { builder =>
+      builder.getCatalogBuilder.getUncacheTableBuilder.setTableName(tableName)
+    }
   }
 
   /**
@@ -576,11 +568,9 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    * @since 3.5.0
    */
   override def clearCache(): Unit = {
-    sparkSession
-      .newDataFrame { builder =>
-        builder.getCatalogBuilder.getClearCacheBuilder
-      }
-      .withResult(_.length)
+    sparkSession.execute { builder =>
+      builder.getCatalogBuilder.getClearCacheBuilder
+    }
   }
 
   /**
@@ -599,11 +589,9 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    * @since 3.5.0
    */
   override def refreshTable(tableName: String): Unit = {
-    sparkSession
-      .newDataFrame { builder =>
-        builder.getCatalogBuilder.getRefreshTableBuilder.setTableName(tableName)
-      }
-      .withResult(_.length)
+    sparkSession.execute { builder =>
+      builder.getCatalogBuilder.getRefreshTableBuilder.setTableName(tableName)
+    }
   }
 
   /**
@@ -614,11 +602,9 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    * @since 3.5.0
    */
   override def refreshByPath(path: String): Unit = {
-    sparkSession
-      .newDataFrame { builder =>
-        builder.getCatalogBuilder.getRefreshByPathBuilder.setPath(path)
-      }
-      .withResult(_.length)
+    sparkSession.execute { builder =>
+      builder.getCatalogBuilder.getRefreshByPathBuilder.setPath(path)
+    }
   }
 
   /**
@@ -638,11 +624,9 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    * @since 3.5.0
    */
   override def setCurrentCatalog(catalogName: String): Unit =
-    sparkSession
-      .newDataFrame { builder =>
-        builder.getCatalogBuilder.getSetCurrentCatalogBuilder.setCatalogName(catalogName)
-      }
-      .withResult(_.length)
+    sparkSession.execute { builder =>
+      builder.getCatalogBuilder.getSetCurrentCatalogBuilder.setCatalogName(catalogName)
+    }
 
   /**
    * Returns a list of catalogs available in this session.
