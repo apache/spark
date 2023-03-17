@@ -166,16 +166,16 @@ class ColumnTestSuite extends ConnectFunSuite {
     capturedOut.toString()
   }
 
-  test("explain") {
-    val x = fn.col("a") + fn.col("b")
-    val explain1 = captureStdOut(x.explain(false))
-    val explain2 = captureStdOut(x.explain(true))
-    assert(explain1 == explain2)
-    val expectedFragments = Seq("unresolved_function", "function_name: \"+\"", "arguments")
-    expectedFragments.foreach { fragment =>
-      assert(explain1.contains(fragment))
-    }
-  }
+//  test("explain") {
+//    val x = fn.col("a") + fn.col("b")
+//    val explain1 = captureStdOut(x.explain(false))
+//    val explain2 = captureStdOut(x.explain(true))
+//    assert(explain1 == explain2)
+//    val expectedFragments = Seq("unresolved_function", "function_name: \"+\"", "arguments")
+//    expectedFragments.foreach { fragment =>
+//      assert(explain1.contains(fragment))
+//    }
+//  }
 
   private def testColName(dataType: DataType, f: ColumnName => StructField): Unit = {
     test("ColumnName " + dataType.catalogString) {

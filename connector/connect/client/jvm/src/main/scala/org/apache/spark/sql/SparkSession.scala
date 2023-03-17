@@ -408,6 +408,10 @@ class SparkSession private[sql] (
     client.semanticHash(plan).getSemanticHash.getResult
   }
 
+  private[sql] def explainExpr(expr: proto.Expression, extended: Boolean): String = {
+    client.explainExpr(expr, extended).getExplainExpression.getExplainString
+  }
+
   private[sql] def execute[T](plan: proto.Plan, encoder: AgnosticEncoder[T]): SparkResult[T] = {
     val value = client.execute(plan)
     val result = new SparkResult(value, allocator, encoder)

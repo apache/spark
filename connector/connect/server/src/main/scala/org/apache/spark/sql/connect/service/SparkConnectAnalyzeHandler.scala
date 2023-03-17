@@ -23,7 +23,7 @@ import io.grpc.stub.StreamObserver
 
 import org.apache.spark.connect.proto
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{Dataset, SparkSession}
+import org.apache.spark.sql.{Column, Dataset, SparkSession}
 import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, InvalidPlanInput, StorageLevelProtoConverter}
 import org.apache.spark.sql.connect.planner.SparkConnectPlanner
 import org.apache.spark.sql.execution.{CodegenMode, CostMode, ExtendedMode, FormattedMode, SimpleMode}
@@ -190,6 +190,20 @@ private[connect] class SparkConnectAnalyzeHandler(
           proto.AnalyzePlanResponse.GetStorageLevel
             .newBuilder()
             .setStorageLevel(StorageLevelProtoConverter.toConnectProtoType(storageLevel))
+            .build())
+
+      case proto.AnalyzePlanRequest.AnalyzeCase.EXPLAIN_EXPRESSION =>
+        val expr = planner.transformExpression(request.getExplainExpression.getExpr)
+        val explainString = if (request.getExplainExpression.getExtended) {
+          expr.toString
+        } else {
+          expr.sql
+        }
+
+        builder.setExplainExpression(
+          proto.AnalyzePlanResponse.ExplainExpression
+            .newBuilder()
+            .setExplainString(explainString)
             .build())
 
       case other => throw InvalidPlanInput(s"Unknown Analyze Method $other!")

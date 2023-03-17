@@ -127,7 +127,7 @@ object SparkConnectServerUtils {
 
 trait RemoteSparkSession extends ConnectFunSuite with BeforeAndAfterAll {
   import SparkConnectServerUtils._
-  var spark: SparkSession = _
+  implicit var spark: SparkSession = _
 
   override def beforeAll(): Unit = {
     super.beforeAll()

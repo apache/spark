@@ -355,6 +355,12 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper {
     testCapturedStdOut(df.explain("formatted"), "Range", "Arguments: ")
   }
 
+  test("Expression explain") {
+    val col = Column("a") + Column("b")
+    assert(captureStdOut(col.explain(false)) == "(a + b)\n")
+    assert(captureStdOut(col.explain(true)) == "('a + 'b)\n")
+  }
+
   test("Dataset result collection") {
     def checkResult(rows: TraversableOnce[java.lang.Long], expectedValues: Long*): Unit = {
       rows.toIterator.zipAll(expectedValues.iterator, null, null).foreach {

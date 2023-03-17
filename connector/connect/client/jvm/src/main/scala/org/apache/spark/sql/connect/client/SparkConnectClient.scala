@@ -166,6 +166,16 @@ private[sql] class SparkConnectClient(
     analyze(builder)
   }
 
+  def explainExpr(expr: proto.Expression, extended: Boolean): proto.AnalyzePlanResponse = {
+    val builder = proto.AnalyzePlanRequest.newBuilder()
+    builder.setExplainExpression(
+      proto.AnalyzePlanRequest.ExplainExpression
+        .newBuilder()
+        .setExpr(expr)
+        .setExtended(extended))
+    analyze(builder)
+  }
+
   private def analyze(builder: proto.AnalyzePlanRequest.Builder): proto.AnalyzePlanResponse = {
     val request = builder
       .setUserContext(userContext)

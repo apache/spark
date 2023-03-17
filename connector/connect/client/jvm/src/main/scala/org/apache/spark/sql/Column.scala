@@ -1211,13 +1211,17 @@ class Column private[sql] (private[sql] val expr: proto.Expression) extends Logg
    * @group df_ops
    * @since 3.4.0
    */
-  def explain(extended: Boolean): Unit = {
+  def explain(extended: Boolean)(implicit spark: SparkSession): Unit = {
     // scalastyle:off println
-    if (extended) {
-      println(expr)
-    } else {
-      println(toString)
-    }
+
+    assert(spark != null)
+    val a = spark.explainExpr(expr, extended)
+    println(a)
+//    if (extended) {
+//      println(expr)
+//    } else {
+//      println(toString)
+//    }
     // scalastyle:on println
   }
 
