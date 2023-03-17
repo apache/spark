@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, DistributedSequenceID}
-import org.apache.spark.sql.catalyst.plans.logical.{AttachDistributedSequence, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{AttachDistributedSequence, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.DISTRIBUTED_SEQUENCE_ID
 import org.apache.spark.sql.types.LongType
@@ -33,10 +33,11 @@ object ExtractDistributedSequenceID extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = {
     plan.resolveOperatorsUpWithPruning(_.containsPattern(DISTRIBUTED_SEQUENCE_ID)) {
       case plan: LogicalPlan if
-        plan.expressions.exists(_.exists(_.isInstanceOf[DistributedSequenceID])) =>
+          plan.expressions.exists(_.exists(_.isInstanceOf[DistributedSequenceID])) =>
         val attr = AttributeReference("distributed_sequence_id", LongType, nullable = false)()
-        plan.withNewChildren(plan.children.map(AttachDistributedSequence(attr, _)))
+        val newPlan = plan.withNewChildren(plan.children.map(AttachDistributedSequence(attr, _)))
           .transformExpressions { case _: DistributedSequenceID => attr }
+        Project(plan.output, newPlan)
     }
   }
 }
