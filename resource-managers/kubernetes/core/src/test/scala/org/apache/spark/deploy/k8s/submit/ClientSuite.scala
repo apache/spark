@@ -368,7 +368,7 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
     val appId = KubernetesTestConf.APP_ID
     val sId = submissionId(kconf.namespace, POD_NAME)
     logAppender.loggingEvents.map(_.getMessage.getFormattedMessage).exists { line =>
-      line.contains(s"Application $appId with submission ID $sId finished")
+      line === s"Application $appId with submission ID $sId finished"
     }
   }
 }
