@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql
 
+import java.io.ByteArrayOutputStream
 import java.sql.{Date, Timestamp}
 import java.time.{Duration, Instant, LocalDate, LocalDateTime, Period}
 import java.time.temporal.ChronoUnit
@@ -919,6 +920,130 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
       assert(row.getDouble(1) <= 4.0)
       assert(row.getDouble(1) >= -4.0)
     }
+  }
+
+  private def captureStdOut(block: => Unit): String = {
+    val capturedOut = new ByteArrayOutputStream()
+    Console.withOut(capturedOut)(block)
+    capturedOut.toString()
+  }
+
+  test("explain") {
+    val col1 = $"a" + $"b"
+    assert(captureStdOut(col1.explain(false)) == "(a + b)\n")
+    assert(captureStdOut(col1.explain(true)) == "('a + 'b)\n")
+
+    val col2 = col1.as[Int]
+    assert(captureStdOut(col2.explain(false)) == "(a + b)\n")
+    assert(captureStdOut(col2.explain(true)) == "('a + 'b)\n")
+
+    val col3 = col1 - Column(Literal(1))
+    assert(captureStdOut(col3.explain(false)) == "((a + b) - 1)\n")
+    assert(captureStdOut(col3.explain(true)) == "(('a + 'b) - 1)\n")
+
+    val col4 = $"a" * Literal(10) / $"b" % Literal(3)
+    assert(captureStdOut(col4.explain(false)) == "(((a * 10) / b) % 3)\n")
+    assert(captureStdOut(col4.explain(true)) == "((('a * 10) / 'b) % 3)\n")
+
+    val col5 = col1.apply(1)
+    assert(captureStdOut(col5.explain(false)) == "(a + b)[1]\n")
+    assert(captureStdOut(col5.explain(true)) == "('a + 'b)[1]\n")
+
+    val col6 = col1.unary_-
+    assert(captureStdOut(col6.explain(false)) == "(- (a + b))\n")
+    assert(captureStdOut(col6.explain(true)) == "-('a + 'b)\n")
+
+    val col7 = col1.unary_!
+    assert(captureStdOut(col7.explain(false)) == "(NOT (a + b))\n")
+    assert(captureStdOut(col7.explain(true)) == "NOT ('a + 'b)\n")
+
+    val col8 = $"a" === Literal(1) || $"b" =!= Literal(2)
+    assert(captureStdOut(col8.explain(false)) == "((a = 1) OR (NOT (b = 2)))\n")
+    assert(captureStdOut(col8.explain(true)) == "(('a = 1) OR NOT ('b = 2))\n")
+
+    val col9 = col1 > Literal(1) && col1 < Literal(9) || $"c" >= Literal(1) && $"c" <= Literal(8)
+    val explain1 = captureStdOut(col9.explain(false))
+    assert(explain1 == "((((a + b) > 1) AND ((a + b) < 9)) OR ((c >= 1) AND (c <= 8)))\n")
+    val explain2 = captureStdOut(col9.explain(true))
+    assert(explain2 == "(((('a + 'b) > 1) AND (('a + 'b) < 9)) OR (('c >= 1) AND ('c <= 8)))\n")
+
+    val col10 = col1 <=> Literal(1)
+    assert(captureStdOut(col10.explain(false)) == "((a + b) <=> 1)\n")
+    assert(captureStdOut(col10.explain(true)) == "(('a + 'b) <=> 1)\n")
+
+    val col11 = functions.when(col1 === 1, -1).otherwise(0)
+    assert(captureStdOut(col11.explain(false)) == "CASE WHEN ((a + b) = 1) THEN -1 ELSE 0 END\n")
+    assert(captureStdOut(col11.explain(true)) == "CASE WHEN (('a + 'b) = 1) THEN -1 ELSE 0 END\n")
+
+    val col12 = col1.between(Literal(1), Literal(3))
+    assert(captureStdOut(col12.explain(false)) == "(((a + b) >= 1) AND ((a + b) <= 3))\n")
+    assert(captureStdOut(col12.explain(true)) == "((('a + 'b) >= 1) AND (('a + 'b) <= 3))\n")
+
+    val col13 = col1.isNaN
+    assert(captureStdOut(col13.explain(false)) == "isnan((a + b))\n")
+    assert(captureStdOut(col13.explain(true)) == "isnan(('a + 'b))\n")
+
+    val col14 = $"a".isNull && $"b".isNotNull
+    assert(captureStdOut(col14.explain(false)) == "((a IS NULL) AND (b IS NOT NULL))\n")
+    assert(captureStdOut(col14.explain(true)) == "(isnull('a) AND isnotnull('b))\n")
+
+    val col15 = col1.isin(2, 3)
+    assert(captureStdOut(col15.explain(false)) == "((a + b) IN (2, 3))\n")
+    assert(captureStdOut(col15.explain(true)) == "('a + 'b) IN (2,3)\n")
+
+    val col16 = $"a".like("Tom*") || $"b".rlike("^P.*$") || $"c".ilike("a")
+    val explain3 = captureStdOut(col16.explain(false))
+    assert(explain3 == "((a LIKE 'Tom*' OR RLIKE(b, '^P.*$')) OR ilike(c, 'a'))\n")
+    val explain4 = captureStdOut(col16.explain(true))
+    assert(explain4 == "(('a LIKE Tom* OR RLIKE('b, ^P.*$)) OR ilike('c, a, \\))\n")
+
+    val col17 = $"a".withField("b", lit(2)).dropFields("a")
+    val explain5 = captureStdOut(col17.explain(false))
+    assert(explain5 == "update_fields(update_fields(a, WithField(2)), dropfield())\n")
+    val explain6 = captureStdOut(col17.explain(true))
+    assert(explain6 == "update_fields(update_fields('a, WithField(b, 2)), dropfield(a))\n")
+
+    val col18 = $"a".substr(2, 5)
+    assert(captureStdOut(col18.explain(false)) == "substring(a, 2, 5)\n")
+    assert(captureStdOut(col18.explain(true)) == "substring('a, 2, 5)\n")
+
+    val col19 = $"a".contains("mer") and $"b".startsWith("Ari") or $"a".endsWith($"c")
+    val explain7 = captureStdOut(col19.explain(false))
+    assert(explain7 == "((contains(a, 'mer') AND startswith(b, 'Ari')) OR endswith(a, c))\n")
+    val explain8 = captureStdOut(col19.explain(true))
+    assert(explain8 == "((Contains('a, mer) AND StartsWith('b, Ari)) OR EndsWith('a, 'c))\n")
+
+    val col20 = col1.as("add_alias")
+    assert(captureStdOut(col20.explain(false)) == "(a + b) AS add_alias\n")
+    assert(captureStdOut(col20.explain(true)) == "('a + 'b) AS add_alias#1\n")
+
+    val col21 = col1.as("add_alias").as("key" :: "value" :: Nil)
+    assert(captureStdOut(col21.explain(false)) == "multialias((a + b) AS add_alias)\n")
+    assert(captureStdOut(col21.explain(true)) == "('a + 'b) AS add_alias#2 AS (key, value)\n")
+
+    val col22 = col1.cast(IntegerType).cast("int")
+    assert(captureStdOut(col22.explain(false)) == "CAST(CAST((a + b) AS INT) AS INT)\n")
+    assert(captureStdOut(col22.explain(true)) == "cast(cast(('a + 'b) as int) as int)\n")
+
+    val col23 = $"a".desc.withField("b1", $"b".asc)
+    val explain9 = captureStdOut(col23.explain(false))
+    assert(explain9 == "update_fields(a DESC NULLS LAST, WithField(b ASC NULLS FIRST))\n")
+    val explain10 = captureStdOut(col23.explain(true))
+    assert(explain10 == "update_fields('a DESC NULLS LAST, WithField(b1, 'b ASC NULLS FIRST))\n")
+
+    val col24 = $"a".desc_nulls_first.withField("b1", $"b".asc_nulls_last)
+    val explain11 = captureStdOut(col24.explain(false))
+    assert(explain11 == "update_fields(a DESC NULLS FIRST, WithField(b ASC NULLS LAST))\n")
+    val explain12 = captureStdOut(col24.explain(true))
+    assert(explain12 == "update_fields('a DESC NULLS FIRST, WithField(b1, 'b ASC NULLS LAST))\n")
+
+    val col25 = $"a".bitwiseAND($"b".bitwiseOR($"c").bitwiseXOR(Literal(3)))
+    assert(captureStdOut(col25.explain(false)) == "(a & ((b | c) ^ 3))\n")
+    assert(captureStdOut(col25.explain(true)) == "('a & (('b | 'c) ^ 3))\n")
+
+    val col26 = $"a".over()
+    assert(captureStdOut(col26.explain(false)) == "a OVER (unspecifiedframe$())\n")
+    assert(captureStdOut(col26.explain(true)) == "'a windowspecdefinition(unspecifiedframe$())\n")
   }
 
   test("bitwiseAND") {
