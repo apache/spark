@@ -3662,7 +3662,7 @@
       "Failed to execute command because subquery expressions are not allowed in DEFAULT values."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2000" : {
+  "INVALID_ANSI_DATE" : {
     "message" : [
       "<message>. If necessary set <ansiConfig> to false to bypass this error."
     ]
