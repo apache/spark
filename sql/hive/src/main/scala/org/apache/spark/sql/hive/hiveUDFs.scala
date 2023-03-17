@@ -23,13 +23,9 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.hadoop.hive.ql.exec._
-import org.apache.hadoop.hive.ql.udf.{UDFType => HiveUDFType}
 import org.apache.hadoop.hive.ql.udf.generic._
 import org.apache.hadoop.hive.ql.udf.generic.GenericUDAFEvaluator.AggregationBuffer
-import org.apache.hadoop.hive.ql.udf.generic.GenericUDF._
-import org.apache.hadoop.hive.ql.udf.generic.GenericUDFUtils.ConversionHelper
 import org.apache.hadoop.hive.serde2.objectinspector.{ConstantObjectInspector, ObjectInspector, ObjectInspectorFactory}
-import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorFactory.ObjectInspectorOptions
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
@@ -53,25 +49,19 @@ private[hive] case class HiveSimpleUDF(
   @transient
   private lazy val evaluator = new HiveSimpleUDFEvaluator(funcWrapper, children)
 
-  override lazy val deterministic: Boolean = isUDFDeterministic && children.forall(_.deterministic)
+  override lazy val deterministic: Boolean =
+    evaluator.isUDFDeterministic && children.forall(_.deterministic)
 
   override def nullable: Boolean = true
 
-  @transient
-  private val isUDFDeterministic = {
-    val udfType = evaluator.function.getClass.getAnnotation(classOf[HiveUDFType])
-    udfType != null && udfType.deterministic() && !udfType.stateful()
-  }
-
-  override def foldable: Boolean = isUDFDeterministic && children.forall(_.foldable)
+  override def foldable: Boolean = evaluator.isUDFDeterministic && children.forall(_.foldable)
 
   override lazy val dataType: DataType = javaTypeToDataType(evaluator.method.getGenericReturnType)
 
   // TODO: Finish input output types.
   override def eval(input: InternalRow): Any = {
     children.zipWithIndex.map {
-      case (child, idx) =>
-        evaluator.setArg(idx, child.eval(input))
+      case (child, idx) => evaluator.setArg(idx, child.eval(input))
     }
     evaluator.evaluate()
   }
@@ -108,18 +98,8 @@ private[hive] case class HiveSimpleUDF(
       code"""
          |${evals.map(_.code).mkString("\n")}
          |${setValues.mkString("\n")}
-         |$resultType $resultTerm = null;
-         |boolean ${ev.isNull} = false;
-         |try {
-         |  $resultTerm = ($resultType) $refEvaluator.evaluate();
-         |  ${ev.isNull} = $resultTerm == null;
-         |} catch (Throwable e) {
-         |  throw QueryExecutionErrors.failedExecuteUserDefinedFunctionError(
-         |    "${funcWrapper.functionClassName}",
-         |    "${children.map(_.dataType.catalogString).mkString(", ")}",
-         |    "${dataType.catalogString}",
-         |    e);
-         |}
+         |$resultType $resultTerm = ($resultType) $refEvaluator.evaluate();
+         |boolean ${ev.isNull} = $resultTerm == null;
          |${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
          |if (!${ev.isNull}) {
          |  ${ev.value} = $resultTerm;
@@ -127,71 +107,6 @@ private[hive] case class HiveSimpleUDF(
          |""".stripMargin
     )
   }
-}
-
-abstract class HiveUDFEvaluatorBase[UDFType <: AnyRef](
-    funcWrapper: HiveFunctionWrapper)
-  extends HiveInspectors with Serializable {
-
-  @transient
-  lazy val function = funcWrapper.createFunction[UDFType]()
-
-  def setArg(index: Int, arg: Any): Unit
-
-  def evaluate(): Any
-
-}
-
-class HiveSimpleUDFEvaluator(
-    funcWrapper: HiveFunctionWrapper, children: Seq[Expression])
-  extends HiveUDFEvaluatorBase[UDF](funcWrapper) {
-
-  @transient
-  lazy val method = function.getResolver.
-    getEvalMethod(children.map(_.dataType.toTypeInfo).asJava)
-
-  @transient
-  private lazy val wrappers = children.map(x => wrapperFor(toInspector(x), x.dataType)).toArray
-
-  @transient
-  private lazy val arguments = children.map(toInspector).toArray
-
-  // Create parameter converters
-  @transient
-  private lazy val conversionHelper = new ConversionHelper(method, arguments)
-
-  @transient
-  private lazy val inputs: Array[AnyRef] = new Array[AnyRef](children.length)
-
-  override def setArg(index: Int, arg: Any): Unit = {
-    inputs(index) = wrappers(index)(arg).asInstanceOf[AnyRef]
-  }
-
-  @transient
-  private lazy val unwrapper: Any => Any =
-    unwrapperFor(ObjectInspectorFactory.getReflectionObjectInspector(
-      method.getGenericReturnType, ObjectInspectorOptions.JAVA))
-
-  override def evaluate(): Any = {
-    val ret = FunctionRegistry.invoke(
-      method,
-      function,
-      conversionHelper.convertIfNecessary(inputs: _*): _*)
-    unwrapper(ret)
-  }
-}
-
-// Adapter from Catalyst ExpressionResult to Hive DeferredObject
-private[hive] class DeferredObjectAdapter(oi: ObjectInspector, dataType: DataType)
-  extends DeferredObject with HiveInspectors {
-
-  private val wrapper = wrapperFor(oi, dataType)
-  private var func: Any = _
-  def set(func: Any): Unit = {
-    this.func = func
-  }
-  override def prepare(i: Int): Unit = {}
-  override def get(): AnyRef = wrapper(func).asInstanceOf[AnyRef]
 }
 
 private[hive] case class HiveGenericUDF(
@@ -203,21 +118,15 @@ private[hive] case class HiveGenericUDF(
   override def nullable: Boolean = true
 
   override lazy val deterministic: Boolean =
-    isUDFDeterministic && children.forall(_.deterministic)
+    evaluator.isUDFDeterministic && children.forall(_.deterministic)
 
-  override def foldable: Boolean = isUDFDeterministic &&
+  override def foldable: Boolean = evaluator.isUDFDeterministic &&
     evaluator.returnInspector.isInstanceOf[ConstantObjectInspector]
 
   override lazy val dataType: DataType = inspectorToDataType(evaluator.returnInspector)
 
   @transient
   private lazy val evaluator = new HiveGenericUDFEvaluator(funcWrapper, children)
-
-  @transient
-  private val isUDFDeterministic = {
-    val udfType = evaluator.function.getClass.getAnnotation(classOf[HiveUDFType])
-    udfType != null && udfType.deterministic() && !udfType.stateful()
-  }
 
   override def eval(input: InternalRow): Any = {
     children.zipWithIndex.map {
@@ -256,18 +165,8 @@ private[hive] case class HiveGenericUDF(
       code"""
          |${evals.map(_.code).mkString("\n")}
          |${setValues.mkString("\n")}
-         |$resultType $resultTerm = null;
-         |boolean ${ev.isNull} = false;
-         |try {
-         |  $resultTerm = ($resultType) $refEvaluator.evaluate();
-         |  ${ev.isNull} = $resultTerm == null;
-         |} catch (Throwable e) {
-         |  throw QueryExecutionErrors.failedExecuteUserDefinedFunctionError(
-         |    "${funcWrapper.functionClassName}",
-         |    "${children.map(_.dataType.catalogString).mkString(", ")}",
-         |    "${dataType.catalogString}",
-         |    e);
-         |}
+         |$resultType $resultTerm = ($resultType) $refEvaluator.evaluate();
+         |boolean ${ev.isNull} = $resultTerm == null;
          |${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
          |if (!${ev.isNull}) {
          |  ${ev.value} = $resultTerm;
@@ -275,32 +174,6 @@ private[hive] case class HiveGenericUDF(
          |""".stripMargin
     )
   }
-}
-
-class HiveGenericUDFEvaluator(
-    funcWrapper: HiveFunctionWrapper, children: Seq[Expression])
-  extends HiveUDFEvaluatorBase[GenericUDF](funcWrapper) {
-
-  @transient
-  private lazy val argumentInspectors = children.map(toInspector)
-
-  @transient
-  lazy val returnInspector = {
-    function.initializeAndFoldConstants(argumentInspectors.toArray)
-  }
-
-  @transient
-  private lazy val deferredObjects: Array[DeferredObject] = argumentInspectors.zip(children).map {
-    case (inspect, child) => new DeferredObjectAdapter(inspect, child.dataType)
-  }.toArray[DeferredObject]
-
-  @transient
-  private lazy val unwrapper: Any => Any = unwrapperFor(returnInspector)
-
-  def setArg(index: Int, arg: Any): Unit =
-    deferredObjects(index).asInstanceOf[DeferredObjectAdapter].set(arg)
-
-  override def evaluate(): Any = unwrapper(function.evaluate(deferredObjects))
 }
 
 /**
