@@ -36,7 +36,7 @@ object DistributionAndOrderingUtils {
       funCatalogOpt: Option[FunctionCatalog]): LogicalPlan = write match {
     case write: RequiresDistributionAndOrdering =>
       val numPartitions = write.requiredNumPartitions()
-      val partitionSize = write.advisoryPartitionSizeInBytes();
+      val partitionSize = write.advisoryPartitionSizeInBytes()
 
       val distribution = write.requiredDistribution match {
         case d: OrderedDistribution =>
