@@ -4004,6 +4004,16 @@ object functions {
   def array_compact(column: Column): Column = Column.fn("array_compact", column)
 
   /**
+   * Returns an array containing value as well as all elements from array. The new element is
+   * positioned at the beginning of the array.
+   *
+   * @group collection_funcs
+   * @since 3.5.0
+   */
+  def array_prepend(column: Column, element: Any): Column =
+    Column.fn("array_prepend", column, lit(element))
+
+  /**
    * Removes duplicate values from the array.
    * @group collection_funcs
    * @since 3.4.0
