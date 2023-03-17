@@ -21,7 +21,6 @@ check_dependencies(__name__)
 from typing import Dict
 from typing import Optional, Union, List, overload, Tuple, cast
 from typing import TYPE_CHECKING
-from typing import Any
 
 from pyspark.sql.connect.plan import Read, DataSource, LogicalPlan, WriteOperation, WriteOperationV2
 from pyspark.sql.types import StructType
