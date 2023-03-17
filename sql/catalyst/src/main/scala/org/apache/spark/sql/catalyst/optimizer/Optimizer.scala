@@ -1213,6 +1213,12 @@ object CollapseRepartition extends Rule[LogicalPlan] {
     // child.
     case r @ RebalancePartitions(_, child: RebalancePartitions, _) =>
       r.withNewChildren(child.children)
+    // Case 5: When a LocalLimit has a child of Repartition we can remove the Repartition.
+    case l @ LocalLimit(_, r: RepartitionByExpression)
+        if r.partitionExpressions.nonEmpty && r.partitionExpressions.forall(_.deterministic) =>
+      l.copy(child = r.child)
+    case l @ LocalLimit(_, r: RebalancePartitions) =>
+      l.copy(child = r.child)
   }
 }
 
