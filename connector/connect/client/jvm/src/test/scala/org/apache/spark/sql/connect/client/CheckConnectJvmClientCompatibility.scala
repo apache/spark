@@ -202,7 +202,6 @@ object CheckConnectJvmClientCompatibility {
       ProblemFilters.exclude[Problem](
         "org.apache.spark.sql.SparkSession.baseRelationToDataFrame"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.createDataset"),
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.catalog"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.executeCommand"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.readStream"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.this"),
