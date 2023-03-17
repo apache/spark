@@ -23,7 +23,7 @@ import shutil
 import tempfile
 from collections import defaultdict
 
-from pyspark.errors import PySparkTypeError
+from pyspark.errors import PySparkAttributeError, PySparkTypeError
 from pyspark.sql import SparkSession as PySparkSession, Row
 from pyspark.sql.types import (
     StructType,
@@ -2935,6 +2935,53 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         )
         self.assertEqual(cdf2.schema, sdf2.schema)
         self.assertEqual(cdf2.collect(), sdf2.collect())
+
+    def test_unsupported_jvm_attribute(self):
+        # Unsupported jvm attributes for Spark session.
+        unsupported_attrs = ["_jsc", "_jconf", "_jvm", "_jsparkSession"]
+        spark_session = self.connect
+        for attr in unsupported_attrs:
+            with self.assertRaises(PySparkAttributeError) as pe:
+                getattr(spark_session, attr)
+
+            self.check_error(
+                exception=pe.exception,
+                error_class="JVM_ATTRIBUTE_NOT_SUPPORTED",
+                message_parameters={"attr_name": attr},
+            )
+
+        # Unsupported jvm attributes for DataFrame.
+        unsupported_attrs = ["_jseq", "_jdf", "_jmap", "_jcols"]
+        cdf = self.connect.range(10)
+        for attr in unsupported_attrs:
+            with self.assertRaises(PySparkAttributeError) as pe:
+                getattr(cdf, attr)
+
+            self.check_error(
+                exception=pe.exception,
+                error_class="JVM_ATTRIBUTE_NOT_SUPPORTED",
+                message_parameters={"attr_name": attr},
+            )
+
+        # Unsupported jvm attributes for Column.
+        with self.assertRaises(PySparkAttributeError) as pe:
+            getattr(cdf.id, "_jc")
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="JVM_ATTRIBUTE_NOT_SUPPORTED",
+            message_parameters={"attr_name": "_jc"},
+        )
+
+        # Unsupported jvm attributes for DataFrameReader.
+        with self.assertRaises(PySparkAttributeError) as pe:
+            getattr(spark_session.read, "_jreader")
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="JVM_ATTRIBUTE_NOT_SUPPORTED",
+            message_parameters={"attr_name": "_jreader"},
+        )
 
 
 @unittest.skipIf(not should_test_connect, connect_requirement_message)
