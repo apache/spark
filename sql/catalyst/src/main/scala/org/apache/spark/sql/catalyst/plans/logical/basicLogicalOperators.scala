@@ -69,7 +69,7 @@ object Subquery {
 }
 
 case class Project(projectList: Seq[NamedExpression], child: LogicalPlan)
-    extends OrderPreservingUnaryNode {
+    extends OrderPreservingUnaryNode with ExposesMetadataColumns {
   override def output: Seq[Attribute] = projectList.map(_.toAttribute)
   override protected def outputExpressions: Seq[NamedExpression] = projectList
   override def maxRows: Option[Long] = child.maxRows
@@ -91,8 +91,22 @@ case class Project(projectList: Seq[NamedExpression], child: LogicalPlan)
   override lazy val validConstraints: ExpressionSet =
     getAllValidConstraints(projectList)
 
-  override def metadataOutput: Seq[AttributeReference] =
-    getTagValue(Project.hiddenOutputTag).getOrElse(child.metadataOutput)
+  override def metadataOutput: Seq[AttributeReference] = {
+    // Propagate any hidden output as-is, with no attempt to reconcile naming collisions. Otherwise,
+    // propagate the child's metadata columns with standard naming collision resolution.
+    getTagValue(Project.hiddenOutputTag).getOrElse {
+      metadataOutputWithOutConflicts(child.metadataOutput)
+    }
+  }
+
+  override protected def withMetadataColumnsInternal(
+      metadataCols: Seq[AttributeReference]): LogicalPlan = {
+    // Do not leak the qualified-access-only restriction to normal plan outputs.
+    val newProjectList = projectList ++ metadataCols.map(_.markAsAllowAnyAccess())
+    val newProj = this.copy(projectList = newProjectList)
+    newProj.copyTagsFrom(this)
+    newProj
+  }
 
   override protected def withNewChildInternal(newChild: LogicalPlan): Project =
     copy(child = newChild)

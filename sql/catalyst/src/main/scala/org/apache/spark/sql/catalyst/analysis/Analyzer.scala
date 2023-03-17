@@ -1012,14 +1012,6 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         plan: LogicalPlan,
         requiredAttrIds: Set[ExprId]): LogicalPlan = plan match {
       case s: ExposesMetadataColumns => s.withMetadataColumns(requiredAttrIds)
-      case p: Project if p.metadataOutput.exists(a => requiredAttrIds.contains(a.exprId)) =>
-        val metadataCols = p.metadataOutput.filter(a => requiredAttrIds.contains(a.exprId))
-        val newProj = p.copy(
-          // Do not leak the qualified-access-only restriction to normal plan outputs.
-          projectList = p.projectList ++ metadataCols.map(_.markAsAllowAnyAccess()),
-          child = addMetadataCol(p.child, requiredAttrIds))
-        newProj.copyTagsFrom(p)
-        newProj
       case _ => plan.mapChildren(addMetadataCol(_, requiredAttrIds))
     }
   }
