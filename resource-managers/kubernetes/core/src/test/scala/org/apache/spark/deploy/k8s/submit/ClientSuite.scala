@@ -33,8 +33,10 @@ import org.scalatestplus.mockito.MockitoSugar._
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.k8s.{Config, _}
+import org.apache.spark.deploy.k8s.Config.WAIT_FOR_APP_COMPLETION
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.Fabric8Aliases._
+import org.apache.spark.deploy.k8s.submit.Client.submissionId
 import org.apache.spark.util.Utils
 
 class ClientSuite extends SparkFunSuite with BeforeAndAfter {
@@ -181,7 +183,8 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
     when(podsWithNamespace.resource(fullExpectedPod())).thenReturn(namedPods)
     when(namedPods.create()).thenReturn(podWithOwnerReference())
     when(namedPods.watch(loggingPodStatusWatcher)).thenReturn(mock[Watch])
-    when(loggingPodStatusWatcher.watchOrStop(kconf.namespace + ":" + POD_NAME)).thenReturn(true)
+    val sId = submissionId(kconf.namespace, POD_NAME)
+    when(loggingPodStatusWatcher.watchOrStop(sId)).thenReturn(true)
     doReturn(resourceList)
       .when(kubernetesClient)
       .resourceList(createdResourcesArgumentCaptor.capture())
@@ -343,6 +346,29 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
       kubernetesClient,
       loggingPodStatusWatcher)
     submissionClient.run()
-    verify(loggingPodStatusWatcher).watchOrStop(kconf.namespace + ":driver")
+    verify(loggingPodStatusWatcher).watchOrStop(submissionId(kconf.namespace, POD_NAME))
+  }
+
+  test("SPARK-42813: Print application info when waitAppCompletion is false") {
+    val logAppender = new LogAppender
+    withLogAppender(logAppender) {
+      val sparkConf = new SparkConf(loadDefaults = false)
+        .set(WAIT_FOR_APP_COMPLETION, false)
+      kconf = KubernetesTestConf.createDriverConf(sparkConf = sparkConf,
+        resourceNamePrefix = Some(KUBERNETES_RESOURCE_PREFIX))
+      when(driverBuilder.buildFromFeatures(kconf, kubernetesClient))
+        .thenReturn(BUILT_KUBERNETES_SPEC)
+      val submissionClient = new Client(
+        kconf,
+        driverBuilder,
+        kubernetesClient,
+        loggingPodStatusWatcher)
+      submissionClient.run()
+    }
+    val appId = KubernetesTestConf.APP_ID
+    val sId = submissionId(kconf.namespace, POD_NAME)
+    logAppender.loggingEvents.map(_.getMessage.getFormattedMessage).exists { line =>
+      line.contains(s"Application $appId with submission ID $sId finished")
+    }
   }
 }

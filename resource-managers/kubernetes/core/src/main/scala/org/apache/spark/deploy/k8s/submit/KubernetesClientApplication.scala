@@ -180,7 +180,7 @@ private[spark] class Client(
         throw e
     }
 
-    val sId = Seq(conf.namespace, driverPodName).mkString(":")
+    val sId = Client.submissionId(conf.namespace, driverPodName)
     if (conf.get(WAIT_FOR_APP_COMPLETION)) {
       breakable {
         while (true) {
@@ -206,6 +206,10 @@ private[spark] class Client(
       logInfo(s"Deployed Spark application ${conf.appId} with submission ID $sId into Kubernetes")
     }
   }
+}
+
+private[spark] object Client {
+  def submissionId(namespace: String, driverPodName: String): String = s"$namespace:$driverPodName"
 }
 
 /**
