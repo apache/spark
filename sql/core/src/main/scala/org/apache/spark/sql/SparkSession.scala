@@ -1265,7 +1265,8 @@ object SparkSession extends Logging {
   }
 
   /**
-   * Initialize extensions passed into this function.
+   * Initialize extensions specified in [[StaticSQLConf]]. The classes will be applied to the
+   * extensions passed into this function.
    */
   private def applyExtensions(
       sparkContext: SparkContext,
