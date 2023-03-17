@@ -1070,7 +1070,7 @@
     "subClass" : {
       "PARTITION_NUM_AND_SIZE" : {
         "message" : [
-          "The number and advisory partition size can't be specified at the same time."
+          "The partition number and advisory partition size can't be specified at the same time."
         ]
       },
       "PARTITION_NUM_WITH_UNSPECIFIED_DISTRIBUTION" : {
