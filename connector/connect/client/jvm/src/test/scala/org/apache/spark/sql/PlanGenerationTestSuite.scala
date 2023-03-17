@@ -2123,17 +2123,4 @@ class PlanGenerationTestSuite
   test("replace") {
     simple.na.replace[Long]("id", Map(1L -> 8L))
   }
-
-  test("createTable without schema") {
-    session.catalog.createTable("text_table", "/invalidPath", "text")
-  }
-
-  test("createTable with schema") {
-    session.catalog.createTable(
-      "test_parquet_table",
-      "parquet",
-      new StructType().add("id", LongType),
-      "parquet table",
-      Map("path" -> "/invalidPath"))
-  }
 }

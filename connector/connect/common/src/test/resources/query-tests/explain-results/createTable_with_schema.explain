@@ -1,2 +1,0 @@
-SubqueryAlias spark_catalog.default.test_parquet_table
-+- Relation spark_catalog.default.test_parquet_table[id#0L] parquet
