@@ -1063,7 +1063,10 @@ class FsHistoryProviderSuite extends SparkFunSuite with Matchers with Logging {
     writeFile(slowApp, None,
       SparkListenerApplicationStart(slowApp.getName(), Some(slowApp.getName()), 1L, "test", None))
     slowApp.setLastModified(clock.getTimeMillis())
-    validLogCount += 1
+
+    // There is a problem with the logic of detecting that the app contains valid info,
+    // so the strategy of deleting if it exceeds the max age is adopted
+    // validLogCount += 1
 
     // Move the clock forward another 2 days and scan the files again. This time the cleaner should
     // pick up the invalid files and get rid of them.
