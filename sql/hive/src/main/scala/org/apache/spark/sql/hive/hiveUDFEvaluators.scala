@@ -40,7 +40,7 @@ abstract class HiveUDFEvaluatorBase[UDFType <: AnyRef](
   lazy val function = funcWrapper.createFunction[UDFType]()
 
   @transient
-  val isUDFDeterministic = {
+  lazy val isUDFDeterministic = {
     val udfType = function.getClass.getAnnotation(classOf[HiveUDFType])
     udfType != null && udfType.deterministic() && !udfType.stateful()
   }
