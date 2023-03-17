@@ -1571,8 +1571,11 @@ class DataFrame:
     def pandas_api(self, *args: Any, **kwargs: Any) -> None:
         raise NotImplementedError("pandas_api() is not implemented.")
 
-    def registerTempTable(self, *args: Any, **kwargs: Any) -> None:
-        raise NotImplementedError("registerTempTable() is not implemented.")
+    def registerTempTable(self, name: str) -> None:
+        warnings.warn("Deprecated in 2.0, use createOrReplaceTempView instead.", FutureWarning)
+        self.createOrReplaceTempView(name)
+
+    registerTempTable.__doc__ = PySparkDataFrame.registerTempTable.__doc__
 
     def storageLevel(self, *args: Any, **kwargs: Any) -> None:
         raise NotImplementedError("storageLevel() is not implemented.")
