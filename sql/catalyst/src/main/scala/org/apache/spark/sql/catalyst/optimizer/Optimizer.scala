@@ -176,6 +176,8 @@ abstract class Optimizer(catalogManager: CatalogManager)
     // to enforce idempotence on it and we change this batch from Once to FixedPoint(1).
     Batch("Subquery", FixedPoint(1),
       OptimizeSubqueries) ::
+    Batch("RewriteSubquery", Once,
+      RewritePredicateSubquery) ::
     Batch("Replace Operators", fixedPoint,
       RewriteExceptAll,
       RewriteIntersectAll,
@@ -224,16 +226,6 @@ abstract class Optimizer(catalogManager: CatalogManager)
     // The following batch should be executed after batch "Join Reorder" and "LocalRelation".
     Batch("Check Cartesian Products", Once,
       CheckCartesianProducts) :+
-    Batch("RewriteSubquery", Once,
-      RewritePredicateSubquery,
-      PushPredicateThroughJoin,
-      LimitPushDown,
-      ColumnPruning,
-      CollapseProject,
-      RemoveRedundantAliases,
-      RemoveNoopOperators,
-      InferFiltersFromConstraints,
-      PushDownPredicates) :+
     // This batch must be executed after the `RewriteSubquery` batch, which creates joins.
     Batch("NormalizeFloatingNumbers", Once, NormalizeFloatingNumbers) :+
     Batch("ReplaceUpdateFieldsExpression", Once, ReplaceUpdateFieldsExpression)
