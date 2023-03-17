@@ -145,7 +145,7 @@ abstract class SparkFunSuite
   override protected def test(testName: String, testTags: Tag*)(testBody: => Any)
     (implicit pos: Position): Unit = {
     if (excluded.contains(testName)) {
-      ignore(s"$testName [enable by remove from $excluded]")(testBody)
+      ignore(s"$testName (excluded)")(testBody)
     } else {
       super.test(testName, testTags: _*)(testBody)
     }
