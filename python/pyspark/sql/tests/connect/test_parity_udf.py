@@ -92,16 +92,6 @@ class UDFParityTests(BaseUDFTestsMixin, ReusedConnectTestCase):
     def test_udf_on_sql_context(self):
         super().test_udf_on_sql_context()
 
-    # TODO(SPARK-42247): implement `UserDefinedFunction.returnType`
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_udf3(self):
-        super().test_udf3()
-
-    # TODO(SPARK-42247): implement `UserDefinedFunction.returnType`
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_udf_registration_return_type_none(self):
-        super().test_udf_registration_return_type_none()
-
     @unittest.skip("Spark Connect does not support SQLContext but the test depends on it.")
     def test_non_existed_udf_with_sql_context(self):
         super().test_non_existed_udf_with_sql_context()
