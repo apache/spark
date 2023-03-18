@@ -23,7 +23,7 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.{SPARK_DOC_ROOT, SparkException, SparkThrowable, SparkThrowableHelper, SparkUnsupportedOperationException}
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.{ExtendedAnalysisException, FunctionIdentifier, QualifiedTableName, TableIdentifier}
+import org.apache.spark.sql.catalyst.{ExtendedAnalysisException, FunctionIdentifier, QualifiedTableName, TableIdentifier, VariableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, FunctionAlreadyExistsException, NamespaceAlreadyExistsException, NoSuchFunctionException, NoSuchNamespaceException, NoSuchPartitionException, NoSuchTableException, ResolvedTable, Star, TableAlreadyExistsException, UnresolvedRegex}
 import org.apache.spark.sql.catalyst.catalog.{CatalogTable, InvalidUDFClassException}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
@@ -629,10 +629,10 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
   def aliasNumberNotMatchColumnNumberError(
       columnSize: Int, outputSize: Int, t: TreeNode[_]): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1028",
+      errorClass = "ASSIGNMENT_ARITY_MISMATCH",
       messageParameters = Map(
-        "columnSize" -> columnSize.toString,
-        "outputSize" -> outputSize.toString),
+        "numExpr" -> columnSize.toString,
+        "numTarget" -> outputSize.toString),
       origin = t.origin)
   }
 
@@ -710,6 +710,21 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1040",
       messageParameters = Map("dt" -> dt.toString))
+  }
+
+  def unresolvedVariableError(name: VariableIdentifier, searchPath: Seq[String]): Throwable = {
+    new AnalysisException(
+      errorClass = "UNRESOLVED_VARIABLE",
+      messageParameters = Map(
+        "variableName" -> toSQLId(name.variableName),
+        "searchPath" -> searchPath.map(toSQLId).mkString("[", ", ", "]")))
+  }
+
+  def setVariableUsingSetCommandError(name: VariableIdentifier): Throwable = {
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_FEATURE.SET_VARIABLE_USING_SET",
+      messageParameters = Map(
+        "variableName" -> toSQLId(name.variableName)))
   }
 
   def unresolvedRoutineError(name: FunctionIdentifier, searchPath: Seq[String]): Throwable = {
@@ -3300,7 +3315,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
   // this is not allowed.
   def defaultReferencesNotAllowedInComplexExpressionsInInsertValuesList(): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1339",
+      errorClass = "DEFAULT_PLACEMENT_INVALID",
       messageParameters = Map.empty)
   }
 
@@ -3308,13 +3323,13 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
   // DEFAULT column references and explicit column lists, since this is not implemented yet.
   def defaultReferencesNotAllowedInComplexExpressionsInUpdateSetClause(): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1340",
+      errorClass = "DEFAULT_PLACEMENT_INVALID",
       messageParameters = Map.empty)
   }
 
   def defaultReferencesNotAllowedInComplexExpressionsInMergeInsertsOrUpdates(): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1343",
+      errorClass = "DEFAULT_PLACEMENT_INVALID",
       messageParameters = Map.empty)
   }
 

@@ -79,6 +79,12 @@ Ambiguous reference to the field `<field>`. It appears `<count>` times in the sc
 
 `<message>`.`<alternative>` If necessary set `<config>` to "false" to bypass this error.
 
+### ASSIGNMENT_ARITY_MISMATCH
+
+[SQLSTATE: 42802](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+The number of columns or variables assigned or aliased: `<numTarget>` does not match the number of source expressions: `<numExpr>`.
+
 ### [AS_OF_JOIN](sql-error-conditions-as-of-join-error-class.html)
 
 SQLSTATE: none assigned
@@ -422,6 +428,13 @@ Decimal precision `<precision>` exceeds max precision `<maxPrecision>`.
 
 Default database `<defaultDatabase>` does not exist, please create it first or change default database to ``<defaultDatabase>``.
 
+### DEFAULT_PLACEMENT_INVALID
+
+[SQLSTATE: 42608](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+A DEFAULT keyword in a MERGE, INSERT, UPDATE, or SET VARIABLE command could not be directly assigned to a target column because it was part of an expression.
+For example: `UPDATE SET c1 = DEFAULT` is allowed, but `UPDATE T SET c1 = DEFAULT + 1` is not allowed.
+
 ### DISTINCT_WINDOW_FUNCTION_UNSUPPORTED
 
 SQLSTATE: none assigned
@@ -451,6 +464,12 @@ Duplicate map key `<key>` was found, please check the input data. If you want to
 SQLSTATE: none assigned
 
 The metric name is not unique: `<metricName>`. The same name cannot be used for metrics with different results. However multiple instances of metrics with with same result and name are allowed (e.g. self-joins).
+
+### DUPLICATE_ASSIGNMENTS
+
+[SQLSTATE: 42701](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+The columns or variables `<nameList>` appear more than once as assignment targets.
 
 ### DUPLICATE_CLAUSES
 
@@ -1610,6 +1629,12 @@ The function `<routineName>` cannot be found. Verify the spelling and correctnes
 If you did not qualify the name with a schema and catalog, verify the current_schema() output, or qualify the name with the correct schema and catalog.
 To tolerate the error on drop use DROP FUNCTION IF EXISTS.
 
+### ROW_SUBQUERY_TOO_MANY_ROWS
+
+[SQLSTATE: 21000](sql-error-conditions-sqlstates.html#class-21-cardinality-violation)
+
+More than one row returned by a subquery used as a row.
+
 ### RULE_ID_NOT_FOUND
 
 [SQLSTATE: 22023](sql-error-conditions-sqlstates.html#class-22-data-exception)
@@ -1703,6 +1728,12 @@ Static partition column `<staticName>` is also specified in the column list.
 SQLSTATE: none assigned
 
 Query [id = `<id>`, runId = `<runId>`] terminated with exception: `<message>`
+
+### SUBQUERY_IN_DEFAULT_EXPRESSION
+
+[SQLSTATE: 0A000](sql-error-conditions-sqlstates.html#class-0A-feature-not-supported)
+
+Failed to execute command because subquery expressions are not allowed in DEFAULT values.
 
 ### SUM_OF_LIMIT_AND_OFFSET_EXCEEDS_MAX_INT
 
@@ -1868,7 +1899,7 @@ Cannot infer grouping columns for GROUP BY ALL based on the select clause. Pleas
 
 [SQLSTATE: 42703](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
-A column or function parameter with name `<objectName>` cannot be resolved.
+A column, variable, or function parameter with name `<objectName>` cannot be resolved.
 
 For more details see [UNRESOLVED_COLUMN](sql-error-conditions-unresolved-column-error-class.html)
 
@@ -1899,6 +1930,12 @@ Cannot resolve function `<routineName>` on search path `<searchPath>`.
 [SQLSTATE: 42703](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 USING column `<colName>` cannot be resolved on the `<side>` side of the join. The `<side>`-side columns: [`<suggestion>`].
+
+### UNRESOLVED_VARIABLE
+
+[SQLSTATE: 42883](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Cannot resolve variable `<variableName>` on search path `<searchPath>`.
 
 ### UNSET_NONEXISTENT_PROPERTIES
 
@@ -2055,6 +2092,21 @@ You're using untyped Scala UDF, which does not have the input type information. 
 1. use typed Scala UDF APIs(without return type parameter), e.g. `udf((x: Int) => x)`.
 2. use Java UDF APIs, e.g. `udf(new UDF1[String, Integer] { override def call(s: String): Integer = s.length() }, IntegerType)`, if input types are all non primitive.
 3. set "spark.sql.legacy.allowUntypedScalaUDF" to "true" and use this API with caution.
+
+### VARIABLE_ALREADY_EXISTS
+
+[SQLSTATE: 42723](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+Cannot create the variable `<variableName>` because it already exists.
+Choose a different name, or drop or replace the existing variable.
+
+### VARIABLE_NOT_FOUND
+
+[SQLSTATE: 42883](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
+
+The variable `<variableName>` cannot be found. Verify the spelling and correctness of the schema and catalog.
+If you did not qualify the name with a schema and catalog, verify the current_schema() output, or qualify the name with the correct schema and catalog.
+To tolerate the error on drop use DROP VARIABLE IF EXISTS.
 
 ### VIEW_ALREADY_EXISTS
 

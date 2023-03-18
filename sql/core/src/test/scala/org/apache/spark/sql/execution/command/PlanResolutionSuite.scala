@@ -1957,7 +1957,7 @@ class PlanResolutionSuite extends AnalysisTest {
       exception = intercept[AnalysisException] {
         parseAndResolve(mergeWithDefaultReferenceAsPartOfComplexExpression)
       },
-      errorClass = "_LEGACY_ERROR_TEMP_1343",
+      errorClass = "DEFAULT_PLACEMENT_INVALID",
       parameters = Map.empty)
 
     val mergeWithDefaultReferenceForNonNullableCol =

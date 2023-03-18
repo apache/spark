@@ -17,12 +17,14 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.catalyst.SQLConfHelper
+import org.apache.spark.sql.catalyst.{SQLConfHelper, VariableIdentifier}
+import org.apache.spark.sql.catalyst.catalog.SessionCatalog
 import org.apache.spark.sql.catalyst.expressions.Alias
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.TreePattern.UNRESOLVED_ATTRIBUTE
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns.{containsExplicitDefaultColumn, getDefaultValueExprOrNullLit, isExplicitDefaultColumn}
 import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.errors.QueryCompilationErrors.unresolvedVariableError
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructField
 
@@ -40,7 +42,11 @@ import org.apache.spark.sql.types.StructField
  * 3. The plan nodes between [[UnresolvedInlineTable]] and [[InsertIntoStatement]] are either
  *    [[Project]], or [[Aggregate]], or [[SubqueryAlias]].
  */
-case object ResolveColumnDefaultInInsert extends SQLConfHelper with ColumnResolutionHelper {
+class ResolveColumnDefaultInInsert(catalog: SessionCatalog)
+  extends SQLConfHelper with ColumnResolutionHelper {
+
+  def sessionCatalog: SessionCatalog = catalog
+
   // TODO (SPARK-43752): support v2 write commands as well.
   def apply(plan: LogicalPlan): LogicalPlan = plan match {
     case i: InsertIntoStatement if conf.enableDefaultColumns && i.table.resolved &&
@@ -75,6 +81,25 @@ case object ResolveColumnDefaultInInsert extends SQLConfHelper with ColumnResolu
           i
         }
       }
+
+    case s: SetVariable  if s.sourceQuery.containsPattern(UNRESOLVED_ATTRIBUTE) =>
+
+      val expectedQuerySchema = s.targetVariables.map { variable =>
+        variable match {
+          case v: UnresolvedVariable =>
+            val varIdent = VariableIdentifier(v.nameParts)
+            val varInfo = sessionCatalog.getVariable(varIdent)
+            if (!varInfo.isDefined) {
+              throw unresolvedVariableError(varIdent, Seq("SESSION"))
+            }
+            varInfo.get._2
+        }
+      }
+
+      // We match the query schema with the SET variable schema by position. If the n-th
+      // column of the query is the DEFAULT column, we should get the default value expression
+      // defined for the n-th variable of the SET.
+      s.withNewChildren(Seq(resolveColumnDefault(s.sourceQuery, expectedQuerySchema)))
 
     case _ => plan
   }

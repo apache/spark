@@ -450,7 +450,7 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
     UpdateTable(aliasedTable, assignments, predicate)
   }
 
-  private def withAssignments(assignCtx: SqlBaseParser.AssignmentListContext): Seq[Assignment] =
+  protected def withAssignments(assignCtx: SqlBaseParser.AssignmentListContext): Seq[Assignment] =
     withOrigin(assignCtx) {
       assignCtx.assignment().asScala.map { assign =>
         Assignment(UnresolvedAttribute(visitMultipartIdentifier(assign.key)),
@@ -3175,6 +3175,14 @@ class AstBuilder extends DataTypeAstBuilder with SQLConfHelper with Logging {
   override def visitDefaultExpression(ctx: DefaultExpressionContext): String =
     withOrigin(ctx) {
       verifyAndGetExpression(ctx.expression(), "DEFAULT")
+    }
+
+  /**
+   * Create a default string.
+   */
+  override def visitVariableDefaultExpression(ctx: VariableDefaultExpressionContext): String =
+    withOrigin(ctx) {
+      verifyAndGetExpression(ctx.expression())
     }
 
   /**

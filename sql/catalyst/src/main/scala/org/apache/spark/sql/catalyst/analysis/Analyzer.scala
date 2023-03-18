@@ -50,6 +50,7 @@ import org.apache.spark.sql.connector.catalog.TableChange.{After, ColumnPosition
 import org.apache.spark.sql.connector.catalog.functions.{AggregateFunction => V2AggregateFunction, ScalarFunction, UnboundFunction}
 import org.apache.spark.sql.connector.expressions.{FieldReference, IdentityTransform, Transform}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
+import org.apache.spark.sql.errors.QueryCompilationErrors.unresolvedVariableError
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.{PartitionOverwriteMode, StoreAssignmentPolicy}
@@ -188,6 +189,7 @@ object AnalysisContext {
 class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor[LogicalPlan]
   with CheckAnalysis with SQLConfHelper with ColumnResolutionHelper {
 
+  def sessionCatalog: SessionCatalog = catalogManager.v1SessionCatalog
   private val v1SessionCatalog: SessionCatalog = catalogManager.v1SessionCatalog
 
   override protected def validatePlanChanges(
@@ -284,13 +286,13 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       ResolveFieldNameAndPosition ::
       AddMetadataColumns ::
       DeduplicateRelations ::
-      ResolveReferences ::
+      new ResolveReferences(v1SessionCatalog) ::
       ResolveLateralColumnAliasReference ::
       ResolveExpressionsWithNamePlaceholders ::
-      ResolveDeserializer ::
+      new ResolveDeserializer(v1SessionCatalog) ::
       ResolveNewInstance ::
       ResolveUpCast ::
-      ResolveGroupingAnalytics ::
+      new ResolveGroupingAnalytics(v1SessionCatalog) ::
       ResolvePivot ::
       ResolveUnpivot ::
       ResolveOrdinalInOrderByAndGroupBy ::
@@ -305,6 +307,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       ResolveWindowFrame ::
       ResolveNaturalAndUsingJoin ::
       ResolveOutputRelation ::
+      ResolveSetVariable ::
       ExtractWindowExpressions ::
       GlobalAggregates ::
       ResolveAggregateFunctions ::
@@ -525,7 +528,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
     }
   }
 
-  object ResolveGroupingAnalytics extends Rule[LogicalPlan] {
+  class ResolveGroupingAnalytics(catalog: SessionCatalog) extends Rule[LogicalPlan] {
     private[analysis] def hasGroupingFunction(e: Expression): Boolean = {
       e.exists (g => g.isInstanceOf[Grouping] || g.isInstanceOf[GroupingID])
     }
@@ -1461,7 +1464,10 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
    *       previous options are permanently not applicable. If the current option can be applicable
    *       in the next iteration (other rules update the plan), we should not try the next option.
    */
-  object ResolveReferences extends Rule[LogicalPlan] with ColumnResolutionHelper {
+  class ResolveReferences(catalog: SessionCatalog)
+    extends Rule[LogicalPlan] with ColumnResolutionHelper {
+
+    def sessionCatalog: SessionCatalog = catalog
 
     /**
      * Return true if there're conflicting attributes among children's outputs of a plan
@@ -1489,7 +1495,11 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
       // Don't wait other rules to resolve the child plans of `InsertIntoStatement` as we need
       // to resolve column "DEFAULT" in the child plans so that they must be unresolved.
-      case i: InsertIntoStatement => ResolveColumnDefaultInInsert(i)
+      case i: InsertIntoStatement => new ResolveColumnDefaultInInsert(catalog)(i)
+
+      // Don't wait other rules to resolve the child plans of `SetVariable` as we need
+      // to resolve column "DEFAULT" in the child plans so that they must be unresolved.
+      case s: SetVariable => new ResolveColumnDefaultInInsert(catalog)(s)
 
       // Wait for other rules to resolve child plans first
       case p: LogicalPlan if !p.childrenResolved => p
@@ -1594,7 +1604,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       // rule: ResolveDeserializer.
       case plan if containsDeserializer(plan.expressions) => plan
 
-      case a: Aggregate => ResolveReferencesInAggregate(a)
+      case a: Aggregate => new ResolveReferencesInAggregate(catalog)(a)
 
       // Special case for Project as it supports lateral column alias.
       case p: Project =>
@@ -1603,14 +1613,15 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         // Lateral column alias has higher priority than outer reference.
         val resolvedWithLCA = resolveLateralColumnAlias(resolvedNoOuter)
         val resolvedWithOuter = resolvedWithLCA.map(resolveOuterRef)
-        p.copy(projectList = resolvedWithOuter.map(_.asInstanceOf[NamedExpression]))
+        val resolvedWithVariables = resolvedWithOuter.map(p => resolveVariables(p))
+        p.copy(projectList = resolvedWithVariables.map(_.asInstanceOf[NamedExpression]))
 
       case o: OverwriteByExpression if o.table.resolved =>
         // The delete condition of `OverwriteByExpression` will be passed to the table
         // implementation and should be resolved based on the table schema.
         o.copy(deleteExpr = resolveExpressionByPlanOutput(o.deleteExpr, o.table))
 
-      case u: UpdateTable => ResolveReferencesInUpdate(u)
+      case u: UpdateTable => new ResolveReferencesInUpdate(catalog)(u)
 
       case m @ MergeIntoTable(targetTable, sourceTable, _, _, _, _)
         if !m.resolved && targetTable.resolved && sourceTable.resolved =>
@@ -1710,7 +1721,8 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         val resolvedNoOuter = partitionExprs.map(resolveExpressionByPlanChildren(_, r))
         val (newPartitionExprs, newChild) = resolveExprsAndAddMissingAttrs(resolvedNoOuter, child)
         // Outer reference has lower priority than this. See the doc of `ResolveReferences`.
-        val finalPartitionExprs = newPartitionExprs.map(resolveOuterRef)
+        val resolvedWithOuterExprs = newPartitionExprs.map(resolveOuterRef)
+        val finalPartitionExprs = resolvedWithOuterExprs.map(e => resolveVariables(e))
         if (child.output == newChild.output) {
           r.copy(finalPartitionExprs, newChild)
         } else {
@@ -1725,7 +1737,8 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         val resolvedWithAgg = resolveColWithAgg(resolvedNoOuter, child)
         val (newCond, newChild) = resolveExprsAndAddMissingAttrs(Seq(resolvedWithAgg), child)
         // Outer reference has lowermost priority. See the doc of `ResolveReferences`.
-        val finalCond = resolveOuterRef(newCond.head)
+        val withOuterCond = resolveOuterRef(newCond.head)
+        val finalCond = resolveVariables(withOuterCond)
         if (child.output == newChild.output) {
           f.copy(condition = finalCond)
         } else {
@@ -1734,7 +1747,8 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
           Project(child.output, newFilter)
         }
 
-      case s: Sort if !s.resolved || s.missingInput.nonEmpty => ResolveReferencesInSort(s)
+      case s: Sort if !s.resolved || s.missingInput.nonEmpty =>
+        new ResolveReferencesInSort(catalog)(s)
 
       case q: LogicalPlan =>
         logTrace(s"Attempting to resolve ${q.simpleString(conf.maxToStringFields)}")
@@ -3345,6 +3359,54 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
   /**
    * Resolves columns of an output table from the data in a logical plan. This rule will:
    *
+   * - Insert casts when data types do not match
+   * - Detect plans that are not compatible with the output table and throw AnalysisException
+   */
+  object ResolveSetVariable extends Rule[LogicalPlan] {
+    override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
+      _.containsPattern(COMMAND), ruleId) {
+      case setVariable: SetVariable
+        if setVariable.sourceQuery.resolved && !setVariable.targetVariables.forall(_.resolved) =>
+
+        /**
+         * Resolve the left hand side of the SET
+         */
+        val resolvedVars = setVariable.targetVariables.map { variable =>
+            variable match {
+            case v: UnresolvedVariable =>
+              val varIdent = VariableIdentifier(v.nameParts)
+              val varInfo = sessionCatalog.getVariable(varIdent)
+              if (!varInfo.isDefined) {
+                throw unresolvedVariableError(varIdent, Seq("SESSION"))
+              }
+              VariableReference(varIdent.variableName, varInfo.get._1, canFold = false)
+            case other => other
+          }
+        }
+
+        /**
+         * Protect against duplicate variable names
+         */
+        val varNames = resolvedVars.collect { case variable => variable.toString }
+        val dups = varNames.diff(varNames.distinct).distinct
+        if (dups.nonEmpty) {
+          throw new AnalysisException(errorClass = "DUPLICATE_ASSIGNMENTS",
+            messageParameters = Map("nameList" -> dups.map(toSQLId).mkString(", ")))
+        }
+
+        val withCasts = TableOutputResolver.resolveVariableOutputColumns(
+          resolvedVars, setVariable.sourceQuery, conf)
+
+        val withLimit = SubqueryAlias("T", UnresolvedSubqueryColumnAliases(varNames,
+          Limit(Literal(2, IntegerType), withCasts)))
+
+        setVariable.copy(sourceQuery = withLimit, targetVariables = resolvedVars)
+    }
+  }
+
+  /**
+   * Resolves columns of an output table from the data in a logical plan. This rule will:
+   *
    * - Reorder columns when the write is by name
    * - Insert casts when data types do not match
    * - Insert aliases when column names do not match
@@ -3456,7 +3518,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
    * Replaces [[UnresolvedDeserializer]] with the deserialization expression that has been resolved
    * to the given input attributes.
    */
-  object ResolveDeserializer extends Rule[LogicalPlan] {
+  class ResolveDeserializer(catalog: SessionCatalog) extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
       _.containsPattern(UNRESOLVED_DESERIALIZER), ruleId) {
       case p if !p.childrenResolved => p

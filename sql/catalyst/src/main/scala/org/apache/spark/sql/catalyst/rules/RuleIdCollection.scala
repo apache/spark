@@ -66,6 +66,7 @@ object RuleIdCollection {
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveRandomSeed" ::
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveReferences" ::
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveRelations" ::
+      "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveSetVariable" ::
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveSubquery" ::
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveSubqueryColumnAliases" ::
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveTables" ::

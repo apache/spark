@@ -20,6 +20,7 @@ import scala.collection.mutable
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.catalog.SessionCatalog
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.SubExprUtils._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Median, PercentileCont, PercentileDisc}
@@ -40,6 +41,8 @@ import org.apache.spark.util.Utils
  * Throws user facing errors when passed invalid queries that fail to analyze.
  */
 trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsBase {
+
+  def sessionCatalog: SessionCatalog
 
   protected def isView(nameParts: Seq[String]): Boolean
 
@@ -259,7 +262,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
 
         // Fail if we still have an unresolved all in group by. This needs to run before the
         // general unresolved check below to throw a more tailored error message.
-        ResolveReferencesInAggregate.checkUnresolvedGroupByAll(operator)
+        new ResolveReferencesInAggregate(sessionCatalog).checkUnresolvedGroupByAll(operator)
 
         getAllExpressions(operator).foreach(_.foreachUp {
           case a: Attribute if !a.resolved =>

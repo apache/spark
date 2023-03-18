@@ -26,10 +26,11 @@ import scala.collection.JavaConverters._
 import org.antlr.v4.runtime.{ParserRuleContext, Token}
 import org.antlr.v4.runtime.tree.TerminalNode
 
-import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{GlobalTempView, LocalTempView, PersistedView, UnresolvedFunctionName, UnresolvedIdentifier}
+import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier, VariableIdentifier}
+import org.apache.spark.sql.catalyst.analysis.{GlobalTempView, LocalTempView, PersistedView, UnresolvedFunctionName, UnresolvedIdentifier, UnresolvedVariable}
 import org.apache.spark.sql.catalyst.catalog._
-import org.apache.spark.sql.catalyst.expressions.{Expression, Literal}
+import org.apache.spark.sql.catalyst.catalog.SessionCatalog.{SESSION_DATABASE, SYSTEM_CATALOG}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Expression, Literal, NamedExpression}
 import org.apache.spark.sql.catalyst.parser._
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -564,6 +565,135 @@ class SparkSqlAstBuilder extends AstBuilder {
           ctx.REPLACE != null,
           viewType = viewType)
       })
+    }
+  }
+
+  /**
+   * Create a [[CreateVariableCommand]].
+   *
+   * For example:
+   * {{{
+   *   CREATE [OR REPLACE] TEMPORARY VARIABLE [db_name.]variable_name
+   *   [dataType] [defaultExpression];
+   * }}}
+   */
+  override def visitCreateVariable(ctx: CreateVariableContext): LogicalPlan = withOrigin(ctx) {
+
+    def format(name: String): String = {
+      if (conf.caseSensitiveAnalysis) name else name.toLowerCase(Locale.ROOT)
+    }
+
+    val multipartIdentifier = visitMultipartIdentifier(ctx.multipartIdentifier)
+    val defaultExpression = if (ctx.variableDefaultExpression() == null) {
+      "null"
+    } else {
+      visitVariableDefaultExpression(ctx.variableDefaultExpression())
+    }
+    val dataTypeStr: Option[String] =
+      if (Option(ctx.dataType).nonEmpty) {
+        Option(source(Option(ctx.dataType).get))
+      } else {
+        Option(null)
+      }
+
+    if (multipartIdentifier.length > 3) {
+      throw QueryParsingErrors.unsupportedVariableNameError(
+        multipartIdentifier, ctx.multipartIdentifier)
+    }
+
+    val schemaQualifiedName = if (multipartIdentifier.length < 2) {
+      SESSION_DATABASE +: multipartIdentifier
+    } else {
+      multipartIdentifier
+    }
+
+    val catalogQualifiedName = if (schemaQualifiedName.length < 3) {
+      SYSTEM_CATALOG +: schemaQualifiedName
+    } else {
+      schemaQualifiedName
+    }
+    val variableIdentifier = VariableIdentifier(catalogQualifiedName)
+
+    if (variableIdentifier != VariableIdentifier(
+      Seq(SYSTEM_CATALOG, SESSION_DATABASE, format(catalogQualifiedName.last)))) {
+      throw QueryParsingErrors.unsupportedVariableNameError(
+        multipartIdentifier, ctx.multipartIdentifier)
+    }
+
+    CreateVariableCommand(variableIdentifier, dataTypeStr, defaultExpression, ctx.REPLACE != null)
+  }
+
+  /**
+   * Create a DROP VARIABLE statement.
+   *
+   * For example:
+   * {{{
+   *   DROP VARIABLE [IF EXISTS] variable;
+   * }}}
+   */
+  override def visitDropVariable(ctx: DropVariableContext): LogicalPlan = withOrigin(ctx) {
+    val variableName = visitMultipartIdentifier(ctx.multipartIdentifier)
+    if (variableName.length > 3) {
+      throw QueryParsingErrors.unsupportedVariableNameError(variableName, ctx)
+    }
+
+    val variableIdentifier = VariableIdentifier(variableName)
+
+    if (ctx.TEMPORARY() != null) {
+      if (variableIdentifier.database.getOrElse(SESSION_DATABASE) != SESSION_DATABASE ||
+        variableIdentifier.catalog.getOrElse(SYSTEM_CATALOG) != SYSTEM_CATALOG) {
+        throw QueryParsingErrors.unsupportedVariableNameError(variableIdentifier.nameParts, ctx)
+      }
+
+      DropVariableCommand(
+        identifier = VariableIdentifier(Seq(SYSTEM_CATALOG, SESSION_DATABASE,
+          variableIdentifier.variableName)),
+        ifExists = ctx.EXISTS != null)
+    } else {
+      DropVariableCommand(
+        identifier = variableIdentifier,
+        ifExists = ctx.EXISTS != null)
+    }
+  }
+
+  override def visitSetVariable(ctx: SetVariableContext): LogicalPlan = withOrigin(ctx) {
+
+    if (ctx.query() != null) {
+      /**
+      * The SET variable source is a query
+      */
+      val varList =
+        ctx.multipartIdentifierList.multipartIdentifier.asScala.map { variableIdent =>
+          val varName = visitMultipartIdentifier(variableIdent)
+          UnresolvedVariable(varName).asInstanceOf[Expression]
+      }.toSeq
+      val query = visitQuery(ctx.query())
+      SetVariable(varList, query)
+    } else {
+      /**
+       * The SET variable source is list of expressions.
+       */
+      val assignCtx = ctx.assignmentList()
+      val (varNames, varExprs) = assignCtx.assignment().asScala.map {
+        assign => {
+          val varIdent = visitMultipartIdentifier(assign.key)
+          if (varIdent.length > 3) {
+            throw QueryParsingErrors.unsupportedVariableNameError(varIdent, assign.key)
+          }
+          val varExpr = expression(assign.value)
+          val varNamedExpr = varExpr match {
+            case n: NamedExpression => n
+            case e => Alias(e, varIdent.takeRight(1).head)()
+          }
+
+          (varIdent, varNamedExpr)
+        }
+      }.toSeq.unzip
+
+      val variables: Seq[UnresolvedVariable] = varNames.map { UnresolvedVariable(_) }
+
+      val source = Project(varExprs, OneRowRelation())
+      SetVariable(variables, source)
     }
   }
 

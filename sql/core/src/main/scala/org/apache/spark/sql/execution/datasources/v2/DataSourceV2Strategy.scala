@@ -271,6 +271,9 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
         r: DataSourceV2Relation, _, query, _, _, Some(write), _) =>
       OverwriteByExpressionExec(planLater(query), refreshCache(r), write) :: Nil
 
+    case SetVariable(variables, query) =>
+      SetVariableExec(variables, planLater(query)) :: Nil
+
     case OverwritePartitionsDynamic(r: DataSourceV2Relation, query, _, _, Some(write)) =>
       OverwritePartitionsDynamicExec(planLater(query), refreshCache(r), write) :: Nil
 

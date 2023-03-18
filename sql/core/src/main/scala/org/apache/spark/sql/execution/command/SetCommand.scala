@@ -19,13 +19,15 @@ package org.apache.spark.sql.execution.command
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{Row, SparkSession}
+import org.apache.spark.sql.catalyst.VariableIdentifier
 import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.IgnoreCachedData
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
 import org.apache.spark.sql.types.{StringType, StructField, StructType}
-
 
 /**
  * Command that runs
@@ -91,6 +93,23 @@ case class SetCommand(kv: Option[(String, Option[String])])
     // Configures a single property.
     case Some((key, Some(value))) =>
       val runFunc = (sparkSession: SparkSession) => {
+        /**
+         * Be nice and detect if the key matches a SQL variable.
+         * If it does give a meaningful error pointing the user to SET VARIABLE
+         */
+        val varName = try {
+          sparkSession.sessionState.sqlParser.parseMultipartIdentifier(key)
+        } catch {
+          case _: ParseException =>
+          Seq()
+        }
+        if (varName.length > 0 && varName.length <= 3) {
+          val varIdent = VariableIdentifier(
+            sparkSession.sessionState.sqlParser.parseMultipartIdentifier(key))
+          if (sparkSession.sessionState.catalog.getVariable(varIdent).isDefined) {
+            throw QueryCompilationErrors.setVariableUsingSetCommandError(varIdent)
+          }
+        }
         if (sparkSession.conf.get(CATALOG_IMPLEMENTATION.key).equals("hive") &&
             key.startsWith("hive.")) {
           logWarning(s"'SET $key=$value' might not work, since Spark doesn't support changing " +

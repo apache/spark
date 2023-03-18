@@ -81,7 +81,7 @@ case class ScalarSubquery(
   def updateResult(): Unit = {
     val rows = plan.executeCollect()
     if (rows.length > 1) {
-      throw QueryExecutionErrors.multipleRowSubqueryError(getContextOrNull())
+      throw QueryExecutionErrors.multipleRowScalarSubqueryError(getContextOrNull())
     }
     if (rows.length == 1) {
       assert(rows(0).numFields == 1,

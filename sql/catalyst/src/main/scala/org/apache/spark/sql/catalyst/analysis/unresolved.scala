@@ -202,6 +202,109 @@ object UnresolvedTVFAliases {
 }
 
 /**
+ * Holds the name of a variable (on the left hand side of a SET) that has yet to be resolved.
+ */
+case class UnresolvedVariable(nameParts: Seq[String]) extends Attribute with Unevaluable {
+
+  def name: String =
+    nameParts.map(n => if (n.contains(".")) s"`$n`" else n).mkString(".")
+
+  override def exprId: ExprId = throw new UnresolvedException("exprId")
+  override def dataType: DataType = throw new UnresolvedException("dataType")
+  override def nullable: Boolean = throw new UnresolvedException("nullable")
+  override def qualifier: Seq[String] = throw new UnresolvedException("qualifier")
+  override lazy val resolved = false
+
+  override def newInstance(): UnresolvedVariable = this
+  override def withNullability(newNullability: Boolean): UnresolvedVariable = this
+  override def withQualifier(newQualifier: Seq[String]): UnresolvedVariable = this
+  override def withName(newName: String): UnresolvedVariable = UnresolvedVariable.quoted(newName)
+  override def withMetadata(newMetadata: Metadata): Attribute = this
+  override def withExprId(newExprId: ExprId): UnresolvedVariable = this
+  override def withDataType(newType: DataType): Attribute = this
+  final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_ATTRIBUTE)
+
+  override def toString: String = s"'$name"
+
+  override def sql: String = nameParts.map(quoteIfNeeded(_)).mkString(".")
+
+  /**
+   * Returns true if this matches the token. This requires the variable to only have one part in
+   * its name and that matches the given token in a case insensitive way.
+   */
+  def equalsIgnoreCase(token: String): Boolean = {
+    nameParts.length == 1 && nameParts.head.equalsIgnoreCase(token)
+  }
+}
+
+object UnresolvedVariable {
+  /**
+   * Creates an [[UnresolvedVariable]], parsing segments separated by dots ('.').
+   */
+  def apply(name: String): UnresolvedVariable =
+    new UnresolvedVariable(CatalystSqlParser.parseMultipartIdentifier(name))
+
+  /**
+   * Creates an [[UnresolvedVariable]], from a single quoted string (for example using backticks in
+   * HiveQL). Since the string is considered quoted, no processing is done on the name.
+   */
+  def quoted(name: String): UnresolvedVariable = new UnresolvedVariable(Seq(name))
+
+  /**
+   * Creates an [[UnresolvedVariable]] from a string in an embedded language.  In this case
+   * we treat it as a quoted identifier, except for '.', which must be further quoted using
+   * backticks if it is part of a column name.
+   */
+  def quotedString(name: String): UnresolvedVariable =
+    new UnresolvedVariable(parseVariableName(name))
+
+  /**
+   * Used to split attribute name by dot with backticks rule.
+   * Backticks must appear in pairs, and the quoted string must be a complete name part,
+   * which means `ab..c`e.f is not allowed.
+   * We can use backtick only inside quoted name parts.
+   */
+  def parseVariableName(name: String): Seq[String] = {
+    def e = QueryCompilationErrors.attributeNameSyntaxError(name)
+    val nameParts = scala.collection.mutable.ArrayBuffer.empty[String]
+    val tmp = scala.collection.mutable.ArrayBuffer.empty[Char]
+    var inBacktick = false
+    var i = 0
+    while (i < name.length) {
+      val char = name(i)
+      if (inBacktick) {
+        if (char == '`') {
+          if (i + 1 < name.length && name(i + 1) == '`') {
+            tmp += '`'
+            i += 1
+          } else {
+            inBacktick = false
+            if (i + 1 < name.length && name(i + 1) != '.') throw e
+          }
+        } else {
+          tmp += char
+        }
+      } else {
+        if (char == '`') {
+          if (tmp.nonEmpty) throw e
+          inBacktick = true
+        } else if (char == '.') {
+          if (name(i - 1) == '.' || i == name.length - 1) throw e
+          nameParts += tmp.mkString
+          tmp.clear()
+        } else {
+          tmp += char
+        }
+      }
+      i += 1
+    }
+    if (inBacktick) throw e
+    nameParts += tmp.mkString
+    nameParts.toSeq
+  }
+}
+
+/**
  * Holds the name of an attribute that has yet to be resolved.
  */
 case class UnresolvedAttribute(nameParts: Seq[String]) extends Attribute with Unevaluable {

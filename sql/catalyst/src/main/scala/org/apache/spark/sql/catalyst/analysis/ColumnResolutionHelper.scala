@@ -23,6 +23,8 @@ import scala.collection.mutable
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.VariableIdentifier
+import org.apache.spark.sql.catalyst.catalog.SessionCatalog
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.SubExprUtils.wrapOuterReference
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -35,6 +37,8 @@ import org.apache.spark.sql.internal.SQLConf
 trait ColumnResolutionHelper extends Logging {
 
   def conf: SQLConf
+
+  def sessionCatalog: SessionCatalog
 
   /**
    * This method tries to resolve expressions and find missing attributes recursively.
@@ -192,7 +196,8 @@ trait ColumnResolutionHelper extends Logging {
 
     try {
       val resolved = innerResolve(expr, isTopLevel = true)
-      if (allowOuter) resolveOuterRef(resolved) else resolved
+      val withOuterResolved = if (allowOuter) resolveOuterRef(resolved) else resolved
+      resolveVariables(withOuterResolved)
     } catch {
       case ae: AnalysisException if !throws =>
         logDebug(ae.getMessage)
@@ -227,6 +232,60 @@ trait ColumnResolutionHelper extends Logging {
       case u: UnresolvedAttribute =>
         resolve(u.nameParts).getOrElse(u)
       // Re-resolves `TempResolvedColumn` as outer references if it has tried to be resolved with
+      // Aggregate but failed.
+      case t: TempResolvedColumn if t.hasTried =>
+        resolve(t.nameParts).getOrElse(t)
+    }
+  }
+
+  // Resolves `UnresolvedAttribute` to its value.
+  protected def resolveVariables(e: Expression): Expression = {
+
+    def resolve(nameParts: Seq[String]): Option[Expression] = {
+      val unqualifiedIdentifier = VariableIdentifier(nameParts.take(1))
+      val varInfo = sessionCatalog.getVariable(unqualifiedIdentifier)
+      val (attr, nestedFields) = if (varInfo.isDefined) {
+        (Some(Alias(VariableReference(nameParts.head, varInfo.get._1), nameParts.head)()),
+          nameParts.tail)
+      } else if (nameParts.length > 1) {
+        val databaseQualifiedIdentifier = VariableIdentifier(nameParts.take(2))
+        val varInfo = sessionCatalog.getVariable(databaseQualifiedIdentifier)
+        if (varInfo.isDefined) {
+          (Some(Alias(VariableReference(nameParts.head, varInfo.get._1), nameParts(1))()),
+            nameParts.tail.tail)
+        } else if (nameParts.length > 2) {
+          val catalogQualifiedIdentifier = VariableIdentifier(nameParts.take(3))
+          val varInfo = sessionCatalog.getVariable(catalogQualifiedIdentifier)
+          if (varInfo.isDefined) {
+            (Some(Alias(VariableReference(nameParts.head, varInfo.get._1), nameParts(2))()),
+              nameParts.drop(3))
+          } else {
+            (None, Seq())
+          }
+        } else {
+          (None, Seq())
+        }
+      } else {
+        (None, Seq())
+      }
+      if (attr.isDefined) {
+        if (nestedFields.nonEmpty) {
+          val fieldExprs = nestedFields.foldLeft(attr.get: Expression) { (e, name) =>
+            ExtractValue(e, Literal(name), conf.resolver)
+          }
+          Some(Alias(fieldExprs, nestedFields.last)())
+        } else {
+          attr
+        }
+      } else {
+        None
+      }
+    }
+
+    e.transformWithPruning(_.containsAnyPattern(UNRESOLVED_ATTRIBUTE, TEMP_RESOLVED_COLUMN)) {
+      case u: UnresolvedAttribute =>
+        resolve(u.nameParts).getOrElse(u)
+      // Re-resolves `TempResolvedColumn` as variable references if it has tried to be resolved with
       // Aggregate but failed.
       case t: TempResolvedColumn if t.hasTried =>
         resolve(t.nameParts).getOrElse(t)
@@ -384,7 +443,8 @@ trait ColumnResolutionHelper extends Logging {
       allowOuter = allowOuter)
   }
 
-  def resolveExprInAssignment(expr: Expression, hostPlan: LogicalPlan): Expression = {
+  def resolveExprInAssignment(expr: Expression, hostPlan: LogicalPlan):
+  Expression = {
     resolveExpressionByPlanChildren(expr, hostPlan) match {
       // Assignment key and value does not need the alias when resolving nested columns.
       case Alias(child: ExtractValue, _) => child

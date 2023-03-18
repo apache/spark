@@ -680,6 +680,19 @@ case class DeleteFromTable(
 }
 
 /**
+ * The logical plan of the SET variable command.
+ */
+case class SetVariable(
+    targetVariables: Seq[Expression],
+    sourceQuery: LogicalPlan)
+  extends UnaryCommand {
+
+  override def child: LogicalPlan = sourceQuery
+  override protected def withNewChildInternal(newChild: LogicalPlan): SetVariable =
+    copy(sourceQuery = newChild)
+}
+
+/**
  * The logical plan of the DELETE FROM command that can be executed using data source filters.
  *
  * As opposed to [[DeleteFromTable]], this node represents a DELETE operation where the condition

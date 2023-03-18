@@ -97,4 +97,9 @@ Cannot resolve window reference `<windowName>`.
 
 Unsupported function name `<funcName>`.
 
+## UNSUPPORTED_VARIABLE_NAME
+
+Unsupported variable name `<varName>`.
+The name of a temporary variable must be of the form [[SYSTEM.]SESSION.]variable_identifier.
+
 

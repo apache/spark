@@ -22,6 +22,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.util.{quoteIdentifier, quoteNameParts}
+import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.types.StructType
@@ -291,3 +292,7 @@ class NoSuchIndexException private(
       messageParameters = Map.empty[String, String])
   }
 }
+
+class NoSuchVariableException(variable: Seq[String])
+  extends AnalysisException(errorClass = "VARIABLE_NOT_FOUND",
+    Map("variableName" -> toSQLId(variable)))
