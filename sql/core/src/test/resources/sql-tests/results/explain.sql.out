@@ -70,12 +70,12 @@ Aggregate [sum(distinct val#x) AS sum(DISTINCT val)#xL]
    +- Relation spark_catalog.default.explain_temp1[key#x,val#x] parquet
 
 == Physical Plan ==
-*HashAggregate(keys=[], functions=[sum(distinct val#x)], output=[sum(DISTINCT val)#xL])
+*HashAggregate(keys=[], functions=[sum(distinct val#x)], results=[sum(val#x)#xL AS sum(DISTINCT val)#xL], output=[sum(DISTINCT val)#xL])
 +- Exchange SinglePartition, ENSURE_REQUIREMENTS, [plan_id=x]
-   +- *HashAggregate(keys=[], functions=[partial_sum(distinct val#x)], output=[sum#xL])
-      +- *HashAggregate(keys=[val#x], functions=[], output=[val#x])
+   +- *HashAggregate(keys=[], functions=[partial_sum(distinct val#x)], results=[sum#xL], output=[sum#xL])
+      +- *HashAggregate(keys=[val#x], functions=[], results=[val#x], output=[val#x])
          +- Exchange hashpartitioning(val#x, 4), ENSURE_REQUIREMENTS, [plan_id=x]
-            +- *HashAggregate(keys=[val#x], functions=[], output=[val#x])
+            +- *HashAggregate(keys=[val#x], functions=[], results=[val#x], output=[val#x])
                +- *ColumnarToRow
                   +- FileScan parquet spark_catalog.default.explain_temp1[val#x] Batched: true, DataFilters: [], Format: Parquet, Location [not included in comparison]/{warehouse_dir}/explain_temp1], PartitionFilters: [], PushedFilters: [], ReadSchema: struct<val:int>
 

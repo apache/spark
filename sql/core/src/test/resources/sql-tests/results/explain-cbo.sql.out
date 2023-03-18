@@ -66,11 +66,11 @@ AdaptiveSparkPlan isFinalPlan=false
    +- Filter (isnotnull(d#x) AND (cast(d#x as bigint) > Subquery subquery#x, [id=#x]))
       :  +- Subquery subquery#x, [id=#x]
       :     +- AdaptiveSparkPlan isFinalPlan=false
-      :        +- HashAggregate(keys=[], functions=[max(csales#xL)], output=[tpcds_cmax#xL])
-      :           +- HashAggregate(keys=[], functions=[partial_max(csales#xL)], output=[max#xL])
-      :              +- HashAggregate(keys=[], functions=[sum(b#x)], output=[csales#xL])
+      :        +- HashAggregate(keys=[], functions=[max(csales#xL)], results=[max(csales#xL)#xL AS tpcds_cmax#xL], output=[tpcds_cmax#xL])
+      :           +- HashAggregate(keys=[], functions=[partial_max(csales#xL)], results=[max#xL], output=[max#xL])
+      :              +- HashAggregate(keys=[], functions=[sum(b#x)], results=[sum(b#x)#xL AS csales#xL], output=[csales#xL])
       :                 +- Exchange SinglePartition, ENSURE_REQUIREMENTS, [plan_id=x]
-      :                    +- HashAggregate(keys=[], functions=[partial_sum(b#x)], output=[sum#xL])
+      :                    +- HashAggregate(keys=[], functions=[partial_sum(b#x)], results=[sum#xL], output=[sum#xL])
       :                       +- Project [b#x]
       :                          +- Filter (isnotnull(a#x) AND (a#x < 100))
       :                             +- FileScan parquet spark_catalog.default.explain_temp1[a#x,b#x] Batched: true, DataFilters: [isnotnull(a#x), (a#x < 100)], Format: Parquet, Location [not included in comparison]/{warehouse_dir}/explain_temp1], PartitionFilters: [], PushedFilters: [IsNotNull(a), LessThan(a,100)], ReadSchema: struct<a:int,b:int>
