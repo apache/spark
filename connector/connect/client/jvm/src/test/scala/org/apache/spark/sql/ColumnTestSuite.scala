@@ -16,8 +16,6 @@
  */
 package org.apache.spark.sql
 
-import java.io.ByteArrayOutputStream
-
 import scala.collection.JavaConverters._
 
 import org.apache.spark.sql.{functions => fn}
@@ -159,23 +157,6 @@ class ColumnTestSuite extends ConnectFunSuite {
     val a = fn.col("a")
     assert(a.asc == a.asc_nulls_first)
   }
-
-  private def captureStdOut(block: => Unit): String = {
-    val capturedOut = new ByteArrayOutputStream()
-    Console.withOut(capturedOut)(block)
-    capturedOut.toString()
-  }
-
-//  test("explain") {
-//    val x = fn.col("a") + fn.col("b")
-//    val explain1 = captureStdOut(x.explain(false))
-//    val explain2 = captureStdOut(x.explain(true))
-//    assert(explain1 == explain2)
-//    val expectedFragments = Seq("unresolved_function", "function_name: \"+\"", "arguments")
-//    expectedFragments.foreach { fragment =>
-//      assert(explain1.contains(fragment))
-//    }
-//  }
 
   private def testColName(dataType: DataType, f: ColumnName => StructField): Unit = {
     test("ColumnName " + dataType.catalogString) {
