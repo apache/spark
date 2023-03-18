@@ -1214,8 +1214,8 @@ class Column private[sql] (private[sql] val expr: proto.Expression) extends Logg
   def explain(extended: Boolean)(implicit spark: SparkSession): Unit = {
     // scalastyle:off println
     assert(spark != null)
-    val a = spark.explainExpr(expr, extended)
-    println(a)
+    val explainString = spark.explainExpr(expr, extended)
+    println(explainString)
     // scalastyle:on println
   }
 
