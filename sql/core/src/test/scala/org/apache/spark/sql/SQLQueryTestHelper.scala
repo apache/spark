@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql
 
-import java.io.File
-
 import scala.util.control.NonFatal
 
 import org.apache.spark.{SparkException, SparkThrowable}
