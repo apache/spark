@@ -26,6 +26,7 @@ import scala.util.control.NonFatal
 import org.apache.commons.lang3.exception.ExceptionUtils
 
 import org.apache.spark.SparkException
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SQLQueryTestSuite
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 import org.apache.spark.sql.catalyst.util.fileToString
@@ -68,7 +69,7 @@ import org.apache.spark.sql.types._
  *   4. Support UDAF testing.
  */
 // scalastyle:on line.size.limit
-class ThriftServerQueryTestSuite extends SQLQueryTestSuite with SharedThriftServer {
+class ThriftServerQueryTestSuite extends SQLQueryTestSuite with SharedThriftServer with Logging {
 
 
   override def mode: ServerMode.Value = ServerMode.binary
@@ -235,7 +236,7 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite with SharedThriftServ
     } else {
       // Create a test case to run this case.
       test(testCase.name) {
-        runSqlTestCase(testCase, Seq.empty, runQueries)
+        runSqlTestCase(testCase, listTestCases)
       }
     }
   }

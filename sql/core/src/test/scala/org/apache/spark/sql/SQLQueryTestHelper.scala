@@ -126,23 +126,4 @@ trait SQLQueryTestHelper extends Logging {
         (emptySchema, Seq(e.getClass.getName, e.getMessage))
     }
   }
-
-  protected def splitWithSemicolon(seq: Seq[String]): Array[String] = {
-    seq.mkString("\n").split("(?<=[^\\\\]);")
-  }
-
-  protected def splitCommentsAndCodes(input: String): (Array[String], Array[String]) =
-    input.split("\n").partition { line =>
-      val newLine = line.trim
-      newLine.startsWith("--") && !newLine.startsWith("--QUERY-DELIMITER")
-    }
-
-  /** Returns all the files (not directories) in a directory, recursively. */
-  protected def listFilesRecursively(path: File): Seq[File] = {
-    val (dirs, files) = path.listFiles().partition(_.isDirectory)
-    // Filter out test files with invalid extensions such as temp files created
-    // by vi (.swp), Mac (.DS_Store) etc.
-    val filteredFiles = files.filter(_.getName.endsWith(validFileExtensions))
-    filteredFiles ++ dirs.flatMap(listFilesRecursively)
-  }
 }
