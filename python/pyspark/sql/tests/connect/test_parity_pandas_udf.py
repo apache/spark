@@ -32,14 +32,6 @@ class PandasUDFParityTests(PandasUDFTestsMixin, ReusedConnectTestCase):
     def test_pandas_udf_timestamp_ntz(self):
         super().test_pandas_udf_timestamp_ntz()
 
-    @unittest.skip("Spark Connect does not support spark.conf but the test depends on it.")
-    def test_pandas_udf_detect_unsafe_type_conversion(self):
-        super().test_pandas_udf_detect_unsafe_type_conversion()
-
-    @unittest.skip("Spark Connect does not support spark.conf but the test depends on it.")
-    def test_pandas_udf_arrow_overflow(self):
-        super().test_pandas_udf_arrow_overflow()
-
     # TODO(SPARK-42247): standardize `returnType` attribute of UDF
     @unittest.skip("Fails in Spark Connect, should enable.")
     def test_pandas_udf_decorator(self):
