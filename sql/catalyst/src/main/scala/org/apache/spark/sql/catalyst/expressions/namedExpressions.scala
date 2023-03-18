@@ -35,6 +35,8 @@ object NamedExpression {
   private[expressions] val jvmId = UUID.randomUUID()
   def newExprId: ExprId = ExprId(curId.getAndIncrement(), jvmId)
   def unapply(expr: NamedExpression): Option[(String, DataType)] = Some((expr.name, expr.dataType))
+  /** Resets the next expression ID to zero. Useful for making tests deterministic. */
+  def resetCurId: Unit = curId.set(0)
 }
 
 /**

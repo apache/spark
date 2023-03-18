@@ -24,6 +24,7 @@ import java.util.Locale
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.{SparkConf, TestUtils}
+import org.apache.spark.sql.catalyst.expressions.NamedExpression
 import org.apache.spark.sql.catalyst.expressions.codegen.CodeGenerator
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
@@ -481,6 +482,9 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
           readGoldenFileAndCompareResults(testCase.resultFile, outputs, ExecutionOutput)
       }
     }
+    // Reset the next expression ID to zero. Useful for keeping the expression ID outputs in the
+    // analyzer tests deterministic.
+    NamedExpression.resetCurId
   }
 
   protected lazy val listTestCases: Seq[TestCase] = {

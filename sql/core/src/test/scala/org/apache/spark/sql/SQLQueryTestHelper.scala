@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql
 
-import java.io.File
-
 import scala.util.control.NonFatal
 
 import org.apache.spark.{SparkException, SparkThrowable}
@@ -40,8 +38,8 @@ trait SQLQueryTestHelper extends Logging {
 
   protected val validFileExtensions = ".sql"
 
-  protected def replaceNotIncludedMsg(line: String): String = {
-    line.replaceAll("#\\d+", "#x")
+  protected def replaceNotIncludedMsg(line: String, replaceExprIds: Boolean): String = {
+    (if (replaceExprIds) line.replaceAll("#\\d+", "#x") else line)
       .replaceAll("plan_id=\\d+", "plan_id=x")
       .replaceAll(
         s"Location.*$clsName/",
@@ -64,7 +62,8 @@ trait SQLQueryTestHelper extends Logging {
     val df = session.sql(sql)
     val schema = df.schema.catalogString
     // Get the answer, but also get rid of the #1234 expression IDs that show up in analyzer plans.
-    (schema, Seq(replaceNotIncludedMsg(df.queryExecution.analyzed.toString)))
+    (schema, Seq(replaceNotIncludedMsg(
+      df.queryExecution.analyzed.toString, replaceExprIds = false)))
   }
 
   /** Executes a query and returns the result as (schema of the output, normalized output). */
@@ -85,7 +84,8 @@ trait SQLQueryTestHelper extends Logging {
     val schema = df.schema.catalogString
     // Get answer, but also get rid of the #1234 expression ids that show up in explain plans
     val answer = SQLExecution.withNewExecutionId(df.queryExecution, Some(sql)) {
-      hiveResultString(df.queryExecution.executedPlan).map(replaceNotIncludedMsg)
+      hiveResultString(df.queryExecution.executedPlan).map(
+        replaceNotIncludedMsg(_, replaceExprIds = true))
     }
 
     // If the output is not pre-sorted, sort it.
