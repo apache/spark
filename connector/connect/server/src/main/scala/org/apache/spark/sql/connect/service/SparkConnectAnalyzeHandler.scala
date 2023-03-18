@@ -24,9 +24,8 @@ import io.grpc.stub.StreamObserver
 import org.apache.spark.connect.proto
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{Dataset, SparkSession}
-import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
-import org.apache.spark.sql.catalyst.expressions.NamedExpression
-import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Project}
+import org.apache.spark.sql.catalyst.FunctionIdentifier
+import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, UnresolvedFunction}
 import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, InvalidPlanInput, StorageLevelProtoConverter}
 import org.apache.spark.sql.connect.planner.SparkConnectPlanner
 import org.apache.spark.sql.execution.{CodegenMode, CostMode, ExtendedMode, FormattedMode, SimpleMode}
@@ -198,14 +197,17 @@ private[connect] class SparkConnectAnalyzeHandler(
       case proto.AnalyzePlanRequest.AnalyzeCase.EXPLAIN_EXPRESSION =>
         val unresolvedExpr = planner.transformExpression(request.getExplainExpression.getExpr)
 
-        // Construct a fake plan so as we can analyze the unresolved expression with Analyzer.
-        val output = unresolvedExpr.collect { case attr: UnresolvedAttribute =>
-          attr
+        val expr = unresolvedExpr transform {
+          case u @ UnresolvedFunction(nameParts, arguments, _, _, _) =>
+            val functionIdentifier = FunctionIdentifier(funcName = nameParts.head)
+            if (FunctionRegistry.builtin.functionExists(functionIdentifier)) {
+              FunctionRegistry.builtin.lookupFunction(functionIdentifier, arguments)
+            } else {
+              u
+            }
+          case other => other
         }
-        val relation = LocalRelation(output, data = Seq.empty)
-        val project = Project(Seq(unresolvedExpr.asInstanceOf[NamedExpression]), relation)
-        val analyzed = session.sessionState.analyzer.execute(project)
-        val expr = analyzed.asInstanceOf[Project].projectList.head
+
         val explainString = if (request.getExplainExpression.getExtended) {
           expr.toString
         } else {
