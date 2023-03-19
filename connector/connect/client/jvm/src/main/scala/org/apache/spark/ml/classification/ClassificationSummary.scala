@@ -34,19 +34,19 @@ private[spark] trait ClassificationSummary extends ModelSummary with Serializabl
    * Dataframe output by the model's `transform` method.
    */
   @Since("3.1.0")
-  def predictions: DataFrame
+  def predictions: DataFrame = getModelSummaryAttrDataFrame("predictions")
 
   /** Field in "predictions" which gives the prediction of each class. */
   @Since("3.1.0")
-  def predictionCol: String
+  def predictionCol: String = getModelSummaryAttr("predictionCol").asInstanceOf[String]
 
   /** Field in "predictions" which gives the true label of each instance (if available). */
   @Since("3.1.0")
-  def labelCol: String
+  def labelCol: String = getModelSummaryAttr("labelCol").asInstanceOf[String]
 
   /** Field in "predictions" which gives the weight of each instance. */
   @Since("3.1.0")
-  def weightCol: String
+  def weightCol: String = getModelSummaryAttr("weightCol").asInstanceOf[String]
 
   /**
    * Returns the sequence of labels in ascending order. This order matches the order used
@@ -58,31 +58,44 @@ private[spark] trait ClassificationSummary extends ModelSummary with Serializabl
    * expected numClasses.
    */
   @Since("3.1.0")
-  def labels: Array[Double]
+  def labels: Array[Double] = getModelSummaryAttr("labels").asInstanceOf[Array[Double]]
 
   /** Returns true positive rate for each label (category). */
   @Since("3.1.0")
-  def truePositiveRateByLabel: Array[Double]
+  def truePositiveRateByLabel: Array[Double] = {
+    getModelSummaryAttr("truePositiveRateByLabel").asInstanceOf[Array[Double]]
+  }
 
   /** Returns false positive rate for each label (category). */
   @Since("3.1.0")
-  def falsePositiveRateByLabel: Array[Double]
+  def falsePositiveRateByLabel: Array[Double] = {
+    getModelSummaryAttr("falsePositiveRateByLabel").asInstanceOf[Array[Double]]
+  }
 
   /** Returns precision for each label (category). */
   @Since("3.1.0")
-  def precisionByLabel: Array[Double]
+  def precisionByLabel: Array[Double] = {
+    getModelSummaryAttr("precisionByLabel").asInstanceOf[Array[Double]]
+  }
 
   /** Returns recall for each label (category). */
   @Since("3.1.0")
-  def recallByLabel: Array[Double]
+  def recallByLabel: Array[Double] = {
+    getModelSummaryAttr("recallByLabel").asInstanceOf[Array[Double]]
+  }
 
   /** Returns f-measure for each label (category). */
   @Since("3.1.0")
-  def fMeasureByLabel(beta: Double): Array[Double]
+  def fMeasureByLabel(beta: Double): Array[Double] = {
+    // TODO
+    throw new UnsupportedOperationException()
+  }
 
   /** Returns f1-measure for each label (category). */
   @Since("3.1.0")
-  def fMeasureByLabel: Array[Double]
+  def fMeasureByLabel: Array[Double] = {
+    getModelSummaryAttr("fMeasureByLabel").asInstanceOf[Array[Double]]
+  }
 
   /**
    * Returns accuracy.
@@ -90,50 +103,67 @@ private[spark] trait ClassificationSummary extends ModelSummary with Serializabl
    * out of the total number of instances.)
    */
   @Since("3.1.0")
-  def accuracy: Double
+  def accuracy: Double = {
+    getModelSummaryAttr("accuracy").asInstanceOf[Double]
+  }
 
   /**
    * Returns weighted true positive rate.
    * (equals to precision, recall and f-measure)
    */
   @Since("3.1.0")
-  def weightedTruePositiveRate: Double
+  def weightedTruePositiveRate: Double = {
+    getModelSummaryAttr("weightedTruePositiveRate").asInstanceOf[Double]
+  }
 
   /** Returns weighted false positive rate. */
   @Since("3.1.0")
-  def weightedFalsePositiveRate: Double
+  def weightedFalsePositiveRate: Double = {
+    getModelSummaryAttr("weightedFalsePositiveRate").asInstanceOf[Double]
+  }
 
   /**
    * Returns weighted averaged recall.
    * (equals to precision, recall and f-measure)
    */
   @Since("3.1.0")
-  def weightedRecall: Double
+  def weightedRecall: Double = {
+    getModelSummaryAttr("weightedRecall").asInstanceOf[Double]
+  }
 
   /** Returns weighted averaged precision. */
   @Since("3.1.0")
-  def weightedPrecision: Double
+  def weightedPrecision: Double = {
+    getModelSummaryAttr("weightedPrecision").asInstanceOf[Double]
+  }
 
   /** Returns weighted averaged f-measure. */
   @Since("3.1.0")
-  def weightedFMeasure(beta: Double): Double
+  def weightedFMeasure(beta: Double): Double = {
+    // TODO
+    throw new UnsupportedOperationException()
+  }
 
   /** Returns weighted averaged f1-measure. */
   @Since("3.1.0")
-  def weightedFMeasure: Double
+  def weightedFMeasure: Double = {
+    getModelSummaryAttr("weightedFMeasure").asInstanceOf[Double]
+  }
 }
 
 /**
  * Abstraction for training results.
  */
-private[spark] trait TrainingSummary {
+private[spark] trait TrainingSummary extends ModelSummary {
 
   /**
    *  objective function (scaled loss + regularization) at each iteration.
    *  It contains one more element, the initial state, than number of iterations.
    */
   @Since("3.1.0")
-  def objectiveHistory: Array[Double]
+  def objectiveHistory: Array[Double] = {
+    getModelSummaryAttr("objectiveHistory").asInstanceOf[Array[Double]]
+  }
 
   /** Number of training iterations. */
   @Since("3.1.0")
@@ -152,7 +182,7 @@ private[spark] trait BinaryClassificationSummary extends ClassificationSummary {
    *  Field in "predictions" which gives the probability or rawPrediction of each class as a
    *  vector.
    */
-  def scoreCol: String
+  def scoreCol: String = getModelSummaryAttr("scoreCol").asInstanceOf[String]
 
   /**
    * Returns the receiver operating characteristic (ROC) curve,
@@ -161,20 +191,26 @@ private[spark] trait BinaryClassificationSummary extends ClassificationSummary {
    * See http://en.wikipedia.org/wiki/Receiver_operating_characteristic
    */
   @Since("3.1.0")
-  @transient lazy val roc: DataFrame
+  @transient lazy val roc: DataFrame = {
+    getModelSummaryAttrDataFrame("roc")
+  }
 
   /**
    * Computes the area under the receiver operating characteristic (ROC) curve.
    */
   @Since("3.1.0")
-  lazy val areaUnderROC: Double
+  lazy val areaUnderROC: Double = {
+    getModelSummaryAttr("areaUnderROC").asInstanceOf[Double]
+  }
 
   /**
    * Returns the precision-recall curve, which is a Dataframe containing
    * two fields recall, precision with (0.0, 1.0) prepended to it.
    */
   @Since("3.1.0")
-  @transient lazy val pr: DataFrame
+  @transient lazy val pr: DataFrame = {
+    getModelSummaryAttrDataFrame("pr")
+  }
 
   /**
    * Returns a dataframe with two fields (threshold, precision) curve.
@@ -182,7 +218,9 @@ private[spark] trait BinaryClassificationSummary extends ClassificationSummary {
    * as thresholds used in calculating the precision.
    */
   @Since("3.1.0")
-  @transient lazy val precisionByThreshold: DataFrame
+  @transient lazy val precisionByThreshold: DataFrame = {
+    getModelSummaryAttrDataFrame("precisionByThreshold")
+  }
 
   /**
    * Returns a dataframe with two fields (threshold, recall) curve.
@@ -190,5 +228,7 @@ private[spark] trait BinaryClassificationSummary extends ClassificationSummary {
    * as thresholds used in calculating the recall.
    */
   @Since("3.1.0")
-  @transient lazy val recallByThreshold: DataFrame
+  @transient lazy val recallByThreshold: DataFrame = {
+    getModelSummaryAttrDataFrame("recallByThreshold")
+  }
 }

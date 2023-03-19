@@ -18,7 +18,7 @@
 package org.apache.spark.ml.classification
 
 import org.apache.spark.annotation.Since
-import org.apache.spark.ml.ModelRef
+import org.apache.spark.ml.{Model, ModelRef}
 import org.apache.spark.ml.linalg.{Matrix, Vector}
 import org.apache.spark.ml.param.{Param, ParamMap}
 import org.apache.spark.ml.util.{HasTrainingSummary, Identifiable}
@@ -94,26 +94,17 @@ class LogisticRegressionModel private[spark] (@Since("1.4.0") override val uid: 
     val weightColName = if (!isDefined(weightCol)) "weightCol" else $(weightCol)
     // Handle possible missing or invalid prediction columns
     val (summaryModel, probabilityColName, predictionColName) = findSummaryModel()
-    val featureColName = $(featuresCol)
-    val labelColName = $(labelCol)
-    val weightColName = $(weightCol)
+    val model = this
+    val sumamryDatasetOpt = Some(summaryModel.transform(dataset))
     if (numClasses > 2) {
       new LogisticRegressionSummary{
-        override def datasetOpt: Option[Dataset[_]] = Some(summaryModel.transform(dataset))
-        override def probabilityCol: String = probabilityColName
-        override def featuresCol: String = featureColName
-        override def predictionCol: String = predictionColName
-        override def labelCol: String = labelColName
-        override def weightCol: String = weightColName
+        override def model: Model[_] = model
+        override def datasetOpt: Option[Dataset[_]] = sumamryDatasetOpt
       }
     } else {
       new BinaryLogisticRegressionSummary{
-        override def datasetOpt: Option[Dataset[_]] = summaryModel.transform(dataset)
-        override def probabilityCol: String = probabilityColName
-        override def featuresCol: String = featureColName
-        override def predictionCol: String = predictionColName
-        override def labelCol: String = labelColName
-        override def weightCol: String = weightColName
+        override def model: Model[_] = model
+        override def datasetOpt: Option[Dataset[_]] = sumamryDatasetOpt
       }
     }
   }
@@ -127,11 +118,15 @@ trait LogisticRegressionSummary extends ClassificationSummary {
 
   /** Field in "predictions" which gives the probability of each class as a vector. */
   @Since("1.5.0")
-  def probabilityCol: String
+  def probabilityCol: String = {
+    getModelSummaryAttr("probabilityCol").asInstanceOf[String]
+  }
 
   /** Field in "predictions" which gives the features of each instance as a vector. */
   @Since("1.6.0")
-  def featuresCol: String
+  def featuresCol: String = {
+    getModelSummaryAttr("featuresCol").asInstanceOf[String]
+  }
 
   /**
    * Convenient method for casting to binary logistic regression summary.
