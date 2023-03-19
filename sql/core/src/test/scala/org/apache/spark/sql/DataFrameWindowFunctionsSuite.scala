@@ -1183,7 +1183,7 @@ class DataFrameWindowFunctionsSuite extends QueryTest
     def isShuffleExecByRequirement(
         plan: ShuffleExchangeExec,
         desiredClusterColumns: Seq[String]): Boolean = plan match {
-      case ShuffleExchangeExec(op: HashPartitioning, _, ENSURE_REQUIREMENTS) =>
+      case ShuffleExchangeExec(op: HashPartitioning, _, ENSURE_REQUIREMENTS, _) =>
         partitionExpressionsColumns(op.expressions) === desiredClusterColumns
       case _ => false
     }

@@ -160,3 +160,9 @@ class PySparkTypeError(PySparkException, TypeError):
     """
     Wrapper class for TypeError to support error classes.
     """
+
+
+class PySparkAttributeError(PySparkException, AttributeError):
+    """
+    Wrapper class for AttributeError to support error classes.
+    """
