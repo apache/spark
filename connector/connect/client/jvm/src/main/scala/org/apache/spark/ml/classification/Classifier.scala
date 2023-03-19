@@ -20,6 +20,7 @@ package org.apache.spark.ml.classification
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.{PredictionModel, Predictor}
 import org.apache.spark.ml.linalg.Vector
+import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.types.StructType
@@ -66,41 +67,7 @@ abstract class ClassificationModel[FeaturesType, M <: ClassificationModel[Featur
 
   /** Number of classes (values which the label can take). */
   @Since("3.5.0")
-  def numClasses: Int
-
-  @Since("3.5.0")
-  override def transformSchema(schema: StructType): StructType = {
-    var outputSchema = super.transformSchema(schema)
-    if ($(predictionCol).nonEmpty) {
-      outputSchema = SchemaUtils.updateNumValues(schema, $(predictionCol), numClasses)
-    }
-    if ($(rawPredictionCol).nonEmpty) {
-      outputSchema =
-        SchemaUtils.updateAttributeGroupSize(outputSchema, $(rawPredictionCol), numClasses)
-    }
-    outputSchema
-  }
-
-  /**
-   * Transforms dataset by reading from [[featuresCol]], and appending new columns as specified by
-   * parameters:
-   *   - predicted labels as [[predictionCol]] of type `Double`
-   *   - raw predictions (confidences) as [[rawPredictionCol]] of type `Vector`.
-   *
-   * @param dataset
-   *   input dataset
-   * @return
-   *   transformed dataset
-   */
-  @Since("3.5.0")
-  override def transform(dataset: Dataset[_]): DataFrame = {
-    // TODO: should send the id of the input dataset and the latest params to the server,
-    //  then invoke the 'transform' method of the remote model
-    throw new NotImplementedError
-  }
-
-  final override def transformImpl(dataset: Dataset[_]): DataFrame =
-    throw new UnsupportedOperationException(s"transformImpl is not supported in $getClass")
+  def numClasses: Int = getModelAttr("numClasses").asInstanceOf[Int]
 
   /**
    * Predict label for the given features. This method is used to implement `transform()` and
@@ -134,5 +101,27 @@ abstract class ClassificationModel[FeaturesType, M <: ClassificationModel[Featur
     // TODO: should send the vector to the server,
     //  then invoke the 'predictRaw' method of the remote model
     throw new NotImplementedError
+  }
+
+  /**
+   * If the rawPrediction and prediction columns are set, this method returns the current model,
+   * otherwise it generates new columns for them and sets them as columns on a new copy of
+   * the current model
+   */
+  private[classification] def findSummaryModel():
+  (ClassificationModel[FeaturesType, M], String, String) = {
+    val model = if ($(rawPredictionCol).isEmpty && $(predictionCol).isEmpty) {
+      copy(ParamMap.empty)
+        .setRawPredictionCol("rawPrediction_" + java.util.UUID.randomUUID.toString)
+        .setPredictionCol("prediction_" + java.util.UUID.randomUUID.toString)
+    } else if ($(rawPredictionCol).isEmpty) {
+      copy(ParamMap.empty).setRawPredictionCol("rawPrediction_" +
+        java.util.UUID.randomUUID.toString)
+    } else if ($(predictionCol).isEmpty) {
+      copy(ParamMap.empty).setPredictionCol("prediction_" + java.util.UUID.randomUUID.toString)
+    } else {
+      this
+    }
+    (model, model.getRawPredictionCol, model.getPredictionCol)
   }
 }

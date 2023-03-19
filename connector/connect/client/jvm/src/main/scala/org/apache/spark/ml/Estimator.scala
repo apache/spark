@@ -20,8 +20,9 @@ package org.apache.spark.ml
 import scala.annotation.varargs
 
 import org.apache.spark.annotation.Since
+import org.apache.spark.connect.proto
 import org.apache.spark.ml.param.{ParamMap, ParamPair}
-import org.apache.spark.sql.Dataset
+import org.apache.spark.sql.{Dataset, SparkSession}
 
 /**
  * Abstract class for estimators that fit models to data.
@@ -72,7 +73,26 @@ abstract class Estimator[M <: Model[M]] extends PipelineStage {
    * Fits a model to the input data.
    */
   @Since("3.5.0")
-  def fit(dataset: Dataset[_]): M
+  def fit(dataset: Dataset[_]): M = {
+    val fitProto = proto.MlCommand.Fit.newBuilder()
+      .setEstimator(
+        proto.MlStage.newBuilder()
+          .setName("LogisticRegression")
+          .setType(proto.MlStage.StageType.ESTIMATOR)
+          .setUid(uid)
+          .setParams(ConnectUtils.getInstanceParamsProto(this))
+      ).build()
+
+    val resp = SparkSession.active.executeMl(
+      proto.MlCommand.newBuilder().setFit(fitProto).build()
+    )
+
+    val modelRefProto = resp.getModelInfo.getModelRef
+    val model = createModel(ModelRef.fromProto(modelRefProto))
+    copyValues(model)
+  }
+
+  def createModel(modelRef: ModelRef): M
 
   /**
    * Fits multiple models to the input data with multiple sets of parameters. The default

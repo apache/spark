@@ -19,6 +19,7 @@ package org.apache.spark.ml.classification
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.linalg.Vector
+import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.util.SchemaUtils
 import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.types.StructType
@@ -79,35 +80,6 @@ abstract class ProbabilisticClassificationModel[
     set(thresholds, value).asInstanceOf[M]
   }
 
-  @Since("3.5.0")
-  override def transformSchema(schema: StructType): StructType = {
-    var outputSchema = super.transformSchema(schema)
-    if ($(probabilityCol).nonEmpty) {
-      outputSchema =
-        SchemaUtils.updateAttributeGroupSize(outputSchema, $(probabilityCol), numClasses)
-    }
-    outputSchema
-  }
-
-  /**
-   * Transforms dataset by reading from [[featuresCol]], and appending new columns as specified by
-   * parameters:
-   *   - predicted labels as [[predictionCol]] of type `Double`
-   *   - raw predictions (confidences) as [[rawPredictionCol]] of type `Vector`
-   *   - probability of each class as [[probabilityCol]] of type `Vector`.
-   *
-   * @param dataset
-   *   input dataset
-   * @return
-   *   transformed dataset
-   */
-  @Since("3.5.0")
-  override def transform(dataset: Dataset[_]): DataFrame = {
-    // TODO: should send the id of the input dataset and the latest params to the server,
-    //  then invoke the 'transform' method of the remote model
-    throw new NotImplementedError
-  }
-
   /**
    * Predict the probability of each class given the features. These predictions are also called
    * class conditional probabilities.
@@ -122,5 +94,26 @@ abstract class ProbabilisticClassificationModel[
     // TODO: should send the vector to the server,
     //  then invoke the 'predictProbability' method of the remote model
     throw new NotImplementedError
+  }
+
+  /**
+   *If the probability and prediction columns are set, this method returns the current model,
+   * otherwise it generates new columns for them and sets them as columns on a new copy of
+   * the current model
+   */
+  override private[classification] def findSummaryModel():
+  (ProbabilisticClassificationModel[FeaturesType, M], String, String) = {
+    val model = if ($(probabilityCol).isEmpty && $(predictionCol).isEmpty) {
+      copy(ParamMap.empty)
+        .setProbabilityCol("probability_" + java.util.UUID.randomUUID.toString)
+        .setPredictionCol("prediction_" + java.util.UUID.randomUUID.toString)
+    } else if ($(probabilityCol).isEmpty) {
+      copy(ParamMap.empty).setProbabilityCol("probability_" + java.util.UUID.randomUUID.toString)
+    } else if ($(predictionCol).isEmpty) {
+      copy(ParamMap.empty).setPredictionCol("prediction_" + java.util.UUID.randomUUID.toString)
+    } else {
+      this
+    }
+    (model, model.getProbabilityCol, model.getPredictionCol)
   }
 }

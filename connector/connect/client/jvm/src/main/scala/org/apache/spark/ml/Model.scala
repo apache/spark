@@ -18,7 +18,24 @@
 package org.apache.spark.ml
 
 import org.apache.spark.annotation.Since
+import org.apache.spark.connect.proto
 import org.apache.spark.ml.param.ParamMap
+import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
+
+
+// TODO: Using Cleaner interface to clean server side object.
+case class ModelRef(refId: String)
+
+object ModelRef {
+  def fromProto(proto: proto.ModelRef): ModelRef = {
+    ModelRef(proto.getId)
+  }
+
+  def toProto(modelRef: ModelRef): proto.ModelRef = {
+    proto.ModelRef.newBuilder().setId(modelRef.refId).build()
+  }
+}
+
 
 /**
  * A fitted model, i.e., a [[Transformer]] produced by an [[Estimator]].
@@ -27,6 +44,8 @@ import org.apache.spark.ml.param.ParamMap
  *   model type
  */
 abstract class Model[M <: Model[M]] extends Transformer {
+
+  @transient var modelRef: ModelRef = _
 
   /**
    * The parent estimator that produced this model.
@@ -49,5 +68,74 @@ abstract class Model[M <: Model[M]] extends Transformer {
   def hasParent: Boolean = parent != null
 
   @Since("3.5.0")
-  override def copy(extra: ParamMap): M
+  override def copy(extra: ParamMap): M = {
+    val cmdBuilder = proto.MlCommand.newBuilder()
+
+    cmdBuilder.getCopyModelBuilder
+      .setModelRef(ModelRef.toProto(modelRef))
+
+    val resp = SparkSession.active.executeMl(cmdBuilder.build())
+    val newRef = ConnectUtils.deserializeResponseValue(resp).asInstanceOf[ModelRef]
+    val newModel = defaultCopy(extra).asInstanceOf[M]
+    newModel.modelRef = newRef
+    newModel
+  }
+
+  def transform(dataset: Dataset[_]): DataFrame = {
+    dataset.sparkSession.newDataFrame { builder =>
+      builder.getMlRelationBuilder.getModelTransformBuilder
+        .setInput(dataset.plan.getRoot)
+        .setModelRef(ModelRef.toProto(modelRef))
+        .setParams(ConnectUtils.getInstanceParamsProto(this))
+    }
+  }
+
+  protected def getModelAttr(name: String): Any = {
+    val cmdBuilder = proto.MlCommand.newBuilder()
+
+    cmdBuilder.getFetchModelAttrBuilder
+      .setModelRef(ModelRef.toProto(modelRef))
+      .setName(name)
+
+    val resp = SparkSession.active.executeMl(cmdBuilder.build())
+    ConnectUtils.deserializeResponseValue(resp)
+  }
+
+}
+
+trait ModelSummary {
+
+  protected def model: Model[_]
+
+  protected def datasetOpt: Option[Dataset[_]]
+
+  protected def getModelSummaryAttr(name: String): Any = {
+    val cmdBuilder = proto.MlCommand.newBuilder()
+
+    val fetchCmdBuilder = cmdBuilder.getFetchModelSummaryAttrBuilder
+
+    fetchCmdBuilder
+      .setModelRef(ModelRef.toProto(model.modelRef))
+      .setName(name)
+      .setParams(ConnectUtils.getInstanceParamsProto(model))
+
+    datasetOpt.map(x => fetchCmdBuilder.setEvaluationDataset(x.plan.getRoot))
+
+    val resp = SparkSession.active.executeMl(cmdBuilder.build())
+    ConnectUtils.deserializeResponseValue(resp)
+  }
+
+  protected def getModelSummaryAttrDataFrame(name: String): DataFrame = {
+    SparkSession.active.newDataFrame { builder =>
+      builder.getMlRelationBuilder.getModelSummaryAttrBuilder
+        .setName(name)
+        .setModelRef(ModelRef.toProto(model.modelRef))
+        .setParams(ConnectUtils.getInstanceParamsProto(model))
+      datasetOpt.map { x =>
+        builder.getMlRelationBuilder.getModelSummaryAttrBuilder.setEvaluationDataset(
+          x.plan.getRoot
+        )
+      }
+    }
+  }
 }

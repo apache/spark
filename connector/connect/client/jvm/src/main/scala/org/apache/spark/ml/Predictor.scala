@@ -59,13 +59,6 @@ abstract class Predictor[
   def setPredictionCol(value: String): Learner = set(predictionCol, value).asInstanceOf[Learner]
 
   @Since("3.5.0")
-  override def fit(dataset: Dataset[_]): M = {
-    // TODO: should send the id of the input dataset and the latest params to the server,
-    //  then invoke the 'fit' method of the remote predictor
-    throw new NotImplementedError
-  }
-
-  @Since("3.5.0")
   override def copy(extra: ParamMap): Learner
 
   /**
@@ -77,10 +70,6 @@ abstract class Predictor[
    * The default value is VectorUDT, but it may be overridden if FeaturesType is not Vector.
    */
   private[ml] def featuresDataType: DataType = new VectorUDT
-
-  override def transformSchema(schema: StructType): StructType = {
-    validateAndTransformSchema(schema, fitting = true, featuresDataType)
-  }
 }
 
 /**
@@ -106,7 +95,7 @@ abstract class PredictionModel[FeaturesType, M <: PredictionModel[FeaturesType, 
 
   /** Returns the number of features the model was trained on. If unknown, returns -1 */
   @Since("3.5.0")
-  def numFeatures: Int = -1
+  def numFeatures: Int = getModelAttr("numFeatures").asInstanceOf[Int]
 
   /**
    * Returns the SQL DataType corresponding to the FeaturesType type parameter.
@@ -118,47 +107,13 @@ abstract class PredictionModel[FeaturesType, M <: PredictionModel[FeaturesType, 
    */
   protected def featuresDataType: DataType = new VectorUDT
 
-  @Since("3.5.0")
-  override def transformSchema(schema: StructType): StructType = {
-    var outputSchema = validateAndTransformSchema(schema, fitting = false, featuresDataType)
-    if ($(predictionCol).nonEmpty) {
-      outputSchema = SchemaUtils.updateNumeric(outputSchema, $(predictionCol))
-    }
-    outputSchema
-  }
-
-  /**
-   * Transforms dataset by reading from [[featuresCol]], calling `predict`, and storing the
-   * predictions as a new column [[predictionCol]].
-   *
-   * @param dataset
-   *   input dataset
-   * @return
-   *   transformed dataset with [[predictionCol]] of type `Double`
-   */
-  @Since("3.5.0")
-  override def transform(dataset: Dataset[_]): DataFrame = {
-    transformSchema(dataset.schema, logging = true)
-    if ($(predictionCol).nonEmpty) {
-      transformImpl(dataset)
-    } else {
-      this.logWarning(
-        s"$uid: Predictor.transform() does nothing" +
-          " because no output columns were set.")
-      dataset.toDF
-    }
-  }
-
-  protected def transformImpl(dataset: Dataset[_]): DataFrame = {
-    // TODO: should send the id of the input dataset and the latest params to the server,
-    //  then invoke the 'transform' method of the remote model
-    throw new NotImplementedError
-  }
-
   /**
    * Predict label for the given features. This method is used to implement `transform()` and
    * output [[predictionCol]].
    */
   @Since("3.5.0")
-  def predict(features: FeaturesType): Double
+  def predict(features: FeaturesType): Double = {
+    // TODO
+    throw new NotImplementedError
+  }
 }

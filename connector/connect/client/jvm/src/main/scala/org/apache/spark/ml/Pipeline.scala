@@ -27,37 +27,5 @@ import org.apache.spark.sql.types.StructType
  */
 abstract class PipelineStage extends Params with Logging {
 
-  /**
-   * Check transform validity and derive the output schema from the input schema.
-   *
-   * We check validity for interactions between parameters during `transformSchema` and raise an
-   * exception if any parameter value is invalid. Parameter value checks which do not depend on
-   * other parameters are handled by `Param.validate()`.
-   *
-   * Typical implementation should first conduct verification on schema change and parameter
-   * validity, including complex parameter interaction checks.
-   */
-  def transformSchema(schema: StructType): StructType
-
-  /**
-   * :: DeveloperApi ::
-   *
-   * Derives the output schema from the input schema and parameters, optionally with logging.
-   *
-   * This should be optimistic. If it is unclear whether the schema will be valid, then it should
-   * be assumed valid until proven otherwise.
-   */
-  @DeveloperApi
-  protected def transformSchema(schema: StructType, logging: Boolean): StructType = {
-    if (logging) {
-      logDebug(s"Input schema: ${schema.json}")
-    }
-    val outputSchema = transformSchema(schema)
-    if (logging) {
-      logDebug(s"Expected output schema: ${outputSchema.json}")
-    }
-    outputSchema
-  }
-
   override def copy(extra: ParamMap): PipelineStage
 }

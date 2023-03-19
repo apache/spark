@@ -20,7 +20,6 @@ package org.apache.spark.ml.util
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.Since
 
-
 /**
  * Trait for models that provides Training summary.
  *

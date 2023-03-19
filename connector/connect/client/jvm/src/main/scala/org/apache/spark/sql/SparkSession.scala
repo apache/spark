@@ -361,7 +361,7 @@ class SparkSession private[sql] (
     }
   }
 
-  private[sql] def newDataFrame(f: proto.Relation.Builder => Unit): DataFrame = {
+  private[spark] def newDataFrame(f: proto.Relation.Builder => Unit): DataFrame = {
     newDataset(UnboundRowEncoder)(f)
   }
 
@@ -424,6 +424,14 @@ class SparkSession private[sql] (
   def execute(extension: com.google.protobuf.Any): Unit = {
     val command = proto.Command.newBuilder().setExtension(extension).build()
     execute(command)
+  }
+
+  private[spark] def executeMl(command: proto.MlCommand): proto.MlCommandResponse = {
+    val plan = proto.Plan.newBuilder().setMlCommand(command).build()
+    client.execute(plan).asScala
+      .find(_.hasSqlCommandResult)
+      .getOrElse(throw new RuntimeException("ml_command_result must be present"))
+      .getMlCommandResult
   }
 
   /**
@@ -490,6 +498,8 @@ class SparkSession private[sql] (
 object SparkSession extends Logging {
   private val planIdGenerator = new AtomicLong
 
+  @volatile private var activeSession: SparkSession = null
+
   def builder(): Builder = new Builder()
 
   private[sql] lazy val cleaner = {
@@ -528,14 +538,14 @@ object SparkSession extends Logging {
   }
 
   def setActiveSession(session: SparkSession): Unit = {
-    throw new UnsupportedOperationException("setActiveSession is not supported")
+    activeSession = session
   }
 
   def clearActiveSession(): Unit = {
-    throw new UnsupportedOperationException("clearActiveSession is not supported")
+    activeSession = null
   }
 
   def active: SparkSession = {
-    throw new UnsupportedOperationException("active is not supported")
+    activeSession
   }
 }
