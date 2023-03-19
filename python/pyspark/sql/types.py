@@ -281,7 +281,7 @@ class TimestampType(AtomicType, metaclass=DataTypeSingleton):
                 # Set the time zone to UTC because the TIMESTAMP type stores timestamps
                 # as the number of microseconds from the epoch of 1970-01-01T00:00:00.000000Z
                 # in the UTC time zone.
-                .fromtimestamp(ts // 1000000, tz=datetime.timezone.utc)
+                .utcfromtimestamp(ts // 1000000)
                 .replace(microsecond=ts % 1000000)
                 # Convert to the local time zone and remove the time zone info to
                 # to have the result type `datetime64[us]` for compatibility.
