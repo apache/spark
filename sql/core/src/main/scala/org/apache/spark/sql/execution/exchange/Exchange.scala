@@ -22,7 +22,6 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, Expression, SortOrder}
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
-import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.vectorized.ColumnarBatch
@@ -48,7 +47,6 @@ abstract class Exchange extends UnaryExecNode {
  */
 case class ReusedExchangeExec(override val output: Seq[Attribute], child: Exchange)
   extends LeafExecNode {
-  val UNKNOWN_CHILD_ID = TreeNodeTag[Unit]("UNKNOWN_CHILD_ID")
 
   override def supportsColumnar: Boolean = child.supportsColumnar
 
@@ -91,26 +89,5 @@ case class ReusedExchangeExec(override val output: Seq[Attribute], child: Exchan
        |$formattedNodeName [Reuses operator id: $reuse_op_str]
        |${ExplainUtils.generateFieldString("Output", output)}
        |""".stripMargin
-  }
-
-  override def generateTreeString(
-    depth: Int,
-    lastChildren: Seq[Boolean],
-    append: String => Unit,
-    verbose: Boolean,
-    prefix: String = "",
-    addSuffix: Boolean = false,
-    maxFields: Int,
-    printNodeId: Boolean,
-    indent: Int = 0): Unit = {
-      super.generateTreeString(depth, lastChildren, append, verbose, prefix, addSuffix,
-        maxFields, printNodeId, indent)
-      // SPARK-42753 Recursively append subtree of the child if that child is an UNKNOWN child
-      // whereby that child has not been printed anywhere else
-      if (this.getTagValue(UNKNOWN_CHILD_ID).isDefined) {
-        child.generateTreeString(
-          depth + 1, lastChildren :+ true, append, verbose, prefix, addSuffix,
-          maxFields, printNodeId = printNodeId, indent = indent)
-      }
   }
 }

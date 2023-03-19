@@ -783,21 +783,24 @@ class ExplainSuiteAE extends ExplainSuiteHelper with EnableAdaptiveExecutionSuit
     val exchange = ShuffleExchangeExec(UnknownPartitioning(10),
       RangeExec(org.apache.spark.sql.catalyst.plans.logical.Range(0, 1000, 1, 10)))
     val reused = ReusedExchangeExec(Seq.empty, exchange)
-
     var results = ""
     def appendStr(str: String): Unit = {
       results = results + str
     }
-
     ExplainUtils.processPlan[SparkPlan](reused, appendStr(_))
 
     val expectedTree = """|ReusedExchange (1)
-                          |+- Exchange (3)
-                          |   +- Range (2)
                           |
                           |
                           |(1) ReusedExchange [Reuses operator id: 3]
                           |Output: []
+                          |
+                          |===== Adaptively Optimized Out Exchanges =====
+                          |
+                          |Subplan:1
+                          |Exchange (3)
+                          |+- Range (2)
+                          |
                           |
                           |(2) Range
                           |Output [1]: [id#xL]
@@ -806,6 +809,7 @@ class ExplainSuiteAE extends ExplainSuiteHelper with EnableAdaptiveExecutionSuit
                           |(3) Exchange
                           |Input [1]: [id#xL]
                           |Arguments: UnknownPartitioning(10), ENSURE_REQUIREMENTS, [plan_id=x]
+                          |
                           |""".stripMargin
 
     results = results.replaceAll("#\\d+", "#x").replaceAll("plan_id=\\d+", "plan_id=x")
@@ -830,13 +834,25 @@ class ExplainSuiteAE extends ExplainSuiteHelper with EnableAdaptiveExecutionSuit
 
     val expectedTree = """|SortMergeJoin Inner (3)
                           |:- ReusedExchange (1)
-                          |:  +- Exchange (5)
-                          |:     +- Range (4)
                           |+- ReusedExchange (2)
                           |
                           |
                           |(1) ReusedExchange [Reuses operator id: 5]
                           |Output: []
+                          |
+                          |(2) ReusedExchange [Reuses operator id: 5]
+                          |Output: []
+                          |
+                          |(3) SortMergeJoin
+                          |Join type: Inner
+                          |Join condition: None
+                          |
+                          |===== Adaptively Optimized Out Exchanges =====
+                          |
+                          |Subplan:1
+                          |Exchange (5)
+                          |+- Range (4)
+                          |
                           |
                           |(4) Range
                           |Output [1]: [id#xL]
@@ -846,12 +862,6 @@ class ExplainSuiteAE extends ExplainSuiteHelper with EnableAdaptiveExecutionSuit
                           |Input [1]: [id#xL]
                           |Arguments: UnknownPartitioning(10), ENSURE_REQUIREMENTS, [plan_id=x]
                           |
-                          |(2) ReusedExchange [Reuses operator id: 5]
-                          |Output: []
-                          |
-                          |(3) SortMergeJoin
-                          |Join type: Inner
-                          |Join condition: None
                           |""".stripMargin
     results = results.replaceAll("#\\d+", "#x").replaceAll("plan_id=\\d+", "plan_id=x")
     assert(results == expectedTree)
@@ -877,26 +887,25 @@ class ExplainSuiteAE extends ExplainSuiteHelper with EnableAdaptiveExecutionSuit
 
     val expectedTree = """|SortMergeJoin Inner (3)
                           |:- ReusedExchange (1)
-                          |:  +- Exchange (7)
-                          |:     +- Range (6)
                           |+- ReusedExchange (2)
-                          |   +- Exchange (5)
-                          |      +- Range (4)
                           |
                           |
-                          |(1) ReusedExchange [Reuses operator id: 7]
+                          |(1) ReusedExchange [Reuses operator id: 5]
                           |Output: []
                           |
-                          |(6) Range
-                          |Output [1]: [id#xL]
-                          |Arguments: Range (0, 1000, step=1, splits=Some(10))
-                          |
-                          |(7) Exchange
-                          |Input [1]: [id#xL]
-                          |Arguments: UnknownPartitioning(10), ENSURE_REQUIREMENTS, [plan_id=x]
-                          |
-                          |(2) ReusedExchange [Reuses operator id: 5]
+                          |(2) ReusedExchange [Reuses operator id: 7]
                           |Output: []
+                          |
+                          |(3) SortMergeJoin
+                          |Join type: Inner
+                          |Join condition: None
+                          |
+                          |===== Adaptively Optimized Out Exchanges =====
+                          |
+                          |Subplan:1
+                          |Exchange (5)
+                          |+- Range (4)
+                          |
                           |
                           |(4) Range
                           |Output [1]: [id#xL]
@@ -906,9 +915,19 @@ class ExplainSuiteAE extends ExplainSuiteHelper with EnableAdaptiveExecutionSuit
                           |Input [1]: [id#xL]
                           |Arguments: UnknownPartitioning(10), ENSURE_REQUIREMENTS, [plan_id=x]
                           |
-                          |(3) SortMergeJoin
-                          |Join type: Inner
-                          |Join condition: None
+                          |Subplan:2
+                          |Exchange (7)
+                          |+- Range (6)
+                          |
+                          |
+                          |(6) Range
+                          |Output [1]: [id#xL]
+                          |Arguments: Range (0, 1000, step=1, splits=Some(10))
+                          |
+                          |(7) Exchange
+                          |Input [1]: [id#xL]
+                          |Arguments: UnknownPartitioning(10), ENSURE_REQUIREMENTS, [plan_id=x]
+                          |
                           |""".stripMargin
     results = results.replaceAll("#\\d+", "#x").replaceAll("plan_id=\\d+", "plan_id=x")
     assert(results == expectedTree)

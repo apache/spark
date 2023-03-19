@@ -27,7 +27,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions.{Expression, PlanExpression}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, AdaptiveSparkPlanHelper, QueryStageExec}
-import org.apache.spark.sql.execution.exchange.ReusedExchangeExec
+import org.apache.spark.sql.execution.exchange.{Exchange, ReusedExchangeExec}
 
 object ExplainUtils extends AdaptiveSparkPlanHelper {
   /**
@@ -78,11 +78,12 @@ object ExplainUtils extends AdaptiveSparkPlanHelper {
    */
   def processPlan[T <: QueryPlan[T]](plan: T, append: String => Unit): Unit = {
     try {
-      // Initialize a reference-unique set of Operators to avoid accidental ID overwrites
+      // Initialize a reference-unique set of Operators to avoid accdiental overwrites and to allow
+      // intentional overwriting of IDs generated in previous AQE iteration
       val operators = newSetFromMap[QueryPlan[_]](new IdentityHashMap())
-      // Initialize a reference-unique set of ReusedExchanges to help find Adaptively Optimized Out
+      // Initialize an array of ReusedExchanges to help find Adaptively Optimized Out
       // Exchanges as part of SPARK-42753
-      val reusedExchanges = newSetFromMap[ReusedExchangeExec](new IdentityHashMap())
+      val reusedExchanges = ArrayBuffer.empty[ReusedExchangeExec]
 
       var currentOperatorID = 0
       currentOperatorID = generateOperatorIDs(plan, currentOperatorID, operators, reusedExchanges,
@@ -97,13 +98,11 @@ object ExplainUtils extends AdaptiveSparkPlanHelper {
       }
 
       // SPARK-42753: Process subtree for a ReusedExchange with unknown child
-      // Get all the operators and ReusedExchanges that have generated ID
-      val reusedIterator = reusedExchanges.iterator()
-      while (reusedIterator.hasNext()) {
-        val reusedExchange = reusedIterator.next()
-        val child = reusedExchange.child
+      val optimizedOutExchanges = ArrayBuffer.empty[Exchange]
+      reusedExchanges.foreach{ reused =>
+        val child = reused.child
         if (!operators.contains(child)) {
-          reusedExchange.setTagValue(reusedExchange.UNKNOWN_CHILD_ID, ())
+          optimizedOutExchanges.append(child)
           currentOperatorID = generateOperatorIDs(child, currentOperatorID, operators,
             reusedExchanges, false)
         }
@@ -127,6 +126,17 @@ object ExplainUtils extends AdaptiveSparkPlanHelper {
         if (!sub._3.isInstanceOf[ReusedSubqueryExec]) {
           processPlanSkippingSubqueries(sub._3.child, append, collectedOperators)
         }
+        append("\n")
+      }
+
+      i = 0
+      optimizedOutExchanges.foreach{ exchange =>
+        if (i == 0) {
+          append("\n===== Adaptively Optimized Out Exchanges =====\n\n")
+        }
+        i = i + 1
+        append(s"Subplan:$i\n")
+        processPlanSkippingSubqueries[SparkPlan](exchange, append, collectedOperators)
         append("\n")
       }
     } finally {
@@ -164,7 +174,7 @@ object ExplainUtils extends AdaptiveSparkPlanHelper {
       plan: QueryPlan[_],
       startOperatorID: Int,
       visited: Set[QueryPlan[_]],
-      reusedExchanges: Set[ReusedExchangeExec],
+      reusedExchanges: ArrayBuffer[ReusedExchangeExec],
       addReusedExchanges: Boolean): Int = {
     var currentOperationID = startOperatorID
     // Skip the subqueries as they are not printed as part of main query block.
@@ -175,7 +185,7 @@ object ExplainUtils extends AdaptiveSparkPlanHelper {
     def setOpId(plan: QueryPlan[_]): Unit = if (!visited.contains(plan)) {
       plan match {
         case r: ReusedExchangeExec if addReusedExchanges =>
-          reusedExchanges.add(r)
+          reusedExchanges.append(r)
         case _ =>
       }
       visited.add(plan)
@@ -244,9 +254,6 @@ object ExplainUtils extends AdaptiveSparkPlanHelper {
       case p: QueryStageExec =>
         collectOperatorsWithID(p.plan, operators, collectedOperators)
         collectOperatorWithID(p)
-      case p: ReusedExchangeExec if p.getTagValue(p.UNKNOWN_CHILD_ID).isDefined =>
-        collectOperatorWithID(p)
-        collectOperatorsWithID(p.child, operators, collectedOperators)
       case other: QueryPlan[_] =>
         collectOperatorWithID(other)
         other.innerChildren.foreach(collectOperatorsWithID(_, operators, collectedOperators))
