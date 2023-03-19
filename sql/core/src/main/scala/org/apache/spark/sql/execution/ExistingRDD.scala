@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, PartitioningCollection, UnknownPartitioning}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{LOGICAL_RDD, TreePattern}
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.util.collection.Utils
@@ -105,6 +106,8 @@ case class LogicalRDD(
   extends LeafNode with MultiInstanceRelation {
 
   import LogicalRDD._
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(LOGICAL_RDD)
 
   override protected final def otherCopyArgs: Seq[AnyRef] =
     session :: originStats :: originConstraints :: Nil

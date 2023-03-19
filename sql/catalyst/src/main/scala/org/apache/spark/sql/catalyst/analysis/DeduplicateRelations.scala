@@ -41,7 +41,8 @@ case class ReferenceEqualPlanWrapper(plan: LogicalPlan) {
 object DeduplicateRelations extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = {
     val newPlan = renewDuplicatedRelations(mutable.HashSet.empty, plan)._1
-    if (newPlan.find(p => p.resolved && p.missingInput.nonEmpty).isDefined) {
+    if (newPlan.find(p => p.resolved &&
+      p.missingInput.nonEmpty && !p.containsAnyPattern(LOGICAL_RDD)).isDefined) {
       // Wait for `ResolveMissingReferences` to resolve missing attributes first
       return newPlan
     }

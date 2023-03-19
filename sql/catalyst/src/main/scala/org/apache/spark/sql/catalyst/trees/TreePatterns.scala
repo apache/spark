@@ -150,4 +150,7 @@ object TreePattern extends Enumeration  {
 
   // Execution Plan patterns (alphabetically ordered)
   val EXCHANGE: Value = Value
+
+  // RDD Plan patterns
+  val LOGICAL_RDD: Value = Value
 }
