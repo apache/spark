@@ -274,9 +274,7 @@ class ExecutorPodsAllocator(
       }
 
       val currentFailedExecutorIds = podsForRpId.filter {
-        case (_, PodFailed(pod)) =>
-          pod.getSpec
-          true
+        case (_, PodFailed(_)) => true
         case _ => false
       }.keySet
 
