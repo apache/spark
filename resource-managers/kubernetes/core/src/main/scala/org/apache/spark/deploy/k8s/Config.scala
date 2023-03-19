@@ -755,8 +755,9 @@ private[spark] object Config extends Logging {
       .doc("Spark exit if the number of failed executors exceeds this threshold. This " +
         s"configuration only take effect when ${KUBERNETES_ALLOCATION_PODS_ALLOCATOR.key} " +
         s"is set to 'direct'.")
-      .version("3.4.0")
+      .version("3.5.0")
       .intConf
+      .checkValue(value => value > 0, "Max number of failures must be a positive value")
       .createOptional
 
   val KUBERNETES_EXECUTOR_ATTEMPT_FAILURE_VALIDITY_INTERVAL_MS =
@@ -764,9 +765,9 @@ private[spark] object Config extends Logging {
       .doc("Interval after which Executor failures will be considered independent and not " +
         "accumulate towards the attempt count. This configuration is take effect when " +
         s"${KUBERNETES_ALLOCATION_PODS_ALLOCATOR.key} is set to 'direct'.")
-      .version("3.4.0")
+      .version("3.5.0")
       .timeConf(TimeUnit.MILLISECONDS)
-      .checkValue(value => value > 0, "failures validity interval should be positive")
+      .checkValue(value => value > 0, "Validity interval of failures must be positive")
       .createOptional
 
   val KUBERNETES_DRIVER_LABEL_PREFIX = "spark.kubernetes.driver.label."
