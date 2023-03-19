@@ -20,9 +20,7 @@ package org.apache.spark.ml
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.linalg.VectorUDT
 import org.apache.spark.ml.param._
-import org.apache.spark.ml.util.SchemaUtils
-import org.apache.spark.sql.{DataFrame, Dataset}
-import org.apache.spark.sql.types.{DataType, StructType}
+import org.apache.spark.sql.types.DataType
 
 /**
  * Abstraction for prediction problems (regression and classification). It accepts all NumericType

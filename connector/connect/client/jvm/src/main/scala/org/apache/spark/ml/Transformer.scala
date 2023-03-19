@@ -110,29 +110,6 @@ abstract class UnaryTransformer[IN: TypeTag, OUT: TypeTag, T <: UnaryTransformer
   @Since("3.5.0")
   protected def outputDataType: DataType
 
-  /**
-   * Validates the input type. Throw an exception if it is invalid.
-   */
-  protected def validateInputType(inputType: DataType): Unit = {}
-
-  @Since("3.5.0")
-  override def transformSchema(schema: StructType): StructType = {
-    val inputType = schema($(inputCol)).dataType
-    validateInputType(inputType)
-    if (schema.fieldNames.contains($(outputCol))) {
-      throw new IllegalArgumentException(s"Output column ${$(outputCol)} already exists.")
-    }
-    val outputFields = schema.fields :+
-      StructField($(outputCol), outputDataType, nullable = false)
-    StructType(outputFields)
-  }
-
-  override def transform(dataset: Dataset[_]): DataFrame = {
-    // TODO: should send the id of the input dataset and the latest params to the server,
-    //  then invoke the 'transform' method of the remote model
-    throw new NotImplementedError
-  }
-
   @Since("3.5.0")
   override def copy(extra: ParamMap): T = defaultCopy(extra)
 }

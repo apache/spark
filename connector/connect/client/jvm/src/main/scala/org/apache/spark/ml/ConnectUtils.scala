@@ -144,6 +144,8 @@ object ConnectUtils {
         protoValue.getInteger
       case proto.Expression.Literal.LiteralTypeCase.ARRAY =>
         toArrayData(protoValue.getArray)
+      case _ =>
+        throw new IllegalArgumentException()
     }
   }
 

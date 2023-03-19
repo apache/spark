@@ -349,12 +349,6 @@ private[classification] trait LogisticRegressionEstimatorParams extends Logistic
   @Since("1.6.0")
   def setWeightCol(value: String): this.type = set(weightCol, value)
 
-  @Since("1.5.0")
-  override def setThresholds(value: Array[Double]): this.type = super.setThresholds(value)
-
-  @Since("1.5.0")
-  override def getThresholds: Array[Double] = super.getThresholds
-
   /**
    * Suggested depth for treeAggregate (greater than or equal to 2).
    * If the dimensions of features or the number of partitions are large,

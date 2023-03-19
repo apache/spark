@@ -27,8 +27,8 @@ import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
 case class ModelRef(refId: String)
 
 object ModelRef {
-  def fromProto(proto: proto.ModelRef): ModelRef = {
-    ModelRef(proto.getId)
+  def fromProto(protoValue: proto.ModelRef): ModelRef = {
+    ModelRef(protoValue.getId)
   }
 
   def toProto(modelRef: ModelRef): proto.ModelRef = {

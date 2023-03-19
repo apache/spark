@@ -17,12 +17,13 @@
 
 package org.apache.spark.ml.classification
 
+import org.apache.spark.SparkException
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.{Model, ModelRef}
 import org.apache.spark.ml.linalg.{Matrix, Vector}
-import org.apache.spark.ml.param.{Param, ParamMap}
+import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.util.{HasTrainingSummary, Identifiable}
-import org.apache.spark.sql.{DataFrame, Dataset}
+import org.apache.spark.sql.Dataset
 
 
 class LogisticRegression @Since("3.5.0") (
@@ -45,7 +46,8 @@ class LogisticRegression @Since("3.5.0") (
 @Since("1.4.0")
 class LogisticRegressionModel private[spark] (@Since("1.4.0") override val uid: String)
   extends ProbabilisticClassificationModel[Vector, LogisticRegressionModel]
-    with LogisticRegressionParams with HasTrainingSummary[LogisticRegressionTrainingSummary] {
+    with LogisticRegressionParams
+    with HasTrainingSummary[LogisticRegressionTrainingSummary, LogisticRegressionModel] {
 
   def coefficientMatrix: Matrix = getModelAttr("coefficientMatrix").asInstanceOf[Matrix]
 
@@ -70,7 +72,25 @@ class LogisticRegressionModel private[spark] (@Since("1.4.0") override val uid: 
    * if `hasSummary` is false.
    */
   @Since("1.5.0")
-  override def summary: LogisticRegressionTrainingSummary = super.summary
+  override def summary: LogisticRegressionTrainingSummary = {
+    val thisModel = this.asInstanceOf[Model[_]]
+    if (hasSummary) {
+      if (numClasses > 2) {
+        new LogisticRegressionTrainingSummary{
+          override def model: Model[_] = thisModel
+          override def datasetOpt: Option[Dataset[_]] = None
+        }
+      } else {
+        new BinaryLogisticRegressionTrainingSummary{
+          override def model: Model[_] = thisModel
+          override def datasetOpt: Option[Dataset[_]] = None
+        }
+      }
+    } else {
+      throw new SparkException(
+        s"No training summary available for this ${this.getClass.getSimpleName}")
+    }
+  }
 
   /**
    * Gets summary of model on training set. An exception is thrown
@@ -91,19 +111,18 @@ class LogisticRegressionModel private[spark] (@Since("1.4.0") override val uid: 
    */
   @Since("2.0.0")
   def evaluate(dataset: Dataset[_]): LogisticRegressionSummary = {
-    val weightColName = if (!isDefined(weightCol)) "weightCol" else $(weightCol)
     // Handle possible missing or invalid prediction columns
     val (summaryModel, probabilityColName, predictionColName) = findSummaryModel()
-    val model = this
+    val thisModel = this.asInstanceOf[Model[_]]
     val sumamryDatasetOpt = Some(summaryModel.transform(dataset))
     if (numClasses > 2) {
       new LogisticRegressionSummary{
-        override def model: Model[_] = model
+        override def model: Model[_] = thisModel
         override def datasetOpt: Option[Dataset[_]] = sumamryDatasetOpt
       }
     } else {
       new BinaryLogisticRegressionSummary{
-        override def model: Model[_] = model
+        override def model: Model[_] = thisModel
         override def datasetOpt: Option[Dataset[_]] = sumamryDatasetOpt
       }
     }

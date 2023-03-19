@@ -21,9 +21,6 @@ import org.apache.spark.annotation.Since
 import org.apache.spark.ml.{PredictionModel, Predictor}
 import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.ml.param.ParamMap
-import org.apache.spark.ml.util._
-import org.apache.spark.sql.{DataFrame, Dataset}
-import org.apache.spark.sql.types.StructType
 
 /**
  * Single-label binary or multiclass classification. Classes are indexed {0, 1, ..., numClasses -

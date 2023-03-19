@@ -15,15 +15,27 @@
  * limitations under the License.
  */
 
-package org.apache.spark.ml
+package org.apache.spark.ml.util
 
-import org.apache.spark.internal.Logging
-import org.apache.spark.ml.param.{ParamMap, Params}
+import org.apache.spark.annotation.Since
+import org.apache.spark.ml.Model
 
 /**
- * A stage in a pipeline, either an [[Estimator]] or a [[Transformer]].
+ * Trait for models that provides Training summary.
+ *
+ * @tparam T Summary instance type
  */
-abstract class PipelineStage extends Params with Logging {
+@Since("3.0.0")
+private[ml] trait HasTrainingSummary[T, M <: Model[M]] extends Model[M] {
 
-  override def copy(extra: ParamMap): PipelineStage
+  /** Indicates whether a training summary exists for this model instance. */
+  @Since("3.0.0")
+  def hasSummary: Boolean = getModelAttr("hasSummary").asInstanceOf[Boolean]
+
+  /**
+   * Gets summary of model on training set. An exception is
+   * thrown if if `hasSummary` is false.
+   */
+  @Since("3.0.0")
+  def summary: T
 }
