@@ -882,6 +882,10 @@ class SparkConnectClient(object):
                             schema = dt
                         if b.HasField("sql_command_result"):
                             properties["sql_command_result"] = b.sql_command_result.relation
+                        if b.HasField("streaming_query_start_result"):
+                            properties["streaming_query_start_result"] = b.streaming_query_start_result
+                        if b.HasField("streaming_query_command_result"):
+                            properties["streaming_query_command_result"] = b.streaming_query_command_result
                         if b.HasField("arrow_batch"):
                             logger.debug(
                                 f"Received arrow batch rows={b.arrow_batch.row_count} "

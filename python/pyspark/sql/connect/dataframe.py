@@ -56,6 +56,7 @@ from pyspark.rdd import PythonEvalType
 import pyspark.sql.connect.plan as plan
 from pyspark.sql.connect.group import GroupedData
 from pyspark.sql.connect.readwriter import DataFrameWriter, DataFrameWriterV2
+from pyspark.sql.connect.streaming.readwriter import DataStreamWriter
 from pyspark.sql.connect.column import Column
 from pyspark.sql.connect.expressions import UnresolvedRegex
 from pyspark.sql.connect.functions import (
@@ -719,6 +720,33 @@ class DataFrame:
     unpivot.__doc__ = PySparkDataFrame.unpivot.__doc__
 
     melt = unpivot
+
+    def withWatermark(self, eventTime: str, delayThreshold: str) -> "DataFrame":
+        # TODO: reuse error handling code sql.DataFrame.
+        if not eventTime or type(eventTime) is not str:
+            raise PySparkTypeError(
+                error_class="NOT_STR",
+                message_parameters={"arg_name": "eventTime", "arg_type": type(eventTime).__name__},
+            )
+        if not delayThreshold or type(delayThreshold) is not str:
+            raise PySparkTypeError(
+                error_class="NOT_STR",
+                message_parameters={
+                    "arg_name": "delayThreshold",
+                    "arg_type": type(delayThreshold).__name__,
+                },
+            )
+
+        return DataFrame.withPlan(
+            plan.WithWatermark(
+                self._plan,
+                event_time=eventTime,
+                delay_threshold=delayThreshold,
+            ),
+            session=self._session,
+        )
+
+    withWatermark.__doc__ = PySparkDataFrame.withWatermark.__doc__
 
     def hint(
         self, name: str, *parameters: Union["PrimitiveType", List["PrimitiveType"]]
@@ -1396,6 +1424,7 @@ class DataFrame:
     def isStreaming(self) -> bool:
         if self._plan is None:
             raise Exception("Cannot analyze on empty plan.")
+        # TODO: Revisit this.
         query = self._plan.to_proto(self._session.client)
         result = self._session.client._analyze(method="is_streaming", plan=query).is_streaming
         assert result is not None
@@ -1547,10 +1576,8 @@ class DataFrame:
     def persist(self, *args: Any, **kwargs: Any) -> None:
         raise NotImplementedError("persist() is not implemented.")
 
-    def withWatermark(self, *args: Any, **kwargs: Any) -> None:
-        raise NotImplementedError("withWatermark() is not implemented.")
-
     def foreach(self, *args: Any, **kwargs: Any) -> None:
+        # TODO: Need to support
         raise NotImplementedError("foreach() is not implemented.")
 
     def foreachPartition(self, *args: Any, **kwargs: Any) -> None:
@@ -1616,8 +1643,12 @@ class DataFrame:
 
     mapInArrow.__doc__ = PySparkDataFrame.mapInArrow.__doc__
 
-    def writeStream(self, *args: Any, **kwargs: Any) -> None:
-        raise NotImplementedError("writeStream() is not implemented.")
+    @property
+    def writeStream(self) -> DataStreamWriter:
+        return DataStreamWriter(plan=self._plan, session=self._session)
+    # TODO: Move it to same relative place in sql/dataframe.py.
+
+    writeStream.__doc__ = PySparkDataFrame.writeStream.__doc__
 
     def toJSON(self, *args: Any, **kwargs: Any) -> None:
         raise NotImplementedError("toJSON() is not implemented.")

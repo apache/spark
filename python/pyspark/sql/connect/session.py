@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+
 from pyspark.sql.connect.utils import check_dependencies
 
 check_dependencies(__name__)
@@ -52,6 +53,7 @@ from pyspark.sql.connect.conf import RuntimeConf
 from pyspark.sql.connect.dataframe import DataFrame
 from pyspark.sql.connect.plan import SQL, Range, LocalRelation, CachedRelation
 from pyspark.sql.connect.readwriter import DataFrameReader
+from pyspark.sql.connect.streaming import DataStreamReader
 from pyspark.sql.pandas.serializers import ArrowStreamPandasSerializer
 from pyspark.sql.pandas.types import to_arrow_schema, to_arrow_type, _get_local_timezone
 from pyspark.sql.session import classproperty, SparkSession as PySparkSession
@@ -166,6 +168,10 @@ class SparkSession:
         return DataFrameReader(self)
 
     read.__doc__ = PySparkSession.read.__doc__
+
+    @property
+    def readStream(self) -> "DataStreamReader":
+        return DataStreamReader(self)
 
     def _inferSchemaFromList(
         self, data: Iterable[Any], names: Optional[List[str]] = None
@@ -483,10 +489,6 @@ class SparkSession:
     @property
     def streams(self) -> Any:
         raise NotImplementedError("streams() is not implemented.")
-
-    @property
-    def readStream(self) -> Any:
-        raise NotImplementedError("readStream() is not implemented.")
 
     @property
     def _jsc(self) -> None:

@@ -260,6 +260,7 @@ class DataSource(LogicalPlan):
         options: Optional[Mapping[str, str]] = None,
         paths: Optional[List[str]] = None,
         predicates: Optional[List[str]] = None,
+        is_streaming: Optional[bool] = None,
     ) -> None:
         super().__init__(None)
 
@@ -284,6 +285,7 @@ class DataSource(LogicalPlan):
         self._options = options
         self._paths = paths
         self._predicates = predicates
+        self._is_streaming = is_streaming
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
         plan = self._create_proto_relation()
@@ -298,6 +300,8 @@ class DataSource(LogicalPlan):
             plan.read.data_source.paths.extend(self._paths)
         if self._predicates is not None and len(self._predicates) > 0:
             plan.read.data_source.predicates.extend(self._predicates)
+        if self._is_streaming is not None:
+            plan.read.is_streaming = self._is_streaming
         return plan
 
 
@@ -467,6 +471,21 @@ class WithColumns(LogicalPlan):
                 alias.metadata = self._metadata[i]
             plan.with_columns.aliases.append(alias)
 
+        return plan
+
+
+class WithWatermark(LogicalPlan):
+    """Logical plan object for a WithWatermark operation."""
+    def __init__(self, child: Optional["LogicalPlan"], event_time: str,  delay_threshold: str):
+        super().__init__(child)
+        self._event_time = event_time
+        self._delay_threshold = delay_threshold
+
+    def plan(self, session: "SparkConnectClient") -> proto.Relation:
+        plan = self._create_proto_relation()
+        plan.with_watermark.input.CopyFrom(self._child.plan(session))
+        plan.with_watermark.event_time = self._event_time
+        plan.with_watermark.delay_threshold = self._delay_threshold
         return plan
 
 
@@ -1555,6 +1574,41 @@ class WriteOperationV2(LogicalPlan):
             else:
                 raise ValueError(f"Unknown Mode value for DataFrame: {self.mode}")
         return plan
+
+
+class WriteStreamOperation(LogicalPlan):
+    def __init__(self, child: "LogicalPlan") -> None:
+        super(WriteStreamOperation, self).__init__(child)
+        self.source: Optional[str] = None
+        self.partitioning_columns: List["ColumnOrName"] = []
+        self.options: dict[str, Optional[str]] = {}
+        self.trigger: Optional[str] = None
+        self.output_mode: Optional[str] = None
+        self.query_name: Optional[str] = None
+        self.path: Optional[str] = None
+
+    def command(self, session: "SparkConnectClient") -> proto.Command:
+        assert self._child is not None
+        write_stream = proto.WriteStreamOperation()
+        write_stream.input.CopyFrom(self._child.plan(session))
+        if self.source:
+            write_stream.format = self.source
+        if self.partitioning_columns:
+            write_stream.partitioning_column_names.extend(self.partitioning_columns)
+        for k, v in self.options.items():
+            write_stream.options[k] = v
+        if self.trigger:
+            write_stream.trigger = self.trigger
+        if self.output_mode:
+            write_stream.output_mode = self.output_mode
+        if self.query_name:
+            write_stream.query_name = self.query_name
+        if self.path:
+            write_stream.path = self.path
+
+        cmd = proto.Command()
+        cmd.write_stream_operation.CopyFrom(write_stream)
+        return cmd
 
 
 # Catalog API (internal-only)

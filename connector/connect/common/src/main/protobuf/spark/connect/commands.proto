@@ -35,6 +35,8 @@ message Command {
     CreateDataFrameViewCommand create_dataframe_view = 3;
     WriteOperationV2 write_operation_v2 = 4;
     SqlCommand sql_command = 5;
+    WriteStreamOperation write_stream_operation = 6;
+    StreamingQueryCommand streaming_query_command = 7;
 
     // This field is used to mark extensions to the protocol. When plugins generate arbitrary
     // Commands they can add them here. During the planning the correct resolution is done.
@@ -173,4 +175,81 @@ message WriteOperationV2 {
 
   // (Optional) A condition for overwrite saving mode
   Expression overwrite_condition = 8;
+}
+
+message WriteStreamOperation {
+
+  // (Required) The output of the `input` streaming relation will be written.
+  Relation input = 1;
+
+  string format = 2;
+
+  map<string, string> options = 3;
+  repeated string partitioning_column_names = 4;
+  string trigger = 5; // TODO: Add more trigger types.
+  string output_mode = 6; // TODO: Make this an enum.
+  string query_name = 7;
+  string path = 8;
+  // TODO add table_name
+}
+
+message StreamingQueryStartResult {
+
+  string name = 1;
+
+  // (Required)
+  string id = 2;
+
+  // (Required)
+  string run_id = 3;
+
+  // TODO: How do we indicate errors?
+  // TODO: Consider adding StreamingQueryStatusResult here.
+}
+
+message StreamingQueryCommand {
+
+  // (Required)
+  string id = 1;
+
+  oneof command_type {
+      StreamingQueryStatusCommand status = 3;
+      StreamingQueryStopCommand stop = 4;
+      // Add more commands like await_termination()
+  }
+}
+
+message StreamingQueryStatusCommand {
+  int32 recent_progress_limit = 1;
+}
+
+message StreamingQueryStopCommand {
+
+}
+
+message StreamingQueryCommandResult {
+  // (Required)
+  string id = 1;
+
+  oneof result_type {
+    StreamingQueryStatusResult status_result = 3;
+    // No response is required for stop.
+  }
+}
+
+message StreamingQueryStatusResult {
+  // Fetch all the relevant status here.
+  // Rather than one call for each type of information.
+
+  // Fields from Scala 'StreamingQueryStatus' struct
+  string status_message = 1;
+  bool is_data_available = 2;
+  bool is_trigger_active = 3;
+
+  bool is_active = 4;
+
+  // Progress as json.
+  repeated string recent_progress_json = 5;
+
+  // TODO: Add exception and other fields.
 }
