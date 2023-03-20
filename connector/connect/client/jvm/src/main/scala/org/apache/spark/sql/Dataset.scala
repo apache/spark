@@ -1020,11 +1020,8 @@ class Dataset[T] private[sql] (
    * @since 3.4.0
    */
   @scala.annotation.varargs
-  def select(cols: Column*): DataFrame = sparkSession.newDataFrame { builder =>
-    builder.getProjectBuilder
-      .setInput(plan.getRoot)
-      .addAllExpressions(cols.map(_.expr).asJava)
-  }
+  def select(cols: Column*): DataFrame =
+    selectUntyped(UnboundRowEncoder, cols).asInstanceOf[DataFrame]
 
   /**
    * Selects a set of columns. This is a variant of `select` that can only select existing columns
@@ -1091,10 +1088,18 @@ class Dataset[T] private[sql] (
    */
   private def selectUntyped(columns: TypedColumn[_, _]*): Dataset[_] = {
     val encoder = ProductEncoder.tuple(columns.map(_.encoder))
+    selectUntyped(encoder, columns)
+  }
+
+  /**
+   * Internal helper function for all select methods. The only difference between the select
+   * methods and typed select methods is the encoder used to build the return dataset.
+   */
+  private def selectUntyped(encoder: AgnosticEncoder[_], cols: Seq[Column]): Dataset[_] = {
     sparkSession.newDataset(encoder) { builder =>
       builder.getProjectBuilder
         .setInput(plan.getRoot)
-        .addAllExpressions(columns.map(_.expr).asJava)
+        .addAllExpressions(cols.map(_.expr).asJava)
     }
   }
 
