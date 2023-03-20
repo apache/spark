@@ -64,20 +64,8 @@ class GroupedApplyInPandasTests(GroupedApplyInPandasTestsMixin, ReusedConnectTes
     @unittest.skip(
         "Spark Connect does not support sc._jvm.org.apache.log4j but the test depends on it."
     )
-    def test_apply_in_pandas_returning_wrong_column_names(self):
-        super().test_apply_in_pandas_returning_wrong_column_names()
-
-    @unittest.skip(
-        "Spark Connect does not support sc._jvm.org.apache.log4j but the test depends on it."
-    )
     def test_apply_in_pandas_returning_no_column_names_and_wrong_amount(self):
         super().test_apply_in_pandas_returning_no_column_names_and_wrong_amount()
-
-    @unittest.skip(
-        "Spark Connect does not support sc._jvm.org.apache.log4j but the test depends on it."
-    )
-    def test_apply_in_pandas_returning_incompatible_type(self):
-        super().test_apply_in_pandas_returning_incompatible_type()
 
     @unittest.skip(
         "Spark Connect does not support sc._jvm.org.apache.log4j but the test depends on it."
