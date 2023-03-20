@@ -62,7 +62,7 @@ class GroupedData(PandasGroupedOpsMixin):
     .. versionadded:: 1.3.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
     """
 
     def __init__(self, jgd: JavaObject, df: DataFrame):
@@ -102,7 +102,7 @@ class GroupedData(PandasGroupedOpsMixin):
         .. versionadded:: 1.3.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -182,7 +182,7 @@ class GroupedData(PandasGroupedOpsMixin):
         .. versionadded:: 1.3.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Examples
         --------
@@ -218,7 +218,7 @@ class GroupedData(PandasGroupedOpsMixin):
         .. versionadded:: 1.3.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -235,7 +235,7 @@ class GroupedData(PandasGroupedOpsMixin):
         .. versionadded:: 1.3.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -284,7 +284,7 @@ class GroupedData(PandasGroupedOpsMixin):
         .. versionadded:: 1.3.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Examples
         --------
@@ -328,7 +328,7 @@ class GroupedData(PandasGroupedOpsMixin):
         .. versionadded:: 1.3.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -377,7 +377,7 @@ class GroupedData(PandasGroupedOpsMixin):
         .. versionadded:: 1.3.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -431,7 +431,7 @@ class GroupedData(PandasGroupedOpsMixin):
         .. versionadded:: 1.6.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------

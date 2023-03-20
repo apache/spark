@@ -1038,7 +1038,7 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
         .withLimit(123)
         .build()
         .trim() ==
-      "SELECT a,b FROM test     FETCH FIRST 123 ROWS ONLY")
+      "SELECT a,b FROM test      FETCH FIRST 123 ROWS ONLY")
   }
 
   test("table exists query by jdbc dialect") {

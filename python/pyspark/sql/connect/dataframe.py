@@ -50,7 +50,7 @@ from pyspark.sql.dataframe import (
     DataFrameStatFunctions as PySparkDataFrameStatFunctions,
 )
 
-from pyspark.errors import PySparkTypeError
+from pyspark.errors import PySparkTypeError, PySparkAttributeError
 from pyspark.errors.exceptions.connect import SparkConnectException
 from pyspark.rdd import PythonEvalType
 import pyspark.sql.connect.plan as plan
@@ -1304,6 +1304,10 @@ class DataFrame:
         return None
 
     def __getattr__(self, name: str) -> "Column":
+        if name in ["_jseq", "_jdf", "_jmap", "_jcols"]:
+            raise PySparkAttributeError(
+                error_class="JVM_ATTRIBUTE_NOT_SUPPORTED", message_parameters={"attr_name": name}
+            )
         return self[name]
 
     @overload
@@ -1344,9 +1348,9 @@ class DataFrame:
         if self._session is None:
             raise Exception("Cannot collect on empty session.")
         query = self._plan.to_proto(self._session.client)
-        table = self._session.client.to_table(query)
+        table, schema = self._session.client.to_table(query)
 
-        schema = from_arrow_schema(table.schema)
+        schema = schema or from_arrow_schema(table.schema)
 
         assert schema is not None and isinstance(schema, StructType)
 
@@ -1567,8 +1571,11 @@ class DataFrame:
     def pandas_api(self, *args: Any, **kwargs: Any) -> None:
         raise NotImplementedError("pandas_api() is not implemented.")
 
-    def registerTempTable(self, *args: Any, **kwargs: Any) -> None:
-        raise NotImplementedError("registerTempTable() is not implemented.")
+    def registerTempTable(self, name: str) -> None:
+        warnings.warn("Deprecated in 2.0, use createOrReplaceTempView instead.", FutureWarning)
+        self.createOrReplaceTempView(name)
+
+    registerTempTable.__doc__ = PySparkDataFrame.registerTempTable.__doc__
 
     def storageLevel(self, *args: Any, **kwargs: Any) -> None:
         raise NotImplementedError("storageLevel() is not implemented.")
@@ -1618,9 +1625,6 @@ class DataFrame:
     def _repr_html_(self, *args: Any, **kwargs: Any) -> None:
         raise NotImplementedError("_repr_html_() is not implemented.")
 
-    def semanticHash(self, *args: Any, **kwargs: Any) -> None:
-        raise NotImplementedError("semanticHash() is not implemented.")
-
     def sameSemantics(self, other: "DataFrame") -> bool:
         assert self._plan is not None
         assert other._plan is not None
@@ -1630,6 +1634,14 @@ class DataFrame:
         )
 
     sameSemantics.__doc__ = PySparkDataFrame.sameSemantics.__doc__
+
+    def semanticHash(self) -> int:
+        assert self._plan is not None
+        return self._session.client.semantic_hash(
+            plan=self._plan.to_proto(self._session.client),
+        )
+
+    semanticHash.__doc__ = PySparkDataFrame.semanticHash.__doc__
 
     def writeTo(self, table: str) -> "DataFrameWriterV2":
         assert self._plan is not None

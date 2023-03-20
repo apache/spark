@@ -401,6 +401,7 @@ class AnalyzeResult:
         spark_version: Optional[str],
         parsed: Optional[DataType],
         is_same_semantics: Optional[bool],
+        semantic_hash: Optional[int],
     ):
         self.schema = schema
         self.explain_string = explain_string
@@ -411,6 +412,7 @@ class AnalyzeResult:
         self.spark_version = spark_version
         self.parsed = parsed
         self.is_same_semantics = is_same_semantics
+        self.semantic_hash = semantic_hash
 
     @classmethod
     def fromProto(cls, pb: Any) -> "AnalyzeResult":
@@ -423,6 +425,7 @@ class AnalyzeResult:
         spark_version: Optional[str] = None
         parsed: Optional[DataType] = None
         is_same_semantics: Optional[bool] = None
+        semantic_hash: Optional[int] = None
 
         if pb.HasField("schema"):
             schema = types.proto_schema_to_pyspark_data_type(pb.schema.schema)
@@ -442,6 +445,8 @@ class AnalyzeResult:
             parsed = types.proto_schema_to_pyspark_data_type(pb.ddl_parse.parsed)
         elif pb.HasField("same_semantics"):
             is_same_semantics = pb.same_semantics.result
+        elif pb.HasField("semantic_hash"):
+            semantic_hash = pb.semantic_hash.result
         else:
             raise SparkConnectException("No analyze result found!")
 
@@ -455,6 +460,7 @@ class AnalyzeResult:
             spark_version,
             parsed,
             is_same_semantics,
+            semantic_hash,
         )
 
 
@@ -613,16 +619,16 @@ class SparkConnectClient(object):
             for x in metrics
         ]
 
-    def to_table(self, plan: pb2.Plan) -> "pa.Table":
+    def to_table(self, plan: pb2.Plan) -> Tuple["pa.Table", Optional[StructType]]:
         """
         Return given plan as a PyArrow Table.
         """
         logger.info(f"Executing plan {self._proto_to_string(plan)}")
         req = self._execute_plan_request_with_metadata()
         req.plan.CopyFrom(plan)
-        table, _, _, _3 = self._execute_and_fetch(req)
+        table, schema, _, _, _ = self._execute_and_fetch(req)
         assert table is not None
-        return table
+        return table, schema
 
     def to_pandas(self, plan: pb2.Plan) -> "pd.DataFrame":
         """
@@ -631,7 +637,7 @@ class SparkConnectClient(object):
         logger.info(f"Executing plan {self._proto_to_string(plan)}")
         req = self._execute_plan_request_with_metadata()
         req.plan.CopyFrom(plan)
-        table, metrics, observed_metrics, _ = self._execute_and_fetch(req)
+        table, _, metrics, observed_metrics, _ = self._execute_and_fetch(req)
         assert table is not None
         column_names = table.column_names
         table = table.rename_columns([f"col_{i}" for i in range(len(column_names))])
@@ -690,7 +696,7 @@ class SparkConnectClient(object):
         if self._user_id:
             req.user_context.user_id = self._user_id
         req.plan.command.CopyFrom(command)
-        data, _, _, properties = self._execute_and_fetch(req)
+        data, _, _, _, properties = self._execute_and_fetch(req)
         if data is not None:
             return (data.to_pandas(), properties)
         else:
@@ -701,6 +707,14 @@ class SparkConnectClient(object):
         return if two plans have the same semantics.
         """
         result = self._analyze(method="same_semantics", plan=plan, other=other).is_same_semantics
+        assert result is not None
+        return result
+
+    def semantic_hash(self, plan: pb2.Plan) -> int:
+        """
+        returns a `hashCode` of the logical query plan.
+        """
+        result = self._analyze(method="semantic_hash", plan=plan).semantic_hash
         assert result is not None
         return result
 
@@ -782,6 +796,8 @@ class SparkConnectClient(object):
         elif method == "same_semantics":
             req.same_semantics.target_plan.CopyFrom(cast(pb2.Plan, kwargs.get("plan")))
             req.same_semantics.other_plan.CopyFrom(cast(pb2.Plan, kwargs.get("other")))
+        elif method == "semantic_hash":
+            req.semantic_hash.plan.CopyFrom(cast(pb2.Plan, kwargs.get("plan")))
         else:
             raise ValueError(f"Unknown Analyze method: {method}")
 
@@ -828,12 +844,19 @@ class SparkConnectClient(object):
 
     def _execute_and_fetch(
         self, req: pb2.ExecutePlanRequest
-    ) -> Tuple[Optional["pa.Table"], List[PlanMetrics], List[PlanObservedMetrics], Dict[str, Any]]:
+    ) -> Tuple[
+        Optional["pa.Table"],
+        Optional[StructType],
+        List[PlanMetrics],
+        List[PlanObservedMetrics],
+        Dict[str, Any],
+    ]:
         logger.info("ExecuteAndFetch")
 
         m: Optional[pb2.ExecutePlanResponse.Metrics] = None
         om: List[pb2.ExecutePlanResponse.ObservedMetrics] = []
         batches: List[pa.RecordBatch] = []
+        schema: Optional[StructType] = None
         properties = {}
         try:
             for attempt in Retrying(
@@ -853,6 +876,10 @@ class SparkConnectClient(object):
                         if b.observed_metrics is not None:
                             logger.debug("Received observed metric batch.")
                             om.extend(b.observed_metrics)
+                        if b.HasField("schema"):
+                            dt = types.proto_schema_to_pyspark_data_type(b.schema)
+                            assert isinstance(dt, StructType)
+                            schema = dt
                         if b.HasField("sql_command_result"):
                             properties["sql_command_result"] = b.sql_command_result.relation
                         if b.HasField("arrow_batch"):
@@ -872,9 +899,9 @@ class SparkConnectClient(object):
 
         if len(batches) > 0:
             table = pa.Table.from_batches(batches=batches)
-            return table, metrics, observed_metrics, properties
+            return table, schema, metrics, observed_metrics, properties
         else:
-            return None, metrics, observed_metrics, properties
+            return None, schema, metrics, observed_metrics, properties
 
     def _config_request_with_metadata(self) -> pb2.ConfigRequest:
         req = pb2.ConfigRequest()

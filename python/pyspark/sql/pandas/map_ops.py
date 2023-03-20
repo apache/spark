@@ -50,7 +50,7 @@ class PandasMapOpsMixin:
         .. versionadded:: 3.0.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------

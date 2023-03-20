@@ -92,7 +92,7 @@ class Catalog:
         .. versionadded:: 3.4.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Examples
         --------
@@ -107,7 +107,7 @@ class Catalog:
         .. versionadded:: 3.4.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -126,7 +126,7 @@ class Catalog:
         .. versionadded:: 3.4.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Returns
         -------
@@ -147,7 +147,7 @@ class Catalog:
         .. versionadded:: 2.0.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Returns
         -------
@@ -168,7 +168,7 @@ class Catalog:
         .. versionadded:: 2.0.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Examples
         --------
@@ -183,7 +183,7 @@ class Catalog:
         .. versionadded:: 2.0.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Returns
         -------
@@ -216,7 +216,7 @@ class Catalog:
         .. versionadded:: 3.4.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -252,7 +252,7 @@ class Catalog:
         .. versionadded:: 3.3.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -291,7 +291,7 @@ class Catalog:
         .. versionadded:: 2.0.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -353,7 +353,7 @@ class Catalog:
         .. versionadded:: 3.4.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -412,7 +412,7 @@ class Catalog:
         .. versionadded:: 3.4.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -466,7 +466,7 @@ class Catalog:
         .. versionadded:: 3.3.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -518,7 +518,7 @@ class Catalog:
         .. versionadded:: 3.4.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -572,7 +572,7 @@ class Catalog:
         .. versionadded:: 2.0.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -638,7 +638,7 @@ class Catalog:
         .. versionadded:: 3.3.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -739,7 +739,7 @@ class Catalog:
         .. versionadded:: 2.0.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Returns
         -------
@@ -765,7 +765,7 @@ class Catalog:
         .. versionadded:: 2.2.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -838,7 +838,7 @@ class Catalog:
         .. versionadded:: 2.0.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -878,7 +878,7 @@ class Catalog:
         .. versionadded:: 2.1.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -924,7 +924,7 @@ class Catalog:
             Use :func:`spark.udf.register` instead.
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
         """
         warnings.warn("Deprecated in 2.3.0. Use spark.udf.register instead.", FutureWarning)
         return self._sparkSession.udf.register(name, f, returnType)
@@ -936,7 +936,7 @@ class Catalog:
         .. versionadded:: 2.0.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -980,7 +980,7 @@ class Catalog:
         .. versionadded:: 2.0.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -1017,7 +1017,7 @@ class Catalog:
         .. versionadded:: 2.0.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -1058,7 +1058,7 @@ class Catalog:
         .. versionadded:: 2.0.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Examples
         --------
@@ -1077,7 +1077,7 @@ class Catalog:
         .. versionadded:: 2.0.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -1129,7 +1129,7 @@ class Catalog:
         .. versionadded:: 2.1.1
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -1176,7 +1176,7 @@ class Catalog:
         .. versionadded:: 2.2.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------

@@ -350,6 +350,23 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
             ],
         ) -> None: ...
 
+    class SemanticHash(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        PLAN_FIELD_NUMBER: builtins.int
+        @property
+        def plan(self) -> global___Plan:
+            """(Required) The logical plan to get a hashCode."""
+        def __init__(
+            self,
+            *,
+            plan: global___Plan | None = ...,
+        ) -> None: ...
+        def HasField(
+            self, field_name: typing_extensions.Literal["plan", b"plan"]
+        ) -> builtins.bool: ...
+        def ClearField(self, field_name: typing_extensions.Literal["plan", b"plan"]) -> None: ...
+
     SESSION_ID_FIELD_NUMBER: builtins.int
     USER_CONTEXT_FIELD_NUMBER: builtins.int
     CLIENT_TYPE_FIELD_NUMBER: builtins.int
@@ -362,6 +379,7 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
     SPARK_VERSION_FIELD_NUMBER: builtins.int
     DDL_PARSE_FIELD_NUMBER: builtins.int
     SAME_SEMANTICS_FIELD_NUMBER: builtins.int
+    SEMANTIC_HASH_FIELD_NUMBER: builtins.int
     session_id: builtins.str
     """(Required)
 
@@ -395,6 +413,8 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
     def ddl_parse(self) -> global___AnalyzePlanRequest.DDLParse: ...
     @property
     def same_semantics(self) -> global___AnalyzePlanRequest.SameSemantics: ...
+    @property
+    def semantic_hash(self) -> global___AnalyzePlanRequest.SemanticHash: ...
     def __init__(
         self,
         *,
@@ -410,6 +430,7 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
         spark_version: global___AnalyzePlanRequest.SparkVersion | None = ...,
         ddl_parse: global___AnalyzePlanRequest.DDLParse | None = ...,
         same_semantics: global___AnalyzePlanRequest.SameSemantics | None = ...,
+        semantic_hash: global___AnalyzePlanRequest.SemanticHash | None = ...,
     ) -> None: ...
     def HasField(
         self,
@@ -434,6 +455,8 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
             b"same_semantics",
             "schema",
             b"schema",
+            "semantic_hash",
+            b"semantic_hash",
             "spark_version",
             b"spark_version",
             "tree_string",
@@ -465,6 +488,8 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
             b"same_semantics",
             "schema",
             b"schema",
+            "semantic_hash",
+            b"semantic_hash",
             "session_id",
             b"session_id",
             "spark_version",
@@ -492,6 +517,7 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
         "spark_version",
         "ddl_parse",
         "same_semantics",
+        "semantic_hash",
     ] | None: ...
 
 global___AnalyzePlanRequest = AnalyzePlanRequest
@@ -639,6 +665,20 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
             self, field_name: typing_extensions.Literal["result", b"result"]
         ) -> None: ...
 
+    class SemanticHash(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        RESULT_FIELD_NUMBER: builtins.int
+        result: builtins.int
+        def __init__(
+            self,
+            *,
+            result: builtins.int = ...,
+        ) -> None: ...
+        def ClearField(
+            self, field_name: typing_extensions.Literal["result", b"result"]
+        ) -> None: ...
+
     SESSION_ID_FIELD_NUMBER: builtins.int
     SCHEMA_FIELD_NUMBER: builtins.int
     EXPLAIN_FIELD_NUMBER: builtins.int
@@ -649,6 +689,7 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
     SPARK_VERSION_FIELD_NUMBER: builtins.int
     DDL_PARSE_FIELD_NUMBER: builtins.int
     SAME_SEMANTICS_FIELD_NUMBER: builtins.int
+    SEMANTIC_HASH_FIELD_NUMBER: builtins.int
     session_id: builtins.str
     @property
     def schema(self) -> global___AnalyzePlanResponse.Schema: ...
@@ -668,6 +709,8 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
     def ddl_parse(self) -> global___AnalyzePlanResponse.DDLParse: ...
     @property
     def same_semantics(self) -> global___AnalyzePlanResponse.SameSemantics: ...
+    @property
+    def semantic_hash(self) -> global___AnalyzePlanResponse.SemanticHash: ...
     def __init__(
         self,
         *,
@@ -681,6 +724,7 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
         spark_version: global___AnalyzePlanResponse.SparkVersion | None = ...,
         ddl_parse: global___AnalyzePlanResponse.DDLParse | None = ...,
         same_semantics: global___AnalyzePlanResponse.SameSemantics | None = ...,
+        semantic_hash: global___AnalyzePlanResponse.SemanticHash | None = ...,
     ) -> None: ...
     def HasField(
         self,
@@ -701,6 +745,8 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
             b"same_semantics",
             "schema",
             b"schema",
+            "semantic_hash",
+            b"semantic_hash",
             "spark_version",
             b"spark_version",
             "tree_string",
@@ -726,6 +772,8 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
             b"same_semantics",
             "schema",
             b"schema",
+            "semantic_hash",
+            b"semantic_hash",
             "session_id",
             b"session_id",
             "spark_version",
@@ -746,6 +794,7 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
         "spark_version",
         "ddl_parse",
         "same_semantics",
+        "semantic_hash",
     ] | None: ...
 
 global___AnalyzePlanResponse = AnalyzePlanResponse
@@ -1007,6 +1056,7 @@ class ExecutePlanResponse(google.protobuf.message.Message):
     EXTENSION_FIELD_NUMBER: builtins.int
     METRICS_FIELD_NUMBER: builtins.int
     OBSERVED_METRICS_FIELD_NUMBER: builtins.int
+    SCHEMA_FIELD_NUMBER: builtins.int
     session_id: builtins.str
     @property
     def arrow_batch(self) -> global___ExecutePlanResponse.ArrowBatch: ...
@@ -1028,6 +1078,9 @@ class ExecutePlanResponse(google.protobuf.message.Message):
         global___ExecutePlanResponse.ObservedMetrics
     ]:
         """The metrics observed during the execution of the query plan."""
+    @property
+    def schema(self) -> pyspark.sql.connect.proto.types_pb2.DataType:
+        """(Optional) The Spark schema. This field is available when `collect` is called."""
     def __init__(
         self,
         *,
@@ -1038,6 +1091,7 @@ class ExecutePlanResponse(google.protobuf.message.Message):
         metrics: global___ExecutePlanResponse.Metrics | None = ...,
         observed_metrics: collections.abc.Iterable[global___ExecutePlanResponse.ObservedMetrics]
         | None = ...,
+        schema: pyspark.sql.connect.proto.types_pb2.DataType | None = ...,
     ) -> None: ...
     def HasField(
         self,
@@ -1050,6 +1104,8 @@ class ExecutePlanResponse(google.protobuf.message.Message):
             b"metrics",
             "response_type",
             b"response_type",
+            "schema",
+            b"schema",
             "sql_command_result",
             b"sql_command_result",
         ],
@@ -1067,6 +1123,8 @@ class ExecutePlanResponse(google.protobuf.message.Message):
             b"observed_metrics",
             "response_type",
             b"response_type",
+            "schema",
+            b"schema",
             "session_id",
             b"session_id",
             "sql_command_result",
@@ -1555,6 +1613,7 @@ class AddArtifactsRequest(google.protobuf.message.Message):
 
     SESSION_ID_FIELD_NUMBER: builtins.int
     USER_CONTEXT_FIELD_NUMBER: builtins.int
+    CLIENT_TYPE_FIELD_NUMBER: builtins.int
     BATCH_FIELD_NUMBER: builtins.int
     BEGIN_CHUNK_FIELD_NUMBER: builtins.int
     CHUNK_FIELD_NUMBER: builtins.int
@@ -1568,6 +1627,11 @@ class AddArtifactsRequest(google.protobuf.message.Message):
     @property
     def user_context(self) -> global___UserContext:
         """User context"""
+    client_type: builtins.str
+    """Provides optional information about the client sending the request. This field
+    can be used for language or version specific information and is only intended for
+    logging purposes and will not be interpreted by the server.
+    """
     @property
     def batch(self) -> global___AddArtifactsRequest.Batch: ...
     @property
@@ -1586,6 +1650,7 @@ class AddArtifactsRequest(google.protobuf.message.Message):
         *,
         session_id: builtins.str = ...,
         user_context: global___UserContext | None = ...,
+        client_type: builtins.str | None = ...,
         batch: global___AddArtifactsRequest.Batch | None = ...,
         begin_chunk: global___AddArtifactsRequest.BeginChunkedArtifact | None = ...,
         chunk: global___AddArtifactsRequest.ArtifactChunk | None = ...,
@@ -1593,12 +1658,16 @@ class AddArtifactsRequest(google.protobuf.message.Message):
     def HasField(
         self,
         field_name: typing_extensions.Literal[
+            "_client_type",
+            b"_client_type",
             "batch",
             b"batch",
             "begin_chunk",
             b"begin_chunk",
             "chunk",
             b"chunk",
+            "client_type",
+            b"client_type",
             "payload",
             b"payload",
             "user_context",
@@ -1608,12 +1677,16 @@ class AddArtifactsRequest(google.protobuf.message.Message):
     def ClearField(
         self,
         field_name: typing_extensions.Literal[
+            "_client_type",
+            b"_client_type",
             "batch",
             b"batch",
             "begin_chunk",
             b"begin_chunk",
             "chunk",
             b"chunk",
+            "client_type",
+            b"client_type",
             "payload",
             b"payload",
             "session_id",
@@ -1622,6 +1695,11 @@ class AddArtifactsRequest(google.protobuf.message.Message):
             b"user_context",
         ],
     ) -> None: ...
+    @typing.overload
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["_client_type", b"_client_type"]
+    ) -> typing_extensions.Literal["client_type"] | None: ...
+    @typing.overload
     def WhichOneof(
         self, oneof_group: typing_extensions.Literal["payload", b"payload"]
     ) -> typing_extensions.Literal["batch", "begin_chunk", "chunk"] | None: ...

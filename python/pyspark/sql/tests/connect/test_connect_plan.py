@@ -42,6 +42,7 @@ if should_test_connect:
         IntegerType,
         MapType,
         ArrayType,
+        DoubleType,
     )
 
 
@@ -985,6 +986,55 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
         self.assertEqual(len(l4.array.elements[0].array.elements), 2)
         self.assertEqual(len(l4.array.elements[1].array.elements), 2)
         self.assertEqual(len(l4.array.elements[2].array.elements), 0)
+
+    def test_literal_to_any_conversion(self):
+        for value in [
+            b"binary\0\0asas",
+            True,
+            False,
+            0,
+            12,
+            -1,
+            0.0,
+            1.234567,
+            decimal.Decimal(0.0),
+            decimal.Decimal(1.234567),
+            "sss",
+            datetime.date(2022, 12, 13),
+            datetime.datetime.now(),
+            datetime.timedelta(1, 2, 3),
+            [1, 2, 3, 4, 5, 6],
+            [-1.0, 2.0, 3.0],
+            ["x", "y", "z"],
+            [[1.0, 2.0, 3.0], [4.0, 5.0], [6.0]],
+        ]:
+            lit = LiteralExpression._from_value(value)
+            proto_lit = lit.to_plan(None).literal
+            value2 = LiteralExpression._to_value(proto_lit)
+            self.assertEqual(value, value2)
+
+        with self.assertRaises(AssertionError):
+            lit = LiteralExpression._from_value(1.234567)
+            proto_lit = lit.to_plan(None).literal
+            LiteralExpression._to_value(proto_lit, StringType())
+
+        with self.assertRaises(AssertionError):
+            lit = LiteralExpression._from_value("1.234567")
+            proto_lit = lit.to_plan(None).literal
+            LiteralExpression._to_value(proto_lit, DoubleType())
+
+        with self.assertRaises(AssertionError):
+            # build a array<string> proto literal, but with incorrect elements
+            proto_lit = proto.Expression().literal
+            proto_lit.array.element_type.CopyFrom(pyspark_types_to_proto_types(StringType()))
+            proto_lit.array.elements.append(
+                LiteralExpression("string", StringType()).to_plan(None).literal
+            )
+            proto_lit.array.elements.append(
+                LiteralExpression(1.234, DoubleType()).to_plan(None).literal
+            )
+
+            LiteralExpression._to_value(proto_lit, DoubleType)
 
 
 if __name__ == "__main__":
