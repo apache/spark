@@ -4595,7 +4595,9 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     }
   }
 
-  test("SPARK-40082: recomputation of shuffle map stage with no pending partitions should not hang") {
+  test("SPARK-40082: recomputation of shuffle map stage with no pending partitions" +
+    "should not hang") {
+
     initPushBasedShuffleConfs(conf)
     conf.set(config.SHUFFLE_MERGER_LOCATIONS_MIN_STATIC_THRESHOLD, 3)
     DAGSchedulerSuite.clearMergerLocs()
