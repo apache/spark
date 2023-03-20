@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.planning
 
+import scala.collection.mutable
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions._
@@ -296,12 +298,17 @@ object PhysicalAggregation {
       // build a set of semantically distinct aggregate expressions and re-write expressions so
       // that they reference the single copy of the aggregate function which actually gets computed.
       // Non-deterministic aggregate expressions are not deduplicated.
-      val equivalentAggregateExpressions = new EquivalentExpressions
+      val equivalentAggregateExpressions = mutable.Map.empty[Expression, Expression]
       val aggregateExpressions = resultExpressions.flatMap { expr =>
         expr.collect {
-          // addExpr() always returns false for non-deterministic expressions and do not add them.
           case a
-            if AggregateExpression.isAggregate(a) && !equivalentAggregateExpressions.addExpr(a) =>
+            if AggregateExpression.isAggregate(a) && (!a.deterministic ||
+              (if (equivalentAggregateExpressions.contains(a.canonicalized)) {
+                false
+              } else {
+                equivalentAggregateExpressions += a.canonicalized -> a
+                true
+              })) =>
             a
         }
       }
@@ -328,12 +335,12 @@ object PhysicalAggregation {
           case ae: AggregateExpression =>
             // The final aggregation buffer's attributes will be `finalAggregationAttributes`,
             // so replace each aggregate expression by its corresponding attribute in the set:
-            equivalentAggregateExpressions.getExprState(ae).map(_.expr)
-              .getOrElse(ae).asInstanceOf[AggregateExpression].resultAttribute
+            equivalentAggregateExpressions.getOrElse(ae.canonicalized, ae)
+              .asInstanceOf[AggregateExpression].resultAttribute
             // Similar to AggregateExpression
           case ue: PythonUDF if PythonUDF.isGroupedAggPandasUDF(ue) =>
-            equivalentAggregateExpressions.getExprState(ue).map(_.expr)
-              .getOrElse(ue).asInstanceOf[PythonUDF].resultAttribute
+            equivalentAggregateExpressions.getOrElse(ue.canonicalized, ue)
+              .asInstanceOf[PythonUDF].resultAttribute
           case expression if !expression.foldable =>
             // Since we're using `namedGroupingAttributes` to extract the grouping key
             // columns, we need to replace grouping key expressions with their corresponding
