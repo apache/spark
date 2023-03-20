@@ -1056,6 +1056,7 @@ class ExecutePlanResponse(google.protobuf.message.Message):
     EXTENSION_FIELD_NUMBER: builtins.int
     METRICS_FIELD_NUMBER: builtins.int
     OBSERVED_METRICS_FIELD_NUMBER: builtins.int
+    SCHEMA_FIELD_NUMBER: builtins.int
     session_id: builtins.str
     @property
     def arrow_batch(self) -> global___ExecutePlanResponse.ArrowBatch: ...
@@ -1077,6 +1078,9 @@ class ExecutePlanResponse(google.protobuf.message.Message):
         global___ExecutePlanResponse.ObservedMetrics
     ]:
         """The metrics observed during the execution of the query plan."""
+    @property
+    def schema(self) -> pyspark.sql.connect.proto.types_pb2.DataType:
+        """(Optional) The Spark schema. This field is available when `collect` is called."""
     def __init__(
         self,
         *,
@@ -1087,6 +1091,7 @@ class ExecutePlanResponse(google.protobuf.message.Message):
         metrics: global___ExecutePlanResponse.Metrics | None = ...,
         observed_metrics: collections.abc.Iterable[global___ExecutePlanResponse.ObservedMetrics]
         | None = ...,
+        schema: pyspark.sql.connect.proto.types_pb2.DataType | None = ...,
     ) -> None: ...
     def HasField(
         self,
@@ -1099,6 +1104,8 @@ class ExecutePlanResponse(google.protobuf.message.Message):
             b"metrics",
             "response_type",
             b"response_type",
+            "schema",
+            b"schema",
             "sql_command_result",
             b"sql_command_result",
         ],
@@ -1116,6 +1123,8 @@ class ExecutePlanResponse(google.protobuf.message.Message):
             b"observed_metrics",
             "response_type",
             b"response_type",
+            "schema",
+            b"schema",
             "session_id",
             b"session_id",
             "sql_command_result",
@@ -1604,6 +1613,7 @@ class AddArtifactsRequest(google.protobuf.message.Message):
 
     SESSION_ID_FIELD_NUMBER: builtins.int
     USER_CONTEXT_FIELD_NUMBER: builtins.int
+    CLIENT_TYPE_FIELD_NUMBER: builtins.int
     BATCH_FIELD_NUMBER: builtins.int
     BEGIN_CHUNK_FIELD_NUMBER: builtins.int
     CHUNK_FIELD_NUMBER: builtins.int
@@ -1617,6 +1627,11 @@ class AddArtifactsRequest(google.protobuf.message.Message):
     @property
     def user_context(self) -> global___UserContext:
         """User context"""
+    client_type: builtins.str
+    """Provides optional information about the client sending the request. This field
+    can be used for language or version specific information and is only intended for
+    logging purposes and will not be interpreted by the server.
+    """
     @property
     def batch(self) -> global___AddArtifactsRequest.Batch: ...
     @property
@@ -1635,6 +1650,7 @@ class AddArtifactsRequest(google.protobuf.message.Message):
         *,
         session_id: builtins.str = ...,
         user_context: global___UserContext | None = ...,
+        client_type: builtins.str | None = ...,
         batch: global___AddArtifactsRequest.Batch | None = ...,
         begin_chunk: global___AddArtifactsRequest.BeginChunkedArtifact | None = ...,
         chunk: global___AddArtifactsRequest.ArtifactChunk | None = ...,
@@ -1642,12 +1658,16 @@ class AddArtifactsRequest(google.protobuf.message.Message):
     def HasField(
         self,
         field_name: typing_extensions.Literal[
+            "_client_type",
+            b"_client_type",
             "batch",
             b"batch",
             "begin_chunk",
             b"begin_chunk",
             "chunk",
             b"chunk",
+            "client_type",
+            b"client_type",
             "payload",
             b"payload",
             "user_context",
@@ -1657,12 +1677,16 @@ class AddArtifactsRequest(google.protobuf.message.Message):
     def ClearField(
         self,
         field_name: typing_extensions.Literal[
+            "_client_type",
+            b"_client_type",
             "batch",
             b"batch",
             "begin_chunk",
             b"begin_chunk",
             "chunk",
             b"chunk",
+            "client_type",
+            b"client_type",
             "payload",
             b"payload",
             "session_id",
@@ -1671,6 +1695,11 @@ class AddArtifactsRequest(google.protobuf.message.Message):
             b"user_context",
         ],
     ) -> None: ...
+    @typing.overload
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["_client_type", b"_client_type"]
+    ) -> typing_extensions.Literal["client_type"] | None: ...
+    @typing.overload
     def WhichOneof(
         self, oneof_group: typing_extensions.Literal["payload", b"payload"]
     ) -> typing_extensions.Literal["batch", "begin_chunk", "chunk"] | None: ...

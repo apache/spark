@@ -63,6 +63,7 @@ message Relation {
     MapPartitions map_partitions = 28;
     CollectMetrics collect_metrics = 29;
     Parse parse = 30;
+    GroupMap group_map = 31;
 
     // NA functions
     NAFill fill_na = 90;
@@ -786,6 +787,17 @@ message MapPartitions {
 
   // (Required) Input user-defined function.
   CommonInlineUserDefinedFunction func = 2;
+}
+
+message GroupMap {
+  // (Required) Input relation for Group Map API: apply, applyInPandas.
+  Relation input = 1;
+
+  // (Required) Expressions for grouping keys.
+  repeated Expression grouping_expressions = 2;
+
+  // (Required) Input user-defined function.
+  CommonInlineUserDefinedFunction func = 3;
 }
 
 // Collect arbitrary (named) metrics from a dataset.

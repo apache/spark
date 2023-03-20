@@ -90,31 +90,4 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCT
   override def supportsIndex: Boolean = true
 
   override def indexOptions: String = "FILLFACTOR=70"
-
-  testOffset()
-  testLimitAndOffset()
-  testPaging()
-
-  testVarPop()
-  testVarPop(true)
-  testVarSamp()
-  testVarSamp(true)
-  testStddevPop()
-  testStddevPop(true)
-  testStddevSamp()
-  testStddevSamp(true)
-  testCovarPop()
-  testCovarPop(true)
-  testCovarSamp()
-  testCovarSamp(true)
-  testCorr()
-  testCorr(true)
-  testRegrIntercept()
-  testRegrIntercept(true)
-  testRegrSlope()
-  testRegrSlope(true)
-  testRegrR2()
-  testRegrR2(true)
-  testRegrSXY()
-  testRegrSXY(true)
 }

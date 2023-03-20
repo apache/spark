@@ -8,9 +8,9 @@ license: |
   The ASF licenses this file to You under the Apache License, Version 2.0
   (the "License"); you may not use this file except in compliance with
   the License.  You may obtain a copy of the License at
- 
+
      http://www.apache.org/licenses/LICENSE-2.0
- 
+
   Unless required by applicable law or agreed to in writing, software
   distributed under the License is distributed on an "AS IS" BASIS,
   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -39,7 +39,7 @@ See [Application Submission Guide](submitting-applications.html) for more detail
 
 ## Load and Save Functions
 
-Since `spark-avro` module is external, there is no `.avro` API in 
+Since `spark-avro` module is external, there is no `.avro` API in
 `DataFrameReader` or `DataFrameWriter`.
 
 To load/save data in Avro format, you need to specify the data source option `format` as `avro`(or `org.apache.spark.sql.avro`).
@@ -84,8 +84,8 @@ write.df(select(df, "name", "favorite_color"), "namesAndFavColors.avro", "avro")
 </div>
 
 ## to_avro() and from_avro()
-The Avro package provides function `to_avro` to encode a column as binary in Avro 
-format, and `from_avro()` to decode Avro binary data into a column. Both functions transform one column to 
+The Avro package provides function `to_avro` to encode a column as binary in Avro
+format, and `from_avro()` to decode Avro binary data into a column. Both functions transform one column to
 another column, and the input/output SQL data type can be a complex type or a primitive type.
 
 Using Avro record as columns is useful when reading from or writing to a streaming source like Kafka. Each
@@ -233,8 +233,8 @@ Data source options of Avro can be set via:
  * the `.option` method on `DataFrameReader` or `DataFrameWriter`.
  * the `options` parameter in function `from_avro`.
 
-<table class="table">
-  <tr><th><b>Property Name</b></th><th><b>Default</b></th><th><b>Meaning</b></th><th><b>Scope</b></th><th><b>Since Version</b></th></tr>
+<table class="table table-striped">
+  <thead><tr><th><b>Property Name</b></th><th><b>Default</b></th><th><b>Meaning</b></th><th><b>Scope</b></th><th><b>Since Version</b></th></tr></thead>
   <tr>
     <td><code>avroSchema</code></td>
     <td>None</td>
@@ -244,7 +244,7 @@ Data source options of Avro can be set via:
           When reading Avro files or calling function <code>from_avro</code>, this option can be set to an evolved schema, which is compatible but different with
           the actual Avro schema. The deserialization schema will be consistent with the evolved schema.
           For example, if we set an evolved schema containing one additional column with a default value,
-          the reading result in Spark will contain the new column too. Note that when using this option with 
+          the reading result in Spark will contain the new column too. Note that when using this option with
           <code>from_avro</code>, you still need to pass the actual Avro schema as a parameter to the function.
         </li>
         <li>
@@ -325,8 +325,8 @@ Data source options of Avro can be set via:
 
 ## Configuration
 Configuration of Avro can be done using the `setConf` method on SparkSession or by running `SET key=value` commands using SQL.
-<table class="table">
-  <tr><th><b>Property Name</b></th><th><b>Default</b></th><th><b>Meaning</b></th><th><b>Since Version</b></th></tr>
+<table class="table table-striped">
+  <thead><tr><th><b>Property Name</b></th><th><b>Default</b></th><th><b>Meaning</b></th><th><b>Since Version</b></th></tr></thead>
   <tr>
     <td>spark.sql.legacy.replaceDatabricksSparkAvro.enabled</td>
     <td>true</td>
@@ -392,28 +392,28 @@ Configuration of Avro can be done using the `setConf` method on SparkSession or 
 </table>
 
 ## Compatibility with Databricks spark-avro
-This Avro data source module is originally from and compatible with Databricks's open source repository 
+This Avro data source module is originally from and compatible with Databricks's open source repository
 [spark-avro](https://github.com/databricks/spark-avro).
 
-By default with the SQL configuration `spark.sql.legacy.replaceDatabricksSparkAvro.enabled` enabled, the data source provider `com.databricks.spark.avro` is 
-mapped to this built-in Avro module. For the Spark tables created with `Provider` property as `com.databricks.spark.avro` in 
-catalog meta store, the mapping is essential to load these tables if you are using this built-in Avro module. 
+By default with the SQL configuration `spark.sql.legacy.replaceDatabricksSparkAvro.enabled` enabled, the data source provider `com.databricks.spark.avro` is
+mapped to this built-in Avro module. For the Spark tables created with `Provider` property as `com.databricks.spark.avro` in
+catalog meta store, the mapping is essential to load these tables if you are using this built-in Avro module.
 
-Note in Databricks's [spark-avro](https://github.com/databricks/spark-avro), implicit classes 
-`AvroDataFrameWriter` and `AvroDataFrameReader` were created for shortcut function `.avro()`. In this 
-built-in but external module, both implicit classes are removed. Please use `.format("avro")` in 
+Note in Databricks's [spark-avro](https://github.com/databricks/spark-avro), implicit classes
+`AvroDataFrameWriter` and `AvroDataFrameReader` were created for shortcut function `.avro()`. In this
+built-in but external module, both implicit classes are removed. Please use `.format("avro")` in
 `DataFrameWriter` or `DataFrameReader` instead, which should be clean and good enough.
 
-If you prefer using your own build of `spark-avro` jar file, you can simply disable the configuration 
-`spark.sql.legacy.replaceDatabricksSparkAvro.enabled`, and use the option `--jars` on deploying your 
+If you prefer using your own build of `spark-avro` jar file, you can simply disable the configuration
+`spark.sql.legacy.replaceDatabricksSparkAvro.enabled`, and use the option `--jars` on deploying your
 applications. Read the [Advanced Dependency Management](https://spark.apache
-.org/docs/latest/submitting-applications.html#advanced-dependency-management) section in Application 
-Submission Guide for more details. 
+.org/docs/latest/submitting-applications.html#advanced-dependency-management) section in Application
+Submission Guide for more details.
 
 ## Supported types for Avro -> Spark SQL conversion
 Currently Spark supports reading all [primitive types](https://avro.apache.org/docs/1.11.1/specification/#primitive-types) and [complex types](https://avro.apache.org/docs/1.11.1/specification/#complex-types) under records of Avro.
-<table class="table">
-  <tr><th><b>Avro type</b></th><th><b>Spark SQL type</b></th></tr>
+<table class="table table-striped">
+  <thead><tr><th><b>Avro type</b></th><th><b>Spark SQL type</b></th></tr></thead>
   <tr>
     <td>boolean</td>
     <td>BooleanType</td>
@@ -477,8 +477,8 @@ All other union types are considered complex. They will be mapped to StructType 
 
 It also supports reading the following Avro [logical types](https://avro.apache.org/docs/1.11.1/specification/#logical-types):
 
-<table class="table">
-  <tr><th><b>Avro logical type</b></th><th><b>Avro type</b></th><th><b>Spark SQL type</b></th></tr>
+<table class="table table-striped">
+  <thead><tr><th><b>Avro logical type</b></th><th><b>Avro type</b></th><th><b>Spark SQL type</b></th></tr></thead>
   <tr>
     <td>date</td>
     <td>int</td>
@@ -510,8 +510,8 @@ At the moment, it ignores docs, aliases and other properties present in the Avro
 ## Supported types for Spark SQL -> Avro conversion
 Spark supports writing of all Spark SQL types into Avro. For most types, the mapping from Spark types to Avro types is straightforward (e.g. IntegerType gets converted to int); however, there are a few special cases which are listed below:
 
-<table class="table">
-<tr><th><b>Spark SQL type</b></th><th><b>Avro type</b></th><th><b>Avro logical type</b></th></tr>
+<table class="table table-striped">
+<thead><tr><th><b>Spark SQL type</b></th><th><b>Avro type</b></th><th><b>Avro logical type</b></th></tr></thead>
   <tr>
     <td>ByteType</td>
     <td>int</td>
@@ -546,8 +546,8 @@ Spark supports writing of all Spark SQL types into Avro. For most types, the map
 
 You can also specify the whole output Avro schema with the option `avroSchema`, so that Spark SQL types can be converted into other Avro types. The following conversions are not applied by default and require user specified Avro schema:
 
-<table class="table">
-  <tr><th><b>Spark SQL type</b></th><th><b>Avro type</b></th><th><b>Avro logical type</b></th></tr>
+<table class="table table-striped">
+  <thead><tr><th><b>Spark SQL type</b></th><th><b>Avro type</b></th><th><b>Avro logical type</b></th></tr></thead>
   <tr>
     <td>BinaryType</td>
     <td>fixed</td>

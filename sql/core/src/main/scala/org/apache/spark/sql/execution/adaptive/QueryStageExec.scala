@@ -180,6 +180,8 @@ case class ShuffleQueryStageExec(
       throw new IllegalStateException(s"wrong plan for shuffle stage:\n ${plan.treeString}")
   }
 
+  def advisoryPartitionSize: Option[Long] = shuffle.advisoryPartitionSize
+
   @transient private lazy val shuffleFuture = shuffle.submitShuffleJob
 
   override protected def doMaterialize(): Future[Any] = shuffleFuture

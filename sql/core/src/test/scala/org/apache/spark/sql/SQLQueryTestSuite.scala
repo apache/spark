@@ -211,6 +211,14 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
       AnsiAnalyzerTestCase(newName, inputFile, newResultFile)
   }
 
+  /** An ANSI-related test case. */
+  protected case class AnsiTestCase(
+      name: String, inputFile: String, resultFile: String) extends TestCase with AnsiTest
+
+  /** An analyzer test that shows the analyzed plan string as output. */
+  protected case class AnalyzerTestCase(
+      name: String, inputFile: String, resultFile: String) extends TestCase with AnalyzerTest
+
   /** A PostgreSQL test case. */
   protected case class PgSQLTestCase(
       name: String, inputFile: String, resultFile: String) extends TestCase with PgSQLTest {
@@ -460,11 +468,10 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
           val (_, output) =
             handleExceptions(getNormalizedQueryAnalysisResult(localSparkSession, sql))
           // We might need to do some query canonicalization in the future.
-          val result = AnalyzerOutput(
+          AnalyzerOutput(
             sql = sql,
             schema = None,
             output = output.mkString("\n").replaceAll("\\s+$", ""))
-          result
         case _ =>
           val (schema, output) =
             handleExceptions(getNormalizedQueryExecutionResult(localSparkSession, sql))
@@ -529,6 +536,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
         file.getAbsolutePath.replace(inputFilePath, analyzerGoldenFilePath) + ".out"
       val absPath = file.getAbsolutePath
       val testCaseName = absPath.stripPrefix(inputFilePath).stripPrefix(File.separator)
+      val analyzerTestCaseName = s"${testCaseName}_analyzer_test"
 
       // Create test cases of test types that depend on the input filename.
       val newTestCases: Seq[TestCase] = if (file.getAbsolutePath.startsWith(

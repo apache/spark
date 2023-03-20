@@ -52,6 +52,9 @@ import org.apache.spark.tags.DockerTest
  */
 @DockerTest
 class OracleNamespaceSuite extends DockerJDBCIntegrationSuite with V2JDBCNamespaceTest {
+
+  override def excluded: Seq[String] = Seq("listNamespaces: basic behavior", "Drop namespace")
+
   override val db = new DatabaseOnDocker {
     lazy override val imageName =
       sys.env.getOrElse("ORACLE_DOCKER_IMAGE_NAME", "gvenzl/oracle-xe:21.3.0")

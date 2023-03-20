@@ -48,6 +48,9 @@ class PandasGroupedOpsMixin:
 
         .. versionadded:: 2.3.0
 
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
+
         Parameters
         ----------
         udf : :func:`pyspark.sql.functions.pandas_udf`
@@ -127,6 +130,9 @@ class PandasGroupedOpsMixin:
         The length of the returned `pandas.DataFrame` can be arbitrary.
 
         .. versionadded:: 3.0.0
+
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
 
         Parameters
         ----------
