@@ -1714,6 +1714,10 @@ class PlanGenerationTestSuite
     fn.array_distinct(fn.col("e"))
   }
 
+  functionTest("array_prepend") {
+    fn.array_prepend(fn.col("e"), lit(1))
+  }
+
   functionTest("array_intersect") {
     fn.array_intersect(fn.col("e"), fn.array(lit(10), lit(4)))
   }

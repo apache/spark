@@ -51,8 +51,8 @@ For connection properties, users can specify the JDBC connection properties in t
 <code>user</code> and <code>password</code> are normally provided as connection properties for
 logging into the data sources.
 
-<table class="table">
-  <tr><th><b>Property Name</b></th><th><b>Default</b></th><th><b>Meaning</b></th><th><b>Scope</b></th></tr>
+<table class="table table-striped">
+  <thead><tr><th><b>Property Name</b></th><th><b>Default</b></th><th><b>Meaning</b></th><th><b>Scope</b></th></tr></thead>
   <tr>
     <td><code>url</code></td>
     <td>(none)</td>
@@ -281,36 +281,36 @@ logging into the data sources.
 
   <tr>
     <td><code>pushDownAggregate</code></td>
-    <td><code>false</code></td>
+    <td><code>true</code></td>
     <td>
-     The option to enable or disable aggregate push-down in V2 JDBC data source. The default value is false, in which case Spark will not push down aggregates to the JDBC data source. Otherwise, if sets to true, aggregates will be pushed down to the JDBC data source. Aggregate push-down is usually turned off when the aggregate is performed faster by Spark than by the JDBC data source. Please note that aggregates can be pushed down if and only if all the aggregate functions and the related filters can be pushed down. If <code>numPartitions</code> equals to 1 or the group by key is the same as <code>partitionColumn</code>, Spark will push down aggregate to data source completely and not apply a final aggregate over the data source output. Otherwise, Spark will apply a final aggregate over the data source output.
+     The option to enable or disable aggregate push-down in V2 JDBC data source. The default value is true, in which case Spark will push down aggregates to the JDBC data source. Otherwise, if sets to false, aggregates will not be pushed down to the JDBC data source. Aggregate push-down is usually turned off when the aggregate is performed faster by Spark than by the JDBC data source. Please note that aggregates can be pushed down if and only if all the aggregate functions and the related filters can be pushed down. If <code>numPartitions</code> equals to 1 or the group by key is the same as <code>partitionColumn</code>, Spark will push down aggregate to data source completely and not apply a final aggregate over the data source output. Otherwise, Spark will apply a final aggregate over the data source output.
     </td>
     <td>read</td>
   </tr>
 
   <tr>
     <td><code>pushDownLimit</code></td>
-    <td><code>false</code></td>
+    <td><code>true</code></td>
     <td>
-     The option to enable or disable LIMIT push-down into V2 JDBC data source. The LIMIT push-down also includes LIMIT + SORT , a.k.a. the Top N operator. The default value is false, in which case Spark does not push down LIMIT or LIMIT with SORT to the JDBC data source. Otherwise, if sets to true, LIMIT or LIMIT with SORT is pushed down to the JDBC data source. If <code>numPartitions</code> is greater than 1, Spark still applies LIMIT or LIMIT with SORT on the result from data source even if LIMIT or LIMIT with SORT is pushed down. Otherwise, if LIMIT or LIMIT with SORT is pushed down and <code>numPartitions</code> equals to 1, Spark will not apply LIMIT or LIMIT with SORT on the result from data source.
+     The option to enable or disable LIMIT push-down into V2 JDBC data source. The LIMIT push-down also includes LIMIT + SORT , a.k.a. the Top N operator. The default value is true, in which case Spark push down LIMIT or LIMIT with SORT to the JDBC data source. Otherwise, if sets to false, LIMIT or LIMIT with SORT is not pushed down to the JDBC data source. If <code>numPartitions</code> is greater than 1, Spark still applies LIMIT or LIMIT with SORT on the result from data source even if LIMIT or LIMIT with SORT is pushed down. Otherwise, if LIMIT or LIMIT with SORT is pushed down and <code>numPartitions</code> equals to 1, Spark will not apply LIMIT or LIMIT with SORT on the result from data source.
     </td>
     <td>read</td>
   </tr>
 
   <tr>
     <td><code>pushDownOffset</code></td>
-    <td><code>false</code></td>
+    <td><code>true</code></td>
     <td>
-     The option to enable or disable OFFSET push-down into V2 JDBC data source. The default value is false, in which case Spark will not push down OFFSET to the JDBC data source. Otherwise, if sets to true, Spark will try to push down OFFSET to the JDBC data source. If <code>pushDownOffset</code> is true and <code>numPartitions</code> is equal to 1, OFFSET will be pushed down to the JDBC data source. Otherwise, OFFSET will not be pushed down and Spark still applies OFFSET on the result from data source.
+     The option to enable or disable OFFSET push-down into V2 JDBC data source. The default value is true, in which case Spark will push down OFFSET to the JDBC data source. Otherwise, if sets to false, Spark will not try to push down OFFSET to the JDBC data source. If <code>pushDownOffset</code> is true and <code>numPartitions</code> is equal to 1, OFFSET will be pushed down to the JDBC data source. Otherwise, OFFSET will not be pushed down and Spark still applies OFFSET on the result from data source.
     </td>
     <td>read</td>
   </tr>
 
   <tr>
     <td><code>pushDownTableSample</code></td>
-    <td><code>false</code></td>
+    <td><code>true</code></td>
     <td>
-     The option to enable or disable TABLESAMPLE push-down into V2 JDBC data source. The default value is false, in which case Spark does not push down TABLESAMPLE to the JDBC data source. Otherwise, if value sets to true, TABLESAMPLE is pushed down to the JDBC data source.
+     The option to enable or disable TABLESAMPLE push-down into V2 JDBC data source. The default value is true, in which case Spark push down TABLESAMPLE to the JDBC data source. Otherwise, if value sets to false, TABLESAMPLE is not pushed down to the JDBC data source.
     </td>
     <td>read</td>
   </tr>
@@ -352,7 +352,7 @@ logging into the data sources.
       </ol>
     </td>
     <td>read/write</td>
-  </tr>  
+  </tr>
 
   <tr>
     <td><code>connectionProvider</code></td>

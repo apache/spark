@@ -54,6 +54,11 @@ from pyspark.sql.connect.udf import _create_udf
 from pyspark.sql import functions as pysparkfuncs
 from pyspark.sql.types import _from_numpy_type, DataType, StructType, ArrayType, StringType
 
+# The implementation of pandas_udf is embedded in pyspark.sql.function.pandas_udf
+# for code reuse.
+from pyspark.sql.functions import pandas_udf  # noqa: F401
+
+
 if TYPE_CHECKING:
     from pyspark.sql.connect._typing import (
         ColumnOrName,
@@ -2466,10 +2471,6 @@ def udf(
 udf.__doc__ = pysparkfuncs.udf.__doc__
 
 
-def pandas_udf(*args: Any, **kwargs: Any) -> None:
-    raise NotImplementedError("pandas_udf() is not implemented.")
-
-
 def _test() -> None:
     import sys
     import doctest
@@ -2480,9 +2481,6 @@ def _test() -> None:
 
     # Spark Connect does not support Spark Context but the test depends on that.
     del pyspark.sql.connect.functions.monotonically_increasing_id.__doc__
-
-    # TODO(SPARK-41843): Implement SparkSession.udf
-    del pyspark.sql.connect.functions.call_udf.__doc__
 
     globs["spark"] = (
         PySparkSession.builder.appName("sql.connect.functions tests")

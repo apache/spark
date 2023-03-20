@@ -272,6 +272,9 @@ message ExecutePlanResponse {
   // The metrics observed during the execution of the query plan.
   repeated ObservedMetrics observed_metrics = 6;
 
+  // (Optional) The Spark schema. This field is available when `collect` is called.
+  DataType schema = 7;
+
   // A SQL command returns an opaque Relation that can be directly used as input for the next
   // call.
   message SqlCommandResult {
@@ -412,6 +415,11 @@ message AddArtifactsRequest {
 
   // User context
   UserContext user_context = 2;
+
+  // Provides optional information about the client sending the request. This field
+  // can be used for language or version specific information and is only intended for
+  // logging purposes and will not be interpreted by the server.
+  optional string client_type = 6;
 
   // A chunk of an Artifact.
   message ArtifactChunk {

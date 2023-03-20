@@ -37,6 +37,27 @@ import org.apache.spark.tags.DockerTest
  */
 @DockerTest
 class MySQLIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest {
+
+  override def excluded: Seq[String] = Seq(
+    "scan with aggregate push-down: VAR_POP with DISTINCT",
+    "scan with aggregate push-down: VAR_SAMP with DISTINCT",
+    "scan with aggregate push-down: STDDEV_POP with DISTINCT",
+    "scan with aggregate push-down: STDDEV_SAMP with DISTINCT",
+    "scan with aggregate push-down: COVAR_POP with DISTINCT",
+    "scan with aggregate push-down: COVAR_POP without DISTINCT",
+    "scan with aggregate push-down: COVAR_SAMP with DISTINCT",
+    "scan with aggregate push-down: COVAR_SAMP without DISTINCT",
+    "scan with aggregate push-down: CORR with DISTINCT",
+    "scan with aggregate push-down: CORR without DISTINCT",
+    "scan with aggregate push-down: REGR_INTERCEPT with DISTINCT",
+    "scan with aggregate push-down: REGR_INTERCEPT without DISTINCT",
+    "scan with aggregate push-down: REGR_SLOPE with DISTINCT",
+    "scan with aggregate push-down: REGR_SLOPE without DISTINCT",
+    "scan with aggregate push-down: REGR_R2 with DISTINCT",
+    "scan with aggregate push-down: REGR_R2 without DISTINCT",
+    "scan with aggregate push-down: REGR_SXY with DISTINCT",
+    "scan with aggregate push-down: REGR_SXY without DISTINCT")
+
   override val catalogName: String = "mysql"
   override val db = new DatabaseOnDocker {
     override val imageName = sys.env.getOrElse("MYSQL_DOCKER_IMAGE_NAME", "mysql:8.0.31")
@@ -124,13 +145,4 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest
   override def supportListIndexes: Boolean = true
 
   override def indexOptions: String = "KEY_BLOCK_SIZE=10"
-
-  testOffset()
-  testLimitAndOffset()
-  testPaging()
-
-  testVarPop()
-  testVarSamp()
-  testStddevPop()
-  testStddevSamp()
 }

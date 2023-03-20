@@ -37,6 +37,7 @@ from pyspark.sql.types import (
     NullType,
     DecimalType,
     StringType,
+    UserDefinedType,
 )
 
 from pyspark.sql.connect.types import to_arrow_schema
@@ -78,6 +79,8 @@ class LocalDataToArrowConversion:
             return True
         elif isinstance(dataType, StringType):
             # Coercion to StringType is allowed
+            return True
+        elif isinstance(dataType, UserDefinedType):
             return True
         else:
             return False
@@ -229,6 +232,19 @@ class LocalDataToArrowConversion:
 
             return convert_string
 
+        elif isinstance(dataType, UserDefinedType):
+            udt: UserDefinedType = dataType
+
+            conv = LocalDataToArrowConversion._create_converter(dataType.sqlType())
+
+            def convert_udt(value: Any) -> Any:
+                if value is None:
+                    return None
+                else:
+                    return conv(udt.serialize(value))
+
+            return convert_udt
+
         else:
 
             return lambda value: value
@@ -285,6 +301,8 @@ class ArrowTableToRowsConversion:
             return True
         elif isinstance(dataType, (TimestampType, TimestampNTZType)):
             # Always remove the time zone info for now
+            return True
+        elif isinstance(dataType, UserDefinedType):
             return True
         else:
             return False
@@ -379,6 +397,19 @@ class ArrowTableToRowsConversion:
                         return value
 
             return convert_timestample
+
+        elif isinstance(dataType, UserDefinedType):
+            udt: UserDefinedType = dataType
+
+            conv = ArrowTableToRowsConversion._create_converter(dataType.sqlType())
+
+            def convert_udt(value: Any) -> Any:
+                if value is None:
+                    return None
+                else:
+                    return udt.deserialize(conv(value))
+
+            return convert_udt
 
         else:
 
