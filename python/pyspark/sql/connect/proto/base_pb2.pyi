@@ -1056,6 +1056,7 @@ class ExecutePlanResponse(google.protobuf.message.Message):
     EXTENSION_FIELD_NUMBER: builtins.int
     METRICS_FIELD_NUMBER: builtins.int
     OBSERVED_METRICS_FIELD_NUMBER: builtins.int
+    SCHEMA_FIELD_NUMBER: builtins.int
     session_id: builtins.str
     @property
     def arrow_batch(self) -> global___ExecutePlanResponse.ArrowBatch: ...
@@ -1077,6 +1078,9 @@ class ExecutePlanResponse(google.protobuf.message.Message):
         global___ExecutePlanResponse.ObservedMetrics
     ]:
         """The metrics observed during the execution of the query plan."""
+    @property
+    def schema(self) -> pyspark.sql.connect.proto.types_pb2.DataType:
+        """(Optional) The Spark schema. This field is available when `collect` is called."""
     def __init__(
         self,
         *,
@@ -1087,6 +1091,7 @@ class ExecutePlanResponse(google.protobuf.message.Message):
         metrics: global___ExecutePlanResponse.Metrics | None = ...,
         observed_metrics: collections.abc.Iterable[global___ExecutePlanResponse.ObservedMetrics]
         | None = ...,
+        schema: pyspark.sql.connect.proto.types_pb2.DataType | None = ...,
     ) -> None: ...
     def HasField(
         self,
@@ -1099,6 +1104,8 @@ class ExecutePlanResponse(google.protobuf.message.Message):
             b"metrics",
             "response_type",
             b"response_type",
+            "schema",
+            b"schema",
             "sql_command_result",
             b"sql_command_result",
         ],
@@ -1116,6 +1123,8 @@ class ExecutePlanResponse(google.protobuf.message.Message):
             b"observed_metrics",
             "response_type",
             b"response_type",
+            "schema",
+            b"schema",
             "session_id",
             b"session_id",
             "sql_command_result",

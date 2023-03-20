@@ -1,6 +1,6 @@
 ---
 layout: global
-displayTitle: Spark Overview
+displayTitle: Apache Spark Overview
 title: Overview
 description: Apache Spark SPARK_VERSION_SHORT documentation homepage
 license: |
@@ -10,20 +10,15 @@ license: |
   The ASF licenses this file to You under the Apache License, Version 2.0
   (the "License"); you may not use this file except in compliance with
   the License.  You may obtain a copy of the License at
- 
+
      http://www.apache.org/licenses/LICENSE-2.0
- 
+
   Unless required by applicable law or agreed to in writing, software
   distributed under the License is distributed on an "AS IS" BASIS,
   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
   See the License for the specific language governing permissions and
   limitations under the License.
 ---
-
-Apache Spark is a unified analytics engine for large-scale data processing.
-It provides high-level APIs in Java, Scala, Python, and R,
-and an optimized engine that supports general execution graphs.
-It also supports a rich set of higher-level tools including [Spark SQL](sql-programming-guide.html) for SQL and structured data processing, [pandas API on Spark](api/python/getting_started/quickstart_ps.html) for pandas workloads, [MLlib](ml-guide.html) for machine learning, [GraphX](graphx-programming-guide.html) for graph processing, and [Structured Streaming](structured-streaming-programming-guide.html) for incremental computation and stream processing.
 
 # Downloading
 
@@ -33,7 +28,7 @@ Users can also download a "Hadoop free" binary and run Spark with any Hadoop ver
 Scala and Java users can include Spark in their projects using its Maven coordinates and Python users can install Spark from PyPI.
 
 
-If you'd like to build Spark from 
+If you'd like to build Spark from
 source, visit [Building Spark](building-spark.html).
 
 
@@ -114,12 +109,12 @@ options for deployment:
 **Programming Guides:**
 
 * [Quick Start](quick-start.html): a quick introduction to the Spark API; start here!
-* [RDD Programming Guide](rdd-programming-guide.html): overview of Spark basics - RDDs (core but old API), accumulators, and broadcast variables  
+* [RDD Programming Guide](rdd-programming-guide.html): overview of Spark basics - RDDs (core but old API), accumulators, and broadcast variables
 * [Spark SQL, Datasets, and DataFrames](sql-programming-guide.html): processing structured data with relational queries (newer API than RDDs)
 * [Structured Streaming](structured-streaming-programming-guide.html): processing structured data streams with relation queries (using Datasets and DataFrames, newer API than DStreams)
 * [Spark Streaming](streaming-programming-guide.html): processing data streams using DStreams (old API)
 * [MLlib](ml-guide.html): applying machine learning algorithms
-* [GraphX](graphx-programming-guide.html): processing graphs 
+* [GraphX](graphx-programming-guide.html): processing graphs
 * [SparkR](sparkr.html): processing data with Spark in R
 * [PySpark](api/python/getting_started/index.html): processing data with Spark in Python
 * [Spark SQL CLI](sql-distributed-sql-engine-spark-sql-cli.html): processing data with SQL on the command line

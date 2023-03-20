@@ -304,6 +304,9 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         .. versionadded:: 1.3.0
 
+        .. versionchanged:: 3.4.0
+            Supports Spark Connect.
+
         .. deprecated:: 2.0.0
             Use :meth:`DataFrame.createOrReplaceTempView` instead.
 

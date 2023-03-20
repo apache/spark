@@ -64,16 +64,6 @@ case class CoalesceShufflePartitions(session: SparkSession) extends AQEShuffleRe
         1
       }
     }
-    val advisoryTargetSize = conf.getConf(SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES)
-    val minPartitionSize = if (Utils.isTesting) {
-      // In the tests, we usually set the target size to a very small value that is even smaller
-      // than the default value of the min partition size. Here we also adjust the min partition
-      // size to be not larger than 20% of the target size, so that the tests don't need to set
-      // both configs all the time to check the coalescing behavior.
-      conf.getConf(SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_SIZE).min(advisoryTargetSize / 5)
-    } else {
-      conf.getConf(SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_SIZE)
-    }
 
     // Sub-plans under the Union operator can be coalesced independently, so we can divide them
     // into independent "coalesce groups", and all shuffle stages within each group have to be
@@ -100,6 +90,17 @@ case class CoalesceShufflePartitions(session: SparkSession) extends AQEShuffleRe
     val specsMap = mutable.HashMap.empty[Int, Seq[ShufflePartitionSpec]]
     // Coalesce partitions for each coalesce group independently.
     coalesceGroups.zip(minNumPartitionsByGroup).foreach { case (shuffleStages, minNumPartitions) =>
+      val advisoryTargetSize = advisoryPartitionSize(shuffleStages)
+      val minPartitionSize = if (Utils.isTesting) {
+        // In the tests, we usually set the target size to a very small value that is even smaller
+        // than the default value of the min partition size. Here we also adjust the min partition
+        // size to be not larger than 20% of the target size, so that the tests don't need to set
+        // both configs all the time to check the coalescing behavior.
+        conf.getConf(SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_SIZE).min(advisoryTargetSize / 5)
+      } else {
+        conf.getConf(SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_SIZE)
+      }
+
       val newPartitionSpecs = ShufflePartitionsUtil.coalescePartitions(
         shuffleStages.map(_.shuffleStage.mapStats),
         shuffleStages.map(_.partitionSpecs),
@@ -118,6 +119,15 @@ case class CoalesceShufflePartitions(session: SparkSession) extends AQEShuffleRe
       updateShuffleReads(plan, specsMap.toMap)
     } else {
       plan
+    }
+  }
+
+  private def advisoryPartitionSize(shuffleStages: Seq[ShuffleStageInfo]): Long = {
+    val advisorySizes = shuffleStages.flatMap(_.shuffleStage.advisoryPartitionSize).toSet
+    if (advisorySizes.size == 1) {
+      advisorySizes.head
+    } else {
+      conf.getConf(SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES)
     }
   }
 
