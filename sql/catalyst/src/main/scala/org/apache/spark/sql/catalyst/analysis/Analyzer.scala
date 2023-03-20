@@ -2690,7 +2690,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
     }
 
     private def trimAlias(expr: NamedExpression): Expression = expr match {
-      case ua: UnresolvedAlias => ua.child
+      case UnresolvedAlias(child, _) => child
       case Alias(child, _) => child
       case MultiAlias(child, _) => child
       case _ => expr
