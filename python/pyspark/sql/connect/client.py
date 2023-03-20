@@ -71,7 +71,8 @@ from pyspark.sql.connect.expressions import (
     CommonInlineUserDefinedFunction,
     JavaUDF,
 )
-from pyspark.sql.types import DataType, StructType
+from pyspark.sql.pandas.types import _check_series_localize_timestamps, _convert_map_items_to_dict
+from pyspark.sql.types import DataType, MapType, StructType, TimestampType
 from pyspark.rdd import PythonEvalType
 
 
@@ -637,12 +638,23 @@ class SparkConnectClient(object):
         logger.info(f"Executing plan {self._proto_to_string(plan)}")
         req = self._execute_plan_request_with_metadata()
         req.plan.CopyFrom(plan)
-        table, _, metrics, observed_metrics, _ = self._execute_and_fetch(req)
+        table, schema, metrics, observed_metrics, _ = self._execute_and_fetch(req)
         assert table is not None
-        column_names = table.column_names
-        table = table.rename_columns([f"col_{i}" for i in range(len(column_names))])
-        pdf = table.to_pandas()
-        pdf.columns = column_names
+        pdf = table.rename_columns([f"col_{i}" for i in range(len(table.column_names))]).to_pandas()
+        pdf.columns = table.column_names
+
+        schema = schema or types.from_arrow_schema(table.schema)
+        assert schema is not None and isinstance(schema, StructType)
+
+        for field, pa_field in zip(schema, table.schema):
+            if isinstance(field.dataType, TimestampType):
+                assert pa_field.type.tz is not None
+                pdf[field.name] = _check_series_localize_timestamps(
+                    pdf[field.name], pa_field.type.tz
+                )
+            elif isinstance(field.dataType, MapType):
+                pdf[field.name] = _convert_map_items_to_dict(pdf[field.name])
+
         if len(metrics) > 0:
             pdf.attrs["metrics"] = metrics
         if len(observed_metrics) > 0:
