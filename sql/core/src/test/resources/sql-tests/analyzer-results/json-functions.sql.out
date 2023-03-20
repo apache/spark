@@ -261,21 +261,13 @@ Project [c0#x, c1#x, c2#x]
 -- !query
 SELECT json_tuple('{"a":"1"}', if(c1 < 1, null, 'a')) FROM ( SELECT rand() AS c1 )
 -- !query analysis
-Project [c0#x]
-+- Generate json_tuple({"a":"1"}, if ((c1#x < cast(1 as double))) cast(null as string) else a), false, [c0#x]
-   +- SubqueryAlias __auto_generated_subquery_name
-      +- Project [rand(6103834913444445292) AS c1#x]
-         +- OneRowRelation
+[Analyzer test output redacted due to nondeterminism]
 
 
 -- !query
 SELECT json_tuple('{"a":"1"}', if(c1 < 1, null, 'a'), if(c2 < 1, null, 'a')) FROM ( SELECT 0 AS c1, rand() AS c2 )
 -- !query analysis
-Project [c0#x, c1#x]
-+- Generate json_tuple({"a":"1"}, if ((c1#x < 1)) cast(null as string) else a, if ((c2#x < cast(1 as double))) cast(null as string) else a), false, [c0#x, c1#x]
-   +- SubqueryAlias __auto_generated_subquery_name
-      +- Project [0 AS c1#x, rand(7468589321288489490) AS c2#x]
-         +- OneRowRelation
+[Analyzer test output redacted due to nondeterminism]
 
 
 -- !query

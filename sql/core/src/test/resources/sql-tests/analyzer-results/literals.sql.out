@@ -338,8 +338,7 @@ Project [World :) AS World :)#x]
 -- !query
 select dAte '2016-03-12'
 -- !query analysis
-Project [2016-03-12 AS DATE '2016-03-12'#x]
-+- OneRowRelation
+[Analyzer test output redacted due to nondeterminism]
 
 
 -- !query
@@ -366,8 +365,7 @@ org.apache.spark.sql.catalyst.parser.ParseException
 -- !query
 select tImEstAmp '2016-03-11 20:54:00.000'
 -- !query analysis
-Project [2016-03-11 20:54:00 AS TIMESTAMP '2016-03-11 20:54:00'#x]
-+- OneRowRelation
+[Analyzer test output redacted due to nondeterminism]
 
 
 -- !query

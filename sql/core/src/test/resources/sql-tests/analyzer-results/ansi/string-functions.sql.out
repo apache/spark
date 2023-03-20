@@ -55,8 +55,7 @@ Project [replace(abc, b, ) AS replace(abc, b, )#x]
 -- !query
 select length(uuid()), (uuid() <> uuid())
 -- !query analysis
-Project [length(uuid(Some(-2552983646637927076))) AS length(uuid())#x, NOT (uuid(Some(-240444868021402694)) = uuid(Some(6366791312598923169))) AS (NOT (uuid() = uuid()))#x]
-+- OneRowRelation
+[Analyzer test output redacted due to nondeterminism]
 
 
 -- !query

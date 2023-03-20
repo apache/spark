@@ -133,14 +133,7 @@ Project [col#x, date_format(col#x, d dd, Some(America/Los_Angeles)) AS date_form
 -- !query
 select col, date_format(col, 'DD') from v where col = timestamp '2100-01-01 01:33:33.123America/Los_Angeles'
 -- !query analysis
-Project [col#x, date_format(col#x, DD, Some(America/Los_Angeles)) AS date_format(col, DD)#x]
-+- Filter (col#x = 2100-01-01 01:33:33.123)
-   +- SubqueryAlias v
-      +- View (`v`, [col#x])
-         +- Project [cast(col#x as timestamp) AS col#x]
-            +- Project [col#x]
-               +- SubqueryAlias t
-                  +- LocalRelation [col#x]
+[Analyzer test output redacted due to nondeterminism]
 
 
 -- !query

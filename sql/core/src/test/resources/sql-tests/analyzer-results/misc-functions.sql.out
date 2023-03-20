@@ -30,8 +30,7 @@ Project [typeof(cast(1.0 as float)) AS typeof(CAST(1.0 AS FLOAT))#x, typeof(1.0)
 -- !query
 select typeof(date '1986-05-23'),  typeof(timestamp '1986-05-23'), typeof(interval '23 days')
 -- !query analysis
-Project [typeof(1986-05-23) AS typeof(DATE '1986-05-23')#x, typeof(1986-05-23 00:00:00) AS typeof(TIMESTAMP '1986-05-23 00:00:00')#x, typeof(INTERVAL '23' DAY) AS typeof(INTERVAL '23' DAY)#x]
-+- OneRowRelation
+[Analyzer test output redacted due to nondeterminism]
 
 
 -- !query

@@ -397,13 +397,13 @@ org.apache.spark.sql.AnalysisException
 -- !query
 DESC FUNCTION boolean
 -- !query analysis
-DescribeFunctionCommand org.apache.spark.sql.catalyst.expressions.ExpressionInfo@64d4353, false
+DescribeFunctionCommand org.apache.spark.sql.catalyst.expressions.ExpressionInfo@xxxxxxxx, false
 
 
 -- !query
 DESC FUNCTION EXTENDED boolean
 -- !query analysis
-DescribeFunctionCommand org.apache.spark.sql.catalyst.expressions.ExpressionInfo@64d4353, true
+DescribeFunctionCommand org.apache.spark.sql.catalyst.expressions.ExpressionInfo@xxxxxxxx, true
 
 
 -- !query

@@ -216,17 +216,7 @@ select a, rand(0), sum(b)
 from 
 (select /*+ REPARTITION(1) */ a, b from data) group by a, 2
 -- !query analysis
-Aggregate [a#x, _nondeterministic#x], [a#x, _nondeterministic#x AS rand(0)#x, sum(b#x) AS sum(b)#xL]
-+- Project [a#x, b#x, rand(0) AS _nondeterministic#x]
-   +- SubqueryAlias __auto_generated_subquery_name
-      +- Repartition 1, true
-         +- Project [a#x, b#x]
-            +- SubqueryAlias data
-               +- View (`data`, [a#x,b#x])
-                  +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
-                     +- Project [a#x, b#x]
-                        +- SubqueryAlias data
-                           +- LocalRelation [a#x, b#x]
+[Analyzer test output redacted due to nondeterminism]
 
 
 -- !query

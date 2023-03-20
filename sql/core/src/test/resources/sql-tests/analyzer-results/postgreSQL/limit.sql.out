@@ -186,10 +186,4 @@ DropTempViewCommand INT8_TBL
 select sum(tenthous) as s1, sum(tenthous) + random()*0 as s2
   from tenk1 group by thousand order by thousand limit 3
 -- !query analysis
-GlobalLimit 3
-+- LocalLimit 3
-   +- Project [s1#xL, s2#x]
-      +- Sort [thousand#x ASC NULLS FIRST], true
-         +- Aggregate [thousand#x], [sum(tenthous#x) AS s1#xL, (cast(sum(tenthous#x) as double) + (random(-6599188231696418777) * cast(0 as double))) AS s2#x, thousand#x]
-            +- SubqueryAlias spark_catalog.default.tenk1
-               +- Relation spark_catalog.default.tenk1[unique1#x,unique2#x,two#x,four#x,ten#x,twenty#x,hundred#x,thousand#x,twothousand#x,fivethous#x,tenthous#x,odd#x,even#x,stringu1#x,stringu2#x,string4#x] parquet
+[Analyzer test output redacted due to nondeterminism]

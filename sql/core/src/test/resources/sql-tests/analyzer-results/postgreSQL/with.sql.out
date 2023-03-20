@@ -26,26 +26,7 @@ SELECT count(*) FROM (
     SELECT * FROM q1
 ) ss
 -- !query analysis
-Aggregate [count(1) AS count(1)#xL]
-+- SubqueryAlias ss
-   +- WithCTE
-      :- CTERelationDef 346, false
-      :  +- SubqueryAlias q1
-      :     +- Project [rand()#x AS x#x]
-      :        +- Project [rand(-6217879008367658218) AS rand()#x]
-      :           +- SubqueryAlias __auto_generated_subquery_name
-      :              +- Project [col#x]
-      :                 +- Generate explode(sequence(1, 5, None, Some(America/Los_Angeles))), false, [col#x]
-      :                    +- OneRowRelation
-      +- Distinct
-         +- Union false, false
-            :- Project [x#x]
-            :  +- SubqueryAlias q1
-            :     +- CTERelationRef 346, true, [x#x]
-            +- Project [x#x AS x#x]
-               +- Project [x#x]
-                  +- SubqueryAlias q1
-                     +- CTERelationRef 346, true, [x#x]
+[Analyzer test output redacted due to nondeterminism]
 
 
 -- !query

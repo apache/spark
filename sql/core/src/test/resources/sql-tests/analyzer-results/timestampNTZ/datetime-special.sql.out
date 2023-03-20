@@ -2,8 +2,7 @@
 -- !query
 select date'999999-03-18', date'-0001-1-28', date'0015'
 -- !query analysis
-Project [+999999-03-18 AS DATE '+999999-03-18'#x, -0001-01-28 AS DATE '-0001-01-28'#x, 0015-01-01 AS DATE '0015-01-01'#x]
-+- OneRowRelation
+[Analyzer test output redacted due to nondeterminism]
 
 
 -- !query

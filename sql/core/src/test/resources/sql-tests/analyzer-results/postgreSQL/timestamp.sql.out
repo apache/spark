@@ -64,28 +64,19 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 -- !query
 SELECT count(*) AS One FROM TIMESTAMP_TBL WHERE d1 = timestamp 'today'
 -- !query analysis
-Aggregate [count(1) AS One#xL]
-+- Filter (d1#x = 2023-03-19 00:00:00)
-   +- SubqueryAlias spark_catalog.default.timestamp_tbl
-      +- Relation spark_catalog.default.timestamp_tbl[d1#x] parquet
+[Analyzer test output redacted due to nondeterminism]
 
 
 -- !query
 SELECT count(*) AS Three FROM TIMESTAMP_TBL WHERE d1 = timestamp 'tomorrow'
 -- !query analysis
-Aggregate [count(1) AS Three#xL]
-+- Filter (d1#x = 2023-03-20 00:00:00)
-   +- SubqueryAlias spark_catalog.default.timestamp_tbl
-      +- Relation spark_catalog.default.timestamp_tbl[d1#x] parquet
+[Analyzer test output redacted due to nondeterminism]
 
 
 -- !query
 SELECT count(*) AS One FROM TIMESTAMP_TBL WHERE d1 = timestamp 'yesterday'
 -- !query analysis
-Aggregate [count(1) AS One#xL]
-+- Filter (d1#x = 2023-03-18 00:00:00)
-   +- SubqueryAlias spark_catalog.default.timestamp_tbl
-      +- Relation spark_catalog.default.timestamp_tbl[d1#x] parquet
+[Analyzer test output redacted due to nondeterminism]
 
 
 -- !query
@@ -146,77 +137,55 @@ Project [ AS 64#x, d1#x]
 SELECT '' AS `48`, d1 FROM TIMESTAMP_TBL
    WHERE d1 > timestamp '1997-01-02'
 -- !query analysis
-Project [ AS 48#x, d1#x]
-+- Filter (d1#x > 1997-01-02 00:00:00)
-   +- SubqueryAlias spark_catalog.default.timestamp_tbl
-      +- Relation spark_catalog.default.timestamp_tbl[d1#x] parquet
+[Analyzer test output redacted due to nondeterminism]
 
 
 -- !query
 SELECT '' AS `15`, d1 FROM TIMESTAMP_TBL
    WHERE d1 < timestamp '1997-01-02'
 -- !query analysis
-Project [ AS 15#x, d1#x]
-+- Filter (d1#x < 1997-01-02 00:00:00)
-   +- SubqueryAlias spark_catalog.default.timestamp_tbl
-      +- Relation spark_catalog.default.timestamp_tbl[d1#x] parquet
+[Analyzer test output redacted due to nondeterminism]
 
 
 -- !query
 SELECT '' AS one, d1 FROM TIMESTAMP_TBL
    WHERE d1 = timestamp '1997-01-02'
 -- !query analysis
-Project [ AS one#x, d1#x]
-+- Filter (d1#x = 1997-01-02 00:00:00)
-   +- SubqueryAlias spark_catalog.default.timestamp_tbl
-      +- Relation spark_catalog.default.timestamp_tbl[d1#x] parquet
+[Analyzer test output redacted due to nondeterminism]
 
 
 -- !query
 SELECT '' AS `63`, d1 FROM TIMESTAMP_TBL
    WHERE d1 != timestamp '1997-01-02'
 -- !query analysis
-Project [ AS 63#x, d1#x]
-+- Filter NOT (d1#x = 1997-01-02 00:00:00)
-   +- SubqueryAlias spark_catalog.default.timestamp_tbl
-      +- Relation spark_catalog.default.timestamp_tbl[d1#x] parquet
+[Analyzer test output redacted due to nondeterminism]
 
 
 -- !query
 SELECT '' AS `16`, d1 FROM TIMESTAMP_TBL
    WHERE d1 <= timestamp '1997-01-02'
 -- !query analysis
-Project [ AS 16#x, d1#x]
-+- Filter (d1#x <= 1997-01-02 00:00:00)
-   +- SubqueryAlias spark_catalog.default.timestamp_tbl
-      +- Relation spark_catalog.default.timestamp_tbl[d1#x] parquet
+[Analyzer test output redacted due to nondeterminism]
 
 
 -- !query
 SELECT '' AS `49`, d1 FROM TIMESTAMP_TBL
    WHERE d1 >= timestamp '1997-01-02'
 -- !query analysis
-Project [ AS 49#x, d1#x]
-+- Filter (d1#x >= 1997-01-02 00:00:00)
-   +- SubqueryAlias spark_catalog.default.timestamp_tbl
-      +- Relation spark_catalog.default.timestamp_tbl[d1#x] parquet
+[Analyzer test output redacted due to nondeterminism]
 
 
 -- !query
 SELECT '' AS `54`, d1 - timestamp '1997-01-02' AS diff
    FROM TIMESTAMP_TBL WHERE d1 BETWEEN '1902-01-01' AND '2038-01-01'
 -- !query analysis
-Project [ AS 54#x, (d1#x - 1997-01-02 00:00:00) AS diff#x]
-+- Filter ((d1#x >= cast(1902-01-01 as timestamp)) AND (d1#x <= cast(2038-01-01 as timestamp)))
-   +- SubqueryAlias spark_catalog.default.timestamp_tbl
-      +- Relation spark_catalog.default.timestamp_tbl[d1#x] parquet
+[Analyzer test output redacted due to nondeterminism]
 
 
 -- !query
 SELECT '' AS date_trunc_week, date_trunc( 'week', timestamp '2004-02-29 15:44:17.71393' ) AS week_trunc
 -- !query analysis
-Project [ AS date_trunc_week#x, date_trunc(week, 2004-02-29 15:44:17.71393, Some(America/Los_Angeles)) AS week_trunc#x]
-+- OneRowRelation
+[Analyzer test output redacted due to nondeterminism]
 
 
 -- !query
@@ -225,10 +194,7 @@ SELECT '' AS `54`, d1 - timestamp '1997-01-02' AS diff
   WHERE d1 BETWEEN timestamp '1902-01-01'
    AND timestamp '2038-01-01'
 -- !query analysis
-Project [ AS 54#x, (d1#x - 1997-01-02 00:00:00) AS diff#x]
-+- Filter ((d1#x >= 1902-01-01 00:00:00) AND (d1#x <= 2038-01-01 00:00:00))
-   +- SubqueryAlias spark_catalog.default.timestamp_tbl
-      +- Relation spark_catalog.default.timestamp_tbl[d1#x] parquet
+[Analyzer test output redacted due to nondeterminism]
 
 
 -- !query

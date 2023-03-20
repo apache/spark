@@ -155,15 +155,13 @@ Project [f1#x AS Three#x]
 -- !query
 SELECT date '1999-01-08'
 -- !query analysis
-Project [1999-01-08 AS DATE '1999-01-08'#x]
-+- OneRowRelation
+[Analyzer test output redacted due to nondeterminism]
 
 
 -- !query
 SELECT date '1999-01-18'
 -- !query analysis
-Project [1999-01-18 AS DATE '1999-01-18'#x]
-+- OneRowRelation
+[Analyzer test output redacted due to nondeterminism]
 
 
 -- !query
@@ -211,15 +209,13 @@ org.apache.spark.sql.catalyst.parser.ParseException
 -- !query
 SELECT date '1999-01-08'
 -- !query analysis
-Project [1999-01-08 AS DATE '1999-01-08'#x]
-+- OneRowRelation
+[Analyzer test output redacted due to nondeterminism]
 
 
 -- !query
 SELECT date '1999-08-01'
 -- !query analysis
-Project [1999-08-01 AS DATE '1999-08-01'#x]
-+- OneRowRelation
+[Analyzer test output redacted due to nondeterminism]
 
 
 -- !query
@@ -267,8 +263,7 @@ org.apache.spark.sql.catalyst.parser.ParseException
 -- !query
 SELECT date '1999-01-08'
 -- !query analysis
-Project [1999-01-08 AS DATE '1999-01-08'#x]
-+- OneRowRelation
+[Analyzer test output redacted due to nondeterminism]
 
 
 -- !query
@@ -316,15 +311,13 @@ org.apache.spark.sql.catalyst.parser.ParseException
 -- !query
 SELECT date '1999-01-08'
 -- !query analysis
-Project [1999-01-08 AS DATE '1999-01-08'#x]
-+- OneRowRelation
+[Analyzer test output redacted due to nondeterminism]
 
 
 -- !query
 SELECT date '1999-08-01'
 -- !query analysis
-Project [1999-08-01 AS DATE '1999-08-01'#x]
-+- OneRowRelation
+[Analyzer test output redacted due to nondeterminism]
 
 
 -- !query
@@ -372,15 +365,13 @@ org.apache.spark.sql.catalyst.parser.ParseException
 -- !query
 SELECT date '1999-01-08'
 -- !query analysis
-Project [1999-01-08 AS DATE '1999-01-08'#x]
-+- OneRowRelation
+[Analyzer test output redacted due to nondeterminism]
 
 
 -- !query
 SELECT date '1999-01-18'
 -- !query analysis
-Project [1999-01-18 AS DATE '1999-01-18'#x]
-+- OneRowRelation
+[Analyzer test output redacted due to nondeterminism]
 
 
 -- !query
@@ -428,15 +419,13 @@ org.apache.spark.sql.catalyst.parser.ParseException
 -- !query
 SELECT date '1999-01-08'
 -- !query analysis
-Project [1999-01-08 AS DATE '1999-01-08'#x]
-+- OneRowRelation
+[Analyzer test output redacted due to nondeterminism]
 
 
 -- !query
 SELECT date '1999-08-01'
 -- !query analysis
-Project [1999-08-01 AS DATE '1999-08-01'#x]
-+- OneRowRelation
+[Analyzer test output redacted due to nondeterminism]
 
 
 -- !query
@@ -484,87 +473,73 @@ org.apache.spark.sql.catalyst.parser.ParseException
 -- !query
 SELECT date '4714-11-24 BC'
 -- !query analysis
-Project [4714-11-24 AS DATE '4714-11-24'#x]
-+- OneRowRelation
+[Analyzer test output redacted due to nondeterminism]
 
 
 -- !query
 SELECT date '4714-11-23 BC'
 -- !query analysis
-Project [4714-11-23 AS DATE '4714-11-23'#x]
-+- OneRowRelation
+[Analyzer test output redacted due to nondeterminism]
 
 
 -- !query
 SELECT date '5874897-12-31'
 -- !query analysis
-Project [+5874897-12-31 AS DATE '+5874897-12-31'#x]
-+- OneRowRelation
+[Analyzer test output redacted due to nondeterminism]
 
 
 -- !query
 SELECT date '5874898-01-01'
 -- !query analysis
-Project [+5874898-01-01 AS DATE '+5874898-01-01'#x]
-+- OneRowRelation
+[Analyzer test output redacted due to nondeterminism]
 
 
 -- !query
 SELECT f1 - date '2000-01-01' AS `Days From 2K` FROM DATE_TBL
 -- !query analysis
-Project [(f1#x - 2000-01-01) AS Days From 2K#x]
-+- SubqueryAlias spark_catalog.default.date_tbl
-   +- Relation spark_catalog.default.date_tbl[f1#x] parquet
+[Analyzer test output redacted due to nondeterminism]
 
 
 -- !query
 SELECT f1 - date 'epoch' AS `Days From Epoch` FROM DATE_TBL
 -- !query analysis
-Project [(f1#x - 1970-01-01) AS Days From Epoch#x]
-+- SubqueryAlias spark_catalog.default.date_tbl
-   +- Relation spark_catalog.default.date_tbl[f1#x] parquet
+[Analyzer test output redacted due to nondeterminism]
 
 
 -- !query
 SELECT date 'yesterday' - date 'today' AS `One day`
 -- !query analysis
-Project [(2023-03-18 - 2023-03-19) AS One day#x]
-+- OneRowRelation
+[Analyzer test output redacted due to nondeterminism]
 
 
 -- !query
 SELECT date 'today' - date 'tomorrow' AS `One day`
 -- !query analysis
-Project [(2023-03-19 - 2023-03-20) AS One day#x]
-+- OneRowRelation
+[Analyzer test output redacted due to nondeterminism]
 
 
 -- !query
 SELECT date 'yesterday' - date 'tomorrow' AS `Two days`
 -- !query analysis
-Project [(2023-03-18 - 2023-03-20) AS Two days#x]
-+- OneRowRelation
+[Analyzer test output redacted due to nondeterminism]
 
 
 -- !query
 SELECT date 'tomorrow' - date 'today' AS `One day`
 -- !query analysis
-Project [(2023-03-20 - 2023-03-19) AS One day#x]
-+- OneRowRelation
+[Analyzer test output redacted due to nondeterminism]
 
 
 -- !query
 SELECT date 'today' - date 'yesterday' AS `One day`
 -- !query analysis
-Project [(2023-03-19 - 2023-03-18) AS One day#x]
-+- OneRowRelation
+[Analyzer test output redacted due to nondeterminism]
 
 
 -- !query
 SELECT date 'tomorrow' - date 'yesterday' AS `Two days`
 -- !query analysis
-Project [(2023-03-20 - 2023-03-18) AS Two days#x]
-+- OneRowRelation
+[Analyzer test output redacted due to nondeterminism]
 
 
 -- !query

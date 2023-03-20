@@ -801,56 +801,7 @@ SELECT c1, (
     ) WHERE c1 = v1.c1
 ) FROM v1
 -- !query analysis
-WithCTE
-:- CTERelationDef 411, false
-:  +- SubqueryAlias v1
-:     +- Project [c1#x, c2#x, rand(0) AS c3#x]
-:        +- SubqueryAlias t1
-:           +- View (`t1`, [c1#x,c2#x])
-:              +- Project [cast(c1#x as int) AS c1#x, cast(c2#x as int) AS c2#x]
-:                 +- SubqueryAlias t1
-:                    +- LocalRelation [c1#x, c2#x]
-:- CTERelationDef 412, false
-:  +- SubqueryAlias v2
-:     +- Project [c1#x, c2#x, rand(0) AS c4#x]
-:        +- Filter c3#x IN (list#x [])
-:           :  +- Project [c3#x]
-:           :     +- SubqueryAlias v1
-:           :        +- CTERelationRef 411, true, [c1#x, c2#x, c3#x]
-:           +- SubqueryAlias v1
-:              +- CTERelationRef 411, true, [c1#x, c2#x, c3#x]
-+- Project [c1#x, scalar-subquery#x [c1#x] AS scalarsubquery(c1)#xL]
-   :  +- WithCTE
-   :     :- CTERelationDef 413, false
-   :     :  +- SubqueryAlias v3
-   :     :     +- Project [c1#x, c2#x, rand(0) AS c5#x]
-   :     :        +- SubqueryAlias t2
-   :     :           +- View (`t2`, [c1#x,c2#x])
-   :     :              +- Project [cast(c1#x as int) AS c1#x, cast(c2#x as int) AS c2#x]
-   :     :                 +- SubqueryAlias t2
-   :     :                    +- LocalRelation [c1#x, c2#x]
-   :     +- Aggregate [count(1) AS count(1)#xL]
-   :        +- Filter (c1#x = outer(c1#x))
-   :           +- SubqueryAlias __auto_generated_subquery_name
-   :              +- Distinct
-   :                 +- Union false, false
-   :                    :- Distinct
-   :                    :  +- Union false, false
-   :                    :     :- Project [c1#x, c2#x, c4#x]
-   :                    :     :  +- Filter (c1#x > 0)
-   :                    :     :     +- SubqueryAlias v2
-   :                    :     :        +- CTERelationRef 412, true, [c1#x, c2#x, c4#x]
-   :                    :     +- Project [c1#x AS c1#x, c2#x AS c2#x, c4#x AS c4#x]
-   :                    :        +- Project [c1#x, c2#x, c4#x]
-   :                    :           +- Filter (c2#x > 0)
-   :                    :              +- SubqueryAlias v2
-   :                    :                 +- CTERelationRef 412, true, [c1#x, c2#x, c4#x]
-   :                    +- Project [c1#x, c2#x, c5#x]
-   :                       +- Filter (c2#x > 0)
-   :                          +- SubqueryAlias v3
-   :                             +- CTERelationRef 413, true, [c1#x, c2#x, c5#x]
-   +- SubqueryAlias v1
-      +- CTERelationRef 411, true, [c1#x, c2#x, c3#x]
+[Analyzer test output redacted due to nondeterminism]
 
 
 -- !query

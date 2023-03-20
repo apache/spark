@@ -211,10 +211,6 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
       AnsiAnalyzerTestCase(newName, inputFile, newResultFile)
   }
 
-  /** An ANSI-related test case. */
-  protected case class AnsiTestCase(
-      name: String, inputFile: String, resultFile: String) extends TestCase with AnsiTest
-
   /** An analyzer test that shows the analyzed plan string as output. */
   protected case class AnalyzerTestCase(
       name: String, inputFile: String, resultFile: String) extends TestCase with AnalyzerTest

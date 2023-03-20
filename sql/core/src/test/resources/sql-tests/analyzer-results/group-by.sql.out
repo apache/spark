@@ -975,13 +975,7 @@ SELECT if(not(a IS NULL), rand(0), 1), count(*) AS c
 FROM testData
 GROUP BY a IS NULL
 -- !query analysis
-Aggregate [isnull(a#x)], [if (NOT isnull(a#x)) rand(0) else cast(1 as double) AS (IF((NOT (a IS NULL)), rand(0), 1))#x, count(1) AS c#xL]
-+- SubqueryAlias testdata
-   +- View (`testData`, [a#x,b#x])
-      +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
-         +- Project [a#x, b#x]
-            +- SubqueryAlias testData
-               +- LocalRelation [a#x, b#x]
+[Analyzer test output redacted due to nondeterminism]
 
 
 -- !query

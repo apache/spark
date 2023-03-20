@@ -58,50 +58,43 @@ Project [try_add(1, (1.0 / 0.0)) AS try_add(1, (1.0 / 0.0))#x]
 -- !query
 SELECT try_add(date'2021-01-01', 1)
 -- !query analysis
-Project [try_add(2021-01-01, 1) AS try_add(DATE '2021-01-01', 1)#x]
-+- OneRowRelation
+[Analyzer test output redacted due to nondeterminism]
 
 
 -- !query
 SELECT try_add(1, date'2021-01-01')
 -- !query analysis
-Project [try_add(1, 2021-01-01) AS try_add(1, DATE '2021-01-01')#x]
-+- OneRowRelation
+[Analyzer test output redacted due to nondeterminism]
 
 
 -- !query
 SELECT try_add(date'2021-01-01', interval 2 year)
 -- !query analysis
-Project [try_add(2021-01-01, INTERVAL '2' YEAR) AS try_add(DATE '2021-01-01', INTERVAL '2' YEAR)#x]
-+- OneRowRelation
+[Analyzer test output redacted due to nondeterminism]
 
 
 -- !query
 SELECT try_add(date'2021-01-01', interval 2 second)
 -- !query analysis
-Project [try_add(2021-01-01, INTERVAL '02' SECOND) AS try_add(DATE '2021-01-01', INTERVAL '02' SECOND)#x]
-+- OneRowRelation
+[Analyzer test output redacted due to nondeterminism]
 
 
 -- !query
 SELECT try_add(interval 2 year, date'2021-01-01')
 -- !query analysis
-Project [try_add(INTERVAL '2' YEAR, 2021-01-01) AS try_add(INTERVAL '2' YEAR, DATE '2021-01-01')#x]
-+- OneRowRelation
+[Analyzer test output redacted due to nondeterminism]
 
 
 -- !query
 SELECT try_add(interval 2 second, date'2021-01-01')
 -- !query analysis
-Project [try_add(INTERVAL '02' SECOND, 2021-01-01) AS try_add(INTERVAL '02' SECOND, DATE '2021-01-01')#x]
-+- OneRowRelation
+[Analyzer test output redacted due to nondeterminism]
 
 
 -- !query
 SELECT try_add(timestamp_ltz'2021-01-01 00:00:00', interval 2 year)
 -- !query analysis
-Project [try_add(2021-01-01 00:00:00, INTERVAL '2' YEAR) AS try_add(TIMESTAMP '2021-01-01 00:00:00', INTERVAL '2' YEAR)#x]
-+- OneRowRelation
+[Analyzer test output redacted due to nondeterminism]
 
 
 -- !query
@@ -114,8 +107,7 @@ Project [try_add(2021-01-01 00:00:00, INTERVAL '02' SECOND) AS try_add(TIMESTAMP
 -- !query
 SELECT try_add(interval 2 year, timestamp_ltz'2021-01-01 00:00:00')
 -- !query analysis
-Project [try_add(INTERVAL '2' YEAR, 2021-01-01 00:00:00) AS try_add(INTERVAL '2' YEAR, TIMESTAMP '2021-01-01 00:00:00')#x]
-+- OneRowRelation
+[Analyzer test output redacted due to nondeterminism]
 
 
 -- !query

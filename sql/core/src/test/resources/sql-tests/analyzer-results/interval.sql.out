@@ -2,8 +2,7 @@
 -- !query
 select 3 * (timestamp'2019-10-15 10:11:12.001002' - date'2019-10-15')
 -- !query analysis
-Project [((2019-10-15 10:11:12.001002 - cast(2019-10-15 as timestamp)) * 3) AS ((TIMESTAMP '2019-10-15 10:11:12.001002' - DATE '2019-10-15') * 3)#x]
-+- OneRowRelation
+[Analyzer test output redacted due to nondeterminism]
 
 
 -- !query
@@ -42,8 +41,7 @@ Project [(INTERVAL '14 00:00:00.000003' DAY TO SECOND * 1.5) AS (INTERVAL '14 00
 -- !query
 select (timestamp'2019-10-15' - timestamp'2019-10-14') / 1.5
 -- !query analysis
-Project [((2019-10-15 00:00:00 - 2019-10-14 00:00:00) / 1.5) AS ((TIMESTAMP '2019-10-15 00:00:00' - TIMESTAMP '2019-10-14 00:00:00') / 1.5)#x]
-+- OneRowRelation
+[Analyzer test output redacted due to nondeterminism]
 
 
 -- !query

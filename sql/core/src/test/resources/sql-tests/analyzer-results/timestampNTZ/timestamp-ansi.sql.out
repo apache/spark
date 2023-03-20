@@ -72,15 +72,13 @@ org.apache.spark.sql.catalyst.parser.ParseException
 -- !query
 select current_timestamp = current_timestamp
 -- !query analysis
-Project [(current_timestamp() = current_timestamp()) AS (current_timestamp() = current_timestamp())#x]
-+- OneRowRelation
+[Analyzer test output redacted due to nondeterminism]
 
 
 -- !query
 select current_timestamp() = current_timestamp()
 -- !query analysis
-Project [(current_timestamp() = current_timestamp()) AS (current_timestamp() = current_timestamp())#x]
-+- OneRowRelation
+[Analyzer test output redacted due to nondeterminism]
 
 
 -- !query
@@ -275,47 +273,31 @@ CreateViewCommand `ttf2`, select * from values
 -- !query
 select current_date = current_date(), current_timestamp = current_timestamp(), a, b from ttf2
 -- !query analysis
-Project [(current_date(Some(America/Los_Angeles)) = current_date(Some(America/Los_Angeles))) AS (current_date() = current_date())#x, (current_timestamp() = current_timestamp()) AS (current_timestamp() = current_timestamp())#x, a#x, b#x]
-+- SubqueryAlias ttf2
-   +- View (`ttf2`, [a#x,b#x])
-      +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
-         +- Project [a#x, b#x]
-            +- SubqueryAlias ttf2
-               +- LocalRelation [a#x, b#x]
+[Analyzer test output redacted due to nondeterminism]
 
 
 -- !query
 select a, b from ttf2 order by a, current_date
 -- !query analysis
-Sort [a#x ASC NULLS FIRST, current_date(Some(America/Los_Angeles)) ASC NULLS FIRST], true
-+- Project [a#x, b#x]
-   +- SubqueryAlias ttf2
-      +- View (`ttf2`, [a#x,b#x])
-         +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
-            +- Project [a#x, b#x]
-               +- SubqueryAlias ttf2
-                  +- LocalRelation [a#x, b#x]
+[Analyzer test output redacted due to nondeterminism]
 
 
 -- !query
 select UNIX_SECONDS(timestamp'2020-12-01 14:30:08Z'), UNIX_SECONDS(timestamp'2020-12-01 14:30:08.999999Z'), UNIX_SECONDS(null)
 -- !query analysis
-Project [unix_seconds(2020-12-01 06:30:08) AS unix_seconds(TIMESTAMP '2020-12-01 06:30:08')#xL, unix_seconds(2020-12-01 06:30:08.999999) AS unix_seconds(TIMESTAMP '2020-12-01 06:30:08.999999')#xL, unix_seconds(null) AS unix_seconds(NULL)#xL]
-+- OneRowRelation
+[Analyzer test output redacted due to nondeterminism]
 
 
 -- !query
 select UNIX_MILLIS(timestamp'2020-12-01 14:30:08Z'), UNIX_MILLIS(timestamp'2020-12-01 14:30:08.999999Z'), UNIX_MILLIS(null)
 -- !query analysis
-Project [unix_millis(2020-12-01 06:30:08) AS unix_millis(TIMESTAMP '2020-12-01 06:30:08')#xL, unix_millis(2020-12-01 06:30:08.999999) AS unix_millis(TIMESTAMP '2020-12-01 06:30:08.999999')#xL, unix_millis(null) AS unix_millis(NULL)#xL]
-+- OneRowRelation
+[Analyzer test output redacted due to nondeterminism]
 
 
 -- !query
 select UNIX_MICROS(timestamp'2020-12-01 14:30:08Z'), UNIX_MICROS(timestamp'2020-12-01 14:30:08.999999Z'), UNIX_MICROS(null)
 -- !query analysis
-Project [unix_micros(2020-12-01 06:30:08) AS unix_micros(TIMESTAMP '2020-12-01 06:30:08')#xL, unix_micros(2020-12-01 06:30:08.999999) AS unix_micros(TIMESTAMP '2020-12-01 06:30:08.999999')#xL, unix_micros(null) AS unix_micros(NULL)#xL]
-+- OneRowRelation
+[Analyzer test output redacted due to nondeterminism]
 
 
 -- !query
@@ -559,15 +541,13 @@ Project [(2011-11-11 11:11:11 - 2011-11-11 11:11:10) AS (TIMESTAMP_NTZ '2011-11-
 -- !query
 select date'2020-01-01' - timestamp'2019-10-06 10:11:12.345678'
 -- !query analysis
-Project [(cast(2020-01-01 as timestamp_ntz) - 2019-10-06 10:11:12.345678) AS (DATE '2020-01-01' - TIMESTAMP_NTZ '2019-10-06 10:11:12.345678')#x]
-+- OneRowRelation
+[Analyzer test output redacted due to nondeterminism]
 
 
 -- !query
 select timestamp'2019-10-06 10:11:12.345678' - date'2020-01-01'
 -- !query analysis
-Project [(2019-10-06 10:11:12.345678 - cast(2020-01-01 as timestamp_ntz)) AS (TIMESTAMP_NTZ '2019-10-06 10:11:12.345678' - DATE '2020-01-01')#x]
-+- OneRowRelation
+[Analyzer test output redacted due to nondeterminism]
 
 
 -- !query
@@ -587,15 +567,13 @@ Project [(cast(2011-11-11 11:11:11 as timestamp_ntz) - 2011-11-11 11:11:10) AS (
 -- !query
 select timestamp'2011-11-11 11:11:11' - null
 -- !query analysis
-Project [(2011-11-11 11:11:11 - cast(null as timestamp_ntz)) AS (TIMESTAMP_NTZ '2011-11-11 11:11:11' - NULL)#x]
-+- OneRowRelation
+[Analyzer test output redacted due to nondeterminism]
 
 
 -- !query
 select null - timestamp'2011-11-11 11:11:11'
 -- !query analysis
-Project [(cast(null as timestamp_ntz) - 2011-11-11 11:11:11) AS (NULL - TIMESTAMP_NTZ '2011-11-11 11:11:11')#x]
-+- OneRowRelation
+[Analyzer test output redacted due to nondeterminism]
 
 
 -- !query
@@ -733,8 +711,7 @@ select date '2012-01-01' - interval 3 hours,
        date '2012-01-01' + interval '12:12:12' hour to second,
        interval '2' minute + date '2012-01-01'
 -- !query analysis
-Project [2012-01-01 - INTERVAL '03' HOUR AS DATE '2012-01-01' - INTERVAL '03' HOUR#x, cast(2012-01-01 as timestamp) + INTERVAL '12:12:12' HOUR TO SECOND AS DATE '2012-01-01' + INTERVAL '12:12:12' HOUR TO SECOND#x, cast(2012-01-01 as timestamp) + INTERVAL '02' MINUTE AS DATE '2012-01-01' + INTERVAL '02' MINUTE#x]
-+- OneRowRelation
+[Analyzer test output redacted due to nondeterminism]
 
 
 -- !query
@@ -796,15 +773,13 @@ Project [timestampadd(MINUTE, 58, 2022-02-14 01:02:03, Some(America/Los_Angeles)
 -- !query
 select timestampadd(YEAR, 1, date'2022-02-15')
 -- !query analysis
-Project [timestampadd(YEAR, 1, cast(2022-02-15 as timestamp), Some(America/Los_Angeles)) AS timestampadd(YEAR, 1, DATE '2022-02-15')#x]
-+- OneRowRelation
+[Analyzer test output redacted due to nondeterminism]
 
 
 -- !query
 select timestampadd(SECOND, -1, date'2022-02-15')
 -- !query analysis
-Project [timestampadd(SECOND, -1, cast(2022-02-15 as timestamp), Some(America/Los_Angeles)) AS timestampadd(SECOND, -1, DATE '2022-02-15')#x]
-+- OneRowRelation
+[Analyzer test output redacted due to nondeterminism]
 
 
 -- !query
@@ -824,12 +799,10 @@ Project [timestampdiff(MINUTE, cast(2022-02-14 01:02:03 as timestamp), cast(2022
 -- !query
 select timestampdiff(YEAR, date'2022-02-15', date'2023-02-15')
 -- !query analysis
-Project [timestampdiff(YEAR, cast(2022-02-15 as timestamp), cast(2023-02-15 as timestamp), Some(America/Los_Angeles)) AS timestampdiff(YEAR, DATE '2022-02-15', DATE '2023-02-15')#xL]
-+- OneRowRelation
+[Analyzer test output redacted due to nondeterminism]
 
 
 -- !query
 select timestampdiff(SECOND, date'2022-02-15', timestamp'2022-02-14 23:59:59')
 -- !query analysis
-Project [timestampdiff(SECOND, cast(2022-02-15 as timestamp), cast(2022-02-14 23:59:59 as timestamp), Some(America/Los_Angeles)) AS timestampdiff(SECOND, DATE '2022-02-15', TIMESTAMP_NTZ '2022-02-14 23:59:59')#xL]
-+- OneRowRelation
+[Analyzer test output redacted due to nondeterminism]

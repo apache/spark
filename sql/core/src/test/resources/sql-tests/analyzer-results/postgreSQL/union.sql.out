@@ -1224,16 +1224,7 @@ SELECT * FROM
 WHERE x > 3
 ORDER BY x
 -- !query analysis
-Sort [x#x ASC NULLS FIRST], true
-+- Project [t#x, x#x]
-   +- Filter (x#x > 3)
-      +- SubqueryAlias ss
-         +- Distinct
-            +- Union false, false
-               :- Project [1 AS t#x, cast((random(-880029258726996260) * cast(3 as double)) as int) AS x#x]
-               :  +- OneRowRelation
-               +- Project [2 AS t#x, 4 AS x#x]
-                  +- OneRowRelation
+[Analyzer test output redacted due to nondeterminism]
 
 
 -- !query

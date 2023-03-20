@@ -156,8 +156,7 @@ SELECT '7' AS `None`,
   CASE WHEN rand() < udf(0) THEN 1
   END AS `NULL on no matches`
 -- !query analysis
-Project [7 AS None#x, CASE WHEN (rand(-6965705050392598935) < cast(cast(udf(cast(0 as string)) as int) as double)) THEN 1 END AS NULL on no matches#x]
-+- OneRowRelation
+[Analyzer test output redacted due to nondeterminism]
 
 
 -- !query

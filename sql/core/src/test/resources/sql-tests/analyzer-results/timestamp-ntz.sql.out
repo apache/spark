@@ -88,61 +88,52 @@ Project [timestampdiff(QUARTER, cast(2022-01-01 01:02:03 as timestamp), cast(202
 -- !query
 select timestampdiff(HOUR, timestamp_ntz'2022-02-14 01:02:03', timestamp_ltz'2022-02-14 02:03:04')
 -- !query analysis
-Project [timestampdiff(HOUR, cast(2022-02-14 01:02:03 as timestamp), 2022-02-14 02:03:04, Some(America/Los_Angeles)) AS timestampdiff(HOUR, TIMESTAMP_NTZ '2022-02-14 01:02:03', TIMESTAMP '2022-02-14 02:03:04')#xL]
-+- OneRowRelation
+[Analyzer test output redacted due to nondeterminism]
 
 
 -- !query
 select timestampdiff(YEAR, date'2022-02-15', timestamp_ntz'2023-02-15 10:11:12')
 -- !query analysis
-Project [timestampdiff(YEAR, cast(2022-02-15 as timestamp), cast(2023-02-15 10:11:12 as timestamp), Some(America/Los_Angeles)) AS timestampdiff(YEAR, DATE '2022-02-15', TIMESTAMP_NTZ '2023-02-15 10:11:12')#xL]
-+- OneRowRelation
+[Analyzer test output redacted due to nondeterminism]
 
 
 -- !query
 select timestampdiff(MILLISECOND, timestamp_ntz'2022-02-14 23:59:59.123', date'2022-02-15')
 -- !query analysis
-Project [timestampdiff(MILLISECOND, cast(2022-02-14 23:59:59.123 as timestamp), cast(2022-02-15 as timestamp), Some(America/Los_Angeles)) AS timestampdiff(MILLISECOND, TIMESTAMP_NTZ '2022-02-14 23:59:59.123', DATE '2022-02-15')#xL]
-+- OneRowRelation
+[Analyzer test output redacted due to nondeterminism]
 
 
 -- !query
 select timestamp_ntz'2022-01-01 00:00:00' = date'2022-01-01'
 -- !query analysis
-Project [(2022-01-01 00:00:00 = cast(2022-01-01 as timestamp_ntz)) AS (TIMESTAMP_NTZ '2022-01-01 00:00:00' = DATE '2022-01-01')#x]
-+- OneRowRelation
+[Analyzer test output redacted due to nondeterminism]
 
 
 -- !query
 select timestamp_ntz'2022-01-01 00:00:00' > date'2022-01-01'
 -- !query analysis
-Project [(2022-01-01 00:00:00 > cast(2022-01-01 as timestamp_ntz)) AS (TIMESTAMP_NTZ '2022-01-01 00:00:00' > DATE '2022-01-01')#x]
-+- OneRowRelation
+[Analyzer test output redacted due to nondeterminism]
 
 
 -- !query
 select timestamp_ntz'2022-01-01 00:00:00' < date'2022-01-01'
 -- !query analysis
-Project [(2022-01-01 00:00:00 < cast(2022-01-01 as timestamp_ntz)) AS (TIMESTAMP_NTZ '2022-01-01 00:00:00' < DATE '2022-01-01')#x]
-+- OneRowRelation
+[Analyzer test output redacted due to nondeterminism]
 
 
 -- !query
 select timestamp_ntz'2022-01-01 00:00:00' = timestamp_ltz'2022-01-01 00:00:00'
 -- !query analysis
-Project [(cast(2022-01-01 00:00:00 as timestamp) = 2022-01-01 00:00:00) AS (TIMESTAMP_NTZ '2022-01-01 00:00:00' = TIMESTAMP '2022-01-01 00:00:00')#x]
-+- OneRowRelation
+[Analyzer test output redacted due to nondeterminism]
 
 
 -- !query
 select timestamp_ntz'2022-01-01 00:00:00' > timestamp_ltz'2022-01-01 00:00:00'
 -- !query analysis
-Project [(cast(2022-01-01 00:00:00 as timestamp) > 2022-01-01 00:00:00) AS (TIMESTAMP_NTZ '2022-01-01 00:00:00' > TIMESTAMP '2022-01-01 00:00:00')#x]
-+- OneRowRelation
+[Analyzer test output redacted due to nondeterminism]
 
 
 -- !query
 select timestamp_ntz'2022-01-01 00:00:00' < timestamp_ltz'2022-01-01 00:00:00'
 -- !query analysis
-Project [(cast(2022-01-01 00:00:00 as timestamp) < 2022-01-01 00:00:00) AS (TIMESTAMP_NTZ '2022-01-01 00:00:00' < TIMESTAMP '2022-01-01 00:00:00')#x]
-+- OneRowRelation
+[Analyzer test output redacted due to nondeterminism]

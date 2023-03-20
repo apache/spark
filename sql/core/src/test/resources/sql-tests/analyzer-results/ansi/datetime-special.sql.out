@@ -2,8 +2,7 @@
 -- !query
 select date'999999-03-18', date'-0001-1-28', date'0015'
 -- !query analysis
-Project [+999999-03-18 AS DATE '+999999-03-18'#x, -0001-01-28 AS DATE '-0001-01-28'#x, 0015-01-01 AS DATE '0015-01-01'#x]
-+- OneRowRelation
+[Analyzer test output redacted due to nondeterminism]
 
 
 -- !query
@@ -16,8 +15,7 @@ Project [make_date(999999, 3, 18, true) AS make_date(999999, 3, 18)#x, make_date
 -- !query
 select timestamp'-1969-12-31 16:00:00', timestamp'-0015-03-18 16:00:00', timestamp'-000001', timestamp'99999-03-18T12:03:17'
 -- !query analysis
-Project [-1969-12-31 16:00:00 AS TIMESTAMP '-1969-12-31 16:00:00'#x, -0015-03-18 16:00:00 AS TIMESTAMP '-0015-03-18 16:00:00'#x, -0001-01-01 00:00:00 AS TIMESTAMP '-0001-01-01 00:00:00'#x, +99999-03-18 12:03:17 AS TIMESTAMP '+99999-03-18 12:03:17'#x]
-+- OneRowRelation
+[Analyzer test output redacted due to nondeterminism]
 
 
 -- !query

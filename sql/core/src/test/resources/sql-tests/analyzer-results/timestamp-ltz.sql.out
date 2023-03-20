@@ -2,8 +2,7 @@
 -- !query
 select timestamp_ltz'2016-12-31 00:12:00', timestamp_ltz'2016-12-31'
 -- !query analysis
-Project [2016-12-31 00:12:00 AS TIMESTAMP '2016-12-31 00:12:00'#x, 2016-12-31 00:00:00 AS TIMESTAMP '2016-12-31 00:00:00'#x]
-+- OneRowRelation
+[Analyzer test output redacted due to nondeterminism]
 
 
 -- !query
@@ -51,5 +50,4 @@ Project [make_timestamp_ltz(2021, 7, 11, 6, 30, cast(60.007 as decimal(16,6)), N
 -- !query
 SELECT convert_timezone('Europe/Brussels', timestamp_ltz'2022-03-23 00:00:00 America/Los_Angeles')
 -- !query analysis
-Project [convert_timezone(current_timezone(), Europe/Brussels, cast(2022-03-23 00:00:00 as timestamp_ntz)) AS convert_timezone(current_timezone(), Europe/Brussels, TIMESTAMP '2022-03-23 00:00:00')#x]
-+- OneRowRelation
+[Analyzer test output redacted due to nondeterminism]
