@@ -45,24 +45,12 @@ class UDFParityTests(BaseUDFTestsMixin, ReusedConnectTestCase):
         super().test_same_accumulator_in_udfs()
 
     @unittest.skip("Spark Connect does not support spark.conf but the test depends on it.")
-    def test_udf_with_column_vector(self):
-        super().test_udf_with_column_vector()
-
-    @unittest.skip("Spark Connect does not support spark.conf but the test depends on it.")
     def test_udf_timestamp_ntz(self):
         super().test_udf_timestamp_ntz()
 
     @unittest.skip("Spark Connect does not support broadcast but the test depends on it.")
     def test_broadcast_in_udf(self):
         super().test_broadcast_in_udf()
-
-    @unittest.skip("Spark Connect does not support sql_conf but the test depends on it.")
-    def test_file_dsv2_with_udf_filter(self):
-        super().test_file_dsv2_with_udf_filter()
-
-    @unittest.skip("Spark Connect does not support sql_conf but the test depends on it.")
-    def test_udf_in_join_condition(self):
-        super().test_udf_in_join_condition()
 
     @unittest.skip("Spark Connect does not support cache() but the test depends on it.")
     def test_udf_cache(self):
@@ -76,13 +64,11 @@ class UDFParityTests(BaseUDFTestsMixin, ReusedConnectTestCase):
     def test_nondeterministic_udf3(self):
         super().test_nondeterministic_udf3()
 
-    @unittest.skip("Requires JVM access.")
     def test_nondeterministic_udf_in_aggregate(self):
-        super().test_nondeterministic_udf_in_aggregate()
+        self.check_nondeterministic_udf_in_aggregate()
 
-    @unittest.skip("Requires JVM access.")
     def test_udf_registration_return_type_not_none(self):
-        super().test_udf_registration_return_type_not_none()
+        self.check_udf_registration_return_type_not_none()
 
     @unittest.skip("Spark Connect doesn't support RDD but the test depends on it.")
     def test_worker_original_stdin_closed(self):
@@ -91,16 +77,6 @@ class UDFParityTests(BaseUDFTestsMixin, ReusedConnectTestCase):
     @unittest.skip("Spark Connect does not support SQLContext but the test depends on it.")
     def test_udf_on_sql_context(self):
         super().test_udf_on_sql_context()
-
-    # TODO(SPARK-42247): implement `UserDefinedFunction.returnType`
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_udf3(self):
-        super().test_udf3()
-
-    # TODO(SPARK-42247): implement `UserDefinedFunction.returnType`
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_udf_registration_return_type_none(self):
-        super().test_udf_registration_return_type_none()
 
     @unittest.skip("Spark Connect does not support SQLContext but the test depends on it.")
     def test_non_existed_udf_with_sql_context(self):

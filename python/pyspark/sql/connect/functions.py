@@ -2482,9 +2482,6 @@ def _test() -> None:
     # Spark Connect does not support Spark Context but the test depends on that.
     del pyspark.sql.connect.functions.monotonically_increasing_id.__doc__
 
-    # TODO(SPARK-41843): Implement SparkSession.udf
-    del pyspark.sql.connect.functions.call_udf.__doc__
-
     globs["spark"] = (
         PySparkSession.builder.appName("sql.connect.functions tests")
         .remote("local[4]")

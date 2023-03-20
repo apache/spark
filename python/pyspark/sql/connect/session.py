@@ -342,20 +342,23 @@ class SparkSession:
                     # For cases like createDataFrame([("Alice", None, 80.1)], schema)
                     # we can not infer the schema from the data itself.
                     warnings.warn("failed to infer the schema from data")
-                    if _schema is None and _schema_str is not None:
+                    if _schema_str is not None:
                         _parsed = self.client._analyze(
                             method="ddl_parse", ddl_string=_schema_str
                         ).parsed
                         if isinstance(_parsed, StructType):
-                            _schema = _parsed
+                            _inferred_schema = _parsed
                         elif isinstance(_parsed, DataType):
-                            _schema = StructType().add("value", _parsed)
-                    if _schema is None or not isinstance(_schema, StructType):
+                            _inferred_schema = StructType().add("value", _parsed)
+                        _schema_str = None
+                    if _inferred_schema is None or not isinstance(_inferred_schema, StructType):
                         raise ValueError(
                             "Some of types cannot be determined after inferring, "
                             "a StructType Schema is required in this case"
                         )
-                    _inferred_schema = _schema
+
+                if _schema_str is None and _cols is None:
+                    _schema = _inferred_schema
 
             from pyspark.sql.connect.conversion import LocalDataToArrowConversion
 

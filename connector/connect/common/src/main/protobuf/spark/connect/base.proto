@@ -272,6 +272,9 @@ message ExecutePlanResponse {
   // The metrics observed during the execution of the query plan.
   repeated ObservedMetrics observed_metrics = 6;
 
+  // (Optional) The Spark schema. This field is available when `collect` is called.
+  DataType schema = 7;
+
   // A SQL command returns an opaque Relation that can be directly used as input for the next
   // call.
   message SqlCommandResult {
