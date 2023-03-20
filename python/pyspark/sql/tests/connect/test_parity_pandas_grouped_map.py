@@ -26,6 +26,11 @@ class GroupedApplyInPandasTests(GroupedApplyInPandasTestsMixin, ReusedConnectTes
     def test_case_insensitive_grouping_column(self):
         super().test_case_insensitive_grouping_column()
 
+    # TODO(SPARK-42857): Support CreateDataFrame from Decimal128
+    @unittest.skip("Fails in Spark Connect, should enable.")
+    def test_supported_types(self):
+        super().test_supported_types()
+
     @unittest.skip(
         "Spark Connect does not support sc._jvm.org.apache.log4j but the test depends on it."
     )

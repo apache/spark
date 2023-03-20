@@ -66,11 +66,6 @@ class PandasUDFParityTests(PandasUDFTestsMixin, ReusedConnectTestCase):
         self.assertEqual(udf.returnType, UnparsedDataType("v double"))
         self.assertEqual(udf.evalType, PandasUDFType.GROUPED_MAP)
 
-    # TODO(SPARK-42340): implement GroupedData.applyInPandas
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_stopiteration_in_grouped_map(self):
-        super().test_stopiteration_in_grouped_map()
-
 
 if __name__ == "__main__":
     import unittest
