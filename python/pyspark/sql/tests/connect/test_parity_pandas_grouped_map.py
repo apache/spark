@@ -77,6 +77,18 @@ class GroupedApplyInPandasTests(GroupedApplyInPandasTestsMixin, ReusedConnectTes
     def test_grouped_with_empty_partition(self):
         super().test_grouped_with_empty_partition()
 
+    @unittest.skip(
+        "Spark Connect does not support sc._jvm.org.apache.log4j but the test depends on it."
+    )
+    def test_apply_in_pandas_returning_empty_dataframe_and_wrong_number_of_columns(self):
+        super().test_apply_in_pandas_returning_empty_dataframe_and_wrong_number_of_columns()
+
+    @unittest.skip(
+        "Spark Connect does not support sc._jvm.org.apache.log4j but the test depends on it."
+    )
+    def test_apply_in_pandas_returning_wrong_number_of_columns(self):
+        super().test_apply_in_pandas_returning_wrong_number_of_columns()
+
 
 if __name__ == "__main__":
     from pyspark.sql.tests.connect.test_parity_pandas_grouped_map import *  # noqa: F401
