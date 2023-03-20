@@ -87,7 +87,6 @@ abstract class Optimizer(catalogManager: CatalogManager)
         CollapseProject,
         OptimizeWindowFunctions,
         CollapseWindow,
-        CombineFilters,
         EliminateOffsets,
         EliminateLimits,
         CombineUnions,
