@@ -128,7 +128,7 @@ class AsyncOffsetSeqLog(
    * @param batchId id of batch to write
    * @param fn serialization function
    * @return CompletableFuture that contains a boolean do
-   *         indicate whether the write was successfuly or not.
+   *         indicate whether the write was successfully or not.
    *         Future can also be completed exceptionally to indicate write errors.
    */
   private def addNewBatchByStreamAsync(batchId: Long)(
