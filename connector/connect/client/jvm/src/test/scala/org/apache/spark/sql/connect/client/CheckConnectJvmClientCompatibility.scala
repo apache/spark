@@ -130,9 +130,7 @@ object CheckConnectJvmClientCompatibility {
       ProblemFilters.exclude[Problem]("org.apache.spark.connect.proto.*"),
 
       // DataFrame Reader & Writer
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.DataFrameReader.json"),
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.DataFrameReader.jdbc"),
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.DataFrameWriter.jdbc"),
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.DataFrameReader.json"), // deprecated
 
       // DataFrameNaFunctions
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.DataFrameNaFunctions.this"),

@@ -9,9 +9,9 @@ license: |
   The ASF licenses this file to You under the Apache License, Version 2.0
   (the "License"); you may not use this file except in compliance with
   the License.  You may obtain a copy of the License at
- 
+
      http://www.apache.org/licenses/LICENSE-2.0
- 
+
   Unless required by applicable law or agreed to in writing, software
   distributed under the License is distributed on an "AS IS" BASIS,
   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -72,7 +72,7 @@ training error) and minimizing model complexity (i.e., to avoid overfitting).
 The following table summarizes the loss functions and their gradients or sub-gradients for the
 methods `spark.mllib` supports:
 
-<table class="table">
+<table class="table table-striped">
   <thead>
     <tr><th></th><th>loss function $L(\wv; \x, y)$</th><th>gradient or sub-gradient</th></tr>
   </thead>
@@ -105,7 +105,7 @@ The purpose of the
 encourage simple models and avoid overfitting.  We support the following
 regularizers in `spark.mllib`:
 
-<table class="table">
+<table class="table table-striped">
   <thead>
     <tr><th></th><th>regularizer $R(\wv)$</th><th>gradient or sub-gradient</th></tr>
   </thead>

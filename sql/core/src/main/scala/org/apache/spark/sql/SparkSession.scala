@@ -35,9 +35,9 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.scheduler.{SparkListener, SparkListenerApplicationEnd}
 import org.apache.spark.sql.catalog.Catalog
 import org.apache.spark.sql.catalyst._
-import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
+import org.apache.spark.sql.catalyst.analysis.{ParameterizedQuery, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.encoders._
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Parameter}
+import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Range}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.ExternalCommandRunner
@@ -100,10 +100,8 @@ class SparkSession private(
   private[sql] def this(
       sc: SparkContext,
       initialSessionOptions: java.util.HashMap[String, String]) = {
-    this(sc, None, None,
-      SparkSession.applyExtensions(
-        sc.getConf.get(StaticSQLConf.SPARK_SESSION_EXTENSIONS).getOrElse(Seq.empty),
-        new SparkSessionExtensions), initialSessionOptions.asScala.toMap)
+    this(sc, None, None, SparkSession.applyExtensions(sc, new SparkSessionExtensions),
+      initialSessionOptions.asScala.toMap)
   }
 
   private[sql] def this(sc: SparkContext) = this(sc, new java.util.HashMap[String, String]())
@@ -623,8 +621,12 @@ class SparkSession private(
     val tracker = new QueryPlanningTracker
     val plan = tracker.measurePhase(QueryPlanningTracker.PARSING) {
       val parser = sessionState.sqlParser
-      val parsedArgs = args.mapValues(parser.parseExpression).toMap
-      Parameter.bind(parser.parsePlan(sqlText), parsedArgs)
+      val parsedPlan = parser.parsePlan(sqlText)
+      if (args.nonEmpty) {
+        ParameterizedQuery(parsedPlan, args.mapValues(parser.parseExpression).toMap)
+      } else {
+        parsedPlan
+      }
     }
     Dataset.ofRows(self, plan, tracker)
   }
@@ -1010,9 +1012,7 @@ object SparkSession extends Logging {
         }
 
         loadExtensions(extensions)
-        applyExtensions(
-          sparkContext.getConf.get(StaticSQLConf.SPARK_SESSION_EXTENSIONS).getOrElse(Seq.empty),
-          extensions)
+        applyExtensions(sparkContext, extensions)
 
         session = new SparkSession(sparkContext, None, None, extensions, options.toMap)
         setDefaultSession(session)
@@ -1265,12 +1265,14 @@ object SparkSession extends Logging {
   }
 
   /**
-   * Initialize extensions for given extension classnames. The classes will be applied to the
+   * Initialize extensions specified in [[StaticSQLConf]]. The classes will be applied to the
    * extensions passed into this function.
    */
   private def applyExtensions(
-      extensionConfClassNames: Seq[String],
+      sparkContext: SparkContext,
       extensions: SparkSessionExtensions): SparkSessionExtensions = {
+    val extensionConfClassNames = sparkContext.getConf.get(StaticSQLConf.SPARK_SESSION_EXTENSIONS)
+      .getOrElse(Seq.empty)
     extensionConfClassNames.foreach { extensionConfClassName =>
       try {
         val extensionConfClass = Utils.classForName(extensionConfClassName)

@@ -2773,8 +2773,17 @@ class Dataset[T] private[sql] (
     sparkSession.sameSemantics(this.plan, other.plan)
   }
 
+  /**
+   * Returns a `hashCode` of the logical query plan against this [[Dataset]].
+   *
+   * @note
+   *   Unlike the standard `hashCode`, the hash is calculated against the query plan simplified by
+   *   tolerating the cosmetic differences such as attribute names.
+   * @since 3.4.0
+   */
+  @DeveloperApi
   def semanticHash(): Int = {
-    throw new UnsupportedOperationException("semanticHash is not implemented.")
+    sparkSession.semanticHash(this.plan)
   }
 
   def toJSON: Dataset[String] = {

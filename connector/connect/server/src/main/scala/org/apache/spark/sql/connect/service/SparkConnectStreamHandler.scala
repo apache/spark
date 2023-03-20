@@ -28,8 +28,9 @@ import org.apache.spark.connect.proto.{ExecutePlanRequest, ExecutePlanResponse}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.connect.common.DataTypeProtoConverter
+import org.apache.spark.sql.connect.common.LiteralValueProtoConverter.toLiteralProto
 import org.apache.spark.sql.connect.config.Connect.CONNECT_GRPC_ARROW_MAX_BATCH_SIZE
-import org.apache.spark.sql.connect.planner.LiteralValueProtoConverter.toConnectProtoValue
 import org.apache.spark.sql.connect.planner.SparkConnectPlanner
 import org.apache.spark.sql.connect.service.SparkConnectStreamHandler.processAsArrowBatches
 import org.apache.spark.sql.execution.{SparkPlan, SQLExecution}
@@ -60,6 +61,8 @@ class SparkConnectStreamHandler(responseObserver: StreamObserver[ExecutePlanResp
     // Extract the plan from the request and convert it to a logical plan
     val planner = new SparkConnectPlanner(session)
     val dataframe = Dataset.ofRows(session, planner.transformRelation(request.getPlan.getRoot))
+    responseObserver.onNext(
+      SparkConnectStreamHandler.sendSchemaToResponse(request.getSessionId, dataframe.schema))
     processAsArrowBatches(request.getSessionId, dataframe, responseObserver)
     responseObserver.onNext(
       SparkConnectStreamHandler.sendMetricsToResponse(request.getSessionId, dataframe))
@@ -203,6 +206,15 @@ object SparkConnectStreamHandler {
     }
   }
 
+  def sendSchemaToResponse(sessionId: String, schema: StructType): ExecutePlanResponse = {
+    // Send the Spark data type
+    ExecutePlanResponse
+      .newBuilder()
+      .setSessionId(sessionId)
+      .setSchema(DataTypeProtoConverter.toConnectProtoType(schema))
+      .build()
+  }
+
   def sendMetricsToResponse(sessionId: String, rows: DataFrame): ExecutePlanResponse = {
     // Send a last batch with the metrics
     ExecutePlanResponse
@@ -216,7 +228,7 @@ object SparkConnectStreamHandler {
       sessionId: String,
       dataframe: DataFrame): ExecutePlanResponse = {
     val observedMetrics = dataframe.queryExecution.observedMetrics.map { case (name, row) =>
-      val cols = (0 until row.length).map(i => toConnectProtoValue(row(i)))
+      val cols = (0 until row.length).map(i => toLiteralProto(row(i)))
       ExecutePlanResponse.ObservedMetrics
         .newBuilder()
         .setName(name)

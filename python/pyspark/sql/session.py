@@ -162,7 +162,7 @@ class SparkSession(SparkConversionMixin):
     To create a :class:`SparkSession`, use the following builder pattern:
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     .. autoattribute:: builder
        :annotation:
@@ -219,7 +219,7 @@ class SparkSession(SparkConversionMixin):
             .. versionadded:: 2.0.0
 
             .. versionchanged:: 3.4.0
-                Support Spark Connect.
+                Supports Spark Connect.
 
             Parameters
             ----------
@@ -352,7 +352,7 @@ class SparkSession(SparkConversionMixin):
             .. versionadded:: 2.0.0
 
             .. versionchanged:: 3.4.0
-                Support Spark Connect.
+                Supports Spark Connect.
 
             Parameters
             ----------
@@ -394,7 +394,7 @@ class SparkSession(SparkConversionMixin):
             .. versionadded:: 2.0.0
 
             .. versionchanged:: 3.4.0
-                Support Spark Connect.
+                Supports Spark Connect.
 
             Returns
             -------
@@ -687,7 +687,7 @@ class SparkSession(SparkConversionMixin):
         .. versionadded:: 2.0.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Returns
         -------
@@ -718,7 +718,7 @@ class SparkSession(SparkConversionMixin):
         .. versionadded:: 2.0.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Returns
         -------
@@ -755,7 +755,7 @@ class SparkSession(SparkConversionMixin):
         .. versionadded:: 2.0.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -1102,7 +1102,7 @@ class SparkSession(SparkConversionMixin):
         .. versionadded:: 2.0.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -1324,7 +1324,7 @@ class SparkSession(SparkConversionMixin):
         .. versionadded:: 2.0.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect and parameterized SQL.
+            Supports Spark Connect and parameterized SQL.
 
         Parameters
         ----------
@@ -1435,7 +1435,7 @@ class SparkSession(SparkConversionMixin):
         .. versionadded:: 2.0.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -1471,7 +1471,7 @@ class SparkSession(SparkConversionMixin):
         .. versionadded:: 2.0.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Returns
         -------
@@ -1575,7 +1575,7 @@ class SparkSession(SparkConversionMixin):
         .. versionadded:: 2.0.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Examples
         --------

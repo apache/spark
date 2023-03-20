@@ -97,7 +97,7 @@ class PlanGenerationTestSuite
     super.beforeAll()
     val client = SparkConnectClient(
       proto.UserContext.newBuilder().build(),
-      InProcessChannelBuilder.forName("/dev/null").build())
+      InProcessChannelBuilder.forName("/dev/null"))
     session =
       new SparkSession(client, cleaner = SparkSession.cleaner, planIdGenerator = new AtomicLong)
   }
@@ -1712,6 +1712,10 @@ class PlanGenerationTestSuite
 
   functionTest("array_distinct") {
     fn.array_distinct(fn.col("e"))
+  }
+
+  functionTest("array_prepend") {
+    fn.array_prepend(fn.col("e"), lit(1))
   }
 
   functionTest("array_intersect") {

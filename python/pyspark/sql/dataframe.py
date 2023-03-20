@@ -83,7 +83,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
     .. versionadded:: 1.3.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Examples
     --------
@@ -180,7 +180,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionadded:: 3.3.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Returns
         -------
@@ -224,7 +224,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionadded:: 1.3.1
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Returns
         -------
@@ -254,7 +254,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionadded:: 1.4.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Returns
         -------
@@ -304,6 +304,9 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         .. versionadded:: 1.3.0
 
+        .. versionchanged:: 3.4.0
+            Supports Spark Connect.
+
         .. deprecated:: 2.0.0
             Use :meth:`DataFrame.createOrReplaceTempView` instead.
 
@@ -337,7 +340,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionadded:: 2.0.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -375,7 +378,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionadded:: 2.0.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -416,7 +419,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionadded:: 2.1.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -457,7 +460,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionadded:: 2.2.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -497,7 +500,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionadded:: 1.4.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Returns
         -------
@@ -555,7 +558,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionadded:: 1.3.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Returns
         -------
@@ -587,7 +590,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionadded:: 1.3.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Returns
         -------
@@ -612,7 +615,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionadded:: 1.3.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -729,7 +732,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionadded:: 2.4.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -765,7 +768,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionadded:: 1.3.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Returns
         -------
@@ -791,7 +794,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionadded:: 2.0.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Notes
         -----
@@ -816,7 +819,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionadded:: 3.3.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Returns
         -------
@@ -840,7 +843,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionadded:: 1.3.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -1126,7 +1129,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionadded:: 2.2.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -1189,7 +1192,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionadded:: 1.3.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Returns
         -------
@@ -1214,7 +1217,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionadded:: 1.3.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Returns
         -------
@@ -1268,7 +1271,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionadded:: 1.3.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -1306,7 +1309,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionadded:: 1.3.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -1341,7 +1344,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionadded:: 3.0.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -1567,7 +1570,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionadded:: 1.4.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -1604,7 +1607,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionadded:: 1.3.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -1682,7 +1685,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionadded:: 2.4.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -1746,7 +1749,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionadded:: 1.3.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Returns
         -------
@@ -1789,7 +1792,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionadded:: 1.3.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -1878,7 +1881,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionadded:: 1.5.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -1948,7 +1951,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionadded:: 1.4.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -1995,7 +1998,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionadded:: 1.3.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Returns
         -------
@@ -2018,7 +2021,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionadded:: 1.3.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Returns
         -------
@@ -2042,7 +2045,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionadded:: 2.3.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -2081,7 +2084,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionadded:: 3.4.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -2139,7 +2142,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionadded:: 1.3.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -2178,7 +2181,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionadded:: 2.1.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -2224,7 +2227,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionadded:: 1.3.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -2461,7 +2464,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionadded:: 1.6.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -2497,7 +2500,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionadded:: 1.3.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -2634,7 +2637,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionadded:: 1.3.1
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         This includes count, mean, stddev, min, and max. If no columns are
         given, this function computes statistics for all numerical or string columns.
@@ -2709,7 +2712,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionadded:: 2.3.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -2781,7 +2784,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionadded:: 1.3.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Notes
         -----
@@ -2818,7 +2821,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionadded:: 1.3.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Returns
         -------
@@ -2848,7 +2851,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionadded:: 1.3.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -2936,7 +2939,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionadded:: 1.3.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -2984,7 +2987,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionadded:: 1.3.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -3042,7 +3045,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionadded:: 1.3.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Returns
         -------
@@ -3074,7 +3077,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionadded:: 1.3.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -3151,7 +3154,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionadded:: 1.3.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -3231,7 +3234,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionadded:: 1.4.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -3280,7 +3283,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionadded:: 1.4.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -3346,7 +3349,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionadded:: 3.4.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -3463,7 +3466,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionadded:: 1.3.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -3611,7 +3614,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionadded:: 2.0.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -3661,7 +3664,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionadded:: 1.3.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -3698,7 +3701,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionadded:: 2.3.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -3755,7 +3758,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionadded:: 1.3.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -3795,7 +3798,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionadded:: 2.4.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -3829,7 +3832,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionadded:: 1.3.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -3873,7 +3876,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionadded:: 1.4.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -3937,7 +3940,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionadded:: 1.3.1
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -4014,7 +4017,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionadded:: 1.3.1
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -4164,7 +4167,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionadded:: 1.4.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -4374,7 +4377,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionadded:: 2.0.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -4476,7 +4479,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionadded:: 1.4.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -4529,7 +4532,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionadded:: 1.4.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -4577,7 +4580,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionadded:: 1.4.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -4630,7 +4633,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionadded:: 1.4.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -4687,7 +4690,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
            Added support for multiple columns adding
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -4739,7 +4742,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionadded:: 1.3.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -4785,7 +4788,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionadded:: 1.3.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -4821,7 +4824,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
            Added support for multiple columns renaming
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -4864,7 +4867,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionadded:: 3.3.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -4910,7 +4913,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionadded:: 1.4.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -4983,7 +4986,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         """Returns a new :class:`DataFrame` that with new specified column names
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -5019,7 +5022,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionadded:: 3.0.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -5155,7 +5158,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionadded:: 3.1.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Returns
         -------
@@ -5208,7 +5211,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionadded:: 3.1.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -5319,7 +5322,7 @@ class DataFrameNaFunctions:
     .. versionadded:: 1.4.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
     """
 
     def __init__(self, df: DataFrame):
@@ -5397,7 +5400,7 @@ class DataFrameStatFunctions:
     .. versionadded:: 1.4.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
     """
 
     def __init__(self, df: DataFrame):

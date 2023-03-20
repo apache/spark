@@ -619,8 +619,8 @@ class StreamingInnerJoinSuite extends StreamingJoinSuite {
 
         assert(query.lastExecution.executedPlan.collect {
           case j @ StreamingSymmetricHashJoinExec(_, _, _, _, _, _, _, _, _,
-            ShuffleExchangeExec(opA: HashPartitioning, _, _),
-            ShuffleExchangeExec(opB: HashPartitioning, _, _))
+            ShuffleExchangeExec(opA: HashPartitioning, _, _, _),
+            ShuffleExchangeExec(opB: HashPartitioning, _, _, _))
               if partitionExpressionsColumns(opA.expressions) === Seq("a", "b")
                 && partitionExpressionsColumns(opB.expressions) === Seq("a", "b")
                 && opA.numPartitions == numPartitions && opB.numPartitions == numPartitions => j

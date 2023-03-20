@@ -30,19 +30,20 @@ import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.{ExecutePlanResponse, SqlCommand}
 import org.apache.spark.connect.proto.ExecutePlanResponse.SqlCommandResult
 import org.apache.spark.connect.proto.Parse.ParseFormat
+import org.apache.spark.ml.{functions => MLFunctions}
 import org.apache.spark.sql.{Column, Dataset, Encoders, SparkSession}
 import org.apache.spark.sql.catalyst.{expressions, AliasIdentifier, FunctionIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{GlobalTempView, LocalTempView, MultiAlias, UnresolvedAlias, UnresolvedAttribute, UnresolvedExtractValue, UnresolvedFunction, UnresolvedRegex, UnresolvedRelation, UnresolvedStar}
+import org.apache.spark.sql.catalyst.analysis.{GlobalTempView, LocalTempView, MultiAlias, ParameterizedQuery, UnresolvedAlias, UnresolvedAttribute, UnresolvedExtractValue, UnresolvedFunction, UnresolvedRegex, UnresolvedRelation, UnresolvedStar}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException, ParserUtils}
 import org.apache.spark.sql.catalyst.plans.{Cross, FullOuter, Inner, JoinType, LeftAnti, LeftOuter, LeftSemi, RightOuter, UsingJoin}
 import org.apache.spark.sql.catalyst.plans.logical
-import org.apache.spark.sql.catalyst.plans.logical.{CollectMetrics, CommandResult, Deduplicate, Except, Intersect, LocalRelation, LogicalPlan, Sample, Sort, SubqueryAlias, Union, Unpivot, UnresolvedHint}
+import org.apache.spark.sql.catalyst.plans.logical.{CollectMetrics, CommandResult, Deduplicate, Except, Intersect, LocalRelation, LogicalPlan, Project, Sample, Sort, SubqueryAlias, Union, Unpivot, UnresolvedHint}
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CharVarcharUtils}
 import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, InvalidPlanInput, UdfPacket}
 import org.apache.spark.sql.connect.config.Connect.CONNECT_GRPC_ARROW_MAX_BATCH_SIZE
-import org.apache.spark.sql.connect.planner.LiteralValueProtoConverter.{toCatalystExpression, toCatalystValue}
+import org.apache.spark.sql.connect.planner.LiteralExpressionProtoConverter.{toCatalystExpression, toCatalystValue}
 import org.apache.spark.sql.connect.plugin.SparkConnectPluginRegistry
 import org.apache.spark.sql.connect.service.SparkConnectStreamHandler
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -209,8 +210,12 @@ class SparkConnectPlanner(val session: SparkSession) {
   private def transformSql(sql: proto.SQL): LogicalPlan = {
     val args = sql.getArgsMap.asScala.toMap
     val parser = session.sessionState.sqlParser
-    val parsedArgs = args.mapValues(parser.parseExpression).toMap
-    Parameter.bind(parser.parsePlan(sql.getQuery), parsedArgs)
+    val parsedPlan = parser.parsePlan(sql.getQuery)
+    if (args.nonEmpty) {
+      ParameterizedQuery(parsedPlan, args.mapValues(parser.parseExpression).toMap)
+    } else {
+      parsedPlan
+    }
   }
 
   private def transformSubqueryAlias(alias: proto.SubqueryAlias): LogicalPlan = {
@@ -455,7 +460,7 @@ class SparkConnectPlanner(val session: SparkSession) {
   }
 
   private def transformToSchema(rel: proto.ToSchema): LogicalPlan = {
-    val schema = DataTypeProtoConverter.toCatalystType(rel.getSchema)
+    val schema = transformDataType(rel.getSchema)
     assert(schema.isInstanceOf[StructType])
 
     Dataset
@@ -477,6 +482,11 @@ class SparkConnectPlanner(val session: SparkSession) {
     pythonUdf.evalType match {
       case PythonEvalType.SQL_MAP_PANDAS_ITER_UDF =>
         logical.MapInPandas(
+          pythonUdf,
+          pythonUdf.dataType.asInstanceOf[StructType].toAttributes,
+          transformRelation(rel.getInput))
+      case PythonEvalType.SQL_MAP_ARROW_ITER_UDF =>
+        logical.PythonMapInArrow(
           pythonUdf,
           pythonUdf.dataType.asInstanceOf[StructType].toAttributes,
           transformRelation(rel.getInput))
@@ -616,6 +626,14 @@ class SparkConnectPlanner(val session: SparkSession) {
     }
   }
 
+  private def transformDataType(t: proto.DataType): DataType = {
+    t.getKindCase match {
+      case proto.DataType.KindCase.UNPARSED =>
+        parseDatatypeString(t.getUnparsed.getDataTypeString)
+      case _ => DataTypeProtoConverter.toCatalystType(t)
+    }
+  }
+
   private[connect] def parseDatatypeString(sqlText: String): DataType = {
     val parser = session.sessionState.sqlParser
     try {
@@ -658,16 +676,36 @@ class SparkConnectPlanner(val session: SparkSession) {
       }
       val attributes = structType.toAttributes
       val proj = UnsafeProjection.create(attributes, attributes)
-      val relation = logical.LocalRelation(attributes, rows.map(r => proj(r).copy()).toSeq)
+      val data = rows.map(proj)
 
       if (schema == null) {
-        relation
+        logical.LocalRelation(attributes, data.map(_.copy()).toSeq)
       } else {
-        Dataset
-          .ofRows(session, logicalPlan = relation)
-          .toDF(schema.names: _*)
-          .to(schema)
+        def udtToSqlType(dt: DataType): DataType = dt match {
+          case udt: UserDefinedType[_] => udt.sqlType
+          case StructType(fields) =>
+            val newFields = fields.map { case StructField(name, dataType, nullable, metadata) =>
+              StructField(name, udtToSqlType(dataType), nullable, metadata)
+            }
+            StructType(newFields)
+          case ArrayType(elementType, containsNull) =>
+            ArrayType(udtToSqlType(elementType), containsNull)
+          case MapType(keyType, valueType, valueContainsNull) =>
+            MapType(udtToSqlType(keyType), udtToSqlType(valueType), valueContainsNull)
+          case _ => dt
+        }
+
+        val sqlTypeOnlySchema = udtToSqlType(schema).asInstanceOf[StructType]
+
+        val project = Dataset
+          .ofRows(session, logicalPlan = logical.LocalRelation(attributes))
+          .toDF(sqlTypeOnlySchema.names: _*)
+          .to(sqlTypeOnlySchema)
           .logicalPlan
+          .asInstanceOf[Project]
+
+        val proj = UnsafeProjection.create(project.projectList, project.child.output)
+        logical.LocalRelation(schema.toAttributes, data.map(proj).map(_.copy()).toSeq)
       }
     } else {
       if (schema == null) {
@@ -960,13 +998,7 @@ class SparkConnectPlanner(val session: SparkSession) {
     PythonUDF(
       name = fun.getFunctionName,
       func = transformPythonFunction(udf),
-      dataType = DataType.parseTypeWithFallback(
-        schema = udf.getOutputType,
-        parser = DataType.fromDDL,
-        fallbackParser = DataType.fromJson) match {
-        case s: DataType => s
-        case other => throw InvalidPlanInput(s"Invalid return type $other")
-      },
+      dataType = transformDataType(udf.getOutputType),
       children = fun.getArgumentsList.asScala.map(transformExpression).toSeq,
       evalType = udf.getEvalType,
       udfDeterministic = fun.getDeterministic)
@@ -1176,8 +1208,49 @@ class SparkConnectPlanner(val session: SparkSession) {
           None
         }
 
+      // ML-specific functions
+      case "vector_to_array" if fun.getArgumentsCount == 2 =>
+        val expr = transformExpression(fun.getArguments(0))
+        val dtype = transformExpression(fun.getArguments(1)) match {
+          case Literal(s, StringType) if s != null => s.toString
+          case other =>
+            throw InvalidPlanInput(
+              s"dtype in vector_to_array should be a literal string, but got $other")
+        }
+        dtype match {
+          case "float64" =>
+            Some(transformUnregisteredUDF(MLFunctions.vectorToArrayUdf, Seq(expr)))
+          case "float32" =>
+            Some(transformUnregisteredUDF(MLFunctions.vectorToArrayFloatUdf, Seq(expr)))
+          case other =>
+            throw InvalidPlanInput(s"Unsupported dtype: $other. Valid values: float64, float32.")
+        }
+
+      case "array_to_vector" if fun.getArgumentsCount == 1 =>
+        val expr = transformExpression(fun.getArguments(0))
+        Some(transformUnregisteredUDF(MLFunctions.arrayToVectorUdf, Seq(expr)))
+
       case _ => None
     }
+  }
+
+  /**
+   * There are some built-in yet not registered UDFs, for example, 'ml.function.array_to_vector'.
+   * This method is to convert them to ScalaUDF expressions.
+   */
+  private def transformUnregisteredUDF(
+      fun: org.apache.spark.sql.expressions.UserDefinedFunction,
+      exprs: Seq[Expression]): ScalaUDF = {
+    val f = fun.asInstanceOf[org.apache.spark.sql.expressions.SparkUserDefinedFunction]
+    ScalaUDF(
+      function = f.f,
+      dataType = f.dataType,
+      children = exprs,
+      inputEncoders = f.inputEncoders,
+      outputEncoder = f.outputEncoder,
+      udfName = f.name,
+      nullable = f.nullable,
+      udfDeterministic = f.deterministic)
   }
 
   private def transformAlias(alias: proto.Expression.Alias): NamedExpression = {
@@ -1220,9 +1293,7 @@ class SparkConnectPlanner(val session: SparkSession) {
   private def transformCast(cast: proto.Expression.Cast): Expression = {
     cast.getCastToTypeCase match {
       case proto.Expression.Cast.CastToTypeCase.TYPE =>
-        Cast(
-          transformExpression(cast.getExpr),
-          DataTypeProtoConverter.toCatalystType(cast.getType))
+        Cast(transformExpression(cast.getExpr), transformDataType(cast.getType))
       case _ =>
         Cast(
           transformExpression(cast.getExpr),
@@ -1615,13 +1686,7 @@ class SparkConnectPlanner(val session: SparkSession) {
     val udpf = UserDefinedPythonFunction(
       name = fun.getFunctionName,
       func = function,
-      dataType = DataType.parseTypeWithFallback(
-        schema = udf.getOutputType,
-        parser = DataType.fromDDL,
-        fallbackParser = DataType.fromJson) match {
-        case s: DataType => s
-        case other => throw InvalidPlanInput(s"Invalid return type $other")
-      },
+      dataType = transformDataType(udf.getOutputType),
       pythonEvalType = udf.getEvalType,
       udfDeterministic = fun.getDeterministic)
 
@@ -1630,16 +1695,11 @@ class SparkConnectPlanner(val session: SparkSession) {
 
   private def handleRegisterJavaUDF(fun: proto.CommonInlineUserDefinedFunction): Unit = {
     val udf = fun.getJavaUdf
-    val dataType =
-      if (udf.hasOutputType) {
-        DataType.parseTypeWithFallback(
-          schema = udf.getOutputType,
-          parser = DataType.fromDDL,
-          fallbackParser = DataType.fromJson) match {
-          case s: DataType => s
-          case other => throw InvalidPlanInput(s"Invalid return type $other")
-        }
-      } else null
+    val dataType = if (udf.hasOutputType) {
+      transformDataType(udf.getOutputType)
+    } else {
+      null
+    }
     if (udf.getAggregate) {
       session.udf.registerJavaUDAF(fun.getFunctionName, udf.getClassName)
     } else {
@@ -1734,6 +1794,7 @@ class SparkConnectPlanner(val session: SparkSession) {
     }
 
     writeOperation.getSaveTypeCase match {
+      case proto.WriteOperation.SaveTypeCase.SAVETYPE_NOT_SET => w.save()
       case proto.WriteOperation.SaveTypeCase.PATH => w.save(writeOperation.getPath)
       case proto.WriteOperation.SaveTypeCase.TABLE =>
         val tableName = writeOperation.getTable.getTableName
@@ -1945,7 +2006,7 @@ class SparkConnectPlanner(val session: SparkSession) {
   private def transformCreateExternalTable(
       getCreateExternalTable: proto.CreateExternalTable): LogicalPlan = {
     val schema = if (getCreateExternalTable.hasSchema) {
-      val struct = DataTypeProtoConverter.toCatalystType(getCreateExternalTable.getSchema)
+      val struct = transformDataType(getCreateExternalTable.getSchema)
       assert(struct.isInstanceOf[StructType])
       struct.asInstanceOf[StructType]
     } else {
@@ -1975,7 +2036,7 @@ class SparkConnectPlanner(val session: SparkSession) {
 
   private def transformCreateTable(getCreateTable: proto.CreateTable): LogicalPlan = {
     val schema = if (getCreateTable.hasSchema) {
-      val struct = DataTypeProtoConverter.toCatalystType(getCreateTable.getSchema)
+      val struct = transformDataType(getCreateTable.getSchema)
       assert(struct.isInstanceOf[StructType])
       struct.asInstanceOf[StructType]
     } else {

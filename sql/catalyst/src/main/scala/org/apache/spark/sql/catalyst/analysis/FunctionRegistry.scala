@@ -697,6 +697,7 @@ object FunctionRegistry {
     expression[Sequence]("sequence"),
     expression[ArrayRepeat]("array_repeat"),
     expression[ArrayRemove]("array_remove"),
+    expression[ArrayPrepend]("array_prepend"),
     expression[ArrayDistinct]("array_distinct"),
     expression[ArrayTransform]("transform"),
     expression[MapFilter]("map_filter"),

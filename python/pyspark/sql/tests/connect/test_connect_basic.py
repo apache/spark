@@ -23,7 +23,7 @@ import shutil
 import tempfile
 from collections import defaultdict
 
-from pyspark.errors import PySparkTypeError
+from pyspark.errors import PySparkAttributeError, PySparkTypeError
 from pyspark.sql import SparkSession as PySparkSession, Row
 from pyspark.sql.types import (
     StructType,
@@ -2814,6 +2814,14 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         other = self.connect.sql("SELECT 1")
         self.assertTrue(plan.sameSemantics(other))
 
+    def test_semantic_hash(self):
+        plan = self.connect.sql("SELECT 1")
+        other = self.connect.sql("SELECT 1")
+        self.assertEqual(
+            plan.semanticHash(),
+            other.semanticHash(),
+        )
+
     def test_unsupported_functions(self):
         # SPARK-41225: Disable unsupported functions.
         df = self.connect.read.table(self.tbl_name)
@@ -2829,7 +2837,6 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             "checkpoint",
             "localCheckpoint",
             "_repr_html_",
-            "semanticHash",
         ):
             with self.assertRaises(NotImplementedError):
                 getattr(df, f)()
@@ -2864,22 +2871,116 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             with self.assertRaises(NotImplementedError):
                 getattr(self.connect, f)()
 
-    def test_unsupported_io_functions(self):
-        # SPARK-41964: Disable unsupported functions.
-        df = self.connect.createDataFrame([(x, f"{x}") for x in range(100)], ["id", "name"])
-
-        for f in ("jdbc",):
-            with self.assertRaises(NotImplementedError):
-                getattr(self.connect.read, f)()
-
-        for f in ("jdbc",):
-            with self.assertRaises(NotImplementedError):
-                getattr(df.write, f)()
-
     def test_sql_with_command(self):
         # SPARK-42705: spark.sql should return values from the command.
         self.assertEqual(
             self.connect.sql("show functions").collect(), self.spark.sql("show functions").collect()
+        )
+
+    def test_schema_has_nullable(self):
+        schema_false = StructType().add("id", IntegerType(), False)
+        cdf1 = self.connect.createDataFrame([[1]], schema=schema_false)
+        sdf1 = self.spark.createDataFrame([[1]], schema=schema_false)
+        self.assertEqual(cdf1.schema, sdf1.schema)
+        self.assertEqual(cdf1.collect(), sdf1.collect())
+
+        schema_true = StructType().add("id", IntegerType(), True)
+        cdf2 = self.connect.createDataFrame([[1]], schema=schema_true)
+        sdf2 = self.spark.createDataFrame([[1]], schema=schema_true)
+        self.assertEqual(cdf2.schema, sdf2.schema)
+        self.assertEqual(cdf2.collect(), sdf2.collect())
+
+        pdf1 = cdf1.toPandas()
+        cdf3 = self.connect.createDataFrame(pdf1, cdf1.schema)
+        sdf3 = self.spark.createDataFrame(pdf1, sdf1.schema)
+        self.assertEqual(cdf3.schema, sdf3.schema)
+        self.assertEqual(cdf3.collect(), sdf3.collect())
+
+        pdf2 = cdf2.toPandas()
+        cdf4 = self.connect.createDataFrame(pdf2, cdf2.schema)
+        sdf4 = self.spark.createDataFrame(pdf2, sdf2.schema)
+        self.assertEqual(cdf4.schema, sdf4.schema)
+        self.assertEqual(cdf4.collect(), sdf4.collect())
+
+    def test_array_has_nullable(self):
+        schema_array_false = StructType().add("arr", ArrayType(IntegerType(), False))
+        cdf1 = self.connect.createDataFrame([Row([1, 2]), Row([3])], schema=schema_array_false)
+        sdf1 = self.spark.createDataFrame([Row([1, 2]), Row([3])], schema=schema_array_false)
+        self.assertEqual(cdf1.schema, sdf1.schema)
+        self.assertEqual(cdf1.collect(), sdf1.collect())
+
+        schema_array_true = StructType().add("arr", ArrayType(IntegerType(), True))
+        cdf2 = self.connect.createDataFrame([Row([1, None]), Row([3])], schema=schema_array_true)
+        sdf2 = self.spark.createDataFrame([Row([1, None]), Row([3])], schema=schema_array_true)
+        self.assertEqual(cdf2.schema, sdf2.schema)
+        self.assertEqual(cdf2.collect(), sdf2.collect())
+
+    def test_map_has_nullable(self):
+        schema_map_false = StructType().add("map", MapType(StringType(), IntegerType(), False))
+        cdf1 = self.connect.createDataFrame(
+            [Row({"a": 1, "b": 2}), Row({"a": 3})], schema=schema_map_false
+        )
+        sdf1 = self.spark.createDataFrame(
+            [Row({"a": 1, "b": 2}), Row({"a": 3})], schema=schema_map_false
+        )
+        self.assertEqual(cdf1.schema, sdf1.schema)
+        self.assertEqual(cdf1.collect(), sdf1.collect())
+
+        schema_map_true = StructType().add("map", MapType(StringType(), IntegerType(), True))
+        cdf2 = self.connect.createDataFrame(
+            [Row({"a": 1, "b": None}), Row({"a": 3})], schema=schema_map_true
+        )
+        sdf2 = self.spark.createDataFrame(
+            [Row({"a": 1, "b": None}), Row({"a": 3})], schema=schema_map_true
+        )
+        self.assertEqual(cdf2.schema, sdf2.schema)
+        self.assertEqual(cdf2.collect(), sdf2.collect())
+
+    def test_unsupported_jvm_attribute(self):
+        # Unsupported jvm attributes for Spark session.
+        unsupported_attrs = ["_jsc", "_jconf", "_jvm", "_jsparkSession"]
+        spark_session = self.connect
+        for attr in unsupported_attrs:
+            with self.assertRaises(PySparkAttributeError) as pe:
+                getattr(spark_session, attr)
+
+            self.check_error(
+                exception=pe.exception,
+                error_class="JVM_ATTRIBUTE_NOT_SUPPORTED",
+                message_parameters={"attr_name": attr},
+            )
+
+        # Unsupported jvm attributes for DataFrame.
+        unsupported_attrs = ["_jseq", "_jdf", "_jmap", "_jcols"]
+        cdf = self.connect.range(10)
+        for attr in unsupported_attrs:
+            with self.assertRaises(PySparkAttributeError) as pe:
+                getattr(cdf, attr)
+
+            self.check_error(
+                exception=pe.exception,
+                error_class="JVM_ATTRIBUTE_NOT_SUPPORTED",
+                message_parameters={"attr_name": attr},
+            )
+
+        # Unsupported jvm attributes for Column.
+        with self.assertRaises(PySparkAttributeError) as pe:
+            getattr(cdf.id, "_jc")
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="JVM_ATTRIBUTE_NOT_SUPPORTED",
+            message_parameters={"attr_name": "_jc"},
+        )
+
+        # Unsupported jvm attributes for DataFrameReader.
+        with self.assertRaises(PySparkAttributeError) as pe:
+            getattr(spark_session.read, "_jreader")
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="JVM_ATTRIBUTE_NOT_SUPPORTED",
+            message_parameters={"attr_name": "_jreader"},
         )
 
 

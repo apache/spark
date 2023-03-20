@@ -34,26 +34,6 @@ class TypesParityTests(TypesTestsMixin, ReusedConnectTestCase):
     def test_apply_schema_to_row(self):
         super().test_apply_schema_to_dict_and_rows()
 
-    # TODO(SPARK-42020): createDataFrame with UDT
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_apply_schema_with_udt(self):
-        super().test_apply_schema_with_udt()
-
-    # TODO(SPARK-42020): createDataFrame with UDT
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_cast_to_string_with_udt(self):
-        super().test_cast_to_string_with_udt()
-
-    # TODO(SPARK-42020): createDataFrame with UDT
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_cast_to_udt_with_udt(self):
-        super().test_cast_to_udt_with_udt()
-
-    # TODO(SPARK-42020): createDataFrame with UDT
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_complex_nested_udt_in_df(self):
-        super().test_complex_nested_udt_in_df()
-
     @unittest.skip("Spark Connect does not support RDD but the tests depend on them.")
     def test_create_dataframe_schema_mismatch(self):
         super().test_create_dataframe_schema_mismatch()
@@ -103,45 +83,13 @@ class TypesParityTests(TypesTestsMixin, ReusedConnectTestCase):
     def test_infer_schema_upcast_int_to_string(self):
         super().test_infer_schema_upcast_int_to_string()
 
-    # TODO(SPARK-42020): createDataFrame with UDT
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_infer_schema_with_udt(self):
-        super().test_infer_schema_with_udt()
-
-    # TODO(SPARK-42020): createDataFrame with UDT
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_nested_udt_in_df(self):
-        super().test_nested_udt_in_df()
-
-    # TODO(SPARK-42020): createDataFrame with UDT
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_parquet_with_udt(self):
-        super().test_parquet_with_udt()
-
-    # TODO(SPARK-42020): createDataFrame with UDT
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_simple_udt_in_df(self):
-        super().test_simple_udt_in_df()
-
-    # TODO(SPARK-42020): createDataFrame with UDT
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip("Spark Connect does not support RDD but the tests depend on them.")
     def test_udf_with_udt(self):
         super().test_udf_with_udt()
 
-    # TODO(SPARK-42020): createDataFrame with UDT
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip("Requires JVM access.")
     def test_udt(self):
         super().test_udt()
-
-    # TODO(SPARK-42020): createDataFrame with UDT
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_udt_with_none(self):
-        super().test_udt_with_none()
-
-    # TODO(SPARK-42020): createDataFrame with UDT
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_union_with_udt(self):
-        super().test_union_with_udt()
 
 
 if __name__ == "__main__":
