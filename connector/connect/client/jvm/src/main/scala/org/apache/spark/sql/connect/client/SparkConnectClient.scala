@@ -337,6 +337,11 @@ private[sql] object SparkConnectClient {
       this
     }
 
+    def option(key: String, value: String): Builder = {
+      metadata += ((key, value))
+      this
+    }
+
     private def parseURIParams(uri: URI): Unit = {
       val params = uri.getPath.split(';').drop(1).filter(_ != "")
       params.foreach { kv =>
