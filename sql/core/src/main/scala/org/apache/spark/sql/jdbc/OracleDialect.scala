@@ -220,4 +220,8 @@ private case object OracleDialect extends JdbcDialect {
 
   override def getJdbcSQLQueryBuilder(options: JDBCOptions): JdbcSQLQueryBuilder =
     new OracleSQLQueryBuilder(this, options)
+
+  override def supportsLimit: Boolean = true
+
+  override def supportsOffset: Boolean = true
 }

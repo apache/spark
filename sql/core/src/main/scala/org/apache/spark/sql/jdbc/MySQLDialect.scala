@@ -320,4 +320,8 @@ private case object MySQLDialect extends JdbcDialect with SQLConfHelper {
 
   override def getJdbcSQLQueryBuilder(options: JDBCOptions): JdbcSQLQueryBuilder =
     new MySQLSQLQueryBuilder(this, options)
+
+  override def supportsLimit: Boolean = true
+
+  override def supportsOffset: Boolean = true
 }

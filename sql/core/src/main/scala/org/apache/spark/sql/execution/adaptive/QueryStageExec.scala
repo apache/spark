@@ -52,11 +52,6 @@ abstract class QueryStageExec extends LeafExecNode {
   val plan: SparkPlan
 
   /**
-   * Cancel the stage materialization if in progress; otherwise do nothing.
-   */
-  def cancel(): Unit
-
-  /**
    * Materialize this query stage, to prepare for the execution, like submitting map stages,
    * broadcasting data, etc. The caller side can use the returned [[Future]] to wait until this
    * stage is ready.
@@ -102,6 +97,7 @@ abstract class QueryStageExec extends LeafExecNode {
   override def executeToIterator(): Iterator[InternalRow] = plan.executeToIterator()
 
   protected override def doExecute(): RDD[InternalRow] = plan.execute()
+  override def supportsRowBased: Boolean = plan.supportsRowBased
   override def supportsColumnar: Boolean = plan.supportsColumnar
   protected override def doExecuteColumnar(): RDD[ColumnarBatch] = plan.executeColumnar()
   override def doExecuteBroadcast[T](): Broadcast[T] = plan.executeBroadcast()
@@ -142,13 +138,18 @@ abstract class QueryStageExec extends LeafExecNode {
 }
 
 /**
- * There are 2 kinds of reusable query stages:
+ * There are 2 kinds of exchange query stages:
  *   1. Shuffle query stage. This stage materializes its output to shuffle files, and Spark launches
  *      another job to execute the further operators.
  *   2. Broadcast query stage. This stage materializes its output to an array in driver JVM. Spark
  *      broadcasts the array before executing the further operators.
  */
-abstract class ReusableQueryStageExec extends QueryStageExec {
+abstract class ExchangeQueryStageExec extends QueryStageExec {
+
+  /**
+   * Cancel the stage materialization if in progress; otherwise do nothing.
+   */
+  def cancel(): Unit
 
   /**
    * The canonicalized plan before applying query stage optimizer rules.
@@ -157,7 +158,7 @@ abstract class ReusableQueryStageExec extends QueryStageExec {
 
   override def doCanonicalize(): SparkPlan = _canonicalized
 
-  def newReuseInstance(newStageId: Int, newOutput: Seq[Attribute]): QueryStageExec
+  def newReuseInstance(newStageId: Int, newOutput: Seq[Attribute]): ExchangeQueryStageExec
 }
 
 /**
@@ -170,7 +171,7 @@ abstract class ReusableQueryStageExec extends QueryStageExec {
 case class ShuffleQueryStageExec(
     override val id: Int,
     override val plan: SparkPlan,
-    override val _canonicalized: SparkPlan) extends ReusableQueryStageExec {
+    override val _canonicalized: SparkPlan) extends ExchangeQueryStageExec {
 
   @transient val shuffle = plan match {
     case s: ShuffleExchangeLike => s
@@ -179,11 +180,14 @@ case class ShuffleQueryStageExec(
       throw new IllegalStateException(s"wrong plan for shuffle stage:\n ${plan.treeString}")
   }
 
+  @transient val advisoryPartitionSize: Option[Long] = shuffle.advisoryPartitionSize
+
   @transient private lazy val shuffleFuture = shuffle.submitShuffleJob
 
   override protected def doMaterialize(): Future[Any] = shuffleFuture
 
-  override def newReuseInstance(newStageId: Int, newOutput: Seq[Attribute]): QueryStageExec = {
+  override def newReuseInstance(
+      newStageId: Int, newOutput: Seq[Attribute]): ExchangeQueryStageExec = {
     val reuse = ShuffleQueryStageExec(
       newStageId,
       ReusedExchangeExec(newOutput, shuffle),
@@ -221,7 +225,7 @@ case class ShuffleQueryStageExec(
 case class BroadcastQueryStageExec(
     override val id: Int,
     override val plan: SparkPlan,
-    override val _canonicalized: SparkPlan) extends ReusableQueryStageExec {
+    override val _canonicalized: SparkPlan) extends ExchangeQueryStageExec {
 
   @transient val broadcast = plan match {
     case b: BroadcastExchangeLike => b
@@ -234,7 +238,8 @@ case class BroadcastQueryStageExec(
     broadcast.submitBroadcastJob
   }
 
-  override def newReuseInstance(newStageId: Int, newOutput: Seq[Attribute]): QueryStageExec = {
+  override def newReuseInstance(
+      newStageId: Int, newOutput: Seq[Attribute]): ExchangeQueryStageExec = {
     val reuse = BroadcastQueryStageExec(
       newStageId,
       ReusedExchangeExec(newOutput, broadcast),
@@ -284,12 +289,6 @@ case class TableCacheQueryStageExec(
   override protected def doMaterialize(): Future[Any] = future
 
   override def isMaterialized: Boolean = super.isMaterialized || inMemoryTableScan.isMaterialized
-
-  override def cancel(): Unit = {
-    if (!isMaterialized) {
-      logDebug(s"Skip canceling the table cache stage: $id")
-    }
-  }
 
   override def getRuntimeStatistics: Statistics = inMemoryTableScan.relation.computeStats()
 }

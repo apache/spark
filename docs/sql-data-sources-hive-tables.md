@@ -9,9 +9,9 @@ license: |
   The ASF licenses this file to You under the Apache License, Version 2.0
   (the "License"); you may not use this file except in compliance with
   the License.  You may obtain a copy of the License at
- 
+
      http://www.apache.org/licenses/LICENSE-2.0
- 
+
   Unless required by applicable law or agreed to in writing, software
   distributed under the License is distributed on an "AS IS" BASIS,
   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -75,8 +75,8 @@ format("serde", "input format", "output format"), e.g. `CREATE TABLE src(id int)
 By default, we will read the table files as plain text. Note that, Hive storage handler is not supported yet when
 creating table, you can create a table using storage handler at Hive side, and use Spark SQL to read it.
 
-<table class="table">
-  <tr><th>Property Name</th><th>Meaning</th></tr>
+<table class="table table-striped">
+  <thead><tr><th>Property Name</th><th>Meaning</th></tr></thead>
   <tr>
     <td><code>fileFormat</code></td>
     <td>
@@ -123,8 +123,8 @@ will compile against built-in Hive and use those classes for internal execution 
 
 The following options can be used to configure the version of Hive that is used to retrieve metadata:
 
-<table class="table">
-  <tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr>
+<table class="table table-striped">
+  <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
   <tr>
     <td><code>spark.sql.hive.metastore.version</code></td>
     <td><code>2.3.9</code></td>
@@ -166,7 +166,7 @@ The following options can be used to configure the version of Hive that is used 
     <td><code>(empty)</code></td>
     <td>
       Comma-separated paths of the jars that used to instantiate the HiveMetastoreClient.
-      This configuration is useful only when <code>spark.sql.hive.metastore.jars</code> is set as <code>path</code>. 
+      This configuration is useful only when <code>spark.sql.hive.metastore.jars</code> is set as <code>path</code>.
       <br/>
       The paths can be any of the following format:
       <ol>

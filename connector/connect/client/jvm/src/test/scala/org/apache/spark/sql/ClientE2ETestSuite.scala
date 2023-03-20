@@ -22,8 +22,10 @@ import java.nio.file.Files
 import scala.collection.JavaConverters._
 
 import io.grpc.StatusRuntimeException
+import java.util.Properties
 import org.apache.commons.io.FileUtils
 import org.apache.commons.io.output.TeeOutputStream
+import org.apache.commons.lang3.{JavaVersion, SystemUtils}
 import org.scalactic.TolerantNumerics
 
 import org.apache.spark.SPARK_VERSION
@@ -54,6 +56,7 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper {
   }
 
   test("eager execution of sql") {
+    assume(IntegrationTestUtils.isSparkHiveJarAvailable)
     withTable("test_martin") {
       // Fails, because table does not exist.
       assertThrows[StatusRuntimeException] {
@@ -160,6 +163,26 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper {
     }
   }
 
+  test("textFile") {
+    val testDataPath = java.nio.file.Paths
+      .get(
+        IntegrationTestUtils.sparkHome,
+        "connector",
+        "connect",
+        "common",
+        "src",
+        "test",
+        "resources",
+        "query-tests",
+        "test-data",
+        "people.txt")
+      .toAbsolutePath
+    val result = spark.read.textFile(testDataPath.toString).collect()
+    val expected = Array("Michael, 29", "Andy, 30", "Justin, 19")
+    assert(result.length == 3)
+    assert(result === expected)
+  }
+
   test("write table") {
     withTable("myTable") {
       val df = spark.range(10).limit(3)
@@ -172,6 +195,28 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper {
       assert(result(2).getLong(0) == 1)
       assert(result(3).getLong(0) == 1)
       assert(result(4).getLong(0) == 2)
+    }
+  }
+
+  test("write without table or path") {
+    // Should receive no error to write noop
+    spark.range(10).write.format("noop").mode("append").save()
+  }
+
+  test("write jdbc") {
+    if (SystemUtils.isJavaVersionAtLeast(JavaVersion.JAVA_9)) {
+      val url = "jdbc:derby:memory:1234"
+      val table = "t1"
+      try {
+        spark.range(10).write.jdbc(url = s"$url;create=true", table, new Properties())
+        val result = spark.read.jdbc(url = url, table, new Properties()).collect()
+        assert(result.length == 10)
+      } finally {
+        // clean up
+        assertThrows[StatusRuntimeException] {
+          spark.read.jdbc(url = s"$url;drop=true", table, new Properties()).collect()
+        }
+      }
     }
   }
 
@@ -206,6 +251,7 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper {
   // TODO (SPARK-42519): Revisit this test after we can set configs.
   //  e.g. spark.conf.set("spark.sql.catalog.testcat", classOf[InMemoryTableCatalog].getName)
   test("writeTo with create") {
+    assume(IntegrationTestUtils.isSparkHiveJarAvailable)
     withTable("myTableV2") {
       // Failed to create as Hive support is required.
       spark.range(3).writeTo("myTableV2").create()

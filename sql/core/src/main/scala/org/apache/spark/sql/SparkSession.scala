@@ -100,10 +100,8 @@ class SparkSession private(
   private[sql] def this(
       sc: SparkContext,
       initialSessionOptions: java.util.HashMap[String, String]) = {
-    this(sc, None, None,
-      SparkSession.applyExtensions(
-        sc.getConf.get(StaticSQLConf.SPARK_SESSION_EXTENSIONS).getOrElse(Seq.empty),
-        new SparkSessionExtensions), initialSessionOptions.asScala.toMap)
+    this(sc, None, None, SparkSession.applyExtensions(sc, new SparkSessionExtensions),
+      initialSessionOptions.asScala.toMap)
   }
 
   private[sql] def this(sc: SparkContext) = this(sc, new java.util.HashMap[String, String]())
@@ -1014,9 +1012,7 @@ object SparkSession extends Logging {
         }
 
         loadExtensions(extensions)
-        applyExtensions(
-          sparkContext.getConf.get(StaticSQLConf.SPARK_SESSION_EXTENSIONS).getOrElse(Seq.empty),
-          extensions)
+        applyExtensions(sparkContext, extensions)
 
         session = new SparkSession(sparkContext, None, None, extensions, options.toMap)
         setDefaultSession(session)
@@ -1269,12 +1265,14 @@ object SparkSession extends Logging {
   }
 
   /**
-   * Initialize extensions for given extension classnames. The classes will be applied to the
+   * Initialize extensions specified in [[StaticSQLConf]]. The classes will be applied to the
    * extensions passed into this function.
    */
   private def applyExtensions(
-      extensionConfClassNames: Seq[String],
+      sparkContext: SparkContext,
       extensions: SparkSessionExtensions): SparkSessionExtensions = {
+    val extensionConfClassNames = sparkContext.getConf.get(StaticSQLConf.SPARK_SESSION_EXTENSIONS)
+      .getOrElse(Seq.empty)
     extensionConfClassNames.foreach { extensionConfClassName =>
       try {
         val extensionConfClass = Utils.classForName(extensionConfClassName)

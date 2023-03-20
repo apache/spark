@@ -22,7 +22,7 @@ import scala.collection.JavaConverters._
 
 import com.google.protobuf.ByteString
 
-import org.apache.spark.SparkClassNotFoundException
+import org.apache.spark.{SparkClassNotFoundException, SparkIllegalArgumentException}
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.Expression
 import org.apache.spark.connect.proto.Join.JoinType
@@ -554,11 +554,14 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
       parameters = Map("columnName" -> "`duplicatedcol`"))
   }
 
-  // TODO(SPARK-42733): Writes without path or table should work.
-  ignore("Writes fails without path or table") {
-    assertThrows[UnsupportedOperationException] {
+  test("Writes fails without path or table") {
+    assertThrows[SparkIllegalArgumentException] {
       transform(localRelation.write())
     }
+  }
+
+  test("Writes without path or table") {
+    transform(localRelation.write(format = Some("noop"), mode = Some("Append")))
   }
 
   test("Write fails with unknown table - AnalysisException") {

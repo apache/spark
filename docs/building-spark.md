@@ -47,7 +47,7 @@ You can fix these problems by setting the `MAVEN_OPTS` variable as discussed bef
 **Note:**
 
 * If using `build/mvn` with no `MAVEN_OPTS` set, the script will automatically add the above options to the `MAVEN_OPTS` environment variable.
-* The `test` phase of the Spark build will automatically add these options to `MAVEN_OPTS`, even when not using `build/mvn`.    
+* The `test` phase of the Spark build will automatically add these options to `MAVEN_OPTS`, even when not using `build/mvn`.
 
 ### build/mvn
 
@@ -290,8 +290,8 @@ If use an individual repository or a repository on GitHub Enterprise, export bel
 
 ### Related environment variables
 
-<table class="table">
-<tr><th>Variable Name</th><th>Default</th><th>Meaning</th></tr>
+<table class="table table-striped">
+<thead><tr><th>Variable Name</th><th>Default</th><th>Meaning</th></tr></thead>
 <tr>
   <td><code>SPARK_PROJECT_URL</code></td>
   <td>https://github.com/apache/spark</td>
