@@ -42,9 +42,8 @@ import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical.{CollectMetrics, CommandResult, Deduplicate, Except, Intersect, LocalRelation, LogicalPlan, Project, Sample, Sort, SubqueryAlias, Union, Unpivot, UnresolvedHint}
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CharVarcharUtils}
 import org.apache.spark.sql.connect.artifact.SparkConnectArtifactManager
-import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, InvalidPlanInput, UdfPacket}
+import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, InvalidPlanInput, LiteralValueProtoConverter, UdfPacket}
 import org.apache.spark.sql.connect.config.Connect.CONNECT_GRPC_ARROW_MAX_BATCH_SIZE
-import org.apache.spark.sql.connect.planner.LiteralExpressionProtoConverter.{toCatalystExpression, toCatalystValue}
 import org.apache.spark.sql.connect.plugin.SparkConnectPluginRegistry
 import org.apache.spark.sql.connect.service.SparkConnectStreamHandler
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -329,7 +328,7 @@ class SparkConnectPlanner(val session: SparkSession) {
     } else {
       val valueMap = mutable.Map.empty[String, Any]
       cols.zip(values).foreach { case (col, value) =>
-        valueMap.update(col, toCatalystValue(value))
+        valueMap.update(col, LiteralValueProtoConverter.toCatalystValue(value))
       }
       dataset.na.fill(valueMap = valueMap.toMap).logicalPlan
     }
@@ -356,8 +355,8 @@ class SparkConnectPlanner(val session: SparkSession) {
     val replacement = mutable.Map.empty[Any, Any]
     rel.getReplacementsList.asScala.foreach { replace =>
       replacement.update(
-        toCatalystValue(replace.getOldValue),
-        toCatalystValue(replace.getNewValue))
+        LiteralValueProtoConverter.toCatalystValue(replace.getOldValue),
+        LiteralValueProtoConverter.toCatalystValue(replace.getNewValue))
     }
 
     if (rel.getColsCount == 0) {
@@ -911,7 +910,7 @@ class SparkConnectPlanner(val session: SparkSession) {
    *   Expression
    */
   private def transformLiteral(lit: proto.Expression.Literal): Literal = {
-    toCatalystExpression(lit)
+    LiteralExpressionProtoConverter.toCatalystExpression(lit)
   }
 
   private def transformLimit(limit: proto.Limit): LogicalPlan = {
