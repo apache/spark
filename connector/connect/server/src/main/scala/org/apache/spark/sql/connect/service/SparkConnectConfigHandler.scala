@@ -32,7 +32,7 @@ class SparkConnectConfigHandler(responseObserver: StreamObserver[proto.ConfigRes
   def handle(request: proto.ConfigRequest): Unit = {
     val session =
       SparkConnectService
-        .getOrCreateIsolatedSession(request.getUserContext.getUserId, request.getClientId)
+        .getOrCreateIsolatedSession(request.getUserContext.getUserId, request.getSessionId)
         .session
 
     val builder = request.getOperation.getOpTypeCase match {
@@ -53,7 +53,7 @@ class SparkConnectConfigHandler(responseObserver: StreamObserver[proto.ConfigRes
       case _ => throw new UnsupportedOperationException(s"${request.getOperation} not supported.")
     }
 
-    builder.setClientId(request.getClientId)
+    builder.setSessionId(request.getSessionId)
     responseObserver.onNext(builder.build())
     responseObserver.onCompleted()
   }

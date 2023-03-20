@@ -17,20 +17,24 @@
 package org.apache.spark.sql
 
 import java.io.Closeable
+import java.net.URI
 import java.util.concurrent.TimeUnit._
 import java.util.concurrent.atomic.AtomicLong
 
 import scala.collection.JavaConverters._
+import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.arrow.memory.RootAllocator
 
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.connect.proto
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
+import org.apache.spark.sql.catalyst.{JavaTypeInference, ScalaReflection}
+import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, RowEncoder}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{BoxedLongEncoder, UnboundRowEncoder}
 import org.apache.spark.sql.connect.client.{SparkConnectClient, SparkResult}
-import org.apache.spark.sql.connect.client.util.Cleaner
+import org.apache.spark.sql.connect.client.util.{Cleaner, ConvertToArrow}
+import org.apache.spark.sql.types.StructType
 
 /**
  * The entry point to programming Spark with the Dataset and DataFrame API.
@@ -91,6 +95,115 @@ class SparkSession private[sql] (
     println(s"Time taken: ${NANOSECONDS.toMillis(end - start)} ms")
     // scalastyle:on println
     ret
+  }
+
+  /**
+   * Returns a `DataFrame` with no rows or columns.
+   *
+   * @since 3.4.0
+   */
+  @transient
+  val emptyDataFrame: DataFrame = emptyDataset(UnboundRowEncoder)
+
+  /**
+   * Creates a new [[Dataset]] of type T containing zero elements.
+   *
+   * @since 3.4.0
+   */
+  def emptyDataset[T: Encoder]: Dataset[T] = createDataset[T](Nil)
+
+  private def createDataset[T](encoder: AgnosticEncoder[T], data: Iterator[T]): Dataset[T] = {
+    newDataset(encoder) { builder =>
+      val localRelationBuilder = builder.getLocalRelationBuilder
+        .setSchema(encoder.schema.json)
+      if (data.nonEmpty) {
+        val timeZoneId = conf.get("spark.sql.session.timeZone")
+        val arrowData = ConvertToArrow(encoder, data, timeZoneId, allocator)
+        localRelationBuilder.setData(arrowData)
+      }
+    }
+  }
+
+  /**
+   * Creates a `DataFrame` from a local Seq of Product.
+   *
+   * @since 3.4.0
+   */
+  def createDataFrame[A <: Product: TypeTag](data: Seq[A]): DataFrame = {
+    createDataset(ScalaReflection.encoderFor[A], data.iterator).toDF()
+  }
+
+  /**
+   * :: DeveloperApi :: Creates a `DataFrame` from a `java.util.List` containing [[Row]]s using
+   * the given schema. It is important to make sure that the structure of every [[Row]] of the
+   * provided List matches the provided schema. Otherwise, there will be runtime exception.
+   *
+   * @since 3.4.0
+   */
+  def createDataFrame(rows: java.util.List[Row], schema: StructType): DataFrame = {
+    createDataset(RowEncoder.encoderFor(schema), rows.iterator().asScala).toDF()
+  }
+
+  /**
+   * Applies a schema to a List of Java Beans.
+   *
+   * WARNING: Since there is no guaranteed ordering for fields in a Java Bean, SELECT * queries
+   * will return the columns in an undefined order.
+   * @since 3.4.0
+   */
+  def createDataFrame(data: java.util.List[_], beanClass: Class[_]): DataFrame = {
+    val encoder = JavaTypeInference.encoderFor(beanClass.asInstanceOf[Class[Any]])
+    createDataset(encoder, data.iterator().asScala).toDF()
+  }
+
+  /**
+   * Creates a [[Dataset]] from a local Seq of data of a given type. This method requires an
+   * encoder (to convert a JVM object of type `T` to and from the internal Spark SQL
+   * representation) that is generally created automatically through implicits from a
+   * `SparkSession`, or can be created explicitly by calling static methods on [[Encoders]].
+   *
+   * ==Example==
+   *
+   * {{{
+   *
+   *   import spark.implicits._
+   *   case class Person(name: String, age: Long)
+   *   val data = Seq(Person("Michael", 29), Person("Andy", 30), Person("Justin", 19))
+   *   val ds = spark.createDataset(data)
+   *
+   *   ds.show()
+   *   // +-------+---+
+   *   // |   name|age|
+   *   // +-------+---+
+   *   // |Michael| 29|
+   *   // |   Andy| 30|
+   *   // | Justin| 19|
+   *   // +-------+---+
+   * }}}
+   *
+   * @since 3.4.0
+   */
+  def createDataset[T: Encoder](data: Seq[T]): Dataset[T] = {
+    createDataset(encoderFor[T], data.iterator)
+  }
+
+  /**
+   * Creates a [[Dataset]] from a `java.util.List` of a given type. This method requires an
+   * encoder (to convert a JVM object of type `T` to and from the internal Spark SQL
+   * representation) that is generally created automatically through implicits from a
+   * `SparkSession`, or can be created explicitly by calling static methods on [[Encoders]].
+   *
+   * ==Java Example==
+   *
+   * {{{
+   *     List<String> data = Arrays.asList("hello", "world");
+   *     Dataset<String> ds = spark.createDataset(data, Encoders.STRING());
+   * }}}
+   *
+   * @since 3.4.0
+   */
+  def createDataset[T: Encoder](data: java.util.List[T]): Dataset[T] = {
+    createDataset(data.asScala.toSeq)
   }
 
   /**
@@ -227,11 +340,11 @@ class SparkSession private[sql] (
    *
    * @since 3.4.0
    */
-  object implicits extends SQLImplicits
+  object implicits extends SQLImplicits(this)
   // scalastyle:on
 
   def newSession(): SparkSession = {
-    throw new UnsupportedOperationException("newSession is not supported")
+    SparkSession.builder().client(client.copy()).build()
   }
 
   private def range(
@@ -261,6 +374,18 @@ class SparkSession private[sql] (
     new Dataset[T](this, plan, encoder)
   }
 
+  @DeveloperApi
+  def newDataFrame(extension: com.google.protobuf.Any): DataFrame = {
+    newDataset(extension, UnboundRowEncoder)
+  }
+
+  @DeveloperApi
+  def newDataset[T](
+      extension: com.google.protobuf.Any,
+      encoder: AgnosticEncoder[T]): Dataset[T] = {
+    newDataset(encoder)(_.setExtension(extension))
+  }
+
   private[sql] def newCommand[T](f: proto.Command.Builder => Unit): proto.Command = {
     val builder = proto.Command.newBuilder()
     f(builder)
@@ -275,6 +400,14 @@ class SparkSession private[sql] (
     client.analyze(method, Some(plan), explainMode)
   }
 
+  private[sql] def sameSemantics(plan: proto.Plan, otherPlan: proto.Plan): Boolean = {
+    client.sameSemantics(plan, otherPlan).getSameSemantics.getResult
+  }
+
+  private[sql] def semanticHash(plan: proto.Plan): Int = {
+    client.semanticHash(plan).getSemanticHash.getResult
+  }
+
   private[sql] def execute[T](plan: proto.Plan, encoder: AgnosticEncoder[T]): SparkResult[T] = {
     val value = client.execute(plan)
     val result = new SparkResult(value, allocator, encoder)
@@ -287,6 +420,43 @@ class SparkSession private[sql] (
     client.execute(plan).asScala.foreach(_ => ())
   }
 
+  @DeveloperApi
+  def execute(extension: com.google.protobuf.Any): Unit = {
+    val command = proto.Command.newBuilder().setExtension(extension).build()
+    execute(command)
+  }
+
+  /**
+   * Add a single artifact to the client session.
+   *
+   * Currently only local files with extensions .jar and .class are supported.
+   *
+   * @since 3.4.0
+   */
+  @Experimental
+  def addArtifact(path: String): Unit = client.addArtifact(path)
+
+  /**
+   * Add a single artifact to the client session.
+   *
+   * Currently only local files with extensions .jar and .class are supported.
+   *
+   * @since 3.4.0
+   */
+  @Experimental
+  def addArtifact(uri: URI): Unit = client.addArtifact(uri)
+
+  /**
+   * Add one or more artifacts to the session.
+   *
+   * Currently only local files with extensions .jar and .class are supported.
+   *
+   * @since 3.4.0
+   */
+  @Experimental
+  @scala.annotation.varargs
+  def addArtifacts(uri: URI*): Unit = client.addArtifacts(uri)
+
   /**
    * This resets the plan id generator so we can produce plans that are comparable.
    *
@@ -296,6 +466,19 @@ class SparkSession private[sql] (
     planIdGenerator.set(0)
   }
 
+  /**
+   * Synonym for `close()`.
+   *
+   * @since 3.4.0
+   */
+  def stop(): Unit = close()
+
+  /**
+   * Close the [[SparkSession]]. This closes the connection, and the allocator. The latter will
+   * throw an exception if there are still open [[SparkResult]]s.
+   *
+   * @since 3.4.0
+   */
   override def close(): Unit = {
     client.shutdown()
     allocator.close()

@@ -329,8 +329,7 @@ object CommandUtils extends Logging {
     case _: IntegralType => true
     case _: DecimalType => true
     case DoubleType | FloatType => true
-    case DateType => true
-    case TimestampType => true
+    case _: DatetimeType => true
     case _ => false
   }
 
@@ -379,8 +378,7 @@ object CommandUtils extends Logging {
       case _: DecimalType => fixedLenTypeStruct
       case DoubleType | FloatType => fixedLenTypeStruct
       case BooleanType => fixedLenTypeStruct
-      case DateType => fixedLenTypeStruct
-      case TimestampType => fixedLenTypeStruct
+      case _: DatetimeType => fixedLenTypeStruct
       case BinaryType | StringType =>
         // For string and binary type, we don't compute min, max or histogram
         val nullLit = Literal(null, col.dataType)

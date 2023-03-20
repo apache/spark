@@ -572,8 +572,8 @@ See the [configuration page](configuration.html) for information on Spark config
 
 #### Spark Properties
 
-<table class="table">
-<tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr>
+<table class="table table-striped">
+<thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
 <tr>
   <td><code>spark.kubernetes.context</code></td>
   <td><code>(none)</code></td>
@@ -1622,7 +1622,7 @@ See the [configuration page](configuration.html) for information on Spark config
   <td><code>spark.kubernetes.executor.rollPolicy</code></td>
   <td><code>OUTLIER</code></td>
   <td>
-    Executor roll policy: Valid values are ID, ADD_TIME, TOTAL_GC_TIME, 
+    Executor roll policy: Valid values are ID, ADD_TIME, TOTAL_GC_TIME,
     TOTAL_DURATION, FAILED_TASKS, and OUTLIER (default).
     When executor roll happens, Spark uses this policy to choose
     an executor and decommission it. The built-in policies are based on executor summary
@@ -1648,8 +1648,8 @@ See the below table for the full list of pod specifications that will be overwri
 
 ### Pod Metadata
 
-<table class="table">
-<tr><th>Pod metadata key</th><th>Modified value</th><th>Description</th></tr>
+<table class="table table-striped">
+<thead><tr><th>Pod metadata key</th><th>Modified value</th><th>Description</th></tr></thead>
 <tr>
   <td>name</td>
   <td>Value of <code>spark.kubernetes.driver.pod.name</code></td>
@@ -1684,8 +1684,8 @@ See the below table for the full list of pod specifications that will be overwri
 
 ### Pod Spec
 
-<table class="table">
-<tr><th>Pod spec key</th><th>Modified value</th><th>Description</th></tr>
+<table class="table table-striped">
+<thead><tr><th>Pod spec key</th><th>Modified value</th><th>Description</th></tr></thead>
 <tr>
   <td>imagePullSecrets</td>
   <td>Adds image pull secrets from <code>spark.kubernetes.container.image.pullSecrets</code></td>
@@ -1737,8 +1737,8 @@ See the below table for the full list of pod specifications that will be overwri
 
 The following affect the driver and executor containers. All other containers in the pod spec will be unaffected.
 
-<table class="table">
-<tr><th>Container spec key</th><th>Modified value</th><th>Description</th></tr>
+<table class="table table-striped">
+<thead><tr><th>Container spec key</th><th>Modified value</th><th>Description</th></tr></thead>
 <tr>
   <td>env</td>
   <td>Adds env variables from <code>spark.kubernetes.driverEnv.[EnvironmentVariableName]</code></td>
@@ -1817,7 +1817,7 @@ metadata:
   labels:
     template-label-key: driver-template-label-value
 spec:
-  # Specify the priority in here 
+  # Specify the priority in here
   priorityClassName: system-node-critical
   containers:
   - name: test-driver-container

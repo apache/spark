@@ -265,6 +265,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       // at the beginning of analysis.
       OptimizeUpdateFields,
       CTESubstitution,
+      BindParameters,
       WindowsSubstitution,
       EliminateUnions,
       SubstituteUnresolvedOrdinals),
@@ -1039,13 +1040,6 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
           child = addMetadataCol(p.child, requiredAttrIds))
         newProj.copyTagsFrom(p)
         newProj
-      case u: Union if u.metadataOutput.exists(a => requiredAttrIds.contains(a.exprId)) =>
-        u.withNewChildren(u.children.map { child =>
-          // The children of a Union will have the same attributes with different expression IDs
-          val exprIdMap = u.metadataOutput.map(_.exprId)
-            .zip(child.metadataOutput.map(_.exprId)).toMap
-          addMetadataCol(child, requiredAttrIds.map(a => exprIdMap.getOrElse(a, a)))
-        })
       case _ => plan.withNewChildren(plan.children.map(addMetadataCol(_, requiredAttrIds)))
     }
   }
@@ -1749,7 +1743,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       // table `t` even if there is a Project node between the table scan node and Sort node.
       // We also need to propagate the missing attributes from the descendant node to the current
       // node, and project them way at the end via an extra Project.
-      case r @ RepartitionByExpression(partitionExprs, child, _)
+      case r @ RepartitionByExpression(partitionExprs, child, _, _)
         if !r.resolved || r.missingInput.nonEmpty =>
         val resolvedNoOuter = partitionExprs.map(resolveExpressionByPlanChildren(_, r))
         val (newPartitionExprs, newChild) = resolveExprsAndAddMissingAttrs(resolvedNoOuter, child)

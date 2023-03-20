@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.plans.physical.UnspecifiedDistribution
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.execution._
+import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.execution.command.{DataWritingCommandExec, ExecutedCommandExec}
 import org.apache.spark.sql.execution.datasources.V1WriteCommand
 import org.apache.spark.sql.execution.datasources.v2.V2CommandExec
@@ -88,12 +89,15 @@ case class InsertAdaptiveSparkPlan(
   //   - The query may need to add exchanges. It's an overkill to run `EnsureRequirements` here, so
   //     we just check `SparkPlan.requiredChildDistribution` and see if it's possible that the
   //     the query needs to add exchanges later.
+  //   - The query contains nested `AdaptiveSparkPlanExec`.
   //   - The query contains sub-query.
   private def shouldApplyAQE(plan: SparkPlan, isSubquery: Boolean): Boolean = {
     conf.getConf(SQLConf.ADAPTIVE_EXECUTION_FORCE_APPLY) || isSubquery || {
       plan.exists {
         case _: Exchange => true
         case p if !p.requiredChildDistribution.forall(_ == UnspecifiedDistribution) => true
+        case i: InMemoryTableScanExec
+            if i.relation.cachedPlan.isInstanceOf[AdaptiveSparkPlanExec] => true
         case p => p.expressions.exists(_.exists {
           case _: SubqueryExpression => true
           case _ => false

@@ -55,6 +55,7 @@ abstract class InMemoryBaseTable(
     val distribution: Distribution = Distributions.unspecified(),
     val ordering: Array[SortOrder] = Array.empty,
     val numPartitions: Option[Int] = None,
+    val advisoryPartitionSize: Option[Long] = None,
     val isDistributionStrictlyRequired: Boolean = true,
     val numRowsPerSplit: Int = Int.MaxValue)
   extends Table with SupportsRead with SupportsWrite with SupportsMetadataColumns {
@@ -73,7 +74,7 @@ abstract class InMemoryBaseTable(
 
   // purposely exposes a metadata column that conflicts with a data column in some tests
   override val metadataColumns: Array[MetadataColumn] = Array(IndexColumn, PartitionKeyColumn)
-  private lazy val metadataColumnNames = metadataColumns.map(_.name).toSet -- schema.map(_.name)
+  private val metadataColumnNames = metadataColumns.map(_.name).toSet -- schema.map(_.name)
 
   private val allowUnsupportedTransforms =
     properties.getOrDefault("allow-unsupported-transforms", "false").toBoolean
@@ -448,6 +449,10 @@ abstract class InMemoryBaseTable(
 
       override def requiredNumPartitions(): Int = {
         numPartitions.getOrElse(0)
+      }
+
+      override def advisoryPartitionSizeInBytes(): Long = {
+        advisoryPartitionSize.getOrElse(0)
       }
 
       override def toBatch: BatchWrite = writer

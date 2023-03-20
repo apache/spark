@@ -2758,15 +2758,14 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
           innerCtx.unitToUnitInterval)
       }
       visitMultiUnitsInterval(innerCtx.multiUnitsInterval)
-    } else if (ctx.errorCapturingUnitToUnitInterval != null) {
+    } else {
+      assert(ctx.errorCapturingUnitToUnitInterval != null)
       val innerCtx = ctx.errorCapturingUnitToUnitInterval
       if (innerCtx.error1 != null || innerCtx.error2 != null) {
         val errorCtx = if (innerCtx.error1 != null) innerCtx.error1 else innerCtx.error2
         throw QueryParsingErrors.moreThanOneFromToUnitInIntervalLiteralError(errorCtx)
       }
       visitUnitToUnitInterval(innerCtx.body)
-    } else {
-      throw QueryParsingErrors.invalidIntervalLiteralError(ctx)
     }
   }
 
@@ -3007,28 +3006,28 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
     ctx.colDefinitionOption().asScala.foreach { option =>
       if (option.NULL != null) {
         if (!nullable) {
-          throw QueryParsingErrors.duplicateCreateTableColumnOption(
+          throw QueryParsingErrors.duplicateTableColumnDescriptor(
             option, colName.getText, "NOT NULL")
         }
         nullable = false
       }
       Option(option.defaultExpression()).foreach { expr =>
         if (defaultExpression.isDefined) {
-          throw QueryParsingErrors.duplicateCreateTableColumnOption(
+          throw QueryParsingErrors.duplicateTableColumnDescriptor(
             option, colName.getText, "DEFAULT")
         }
         defaultExpression = Some(expr)
       }
       Option(option.generationExpression()).foreach { expr =>
         if (generationExpression.isDefined) {
-          throw QueryParsingErrors.duplicateCreateTableColumnOption(
+          throw QueryParsingErrors.duplicateTableColumnDescriptor(
             option, colName.getText, "GENERATED ALWAYS AS")
         }
         generationExpression = Some(expr)
       }
       Option(option.commentSpec()).foreach { spec =>
         if (commentSpec.isDefined) {
-          throw QueryParsingErrors.duplicateCreateTableColumnOption(
+          throw QueryParsingErrors.duplicateTableColumnDescriptor(
             option, colName.getText, "COMMENT")
         }
         commentSpec = Some(spec)
@@ -4007,18 +4006,59 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
   override def visitQualifiedColTypeWithPosition(
       ctx: QualifiedColTypeWithPositionContext): QualifiedColType = withOrigin(ctx) {
     val name = typedVisit[Seq[String]](ctx.name)
-    // Add the 'DEFAULT expression' clause in the column definition, if any, to the column metadata.
-    val defaultExpr = Option(ctx.defaultExpression()).map(visitDefaultExpression)
-    if (defaultExpr.isDefined && !conf.getConf(SQLConf.ENABLE_DEFAULT_COLUMNS)) {
-      throw QueryParsingErrors.defaultColumnNotEnabledError(ctx)
+    // Check that no duplicates exist among any ALTER TABLE ADD|REPLACE column options specified.
+    var nullable = true
+    var defaultExpression: Option[DefaultExpressionContext] = None
+    var commentSpec: Option[CommentSpecContext] = None
+    var colPosition: Option[ColPositionContext] = None
+    val columnName = name.last
+    ctx.colDefinitionDescriptorWithPosition.asScala.foreach { option =>
+      if (option.NULL != null) {
+        if (!nullable) {
+          throw QueryParsingErrors.duplicateTableColumnDescriptor(
+            option, columnName, "NOT NULL", isCreate = false)
+        }
+        nullable = false
+      }
+      Option(option.defaultExpression()).foreach { expr =>
+        if (defaultExpression.isDefined) {
+          throw QueryParsingErrors.duplicateTableColumnDescriptor(
+            option, columnName, "DEFAULT", isCreate = false)
+        }
+        defaultExpression = Some(expr)
+      }
+      Option(option.commentSpec()).foreach { spec =>
+        if (commentSpec.isDefined) {
+          throw QueryParsingErrors.duplicateTableColumnDescriptor(
+            option, columnName, "COMMENT", isCreate = false)
+        }
+        commentSpec = Some(spec)
+      }
+      Option(option.colPosition()).foreach { spec =>
+        if (colPosition.isDefined) {
+          throw QueryParsingErrors.duplicateTableColumnDescriptor(
+            option, columnName, "FIRST|AFTER", isCreate = false)
+        }
+        colPosition = Some(spec)
+      }
     }
+
+    // Add the 'DEFAULT expression' clause in the column definition, if any, to the column metadata.
+    val defaultExpr = defaultExpression.map(visitDefaultExpression).map { field =>
+      if (conf.getConf(SQLConf.ENABLE_DEFAULT_COLUMNS)) {
+        field
+      } else {
+        throw QueryParsingErrors.defaultColumnNotEnabledError(ctx)
+      }
+    }
+
     QualifiedColType(
       path = if (name.length > 1) Some(UnresolvedFieldName(name.init)) else None,
       colName = name.last,
       dataType = typedVisit[DataType](ctx.dataType),
-      nullable = ctx.NULL == null,
-      comment = Option(ctx.commentSpec()).map(visitCommentSpec),
-      position = Option(ctx.colPosition).map( pos =>
+      nullable = nullable,
+      comment = commentSpec.map(visitCommentSpec),
+      position = colPosition.map( pos =>
         UnresolvedFieldPosition(typedVisit[ColumnPosition](pos))),
       default = defaultExpr)
   }
@@ -4170,23 +4210,40 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
     ReplaceColumns(
       createUnresolvedTable(ctx.multipartIdentifier, "ALTER TABLE ... REPLACE COLUMNS"),
       ctx.columns.qualifiedColTypeWithPosition.asScala.map { colType =>
-        if (colType.NULL != null) {
-          throw QueryParsingErrors.operationInHiveStyleCommandUnsupportedError(
-            "NOT NULL", "REPLACE COLUMNS", ctx)
-        }
-        if (colType.colPosition != null) {
-          throw QueryParsingErrors.operationInHiveStyleCommandUnsupportedError(
-            "Column position", "REPLACE COLUMNS", ctx)
-        }
-        val col = typedVisit[QualifiedColType](colType)
-        if (col.path.isDefined) {
+        val name = typedVisit[Seq[String]](colType.name)
+        if (name.length > 1) {
           throw QueryParsingErrors.operationInHiveStyleCommandUnsupportedError(
             "Replacing with a nested column", "REPLACE COLUMNS", ctx)
         }
-        if (Option(colType.defaultExpression()).map(visitDefaultExpression).isDefined) {
-          throw QueryParsingErrors.defaultColumnNotImplementedYetError(ctx)
+        var commentSpec: Option[CommentSpecContext] = None
+        colType.colDefinitionDescriptorWithPosition.asScala.foreach { opt =>
+          if (opt.NULL != null) {
+            throw QueryParsingErrors.operationInHiveStyleCommandUnsupportedError(
+              "NOT NULL", "REPLACE COLUMNS", ctx)
+          }
+          if (opt.colPosition != null) {
+            throw QueryParsingErrors.operationInHiveStyleCommandUnsupportedError(
+              "Column position", "REPLACE COLUMNS", ctx)
+          }
+          if (Option(opt.defaultExpression()).map(visitDefaultExpression).isDefined) {
+            throw QueryParsingErrors.defaultColumnNotImplementedYetError(ctx)
+          }
+          Option(opt.commentSpec()).foreach { spec =>
+            if (commentSpec.isDefined) {
+              throw QueryParsingErrors.duplicateTableColumnDescriptor(
+                opt, name.last, "COMMENT", isCreate = false, alterType = "REPLACE")
+            }
+            commentSpec = Some(spec)
+          }
         }
-        col
+        QualifiedColType(
+          path = None,
+          colName = name.last,
+          dataType = typedVisit[DataType](colType.dataType),
+          nullable = true,
+          comment = commentSpec.map(visitCommentSpec),
+          position = None,
+          default = None)
       }.toSeq
     )
   }

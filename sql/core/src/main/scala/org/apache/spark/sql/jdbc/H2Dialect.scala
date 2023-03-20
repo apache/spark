@@ -276,4 +276,8 @@ private[sql] object H2Dialect extends JdbcDialect {
       }
     }
   }
+
+  override def supportsLimit: Boolean = true
+
+  override def supportsOffset: Boolean = true
 }

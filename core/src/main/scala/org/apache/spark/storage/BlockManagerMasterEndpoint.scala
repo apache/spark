@@ -32,6 +32,7 @@ import com.google.common.cache.CacheBuilder
 import org.apache.spark.{MapOutputTrackerMaster, SparkConf, SparkContext}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.internal.{config, Logging}
+import org.apache.spark.internal.config.RDD_CACHE_VISIBILITY_TRACKING_ENABLED
 import org.apache.spark.network.shuffle.{ExternalBlockStoreClient, RemoteBlockPushResolver}
 import org.apache.spark.rpc.{IsolatedThreadSafeRpcEndpoint, RpcCallContext, RpcEndpointRef, RpcEnv}
 import org.apache.spark.scheduler._
@@ -77,6 +78,12 @@ class BlockManagerMasterEndpoint(
   // Mapping from block id to the set of block managers that have the block.
   private val blockLocations = new JHashMap[BlockId, mutable.HashSet[BlockManagerId]]
 
+  // Mapping from task id to the set of rdd blocks which are generated from the task.
+  private val tidToRddBlockIds = new mutable.HashMap[Long, mutable.HashSet[RDDBlockId]]
+  // Record the RDD blocks which are not visible yet, a block will be removed from this collection
+  // after at least one task generating the block finishes successfully.
+  private val invisibleRDDBlocks = new mutable.HashSet[RDDBlockId]
+
   // Mapping from host name to shuffle (mergers) services where the current app
   // registered an executor in the past. Older hosts are removed when the
   // maxRetainedMergerLocations size is reached in favor of newer locations.
@@ -115,6 +122,9 @@ class BlockManagerMasterEndpoint(
 
   private lazy val driverEndpoint =
     RpcUtils.makeDriverRef(CoarseGrainedSchedulerBackend.ENDPOINT_NAME, conf, rpcEnv)
+
+  /** Whether rdd cache visibility tracking is enabled. */
+  private val trackingCacheVisibility: Boolean = conf.get(RDD_CACHE_VISIBILITY_TRACKING_ENABLED)
 
   override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
     case RegisterBlockManager(
@@ -210,6 +220,70 @@ class BlockManagerMasterEndpoint(
     case StopBlockManagerMaster =>
       context.reply(true)
       stop()
+
+    case UpdateRDDBlockTaskInfo(blockId, taskId) =>
+      // This is to report the information that a rdd block(with `blockId`) is computed
+      // and cached by task(with `taskId`). And this happens right after the task finished
+      // computing/caching the block only when the block is not visible yet. And the rdd
+      // block will be marked as visible when the corresponding task finished successfully.
+      context.reply(updateRDDBlockTaskInfo(blockId, taskId))
+
+    case GetRDDBlockVisibility(blockId) =>
+      // Get the visibility status of a specific rdd block.
+      context.reply(isRDDBlockVisible(blockId))
+
+    case UpdateRDDBlockVisibility(taskId, visible) =>
+      // This is to report the information that whether rdd blocks computed by task(with `taskId`)
+      // can be turned to be visible. This is reported by DAGScheduler right after task completes.
+      // If the task finished successfully, rdd blocks can be turned to be visible, otherwise rdd
+      // blocks' visibility status won't change.
+      context.reply(updateRDDBlockVisibility(taskId, visible))
+  }
+
+  private def isRDDBlockVisible(blockId: RDDBlockId): Boolean = {
+    if (trackingCacheVisibility) {
+      blockLocations.containsKey(blockId) &&
+        blockLocations.get(blockId).nonEmpty && !invisibleRDDBlocks.contains(blockId)
+    } else {
+      // Blocks should always be visible if the feature flag is disabled.
+      true
+    }
+  }
+
+  private def updateRDDBlockVisibility(taskId: Long, visible: Boolean): Unit = {
+    if (!trackingCacheVisibility) {
+      // Do nothing if the feature flag is disabled.
+      return
+    }
+
+    // TODO: When visible is false(the task had failed), we should be asking the block managers to
+    //  evict the block since the results can be inconsistent if there is any indeterminate
+    //  operation computing the rdd. Besides evicting the blocks here, when a rdd block is reported
+    //  we may also need to check the data with existing replicas somehow.
+    //  This will be tracked with jira: https://issues.apache.org/jira/browse/SPARK-42582
+    if (visible) {
+      tidToRddBlockIds.get(taskId).foreach { blockIds =>
+        blockIds.foreach { blockId =>
+          invisibleRDDBlocks.remove(blockId)
+          // Ask block managers to update the visibility status.
+          val msg = MarkRDDBlockAsVisible(blockId)
+          getLocations(blockId).flatMap(blockManagerInfo.get).foreach { managerInfo =>
+            managerInfo.storageEndpoint.ask[Unit](msg)
+          }
+        }
+      }
+    }
+
+    tidToRddBlockIds.remove(taskId)
+  }
+
+  private def updateRDDBlockTaskInfo(blockId: RDDBlockId, taskId: Long): Unit = {
+    if (!trackingCacheVisibility) {
+      // Do nothing if the feature flag is disabled.
+      return
+    }
+    tidToRddBlockIds.getOrElseUpdate(taskId, new mutable.HashSet[RDDBlockId])
+      .add(blockId)
   }
 
   /**
@@ -274,6 +348,9 @@ class BlockManagerMasterEndpoint(
 
     blocks.foreach { blockId =>
       val bms: mutable.HashSet[BlockManagerId] = blockLocations.remove(blockId)
+      if (trackingCacheVisibility) {
+        invisibleRDDBlocks.remove(blockId)
+      }
 
       val (bmIdsExtShuffle, bmIdsExecutor) = bms.partition(_.port == externalShuffleServicePort)
       val liveExecutorsForBlock = bmIdsExecutor.map(_.executorId).toSet
@@ -728,7 +805,22 @@ class BlockManagerMasterEndpoint(
     }
 
     if (storageLevel.isValid) {
+      val firstBlock = locations.isEmpty
       locations.add(blockManagerId)
+
+      blockId.asRDDId.foreach { rddBlockId =>
+        (trackingCacheVisibility, firstBlock) match {
+          case (true, true) =>
+            // Mark as invisible for the first block.
+            invisibleRDDBlocks.add(rddBlockId)
+          case (true, false) if !invisibleRDDBlocks.contains(rddBlockId) =>
+            // If the rdd block is already visible, ask storage manager to update the visibility
+            // status.
+            blockManagerInfo(blockManagerId).storageEndpoint
+              .ask[Unit](MarkRDDBlockAsVisible(rddBlockId))
+          case _ =>
+        }
+      }
     } else {
       locations.remove(blockManagerId)
     }

@@ -171,15 +171,6 @@ private object PostgresDialect extends JdbcDialect with SQLConfHelper {
     s"ALTER TABLE $tableName ALTER COLUMN ${quoteIdentifier(columnName)} $nullable"
   }
 
-  override def supportsTableSample: Boolean = true
-
-  override def getTableSample(sample: TableSampleInfo): String = {
-    // hard-coded to BERNOULLI for now because Spark doesn't have a way to specify sample
-    // method name
-    "TABLESAMPLE BERNOULLI" +
-      s" (${(sample.upperBound - sample.lowerBound) * 100}) REPEATABLE (${sample.seed})"
-  }
-
   // CREATE INDEX syntax
   // https://www.postgresql.org/docs/14/sql-createindex.html
   override def createIndex(
@@ -242,5 +233,18 @@ private object PostgresDialect extends JdbcDialect with SQLConfHelper {
       case unsupported: UnsupportedOperationException => throw unsupported
       case _ => super.classifyException(message, e)
     }
+  }
+
+  override def supportsLimit: Boolean = true
+
+  override def supportsOffset: Boolean = true
+
+  override def supportsTableSample: Boolean = true
+
+  override def getTableSample(sample: TableSampleInfo): String = {
+    // hard-coded to BERNOULLI for now because Spark doesn't have a way to specify sample
+    // method name
+    "TABLESAMPLE BERNOULLI" +
+      s" (${(sample.upperBound - sample.lowerBound) * 100}) REPEATABLE (${sample.seed})"
   }
 }
