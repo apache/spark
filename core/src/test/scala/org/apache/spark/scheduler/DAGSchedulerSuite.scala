@@ -4718,8 +4718,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
       // The second task, for partition 1 succeeds as well.
       runEvent(makeCompletionEvent(taskSets(1).tasks(1), Success,
         result = MapStatus(BlockManagerId("hostE-exec2", "hostE", 23456),
-          Array.fill[Long](2)(2), mapTaskId = taskIdCount),
-      ))
+          Array.fill[Long](2)(2), mapTaskId = taskIdCount)))
       taskIdCount += 1
 
       sc.listenerBus.waitUntilEmpty()
