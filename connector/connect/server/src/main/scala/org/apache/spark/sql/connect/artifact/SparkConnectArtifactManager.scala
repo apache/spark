@@ -102,13 +102,15 @@ class SparkConnectArtifactManager private[connect] {
       Files.createDirectories(target.getParent)
       // Disallow overwriting jars because spark doesn't support removing jars that were
       // previously added,
-      if (!Files.exists(target)) {
-        Files.move(serverLocalStagingPath, target)
-        if (remoteRelativePath.startsWith("jars")) {
-          // Adding Jars to the underlying spark context (visible to all users)
-          session.sessionState.resourceLoader.addJar(target.toString)
-          jarsList.add(target)
-        }
+      if (Files.exists(target)) {
+        throw new RuntimeException(s"Duplicate Jar: $remoteRelativePath. " +
+          s"Jars cannot be overwritten.")
+      }
+      Files.move(serverLocalStagingPath, target)
+      if (remoteRelativePath.startsWith("jars")) {
+        // Adding Jars to the underlying spark context (visible to all users)
+        session.sessionState.resourceLoader.addJar(target.toString)
+        jarsList.add(target)
       }
     }
   }
