@@ -29,7 +29,7 @@ import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent, SparkListe
 import org.apache.spark.sql.{Dataset, QueryTest, Row, SparkSession, Strategy}
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan}
-import org.apache.spark.sql.execution.{CollectLimitExec, ColumnarToRowExec, LocalTableScanExec, PartialReducerPartitionSpec, QueryExecution, ReusedSubqueryExec, ShuffledRowRDD, SortExec, SparkPlan, SparkPlanInfo, UnionExec}
+import org.apache.spark.sql.execution.{CollectLimitExec, ColumnarToRowExec, LocalTableScanExec, PartialReducerPartitionSpec, QueryExecution, ReusedSubqueryExec, ShuffledRowRDD, SortExec, SparkPlan, SparkPlanInfo, TakeOrderedAndProjectExec, UnionExec}
 import org.apache.spark.sql.execution.aggregate.BaseAggregateExec
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.execution.command.DataWritingCommandExec
@@ -2815,6 +2815,21 @@ class AdaptiveQueryExecSuite
         case c: TableCacheQueryStageExec => c
       }.size == 1)
     }
+  }
+
+  test("SPARK-42868: Support eliminate sorts in AQE Optimizer") {
+    val df = sql(
+      """
+        |SELECT    *
+        |FROM      (SELECT DISTINCT a, b FROM testData2 ORDER BY a, b limit 100) t1
+        |LEFT JOIN testData2 t2
+        |ON        t1.a = t2.a
+        |ORDER BY  t1.b, t1.a limit 100
+        |""".stripMargin)
+    df.collect()
+    val plan = df.queryExecution.executedPlan
+    assert(findTopLevelLimit(plan).isEmpty)
+    assert(collect(plan) { case s: TakeOrderedAndProjectExec => s }.size === 1)
   }
 }
 
