@@ -144,6 +144,7 @@ case class LikeJoni(left: Expression, right: Expression, escapeChar: Char)
     val syntaxClass = classOf[Syntax].getName
     val escapeFunc = StringUtils.getClass.getName.stripSuffix("$") + ".escapeLikeJoniRegex"
     val regex = ctx.freshName("regex")
+    val patternName = ctx.freshName("pattern")
 
     if (right.foldable) {
       val rVal = right.eval()
@@ -153,8 +154,8 @@ case class LikeJoni(left: Expression, right: Expression, escapeChar: Char)
             new String(escape(rVal.asInstanceOf[UTF8String].getBytes), "utf-8"))
         val pattern = ctx.addMutableState(regexClass, regex,
           v => s"""
-                      byte[] pattern = UTF8String.fromString("${tmp}").getBytes();
-                      $v = new ${regexClass}(pattern, 0, pattern.length, ${optionClass}.NONE,
+                      byte[] $patternName = UTF8String.fromString("${tmp}").getBytes();
+                      $v = new $regexClass($patternName, 0, pattern.length, $patternName.NONE,
                         ${encodingClass}.INSTANCE, ${syntaxClass}.Java);
                     """.stripMargin)
 
@@ -419,6 +420,7 @@ case class RLikeJoni(left: Expression, right: Expression) extends StringRegexExp
     val encodingClass = classOf[UTF8Encoding].getName
     val syntaxClass = classOf[Syntax].getName
     val regex = ctx.freshName("regex")
+    val patternName = ctx.freshName("pattern")
 
     if (right.foldable) {
       val rVal = right.eval()
@@ -427,9 +429,9 @@ case class RLikeJoni(left: Expression, right: Expression) extends StringRegexExp
           StringEscapeUtils.escapeJava(rVal.asInstanceOf[UTF8String].toString())
         val pattern = ctx.addMutableState(regexClass, regex,
           v => s"""
-                    byte[] pattern = UTF8String.fromString("${tmp}").getBytes();
-                    $v = new ${regexClass}(pattern, 0, pattern.length, ${optionClass}.NONE,
-                      ${encodingClass}.INSTANCE, ${syntaxClass}.Java);
+                    byte[] $patternName = UTF8String.fromString("${tmp}").getBytes();
+                    $v = new $regexClass($patternName, 0, $patternName.length, $optionClass.NONE,
+                      $encodingClass.INSTANCE, $syntaxClass.Java);
                   """.stripMargin)
 
         // We don't use nullSafeCodeGen here because we don't want to re-evaluate right again.
