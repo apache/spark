@@ -118,6 +118,8 @@ class SparkConnectPlanner(val session: SparkSession) {
         transformMapPartitions(rel.getMapPartitions)
       case proto.Relation.RelTypeCase.GROUP_MAP =>
         transformGroupMap(rel.getGroupMap)
+      case proto.Relation.RelTypeCase.CO_GROUP_MAP =>
+        transformCoGroupMap(rel.getCoGroupMap)
       case proto.Relation.RelTypeCase.COLLECT_METRICS =>
         transformCollectMetrics(rel.getCollectMetrics)
       case proto.Relation.RelTypeCase.PARSE => transformParse(rel.getParse)
@@ -506,6 +508,26 @@ class SparkConnectPlanner(val session: SparkSession) {
       .groupBy(cols: _*)
       .flatMapGroupsInPandas(pythonUdf)
       .logicalPlan
+  }
+
+  private def transformCoGroupMap(rel: proto.GroupMap): LogicalPlan = {
+    val pythonUdf = transformPythonUDF(rel.getFunc)
+
+    val input_cols =
+      rel.getInputGroupingExpressionsList.asScala.toSeq.map(expr =>
+        Column(transformExpression(expr)))
+    val other_cols =
+      rel.getOtherGroupingExpressionsList.asScala.toSeq.map(expr =>
+        Column(transformExpression(expr)))
+
+    val input = Dataset
+      .ofRows(session, transformRelation(rel.getInput))
+      .groupBy(input_cols: _*)
+    val other = Dataset
+      .ofRows(session, transformRelation(rel.getInput))
+      .groupBy(other_cols: _*)
+
+    input.flatMapCoGroupsInPandas(other, pythonUdf).logicalPlan
   }
 
   private def transformWithColumnsRenamed(rel: proto.WithColumnsRenamed): LogicalPlan = {
