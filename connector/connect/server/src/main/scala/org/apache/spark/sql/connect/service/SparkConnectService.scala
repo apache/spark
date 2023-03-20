@@ -20,7 +20,6 @@ package org.apache.spark.sql.connect.service
 import java.util.concurrent.TimeUnit
 
 import scala.annotation.tailrec
-import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 import scala.util.control.NonFatal
 
@@ -40,13 +39,10 @@ import org.json4s.jackson.JsonMethods.{compact, render}
 import org.apache.spark.{SparkEnv, SparkException, SparkThrowable}
 import org.apache.spark.api.python.PythonException
 import org.apache.spark.connect.proto
-import org.apache.spark.connect.proto.{AnalyzePlanRequest, AnalyzePlanResponse, ExecutePlanRequest, ExecutePlanResponse, SparkConnectServiceGrpc}
+import org.apache.spark.connect.proto.{AddArtifactsRequest, AddArtifactsResponse}
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{Dataset, SparkSession}
-import org.apache.spark.sql.connect.common.DataTypeProtoConverter
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connect.config.Connect.CONNECT_GRPC_BINDING_PORT
-import org.apache.spark.sql.connect.planner.SparkConnectPlanner
-import org.apache.spark.sql.execution.{CodegenMode, CostMode, ExplainMode, ExtendedMode, FormattedMode, SimpleMode}
 
 /**
  * The SparkConnectService implementation.
@@ -57,7 +53,7 @@ import org.apache.spark.sql.execution.{CodegenMode, CostMode, ExplainMode, Exten
  *   delegates debug behavior to the handlers.
  */
 class SparkConnectService(debug: Boolean)
-    extends SparkConnectServiceGrpc.SparkConnectServiceImplBase
+    extends proto.SparkConnectServiceGrpc.SparkConnectServiceImplBase
     with Logging {
 
   private def allClasses(cl: Class[_]): Seq[Class[_]] = {
@@ -143,8 +139,8 @@ class SparkConnectService(debug: Boolean)
    * @param responseObserver
    */
   override def executePlan(
-      request: ExecutePlanRequest,
-      responseObserver: StreamObserver[ExecutePlanResponse]): Unit = {
+      request: proto.ExecutePlanRequest,
+      responseObserver: StreamObserver[proto.ExecutePlanResponse]): Unit = {
     try {
       new SparkConnectStreamHandler(responseObserver).handle(request)
     } catch handleError("execute", observer = responseObserver)
@@ -163,54 +159,11 @@ class SparkConnectService(debug: Boolean)
    * @param responseObserver
    */
   override def analyzePlan(
-      request: AnalyzePlanRequest,
-      responseObserver: StreamObserver[AnalyzePlanResponse]): Unit = {
+      request: proto.AnalyzePlanRequest,
+      responseObserver: StreamObserver[proto.AnalyzePlanResponse]): Unit = {
     try {
-      if (request.getPlan.getOpTypeCase != proto.Plan.OpTypeCase.ROOT) {
-        responseObserver.onError(
-          new UnsupportedOperationException(
-            s"${request.getPlan.getOpTypeCase} not supported for analysis."))
-      }
-      val session =
-        SparkConnectService
-          .getOrCreateIsolatedSession(request.getUserContext.getUserId, request.getClientId)
-          .session
-
-      val explainMode = request.getExplain.getExplainMode match {
-        case proto.Explain.ExplainMode.SIMPLE => SimpleMode
-        case proto.Explain.ExplainMode.EXTENDED => ExtendedMode
-        case proto.Explain.ExplainMode.CODEGEN => CodegenMode
-        case proto.Explain.ExplainMode.COST => CostMode
-        case proto.Explain.ExplainMode.FORMATTED => FormattedMode
-        case _ =>
-          throw new IllegalArgumentException(
-            s"Explain mode unspecified. Accepted " +
-              "explain modes are 'simple', 'extended', 'codegen', 'cost', 'formatted'.")
-      }
-
-      val response = handleAnalyzePlanRequest(request.getPlan.getRoot, session, explainMode)
-      response.setClientId(request.getClientId)
-      responseObserver.onNext(response.build())
-      responseObserver.onCompleted()
+      new SparkConnectAnalyzeHandler(responseObserver).handle(request)
     } catch handleError("analyze", observer = responseObserver)
-  }
-
-  def handleAnalyzePlanRequest(
-      relation: proto.Relation,
-      session: SparkSession,
-      explainMode: ExplainMode): proto.AnalyzePlanResponse.Builder = {
-    val logicalPlan = new SparkConnectPlanner(session).transformRelation(relation)
-
-    val ds = Dataset.ofRows(session, logicalPlan)
-    val explainString = ds.queryExecution.explainString(explainMode)
-
-    val response = proto.AnalyzePlanResponse.newBuilder()
-    response.setSchema(DataTypeProtoConverter.toConnectProtoType(ds.schema))
-    response.setExplainString(explainString)
-    response.setTreeString(ds.schema.treeString)
-    response.setIsLocal(ds.isLocal)
-    response.setIsStreaming(ds.isStreaming)
-    response.addAllInputFiles(ds.inputFiles.toSeq.asJava)
   }
 
   /**
@@ -226,6 +179,28 @@ class SparkConnectService(debug: Boolean)
     try {
       new SparkConnectConfigHandler(responseObserver).handle(request)
     } catch handleError("config", observer = responseObserver)
+  }
+
+  /**
+   * This is the main entry method for all calls to add/transfer artifacts.
+   *
+   * @param responseObserver
+   * @return
+   */
+  override def addArtifacts(responseObserver: StreamObserver[AddArtifactsResponse])
+      : StreamObserver[AddArtifactsRequest] = {
+    // TODO: Handle artifact files
+    // No-Op StreamObserver
+    new StreamObserver[AddArtifactsRequest] {
+      override def onNext(v: AddArtifactsRequest): Unit = {}
+
+      override def onError(throwable: Throwable): Unit = responseObserver.onError(throwable)
+
+      override def onCompleted(): Unit = {
+        responseObserver.onNext(proto.AddArtifactsResponse.newBuilder().build())
+        responseObserver.onCompleted()
+      }
+    }
   }
 }
 

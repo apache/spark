@@ -60,7 +60,10 @@ message Relation {
     Unpivot unpivot = 25;
     ToSchema to_schema = 26;
     RepartitionByExpression repartition_by_expression = 27;
-    FrameMap frame_map = 28;
+    MapPartitions map_partitions = 28;
+    CollectMetrics collect_metrics = 29;
+    Parse parse = 30;
+    GroupMap group_map = 31;
 
     // NA functions
     NAFill fill_na = 90;
@@ -139,6 +142,11 @@ message Read {
 
     // (Optional) A list of path for file-system backed data sources.
     repeated string paths = 4;
+
+    // (Optional) Condition in the where clause for each partition.
+    //
+    // This is only supported by the JDBC data source.
+    repeated string predicates = 5;
   }
 }
 
@@ -321,10 +329,11 @@ message Drop {
   // (Required) The input relation.
   Relation input = 1;
 
-  // (Required) columns to drop.
-  //
-  // Should contain at least 1 item.
-  repeated Expression cols = 2;
+  // (Optional) columns to drop.
+  repeated Expression columns = 2;
+
+  // (Optional) names of columns to drop.
+  repeated string column_names = 3;
 }
 
 
@@ -772,11 +781,51 @@ message RepartitionByExpression {
   optional int32 num_partitions = 3;
 }
 
-message FrameMap {
-  // (Required) Input relation for a Frame Map API: mapInPandas, mapInArrow.
+message MapPartitions {
+  // (Required) Input relation for a mapPartitions-equivalent API: mapInPandas, mapInArrow.
   Relation input = 1;
 
-  // (Required) Input user-defined function of a Frame Map API.
+  // (Required) Input user-defined function.
   CommonInlineUserDefinedFunction func = 2;
 }
 
+message GroupMap {
+  // (Required) Input relation for Group Map API: apply, applyInPandas.
+  Relation input = 1;
+
+  // (Required) Expressions for grouping keys.
+  repeated Expression grouping_expressions = 2;
+
+  // (Required) Input user-defined function.
+  CommonInlineUserDefinedFunction func = 3;
+}
+
+// Collect arbitrary (named) metrics from a dataset.
+message CollectMetrics {
+  // (Required) The input relation.
+  Relation input = 1;
+
+  // (Required) Name of the metrics.
+  string name = 2;
+
+  // (Required) The metric sequence.
+  repeated Expression metrics = 3;
+}
+
+message Parse {
+  // (Required) Input relation to Parse. The input is expected to have single text column.
+  Relation input = 1;
+  // (Required) The expected format of the text.
+  ParseFormat format = 2;
+
+  // (Optional) DataType representing the schema. If not set, Spark will infer the schema.
+  optional DataType schema = 3;
+
+  // Options for the csv/json parser. The map key is case insensitive.
+  map<string, string> options = 4;
+  enum ParseFormat {
+    PARSE_FORMAT_UNSPECIFIED = 0;
+    PARSE_FORMAT_CSV = 1;
+    PARSE_FORMAT_JSON = 2;
+  }
+}

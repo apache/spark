@@ -47,15 +47,16 @@ class PandasUDFTestsMixin:
         self.assertEqual(udf.returnType, DoubleType())
         self.assertEqual(udf.evalType, PythonEvalType.SQL_SCALAR_PANDAS_UDF)
 
-        udf = pandas_udf(lambda x: x, "double", PandasUDFType.SCALAR)
-        self.assertEqual(udf.returnType, DoubleType())
-        self.assertEqual(udf.evalType, PythonEvalType.SQL_SCALAR_PANDAS_UDF)
-
         udf = pandas_udf(
             lambda x: x, StructType([StructField("v", DoubleType())]), PandasUDFType.GROUPED_MAP
         )
         self.assertEqual(udf.returnType, StructType([StructField("v", DoubleType())]))
         self.assertEqual(udf.evalType, PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF)
+
+    def test_pandas_udf_basic_with_return_type_string(self):
+        udf = pandas_udf(lambda x: x, "double", PandasUDFType.SCALAR)
+        self.assertEqual(udf.returnType, DoubleType())
+        self.assertEqual(udf.evalType, PythonEvalType.SQL_SCALAR_PANDAS_UDF)
 
         udf = pandas_udf(lambda x: x, "v double", PandasUDFType.GROUPED_MAP)
         self.assertEqual(udf.returnType, StructType([StructField("v", DoubleType())]))
@@ -93,14 +94,24 @@ class PandasUDFTestsMixin:
         self.assertEqual(foo.returnType, schema)
         self.assertEqual(foo.evalType, PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF)
 
-        @pandas_udf("v double", PandasUDFType.GROUPED_MAP)
+        @pandas_udf(schema, functionType=PandasUDFType.GROUPED_MAP)
         def foo(x):
             return x
 
         self.assertEqual(foo.returnType, schema)
         self.assertEqual(foo.evalType, PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF)
 
-        @pandas_udf(schema, functionType=PandasUDFType.GROUPED_MAP)
+        @pandas_udf(returnType=schema, functionType=PandasUDFType.GROUPED_MAP)
+        def foo(x):
+            return x
+
+        self.assertEqual(foo.returnType, schema)
+        self.assertEqual(foo.evalType, PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF)
+
+    def test_pandas_udf_decorator_with_return_type_string(self):
+        schema = StructType([StructField("v", DoubleType())])
+
+        @pandas_udf("v double", PandasUDFType.GROUPED_MAP)
         def foo(x):
             return x
 
@@ -113,13 +124,6 @@ class PandasUDFTestsMixin:
 
         self.assertEqual(foo.returnType, DoubleType())
         self.assertEqual(foo.evalType, PythonEvalType.SQL_SCALAR_PANDAS_UDF)
-
-        @pandas_udf(returnType=schema, functionType=PandasUDFType.GROUPED_MAP)
-        def foo(x):
-            return x
-
-        self.assertEqual(foo.returnType, schema)
-        self.assertEqual(foo.evalType, PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF)
 
     def test_udf_wrong_arg(self):
         with QuietTest(self.sc):

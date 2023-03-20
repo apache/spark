@@ -22,20 +22,10 @@ from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
 class DataFrameParityTests(DataFrameTestsMixin, ReusedConnectTestCase):
-    # TODO(SPARK-41868): Support data type Duration(NANOSECOND)
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_create_dataframe_from_pandas_with_day_time_interval(self):
-        super().test_create_dataframe_from_pandas_with_day_time_interval()
-
     # TODO(SPARK-41834): Implement SparkSession.conf
     @unittest.skip("Fails in Spark Connect, should enable.")
     def test_create_dataframe_from_pandas_with_dst(self):
         super().test_create_dataframe_from_pandas_with_dst()
-
-    # TODO(SPARK-41870): Handle duplicate columns in `createDataFrame`
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_duplicated_column_names(self):
-        super().test_duplicated_column_names()
 
     @unittest.skip("Spark Connect does not support RDD but the tests depend on them.")
     def test_help_command(self):
@@ -70,8 +60,7 @@ class DataFrameParityTests(DataFrameTestsMixin, ReusedConnectTestCase):
     def test_repr_behaviors(self):
         super().test_repr_behaviors()
 
-    # TODO(SPARK-41874): Implement DataFrame `sameSemantics`
-    @unittest.skip("Fails in Spark Connect, should enable.")
+    @unittest.skip("Spark Connect does not SparkContext but the tests depend on them.")
     def test_same_semantics_error(self):
         super().test_same_semantics_error()
 
@@ -117,11 +106,6 @@ class DataFrameParityTests(DataFrameTestsMixin, ReusedConnectTestCase):
 
     def test_to_pandas_with_duplicated_column_names(self):
         self.check_to_pandas_with_duplicated_column_names()
-
-    # TODO(SPARK-42367): DataFrame.drop should handle duplicated columns properly
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_drop_duplicates_with_ambiguous_reference(self):
-        super().test_drop_duplicates_with_ambiguous_reference()
 
 
 if __name__ == "__main__":

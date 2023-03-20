@@ -81,6 +81,15 @@ class BlockManagerStorageEndpoint(
     case ReplicateBlock(blockId, replicas, maxReplicas) =>
       context.reply(blockManager.replicateBlock(blockId, replicas.toSet, maxReplicas))
 
+    case MarkRDDBlockAsVisible(blockId) =>
+      // The message is sent from driver to ask the block manager to mark the rdd block with
+      // `blockId` to be visible now. This happens in 2 scenarios:
+      // 1. A task computing/caching the rdd block finished successfully and the rdd block can be
+      //    turned to be visible. Driver will ask all block managers hosting the rdd block to mark
+      //    the block as visible.
+      // 2. Once a replica of a visible block is cached and reported, driver will also ask the
+      //    the block manager to mark the block as visible immediately.
+      context.reply(blockManager.blockInfoManager.tryMarkBlockAsVisible(blockId))
   }
 
   private def doAsync[T](actionMessage: String, context: RpcCallContext)(body: => T): Unit = {

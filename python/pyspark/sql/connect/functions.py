@@ -16,7 +16,7 @@
 #
 from pyspark.sql.connect.utils import check_dependencies
 
-check_dependencies(__name__, __file__)
+check_dependencies(__name__)
 
 import inspect
 import warnings
@@ -53,6 +53,11 @@ from pyspark.sql.connect.expressions import (
 from pyspark.sql.connect.udf import _create_udf
 from pyspark.sql import functions as pysparkfuncs
 from pyspark.sql.types import _from_numpy_type, DataType, StructType, ArrayType, StringType
+
+# The implementation of pandas_udf is embedded in pyspark.sql.function.pandas_udf
+# for code reuse.
+from pyspark.sql.functions import pandas_udf  # noqa: F401
+
 
 if TYPE_CHECKING:
     from pyspark.sql.connect._typing import (
@@ -224,6 +229,10 @@ def lit(col: Any) -> Column:
     if isinstance(col, Column):
         return col
     elif isinstance(col, list):
+        if any(isinstance(c, Column) for c in col):
+            raise PySparkValueError(
+                error_class="COLUMN_IN_LIST", message_parameters={"func_name": "lit"}
+            )
         return array(*[lit(c) for c in col])
     elif isinstance(col, np.ndarray) and col.ndim == 1:
         if _from_numpy_type(col.dtype) is None:
@@ -2462,10 +2471,6 @@ def udf(
 udf.__doc__ = pysparkfuncs.udf.__doc__
 
 
-def pandas_udf(*args: Any, **kwargs: Any) -> None:
-    raise NotImplementedError("pandas_udf() is not implemented.")
-
-
 def _test() -> None:
     import sys
     import doctest
@@ -2476,9 +2481,6 @@ def _test() -> None:
 
     # Spark Connect does not support Spark Context but the test depends on that.
     del pyspark.sql.connect.functions.monotonically_increasing_id.__doc__
-
-    # TODO(SPARK-41843): Implement SparkSession.udf
-    del pyspark.sql.connect.functions.call_udf.__doc__
 
     globs["spark"] = (
         PySparkSession.builder.appName("sql.connect.functions tests")

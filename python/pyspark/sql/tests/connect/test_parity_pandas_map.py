@@ -14,31 +14,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-import unittest
-
 from pyspark.sql.tests.pandas.test_pandas_map import MapInPandasTestsMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
 class MapInPandasParityTests(MapInPandasTestsMixin, ReusedConnectTestCase):
-    @unittest.skip(
-        "Spark Connect does not support sc._jvm.org.apache.log4j but the test depends on it."
-    )
     def test_empty_dataframes_with_less_columns(self):
-        super().test_empty_dataframes_with_less_columns()
+        self.check_empty_dataframes_with_less_columns()
 
-    @unittest.skip(
-        "Spark Connect does not support sc._jvm.org.apache.log4j but the test depends on it."
-    )
     def test_other_than_dataframe(self):
-        super().test_other_than_dataframe()
-
-    @unittest.skip("Spark Connect does not support spark.conf but the test depends on it.")
-    def test_map_in_pandas_with_column_vector(self):
-        super().test_map_in_pandas_with_column_vector()
+        self.check_other_than_dataframe()
 
 
 if __name__ == "__main__":
+    import unittest
     from pyspark.sql.tests.connect.test_parity_pandas_map import *  # noqa: F401
 
     try:

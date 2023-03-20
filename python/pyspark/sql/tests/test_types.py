@@ -379,13 +379,13 @@ class TypesTestsMixin:
 
     def test_negative_decimal(self):
         try:
-            self.spark.sql("set spark.sql.legacy.allowNegativeScaleOfDecimal=true").collect()
+            self.spark.sql("set spark.sql.legacy.allowNegativeScaleOfDecimal=true")
             df = self.spark.createDataFrame([(1,), (11,)], ["value"])
             ret = df.select(col("value").cast(DecimalType(1, -1))).collect()
             actual = list(map(lambda r: int(r.value), ret))
             self.assertEqual(actual, [0, 10])
         finally:
-            self.spark.sql("set spark.sql.legacy.allowNegativeScaleOfDecimal=false").collect()
+            self.spark.sql("set spark.sql.legacy.allowNegativeScaleOfDecimal=false")
 
     def test_create_dataframe_from_objects(self):
         data = [MyObject(1, "1"), MyObject(2, "2")]
@@ -692,10 +692,10 @@ class TypesTestsMixin:
 
         row = Row(point=ExamplePoint(1.0, 2.0), python_only_point=PythonOnlyPoint(1.0, 2.0))
         df = self.spark.createDataFrame([row])
-        self.assertRaises(AnalysisException, lambda: df.select(col("point").cast(PythonOnlyUDT())))
-        self.assertRaises(
-            AnalysisException, lambda: df.select(col("python_only_point").cast(ExamplePointUDT()))
-        )
+        with self.assertRaises(AnalysisException):
+            df.select(col("point").cast(PythonOnlyUDT())).collect()
+        with self.assertRaises(AnalysisException):
+            df.select(col("python_only_point").cast(ExamplePointUDT())).collect()
 
     def test_struct_type(self):
         struct1 = StructType().add("f1", StringType(), True).add("f2", StringType(), True, None)

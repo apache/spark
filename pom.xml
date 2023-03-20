@@ -84,8 +84,9 @@
     <module>common/tags</module>
     <module>core</module>
     <module>graphx</module>
-    <module>mllib</module>
-    <module>mllib-local</module>
+    <module>mllib/core</module>
+    <module>mllib/common</module>
+    <module>mllib/local</module>
     <module>tools</module>
     <module>streaming</module>
     <module>sql/catalyst</module>
@@ -141,9 +142,9 @@
     <!-- After 10.15.1.3, the minimum required version is JDK9 -->
     <derby.version>10.14.2.0</derby.version>
     <parquet.version>1.12.3</parquet.version>
-    <orc.version>1.8.2</orc.version>
+    <orc.version>1.8.3</orc.version>
     <orc.classifier>shaded-protobuf</orc.classifier>
-    <jetty.version>9.4.50.v20221201</jetty.version>
+    <jetty.version>9.4.51.v20230217</jetty.version>
     <jakartaservlet.version>4.0.3</jakartaservlet.version>
     <chill.version>0.10.0</chill.version>
     <ivy.version>2.5.1</ivy.version>
@@ -152,7 +153,7 @@
     If you changes codahale.metrics.version, you also need to change
     the link to metrics.dropwizard.io in docs/monitoring.md.
     -->
-    <codahale.metrics.version>4.2.15</codahale.metrics.version>
+    <codahale.metrics.version>4.2.17</codahale.metrics.version>
     <!-- Should be consistent with SparkBuild.scala and docs -->
     <avro.version>1.11.1</avro.version>
     <aws.kinesis.client.version>1.12.0</aws.kinesis.client.version>
@@ -177,7 +178,7 @@
       See: SPARK-36547, SPARK-38394.
        -->
     <scala-maven-plugin.version>4.8.0</scala-maven-plugin.version>
-    <versions-maven-plugin.version>2.14.2</versions-maven-plugin.version>
+    <versions-maven-plugin.version>2.15.0</versions-maven-plugin.version>
     <!-- for now, not running scalafmt as part of default verify pipeline -->
     <scalafmt.skip>true</scalafmt.skip>
     <scalafmt.validateOnly>true</scalafmt.validateOnly>
@@ -223,7 +224,7 @@
     <arrow.version>11.0.0</arrow.version>
     <!-- org.fusesource.leveldbjni will be used except on arm64 platform. -->
     <leveldbjni.group>org.fusesource.leveldbjni</leveldbjni.group>
-    <kubernetes-client.version>6.4.1</kubernetes-client.version>
+    <kubernetes-client.version>6.5.0</kubernetes-client.version>
 
     <test.java.home>${java.home}</test.java.home>
 
@@ -686,7 +687,7 @@
       <dependency>
         <groupId>org.rocksdb</groupId>
         <artifactId>rocksdbjni</artifactId>
-        <version>7.9.2</version>
+        <version>7.10.2</version>
       </dependency>
       <dependency>
         <groupId>${leveldbjni.group}</groupId>
@@ -806,7 +807,7 @@
       <dependency>
         <groupId>com.github.luben</groupId>
         <artifactId>zstd-jni</artifactId>
-        <version>1.5.4-1</version>
+        <version>1.5.4-2</version>
       </dependency>
       <dependency>
         <groupId>com.clearspring.analytics</groupId>
@@ -1075,11 +1076,6 @@
         </exclusions>
       </dependency>
       <dependency>
-        <groupId>com.chuusai</groupId>
-        <artifactId>shapeless_${scala.binary.version}</artifactId>
-        <version>2.3.9</version>
-      </dependency>
-      <dependency>
         <groupId>org.json4s</groupId>
         <artifactId>json4s-jackson_${scala.binary.version}</artifactId>
         <version>3.7.0-M11</version>
@@ -1206,7 +1202,7 @@
       <dependency>
         <groupId>com.mysql</groupId>
         <artifactId>mysql-connector-j</artifactId>
-        <version>8.0.31</version>
+        <version>8.0.32</version>
         <scope>test</scope>
       </dependency>
       <dependency>
@@ -1430,6 +1426,10 @@
         <scope>test</scope>
       </dependency>
       <!-- Managed up to match Hadoop in HADOOP-16530 -->
+      <!--
+        When upgrading `xercesImpl` version, also need to change
+        the version definition in `SparkBuild#DependencyOverrides`.
+      -->
       <dependency>
         <groupId>xerces</groupId>
         <artifactId>xercesImpl</artifactId>
@@ -2772,7 +2772,7 @@
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-enforcer-plugin</artifactId>
-          <version>3.0.0-M2</version>
+          <version>3.2.1</version>
           <executions>
             <execution>
               <id>enforce-versions</id>
@@ -2815,7 +2815,7 @@
         <plugin>
           <groupId>org.codehaus.mojo</groupId>
           <artifactId>build-helper-maven-plugin</artifactId>
-          <version>3.2.0</version>
+          <version>3.3.0</version>
           <executions>
             <execution>
               <id>module-timestamp-property</id>
@@ -2917,7 +2917,7 @@
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-compiler-plugin</artifactId>
-          <version>3.10.1</version>
+          <version>3.11.0</version>
           <configuration>
             <source>${java.version}</source>
             <target>${java.version}</target>
@@ -2934,7 +2934,7 @@
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-surefire-plugin</artifactId>
-          <version>3.0.0-M8</version>
+          <version>3.0.0</version>
           <!-- Note config is repeated in scalatest config -->
           <configuration>
             <includes>
@@ -2957,7 +2957,7 @@
               <JAVA_HOME>${test.java.home}</JAVA_HOME>
               <SPARK_BEELINE_OPTS>-DmyKey=yourValue</SPARK_BEELINE_OPTS>
             </environmentVariables>
-            <systemProperties>
+            <systemPropertyVariables>
               <log4j.configurationFile>file:src/test/resources/log4j2.properties</log4j.configurationFile>
               <derby.system.durability>test</derby.system.durability>
               <java.awt.headless>true</java.awt.headless>
@@ -2972,7 +2972,7 @@
               <spark.hadoop.hadoop.security.key.provider.path>test:///</spark.hadoop.hadoop.security.key.provider.path>
               <!-- Needed by sql/hive tests. -->
               <test.src.tables>src</test.src.tables>
-            </systemProperties>
+            </systemPropertyVariables>
             <failIfNoTests>false</failIfNoTests>
             <failIfNoSpecifiedTests>false</failIfNoSpecifiedTests>
             <excludedGroups>${test.exclude.tags}</excludedGroups>
@@ -3095,7 +3095,7 @@
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-javadoc-plugin</artifactId>
-          <version>3.4.1</version>
+          <version>3.5.0</version>
           <configuration>
             <additionalJOptions>
               <additionalJOption>-Xdoclint:all</additionalJOption>
@@ -3173,7 +3173,7 @@
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-deploy-plugin</artifactId>
-          <version>3.0.0</version>
+          <version>3.1.0</version>
         </plugin>
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>

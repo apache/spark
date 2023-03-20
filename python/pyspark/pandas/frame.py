@@ -2508,6 +2508,9 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             The subset of columns to write. Writes all columns by default.
         col_space : int, optional
             The minimum width of each column.
+
+            .. deprecated:: 3.4.0
+
         header : bool or list of str, default True
             Write out the column names. If a list of strings is given, it is assumed to be aliases
             for the column names.
@@ -3494,6 +3497,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             ).resolved_copy
             return DataFrame(internal)
 
+    # TODO(SPARK-42620): Add `inclusive` parameter and replace `include_start` & `include_end`.
+    # See https://github.com/pandas-dev/pandas/issues/43248
     def between_time(
         self,
         start_time: Union[datetime.time, str],
@@ -3516,8 +3521,14 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             End time as a time filter limit.
         include_start : bool, default True
             Whether the start time needs to be included in the result.
+
+            .. deprecated:: 3.4.0
+
         include_end : bool, default True
             Whether the end time needs to be included in the result.
+
+            .. deprecated:: 3.4.0
+
         axis : {0 or 'index', 1 or 'columns'}, default 0
             Determine range time on index or columns value.
 
@@ -8813,6 +8824,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         Columns in other that are not in the caller are added as new columns.
 
+        .. deprecated:: 3.4.0
+
         Parameters
         ----------
         other : DataFrame or Series/dict-like object, or list of these
@@ -8849,6 +8862,12 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         2  1  2
         3  3  4
         """
+        warnings.warn(
+            "The DataFrame.append method is deprecated "
+            "and will be removed in a future version. "
+            "Use pyspark.pandas.concat instead.",
+            FutureWarning,
+        )
         if isinstance(other, ps.Series):
             raise TypeError("DataFrames.append() does not support appending Series to DataFrames")
         if sort:
@@ -11990,6 +12009,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         return cast(ps.Series, ps.from_pandas(psdf._to_internal_pandas().idxmin()))
 
+    # TODO(SPARK-41619): Add `show_counts` parameter and replace with `null_counts`.
     def info(
         self,
         verbose: Optional[bool] = None,
@@ -12017,6 +12037,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             is used.
         null_counts : bool, optional
             Whether to show the non-null counts.
+
+            .. deprecated:: 3.4.0
 
         Returns
         -------
@@ -12663,6 +12685,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         """
         Return the mean absolute deviation of values.
 
+        .. deprecated:: 3.4.0
+
         Parameters
         ----------
         axis : {index (0), columns (1)}
@@ -12685,6 +12709,11 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         3     NaN
         dtype: float64
         """
+        warnings.warn(
+            "The 'mad' method is deprecated and will be removed in a future version. "
+            "To compute the same result, you may do `(df - df.mean()).abs().mean()`.",
+            FutureWarning,
+        )
         from pyspark.pandas.series import first_series
 
         axis = validate_axis(axis)

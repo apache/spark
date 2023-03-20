@@ -16,7 +16,7 @@
 #
 from pyspark.sql.connect.utils import check_dependencies
 
-check_dependencies(__name__, __file__)
+check_dependencies(__name__)
 
 import array
 import datetime
@@ -37,6 +37,7 @@ from pyspark.sql.types import (
     NullType,
     DecimalType,
     StringType,
+    UserDefinedType,
 )
 
 from pyspark.sql.connect.types import to_arrow_schema
@@ -78,6 +79,8 @@ class LocalDataToArrowConversion:
             return True
         elif isinstance(dataType, StringType):
             # Coercion to StringType is allowed
+            return True
+        elif isinstance(dataType, UserDefinedType):
             return True
         else:
             return False
@@ -229,6 +232,19 @@ class LocalDataToArrowConversion:
 
             return convert_string
 
+        elif isinstance(dataType, UserDefinedType):
+            udt: UserDefinedType = dataType
+
+            conv = LocalDataToArrowConversion._create_converter(dataType.sqlType())
+
+            def convert_udt(value: Any) -> Any:
+                if value is None:
+                    return None
+                else:
+                    return conv(udt.serialize(value))
+
+            return convert_udt
+
         else:
 
             return lambda value: value
@@ -243,36 +259,24 @@ class LocalDataToArrowConversion:
 
         column_names = schema.fieldNames()
 
-        column_convs = {
-            field.name: LocalDataToArrowConversion._create_converter(field.dataType)
-            for field in schema.fields
-        }
+        column_convs = [
+            LocalDataToArrowConversion._create_converter(field.dataType) for field in schema.fields
+        ]
 
-        pylist = []
+        pylist: List[List] = [[] for _ in range(len(column_names))]
 
         for item in data:
-            _dict = {}
+            if not isinstance(item, Row) and hasattr(item, "__dict__"):
+                item = item.__dict__
+            for i, col in enumerate(column_names):
+                if isinstance(item, dict):
+                    value = item.get(col)
+                else:
+                    value = item[i]
 
-            if isinstance(item, dict):
-                for col, value in item.items():
-                    _dict[col] = column_convs[col](value)
-            elif isinstance(item, Row) and hasattr(item, "__fields__"):
-                for col, value in item.asDict(recursive=False).items():
-                    _dict[col] = column_convs[col](value)
-            elif not isinstance(item, Row) and hasattr(item, "__dict__"):
-                for col, value in item.__dict__.items():
-                    print(col, value)
-                    _dict[col] = column_convs[col](value)
-            else:
-                i = 0
-                for value in item:
-                    col = column_names[i]
-                    _dict[col] = column_convs[col](value)
-                    i += 1
+                pylist[i].append(column_convs[i](value))
 
-            pylist.append(_dict)
-
-        return pa.Table.from_pylist(pylist, schema=pa_schema)
+        return pa.Table.from_arrays(pylist, schema=pa_schema)
 
 
 class ArrowTableToRowsConversion:
@@ -297,6 +301,8 @@ class ArrowTableToRowsConversion:
             return True
         elif isinstance(dataType, (TimestampType, TimestampNTZType)):
             # Always remove the time zone info for now
+            return True
+        elif isinstance(dataType, UserDefinedType):
             return True
         else:
             return False
@@ -391,6 +397,19 @@ class ArrowTableToRowsConversion:
                         return value
 
             return convert_timestample
+
+        elif isinstance(dataType, UserDefinedType):
+            udt: UserDefinedType = dataType
+
+            conv = ArrowTableToRowsConversion._create_converter(dataType.sqlType())
+
+            def convert_udt(value: Any) -> Any:
+                if value is None:
+                    return None
+                else:
+                    return udt.deserialize(conv(value))
+
+            return convert_udt
 
         else:
 

@@ -20,7 +20,6 @@ syntax = 'proto3';
 import "google/protobuf/any.proto";
 import "spark/connect/expressions.proto";
 import "spark/connect/relations.proto";
-import "spark/connect/types.proto";
 
 package spark.connect;
 
@@ -35,12 +34,27 @@ message Command {
     WriteOperation write_operation = 2;
     CreateDataFrameViewCommand create_dataframe_view = 3;
     WriteOperationV2 write_operation_v2 = 4;
+    SqlCommand sql_command = 5;
 
     // This field is used to mark extensions to the protocol. When plugins generate arbitrary
     // Commands they can add them here. During the planning the correct resolution is done.
     google.protobuf.Any extension = 999;
 
   }
+}
+
+// A SQL Command is used to trigger the eager evaluation of SQL commands in Spark.
+//
+// When the SQL provide as part of the message is a command it will be immediately evaluated
+// and the result will be collected and returned as part of a LocalRelation. If the result is
+// not a command, the operation will simply return a SQL Relation. This allows the client to be
+// almost oblivious to the server-side behavior.
+message SqlCommand {
+  // (Required) SQL Query.
+  string sql = 1;
+
+  // (Optional) A map of parameter names to literal values.
+  map<string, string> args = 2;
 }
 
 // A command that can create DataFrame global temp view or local temp view.
@@ -69,7 +83,11 @@ message WriteOperation {
   // (Optional) Format value according to the Spark documentation. Examples are: text, parquet, delta.
   optional string source = 2;
 
-  // The destination of the write operation must be either a path or a table.
+  // (Optional)
+  //
+  // The destination of the write operation can be either a path or a table.
+  // If the destination is neither a path nor a table, such as jdbc and noop,
+  // the `save_type` should not be set.
   oneof save_type {
     string path = 3;
     SaveTable table = 4;

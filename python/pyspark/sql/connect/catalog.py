@@ -16,7 +16,7 @@
 #
 from pyspark.sql.connect.utils import check_dependencies
 
-check_dependencies(__name__, __file__)
+check_dependencies(__name__)
 
 from typing import Any, Callable, List, Optional, TYPE_CHECKING
 
@@ -330,9 +330,6 @@ def _test() -> None:
     globs["spark"] = (
         PySparkSession.builder.appName("sql.connect.catalog tests").remote("local[4]").getOrCreate()
     )
-
-    # TODO(SPARK-41818): java.lang.ClassNotFoundException) .DefaultSource
-    del pyspark.sql.connect.catalog.Catalog.recoverPartitions.__doc__
 
     (failure_count, test_count) = doctest.testmod(
         pyspark.sql.connect.catalog,

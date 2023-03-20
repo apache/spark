@@ -144,10 +144,9 @@ class EquivalentExpressions {
 
   private def supportedExpression(e: Expression) = {
     !e.exists {
-      // `LambdaVariable` is usually used as a loop variable and `NamedLambdaVariable` is used in
-      // higher-order functions, which can't be evaluated ahead of the execution.
+      // `LambdaVariable` is usually used as a loop variable, which can't be evaluated ahead of the
+      // loop. So we can't evaluate sub-expressions containing `LambdaVariable` at the beginning.
       case _: LambdaVariable => true
-      case _: NamedLambdaVariable => true
 
       // `PlanExpression` wraps query plan. To compare query plans of `PlanExpression` on executor,
       // can cause error like NPE.

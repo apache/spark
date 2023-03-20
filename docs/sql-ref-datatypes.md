@@ -108,6 +108,38 @@ Spark SQL and DataFrames support the following data types:
     `null` values.
 
 <div class="codetabs">
+
+<div data-lang="python"  markdown="1">
+
+All data types of Spark SQL are located in the package of `pyspark.sql.types`.
+You can access them by doing
+{% highlight python %}
+from pyspark.sql.types import *
+{% endhighlight %}
+
+|Data type|Value type in Python|API to access or create a data type|
+|---------|--------------------|-----------------------------------|
+|**ByteType**|int or long<br/>**Note:** Numbers will be converted to 1-byte signed integer numbers at runtime. Please make sure that numbers are within the range of -128 to 127.|ByteType()|
+|**ShortType**|int or long<br/>**Note:** Numbers will be converted to 2-byte signed integer numbers at runtime. Please make sure that numbers are within the range of -32768 to 32767.|ShortType()|
+|**IntegerType**|int or long|IntegerType()|
+|**LongType**|long<br/>**Note:** Numbers will be converted to 8-byte signed integer numbers at runtime. Please make sure that numbers are within the range of -9223372036854775808 to 9223372036854775807. Otherwise, please convert data to decimal.Decimal and use DecimalType.|LongType()|
+|**FloatType**|float<br/>**Note:** Numbers will be converted to 4-byte single-precision floating point numbers at runtime.|FloatType()|
+|**DoubleType**|float|DoubleType()|
+|**DecimalType**|decimal.Decimal|DecimalType()|
+|**StringType**|string|StringType()|
+|**BinaryType**|bytearray|BinaryType()|
+|**BooleanType**|bool|BooleanType()|
+|**TimestampType**|datetime.datetime|TimestampType()|
+|**TimestampNTZType**|datetime.datetime|TimestampNTZType()|
+|**DateType**|datetime.date|DateType()|
+|**DayTimeIntervalType**|datetime.timedelta|DayTimeIntervalType()|
+|**ArrayType**|list, tuple, or array|ArrayType(*elementType*, [*containsNull*])<br/>**Note:**The default value of *containsNull* is True.|
+|**MapType**|dict|MapType(*keyType*, *valueType*, [*valueContainsNull]*)<br/>**Note:**The default value of *valueContainsNull* is True.|
+|**StructType**|list or tuple|StructType(*fields*)<br/>**Note:** *fields* is a Seq of StructFields. Also, two fields with the same name are not allowed.|
+|**StructField**|The value type in Python of the data type of this field<br/>(For example, Int for a StructField with the data type IntegerType)|StructField(*name*, *dataType*, [*nullable*])<br/>**Note:** The default value of *nullable* is True.|
+
+</div>
+
 <div data-lang="scala"  markdown="1">
 
 All data types of Spark SQL are located in the package `org.apache.spark.sql.types`.
@@ -167,37 +199,6 @@ please use factory methods provided in
 |**MapType**|java.util.Map|DataTypes.createMapType(*keyType*, *valueType*)<br/>**Note:** The value of *valueContainsNull* will be true.<br/>DataTypes.createMapType(*keyType*, *valueType*, *valueContainsNull*)|
 |**StructType**|org.apache.spark.sql.Row|DataTypes.createStructType(*fields*)<br/>**Note:** *fields* is a List or an array of StructFields.Also, two fields with the same name are not allowed.|
 |**StructField**|The value type in Java of the data type of this field (For example, int for a StructField with the data type IntegerType)|DataTypes.createStructField(*name*, *dataType*, *nullable*)| 
-
-</div>
-
-<div data-lang="python"  markdown="1">
-
-All data types of Spark SQL are located in the package of `pyspark.sql.types`.
-You can access them by doing
-{% highlight python %}
-from pyspark.sql.types import *
-{% endhighlight %}
-
-|Data type|Value type in Python|API to access or create a data type|
-|---------|--------------------|-----------------------------------|
-|**ByteType**|int or long<br/>**Note:** Numbers will be converted to 1-byte signed integer numbers at runtime. Please make sure that numbers are within the range of -128 to 127.|ByteType()|
-|**ShortType**|int or long<br/>**Note:** Numbers will be converted to 2-byte signed integer numbers at runtime. Please make sure that numbers are within the range of -32768 to 32767.|ShortType()|
-|**IntegerType**|int or long|IntegerType()|
-|**LongType**|long<br/>**Note:** Numbers will be converted to 8-byte signed integer numbers at runtime. Please make sure that numbers are within the range of -9223372036854775808 to 9223372036854775807. Otherwise, please convert data to decimal.Decimal and use DecimalType.|LongType()|
-|**FloatType**|float<br/>**Note:** Numbers will be converted to 4-byte single-precision floating point numbers at runtime.|FloatType()|
-|**DoubleType**|float|DoubleType()|
-|**DecimalType**|decimal.Decimal|DecimalType()|
-|**StringType**|string|StringType()|
-|**BinaryType**|bytearray|BinaryType()|
-|**BooleanType**|bool|BooleanType()|
-|**TimestampType**|datetime.datetime|TimestampType()|
-|**TimestampNTZType**|datetime.datetime|TimestampNTZType()|
-|**DateType**|datetime.date|DateType()|
-|**DayTimeIntervalType**|datetime.timedelta|DayTimeIntervalType()|
-|**ArrayType**|list, tuple, or array|ArrayType(*elementType*, [*containsNull*])<br/>**Note:**The default value of *containsNull* is True.|
-|**MapType**|dict|MapType(*keyType*, *valueType*, [*valueContainsNull]*)<br/>**Note:**The default value of *valueContainsNull* is True.|
-|**StructType**|list or tuple|StructType(*fields*)<br/>**Note:** *fields* is a Seq of StructFields. Also, two fields with the same name are not allowed.|
-|**StructField**|The value type in Python of the data type of this field<br/>(For example, Int for a StructField with the data type IntegerType)|StructField(*name*, *dataType*, [*nullable*])<br/>**Note:** The default value of *nullable* is True.|
 
 </div>
 

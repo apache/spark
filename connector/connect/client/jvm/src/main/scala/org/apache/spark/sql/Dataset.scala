@@ -22,12 +22,14 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.util.control.NonFatal
 
+import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{PrimitiveLongEncoder, StringEncoder, UnboundRowEncoder}
 import org.apache.spark.sql.catalyst.expressions.RowOrdering
 import org.apache.spark.sql.connect.client.SparkResult
 import org.apache.spark.sql.connect.common.DataTypeProtoConverter
+import org.apache.spark.sql.functions.{struct, to_json}
 import org.apache.spark.sql.types.{Metadata, StructType}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.Utils
@@ -120,7 +122,7 @@ import org.apache.spark.util.Utils
  */
 class Dataset[T] private[sql] (
     val sparkSession: SparkSession,
-    private[sql] val plan: proto.Plan,
+    @DeveloperApi val plan: proto.Plan,
     val encoder: AgnosticEncoder[T])
     extends Serializable {
   // Make sure we don't forget to set plan id.
@@ -234,7 +236,13 @@ class Dataset[T] private[sql] (
    */
   def schema: StructType = {
     if (encoder == UnboundRowEncoder) {
-      DataTypeProtoConverter.toCatalystType(analyze.getSchema).asInstanceOf[StructType]
+      DataTypeProtoConverter
+        .toCatalystType(
+          sparkSession
+            .analyze(plan, proto.AnalyzePlanRequest.AnalyzeCase.SCHEMA)
+            .getSchema
+            .getSchema)
+        .asInstanceOf[StructType]
     } else {
       encoder.schema
     }
@@ -272,11 +280,11 @@ class Dataset[T] private[sql] (
    */
   def explain(mode: String): Unit = {
     val protoMode = mode.trim.toLowerCase(Locale.ROOT) match {
-      case "simple" => proto.Explain.ExplainMode.SIMPLE
-      case "extended" => proto.Explain.ExplainMode.EXTENDED
-      case "codegen" => proto.Explain.ExplainMode.CODEGEN
-      case "cost" => proto.Explain.ExplainMode.COST
-      case "formatted" => proto.Explain.ExplainMode.FORMATTED
+      case "simple" => proto.AnalyzePlanRequest.Explain.ExplainMode.EXPLAIN_MODE_SIMPLE
+      case "extended" => proto.AnalyzePlanRequest.Explain.ExplainMode.EXPLAIN_MODE_EXTENDED
+      case "codegen" => proto.AnalyzePlanRequest.Explain.ExplainMode.EXPLAIN_MODE_CODEGEN
+      case "cost" => proto.AnalyzePlanRequest.Explain.ExplainMode.EXPLAIN_MODE_COST
+      case "formatted" => proto.AnalyzePlanRequest.Explain.ExplainMode.EXPLAIN_MODE_FORMATTED
       case _ => throw new IllegalArgumentException("Unsupported explain mode: " + mode)
     }
     explain(protoMode)
@@ -293,9 +301,9 @@ class Dataset[T] private[sql] (
    */
   def explain(extended: Boolean): Unit = {
     val mode = if (extended) {
-      proto.Explain.ExplainMode.EXTENDED
+      proto.AnalyzePlanRequest.Explain.ExplainMode.EXPLAIN_MODE_EXTENDED
     } else {
-      proto.Explain.ExplainMode.SIMPLE
+      proto.AnalyzePlanRequest.Explain.ExplainMode.EXPLAIN_MODE_SIMPLE
     }
     explain(mode)
   }
@@ -306,11 +314,15 @@ class Dataset[T] private[sql] (
    * @group basic
    * @since 3.4.0
    */
-  def explain(): Unit = explain(proto.Explain.ExplainMode.SIMPLE)
+  def explain(): Unit = explain(proto.AnalyzePlanRequest.Explain.ExplainMode.EXPLAIN_MODE_SIMPLE)
 
-  private def explain(mode: proto.Explain.ExplainMode): Unit = {
+  private def explain(mode: proto.AnalyzePlanRequest.Explain.ExplainMode): Unit = {
     // scalastyle:off println
-    println(sparkSession.analyze(plan, mode).getExplainString)
+    println(
+      sparkSession
+        .analyze(plan, proto.AnalyzePlanRequest.AnalyzeCase.EXPLAIN, Some(mode))
+        .getExplain
+        .getExplainString)
     // scalastyle:on println
   }
 
@@ -339,7 +351,10 @@ class Dataset[T] private[sql] (
    * @group basic
    * @since 3.4.0
    */
-  def isLocal: Boolean = analyze.getIsLocal
+  def isLocal: Boolean = sparkSession
+    .analyze(plan, proto.AnalyzePlanRequest.AnalyzeCase.IS_LOCAL)
+    .getIsLocal
+    .getIsLocal
 
   /**
    * Returns true if the `Dataset` is empty.
@@ -359,7 +374,10 @@ class Dataset[T] private[sql] (
    * @group streaming
    * @since 3.4.0
    */
-  def isStreaming: Boolean = analyze.getIsStreaming
+  def isStreaming: Boolean = sparkSession
+    .analyze(plan, proto.AnalyzePlanRequest.AnalyzeCase.IS_STREAMING)
+    .getIsStreaming
+    .getIsStreaming
 
   /**
    * Displays the Dataset in a tabular form. Strings more than 20 characters will be truncated,
@@ -516,6 +534,30 @@ class Dataset[T] private[sql] (
     // scalastyle:on println
     }
   }
+
+  /**
+   * Returns a [[DataFrameNaFunctions]] for working with missing data.
+   * {{{
+   *   // Dropping rows containing any null values.
+   *   ds.na.drop()
+   * }}}
+   *
+   * @group untypedrel
+   * @since 3.4.0
+   */
+  def na: DataFrameNaFunctions = new DataFrameNaFunctions(sparkSession, plan.getRoot)
+
+  /**
+   * Returns a [[DataFrameStatFunctions]] for working statistic functions support.
+   * {{{
+   *   // Finding frequent items in column with name 'a'.
+   *   ds.stat.freqItems(Seq("a"))
+   * }}}
+   *
+   * @group untypedrel
+   * @since 3.4.0
+   */
+  def stat: DataFrameStatFunctions = new DataFrameStatFunctions(sparkSession, plan.getRoot)
 
   private def buildJoin(right: Dataset[_])(f: proto.Join.Builder => Unit): DataFrame = {
     sparkSession.newDataFrame { builder =>
@@ -900,6 +942,13 @@ class Dataset[T] private[sql] (
         .addAllParameters(parameters.map(p => functions.lit(p).expr).asJava)
   }
 
+  private def getPlanId: Option[Long] =
+    if (plan.getRoot.hasCommon && plan.getRoot.getCommon.hasPlanId) {
+      Option(plan.getRoot.getCommon.getPlanId)
+    } else {
+      None
+    }
+
   /**
    * Selects column based on the column name and returns it as a [[Column]].
    *
@@ -910,12 +959,7 @@ class Dataset[T] private[sql] (
    * @since 3.4.0
    */
   def col(colName: String): Column = {
-    val planId = if (plan.getRoot.hasCommon && plan.getRoot.getCommon.hasPlanId) {
-      Option(plan.getRoot.getCommon.getPlanId)
-    } else {
-      None
-    }
-    Column.apply(colName, planId)
+    Column.apply(colName, getPlanId)
   }
 
   /**
@@ -923,8 +967,11 @@ class Dataset[T] private[sql] (
    * @group untypedrel
    * @since 3.4.0
    */
-  def colRegex(colName: String): Column = Column { builder =>
-    builder.getUnresolvedRegexBuilder.setColName(colName)
+  def colRegex(colName: String): Column = {
+    Column { builder =>
+      val unresolvedRegexBuilder = builder.getUnresolvedRegexBuilder.setColName(colName)
+      getPlanId.foreach(unresolvedRegexBuilder.setPlanId)
+    }
   }
 
   /**
@@ -1010,6 +1057,31 @@ class Dataset[T] private[sql] (
   @scala.annotation.varargs
   def selectExpr(exprs: String*): DataFrame = {
     select(exprs.map(functions.expr): _*)
+  }
+
+  /**
+   * Returns a new Dataset by computing the given [[Column]] expression for each element.
+   *
+   * {{{
+   *   val ds = Seq(1, 2, 3).toDS()
+   *   val newDS = ds.select(expr("value + 1").as[Int])
+   * }}}
+   *
+   * @group typedrel
+   * @since 3.4.0
+   */
+  def select[U1](c1: TypedColumn[T, U1]): Dataset[U1] = {
+    val encoder = c1.encoder
+    val expr = if (encoder.schema == encoder.dataType) {
+      functions.inline(functions.array(c1)).expr
+    } else {
+      c1.expr
+    }
+    sparkSession.newDataset(encoder) { builder =>
+      builder.getProjectBuilder
+        .setInput(plan.getRoot)
+        .addExpressions(expr)
+    }
   }
 
   /**
@@ -2074,7 +2146,7 @@ class Dataset[T] private[sql] (
    * @since 3.4.0
    */
   def drop(colName: String): DataFrame = {
-    drop(functions.col(colName))
+    drop(Seq(colName): _*)
   }
 
   /**
@@ -2088,7 +2160,7 @@ class Dataset[T] private[sql] (
    * @since 3.4.0
    */
   @scala.annotation.varargs
-  def drop(colNames: String*): DataFrame = buildDrop(colNames.map(functions.col))
+  def drop(colNames: String*): DataFrame = buildDropByNames(colNames)
 
   /**
    * Returns a new Dataset with column dropped.
@@ -2119,7 +2191,14 @@ class Dataset[T] private[sql] (
   private def buildDrop(cols: Seq[Column]): DataFrame = sparkSession.newDataFrame { builder =>
     builder.getDropBuilder
       .setInput(plan.getRoot)
-      .addAllCols(cols.map(_.expr).asJava)
+      .addAllColumns(cols.map(_.expr).asJava)
+  }
+
+  private def buildDropByNames(cols: Seq[String]): DataFrame = sparkSession.newDataFrame {
+    builder =>
+      builder.getDropBuilder
+        .setInput(plan.getRoot)
+        .addAllColumnNames(cols.asJava)
   }
 
   /**
@@ -2584,7 +2663,13 @@ class Dataset[T] private[sql] (
    * @group basic
    * @since 3.4.0
    */
-  def inputFiles: Array[String] = analyze.getInputFilesList.asScala.toArray
+  def inputFiles: Array[String] =
+    sparkSession
+      .analyze(plan, proto.AnalyzePlanRequest.AnalyzeCase.INPUT_FILES)
+      .getInputFiles
+      .getFilesList
+      .asScala
+      .toArray
 
   /**
    * Interface for saving the content of the non-streaming Dataset out into external storage.
@@ -2669,20 +2754,44 @@ class Dataset[T] private[sql] (
     throw new UnsupportedOperationException("localCheckpoint is not implemented.")
   }
 
+  /**
+   * Returns `true` when the logical query plans inside both [[Dataset]]s are equal and therefore
+   * return same results.
+   *
+   * @note
+   *   The equality comparison here is simplified by tolerating the cosmetic differences such as
+   *   attribute names.
+   * @note
+   *   This API can compare both [[Dataset]]s but can still return `false` on the [[Dataset]] that
+   *   return the same results, for instance, from different plans. Such false negative semantic
+   *   can be useful when caching as an example. This comparison may not be fast because it will
+   *   execute a RPC call.
+   * @since 3.4.0
+   */
+  @DeveloperApi
   def sameSemantics(other: Dataset[T]): Boolean = {
-    throw new UnsupportedOperationException("sameSemantics is not implemented.")
+    sparkSession.sameSemantics(this.plan, other.plan)
   }
 
+  /**
+   * Returns a `hashCode` of the logical query plan against this [[Dataset]].
+   *
+   * @note
+   *   Unlike the standard `hashCode`, the hash is calculated against the query plan simplified by
+   *   tolerating the cosmetic differences such as attribute names.
+   * @since 3.4.0
+   */
+  @DeveloperApi
   def semanticHash(): Int = {
-    throw new UnsupportedOperationException("semanticHash is not implemented.")
+    sparkSession.semanticHash(this.plan)
   }
 
   def toJSON: Dataset[String] = {
-    throw new UnsupportedOperationException("toJSON is not implemented.")
+    select(to_json(struct(col("*")))).as(StringEncoder)
   }
 
   private[sql] def analyze: proto.AnalyzePlanResponse = {
-    sparkSession.analyze(plan, proto.Explain.ExplainMode.SIMPLE)
+    sparkSession.analyze(plan, proto.AnalyzePlanRequest.AnalyzeCase.SCHEMA)
   }
 
   def collectResult(): SparkResult[T] = sparkSession.execute(plan, encoder)

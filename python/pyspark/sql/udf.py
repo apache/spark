@@ -478,7 +478,7 @@ class UDFRegistration:
         .. versionadded:: 1.3.1
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -622,6 +622,9 @@ class UDFRegistration:
 
         .. versionadded:: 2.3.0
 
+        .. versionchanged:: 3.4.0
+            Supports Spark Connect.
+
         Parameters
         ----------
         name : str
@@ -665,6 +668,9 @@ class UDFRegistration:
         """Register a Java user-defined aggregate function as a SQL function.
 
         .. versionadded:: 2.3.0
+
+        .. versionchanged:: 3.4.0
+            Supports Spark Connect.
 
         name : str
             name of the user-defined aggregate function

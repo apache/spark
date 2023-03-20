@@ -20,16 +20,18 @@ package org.apache.spark.sql.connect.planner
 import scala.collection.JavaConverters._
 
 import com.google.protobuf.ByteString
+import io.grpc.stub.StreamObserver
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.connect.proto
+import org.apache.spark.connect.proto.ExecutePlanResponse
 import org.apache.spark.connect.proto.Expression.{Alias, ExpressionString, UnresolvedStar}
 import org.apache.spark.sql.{AnalysisException, Dataset, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, UnsafeProjection}
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.connect.common.InvalidPlanInput
-import org.apache.spark.sql.connect.planner.LiteralValueProtoConverter.toConnectProtoValue
+import org.apache.spark.sql.connect.common.LiteralValueProtoConverter.toLiteralProto
 import org.apache.spark.sql.execution.arrow.ArrowConverters
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
@@ -41,12 +43,18 @@ import org.apache.spark.unsafe.types.UTF8String
  */
 trait SparkConnectPlanTest extends SharedSparkSession {
 
+  class MockObserver extends StreamObserver[proto.ExecutePlanResponse] {
+    override def onNext(value: ExecutePlanResponse): Unit = {}
+    override def onError(t: Throwable): Unit = {}
+    override def onCompleted(): Unit = {}
+  }
+
   def transform(rel: proto.Relation): logical.LogicalPlan = {
     new SparkConnectPlanner(spark).transformRelation(rel)
   }
 
   def transform(cmd: proto.Command): Unit = {
-    new SparkConnectPlanner(spark).process(cmd)
+    new SparkConnectPlanner(spark).process(cmd, "clientId", new MockObserver())
   }
 
   def readRel: proto.Relation =
@@ -594,13 +602,11 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
     val logical = transform(
       proto.Relation
         .newBuilder()
-        .setHint(
-          proto.Hint
-            .newBuilder()
-            .setInput(input)
-            .setName("REPARTITION")
-            .addParameters(
-              proto.Expression.newBuilder().setLiteral(toConnectProtoValue(10000)).build()))
+        .setHint(proto.Hint
+          .newBuilder()
+          .setInput(input)
+          .setName("REPARTITION")
+          .addParameters(proto.Expression.newBuilder().setLiteral(toLiteralProto(10000)).build()))
         .build())
 
     val df = Dataset.ofRows(spark, logical)
@@ -640,13 +646,11 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
     val logical = transform(
       proto.Relation
         .newBuilder()
-        .setHint(
-          proto.Hint
-            .newBuilder()
-            .setInput(input)
-            .setName("REPARTITION")
-            .addParameters(
-              proto.Expression.newBuilder().setLiteral(toConnectProtoValue("id")).build()))
+        .setHint(proto.Hint
+          .newBuilder()
+          .setInput(input)
+          .setName("REPARTITION")
+          .addParameters(proto.Expression.newBuilder().setLiteral(toLiteralProto("id")).build()))
         .build())
     assert(10 === Dataset.ofRows(spark, logical).count())
   }
@@ -663,13 +667,11 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
     val logical = transform(
       proto.Relation
         .newBuilder()
-        .setHint(
-          proto.Hint
-            .newBuilder()
-            .setInput(input)
-            .setName("REPARTITION")
-            .addParameters(
-              proto.Expression.newBuilder().setLiteral(toConnectProtoValue(true)).build()))
+        .setHint(proto.Hint
+          .newBuilder()
+          .setInput(input)
+          .setName("REPARTITION")
+          .addParameters(proto.Expression.newBuilder().setLiteral(toLiteralProto(true)).build()))
         .build())
     intercept[AnalysisException](Dataset.ofRows(spark, logical))
   }
