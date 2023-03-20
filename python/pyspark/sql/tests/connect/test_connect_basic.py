@@ -2843,7 +2843,6 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         cg = self.connect.read.table(self.tbl_name).groupBy("id")
         for f in (
             "applyInPandasWithState",
-            "cogroup",
         ):
             with self.assertRaises(NotImplementedError):
                 getattr(cg, f)()
