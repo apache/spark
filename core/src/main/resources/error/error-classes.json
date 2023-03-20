@@ -3684,7 +3684,7 @@
       "<message>. If necessary set <ansiConfig> to false to bypass this error."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2003" : {
+  "CANNOT_ZIP_MAPS" : {
     "message" : [
       "Unsuccessful try to zip maps with <size> unique keys due to exceeding the array size limit <maxRoundedArrayLength>."
     ]
