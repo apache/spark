@@ -469,6 +469,12 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
    */
   object ResolveAliases extends Rule[LogicalPlan] {
     private def assignAliases(exprs: Seq[NamedExpression]) = {
+      def extractOnly(e: Expression): Boolean = e match {
+        case _: ExtractValue => e.children.forall(extractOnly)
+        case _: Literal => true
+        case _: Attribute => true
+        case _ => false
+      }
       exprs.map(_.transformUpWithPruning(_.containsPattern(UNRESOLVED_ALIAS)) {
           case u @ UnresolvedAlias(child, optGenAliasFunc) =>
           child match {
@@ -477,6 +483,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
             case e if !e.resolved => u
             case g: Generator => MultiAlias(g, Nil)
             case c @ Cast(ne: NamedExpression, _, _, _) => Alias(c, ne.name)()
+            case e: ExtractValue if extractOnly(e) => Alias(e, toPrettySQL(e))()
             case e if optGenAliasFunc.isDefined =>
               Alias(child, optGenAliasFunc.get.apply(e))()
             case l: Literal => Alias(l, toPrettySQL(l))()
