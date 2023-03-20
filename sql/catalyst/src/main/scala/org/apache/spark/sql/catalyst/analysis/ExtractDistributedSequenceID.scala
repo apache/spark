@@ -32,7 +32,7 @@ import org.apache.spark.sql.types.LongType
 object ExtractDistributedSequenceID extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = {
     plan.resolveOperatorsUpWithPruning(_.containsPattern(DISTRIBUTED_SEQUENCE_ID)) {
-      case plan: LogicalPlan if
+      case plan: LogicalPlan if plan.resolved &&
           plan.expressions.exists(_.exists(_.isInstanceOf[DistributedSequenceID])) =>
         val attr = AttributeReference("distributed_sequence_id", LongType, nullable = false)()
         val newPlan = plan.withNewChildren(plan.children.map(AttachDistributedSequence(attr, _)))
