@@ -29,9 +29,17 @@ option java_package = "org.apache.spark.connect.proto";
 // ML Estimator / Transformer / Model / Evaluator
 message MlParams {
   // user-supplied params
-  map<string, Expression.Literal> params = 1;
+  map<string, ParamValue> params = 1;
   // default params
-  map<string, Expression.Literal> default_params = 2;
+  map<string, ParamValue> default_params = 2;
+
+  message ParamValue {
+    oneof param_value_type {
+      Expression.Literal literal = 1;
+      Vector vector = 2;
+      Matrix matrix = 3;
+    }
+  }
 }
 
 // MlStage stores ML stage data (Estimator or Transformer)
@@ -44,9 +52,9 @@ message MlStage {
   string uid = 3;
   StageType type = 4;
   enum StageType {
-    UNSPECIFIED = 0;
-    ESTIMATOR = 1;
-    TRANSFORMER = 2;
+    STAGE_TYPE_UNSPECIFIED = 0;
+    STAGE_TYPE_ESTIMATOR = 1;
+    STAGE_TYPE_TRANSFORMER = 2;
   }
 }
 
@@ -54,4 +62,40 @@ message MlStage {
 message ModelRef {
   // The ID is used to lookup the model instance in server side.
   string id = 1;
+}
+
+message Vector {
+  oneof one_of {
+    Dense dense = 1;
+    Sparse sparse = 2;
+  }
+  message Dense {
+    repeated double value = 1;
+  }
+  message Sparse {
+    int32 size = 1;
+    repeated double index = 2;
+    repeated double value = 3;
+  }
+}
+
+message Matrix {
+  oneof one_of {
+    Dense dense = 1;
+    Sparse sparse = 2;
+  }
+  message Dense {
+    int32 num_rows = 1;
+    int32 num_cols = 2;
+    repeated double value = 3;
+    bool is_transposed = 4;
+  }
+  message Sparse {
+    int32 num_rows = 1;
+    int32 num_cols = 2;
+    repeated double colptr = 3;
+    repeated double row_index = 4;
+    repeated double value = 5;
+    bool is_transposed = 6;
+  }
 }

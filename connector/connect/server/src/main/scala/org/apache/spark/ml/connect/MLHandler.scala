@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.connect.ml
+package org.apache.spark.ml.connect
 
 import scala.collection.JavaConverters._
 import scala.language.existentials
@@ -24,6 +24,7 @@ import org.apache.spark.connect.proto
 import org.apache.spark.ml.Model
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.connect.ConnectSqlUtil
 import org.apache.spark.sql.connect.common.LiteralValueProtoConverter
 import org.apache.spark.sql.connect.service.SessionHolder
 
@@ -36,14 +37,14 @@ object MLHandler {
       case proto.MlCommand.MlCommandTypeCase.FIT =>
         val fitCommandProto = mlCommand.getFit
         val estimatorProto = fitCommandProto.getEstimator
-        assert(estimatorProto.getType == proto.MlStage.StageType.ESTIMATOR)
+        assert(estimatorProto.getType == proto.MlStage.StageType.STAGE_TYPE_ESTIMATOR)
 
         val algoName = fitCommandProto.getEstimator.getName
         val algo = AlgorithmRegistry.get(algoName)
 
         val estimator = algo.initiateEstimator(estimatorProto.getUid)
         MLUtils.setInstanceParams(estimator, estimatorProto.getParams)
-        val dataset = MLUtils.parseRelationProto(fitCommandProto.getDataset, sessionHolder)
+        val dataset = ConnectSqlUtil.parseRelationProto(fitCommandProto.getDataset, sessionHolder)
         val model = estimator.fit(dataset).asInstanceOf[Model[_]]
         val refId = sessionHolder.mlCache.modelCache.register(model, algo)
 
@@ -72,7 +73,7 @@ object MLHandler {
         MLUtils.setInstanceParams(copiedModel, getModelSummaryAttrProto.getParams)
 
         val datasetOpt = if (getModelSummaryAttrProto.hasEvaluationDataset) {
-          val evalDF = MLUtils.parseRelationProto(
+          val evalDF = ConnectSqlUtil.parseRelationProto(
             getModelSummaryAttrProto.getEvaluationDataset,
             sessionHolder)
           Some(evalDF)
@@ -91,13 +92,9 @@ object MLHandler {
 
         proto.MlCommandResponse
           .newBuilder()
-          .setModelInfo(
-            proto.MlCommandResponse.ModelInfo.newBuilder
-              .setModelRef(
-                proto.ModelRef.newBuilder().setId(refId)
-              )
-              .setModelUid(model.uid)
-              .setParams(MLUtils.convertInstanceParamsToProto(model)))
+          .setModelRef(
+            proto.ModelRef.newBuilder().setId(refId)
+          )
           .build()
 
       case proto.MlCommand.MlCommandTypeCase.SAVE_MODEL =>
@@ -118,7 +115,7 @@ object MLHandler {
         val loadStageProto = mlCommand.getLoadStage
         val name = loadStageProto.getName
         loadStageProto.getType match {
-          case proto.MlStage.StageType.ESTIMATOR =>
+          case proto.MlStage.StageType.STAGE_TYPE_ESTIMATOR =>
             val algo = AlgorithmRegistry.get(name)
             val estimator = algo.loadEstimator(loadStageProto.getPath)
 
@@ -128,7 +125,7 @@ object MLHandler {
                 proto.MlStage
                   .newBuilder()
                   .setName(name)
-                  .setType(proto.MlStage.StageType.ESTIMATOR)
+                  .setType(proto.MlStage.StageType.STAGE_TYPE_ESTIMATOR)
                   .setUid(estimator.uid)
                   .setParams(MLUtils.convertInstanceParamsToProto(estimator)))
               .build()
@@ -141,7 +138,7 @@ object MLHandler {
         val stageProto = saveStageProto.getStage
 
         stageProto.getType match {
-          case proto.MlStage.StageType.ESTIMATOR =>
+          case proto.MlStage.StageType.STAGE_TYPE_ESTIMATOR =>
             val name = stageProto.getName
             val algo = AlgorithmRegistry.get(name)
             val estimator = algo.initiateEstimator(stageProto.getUid)
@@ -196,7 +193,7 @@ object MLHandler {
         val copiedModel = model.copy(ParamMap.empty).asInstanceOf[Model[_]]
         MLUtils.setInstanceParams(copiedModel, modelTransformRelationProto.getParams)
         val inputDF =
-          MLUtils.parseRelationProto(modelTransformRelationProto.getInput, sessionHolder)
+          ConnectSqlUtil.parseRelationProto(modelTransformRelationProto.getInput, sessionHolder)
         copiedModel.transform(inputDF)
 
       case proto.MlRelation.MlRelationTypeCase.MODEL_ATTR =>
@@ -215,7 +212,7 @@ object MLHandler {
 
         val datasetOpt = if (modelSummaryAttr.hasEvaluationDataset) {
           val evalDF =
-            MLUtils.parseRelationProto(modelSummaryAttr.getEvaluationDataset, sessionHolder)
+            ConnectSqlUtil.parseRelationProto(modelSummaryAttr.getEvaluationDataset, sessionHolder)
           Some(evalDF)
         } else {
           None

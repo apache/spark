@@ -480,14 +480,14 @@ def _test() -> None:
     import sys
     import doctest
     from pyspark.sql import SparkSession as PySparkSession
-    import pyspark.sql.connect.ml.classification
+    import pyspark.ml.connect.classification
 
     os.chdir(os.environ["SPARK_HOME"])
 
     globs = pyspark.sql.connect.dataframe.__dict__.copy()
 
     globs["spark"] = (
-        PySparkSession.builder.appName("sql.connect.ml.classification tests")
+        PySparkSession.builder.appName("ml.connect.classification tests")
             .remote("local[4]")
             .getOrCreate()
     )

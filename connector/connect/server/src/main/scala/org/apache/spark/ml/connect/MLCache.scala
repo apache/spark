@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.connect.ml
+package org.apache.spark.ml.connect
 
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap

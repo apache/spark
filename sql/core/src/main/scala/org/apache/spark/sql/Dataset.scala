@@ -187,7 +187,7 @@ private[sql] object Dataset {
  * @since 1.6.0
  */
 @Stable
-class Dataset[T] private[sql](
+class Dataset[T] private[spark](
     @DeveloperApi @Unstable @transient val queryExecution: QueryExecution,
     @DeveloperApi @Unstable @transient val encoder: Encoder[T])
   extends Serializable {

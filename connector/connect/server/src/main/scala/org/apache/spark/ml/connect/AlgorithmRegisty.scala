@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.connect.ml
+package org.apache.spark.ml.connect
 
 import org.apache.spark.connect.proto
 import org.apache.spark.ml
@@ -112,13 +112,14 @@ class LogisticRegressionAlgorithm extends Algorithm {
     val lorModel = model.asInstanceOf[ml.classification.LogisticRegressionModel]
     // TODO: hasSummary
     name match {
-      case "hasSummary" => Left(Serializer.serialize(lorModel.hasSummary))
-      case "numClasses" => Left(Serializer.serialize(lorModel.numClasses))
-      case "numFeatures" => Left(Serializer.serialize(lorModel.numFeatures))
-      case "intercept" => Left(Serializer.serialize(lorModel.intercept))
-      case "interceptVector" => Left(Serializer.serialize(lorModel.interceptVector))
-      case "coefficients" => Left(Serializer.serialize(lorModel.coefficients))
-      case "coefficientMatrix" => Left(Serializer.serialize(lorModel.coefficientMatrix))
+      case "hasSummary" => Left(Serializer.serializeResponseValue(lorModel.hasSummary))
+      case "numClasses" => Left(Serializer.serializeResponseValue(lorModel.numClasses))
+      case "numFeatures" => Left(Serializer.serializeResponseValue(lorModel.numFeatures))
+      case "intercept" => Left(Serializer.serializeResponseValue(lorModel.intercept))
+      case "interceptVector" => Left(Serializer.serializeResponseValue(lorModel.interceptVector))
+      case "coefficients" => Left(Serializer.serializeResponseValue(lorModel.coefficients))
+      case "coefficientMatrix" =>
+        Left(Serializer.serializeResponseValue(lorModel.coefficientMatrix))
       case _ =>
         throw new IllegalArgumentException()
     }
@@ -146,8 +147,10 @@ class LogisticRegressionAlgorithm extends Algorithm {
       .orElse {
         val lorSummary = summary
         name match {
-          case "probabilityCol" => Some(Left(Serializer.serialize(lorSummary.probabilityCol)))
-          case "featuresCol" => Some(Left(Serializer.serialize(lorSummary.featuresCol)))
+          case "probabilityCol" =>
+            Some(Left(Serializer.serializeResponseValue(lorSummary.probabilityCol)))
+          case "featuresCol" =>
+            Some(Left(Serializer.serializeResponseValue(lorSummary.featuresCol)))
           case _ =>
             throw new IllegalArgumentException()
         }

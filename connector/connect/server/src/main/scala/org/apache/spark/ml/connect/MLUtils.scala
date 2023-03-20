@@ -15,15 +15,13 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.connect.ml
+package org.apache.spark.ml.connect
 
 import org.apache.spark.connect.proto
+import org.apache.spark.ml.linalg.{Matrix, Vector}
 import org.apache.spark.ml.param.Params
-import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.connect.common.LiteralValueProtoConverter
 import org.apache.spark.sql.connect.planner.LiteralExpressionProtoConverter
-import org.apache.spark.sql.connect.planner.SparkConnectPlanner
-import org.apache.spark.sql.connect.service.SessionHolder
 
 object MLUtils {
 
@@ -41,9 +39,36 @@ object MLUtils {
     }
   }
 
-  def parseParamValue(paramType: Class[_], paramValueProto: proto.Expression.Literal): Any = {
-    val value = LiteralExpressionProtoConverter.toCatalystValue(paramValueProto)
-    _convertParamValue(paramType, value)
+  def parseParamValue(paramType: Class[_], paramValueProto: proto.MlParams.ParamValue): Any = {
+    paramValueProto.getParamValueTypeCase match {
+      case proto.MlParams.ParamValue.ParamValueTypeCase.VECTOR =>
+        Serializer.deserializeVector(paramValueProto.getVector)
+      case proto.MlParams.ParamValue.ParamValueTypeCase.MATRIX =>
+        Serializer.deserializeMatrix(paramValueProto.getMatrix)
+      case proto.MlParams.ParamValue.ParamValueTypeCase.LITERAL =>
+        val value = LiteralExpressionProtoConverter.toCatalystValue(paramValueProto.getLiteral)
+        _convertParamValue(paramType, value)
+      case _ =>
+        throw new IllegalArgumentException()
+    }
+  }
+
+  def paramValueToProto(paramValue: Any): proto.MlParams.ParamValue = {
+    paramValue match {
+      case v: Vector =>
+        proto.MlParams.ParamValue.newBuilder()
+          .setVector(Serializer.serializeVector(v))
+          .build()
+      case m: Matrix =>
+        proto.MlParams.ParamValue.newBuilder()
+          .setMatrix(Serializer.serializeMatrix(m))
+          .build()
+      case _ =>
+        val literalProto = LiteralValueProtoConverter.toLiteralProto(paramValue)
+        proto.MlParams.ParamValue.newBuilder()
+          .setLiteral(literalProto)
+          .build()
+    }
   }
 
   def _convertParamValue(paramType: Class[_], value: Any): Any = {
@@ -87,22 +112,15 @@ object MLUtils {
       val defaultValueOpt = instance.getDefault(param)
 
       if (valueOpt.isDefined) {
-        val valueProto = LiteralValueProtoConverter.toLiteralProto(valueOpt.get)
+        val valueProto = paramValueToProto(valueOpt.get)
         builder.putParams(name, valueProto)
       }
       if (defaultValueOpt.isDefined) {
-        val defaultValueProto = LiteralValueProtoConverter.toLiteralProto(defaultValueOpt.get)
+        val defaultValueProto = paramValueToProto(defaultValueOpt.get)
         builder.putDefaultParams(name, defaultValueProto)
       }
     }
     builder.build()
   }
 
-  def parseRelationProto(
-      relationProto: proto.Relation,
-      sessionHolder: SessionHolder): DataFrame = {
-    val relationalPlanner = new SparkConnectPlanner(sessionHolder)
-    val plan = relationalPlanner.transformRelation(relationProto)
-    Dataset.ofRows(sessionHolder.session, plan)
-  }
 }

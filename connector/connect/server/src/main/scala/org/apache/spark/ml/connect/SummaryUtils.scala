@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.connect.ml
+package org.apache.spark.ml.connect
 
 import org.apache.spark.connect.proto
 import org.apache.spark.ml.classification.{BinaryClassificationSummary, ClassificationSummary, TrainingSummary}
@@ -28,27 +28,32 @@ object SummaryUtils {
       name: String): Option[Either[proto.MlCommandResponse, DataFrame]] = {
     name match {
       case "predictions" => Some(Right(summary.predictions))
-      case "predictionCol" => Some(Left(Serializer.serialize(summary.predictionCol)))
-      case "labelCol" => Some(Left(Serializer.serialize(summary.labelCol)))
-      case "weightCol" => Some(Left(Serializer.serialize(summary.weightCol)))
-      case "labels" => Some(Left(Serializer.serialize(summary.labels)))
+      case "predictionCol" => Some(Left(Serializer.serializeResponseValue(summary.predictionCol)))
+      case "labelCol" => Some(Left(Serializer.serializeResponseValue(summary.labelCol)))
+      case "weightCol" => Some(Left(Serializer.serializeResponseValue(summary.weightCol)))
+      case "labels" => Some(Left(Serializer.serializeResponseValue(summary.labels)))
       case "truePositiveRateByLabel" =>
-        Some(Left(Serializer.serialize(summary.truePositiveRateByLabel)))
+        Some(Left(Serializer.serializeResponseValue(summary.truePositiveRateByLabel)))
       case "falsePositiveRateByLabel" =>
-        Some(Left(Serializer.serialize(summary.falsePositiveRateByLabel)))
-      case "precisionByLabel" => Some(Left(Serializer.serialize(summary.precisionByLabel)))
-      case "recallByLabel" => Some(Left(Serializer.serialize(summary.recallByLabel)))
+        Some(Left(Serializer.serializeResponseValue(summary.falsePositiveRateByLabel)))
+      case "precisionByLabel" =>
+        Some(Left(Serializer.serializeResponseValue(summary.precisionByLabel)))
+      case "recallByLabel" =>
+        Some(Left(Serializer.serializeResponseValue(summary.recallByLabel)))
       // TODO: Support beta params.
-      case "fMeasureByLabel" => Some(Left(Serializer.serialize(summary.fMeasureByLabel)))
-      case "accuracy" => Some(Left(Serializer.serialize(summary.accuracy)))
+      case "fMeasureByLabel" =>
+        Some(Left(Serializer.serializeResponseValue(summary.fMeasureByLabel)))
+      case "accuracy" => Some(Left(Serializer.serializeResponseValue(summary.accuracy)))
       case "weightedTruePositiveRate" =>
-        Some(Left(Serializer.serialize(summary.weightedTruePositiveRate)))
+        Some(Left(Serializer.serializeResponseValue(summary.weightedTruePositiveRate)))
       case "weightedFalsePositiveRate" =>
-        Some(Left(Serializer.serialize(summary.weightedFalsePositiveRate)))
-      case "weightedRecall" => Some(Left(Serializer.serialize(summary.weightedRecall)))
-      case "weightedPrecision" => Some(Left(Serializer.serialize(summary.weightedPrecision)))
+        Some(Left(Serializer.serializeResponseValue(summary.weightedFalsePositiveRate)))
+      case "weightedRecall" => Some(Left(Serializer.serializeResponseValue(summary.weightedRecall)))
+      case "weightedPrecision" =>
+        Some(Left(Serializer.serializeResponseValue(summary.weightedPrecision)))
       // TODO: Support beta params.
-      case "weightedFMeasure" => Some(Left(Serializer.serialize(summary.weightedFMeasure)))
+      case "weightedFMeasure" =>
+        Some(Left(Serializer.serializeResponseValue(summary.weightedFMeasure)))
       case _ => None
     }
   }
@@ -57,9 +62,9 @@ object SummaryUtils {
       summary: BinaryClassificationSummary,
       name: String): Option[Either[proto.MlCommandResponse, DataFrame]] = {
     getClassificationSummaryAttr(summary, name).orElse(name match {
-      case "scoreCol" => Some(Left(Serializer.serialize(summary.scoreCol)))
+      case "scoreCol" => Some(Left(Serializer.serializeResponseValue(summary.scoreCol)))
       case "roc" => Some(Right(summary.roc))
-      case "areaUnderROC" => Some(Left(Serializer.serialize(summary.areaUnderROC)))
+      case "areaUnderROC" => Some(Left(Serializer.serializeResponseValue(summary.areaUnderROC)))
       case "pr" => Some(Right(summary.pr))
       case "fMeasureByThreshold" => Some(Right(summary.fMeasureByThreshold))
       case "precisionByThreshold" => Some(Right(summary.precisionByThreshold))
@@ -72,8 +77,10 @@ object SummaryUtils {
       summary: TrainingSummary,
       name: String): Option[Either[proto.MlCommandResponse, DataFrame]] = {
     name match {
-      case "objectiveHistory" => Some(Left(Serializer.serialize(summary.objectiveHistory)))
-      case "totalIterations" => Some(Left(Serializer.serialize(summary.totalIterations)))
+      case "objectiveHistory" =>
+        Some(Left(Serializer.serializeResponseValue(summary.objectiveHistory)))
+      case "totalIterations" =>
+        Some(Left(Serializer.serializeResponseValue(summary.totalIterations)))
       case _ => None
     }
   }

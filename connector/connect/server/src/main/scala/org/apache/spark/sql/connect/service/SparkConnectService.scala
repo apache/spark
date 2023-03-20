@@ -41,9 +41,9 @@ import org.apache.spark.api.python.PythonException
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.{AddArtifactsRequest, AddArtifactsResponse}
 import org.apache.spark.internal.Logging
+import org.apache.spark.ml.connect.MLCache
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connect.config.Connect.CONNECT_GRPC_BINDING_PORT
-import org.apache.spark.sql.connect.ml.MLCache
 
 /**
  * The SparkConnectService implementation.

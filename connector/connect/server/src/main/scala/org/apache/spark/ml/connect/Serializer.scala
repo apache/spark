@@ -15,18 +15,28 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.connect.ml
+package org.apache.spark.ml.connect
 
 import org.apache.spark.connect.proto
-import org.apache.spark.ml.linalg.{Matrix, Vector}
+import org.apache.spark.ml.linalg.{Matrices, Matrix, Vector, Vectors}
 import org.apache.spark.sql.connect.common.LiteralValueProtoConverter
 
 object Serializer {
 
-  def serialize(data: Any): proto.MlCommandResponse = {
+  def serializeResponseValue(data: Any): proto.MlCommandResponse = {
     data match {
-      case v: Vector => serializeVector(v)
-      case v: Matrix => serializeMatrix(v)
+      case v: Vector =>
+        val vectorProto = serializeVector(v)
+        proto.MlCommandResponse
+          .newBuilder()
+          .setVector(vectorProto)
+          .build()
+      case v: Matrix =>
+        val matrixProto = serializeMatrix(v)
+        proto.MlCommandResponse
+          .newBuilder()
+          .setMatrix(matrixProto)
+          .build()
       case _: Byte | _: Short | _: Int | _: Long | _: Float | _: Double | _: Boolean | _: String |
           _: Array[_] =>
         proto.MlCommandResponse
@@ -36,21 +46,17 @@ object Serializer {
     }
   }
 
-  def serializeVector(data: Vector): proto.MlCommandResponse = {
+  def serializeVector(data: Vector): proto.Vector = {
     // TODO: Support sparse
     val values = data.toArray
     val denseBuilder = proto.Vector.Dense.newBuilder()
     for (i <- 0 until values.length) {
       denseBuilder.addValue(values(i))
     }
-
-    proto.MlCommandResponse
-      .newBuilder()
-      .setVector(proto.Vector.newBuilder().setDense(denseBuilder))
-      .build()
+    proto.Vector.newBuilder().setDense(denseBuilder).build()
   }
 
-  def serializeMatrix(data: Matrix): proto.MlCommandResponse = {
+  def serializeMatrix(data: Matrix): proto.Matrix = {
     // TODO: Support sparse
     // TODO: optimize transposed case
     val denseBuilder = proto.Matrix.Dense.newBuilder()
@@ -61,9 +67,23 @@ object Serializer {
     denseBuilder.setNumCols(data.numCols)
     denseBuilder.setNumRows(data.numRows)
     denseBuilder.setIsTransposed(false)
-    proto.MlCommandResponse
-      .newBuilder()
-      .setMatrix(proto.Matrix.newBuilder().setDense(denseBuilder))
-      .build()
+    proto.Matrix.newBuilder().setDense(denseBuilder).build()
+  }
+
+  def deserializeVector(protoValue: proto.Vector): Vector = {
+    // TODO: Support sparse
+    Vectors.dense(
+      protoValue.getDense.getValueList.stream().mapToDouble(_.doubleValue()).toArray
+    )
+  }
+
+  def deserializeMatrix(protoValue: proto.Matrix): Matrix = {
+    // TODO: Support sparse
+    val denseProto = protoValue.getDense
+    Matrices.dense(
+      denseProto.getNumRows,
+      denseProto.getNumCols,
+      denseProto.getValueList.stream().mapToDouble(_.doubleValue()).toArray
+    )
   }
 }
