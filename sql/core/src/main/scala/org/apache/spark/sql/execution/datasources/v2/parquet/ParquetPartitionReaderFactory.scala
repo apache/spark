@@ -23,9 +23,10 @@ import org.apache.hadoop.mapreduce._
 import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
 import org.apache.parquet.filter2.compat.FilterCompat
 import org.apache.parquet.filter2.predicate.{FilterApi, FilterPredicate}
-import org.apache.parquet.format.converter.ParquetMetadataConverter.{NO_FILTER, SKIP_ROW_GROUPS}
+import org.apache.parquet.format.converter.ParquetMetadataConverter.SKIP_ROW_GROUPS
 import org.apache.parquet.hadoop.{ParquetInputFormat, ParquetRecordReader}
 import org.apache.parquet.hadoop.metadata.{FileMetaData, ParquetMetadata}
+import org.apache.parquet.HadoopReadOptions
 
 import org.apache.spark.TaskContext
 import org.apache.spark.broadcast.Broadcast
@@ -93,7 +94,11 @@ case class ParquetPartitionReaderFactory(
       ParquetFooterReader.readFooter(conf, filePath, SKIP_ROW_GROUPS)
     } else {
       // For aggregate push down, we will get max/min/count from footer statistics.
-      ParquetFooterReader.readFooter(conf, filePath, NO_FILTER)
+      filter = HadoopReadOptions.builder(configuration, split.getPath)
+        .withRange(split.getStart, split.getStart + split.getLength)
+        .withCodecFactory(new ParquetCodecFactory(configuration, 0))
+        .build.getMetadataFilter
+      ParquetFooterReader.readFooter(conf, filePath, filter)
     }
   }
 
