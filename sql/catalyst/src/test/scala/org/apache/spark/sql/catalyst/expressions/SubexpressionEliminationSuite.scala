@@ -459,7 +459,7 @@ class SubexpressionEliminationSuite extends SparkFunSuite with ExpressionEvalHel
       ArrayTransform(arr, lambda)
     }
     val equivalence = new EquivalentExpressions
-    val isNewExpr = equivalence.addExpr(tx)
+    val isNewExpr = !equivalence.addExpr(tx)
     val cseState = equivalence.getExprState(tx)
     assert(isNewExpr == cseState.isDefined)
   }
