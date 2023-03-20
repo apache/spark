@@ -513,47 +513,6 @@ pyspark_sql = Module(
     ],
 )
 
-pyspark_connect = Module(
-    name="pyspark-connect",
-    dependencies=[pyspark_sql, connect],
-    source_file_regexes=["python/pyspark/sql/connect"],
-    python_test_goals=[
-        # doctests
-        "pyspark.sql.connect.catalog",
-        "pyspark.sql.connect.conf",
-        "pyspark.sql.connect.group",
-        "pyspark.sql.connect.session",
-        "pyspark.sql.connect.window",
-        "pyspark.sql.connect.column",
-        "pyspark.sql.connect.readwriter",
-        "pyspark.sql.connect.dataframe",
-        "pyspark.sql.connect.functions",
-        # unittests
-        "pyspark.sql.tests.connect.test_client",
-        "pyspark.sql.tests.connect.test_connect_plan",
-        "pyspark.sql.tests.connect.test_connect_basic",
-        "pyspark.sql.tests.connect.test_connect_function",
-        "pyspark.sql.tests.connect.test_connect_column",
-        "pyspark.sql.tests.connect.test_parity_datasources",
-        "pyspark.sql.tests.connect.test_parity_catalog",
-        "pyspark.sql.tests.connect.test_parity_conf",
-        "pyspark.sql.tests.connect.test_parity_serde",
-        "pyspark.sql.tests.connect.test_parity_functions",
-        "pyspark.sql.tests.connect.test_parity_group",
-        "pyspark.sql.tests.connect.test_parity_dataframe",
-        "pyspark.sql.tests.connect.test_parity_types",
-        "pyspark.sql.tests.connect.test_parity_column",
-        "pyspark.sql.tests.connect.test_parity_readwriter",
-        "pyspark.sql.tests.connect.test_parity_udf",
-        "pyspark.sql.tests.connect.test_parity_pandas_udf",
-        "pyspark.sql.tests.connect.test_parity_pandas_map",
-        "pyspark.sql.tests.connect.test_parity_arrow_map",
-    ],
-    excluded_python_implementations=[
-        "PyPy"  # Skip these tests under PyPy since they require numpy, pandas, and pyarrow and
-        # they aren't available there
-    ],
-)
 
 pyspark_resource = Module(
     name="pyspark-resource",
@@ -780,6 +739,57 @@ pyspark_pandas_slow = Module(
         # they aren't available there
     ],
 )
+
+
+pyspark_connect = Module(
+    name="pyspark-connect",
+    dependencies=[pyspark_sql, pyspark_ml, connect],
+    source_file_regexes=[
+        "python/pyspark/sql/connect",
+        "python/pyspark/ml/connect",
+    ],
+    python_test_goals=[
+        # sql doctests
+        "pyspark.sql.connect.catalog",
+        "pyspark.sql.connect.conf",
+        "pyspark.sql.connect.group",
+        "pyspark.sql.connect.session",
+        "pyspark.sql.connect.window",
+        "pyspark.sql.connect.column",
+        "pyspark.sql.connect.readwriter",
+        "pyspark.sql.connect.dataframe",
+        "pyspark.sql.connect.functions",
+        # sql unittests
+        "pyspark.sql.tests.connect.test_client",
+        "pyspark.sql.tests.connect.test_connect_plan",
+        "pyspark.sql.tests.connect.test_connect_basic",
+        "pyspark.sql.tests.connect.test_connect_function",
+        "pyspark.sql.tests.connect.test_connect_column",
+        "pyspark.sql.tests.connect.test_parity_datasources",
+        "pyspark.sql.tests.connect.test_parity_catalog",
+        "pyspark.sql.tests.connect.test_parity_conf",
+        "pyspark.sql.tests.connect.test_parity_serde",
+        "pyspark.sql.tests.connect.test_parity_functions",
+        "pyspark.sql.tests.connect.test_parity_group",
+        "pyspark.sql.tests.connect.test_parity_dataframe",
+        "pyspark.sql.tests.connect.test_parity_types",
+        "pyspark.sql.tests.connect.test_parity_column",
+        "pyspark.sql.tests.connect.test_parity_readwriter",
+        "pyspark.sql.tests.connect.test_parity_udf",
+        "pyspark.sql.tests.connect.test_parity_pandas_udf",
+        "pyspark.sql.tests.connect.test_parity_pandas_map",
+        "pyspark.sql.tests.connect.test_parity_arrow_map",
+        # ml doctests
+        "pyspark.ml.connect.functions",
+        # ml unittests
+        "pyspark.ml.tests.connect.test_connect_function",
+    ],
+    excluded_python_implementations=[
+        "PyPy"  # Skip these tests under PyPy since they require numpy, pandas, and pyarrow and
+        # they aren't available there
+    ],
+)
+
 
 pyspark_errors = Module(
     name="pyspark-errors",

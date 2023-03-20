@@ -74,6 +74,7 @@ object MimaExcludes {
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ml.param.DoubleParam"),
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ml.param.IntParam"),
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ml.param.FloatParam"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ml.param.FloatParam$"),
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ml.param.LongParam"),
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ml.param.BooleanParam"),
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ml.param.IntArrayParam"),

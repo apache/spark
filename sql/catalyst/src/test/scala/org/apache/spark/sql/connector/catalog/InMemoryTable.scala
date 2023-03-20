@@ -39,10 +39,12 @@ class InMemoryTable(
     distribution: Distribution = Distributions.unspecified(),
     ordering: Array[SortOrder] = Array.empty,
     numPartitions: Option[Int] = None,
+    advisoryPartitionSize: Option[Long] = None,
     isDistributionStrictlyRequired: Boolean = true,
     override val numRowsPerSplit: Int = Int.MaxValue)
   extends InMemoryBaseTable(name, schema, partitioning, properties, distribution,
-    ordering, numPartitions, isDistributionStrictlyRequired, numRowsPerSplit) with SupportsDelete {
+    ordering, numPartitions, advisoryPartitionSize, isDistributionStrictlyRequired,
+    numRowsPerSplit) with SupportsDelete {
 
   override def canDeleteWhere(filters: Array[Filter]): Boolean = {
     InMemoryTable.supportsFilters(filters)

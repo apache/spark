@@ -7632,6 +7632,36 @@ def get(col: "ColumnOrName", index: Union["ColumnOrName", int]) -> Column:
 
 
 @try_remote_functions
+def array_prepend(col: "ColumnOrName", value: Any) -> Column:
+    """
+    Collection function: Returns an array containing element as
+    well as all elements from array. The new element is positioned
+    at the beginning of the array.
+
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+        name of column containing array
+    value :
+        a literal value, or a :class:`~pyspark.sql.Column` expression.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        an array excluding given value.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([([2, 3, 4],), ([],)], ['data'])
+    >>> df.select(array_prepend(df.data, 1)).collect()
+    [Row(array_prepend(data, 1)=[1, 2, 3, 4]), Row(array_prepend(data, 1)=[1])]
+    """
+    return _invoke_function_over_columns("array_prepend", col, lit(value))
+
+
+@try_remote_functions
 def array_remove(col: "ColumnOrName", element: Any) -> Column:
     """
     Collection function: Remove all elements that equal to element from the given array.
