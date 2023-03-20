@@ -93,10 +93,11 @@ case class ParquetPartitionReaderFactory(
     if (aggregation.isEmpty) {
       ParquetFooterReader.readFooter(conf, filePath, SKIP_ROW_GROUPS)
     } else {
+      val split = new FileSplit(file.toPath, file.start, file.length, Array.empty[String])
       // For aggregate push down, we will get max/min/count from footer statistics.
-      filter = HadoopReadOptions.builder(configuration, split.getPath)
+      val filter = HadoopReadOptions.builder(conf, split.getPath)
         .withRange(split.getStart, split.getStart + split.getLength)
-        .withCodecFactory(new ParquetCodecFactory(configuration, 0))
+        .withCodecFactory(new ParquetCodecFactory(conf, 0))
         .build.getMetadataFilter
       ParquetFooterReader.readFooter(conf, filePath, filter)
     }
