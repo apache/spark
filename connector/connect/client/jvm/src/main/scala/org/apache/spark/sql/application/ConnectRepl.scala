@@ -16,16 +16,22 @@
  */
 package org.apache.spark.sql.application
 
+import scala.util.control.NonFatal
+
 import ammonite.compiler.CodeClassWrapper
 import ammonite.util.Bind
 
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.connect.client.{SparkConnectClient, SparkConnectClientParser}
 
 /**
  * REPL for spark connect.
  */
 @DeveloperApi
 object ConnectRepl {
+  private val name = "Spark Connect REPL"
+
   private val splash =
     """
       |Spark session available as 'spark'.
@@ -38,9 +44,29 @@ object ConnectRepl {
       |""".stripMargin
 
   def main(args: Array[String]): Unit = {
+    // Build the client.
+    val client = try {
+      SparkConnectClient.builder()
+        .loadFromEnvironment()
+        .userAgent(name)
+        .parse(args)
+        .build()
+    } catch {
+      case NonFatal(e) =>
+        // scalastyle:off println
+        println(
+          s"""
+             |$name
+             |${e.getMessage}
+             |${SparkConnectClientParser.usage()}
+             |""".stripMargin)
+        // scalastyle:on println
+        System.exit(1)
+        return
+    }
+
     // Build the session.
-    val spark = Config.parseOrExit("Spark Connect REPL", args).createSession()
-    val bind = new Bind("spark", spark)
+    val spark = SparkSession.builder().client(client).build()
 
     // Add the proper imports.
     val imports =
@@ -50,11 +76,13 @@ object ConnectRepl {
         |import spark.sql
         |""".stripMargin
 
+    // Please note that we make ammonite generate classes instead of objects.
+    // Classes tend to have superior serialization behavior when using UDFs.
      val main = ammonite.Main(
        welcomeBanner = Option(splash),
        predefCode = imports,
        replCodeWrapper = CodeClassWrapper,
        scriptCodeWrapper = CodeClassWrapper)
-    main.run(bind)
+    main.run(new Bind("spark", spark))
   }
 }
