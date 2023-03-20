@@ -23,7 +23,7 @@ WholeStageCodegen (21)
                                             Exchange [ws_order_number] #2
                                               WholeStageCodegen (1)
                                                 Project [ws_ship_date_sk,ws_ship_addr_sk,ws_web_site_sk,ws_order_number,ws_ext_ship_cost,ws_net_profit]
-                                                  Filter [ws_ship_date_sk,ws_ship_addr_sk,ws_web_site_sk,ws_order_number]
+                                                  Filter [ws_order_number,ws_ship_date_sk,ws_ship_addr_sk,ws_web_site_sk]
                                                     Subquery #1
                                                       ObjectHashAggregate [buf] [bloom_filter_agg(xxhash64(ca_address_sk, 42), 17961, 333176, 0, 0),bloomFilter,buf]
                                                         Exchange #3

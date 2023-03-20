@@ -26,7 +26,7 @@ TakeOrderedAndProject [cd_gender,cd_marital_status,cd_education_status,cd_purcha
                                                   InputAdapter
                                                     Exchange [c_customer_sk] #3
                                                       WholeStageCodegen (1)
-                                                        Filter [c_current_addr_sk,c_current_cdemo_sk,c_customer_sk]
+                                                        Filter [c_customer_sk,c_current_addr_sk,c_current_cdemo_sk]
                                                           Subquery #1
                                                             ObjectHashAggregate [buf] [bloom_filter_agg(xxhash64(ca_address_sk, 42), 55556, 899992, 0, 0),bloomFilter,buf]
                                                               Exchange #4

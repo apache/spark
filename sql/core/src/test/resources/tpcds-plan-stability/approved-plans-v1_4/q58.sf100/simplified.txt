@@ -23,7 +23,7 @@ TakeOrderedAndProject [item_id,ss_item_rev,ss_dev,cs_item_rev,cs_dev,ws_item_rev
                                             WholeStageCodegen (2)
                                               Project [d_date_sk]
                                                 BroadcastHashJoin [d_date,d_date]
-                                                  Filter [d_date_sk,d_date]
+                                                  Filter [d_date,d_date_sk]
                                                     ColumnarToRow
                                                       InputAdapter
                                                         Scan parquet spark_catalog.default.date_dim [d_date_sk,d_date]

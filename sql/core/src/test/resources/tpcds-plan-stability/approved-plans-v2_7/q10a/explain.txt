@@ -49,7 +49,7 @@ TakeOrderedAndProject (44)
 Output [3]: [c_customer_sk#1, c_current_cdemo_sk#2, c_current_addr_sk#3]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/customer]
-PushedFilters: [IsNotNull(c_current_addr_sk), IsNotNull(c_current_cdemo_sk), IsNotNull(c_customer_sk)]
+PushedFilters: [IsNotNull(c_customer_sk), IsNotNull(c_current_addr_sk), IsNotNull(c_current_cdemo_sk)]
 ReadSchema: struct<c_customer_sk:int,c_current_cdemo_sk:int,c_current_addr_sk:int>
 
 (2) ColumnarToRow [codegen id : 9]
@@ -57,7 +57,7 @@ Input [3]: [c_customer_sk#1, c_current_cdemo_sk#2, c_current_addr_sk#3]
 
 (3) Filter [codegen id : 9]
 Input [3]: [c_customer_sk#1, c_current_cdemo_sk#2, c_current_addr_sk#3]
-Condition : ((isnotnull(c_current_addr_sk#3) AND isnotnull(c_current_cdemo_sk#2)) AND isnotnull(c_customer_sk#1))
+Condition : ((isnotnull(c_customer_sk#1) AND isnotnull(c_current_addr_sk#3)) AND isnotnull(c_current_cdemo_sk#2))
 
 (4) Scan parquet spark_catalog.default.store_sales
 Output [2]: [ss_customer_sk#4, ss_sold_date_sk#5]

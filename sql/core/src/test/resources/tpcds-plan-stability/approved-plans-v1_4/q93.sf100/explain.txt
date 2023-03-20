@@ -4,24 +4,24 @@ TakeOrderedAndProject (25)
    +- Exchange (23)
       +- * HashAggregate (22)
          +- * Project (21)
-            +- * SortMergeJoin Inner (20)
-               :- * Sort (13)
-               :  +- Exchange (12)
-               :     +- * Project (11)
-               :        +- * BroadcastHashJoin Inner BuildRight (10)
-               :           :- * Project (4)
-               :           :  +- * Filter (3)
-               :           :     +- * ColumnarToRow (2)
-               :           :        +- Scan parquet spark_catalog.default.store_returns (1)
-               :           +- BroadcastExchange (9)
-               :              +- * Project (8)
-               :                 +- * Filter (7)
-               :                    +- * ColumnarToRow (6)
-               :                       +- Scan parquet spark_catalog.default.reason (5)
-               +- * Sort (19)
-                  +- Exchange (18)
-                     +- * Project (17)
-                        +- * Filter (16)
+            +- * Project (20)
+               +- * SortMergeJoin Inner (19)
+                  :- * Sort (13)
+                  :  +- Exchange (12)
+                  :     +- * Project (11)
+                  :        +- * BroadcastHashJoin Inner BuildRight (10)
+                  :           :- * Project (4)
+                  :           :  +- * Filter (3)
+                  :           :     +- * ColumnarToRow (2)
+                  :           :        +- Scan parquet spark_catalog.default.store_returns (1)
+                  :           +- BroadcastExchange (9)
+                  :              +- * Project (8)
+                  :                 +- * Filter (7)
+                  :                    +- * ColumnarToRow (6)
+                  :                       +- Scan parquet spark_catalog.default.reason (5)
+                  +- * Sort (18)
+                     +- Exchange (17)
+                        +- * Project (16)
                            +- * ColumnarToRow (15)
                               +- Scan parquet spark_catalog.default.store_sales (14)
 
@@ -88,37 +88,36 @@ Arguments: [sr_item_sk#1 ASC NULLS FIRST, sr_ticket_number#3 ASC NULLS FIRST], f
 Output [6]: [ss_item_sk#8, ss_customer_sk#9, ss_ticket_number#10, ss_quantity#11, ss_sales_price#12, ss_sold_date_sk#13]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store_sales]
-PushedFilters: [IsNotNull(ss_item_sk), IsNotNull(ss_ticket_number)]
 ReadSchema: struct<ss_item_sk:int,ss_customer_sk:int,ss_ticket_number:int,ss_quantity:int,ss_sales_price:decimal(7,2)>
 
 (15) ColumnarToRow [codegen id : 4]
 Input [6]: [ss_item_sk#8, ss_customer_sk#9, ss_ticket_number#10, ss_quantity#11, ss_sales_price#12, ss_sold_date_sk#13]
 
-(16) Filter [codegen id : 4]
-Input [6]: [ss_item_sk#8, ss_customer_sk#9, ss_ticket_number#10, ss_quantity#11, ss_sales_price#12, ss_sold_date_sk#13]
-Condition : (isnotnull(ss_item_sk#8) AND isnotnull(ss_ticket_number#10))
-
-(17) Project [codegen id : 4]
+(16) Project [codegen id : 4]
 Output [5]: [ss_item_sk#8, ss_customer_sk#9, ss_ticket_number#10, ss_quantity#11, ss_sales_price#12]
 Input [6]: [ss_item_sk#8, ss_customer_sk#9, ss_ticket_number#10, ss_quantity#11, ss_sales_price#12, ss_sold_date_sk#13]
 
-(18) Exchange
+(17) Exchange
 Input [5]: [ss_item_sk#8, ss_customer_sk#9, ss_ticket_number#10, ss_quantity#11, ss_sales_price#12]
 Arguments: hashpartitioning(ss_item_sk#8, ss_ticket_number#10, 5), ENSURE_REQUIREMENTS, [plan_id=3]
 
-(19) Sort [codegen id : 5]
+(18) Sort [codegen id : 5]
 Input [5]: [ss_item_sk#8, ss_customer_sk#9, ss_ticket_number#10, ss_quantity#11, ss_sales_price#12]
 Arguments: [ss_item_sk#8 ASC NULLS FIRST, ss_ticket_number#10 ASC NULLS FIRST], false, 0
 
-(20) SortMergeJoin [codegen id : 6]
+(19) SortMergeJoin [codegen id : 6]
 Left keys [2]: [sr_item_sk#1, sr_ticket_number#3]
 Right keys [2]: [ss_item_sk#8, ss_ticket_number#10]
 Join type: Inner
 Join condition: None
 
+(20) Project [codegen id : 6]
+Output [4]: [ss_customer_sk#9, ss_quantity#11, ss_sales_price#12, sr_return_quantity#4]
+Input [8]: [sr_item_sk#1, sr_ticket_number#3, sr_return_quantity#4, ss_item_sk#8, ss_customer_sk#9, ss_ticket_number#10, ss_quantity#11, ss_sales_price#12]
+
 (21) Project [codegen id : 6]
 Output [2]: [ss_customer_sk#9, CASE WHEN isnotnull(sr_return_quantity#4) THEN (cast((ss_quantity#11 - sr_return_quantity#4) as decimal(10,0)) * ss_sales_price#12) ELSE (cast(ss_quantity#11 as decimal(10,0)) * ss_sales_price#12) END AS act_sales#14]
-Input [8]: [sr_item_sk#1, sr_ticket_number#3, sr_return_quantity#4, ss_item_sk#8, ss_customer_sk#9, ss_ticket_number#10, ss_quantity#11, ss_sales_price#12]
+Input [4]: [ss_customer_sk#9, ss_quantity#11, ss_sales_price#12, sr_return_quantity#4]
 
 (22) HashAggregate [codegen id : 6]
 Input [2]: [ss_customer_sk#9, act_sales#14]

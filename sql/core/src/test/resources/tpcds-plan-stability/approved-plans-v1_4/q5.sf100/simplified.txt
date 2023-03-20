@@ -113,11 +113,10 @@ TakeOrderedAndProject [channel,id,sales,returns,profit]
                                                         InputAdapter
                                                           Exchange [wr_item_sk,wr_order_number] #8
                                                             WholeStageCodegen (14)
-                                                              Filter [wr_item_sk,wr_order_number]
-                                                                ColumnarToRow
-                                                                  InputAdapter
-                                                                    Scan parquet spark_catalog.default.web_returns [wr_item_sk,wr_order_number,wr_return_amt,wr_net_loss,wr_returned_date_sk]
-                                                                      ReusedSubquery [d_date_sk] #1
+                                                              ColumnarToRow
+                                                                InputAdapter
+                                                                  Scan parquet spark_catalog.default.web_returns [wr_item_sk,wr_order_number,wr_return_amt,wr_net_loss,wr_returned_date_sk]
+                                                                    ReusedSubquery [d_date_sk] #1
                                                   InputAdapter
                                                     WholeStageCodegen (17)
                                                       Sort [ws_item_sk,ws_order_number]

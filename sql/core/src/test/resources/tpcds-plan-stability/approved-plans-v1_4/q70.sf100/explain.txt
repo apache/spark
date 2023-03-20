@@ -77,7 +77,7 @@ Input [4]: [ss_store_sk#1, ss_net_profit#2, ss_sold_date_sk#3, d_date_sk#5]
 Output [3]: [s_store_sk#6, s_county#7, s_state#8]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store]
-PushedFilters: [IsNotNull(s_store_sk), IsNotNull(s_state)]
+PushedFilters: [IsNotNull(s_state), IsNotNull(s_store_sk)]
 ReadSchema: struct<s_store_sk:int,s_county:string,s_state:string>
 
 (8) ColumnarToRow [codegen id : 8]
@@ -85,7 +85,7 @@ Input [3]: [s_store_sk#6, s_county#7, s_state#8]
 
 (9) Filter [codegen id : 8]
 Input [3]: [s_store_sk#6, s_county#7, s_state#8]
-Condition : (isnotnull(s_store_sk#6) AND isnotnull(s_state#8))
+Condition : (isnotnull(s_state#8) AND isnotnull(s_store_sk#6))
 
 (10) Scan parquet spark_catalog.default.store_sales
 Output [3]: [ss_store_sk#9, ss_net_profit#10, ss_sold_date_sk#11]

@@ -24,7 +24,7 @@ WholeStageCodegen (12)
                                               Exchange [cs_order_number] #2
                                                 WholeStageCodegen (1)
                                                   Project [cs_ship_date_sk,cs_ship_addr_sk,cs_call_center_sk,cs_warehouse_sk,cs_order_number,cs_ext_ship_cost,cs_net_profit]
-                                                    Filter [cs_ship_date_sk,cs_ship_addr_sk,cs_call_center_sk,cs_order_number,cs_warehouse_sk]
+                                                    Filter [cs_order_number,cs_warehouse_sk,cs_ship_date_sk,cs_ship_addr_sk,cs_call_center_sk]
                                                       Subquery #1
                                                         ObjectHashAggregate [buf] [bloom_filter_agg(xxhash64(ca_address_sk, 42), 17961, 333176, 0, 0),bloomFilter,buf]
                                                           Exchange #3

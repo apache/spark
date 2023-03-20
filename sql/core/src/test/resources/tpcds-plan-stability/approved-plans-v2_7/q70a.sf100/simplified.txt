@@ -43,7 +43,7 @@ TakeOrderedAndProject [lochierarchy,s_state,rank_within_parent,total_sum,s_count
                                                     BroadcastExchange #5
                                                       WholeStageCodegen (8)
                                                         BroadcastHashJoin [s_state,s_state]
-                                                          Filter [s_store_sk,s_state]
+                                                          Filter [s_state,s_store_sk]
                                                             ColumnarToRow
                                                               InputAdapter
                                                                 Scan parquet spark_catalog.default.store [s_store_sk,s_county,s_state]

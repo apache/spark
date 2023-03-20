@@ -96,7 +96,7 @@ Input [5]: [ss_item_sk#1, ss_addr_sk#2, ss_ext_sales_price#3, ss_sold_date_sk#4,
 Output [2]: [i_item_sk#7, i_manufact_id#8]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/item]
-PushedFilters: [IsNotNull(i_item_sk), IsNotNull(i_manufact_id)]
+PushedFilters: [IsNotNull(i_manufact_id), IsNotNull(i_item_sk)]
 ReadSchema: struct<i_item_sk:int,i_manufact_id:int>
 
 (8) ColumnarToRow [codegen id : 3]
@@ -104,7 +104,7 @@ Input [2]: [i_item_sk#7, i_manufact_id#8]
 
 (9) Filter [codegen id : 3]
 Input [2]: [i_item_sk#7, i_manufact_id#8]
-Condition : (isnotnull(i_item_sk#7) AND isnotnull(i_manufact_id#8))
+Condition : (isnotnull(i_manufact_id#8) AND isnotnull(i_item_sk#7))
 
 (10) Scan parquet spark_catalog.default.item
 Output [2]: [i_category#9, i_manufact_id#10]
