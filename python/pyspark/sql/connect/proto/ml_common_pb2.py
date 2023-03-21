@@ -33,15 +33,22 @@ from pyspark.sql.connect.proto import expressions_pb2 as spark_dot_connect_dot_e
 
 
 DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(
-    b'\n\x1dspark/connect/ml_common.proto\x12\rspark.connect\x1a\x1fspark/connect/expressions.proto"\xdd\x02\n\x08MlParams\x12;\n\x06params\x18\x01 \x03(\x0b\x32#.spark.connect.MlParams.ParamsEntryR\x06params\x12Q\n\x0e\x64\x65\x66\x61ult_params\x18\x02 \x03(\x0b\x32*.spark.connect.MlParams.DefaultParamsEntryR\rdefaultParams\x1a\\\n\x0bParamsEntry\x12\x10\n\x03key\x18\x01 \x01(\tR\x03key\x12\x37\n\x05value\x18\x02 \x01(\x0b\x32!.spark.connect.Expression.LiteralR\x05value:\x02\x38\x01\x1a\x63\n\x12\x44\x65\x66\x61ultParamsEntry\x12\x10\n\x03key\x18\x01 \x01(\tR\x03key\x12\x37\n\x05value\x18\x02 \x01(\x0b\x32!.spark.connect.Expression.LiteralR\x05value:\x02\x38\x01"\xd4\x01\n\x07MlStage\x12\x12\n\x04name\x18\x01 \x01(\tR\x04name\x12/\n\x06params\x18\x02 \x01(\x0b\x32\x17.spark.connect.MlParamsR\x06params\x12\x10\n\x03uid\x18\x03 \x01(\tR\x03uid\x12\x34\n\x04type\x18\x04 \x01(\x0e\x32 .spark.connect.MlStage.StageTypeR\x04type"<\n\tStageType\x12\x0f\n\x0bUNSPECIFIED\x10\x00\x12\r\n\tESTIMATOR\x10\x01\x12\x0f\n\x0bTRANSFORMER\x10\x02"\x1a\n\x08ModelRef\x12\x0e\n\x02id\x18\x01 \x01(\tR\x02idB"\n\x1eorg.apache.spark.connect.protoP\x01\x62\x06proto3'
+    b'\n\x1dspark/connect/ml_common.proto\x12\rspark.connect\x1a\x1fspark/connect/expressions.proto"\xa3\x04\n\x08MlParams\x12;\n\x06params\x18\x01 \x03(\x0b\x32#.spark.connect.MlParams.ParamsEntryR\x06params\x12Q\n\x0e\x64\x65\x66\x61ult_params\x18\x02 \x03(\x0b\x32*.spark.connect.MlParams.DefaultParamsEntryR\rdefaultParams\x1a]\n\x0bParamsEntry\x12\x10\n\x03key\x18\x01 \x01(\tR\x03key\x12\x38\n\x05value\x18\x02 \x01(\x0b\x32".spark.connect.MlParams.ParamValueR\x05value:\x02\x38\x01\x1a\x64\n\x12\x44\x65\x66\x61ultParamsEntry\x12\x10\n\x03key\x18\x01 \x01(\tR\x03key\x12\x38\n\x05value\x18\x02 \x01(\x0b\x32".spark.connect.MlParams.ParamValueR\x05value:\x02\x38\x01\x1a\xc1\x01\n\nParamValue\x12=\n\x07literal\x18\x01 \x01(\x0b\x32!.spark.connect.Expression.LiteralH\x00R\x07literal\x12/\n\x06vector\x18\x02 \x01(\x0b\x32\x15.spark.connect.VectorH\x00R\x06vector\x12/\n\x06matrix\x18\x03 \x01(\x0b\x32\x15.spark.connect.MatrixH\x00R\x06matrixB\x12\n\x10param_value_type"\xf5\x01\n\x07MlStage\x12\x12\n\x04name\x18\x01 \x01(\tR\x04name\x12/\n\x06params\x18\x02 \x01(\x0b\x32\x17.spark.connect.MlParamsR\x06params\x12\x10\n\x03uid\x18\x03 \x01(\tR\x03uid\x12\x34\n\x04type\x18\x04 \x01(\x0e\x32 .spark.connect.MlStage.StageTypeR\x04type"]\n\tStageType\x12\x1a\n\x16STAGE_TYPE_UNSPECIFIED\x10\x00\x12\x18\n\x14STAGE_TYPE_ESTIMATOR\x10\x01\x12\x1a\n\x16STAGE_TYPE_TRANSFORMER\x10\x02"\x1a\n\x08ModelRef\x12\x0e\n\x02id\x18\x01 \x01(\tR\x02id"\xe8\x01\n\x06Vector\x12\x33\n\x05\x64\x65nse\x18\x01 \x01(\x0b\x32\x1b.spark.connect.Vector.DenseH\x00R\x05\x64\x65nse\x12\x36\n\x06sparse\x18\x02 \x01(\x0b\x32\x1c.spark.connect.Vector.SparseH\x00R\x06sparse\x1a\x1d\n\x05\x44\x65nse\x12\x14\n\x05value\x18\x01 \x03(\x01R\x05value\x1aH\n\x06Sparse\x12\x12\n\x04size\x18\x01 \x01(\x05R\x04size\x12\x14\n\x05index\x18\x02 \x03(\x01R\x05index\x12\x14\n\x05value\x18\x03 \x03(\x01R\x05valueB\x08\n\x06one_of"\xaa\x03\n\x06Matrix\x12\x33\n\x05\x64\x65nse\x18\x01 \x01(\x0b\x32\x1b.spark.connect.Matrix.DenseH\x00R\x05\x64\x65nse\x12\x36\n\x06sparse\x18\x02 \x01(\x0b\x32\x1c.spark.connect.Matrix.SparseH\x00R\x06sparse\x1ax\n\x05\x44\x65nse\x12\x19\n\x08num_rows\x18\x01 \x01(\x05R\x07numRows\x12\x19\n\x08num_cols\x18\x02 \x01(\x05R\x07numCols\x12\x14\n\x05value\x18\x03 \x03(\x01R\x05value\x12#\n\ris_transposed\x18\x04 \x01(\x08R\x0cisTransposed\x1a\xae\x01\n\x06Sparse\x12\x19\n\x08num_rows\x18\x01 \x01(\x05R\x07numRows\x12\x19\n\x08num_cols\x18\x02 \x01(\x05R\x07numCols\x12\x16\n\x06\x63olptr\x18\x03 \x03(\x01R\x06\x63olptr\x12\x1b\n\trow_index\x18\x04 \x03(\x01R\x08rowIndex\x12\x14\n\x05value\x18\x05 \x03(\x01R\x05value\x12#\n\ris_transposed\x18\x06 \x01(\x08R\x0cisTransposedB\x08\n\x06one_ofB"\n\x1eorg.apache.spark.connect.protoP\x01\x62\x06proto3'
 )
 
 
 _MLPARAMS = DESCRIPTOR.message_types_by_name["MlParams"]
 _MLPARAMS_PARAMSENTRY = _MLPARAMS.nested_types_by_name["ParamsEntry"]
 _MLPARAMS_DEFAULTPARAMSENTRY = _MLPARAMS.nested_types_by_name["DefaultParamsEntry"]
+_MLPARAMS_PARAMVALUE = _MLPARAMS.nested_types_by_name["ParamValue"]
 _MLSTAGE = DESCRIPTOR.message_types_by_name["MlStage"]
 _MODELREF = DESCRIPTOR.message_types_by_name["ModelRef"]
+_VECTOR = DESCRIPTOR.message_types_by_name["Vector"]
+_VECTOR_DENSE = _VECTOR.nested_types_by_name["Dense"]
+_VECTOR_SPARSE = _VECTOR.nested_types_by_name["Sparse"]
+_MATRIX = DESCRIPTOR.message_types_by_name["Matrix"]
+_MATRIX_DENSE = _MATRIX.nested_types_by_name["Dense"]
+_MATRIX_SPARSE = _MATRIX.nested_types_by_name["Sparse"]
 _MLSTAGE_STAGETYPE = _MLSTAGE.enum_types_by_name["StageType"]
 MlParams = _reflection.GeneratedProtocolMessageType(
     "MlParams",
@@ -65,6 +72,15 @@ MlParams = _reflection.GeneratedProtocolMessageType(
                 # @@protoc_insertion_point(class_scope:spark.connect.MlParams.DefaultParamsEntry)
             },
         ),
+        "ParamValue": _reflection.GeneratedProtocolMessageType(
+            "ParamValue",
+            (_message.Message,),
+            {
+                "DESCRIPTOR": _MLPARAMS_PARAMVALUE,
+                "__module__": "spark.connect.ml_common_pb2"
+                # @@protoc_insertion_point(class_scope:spark.connect.MlParams.ParamValue)
+            },
+        ),
         "DESCRIPTOR": _MLPARAMS,
         "__module__": "spark.connect.ml_common_pb2"
         # @@protoc_insertion_point(class_scope:spark.connect.MlParams)
@@ -73,6 +89,7 @@ MlParams = _reflection.GeneratedProtocolMessageType(
 _sym_db.RegisterMessage(MlParams)
 _sym_db.RegisterMessage(MlParams.ParamsEntry)
 _sym_db.RegisterMessage(MlParams.DefaultParamsEntry)
+_sym_db.RegisterMessage(MlParams.ParamValue)
 
 MlStage = _reflection.GeneratedProtocolMessageType(
     "MlStage",
@@ -96,6 +113,68 @@ ModelRef = _reflection.GeneratedProtocolMessageType(
 )
 _sym_db.RegisterMessage(ModelRef)
 
+Vector = _reflection.GeneratedProtocolMessageType(
+    "Vector",
+    (_message.Message,),
+    {
+        "Dense": _reflection.GeneratedProtocolMessageType(
+            "Dense",
+            (_message.Message,),
+            {
+                "DESCRIPTOR": _VECTOR_DENSE,
+                "__module__": "spark.connect.ml_common_pb2"
+                # @@protoc_insertion_point(class_scope:spark.connect.Vector.Dense)
+            },
+        ),
+        "Sparse": _reflection.GeneratedProtocolMessageType(
+            "Sparse",
+            (_message.Message,),
+            {
+                "DESCRIPTOR": _VECTOR_SPARSE,
+                "__module__": "spark.connect.ml_common_pb2"
+                # @@protoc_insertion_point(class_scope:spark.connect.Vector.Sparse)
+            },
+        ),
+        "DESCRIPTOR": _VECTOR,
+        "__module__": "spark.connect.ml_common_pb2"
+        # @@protoc_insertion_point(class_scope:spark.connect.Vector)
+    },
+)
+_sym_db.RegisterMessage(Vector)
+_sym_db.RegisterMessage(Vector.Dense)
+_sym_db.RegisterMessage(Vector.Sparse)
+
+Matrix = _reflection.GeneratedProtocolMessageType(
+    "Matrix",
+    (_message.Message,),
+    {
+        "Dense": _reflection.GeneratedProtocolMessageType(
+            "Dense",
+            (_message.Message,),
+            {
+                "DESCRIPTOR": _MATRIX_DENSE,
+                "__module__": "spark.connect.ml_common_pb2"
+                # @@protoc_insertion_point(class_scope:spark.connect.Matrix.Dense)
+            },
+        ),
+        "Sparse": _reflection.GeneratedProtocolMessageType(
+            "Sparse",
+            (_message.Message,),
+            {
+                "DESCRIPTOR": _MATRIX_SPARSE,
+                "__module__": "spark.connect.ml_common_pb2"
+                # @@protoc_insertion_point(class_scope:spark.connect.Matrix.Sparse)
+            },
+        ),
+        "DESCRIPTOR": _MATRIX,
+        "__module__": "spark.connect.ml_common_pb2"
+        # @@protoc_insertion_point(class_scope:spark.connect.Matrix)
+    },
+)
+_sym_db.RegisterMessage(Matrix)
+_sym_db.RegisterMessage(Matrix.Dense)
+_sym_db.RegisterMessage(Matrix.Sparse)
+
 if _descriptor._USE_C_DESCRIPTORS == False:
 
     DESCRIPTOR._options = None
@@ -105,15 +184,29 @@ if _descriptor._USE_C_DESCRIPTORS == False:
     _MLPARAMS_DEFAULTPARAMSENTRY._options = None
     _MLPARAMS_DEFAULTPARAMSENTRY._serialized_options = b"8\001"
     _MLPARAMS._serialized_start = 82
-    _MLPARAMS._serialized_end = 431
+    _MLPARAMS._serialized_end = 629
     _MLPARAMS_PARAMSENTRY._serialized_start = 238
-    _MLPARAMS_PARAMSENTRY._serialized_end = 330
-    _MLPARAMS_DEFAULTPARAMSENTRY._serialized_start = 332
-    _MLPARAMS_DEFAULTPARAMSENTRY._serialized_end = 431
-    _MLSTAGE._serialized_start = 434
-    _MLSTAGE._serialized_end = 646
-    _MLSTAGE_STAGETYPE._serialized_start = 586
-    _MLSTAGE_STAGETYPE._serialized_end = 646
-    _MODELREF._serialized_start = 648
-    _MODELREF._serialized_end = 674
+    _MLPARAMS_PARAMSENTRY._serialized_end = 331
+    _MLPARAMS_DEFAULTPARAMSENTRY._serialized_start = 333
+    _MLPARAMS_DEFAULTPARAMSENTRY._serialized_end = 433
+    _MLPARAMS_PARAMVALUE._serialized_start = 436
+    _MLPARAMS_PARAMVALUE._serialized_end = 629
+    _MLSTAGE._serialized_start = 632
+    _MLSTAGE._serialized_end = 877
+    _MLSTAGE_STAGETYPE._serialized_start = 784
+    _MLSTAGE_STAGETYPE._serialized_end = 877
+    _MODELREF._serialized_start = 879
+    _MODELREF._serialized_end = 905
+    _VECTOR._serialized_start = 908
+    _VECTOR._serialized_end = 1140
+    _VECTOR_DENSE._serialized_start = 1027
+    _VECTOR_DENSE._serialized_end = 1056
+    _VECTOR_SPARSE._serialized_start = 1058
+    _VECTOR_SPARSE._serialized_end = 1130
+    _MATRIX._serialized_start = 1143
+    _MATRIX._serialized_end = 1569
+    _MATRIX_DENSE._serialized_start = 1262
+    _MATRIX_DENSE._serialized_end = 1382
+    _MATRIX_SPARSE._serialized_start = 1385
+    _MATRIX_SPARSE._serialized_end = 1559
 # @@protoc_insertion_point(module_scope)

@@ -64,12 +64,12 @@ class MlParams(google.protobuf.message.Message):
         VALUE_FIELD_NUMBER: builtins.int
         key: builtins.str
         @property
-        def value(self) -> pyspark.sql.connect.proto.expressions_pb2.Expression.Literal: ...
+        def value(self) -> global___MlParams.ParamValue: ...
         def __init__(
             self,
             *,
             key: builtins.str = ...,
-            value: pyspark.sql.connect.proto.expressions_pb2.Expression.Literal | None = ...,
+            value: global___MlParams.ParamValue | None = ...,
         ) -> None: ...
         def HasField(
             self, field_name: typing_extensions.Literal["value", b"value"]
@@ -85,12 +85,12 @@ class MlParams(google.protobuf.message.Message):
         VALUE_FIELD_NUMBER: builtins.int
         key: builtins.str
         @property
-        def value(self) -> pyspark.sql.connect.proto.expressions_pb2.Expression.Literal: ...
+        def value(self) -> global___MlParams.ParamValue: ...
         def __init__(
             self,
             *,
             key: builtins.str = ...,
-            value: pyspark.sql.connect.proto.expressions_pb2.Expression.Literal | None = ...,
+            value: global___MlParams.ParamValue | None = ...,
         ) -> None: ...
         def HasField(
             self, field_name: typing_extensions.Literal["value", b"value"]
@@ -99,32 +99,72 @@ class MlParams(google.protobuf.message.Message):
             self, field_name: typing_extensions.Literal["key", b"key", "value", b"value"]
         ) -> None: ...
 
+    class ParamValue(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        LITERAL_FIELD_NUMBER: builtins.int
+        VECTOR_FIELD_NUMBER: builtins.int
+        MATRIX_FIELD_NUMBER: builtins.int
+        @property
+        def literal(self) -> pyspark.sql.connect.proto.expressions_pb2.Expression.Literal: ...
+        @property
+        def vector(self) -> global___Vector: ...
+        @property
+        def matrix(self) -> global___Matrix: ...
+        def __init__(
+            self,
+            *,
+            literal: pyspark.sql.connect.proto.expressions_pb2.Expression.Literal | None = ...,
+            vector: global___Vector | None = ...,
+            matrix: global___Matrix | None = ...,
+        ) -> None: ...
+        def HasField(
+            self,
+            field_name: typing_extensions.Literal[
+                "literal",
+                b"literal",
+                "matrix",
+                b"matrix",
+                "param_value_type",
+                b"param_value_type",
+                "vector",
+                b"vector",
+            ],
+        ) -> builtins.bool: ...
+        def ClearField(
+            self,
+            field_name: typing_extensions.Literal[
+                "literal",
+                b"literal",
+                "matrix",
+                b"matrix",
+                "param_value_type",
+                b"param_value_type",
+                "vector",
+                b"vector",
+            ],
+        ) -> None: ...
+        def WhichOneof(
+            self, oneof_group: typing_extensions.Literal["param_value_type", b"param_value_type"]
+        ) -> typing_extensions.Literal["literal", "vector", "matrix"] | None: ...
+
     PARAMS_FIELD_NUMBER: builtins.int
     DEFAULT_PARAMS_FIELD_NUMBER: builtins.int
     @property
     def params(
         self,
-    ) -> google.protobuf.internal.containers.MessageMap[
-        builtins.str, pyspark.sql.connect.proto.expressions_pb2.Expression.Literal
-    ]:
+    ) -> google.protobuf.internal.containers.MessageMap[builtins.str, global___MlParams.ParamValue]:
         """user-supplied params"""
     @property
     def default_params(
         self,
-    ) -> google.protobuf.internal.containers.MessageMap[
-        builtins.str, pyspark.sql.connect.proto.expressions_pb2.Expression.Literal
-    ]:
+    ) -> google.protobuf.internal.containers.MessageMap[builtins.str, global___MlParams.ParamValue]:
         """default params"""
     def __init__(
         self,
         *,
-        params: collections.abc.Mapping[
-            builtins.str, pyspark.sql.connect.proto.expressions_pb2.Expression.Literal
-        ]
-        | None = ...,
-        default_params: collections.abc.Mapping[
-            builtins.str, pyspark.sql.connect.proto.expressions_pb2.Expression.Literal
-        ]
+        params: collections.abc.Mapping[builtins.str, global___MlParams.ParamValue] | None = ...,
+        default_params: collections.abc.Mapping[builtins.str, global___MlParams.ParamValue]
         | None = ...,
     ) -> None: ...
     def ClearField(
@@ -150,14 +190,14 @@ class MlStage(google.protobuf.message.Message):
         builtins.type,
     ):  # noqa: F821
         DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
-        UNSPECIFIED: MlStage._StageType.ValueType  # 0
-        ESTIMATOR: MlStage._StageType.ValueType  # 1
-        TRANSFORMER: MlStage._StageType.ValueType  # 2
+        STAGE_TYPE_UNSPECIFIED: MlStage._StageType.ValueType  # 0
+        STAGE_TYPE_ESTIMATOR: MlStage._StageType.ValueType  # 1
+        STAGE_TYPE_TRANSFORMER: MlStage._StageType.ValueType  # 2
 
     class StageType(_StageType, metaclass=_StageTypeEnumTypeWrapper): ...
-    UNSPECIFIED: MlStage.StageType.ValueType  # 0
-    ESTIMATOR: MlStage.StageType.ValueType  # 1
-    TRANSFORMER: MlStage.StageType.ValueType  # 2
+    STAGE_TYPE_UNSPECIFIED: MlStage.StageType.ValueType  # 0
+    STAGE_TYPE_ESTIMATOR: MlStage.StageType.ValueType  # 1
+    STAGE_TYPE_TRANSFORMER: MlStage.StageType.ValueType  # 2
 
     NAME_FIELD_NUMBER: builtins.int
     PARAMS_FIELD_NUMBER: builtins.int
@@ -207,3 +247,201 @@ class ModelRef(google.protobuf.message.Message):
     def ClearField(self, field_name: typing_extensions.Literal["id", b"id"]) -> None: ...
 
 global___ModelRef = ModelRef
+
+class Vector(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    class Dense(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        VALUE_FIELD_NUMBER: builtins.int
+        @property
+        def value(
+            self,
+        ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.float]: ...
+        def __init__(
+            self,
+            *,
+            value: collections.abc.Iterable[builtins.float] | None = ...,
+        ) -> None: ...
+        def ClearField(self, field_name: typing_extensions.Literal["value", b"value"]) -> None: ...
+
+    class Sparse(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        SIZE_FIELD_NUMBER: builtins.int
+        INDEX_FIELD_NUMBER: builtins.int
+        VALUE_FIELD_NUMBER: builtins.int
+        size: builtins.int
+        @property
+        def index(
+            self,
+        ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.float]: ...
+        @property
+        def value(
+            self,
+        ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.float]: ...
+        def __init__(
+            self,
+            *,
+            size: builtins.int = ...,
+            index: collections.abc.Iterable[builtins.float] | None = ...,
+            value: collections.abc.Iterable[builtins.float] | None = ...,
+        ) -> None: ...
+        def ClearField(
+            self,
+            field_name: typing_extensions.Literal[
+                "index", b"index", "size", b"size", "value", b"value"
+            ],
+        ) -> None: ...
+
+    DENSE_FIELD_NUMBER: builtins.int
+    SPARSE_FIELD_NUMBER: builtins.int
+    @property
+    def dense(self) -> global___Vector.Dense: ...
+    @property
+    def sparse(self) -> global___Vector.Sparse: ...
+    def __init__(
+        self,
+        *,
+        dense: global___Vector.Dense | None = ...,
+        sparse: global___Vector.Sparse | None = ...,
+    ) -> None: ...
+    def HasField(
+        self,
+        field_name: typing_extensions.Literal[
+            "dense", b"dense", "one_of", b"one_of", "sparse", b"sparse"
+        ],
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "dense", b"dense", "one_of", b"one_of", "sparse", b"sparse"
+        ],
+    ) -> None: ...
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["one_of", b"one_of"]
+    ) -> typing_extensions.Literal["dense", "sparse"] | None: ...
+
+global___Vector = Vector
+
+class Matrix(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    class Dense(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        NUM_ROWS_FIELD_NUMBER: builtins.int
+        NUM_COLS_FIELD_NUMBER: builtins.int
+        VALUE_FIELD_NUMBER: builtins.int
+        IS_TRANSPOSED_FIELD_NUMBER: builtins.int
+        num_rows: builtins.int
+        num_cols: builtins.int
+        @property
+        def value(
+            self,
+        ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.float]: ...
+        is_transposed: builtins.bool
+        def __init__(
+            self,
+            *,
+            num_rows: builtins.int = ...,
+            num_cols: builtins.int = ...,
+            value: collections.abc.Iterable[builtins.float] | None = ...,
+            is_transposed: builtins.bool = ...,
+        ) -> None: ...
+        def ClearField(
+            self,
+            field_name: typing_extensions.Literal[
+                "is_transposed",
+                b"is_transposed",
+                "num_cols",
+                b"num_cols",
+                "num_rows",
+                b"num_rows",
+                "value",
+                b"value",
+            ],
+        ) -> None: ...
+
+    class Sparse(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        NUM_ROWS_FIELD_NUMBER: builtins.int
+        NUM_COLS_FIELD_NUMBER: builtins.int
+        COLPTR_FIELD_NUMBER: builtins.int
+        ROW_INDEX_FIELD_NUMBER: builtins.int
+        VALUE_FIELD_NUMBER: builtins.int
+        IS_TRANSPOSED_FIELD_NUMBER: builtins.int
+        num_rows: builtins.int
+        num_cols: builtins.int
+        @property
+        def colptr(
+            self,
+        ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.float]: ...
+        @property
+        def row_index(
+            self,
+        ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.float]: ...
+        @property
+        def value(
+            self,
+        ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.float]: ...
+        is_transposed: builtins.bool
+        def __init__(
+            self,
+            *,
+            num_rows: builtins.int = ...,
+            num_cols: builtins.int = ...,
+            colptr: collections.abc.Iterable[builtins.float] | None = ...,
+            row_index: collections.abc.Iterable[builtins.float] | None = ...,
+            value: collections.abc.Iterable[builtins.float] | None = ...,
+            is_transposed: builtins.bool = ...,
+        ) -> None: ...
+        def ClearField(
+            self,
+            field_name: typing_extensions.Literal[
+                "colptr",
+                b"colptr",
+                "is_transposed",
+                b"is_transposed",
+                "num_cols",
+                b"num_cols",
+                "num_rows",
+                b"num_rows",
+                "row_index",
+                b"row_index",
+                "value",
+                b"value",
+            ],
+        ) -> None: ...
+
+    DENSE_FIELD_NUMBER: builtins.int
+    SPARSE_FIELD_NUMBER: builtins.int
+    @property
+    def dense(self) -> global___Matrix.Dense: ...
+    @property
+    def sparse(self) -> global___Matrix.Sparse: ...
+    def __init__(
+        self,
+        *,
+        dense: global___Matrix.Dense | None = ...,
+        sparse: global___Matrix.Sparse | None = ...,
+    ) -> None: ...
+    def HasField(
+        self,
+        field_name: typing_extensions.Literal[
+            "dense", b"dense", "one_of", b"one_of", "sparse", b"sparse"
+        ],
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "dense", b"dense", "one_of", b"one_of", "sparse", b"sparse"
+        ],
+    ) -> None: ...
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["one_of", b"one_of"]
+    ) -> typing_extensions.Literal["dense", "sparse"] | None: ...
+
+global___Matrix = Matrix

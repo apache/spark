@@ -24,7 +24,7 @@ from pyspark.ml.util import MLWritable, MLWriter, MLReadable, MLReader
 import pyspark.sql.connect.proto as pb2
 import pyspark.sql.connect.proto.ml_pb2 as ml_pb2
 import pyspark.sql.connect.proto.ml_common_pb2 as ml_common_pb2
-from pyspark.ml.connect.serializer import deserialize, serialize_ml_params
+from pyspark.ml.connect.serializer import deserialize_response_value, serialize_ml_params
 from pyspark.sql.connect import session as pyspark_session
 from pyspark.sql.connect.plan import LogicalPlan
 
@@ -84,7 +84,7 @@ class ClientEstimator(Estimator, metaclass=ABCMeta):
         req.plan.ml_command.fit.CopyFrom(fit_command_proto)
 
         resp = client._execute_ml(req)
-        return deserialize(resp, client, clazz=self._model_class())
+        return deserialize_response_value(resp, client, clazz=self._model_class())
 
 
 @inherit_doc
@@ -112,7 +112,7 @@ class ClientModel(Model, metaclass=ABCMeta):
         req.plan.ml_command.fetch_model_attr.CopyFrom(model_attr_command_proto)
 
         resp = client._execute_ml(req)
-        return deserialize(resp, client)
+        return deserialize_response_value(resp, client)
 
     def _get_model_attr_dataframe(self, name) -> DataFrame:
         session = pyspark_session._active_spark_session
@@ -137,7 +137,7 @@ class ClientModel(Model, metaclass=ABCMeta):
         req.plan.ml_command.copy_model.CopyFrom(copy_model_proto)
 
         resp = client._execute_ml(req)
-        new_model_ref = deserialize(resp, client)
+        new_model_ref = deserialize_response_value(resp, client)
 
         copied_model.model_ref = new_model_ref
 
@@ -227,7 +227,7 @@ class ClientModelSummary(metaclass=ABCMeta):
         req.plan.ml_command.fetch_model_summary_attr.CopyFrom(model_summary_attr_command_proto)
 
         resp = client._execute_ml(req)
-        return deserialize(resp, client)
+        return deserialize_response_value(resp, client)
 
 
 @inherit_doc
@@ -317,7 +317,7 @@ class ClientMLReader(MLReader):
             )
             req.plan.ml_command.load_model.CopyFrom(load_model_proto)
             resp = client._execute_ml(req)
-            return deserialize(resp, client, clazz=self.clazz)
+            return deserialize_response_value(resp, client, clazz=self.clazz)
 
         elif issubclass(self.clazz, ClientEstimator):
             load_estimator_proto = ml_pb2.MlCommand.LoadStage(
@@ -327,7 +327,7 @@ class ClientMLReader(MLReader):
             )
             req.plan.ml_command.load_stage.CopyFrom(load_estimator_proto)
             resp = client._execute_ml(req)
-            return deserialize(resp, client, clazz=self.clazz)
+            return deserialize_response_value(resp, client, clazz=self.clazz)
         else:
             raise NotImplementedError()
 
