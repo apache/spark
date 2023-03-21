@@ -155,7 +155,7 @@ case class LikeJoni(left: Expression, right: Expression, escapeChar: Char)
         val pattern = ctx.addMutableState(regexClass, regex,
           v => s"""
                       byte[] $patternName = UTF8String.fromString("${tmp}").getBytes();
-                      $v = new $regexClass($patternName, 0, $patternName.length, $patternName.NONE,
+                      $v = new $regexClass($patternName, 0, $patternName.length, $optionClass.NONE,
                         ${encodingClass}.INSTANCE, ${syntaxClass}.Java);
                     """.stripMargin)
 
@@ -187,7 +187,7 @@ case class LikeJoni(left: Expression, right: Expression, escapeChar: Char)
       nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
         s"""
           byte[] pattern = $escapeFunc(${eval2}.getBytes(), '${escapedEscapeChar}');
-          ${regexClass} $regex = new ${regexClass}(pattern, 0, pattern.length, ${optionClass}.NONE,
+          ${regexClass} $regex = new ${regexClass}(pattern, 0, pattern.length, $optionClass.NONE,
           ${encodingClass}.INSTANCE, ${syntaxClass}.Java);
           byte[] input = ${eval1}.getBytes();
           ${ev.value} =
@@ -456,7 +456,7 @@ case class RLikeJoni(left: Expression, right: Expression) extends StringRegexExp
       nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
         s"""
           byte[] pattern = ${eval2}.getBytes();
-          ${regexClass} $regex = new ${regexClass}(pattern, 0, pattern.length, ${optionClass}.NONE,
+          ${regexClass} $regex = new ${regexClass}(pattern, 0, pattern.length, $optionClass.NONE,
           ${encodingClass}.INSTANCE, ${syntaxClass}.Java);
           byte[] input = ${eval1}.getBytes();
           ${ev.value} =
