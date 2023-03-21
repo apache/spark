@@ -28,7 +28,8 @@ import com.fasterxml.jackson.core.json.JsonReadFeature
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
-import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, CodegenFallback, ExprCode}
+import org.apache.spark.sql.catalyst.expressions.codegen.Block.BlockHelper
 import org.apache.spark.sql.catalyst.json._
 import org.apache.spark.sql.catalyst.trees.TreePattern.{JSON_TO_STRUCT, TreePattern}
 import org.apache.spark.sql.catalyst.util._
@@ -125,13 +126,7 @@ private[this] object SharedFactory {
   group = "json_funcs",
   since = "1.5.0")
 case class GetJsonObject(json: Expression, path: Expression)
-  extends BinaryExpression with ExpectsInputTypes with CodegenFallback {
-
-  import com.fasterxml.jackson.core.JsonToken._
-
-  import PathInstruction._
-  import SharedFactory._
-  import WriteStyle._
+  extends BinaryExpression with ExpectsInputTypes {
 
   override def left: Expression = json
   override def right: Expression = path
@@ -140,10 +135,84 @@ case class GetJsonObject(json: Expression, path: Expression)
   override def nullable: Boolean = true
   override def prettyName: String = "get_json_object"
 
-  @transient private lazy val parsedPath = parsePath(path.eval().asInstanceOf[UTF8String])
+  @transient
+  private lazy val evaluator = new GetJsonObjectEvaluator(right)
 
   override def eval(input: InternalRow): Any = {
-    val jsonStr = json.eval(input).asInstanceOf[UTF8String]
+    evaluator.setJson(json.eval(input).asInstanceOf[UTF8String])
+    evaluator.setPath(path.eval(input).asInstanceOf[UTF8String])
+    evaluator.evaluate()
+  }
+
+  protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val refEvaluator = ctx.addReferenceObj("evaluator", evaluator)
+    val jsonEval = json.genCode(ctx)
+    val pathEval = path.genCode(ctx)
+
+    val setJson =
+      s"""
+         |if (${jsonEval.isNull}) {
+         |  $refEvaluator.setJson(null);
+         |} else {
+         |  $refEvaluator.setJson(${jsonEval.value});
+         |}
+         |""".stripMargin
+    val setPath =
+      s"""
+         |if (${pathEval.isNull}) {
+         |  $refEvaluator.setPath(null);
+         |} else {
+         |  $refEvaluator.setPath(${pathEval.value});
+         |}
+         |""".stripMargin
+
+    val resultType = CodeGenerator.boxedType(dataType)
+    val resultTerm = ctx.freshName("result")
+    ev.copy(code =
+      code"""
+         |${jsonEval.code + "\n"}
+         |${pathEval.code + "\n"}
+         |${setJson + "\n"}
+         |${setPath + "\n"}
+         |$resultType $resultTerm = ($resultType) $refEvaluator.evaluate();
+         |boolean ${ev.isNull} = $resultTerm == null;
+         |${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+         |if (!${ev.isNull}) {
+         |  ${ev.value} = $resultTerm;
+         |}
+         |""".stripMargin
+    )
+  }
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): GetJsonObject =
+    copy(json = newLeft, path = newRight)
+}
+
+class GetJsonObjectEvaluator(path: Expression) extends Serializable {
+  import com.fasterxml.jackson.core.JsonToken._
+  import PathInstruction._
+  import SharedFactory._
+  import WriteStyle._
+
+  @transient
+  private lazy val parsedPath = parsePath(path.eval().asInstanceOf[UTF8String])
+
+  @transient
+  private var jsonStr: UTF8String = null
+
+  @transient
+  private var pathStr: UTF8String = null
+
+  def setJson(arg: UTF8String): Unit = {
+    jsonStr = arg
+  }
+
+  def setPath(arg: UTF8String): Unit = {
+    pathStr = arg
+  }
+
+  def evaluate(): Any = {
     if (jsonStr == null) {
       return null
     }
@@ -151,7 +220,7 @@ case class GetJsonObject(json: Expression, path: Expression)
     val parsed = if (path.foldable) {
       parsedPath
     } else {
-      parsePath(path.eval(input).asInstanceOf[UTF8String])
+      parsePath(pathStr)
     }
 
     if (parsed.isDefined) {
@@ -294,7 +363,7 @@ case class GetJsonObject(json: Expression, path: Expression)
           g.writeRawValue(buf.toString)
         } else if (dirty == 1) {
           // remove outer array tokens
-          g.writeRawValue(buf.substring(1, buf.length()-1))
+          g.writeRawValue(buf.substring(1, buf.length() - 1))
         } // else do not write anything
 
         dirty > 0
@@ -337,10 +406,6 @@ case class GetJsonObject(json: Expression, path: Expression)
         false
     }
   }
-
-  override protected def withNewChildrenInternal(
-      newLeft: Expression, newRight: Expression): GetJsonObject =
-    copy(json = newLeft, path = newRight)
 }
 
 // scalastyle:off line.size.limit line.contains.tab
