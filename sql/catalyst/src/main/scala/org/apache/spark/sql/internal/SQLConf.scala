@@ -4878,12 +4878,11 @@ class SQLConf extends Serializable with Logging {
 
   def defaultDatabase: String = getConf(StaticSQLConf.CATALOG_DEFAULT_DATABASE)
 
-<<<<<<< HEAD
   def regexEngine: String = getConf(REGEX_ENGINE)
-=======
+
   def allowsTempViewCreationWithMultipleNameparts: Boolean =
     getConf(SQLConf.ALLOW_TEMP_VIEW_CREATION_WITH_MULTIPLE_NAME_PARTS)
->>>>>>> master
+
 
   /** ********************** SQLConf functionality methods ************ */
 

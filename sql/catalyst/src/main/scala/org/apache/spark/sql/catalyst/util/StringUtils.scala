@@ -72,7 +72,7 @@ object StringUtils extends Logging {
     val out = new ArrayBuffer[Byte]()
     out.appendAll("(?s)".getBytes())
 
-    def fail(message: String) = throw QueryCompilationErrors.invalidPatternError(
+    def fail(message: String) = throw QueryCompilationErrors.escapeCharacterInTheMiddleError(
       pattern.toString, message)
 
     while (in.hasNext) {
