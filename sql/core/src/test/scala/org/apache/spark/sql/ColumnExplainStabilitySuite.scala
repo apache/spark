@@ -35,24 +35,32 @@ import org.apache.spark.sql.types.IntegerType
  *   last approved extended explain: /path/to/column-stability/q1/extended.txt
  *
  *   explain(false):
+ *   [last approved simplified explain]
  *
  *   explain(true):
+ *   [last approved extended explain]
  *
  *   actual simplified explain: /path/to/tmp/q1.actual.simplified.txt
- *   actual explain explain: /path/to/tmp/q1.actual.extended.txt
+ *   actual extended explain: /path/to/tmp/q1.actual.extended.txt
+ *
+ *   explain(false):
+ *   [actual simplified explain]
+ *
+ *   explain(true):
+ *   [actual extended explain]
  *
  *
  * To run the entire test suite:
  * {{{
- *   build/sbt "sql/testOnly *ColumnStabilitySuite"
+ *   build/sbt "sql/testOnly *ColumnExplainStabilitySuite"
  * }}}
  *
  * To re-generate golden files for entire suite, run:
  * {{{
- *   SPARK_GENERATE_GOLDEN_FILES=1 build/sbt "sql/testOnly *ColumnStabilitySuite"
+ *   SPARK_GENERATE_GOLDEN_FILES=1 build/sbt "sql/testOnly *ColumnExplainStabilitySuite"
  * }}}
  */
-class ColumnStabilitySuite extends SparkFunSuite {
+class ColumnExplainStabilitySuite extends SparkFunSuite {
 
   private val SIMPLIFIED_FILE_NAME = "simplified.txt"
   private val EXTENDED_FILE_NAME = "extended.txt"
@@ -138,9 +146,13 @@ class ColumnStabilitySuite extends SparkFunSuite {
            |$approvedExtended
            |
            |actual simplified explain: ${actualSimplifiedFile.getAbsolutePath}
-           |actual explain explain: ${actualExtendedFile.getAbsolutePath}
+           |actual extended explain: ${actualExtendedFile.getAbsolutePath}
            |
+           |explain(false):
            |$actualSimplified
+           |
+           |explain(true):
+           |$actualExtended
         """.stripMargin)
     }
   }
