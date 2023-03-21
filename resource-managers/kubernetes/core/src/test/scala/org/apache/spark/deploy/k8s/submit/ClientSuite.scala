@@ -369,8 +369,8 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
     }
     val appId = KubernetesTestConf.APP_ID
     val sId = submissionId(kconf.namespace, POD_NAME)
-    logAppender.loggingEvents.map(_.getMessage.getFormattedMessage).exists { line =>
-      line === s"Application $appName with application ID $appId and submission ID $sId finished"
-    }
+    assert(logAppender.loggingEvents.map(_.getMessage.getFormattedMessage).contains(
+      s"Deployed Spark application $appName with application ID $appId " +
+      s"and submission ID $sId into Kubernetes"))
   }
 }

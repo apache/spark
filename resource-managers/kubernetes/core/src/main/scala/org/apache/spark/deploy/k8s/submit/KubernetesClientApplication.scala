@@ -203,7 +203,7 @@ private[spark] class Client(
         }
       }
     } else {
-      logInfo(s"Deployed Spark application ${conf.appName} with application ID ${conf.appName} " +
+      logInfo(s"Deployed Spark application ${conf.appName} with application ID ${conf.appId} " +
         s"and submission ID $sId into Kubernetes")
     }
   }
