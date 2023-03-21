@@ -21,7 +21,6 @@ import org.apache.spark.connect.proto
 import org.apache.spark.ml.linalg.{Matrix, Vector}
 import org.apache.spark.ml.param.Params
 import org.apache.spark.sql.connect.common.LiteralValueProtoConverter
-import org.apache.spark.sql.connect.planner.LiteralExpressionProtoConverter
 
 object MLUtils {
 
@@ -46,7 +45,7 @@ object MLUtils {
       case proto.MlParams.ParamValue.ParamValueTypeCase.MATRIX =>
         Serializer.deserializeMatrix(paramValueProto.getMatrix)
       case proto.MlParams.ParamValue.ParamValueTypeCase.LITERAL =>
-        val value = LiteralExpressionProtoConverter.toCatalystValue(paramValueProto.getLiteral)
+        val value = LiteralValueProtoConverter.toCatalystValue(paramValueProto.getLiteral)
         _convertParamValue(paramType, value)
       case _ =>
         throw new IllegalArgumentException()
