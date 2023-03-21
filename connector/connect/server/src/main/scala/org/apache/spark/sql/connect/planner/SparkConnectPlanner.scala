@@ -40,11 +40,10 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.BloomFilterAggregate
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException, ParserUtils}
 import org.apache.spark.sql.catalyst.plans.{Cross, FullOuter, Inner, JoinType, LeftAnti, LeftOuter, LeftSemi, RightOuter, UsingJoin}
 import org.apache.spark.sql.catalyst.plans.logical
-import org.apache.spark.sql.catalyst.plans.logical.{CollectMetrics, CommandResult, Deduplicate, Except, Intersect, LocalRelation, LogicalPlan, Sample, Sort, SubqueryAlias, Union, Unpivot, UnresolvedHint}
+import org.apache.spark.sql.catalyst.plans.logical.{CollectMetrics, CommandResult, Deduplicate, Except, Intersect, LocalRelation, LogicalPlan, Project, Sample, Sort, SubqueryAlias, Union, Unpivot, UnresolvedHint}
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CharVarcharUtils}
-import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, InvalidPlanInput, UdfPacket}
+import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, InvalidPlanInput, LiteralValueProtoConverter, UdfPacket}
 import org.apache.spark.sql.connect.config.Connect.CONNECT_GRPC_ARROW_MAX_BATCH_SIZE
-import org.apache.spark.sql.connect.planner.LiteralExpressionProtoConverter.{toCatalystExpression, toCatalystValue}
 import org.apache.spark.sql.connect.plugin.SparkConnectPluginRegistry
 import org.apache.spark.sql.connect.service.SparkConnectStreamHandler
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -118,6 +117,8 @@ class SparkConnectPlanner(val session: SparkSession) {
         transformRepartitionByExpression(rel.getRepartitionByExpression)
       case proto.Relation.RelTypeCase.MAP_PARTITIONS =>
         transformMapPartitions(rel.getMapPartitions)
+      case proto.Relation.RelTypeCase.GROUP_MAP =>
+        transformGroupMap(rel.getGroupMap)
       case proto.Relation.RelTypeCase.COLLECT_METRICS =>
         transformCollectMetrics(rel.getCollectMetrics)
       case proto.Relation.RelTypeCase.PARSE => transformParse(rel.getParse)
@@ -327,7 +328,7 @@ class SparkConnectPlanner(val session: SparkSession) {
     } else {
       val valueMap = mutable.Map.empty[String, Any]
       cols.zip(values).foreach { case (col, value) =>
-        valueMap.update(col, toCatalystValue(value))
+        valueMap.update(col, LiteralValueProtoConverter.toCatalystValue(value))
       }
       dataset.na.fill(valueMap = valueMap.toMap).logicalPlan
     }
@@ -354,8 +355,8 @@ class SparkConnectPlanner(val session: SparkSession) {
     val replacement = mutable.Map.empty[Any, Any]
     rel.getReplacementsList.asScala.foreach { replace =>
       replacement.update(
-        toCatalystValue(replace.getOldValue),
-        toCatalystValue(replace.getNewValue))
+        LiteralValueProtoConverter.toCatalystValue(replace.getOldValue),
+        LiteralValueProtoConverter.toCatalystValue(replace.getNewValue))
     }
 
     if (rel.getColsCount == 0) {
@@ -494,6 +495,18 @@ class SparkConnectPlanner(val session: SparkSession) {
       case _ =>
         throw InvalidPlanInput(s"Function with EvalType: ${pythonUdf.evalType} is not supported")
     }
+  }
+
+  private def transformGroupMap(rel: proto.GroupMap): LogicalPlan = {
+    val pythonUdf = transformPythonUDF(rel.getFunc)
+    val cols =
+      rel.getGroupingExpressionsList.asScala.toSeq.map(expr => Column(transformExpression(expr)))
+
+    Dataset
+      .ofRows(session, transformRelation(rel.getInput))
+      .groupBy(cols: _*)
+      .flatMapGroupsInPandas(pythonUdf)
+      .logicalPlan
   }
 
   private def transformWithColumnsRenamed(rel: proto.WithColumnsRenamed): LogicalPlan = {
@@ -677,16 +690,36 @@ class SparkConnectPlanner(val session: SparkSession) {
       }
       val attributes = structType.toAttributes
       val proj = UnsafeProjection.create(attributes, attributes)
-      val relation = logical.LocalRelation(attributes, rows.map(r => proj(r).copy()).toSeq)
+      val data = rows.map(proj)
 
       if (schema == null) {
-        relation
+        logical.LocalRelation(attributes, data.map(_.copy()).toSeq)
       } else {
-        Dataset
-          .ofRows(session, logicalPlan = relation)
-          .toDF(schema.names: _*)
-          .to(schema)
+        def udtToSqlType(dt: DataType): DataType = dt match {
+          case udt: UserDefinedType[_] => udt.sqlType
+          case StructType(fields) =>
+            val newFields = fields.map { case StructField(name, dataType, nullable, metadata) =>
+              StructField(name, udtToSqlType(dataType), nullable, metadata)
+            }
+            StructType(newFields)
+          case ArrayType(elementType, containsNull) =>
+            ArrayType(udtToSqlType(elementType), containsNull)
+          case MapType(keyType, valueType, valueContainsNull) =>
+            MapType(udtToSqlType(keyType), udtToSqlType(valueType), valueContainsNull)
+          case _ => dt
+        }
+
+        val sqlTypeOnlySchema = udtToSqlType(schema).asInstanceOf[StructType]
+
+        val project = Dataset
+          .ofRows(session, logicalPlan = logical.LocalRelation(attributes))
+          .toDF(sqlTypeOnlySchema.names: _*)
+          .to(sqlTypeOnlySchema)
           .logicalPlan
+          .asInstanceOf[Project]
+
+        val proj = UnsafeProjection.create(project.projectList, project.child.output)
+        logical.LocalRelation(schema.toAttributes, data.map(proj).map(_.copy()).toSeq)
       }
     } else {
       if (schema == null) {
@@ -877,7 +910,7 @@ class SparkConnectPlanner(val session: SparkSession) {
    *   Expression
    */
   private def transformLiteral(lit: proto.Expression.Literal): Literal = {
-    toCatalystExpression(lit)
+    LiteralExpressionProtoConverter.toCatalystExpression(lit)
   }
 
   private def transformLimit(limit: proto.Limit): LogicalPlan = {

@@ -160,18 +160,22 @@ class SparkConnectServiceSuite extends SharedSparkSession {
     assert(done)
 
     // 4 Partitions + Metrics
-    assert(responses.size == 5)
+    assert(responses.size == 6)
+
+    // Make sure the first response is schema only
+    val head = responses.head
+    assert(head.hasSchema && !head.hasArrowBatch && !head.hasMetrics)
 
     // Make sure the last response is metrics only
     val last = responses.last
-    assert(last.hasMetrics && !last.hasArrowBatch)
+    assert(last.hasMetrics && !last.hasSchema && !last.hasArrowBatch)
 
     val allocator = new RootAllocator()
 
     // Check the 'data' batches
     var expectedId = 0L
     var previousEId = 0.0d
-    responses.dropRight(1).foreach { response =>
+    responses.tail.dropRight(1).foreach { response =>
       assert(response.hasArrowBatch)
       val batch = response.getArrowBatch
       assert(batch.getData != null)
@@ -347,11 +351,15 @@ class SparkConnectServiceSuite extends SharedSparkSession {
       // The current implementation is expected to be blocking. This is here to make sure it is.
       assert(done)
 
-      assert(responses.size == 6)
+      assert(responses.size == 7)
+
+      // Make sure the first response is schema only
+      val head = responses.head
+      assert(head.hasSchema && !head.hasArrowBatch && !head.hasMetrics)
 
       // Make sure the last response is observed metrics only
       val last = responses.last
-      assert(last.getObservedMetricsCount == 1 && !last.hasArrowBatch)
+      assert(last.getObservedMetricsCount == 1 && !last.hasSchema && !last.hasArrowBatch)
 
       val observedMetricsList = last.getObservedMetricsList.asScala
       val observedMetric = observedMetricsList.head

@@ -31,7 +31,7 @@ from typing import (
     Optional,
 )
 
-from pyspark.errors import PySparkTypeError
+from pyspark.errors import PySparkTypeError, PySparkAttributeError
 from pyspark.sql.types import DataType
 from pyspark.sql.column import Column as PySparkColumn
 
@@ -433,6 +433,10 @@ class Column:
     dropFields.__doc__ = PySparkColumn.dropFields.__doc__
 
     def __getattr__(self, item: Any) -> "Column":
+        if item == "_jc":
+            raise PySparkAttributeError(
+                error_class="JVM_ATTRIBUTE_NOT_SUPPORTED", message_parameters={"attr_name": "_jc"}
+            )
         if item.startswith("__"):
             raise AttributeError(item)
         return self[item]
@@ -458,6 +462,12 @@ class Column:
         )
 
     __bool__ = __nonzero__
+
+    @property
+    def _jc(self) -> None:
+        raise PySparkAttributeError(
+            error_class="JVM_ATTRIBUTE_NOT_SUPPORTED", message_parameters={"attr_name": "_jc"}
+        )
 
 
 Column.__doc__ = PySparkColumn.__doc__

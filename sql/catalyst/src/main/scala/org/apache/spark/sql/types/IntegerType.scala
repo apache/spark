@@ -45,7 +45,7 @@ class IntegerType private() extends IntegralType {
    */
   override def defaultSize: Int = 4
 
-  override def physicalDataType: PhysicalDataType = PhysicalIntegerType
+  private[sql] override def physicalDataType: PhysicalDataType = PhysicalIntegerType
 
   override def simpleString: String = "int"
 

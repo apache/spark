@@ -956,6 +956,7 @@ case class PreRuleReplaceAddWithBrokenVersion() extends Rule[SparkPlan] {
 case class MyShuffleExchangeExec(delegate: ShuffleExchangeExec) extends ShuffleExchangeLike {
   override def numMappers: Int = delegate.numMappers
   override def numPartitions: Int = delegate.numPartitions
+  override def advisoryPartitionSize: Option[Long] = delegate.advisoryPartitionSize
   override def shuffleOrigin: ShuffleOrigin = {
     delegate.shuffleOrigin
   }

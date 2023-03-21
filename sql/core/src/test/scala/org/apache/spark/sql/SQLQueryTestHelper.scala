@@ -22,6 +22,7 @@ import scala.util.control.NonFatal
 import org.apache.spark.{SparkException, SparkThrowable}
 import org.apache.spark.ErrorMessageFormat.MINIMAL
 import org.apache.spark.SparkThrowableHelper.getMessage
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.HiveResult.hiveResultString
@@ -29,11 +30,13 @@ import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.command.{DescribeColumnCommand, DescribeCommandBase}
 import org.apache.spark.sql.types.StructType
 
-trait SQLQueryTestHelper {
+trait SQLQueryTestHelper extends Logging {
 
   private val notIncludedMsg = "[not included in comparison]"
   private val clsName = this.getClass.getCanonicalName
   protected val emptySchema = StructType(Seq.empty).catalogString
+
+  protected val validFileExtensions = ".sql"
 
   protected def replaceNotIncludedMsg(line: String): String = {
     line.replaceAll("#\\d+", "#x")
@@ -50,8 +53,21 @@ trait SQLQueryTestHelper {
   }
 
 
+  /**
+   * Analyzes a query and returns the result as (schema of the output, normalized resolved plan
+   * tree string representation).
+   */
+  protected def getNormalizedQueryAnalysisResult(
+      session: SparkSession, sql: String): (String, Seq[String]) = {
+    val df = session.sql(sql)
+    val schema = df.schema.catalogString
+    // Get the answer, but also get rid of the #1234 expression IDs that show up in analyzer plans.
+    (schema, Seq(replaceNotIncludedMsg(df.queryExecution.analyzed.toString)))
+  }
+
   /** Executes a query and returns the result as (schema of the output, normalized output). */
-  protected def getNormalizedResult(session: SparkSession, sql: String): (String, Seq[String]) = {
+  protected def getNormalizedQueryExecutionResult(
+      session: SparkSession, sql: String): (String, Seq[String]) = {
     // Returns true if the plan is supposed to be sorted.
     def isSorted(plan: LogicalPlan): Boolean = plan match {
       case _: Join | _: Aggregate | _: Generate | _: Sample | _: Distinct => false

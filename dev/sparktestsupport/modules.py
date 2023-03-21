@@ -513,7 +513,6 @@ pyspark_sql = Module(
     ],
 )
 
-
 pyspark_resource = Module(
     name="pyspark-resource",
     dependencies=[pyspark_core],
@@ -779,6 +778,7 @@ pyspark_connect = Module(
         "pyspark.sql.tests.connect.test_parity_pandas_udf",
         "pyspark.sql.tests.connect.test_parity_pandas_map",
         "pyspark.sql.tests.connect.test_parity_arrow_map",
+        "pyspark.sql.tests.connect.test_parity_pandas_grouped_map",
         # ml doctests
         "pyspark.ml.connect.functions",
         # ml unittests

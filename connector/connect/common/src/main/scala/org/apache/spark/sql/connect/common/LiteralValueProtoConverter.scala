@@ -22,6 +22,9 @@ import java.math.{BigDecimal => JBigDecimal}
 import java.sql.{Date, Timestamp}
 import java.time._
 
+import scala.collection.mutable
+import scala.reflect.ClassTag
+
 import com.google.protobuf.ByteString
 
 import org.apache.spark.connect.proto
@@ -141,5 +144,116 @@ object LiteralValueProtoConverter {
     case _ if clz.isArray => ArrayType(toDataType(clz.getComponentType))
     case _ =>
       throw new UnsupportedOperationException(s"Unsupported component type $clz in arrays.")
+  }
+
+  def toCatalystValue(literal: proto.Expression.Literal): Any = {
+    literal.getLiteralTypeCase match {
+      case proto.Expression.Literal.LiteralTypeCase.NULL => null
+
+      case proto.Expression.Literal.LiteralTypeCase.BINARY => literal.getBinary.toByteArray
+
+      case proto.Expression.Literal.LiteralTypeCase.BOOLEAN => literal.getBoolean
+
+      case proto.Expression.Literal.LiteralTypeCase.BYTE => literal.getByte.toByte
+
+      case proto.Expression.Literal.LiteralTypeCase.SHORT => literal.getShort.toShort
+
+      case proto.Expression.Literal.LiteralTypeCase.INTEGER => literal.getInteger
+
+      case proto.Expression.Literal.LiteralTypeCase.LONG => literal.getLong
+
+      case proto.Expression.Literal.LiteralTypeCase.FLOAT => literal.getFloat
+
+      case proto.Expression.Literal.LiteralTypeCase.DOUBLE => literal.getDouble
+
+      case proto.Expression.Literal.LiteralTypeCase.DECIMAL =>
+        Decimal(literal.getDecimal.getValue)
+
+      case proto.Expression.Literal.LiteralTypeCase.STRING => literal.getString
+
+      case proto.Expression.Literal.LiteralTypeCase.DATE =>
+        DateTimeUtils.toJavaDate(literal.getDate)
+
+      case proto.Expression.Literal.LiteralTypeCase.TIMESTAMP =>
+        DateTimeUtils.toJavaTimestamp(literal.getTimestamp)
+
+      case proto.Expression.Literal.LiteralTypeCase.TIMESTAMP_NTZ =>
+        DateTimeUtils.microsToLocalDateTime(literal.getTimestampNtz)
+
+      case proto.Expression.Literal.LiteralTypeCase.CALENDAR_INTERVAL =>
+        new CalendarInterval(
+          literal.getCalendarInterval.getMonths,
+          literal.getCalendarInterval.getDays,
+          literal.getCalendarInterval.getMicroseconds)
+
+      case proto.Expression.Literal.LiteralTypeCase.YEAR_MONTH_INTERVAL =>
+        IntervalUtils.monthsToPeriod(literal.getYearMonthInterval)
+
+      case proto.Expression.Literal.LiteralTypeCase.DAY_TIME_INTERVAL =>
+        IntervalUtils.microsToDuration(literal.getDayTimeInterval)
+
+      case proto.Expression.Literal.LiteralTypeCase.ARRAY =>
+        toCatalystArray(literal.getArray)
+
+      case other =>
+        throw new UnsupportedOperationException(
+          s"Unsupported Literal Type: ${other.getNumber} (${other.name})")
+    }
+  }
+
+  def toCatalystArray(array: proto.Expression.Literal.Array): Array[_] = {
+    def makeArrayData[T](converter: proto.Expression.Literal => T)(implicit
+        tag: ClassTag[T]): Array[T] = {
+      val builder = mutable.ArrayBuilder.make[T]
+      val elementList = array.getElementsList
+      builder.sizeHint(elementList.size())
+      val iter = elementList.iterator()
+      while (iter.hasNext) {
+        builder += converter(iter.next())
+      }
+      builder.result()
+    }
+
+    val elementType = array.getElementType
+    if (elementType.hasShort) {
+      makeArrayData(v => v.getShort.toShort)
+    } else if (elementType.hasInteger) {
+      makeArrayData(v => v.getInteger)
+    } else if (elementType.hasLong) {
+      makeArrayData(v => v.getLong)
+    } else if (elementType.hasDouble) {
+      makeArrayData(v => v.getDouble)
+    } else if (elementType.hasByte) {
+      makeArrayData(v => v.getByte.toByte)
+    } else if (elementType.hasFloat) {
+      makeArrayData(v => v.getFloat)
+    } else if (elementType.hasBoolean) {
+      makeArrayData(v => v.getBoolean)
+    } else if (elementType.hasString) {
+      makeArrayData(v => v.getString)
+    } else if (elementType.hasBinary) {
+      makeArrayData(v => v.getBinary.toByteArray)
+    } else if (elementType.hasDate) {
+      makeArrayData(v => DateTimeUtils.toJavaDate(v.getDate))
+    } else if (elementType.hasTimestamp) {
+      makeArrayData(v => DateTimeUtils.toJavaTimestamp(v.getTimestamp))
+    } else if (elementType.hasTimestampNtz) {
+      makeArrayData(v => DateTimeUtils.microsToLocalDateTime(v.getTimestampNtz))
+    } else if (elementType.hasDayTimeInterval) {
+      makeArrayData(v => IntervalUtils.microsToDuration(v.getDayTimeInterval))
+    } else if (elementType.hasYearMonthInterval) {
+      makeArrayData(v => IntervalUtils.monthsToPeriod(v.getYearMonthInterval))
+    } else if (elementType.hasDecimal) {
+      makeArrayData(v => Decimal(v.getDecimal.getValue))
+    } else if (elementType.hasCalendarInterval) {
+      makeArrayData(v => {
+        val interval = v.getCalendarInterval
+        new CalendarInterval(interval.getMonths, interval.getDays, interval.getMicroseconds)
+      })
+    } else if (elementType.hasArray) {
+      makeArrayData(v => toCatalystArray(v.getArray))
+    } else {
+      throw new UnsupportedOperationException(s"Unsupported Literal Type: $elementType)")
+    }
   }
 }
