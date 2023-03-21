@@ -1,0 +1,1 @@
+update_fields('a DESC NULLS FIRST, WithField(b1, 'b ASC NULLS LAST))

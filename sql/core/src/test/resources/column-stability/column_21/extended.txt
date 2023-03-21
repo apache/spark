@@ -1,0 +1,1 @@
+cast(cast('a as int) as int)

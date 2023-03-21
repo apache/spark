@@ -1,0 +1,1 @@
+update_fields(update_fields('a, WithField(b, 2)), dropfield(a))

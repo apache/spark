@@ -1,0 +1,1 @@
+'a AS add_alias#1 AS (key, value)

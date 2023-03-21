@@ -1,0 +1,1 @@
+((a LIKE 'Tom*' OR RLIKE(b, '^P.*$')) OR ilike(c, 'a'))

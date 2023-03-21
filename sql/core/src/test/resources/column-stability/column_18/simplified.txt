@@ -1,0 +1,1 @@
+((contains(a, 'mer') AND startswith(b, 'Ari')) OR endswith(a, c))

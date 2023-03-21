@@ -1,0 +1,1 @@
+((Contains('a, mer) AND StartsWith('b, Ari)) OR EndsWith('a, 'c))

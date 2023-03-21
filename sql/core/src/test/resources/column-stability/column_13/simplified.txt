@@ -1,0 +1,1 @@
+((a IS NULL) AND (b IS NOT NULL))

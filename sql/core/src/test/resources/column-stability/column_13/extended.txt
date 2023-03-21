@@ -1,0 +1,1 @@
+(isnull('a) AND isnotnull('b))
