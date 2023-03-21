@@ -68,7 +68,7 @@ case class MapType(
    */
   override def defaultSize: Int = 1 * (keyType.defaultSize + valueType.defaultSize)
 
-  override def physicalDataType: PhysicalDataType =
+  private[sql] override def physicalDataType: PhysicalDataType =
     PhysicalMapType(keyType, valueType, valueContainsNull)
 
   override def simpleString: String = s"map<${keyType.simpleString},${valueType.simpleString}>"
