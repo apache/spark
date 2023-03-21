@@ -652,64 +652,14 @@ class WriteStreamOperation(google.protobuf.message.Message):
             self, field_name: typing_extensions.Literal["key", b"key", "value", b"value"]
         ) -> None: ...
 
-    class ProcessingTimeTrigger(google.protobuf.message.Message):
-        """Triggers (see corresponding scala case classes for documentation)"""
-
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
-
-        INTERVAL_FIELD_NUMBER: builtins.int
-        interval: builtins.str
-        """(Required)"""
-        def __init__(
-            self,
-            *,
-            interval: builtins.str = ...,
-        ) -> None: ...
-        def ClearField(
-            self, field_name: typing_extensions.Literal["interval", b"interval"]
-        ) -> None: ...
-
-    class AvailableNowTrigger(google.protobuf.message.Message):
-        """Empty"""
-
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
-
-        def __init__(
-            self,
-        ) -> None: ...
-
-    class OneTimeTrigger(google.protobuf.message.Message):
-        """Empty"""
-
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
-
-        def __init__(
-            self,
-        ) -> None: ...
-
-    class ContinuousTrigger(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
-
-        INTERVAL_FIELD_NUMBER: builtins.int
-        interval: builtins.str
-        """(Required)"""
-        def __init__(
-            self,
-            *,
-            interval: builtins.str = ...,
-        ) -> None: ...
-        def ClearField(
-            self, field_name: typing_extensions.Literal["interval", b"interval"]
-        ) -> None: ...
-
     INPUT_FIELD_NUMBER: builtins.int
     FORMAT_FIELD_NUMBER: builtins.int
     OPTIONS_FIELD_NUMBER: builtins.int
     PARTITIONING_COLUMN_NAMES_FIELD_NUMBER: builtins.int
-    PROCESSING_TIME_TRIGGER_FIELD_NUMBER: builtins.int
-    AVAILABLE_NOW_TRIGGER_FIELD_NUMBER: builtins.int
-    ONE_TIME_TRIGGER_FIELD_NUMBER: builtins.int
-    CONTINUOUS_TRIGGER_FIELD_NUMBER: builtins.int
+    PROCESSING_TIME_INTERVAL_FIELD_NUMBER: builtins.int
+    AVAILABLE_NOW_FIELD_NUMBER: builtins.int
+    ONE_TIME_FIELD_NUMBER: builtins.int
+    CONTINUOUS_CHECKPOINT_INTERVAL_FIELD_NUMBER: builtins.int
     OUTPUT_MODE_FIELD_NUMBER: builtins.int
     QUERY_NAME_FIELD_NUMBER: builtins.int
     PATH_FIELD_NUMBER: builtins.int
@@ -726,14 +676,10 @@ class WriteStreamOperation(google.protobuf.message.Message):
     def partitioning_column_names(
         self,
     ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]: ...
-    @property
-    def processing_time_trigger(self) -> global___WriteStreamOperation.ProcessingTimeTrigger: ...
-    @property
-    def available_now_trigger(self) -> global___WriteStreamOperation.AvailableNowTrigger: ...
-    @property
-    def one_time_trigger(self) -> global___WriteStreamOperation.OneTimeTrigger: ...
-    @property
-    def continuous_trigger(self) -> global___WriteStreamOperation.ContinuousTrigger: ...
+    processing_time_interval: builtins.str
+    available_now: builtins.bool
+    one_time: builtins.bool
+    continuous_checkpoint_interval: builtins.str
     output_mode: builtins.str
     query_name: builtins.str
     path: builtins.str
@@ -745,10 +691,10 @@ class WriteStreamOperation(google.protobuf.message.Message):
         format: builtins.str = ...,
         options: collections.abc.Mapping[builtins.str, builtins.str] | None = ...,
         partitioning_column_names: collections.abc.Iterable[builtins.str] | None = ...,
-        processing_time_trigger: global___WriteStreamOperation.ProcessingTimeTrigger | None = ...,
-        available_now_trigger: global___WriteStreamOperation.AvailableNowTrigger | None = ...,
-        one_time_trigger: global___WriteStreamOperation.OneTimeTrigger | None = ...,
-        continuous_trigger: global___WriteStreamOperation.ContinuousTrigger | None = ...,
+        processing_time_interval: builtins.str = ...,
+        available_now: builtins.bool = ...,
+        one_time: builtins.bool = ...,
+        continuous_checkpoint_interval: builtins.str = ...,
         output_mode: builtins.str = ...,
         query_name: builtins.str = ...,
         path: builtins.str = ...,
@@ -757,39 +703,39 @@ class WriteStreamOperation(google.protobuf.message.Message):
     def HasField(
         self,
         field_name: typing_extensions.Literal[
-            "available_now_trigger",
-            b"available_now_trigger",
-            "continuous_trigger",
-            b"continuous_trigger",
+            "available_now",
+            b"available_now",
+            "continuous_checkpoint_interval",
+            b"continuous_checkpoint_interval",
             "input",
             b"input",
-            "one_time_trigger",
-            b"one_time_trigger",
+            "one_time",
+            b"one_time",
             "path",
             b"path",
-            "processing_time_trigger",
-            b"processing_time_trigger",
-            "sink_path_type",
-            b"sink_path_type",
+            "processing_time_interval",
+            b"processing_time_interval",
+            "sink_destination",
+            b"sink_destination",
             "table_name",
             b"table_name",
-            "trigger_type",
-            b"trigger_type",
+            "trigger",
+            b"trigger",
         ],
     ) -> builtins.bool: ...
     def ClearField(
         self,
         field_name: typing_extensions.Literal[
-            "available_now_trigger",
-            b"available_now_trigger",
-            "continuous_trigger",
-            b"continuous_trigger",
+            "available_now",
+            b"available_now",
+            "continuous_checkpoint_interval",
+            b"continuous_checkpoint_interval",
             "format",
             b"format",
             "input",
             b"input",
-            "one_time_trigger",
-            b"one_time_trigger",
+            "one_time",
+            b"one_time",
             "options",
             b"options",
             "output_mode",
@@ -798,27 +744,27 @@ class WriteStreamOperation(google.protobuf.message.Message):
             b"partitioning_column_names",
             "path",
             b"path",
-            "processing_time_trigger",
-            b"processing_time_trigger",
+            "processing_time_interval",
+            b"processing_time_interval",
             "query_name",
             b"query_name",
-            "sink_path_type",
-            b"sink_path_type",
+            "sink_destination",
+            b"sink_destination",
             "table_name",
             b"table_name",
-            "trigger_type",
-            b"trigger_type",
+            "trigger",
+            b"trigger",
         ],
     ) -> None: ...
     @typing.overload
     def WhichOneof(
-        self, oneof_group: typing_extensions.Literal["sink_path_type", b"sink_path_type"]
+        self, oneof_group: typing_extensions.Literal["sink_destination", b"sink_destination"]
     ) -> typing_extensions.Literal["path", "table_name"] | None: ...
     @typing.overload
     def WhichOneof(
-        self, oneof_group: typing_extensions.Literal["trigger_type", b"trigger_type"]
+        self, oneof_group: typing_extensions.Literal["trigger", b"trigger"]
     ) -> typing_extensions.Literal[
-        "processing_time_trigger", "available_now_trigger", "one_time_trigger", "continuous_trigger"
+        "processing_time_interval", "available_now", "one_time", "continuous_checkpoint_interval"
     ] | None: ...
 
 global___WriteStreamOperation = WriteStreamOperation
@@ -851,146 +797,189 @@ global___StreamingQueryStartResult = StreamingQueryStartResult
 class StreamingQueryCommand(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
+    class StatusCommand(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        RECENT_PROGRESS_LIMIT_FIELD_NUMBER: builtins.int
+        recent_progress_limit: builtins.int
+        def __init__(
+            self,
+            *,
+            recent_progress_limit: builtins.int = ...,
+        ) -> None: ...
+        def ClearField(
+            self,
+            field_name: typing_extensions.Literal[
+                "recent_progress_limit", b"recent_progress_limit"
+            ],
+        ) -> None: ...
+
+    class ExplainCommand(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        EXTENDED_FIELD_NUMBER: builtins.int
+        extended: builtins.bool
+        def __init__(
+            self,
+            *,
+            extended: builtins.bool = ...,
+        ) -> None: ...
+        def ClearField(
+            self, field_name: typing_extensions.Literal["extended", b"extended"]
+        ) -> None: ...
+
     ID_FIELD_NUMBER: builtins.int
     STATUS_FIELD_NUMBER: builtins.int
     STOP_FIELD_NUMBER: builtins.int
+    PROCESS_ALL_AVAILABLE_FIELD_NUMBER: builtins.int
+    EXPLAIN_FIELD_NUMBER: builtins.int
     id: builtins.str
     """(Required)"""
     @property
-    def status(self) -> global___StreamingQueryStatusCommand: ...
+    def status(self) -> global___StreamingQueryCommand.StatusCommand: ...
+    stop: builtins.bool
+    process_all_available: builtins.bool
     @property
-    def stop(self) -> global___StreamingQueryStopCommand:
-        """Add more commands like await_termination()"""
+    def explain(self) -> global___StreamingQueryCommand.ExplainCommand: ...
     def __init__(
         self,
         *,
         id: builtins.str = ...,
-        status: global___StreamingQueryStatusCommand | None = ...,
-        stop: global___StreamingQueryStopCommand | None = ...,
+        status: global___StreamingQueryCommand.StatusCommand | None = ...,
+        stop: builtins.bool = ...,
+        process_all_available: builtins.bool = ...,
+        explain: global___StreamingQueryCommand.ExplainCommand | None = ...,
     ) -> None: ...
     def HasField(
         self,
         field_name: typing_extensions.Literal[
-            "command_type", b"command_type", "status", b"status", "stop", b"stop"
+            "command_type",
+            b"command_type",
+            "explain",
+            b"explain",
+            "process_all_available",
+            b"process_all_available",
+            "status",
+            b"status",
+            "stop",
+            b"stop",
         ],
     ) -> builtins.bool: ...
     def ClearField(
         self,
         field_name: typing_extensions.Literal[
-            "command_type", b"command_type", "id", b"id", "status", b"status", "stop", b"stop"
+            "command_type",
+            b"command_type",
+            "explain",
+            b"explain",
+            "id",
+            b"id",
+            "process_all_available",
+            b"process_all_available",
+            "status",
+            b"status",
+            "stop",
+            b"stop",
         ],
     ) -> None: ...
     def WhichOneof(
         self, oneof_group: typing_extensions.Literal["command_type", b"command_type"]
-    ) -> typing_extensions.Literal["status", "stop"] | None: ...
+    ) -> typing_extensions.Literal["status", "stop", "process_all_available", "explain"] | None: ...
 
 global___StreamingQueryCommand = StreamingQueryCommand
-
-class StreamingQueryStatusCommand(google.protobuf.message.Message):
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
-
-    RECENT_PROGRESS_LIMIT_FIELD_NUMBER: builtins.int
-    recent_progress_limit: builtins.int
-    def __init__(
-        self,
-        *,
-        recent_progress_limit: builtins.int = ...,
-    ) -> None: ...
-    def ClearField(
-        self,
-        field_name: typing_extensions.Literal["recent_progress_limit", b"recent_progress_limit"],
-    ) -> None: ...
-
-global___StreamingQueryStatusCommand = StreamingQueryStatusCommand
-
-class StreamingQueryStopCommand(google.protobuf.message.Message):
-    """Empty"""
-
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
-
-    def __init__(
-        self,
-    ) -> None: ...
-
-global___StreamingQueryStopCommand = StreamingQueryStopCommand
 
 class StreamingQueryCommandResult(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
+    class StatusResult(google.protobuf.message.Message):
+        """This status includes all the available to status, including progress messages."""
+
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        STATUS_MESSAGE_FIELD_NUMBER: builtins.int
+        IS_DATA_AVAILABLE_FIELD_NUMBER: builtins.int
+        IS_TRIGGER_ACTIVE_FIELD_NUMBER: builtins.int
+        IS_ACTIVE_FIELD_NUMBER: builtins.int
+        RECENT_PROGRESS_JSON_FIELD_NUMBER: builtins.int
+        status_message: builtins.str
+        """Fields from Scala 'StreamingQueryStatus' struct"""
+        is_data_available: builtins.bool
+        is_trigger_active: builtins.bool
+        is_active: builtins.bool
+        @property
+        def recent_progress_json(
+            self,
+        ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
+            """Progress as json."""
+        def __init__(
+            self,
+            *,
+            status_message: builtins.str = ...,
+            is_data_available: builtins.bool = ...,
+            is_trigger_active: builtins.bool = ...,
+            is_active: builtins.bool = ...,
+            recent_progress_json: collections.abc.Iterable[builtins.str] | None = ...,
+        ) -> None: ...
+        def ClearField(
+            self,
+            field_name: typing_extensions.Literal[
+                "is_active",
+                b"is_active",
+                "is_data_available",
+                b"is_data_available",
+                "is_trigger_active",
+                b"is_trigger_active",
+                "recent_progress_json",
+                b"recent_progress_json",
+                "status_message",
+                b"status_message",
+            ],
+        ) -> None: ...
+
+    class ExplainResult(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        RESULT_FIELD_NUMBER: builtins.int
+        result: builtins.str
+        def __init__(
+            self,
+            *,
+            result: builtins.str = ...,
+        ) -> None: ...
+        def ClearField(
+            self, field_name: typing_extensions.Literal["result", b"result"]
+        ) -> None: ...
+
     ID_FIELD_NUMBER: builtins.int
-    STATUS_RESULT_FIELD_NUMBER: builtins.int
+    STATUS_FIELD_NUMBER: builtins.int
+    EXPLAIN_FIELD_NUMBER: builtins.int
     id: builtins.str
     """(Required)"""
     @property
-    def status_result(self) -> global___StreamingQueryStatusResult:
-        """Add any"""
+    def status(self) -> global___StreamingQueryCommandResult.StatusResult: ...
+    @property
+    def explain(self) -> global___StreamingQueryCommandResult.ExplainResult: ...
     def __init__(
         self,
         *,
         id: builtins.str = ...,
-        status_result: global___StreamingQueryStatusResult | None = ...,
+        status: global___StreamingQueryCommandResult.StatusResult | None = ...,
+        explain: global___StreamingQueryCommandResult.ExplainResult | None = ...,
     ) -> None: ...
     def HasField(
         self,
         field_name: typing_extensions.Literal[
-            "result_type", b"result_type", "status_result", b"status_result"
+            "explain", b"explain", "result_type", b"result_type", "status", b"status"
         ],
     ) -> builtins.bool: ...
     def ClearField(
         self,
         field_name: typing_extensions.Literal[
-            "id", b"id", "result_type", b"result_type", "status_result", b"status_result"
+            "explain", b"explain", "id", b"id", "result_type", b"result_type", "status", b"status"
         ],
     ) -> None: ...
     def WhichOneof(
         self, oneof_group: typing_extensions.Literal["result_type", b"result_type"]
-    ) -> typing_extensions.Literal["status_result"] | None: ...
+    ) -> typing_extensions.Literal["status", "explain"] | None: ...
 
 global___StreamingQueryCommandResult = StreamingQueryCommandResult
-
-class StreamingQueryStatusResult(google.protobuf.message.Message):
-    """This status includes all the available to status"""
-
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
-
-    STATUS_MESSAGE_FIELD_NUMBER: builtins.int
-    IS_DATA_AVAILABLE_FIELD_NUMBER: builtins.int
-    IS_TRIGGER_ACTIVE_FIELD_NUMBER: builtins.int
-    IS_ACTIVE_FIELD_NUMBER: builtins.int
-    RECENT_PROGRESS_JSON_FIELD_NUMBER: builtins.int
-    status_message: builtins.str
-    """Fields from Scala 'StreamingQueryStatus' struct"""
-    is_data_available: builtins.bool
-    is_trigger_active: builtins.bool
-    is_active: builtins.bool
-    @property
-    def recent_progress_json(
-        self,
-    ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
-        """Progress as json."""
-    def __init__(
-        self,
-        *,
-        status_message: builtins.str = ...,
-        is_data_available: builtins.bool = ...,
-        is_trigger_active: builtins.bool = ...,
-        is_active: builtins.bool = ...,
-        recent_progress_json: collections.abc.Iterable[builtins.str] | None = ...,
-    ) -> None: ...
-    def ClearField(
-        self,
-        field_name: typing_extensions.Literal[
-            "is_active",
-            b"is_active",
-            "is_data_available",
-            b"is_data_available",
-            "is_trigger_active",
-            b"is_trigger_active",
-            "recent_progress_json",
-            b"recent_progress_json",
-            "status_message",
-            b"status_message",
-        ],
-    ) -> None: ...
-
-global___StreamingQueryStatusResult = StreamingQueryStatusResult

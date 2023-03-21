@@ -26,7 +26,7 @@ from pyspark.sql.streaming.query import (
 )
 
 __all__ = [
-    "StreamingQuery", # XXX "StreamingQueryManager"
+    "StreamingQuery",  # TODO(WIP): "StreamingQueryManager"
 ]
 
 if TYPE_CHECKING:
@@ -56,14 +56,18 @@ class StreamingQuery:
     def name(self) -> str:
         return self._name
 
-    # TODO Add doc for all the methods.
+    name.__doc__ = PySparkStreamingQuery.name.__doc__
 
     @property
     def isActive(self) -> bool:
         return self._fetch_status().is_active
 
+    isActive.__doc__ = PySparkStreamingQuery.isActive.__doc__
+
     def awaitTermination(self, timeout: Optional[int] = None) -> Optional[bool]:
         raise NotImplementedError()
+
+    awaitTermination.__doc__ = PySparkStreamingQuery.awaitTermination.__doc__
 
     @property
     def status(self) -> Dict[str, Any]:
@@ -74,10 +78,14 @@ class StreamingQuery:
             "isTriggerActive": proto.is_trigger_active
         }
 
+    status.__doc__ = PySparkStreamingQuery.status.__doc__
+
     @property
     def recentProgress(self) -> List[Dict[str, Any]]:
         progress = list(self._fetch_status(recent_progress_limit=-1).recent_progress_json)
         return [json.loads(p) for p in progress]
+
+    recentProgress.__doc__ = PySparkStreamingQuery.recentProgress.__doc__
 
     @property
     def lastProgress(self) -> Optional[Dict[str, Any]]:
@@ -87,37 +95,50 @@ class StreamingQuery:
         else:
             return None
 
+    lastProgress.__doc__ = PySparkStreamingQuery.lastProgress.__doc__
+
     def processAllAvailable(self) -> None:
-        raise NotImplementedError()
+        cmd = pb2.StreamingQueryCommand()
+        cmd.process_all_available = True
+        self._execute_streaming_query_cmd(cmd)
+
+    processAllAvailable.__doc__ = PySparkStreamingQuery.processAllAvailable.__doc__
 
     def stop(self) -> None:
         cmd = pb2.StreamingQueryCommand()
-        cmd.stop.CopyFrom(pb2.StreamingQueryStopCommand())
+        cmd.stop = True
         self._execute_streaming_query_cmd(cmd)
 
+    stop.__doc__ = PySparkStreamingQuery.stop.__doc__
+
     def explain(self, extended: bool = False) -> None:
-        raise NotImplementedError()
+        cmd = pb2.StreamingQueryCommand()
+        cmd.explain.extended = extended
+        result = self._execute_streaming_query_cmd(cmd).explain.result
+        print(result)
+
+    processAllAvailable.__doc__ = PySparkStreamingQuery.processAllAvailable.__doc__
 
     def exception(self) -> Optional[StreamingQueryException]:
         raise NotImplementedError()
 
-    def _fetch_status(self, recent_progress_limit=0) -> pb2.StreamingQueryStatusResult:
-        cmd = pb2.StreamingQueryCommand()
-        status = pb2.StreamingQueryStatusCommand()
-        status.recent_progress_limit = recent_progress_limit
-        cmd.status.CopyFrom(status)
+    processAllAvailable.__doc__ = PySparkStreamingQuery.processAllAvailable.__doc__
 
-        return self._execute_streaming_query_cmd(cmd).status_result
+    def _fetch_status(self, recent_progress_limit=0) -> pb2.StreamingQueryCommandResult.StatusResult:
+        cmd = pb2.StreamingQueryCommand()
+        cmd.status.recent_progress_limit = recent_progress_limit
+
+        return self._execute_streaming_query_cmd(cmd).status
 
     def _execute_streaming_query_cmd(self, cmd: pb2.StreamingQueryCommand) -> pb2.StreamingQueryCommandResult:
-        exec_cmd = pb2.Command()
         cmd.id = self._id
+        exec_cmd = pb2.Command()
         exec_cmd.streaming_query_command.CopyFrom(cmd)
         (_, properties) = self._session.client.execute_command(exec_cmd)
         return cast(pb2.StreamingQueryCommandResult, properties["streaming_query_command_result"])
 
 
-# TODO class StreamingQueryManager:
+# TODO(WIP) class StreamingQueryManager:
 
 
 def _test() -> None:

@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 
-# XXX re-sync
-from pyspark.sql.connect.streaming.readwriter import DataStreamReader  # noqa: F401
+from pyspark.sql.connect.streaming.query import StreamingQuery  # StreamingQueryManager  noqa: F401
+from pyspark.sql.connect.streaming.readwriter import DataStreamReader, DataStreamWriter  # noqa: F401
+# from pyspark.sql.connect.streaming.listener import StreamingQueryListener  # noqa: F401
 from pyspark.errors import StreamingQueryException  # noqa: F401

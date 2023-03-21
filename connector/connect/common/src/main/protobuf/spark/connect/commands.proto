@@ -185,37 +185,20 @@ message WriteStreamOperation {
   string format = 2;
   map<string, string> options = 3;
   repeated string partitioning_column_names = 4;
-  oneof trigger_type {
-    ProcessingTimeTrigger processing_time_trigger = 5;
-    AvailableNowTrigger available_now_trigger = 6;
-    OneTimeTrigger one_time_trigger = 7;
-    ContinuousTrigger continuous_trigger = 8;
+
+  oneof trigger {
+    string processing_time_interval = 5;
+    bool available_now = 6;
+    bool one_time = 7;
+    string continuous_checkpoint_interval = 8;
   }
+
   string output_mode = 9;
   string query_name = 10;
 
-  oneof sink_path_type {
+  oneof sink_destination {
     string path = 11;
     string table_name = 12;
-  }
-
-  // Triggers (see corresponding scala case classes for documentation)
-  message ProcessingTimeTrigger {
-    // (Required)
-    string interval = 1;
-  }
-
-  message AvailableNowTrigger {
-    // Empty
-  }
-
-  message OneTimeTrigger {
-    // Empty
-  }
-
-  message ContinuousTrigger {
-    // (Required)
-    string interval = 1;
   }
 }
 
@@ -239,18 +222,22 @@ message StreamingQueryCommand {
   string id = 1;
 
   oneof command_type {
-      StreamingQueryStatusCommand status = 2;
-      StreamingQueryStopCommand stop = 3;
-      // Add more commands like await_termination()
+      StatusCommand status = 2;
+      bool stop = 3;
+      bool process_all_available = 4;
+      ExplainCommand explain = 5;
+
+      // TODO(SPARK-42960) Add more commands: await_termination(), exception() etc.
   }
-}
 
-message StreamingQueryStatusCommand {
-  int32 recent_progress_limit = 1;
-}
+  message StatusCommand {
+    int32 recent_progress_limit = 1;
+  }
 
-message StreamingQueryStopCommand {
-  // Empty
+  message ExplainCommand {
+    bool extended = 1;
+  }
+
 }
 
 message StreamingQueryCommandResult {
@@ -258,23 +245,28 @@ message StreamingQueryCommandResult {
   string id = 1;
 
   oneof result_type {
-    StreamingQueryStatusResult status_result = 2;
-    // Add any
+    StatusResult status = 2;
+    ExplainResult explain = 3;
+  }
+
+  message StatusResult {
+    // This status includes all the available to status, including progress messages.
+
+    // Fields from Scala 'StreamingQueryStatus' struct
+    string status_message = 1;
+    bool is_data_available = 2;
+    bool is_trigger_active = 3;
+
+    bool is_active = 4;
+
+    // Progress as json.
+    repeated string recent_progress_json = 5;
+
+    // TODO: Add exception and other fields.
+  }
+
+  message ExplainResult {
+    string result = 1;
   }
 }
 
-message StreamingQueryStatusResult {
-  // This status includes all the available to status
-
-  // Fields from Scala 'StreamingQueryStatus' struct
-  string status_message = 1;
-  bool is_data_available = 2;
-  bool is_trigger_active = 3;
-
-  bool is_active = 4;
-
-  // Progress as json.
-  repeated string recent_progress_json = 5;
-
-  // TODO: Add exception and other fields.
-}

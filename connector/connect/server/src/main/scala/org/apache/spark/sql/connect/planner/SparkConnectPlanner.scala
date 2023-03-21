@@ -33,9 +33,8 @@ import org.apache.spark.connect.proto.Parse.ParseFormat
 import org.apache.spark.connect.proto.StreamingQueryCommand
 import org.apache.spark.connect.proto.StreamingQueryCommandResult
 import org.apache.spark.connect.proto.StreamingQueryStartResult
-import org.apache.spark.connect.proto.StreamingQueryStatusResult
 import org.apache.spark.connect.proto.WriteStreamOperation
-import org.apache.spark.connect.proto.WriteStreamOperation.TriggerTypeCase
+import org.apache.spark.connect.proto.WriteStreamOperation.TriggerCase
 import org.apache.spark.ml.{functions => MLFunctions}
 import org.apache.spark.sql.{Column, Dataset, Encoders, SparkSession}
 import org.apache.spark.sql.catalyst.{expressions, AliasIdentifier, FunctionIdentifier}
@@ -59,6 +58,8 @@ import org.apache.spark.sql.execution.command.CreateViewCommand
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JDBCPartition, JDBCRelation}
 import org.apache.spark.sql.execution.python.UserDefinedPythonFunction
+import org.apache.spark.sql.execution.streaming.StreamExecution
+import org.apache.spark.sql.execution.streaming.StreamingQueryWrapper
 import org.apache.spark.sql.internal.CatalogImpl
 import org.apache.spark.sql.streaming.Trigger
 import org.apache.spark.sql.types._
@@ -1959,16 +1960,16 @@ class SparkConnectPlanner(val session: SparkSession) {
       writer.partitionBy(writeOp.getPartitioningColumnNamesList.asScala.toList: _*)
     }
 
-    writeOp.getTriggerTypeCase match {
-      case TriggerTypeCase.PROCESSING_TIME_TRIGGER =>
-        writer.trigger(Trigger.ProcessingTime(writeOp.getProcessingTimeTrigger.getInterval))
-      case TriggerTypeCase.AVAILABLE_NOW_TRIGGER =>
+    writeOp.getTriggerCase match {
+      case TriggerCase.PROCESSING_TIME_INTERVAL =>
+        writer.trigger(Trigger.ProcessingTime(writeOp.getProcessingTimeInterval))
+      case TriggerCase.AVAILABLE_NOW =>
         writer.trigger(Trigger.AvailableNow())
-      case TriggerTypeCase.ONE_TIME_TRIGGER =>
+      case TriggerCase.ONE_TIME =>
         writer.trigger(Trigger.Once())
-      case TriggerTypeCase.CONTINUOUS_TRIGGER =>
-        writer.trigger(Trigger.Continuous(writeOp.getContinuousTrigger.getInterval))
-      case TriggerTypeCase.TRIGGERTYPE_NOT_SET =>
+      case TriggerCase.CONTINUOUS_CHECKPOINT_INTERVAL =>
+        writer.trigger(Trigger.Continuous(writeOp.getContinuousCheckpointInterval))
+      case TriggerCase.TRIGGER_NOT_SET =>
     }
 
     if (writeOp.getOutputMode.nonEmpty) {
@@ -1980,6 +1981,7 @@ class SparkConnectPlanner(val session: SparkSession) {
     }
 
     val query = writeOp.getPath match {
+      case "" if writeOp.hasTableName => writer.toTable(writeOp.getTableName)
       case "" => writer.start()
       case path => writer.start(path)
     }
@@ -2012,9 +2014,10 @@ class SparkConnectPlanner(val session: SparkSession) {
 
     val query = Option(session.streams.get(command.getId)).getOrElse {
       throw new IllegalArgumentException(s"Streaming query $id is not found")
-      // TODO(SPARK-XXX): Handle this better. May be cache stopped queries for a few minutes.
+      // TODO(SPARK-42962): Handle this better. May be cache stopped queries for a few minutes.
     }
 
+    System.currentTimeMillis()
     command.getCommandTypeCase match {
       case StreamingQueryCommand.CommandTypeCase.STATUS =>
         val recentProgress: Seq[String] = command.getStatus.getRecentProgressLimit match {
@@ -2026,7 +2029,7 @@ class SparkConnectPlanner(val session: SparkSession) {
 
         val queryStatus = query.status
 
-        val statusResult = StreamingQueryStatusResult
+        val statusResult = StreamingQueryCommandResult.StatusResult
           .newBuilder()
           .setStatusMessage(queryStatus.message)
           .setIsDataAvailable(queryStatus.isDataAvailable)
@@ -2035,10 +2038,26 @@ class SparkConnectPlanner(val session: SparkSession) {
           .addAllRecentProgressJson(recentProgress.asJava)
           .build()
 
-        respBuilder.setStatusResult(statusResult)
+        respBuilder.setStatus(statusResult)
 
       case StreamingQueryCommand.CommandTypeCase.STOP =>
         query.stop()
+
+      case StreamingQueryCommand.CommandTypeCase.PROCESS_ALL_AVAILABLE =>
+        query.processAllAvailable()
+
+      case StreamingQueryCommand.CommandTypeCase.EXPLAIN =>
+        val result = query match {
+          case q: StreamExecution => q.explainInternal(command.getExplain.getExtended)
+          case q: StreamingQueryWrapper =>
+            q.streamingQuery.explainInternal(command.getExplain.getExtended)
+          case _ => throw new IllegalStateException(s"Unexpected type for streaming query: $query")
+        }
+        val explain = StreamingQueryCommandResult.ExplainResult
+          .newBuilder()
+          .setResult(result)
+          .build()
+        respBuilder.setExplain(explain)
 
       case StreamingQueryCommand.CommandTypeCase.COMMANDTYPE_NOT_SET =>
         throw new IllegalArgumentException("Missing command in StreamingQueryCommand")
