@@ -306,11 +306,6 @@ class PandasCogroupedOps:
 
     applyInPandas.__doc__ = PySparkPandasCogroupedOps.applyInPandas.__doc__
 
-    @staticmethod
-    def _extract_cols(gd: "GroupedData") -> List[Column]:
-        df = gd._df
-        return [df[col] for col in df.columns]
-
 
 PandasCogroupedOps.__doc__ = PySparkPandasCogroupedOps.__doc__
 
