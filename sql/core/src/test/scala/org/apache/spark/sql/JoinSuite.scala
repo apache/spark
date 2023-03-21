@@ -18,12 +18,9 @@
 package org.apache.spark.sql
 
 import java.util.Locale
-
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ListBuffer
-
 import org.mockito.Mockito._
-
 import org.apache.spark.TestUtils.{assertNotSpilled, assertSpilled}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
@@ -1453,6 +1450,17 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
       val result2 = sql(queryBuildRight)
 
       checkAnswer(result1, result2)
+    }
+  }
+
+  test("SPARK-42805: DeduplicateRelations rule process LOGICAL_RDD") {
+    withTempDir { dir =>
+      spark.sparkContext.setCheckpointDir(dir.getPath)
+      val df = spark.range(10).toDF("col")
+      val checkoutDf = df.checkpoint()
+      val count = checkoutDf.join(df).count()
+      assert(count == 100)
+
     }
   }
 }
