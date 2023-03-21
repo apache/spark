@@ -73,7 +73,7 @@ if have_pyarrow:
     not have_pandas or not have_pyarrow,
     cast(str, pandas_requirement_message or pyarrow_requirement_message),
 )
-class GroupedMapInPandasTests(ReusedSQLTestCase):
+class GroupedApplyInPandasTestsMixin:
     @property
     def data(self):
         return (
@@ -738,6 +738,10 @@ class GroupedMapInPandasTests(ReusedSQLTestCase):
             .first()
         )
         self.assertEqual(row.asDict(), Row(column=1, score=0.5).asDict())
+
+
+class GroupedApplyInPandasTests(GroupedApplyInPandasTestsMixin, ReusedSQLTestCase):
+    pass
 
 
 if __name__ == "__main__":

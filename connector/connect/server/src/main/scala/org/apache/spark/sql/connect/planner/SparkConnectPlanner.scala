@@ -116,6 +116,8 @@ class SparkConnectPlanner(val session: SparkSession) {
         transformRepartitionByExpression(rel.getRepartitionByExpression)
       case proto.Relation.RelTypeCase.MAP_PARTITIONS =>
         transformMapPartitions(rel.getMapPartitions)
+      case proto.Relation.RelTypeCase.GROUP_MAP =>
+        transformGroupMap(rel.getGroupMap)
       case proto.Relation.RelTypeCase.COLLECT_METRICS =>
         transformCollectMetrics(rel.getCollectMetrics)
       case proto.Relation.RelTypeCase.PARSE => transformParse(rel.getParse)
@@ -492,6 +494,18 @@ class SparkConnectPlanner(val session: SparkSession) {
       case _ =>
         throw InvalidPlanInput(s"Function with EvalType: ${pythonUdf.evalType} is not supported")
     }
+  }
+
+  private def transformGroupMap(rel: proto.GroupMap): LogicalPlan = {
+    val pythonUdf = transformPythonUDF(rel.getFunc)
+    val cols =
+      rel.getGroupingExpressionsList.asScala.toSeq.map(expr => Column(transformExpression(expr)))
+
+    Dataset
+      .ofRows(session, transformRelation(rel.getInput))
+      .groupBy(cols: _*)
+      .flatMapGroupsInPandas(pythonUdf)
+      .logicalPlan
   }
 
   private def transformWithColumnsRenamed(rel: proto.WithColumnsRenamed): LogicalPlan = {
