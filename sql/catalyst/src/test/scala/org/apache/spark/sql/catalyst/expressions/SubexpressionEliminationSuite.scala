@@ -21,7 +21,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{ArrayType, BinaryType, DataType, IntegerType}
+import org.apache.spark.sql.types.{BinaryType, DataType, IntegerType, ObjectType}
 
 class SubexpressionEliminationSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("Semantic equals and hash") {
@@ -451,17 +451,18 @@ class SubexpressionEliminationSuite extends SparkFunSuite with ExpressionEvalHel
   }
 
   test("SPARK-42851: Handle supportExpression consistently across add and get") {
-    val tx = {
-      val arr = Literal(Array(1, 2))
-      val ArrayType(et, cn) = arr.dataType
-      val lv = NamedLambdaVariable("x", et, cn)
-      val lambda = LambdaFunction(lv, Seq(lv))
-      ArrayTransform(arr, lambda)
+    val expr = {
+      val function = (lambda: Expression) => Add(lambda, Literal(1))
+      val elementType = IntegerType
+      val colClass = classOf[Array[Int]]
+      val inputType = ObjectType(colClass)
+      val inputObject = BoundReference(0, inputType, nullable = true)
+      objects.MapObjects(function, inputObject, elementType, true, Option(colClass))
     }
     val equivalence = new EquivalentExpressions
-    equivalence.addExpr(tx)
-    val hasMatching = equivalence.addExpr(tx)
-    val cseState = equivalence.getExprState(tx)
+    equivalence.addExpr(expr)
+    val hasMatching = equivalence.addExpr(expr)
+    val cseState = equivalence.getExprState(expr)
     assert(hasMatching == cseState.isDefined)
   }
 }
