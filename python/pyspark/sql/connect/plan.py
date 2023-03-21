@@ -1960,7 +1960,7 @@ class CoGroupMap(LogicalPlan):
         other: Optional["LogicalPlan"],
         other_grouping_cols: Sequence[Column],
         function: "UserDefinedFunction",
-        cols: List[str],
+        cols: List[Column],
     ):
         assert isinstance(input_grouping_cols, list) and all(
             isinstance(c, Column) for c in input_grouping_cols

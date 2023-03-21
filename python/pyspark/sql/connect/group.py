@@ -291,7 +291,7 @@ class PandasCogroupedOps:
             evalType=PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF,
         )
 
-        all_cols = self._gd1._df.columns + self._gd2._df.columns
+        all_cols = self._extract_cols(self._gd1) + self._extract_cols(self._gd2)
         return DataFrame.withPlan(
             plan.CoGroupMap(
                 input=self._gd1._df._plan,
@@ -305,6 +305,11 @@ class PandasCogroupedOps:
         )
 
     applyInPandas.__doc__ = PySparkPandasCogroupedOps.applyInPandas.__doc__
+
+    @staticmethod
+    def _extract_cols(gd: "GroupedData") -> List[Column]:
+        df = gd._df
+        return [df[col] for col in df.columns]
 
 
 PandasCogroupedOps.__doc__ = PySparkPandasCogroupedOps.__doc__
