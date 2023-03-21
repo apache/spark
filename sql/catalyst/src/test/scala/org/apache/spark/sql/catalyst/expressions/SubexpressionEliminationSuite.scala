@@ -450,7 +450,7 @@ class SubexpressionEliminationSuite extends SparkFunSuite with ExpressionEvalHel
     assert(e2.getCommonSubexpressions.head == add)
   }
 
-  test("SPARK-42851: Handle supportExpressions consistently across add and get") {
+  test("SPARK-42851: Handle supportExpression consistently across add and get") {
     val tx = {
       val arr = Literal(Array(1, 2))
       val ArrayType(et, cn) = arr.dataType
@@ -459,9 +459,10 @@ class SubexpressionEliminationSuite extends SparkFunSuite with ExpressionEvalHel
       ArrayTransform(arr, lambda)
     }
     val equivalence = new EquivalentExpressions
-    val isNewExpr = equivalence.addExpr(tx)
+    equivalence.addExpr(tx)
+    val hasMatching = equivalence.addExpr(tx)
     val cseState = equivalence.getExprState(tx)
-    assert(isNewExpr == cseState.isDefined)
+    assert(hasMatching == cseState.isDefined)
   }
 }
 
