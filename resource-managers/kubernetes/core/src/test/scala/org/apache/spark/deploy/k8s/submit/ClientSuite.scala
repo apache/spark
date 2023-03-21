@@ -350,9 +350,11 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
   }
 
   test("SPARK-42813: Print application info when waitAppCompletion is false") {
+    val appName = "SPARK-42813"
     val logAppender = new LogAppender
     withLogAppender(logAppender) {
       val sparkConf = new SparkConf(loadDefaults = false)
+        .set("spark.app.name", appName)
         .set(WAIT_FOR_APP_COMPLETION, false)
       kconf = KubernetesTestConf.createDriverConf(sparkConf = sparkConf,
         resourceNamePrefix = Some(KUBERNETES_RESOURCE_PREFIX))
@@ -368,7 +370,7 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
     val appId = KubernetesTestConf.APP_ID
     val sId = submissionId(kconf.namespace, POD_NAME)
     logAppender.loggingEvents.map(_.getMessage.getFormattedMessage).exists { line =>
-      line === s"Application $appId with submission ID $sId finished"
+      line === s"Application $appName with application ID $appId and submission ID $sId finished"
     }
   }
 }
