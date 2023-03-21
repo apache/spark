@@ -155,7 +155,7 @@ case class LikeJoni(left: Expression, right: Expression, escapeChar: Char)
         val pattern = ctx.addMutableState(regexClass, regex,
           v => s"""
                       byte[] $patternName = UTF8String.fromString("${tmp}").getBytes();
-                      $v = new $regexClass($patternName, 0, pattern.length, $patternName.NONE,
+                      $v = new $regexClass($patternName, 0, $patternName.length, $patternName.NONE,
                         ${encodingClass}.INSTANCE, ${syntaxClass}.Java);
                     """.stripMargin)
 
