@@ -170,10 +170,10 @@ case class GetJsonObject(json: Expression, path: Expression)
     val resultTerm = ctx.freshName("result")
     ev.copy(code =
       code"""
-         |${jsonEval.code + "\n"}
-         |${pathEval.code + "\n"}
-         |${setJson + "\n"}
-         |${setPath + "\n"}
+         |${jsonEval.code}
+         |${pathEval.code}
+         |$setJson
+         |$setPath
          |$resultType $resultTerm = ($resultType) $refEvaluator.evaluate();
          |boolean ${ev.isNull} = $resultTerm == null;
          |${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
