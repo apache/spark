@@ -24,7 +24,11 @@ from pyspark.ml.util import MLWritable, MLWriter, MLReadable, MLReader
 import pyspark.sql.connect.proto as pb2
 import pyspark.sql.connect.proto.ml_pb2 as ml_pb2
 import pyspark.sql.connect.proto.ml_common_pb2 as ml_common_pb2
-from pyspark.ml.connect.serializer import deserialize_response_value, serialize_ml_params
+from pyspark.ml.connect.serializer import (
+    deserialize_response_value,
+    serialize_ml_params,
+    set_instance_params_from_proto,
+)
 from pyspark.sql.connect import session as pyspark_session
 from pyspark.sql.connect.plan import LogicalPlan
 
@@ -74,7 +78,7 @@ class ClientEstimator(Estimator, metaclass=ABCMeta):
             name=self._algo_name(),
             params=serialize_ml_params(self, client),
             uid=self.uid,
-            type=ml_common_pb2.MlStage.ESTIMATOR,
+            type=ml_common_pb2.MlStage.STAGE_TYPE_ESTIMATOR,
         )
         fit_command_proto = ml_pb2.MlCommand.Fit(
             estimator=estimator_proto,
@@ -84,7 +88,11 @@ class ClientEstimator(Estimator, metaclass=ABCMeta):
         req.plan.ml_command.fit.CopyFrom(fit_command_proto)
 
         resp = client._execute_ml(req)
-        return deserialize_response_value(resp, client, clazz=self._model_class())
+        model_ref = deserialize_response_value(resp, client)
+        model = self._model_class()()
+        model._resetUid(self.uid)
+        model.model_ref = model_ref
+        return self._copyValues(model)
 
 
 @inherit_doc
@@ -273,7 +281,7 @@ class ClientMLWriter(MLWriter):
                 name=self.instance._algo_name(),
                 params=serialize_ml_params(self.instance, client),
                 uid=self.instance.uid,
-                type=ml_common_pb2.MlStage.ESTIMATOR,
+                type=ml_common_pb2.MlStage.STAGE_TYPE_ESTIMATOR,
             )
             save_cmd_proto = ml_pb2.MlCommand.SaveStage(
                 stage=stage_pb,
@@ -323,7 +331,7 @@ class ClientMLReader(MLReader):
             load_estimator_proto = ml_pb2.MlCommand.LoadStage(
                 name=name,
                 path=path,
-                type=ml_common_pb2.MlStage.ESTIMATOR
+                type=ml_common_pb2.MlStage.STAGE_TYPE_ESTIMATOR
             )
             req.plan.ml_command.load_stage.CopyFrom(load_estimator_proto)
             resp = client._execute_ml(req)

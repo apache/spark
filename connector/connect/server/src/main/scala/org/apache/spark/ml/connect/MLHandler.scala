@@ -50,12 +50,9 @@ object MLHandler {
 
         proto.MlCommandResponse
           .newBuilder()
-          .setModelInfo(
-            proto.MlCommandResponse.ModelInfo.newBuilder
-              .setModelRef(
-                proto.ModelRef.newBuilder().setId(refId)
-              )
-              .setModelUid(model.uid))
+          .setModelRef(
+            proto.ModelRef.newBuilder().setId(refId)
+          )
           .build()
 
       case proto.MlCommand.MlCommandTypeCase.FETCH_MODEL_ATTR =>
@@ -92,8 +89,11 @@ object MLHandler {
 
         proto.MlCommandResponse
           .newBuilder()
-          .setModelRef(
-            proto.ModelRef.newBuilder().setId(refId)
+          .setModelInfo(
+            proto.MlCommandResponse.ModelInfo.newBuilder()
+              .setModelRef(proto.ModelRef.newBuilder().setId(refId))
+              .setModelUid(model.uid)
+              .setParams(MLUtils.convertInstanceParamsToProto(model))
           )
           .build()
 
