@@ -236,12 +236,12 @@ private trait BloomFilterUpdater {
   def update(bf: BloomFilter, v: Any): Boolean
 }
 
-private object LongUpdater extends BloomFilterUpdater {
+private object LongUpdater extends BloomFilterUpdater with Serializable {
   override def update(bf: BloomFilter, v: Any): Boolean =
     bf.putLong(v.asInstanceOf[Long])
 }
 
-private object BinaryUpdater extends BloomFilterUpdater {
+private object BinaryUpdater extends BloomFilterUpdater with Serializable {
   override def update(bf: BloomFilter, v: Any): Boolean =
     bf.putBinary(v.asInstanceOf[UTF8String].getBytes)
 }
