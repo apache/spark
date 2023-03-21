@@ -178,6 +178,16 @@ class SparkSession(SparkConversionMixin):
     ...         .config("spark.some.config.option", "some-value")
     ...         .getOrCreate()
     ... )
+
+    Create a Spark session with Spark Connect.
+
+    >>> spark = (
+    ...     SparkSession.builder
+    ...         .remote("sc://localhost")
+    ...         .appName("Word Count")
+    ...         .config("spark.some.config.option", "some-value")
+    ...         .getOrCreate()
+    ... )  # doctest: +SKIP
     """
 
     class Builder:
