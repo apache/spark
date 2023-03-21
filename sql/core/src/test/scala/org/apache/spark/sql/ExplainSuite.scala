@@ -18,7 +18,7 @@
 package org.apache.spark.sql
 
 import org.apache.spark.sql.catalyst.plans.Inner
-import org.apache.spark.sql.catalyst.plans.physical.UnknownPartitioning
+import org.apache.spark.sql.catalyst.plans.physical.RoundRobinPartitioning
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.adaptive.{DisableAdaptiveExecutionSuite, EnableAdaptiveExecutionSuite}
 import org.apache.spark.sql.execution.datasources.SaveIntoDataSourceCommand
@@ -778,11 +778,11 @@ class ExplainSuiteAE extends ExplainSuiteHelper with EnableAdaptiveExecutionSuit
 
   test("SPARK-42753: Process subtree for ReusedExchange with unknown child") {
     // Simulate a simplified subtree with a ReusedExchange pointing to an Exchange node that has
-    // no ID. This is a rare edge cases that could arise during AQE if there are multiple
+    // no ID. This is a rare edge case that could arise during AQE if there are multiple
     // ReusedExchanges. We check to make sure the child Exchange gets an ID and gets printed
-    val exchange = ShuffleExchangeExec(UnknownPartitioning(10),
+    val exchange = ShuffleExchangeExec(RoundRobinPartitioning(10),
       RangeExec(org.apache.spark.sql.catalyst.plans.logical.Range(0, 1000, 1, 10)))
-    val reused = ReusedExchangeExec(Seq.empty, exchange)
+    val reused = ReusedExchangeExec(exchange.output, exchange)
     var results = ""
     def appendStr(str: String): Unit = {
       results = results + str
@@ -793,7 +793,7 @@ class ExplainSuiteAE extends ExplainSuiteHelper with EnableAdaptiveExecutionSuit
                           |
                           |
                           |(1) ReusedExchange [Reuses operator id: 3]
-                          |Output: []
+                          |Output [1]: [id#xL]
                           |
                           |===== Adaptively Optimized Out Exchanges =====
                           |
@@ -808,7 +808,7 @@ class ExplainSuiteAE extends ExplainSuiteHelper with EnableAdaptiveExecutionSuit
                           |
                           |(3) Exchange
                           |Input [1]: [id#xL]
-                          |Arguments: UnknownPartitioning(10), ENSURE_REQUIREMENTS, [plan_id=x]
+                          |Arguments: RoundRobinPartitioning(10), ENSURE_REQUIREMENTS, [plan_id=x]
                           |
                           |""".stripMargin
 
@@ -819,11 +819,11 @@ class ExplainSuiteAE extends ExplainSuiteHelper with EnableAdaptiveExecutionSuit
   test("SPARK-42753: Two ReusedExchange Sharing Same Subtree") {
     // Simulate a simplified subtree with a two ReusedExchange reusing the same exchange
     // Only one exchange node should be printed
-    val exchange = ShuffleExchangeExec(UnknownPartitioning(10),
+    val exchange = ShuffleExchangeExec(RoundRobinPartitioning(10),
       RangeExec(org.apache.spark.sql.catalyst.plans.logical.Range(0, 1000, 1, 10)))
-    val reused1 = ReusedExchangeExec(Seq.empty, exchange)
-    val reused2 = ReusedExchangeExec(Seq.empty, exchange)
-    val join = SortMergeJoinExec(Seq.empty, Seq.empty, Inner, None, reused1, reused2)
+    val reused1 = ReusedExchangeExec(exchange.output, exchange)
+    val reused2 = ReusedExchangeExec(exchange.output, exchange)
+    val join = SortMergeJoinExec(reused1.output, reused2.output, Inner, None, reused1, reused2)
 
     var results = ""
     def appendStr(str: String): Unit = {
@@ -838,12 +838,14 @@ class ExplainSuiteAE extends ExplainSuiteHelper with EnableAdaptiveExecutionSuit
                           |
                           |
                           |(1) ReusedExchange [Reuses operator id: 5]
-                          |Output: []
+                          |Output [1]: [id#xL]
                           |
                           |(2) ReusedExchange [Reuses operator id: 5]
-                          |Output: []
+                          |Output [1]: [id#xL]
                           |
                           |(3) SortMergeJoin
+                          |Left keys [1]: [id#xL]
+                          |Right keys [1]: [id#xL]
                           |Join type: Inner
                           |Join condition: None
                           |
@@ -860,7 +862,7 @@ class ExplainSuiteAE extends ExplainSuiteHelper with EnableAdaptiveExecutionSuit
                           |
                           |(5) Exchange
                           |Input [1]: [id#xL]
-                          |Arguments: UnknownPartitioning(10), ENSURE_REQUIREMENTS, [plan_id=x]
+                          |Arguments: RoundRobinPartitioning(10), ENSURE_REQUIREMENTS, [plan_id=x]
                           |
                           |""".stripMargin
     results = results.replaceAll("#\\d+", "#x").replaceAll("plan_id=\\d+", "plan_id=x")
@@ -870,13 +872,13 @@ class ExplainSuiteAE extends ExplainSuiteHelper with EnableAdaptiveExecutionSuit
   test("SPARK-42753: Correctly separate two ReusedExchange not sharing subtree") {
     // Simulate two ReusedExchanges reusing two different Exchanges that appear similar
     // The two exchanges should have separate IDs and printed separately
-    val exchange1 = ShuffleExchangeExec(UnknownPartitioning(10),
+    val exchange1 = ShuffleExchangeExec(RoundRobinPartitioning(10),
       RangeExec(org.apache.spark.sql.catalyst.plans.logical.Range(0, 1000, 1, 10)))
-    val reused1 = ReusedExchangeExec(Seq.empty, exchange1)
-    val exchange2 = ShuffleExchangeExec(UnknownPartitioning(10),
+    val reused1 = ReusedExchangeExec(exchange1.output, exchange1)
+    val exchange2 = ShuffleExchangeExec(RoundRobinPartitioning(10),
       RangeExec(org.apache.spark.sql.catalyst.plans.logical.Range(0, 1000, 1, 10)))
-    val reused2 = ReusedExchangeExec(Seq.empty, exchange2)
-    val join = SortMergeJoinExec(Seq.empty, Seq.empty, Inner, None, reused1, reused2)
+    val reused2 = ReusedExchangeExec(exchange2.output, exchange2)
+    val join = SortMergeJoinExec(reused1.output, reused2.output, Inner, None, reused1, reused2)
 
     var results = ""
     def appendStr(str: String): Unit = {
@@ -891,12 +893,14 @@ class ExplainSuiteAE extends ExplainSuiteHelper with EnableAdaptiveExecutionSuit
                           |
                           |
                           |(1) ReusedExchange [Reuses operator id: 5]
-                          |Output: []
+                          |Output [1]: [id#xL]
                           |
                           |(2) ReusedExchange [Reuses operator id: 7]
-                          |Output: []
+                          |Output [1]: [id#xL]
                           |
                           |(3) SortMergeJoin
+                          |Left keys [1]: [id#xL]
+                          |Right keys [1]: [id#xL]
                           |Join type: Inner
                           |Join condition: None
                           |
@@ -913,7 +917,7 @@ class ExplainSuiteAE extends ExplainSuiteHelper with EnableAdaptiveExecutionSuit
                           |
                           |(5) Exchange
                           |Input [1]: [id#xL]
-                          |Arguments: UnknownPartitioning(10), ENSURE_REQUIREMENTS, [plan_id=x]
+                          |Arguments: RoundRobinPartitioning(10), ENSURE_REQUIREMENTS, [plan_id=x]
                           |
                           |Subplan:2
                           |Exchange (7)
@@ -926,7 +930,7 @@ class ExplainSuiteAE extends ExplainSuiteHelper with EnableAdaptiveExecutionSuit
                           |
                           |(7) Exchange
                           |Input [1]: [id#xL]
-                          |Arguments: UnknownPartitioning(10), ENSURE_REQUIREMENTS, [plan_id=x]
+                          |Arguments: RoundRobinPartitioning(10), ENSURE_REQUIREMENTS, [plan_id=x]
                           |
                           |""".stripMargin
     results = results.replaceAll("#\\d+", "#x").replaceAll("plan_id=\\d+", "plan_id=x")
