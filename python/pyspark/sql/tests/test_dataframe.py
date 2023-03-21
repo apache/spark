@@ -1186,6 +1186,12 @@ class DataFrameTestsMixin:
 
     @unittest.skipIf(not have_pandas, pandas_requirement_message)  # type: ignore
     def test_to_pandas_from_empty_dataframe(self):
+        is_arrow_enabled = [True, False]
+        for value in is_arrow_enabled:
+            with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": value}):
+                self.check_to_pandas_from_empty_dataframe()
+
+    def check_to_pandas_from_empty_dataframe(self):
         # SPARK-29188 test that toPandas() on an empty dataframe has the correct dtypes
         # SPARK-30537 test that toPandas() on an empty dataframe has the correct dtypes
         # when arrow is enabled
@@ -1204,15 +1210,18 @@ class DataFrameTestsMixin:
             CAST('2019-01-01' AS TIMESTAMP_NTZ) AS timestamp_ntz,
             INTERVAL '1563:04' MINUTE TO SECOND AS day_time_interval
             """
-        is_arrow_enabled = [True, False]
-        for value in is_arrow_enabled:
-            with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": value}):
-                dtypes_when_nonempty_df = self.spark.sql(sql).toPandas().dtypes
-                dtypes_when_empty_df = self.spark.sql(sql).filter("False").toPandas().dtypes
-                self.assertTrue(np.all(dtypes_when_empty_df == dtypes_when_nonempty_df))
+        dtypes_when_nonempty_df = self.spark.sql(sql).toPandas().dtypes
+        dtypes_when_empty_df = self.spark.sql(sql).filter("False").toPandas().dtypes
+        self.assertTrue(np.all(dtypes_when_empty_df == dtypes_when_nonempty_df))
 
     @unittest.skipIf(not have_pandas, pandas_requirement_message)  # type: ignore
     def test_to_pandas_from_null_dataframe(self):
+        is_arrow_enabled = [True, False]
+        for value in is_arrow_enabled:
+            with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": value}):
+                self.check_to_pandas_from_null_dataframe()
+
+    def check_to_pandas_from_null_dataframe(self):
         # SPARK-29188 test that toPandas() on a dataframe with only nulls has correct dtypes
         # SPARK-30537 test that toPandas() on a dataframe with only nulls has correct dtypes
         # using arrow
@@ -1231,25 +1240,28 @@ class DataFrameTestsMixin:
             CAST(NULL AS TIMESTAMP_NTZ) AS timestamp_ntz,
             INTERVAL '1563:04' MINUTE TO SECOND AS day_time_interval
             """
-        is_arrow_enabled = [True, False]
-        for value in is_arrow_enabled:
-            with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": value}):
-                pdf = self.spark.sql(sql).toPandas()
-                types = pdf.dtypes
-                self.assertEqual(types[0], np.float64)
-                self.assertEqual(types[1], np.float64)
-                self.assertEqual(types[2], np.float64)
-                self.assertEqual(types[3], np.float64)
-                self.assertEqual(types[4], np.float32)
-                self.assertEqual(types[5], np.float64)
-                self.assertEqual(types[6], object)
-                self.assertEqual(types[7], object)
-                self.assertTrue(np.can_cast(np.datetime64, types[8]))
-                self.assertTrue(np.can_cast(np.datetime64, types[9]))
-                self.assertTrue(np.can_cast(np.timedelta64, types[10]))
+        pdf = self.spark.sql(sql).toPandas()
+        types = pdf.dtypes
+        self.assertEqual(types[0], np.float64)
+        self.assertEqual(types[1], np.float64)
+        self.assertEqual(types[2], np.float64)
+        self.assertEqual(types[3], np.float64)
+        self.assertEqual(types[4], np.float32)
+        self.assertEqual(types[5], np.float64)
+        self.assertEqual(types[6], object)
+        self.assertEqual(types[7], object)
+        self.assertTrue(np.can_cast(np.datetime64, types[8]))
+        self.assertTrue(np.can_cast(np.datetime64, types[9]))
+        self.assertTrue(np.can_cast(np.timedelta64, types[10]))
 
     @unittest.skipIf(not have_pandas, pandas_requirement_message)  # type: ignore
     def test_to_pandas_from_mixed_dataframe(self):
+        is_arrow_enabled = [True, False]
+        for value in is_arrow_enabled:
+            with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": value}):
+                self.check_to_pandas_from_mixed_dataframe()
+
+    def check_to_pandas_from_mixed_dataframe(self):
         # SPARK-29188 test that toPandas() on a dataframe with some nulls has correct dtypes
         # SPARK-30537 test that toPandas() on a dataframe with some nulls has correct dtypes
         # using arrow
@@ -1270,12 +1282,9 @@ class DataFrameTestsMixin:
         FROM VALUES (1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1),
                     (NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL)
         """
-        is_arrow_enabled = [True, False]
-        for value in is_arrow_enabled:
-            with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": value}):
-                pdf_with_some_nulls = self.spark.sql(sql).toPandas()
-                pdf_with_only_nulls = self.spark.sql(sql).filter("tinyint is null").toPandas()
-                self.assertTrue(np.all(pdf_with_only_nulls.dtypes == pdf_with_some_nulls.dtypes))
+        pdf_with_some_nulls = self.spark.sql(sql).toPandas()
+        pdf_with_only_nulls = self.spark.sql(sql).filter("tinyint is null").toPandas()
+        self.assertTrue(np.all(pdf_with_only_nulls.dtypes == pdf_with_some_nulls.dtypes))
 
     @unittest.skipIf(
         not have_pandas or not have_pyarrow or pyarrow_version_less_than_minimum("2.0.0"),

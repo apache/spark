@@ -322,7 +322,9 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       ResolveUnion ::
       RewriteDeleteFromTable ::
       typeCoercionRules ++
-      Seq(ResolveWithCTE) ++
+      Seq(
+        ResolveWithCTE,
+        ExtractDistributedSequenceID) ++
       extendedResolutionRules : _*),
     Batch("Remove TempResolvedColumn", Once, RemoveTempResolvedColumn),
     Batch("Post-Hoc Resolution", Once,

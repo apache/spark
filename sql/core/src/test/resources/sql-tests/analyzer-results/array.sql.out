@@ -657,3 +657,66 @@ select array_append(array(CAST(NULL AS String)), CAST(NULL AS String))
 -- !query analysis
 Project [array_append(array(cast(null as string)), cast(null as string)) AS array_append(array(CAST(NULL AS STRING)), CAST(NULL AS STRING))#x]
 +- OneRowRelation
+
+
+-- !query
+select array_prepend(array(1, 2, 3), 4)
+-- !query analysis
+Project [array_prepend(array(1, 2, 3), 4) AS array_prepend(array(1, 2, 3), 4)#x]
++- OneRowRelation
+
+
+-- !query
+select array_prepend(array('a', 'b', 'c'), 'd')
+-- !query analysis
+Project [array_prepend(array(a, b, c), d) AS array_prepend(array(a, b, c), d)#x]
++- OneRowRelation
+
+
+-- !query
+select array_prepend(array(1, 2, 3, NULL), NULL)
+-- !query analysis
+Project [array_prepend(array(1, 2, 3, cast(null as int)), cast(null as int)) AS array_prepend(array(1, 2, 3, NULL), NULL)#x]
++- OneRowRelation
+
+
+-- !query
+select array_prepend(array('a', 'b', 'c', NULL), NULL)
+-- !query analysis
+Project [array_prepend(array(a, b, c, cast(null as string)), cast(null as string)) AS array_prepend(array(a, b, c, NULL), NULL)#x]
++- OneRowRelation
+
+
+-- !query
+select array_prepend(CAST(null AS ARRAY<String>), 'a')
+-- !query analysis
+Project [array_prepend(cast(null as array<string>), a) AS array_prepend(NULL, a)#x]
++- OneRowRelation
+
+
+-- !query
+select array_prepend(CAST(null AS ARRAY<String>), CAST(null as String))
+-- !query analysis
+Project [array_prepend(cast(null as array<string>), cast(null as string)) AS array_prepend(NULL, CAST(NULL AS STRING))#x]
++- OneRowRelation
+
+
+-- !query
+select array_prepend(array(), 1)
+-- !query analysis
+Project [array_prepend(cast(array() as array<int>), 1) AS array_prepend(array(), 1)#x]
++- OneRowRelation
+
+
+-- !query
+select array_prepend(CAST(array() AS ARRAY<String>), CAST(NULL AS String))
+-- !query analysis
+Project [array_prepend(cast(array() as array<string>), cast(null as string)) AS array_prepend(array(), CAST(NULL AS STRING))#x]
++- OneRowRelation
+
+
+-- !query
+select array_prepend(array(CAST(NULL AS String)), CAST(NULL AS String))
+-- !query analysis
+Project [array_prepend(array(cast(null as string)), cast(null as string)) AS array_prepend(array(CAST(NULL AS STRING)), CAST(NULL AS STRING))#x]
++- OneRowRelation
