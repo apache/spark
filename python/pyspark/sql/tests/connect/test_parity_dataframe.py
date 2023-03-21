@@ -22,11 +22,6 @@ from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
 class DataFrameParityTests(DataFrameTestsMixin, ReusedConnectTestCase):
-    # TODO(SPARK-41834): Implement SparkSession.conf
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_create_dataframe_from_pandas_with_dst(self):
-        super().test_create_dataframe_from_pandas_with_dst()
-
     @unittest.skip("Spark Connect does not support RDD but the tests depend on them.")
     def test_help_command(self):
         super().test_help_command()
@@ -87,25 +82,24 @@ class DataFrameParityTests(DataFrameTestsMixin, ReusedConnectTestCase):
     def test_to_local_iterator_prefetch(self):
         super().test_to_local_iterator_prefetch()
 
-    # TODO(SPARK-41884): DataFrame `toPandas` parity in return types
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_to_pandas(self):
-        super().test_to_pandas()
-
     def test_to_pandas_for_array_of_struct(self):
         # Spark Connect's implementation is based on Arrow.
         super().check_to_pandas_for_array_of_struct(True)
 
-    # TODO(SPARK-41834): Implement SparkSession.conf
-    @unittest.skip("Fails in Spark Connect, should enable.")
     def test_to_pandas_from_null_dataframe(self):
-        super().test_to_pandas_from_null_dataframe()
+        self.check_to_pandas_from_null_dataframe()
 
     def test_to_pandas_on_cross_join(self):
         self.check_to_pandas_on_cross_join()
 
+    def test_to_pandas_from_empty_dataframe(self):
+        self.check_to_pandas_from_empty_dataframe()
+
     def test_to_pandas_with_duplicated_column_names(self):
         self.check_to_pandas_with_duplicated_column_names()
+
+    def test_to_pandas_from_mixed_dataframe(self):
+        self.check_to_pandas_from_mixed_dataframe()
 
 
 if __name__ == "__main__":

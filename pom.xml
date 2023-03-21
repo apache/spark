@@ -118,7 +118,7 @@
     <exec-maven-plugin.version>1.6.0</exec-maven-plugin.version>
     <sbt.project.name>spark</sbt.project.name>
     <slf4j.version>2.0.6</slf4j.version>
-    <log4j.version>2.19.0</log4j.version>
+    <log4j.version>2.20.0</log4j.version>
     <!-- make sure to update IsolatedClientLoader whenever this version is changed -->
     <hadoop.version>3.3.5</hadoop.version>
     <!-- Protobuf version for building with Hadoop/Yarn dependencies -->
@@ -177,7 +177,7 @@
       errors building different Hadoop versions.
       See: SPARK-36547, SPARK-38394.
        -->
-    <scala-maven-plugin.version>4.8.1</scala-maven-plugin.version>
+    <scala-maven-plugin.version>4.8.0</scala-maven-plugin.version>
     <versions-maven-plugin.version>2.15.0</versions-maven-plugin.version>
     <!-- for now, not running scalafmt as part of default verify pipeline -->
     <scalafmt.skip>true</scalafmt.skip>

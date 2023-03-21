@@ -14,6 +14,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import warnings
+
 from pyspark.sql.connect.utils import check_dependencies
 
 check_dependencies(__name__)
@@ -30,6 +32,7 @@ from typing import (
     cast,
 )
 
+from pyspark.rdd import PythonEvalType
 from pyspark.sql.group import GroupedData as PySparkGroupedData
 from pyspark.sql.types import NumericType
 
@@ -38,8 +41,13 @@ from pyspark.sql.connect.column import Column
 from pyspark.sql.connect.functions import _invoke_function, col, lit
 
 if TYPE_CHECKING:
-    from pyspark.sql.connect._typing import LiteralType
+    from pyspark.sql.connect._typing import (
+        LiteralType,
+        PandasGroupedMapFunction,
+        GroupedMapPandasUserDefinedFunction,
+    )
     from pyspark.sql.connect.dataframe import DataFrame
+    from pyspark.sql.types import StructType
 
 
 class GroupedData:
@@ -203,11 +211,54 @@ class GroupedData:
 
     pivot.__doc__ = PySparkGroupedData.pivot.__doc__
 
-    def apply(self, *args: Any, **kwargs: Any) -> None:
-        raise NotImplementedError("apply() is not implemented.")
+    def apply(self, udf: "GroupedMapPandasUserDefinedFunction") -> "DataFrame":
+        # Columns are special because hasattr always return True
+        if (
+            isinstance(udf, Column)
+            or not hasattr(udf, "func")
+            or (
+                udf.evalType  # type: ignore[attr-defined]
+                != PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF
+            )
+        ):
+            raise ValueError(
+                "Invalid udf: the udf argument must be a pandas_udf of type " "GROUPED_MAP."
+            )
 
-    def applyInPandas(self, *args: Any, **kwargs: Any) -> None:
-        raise NotImplementedError("applyInPandas() is not implemented.")
+        warnings.warn(
+            "It is preferred to use 'applyInPandas' over this "
+            "API. This API will be deprecated in the future releases. See SPARK-28264 for "
+            "more details.",
+            UserWarning,
+        )
+
+        return self.applyInPandas(udf.func, schema=udf.returnType)  # type: ignore[attr-defined]
+
+    apply.__doc__ = PySparkGroupedData.apply.__doc__
+
+    def applyInPandas(
+        self, func: "PandasGroupedMapFunction", schema: Union["StructType", str]
+    ) -> "DataFrame":
+        from pyspark.sql.connect.udf import UserDefinedFunction
+        from pyspark.sql.connect.dataframe import DataFrame
+
+        udf_obj = UserDefinedFunction(
+            func,
+            returnType=schema,
+            evalType=PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
+        )
+
+        return DataFrame.withPlan(
+            plan.GroupMap(
+                child=self._df._plan,
+                grouping_cols=self._grouping_cols,
+                function=udf_obj,
+                cols=self._df.columns,
+            ),
+            session=self._df._session,
+        )
+
+    applyInPandas.__doc__ = PySparkGroupedData.applyInPandas.__doc__
 
     def applyInPandasWithState(self, *args: Any, **kwargs: Any) -> None:
         raise NotImplementedError("applyInPandasWithState() is not implemented.")
