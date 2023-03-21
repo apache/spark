@@ -974,3 +974,13 @@ class WindowExpression(Expression):
 
     def __repr__(self) -> str:
         return f"WindowExpression({str(self._windowFunction)}, ({str(self._windowSpec)}))"
+
+
+class DistributedSequenceID(Expression):
+    def to_plan(self, session: "SparkConnectClient") -> proto.Expression:
+        expr = proto.Expression()
+        expr.distributed_sequence_id.SetInParent()
+        return expr
+
+    def __repr__(self) -> str:
+        return "DistributedSequenceID()"

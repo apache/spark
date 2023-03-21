@@ -49,6 +49,7 @@ from pyspark.sql.connect.expressions import (
     SQLExpression,
     LambdaFunction,
     UnresolvedNamedLambdaVariable,
+    DistributedSequenceID,
 )
 from pyspark.sql.connect.udf import _create_udf
 from pyspark.sql import functions as pysparkfuncs
@@ -2469,6 +2470,13 @@ def udf(
 
 
 udf.__doc__ = pysparkfuncs.udf.__doc__
+
+
+def _distributed_sequence_id() -> Column:
+    """
+    Internal function for pandas API on Spark
+    """
+    return Column(DistributedSequenceID())
 
 
 def _test() -> None:
