@@ -27,8 +27,8 @@ option java_package = "org.apache.spark.connect.proto";
 // Catalog messages are marked as unstable.
 message Catalog {
   oneof cat_type {
-    CurrentDatabase current_database = 1;
-    SetCurrentDatabase set_current_database = 2;
+    CurrentDatabase current_database = 2;
+    SetCurrentDatabase set_current_database = 1;
     ListDatabases list_databases = 3;
     ListTables list_tables = 4;
     ListFunctions list_functions = 5;
