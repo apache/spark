@@ -524,7 +524,7 @@ class SparkConnectPlanner(val session: SparkSession) {
       .ofRows(session, transformRelation(rel.getInput))
       .groupBy(inputCols: _*)
     val other = Dataset
-      .ofRows(session, transformRelation(rel.getInput))
+      .ofRows(session, transformRelation(rel.getOther))
       .groupBy(otherCols: _*)
 
     input.flatMapCoGroupsInPandas(other, pythonUdf).logicalPlan
