@@ -62,6 +62,18 @@ object SparkConnectServerUtils {
       "connector/connect/server",
       "spark-connect-assembly",
       "spark-connect").getCanonicalPath
+    val catalogImplementation = if (IntegrationTestUtils.isSparkHiveJarAvailable) {
+      "hive"
+    } else {
+      // scalastyle:off println
+      println(
+        "Will start Spark Connect server with `spark.sql.catalogImplementation=in-memory`, " +
+          "some tests that rely on Hive will be ignored. If you don't want to skip them:\n" +
+          "1. Test with maven: run `build/mvn install -DskipTests -Phive` before testing\n" +
+          "2. Test with sbt: run test with `-Phive` profile")
+      // scalastyle:on println
+      "in-memory"
+    }
     val builder = Process(
       Seq(
         "bin/spark-submit",
@@ -72,7 +84,7 @@ object SparkConnectServerUtils {
         "--conf",
         "spark.sql.catalog.testcat=org.apache.spark.sql.connect.catalog.InMemoryTableCatalog",
         "--conf",
-        "spark.sql.catalogImplementation=hive",
+        s"spark.sql.catalogImplementation=$catalogImplementation",
         "--class",
         "org.apache.spark.sql.connect.SimpleSparkConnectService",
         jar),

@@ -50,7 +50,7 @@ from pyspark.sql.dataframe import (
     DataFrameStatFunctions as PySparkDataFrameStatFunctions,
 )
 
-from pyspark.errors import PySparkTypeError
+from pyspark.errors import PySparkTypeError, PySparkAttributeError
 from pyspark.errors.exceptions.connect import SparkConnectException
 from pyspark.rdd import PythonEvalType
 import pyspark.sql.connect.plan as plan
@@ -1304,6 +1304,10 @@ class DataFrame:
         return None
 
     def __getattr__(self, name: str) -> "Column":
+        if name in ["_jseq", "_jdf", "_jmap", "_jcols"]:
+            raise PySparkAttributeError(
+                error_class="JVM_ATTRIBUTE_NOT_SUPPORTED", message_parameters={"attr_name": name}
+            )
         return self[name]
 
     @overload
@@ -1344,9 +1348,9 @@ class DataFrame:
         if self._session is None:
             raise Exception("Cannot collect on empty session.")
         query = self._plan.to_proto(self._session.client)
-        table = self._session.client.to_table(query)
+        table, schema = self._session.client.to_table(query)
 
-        schema = from_arrow_schema(table.schema)
+        schema = schema or from_arrow_schema(table.schema)
 
         assert schema is not None and isinstance(schema, StructType)
 
@@ -1567,8 +1571,11 @@ class DataFrame:
     def pandas_api(self, *args: Any, **kwargs: Any) -> None:
         raise NotImplementedError("pandas_api() is not implemented.")
 
-    def registerTempTable(self, *args: Any, **kwargs: Any) -> None:
-        raise NotImplementedError("registerTempTable() is not implemented.")
+    def registerTempTable(self, name: str) -> None:
+        warnings.warn("Deprecated in 2.0, use createOrReplaceTempView instead.", FutureWarning)
+        self.createOrReplaceTempView(name)
+
+    registerTempTable.__doc__ = PySparkDataFrame.registerTempTable.__doc__
 
     def storageLevel(self, *args: Any, **kwargs: Any) -> None:
         raise NotImplementedError("storageLevel() is not implemented.")

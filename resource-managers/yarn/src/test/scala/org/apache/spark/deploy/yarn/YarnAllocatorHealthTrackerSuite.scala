@@ -97,6 +97,16 @@ class YarnAllocatorHealthTrackerSuite extends SparkFunSuite with Matchers
     verify(amClientMock, times(0)).updateBlacklist(Collections.emptyList(), Collections.emptyList())
   }
 
+  test("SPARK-41585 YARN Exclude Nodes should work independently of dynamic allocation") {
+    sparkConf.set(YARN_EXCLUDE_NODES, Seq("host1", "host2"))
+    val yarnHealthTracker = createYarnAllocatorHealthTracker(sparkConf)
+
+    // Check that host1 and host2 are in the exclude list
+    // Note, this covers also non-dynamic allocation
+    verify(amClientMock)
+      .updateBlacklist(Arrays.asList("host1", "host2"), Collections.emptyList())
+  }
+
   test("combining scheduler and allocation excluded node list") {
     sparkConf.set(YARN_EXCLUDE_NODES, Seq("initial1", "initial2"))
     val yarnHealthTracker = createYarnAllocatorHealthTracker(sparkConf)
