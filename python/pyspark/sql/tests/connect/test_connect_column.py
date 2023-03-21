@@ -44,14 +44,13 @@ from pyspark.errors import PySparkTypeError
 from pyspark.errors.exceptions.connect import SparkConnectException
 from pyspark.testing.connectutils import should_test_connect
 from pyspark.sql.tests.connect.test_connect_basic import SparkConnectSQLTestCase
-from pyspark.sql.connect.expressions import DistributedSequenceID
 
 
 if should_test_connect:
     import pandas as pd
     from pyspark.sql.connect import functions as CF
     from pyspark.sql.connect.column import Column
-    from pyspark.sql.connect.expressions import LiteralExpression
+    from pyspark.sql.connect.expressions import DistributedSequenceID, LiteralExpression
     from pyspark.sql.connect.types import (
         JVM_BYTE_MIN,
         JVM_BYTE_MAX,
@@ -1021,9 +1020,9 @@ class SparkConnectColumnTests(SparkConnectSQLTestCase):
 
     def test_distributed_sequence_column(self):
         cdf = self.connect.range(10)
-        expected = self.connect.range(0, 10).selectExpr("id", "id as distributed_sequence_id")
+        expected = self.connect.range(0, 10).selectExpr("id as index", "id")
         self.assertEqual(
-            cdf.select("*", Column(DistributedSequenceID())).collect(),
+            cdf.select(Column(DistributedSequenceID()).alias("index"), "*").collect(),
             expected.collect(),
         )
 
