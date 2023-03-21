@@ -27,7 +27,9 @@ import io.fabric8.kubernetes.api.model.apiextensions.v1.{CustomResourceDefinitio
 import io.fabric8.kubernetes.client.{KubernetesClient, Watch}
 import io.fabric8.kubernetes.client.dsl.PodResource
 import org.mockito.{ArgumentCaptor, Mock, MockitoAnnotations}
+import org.mockito.ArgumentMatchers.{any, argThat}
 import org.mockito.Mockito.{verify, when}
+import org.mockito.internal.matchers.Equality
 import org.scalatest.BeforeAndAfter
 import org.scalatestplus.mockito.MockitoSugar._
 
@@ -91,7 +93,8 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
   private val KEY_TO_PATH =
     new KeyToPath(SPARK_CONF_FILE_NAME, 420, SPARK_CONF_FILE_NAME)
 
-  private def fullExpectedPod(keyToPaths: List[KeyToPath] = List(KEY_TO_PATH)) =
+  private def fullExpectedPod(keyToPaths: List[KeyToPath] = List(KEY_TO_PATH),
+                              configMapName: String = "") =
     new PodBuilder(BUILT_DRIVER_POD)
       .editSpec()
         .addToContainers(FULL_EXPECTED_CONTAINER)
@@ -99,7 +102,7 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
           .withName(SPARK_CONF_VOLUME_DRIVER)
           .withNewConfigMap()
             .withItems(keyToPaths.asJava)
-            .withName(KubernetesClientUtils.configMapNameDriver)
+            .withName(configMapName)
             .endConfigMap()
           .endVolume()
         .endSpec()
@@ -178,7 +181,7 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
 
     createdPodArgumentCaptor = ArgumentCaptor.forClass(classOf[Pod])
     createdResourcesArgumentCaptor = ArgumentCaptor.forClass(classOf[HasMetadata])
-    when(podsWithNamespace.resource(fullExpectedPod())).thenReturn(namedPods)
+    when(podsWithNamespace.resource(any())).thenReturn(namedPods)
     when(namedPods.create()).thenReturn(podWithOwnerReference())
     when(namedPods.watch(loggingPodStatusWatcher)).thenReturn(mock[Watch])
     when(loggingPodStatusWatcher.watchOrStop(kconf.namespace + ":" + POD_NAME)).thenReturn(true)
@@ -194,7 +197,11 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
       kubernetesClient,
       loggingPodStatusWatcher)
     submissionClient.run()
-    verify(podsWithNamespace).resource(fullExpectedPod())
+    verify(podsWithNamespace).resource(argThat((pod: Pod) => {
+      val configMapName = pod.getSpec.getVolumes.get(0).getConfigMap.getName
+      val expectedPod = fullExpectedPod(List(KEY_TO_PATH), configMapName)
+      Equality.areEqual(pod, expectedPod)
+    }))
     verify(namedPods).create()
   }
 
@@ -214,8 +221,6 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
     assert(secrets.nonEmpty)
     assert(configMaps.nonEmpty)
     val configMap = configMaps.head
-    assert(configMap.getMetadata.getName ===
-      KubernetesClientUtils.configMapNameDriver)
     assert(configMap.getImmutable())
     assert(configMap.getData.containsKey(SPARK_CONF_FILE_NAME))
     assert(configMap.getData.get(SPARK_CONF_FILE_NAME).contains("conf1key=conf1value"))
@@ -260,8 +265,6 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
     assert(secrets.nonEmpty)
     assert(configMaps.nonEmpty)
     val configMap = configMaps.head
-    assert(configMap.getMetadata.getName ===
-      KubernetesClientUtils.configMapNameDriver)
     assert(configMap.getImmutable())
     assert(configMap.getData.containsKey(SPARK_CONF_FILE_NAME))
     assert(configMap.getData.get(SPARK_CONF_FILE_NAME).contains("conf1key=conf1value"))
@@ -325,9 +328,7 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
     val configMaps = otherCreatedResources.toArray
       .filter(_.isInstanceOf[ConfigMap]).map(_.asInstanceOf[ConfigMap])
     assert(configMaps.nonEmpty)
-    val configMapName = KubernetesClientUtils.configMapNameDriver
     val configMap: ConfigMap = configMaps.head
-    assert(configMap.getMetadata.getName == configMapName)
     val configMapLoadedFiles = configMap.getData.keySet().asScala.toSet -
         Config.KUBERNETES_NAMESPACE.key
     assert(configMapLoadedFiles === expectedConfFiles.toSet ++ Set(SPARK_CONF_FILE_NAME))
