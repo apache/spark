@@ -27,7 +27,7 @@ import pandas as pd
 from pandas.api.types import is_list_like  # type: ignore[attr-defined]
 from pyspark.sql import functions as F, Column
 from pyspark.sql.types import BooleanType, LongType, DataType
-from pyspark.sql.utils import AnalysisException
+from pyspark.errors import AnalysisException
 import numpy as np
 
 from pyspark import pandas as ps  # noqa: F401

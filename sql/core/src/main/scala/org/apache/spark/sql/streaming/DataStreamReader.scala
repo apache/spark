@@ -180,11 +180,12 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
         import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
         table match {
           case _: SupportsRead if table.supportsAny(MICRO_BATCH_READ, CONTINUOUS_READ) =>
+            import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
             Dataset.ofRows(
               sparkSession,
               StreamingRelationV2(
                 Some(provider), source, table, dsOptions,
-                table.schema.toAttributes, None, None, v1Relation))
+                table.columns.asSchema.toAttributes, None, None, v1Relation))
 
           // fallback to v1
           // TODO (SPARK-27483): we should move this fallback logic to an analyzer rule.

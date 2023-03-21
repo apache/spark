@@ -33,7 +33,6 @@ export LC_ALL=C
 HADOOP_MODULE_PROFILES="-Phive-thriftserver -Pmesos -Pkubernetes -Pyarn -Phive \
     -Pspark-ganglia-lgpl -Pkinesis-asl -Phadoop-cloud"
 MVN="build/mvn"
-VERSIONS_MAVEN_PLUGIN="org.codehaus.mojo:versions-maven-plugin:2.14.1"
 HADOOP_HIVE_PROFILES=(
     hadoop-2-hive-2.3
     hadoop-3-hive-2.3
@@ -65,7 +64,6 @@ SCALA_BINARY_VERSION=$($MVN -q \
     --non-recursive \
     org.codehaus.mojo:exec-maven-plugin:1.6.0:exec | grep -E '[0-9]+\.[0-9]+')
 if [[ "$SCALA_BINARY_VERSION" != "2.12" ]]; then
-  # TODO(SPARK-36168) Support Scala 2.13 in dev/test-dependencies.sh
   echo "Skip dependency testing on $SCALA_BINARY_VERSION"
   exit 0
 fi
@@ -77,11 +75,11 @@ function reset_version {
   find "$HOME/.m2/" | grep "$TEMP_VERSION" | xargs rm -rf
 
   # Restore the original version number:
-  $MVN -q $VERSIONS_MAVEN_PLUGIN:set -DnewVersion=$OLD_VERSION -DgenerateBackupPoms=false > /dev/null
+  $MVN -q versions:set -DnewVersion=$OLD_VERSION -DgenerateBackupPoms=false > /dev/null
 }
 trap reset_version EXIT
 
-$MVN -q $VERSIONS_MAVEN_PLUGIN:set -DnewVersion=$TEMP_VERSION -DgenerateBackupPoms=false > /dev/null
+$MVN -q versions:set -DnewVersion=$TEMP_VERSION -DgenerateBackupPoms=false > /dev/null
 
 # Generate manifests for each Hadoop profile:
 for HADOOP_HIVE_PROFILE in "${HADOOP_HIVE_PROFILES[@]}"; do

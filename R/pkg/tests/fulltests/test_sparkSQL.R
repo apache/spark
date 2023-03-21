@@ -495,7 +495,7 @@ test_that("SPARK-17902: collect() with stringsAsFactors enabled", {
   expect_equal(iris$Species, df$Species)
 })
 
-test_that("SPARK-17811: can create DataFrame containing NA as date and time", {
+test_that("SPARK-17811, SPARK-18011: can create DataFrame containing NA as date and time", {
   df <- data.frame(
     id = 1:2,
     time = c(as.POSIXlt("2016-01-10"), NA),
@@ -622,7 +622,7 @@ test_that("read/write json files", {
 
     # Test errorifexists
     expect_error(write.df(df, jsonPath2, "json", mode = "errorifexists"),
-                 "analysis error - Path file:.*already exists")
+                 "Error in save : analysis error - \\[PATH_ALREADY_EXISTS\\].*")
 
     # Test write.json
     jsonPath3 <- tempfile(pattern = "jsonPath3", fileext = ".json")
@@ -3990,13 +3990,13 @@ test_that("Call DataFrameWriter.save() API in Java without path and check argume
                paste("Error in save : org.apache.spark.SparkIllegalArgumentException:",
                      "Expected exactly one path to be specified"))
   expect_error(write.json(df, jsonPath),
-              "Error in json : analysis error - Path file:.*already exists")
+              "Error in json : analysis error - \\[PATH_ALREADY_EXISTS\\].*")
   expect_error(write.text(df, jsonPath),
-              "Error in text : analysis error - Path file:.*already exists")
+              "Error in text : analysis error - \\[PATH_ALREADY_EXISTS\\].*")
   expect_error(write.orc(df, jsonPath),
-              "Error in orc : analysis error - Path file:.*already exists")
+              "Error in orc : analysis error - \\[PATH_ALREADY_EXISTS\\].*")
   expect_error(write.parquet(df, jsonPath),
-              "Error in parquet : analysis error - Path file:.*already exists")
+              "Error in parquet : analysis error - \\[PATH_ALREADY_EXISTS\\].*")
   expect_error(write.parquet(df, jsonPath, mode = 123), "mode should be character or omitted.")
 
   # Arguments checking in R side.
@@ -4014,8 +4014,7 @@ test_that("Call DataFrameWriter.load() API in Java without path and check argume
   # It makes sure that we can omit path argument in read.df API and then it calls
   # DataFrameWriter.load() without path.
   expect_error(read.df(source = "json"),
-               paste("Error in load : analysis error - Unable to infer schema for JSON.",
-                     "It must be specified manually"))
+               "Error in load : analysis error - \\[UNABLE_TO_INFER_SCHEMA\\].*")
   expect_error(read.df("arbitrary_path"),
                "Error in load : analysis error - \\[PATH_NOT_FOUND\\].*")
   expect_error(read.json("arbitrary_path"),
@@ -4235,6 +4234,54 @@ test_that("assert_true, raise_error", {
 
   expect_error(collect(select(filtered, raise_error("error message"))), "error message")
   expect_error(collect(select(filtered, raise_error(filtered$name))), "Justin")
+})
+
+test_that("SPARK-41937: check class column for multi-class object works", {
+  .originalTimeZone <- Sys.getenv("TZ")
+  Sys.setenv(TZ = "")
+  temp_time <- as.POSIXlt("2015-03-11 12:13:04.043", tz = "")
+  sdf <- createDataFrame(
+    data.frame(x = temp_time + c(-1, 1, -1, 1, -1)),
+    schema = structType("x timestamp")
+  )
+  expect_warning(collect(filter(sdf, column("x") > temp_time)), NA)
+  expect_equal(collect(filter(sdf, column("x") > temp_time)), data.frame(x = temp_time + c(1, 1)))
+  expect_warning(collect(filter(sdf, contains(column("x"), temp_time + 5))), NA)
+  expect_warning(
+    collect(
+      mutate(
+        sdf,
+        newcol = otherwise(when(column("x") > lit(temp_time), temp_time), temp_time + 1)
+      )
+    ),
+    NA
+  )
+  expect_equal(
+    collect(
+      mutate(
+        sdf,
+        newcol = otherwise(when(column("x") > lit(temp_time), temp_time), temp_time + 1)
+      )
+    ),
+    data.frame(x = temp_time + c(-1, 1, -1, 1, -1), newcol = temp_time + c(1, 0, 1, 0, 1))
+  )
+  expect_error(
+    collect(fillna(sdf, temp_time)),
+    "value should be an integer, numeric, character or named list"
+  )
+  expect_error(
+    collect(fillna(sdf, list(x = temp_time))),
+    "value should be an integer, numeric or character"
+  )
+  expect_warning(
+    collect(mutate(sdf, x2 = ifelse(column("x") > temp_time, temp_time + 5, temp_time - 5))),
+    NA
+  )
+  expect_equal(
+    collect(mutate(sdf, x2 = ifelse(column("x") > temp_time, temp_time + 5, temp_time - 5))),
+    data.frame(x = temp_time + c(-1, 1, -1, 1, -1), x2 = temp_time + c(-5, 5, -5, 5, -5))
+  )
+  Sys.setenv(TZ = .originalTimeZone)
 })
 
 compare_list <- function(list1, list2) {

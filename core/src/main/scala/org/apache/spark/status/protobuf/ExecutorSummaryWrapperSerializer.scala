@@ -24,17 +24,12 @@ import collection.JavaConverters._
 import org.apache.spark.resource.ResourceInformation
 import org.apache.spark.status.ExecutorSummaryWrapper
 import org.apache.spark.status.api.v1.{ExecutorSummary, MemoryMetrics}
-import org.apache.spark.status.protobuf.Utils.getOptional
+import org.apache.spark.status.protobuf.Utils.{getOptional, getStringField, setStringField}
+import org.apache.spark.util.Utils.weakIntern
 
-class ExecutorSummaryWrapperSerializer extends ProtobufSerDe {
+class ExecutorSummaryWrapperSerializer extends ProtobufSerDe[ExecutorSummaryWrapper] {
 
-  override val supportClass: Class[_] = classOf[ExecutorSummaryWrapper]
-
-  override def serialize(input: Any): Array[Byte] = {
-    serialize(input.asInstanceOf[ExecutorSummaryWrapper])
-  }
-
-  def serialize(input: ExecutorSummaryWrapper): Array[Byte] = {
+  override def serialize(input: ExecutorSummaryWrapper): Array[Byte] = {
     val info = serializeExecutorSummary(input.info)
     val builder = StoreTypes.ExecutorSummaryWrapper.newBuilder()
       .setInfo(info)
@@ -50,8 +45,6 @@ class ExecutorSummaryWrapperSerializer extends ProtobufSerDe {
   private def serializeExecutorSummary(
       input: ExecutorSummary): StoreTypes.ExecutorSummary = {
     val builder = StoreTypes.ExecutorSummary.newBuilder()
-      .setId(input.id)
-      .setHostPort(input.hostPort)
       .setIsActive(input.isActive)
       .setRddBlocks(input.rddBlocks)
       .setMemoryUsed(input.memoryUsed)
@@ -70,7 +63,8 @@ class ExecutorSummaryWrapperSerializer extends ProtobufSerDe {
       .setIsBlacklisted(input.isBlacklisted)
       .setMaxMemory(input.maxMemory)
       .setAddTime(input.addTime.getTime)
-
+    setStringField(input.id, builder.setId)
+    setStringField(input.hostPort, builder.setHostPort)
     input.removeTime.foreach {
       date => builder.setRemoveTime(date.getTime)
     }
@@ -115,8 +109,8 @@ class ExecutorSummaryWrapperSerializer extends ProtobufSerDe {
       getOptional(binary.hasMemoryMetrics,
         () => deserializeMemoryMetrics(binary.getMemoryMetrics))
     new ExecutorSummary(
-      id = binary.getId,
-      hostPort = binary.getHostPort,
+      id = getStringField(binary.hasId, binary.getId),
+      hostPort = getStringField(binary.hasHostPort, () => weakIntern(binary.getHostPort)),
       isActive = binary.getIsActive,
       rddBlocks = binary.getRddBlocks,
       memoryUsed = binary.getMemoryUsed,
@@ -169,15 +163,17 @@ class ExecutorSummaryWrapperSerializer extends ProtobufSerDe {
   private def serializeResourceInformation(info: ResourceInformation):
     StoreTypes.ResourceInformation = {
     val builder = StoreTypes.ResourceInformation.newBuilder()
-    builder.setName(info.name)
-    info.addresses.foreach(builder.addAddresses)
+    setStringField(info.name, builder.setName)
+    if (info.addresses != null) {
+      info.addresses.foreach(builder.addAddresses)
+    }
     builder.build()
   }
 
   private def deserializeResourceInformation(binary: StoreTypes.ResourceInformation):
     ResourceInformation = {
     new ResourceInformation(
-      name = binary.getName,
-      addresses = binary.getAddressesList.asScala.toArray)
+      name = getStringField(binary.hasName, () => weakIntern(binary.getName)),
+      addresses = binary.getAddressesList.asScala.map(weakIntern).toArray)
   }
 }

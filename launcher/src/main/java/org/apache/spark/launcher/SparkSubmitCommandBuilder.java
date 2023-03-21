@@ -22,6 +22,7 @@ import java.io.IOException;
 import java.util.*;
 
 import static org.apache.spark.launcher.CommandBuilderUtils.*;
+import static org.apache.spark.launcher.CommandBuilderUtils.checkState;
 
 /**
  * Special command builder for handling a CLI invocation of SparkSubmit.
@@ -85,6 +86,8 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
     specialClasses.put("org.apache.spark.sql.hive.thriftserver.SparkSQLCLIDriver",
       SparkLauncher.NO_RESOURCE);
     specialClasses.put("org.apache.spark.sql.hive.thriftserver.HiveThriftServer2",
+      SparkLauncher.NO_RESOURCE);
+    specialClasses.put("org.apache.spark.sql.connect.service.SparkConnectServer",
       SparkLauncher.NO_RESOURCE);
   }
 
@@ -266,8 +269,8 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
     String extraClassPath = isClientMode ? config.get(SparkLauncher.DRIVER_EXTRA_CLASSPATH) : null;
 
     List<String> cmd = buildJavaCommand(extraClassPath);
-    // Take Thrift Server as daemon
-    if (isThriftServer(mainClass)) {
+    // Take Thrift/Connect Server as daemon
+    if (isThriftServer(mainClass) || isConnectServer(mainClass)) {
       addOptionString(cmd, System.getenv("SPARK_DAEMON_JAVA_OPTS"));
     }
     addOptionString(cmd, System.getenv("SPARK_SUBMIT_OPTS"));
@@ -287,9 +290,10 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
       // - SPARK_DRIVER_MEMORY env variable
       // - SPARK_MEM env variable
       // - default value (1g)
-      // Take Thrift Server as daemon
+      // Take Thrift/Connect Server as daemon
       String tsMemory =
-        isThriftServer(mainClass) ? System.getenv("SPARK_DAEMON_MEMORY") : null;
+        isThriftServer(mainClass) || isConnectServer(mainClass) ?
+          System.getenv("SPARK_DAEMON_MEMORY") : null;
       String memory = firstNonEmpty(tsMemory, config.get(SparkLauncher.DRIVER_MEMORY),
         System.getenv("SPARK_DRIVER_MEMORY"), System.getenv("SPARK_MEM"), DEFAULT_MEM);
       cmd.add("-Xmx" + memory);
@@ -349,9 +353,18 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
       // pass conf spark.pyspark.python to python by environment variable.
       env.put("PYSPARK_PYTHON", conf.get(SparkLauncher.PYSPARK_PYTHON));
     }
-    if (remote != null) {
-      env.put("SPARK_REMOTE", remote);
+    String remoteStr = firstNonEmpty(remote, conf.getOrDefault(SparkLauncher.SPARK_REMOTE, null));
+    String masterStr = firstNonEmpty(master, conf.getOrDefault(SparkLauncher.SPARK_MASTER, null));
+    String deployStr = firstNonEmpty(
+      deployMode, conf.getOrDefault(SparkLauncher.DEPLOY_MODE, null));
+    if (!conf.containsKey(SparkLauncher.SPARK_LOCAL_REMOTE) &&
+        remoteStr != null && (masterStr != null || deployStr != null)) {
+      throw new IllegalStateException("Remote cannot be specified with master and/or deploy mode.");
     }
+    if (remoteStr != null) {
+      env.put("SPARK_REMOTE", remoteStr);
+    }
+
     if (!isEmpty(pyOpts)) {
       pyargs.addAll(parseOptionString(pyOpts));
     }
@@ -413,6 +426,14 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
       mainClass.equals("org.apache.spark.sql.hive.thriftserver.HiveThriftServer2"));
   }
 
+  /**
+   * Return whether the given main class represents a connect server.
+   */
+  private boolean isConnectServer(String mainClass) {
+    return (mainClass != null &&
+      mainClass.equals("org.apache.spark.sql.connect.service.SparkConnectServer"));
+  }
+
   private String findExamplesAppJar() {
     boolean isTesting = "1".equals(getenv("SPARK_TESTING"));
     if (isTesting) {
@@ -465,18 +486,12 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
     protected boolean handle(String opt, String value) {
       switch (opt) {
         case MASTER:
-          checkArgument(remote == null,
-            "Both master (%s) and remote (%s) cannot be set together.", master, remote);
           master = value;
           break;
         case REMOTE:
-          checkArgument(remote == null,
-            "Both master (%s) and remote (%s) cannot be set together.", master, remote);
           remote = value;
           break;
         case DEPLOY_MODE:
-          checkArgument(remote == null,
-            "Both deploy-mode (%s) and remote (%s) cannot be set together.", deployMode, remote);
           deployMode = value;
           break;
         case PROPERTIES_FILE:

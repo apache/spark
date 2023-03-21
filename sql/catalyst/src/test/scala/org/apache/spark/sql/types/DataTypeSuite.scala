@@ -153,11 +153,14 @@ class DataTypeSuite extends SparkFunSuite {
     val right = StructType(
       StructField("b", LongType) :: Nil)
 
-    val message = intercept[SparkException] {
-      left.merge(right)
-    }.getMessage
-    assert(message.equals("Failed to merge fields 'b' and 'b'. " +
-      "Failed to merge incompatible data types float and bigint"))
+    checkError(
+      exception = intercept[SparkException] {
+        left.merge(right)
+      },
+      errorClass = "CANNOT_MERGE_INCOMPATIBLE_DATA_TYPE",
+      parameters = Map("left" -> "\"FLOAT\"", "right" -> "\"BIGINT\""
+      )
+    )
   }
 
   test("existsRecursively") {
@@ -186,6 +189,12 @@ class DataTypeSuite extends SparkFunSuite {
 
   test("SPARK-36224: Backwards compatibility test for NullType.json") {
     assert(DataType.fromJson("\"null\"") == NullType)
+  }
+
+  test("SPARK-42723: Parse timestamp_ltz as TimestampType") {
+    assert(DataType.fromJson("\"timestamp_ltz\"") == TimestampType)
+    val expectedStructType = StructType(Seq(StructField("ts", TimestampType)))
+    assert(DataType.fromDDL("ts timestamp_ltz") == expectedStructType)
   }
 
   def checkDataTypeFromJson(dataType: DataType): Unit = {
@@ -237,6 +246,9 @@ class DataTypeSuite extends SparkFunSuite {
 
   checkDataTypeFromJson(TimestampType)
   checkDataTypeFromDDL(TimestampType)
+
+  checkDataTypeFromJson(TimestampNTZType)
+  checkDataTypeFromDDL(TimestampNTZType)
 
   checkDataTypeFromJson(StringType)
   checkDataTypeFromDDL(StringType)

@@ -56,6 +56,20 @@ import org.apache.spark.tags.DockerTest
  */
 @DockerTest
 class OracleIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest {
+
+  override def excluded: Seq[String] = Seq(
+    "scan with aggregate push-down: VAR_POP with DISTINCT",
+    "scan with aggregate push-down: VAR_SAMP with DISTINCT",
+    "scan with aggregate push-down: STDDEV_POP with DISTINCT",
+    "scan with aggregate push-down: STDDEV_SAMP with DISTINCT",
+    "scan with aggregate push-down: COVAR_POP with DISTINCT",
+    "scan with aggregate push-down: COVAR_SAMP with DISTINCT",
+    "scan with aggregate push-down: CORR with DISTINCT",
+    "scan with aggregate push-down: REGR_INTERCEPT with DISTINCT",
+    "scan with aggregate push-down: REGR_SLOPE with DISTINCT",
+    "scan with aggregate push-down: REGR_R2 with DISTINCT",
+    "scan with aggregate push-down: REGR_SXY with DISTINCT")
+
   override val catalogName: String = "oracle"
   override val namespaceOpt: Option[String] = Some("SYSTEM")
   override val db = new DatabaseOnDocker {
@@ -76,6 +90,8 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTes
     .set("spark.sql.catalog.oracle", classOf[JDBCTableCatalog].getName)
     .set("spark.sql.catalog.oracle.url", db.getJdbcUrl(dockerIp, externalPort))
     .set("spark.sql.catalog.oracle.pushDownAggregate", "true")
+    .set("spark.sql.catalog.oracle.pushDownLimit", "true")
+    .set("spark.sql.catalog.oracle.pushDownOffset", "true")
 
   override val connectionTimeout = timeout(7.minutes)
 
@@ -103,16 +119,4 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTes
   }
 
   override def caseConvert(tableName: String): String = tableName.toUpperCase(Locale.ROOT)
-
-  testVarPop()
-  testVarSamp()
-  testStddevPop()
-  testStddevSamp()
-  testCovarPop()
-  testCovarSamp()
-  testCorr()
-  testRegrIntercept()
-  testRegrSlope()
-  testRegrR2()
-  testRegrSXY()
 }

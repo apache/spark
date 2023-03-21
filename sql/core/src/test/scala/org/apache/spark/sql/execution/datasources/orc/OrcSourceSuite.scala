@@ -230,10 +230,14 @@ abstract class OrcSuite
   protected def testMergeSchemasInParallel(
       schemaReader: (Seq[FileStatus], Configuration, Boolean) => Seq[StructType]): Unit = {
     testMergeSchemasInParallel(true, schemaReader)
-    val exception = intercept[SparkException] {
-      testMergeSchemasInParallel(false, schemaReader)
-    }.getCause
-    assert(exception.getCause.getMessage.contains("Could not read footer for file"))
+    checkError(
+      exception = intercept[SparkException] {
+        testMergeSchemasInParallel(false, schemaReader)
+      }.getCause.getCause.asInstanceOf[SparkException],
+      errorClass = "CANNOT_READ_FILE_FOOTER",
+      parameters = Map("file" -> "file:.*"),
+      matchPVals = true
+    )
   }
 
   test("create temporary orc table") {
@@ -444,14 +448,15 @@ abstract class OrcSuite
           spark.read.orc(basePath).columns.length
         }.getCause
 
-        val innerMessage = orcImp match {
-          case "native" => exception.getMessage
-          case "hive" => exception.getCause.getMessage
+        val innerException = orcImp match {
+          case "native" => exception
+          case "hive" => exception.getCause
           case impl =>
             throw new UnsupportedOperationException(s"Unknown ORC implementation: $impl")
         }
 
-        assert(innerMessage.contains("Failed to merge incompatible data types"))
+        assert(innerException.asInstanceOf[SparkException].getErrorClass ===
+          "CANNOT_MERGE_INCOMPATIBLE_DATA_TYPE")
       }
 
       // it is ok if no schema merging
@@ -476,10 +481,14 @@ abstract class OrcSuite
 
         // don't ignore corrupt files
         withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "false") {
-          val exception = intercept[SparkException] {
-            spark.read.orc(basePath).columns.length
-          }.getCause
-          assert(exception.getCause.getMessage.contains("Could not read footer for file"))
+          checkError(
+            exception = intercept[SparkException] {
+              spark.read.orc(basePath).columns.length
+            }.getCause.getCause.asInstanceOf[SparkException],
+            errorClass = "CANNOT_READ_FILE_FOOTER",
+            parameters = Map("file" -> "file:.*"),
+            matchPVals = true
+          )
         }
       }
     }

@@ -21,24 +21,23 @@ import java.util.Date
 
 import collection.JavaConverters._
 
-import org.apache.spark.JobExecutionStatus
 import org.apache.spark.sql.execution.ui.SQLExecutionUIData
-import org.apache.spark.status.protobuf.{ProtobufSerDe, StoreTypes}
-import org.apache.spark.status.protobuf.Utils.getOptional
+import org.apache.spark.status.protobuf.{JobExecutionStatusSerializer, ProtobufSerDe, StoreTypes}
+import org.apache.spark.status.protobuf.Utils._
 
-class SQLExecutionUIDataSerializer extends ProtobufSerDe {
+class SQLExecutionUIDataSerializer extends ProtobufSerDe[SQLExecutionUIData] {
 
-  override val supportClass: Class[_] = classOf[SQLExecutionUIData]
-
-  override def serialize(input: Any): Array[Byte] = {
-    val ui = input.asInstanceOf[SQLExecutionUIData]
+  override def serialize(ui: SQLExecutionUIData): Array[Byte] = {
     val builder = StoreTypes.SQLExecutionUIData.newBuilder()
     builder.setExecutionId(ui.executionId)
-    builder.setDescription(ui.description)
-    builder.setDetails(ui.details)
-    builder.setPhysicalPlanDescription(ui.physicalPlanDescription)
-    ui.modifiedConfigs.foreach {
-      case (k, v) => builder.putModifiedConfigs(k, v)
+    builder.setRootExecutionId(ui.rootExecutionId)
+    setStringField(ui.description, builder.setDescription)
+    setStringField(ui.details, builder.setDetails)
+    setStringField(ui.physicalPlanDescription, builder.setPhysicalPlanDescription)
+    if (ui.modifiedConfigs != null) {
+      ui.modifiedConfigs.foreach {
+        case (k, v) => builder.putModifiedConfigs(k, v)
+      }
     }
     ui.metrics.foreach(m => builder.addMetrics(SQLPlanMetricSerializer.serialize(m)))
     builder.setSubmissionTime(ui.submissionTime)
@@ -46,11 +45,14 @@ class SQLExecutionUIDataSerializer extends ProtobufSerDe {
     ui.errorMessage.foreach(builder.setErrorMessage)
     ui.jobs.foreach {
       case (id, status) =>
-        builder.putJobs(id.toLong, StoreTypes.JobExecutionStatus.valueOf(status.toString))
+        builder.putJobs(id.toLong, JobExecutionStatusSerializer.serialize(status))
     }
     ui.stages.foreach(stageId => builder.addStages(stageId.toLong))
     val metricValues = ui.metricValues
-    if (metricValues != null) {
+    if (metricValues == null) {
+      builder.setMetricValuesIsNull(true)
+    } else {
+      builder.setMetricValuesIsNull(false)
       metricValues.foreach {
         case (k, v) => builder.putMetricValues(k, v)
       }
@@ -64,19 +66,25 @@ class SQLExecutionUIDataSerializer extends ProtobufSerDe {
       getOptional(ui.hasCompletionTime, () => new Date(ui.getCompletionTime))
     val errorMessage = getOptional(ui.hasErrorMessage, () => ui.getErrorMessage)
     val metrics =
-      ui.getMetricsList.asScala.map(m => SQLPlanMetricSerializer.deserialize(m)).toSeq
+      ui.getMetricsList.asScala.map(m => SQLPlanMetricSerializer.deserialize(m))
     val jobs = ui.getJobsMap.asScala.map {
-      case (jobId, status) => jobId.toInt -> JobExecutionStatus.valueOf(status.toString)
+      case (jobId, status) => jobId.toInt -> JobExecutionStatusSerializer.deserialize(status)
     }.toMap
-    val metricValues = ui.getMetricValuesMap.asScala.map {
-      case (k, v) => k.toLong -> v
-    }.toMap
+    val metricValues = if (ui.getMetricValuesIsNull) {
+      null
+    } else {
+      ui.getMetricValuesMap.asScala.map {
+        case (k, v) => k.toLong -> v
+      }.toMap
+    }
 
     new SQLExecutionUIData(
       executionId = ui.getExecutionId,
-      description = ui.getDescription,
-      details = ui.getDetails,
-      physicalPlanDescription = ui.getPhysicalPlanDescription,
+      rootExecutionId = ui.getRootExecutionId,
+      description = getStringField(ui.hasDescription, () => ui.getDescription),
+      details = getStringField(ui.hasDetails, () => ui.getDetails),
+      physicalPlanDescription =
+        getStringField(ui.hasPhysicalPlanDescription, () => ui.getPhysicalPlanDescription),
       modifiedConfigs = ui.getModifiedConfigsMap.asScala.toMap,
       metrics = metrics,
       submissionTime = ui.getSubmissionTime,

@@ -6,7 +6,7 @@ jenkins-worker -- set up the craziness of a jenkins worker to build and test Apa
 Requirements
 ------------
 
-Oh jeez.  This is just a framework to help others get started.  If you try and deploy this locally, you'll need a service account, auth set up, etc etc.
+Oh jeez.  This is just a framework to help others get started.  If you try and deploy this locally, you'll need a service account, auth set up, etc.
 
 Role Variables
 --------------

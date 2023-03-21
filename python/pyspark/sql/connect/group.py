@@ -14,6 +14,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import warnings
+
+from pyspark.sql.connect.utils import check_dependencies
+
+check_dependencies(__name__)
 
 from typing import (
     Any,
@@ -27,15 +32,22 @@ from typing import (
     cast,
 )
 
+from pyspark.rdd import PythonEvalType
 from pyspark.sql.group import GroupedData as PySparkGroupedData
+from pyspark.sql.types import NumericType
 
 import pyspark.sql.connect.plan as plan
-from pyspark.sql.connect.column import Column, scalar_function
-from pyspark.sql.connect.functions import col, lit
+from pyspark.sql.connect.column import Column
+from pyspark.sql.connect.functions import _invoke_function, col, lit
 
 if TYPE_CHECKING:
-    from pyspark.sql.connect._typing import LiteralType
+    from pyspark.sql.connect._typing import (
+        LiteralType,
+        PandasGroupedMapFunction,
+        GroupedMapPandasUserDefinedFunction,
+    )
     from pyspark.sql.connect.dataframe import DataFrame
+    from pyspark.sql.types import StructType
 
 
 class GroupedData:
@@ -80,13 +92,13 @@ class GroupedData:
         assert exprs, "exprs should not be empty"
         if len(exprs) == 1 and isinstance(exprs[0], dict):
             # Convert the dict into key value pairs
-            aggregate_cols = [scalar_function(exprs[0][k], col(k)) for k in exprs[0]]
+            aggregate_cols = [_invoke_function(exprs[0][k], col(k)) for k in exprs[0]]
         else:
             # Columns
             assert all(isinstance(c, Column) for c in exprs), "all exprs should be Column"
             aggregate_cols = cast(List[Column], list(exprs))
 
-        res = DataFrame.withPlan(
+        return DataFrame.withPlan(
             plan.Aggregate(
                 child=self._df._plan,
                 group_type=self._group_type,
@@ -97,41 +109,72 @@ class GroupedData:
             ),
             session=self._df._session,
         )
-        return res
 
     agg.__doc__ = PySparkGroupedData.agg.__doc__
 
-    def _map_cols_to_expression(self, fun: str, param: Union[Column, str]) -> Sequence[Column]:
-        return [
-            scalar_function(fun, col(param)) if isinstance(param, str) else param,
+    def _numeric_agg(self, function: str, cols: Sequence[str]) -> "DataFrame":
+        from pyspark.sql.connect.dataframe import DataFrame
+
+        assert isinstance(function, str) and function in ["min", "max", "avg", "sum"]
+
+        assert isinstance(cols, list) and all(isinstance(c, str) for c in cols)
+
+        schema = self._df.schema
+
+        numerical_cols: List[str] = [
+            field.name for field in schema.fields if isinstance(field.dataType, NumericType)
         ]
 
-    def min(self, col: Union[Column, str]) -> "DataFrame":
-        expr = self._map_cols_to_expression("min", col)
-        return self.agg(*expr)
+        agg_cols: List[str] = []
+
+        if len(cols) > 0:
+            invalid_cols = [c for c in cols if c not in numerical_cols]
+            if len(invalid_cols) > 0:
+                raise TypeError(
+                    f"{invalid_cols} are not numeric columns. "
+                    f"Numeric aggregation function can only be applied on numeric columns."
+                )
+            agg_cols = cols
+        else:
+            # if no column is provided, then all numerical columns are selected
+            agg_cols = numerical_cols
+
+        return DataFrame.withPlan(
+            plan.Aggregate(
+                child=self._df._plan,
+                group_type=self._group_type,
+                grouping_cols=self._grouping_cols,
+                aggregate_cols=[_invoke_function(function, col(c)) for c in agg_cols],
+                pivot_col=self._pivot_col,
+                pivot_values=self._pivot_values,
+            ),
+            session=self._df._session,
+        )
+
+    def min(self, *cols: str) -> "DataFrame":
+        return self._numeric_agg("min", list(cols))
 
     min.__doc__ = PySparkGroupedData.min.__doc__
 
-    def max(self, col: Union[Column, str]) -> "DataFrame":
-        expr = self._map_cols_to_expression("max", col)
-        return self.agg(*expr)
+    def max(self, *cols: str) -> "DataFrame":
+        return self._numeric_agg("max", list(cols))
 
     max.__doc__ = PySparkGroupedData.max.__doc__
 
-    def sum(self, col: Union[Column, str]) -> "DataFrame":
-        expr = self._map_cols_to_expression("sum", col)
-        return self.agg(*expr)
+    def sum(self, *cols: str) -> "DataFrame":
+        return self._numeric_agg("sum", list(cols))
 
     sum.__doc__ = PySparkGroupedData.sum.__doc__
 
-    def avg(self, col: Union[Column, str]) -> "DataFrame":
-        expr = self._map_cols_to_expression("avg", col)
-        return self.agg(*expr)
+    def avg(self, *cols: str) -> "DataFrame":
+        return self._numeric_agg("avg", list(cols))
 
     avg.__doc__ = PySparkGroupedData.avg.__doc__
 
+    mean = avg
+
     def count(self) -> "DataFrame":
-        return self.agg(scalar_function("count", lit(1)))
+        return self.agg(_invoke_function("count", lit(1)).alias("count"))
 
     count.__doc__ = PySparkGroupedData.count.__doc__
 
@@ -168,5 +211,88 @@ class GroupedData:
 
     pivot.__doc__ = PySparkGroupedData.pivot.__doc__
 
+    def apply(self, udf: "GroupedMapPandasUserDefinedFunction") -> "DataFrame":
+        # Columns are special because hasattr always return True
+        if (
+            isinstance(udf, Column)
+            or not hasattr(udf, "func")
+            or (
+                udf.evalType  # type: ignore[attr-defined]
+                != PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF
+            )
+        ):
+            raise ValueError(
+                "Invalid udf: the udf argument must be a pandas_udf of type " "GROUPED_MAP."
+            )
+
+        warnings.warn(
+            "It is preferred to use 'applyInPandas' over this "
+            "API. This API will be deprecated in the future releases. See SPARK-28264 for "
+            "more details.",
+            UserWarning,
+        )
+
+        return self.applyInPandas(udf.func, schema=udf.returnType)  # type: ignore[attr-defined]
+
+    apply.__doc__ = PySparkGroupedData.apply.__doc__
+
+    def applyInPandas(
+        self, func: "PandasGroupedMapFunction", schema: Union["StructType", str]
+    ) -> "DataFrame":
+        from pyspark.sql.connect.udf import UserDefinedFunction
+        from pyspark.sql.connect.dataframe import DataFrame
+
+        udf_obj = UserDefinedFunction(
+            func,
+            returnType=schema,
+            evalType=PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
+        )
+
+        return DataFrame.withPlan(
+            plan.GroupMap(
+                child=self._df._plan,
+                grouping_cols=self._grouping_cols,
+                function=udf_obj,
+                cols=self._df.columns,
+            ),
+            session=self._df._session,
+        )
+
+    applyInPandas.__doc__ = PySparkGroupedData.applyInPandas.__doc__
+
+    def applyInPandasWithState(self, *args: Any, **kwargs: Any) -> None:
+        raise NotImplementedError("applyInPandasWithState() is not implemented.")
+
+    def cogroup(self, *args: Any, **kwargs: Any) -> None:
+        raise NotImplementedError("cogroup() is not implemented.")
+
 
 GroupedData.__doc__ = PySparkGroupedData.__doc__
+
+
+def _test() -> None:
+    import sys
+    import doctest
+    from pyspark.sql import SparkSession as PySparkSession
+    import pyspark.sql.connect.group
+
+    globs = pyspark.sql.connect.group.__dict__.copy()
+
+    globs["spark"] = (
+        PySparkSession.builder.appName("sql.connect.group tests").remote("local[4]").getOrCreate()
+    )
+
+    (failure_count, test_count) = doctest.testmod(
+        pyspark.sql.connect.group,
+        globs=globs,
+        optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE | doctest.REPORT_NDIFF,
+    )
+
+    globs["spark"].stop()
+
+    if failure_count:
+        sys.exit(-1)
+
+
+if __name__ == "__main__":
+    _test()

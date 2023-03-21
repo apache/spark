@@ -20,7 +20,6 @@ package org.apache.spark.util
 import java.util.Properties
 
 import scala.collection.JavaConverters._
-import scala.collection.Map
 import scala.language.implicitConversions
 
 import com.fasterxml.jackson.databind.{JsonNode, ObjectMapper}
@@ -60,19 +59,22 @@ class JsonProtocolSuite extends SparkFunSuite {
       new ExecutorMetrics(Array(543L, 123456L, 12345L, 1234L, 123L, 12L, 432L,
         321L, 654L, 765L, 256912L, 123456L, 123456L, 61728L, 30364L, 15182L,
         0, 0, 0, 0, 80001L)),
-      makeTaskMetrics(300L, 400L, 500L, 600L, 700, 800, hasHadoopInput = false, hasOutput = false))
+      makeTaskMetrics(300L, 400L, 500L, 600L, 700, 800, 0,
+        hasHadoopInput = false, hasOutput = false))
     val taskEndWithHadoopInput = SparkListenerTaskEnd(1, 0, "ShuffleMapTask", Success,
       makeTaskInfo(123L, 234, 67, 234, 345L, false),
       new ExecutorMetrics(Array(543L, 123456L, 12345L, 1234L, 123L, 12L, 432L,
         321L, 654L, 765L, 256912L, 123456L, 123456L, 61728L, 30364L, 15182L,
         0, 0, 0, 0, 80001L)),
-      makeTaskMetrics(300L, 400L, 500L, 600L, 700, 800, hasHadoopInput = true, hasOutput = false))
+      makeTaskMetrics(300L, 400L, 500L, 600L, 700, 800, 0,
+        hasHadoopInput = true, hasOutput = false))
     val taskEndWithOutput = SparkListenerTaskEnd(1, 0, "ResultTask", Success,
       makeTaskInfo(123L, 234, 67, 234, 345L, false),
       new ExecutorMetrics(Array(543L, 123456L, 12345L, 1234L, 123L, 12L, 432L,
         321L, 654L, 765L, 256912L, 123456L, 123456L, 61728L, 30364L, 15182L,
         0, 0, 0, 0, 80001L)),
-      makeTaskMetrics(300L, 400L, 500L, 600L, 700, 800, hasHadoopInput = true, hasOutput = true))
+      makeTaskMetrics(300L, 400L, 500L, 600L, 700, 800, 0,
+        hasHadoopInput = true, hasOutput = true))
     val jobStart = {
       val stageIds = Seq[Int](1, 2, 3, 4)
       val stageInfos = stageIds.map(x =>
@@ -97,8 +99,8 @@ class JsonProtocolSuite extends SparkFunSuite {
     val blockManagerRemoved = SparkListenerBlockManagerRemoved(2L,
       BlockManagerId("Scarce", "to be counted...", 100))
     val unpersistRdd = SparkListenerUnpersistRDD(12345)
-    val logUrlMap = Map("stderr" -> "mystderr", "stdout" -> "mystdout").toMap
-    val attributes = Map("ContainerId" -> "ct1", "User" -> "spark").toMap
+    val logUrlMap = Map("stderr" -> "mystderr", "stdout" -> "mystdout")
+    val attributes = Map("ContainerId" -> "ct1", "User" -> "spark")
     val resources = Map(ResourceUtils.GPU ->
       new ResourceInformation(ResourceUtils.GPU, Array("0", "1")))
     val applicationStart = SparkListenerApplicationStart("The winner of all", Some("appId"),
@@ -107,9 +109,9 @@ class JsonProtocolSuite extends SparkFunSuite {
       42L, "Garfield", Some("appAttempt"), Some(logUrlMap))
     val applicationEnd = SparkListenerApplicationEnd(42L)
     val executorAdded = SparkListenerExecutorAdded(executorAddedTime, "exec1",
-      new ExecutorInfo("Hostee.awesome.com", 11, logUrlMap, attributes, resources.toMap, 4))
+      new ExecutorInfo("Hostee.awesome.com", 11, logUrlMap, attributes, resources, 4))
     val executorAddedWithTime = SparkListenerExecutorAdded(executorAddedTime, "exec1",
-      new ExecutorInfo("Hostee.awesome.com", 11, logUrlMap, attributes, resources.toMap, 4,
+      new ExecutorInfo("Hostee.awesome.com", 11, logUrlMap, attributes, resources, 4,
         Some(1), Some(0)))
     val executorRemoved = SparkListenerExecutorRemoved(executorRemovedTime, "exec2", "test reason")
     val executorBlacklisted = SparkListenerExecutorBlacklisted(executorExcludedTime, "exec1", 22)
@@ -127,7 +129,8 @@ class JsonProtocolSuite extends SparkFunSuite {
     val executorMetricsUpdate = {
       // Use custom accum ID for determinism
       val accumUpdates =
-        makeTaskMetrics(300L, 400L, 500L, 600L, 700, 800, hasHadoopInput = true, hasOutput = true)
+        makeTaskMetrics(300L, 400L, 500L, 600L, 700, 800, 0,
+          hasHadoopInput = true, hasOutput = true)
           .accumulators().map(AccumulatorSuite.makeInfo)
           .zipWithIndex.map { case (a, i) => a.copy(id = i) }
       val executorUpdates = new ExecutorMetrics(
@@ -194,14 +197,14 @@ class JsonProtocolSuite extends SparkFunSuite {
   }
 
   test("Dependent Classes") {
-    val logUrlMap = Map("stderr" -> "mystderr", "stdout" -> "mystdout").toMap
-    val attributes = Map("ContainerId" -> "ct1", "User" -> "spark").toMap
-    val rinfo = Map[String, ResourceInformation]().toMap
+    val logUrlMap = Map("stderr" -> "mystderr", "stdout" -> "mystdout")
+    val attributes = Map("ContainerId" -> "ct1", "User" -> "spark")
+    val rinfo = Map[String, ResourceInformation]()
     testRDDInfo(makeRddInfo(2, 3, 4, 5L, 6L, DeterministicLevel.DETERMINATE))
     testStageInfo(makeStageInfo(10, 20, 30, 40L, 50L))
     testTaskInfo(makeTaskInfo(999L, 888, 55, 888, 777L, false))
     testTaskMetrics(makeTaskMetrics(
-      33333L, 44444L, 55555L, 66666L, 7, 8, hasHadoopInput = false, hasOutput = false))
+      33333L, 44444L, 55555L, 66666L, 7, 8, 0, hasHadoopInput = false, hasOutput = false))
     testBlockManagerId(BlockManagerId("Hong", "Kong", 500))
     testExecutorInfo(new ExecutorInfo("host", 43, logUrlMap, attributes))
     testExecutorInfo(new ExecutorInfo("host", 43, logUrlMap, attributes,
@@ -299,7 +302,7 @@ class JsonProtocolSuite extends SparkFunSuite {
 
   test("InputMetrics backward compatibility") {
     // InputMetrics were added after 1.0.1.
-    val metrics = makeTaskMetrics(1L, 2L, 3L, 4L, 5, 6, hasHadoopInput = true, hasOutput = false)
+    val metrics = makeTaskMetrics(1L, 2L, 3L, 4L, 5, 6, 0, hasHadoopInput = true, hasOutput = false)
     val newJson = toJsonString(JsonProtocol.taskMetricsToJson(metrics, _))
     val oldJson = newJson.removeField("Input Metrics")
     val newMetrics = JsonProtocol.taskMetricsFromJson(oldJson)
@@ -309,7 +312,7 @@ class JsonProtocolSuite extends SparkFunSuite {
 
   test("Input/Output records backwards compatibility") {
     // records read were added after 1.2
-    val metrics = makeTaskMetrics(1L, 2L, 3L, 4L, 5, 6,
+    val metrics = makeTaskMetrics(1L, 2L, 3L, 4L, 5, 6, 0,
       hasHadoopInput = true, hasOutput = true, hasRecords = false)
     val newJson = toJsonString(JsonProtocol.taskMetricsToJson(metrics, _))
     val oldJson = newJson
@@ -323,7 +326,7 @@ class JsonProtocolSuite extends SparkFunSuite {
   test("Shuffle Read/Write records backwards compatibility") {
     // records read were added after 1.2
     // "Remote Bytes Read To Disk" was added in 2.3.0
-    val metrics = makeTaskMetrics(1L, 2L, 3L, 4L, 5, 6,
+    val metrics = makeTaskMetrics(1L, 2L, 3L, 4L, 5, 6, 0,
       hasHadoopInput = false, hasOutput = false, hasRecords = false)
     val newJson = toJsonString(JsonProtocol.taskMetricsToJson(metrics, _))
     val oldJson = newJson
@@ -338,7 +341,7 @@ class JsonProtocolSuite extends SparkFunSuite {
 
   test("OutputMetrics backward compatibility") {
     // OutputMetrics were added after 1.1
-    val metrics = makeTaskMetrics(1L, 2L, 3L, 4L, 5, 6, hasHadoopInput = false, hasOutput = true)
+    val metrics = makeTaskMetrics(1L, 2L, 3L, 4L, 5, 6, 0, hasHadoopInput = false, hasOutput = true)
     val newJson = toJsonString(JsonProtocol.taskMetricsToJson(metrics, _))
     val oldJson = newJson.removeField("Output Metrics")
     val newMetrics = JsonProtocol.taskMetricsFromJson(oldJson)
@@ -349,7 +352,7 @@ class JsonProtocolSuite extends SparkFunSuite {
   test("TaskMetrics backward compatibility") {
     // "Executor Deserialize CPU Time" and "Executor CPU Time" were introduced in Spark 2.1.0
     // "Peak Execution Memory" was introduced in Spark 3.0.0
-    val metrics = makeTaskMetrics(1L, 2L, 3L, 4L, 5, 6, hasHadoopInput = false, hasOutput = true)
+    val metrics = makeTaskMetrics(1L, 2L, 3L, 4L, 5, 6, 0, hasHadoopInput = false, hasOutput = true)
     metrics.setExecutorDeserializeCpuTime(100L)
     metrics.setExecutorCpuTime(100L)
     metrics.setPeakExecutionMemory(100L)
@@ -425,7 +428,7 @@ class JsonProtocolSuite extends SparkFunSuite {
 
   test("ShuffleReadMetrics: Local bytes read backwards compatibility") {
     // Metrics about local shuffle bytes read were added in 1.3.1.
-    val metrics = makeTaskMetrics(1L, 2L, 3L, 4L, 5, 6,
+    val metrics = makeTaskMetrics(1L, 2L, 3L, 4L, 5, 6, 0,
       hasHadoopInput = false, hasOutput = false, hasRecords = false)
     val newJson = toJsonString(JsonProtocol.taskMetricsToJson(metrics, _))
     val oldJson = newJson.removeField("Local Bytes Read")
@@ -548,7 +551,7 @@ class JsonProtocolSuite extends SparkFunSuite {
     // "Task Metrics" was replaced with "Accumulator Updates" in 2.0.0. For older event logs,
     // we should still be able to fallback to constructing the accumulator updates from the
     // "Task Metrics" field, if it exists.
-    val tm = makeTaskMetrics(1L, 2L, 3L, 4L, 5, 6, hasHadoopInput = true, hasOutput = true)
+    val tm = makeTaskMetrics(1L, 2L, 3L, 4L, 5, 6, 0, hasHadoopInput = true, hasOutput = true)
     val tmJson = toJsonString(JsonProtocol.taskMetricsToJson(tm, _))
     val accumUpdates = tm.accumulators().map(AccumulatorSuite.makeInfo)
     val exception = new SparkException("sentimental")
@@ -572,7 +575,7 @@ class JsonProtocolSuite extends SparkFunSuite {
   test("TaskKilled backward compatibility") {
     // The "Kill Reason" field was added in Spark 2.2.0
     // The "Accumulator Updates" field was added in Spark 2.4.0
-    val tm = makeTaskMetrics(1L, 2L, 3L, 4L, 5, 6, hasHadoopInput = true, hasOutput = true)
+    val tm = makeTaskMetrics(1L, 2L, 3L, 4L, 5, 6, 0, hasHadoopInput = true, hasOutput = true)
     val accumUpdates = tm.accumulators().map(AccumulatorSuite.makeInfo)
     val taskKilled = TaskKilled(reason = "test", accumUpdates)
     val taskKilledJson = toJsonString(JsonProtocol.taskEndReasonToJson(taskKilled, _))
@@ -628,13 +631,13 @@ class JsonProtocolSuite extends SparkFunSuite {
     // The "Resource Profile Id", "Registration Time", and "Request Time"
     // fields were added in Spark 3.4.0
     val resourcesInfo = Map(ResourceUtils.GPU ->
-      new ResourceInformation(ResourceUtils.GPU, Array("0", "1"))).toMap
-    val attributes = Map("ContainerId" -> "ct1", "User" -> "spark").toMap
+      new ResourceInformation(ResourceUtils.GPU, Array("0", "1")))
+    val attributes = Map("ContainerId" -> "ct1", "User" -> "spark")
     val executorInfo =
       new ExecutorInfo(
         "Hostee.awesome.com",
         11,
-        logUrlMap = Map.empty[String, String].toMap,
+        logUrlMap = Map.empty[String, String],
         attributes = attributes,
         resourcesInfo = resourcesInfo,
         resourceProfileId = 123,
@@ -773,6 +776,38 @@ class JsonProtocolSuite extends SparkFunSuite {
         |  "foo" : "foo"
         |}""".stripMargin
     assert(JsonProtocol.sparkEventFromJson(unknownFieldsJson) === expected)
+  }
+
+  test("SPARK-42403: properly handle null string values") {
+    // Null string values can appear in a few different event types,
+    // so we test multiple known cases here:
+    val stackTraceJson =
+      """
+        |[
+        |  {
+        |    "Declaring Class": "someClass",
+        |    "Method Name": "someMethod",
+        |    "File Name": null,
+        |    "Line Number": -1
+        |  }
+        |]
+        |""".stripMargin
+    val stackTrace = JsonProtocol.stackTraceFromJson(stackTraceJson)
+    assert(stackTrace === Array(new StackTraceElement("someClass", "someMethod", null, -1)))
+
+    val exceptionFailureJson =
+      """
+        |{
+        |  "Reason": "ExceptionFailure",
+        |  "Class Name": "java.lang.Exception",
+        |  "Description": null,
+        |  "Stack Trace": [],
+        |  "Accumulator Updates": []
+        |}
+        |""".stripMargin
+    val exceptionFailure =
+      JsonProtocol.taskEndReasonFromJson(exceptionFailureJson).asInstanceOf[ExceptionFailure]
+    assert(exceptionFailure.description == null)
   }
 }
 
@@ -920,12 +955,12 @@ private[spark] object JsonProtocolSuite extends Assertions {
         assert(e1.jobId === e2.jobId)
         assertEquals(e1.jobResult, e2.jobResult)
       case (e1: SparkListenerEnvironmentUpdate, e2: SparkListenerEnvironmentUpdate) =>
-        assertEquals(e1.environmentDetails, e2.environmentDetails)
+        assertEquals(e1.environmentDetails.toMap, e2.environmentDetails.toMap)
       case (e1: SparkListenerExecutorAdded, e2: SparkListenerExecutorAdded) =>
-        assert(e1.executorId === e1.executorId)
+        assert(e1.executorId === e2.executorId)
         assertEquals(e1.executorInfo, e2.executorInfo)
       case (e1: SparkListenerExecutorRemoved, e2: SparkListenerExecutorRemoved) =>
-        assert(e1.executorId === e1.executorId)
+        assert(e1.executorId === e2.executorId)
       case (e1: SparkListenerExecutorMetricsUpdate, e2: SparkListenerExecutorMetricsUpdate) =>
         assert(e1.execId === e2.execId)
         assertSeqEquals[(Long, Int, Int, Seq[AccumulableInfo])](
@@ -1090,10 +1125,11 @@ private[spark] object JsonProtocolSuite extends Assertions {
   }
 
   private def assertEquals(
-      details1: Map[String, Seq[(String, String)]],
-      details2: Map[String, Seq[(String, String)]]): Unit = {
+      details1: Map[String, scala.collection.Seq[(String, String)]],
+      details2: Map[String, scala.collection.Seq[(String, String)]]): Unit = {
     details1.zip(details2).foreach {
-      case ((key1, values1: Seq[(String, String)]), (key2, values2: Seq[(String, String)])) =>
+      case ((key1, values1: scala.collection.Seq[(String, String)]),
+        (key2, values2: scala.collection.Seq[(String, String)])) =>
         assert(key1 === key2)
         values1.zip(values2).foreach { case (v1, v2) => assert(v1 === v2) }
     }
@@ -1130,7 +1166,10 @@ private[spark] object JsonProtocolSuite extends Assertions {
     }
   }
 
-  private def assertSeqEquals[T](seq1: Seq[T], seq2: Seq[T], assertEquals: (T, T) => Unit): Unit = {
+  private def assertSeqEquals[T](
+      seq1: scala.collection.Seq[T],
+      seq2: scala.collection.Seq[T],
+      assertEquals: (T, T) => Unit): Unit = {
     assert(seq1.length === seq2.length)
     seq1.zip(seq2).foreach { case (t1, t2) =>
       assertEquals(t1, t2)
@@ -1281,6 +1320,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       d: Long,
       e: Int,
       f: Int,
+      g: Int,
       hasHadoopInput: Boolean,
       hasOutput: Boolean,
       hasRecords: Boolean = true) = {
@@ -1309,6 +1349,10 @@ private[spark] object JsonProtocolSuite extends Assertions {
       sr.incRemoteBlocksFetched(f)
       sr.incRecordsRead(if (hasRecords) (b + d) / 100 else -1)
       sr.incLocalBytesRead(a + f)
+      sr.incCorruptMergedBlockChunks(if (f > e) f - e else e - f)
+      sr.incMergedFetchFallbackCount(if (f > e) f - e else e - f)
+      sr.incRemoteReqsDuration(a + d)
+      sr.incRemoteMergedReqsDuration(g)
       t.mergeShuffleReadMetrics()
     }
     if (hasOutput) {
@@ -1362,7 +1406,9 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |        "Count Failed Values": false
       |      }
       |    ],
-      |    "Resource Profile Id" : 0
+      |    "Resource Profile Id" : 0,
+      |    "Shuffle Push Enabled" : false,
+      |    "Shuffle Push Mergers Count" : 0
       |  },
       |  "Properties": {
       |    "France": "Paris",
@@ -1403,7 +1449,9 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |        "Count Failed Values": false
       |      }
       |    ],
-      |    "Resource Profile Id" : 0
+      |    "Resource Profile Id" : 0,
+      |    "Shuffle Push Enabled" : false,
+      |    "Shuffle Push Mergers Count" : 0
       |  }
       |}
     """.stripMargin
@@ -1458,7 +1506,9 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |        "Count Failed Values": false
       |      }
       |    ],
-      |    "Resource Profile Id" : 0
+      |    "Resource Profile Id" : 0,
+      |    "Shuffle Push Enabled" : false,
+      |    "Shuffle Push Mergers Count" : 0
       |  }
       |}
     """.stripMargin
@@ -1653,7 +1703,19 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |      "Remote Bytes Read": 1000,
       |      "Remote Bytes Read To Disk": 400,
       |      "Local Bytes Read": 1100,
-      |      "Total Records Read": 10
+      |      "Total Records Read": 10,
+      |      "Remote Requests Duration": 900,
+      |      "Push Based Shuffle": {
+      |         "Corrupt Merged Block Chunks" : 100,
+      |         "Merged Fetch Fallback Count" : 100,
+      |         "Merged Remote Blocks Fetched" : 0,
+      |         "Merged Local Blocks Fetched" : 0,
+      |         "Merged Remote Chunks Fetched" : 0,
+      |         "Merged Local Chunks Fetched" : 0,
+      |         "Merged Remote Bytes Read" : 0,
+      |         "Merged Local Bytes Read" : 0,
+      |         "Merged Remote Requests Duration": 0
+      |      }
       |    },
       |    "Shuffle Write Metrics": {
       |      "Shuffle Bytes Written": 1200,
@@ -1780,7 +1842,19 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |      "Remote Bytes Read" : 0,
       |      "Remote Bytes Read To Disk" : 0,
       |      "Local Bytes Read" : 0,
-      |      "Total Records Read" : 0
+      |      "Total Records Read" : 0,
+      |      "Remote Requests Duration": 0,
+      |      "Push Based Shuffle": {
+      |         "Corrupt Merged Block Chunks" : 0,
+      |         "Merged Fetch Fallback Count" : 0,
+      |         "Merged Remote Blocks Fetched" : 0,
+      |         "Merged Local Blocks Fetched" : 0,
+      |         "Merged Remote Chunks Fetched" : 0,
+      |         "Merged Local Chunks Fetched" : 0,
+      |         "Merged Remote Bytes Read" : 0,
+      |         "Merged Local Bytes Read" : 0,
+      |         "Merged Remote Requests Duration": 0
+      |      }
       |    },
       |    "Shuffle Write Metrics": {
       |      "Shuffle Bytes Written": 1200,
@@ -1907,7 +1981,19 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |      "Remote Bytes Read" : 0,
       |      "Remote Bytes Read To Disk" : 0,
       |      "Local Bytes Read" : 0,
-      |      "Total Records Read" : 0
+      |      "Total Records Read" : 0,
+      |      "Remote Requests Duration": 0,
+      |      "Push Based Shuffle": {
+      |         "Corrupt Merged Block Chunks" : 0,
+      |         "Merged Fetch Fallback Count" : 0,
+      |         "Merged Remote Blocks Fetched" : 0,
+      |         "Merged Local Blocks Fetched" : 0,
+      |         "Merged Remote Chunks Fetched" : 0,
+      |         "Merged Local Chunks Fetched" : 0,
+      |         "Merged Remote Bytes Read" : 0,
+      |         "Merged Local Bytes Read" : 0,
+      |         "Merged Remote Requests Duration": 0
+      |      }
       |    },
       |    "Shuffle Write Metrics": {
       |      "Shuffle Bytes Written" : 0,
@@ -1995,7 +2081,9 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |          "Count Failed Values": false
       |        }
       |      ],
-      |      "Resource Profile Id" : 0
+      |      "Resource Profile Id" : 0,
+      |      "Shuffle Push Enabled" : false,
+      |      "Shuffle Push Mergers Count" : 0
       |    },
       |    {
       |      "Stage ID": 2,
@@ -2062,7 +2150,9 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |          "Count Failed Values": false
       |        }
       |      ],
-      |      "Resource Profile Id" : 0
+      |      "Resource Profile Id" : 0,
+      |      "Shuffle Push Enabled" : false,
+      |      "Shuffle Push Mergers Count" : 0
       |    },
       |    {
       |      "Stage ID": 3,
@@ -2148,7 +2238,9 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |          "Count Failed Values": false
       |        }
       |      ],
-      |      "Resource Profile Id" : 0
+      |      "Resource Profile Id" : 0,
+      |      "Shuffle Push Enabled" : false,
+      |      "Shuffle Push Mergers Count" : 0
       |    },
       |    {
       |      "Stage ID": 4,
@@ -2253,7 +2345,9 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |          "Count Failed Values": false
       |        }
       |      ],
-      |      "Resource Profile Id" : 0
+      |      "Resource Profile Id" : 0,
+      |      "Shuffle Push Enabled" : false,
+      |      "Shuffle Push Mergers Count" : 0
       |    }
       |  ],
       |  "Stage IDs": [
@@ -2616,55 +2710,125 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |        },
       |        {
       |          "ID": 18,
-      |          "Name": "${shuffleWrite.BYTES_WRITTEN}",
+      |          "Name": "${shuffleRead.CORRUPT_MERGED_BLOCK_CHUNKS}",
       |          "Update": 0,
       |          "Internal": true,
       |          "Count Failed Values": true
       |        },
       |        {
       |          "ID": 19,
+      |          "Name": "${shuffleRead.MERGED_FETCH_FALLBACK_COUNT}",
+      |          "Update": 0,
+      |          "Internal": true,
+      |          "Count Failed Values": true
+      |        },
+      |        {
+      |          "ID" : 20,
+      |          "Name" : "${shuffleRead.REMOTE_MERGED_BLOCKS_FETCHED}",
+      |          "Update" : 0,
+      |          "Internal" : true,
+      |          "Count Failed Values" : true
+      |        },
+      |        {
+      |          "ID" : 21,
+      |          "Name" : "${shuffleRead.LOCAL_MERGED_BLOCKS_FETCHED}",
+      |          "Update" : 0,
+      |          "Internal" : true,
+      |          "Count Failed Values" : true
+      |        },
+      |        {
+      |          "ID" : 22,
+      |          "Name" : "${shuffleRead.REMOTE_MERGED_CHUNKS_FETCHED}",
+      |          "Update" : 0,
+      |          "Internal" : true,
+      |          "Count Failed Values" : true
+      |        },
+      |        {
+      |          "ID" : 23,
+      |          "Name" : "${shuffleRead.LOCAL_MERGED_CHUNKS_FETCHED}",
+      |          "Update" : 0,
+      |          "Internal" : true,
+      |          "Count Failed Values" : true
+      |        },
+      |        {
+      |          "ID" : 24,
+      |          "Name" : "${shuffleRead.REMOTE_MERGED_BYTES_READ}",
+      |          "Update" : 0,
+      |          "Internal" : true,
+      |          "Count Failed Values" : true
+      |        },
+      |        {
+      |          "ID" : 25,
+      |          "Name" : "${shuffleRead.LOCAL_MERGED_BYTES_READ}",
+      |          "Update" : 0,
+      |          "Internal" : true,
+      |          "Count Failed Values" : true
+      |        },
+      |        {
+      |          "ID" : 26,
+      |          "Name" : "${shuffleRead.REMOTE_REQS_DURATION}",
+      |          "Update" : 0,
+      |          "Internal" : true,
+      |          "Count Failed Values" : true
+      |        },
+      |        {
+      |          "ID" : 27,
+      |          "Name" : "${shuffleRead.REMOTE_MERGED_REQS_DURATION}",
+      |          "Update" : 0,
+      |          "Internal" : true,
+      |          "Count Failed Values" : true
+      |        },
+      |        {
+      |          "ID": 28,
+      |          "Name": "${shuffleWrite.BYTES_WRITTEN}",
+      |          "Update": 0,
+      |          "Internal": true,
+      |          "Count Failed Values": true
+      |        },
+      |        {
+      |          "ID": 29,
       |          "Name": "${shuffleWrite.RECORDS_WRITTEN}",
       |          "Update": 0,
       |          "Internal": true,
       |          "Count Failed Values": true
       |        },
       |        {
-      |          "ID": 20,
+      |          "ID": 30,
       |          "Name": "${shuffleWrite.WRITE_TIME}",
       |          "Update": 0,
       |          "Internal": true,
       |          "Count Failed Values": true
       |        },
       |        {
-      |          "ID": 21,
+      |          "ID": 31,
       |          "Name": "${input.BYTES_READ}",
       |          "Update": 2100,
       |          "Internal": true,
       |          "Count Failed Values": true
       |        },
       |        {
-      |          "ID": 22,
+      |          "ID": 32,
       |          "Name": "${input.RECORDS_READ}",
       |          "Update": 21,
       |          "Internal": true,
       |          "Count Failed Values": true
       |        },
       |        {
-      |          "ID": 23,
+      |          "ID": 33,
       |          "Name": "${output.BYTES_WRITTEN}",
       |          "Update": 1200,
       |          "Internal": true,
       |          "Count Failed Values": true
       |        },
       |        {
-      |          "ID": 24,
+      |          "ID": 34,
       |          "Name": "${output.RECORDS_WRITTEN}",
       |          "Update": 12,
       |          "Internal": true,
       |          "Count Failed Values": true
       |        },
       |        {
-      |          "ID": 25,
+      |          "ID": 35,
       |          "Name": "$TEST_ACCUM",
       |          "Update": 0,
       |          "Internal": true,

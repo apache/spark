@@ -92,7 +92,7 @@ class Catalog:
         .. versionadded:: 3.4.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Examples
         --------
@@ -107,7 +107,7 @@ class Catalog:
         .. versionadded:: 3.4.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -126,7 +126,7 @@ class Catalog:
         .. versionadded:: 3.4.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Returns
         -------
@@ -147,7 +147,7 @@ class Catalog:
         .. versionadded:: 2.0.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Returns
         -------
@@ -168,7 +168,7 @@ class Catalog:
         .. versionadded:: 2.0.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Examples
         --------
@@ -183,7 +183,7 @@ class Catalog:
         .. versionadded:: 2.0.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Returns
         -------
@@ -216,7 +216,7 @@ class Catalog:
         .. versionadded:: 3.4.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -252,7 +252,7 @@ class Catalog:
         .. versionadded:: 3.3.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -291,7 +291,7 @@ class Catalog:
         .. versionadded:: 2.0.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -353,7 +353,7 @@ class Catalog:
         .. versionadded:: 3.4.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -388,7 +388,7 @@ class Catalog:
         >>> spark.catalog.getTable("tbl1")
         Traceback (most recent call last):
             ...
-        pyspark.sql.utils.AnalysisException: ...
+        AnalysisException: ...
         """
         jtable = self._jcatalog.getTable(tableName)
         jnamespace = jtable.namespace()
@@ -412,7 +412,7 @@ class Catalog:
         .. versionadded:: 3.4.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -466,7 +466,7 @@ class Catalog:
         .. versionadded:: 3.3.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -518,7 +518,7 @@ class Catalog:
         .. versionadded:: 3.4.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -532,7 +532,8 @@ class Catalog:
 
         Examples
         --------
-        >>> func = spark.sql("CREATE FUNCTION my_func1 AS 'test.org.apache.spark.sql.MyDoubleAvg'")
+        >>> _ = spark.sql(
+        ...     "CREATE FUNCTION my_func1 AS 'test.org.apache.spark.sql.MyDoubleAvg'")
         >>> spark.catalog.getFunction("my_func1")
         Function(name='my_func1', catalog='spark_catalog', namespace=['default'], ...
 
@@ -548,7 +549,7 @@ class Catalog:
         >>> spark.catalog.getFunction("my_func2")
         Traceback (most recent call last):
             ...
-        pyspark.sql.utils.AnalysisException: ...
+        AnalysisException: ...
         """
         jfunction = self._jcatalog.getFunction(functionName)
         jnamespace = jfunction.namespace()
@@ -571,7 +572,7 @@ class Catalog:
         .. versionadded:: 2.0.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -637,7 +638,7 @@ class Catalog:
         .. versionadded:: 3.3.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -738,7 +739,7 @@ class Catalog:
         .. versionadded:: 2.0.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Returns
         -------
@@ -764,7 +765,7 @@ class Catalog:
         .. versionadded:: 2.2.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -837,7 +838,7 @@ class Catalog:
         .. versionadded:: 2.0.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -877,7 +878,7 @@ class Catalog:
         .. versionadded:: 2.1.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -921,6 +922,9 @@ class Catalog:
 
         .. deprecated:: 2.3.0
             Use :func:`spark.udf.register` instead.
+
+        .. versionchanged:: 3.4.0
+            Supports Spark Connect.
         """
         warnings.warn("Deprecated in 2.3.0. Use spark.udf.register instead.", FutureWarning)
         return self._sparkSession.udf.register(name, f, returnType)
@@ -930,6 +934,9 @@ class Catalog:
         Returns true if the table is currently cached in-memory.
 
         .. versionadded:: 2.0.0
+
+        .. versionchanged:: 3.4.0
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -956,7 +963,7 @@ class Catalog:
         >>> spark.catalog.isCached("not_existing_table")
         Traceback (most recent call last):
             ...
-        pyspark.sql.utils.AnalysisException: ...
+        AnalysisException: ...
 
         Using the fully qualified name for the table.
 
@@ -971,6 +978,9 @@ class Catalog:
         """Caches the specified table in-memory.
 
         .. versionadded:: 2.0.0
+
+        .. versionchanged:: 3.4.0
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -991,7 +1001,7 @@ class Catalog:
         >>> spark.catalog.cacheTable("not_existing_table")
         Traceback (most recent call last):
             ...
-        pyspark.sql.utils.AnalysisException: ...
+        AnalysisException: ...
 
         Using the fully qualified name for the table.
 
@@ -1005,6 +1015,9 @@ class Catalog:
         """Removes the specified table from the in-memory cache.
 
         .. versionadded:: 2.0.0
+
+        .. versionchanged:: 3.4.0
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -1025,10 +1038,10 @@ class Catalog:
 
         Throw an analysis exception when the table does not exist.
 
-        >>> spark.catalog.uncacheTable("not_existing_table")  # doctest: +IGNORE_EXCEPTION_DETAIL
+        >>> spark.catalog.uncacheTable("not_existing_table")
         Traceback (most recent call last):
             ...
-        pyspark.sql.utils.AnalysisException: ...
+        AnalysisException: ...
 
         Using the fully qualified name for the table.
 
@@ -1045,7 +1058,7 @@ class Catalog:
         .. versionadded:: 2.0.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Examples
         --------
@@ -1064,7 +1077,7 @@ class Catalog:
         .. versionadded:: 2.0.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -1081,7 +1094,8 @@ class Catalog:
         >>> import tempfile
         >>> with tempfile.TemporaryDirectory() as d:
         ...     _ = spark.sql("DROP TABLE IF EXISTS tbl1")
-        ...     _ = spark.sql("CREATE TABLE tbl1 (col STRING) USING TEXT LOCATION '{}'".format(d))
+        ...     _ = spark.sql(
+        ...         "CREATE TABLE tbl1 (col STRING) USING TEXT LOCATION '{}'".format(d))
         ...     _ = spark.sql("INSERT INTO tbl1 SELECT 'abc'")
         ...     spark.catalog.cacheTable("tbl1")
         ...     spark.table("tbl1").show()
@@ -1115,7 +1129,7 @@ class Catalog:
         .. versionadded:: 2.1.1
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -1162,7 +1176,7 @@ class Catalog:
         .. versionadded:: 2.2.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -1176,7 +1190,8 @@ class Catalog:
         >>> import tempfile
         >>> with tempfile.TemporaryDirectory() as d:
         ...     _ = spark.sql("DROP TABLE IF EXISTS tbl1")
-        ...     _ = spark.sql("CREATE TABLE tbl1 (col STRING) USING TEXT LOCATION '{}'".format(d))
+        ...     _ = spark.sql(
+        ...         "CREATE TABLE tbl1 (col STRING) USING TEXT LOCATION '{}'".format(d))
         ...     _ = spark.sql("INSERT INTO tbl1 SELECT 'abc'")
         ...     spark.catalog.cacheTable("tbl1")
         ...     spark.table("tbl1").show()

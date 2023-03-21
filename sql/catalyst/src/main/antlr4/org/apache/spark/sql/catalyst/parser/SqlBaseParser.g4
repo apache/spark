@@ -203,7 +203,7 @@ statement
     | LOAD DATA LOCAL? INPATH path=stringLit OVERWRITE? INTO TABLE
         multipartIdentifier partitionSpec?                             #loadData
     | TRUNCATE TABLE multipartIdentifier partitionSpec?                #truncateTable
-    | MSCK REPAIR TABLE multipartIdentifier
+    | (MSCK)? REPAIR TABLE multipartIdentifier
         (option=(ADD|DROP|SYNC) PARTITIONS)?                           #repairTable
     | op=(ADD | LIST) identifier .*?                                   #manageResource
     | SET ROLE .*?                                                     #failNativeCommand
@@ -955,7 +955,7 @@ booleanValue
     ;
 
 interval
-    : INTERVAL (errorCapturingMultiUnitsInterval | errorCapturingUnitToUnitInterval)?
+    : INTERVAL (errorCapturingMultiUnitsInterval | errorCapturingUnitToUnitInterval)
     ;
 
 errorCapturingMultiUnitsInterval
@@ -1009,7 +1009,14 @@ qualifiedColTypeWithPositionList
     ;
 
 qualifiedColTypeWithPosition
-    : name=multipartIdentifier dataType (NOT NULL)? defaultExpression? commentSpec? colPosition?
+    : name=multipartIdentifier dataType colDefinitionDescriptorWithPosition*
+    ;
+
+colDefinitionDescriptorWithPosition
+    : NOT NULL
+    | defaultExpression
+    | commentSpec
+    | colPosition
     ;
 
 defaultExpression
@@ -1035,7 +1042,12 @@ createOrReplaceTableColType
 colDefinitionOption
     : NOT NULL
     | defaultExpression
+    | generationExpression
     | commentSpec
+    ;
+
+generationExpression
+    : GENERATED ALWAYS AS LEFT_PAREN expression RIGHT_PAREN
     ;
 
 complexColTypeList
@@ -1183,6 +1195,7 @@ ansiNonReserved
     : ADD
     | AFTER
     | ALTER
+    | ALWAYS
     | ANALYZE
     | ANTI
     | ANY_VALUE
@@ -1252,6 +1265,7 @@ ansiNonReserved
     | FORMATTED
     | FUNCTION
     | FUNCTIONS
+    | GENERATED
     | GLOBAL
     | GROUPING
     | HOUR
@@ -1441,6 +1455,7 @@ nonReserved
     | AFTER
     | ALL
     | ALTER
+    | ALWAYS
     | ANALYZE
     | AND
     | ANY
@@ -1535,6 +1550,7 @@ nonReserved
     | FROM
     | FUNCTION
     | FUNCTIONS
+    | GENERATED
     | GLOBAL
     | GRANT
     | GROUP

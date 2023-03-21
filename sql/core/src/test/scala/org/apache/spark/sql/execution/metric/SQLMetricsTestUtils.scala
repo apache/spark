@@ -27,6 +27,7 @@ import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.execution.{SparkPlan, SparkPlanInfo}
 import org.apache.spark.sql.execution.ui.{SparkPlanGraph, SQLAppStatusStore}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.WHOLESTAGE_CODEGEN_ENABLED
 import org.apache.spark.sql.test.SQLTestUtils
 
@@ -80,7 +81,13 @@ trait SQLMetricsTestUtils extends SQLTestUtils {
     assert(executionIds.size == 1)
     val executionId = executionIds.head
 
-    val executedNode = statusStore.planGraph(executionId).nodes.head
+    val executedNode = if (conf.plannedWriteEnabled) {
+      val executedNodeOpt = statusStore.planGraph(executionId).nodes.find(_.name == "WriteFiles")
+      assert(executedNodeOpt.isDefined)
+      executedNodeOpt.get
+    } else {
+      statusStore.planGraph(executionId).nodes.head
+    }
 
     val metricsNames = Seq(
       "number of written files",
@@ -104,9 +111,17 @@ trait SQLMetricsTestUtils extends SQLTestUtils {
     assert(totalNumBytes > 0)
   }
 
+  protected def withPlannedWrite(f: => Unit): Unit = {
+    Seq(true, false).foreach { plannedWrite =>
+      withSQLConf(SQLConf.PLANNED_WRITE_ENABLED.key -> plannedWrite.toString) {
+        f
+      }
+    }
+  }
+
   protected def testMetricsNonDynamicPartition(
       dataFormat: String,
-      tableName: String): Unit = {
+      tableName: String): Unit = withPlannedWrite {
     withTable(tableName) {
       Seq((1, 2)).toDF("i", "j")
         .write.format(dataFormat).mode("overwrite").saveAsTable(tableName)
@@ -126,7 +141,7 @@ trait SQLMetricsTestUtils extends SQLTestUtils {
   protected def testMetricsDynamicPartition(
       provider: String,
       dataFormat: String,
-      tableName: String): Unit = {
+      tableName: String): Unit = withPlannedWrite {
     withTable(tableName) {
       withTempPath { dir =>
         spark.sql(

@@ -411,7 +411,7 @@ Example:
     >>> df['bad_key']
     Traceback (most recent call last):
     ...
-    pyspark.sql.utils.AnalysisException: Cannot resolve column name "bad_key" among (id)
+    pyspark.errors.exceptions.AnalysisException: Cannot resolve column name "bad_key" among (id)
 
 Solution:
 
@@ -431,8 +431,9 @@ Example:
     >>> spark.sql("select * 1")
     Traceback (most recent call last):
     ...
-    pyspark.sql.utils.ParseException:
-    Syntax error at or near '1': extra input '1'(line 1, pos 9)
+    pyspark.errors.exceptions.ParseException:
+    [PARSE_SYNTAX_ERROR] Syntax error at or near '1': extra input '1'.(line 1, pos 9)
+
     == SQL ==
     select * 1
     ---------^^^
@@ -455,7 +456,7 @@ Example:
     >>> spark.range(1).sample(-1.0)
     Traceback (most recent call last):
     ...
-    pyspark.sql.utils.IllegalArgumentException: requirement failed: Sampling fraction (-1.0) must be on interval [0, 1] without replacement
+    pyspark.errors.exceptions.IllegalArgumentException: requirement failed: Sampling fraction (-1.0) must be on interval [0, 1] without replacement
 
 Solution:
 
@@ -474,6 +475,7 @@ Example:
 
 .. code-block:: python
 
+    >>> import pyspark.sql.functions as F
     >>> from pyspark.sql.functions import udf
     >>> def f(x):
     ...   return F.abs(x)
@@ -512,7 +514,7 @@ Example:
       File "<stdin>", line 1, in <lambda>
     ZeroDivisionError: division by zero
     ...
-    pyspark.sql.utils.StreamingQueryException: Query q1 [id = ced5797c-74e2-4079-825b-f3316b327c7d, runId = 65bacaf3-9d51-476a-80ce-0ac388d4906a] terminated with exception: Writing job aborted
+    pyspark.errors.exceptions.StreamingQueryException: [STREAM_FAILED] Query [id = 74eb53a8-89bd-49b0-9313-14d29eed03aa, runId = 9f2d5cf6-a373-478d-b718-2c2b6d8a0f24] terminated with exception: Job aborted
 
 Solution:
 

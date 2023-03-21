@@ -299,10 +299,13 @@ class DataFrameNaFunctionsSuite extends QueryTest with SharedSparkSession {
 
   test("drop with col(*)") {
     val df = createDF()
-    val exception = intercept[AnalysisException] {
-      df.na.drop("any", Seq("*"))
-    }
-    assert(exception.getMessage.contains("Cannot resolve column name \"*\""))
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.na.drop("any", Seq("*"))
+      },
+      errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+      parameters = Map("objectName" -> "`*`", "proposal" -> "`name`, `age`, `height`")
+    )
   }
 
   test("fill with nested columns") {
@@ -534,7 +537,11 @@ class DataFrameNaFunctionsSuite extends QueryTest with SharedSparkSession {
     val exception = intercept[AnalysisException] {
       df.na.replace("aa", Map( "n/a" -> "unknown"))
     }
-    assert(exception.getMessage.equals("Cannot resolve column name \"aa\" among (Col.1, Col.2)"))
+    checkError(
+      exception = exception,
+      errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+      parameters = Map("objectName" -> "`aa`", "proposal" -> "`Col`.`1`, `Col`.`2`")
+    )
   }
 
   test("SPARK-34649: replace value of a nested column") {

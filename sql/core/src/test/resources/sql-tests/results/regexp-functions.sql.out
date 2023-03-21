@@ -160,12 +160,12 @@ struct<>
 -- !query output
 org.apache.spark.SparkRuntimeException
 {
-  "errorClass" : "INVALID_PARAMETER_VALUE",
+  "errorClass" : "INVALID_PARAMETER_VALUE.PATTERN",
   "sqlState" : "22023",
   "messageParameters" : {
-    "expected" : "'(?l)'",
     "functionName" : "`regexp_extract`",
-    "parameter" : "regexp"
+    "parameter" : "`regexp`",
+    "value" : "'(?l)'"
   }
 }
 
@@ -331,12 +331,12 @@ struct<>
 -- !query output
 org.apache.spark.SparkRuntimeException
 {
-  "errorClass" : "INVALID_PARAMETER_VALUE",
+  "errorClass" : "INVALID_PARAMETER_VALUE.PATTERN",
   "sqlState" : "22023",
   "messageParameters" : {
-    "expected" : "'], ['",
     "functionName" : "`regexp_extract_all`",
-    "parameter" : "regexp"
+    "parameter" : "`regexp`",
+    "value" : "'], ['"
   }
 }
 
@@ -357,6 +357,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.VALUE_OUT_OF_RANGE",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "currentValue" : "-2",
     "exprName" : "position",
@@ -381,6 +382,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.VALUE_OUT_OF_RANGE",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "currentValue" : "0",
     "exprName" : "position",
@@ -668,11 +670,11 @@ struct<>
 -- !query output
 org.apache.spark.SparkRuntimeException
 {
-  "errorClass" : "INVALID_PARAMETER_VALUE",
+  "errorClass" : "INVALID_PARAMETER_VALUE.PATTERN",
   "sqlState" : "22023",
   "messageParameters" : {
-    "expected" : "') ?'",
     "functionName" : "`regexp_instr`",
-    "parameter" : "regexp"
+    "parameter" : "`regexp`",
+    "value" : "') ?'"
   }
 }

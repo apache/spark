@@ -28,14 +28,15 @@ import org.scalatest.BeforeAndAfter
 import org.scalatest.matchers.must.Matchers
 import org.scalatest.matchers.should.Matchers._
 
+import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{AnalysisException, Dataset}
+import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset}
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.UTC
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.sources.MemorySink
-import org.apache.spark.sql.functions.{count, timestamp_seconds, window}
+import org.apache.spark.sql.functions.{count, expr, timestamp_seconds, window}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.OutputMode._
 import org.apache.spark.util.Utils
@@ -548,17 +549,131 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
     assert(e.getMessage contains "should not be negative.")
   }
 
-  test("the new watermark should override the old one") {
-    val df = MemoryStream[(Long, Long)].toDF()
+  private def buildTestQueryForOverridingWatermark(): (MemoryStream[(Long, Long)], DataFrame) = {
+    val input = MemoryStream[(Long, Long)]
+    val df = input.toDF()
       .withColumn("first", timestamp_seconds($"_1"))
       .withColumn("second", timestamp_seconds($"_2"))
       .withWatermark("first", "1 minute")
+      .select("*")
       .withWatermark("second", "2 minutes")
+      .groupBy(window($"second", "1 minute"))
+      .count()
 
-    val eventTimeColumns = df.logicalPlan.output
-      .filter(_.metadata.contains(EventTimeWatermark.delayKey))
-    assert(eventTimeColumns.size === 1)
-    assert(eventTimeColumns(0).name === "second")
+    (input, df)
+  }
+
+  test("overriding watermark should not be allowed by default") {
+    val (input, df) = buildTestQueryForOverridingWatermark()
+    testStream(df)(
+      AddData(input, (100L, 200L)),
+      ExpectFailure[AnalysisException](assertFailure = exc => {
+        assert(exc.getMessage.contains("Redefining watermark is disallowed."))
+        assert(exc.getMessage.contains(SQLConf.STATEFUL_OPERATOR_ALLOW_MULTIPLE.key))
+      })
+    )
+  }
+
+  test("overriding watermark should not fail in compatibility mode") {
+    withSQLConf(SQLConf.STATEFUL_OPERATOR_ALLOW_MULTIPLE.key -> "false") {
+      val (input, df) = buildTestQueryForOverridingWatermark()
+      testStream(df)(
+        AddData(input, (100L, 200L)),
+        CheckAnswer(),
+        Execute { query =>
+          val lastExecution = query.lastExecution
+          val aggSaveOperator = lastExecution.executedPlan.collect {
+            case j: StateStoreSaveExec => j
+          }.head
+
+          // - watermark from first definition = 100 - 60 = 40
+          // - watermark from second definition = 200 - 120 = 80
+          // - global watermark = min(40, 60) = 40
+          //
+          // As we see the result, even though we override the watermark definition, the old
+          // definition of watermark still plays to calculate global watermark.
+          //
+          // This is conceptually the right behavior. For operators after the first watermark
+          // definition, the column named "first" is considered as event time column, and for
+          // operators after the second watermark definition, the column named "second" is
+          // considered as event time column. The correct "single" value of watermark satisfying
+          // all operators should be lower bound of both columns "first" and "second".
+          //
+          // That said, this easily leads to incorrect definition - e.g. re-define watermark
+          // against the output of streaming aggregation for append mode. The global watermark
+          // cannot advance. This is the reason we don't allow re-define watermark in new behavior.
+          val expectedWatermarkMs = 40 * 1000
+
+          assert(aggSaveOperator.eventTimeWatermarkForLateEvents === Some(expectedWatermarkMs))
+          assert(aggSaveOperator.eventTimeWatermarkForEviction === Some(expectedWatermarkMs))
+
+          val eventTimeCols = aggSaveOperator.keyExpressions.filter(
+            _.metadata.contains(EventTimeWatermark.delayKey))
+          assert(eventTimeCols.size === 1)
+          assert(eventTimeCols.head.name === "window")
+          // 2 minutes delay threshold
+          assert(eventTimeCols.head.metadata.getLong(EventTimeWatermark.delayKey) === 120 * 1000)
+        }
+      )
+    }
+  }
+
+  private def buildTestQueryForMultiEventTimeColumns()
+    : (MemoryStream[(String, Long)], MemoryStream[(String, Long)], DataFrame) = {
+    val input1 = MemoryStream[(String, Long)]
+    val input2 = MemoryStream[(String, Long)]
+    val df1 = input1.toDF()
+      .selectExpr("_1 AS id1", "timestamp_seconds(_2) AS ts1")
+      .withWatermark("ts1", "1 minute")
+
+    val df2 = input2.toDF()
+      .selectExpr("_1 AS id2", "timestamp_seconds(_2) AS ts2")
+      .withWatermark("ts2", "2 minutes")
+
+    val joined = df1.join(df2, expr("id1 = id2 AND ts1 = ts2 + INTERVAL 10 SECONDS"), "inner")
+      .selectExpr("id1", "ts1", "ts2")
+    // the output of join contains both ts1 and ts2
+    val dedup = joined.dropDuplicates()
+      .selectExpr("id1", "CAST(ts1 AS LONG) AS ts1", "CAST(ts2 AS LONG) AS ts2")
+
+    (input1, input2, dedup)
+  }
+
+  test("multiple event time columns in an input DataFrame for stateful operator is " +
+    "not allowed") {
+    // for ease of verification, we change the session timezone to UTC
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+      val (input1, input2, dedup) = buildTestQueryForMultiEventTimeColumns()
+      testStream(dedup)(
+        MultiAddData(
+          (input1, Seq(("A", 200L), ("B", 300L))),
+          (input2, Seq(("A", 190L), ("C", 350L)))
+        ),
+        ExpectFailure[SparkException](assertFailure = exc => {
+          val cause = exc.getCause
+          assert(cause.getMessage.contains("More than one event time columns are available."))
+          assert(cause.getMessage.contains(
+            "Please ensure there is at most one event time column per stream."))
+        })
+      )
+    }
+  }
+
+  test("stateful operator should pick the first occurrence of event time column if there is " +
+    "multiple event time columns in compatibility mode") {
+    // for ease of verification, we change the session timezone to UTC
+    withSQLConf(
+      SQLConf.STATEFUL_OPERATOR_ALLOW_MULTIPLE.key -> "false",
+      SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+      val (input1, input2, dedup) = buildTestQueryForMultiEventTimeColumns()
+      testStream(dedup)(
+        MultiAddData(
+          (input1, Seq(("A", 200L), ("B", 300L))),
+          (input2, Seq(("A", 190L), ("C", 350L)))
+        ),
+        CheckAnswer(("A", 200L, 190L))
+      )
+    }
   }
 
   test("EventTime watermark should be ignored in batch query.") {

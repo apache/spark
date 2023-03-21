@@ -168,7 +168,7 @@ private[spark] class AppStatusListener(
   override def onEnvironmentUpdate(event: SparkListenerEnvironmentUpdate): Unit = {
     val details = event.environmentDetails
 
-    val jvmInfo = Map(details("JVM Information"): _*)
+    val jvmInfo = details("JVM Information").toMap
     val runtime = new v1.RuntimeInfo(
       jvmInfo.get("Java Version").orNull,
       jvmInfo.get("Java Home").orNull,
@@ -507,7 +507,6 @@ private[spark] class AppStatusListener(
             stage.status = v1.StageStatus.SKIPPED
             job.skippedStages += stage.info.stageId
             job.skippedTasks += stage.info.numTasks
-            job.activeStages -= 1
 
             pools.get(stage.schedulingPool).foreach { pool =>
               pool.stageIds = pool.stageIds - stage.info.stageId

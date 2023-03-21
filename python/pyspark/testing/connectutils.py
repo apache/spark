@@ -14,17 +14,22 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import shutil
+import tempfile
 import typing
 import os
 import functools
 import unittest
 
+from pyspark import Row, SparkConf
+from pyspark.testing.utils import PySparkErrorTestUtils
 from pyspark.testing.sqlutils import (
     have_pandas,
-    have_pyarrow,
     pandas_requirement_message,
     pyarrow_requirement_message,
+    SQLTestUtils,
 )
+from pyspark.sql.session import SparkSession as PySparkSession
 
 
 grpc_requirement_message = None
@@ -34,36 +39,35 @@ except ImportError as e:
     grpc_requirement_message = str(e)
 have_grpc = grpc_requirement_message is None
 
-connect_not_compiled_message = None
-if have_pandas and have_pyarrow and have_grpc:
-    from pyspark.sql.connect import DataFrame
-    from pyspark.sql.connect.plan import Read, Range, SQL
-    from pyspark.testing.utils import search_jar
-    from pyspark.sql.connect.session import SparkSession
 
-    connect_jar = search_jar("connector/connect/server", "spark-connect-assembly-", "spark-connect")
-    existing_args = os.environ.get("PYSPARK_SUBMIT_ARGS", "pyspark-shell")
-    connect_url = "--remote sc://localhost"
-    jars_args = "--jars %s" % connect_jar
-    plugin_args = "--conf spark.plugins=org.apache.spark.sql.connect.SparkConnectPlugin"
-    os.environ["PYSPARK_SUBMIT_ARGS"] = " ".join(
-        [connect_url, jars_args, plugin_args, existing_args]
-    )
-else:
-    connect_not_compiled_message = (
-        "Skipping all Spark Connect Python tests as the optional Spark Connect project was "
-        "not compiled into a JAR. To run these tests, you need to build Spark with "
-        "'build/sbt package' or 'build/mvn package' before running this test."
-    )
+grpc_status_requirement_message = None
+try:
+    import grpc_status
+except ImportError as e:
+    grpc_status_requirement_message = str(e)
+have_grpc_status = grpc_status_requirement_message is None
+
+googleapis_common_protos_requirement_message = None
+try:
+    from google.rpc import error_details_pb2
+except ImportError as e:
+    googleapis_common_protos_requirement_message = str(e)
+have_googleapis_common_protos = googleapis_common_protos_requirement_message is None
 
 
 connect_requirement_message = (
     pandas_requirement_message
     or pyarrow_requirement_message
     or grpc_requirement_message
-    or connect_not_compiled_message
+    or googleapis_common_protos_requirement_message
+    or grpc_status_requirement_message
 )
 should_test_connect: str = typing.cast(str, connect_requirement_message is None)
+
+if should_test_connect:
+    from pyspark.sql.connect.dataframe import DataFrame
+    from pyspark.sql.connect.plan import Read, Range, SQL
+    from pyspark.sql.connect.session import SparkSession
 
 
 class MockRemoteSession:
@@ -118,7 +122,6 @@ class PlanOnlyTestFixture(unittest.TestCase):
         cls.session = SparkSession.builder.remote().getOrCreate()
         cls.tbl_name = "test_connect_plan_only_table_1"
 
-        cls.connect.set_hook("register_udf", cls._udf_mock)
         cls.connect.set_hook("readTable", cls._read_table)
         cls.connect.set_hook("range", cls._session_range)
         cls.connect.set_hook("sql", cls._session_sql)
@@ -126,8 +129,39 @@ class PlanOnlyTestFixture(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
-        cls.connect.drop_hook("register_udf")
         cls.connect.drop_hook("readTable")
         cls.connect.drop_hook("range")
         cls.connect.drop_hook("sql")
         cls.connect.drop_hook("with_plan")
+
+
+@unittest.skipIf(not should_test_connect, connect_requirement_message)
+class ReusedConnectTestCase(unittest.TestCase, SQLTestUtils, PySparkErrorTestUtils):
+    """
+    Spark Connect version of :class:`pyspark.testing.sqlutils.ReusedSQLTestCase`.
+    """
+
+    @classmethod
+    def conf(cls):
+        """
+        Override this in subclasses to supply a more specific conf
+        """
+        return SparkConf(loadDefaults=False)
+
+    @classmethod
+    def setUpClass(cls):
+        cls.spark = (
+            PySparkSession.builder.config(conf=cls.conf())
+            .appName(cls.__name__)
+            .remote("local[4]")
+            .getOrCreate()
+        )
+        cls.tempdir = tempfile.NamedTemporaryFile(delete=False)
+        os.unlink(cls.tempdir.name)
+        cls.testData = [Row(key=i, value=str(i)) for i in range(100)]
+        cls.df = cls.spark.createDataFrame(cls.testData)
+
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.tempdir.name, ignore_errors=True)
+        cls.spark.stop()

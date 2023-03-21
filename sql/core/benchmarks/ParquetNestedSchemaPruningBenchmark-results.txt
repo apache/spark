@@ -2,52 +2,52 @@
 Nested Schema Pruning Benchmark For Parquet
 ================================================================================================
 
-Java HotSpot(TM) 64-Bit Server VM 1.8.0_221-b11 on Linux 5.4.0-122-generic
-Intel(R) Core(TM) i7-8750H CPU @ 2.20GHz
+OpenJDK 64-Bit Server VM 1.8.0_362-b09 on Linux 5.15.0-1031-azure
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 Selection:                                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Top-level column                                     91            131          30         10.9          91.4       1.0X
-Nested column                                        73            109          32         13.6          73.5       1.2X
-Nested column in array                              248            266          28          4.0         248.1       0.4X
+Top-level column                                     89            104          20         11.2          89.4       1.0X
+Nested column                                        94            103          12         10.6          94.5       0.9X
+Nested column in array                              306            311           7          3.3         306.0       0.3X
 
-Java HotSpot(TM) 64-Bit Server VM 1.8.0_221-b11 on Linux 5.4.0-122-generic
-Intel(R) Core(TM) i7-8750H CPU @ 2.20GHz
+OpenJDK 64-Bit Server VM 1.8.0_362-b09 on Linux 5.15.0-1031-azure
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 Limiting:                                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Top-level column                                    268            386         154          3.7         268.4       1.0X
-Nested column                                       271            305          22          3.7         271.3       1.0X
-Nested column in array                              648            737          49          1.5         648.0       0.4X
+Top-level column                                    298            310           8          3.4         298.2       1.0X
+Nested column                                       306            334          27          3.3         306.2       1.0X
+Nested column in array                              696            711          15          1.4         696.0       0.4X
 
-Java HotSpot(TM) 64-Bit Server VM 1.8.0_221-b11 on Linux 5.4.0-122-generic
-Intel(R) Core(TM) i7-8750H CPU @ 2.20GHz
+OpenJDK 64-Bit Server VM 1.8.0_362-b09 on Linux 5.15.0-1031-azure
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 Repartitioning:                           Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Top-level column                                    227            259          24          4.4         226.6       1.0X
-Nested column                                       271            429         182          3.7         271.2       0.8X
-Nested column in array                              644            751         114          1.6         644.1       0.4X
+Top-level column                                    288            291           3          3.5         287.6       1.0X
+Nested column                                       295            300           5          3.4         294.6       1.0X
+Nested column in array                              671            677           9          1.5         670.9       0.4X
 
-Java HotSpot(TM) 64-Bit Server VM 1.8.0_221-b11 on Linux 5.4.0-122-generic
-Intel(R) Core(TM) i7-8750H CPU @ 2.20GHz
+OpenJDK 64-Bit Server VM 1.8.0_362-b09 on Linux 5.15.0-1031-azure
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 Repartitioning by exprs:                  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Top-level column                                    263            306          29          3.8         262.8       1.0X
-Nested column                                       323            385          48          3.1         322.5       0.8X
-Nested column in array                              637            789         195          1.6         637.1       0.4X
+Top-level column                                    287            293           4          3.5         287.3       1.0X
+Nested column                                       317            320           3          3.2         316.7       0.9X
+Nested column in array                              710            718          10          1.4         710.2       0.4X
 
-Java HotSpot(TM) 64-Bit Server VM 1.8.0_221-b11 on Linux 5.4.0-122-generic
-Intel(R) Core(TM) i7-8750H CPU @ 2.20GHz
+OpenJDK 64-Bit Server VM 1.8.0_362-b09 on Linux 5.15.0-1031-azure
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 Sample:                                   Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Top-level column                                     84            129          43         12.0          83.5       1.0X
-Nested column                                        83             99          13         12.1          82.7       1.0X
-Nested column in array                              312            366          47          3.2         312.2       0.3X
+Top-level column                                    100            114          18         10.0         100.1       1.0X
+Nested column                                       110            122          21          9.1         109.6       0.9X
+Nested column in array                              331            396          75          3.0         330.9       0.3X
 
-Java HotSpot(TM) 64-Bit Server VM 1.8.0_221-b11 on Linux 5.4.0-122-generic
-Intel(R) Core(TM) i7-8750H CPU @ 2.20GHz
+OpenJDK 64-Bit Server VM 1.8.0_362-b09 on Linux 5.15.0-1031-azure
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 Sorting:                                  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Top-level column                                    342            420          54          2.9         342.2       1.0X
-Nested column                                       423            441          17          2.4         422.6       0.8X
-Nested column in array                              821            870          28          1.2         821.1       0.4X
+Top-level column                                    425            434           5          2.4         425.1       1.0X
+Nested column                                       486            494           7          2.1         486.1       0.9X
+Nested column in array                              953            968          23          1.0         952.5       0.4X
 
 

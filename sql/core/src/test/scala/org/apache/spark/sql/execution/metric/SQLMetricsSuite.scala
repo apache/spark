@@ -34,12 +34,14 @@ import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.adaptive.DisableAdaptiveExecutionSuite
 import org.apache.spark.sql.execution.aggregate.HashAggregateExec
 import org.apache.spark.sql.execution.command.DataWritingCommandExec
-import org.apache.spark.sql.execution.datasources.{BasicWriteJobStatsTracker, SQLHadoopMapReduceCommitProtocol}
+import org.apache.spark.sql.execution.datasources.{BasicWriteJobStatsTracker, SQLHadoopMapReduceCommitProtocol, WriteFilesExec}
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, ShuffledHashJoinExec}
+import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.util.QueryExecutionListener
 import org.apache.spark.util.{AccumulatorContext, JsonProtocol}
 
 // Disable AQE because metric info is different with AQE on/off
@@ -785,11 +787,7 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
 
     testMetricsInSparkPlanOperator(exchanges.head,
       Map("dataSize" -> 3200, "shuffleRecordsWritten" -> 100))
-    // `testData2.filter($"b" === 0)` is an empty relation.
-    // The exchange doesn't serialize any bytes.
-    // The SQLMetric keeps initial value.
-    testMetricsInSparkPlanOperator(exchanges(1),
-      Map("dataSize" -> -1, "shuffleRecordsWritten" -> 0))
+    testMetricsInSparkPlanOperator(exchanges(1), Map("dataSize" -> 0, "shuffleRecordsWritten" -> 0))
   }
 
   test("Add numRows to metric of BroadcastExchangeExec") {
@@ -832,18 +830,36 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
 
   test("SPARK-34567: Add metrics for CTAS operator") {
     withTable("t") {
-      val df = sql("CREATE TABLE t USING PARQUET AS SELECT 1 as a")
-      assert(df.queryExecution.executedPlan.isInstanceOf[CommandResultExec])
-      val commandResultExec = df.queryExecution.executedPlan.asInstanceOf[CommandResultExec]
-      val dataWritingCommandExec =
-        commandResultExec.commandPhysicalPlan.asInstanceOf[DataWritingCommandExec]
-      val createTableAsSelect = dataWritingCommandExec.cmd
-      assert(createTableAsSelect.metrics.contains("numFiles"))
-      assert(createTableAsSelect.metrics("numFiles").value == 1)
-      assert(createTableAsSelect.metrics.contains("numOutputBytes"))
-      assert(createTableAsSelect.metrics("numOutputBytes").value > 0)
-      assert(createTableAsSelect.metrics.contains("numOutputRows"))
-      assert(createTableAsSelect.metrics("numOutputRows").value == 1)
+      var dataWriting: DataWritingCommandExec = null
+      val listener = new QueryExecutionListener {
+        override def onFailure(f: String, qe: QueryExecution, e: Exception): Unit = {}
+        override def onSuccess(funcName: String, qe: QueryExecution, duration: Long): Unit = {
+          qe.executedPlan match {
+            case dataWritingCommandExec: DataWritingCommandExec =>
+              dataWriting = dataWritingCommandExec
+            case _ =>
+          }
+        }
+      }
+      spark.listenerManager.register(listener)
+      try {
+        sql("CREATE TABLE t USING PARQUET AS SELECT 1 as a")
+        sparkContext.listenerBus.waitUntilEmpty()
+        assert(dataWriting != null)
+        val metrics = if (conf.plannedWriteEnabled) {
+          dataWriting.child.asInstanceOf[WriteFilesExec].metrics
+        } else {
+          dataWriting.cmd.metrics
+        }
+        assert(metrics.contains("numFiles"))
+        assert(metrics("numFiles").value == 1)
+        assert(metrics.contains("numOutputBytes"))
+        assert(metrics("numOutputBytes").value > 0)
+        assert(metrics.contains("numOutputRows"))
+        assert(metrics("numOutputRows").value == 1)
+      } finally {
+        spark.listenerManager.unregister(listener)
+      }
     }
   }
 
@@ -868,6 +884,21 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
         }
       }
     }
+  }
+
+  test("SPARK-40711: Add spill size metrics for window") {
+    val data = Seq((1, "a"), (2, "b")).toDF("c1", "c2")
+    val w = Window.partitionBy("c1").orderBy("c2")
+    val df = data.select(rank().over(w))
+    // Project
+    //   Window
+    //     ...
+    testSparkPlanMetricsWithPredicates(df, 1, Map(
+      1L -> (("Window", Map(
+        "spill size" -> {
+          _.toString.matches(sizeMetricPattern)
+        }))))
+    )
   }
 }
 

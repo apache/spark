@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.{SPARK_DOC_ROOT, SparkRuntimeException}
 import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -579,11 +580,12 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         df.selectExpr("sentences()")
       },
-      errorClass = "WRONG_NUM_ARGS.WITH_SUGGESTION",
+      errorClass = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
       parameters = Map(
         "functionName" -> toSQLId("sentences"),
         "expectedNum" -> "[1, 2, 3]",
-        "actualNum" -> "0"
+        "actualNum" -> "0",
+        "docroot" -> SPARK_DOC_ROOT
       ),
       context = ExpectedContext(
         fragment = "sentences()",
@@ -662,5 +664,54 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
         fragment = "regexp_replace(collect_list(1), '1', '2')",
         start = 7,
         stop = 47))
+  }
+
+  test("SPARK-41780: INVALID_PARAMETER_VALUE.PATTERN - " +
+    "invalid parameters `regexp` in regexp_replace & regexp_extract") {
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        sql("select regexp_replace('', '[a\\\\d]{0, 2}', 'x')").collect()
+      },
+      errorClass = "INVALID_PARAMETER_VALUE.PATTERN",
+      parameters = Map(
+        "parameter" -> toSQLId("regexp"),
+        "functionName" -> toSQLId("regexp_replace"),
+        "value" -> "'[a\\\\d]{0, 2}'"
+      )
+    )
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        sql("select regexp_extract('', '[a\\\\d]{0, 2}', 1)").collect
+      },
+      errorClass = "INVALID_PARAMETER_VALUE.PATTERN",
+      parameters = Map(
+        "parameter" -> toSQLId("regexp"),
+        "functionName" -> toSQLId("regexp_extract"),
+        "value" -> "'[a\\\\d]{0, 2}'"
+      )
+    )
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        sql("select rlike('', '[a\\\\d]{0, 2}')").collect()
+      },
+      errorClass = "INVALID_PARAMETER_VALUE.PATTERN",
+      parameters = Map(
+        "parameter" -> toSQLId("regexp"),
+        "functionName" -> toSQLId("rlike"),
+        "value" -> "'[a\\\\d]{0, 2}'"
+      )
+    )
+  }
+
+  test("SPARK-42384: mask with null input") {
+    val df = Seq(
+      ("AbCD123-@$#"),
+      (null)
+    ).toDF("a")
+
+    checkAnswer(
+      df.selectExpr("mask(a,'Q','q','d','o')"),
+      Row("QqQQdddoooo") :: Row(null) :: Nil
+    )
   }
 }

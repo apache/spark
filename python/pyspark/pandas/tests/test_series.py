@@ -1289,6 +1289,19 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         psser = ps.from_pandas(pser)
         self.assert_eq(psser.map(tomorrow), pser.map(tomorrow))
 
+    def test_add_and_radd_fill_value(self):
+        pser = pd.Series([1, 2, None, 4])
+        psser = ps.from_pandas(pser)
+        values = [-10, -0.5, 0, None, 0.5, 10]
+        for value in values:
+            self.assert_eq(pser.add(10, fill_value=value), psser.add(10, fill_value=value))
+            self.assert_eq(pser.radd(10, fill_value=value), psser.radd(10, fill_value=value))
+
+        self.assertRaises(NotImplementedError, lambda: psser.add([1, 2, None, None], fill_value=10))
+        self.assertRaises(
+            NotImplementedError, lambda: psser.radd([1, 2, None, None], fill_value=10)
+        )
+
     def test_add_prefix(self):
         pser = pd.Series([1, 2, 3, 4], name="0")
         psser = ps.from_pandas(pser)
@@ -1563,7 +1576,6 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         psser = ps.Series(pser)
 
         self.assert_eq(psser.astype(int), pser.astype(int))
-        self.assert_eq(psser.astype(np.int), pser.astype(np.int))
         self.assert_eq(psser.astype(np.int8), pser.astype(np.int8))
         self.assert_eq(psser.astype(np.int16), pser.astype(np.int16))
         self.assert_eq(psser.astype(np.int32), pser.astype(np.int32))
@@ -1579,7 +1591,6 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         self.assert_eq(psser.astype("i"), pser.astype("i"))
         self.assert_eq(psser.astype("long"), pser.astype("long"))
         self.assert_eq(psser.astype("short"), pser.astype("short"))
-        self.assert_eq(psser.astype(np.float), pser.astype(np.float))
         self.assert_eq(psser.astype(np.float32), pser.astype(np.float32))
         self.assert_eq(psser.astype(np.float64), pser.astype(np.float64))
         self.assert_eq(psser.astype("float"), pser.astype("float"))

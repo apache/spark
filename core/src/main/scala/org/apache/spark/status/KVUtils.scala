@@ -45,8 +45,26 @@ private[spark] object KVUtils extends Logging {
   /** Use this to annotate constructor params to be used as KVStore indices. */
   type KVIndexParam = KVIndex @getter
 
-  private def backend(conf: SparkConf) =
-    HybridStoreDiskBackend.withName(conf.get(HYBRID_STORE_DISK_BACKEND))
+  private def backend(conf: SparkConf, live: Boolean) = {
+    if (live) {
+      // For the disk-based KV store of live UI, let's simply make it ROCKSDB only for now,
+      // instead of supporting both LevelDB and RocksDB. RocksDB is built based on LevelDB with
+      // improvements on writes and reads.
+      HybridStoreDiskBackend.ROCKSDB
+    } else {
+      HybridStoreDiskBackend.withName(conf.get(HYBRID_STORE_DISK_BACKEND))
+    }
+  }
+
+  private def serializer(conf: SparkConf, live: Boolean) = {
+    if (live) {
+      // For the disk-based KV store of live UI, let's simply use protobuf serializer only.
+      // The default serializer is slow since it is using JSON+GZip encoding.
+      new KVStoreProtobufSerializer()
+    } else {
+      serializerForHistoryServer(conf)
+    }
+  }
 
   /**
    * A KVStoreSerializer that provides Scala types serialization too, and uses the same options as
@@ -72,12 +90,11 @@ private[spark] object KVUtils extends Logging {
       path: File,
       metadata: M,
       conf: SparkConf,
-      diskBackend: Option[HybridStoreDiskBackend.Value] = None,
-      serializer: Option[KVStoreSerializer] = None): KVStore = {
+      live: Boolean): KVStore = {
     require(metadata != null, "Metadata is required.")
 
-    val kvSerializer = serializer.getOrElse(new KVStoreScalaSerializer())
-    val db = diskBackend.getOrElse(backend(conf)) match {
+    val kvSerializer = serializer(conf, live)
+    val db = backend(conf, live) match {
       case LEVELDB => new LevelDB(path, kvSerializer)
       case ROCKSDB => new RocksDB(path, kvSerializer)
     }
@@ -92,27 +109,23 @@ private[spark] object KVUtils extends Logging {
     db
   }
 
+  def serializerForHistoryServer(conf: SparkConf): KVStoreScalaSerializer = {
+    History.LocalStoreSerializer.withName(conf.get(History.LOCAL_STORE_SERIALIZER)) match {
+      case History.LocalStoreSerializer.JSON =>
+        new KVStoreScalaSerializer()
+      case History.LocalStoreSerializer.PROTOBUF =>
+        new KVStoreProtobufSerializer()
+      case other =>
+        throw new IllegalArgumentException(s"Unrecognized KV store serializer $other")
+    }
+  }
+
   def createKVStore(
       storePath: Option[File],
       live: Boolean,
       conf: SparkConf): KVStore = {
     storePath.map { path =>
-      val diskBackend = if (live) {
-        // For the disk-based KV store of live UI, let's simply make it ROCKSDB only for now,
-        // instead of supporting both LevelDB and RocksDB. RocksDB is built based on LevelDB with
-        // improvements on writes and reads.
-        HybridStoreDiskBackend.ROCKSDB
-      } else {
-        HybridStoreDiskBackend.withName(conf.get(History.HYBRID_STORE_DISK_BACKEND))
-      }
-
-      val serializer = if (live) {
-        // For the disk-based KV store of live UI, let's simply use protobuf serializer only.
-        // The default serializer is slow since it is using JSON+GZip encoding.
-        Some(new KVStoreProtobufSerializer())
-      } else {
-        None
-      }
+      val diskBackend = backend(conf, live)
 
       val dir = diskBackend match {
         case LEVELDB => "listing.ldb"
@@ -128,7 +141,7 @@ private[spark] object KVUtils extends Logging {
         conf.get(History.HISTORY_LOG_DIR))
 
       try {
-        open(dbPath, metadata, conf, Some(diskBackend), serializer)
+        open(dbPath, metadata, conf, live)
       } catch {
         // If there's an error, remove the listing database and any existing UI database
         // from the store directory, since it's extremely likely that they'll all contain
@@ -136,12 +149,12 @@ private[spark] object KVUtils extends Logging {
         case _: UnsupportedStoreVersionException | _: MetadataMismatchException =>
           logInfo("Detected incompatible DB versions, deleting...")
           path.listFiles().foreach(Utils.deleteRecursively)
-          open(dbPath, metadata, conf, Some(diskBackend), serializer)
+          open(dbPath, metadata, conf, live)
         case dbExc @ (_: NativeDB.DBException | _: RocksDBException) =>
           // Get rid of the corrupted data and re-create it.
           logWarning(s"Failed to load disk store $dbPath :", dbExc)
           Utils.deleteRecursively(dbPath)
-          open(dbPath, metadata, conf, Some(diskBackend), serializer)
+          open(dbPath, metadata, conf, live)
       }
     }.getOrElse(new InMemoryStore())
   }
