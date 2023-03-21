@@ -4612,32 +4612,66 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
 
     val rddC = new MyRDD(sc, 2, List(shuffleDepB), tracker = mapOutputTracker)
 
-    submit(rddC, Array(0, 1))
+    // stage0
+    submitMapStage(shuffleDepA)
 
     completeShuffleMapStageSuccessfully(0, 0, 2, Seq("hostA", "hostB"))
 
-    // Fetch failed
+    // stage2
+    submitMapStage(shuffleDepB)
+
+    sc.listenerBus.waitUntilEmpty()
+
+    var taskIdCount = 2
+    def createTaskInfo(speculative: Boolean): TaskInfo = {
+      val taskInfo =
+        new TaskInfo(taskIdCount, 0, 0, 0, 0L, "", "hostC", TaskLocality.ANY, speculative)
+      taskIdCount += 1
+      taskInfo
+    }
+
+    // stage2`s task0 Fetch failed
     runEvent(makeCompletionEvent(
       taskSets(1).tasks(0),
       FetchFailed(makeBlockManagerId("hostA"), shuffleIdA, 0L, 0, 0,
         "Fetch failure of task: stageId=1, stageAttempt=0, partitionId=0"),
-      result = null))
+      result = null, Seq.empty, Array.empty, createTaskInfo(false)))
 
     // long running task complete
-    completeShuffleMapStageSuccessfully(1, 0, 2, Seq("hostA", "hostB"))
+    runEvent(makeCompletionEvent(taskSets(1).tasks(1), Success,
+      result = MapStatus(BlockManagerId("hostC-exec1", "hostC", 44399),
+        Array.fill[Long](2)(2), mapTaskId = taskIdCount),
+      Seq.empty, Array.empty, createTaskInfo(false)))
+    runEvent(makeCompletionEvent(taskSets(1).tasks(0), Success,
+      result = MapStatus(BlockManagerId("hostD-exec1", "hostD", 44400),
+        Array.fill[Long](2)(2), mapTaskId = taskIdCount),
+      Seq.empty, Array.empty, createTaskInfo(true)))
+
+
+    sc.listenerBus.waitUntilEmpty()
+
+    // stage2 can not be shuffleMergeFinalized
     assert(!shuffleDepB.shuffleMergeFinalized)
 
-    // stage1`s tasks have all completed
-    val shuffleStage1 = scheduler.stageIdToStage(1).asInstanceOf[ShuffleMapStage]
-    assert(shuffleStage1.pendingPartitions.isEmpty)
+    // stage2`s tasks have all completed
+    val shuffleStageB = scheduler.stageIdToStage(2).asInstanceOf[ShuffleMapStage]
+    assert(shuffleStageB.pendingPartitions.isEmpty)
 
-    // resubmit
-    scheduler.resubmitFailedStages()
+    // wait resubmit
+    sc.listenerBus.waitUntilEmpty()
+    Thread.sleep(DAGScheduler.RESUBMIT_TIMEOUT * 2)
 
-    // complete parentStage0
-    completeShuffleMapStageSuccessfully(0, 0, 2, Seq("hostA", "hostB"))
+    // stage0 retry
+    val stage0Retry = taskSets.filter(_.stageId == 1)
+    assert(stage0Retry.size === 1)
+    runEvent(makeCompletionEvent(stage0Retry.head.tasks(0), Success,
+      result = MapStatus(BlockManagerId("hostE-exec1", "hostE", 44401),
+        Array.fill[Long](2)(2), mapTaskId = taskIdCount)))
 
-    // stage1 should be shuffleMergeFinalized
+    // wait stage2 resubmit
+    sc.listenerBus.waitUntilEmpty()
+
+    // stage2 should be shuffleMergeFinalized
     assert(shuffleDepB.shuffleMergeFinalized)
   }
 
