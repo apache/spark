@@ -4595,8 +4595,8 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     }
   }
 
-  test("SPARK-40082: recomputation of shuffle map stage with no pending partitions" +
-    "should not hang") {
+  test("SPARK-40082: recomputation of shuffle map stage with no pending partitions should " +
+    "finalize the stage") {
 
     initPushBasedShuffleConfs(conf)
     conf.set(config.SHUFFLE_MERGER_LOCATIONS_MIN_STATIC_THRESHOLD, 3)
@@ -4614,17 +4614,17 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
 
     submit(rddC, Array(0, 1))
 
-    completeShuffleMapStageSuccessfully(0, 0, 2, Seq("hostA", "hostA"))
+    completeShuffleMapStageSuccessfully(0, 0, 2, Seq("hostA", "hostB"))
 
     // Fetch failed
     runEvent(makeCompletionEvent(
       taskSets(1).tasks(0),
-      FetchFailed(makeBlockManagerId("hostC"), shuffleIdA, 0L, 0, 0,
+      FetchFailed(makeBlockManagerId("hostA"), shuffleIdA, 0L, 0, 0,
         "Fetch failure of task: stageId=1, stageAttempt=0, partitionId=0"),
       result = null))
 
     // long running task complete
-    completeShuffleMapStageSuccessfully(1, 0, 2, Seq("hostA", "hostA"))
+    completeShuffleMapStageSuccessfully(1, 0, 2, Seq("hostA", "hostB"))
     assert(!shuffleDepB.shuffleMergeFinalized)
 
     // stage1`s tasks have all completed
@@ -4635,15 +4635,15 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     scheduler.resubmitFailedStages()
 
     // complete parentStage0
-    completeShuffleMapStageSuccessfully(0, 0, 2, Seq("hostA", "hostA"))
+    completeShuffleMapStageSuccessfully(0, 0, 2, Seq("hostA", "hostB"))
 
     // stage1 should be shuffleMergeFinalized
     assert(shuffleDepB.shuffleMergeFinalized)
   }
 
   for (pushBasedShuffleEnabled <- Seq(true, false)) {
-    test("SPARK-40082: recomputation of shuffle map stage with no pending partitions should not " +
-      s"hang. pushBasedShuffleEnabled = $pushBasedShuffleEnabled") {
+    test("SPARK-40082: recomputation of shuffle map stage with no pending partitions should " +
+      s"finalize the stage. pushBasedShuffleEnabled = $pushBasedShuffleEnabled") {
 
       if (pushBasedShuffleEnabled) {
         initPushBasedShuffleConfs(conf)
