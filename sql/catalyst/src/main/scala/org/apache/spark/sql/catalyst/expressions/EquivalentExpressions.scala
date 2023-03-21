@@ -137,8 +137,8 @@ class EquivalentExpressions(
       // The subexpression may not need to eval even if it appears more than once.
       // e.g., `if(or(a, and(b, b)))`, the expression `b` would be skipped if `a` is true.
       expr match {
-        case and: And => skipForShortcut(and.left)
-        case or: Or => skipForShortcut(or.left)
+        case and: And => and.left
+        case or: Or => or.left
         case other => other
       }
     } else {
