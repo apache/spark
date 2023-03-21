@@ -41,10 +41,7 @@ class InterpretedProjection(expressions: Seq[Expression]) extends Projection {
   }
 
   override def initialize(partitionIndex: Int): Unit = {
-    exprArray.foreach(_.foreach {
-      case n: Nondeterministic => n.initialize(partitionIndex)
-      case _ =>
-    })
+    initializeExprs(exprArray, partitionIndex)
   }
 
   def apply(input: InternalRow): InternalRow = {

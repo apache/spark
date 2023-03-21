@@ -392,8 +392,7 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
     findField(this, fieldNames, Nil)
   }
 
-  protected[sql] def toAttributes: Seq[AttributeReference] =
-    map(f => AttributeReference(f.name, f.dataType, f.nullable, f.metadata)())
+  protected[sql] def toAttributes: Seq[AttributeReference] = map(field => field.toAttribute)
 
   def treeString: String = treeString(Int.MaxValue)
 
@@ -432,7 +431,7 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
    */
   override def defaultSize: Int = fields.map(_.dataType.defaultSize).sum
 
-  override def physicalDataType: PhysicalDataType = PhysicalStructType(fields)
+  private[sql] override def physicalDataType: PhysicalDataType = PhysicalStructType(fields)
 
   override def simpleString: String = {
     val fieldTypes = fields.view.map(field => s"${field.name}:${field.dataType.simpleString}").toSeq
@@ -613,7 +612,8 @@ object StructType extends AbstractDataType {
                   nullable = leftNullable || rightNullable)
               } catch {
                 case NonFatal(e) =>
-                  throw QueryExecutionErrors.failedMergingFieldsError(leftName, rightName, e)
+                  throw QueryExecutionErrors.cannotMergeIncompatibleDataTypesError(
+                    leftType, rightType)
               }
             }
             .orElse {

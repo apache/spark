@@ -17,19 +17,29 @@
 
 package org.apache.spark.status.protobuf
 
-import org.apache.commons.lang3.StringUtils
-
 import org.apache.spark.status.api.v1.StageStatus
+import org.apache.spark.status.protobuf.StoreTypes.{StageStatus => GStageStatus}
 
 private[protobuf] object StageStatusSerializer {
 
-  private def PREFIX = "STAGE_STATUS_"
-
-  def serialize(input: StageStatus): StoreTypes.StageStatus = {
-    StoreTypes.StageStatus.valueOf(PREFIX + input.toString)
+  def serialize(input: StageStatus): GStageStatus = {
+    input match {
+      case StageStatus.ACTIVE => GStageStatus.STAGE_STATUS_ACTIVE
+      case StageStatus.COMPLETE => GStageStatus.STAGE_STATUS_COMPLETE
+      case StageStatus.FAILED => GStageStatus.STAGE_STATUS_FAILED
+      case StageStatus.PENDING => GStageStatus.STAGE_STATUS_PENDING
+      case StageStatus.SKIPPED => GStageStatus.STAGE_STATUS_SKIPPED
+    }
   }
 
-  def deserialize(binary: StoreTypes.StageStatus): StageStatus = {
-    StageStatus.valueOf(StringUtils.removeStart(binary.toString, PREFIX))
+  def deserialize(binary: GStageStatus): StageStatus = {
+    binary match {
+      case GStageStatus.STAGE_STATUS_ACTIVE => StageStatus.ACTIVE
+      case GStageStatus.STAGE_STATUS_COMPLETE => StageStatus.COMPLETE
+      case GStageStatus.STAGE_STATUS_FAILED => StageStatus.FAILED
+      case GStageStatus.STAGE_STATUS_PENDING => StageStatus.PENDING
+      case GStageStatus.STAGE_STATUS_SKIPPED => StageStatus.SKIPPED
+      case _ => null
+    }
   }
 }

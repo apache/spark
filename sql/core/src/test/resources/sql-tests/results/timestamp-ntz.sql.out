@@ -46,9 +46,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "WRONG_NUM_ARGS.WITH_SUGGESTION",
+  "errorClass" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+  "sqlState" : "42605",
   "messageParameters" : {
     "actualNum" : "7",
+    "docroot" : "https://spark.apache.org/docs/latest",
     "expectedNum" : "6",
     "functionName" : "`make_timestamp_ntz`"
   },

@@ -9,9 +9,9 @@ license: |
   The ASF licenses this file to You under the Apache License, Version 2.0
   (the "License"); you may not use this file except in compliance with
   the License.  You may obtain a copy of the License at
- 
+
      http://www.apache.org/licenses/LICENSE-2.0
- 
+
   Unless required by applicable law or agreed to in writing, software
   distributed under the License is distributed on an "AS IS" BASIS,
   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -37,7 +37,6 @@ For example, historically, `native` implementation handles `CHAR/VARCHAR` with S
 
 `native` implementation supports a vectorized ORC reader and has been the default ORC implementation since Spark 2.3.
 The vectorized reader is used for the native ORC tables (e.g., the ones created using the clause `USING ORC`) when `spark.sql.orc.impl` is set to `native` and `spark.sql.orc.enableVectorizedReader` is set to `true`.
-For nested data types (array, map and struct), vectorized reader is disabled by default. Set `spark.sql.orc.enableNestedColumnVectorizedReader` to `true` to enable vectorized reader for these types.
 
 For the Hive ORC serde tables (e.g., the ones created using the clause `USING HIVE OPTIONS (fileFormat 'ORC')`),
 the vectorized reader is used when `spark.sql.hive.convertMetastoreOrc` is also set to `true`, and is turned on by default.
@@ -131,8 +130,8 @@ When reading from Hive metastore ORC tables and inserting to Hive metastore ORC 
 
 ### Configuration
 
-<table class="table">
-  <tr><th><b>Property Name</b></th><th><b>Default</b></th><th><b>Meaning</b></th><th><b>Since Version</b></th></tr>
+<table class="table table-striped">
+  <thead><tr><th><b>Property Name</b></th><th><b>Default</b></th><th><b>Meaning</b></th><th><b>Since Version</b></th></tr></thead>
   <tr>
     <td><code>spark.sql.orc.impl</code></td>
     <td><code>native</code></td>
@@ -157,7 +156,7 @@ When reading from Hive metastore ORC tables and inserting to Hive metastore ORC 
     <td><code>spark.sql.orc.columnarReaderBatchSize</code></td>
     <td><code>4096</code></td>
     <td>
-      The number of rows to include in an orc vectorized reader batch. The number should 
+      The number of rows to include in an orc vectorized reader batch. The number should
       be carefully chosen to minimize overhead and avoid OOMs in reading data.
     </td>
     <td>2.4.0</td>
@@ -166,14 +165,14 @@ When reading from Hive metastore ORC tables and inserting to Hive metastore ORC 
     <td><code>spark.sql.orc.columnarWriterBatchSize</code></td>
     <td><code>1024</code></td>
     <td>
-      The number of rows to include in an orc vectorized writer batch. The number should 
+      The number of rows to include in an orc vectorized writer batch. The number should
       be carefully chosen to minimize overhead and avoid OOMs in writing data.
     </td>
     <td>3.4.0</td>
   </tr>
   <tr>
     <td><code>spark.sql.orc.enableNestedColumnVectorizedReader</code></td>
-    <td><code>false</code></td>
+    <td><code>true</code></td>
     <td>
       Enables vectorized orc decoding in <code>native</code> implementation for nested data types
       (array, map and struct). If <code>spark.sql.orc.enableVectorizedReader</code> is set to
@@ -193,9 +192,9 @@ When reading from Hive metastore ORC tables and inserting to Hive metastore ORC 
     <td><code>spark.sql.orc.aggregatePushdown</code></td>
     <td><code>false</code></td>
     <td>
-      If true, aggregates will be pushed down to ORC for optimization. Support MIN, MAX and 
-      COUNT as aggregate expression. For MIN/MAX, support boolean, integer, float and date 
-      type. For COUNT, support all data types. If statistics is missing from any ORC file 
+      If true, aggregates will be pushed down to ORC for optimization. Support MIN, MAX and
+      COUNT as aggregate expression. For MIN/MAX, support boolean, integer, float and date
+      type. For COUNT, support all data types. If statistics is missing from any ORC file
       footer, exception would be thrown.
     </td>
     <td>3.3.0</td>
@@ -232,8 +231,8 @@ Data source options of ORC can be set via:
   * `DataStreamWriter`
 * `OPTIONS` clause at [CREATE TABLE USING DATA_SOURCE](sql-ref-syntax-ddl-create-table-datasource.html)
 
-<table class="table">
-  <tr><th><b>Property Name</b></th><th><b>Default</b></th><th><b>Meaning</b></th><th><b>Scope</b></th></tr>
+<table class="table table-striped">
+  <thead><tr><th><b>Property Name</b></th><th><b>Default</b></th><th><b>Meaning</b></th><th><b>Scope</b></th></tr></thead>
   <tr>
     <td><code>mergeSchema</code></td>
     <td><code>false</code></td>

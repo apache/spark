@@ -25,6 +25,7 @@ import scala.util.control.NonFatal
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.NonEmptyNamespaceException
 import org.apache.spark.sql.connector.expressions.Expression
+import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
 import org.apache.spark.sql.types._
 
 private object DB2Dialect extends JdbcDialect {
@@ -160,4 +161,32 @@ private object DB2Dialect extends JdbcDialect {
       s"DROP SCHEMA ${quoteIdentifier(schema)} RESTRICT"
     }
   }
+
+  override def getLimitClause(limit: Integer): String = {
+    if (limit > 0) s"FETCH FIRST $limit ROWS ONLY" else ""
+  }
+
+  override def getOffsetClause(offset: Integer): String = {
+    if (offset > 0) s"OFFSET $offset ROWS" else ""
+  }
+
+  class DB2SQLQueryBuilder(dialect: JdbcDialect, options: JDBCOptions)
+    extends JdbcSQLQueryBuilder(dialect, options) {
+
+    override def build(): String = {
+      val limitClause = dialect.getLimitClause(limit)
+      val offsetClause = dialect.getOffsetClause(offset)
+
+      options.prepareQuery +
+        s"SELECT $columnList FROM ${options.tableOrQuery} $tableSampleClause" +
+        s" $whereClause $groupByClause $orderByClause $offsetClause $limitClause"
+    }
+  }
+
+  override def getJdbcSQLQueryBuilder(options: JDBCOptions): JdbcSQLQueryBuilder =
+    new DB2SQLQueryBuilder(this, options)
+
+  override def supportsLimit: Boolean = true
+
+  override def supportsOffset: Boolean = true
 }

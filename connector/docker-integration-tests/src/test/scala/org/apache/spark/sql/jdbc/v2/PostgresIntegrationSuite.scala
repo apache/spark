@@ -52,6 +52,7 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCT
     .set("spark.sql.catalog.postgresql.pushDownTableSample", "true")
     .set("spark.sql.catalog.postgresql.pushDownLimit", "true")
     .set("spark.sql.catalog.postgresql.pushDownAggregate", "true")
+    .set("spark.sql.catalog.postgresql.pushDownOffset", "true")
 
   override def tablePreparation(connection: Connection): Unit = {
     connection.prepareStatement(
@@ -89,27 +90,4 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCT
   override def supportsIndex: Boolean = true
 
   override def indexOptions: String = "FILLFACTOR=70"
-
-  testVarPop()
-  testVarPop(true)
-  testVarSamp()
-  testVarSamp(true)
-  testStddevPop()
-  testStddevPop(true)
-  testStddevSamp()
-  testStddevSamp(true)
-  testCovarPop()
-  testCovarPop(true)
-  testCovarSamp()
-  testCovarSamp(true)
-  testCorr()
-  testCorr(true)
-  testRegrIntercept()
-  testRegrIntercept(true)
-  testRegrSlope()
-  testRegrSlope(true)
-  testRegrR2()
-  testRegrR2(true)
-  testRegrSXY()
-  testRegrSXY(true)
 }

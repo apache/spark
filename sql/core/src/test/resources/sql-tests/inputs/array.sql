@@ -130,6 +130,18 @@ select get(array(1, 2, 3), 3);
 select get(array(1, 2, 3), null);
 select get(array(1, 2, 3), -1);
 
+-- function array_insert()
+select array_insert(array(1, 2, 3), 3, 4);
+select array_insert(array(2, 3, 4), 0, 1);
+select array_insert(array(2, 3, 4), 1, 1);
+select array_insert(array(1, 3, 4), -2, 2);
+select array_insert(array(1, 2, 3), 3, "4");
+select array_insert(cast(NULL as ARRAY<INT>), 1, 1);
+select array_insert(array(1, 2, 3, NULL), cast(NULL as INT), 4);
+select array_insert(array(1, 2, 3, NULL), 4, cast(NULL as INT));
+select array_insert(array(2, 3, NULL, 4), 5, 5);
+select array_insert(array(2, 3, NULL, 4), -5, 1);
+
 -- function array_compact
 select array_compact(id) from values (1) as t(id);
 select array_compact(array("1", null, "2", null));
@@ -137,3 +149,25 @@ select array_compact(array("a", "b", "c"));
 select array_compact(array(1D, null, 2D, null));
 select array_compact(array(array(1, 2, 3, null), null, array(4, null, 6)));
 select array_compact(array(null));
+
+-- function array_append
+select array_append(array(1, 2, 3), 4);
+select array_append(array('a', 'b', 'c'), 'd');
+select array_append(array(1, 2, 3, NULL), NULL);
+select array_append(array('a', 'b', 'c', NULL), NULL);
+select array_append(CAST(null AS ARRAY<String>), 'a');
+select array_append(CAST(null AS ARRAY<String>), CAST(null as String));
+select array_append(array(), 1);
+select array_append(CAST(array() AS ARRAY<String>), CAST(NULL AS String));
+select array_append(array(CAST(NULL AS String)), CAST(NULL AS String));
+
+-- function array_prepend
+select array_prepend(array(1, 2, 3), 4);
+select array_prepend(array('a', 'b', 'c'), 'd');
+select array_prepend(array(1, 2, 3, NULL), NULL);
+select array_prepend(array('a', 'b', 'c', NULL), NULL);
+select array_prepend(CAST(null AS ARRAY<String>), 'a');
+select array_prepend(CAST(null AS ARRAY<String>), CAST(null as String));
+select array_prepend(array(), 1);
+select array_prepend(CAST(array() AS ARRAY<String>), CAST(NULL AS String));
+select array_prepend(array(CAST(NULL AS String)), CAST(NULL AS String));

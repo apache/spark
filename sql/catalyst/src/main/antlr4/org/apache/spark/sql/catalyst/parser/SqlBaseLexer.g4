@@ -81,7 +81,8 @@ LEFT_BRACKET: '[';
 RIGHT_BRACKET: ']';
 
 // NOTE: If you add a new token in the list below, you should update the list of keywords
-// and reserved tag in `docs/sql-ref-ansi-compliance.md#sql-keywords`.
+// and reserved tag in `docs/sql-ref-ansi-compliance.md#sql-keywords`, and
+// modify `ParserUtils.toExprAlias()` which assumes all keywords are between `ADD` and `ZONE`.
 
 //============================
 // Start of the keywords list
@@ -91,6 +92,7 @@ ADD: 'ADD';
 AFTER: 'AFTER';
 ALL: 'ALL';
 ALTER: 'ALTER';
+ALWAYS: 'ALWAYS';
 ANALYZE: 'ANALYZE';
 AND: 'AND';
 ANTI: 'ANTI';
@@ -189,6 +191,7 @@ FROM: 'FROM';
 FULL: 'FULL';
 FUNCTION: 'FUNCTION';
 FUNCTIONS: 'FUNCTIONS';
+GENERATED: 'GENERATED';
 GLOBAL: 'GLOBAL';
 GRANT: 'GRANT';
 GROUP: 'GROUP';
@@ -423,6 +426,9 @@ STRING
 DOUBLEQUOTED_STRING
     :'"' ( ~('"'|'\\') | ('\\' .) )* '"'
     ;
+
+// NOTE: If you move a numeric literal, you should modify `ParserUtils.toExprAlias()`
+// which assumes all numeric literals are between `BIGINT_LITERAL` and `BIGDECIMAL_LITERAL`.
 
 BIGINT_LITERAL
     : DIGIT+ 'L'

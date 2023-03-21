@@ -38,6 +38,7 @@ import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.executor.{ExecutorMetrics, TaskMetrics}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config
+import org.apache.spark.internal.config.RDD_CACHE_VISIBILITY_TRACKING_ENABLED
 import org.apache.spark.internal.config.Tests.TEST_NO_STAGE_RETRY
 import org.apache.spark.network.shuffle.{BlockStoreClient, MergeFinalizerListener}
 import org.apache.spark.network.shuffle.protocol.MergeStatuses
@@ -232,6 +233,13 @@ private[spark] class DAGScheduler(
       DAGScheduler.DEFAULT_MAX_CONSECUTIVE_STAGE_ATTEMPTS)
 
   /**
+   * Max stage attempts allowed before a stage is aborted.
+   */
+  private[scheduler] val maxStageAttempts: Int = {
+    Math.max(maxConsecutiveStageAttempts, sc.getConf.get(config.STAGE_MAX_ATTEMPTS))
+  }
+
+  /**
    * Whether ignore stage fetch failure caused by executor decommission when
    * count spark.stage.maxConsecutiveAttempts
    */
@@ -302,6 +310,10 @@ private[spark] class DAGScheduler(
   // Send finalize RPC tasks to merger ESS
   private val shuffleSendFinalizeRpcExecutor: ExecutorService =
     ThreadUtils.newDaemonFixedThreadPool(shuffleFinalizeRpcThreads, "shuffle-merge-finalize-rpc")
+
+  /** Whether rdd cache visibility tracking is enabled. */
+  private val trackingCacheVisibility: Boolean =
+    sc.getConf.get(RDD_CACHE_VISIBILITY_TRACKING_ENABLED)
 
   /**
    * Called by the TaskSetManager to report task's starting.
@@ -1350,16 +1362,23 @@ private[spark] class DAGScheduler(
       logDebug(s"submitStage($stage (name=${stage.name};" +
         s"jobs=${stage.jobIds.toSeq.sorted.mkString(",")}))")
       if (!waitingStages(stage) && !runningStages(stage) && !failedStages(stage)) {
-        val missing = getMissingParentStages(stage).sortBy(_.id)
-        logDebug("missing: " + missing)
-        if (missing.isEmpty) {
-          logInfo("Submitting " + stage + " (" + stage.rdd + "), which has no missing parents")
-          submitMissingTasks(stage, jobId.get)
+        if (stage.getNextAttemptId >= maxStageAttempts) {
+          val reason = s"$stage (name=${stage.name}) has been resubmitted for the maximum " +
+            s"allowable number of times: ${maxStageAttempts}, which is the max value of " +
+            s"config `spark.stage.maxAttempts` and `spark.stage.maxConsecutiveAttempts`."
+          abortStage(stage, reason, None)
         } else {
-          for (parent <- missing) {
-            submitStage(parent)
+          val missing = getMissingParentStages(stage).sortBy(_.id)
+          logDebug("missing: " + missing)
+          if (missing.isEmpty) {
+            logInfo("Submitting " + stage + " (" + stage.rdd + "), which has no missing parents")
+            submitMissingTasks(stage, jobId.get)
+          } else {
+            for (parent <- missing) {
+              submitStage(parent)
+            }
+            waitingStages += stage
           }
-          waitingStages += stage
         }
       }
     } else {
@@ -1398,9 +1417,7 @@ private[spark] class DAGScheduler(
    */
   private def prepareShuffleServicesForShuffleMapStage(stage: ShuffleMapStage): Unit = {
     assert(stage.shuffleDep.shuffleMergeAllowed && !stage.shuffleDep.isShuffleMergeFinalizedMarked)
-    if (stage.shuffleDep.getMergerLocs.isEmpty) {
-      getAndSetShufflePushMergerLocations(stage)
-    }
+    configureShufflePushMergerLocations(stage)
 
     val shuffleId = stage.shuffleDep.shuffleId
     val shuffleMergeId = stage.shuffleDep.shuffleMergeId
@@ -1415,17 +1432,17 @@ private[spark] class DAGScheduler(
     }
   }
 
-  private def getAndSetShufflePushMergerLocations(stage: ShuffleMapStage): Seq[BlockManagerId] = {
+  private def configureShufflePushMergerLocations(stage: ShuffleMapStage): Unit = {
+    if (stage.shuffleDep.getMergerLocs.nonEmpty) return
     val mergerLocs = sc.schedulerBackend.getShufflePushMergerLocations(
       stage.shuffleDep.partitioner.numPartitions, stage.resourceProfileId)
     if (mergerLocs.nonEmpty) {
       stage.shuffleDep.setMergerLocs(mergerLocs)
+      mapOutputTracker.registerShufflePushMergerLocations(stage.shuffleDep.shuffleId, mergerLocs)
+      logDebug(s"Shuffle merge locations for shuffle ${stage.shuffleDep.shuffleId} with" +
+        s" shuffle merge ${stage.shuffleDep.shuffleMergeId} is" +
+        s" ${stage.shuffleDep.getMergerLocs.map(_.host).mkString(", ")}")
     }
-
-    logDebug(s"Shuffle merge locations for shuffle ${stage.shuffleDep.shuffleId} with" +
-      s" shuffle merge ${stage.shuffleDep.shuffleMergeId} is" +
-      s" ${stage.shuffleDep.getMergerLocs.map(_.host).mkString(", ")}")
-    mergerLocs
   }
 
   /** Called when stage's parents are available and we can now do its task. */
@@ -1789,6 +1806,12 @@ private[spark] class DAGScheduler(
       case _: ExceptionFailure | _: TaskKilled => updateAccumulators(event)
       case _ =>
     }
+    if (trackingCacheVisibility) {
+      // Update rdd blocks' visibility status.
+      blockManagerMaster.updateRDDBlockVisibility(
+        event.taskInfo.taskId, visible = event.reason == Success)
+    }
+
     postTaskEnd(event)
 
     event.reason match {
@@ -2521,7 +2544,8 @@ private[spark] class DAGScheduler(
     // if the cluster manager explicitly tells us that the entire worker was lost, then
     // we know to unregister shuffle output.  (Note that "worker" specifically refers to the process
     // from a Standalone cluster, where the shuffle service lives in the Worker.)
-    val fileLost = workerHost.isDefined || !env.blockManager.externalShuffleServiceEnabled
+    val fileLost = !sc.shuffleDriverComponents.supportsReliableStorage() &&
+      (workerHost.isDefined || !env.blockManager.externalShuffleServiceEnabled)
     removeExecutorAndUnregisterOutputs(
       execId = execId,
       fileLost = fileLost,
@@ -2629,16 +2653,15 @@ private[spark] class DAGScheduler(
       shuffleIdToMapStage.filter { case (_, stage) =>
         stage.shuffleDep.shuffleMergeAllowed && stage.shuffleDep.getMergerLocs.isEmpty &&
           runningStages.contains(stage)
-      }.foreach { case(_, stage: ShuffleMapStage) =>
-          if (getAndSetShufflePushMergerLocations(stage).nonEmpty) {
-            logInfo(s"Shuffle merge enabled adaptively for $stage with shuffle" +
-              s" ${stage.shuffleDep.shuffleId} and shuffle merge" +
-              s" ${stage.shuffleDep.shuffleMergeId} with ${stage.shuffleDep.getMergerLocs.size}" +
-              s" merger locations")
-            mapOutputTracker.registerShufflePushMergerLocations(stage.shuffleDep.shuffleId,
-              stage.shuffleDep.getMergerLocs)
-          }
+      }.foreach { case (_, stage: ShuffleMapStage) =>
+        configureShufflePushMergerLocations(stage)
+        if (stage.shuffleDep.getMergerLocs.nonEmpty) {
+          logInfo(s"Shuffle merge enabled adaptively for $stage with shuffle" +
+            s" ${stage.shuffleDep.shuffleId} and shuffle merge" +
+            s" ${stage.shuffleDep.shuffleMergeId} with ${stage.shuffleDep.getMergerLocs.size}" +
+            s" merger locations")
         }
+      }
     }
   }
 
@@ -2734,7 +2757,7 @@ private[spark] class DAGScheduler(
 
   private def updateStageInfoForPushBasedShuffle(stage: Stage): Unit = {
     // With adaptive shuffle mergers, StageInfo's
-    // isPushBasedShuffleEnabled and shuffleMergers need to be updated at the end.
+    // isShufflePushEnabled and shuffleMergers need to be updated at the end.
     stage match {
       case s: ShuffleMapStage =>
         stage.latestInfo.setPushBasedShuffleEnabled(s.shuffleDep.shuffleMergeEnabled)
@@ -2766,7 +2789,7 @@ private[spark] class DAGScheduler(
           val stage = stageIdToStage(stageId)
           if (runningStages.contains(stage)) {
             try { // cancelTasks will fail if a SchedulerBackend does not implement killTask
-              taskScheduler.cancelTasks(stageId, shouldInterruptTaskThread(job))
+              taskScheduler.cancelTasks(stageId, shouldInterruptTaskThread(job), reason)
               markStageAsFinished(stage, Some(reason))
             } catch {
               case e: UnsupportedOperationException =>

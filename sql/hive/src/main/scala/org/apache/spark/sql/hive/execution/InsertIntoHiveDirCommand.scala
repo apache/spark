@@ -30,6 +30,8 @@ import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.command.DDLUtils
+import org.apache.spark.sql.execution.datasources.BasicWriteJobStatsTracker
+import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.hive.client.HiveClientImpl
 import org.apache.spark.sql.util.SchemaUtils
 
@@ -55,7 +57,12 @@ case class InsertIntoHiveDirCommand(
     storage: CatalogStorageFormat,
     query: LogicalPlan,
     overwrite: Boolean,
-    outputColumnNames: Seq[String]) extends SaveAsHiveFile {
+    outputColumnNames: Seq[String]) extends SaveAsHiveFile with V1WritesHiveUtils {
+
+  // We did not pull out `InsertIntoHiveDirCommand` to `V1WriteCommand`,
+  // so there is no `WriteFiles`. It should always hold all metrics by itself.
+  override lazy val metrics: Map[String, SQLMetric] =
+    BasicWriteJobStatsTracker.metrics
 
   override def run(sparkSession: SparkSession, child: SparkPlan): Seq[Row] = {
     assert(storage.locationUri.nonEmpty)
@@ -99,21 +106,24 @@ case class InsertIntoHiveDirCommand(
     }
 
     // The temporary path must be a HDFS path, not a local path.
-    val tmpPath = getExternalTmpPath(sparkSession, hadoopConf, qualifiedPath)
+    val hiveTempPath = new HiveTempPath(sparkSession, hadoopConf, qualifiedPath)
+    val tmpPath = hiveTempPath.externalTempPath
     val fileSinkConf = new org.apache.spark.sql.hive.HiveShim.ShimFileSinkDesc(
       tmpPath.toString, tableDesc, false)
+    setupHadoopConfForCompression(fileSinkConf, hadoopConf, sparkSession)
+    hiveTempPath.createTmpPath()
 
     try {
       saveAsHiveFile(
         sparkSession = sparkSession,
         plan = child,
         hadoopConf = hadoopConf,
-        fileSinkConf = fileSinkConf,
+        fileFormat = new HiveFileFormat(fileSinkConf),
         outputLocation = tmpPath.toString)
 
       if (overwrite && fs.exists(writeToPath)) {
         fs.listStatus(writeToPath).foreach { existFile =>
-          if (Option(existFile.getPath) != createdTempDir) fs.delete(existFile.getPath, true)
+          hiveTempPath.deleteIfNotStagingDir(existFile.getPath, fs)
         }
       }
 
@@ -131,7 +141,7 @@ case class InsertIntoHiveDirCommand(
         throw new SparkException(
           "Failed inserting overwrite directory " + storage.locationUri.get, e)
     } finally {
-      deleteExternalTmpPath(hadoopConf)
+      hiveTempPath.deleteTmpPath()
     }
 
     Seq.empty[Row]

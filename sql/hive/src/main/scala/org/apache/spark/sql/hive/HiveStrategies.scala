@@ -238,7 +238,8 @@ case class RelationConversions(
       // that only matches table insertion inside Hive CTAS.
       // This pattern would not cause conflicts because this rule is always applied before
       // `HiveAnalysis` and both of these rules are running once.
-      case InsertIntoHiveTable(tableDesc, _, query, overwrite, ifPartitionNotExists, _)
+      case InsertIntoHiveTable(
+        tableDesc, _, query, overwrite, ifPartitionNotExists, _, _, _, _, _, _)
           if query.resolved && DDLUtils.isHiveTable(tableDesc) &&
             tableDesc.partitionColumnNames.isEmpty && isConvertible(tableDesc) &&
             conf.getConf(HiveUtils.CONVERT_METASTORE_CTAS) =>

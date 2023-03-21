@@ -35,6 +35,7 @@ from py4j.java_gateway import JavaObject
 
 from pyspark import copy_func
 from pyspark.context import SparkContext
+from pyspark.errors import PySparkTypeError
 from pyspark.sql.types import DataType
 
 if TYPE_CHECKING:
@@ -182,9 +183,6 @@ def _reverse_op(
     return _
 
 
-# TODO(SPARK-41757): Compatibility of string representation for Column
-
-
 class Column:
 
     """
@@ -193,7 +191,7 @@ class Column:
     .. versionadded:: 1.3.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Examples
     --------
@@ -203,17 +201,17 @@ class Column:
     ...      [(2, "Alice"), (5, "Bob")], ["age", "name"])
 
     Select a column out of a DataFrame
-    >>> df.name   # doctest: +SKIP
+    >>> df.name
     Column<'name'>
-    >>> df["name"]  # doctest: +SKIP
+    >>> df["name"]
     Column<'name'>
 
     Create from an expression
 
-    >>> df.age + 1  # doctest: +SKIP
-    Column<'(age + 1)'>
-    >>> 1 / df.age  # doctest: +SKIP
-    Column<'(1 / age)'>
+    >>> df.age + 1
+    Column<...>
+    >>> 1 / df.age
+    Column<...>
     """
 
     def __init__(self, jc: JavaObject) -> None:
@@ -282,15 +280,13 @@ class Column:
     __ge__ = _bin_op("geq")
     __gt__ = _bin_op("gt")
 
-    # TODO(SPARK-41812): DataFrame.join: ambiguous column
-    # TODO(SPARK-41814): Column.eqNullSafe fails on NaN comparison
     _eqNullSafe_doc = """
     Equality test that is safe for null values.
 
     .. versionadded:: 2.3.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -319,9 +315,9 @@ class Column:
     ...     Row(value = 'bar'),
     ...     Row(value = None)
     ... ])
-    >>> df1.join(df2, df1["value"] == df2["value"]).count()  # doctest: +SKIP
+    >>> df1.join(df2, df1["value"] == df2["value"]).count()
     0
-    >>> df1.join(df2, df1["value"].eqNullSafe(df2["value"])).count()  # doctest: +SKIP
+    >>> df1.join(df2, df1["value"].eqNullSafe(df2["value"])).count()
     1
     >>> df2 = spark.createDataFrame([
     ...     Row(id=1, value=float('NaN')),
@@ -332,7 +328,7 @@ class Column:
     ...     df2['value'].eqNullSafe(None),
     ...     df2['value'].eqNullSafe(float('NaN')),
     ...     df2['value'].eqNullSafe(42.0)
-    ... ).show()  # doctest: +SKIP
+    ... ).show()
     +----------------+---------------+----------------+
     |(value <=> NULL)|(value <=> NaN)|(value <=> 42.0)|
     +----------------+---------------+----------------+
@@ -369,7 +365,7 @@ class Column:
     Compute bitwise OR of this expression with another expression.
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -388,7 +384,7 @@ class Column:
     Compute bitwise AND of this expression with another expression.
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -407,7 +403,7 @@ class Column:
     Compute bitwise XOR of this expression with another expression.
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -435,7 +431,7 @@ class Column:
         .. versionadded:: 1.3.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -477,7 +473,7 @@ class Column:
         .. versionadded:: 1.3.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -525,7 +521,7 @@ class Column:
         .. versionadded:: 3.1.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -560,10 +556,16 @@ class Column:
         +---+
         """
         if not isinstance(fieldName, str):
-            raise TypeError("fieldName should be a string")
+            raise PySparkTypeError(
+                error_class="NOT_STR",
+                message_parameters={"arg_name": "fieldName", "arg_type": type(fieldName).__name__},
+            )
 
         if not isinstance(col, Column):
-            raise TypeError("col should be a Column")
+            raise PySparkTypeError(
+                error_class="NOT_COLUMN",
+                message_parameters={"arg_name": "col", "arg_type": type(col).__name__},
+            )
 
         return Column(self._jc.withField(fieldName, col._jc))
 
@@ -575,7 +577,7 @@ class Column:
         .. versionadded:: 3.1.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -637,11 +639,70 @@ class Column:
         return Column(jc)
 
     def __getattr__(self, item: Any) -> "Column":
+        """
+        An expression that gets an item at position ``ordinal`` out of a list,
+        or gets an item by key out of a dict.
+
+        .. versionadded:: 1.3.0
+
+        .. versionchanged:: 3.4.0
+            Supports Spark Connect.
+
+        Parameters
+        ----------
+        item
+            a literal value.
+
+        Returns
+        -------
+        :class:`Column`
+            Column representing the item got by key out of a dict.
+
+        Examples
+        --------
+        >>> df = spark.createDataFrame([('abcedfg', {"key": "value"})], ["l", "d"])
+        >>> df.select(df.d.key).show()
+        +------+
+        |d[key]|
+        +------+
+        | value|
+        +------+
+        """
         if item.startswith("__"):
             raise AttributeError(item)
         return self[item]
 
     def __getitem__(self, k: Any) -> "Column":
+        """
+        An expression that gets an item at position ``ordinal`` out of a list,
+        or gets an item by key out of a dict.
+
+        .. versionadded:: 1.3.0
+
+        .. versionchanged:: 3.4.0
+            Supports Spark Connect.
+
+        Parameters
+        ----------
+        k
+            a literal value, or a slice object without step.
+
+        Returns
+        -------
+        :class:`Column`
+            Column representing the item got by key out of a dict, or substrings sliced by
+            the given slice object.
+
+        Examples
+        --------
+        >>> df = spark.createDataFrame([('abcedfg', {"key": "value"})], ["l", "d"])
+        >>> df.select(df.l[slice(1, 3)], df.d['key']).show()
+        +------------------+------+
+        |substring(l, 1, 3)|d[key]|
+        +------------------+------+
+        |               abc| value|
+        +------------------+------+
+        """
         if isinstance(k, slice):
             if k.step is not None:
                 raise ValueError("slice with step is not supported.")
@@ -657,7 +718,7 @@ class Column:
     Contains the other element. Returns a boolean :class:`Column` based on a string match.
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -674,13 +735,13 @@ class Column:
     _startswith_doc = """
     String starts with. Returns a boolean :class:`Column` based on a string match.
 
+    .. versionchanged:: 3.4.0
+        Supports Spark Connect.
+
     Parameters
     ----------
     other : :class:`Column` or str
         string at start of line (do not use a regex `^`)
-
-    .. versionchanged:: 3.4.0
-        Support Spark Connect.
 
     Examples
     --------
@@ -695,7 +756,7 @@ class Column:
     String ends with. Returns a boolean :class:`Column` based on a string match.
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -721,7 +782,7 @@ class Column:
         SQL like expression. Returns a boolean :class:`Column` based on a SQL LIKE match.
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -754,7 +815,7 @@ class Column:
         match.
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -785,7 +846,7 @@ class Column:
         .. versionadded:: 3.3.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -827,7 +888,7 @@ class Column:
         .. versionadded:: 1.3.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -849,12 +910,14 @@ class Column:
         [Row(col='Ali'), Row(col='Bob')]
         """
         if type(startPos) != type(length):
-            raise TypeError(
-                "startPos and length must be the same type. "
-                "Got {startPos_t} and {length_t}, respectively.".format(
-                    startPos_t=type(startPos),
-                    length_t=type(length),
-                )
+            raise PySparkTypeError(
+                error_class="NOT_SAME_TYPE",
+                message_parameters={
+                    "arg_name1": "startPos",
+                    "arg_name2": "length",
+                    "arg_type1": type(startPos).__name__,
+                    "arg_type2": type(length).__name__,
+                },
             )
         if isinstance(startPos, int):
             jc = self._jc.substr(startPos, length)
@@ -872,7 +935,7 @@ class Column:
         .. versionadded:: 1.5.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -908,6 +971,9 @@ class Column:
     _asc_doc = """
     Returns a sort expression based on the ascending order of the column.
 
+    .. versionchanged:: 3.4.0
+        Supports Spark Connect.
+
     Examples
     --------
     >>> from pyspark.sql import Row
@@ -920,6 +986,9 @@ class Column:
     return before non-null values.
 
     .. versionadded:: 2.4.0
+
+    .. versionchanged:: 3.4.0
+        Supports Spark Connect.
 
     Examples
     --------
@@ -935,6 +1004,9 @@ class Column:
 
     .. versionadded:: 2.4.0
 
+    .. versionchanged:: 3.4.0
+        Supports Spark Connect.
+
     Examples
     --------
     >>> from pyspark.sql import Row
@@ -947,6 +1019,9 @@ class Column:
     Returns a sort expression based on the descending order of the column.
 
     .. versionadded:: 2.4.0
+
+    .. versionchanged:: 3.4.0
+        Supports Spark Connect.
 
     Examples
     --------
@@ -961,6 +1036,9 @@ class Column:
 
     .. versionadded:: 2.4.0
 
+    .. versionchanged:: 3.4.0
+        Supports Spark Connect.
+
     Examples
     --------
     >>> from pyspark.sql import Row
@@ -974,6 +1052,9 @@ class Column:
     appear after non-null values.
 
     .. versionadded:: 2.4.0
+
+    .. versionchanged:: 3.4.0
+        Supports Spark Connect.
 
     Examples
     --------
@@ -994,7 +1075,7 @@ class Column:
     True if the current expression is null.
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Examples
     --------
@@ -1007,7 +1088,7 @@ class Column:
     True if the current expression is NOT null.
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Examples
     --------
@@ -1028,7 +1109,7 @@ class Column:
         .. versionadded:: 1.3.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -1086,7 +1167,7 @@ class Column:
         .. versionadded:: 1.3.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -1133,6 +1214,9 @@ class Column:
 
         .. versionadded:: 1.3.0
 
+        .. versionchanged:: 3.4.0
+            Supports Spark Connect.
+
         Parameters
         ----------
         lowerBound : :class:`Column`, int, float, string, bool, datetime, date or Decimal
@@ -1168,7 +1252,7 @@ class Column:
         .. versionadded:: 1.4.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -1213,7 +1297,7 @@ class Column:
         .. versionadded:: 1.4.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -1253,7 +1337,7 @@ class Column:
         .. versionadded:: 1.4.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------

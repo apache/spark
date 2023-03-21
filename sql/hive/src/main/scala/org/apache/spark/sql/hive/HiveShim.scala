@@ -40,10 +40,6 @@ import org.apache.spark.sql.types.Decimal
 import org.apache.spark.util.Utils
 
 private[hive] object HiveShim {
-  // Precision and scale to pass for unlimited decimals; these are the same as the precision and
-  // scale Hive 0.13 infers for BigDecimals from sources that don't specify them (e.g. UDFs)
-  val UNLIMITED_DECIMAL_PRECISION = 38
-  val UNLIMITED_DECIMAL_SCALE = 18
   val HIVE_GENERIC_UDF_MACRO_CLS = "org.apache.hadoop.hive.ql.udf.generic.GenericUDFMacro"
 
   /*

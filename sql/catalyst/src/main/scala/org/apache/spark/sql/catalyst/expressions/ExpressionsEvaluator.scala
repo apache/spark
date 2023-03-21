@@ -42,4 +42,11 @@ trait ExpressionsEvaluator {
    * The default implementation does nothing.
    */
   def initialize(partitionIndex: Int): Unit = {}
+
+  protected def initializeExprs(exprs: Seq[Expression], partitionIndex: Int): Unit = {
+    exprs.foreach(_.foreach {
+      case n: Nondeterministic => n.initialize(partitionIndex)
+      case _ =>
+    })
+  }
 }

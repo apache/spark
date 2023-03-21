@@ -169,8 +169,13 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
       MapType(IntegerType, IntegerType, valueContainsNull = true))
     val mNull = Literal.create(null, MapType(StringType, StringType))
 
-    checkExceptionInExpression[RuntimeException](
-      MapConcat(Seq(m0, m1)), "Duplicate map key")
+    checkErrorInExpression[SparkRuntimeException](
+      MapConcat(Seq(m0, m1)),
+      errorClass = "DUPLICATED_MAP_KEY",
+      parameters = Map(
+        "key" -> "a",
+        "mapKeyDedupPolicy" -> "\"spark.sql.mapKeyDedupPolicy\"")
+    )
     withSQLConf(SQLConf.MAP_KEY_DEDUP_POLICY.key -> SQLConf.MapKeyDedupPolicy.LAST_WIN.toString) {
       // overlapping maps should remove duplicated map keys w.r.t. last win policy.
       checkEvaluation(MapConcat(Seq(m0, m1)), create_map("a" -> "4", "b" -> "2", "c" -> "3"))
@@ -324,8 +329,13 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     checkEvaluation(MapFromEntries(ai2), Map.empty)
     checkEvaluation(MapFromEntries(ai3), null)
 
-    checkExceptionInExpression[RuntimeException](
-      MapFromEntries(ai4), "Duplicate map key")
+    checkErrorInExpression[SparkRuntimeException](
+      MapFromEntries(ai4),
+      errorClass = "DUPLICATED_MAP_KEY",
+      parameters = Map(
+        "key" -> "1",
+        "mapKeyDedupPolicy" -> "\"spark.sql.mapKeyDedupPolicy\"")
+    )
     withSQLConf(SQLConf.MAP_KEY_DEDUP_POLICY.key -> SQLConf.MapKeyDedupPolicy.LAST_WIN.toString) {
       // Duplicated map keys will be removed w.r.t. the last wins policy.
       checkEvaluation(MapFromEntries(ai4), create_map(1 -> 20))
@@ -351,8 +361,13 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     checkEvaluation(MapFromEntries(as2), Map.empty)
     checkEvaluation(MapFromEntries(as3), null)
 
-    checkExceptionInExpression[RuntimeException](
-      MapFromEntries(as4), "Duplicate map key")
+    checkErrorInExpression[SparkRuntimeException](
+      MapFromEntries(as4),
+      errorClass = "DUPLICATED_MAP_KEY",
+      parameters = Map(
+        "key" -> "a",
+        "mapKeyDedupPolicy" -> "\"spark.sql.mapKeyDedupPolicy\"")
+    )
     withSQLConf(SQLConf.MAP_KEY_DEDUP_POLICY.key -> SQLConf.MapKeyDedupPolicy.LAST_WIN.toString) {
       // Duplicated map keys will be removed w.r.t. the last wins policy.
       checkEvaluation(MapFromEntries(as4), create_map("a" -> "bb"))
@@ -1840,6 +1855,50 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     checkEvaluation(ArrayRepeat(Literal("hi"), Literal(null, IntegerType)), null)
   }
 
+  test("SPARK-41233: ArrayPrepend") {
+    val a0 = Literal.create(Seq(1, 2, 3, 4), ArrayType(IntegerType))
+    val a1 = Literal.create(Seq("a", "b", "c"), ArrayType(StringType))
+    val a2 = Literal.create(Seq.empty[Integer], ArrayType(IntegerType))
+    val a3 = Literal.create(null, ArrayType(StringType))
+
+    checkEvaluation(ArrayPrepend(a0, Literal(0)), Seq(0, 1, 2, 3, 4))
+    checkEvaluation(ArrayPrepend(a1, Literal("a")), Seq("a", "a", "b", "c"))
+    checkEvaluation(ArrayPrepend(a2, Literal(1)), Seq(1))
+    checkEvaluation(ArrayPrepend(a2, Literal(null, IntegerType)), Seq(null))
+    checkEvaluation(ArrayPrepend(a3, Literal("a")), null)
+    checkEvaluation(ArrayPrepend(a3, Literal(null, StringType)), null)
+
+    // complex data types
+    val data = Seq[Array[Byte]](
+      Array[Byte](5, 6),
+      Array[Byte](1, 2),
+      Array[Byte](1, 2),
+      Array[Byte](5, 6))
+    val b0 = Literal.create(
+      data,
+      ArrayType(BinaryType))
+    val b1 = Literal.create(Seq[Array[Byte]](Array[Byte](2, 1), null), ArrayType(BinaryType))
+    val nullBinary = Literal.create(null, BinaryType)
+    // Calling ArrayPrepend with a null element should result in NULL being prepended to the array
+    val dataWithNullPrepended = null +: data
+    checkEvaluation(ArrayPrepend(b0, nullBinary), dataWithNullPrepended)
+    val dataToPrepend1 = Literal.create(Array[Byte](5, 6), BinaryType)
+    checkEvaluation(
+      ArrayPrepend(b1, dataToPrepend1),
+      Seq[Array[Byte]](Array[Byte](5, 6), Array[Byte](2, 1), null))
+
+    val c0 = Literal.create(
+      Seq[Seq[Int]](Seq[Int](1, 2), Seq[Int](3, 4)),
+      ArrayType(ArrayType(IntegerType)))
+    val dataToPrepend2 = Literal.create(Seq[Int](5, 6), ArrayType(IntegerType))
+    checkEvaluation(
+      ArrayPrepend(c0, dataToPrepend2),
+      Seq(Seq[Int](5, 6), Seq[Int](1, 2), Seq[Int](3, 4)))
+    checkEvaluation(
+      ArrayPrepend(c0, Literal.create(Seq.empty[Int], ArrayType(IntegerType))),
+      Seq(Seq.empty[Int], Seq[Int](1, 2), Seq[Int](3, 4)))
+  }
+
   test("Array remove") {
     val a0 = Literal.create(Seq(1, 2, 3, 2, 2, 5), ArrayType(IntegerType))
     val a1 = Literal.create(Seq("b", "a", "a", "c", "b"), ArrayType(StringType))
@@ -2250,6 +2309,78 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
       Seq(2d))
   }
 
+  test("Array Insert") {
+    val a1 = Literal.create(Seq(1, 2, 4), ArrayType(IntegerType))
+    val a2 = Literal.create(Seq(1, 2, null, 4, 5, null), ArrayType(IntegerType))
+    val a3 = Literal.create(Seq[Boolean](true, false, true), ArrayType(BooleanType))
+    val a4 = Literal.create(Seq[Byte](1, 2, 3, 2), ArrayType(ByteType))
+    val a5 = Literal.create(Seq[Short](1, 2, 3, 2), ArrayType(ShortType))
+    val a6 = Literal.create(Seq[Float](1.1F, 2.2F, 3.3F, 2.2F), ArrayType(FloatType))
+    val a7 = Literal.create(Seq[Double](1.1, 2.2, 3.3, 2.2), ArrayType(DoubleType))
+    val a8 = Literal.create(Seq(1L, 2L, 4L), ArrayType(LongType))
+    val a9 = Literal.create(Seq("b", "a", "c"), ArrayType(StringType, false))
+    val a10 = Literal.create(Seq("b", null, "a", "g", null), ArrayType(StringType, true))
+    val a11 = Literal.create(null, ArrayType(StringType))
+
+    // basic additions per type
+    checkEvaluation(ArrayInsert(a1, Literal(3), Literal(3)), Seq(1, 2, 3, 4))
+    checkEvaluation(
+      ArrayInsert(a3, Literal.create(3, IntegerType), Literal(true)),
+      Seq[Boolean](true, false, true, true)
+    )
+    checkEvaluation(
+      ArrayInsert(
+        a4,
+        Literal(3),
+        Literal.create(5.asInstanceOf[Byte], ByteType)),
+      Seq[Byte](1, 2, 5, 3, 2))
+
+    checkEvaluation(
+      ArrayInsert(
+        a5,
+        Literal(3),
+        Literal.create(3.asInstanceOf[Short], ShortType)),
+      Seq[Short](1, 2, 3, 3, 2))
+
+    checkEvaluation(
+      ArrayInsert(a7, Literal(4), Literal(4.4)),
+      Seq[Double](1.1, 2.2, 3.3, 4.4, 2.2)
+    )
+
+    checkEvaluation(
+      ArrayInsert(a6, Literal(4), Literal(4.4F)),
+      Seq(1.1F, 2.2F, 3.3F, 4.4F, 2.2F)
+    )
+    checkEvaluation(ArrayInsert(a8, Literal(3), Literal(3L)), Seq(1L, 2L, 3L, 4L))
+    checkEvaluation(ArrayInsert(a9, Literal(3), Literal("d")), Seq("b", "a", "d", "c"))
+
+    // index edge cases
+    checkEvaluation(ArrayInsert(a1, Literal(2), Literal(3)), Seq(1, 3, 2, 4))
+    checkEvaluation(ArrayInsert(a1, Literal(0), Literal(3)), Seq(3, 1, 2, 4))
+    checkEvaluation(ArrayInsert(a1, Literal(1), Literal(3)), Seq(3, 1, 2, 4))
+    checkEvaluation(ArrayInsert(a1, Literal(4), Literal(3)), Seq(1, 2, 4, 3))
+    checkEvaluation(ArrayInsert(a1, Literal(-2), Literal(3)), Seq(1, 3, 2, 4))
+    checkEvaluation(ArrayInsert(a1, Literal(-3), Literal(3)), Seq(3, 1, 2, 4))
+    checkEvaluation(ArrayInsert(a1, Literal(-4), Literal(3)), Seq(3, null, 1, 2, 4))
+    checkEvaluation(
+      ArrayInsert(a1, Literal(10), Literal(3)),
+      Seq(1, 2, 4, null, null, null, null, null, null, 3)
+    )
+    checkEvaluation(
+      ArrayInsert(a1, Literal(-10), Literal(3)),
+      Seq(3, null, null, null, null, null, null, null, 1, 2, 4)
+    )
+
+    // null handling
+    checkEvaluation(ArrayInsert(
+      a1, Literal(3), Literal.create(null, IntegerType)), Seq(1, 2, null, 4)
+    )
+    checkEvaluation(ArrayInsert(a2, Literal(3), Literal(3)), Seq(1, 2, 3, null, 4, 5, null))
+    checkEvaluation(ArrayInsert(a10, Literal(3), Literal("d")), Seq("b", null, "d", "a", "g", null))
+    checkEvaluation(ArrayInsert(a11, Literal(3), Literal("d")), null)
+    checkEvaluation(ArrayInsert(a10, Literal.create(null, IntegerType), Literal("d")), null)
+  }
+
   test("Array Intersect") {
     val a00 = Literal.create(Seq(1, 2, 4), ArrayType(IntegerType, false))
     val a01 = Literal.create(Seq(4, 2), ArrayType(IntegerType, false))
@@ -2589,5 +2720,101 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
           Date.valueOf("2017-02-25"),
           Date.valueOf("2017-02-12")))
     }
+  }
+
+  test("ArrayAppend Expression Test") {
+    checkEvaluation(
+      ArrayAppend(
+        Literal.create(null, ArrayType(StringType)),
+        Literal.create("c", StringType)),
+      null)
+
+    checkEvaluation(
+      ArrayAppend(
+        Literal.create(null, ArrayType(StringType)),
+        Literal.create(null, StringType)),
+      null)
+
+    checkEvaluation(
+      ArrayAppend(
+        Literal.create(Seq(""), ArrayType(StringType)),
+        Literal.create(null, StringType)),
+      Seq("", null))
+
+    checkEvaluation(
+      ArrayAppend(
+        Literal.create(Seq("a", "b", "c"), ArrayType(StringType)),
+        Literal.create(null, StringType)),
+      Seq("a", "b", "c", null))
+
+    checkEvaluation(
+      ArrayAppend(
+        Literal.create(Seq(Double.NaN, 1d, 2d), ArrayType(DoubleType)),
+        Literal.create(3d, DoubleType)),
+      Seq(Double.NaN, 1d, 2d, 3d))
+    // Null entry check
+    checkEvaluation(
+      ArrayAppend(
+        Literal.create(Seq(null, 1d, 2d), ArrayType(DoubleType)),
+        Literal.create(3d, DoubleType)),
+      Seq(null, 1d, 2d, 3d))
+
+    checkEvaluation(
+      ArrayAppend(
+        Literal.create(Seq("a", "b", "c"), ArrayType(StringType)),
+        Literal.create("c", StringType)),
+      Seq("a", "b", "c", "c"))
+
+    assert(
+      ArrayAppend(
+        Literal.create(Seq(null, 1d, 2d), ArrayType(DoubleType)),
+        Literal.create(3, IntegerType))
+        .checkInputDataTypes() ==
+        DataTypeMismatch(
+          errorSubClass = "ARRAY_FUNCTION_DIFF_TYPES",
+          messageParameters = Map(
+            "functionName" -> "`array_append`",
+            "dataType" -> "\"ARRAY\"",
+            "leftType" -> "\"ARRAY<DOUBLE>\"",
+            "rightType" -> "\"INT\""))
+    )
+
+
+    assert(
+      ArrayAppend(
+        Literal.create("Hi", StringType),
+        Literal.create("Spark", StringType))
+        .checkInputDataTypes() == DataTypeMismatch(
+        errorSubClass = "UNEXPECTED_INPUT_TYPE",
+        messageParameters = Map(
+          "paramIndex" -> "0",
+          "requiredType" -> "\"ARRAY\"",
+          "inputSql" -> "\"Hi\"",
+          "inputType" -> "\"STRING\""
+        )
+      )
+    )
+
+  }
+
+  test("SPARK-42401: Array insert of null value (explicit)") {
+    val a = Literal.create(Seq("b", "a", "c"), ArrayType(StringType, false))
+    checkEvaluation(ArrayInsert(
+      a, Literal(2), Literal.create(null, StringType)), Seq("b", null, "a", "c")
+    )
+  }
+
+  test("SPARK-42401: Array insert of null value (implicit)") {
+    val a = Literal.create(Seq("b", "a", "c"), ArrayType(StringType, false))
+    checkEvaluation(ArrayInsert(
+      a, Literal(5), Literal.create("q", StringType)), Seq("b", "a", "c", null, "q")
+    )
+  }
+
+  test("SPARK-42401: Array append of null value") {
+    val a = Literal.create(Seq("b", "a", "c"), ArrayType(StringType, false))
+    checkEvaluation(ArrayAppend(
+      a, Literal.create(null, StringType)), Seq("b", "a", "c", null)
+    )
   }
 }

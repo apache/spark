@@ -14,6 +14,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import warnings
+
+from pyspark.sql.connect.utils import check_dependencies
+
+check_dependencies(__name__)
 
 from typing import (
     Any,
@@ -27,6 +32,7 @@ from typing import (
     cast,
 )
 
+from pyspark.rdd import PythonEvalType
 from pyspark.sql.group import GroupedData as PySparkGroupedData
 from pyspark.sql.types import NumericType
 
@@ -35,8 +41,13 @@ from pyspark.sql.connect.column import Column
 from pyspark.sql.connect.functions import _invoke_function, col, lit
 
 if TYPE_CHECKING:
-    from pyspark.sql.connect._typing import LiteralType
+    from pyspark.sql.connect._typing import (
+        LiteralType,
+        PandasGroupedMapFunction,
+        GroupedMapPandasUserDefinedFunction,
+    )
     from pyspark.sql.connect.dataframe import DataFrame
+    from pyspark.sql.types import StructType
 
 
 class GroupedData:
@@ -80,14 +91,8 @@ class GroupedData:
 
         assert exprs, "exprs should not be empty"
         if len(exprs) == 1 and isinstance(exprs[0], dict):
-            # There is a special case for count(*) which is rewritten into count(1).
             # Convert the dict into key value pairs
-            aggregate_cols = [
-                _invoke_function(
-                    exprs[0][k], lit(1) if exprs[0][k] == "count" and k == "*" else col(k)
-                )
-                for k in exprs[0]
-            ]
+            aggregate_cols = [_invoke_function(exprs[0][k], col(k)) for k in exprs[0]]
         else:
             # Columns
             assert all(isinstance(c, Column) for c in exprs), "all exprs should be Column"
@@ -206,46 +211,87 @@ class GroupedData:
 
     pivot.__doc__ = PySparkGroupedData.pivot.__doc__
 
+    def apply(self, udf: "GroupedMapPandasUserDefinedFunction") -> "DataFrame":
+        # Columns are special because hasattr always return True
+        if (
+            isinstance(udf, Column)
+            or not hasattr(udf, "func")
+            or (
+                udf.evalType  # type: ignore[attr-defined]
+                != PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF
+            )
+        ):
+            raise ValueError(
+                "Invalid udf: the udf argument must be a pandas_udf of type " "GROUPED_MAP."
+            )
+
+        warnings.warn(
+            "It is preferred to use 'applyInPandas' over this "
+            "API. This API will be deprecated in the future releases. See SPARK-28264 for "
+            "more details.",
+            UserWarning,
+        )
+
+        return self.applyInPandas(udf.func, schema=udf.returnType)  # type: ignore[attr-defined]
+
+    apply.__doc__ = PySparkGroupedData.apply.__doc__
+
+    def applyInPandas(
+        self, func: "PandasGroupedMapFunction", schema: Union["StructType", str]
+    ) -> "DataFrame":
+        from pyspark.sql.connect.udf import UserDefinedFunction
+        from pyspark.sql.connect.dataframe import DataFrame
+
+        udf_obj = UserDefinedFunction(
+            func,
+            returnType=schema,
+            evalType=PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
+        )
+
+        return DataFrame.withPlan(
+            plan.GroupMap(
+                child=self._df._plan,
+                grouping_cols=self._grouping_cols,
+                function=udf_obj,
+                cols=self._df.columns,
+            ),
+            session=self._df._session,
+        )
+
+    applyInPandas.__doc__ = PySparkGroupedData.applyInPandas.__doc__
+
+    def applyInPandasWithState(self, *args: Any, **kwargs: Any) -> None:
+        raise NotImplementedError("applyInPandasWithState() is not implemented.")
+
+    def cogroup(self, *args: Any, **kwargs: Any) -> None:
+        raise NotImplementedError("cogroup() is not implemented.")
+
 
 GroupedData.__doc__ = PySparkGroupedData.__doc__
 
 
 def _test() -> None:
-    import os
     import sys
     import doctest
-    from pyspark import SparkContext, SparkConf
     from pyspark.sql import SparkSession as PySparkSession
-    from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
+    import pyspark.sql.connect.group
 
-    os.chdir(os.environ["SPARK_HOME"])
+    globs = pyspark.sql.connect.group.__dict__.copy()
 
-    if should_test_connect:
-        import pyspark.sql.connect.group
+    globs["spark"] = (
+        PySparkSession.builder.appName("sql.connect.group tests").remote("local[4]").getOrCreate()
+    )
 
-        globs = pyspark.sql.connect.group.__dict__.copy()
-        # Works around to create a regular Spark session
-        sc = SparkContext("local[4]", "sql.connect.group tests", conf=SparkConf())
-        globs["_spark"] = PySparkSession(sc, options={"spark.app.name": "sql.connect.group tests"})
+    (failure_count, test_count) = doctest.testmod(
+        pyspark.sql.connect.group,
+        globs=globs,
+        optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE | doctest.REPORT_NDIFF,
+    )
 
-        # Creates a remote Spark session.
-        os.environ["SPARK_REMOTE"] = "sc://localhost"
-        globs["spark"] = PySparkSession.builder.remote("sc://localhost").getOrCreate()
+    globs["spark"].stop()
 
-        (failure_count, test_count) = doctest.testmod(
-            pyspark.sql.connect.group,
-            globs=globs,
-            optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE | doctest.REPORT_NDIFF,
-        )
-        globs["_spark"].stop()
-        globs["spark"].stop()
-        if failure_count:
-            sys.exit(-1)
-    else:
-        print(
-            f"Skipping pyspark.sql.connect.group doctests: {connect_requirement_message}",
-            file=sys.stderr,
-        )
+    if failure_count:
+        sys.exit(-1)
 
 
 if __name__ == "__main__":

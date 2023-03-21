@@ -119,7 +119,7 @@ abstract class DataType extends AbstractDataType {
 
   override private[sql] def acceptsType(other: DataType): Boolean = sameType(other)
 
-  def physicalDataType: PhysicalDataType = UninitializedPhysicalType
+  private[sql] def physicalDataType: PhysicalDataType = UninitializedPhysicalType
 }
 
 
@@ -201,6 +201,7 @@ object DataType {
       case VARCHAR_TYPE(length) => VarcharType(length.toInt)
       // For backwards compatibility, previously the type name of NullType is "null"
       case "null" => NullType
+      case "timestamp_ltz" => TimestampType
       case other => otherTypes.getOrElse(
         other,
         throw new IllegalArgumentException(

@@ -61,7 +61,7 @@ case class DayTimeIntervalType(startField: Byte, endField: Byte) extends AnsiInt
    */
   override def defaultSize: Int = 8
 
-  override def physicalDataType: PhysicalDataType = PhysicalLongType
+  private[sql] override def physicalDataType: PhysicalDataType = PhysicalLongType
 
   private[spark] override def asNullable: DayTimeIntervalType = this
 

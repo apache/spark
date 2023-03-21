@@ -70,7 +70,8 @@ import org.apache.spark.util.{HadoopFSUtils, ThreadUtils, Utils}
  *
  * @param paths A list of file system paths that hold data. These will be globbed before if
  *              the "__globPaths__" option is true, and will be qualified. This option only works
- *              when reading from a [[FileFormat]].
+ *              when reading from a [[FileFormat]]. These paths are expected to be hadoop [[Path]]
+ *              strings.
  * @param userSpecifiedSchema An optional specification of the schema of the data. When present
  *                            we skip attempting to infer the schema.
  * @param partitionColumns A list of column names that the relation is partitioned by. This list is
@@ -525,7 +526,7 @@ case class DataSource(
         SaveIntoDataSourceCommand(data, dataSource, caseInsensitiveOptions, mode)
       case format: FileFormat =>
         disallowWritingIntervals(data.schema.map(_.dataType), forbidAnsiIntervals = false)
-        DataSource.validateSchema(data.schema)
+        DataSource.validateSchema(data.schema, sparkSession.sessionState.conf)
         planForWritingFileFormat(format, mode, data)
       case _ => throw new IllegalStateException(
         s"${providingClass.getCanonicalName} does not allow create table as select.")
@@ -643,7 +644,7 @@ object DataSource extends Logging {
                 } else if (provider1.toLowerCase(Locale.ROOT) == "kafka") {
                   throw QueryCompilationErrors.failedToFindKafkaDataSourceError(provider1)
                 } else {
-                  throw QueryExecutionErrors.failedToFindDataSourceError(provider1, error)
+                  throw QueryExecutionErrors.dataSourceNotFoundError(provider1, error)
                 }
             }
           } catch {
@@ -791,11 +792,13 @@ object DataSource extends Logging {
   }
 
   /**
-   * Called before writing into a FileFormat based data source to make sure the
-   * supplied schema is not empty.
+   * Called before writing into a FileFormat based data source to validate whether
+   * the supplied schema is not empty.
    * @param schema
+   * @param conf
    */
-  def validateSchema(schema: StructType): Unit = {
+  def validateSchema(schema: StructType, conf: SQLConf): Unit = {
+    val shouldAllowEmptySchema = conf.getConf(SQLConf.ALLOW_EMPTY_SCHEMAS_FOR_WRITES)
     def hasEmptySchema(schema: StructType): Boolean = {
       schema.size == 0 || schema.exists {
         case StructField(_, b: StructType, _, _) => hasEmptySchema(b)
@@ -804,7 +807,7 @@ object DataSource extends Logging {
     }
 
 
-    if (hasEmptySchema(schema)) {
+    if (!shouldAllowEmptySchema && hasEmptySchema(schema)) {
       throw QueryCompilationErrors.writeEmptySchemasUnsupportedByDataSourceError()
     }
   }

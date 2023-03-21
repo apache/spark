@@ -18,17 +18,12 @@
 package org.apache.spark.status.protobuf
 
 import org.apache.spark.status.TaskDataWrapper
-import org.apache.spark.status.protobuf.Utils.getOptional
+import org.apache.spark.status.protobuf.Utils.{getOptional, getStringField, setStringField}
 import org.apache.spark.util.Utils.weakIntern
 
-class TaskDataWrapperSerializer extends ProtobufSerDe {
+class TaskDataWrapperSerializer extends ProtobufSerDe[TaskDataWrapper] {
 
-  override val supportClass: Class[_] = classOf[TaskDataWrapper]
-
-  override def serialize(input: Any): Array[Byte] =
-    serialize(input.asInstanceOf[TaskDataWrapper])
-
-  private def serialize(input: TaskDataWrapper): Array[Byte] = {
+  override def serialize(input: TaskDataWrapper): Array[Byte] = {
     val builder = StoreTypes.TaskDataWrapper.newBuilder()
       .setTaskId(input.taskId)
       .setIndex(input.index)
@@ -37,10 +32,6 @@ class TaskDataWrapperSerializer extends ProtobufSerDe {
       .setLaunchTime(input.launchTime)
       .setResultFetchStart(input.resultFetchStart)
       .setDuration(input.duration)
-      .setExecutorId(input.executorId)
-      .setHost(input.host)
-      .setStatus(input.status)
-      .setTaskLocality(input.taskLocality)
       .setSpeculative(input.speculative)
       .setHasMetrics(input.hasMetrics)
       .setExecutorDeserializeTime(input.executorDeserializeTime)
@@ -64,11 +55,25 @@ class TaskDataWrapperSerializer extends ProtobufSerDe {
       .setShuffleRemoteBytesReadToDisk(input.shuffleRemoteBytesReadToDisk)
       .setShuffleLocalBytesRead(input.shuffleLocalBytesRead)
       .setShuffleRecordsRead(input.shuffleRecordsRead)
+      .setShuffleCorruptMergedBlockChunks(input.shuffleCorruptMergedBlockChunks)
+      .setShuffleMergedFetchFallbackCount(input.shuffleMergedFetchFallbackCount)
+      .setShuffleMergedRemoteBlocksFetched(input.shuffleMergedRemoteBlocksFetched)
+      .setShuffleMergedLocalBlocksFetched(input.shuffleMergedLocalBlocksFetched)
+      .setShuffleMergedRemoteChunksFetched(input.shuffleMergedRemoteChunksFetched)
+      .setShuffleMergedLocalChunksFetched(input.shuffleMergedLocalChunksFetched)
+      .setShuffleMergedRemoteBytesRead(input.shuffleMergedRemoteBytesRead)
+      .setShuffleMergedLocalBytesRead(input.shuffleMergedLocalBytesRead)
+      .setShuffleRemoteReqsDuration(input.shuffleRemoteReqsDuration)
+      .setShuffleMergedRemoteReqDuration(input.shuffleMergedRemoteReqDuration)
       .setShuffleBytesWritten(input.shuffleBytesWritten)
       .setShuffleWriteTime(input.shuffleWriteTime)
       .setShuffleRecordsWritten(input.shuffleRecordsWritten)
       .setStageId(input.stageId)
       .setStageAttemptId(input.stageAttemptId)
+    setStringField(input.executorId, builder.setExecutorId)
+    setStringField(input.host, builder.setHost)
+    setStringField(input.status, builder.setStatus)
+    setStringField(input.taskLocality, builder.setTaskLocality)
     input.errorMessage.foreach(builder.setErrorMessage)
     input.accumulatorUpdates.foreach { update =>
       builder.addAccumulatorUpdates(AccumulableInfoSerializer.serialize(update))
@@ -87,10 +92,11 @@ class TaskDataWrapperSerializer extends ProtobufSerDe {
       launchTime = binary.getLaunchTime,
       resultFetchStart = binary.getResultFetchStart,
       duration = binary.getDuration,
-      executorId = weakIntern(binary.getExecutorId),
-      host = weakIntern(binary.getHost),
-      status = weakIntern(binary.getStatus),
-      taskLocality = weakIntern(binary.getTaskLocality),
+      executorId = getStringField(binary.hasExecutorId, () => weakIntern(binary.getExecutorId)),
+      host = getStringField(binary.hasHost, () => weakIntern(binary.getHost)),
+      status = getStringField(binary.hasStatus, () => weakIntern(binary.getStatus)),
+      taskLocality =
+        getStringField(binary.hasTaskLocality, () => weakIntern(binary.getTaskLocality)),
       speculative = binary.getSpeculative,
       accumulatorUpdates = accumulatorUpdates,
       errorMessage = getOptional(binary.hasErrorMessage, binary.getErrorMessage),
@@ -116,6 +122,16 @@ class TaskDataWrapperSerializer extends ProtobufSerDe {
       shuffleRemoteBytesReadToDisk = binary.getShuffleRemoteBytesReadToDisk,
       shuffleLocalBytesRead = binary.getShuffleLocalBytesRead,
       shuffleRecordsRead = binary.getShuffleRecordsRead,
+      shuffleCorruptMergedBlockChunks = binary.getShuffleCorruptMergedBlockChunks,
+      shuffleMergedFetchFallbackCount = binary.getShuffleMergedFetchFallbackCount,
+      shuffleMergedRemoteBlocksFetched = binary.getShuffleMergedRemoteBlocksFetched,
+      shuffleMergedLocalBlocksFetched = binary.getShuffleMergedLocalBlocksFetched,
+      shuffleMergedRemoteChunksFetched = binary.getShuffleMergedRemoteChunksFetched,
+      shuffleMergedLocalChunksFetched = binary.getShuffleMergedLocalChunksFetched,
+      shuffleMergedRemoteBytesRead = binary.getShuffleMergedRemoteBytesRead,
+      shuffleMergedLocalBytesRead = binary.getShuffleMergedLocalBytesRead,
+      shuffleRemoteReqsDuration = binary.getShuffleRemoteReqsDuration,
+      shuffleMergedRemoteReqDuration = binary.getShuffleMergedRemoteReqDuration,
       shuffleBytesWritten = binary.getShuffleBytesWritten,
       shuffleWriteTime = binary.getShuffleWriteTime,
       shuffleRecordsWritten = binary.getShuffleRecordsWritten,

@@ -8,9 +8,9 @@ license: |
   The ASF licenses this file to You under the Apache License, Version 2.0
   (the "License"); you may not use this file except in compliance with
   the License.  You may obtain a copy of the License at
- 
+
      http://www.apache.org/licenses/LICENSE-2.0
- 
+
   Unless required by applicable law or agreed to in writing, software
   distributed under the License is distributed on an "AS IS" BASIS,
   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -19,7 +19,7 @@ license: |
 ---
 * This will become a table of contents (this text will be scraped).
 {:toc}
-  
+
 *Note*: Apache Mesos support is deprecated as of Apache Spark 3.2.0. It will be removed in a future version.
 
 Spark can run on hardware clusters managed by [Apache Mesos](http://mesos.apache.org/).
@@ -132,8 +132,8 @@ An equivalent order applies for the secret.  Essentially we prefer the configura
 If you want to deploy a Spark Application into a Mesos cluster that is running in a secure mode there are some environment variables that need to be set.
 
 - `LIBPROCESS_SSL_ENABLED=true` enables SSL communication
-- `LIBPROCESS_SSL_VERIFY_CERT=false` verifies the ssl certificate 
-- `LIBPROCESS_SSL_KEY_FILE=pathToKeyFile.key` path to key 
+- `LIBPROCESS_SSL_VERIFY_CERT=false` verifies the ssl certificate
+- `LIBPROCESS_SSL_KEY_FILE=pathToKeyFile.key` path to key
 - `LIBPROCESS_SSL_CERT_FILE=pathToCRTFile.crt` the certificate file to be used
 
 All options can be found at http://mesos.apache.org/documentation/latest/ssl/
@@ -374,8 +374,8 @@ See the [configuration page](configuration.html) for information on Spark config
 
 #### Spark Properties
 
-<table class="table">
-<tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr>
+<table class="table table-striped">
+<thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
 <tr>
   <td><code>spark.mesos.coarse</code></td>
   <td>true</td>
@@ -622,7 +622,7 @@ See the [configuration page](configuration.html) for information on Spark config
       <code>spark.mesos.[driver|executor].secret.values</code>
       property, to make the secret available in the driver or executors.
       For example, to make a secret password "guessme" available to the driver process, set:
-    
+
       <pre>spark.mesos.driver.secret.values=guessme</pre>
     </p>
     <p>
@@ -697,9 +697,9 @@ See the [configuration page](configuration.html) for information on Spark config
       provide a comma-separated list:
 
       <pre>spark.mesos.driver.secret.envkeys=PASSWORD1,PASSWORD2</pre>
-    
+
       or
-    
+
       <pre>spark.mesos.driver.secret.filenames=pwdfile1,pwdfile2</pre>
     </p>
   </td>
@@ -830,10 +830,10 @@ See the [configuration page](configuration.html) for information on Spark config
   <td><code>spark.mesos.driver.failoverTimeout</code></td>
   <td><code>0.0</code></td>
   <td>
-    The amount of time (in seconds) that the master will wait for the 
-    driver to reconnect, after being temporarily disconnected, before 
-    it tears down the driver framework by killing all its 
-    executors. The default value is zero, meaning no timeout: if the 
+    The amount of time (in seconds) that the master will wait for the
+    driver to reconnect, after being temporarily disconnected, before
+    it tears down the driver framework by killing all its
+    executors. The default value is zero, meaning no timeout: if the
     driver disconnects, the master immediately tears down the framework.
   </td>
   <td>2.3.0</td>

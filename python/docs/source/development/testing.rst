@@ -68,40 +68,22 @@ Running Tests for Spark Connect
 Running Tests for Python Client
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-In order to run the tests for Spark Connect in Pyth, you should pass ``--parallelism 1`` option together, for example, as below:
-
-.. code-block:: bash
-
-    python/run-tests --module pyspark-connect --parallelism 1
-
-Note that if you made some changes in Protobuf definitions, for example, at
+In order to test the changes in Protobuf definitions, for example, at
 `spark/connector/connect/common/src/main/protobuf/spark/connect <https://github.com/apache/spark/tree/master/connector/connect/common/src/main/protobuf/spark/connect>`_,
-you should regenerate Python Protobuf client by running ``dev/connect-gen-protos.sh``.
+you should regenerate Python Protobuf client first by running ``dev/connect-gen-protos.sh``.
 
 
 Running PySpark Shell with Python Client
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-To run Spark Connect server you locally built:
+For Apache Spark you locally built:
 
 .. code-block:: bash
 
-    bin/spark-shell \
-      --jars `ls connector/connect/target/**/spark-connect*SNAPSHOT.jar | paste -sd ',' -` \
-      --conf spark.plugins=org.apache.spark.sql.connect.SparkConnectPlugin
+    bin/pyspark --remote "local[*]"
 
-To run the Spark Connect server from the Apache Spark release:
+For the Apache Spark release:
 
 .. code-block:: bash
 
-    bin/spark-shell \
-      --packages org.apache.spark:spark-connect_2.12:3.4.0 \
-      --conf spark.plugins=org.apache.spark.sql.connect.SparkConnectPlugin
-
-
-To run the PySpark Shell with the client for the Spark Connect server:
-
-.. code-block:: bash
-
-    bin/pyspark --remote sc://localhost
-
+    bin/pyspark --remote "local[*]" --packages org.apache.spark:spark-connect_2.12:3.4.0

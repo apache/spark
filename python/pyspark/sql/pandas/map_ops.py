@@ -44,9 +44,13 @@ class PandasMapOpsMixin:
         together as an iterator of `pandas.DataFrame`\\s to the function and the
         returned iterator of `pandas.DataFrame`\\s are combined as a :class:`DataFrame`.
         Each `pandas.DataFrame` size can be controlled by
-        `spark.sql.execution.arrow.maxRecordsPerBatch`.
+        `spark.sql.execution.arrow.maxRecordsPerBatch`. The size of the function's input and
+        output can be different.
 
         .. versionadded:: 3.0.0
+
+        .. versionchanged:: 3.4.0
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -105,7 +109,8 @@ class PandasMapOpsMixin:
         together as an iterator of `pyarrow.RecordBatch`\\s to the function and the
         returned iterator of `pyarrow.RecordBatch`\\s are combined as a :class:`DataFrame`.
         Each `pyarrow.RecordBatch` size can be controlled by
-        `spark.sql.execution.arrow.maxRecordsPerBatch`.
+        `spark.sql.execution.arrow.maxRecordsPerBatch`. The size of the function's input and
+        output can be different.
 
         .. versionadded:: 3.3.0
 

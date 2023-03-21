@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.analysis.TypeCoercion._
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.plans.ReferenceAllColumns
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.{Rule, RuleExecutor}
 import org.apache.spark.sql.internal.SQLConf
@@ -1740,6 +1741,16 @@ class TypeCoercionSuite extends TypeCoercionSuiteBase {
       }
     }
   }
+
+  test("SPARK-32638: Add ReferenceAllColumns to skip rewriting attributes") {
+    val t1 = LocalRelation(AttributeReference("c", DecimalType(1, 0))())
+    val t2 = LocalRelation(AttributeReference("c", DecimalType(2, 0))())
+    val unresolved = t1.union(t2).select(UnresolvedStar(None))
+    val referenceAllColumns = FakeReferenceAllColumns(unresolved)
+    val wp1 = widenSetOperationTypes(referenceAllColumns.select(t1.output.head))
+    assert(wp1.isInstanceOf[Project])
+    assert(wp1.expressions.forall(!_.exists(_ == t1.output.head)))
+  }
 }
 
 
@@ -1797,4 +1808,11 @@ object TypeCoercionSuite {
         newLeft: Expression, newRight: Expression): NumericTypeBinaryOperator =
       copy(left = newLeft, right = newRight)
   }
+}
+
+case class FakeReferenceAllColumns(child: LogicalPlan)
+  extends UnaryNode with ReferenceAllColumns[LogicalPlan] {
+  override def output: Seq[Attribute] = child.output
+  override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan =
+    copy(child = newChild)
 }

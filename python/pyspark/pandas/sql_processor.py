@@ -218,7 +218,7 @@ def _get_ipython_scope() -> Dict[str, Any]:
     in an IPython notebook environment.
     """
     try:
-        from IPython import get_ipython  # type: ignore[import]
+        from IPython import get_ipython
 
         shell = get_ipython()
         return shell.user_ns

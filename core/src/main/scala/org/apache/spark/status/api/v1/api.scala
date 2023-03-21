@@ -282,6 +282,16 @@ class StageData private[spark](
     val shuffleLocalBytesRead: Long,
     val shuffleReadBytes: Long,
     val shuffleReadRecords: Long,
+    val shuffleCorruptMergedBlockChunks: Long,
+    val shuffleMergedFetchFallbackCount: Long,
+    val shuffleMergedRemoteBlocksFetched: Long,
+    val shuffleMergedLocalBlocksFetched: Long,
+    val shuffleMergedRemoteChunksFetched: Long,
+    val shuffleMergedLocalChunksFetched: Long,
+    val shuffleMergedRemoteBytesRead: Long,
+    val shuffleMergedLocalBytesRead: Long,
+    val shuffleRemoteReqsDuration: Long,
+    val shuffleMergedRemoteReqsDuration: Long,
     val shuffleWriteBytes: Long,
     val shuffleWriteTime: Long,
     val shuffleWriteRecords: Long,
@@ -302,7 +312,9 @@ class StageData private[spark](
     @JsonDeserialize(using = classOf[ExecutorMetricsJsonDeserializer])
     val peakExecutorMetrics: Option[ExecutorMetrics],
     val taskMetricsDistributions: Option[TaskMetricDistributions],
-    val executorMetricsDistributions: Option[ExecutorMetricsDistributions])
+    val executorMetricsDistributions: Option[ExecutorMetricsDistributions],
+    val isShufflePushEnabled: Boolean,
+    val shuffleMergersCount: Int)
 
 class TaskData private[spark](
     val taskId: Long,
@@ -349,6 +361,17 @@ class OutputMetrics private[spark](
     val bytesWritten: Long,
     val recordsWritten: Long)
 
+class ShufflePushReadMetrics private[spark](
+  val corruptMergedBlockChunks: Long,
+  val mergedFetchFallbackCount: Long,
+  val remoteMergedBlocksFetched: Long,
+  val localMergedBlocksFetched: Long,
+  val remoteMergedChunksFetched: Long,
+  val localMergedChunksFetched: Long,
+  val remoteMergedBytesRead: Long,
+  val localMergedBytesRead: Long,
+  val remoteMergedReqsDuration: Long)
+
 class ShuffleReadMetrics private[spark](
     val remoteBlocksFetched: Long,
     val localBlocksFetched: Long,
@@ -356,7 +379,9 @@ class ShuffleReadMetrics private[spark](
     val remoteBytesRead: Long,
     val remoteBytesReadToDisk: Long,
     val localBytesRead: Long,
-    val recordsRead: Long)
+    val recordsRead: Long,
+    val remoteReqsDuration: Long,
+    val shufflePushReadMetrics: ShufflePushReadMetrics)
 
 class ShuffleWriteMetrics private[spark](
     val bytesWritten: Long,
@@ -392,6 +417,17 @@ class InputMetricDistributions private[spark](
 class OutputMetricDistributions private[spark](
     val bytesWritten: IndexedSeq[Double],
     val recordsWritten: IndexedSeq[Double])
+
+class ShufflePushReadMetricDistributions private[spark](
+  val corruptMergedBlockChunks: IndexedSeq[Double],
+  val mergedFetchFallbackCount: IndexedSeq[Double],
+  val remoteMergedBlocksFetched: IndexedSeq[Double],
+  val localMergedBlocksFetched: IndexedSeq[Double],
+  val remoteMergedChunksFetched: IndexedSeq[Double],
+  val localMergedChunksFetched: IndexedSeq[Double],
+  val remoteMergedBytesRead: IndexedSeq[Double],
+  val localMergedBytesRead: IndexedSeq[Double],
+  val remoteMergedReqsDuration: IndexedSeq[Double])
 
 class ExecutorMetricsDistributions private[spark](
   val quantiles: IndexedSeq[Double],
@@ -436,7 +472,9 @@ class ShuffleReadMetricDistributions private[spark](
     val fetchWaitTime: IndexedSeq[Double],
     val remoteBytesRead: IndexedSeq[Double],
     val remoteBytesReadToDisk: IndexedSeq[Double],
-    val totalBlocksFetched: IndexedSeq[Double])
+    val totalBlocksFetched: IndexedSeq[Double],
+    val remoteReqsDuration: IndexedSeq[Double],
+    val shufflePushReadMetricsDist: ShufflePushReadMetricDistributions)
 
 class ShuffleWriteMetricDistributions private[spark](
     val writeBytes: IndexedSeq[Double],
