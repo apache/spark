@@ -179,8 +179,8 @@ class ChannelBuilder:
         self._extract_attributes()
 
         GRPC_DEFAULT_OPTIONS = [
-            ("grpc.max_send_message_length", MAX_MESSAGE_LENGTH),
-            ("grpc.max_receive_message_length", MAX_MESSAGE_LENGTH),
+            ("grpc.max_send_message_length", ChannelBuilder.MAX_MESSAGE_LENGTH),
+            ("grpc.max_receive_message_length", ChannelBuilder.MAX_MESSAGE_LENGTH),
         ]
 
         if channelOptions is None:

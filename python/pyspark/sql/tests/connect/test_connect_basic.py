@@ -2948,6 +2948,15 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         self.assertEqual(cdf2.schema, sdf2.schema)
         self.assertEqual(cdf2.collect(), sdf2.collect())
 
+    def test_large_client_data(self):
+        # SPARK-42816 support more than 4MB message size.
+        # ~200bytes
+        cols = ["abcdefghijklmnoprstuvwxyz" for x in range(10)]
+        # 100k rows => 20MB
+        row_count = 100 * 1000
+        rows = [cols] * row_count
+        self.assertEqual(row_count, self.connect.createDataFrame(data=rows).count())
+
 
 @unittest.skipIf(not should_test_connect, connect_requirement_message)
 class ClientTests(unittest.TestCase):
