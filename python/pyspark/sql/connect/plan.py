@@ -1972,7 +1972,7 @@ class CoGroupMap(LogicalPlan):
         super().__init__(input)
         self._input_grouping_cols = input_grouping_cols
         self._other_grouping_cols = other_grouping_cols
-        self._other = other
+        self._other = cast(LogicalPlan, other)
         self._func = function._build_common_inline_user_defined_function(*cols)
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:

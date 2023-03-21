@@ -280,8 +280,8 @@ class PandasCogroupedOps:
         self._gd2 = gd2
 
     def applyInPandas(
-        self, func: "PandasCogroupedMapFunction", schema: Union[StructType, str]
-    ) -> DataFrame:
+        self, func: "PandasCogroupedMapFunction", schema: Union["StructType", str]
+    ) -> "DataFrame":
         from pyspark.sql.connect.udf import UserDefinedFunction
         from pyspark.sql.connect.dataframe import DataFrame
 
