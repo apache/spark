@@ -484,7 +484,7 @@ def _test() -> None:
 
     os.chdir(os.environ["SPARK_HOME"])
 
-    globs = pyspark.sql.connect.dataframe.__dict__.copy()
+    globs = pyspark.ml.connect.classification.__dict__.copy()
 
     globs["spark"] = (
         PySparkSession.builder.appName("ml.connect.classification tests")
@@ -493,7 +493,7 @@ def _test() -> None:
     )
 
     (failure_count, test_count) = doctest.testmod(
-        pyspark.sql.connect.ml.classification,
+        pyspark.ml.connect.classification,
         globs=globs,
         optionflags=doctest.ELLIPSIS
                     | doctest.NORMALIZE_WHITESPACE

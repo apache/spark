@@ -1330,11 +1330,13 @@ class LogisticRegression(
     --------
     >>> from pyspark.sql import Row
     >>> from pyspark.ml.linalg import Vectors
-    >>> bdf = sc.parallelize([
-    ...     Row(label=1.0, weight=1.0, features=Vectors.dense(0.0, 5.0)),
-    ...     Row(label=0.0, weight=2.0, features=Vectors.dense(1.0, 2.0)),
-    ...     Row(label=1.0, weight=3.0, features=Vectors.dense(2.0, 1.0)),
-    ...     Row(label=0.0, weight=4.0, features=Vectors.dense(3.0, 3.0))]).toDF()
+    >>> from pyspark.ml.functions import array_to_vector
+    >>> bdf = spark.createDataFrame([
+    ...     (1.0, 1.0, [0.0, 5.0]),
+    ...     (0.0, 2.0, [1.0, 2.0]),
+    ...     (1.0, 3.0, [2.0, 1.0]),
+    ...     (0.0, 4.0, [3.0, 3.0]),
+    ... ], ["label", "weight", "features"]).withColumn("features", array_to_vector("features"))
     >>> blor = LogisticRegression(weightCol="weight")
     >>> blor.getRegParam()
     0.0
