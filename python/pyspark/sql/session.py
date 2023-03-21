@@ -178,11 +178,6 @@ class SparkSession(SparkConversionMixin):
     ...         .config("spark.some.config.option", "some-value")
     ...         .getOrCreate()
     ... )
-
-    Create a Spark session from a Spark context.
-
-    >>> sc = spark.sparkContext
-    >>> spark = SparkSession(sc)
     """
 
     class Builder:
