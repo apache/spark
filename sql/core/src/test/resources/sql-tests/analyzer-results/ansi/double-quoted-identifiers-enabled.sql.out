@@ -427,14 +427,14 @@ Project [a1#x AS a2#x]
          +- View (`myview`, [c1#x])
             +- Project [cast(a#x as int) AS c1#x]
                +- WithCTE
-                  :- CTERelationDef 3, false
+                  :- CTERelationDef xxxx, false
                   :  +- SubqueryAlias v
                   :     +- Project [1#x AS a#x]
                   :        +- Project [1 AS 1#x]
                   :           +- OneRowRelation
                   +- Project [a#x]
                      +- SubqueryAlias v
-                        +- CTERelationRef 3, true, [a#x]
+                        +- CTERelationRef xxxx, true, [a#x]
 
 
 -- !query

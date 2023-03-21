@@ -7,18 +7,18 @@ WITH t as (
 SELECT * FROM t
 -- !query analysis
 WithCTE
-:- CTERelationDef 140, false
+:- CTERelationDef xxxx, false
 :  +- SubqueryAlias t2
 :     +- Project [1 AS 1#x]
 :        +- OneRowRelation
-:- CTERelationDef 141, false
+:- CTERelationDef xxxx, false
 :  +- SubqueryAlias t
 :     +- Project [1#x]
 :        +- SubqueryAlias t2
-:           +- CTERelationRef 140, true, [1#x]
+:           +- CTERelationRef xxxx, true, [1#x]
 +- Project [1#x]
    +- SubqueryAlias t
-      +- CTERelationRef 141, true, [1#x]
+      +- CTERelationRef xxxx, true, [1#x]
 
 
 -- !query
@@ -30,14 +30,14 @@ SELECT max(c) FROM (
 Aggregate [max(c#x) AS max(c)#x]
 +- SubqueryAlias __auto_generated_subquery_name
    +- WithCTE
-      :- CTERelationDef 142, false
+      :- CTERelationDef xxxx, false
       :  +- SubqueryAlias t
       :     +- Project [1#x AS c#x]
       :        +- Project [1 AS 1#x]
       :           +- OneRowRelation
       +- Project [c#x]
          +- SubqueryAlias t
-            +- CTERelationRef 142, true, [c#x]
+            +- CTERelationRef xxxx, true, [c#x]
 
 
 -- !query
@@ -48,13 +48,13 @@ SELECT (
 -- !query analysis
 Project [scalar-subquery#x [] AS scalarsubquery()#x]
 :  +- WithCTE
-:     :- CTERelationDef 143, false
+:     :- CTERelationDef xxxx, false
 :     :  +- SubqueryAlias t
 :     :     +- Project [1 AS 1#x]
 :     :        +- OneRowRelation
 :     +- Project [1#x]
 :        +- SubqueryAlias t
-:           +- CTERelationRef 143, true, [1#x]
+:           +- CTERelationRef xxxx, true, [1#x]
 +- OneRowRelation
 
 
@@ -117,29 +117,29 @@ WITH
 SELECT * FROM t2
 -- !query analysis
 WithCTE
-:- CTERelationDef 145, false
+:- CTERelationDef xxxx, false
 :  +- SubqueryAlias t
 :     +- Project [1#x AS c#x]
 :        +- Project [1 AS 1#x]
 :           +- OneRowRelation
-:- CTERelationDef 147, false
+:- CTERelationDef xxxx, false
 :  +- SubqueryAlias t2
 :     +- Project [scalar-subquery#x [] AS scalarsubquery()#x]
 :        :  +- Aggregate [max(c#x) AS max(c)#x]
 :        :     +- SubqueryAlias __auto_generated_subquery_name
 :        :        +- WithCTE
-:        :           :- CTERelationDef 146, false
+:        :           :- CTERelationDef xxxx, false
 :        :           :  +- SubqueryAlias t
 :        :           :     +- Project [2#x AS c#x]
 :        :           :        +- Project [2 AS 2#x]
 :        :           :           +- OneRowRelation
 :        :           +- Project [c#x]
 :        :              +- SubqueryAlias t
-:        :                 +- CTERelationRef 146, true, [c#x]
+:        :                 +- CTERelationRef xxxx, true, [c#x]
 :        +- OneRowRelation
 +- Project [scalarsubquery()#x]
    +- SubqueryAlias t2
-      +- CTERelationRef 147, true, [scalarsubquery()#x]
+      +- CTERelationRef xxxx, true, [scalarsubquery()#x]
 
 
 -- !query
@@ -173,12 +173,12 @@ SELECT max(c) FROM (
 )
 -- !query analysis
 WithCTE
-:- CTERelationDef 148, false
+:- CTERelationDef xxxx, false
 :  +- SubqueryAlias t
 :     +- Project [1#x AS c#x]
 :        +- Project [1 AS 1#x]
 :           +- OneRowRelation
-:- CTERelationDef 149, false
+:- CTERelationDef xxxx, false
 :  +- SubqueryAlias t
 :     +- Project [2#x AS c#x]
 :        +- Project [2 AS 2#x]
@@ -187,7 +187,7 @@ WithCTE
    +- SubqueryAlias __auto_generated_subquery_name
       +- Project [c#x]
          +- SubqueryAlias t
-            +- CTERelationRef 149, true, [c#x]
+            +- CTERelationRef xxxx, true, [c#x]
 
 
 -- !query
@@ -200,12 +200,12 @@ SELECT sum(c) FROM (
 )
 -- !query analysis
 WithCTE
-:- CTERelationDef 150, false
+:- CTERelationDef xxxx, false
 :  +- SubqueryAlias t
 :     +- Project [1#x AS c#x]
 :        +- Project [1 AS 1#x]
 :           +- OneRowRelation
-:- CTERelationDef 151, false
+:- CTERelationDef xxxx, false
 :  +- SubqueryAlias t
 :     +- Project [2#x AS c#x]
 :        +- Project [2 AS 2#x]
@@ -216,7 +216,7 @@ WithCTE
          +- SubqueryAlias __auto_generated_subquery_name
             +- Project [c#x]
                +- SubqueryAlias t
-                  +- CTERelationRef 151, true, [c#x]
+                  +- CTERelationRef xxxx, true, [c#x]
 
 
 -- !query
@@ -230,17 +230,17 @@ SELECT sum(c) FROM (
 )
 -- !query analysis
 WithCTE
-:- CTERelationDef 152, false
+:- CTERelationDef xxxx, false
 :  +- SubqueryAlias t
 :     +- Project [1#x AS c#x]
 :        +- Project [1 AS 1#x]
 :           +- OneRowRelation
-:- CTERelationDef 153, false
+:- CTERelationDef xxxx, false
 :  +- SubqueryAlias t
 :     +- Project [2#x AS c#x]
 :        +- Project [2 AS 2#x]
 :           +- OneRowRelation
-:- CTERelationDef 154, false
+:- CTERelationDef xxxx, false
 :  +- SubqueryAlias t
 :     +- Project [3#x AS c#x]
 :        +- Project [3 AS 3#x]
@@ -251,7 +251,7 @@ WithCTE
          +- SubqueryAlias __auto_generated_subquery_name
             +- Project [c#x]
                +- SubqueryAlias t
-                  +- CTERelationRef 154, true, [c#x]
+                  +- CTERelationRef xxxx, true, [c#x]
 
 
 -- !query
@@ -338,22 +338,22 @@ WITH
 SELECT * FROM t
 -- !query analysis
 WithCTE
-:- CTERelationDef 155, false
+:- CTERelationDef xxxx, false
 :  +- SubqueryAlias t2
 :     +- Project [1 AS 1#x]
 :        +- OneRowRelation
-:- CTERelationDef 156, false
+:- CTERelationDef xxxx, false
 :  +- SubqueryAlias t
 :     +- Project [1#x]
 :        +- SubqueryAlias t2
-:           +- CTERelationRef 155, true, [1#x]
-:- CTERelationDef 157, false
+:           +- CTERelationRef xxxx, true, [1#x]
+:- CTERelationDef xxxx, false
 :  +- SubqueryAlias t2
 :     +- Project [2 AS 2#x]
 :        +- OneRowRelation
 +- Project [1#x]
    +- SubqueryAlias t
-      +- CTERelationRef 156, true, [1#x]
+      +- CTERelationRef xxxx, true, [1#x]
 
 
 -- !query
@@ -404,23 +404,23 @@ WITH
 SELECT * FROM t2
 -- !query analysis
 WithCTE
-:- CTERelationDef 158, false
+:- CTERelationDef xxxx, false
 :  +- SubqueryAlias t1
 :     +- Project [1 AS 1#x]
 :        +- OneRowRelation
-:- CTERelationDef 159, false
+:- CTERelationDef xxxx, false
 :  +- SubqueryAlias t3
 :     +- Project [1#x]
 :        +- SubqueryAlias t1
-:           +- CTERelationRef 158, true, [1#x]
-:- CTERelationDef 160, false
+:           +- CTERelationRef xxxx, true, [1#x]
+:- CTERelationDef xxxx, false
 :  +- SubqueryAlias t2
 :     +- Project [1#x]
 :        +- SubqueryAlias t3
-:           +- CTERelationRef 159, true, [1#x]
+:           +- CTERelationRef xxxx, true, [1#x]
 +- Project [1#x]
    +- SubqueryAlias t2
-      +- CTERelationRef 160, true, [1#x]
+      +- CTERelationRef xxxx, true, [1#x]
 
 
 -- !query
@@ -435,20 +435,20 @@ SELECT * FROM (
 )
 -- !query analysis
 WithCTE
-:- CTERelationDef 161, false
+:- CTERelationDef xxxx, false
 :  +- SubqueryAlias cte_outer
 :     +- Project [1 AS 1#x]
 :        +- OneRowRelation
-:- CTERelationDef 162, false
+:- CTERelationDef xxxx, false
 :  +- SubqueryAlias cte_inner
 :     +- Project [1#x]
 :        +- SubqueryAlias cte_outer
-:           +- CTERelationRef 161, true, [1#x]
+:           +- CTERelationRef xxxx, true, [1#x]
 +- Project [1#x]
    +- SubqueryAlias __auto_generated_subquery_name
       +- Project [1#x]
          +- SubqueryAlias cte_inner
-            +- CTERelationRef 162, true, [1#x]
+            +- CTERelationRef xxxx, true, [1#x]
 
 
 -- !query
@@ -468,27 +468,27 @@ SELECT * FROM (
 )
 -- !query analysis
 WithCTE
-:- CTERelationDef 163, false
+:- CTERelationDef xxxx, false
 :  +- SubqueryAlias cte_outer
 :     +- Project [1 AS 1#x]
 :        +- OneRowRelation
-:- CTERelationDef 164, false
+:- CTERelationDef xxxx, false
 :  +- SubqueryAlias cte_inner_inner
 :     +- Project [1#x]
 :        +- SubqueryAlias cte_outer
-:           +- CTERelationRef 163, true, [1#x]
-:- CTERelationDef 165, false
+:           +- CTERelationRef xxxx, true, [1#x]
+:- CTERelationDef xxxx, false
 :  +- SubqueryAlias cte_inner
 :     +- Project [1#x]
 :        +- SubqueryAlias __auto_generated_subquery_name
 :           +- Project [1#x]
 :              +- SubqueryAlias cte_inner_inner
-:                 +- CTERelationRef 164, true, [1#x]
+:                 +- CTERelationRef xxxx, true, [1#x]
 +- Project [1#x]
    +- SubqueryAlias __auto_generated_subquery_name
       +- Project [1#x]
          +- SubqueryAlias cte_inner
-            +- CTERelationRef 165, true, [1#x]
+            +- CTERelationRef xxxx, true, [1#x]
 
 
 -- !query

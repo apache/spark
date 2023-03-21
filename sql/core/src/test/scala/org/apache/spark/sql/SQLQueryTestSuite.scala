@@ -562,11 +562,17 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
       }
       // Also include a copy of each of the above test cases as an analyzer test.
       newTestCases.flatMap { test =>
-        Seq(
-          test,
-          test.asAnalyzerTest(
-            newName = s"${test.name}_analyzer_test",
-            newResultFile = analyzerResultFile))
+        test match {
+          case _: UDAFTestCase =>
+            // Skip creating analyzer test cases for UDAF tests as they are hard to update locally.
+            Seq(test)
+          case _ =>
+            Seq(
+              test,
+              test.asAnalyzerTest(
+                newName = s"${test.name}_analyzer_test",
+                newResultFile = analyzerResultFile))
+        }
       }
     }.sortBy(_.name)
   }

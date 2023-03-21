@@ -4,7 +4,7 @@ WITH q1(x,y) AS (SELECT 1,2)
 SELECT * FROM q1, q1 AS q2
 -- !query analysis
 WithCTE
-:- CTERelationDef 345, false
+:- CTERelationDef xxxx, false
 :  +- SubqueryAlias q1
 :     +- Project [1#x AS x#x, 2#x AS y#x]
 :        +- Project [1 AS 1#x, 2 AS 2#x]
@@ -12,10 +12,10 @@ WithCTE
 +- Project [x#x, y#x, x#x, y#x]
    +- Join Inner
       :- SubqueryAlias q1
-      :  +- CTERelationRef 345, true, [x#x, y#x]
+      :  +- CTERelationRef xxxx, true, [x#x, y#x]
       +- SubqueryAlias q2
          +- SubqueryAlias q1
-            +- CTERelationRef 345, true, [x#x, y#x]
+            +- CTERelationRef xxxx, true, [x#x, y#x]
 
 
 -- !query
@@ -184,7 +184,7 @@ InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_d
 with cte(foo) as ( select 42 ) select * from ((select foo from cte)) q
 -- !query analysis
 WithCTE
-:- CTERelationDef 347, false
+:- CTERelationDef xxxx, false
 :  +- SubqueryAlias cte
 :     +- Project [42#x AS foo#x]
 :        +- Project [42 AS 42#x]
@@ -193,7 +193,7 @@ WithCTE
    +- SubqueryAlias q
       +- Project [foo#x]
          +- SubqueryAlias cte
-            +- CTERelationRef 347, true, [foo#x]
+            +- CTERelationRef xxxx, true, [foo#x]
 
 
 -- !query
@@ -206,11 +206,11 @@ WITH outermost(x) AS (
 SELECT * FROM outermost ORDER BY 1
 -- !query analysis
 WithCTE
-:- CTERelationDef 348, false
+:- CTERelationDef xxxx, false
 :  +- SubqueryAlias innermost
 :     +- Project [2 AS 2#x]
 :        +- OneRowRelation
-:- CTERelationDef 349, false
+:- CTERelationDef xxxx, false
 :  +- SubqueryAlias outermost
 :     +- Project [1#x AS x#x]
 :        +- Distinct
@@ -221,13 +221,13 @@ WithCTE
 :                 +- Union false, false
 :                    :- Project [2#x]
 :                    :  +- SubqueryAlias innermost
-:                    :     +- CTERelationRef 348, true, [2#x]
+:                    :     +- CTERelationRef xxxx, true, [2#x]
 :                    +- Project [3 AS 3#x]
 :                       +- OneRowRelation
 +- Sort [x#x ASC NULLS FIRST], true
    +- Project [x#x]
       +- SubqueryAlias outermost
-         +- CTERelationRef 349, true, [x#x]
+         +- CTERelationRef xxxx, true, [x#x]
 
 
 -- !query
@@ -410,13 +410,13 @@ org.apache.spark.sql.catalyst.parser.ParseException
 with ordinality as (select 1 as x) select * from ordinality
 -- !query analysis
 WithCTE
-:- CTERelationDef 352, false
+:- CTERelationDef xxxx, false
 :  +- SubqueryAlias ordinality
 :     +- Project [1 AS x#x]
 :        +- OneRowRelation
 +- Project [x#x]
    +- SubqueryAlias ordinality
-      +- CTERelationRef 352, true, [x#x]
+      +- CTERelationRef xxxx, true, [x#x]
 
 
 -- !query

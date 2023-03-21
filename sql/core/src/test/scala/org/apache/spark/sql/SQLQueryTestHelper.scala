@@ -50,10 +50,11 @@ trait SQLQueryTestHelper extends Logging {
       .replaceAll("Created Time.*", s"Created Time $notIncludedMsg")
       .replaceAll("Last Access.*", s"Last Access $notIncludedMsg")
       .replaceAll("Partition Statistics\t\\d+", s"Partition Statistics\t$notIncludedMsg")
+      .replaceAll("CTERelationDef \\d+,", s"CTERelationDef xxxx,")
+      .replaceAll("CTERelationRef \\d+,", s"CTERelationRef xxxx,")
       .replaceAll("@\\w*,", s"@xxxxxxxx,")
       .replaceAll("\\*\\(\\d+\\) ", "*") // remove the WholeStageCodegen codegenStageIds
   }
-
 
   /**
    * Analyzes a query and returns the result as (schema of the output, normalized resolved plan
