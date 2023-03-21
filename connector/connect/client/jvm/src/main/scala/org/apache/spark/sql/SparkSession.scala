@@ -213,9 +213,8 @@ class SparkSession private[sql] (
    * @param sqlText
    *   A SQL statement with named parameters to execute.
    * @param args
-   *   A map of parameter names to string values that are parsed as SQL literal expressions.
-   *   For example, map keys: "abc", "def_1",
-   *                map values: "1", "'abc'", "DATE'2023-03-21'".
+   *   A map of parameter names to string values that are parsed as SQL literal expressions. For
+   *   example, map keys: "abc", "def_1", map values: "1", "'abc'", "DATE'2023-03-21'".
    *
    * @since 3.4.0
    */
@@ -231,9 +230,8 @@ class SparkSession private[sql] (
    * @param sqlText
    *   A SQL statement with named parameters to execute.
    * @param args
-   *   A map of parameter names to string values that are parsed as SQL literal expressions.
-   *   For example, map keys: "abc", "def_1",
-   *                map values: "1", "'abc'", "DATE'2023-03-21'".
+   *   A map of parameter names to string values that are parsed as SQL literal expressions. For
+   *   example, map keys: "abc", "def_1", map values: "1", "'abc'", "DATE'2023-03-21'".
    *
    * @since 3.4.0
    */
