@@ -71,7 +71,8 @@ from pyspark.sql.connect.expressions import (
     CommonInlineUserDefinedFunction,
     JavaUDF,
 )
-from pyspark.sql.types import DataType, StructType
+from pyspark.sql.pandas.types import _check_series_localize_timestamps, _convert_map_items_to_dict
+from pyspark.sql.types import DataType, MapType, StructType, TimestampType
 from pyspark.rdd import PythonEvalType
 
 
@@ -629,16 +630,16 @@ class SparkConnectClient(object):
             for x in metrics
         ]
 
-    def to_table(self, plan: pb2.Plan) -> "pa.Table":
+    def to_table(self, plan: pb2.Plan) -> Tuple["pa.Table", Optional[StructType]]:
         """
         Return given plan as a PyArrow Table.
         """
         logger.info(f"Executing plan {self._proto_to_string(plan)}")
         req = self._execute_plan_request_with_metadata()
         req.plan.CopyFrom(plan)
-        table, _, _, _3 = self._execute_and_fetch(req)
+        table, schema, _, _, _ = self._execute_and_fetch(req)
         assert table is not None
-        return table
+        return table, schema
 
     def to_pandas(self, plan: pb2.Plan) -> "pd.DataFrame":
         """
@@ -647,12 +648,23 @@ class SparkConnectClient(object):
         logger.info(f"Executing plan {self._proto_to_string(plan)}")
         req = self._execute_plan_request_with_metadata()
         req.plan.CopyFrom(plan)
-        table, metrics, observed_metrics, _ = self._execute_and_fetch(req)
+        table, schema, metrics, observed_metrics, _ = self._execute_and_fetch(req)
         assert table is not None
-        column_names = table.column_names
-        table = table.rename_columns([f"col_{i}" for i in range(len(column_names))])
-        pdf = table.to_pandas()
-        pdf.columns = column_names
+        pdf = table.rename_columns([f"col_{i}" for i in range(len(table.column_names))]).to_pandas()
+        pdf.columns = table.column_names
+
+        schema = schema or types.from_arrow_schema(table.schema)
+        assert schema is not None and isinstance(schema, StructType)
+
+        for field, pa_field in zip(schema, table.schema):
+            if isinstance(field.dataType, TimestampType):
+                assert pa_field.type.tz is not None
+                pdf[field.name] = _check_series_localize_timestamps(
+                    pdf[field.name], pa_field.type.tz
+                )
+            elif isinstance(field.dataType, MapType):
+                pdf[field.name] = _convert_map_items_to_dict(pdf[field.name])
+
         if len(metrics) > 0:
             pdf.attrs["metrics"] = metrics
         if len(observed_metrics) > 0:
@@ -706,7 +718,7 @@ class SparkConnectClient(object):
         if self._user_id:
             req.user_context.user_id = self._user_id
         req.plan.command.CopyFrom(command)
-        data, _, _, properties = self._execute_and_fetch(req)
+        data, _, _, _, properties = self._execute_and_fetch(req)
         if data is not None:
             return (data.to_pandas(), properties)
         else:
@@ -854,12 +866,19 @@ class SparkConnectClient(object):
 
     def _execute_and_fetch(
         self, req: pb2.ExecutePlanRequest
-    ) -> Tuple[Optional["pa.Table"], List[PlanMetrics], List[PlanObservedMetrics], Dict[str, Any]]:
+    ) -> Tuple[
+        Optional["pa.Table"],
+        Optional[StructType],
+        List[PlanMetrics],
+        List[PlanObservedMetrics],
+        Dict[str, Any],
+    ]:
         logger.info("ExecuteAndFetch")
 
         m: Optional[pb2.ExecutePlanResponse.Metrics] = None
         om: List[pb2.ExecutePlanResponse.ObservedMetrics] = []
         batches: List[pa.RecordBatch] = []
+        schema: Optional[StructType] = None
         properties = {}
         try:
             for attempt in Retrying(
@@ -879,6 +898,10 @@ class SparkConnectClient(object):
                         if b.observed_metrics is not None:
                             logger.debug("Received observed metric batch.")
                             om.extend(b.observed_metrics)
+                        if b.HasField("schema"):
+                            dt = types.proto_schema_to_pyspark_data_type(b.schema)
+                            assert isinstance(dt, StructType)
+                            schema = dt
                         if b.HasField("sql_command_result"):
                             properties["sql_command_result"] = b.sql_command_result.relation
                         if b.HasField("arrow_batch"):
@@ -898,9 +921,9 @@ class SparkConnectClient(object):
 
         if len(batches) > 0:
             table = pa.Table.from_batches(batches=batches)
-            return table, metrics, observed_metrics, properties
+            return table, schema, metrics, observed_metrics, properties
         else:
-            return None, metrics, observed_metrics, properties
+            return None, schema, metrics, observed_metrics, properties
 
     def _config_request_with_metadata(self) -> pb2.ConfigRequest:
         req = pb2.ConfigRequest()

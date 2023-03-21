@@ -3973,11 +3973,7 @@ class Dataset[T] private[sql](
    * This is for 'distributed-sequence' default index in pandas API on Spark.
    */
   private[sql] def withSequenceColumn(name: String) = {
-    Dataset.ofRows(
-      sparkSession,
-      AttachDistributedSequence(
-        AttributeReference(name, LongType, nullable = false)(),
-        logicalPlan))
+    select(Column(DistributedSequenceID()).alias(name), col("*"))
   }
 
   /**
