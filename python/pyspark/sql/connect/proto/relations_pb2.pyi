@@ -638,6 +638,7 @@ class Read(google.protobuf.message.Message):
         OPTIONS_FIELD_NUMBER: builtins.int
         PATHS_FIELD_NUMBER: builtins.int
         PREDICATES_FIELD_NUMBER: builtins.int
+        STREAMING_TABLE_NAME_FIELD_NUMBER: builtins.int
         format: builtins.str
         """(Optional) Supported formats include: parquet, orc, text, json, parquet, csv, avro.
 
@@ -669,6 +670,8 @@ class Read(google.protobuf.message.Message):
 
             This is only supported by the JDBC data source.
             """
+        streaming_table_name: builtins.str
+        """(Optional) Source table name for a streaming read. Not used in batch read."""
         def __init__(
             self,
             *,
@@ -677,6 +680,7 @@ class Read(google.protobuf.message.Message):
             options: collections.abc.Mapping[builtins.str, builtins.str] | None = ...,
             paths: collections.abc.Iterable[builtins.str] | None = ...,
             predicates: collections.abc.Iterable[builtins.str] | None = ...,
+            streaming_table_name: builtins.str = ...,
         ) -> None: ...
         def HasField(
             self,
@@ -708,6 +712,8 @@ class Read(google.protobuf.message.Message):
                 b"predicates",
                 "schema",
                 b"schema",
+                "streaming_table_name",
+                b"streaming_table_name",
             ],
         ) -> None: ...
         @typing.overload
@@ -1182,7 +1188,7 @@ class Aggregate(google.protobuf.message.Message):
         ]:
             """(Optional) List of values that will be translated to columns in the output DataFrame.
 
-            Note that if it is empty, the server side will immediately trigger a job to collect
+            Note that if it is empty, the server side will immediately st a job to collect
             the distinct values of the column.
             """
         def __init__(

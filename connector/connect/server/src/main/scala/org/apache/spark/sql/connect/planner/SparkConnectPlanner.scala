@@ -21,10 +21,10 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable
 
 import com.google.common.collect.{Lists, Maps}
-import com.google.protobuf.{Any => ProtoAny, ByteString}
+import com.google.protobuf.{ByteString, Any => ProtoAny}
 import io.grpc.stub.StreamObserver
-
 import org.apache.spark.{Partition, SparkEnv, TaskContext}
+
 import org.apache.spark.api.python.{PythonEvalType, SimplePythonFunction}
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.{ExecutePlanResponse, SqlCommand}
@@ -35,6 +35,7 @@ import org.apache.spark.connect.proto.StreamingQueryCommandResult
 import org.apache.spark.connect.proto.StreamingQueryStartResult
 import org.apache.spark.connect.proto.StreamingQueryStatusResult
 import org.apache.spark.connect.proto.WriteStreamOperation
+import org.apache.spark.connect.proto.WriteStreamOperation.TriggerTypeCase
 import org.apache.spark.ml.{functions => MLFunctions}
 import org.apache.spark.sql.{Column, Dataset, Encoders, SparkSession}
 import org.apache.spark.sql.catalyst.{expressions, AliasIdentifier, FunctionIdentifier}
@@ -749,7 +750,7 @@ class SparkConnectPlanner(val session: SparkSession) {
 
     def parseSchema(schema: String): StructType = {
       DataType.parseTypeWithFallback(
-        rel.getDataSource.getSchema,
+        schema,
         StructType.fromDDL,
         fallbackParser = DataType.fromJson) match {
         case s: StructType => s
@@ -758,8 +759,7 @@ class SparkConnectPlanner(val session: SparkSession) {
     }
 
     rel.getReadTypeCase match {
-      case proto.Read.ReadTypeCase.NAMED_TABLE =>
-        assert(!rel.getIsStreaming) // XXX
+      case proto.Read.ReadTypeCase.NAMED_TABLE if !rel.getIsStreaming =>
         val multipartIdentifier =
           CatalystSqlParser.parseMultipartIdentifier(rel.getNamedTable.getUnparsedIdentifier)
         UnresolvedRelation(multipartIdentifier)
@@ -812,13 +812,16 @@ class SparkConnectPlanner(val session: SparkSession) {
         if (streamSource.getSchema.nonEmpty) {
           reader.schema(parseSchema(streamSource.getSchema))
         }
-        if (streamSource.getPathsCount == 0) {
-          reader.load().queryExecution.analyzed
-        } else if (streamSource.getPathsCount == 1) {
-          reader.load(streamSource.getPaths(0)).queryExecution.analyzed
-        } else {
-          throw InvalidPlanInput(s"Multiple paths are not supported for streaming source")
+        val streamDF = streamSource.getPathsCount match {
+          case 0 if streamSource.getStreamingTableName.nonEmpty =>
+            reader.table(streamSource.getStreamingTableName)
+          case 0 => reader.load()
+          case 1 => reader.load(streamSource.getPaths(0))
+          case _ =>
+            throw InvalidPlanInput(s"Multiple paths are not supported for streaming source")
         }
+
+        streamDF.queryExecution.analyzed
 
       case _ => throw InvalidPlanInput(s"Does not support ${rel.getReadTypeCase.name()}")
     }
@@ -1648,7 +1651,7 @@ class SparkConnectPlanner(val session: SparkSession) {
       case proto.Command.CommandTypeCase.WRITE_STREAM_OPERATION =>
         handleWriteStreamOperation(command.getWriteStreamOperation, sessionId, responseObserver)
       case proto.Command.CommandTypeCase.STREAMING_QUERY_COMMAND =>
-        handleStreamingQyeryCommand(command.getStreamingQueryCommand, sessionId, responseObserver)
+        handleStreamingQueryCommand(command.getStreamingQueryCommand, sessionId, responseObserver)
       case _ => throw new UnsupportedOperationException(s"$command not supported.")
     }
   }
@@ -1956,8 +1959,16 @@ class SparkConnectPlanner(val session: SparkSession) {
       writer.partitionBy(writeOp.getPartitioningColumnNamesList.asScala.toList: _*)
     }
 
-    if (writeOp.getTrigger.nonEmpty) {
-      writer.trigger(Trigger.ProcessingTime(writeOp.getTrigger))
+    writeOp.getTriggerTypeCase match {
+      case TriggerTypeCase.PROCESSING_TIME_TRIGGER =>
+        writer.trigger(Trigger.ProcessingTime(writeOp.getProcessingTimeTrigger.getInterval))
+      case TriggerTypeCase.AVAILABLE_NOW_TRIGGER =>
+        writer.trigger(Trigger.AvailableNow())
+      case TriggerTypeCase.ONE_TIME_TRIGGER =>
+        writer.trigger(Trigger.Once())
+      case TriggerTypeCase.CONTINUOUS_TRIGGER =>
+        writer.trigger(Trigger.Continuous(writeOp.getContinuousTrigger.getInterval))
+      case TriggerTypeCase.TRIGGERTYPE_NOT_SET =>
     }
 
     if (writeOp.getOutputMode.nonEmpty) {
@@ -1988,7 +1999,7 @@ class SparkConnectPlanner(val session: SparkSession) {
         .build())
   }
 
-  def handleStreamingQyeryCommand(
+  def handleStreamingQueryCommand(
       command: StreamingQueryCommand,
       sessionId: String,
       responseObserver: StreamObserver[ExecutePlanResponse]): Unit = {
@@ -2001,7 +2012,7 @@ class SparkConnectPlanner(val session: SparkSession) {
 
     val query = Option(session.streams.get(command.getId)).getOrElse {
       throw new IllegalArgumentException(s"Streaming query $id is not found")
-      // TODO: Handle this better. May be cache stopped queries for a few minutes.
+      // TODO(SPARK-XXX): Handle this better. May be cache stopped queries for a few minutes.
     }
 
     command.getCommandTypeCase match {

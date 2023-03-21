@@ -183,14 +183,40 @@ message WriteStreamOperation {
   Relation input = 1;
 
   string format = 2;
-
   map<string, string> options = 3;
   repeated string partitioning_column_names = 4;
-  string trigger = 5; // TODO: Add more trigger types.
-  string output_mode = 6; // TODO: Make this an enum.
-  string query_name = 7;
-  string path = 8;
-  // TODO add table_name
+  oneof trigger_type {
+    ProcessingTimeTrigger processing_time_trigger = 5;
+    AvailableNowTrigger available_now_trigger = 6;
+    OneTimeTrigger one_time_trigger = 7;
+    ContinuousTrigger continuous_trigger = 8;
+  }
+  string output_mode = 9;
+  string query_name = 10;
+
+  oneof sink_path_type {
+    string path = 11;
+    string table_name = 12;
+  }
+
+  // Triggers (see corresponding scala case classes for documentation)
+  message ProcessingTimeTrigger {
+    // (Required)
+    string interval = 1;
+  }
+
+  message AvailableNowTrigger {
+    // Empty
+  }
+
+  message OneTimeTrigger {
+    // Empty
+  }
+
+  message ContinuousTrigger {
+    // (Required)
+    string interval = 1;
+  }
 }
 
 message StreamingQueryStartResult {
@@ -213,8 +239,8 @@ message StreamingQueryCommand {
   string id = 1;
 
   oneof command_type {
-      StreamingQueryStatusCommand status = 3;
-      StreamingQueryStopCommand stop = 4;
+      StreamingQueryStatusCommand status = 2;
+      StreamingQueryStopCommand stop = 3;
       // Add more commands like await_termination()
   }
 }
@@ -224,7 +250,7 @@ message StreamingQueryStatusCommand {
 }
 
 message StreamingQueryStopCommand {
-
+  // Empty
 }
 
 message StreamingQueryCommandResult {
@@ -232,14 +258,13 @@ message StreamingQueryCommandResult {
   string id = 1;
 
   oneof result_type {
-    StreamingQueryStatusResult status_result = 3;
-    // No response is required for stop.
+    StreamingQueryStatusResult status_result = 2;
+    // Add any
   }
 }
 
 message StreamingQueryStatusResult {
-  // Fetch all the relevant status here.
-  // Rather than one call for each type of information.
+  // This status includes all the available to status
 
   // Fields from Scala 'StreamingQueryStatus' struct
   string status_message = 1;

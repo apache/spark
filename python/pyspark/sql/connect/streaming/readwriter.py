@@ -256,25 +256,25 @@ class DataStreamWriter:
 
     def __init__(self, plan: "LogicalPlan", session: "SparkSession") -> None:
         self._session = session
-        self._writeStream = WriteStreamOperation(plan)
+        self._write_stream = WriteStreamOperation(plan)
 
     # def _sq(self, jsq: JavaObject) -> StreamingQuery:
     #    return StreamingQuery(jsq)
 
     def outputMode(self, outputMode: str) -> "DataStreamWriter":
-        self._writeStream.output_mode = outputMode
+        self._write_stream.write_op.output_mode = outputMode
         return self
 
     outputMode.__doc__ = PySparkDataStreamWriter.outputMode.__doc__
 
     def format(self, source: str) -> "DataStreamWriter":
-        self._writeStream.source = source
+        self._write_stream.write_op.source = source
         return self
 
     format.__doc__ = PySparkDataStreamWriter.format.__doc__
 
     def option(self, key: str, value: "OptionalPrimitiveType") -> "DataStreamWriter":
-        self._writeStream.options[key] = to_str(value)
+        self._write_stream.write_op.options[key] = to_str(value)
         return self
 
     option.__doc__ = PySparkDataStreamWriter.option.__doc__
@@ -297,13 +297,13 @@ class DataStreamWriter:
     def partitionBy(self, *cols: str) -> "DataStreamWriter":  # type: ignore[misc]
         if len(cols) == 1 and isinstance(cols[0], (list, tuple)):
             cols = cols[0]
-        self._writeStream.partitioning_cols = cast(List[str], cols)
+        self._write_stream.write_op.partitioning_cols = cast(List[str], cols)
         return self
 
     partitionBy.__doc__ = PySparkDataStreamWriter.partitionBy.__doc__
 
     def queryName(self, queryName: str) -> "DataStreamWriter":
-        self._writeStream.query_name = queryName
+        self._write_stream.write_op.query_name = queryName
         return self
 
     queryName.__doc__ = PySparkDataStreamWriter.queryName.__doc__
@@ -339,20 +339,17 @@ class DataStreamWriter:
         elif params.count(None) < 3:
             raise ValueError("Multiple triggers not allowed.")
 
-        trigger = None
-
         if processingTime is not None:
             if type(processingTime) != str or len(processingTime.strip()) == 0:
                 raise ValueError(
                     "Value for processingTime must be a non empty string. Got: %s" % processingTime
                 )
-            interval = processingTime.strip()
-            trigger = interval
+            self._write_stream.write_op.processing_time_trigger.interval = processingTime.strip()
 
         elif once is not None:
             if once is not True:
                 raise ValueError("Value for once must be True. Got: %s" % once)
-            raise NotImplementedError("Trigger.Once")
+            self._write_stream.write_op.one_time_trigger.CopyFrom()
 
         elif continuous is not None:
             if type(continuous) != str or len(continuous.strip()) == 0:
@@ -367,7 +364,7 @@ class DataStreamWriter:
                 raise ValueError("Value for availableNow must be True. Got: %s" % availableNow)
             raise NotImplementedError("Trigger.AvailableNow")
 
-        self._writeStream.trigger = trigger
+        self._write_stream.write_op.trigger = trigger
         return self
 
     trigger.__doc__ = PySparkDataStreamWriter.trigger.__doc__
@@ -385,9 +382,10 @@ class DataStreamWriter:
 
     foreach.__doc__ = PySparkDataStreamWriter.foreach.__doc__
 
-    def start(
+    def _start_internal(
         self,
         path: Optional[str] = None,
+        tableName: Optional[str] = None,
         format: Optional[str] = None,
         outputMode: Optional[str] = None,
         partitionBy: Optional[Union[str, List[str]]] = None,
@@ -404,9 +402,11 @@ class DataStreamWriter:
         if queryName is not None:
             self.queryName(queryName)
         if path:
-            self._writeStream.path = path
+            self._write_stream.write_op.path = path
+        if tableName:
+            self._write_stream.write_op.table_name = tableName
 
-        cmd = self._writeStream.command(self._session.client)
+        cmd = self._write_stream.write_op.command(self._session.client)
         (_, properties) = self._session.client.execute_command(cmd)
 
         start_result = cast(pb2.StreamingQueryStartResult, properties["streaming_query_start_result"])
@@ -417,6 +417,26 @@ class DataStreamWriter:
             name=start_result.name
         )
 
+    def start(
+        self,
+        path: Optional[str] = None,
+        format: Optional[str] = None,
+        outputMode: Optional[str] = None,
+        partitionBy: Optional[Union[str, List[str]]] = None,
+        queryName: Optional[str] = None,
+        **options: "OptionalPrimitiveType",
+    ) -> StreamingQuery:
+        return self._start_internal(
+            path=path,
+            format=format,
+            outputMode=outputMode,
+            partitionBy=partitionBy,
+            queryName=queryName,
+            **options,
+        )
+
+    start.__doc__ = PySparkDataStreamWriter.start.__doc__
+
     def toTable(
         self,
         tableName: str,
@@ -426,7 +446,16 @@ class DataStreamWriter:
         queryName: Optional[str] = None,
         **options: "OptionalPrimitiveType",
     ) -> StreamingQuery:
-        raise NotImplementedError()
+        return self._start_internal(
+            tableName=tableName,
+            format=format,
+            outputMode=outputMode,
+            partitionBy=partitionBy,
+            queryName=queryName,
+            **options,
+        )
+
+    start.__doc__ = PySparkDataStreamWriter.toTable__doc__
 
 
 def _test() -> None:

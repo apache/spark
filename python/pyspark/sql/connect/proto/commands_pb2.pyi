@@ -652,14 +652,68 @@ class WriteStreamOperation(google.protobuf.message.Message):
             self, field_name: typing_extensions.Literal["key", b"key", "value", b"value"]
         ) -> None: ...
 
+    class ProcessingTimeTrigger(google.protobuf.message.Message):
+        """Triggers (see corresponding scala case classes for documentation)"""
+
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        INTERVAL_FIELD_NUMBER: builtins.int
+        interval: builtins.str
+        """(Required)"""
+        def __init__(
+            self,
+            *,
+            interval: builtins.str = ...,
+        ) -> None: ...
+        def ClearField(
+            self, field_name: typing_extensions.Literal["interval", b"interval"]
+        ) -> None: ...
+
+    class AvailableNowTrigger(google.protobuf.message.Message):
+        """Empty"""
+
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        def __init__(
+            self,
+        ) -> None: ...
+
+    class OneTimeTrigger(google.protobuf.message.Message):
+        """Empty"""
+
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        def __init__(
+            self,
+        ) -> None: ...
+
+    class ContinuousTrigger(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        INTERVAL_FIELD_NUMBER: builtins.int
+        interval: builtins.str
+        """(Required)"""
+        def __init__(
+            self,
+            *,
+            interval: builtins.str = ...,
+        ) -> None: ...
+        def ClearField(
+            self, field_name: typing_extensions.Literal["interval", b"interval"]
+        ) -> None: ...
+
     INPUT_FIELD_NUMBER: builtins.int
     FORMAT_FIELD_NUMBER: builtins.int
     OPTIONS_FIELD_NUMBER: builtins.int
     PARTITIONING_COLUMN_NAMES_FIELD_NUMBER: builtins.int
-    TRIGGER_FIELD_NUMBER: builtins.int
+    PROCESSING_TIME_TRIGGER_FIELD_NUMBER: builtins.int
+    AVAILABLE_NOW_TRIGGER_FIELD_NUMBER: builtins.int
+    ONE_TIME_TRIGGER_FIELD_NUMBER: builtins.int
+    CONTINUOUS_TRIGGER_FIELD_NUMBER: builtins.int
     OUTPUT_MODE_FIELD_NUMBER: builtins.int
     QUERY_NAME_FIELD_NUMBER: builtins.int
     PATH_FIELD_NUMBER: builtins.int
+    TABLE_NAME_FIELD_NUMBER: builtins.int
     @property
     def input(self) -> pyspark.sql.connect.proto.relations_pb2.Relation:
         """(Required) The output of the `input` streaming relation will be written."""
@@ -672,13 +726,18 @@ class WriteStreamOperation(google.protobuf.message.Message):
     def partitioning_column_names(
         self,
     ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]: ...
-    trigger: builtins.str
-    """TODO: Add more trigger types."""
+    @property
+    def processing_time_trigger(self) -> global___WriteStreamOperation.ProcessingTimeTrigger: ...
+    @property
+    def available_now_trigger(self) -> global___WriteStreamOperation.AvailableNowTrigger: ...
+    @property
+    def one_time_trigger(self) -> global___WriteStreamOperation.OneTimeTrigger: ...
+    @property
+    def continuous_trigger(self) -> global___WriteStreamOperation.ContinuousTrigger: ...
     output_mode: builtins.str
-    """TODO: Make this an enum."""
     query_name: builtins.str
     path: builtins.str
-    """TODO add table_name"""
+    table_name: builtins.str
     def __init__(
         self,
         *,
@@ -686,21 +745,51 @@ class WriteStreamOperation(google.protobuf.message.Message):
         format: builtins.str = ...,
         options: collections.abc.Mapping[builtins.str, builtins.str] | None = ...,
         partitioning_column_names: collections.abc.Iterable[builtins.str] | None = ...,
-        trigger: builtins.str = ...,
+        processing_time_trigger: global___WriteStreamOperation.ProcessingTimeTrigger | None = ...,
+        available_now_trigger: global___WriteStreamOperation.AvailableNowTrigger | None = ...,
+        one_time_trigger: global___WriteStreamOperation.OneTimeTrigger | None = ...,
+        continuous_trigger: global___WriteStreamOperation.ContinuousTrigger | None = ...,
         output_mode: builtins.str = ...,
         query_name: builtins.str = ...,
         path: builtins.str = ...,
+        table_name: builtins.str = ...,
     ) -> None: ...
     def HasField(
-        self, field_name: typing_extensions.Literal["input", b"input"]
+        self,
+        field_name: typing_extensions.Literal[
+            "available_now_trigger",
+            b"available_now_trigger",
+            "continuous_trigger",
+            b"continuous_trigger",
+            "input",
+            b"input",
+            "one_time_trigger",
+            b"one_time_trigger",
+            "path",
+            b"path",
+            "processing_time_trigger",
+            b"processing_time_trigger",
+            "sink_path_type",
+            b"sink_path_type",
+            "table_name",
+            b"table_name",
+            "trigger_type",
+            b"trigger_type",
+        ],
     ) -> builtins.bool: ...
     def ClearField(
         self,
         field_name: typing_extensions.Literal[
+            "available_now_trigger",
+            b"available_now_trigger",
+            "continuous_trigger",
+            b"continuous_trigger",
             "format",
             b"format",
             "input",
             b"input",
+            "one_time_trigger",
+            b"one_time_trigger",
             "options",
             b"options",
             "output_mode",
@@ -709,12 +798,28 @@ class WriteStreamOperation(google.protobuf.message.Message):
             b"partitioning_column_names",
             "path",
             b"path",
+            "processing_time_trigger",
+            b"processing_time_trigger",
             "query_name",
             b"query_name",
-            "trigger",
-            b"trigger",
+            "sink_path_type",
+            b"sink_path_type",
+            "table_name",
+            b"table_name",
+            "trigger_type",
+            b"trigger_type",
         ],
     ) -> None: ...
+    @typing.overload
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["sink_path_type", b"sink_path_type"]
+    ) -> typing_extensions.Literal["path", "table_name"] | None: ...
+    @typing.overload
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["trigger_type", b"trigger_type"]
+    ) -> typing_extensions.Literal[
+        "processing_time_trigger", "available_now_trigger", "one_time_trigger", "continuous_trigger"
+    ] | None: ...
 
 global___WriteStreamOperation = WriteStreamOperation
 
@@ -799,6 +904,8 @@ class StreamingQueryStatusCommand(google.protobuf.message.Message):
 global___StreamingQueryStatusCommand = StreamingQueryStatusCommand
 
 class StreamingQueryStopCommand(google.protobuf.message.Message):
+    """Empty"""
+
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
     def __init__(
@@ -816,7 +923,7 @@ class StreamingQueryCommandResult(google.protobuf.message.Message):
     """(Required)"""
     @property
     def status_result(self) -> global___StreamingQueryStatusResult:
-        """No response is required for stop."""
+        """Add any"""
     def __init__(
         self,
         *,
@@ -842,9 +949,7 @@ class StreamingQueryCommandResult(google.protobuf.message.Message):
 global___StreamingQueryCommandResult = StreamingQueryCommandResult
 
 class StreamingQueryStatusResult(google.protobuf.message.Message):
-    """Fetch all the relevant status here.
-    Rather than one call for each type of information.
-    """
+    """This status includes all the available to status"""
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 

@@ -755,7 +755,7 @@ class DataFrame:
             parameters = parameters[0]  # type: ignore[assignment]
 
         if not isinstance(name, str):
-            raise TypeError("name should be provided as str, got {0}".format(type(name)))
+            raise TypeError("name should be prtovided as str, got {0}".format(type(name)))
 
         allowed_types = (str, list, float, int)
         for p in parameters:
