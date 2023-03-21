@@ -2841,9 +2841,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
     def test_unsupported_group_functions(self):
         # SPARK-41927: Disable unsupported functions.
         cg = self.connect.read.table(self.tbl_name).groupBy("id")
-        for f in (
-            "applyInPandasWithState",
-        ):
+        for f in ("applyInPandasWithState",):
             with self.assertRaises(NotImplementedError):
                 getattr(cg, f)()
 

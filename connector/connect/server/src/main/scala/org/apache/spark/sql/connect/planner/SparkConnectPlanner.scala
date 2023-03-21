@@ -510,22 +510,22 @@ class SparkConnectPlanner(val session: SparkSession) {
       .logicalPlan
   }
 
-  private def transformCoGroupMap(rel: proto.GroupMap): LogicalPlan = {
+  private def transformCoGroupMap(rel: proto.CoGroupMap): LogicalPlan = {
     val pythonUdf = transformPythonUDF(rel.getFunc)
 
-    val input_cols =
+    val inputCols =
       rel.getInputGroupingExpressionsList.asScala.toSeq.map(expr =>
         Column(transformExpression(expr)))
-    val other_cols =
+    val otherCols =
       rel.getOtherGroupingExpressionsList.asScala.toSeq.map(expr =>
         Column(transformExpression(expr)))
 
     val input = Dataset
       .ofRows(session, transformRelation(rel.getInput))
-      .groupBy(input_cols: _*)
+      .groupBy(inputCols: _*)
     val other = Dataset
       .ofRows(session, transformRelation(rel.getInput))
-      .groupBy(other_cols: _*)
+      .groupBy(otherCols: _*)
 
     input.flatMapCoGroupsInPandas(other, pythonUdf).logicalPlan
   }
