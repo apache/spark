@@ -1460,7 +1460,6 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
       val checkoutDf = df.checkpoint()
       val count = checkoutDf.join(df).count()
       assert(count == 100)
-
     }
   }
 }
