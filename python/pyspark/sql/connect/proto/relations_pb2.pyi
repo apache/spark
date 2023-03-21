@@ -93,6 +93,7 @@ class Relation(google.protobuf.message.Message):
     MAP_PARTITIONS_FIELD_NUMBER: builtins.int
     COLLECT_METRICS_FIELD_NUMBER: builtins.int
     PARSE_FIELD_NUMBER: builtins.int
+    GROUP_MAP_FIELD_NUMBER: builtins.int
     FILL_NA_FIELD_NUMBER: builtins.int
     DROP_NA_FIELD_NUMBER: builtins.int
     REPLACE_FIELD_NUMBER: builtins.int
@@ -169,6 +170,8 @@ class Relation(google.protobuf.message.Message):
     @property
     def parse(self) -> global___Parse: ...
     @property
+    def group_map(self) -> global___GroupMap: ...
+    @property
     def fill_na(self) -> global___NAFill:
         """NA functions"""
     @property
@@ -238,6 +241,7 @@ class Relation(google.protobuf.message.Message):
         map_partitions: global___MapPartitions | None = ...,
         collect_metrics: global___CollectMetrics | None = ...,
         parse: global___Parse | None = ...,
+        group_map: global___GroupMap | None = ...,
         fill_na: global___NAFill | None = ...,
         drop_na: global___NADrop | None = ...,
         replace: global___NAReplace | None = ...,
@@ -289,6 +293,8 @@ class Relation(google.protobuf.message.Message):
             b"filter",
             "freq_items",
             b"freq_items",
+            "group_map",
+            b"group_map",
             "hint",
             b"hint",
             "join",
@@ -386,6 +392,8 @@ class Relation(google.protobuf.message.Message):
             b"filter",
             "freq_items",
             b"freq_items",
+            "group_map",
+            b"group_map",
             "hint",
             b"hint",
             "join",
@@ -480,6 +488,7 @@ class Relation(google.protobuf.message.Message):
         "map_partitions",
         "collect_metrics",
         "parse",
+        "group_map",
         "fill_na",
         "drop_na",
         "replace",
@@ -2941,6 +2950,48 @@ class MapPartitions(google.protobuf.message.Message):
     ) -> None: ...
 
 global___MapPartitions = MapPartitions
+
+class GroupMap(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    INPUT_FIELD_NUMBER: builtins.int
+    GROUPING_EXPRESSIONS_FIELD_NUMBER: builtins.int
+    FUNC_FIELD_NUMBER: builtins.int
+    @property
+    def input(self) -> global___Relation:
+        """(Required) Input relation for Group Map API: apply, applyInPandas."""
+    @property
+    def grouping_expressions(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+        pyspark.sql.connect.proto.expressions_pb2.Expression
+    ]:
+        """(Required) Expressions for grouping keys."""
+    @property
+    def func(self) -> pyspark.sql.connect.proto.expressions_pb2.CommonInlineUserDefinedFunction:
+        """(Required) Input user-defined function."""
+    def __init__(
+        self,
+        *,
+        input: global___Relation | None = ...,
+        grouping_expressions: collections.abc.Iterable[
+            pyspark.sql.connect.proto.expressions_pb2.Expression
+        ]
+        | None = ...,
+        func: pyspark.sql.connect.proto.expressions_pb2.CommonInlineUserDefinedFunction
+        | None = ...,
+    ) -> None: ...
+    def HasField(
+        self, field_name: typing_extensions.Literal["func", b"func", "input", b"input"]
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "func", b"func", "grouping_expressions", b"grouping_expressions", "input", b"input"
+        ],
+    ) -> None: ...
+
+global___GroupMap = GroupMap
 
 class CollectMetrics(google.protobuf.message.Message):
     """Collect arbitrary (named) metrics from a dataset."""

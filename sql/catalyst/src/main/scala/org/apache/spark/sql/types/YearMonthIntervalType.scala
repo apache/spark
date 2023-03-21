@@ -59,7 +59,7 @@ case class YearMonthIntervalType(startField: Byte, endField: Byte) extends AnsiI
    */
   override def defaultSize: Int = 4
 
-  override def physicalDataType: PhysicalDataType = PhysicalIntegerType
+  private[sql] override def physicalDataType: PhysicalDataType = PhysicalIntegerType
 
   private[spark] override def asNullable: YearMonthIntervalType = this
 

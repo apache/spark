@@ -174,10 +174,8 @@ object CheckConnectJvmClientCompatibility {
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.functions.callUDF"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.functions.unwrap_udt"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.functions.udaf"),
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.functions.broadcast"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.functions.typedlit"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.functions.typedLit"),
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.functions.array_prepend"),
 
       // RelationalGroupedDataset
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.RelationalGroupedDataset.apply"),
