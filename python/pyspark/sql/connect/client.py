@@ -123,6 +123,7 @@ class ChannelBuilder:
     PARAM_TOKEN = "token"
     PARAM_USER_ID = "user_id"
     PARAM_USER_AGENT = "user_agent"
+    MAX_MESSAGE_LENGTH = 128 * 1024 * 1024
 
     @staticmethod
     def default_port() -> int:
@@ -177,7 +178,16 @@ class ChannelBuilder:
                 f"Path component for connection URI must be empty: {self.url.path}"
             )
         self._extract_attributes()
-        self._channel_options = channelOptions
+
+        GRPC_DEFAULT_OPTIONS = [
+            ("grpc.max_send_message_length", ChannelBuilder.MAX_MESSAGE_LENGTH),
+            ("grpc.max_receive_message_length", ChannelBuilder.MAX_MESSAGE_LENGTH),
+        ]
+
+        if channelOptions is None:
+            self._channel_options = GRPC_DEFAULT_OPTIONS
+        else:
+            self._channel_options = GRPC_DEFAULT_OPTIONS + channelOptions
 
     def _extract_attributes(self) -> None:
         if len(self.url.params) > 0:
