@@ -23,6 +23,7 @@ import "google/protobuf/any.proto";
 import "spark/connect/commands.proto";
 import "spark/connect/expressions.proto";
 import "spark/connect/relations.proto";
+import "spark/connect/storage_level.proto";
 import "spark/connect/types.proto";
 
 option java_multiple_files = true;
@@ -52,20 +53,6 @@ message UserContext {
   // messages into this message. Extensions are stored as a `repeated` type to be able to
   // handle multiple active extensions.
   repeated google.protobuf.Any extensions = 999;
-}
-
-// StorageLevel for persisting Datasets/Tables.
-message StorageLevel {
-  // (Required) Whether the cache should use disk or not.
-  bool use_disk = 1;
-  // (Required) Whether the cache should use memory or not.
-  bool use_memory = 2;
-  // (Required) Whether the cache should use off-heap or not.
-  bool use_off_heap = 3;
-  // (Required) Whether the cached data is deserialized or not.
-  bool deserialized = 4;
-  // (Required) The number of replicas.
-  int32 replication = 5;
 }
 
 // Request to perform plan analyze, optionally to explain the plan.
