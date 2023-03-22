@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{PrimitiveLongEncoder, StringEncoder, UnboundRowEncoder}
 import org.apache.spark.sql.catalyst.expressions.RowOrdering
 import org.apache.spark.sql.connect.client.SparkResult
-import org.apache.spark.sql.connect.common.DataTypeProtoConverter
+import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, StorageLevelProtoConverter}
 import org.apache.spark.sql.functions.{struct, to_json}
 import org.apache.spark.sql.types.{Metadata, StructType}
 import org.apache.spark.storage.StorageLevel
@@ -2704,22 +2704,86 @@ class Dataset[T] private[sql] (
     new DataFrameWriterV2[T](table, this)
   }
 
+  /**
+   * Persist this Dataset with the default storage level (`MEMORY_AND_DISK`).
+   *
+   * @group basic
+   * @since 3.4.0
+   */
   def persist(): this.type = {
-    throw new UnsupportedOperationException("persist is not implemented.")
+    sparkSession.analyze { builder =>
+      builder.getPersistBuilder.setRelation(plan.getRoot)
+    }
+    this
   }
 
+  /**
+   * Persist this Dataset with the given storage level.
+   *
+   * @param newLevel
+   *   One of: `MEMORY_ONLY`, `MEMORY_AND_DISK`, `MEMORY_ONLY_SER`, `MEMORY_AND_DISK_SER`,
+   *   `DISK_ONLY`, `MEMORY_ONLY_2`, `MEMORY_AND_DISK_2`, etc.
+   * @group basic
+   * @since 3.4.0
+   */
   def persist(newLevel: StorageLevel): this.type = {
-    throw new UnsupportedOperationException("persist is not implemented.")
+    sparkSession.analyze { builder =>
+      builder.getPersistBuilder
+        .setRelation(plan.getRoot)
+        .setStorageLevel(StorageLevelProtoConverter.toConnectProtoType(newLevel))
+    }
+    this
   }
 
+  /**
+   * Mark the Dataset as non-persistent, and remove all blocks for it from memory and disk. This
+   * will not un-persist any cached data that is built upon this Dataset.
+   *
+   * @param blocking
+   *   Whether to block until all blocks are deleted.
+   * @group basic
+   * @since 3.4.0
+   */
   def unpersist(blocking: Boolean): this.type = {
-    throw new UnsupportedOperationException("unpersist() is not implemented.")
+    sparkSession.analyze { builder =>
+      builder.getUnpersistBuilder
+        .setRelation(plan.getRoot)
+        .setBlocking(blocking)
+    }
+    this
   }
 
+  /**
+   * Mark the Dataset as non-persistent, and remove all blocks for it from memory and disk. This
+   * will not un-persist any cached data that is built upon this Dataset.
+   *
+   * @group basic
+   * @since 3.4.0
+   */
   def unpersist(): this.type = unpersist(blocking = false)
 
-  def cache(): this.type = {
-    throw new UnsupportedOperationException("cache() is not implemented.")
+  /**
+   * Persist this Dataset with the default storage level (`MEMORY_AND_DISK`).
+   *
+   * @group basic
+   * @since 3.4.0
+   */
+  def cache(): this.type = persist()
+
+  /**
+   * Get the Dataset's current storage level, or StorageLevel.NONE if not persisted.
+   *
+   * @group basic
+   * @since 3.4.0
+   */
+  def storageLevel: StorageLevel = {
+    StorageLevelProtoConverter.toStorageLevel(
+      sparkSession
+        .analyze { builder =>
+          builder.getGetStorageLevelBuilder.setRelation(plan.getRoot)
+        }
+        .getGetStorageLevel
+        .getStorageLevel)
   }
 
   def withWatermark(eventTime: String, delayThreshold: String): Dataset[T] = {

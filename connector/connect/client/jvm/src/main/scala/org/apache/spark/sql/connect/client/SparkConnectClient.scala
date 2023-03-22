@@ -166,7 +166,8 @@ private[sql] class SparkConnectClient(
     analyze(builder)
   }
 
-  private def analyze(builder: proto.AnalyzePlanRequest.Builder): proto.AnalyzePlanResponse = {
+  private[sql] def analyze(
+      builder: proto.AnalyzePlanRequest.Builder): proto.AnalyzePlanResponse = {
     val request = builder
       .setUserContext(userContext)
       .setSessionId(sessionId)
