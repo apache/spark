@@ -67,7 +67,7 @@ class ColumnExplainStabilitySuite extends SparkFunSuite {
   private val SIMPLIFIED_FILE_NAME = "simplified.txt"
   private val EXTENDED_FILE_NAME = "extended.txt"
 
-  protected val baseResourcePath = {
+  private val baseResourcePath = {
     // use the same way as `SQLQueryTestSuite` to get the resource path
     getWorkspaceFilePath("sql", "core", "src", "test", "resources", "column-stability").toFile
   }
@@ -173,7 +173,7 @@ class ColumnExplainStabilitySuite extends SparkFunSuite {
    * Test a `Column.explain`. Depending on the settings this test will either check if the explain
    * matches a golden file or it will create a new golden file.
    */
-  def testExplain(column: Column, name: String): Unit = {
+  private def testExplain(column: Column, name: String): Unit = {
     if (regenerateGoldenFiles) {
       generateGoldenFile(column, name)
     } else {
