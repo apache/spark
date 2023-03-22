@@ -85,7 +85,6 @@ def _create_py_udf(
     f: Callable[..., Any],
     returnType: "DataTypeOrString",
     evalType: int,
-    useArrow: Optional[bool] = None,
 ) -> "UserDefinedFunctionLike":
     # The following table shows the results when the type coercion in Arrow is needed, that is,
     # when the user-specified return type(SQL Type) of the UDF and the actual instance(Python
@@ -117,14 +116,10 @@ def _create_py_udf(
     from pyspark.sql import SparkSession
 
     session = SparkSession._instantiatedSession
-    if session is None:
-        is_arrow_enabled = False
-    else:
-        is_arrow_enabled = (
-            session.conf.get("spark.sql.execution.pythonUDF.arrow.enabled") == "true"
-            if useArrow is None
-            else useArrow
-        )
+    is_arrow_enabled = (
+        session is not None
+        and session.conf.get("spark.sql.execution.pythonUDF.arrow.enabled") == "true"
+    )
 
     regular_udf = _create_udf(f, returnType, evalType)
     return_type = regular_udf.returnType

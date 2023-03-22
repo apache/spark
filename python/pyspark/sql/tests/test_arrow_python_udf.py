@@ -76,47 +76,6 @@ class PythonUDFArrowTests(BaseUDFTestsMixin, ReusedSQLTestCase):
         self.assertEquals(row[0], "[1 2 3]")
         self.assertEquals(row[1], "{'a': 'b'}")
 
-    def test_use_arrow(self):
-        # useArrow=True
-        row_true = (
-            self.spark.range(1)
-            .selectExpr(
-                "array(1, 2, 3) as array",
-            )
-            .select(
-                udf(lambda x: str(x), useArrow=True)("array"),
-            )
-            .first()
-        )
-
-        # useArrow=None
-        row_none = (
-            self.spark.range(1)
-            .selectExpr(
-                "array(1, 2, 3) as array",
-            )
-            .select(
-                udf(lambda x: str(x), useArrow=None)("array"),
-            )
-            .first()
-        )
-
-        # The input is a NumPy array when the Arrow optimization is on.
-        self.assertEquals(row_true[0], row_none[0])  # "[1 2 3]"
-
-        # useArrow=False
-        row_false = (
-            self.spark.range(1)
-            .selectExpr(
-                "array(1, 2, 3) as array",
-            )
-            .select(
-                udf(lambda x: str(x), useArrow=False)("array"),
-            )
-            .first()
-        )
-        self.assertEquals(row_false[0], "[1, 2, 3]")
-
 
 if __name__ == "__main__":
     from pyspark.sql.tests.test_arrow_python_udf import *  # noqa: F401

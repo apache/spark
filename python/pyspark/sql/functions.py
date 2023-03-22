@@ -10095,8 +10095,6 @@ def unwrap_udt(col: "ColumnOrName") -> Column:
 def udf(
     f: Callable[..., Any],
     returnType: "DataTypeOrString" = StringType(),
-    *,
-    useArrow: Optional[bool] = None,
 ) -> "UserDefinedFunctionLike":
     ...
 
@@ -10104,8 +10102,6 @@ def udf(
 @overload
 def udf(
     f: Optional["DataTypeOrString"] = None,
-    *,
-    useArrow: Optional[bool] = None,
 ) -> Callable[[Callable[..., Any]], "UserDefinedFunctionLike"]:
     ...
 
@@ -10114,7 +10110,6 @@ def udf(
 def udf(
     *,
     returnType: "DataTypeOrString" = StringType(),
-    useArrow: Optional[bool] = None,
 ) -> Callable[[Callable[..., Any]], "UserDefinedFunctionLike"]:
     ...
 
@@ -10123,8 +10118,6 @@ def udf(
 def udf(
     f: Optional[Union[Callable[..., Any], "DataTypeOrString"]] = None,
     returnType: "DataTypeOrString" = StringType(),
-    *,
-    useArrow: Optional[bool] = None,
 ) -> Union["UserDefinedFunctionLike", Callable[[Callable[..., Any]], "UserDefinedFunctionLike"]]:
     """Creates a user defined function (UDF).
 
@@ -10140,9 +10133,6 @@ def udf(
     returnType : :class:`pyspark.sql.types.DataType` or str
         the return type of the user-defined function. The value can be either a
         :class:`pyspark.sql.types.DataType` object or a DDL-formatted type string.
-    useArrow : bool or None
-        whether to use Arrow to optimize the (de)serialization. When it is None, the
-        Spark config "spark.sql.execution.pythonUDF.arrow.enabled" takes effect.
 
     Examples
     --------
@@ -10224,12 +10214,9 @@ def udf(
             _create_py_udf,
             returnType=return_type,
             evalType=PythonEvalType.SQL_BATCHED_UDF,
-            useArrow=useArrow,
         )
     else:
-        return _create_py_udf(
-            f=f, returnType=returnType, evalType=PythonEvalType.SQL_BATCHED_UDF, useArrow=useArrow
-        )
+        return _create_py_udf(f=f, returnType=returnType, evalType=PythonEvalType.SQL_BATCHED_UDF)
 
 
 def _test() -> None:
