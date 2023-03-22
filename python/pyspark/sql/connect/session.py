@@ -357,7 +357,7 @@ class SparkSession:
                             "a StructType Schema is required in this case"
                         )
 
-                if _schema_str is None and _cols is None:
+                if _schema_str is None:
                     _schema = _inferred_schema
 
             from pyspark.sql.connect.conversion import LocalDataToArrowConversion
@@ -376,13 +376,15 @@ class SparkSession:
             )
 
         if _schema is not None:
-            return DataFrame.withPlan(LocalRelation(_table, schema=_schema.json()), self)
+            df = DataFrame.withPlan(LocalRelation(_table, schema=_schema.json()), self)
         elif _schema_str is not None:
-            return DataFrame.withPlan(LocalRelation(_table, schema=_schema_str), self)
-        elif _cols is not None and len(_cols) > 0:
-            return DataFrame.withPlan(LocalRelation(_table), self).toDF(*_cols)
+            df = DataFrame.withPlan(LocalRelation(_table, schema=_schema_str), self)
         else:
-            return DataFrame.withPlan(LocalRelation(_table), self)
+            df = DataFrame.withPlan(LocalRelation(_table), self)
+
+        if _cols is not None and len(_cols) > 0:
+            df = df.toDF(*_cols)
+        return df
 
     createDataFrame.__doc__ = PySparkSession.createDataFrame.__doc__
 
