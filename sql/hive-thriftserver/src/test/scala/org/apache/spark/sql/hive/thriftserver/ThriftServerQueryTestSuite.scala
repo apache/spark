@@ -26,6 +26,7 @@ import scala.util.control.NonFatal
 import org.apache.commons.lang3.exception.ExceptionUtils
 
 import org.apache.spark.SparkException
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SQLQueryTestSuite
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 import org.apache.spark.sql.catalyst.util.fileToString
@@ -68,7 +69,7 @@ import org.apache.spark.sql.types._
  *   4. Support UDAF testing.
  */
 // scalastyle:on line.size.limit
-class ThriftServerQueryTestSuite extends SQLQueryTestSuite with SharedThriftServer {
+class ThriftServerQueryTestSuite extends SQLQueryTestSuite with SharedThriftServer with Logging {
 
 
   override def mode: ServerMode.Value = ServerMode.binary
@@ -125,17 +126,17 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite with SharedThriftServ
       }
 
       // Run the SQL queries preparing them for comparison.
-      val outputs: Seq[QueryOutput] = queries.map { sql =>
+      val outputs: Seq[QueryTestOutput] = queries.map { sql =>
         val (_, output) = handleExceptions(getNormalizedResult(statement, sql))
         // We might need to do some query canonicalization in the future.
-        QueryOutput(
+        ExecutionOutput(
           sql = sql,
-          schema = "",
+          schema = Some(""),
           output = output.mkString("\n").replaceAll("\\s+$", ""))
       }
 
       // Read back the golden file.
-      val expectedOutputs: Seq[QueryOutput] = {
+      val expectedOutputs: Seq[QueryTestOutput] = {
         val goldenOutput = fileToString(new File(testCase.resultFile))
         val segments = goldenOutput.split("-- !query.*\n")
 
@@ -152,9 +153,9 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite with SharedThriftServ
           } else {
             originalOut
           }
-          QueryOutput(
+          ExecutionOutput(
             sql = sql,
-            schema = "",
+            schema = Some(""),
             output = output.replaceAll("\\s+$", "")
           )
         }
@@ -235,7 +236,7 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite with SharedThriftServ
     } else {
       // Create a test case to run this case.
       test(testCase.name) {
-        runTest(testCase)
+        runSqlTestCase(testCase, listTestCases)
       }
     }
   }

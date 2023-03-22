@@ -44,13 +44,13 @@ The Spark Connect client translates DataFrame operations into unresolved
 logical query plans which are encoded using protocol buffers. These are sent
 to the server using the gRPC framework.
 
-The Spark Connect endpoint embedded on the Spark Server, receives and
+The Spark Connect endpoint embedded on the Spark Server receives and
 translates unresolved logical plans into Spark's logical plan operators.
 This is similar to parsing a SQL query, where attributes and relations are
 parsed and an initial parse plan is built. From there, the standard Spark
 execution process kicks in, ensuring that Spark Connect leverages all of
 Spark's optimizations and enhancements. Results are streamed back to the
-client via gRPC as Apache Arrow-encoded row batches.
+client through gRPC as Apache Arrow-encoded row batches.
 
 <p style="text-align: center;">
   <img src="img/spark-connect-communication.png" title="Spark Connect communication" alt="Spark Connect communication" />
@@ -67,11 +67,11 @@ own dependencies on the client and don't need to worry about potential conflicts
 with the Spark driver.
 
 **Upgradability**: The Spark driver can now seamlessly be upgraded independently
-of applications, e.g. to benefit from performance improvements and security fixes.
+of applications, for example to benefit from performance improvements and security fixes.
 This means applications can be forward-compatible, as long as the server-side RPC
 definitions are designed to be backwards compatible.
 
-**Debuggability and Observability**: Spark Connect enables interactive debugging
+**Debuggability and observability**: Spark Connect enables interactive debugging
 during development directly from your favorite IDE. Similarly, applications can
 be monitored using the application's framework native metrics and logging libraries.
 
@@ -106,8 +106,8 @@ Spark Connect, like in this example:
 
 Note that we include a Spark Connect package (`spark-connect_2.12:3.4.0`), when starting
 Spark server. This is required to use Spark Connect. Make sure to use the same version
-of the package as the Spark version you downloaded above. In the example here, Spark 3.4.0
-with Scala 2.12.
+of the package as the Spark version you downloaded previously. In this example,
+Spark 3.4.0 with Scala 2.12.
 
 Now Spark server is running and ready to accept Spark Connect sessions from client
 applications. In the next section we will walk through how to use Spark Connect
@@ -116,7 +116,7 @@ when writing client applications.
 ## Use Spark Connect in client applications
 
 When creating a Spark session, you can specify that you want to use Spark Connect
-and there are a few ways to do that as outlined below.
+and there are a few ways to do that outlined as follows.
 
 If you do not use one of the mechanisms outlined here, your Spark session will
 work just like before, without leveraging Spark Connect, and your application code
@@ -125,12 +125,12 @@ will run on the Spark driver node.
 ### Set SPARK_REMOTE environment variable
 
 If you set the `SPARK_REMOTE` environment variable on the client machine where your
-Spark client application is running and create a new Spark Session as illustrated
-below, the session will be a Spark Connect session. With this approach, there is
-no code change needed to start using Spark Connect.
+Spark client application is running and create a new Spark Session as in the following
+example, the session will be a Spark Connect session. With this approach, there is no
+code change needed to start using Spark Connect.
 
 In a terminal window, set the `SPARK_REMOTE` environment variable to point to the
-local Spark server you started on your computer above:
+local Spark server you started previously on your computer:
 
 {% highlight bash %}
 export SPARK_REMOTE="sc://localhost"
@@ -145,8 +145,11 @@ And start the Spark shell as usual:
 ./bin/pyspark
 {% endhighlight %}
 
-The PySpark shell is now connected to Spark using Spark Connect as indicated in the welcome
-message.
+The PySpark shell is now connected to Spark using Spark Connect as indicated in the welcome message:
+
+{% highlight python %}
+Client connected to the Spark Connect server at localhost
+{% endhighlight %}
 </div>
 
 </div>
@@ -164,8 +167,8 @@ spark = SparkSession.builder.getOrCreate()
 
 </div>
 
-Which will create a Spark Connect session from your application by reading the
-`SPARK_REMOTE` environment variable we set above.
+This will create a Spark Connect session from your application by reading the
+`SPARK_REMOTE` environment variable we set previously.
 
 ### Specify Spark Connect when creating Spark session
 
@@ -180,14 +183,27 @@ illustrated here.
 <div data-lang="python"  markdown="1">
 To launch the PySpark shell with Spark Connect, simply include the `remote`
 parameter and specify the location of your Spark server. We are using `localhost`
-in this example to connect to the local Spark server we started above.
+in this example to connect to the local Spark server we started previously:
 
 {% highlight bash %}
 ./bin/pyspark --remote "sc://localhost"
 {% endhighlight %}
 
 And you will notice that the PySpark shell welcome message tells you that
-you have connected to Spark using Spark Connect.
+you have connected to Spark using Spark Connect:
+
+{% highlight python %}
+Client connected to the Spark Connect server at localhost
+{% endhighlight %}
+
+You can also check the Spark session type. If it includes `.connect.` you
+are using Spark Connect as shown in this example:
+
+{% highlight python %}
+SparkSession available as 'spark'.
+>>> type(spark)
+<class 'pyspark.sql.connect.session.SparkSession'>
+{% endhighlight %}
 
 Now you can run PySpark code in the shell to see Spark Connect in action:
 
@@ -202,8 +218,6 @@ Now you can run PySpark code in the shell to see Spark Connect in action:
 |  1|Sarah|
 |  2|Maria|
 +---+-----+
-
->>>
 {% endhighlight %}
 </div>
 

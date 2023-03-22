@@ -331,9 +331,6 @@ def _test() -> None:
         PySparkSession.builder.appName("sql.connect.catalog tests").remote("local[4]").getOrCreate()
     )
 
-    # TODO(SPARK-41818): java.lang.ClassNotFoundException) .DefaultSource
-    del pyspark.sql.connect.catalog.Catalog.recoverPartitions.__doc__
-
     (failure_count, test_count) = doctest.testmod(
         pyspark.sql.connect.catalog,
         globs=globs,

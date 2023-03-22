@@ -1803,7 +1803,19 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
 
   def numberOfPartitionsNotAllowedWithUnspecifiedDistributionError(): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1178",
+      errorClass = "INVALID_WRITE_DISTRIBUTION.PARTITION_NUM_WITH_UNSPECIFIED_DISTRIBUTION",
+      messageParameters = Map.empty)
+  }
+
+  def partitionSizeNotAllowedWithUnspecifiedDistributionError(): Throwable = {
+    new AnalysisException(
+      errorClass = "INVALID_WRITE_DISTRIBUTION.PARTITION_SIZE_WITH_UNSPECIFIED_DISTRIBUTION",
+      messageParameters = Map.empty)
+  }
+
+  def numberAndSizeOfPartitionsNotAllowedTogether(): Throwable = {
+    new AnalysisException(
+      errorClass = "INVALID_WRITE_DISTRIBUTION.PARTITION_NUM_AND_SIZE",
       messageParameters = Map.empty)
   }
 

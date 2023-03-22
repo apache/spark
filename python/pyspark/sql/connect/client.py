@@ -71,8 +71,10 @@ from pyspark.sql.connect.expressions import (
     CommonInlineUserDefinedFunction,
     JavaUDF,
 )
-from pyspark.sql.types import DataType, StructType
+from pyspark.sql.pandas.types import _check_series_localize_timestamps, _convert_map_items_to_dict
+from pyspark.sql.types import DataType, MapType, StructType, TimestampType
 from pyspark.rdd import PythonEvalType
+from pyspark.storagelevel import StorageLevel
 
 
 if TYPE_CHECKING:
@@ -122,6 +124,7 @@ class ChannelBuilder:
     PARAM_TOKEN = "token"
     PARAM_USER_ID = "user_id"
     PARAM_USER_AGENT = "user_agent"
+    MAX_MESSAGE_LENGTH = 128 * 1024 * 1024
 
     @staticmethod
     def default_port() -> int:
@@ -176,7 +179,16 @@ class ChannelBuilder:
                 f"Path component for connection URI must be empty: {self.url.path}"
             )
         self._extract_attributes()
-        self._channel_options = channelOptions
+
+        GRPC_DEFAULT_OPTIONS = [
+            ("grpc.max_send_message_length", ChannelBuilder.MAX_MESSAGE_LENGTH),
+            ("grpc.max_receive_message_length", ChannelBuilder.MAX_MESSAGE_LENGTH),
+        ]
+
+        if channelOptions is None:
+            self._channel_options = GRPC_DEFAULT_OPTIONS
+        else:
+            self._channel_options = GRPC_DEFAULT_OPTIONS + channelOptions
 
     def _extract_attributes(self) -> None:
         if len(self.url.params) > 0:
@@ -402,6 +414,7 @@ class AnalyzeResult:
         parsed: Optional[DataType],
         is_same_semantics: Optional[bool],
         semantic_hash: Optional[int],
+        storage_level: Optional[StorageLevel],
     ):
         self.schema = schema
         self.explain_string = explain_string
@@ -413,6 +426,7 @@ class AnalyzeResult:
         self.parsed = parsed
         self.is_same_semantics = is_same_semantics
         self.semantic_hash = semantic_hash
+        self.storage_level = storage_level
 
     @classmethod
     def fromProto(cls, pb: Any) -> "AnalyzeResult":
@@ -426,6 +440,7 @@ class AnalyzeResult:
         parsed: Optional[DataType] = None
         is_same_semantics: Optional[bool] = None
         semantic_hash: Optional[int] = None
+        storage_level: Optional[StorageLevel] = None
 
         if pb.HasField("schema"):
             schema = types.proto_schema_to_pyspark_data_type(pb.schema.schema)
@@ -447,6 +462,18 @@ class AnalyzeResult:
             is_same_semantics = pb.same_semantics.result
         elif pb.HasField("semantic_hash"):
             semantic_hash = pb.semantic_hash.result
+        elif pb.HasField("persist"):
+            pass
+        elif pb.HasField("unpersist"):
+            pass
+        elif pb.HasField("get_storage_level"):
+            storage_level = StorageLevel(
+                useDisk=pb.get_storage_level.storage_level.use_disk,
+                useMemory=pb.get_storage_level.storage_level.use_memory,
+                useOffHeap=pb.get_storage_level.storage_level.use_off_heap,
+                deserialized=pb.get_storage_level.storage_level.deserialized,
+                replication=pb.get_storage_level.storage_level.replication,
+            )
         else:
             raise SparkConnectException("No analyze result found!")
 
@@ -461,6 +488,7 @@ class AnalyzeResult:
             parsed,
             is_same_semantics,
             semantic_hash,
+            storage_level,
         )
 
 
@@ -619,16 +647,16 @@ class SparkConnectClient(object):
             for x in metrics
         ]
 
-    def to_table(self, plan: pb2.Plan) -> "pa.Table":
+    def to_table(self, plan: pb2.Plan) -> Tuple["pa.Table", Optional[StructType]]:
         """
         Return given plan as a PyArrow Table.
         """
         logger.info(f"Executing plan {self._proto_to_string(plan)}")
         req = self._execute_plan_request_with_metadata()
         req.plan.CopyFrom(plan)
-        table, _, _, _3 = self._execute_and_fetch(req)
+        table, schema, _, _, _ = self._execute_and_fetch(req)
         assert table is not None
-        return table
+        return table, schema
 
     def to_pandas(self, plan: pb2.Plan) -> "pd.DataFrame":
         """
@@ -637,12 +665,23 @@ class SparkConnectClient(object):
         logger.info(f"Executing plan {self._proto_to_string(plan)}")
         req = self._execute_plan_request_with_metadata()
         req.plan.CopyFrom(plan)
-        table, metrics, observed_metrics, _ = self._execute_and_fetch(req)
+        table, schema, metrics, observed_metrics, _ = self._execute_and_fetch(req)
         assert table is not None
-        column_names = table.column_names
-        table = table.rename_columns([f"col_{i}" for i in range(len(column_names))])
-        pdf = table.to_pandas()
-        pdf.columns = column_names
+        pdf = table.rename_columns([f"col_{i}" for i in range(len(table.column_names))]).to_pandas()
+        pdf.columns = table.column_names
+
+        schema = schema or types.from_arrow_schema(table.schema)
+        assert schema is not None and isinstance(schema, StructType)
+
+        for field, pa_field in zip(schema, table.schema):
+            if isinstance(field.dataType, TimestampType):
+                assert pa_field.type.tz is not None
+                pdf[field.name] = _check_series_localize_timestamps(
+                    pdf[field.name], pa_field.type.tz
+                )
+            elif isinstance(field.dataType, MapType):
+                pdf[field.name] = _convert_map_items_to_dict(pdf[field.name])
+
         if len(metrics) > 0:
             pdf.attrs["metrics"] = metrics
         if len(observed_metrics) > 0:
@@ -696,7 +735,7 @@ class SparkConnectClient(object):
         if self._user_id:
             req.user_context.user_id = self._user_id
         req.plan.command.CopyFrom(command)
-        data, _, _, properties = self._execute_and_fetch(req)
+        data, _, _, _, properties = self._execute_and_fetch(req)
         if data is not None:
             return (data.to_pandas(), properties)
         else:
@@ -798,6 +837,25 @@ class SparkConnectClient(object):
             req.same_semantics.other_plan.CopyFrom(cast(pb2.Plan, kwargs.get("other")))
         elif method == "semantic_hash":
             req.semantic_hash.plan.CopyFrom(cast(pb2.Plan, kwargs.get("plan")))
+        elif method == "persist":
+            req.persist.relation.CopyFrom(cast(pb2.Relation, kwargs.get("relation")))
+            if kwargs.get("storage_level", None) is not None:
+                storage_level = cast(StorageLevel, kwargs.get("storage_level"))
+                req.persist.storage_level.CopyFrom(
+                    pb2.StorageLevel(
+                        use_disk=storage_level.useDisk,
+                        use_memory=storage_level.useMemory,
+                        use_off_heap=storage_level.useOffHeap,
+                        deserialized=storage_level.deserialized,
+                        replication=storage_level.replication,
+                    )
+                )
+        elif method == "unpersist":
+            req.unpersist.relation.CopyFrom(cast(pb2.Relation, kwargs.get("relation")))
+            if kwargs.get("blocking", None) is not None:
+                req.unpersist.blocking = cast(bool, kwargs.get("blocking"))
+        elif method == "get_storage_level":
+            req.get_storage_level.relation.CopyFrom(cast(pb2.Relation, kwargs.get("relation")))
         else:
             raise ValueError(f"Unknown Analyze method: {method}")
 
@@ -844,12 +902,19 @@ class SparkConnectClient(object):
 
     def _execute_and_fetch(
         self, req: pb2.ExecutePlanRequest
-    ) -> Tuple[Optional["pa.Table"], List[PlanMetrics], List[PlanObservedMetrics], Dict[str, Any]]:
+    ) -> Tuple[
+        Optional["pa.Table"],
+        Optional[StructType],
+        List[PlanMetrics],
+        List[PlanObservedMetrics],
+        Dict[str, Any],
+    ]:
         logger.info("ExecuteAndFetch")
 
         m: Optional[pb2.ExecutePlanResponse.Metrics] = None
         om: List[pb2.ExecutePlanResponse.ObservedMetrics] = []
         batches: List[pa.RecordBatch] = []
+        schema: Optional[StructType] = None
         properties = {}
         try:
             for attempt in Retrying(
@@ -869,6 +934,10 @@ class SparkConnectClient(object):
                         if b.observed_metrics is not None:
                             logger.debug("Received observed metric batch.")
                             om.extend(b.observed_metrics)
+                        if b.HasField("schema"):
+                            dt = types.proto_schema_to_pyspark_data_type(b.schema)
+                            assert isinstance(dt, StructType)
+                            schema = dt
                         if b.HasField("sql_command_result"):
                             properties["sql_command_result"] = b.sql_command_result.relation
                         if b.HasField("arrow_batch"):
@@ -888,9 +957,9 @@ class SparkConnectClient(object):
 
         if len(batches) > 0:
             table = pa.Table.from_batches(batches=batches)
-            return table, metrics, observed_metrics, properties
+            return table, schema, metrics, observed_metrics, properties
         else:
-            return None, metrics, observed_metrics, properties
+            return None, schema, metrics, observed_metrics, properties
 
     def _config_request_with_metadata(self) -> pb2.ConfigRequest:
         req = pb2.ConfigRequest()

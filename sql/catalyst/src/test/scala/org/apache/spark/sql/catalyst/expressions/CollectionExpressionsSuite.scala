@@ -1855,6 +1855,50 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     checkEvaluation(ArrayRepeat(Literal("hi"), Literal(null, IntegerType)), null)
   }
 
+  test("SPARK-41233: ArrayPrepend") {
+    val a0 = Literal.create(Seq(1, 2, 3, 4), ArrayType(IntegerType))
+    val a1 = Literal.create(Seq("a", "b", "c"), ArrayType(StringType))
+    val a2 = Literal.create(Seq.empty[Integer], ArrayType(IntegerType))
+    val a3 = Literal.create(null, ArrayType(StringType))
+
+    checkEvaluation(ArrayPrepend(a0, Literal(0)), Seq(0, 1, 2, 3, 4))
+    checkEvaluation(ArrayPrepend(a1, Literal("a")), Seq("a", "a", "b", "c"))
+    checkEvaluation(ArrayPrepend(a2, Literal(1)), Seq(1))
+    checkEvaluation(ArrayPrepend(a2, Literal(null, IntegerType)), Seq(null))
+    checkEvaluation(ArrayPrepend(a3, Literal("a")), null)
+    checkEvaluation(ArrayPrepend(a3, Literal(null, StringType)), null)
+
+    // complex data types
+    val data = Seq[Array[Byte]](
+      Array[Byte](5, 6),
+      Array[Byte](1, 2),
+      Array[Byte](1, 2),
+      Array[Byte](5, 6))
+    val b0 = Literal.create(
+      data,
+      ArrayType(BinaryType))
+    val b1 = Literal.create(Seq[Array[Byte]](Array[Byte](2, 1), null), ArrayType(BinaryType))
+    val nullBinary = Literal.create(null, BinaryType)
+    // Calling ArrayPrepend with a null element should result in NULL being prepended to the array
+    val dataWithNullPrepended = null +: data
+    checkEvaluation(ArrayPrepend(b0, nullBinary), dataWithNullPrepended)
+    val dataToPrepend1 = Literal.create(Array[Byte](5, 6), BinaryType)
+    checkEvaluation(
+      ArrayPrepend(b1, dataToPrepend1),
+      Seq[Array[Byte]](Array[Byte](5, 6), Array[Byte](2, 1), null))
+
+    val c0 = Literal.create(
+      Seq[Seq[Int]](Seq[Int](1, 2), Seq[Int](3, 4)),
+      ArrayType(ArrayType(IntegerType)))
+    val dataToPrepend2 = Literal.create(Seq[Int](5, 6), ArrayType(IntegerType))
+    checkEvaluation(
+      ArrayPrepend(c0, dataToPrepend2),
+      Seq(Seq[Int](5, 6), Seq[Int](1, 2), Seq[Int](3, 4)))
+    checkEvaluation(
+      ArrayPrepend(c0, Literal.create(Seq.empty[Int], ArrayType(IntegerType))),
+      Seq(Seq.empty[Int], Seq[Int](1, 2), Seq[Int](3, 4)))
+  }
+
   test("Array remove") {
     val a0 = Literal.create(Seq(1, 2, 3, 2, 2, 5), ArrayType(IntegerType))
     val a1 = Literal.create(Seq("b", "a", "a", "c", "b"), ArrayType(StringType))

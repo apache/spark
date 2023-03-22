@@ -652,7 +652,7 @@ trait Params extends Identifiable with Serializable {
     methods.filter { m =>
         Modifier.isPublic(m.getModifiers) &&
           classOf[Param[_]].isAssignableFrom(m.getReturnType) &&
-          m.getParameterTypes.isEmpty
+          m.getParameterCount == 0
       }.sortBy(_.getName)
       .map(m => m.invoke(this).asInstanceOf[Param[_]])
   }
