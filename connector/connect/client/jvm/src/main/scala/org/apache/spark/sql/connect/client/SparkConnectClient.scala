@@ -450,10 +450,7 @@ object SparkConnectClient {
       if (metadata.nonEmpty) {
         channelBuilder.intercept(new MetadataHeaderClientInterceptor(metadata))
       }
-      new SparkConnectClient(
-        userContextBuilder.build(),
-        channelBuilder,
-        _userAgent)
+      new SparkConnectClient(userContextBuilder.build(), channelBuilder, _userAgent)
     }
   }
 

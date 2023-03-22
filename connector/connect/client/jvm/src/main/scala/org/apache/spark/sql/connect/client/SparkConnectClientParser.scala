@@ -19,11 +19,14 @@ package org.apache.spark.sql.connect.client
 import scala.annotation.tailrec
 
 /**
- * Parser that takes an array of (CLI) arguments and configures a [[SparkConnectClient]] with them.
+ * Parser that takes an array of (CLI) arguments and configures a [[SparkConnectClient]] with
+ * them.
  */
 private[sql] object SparkConnectClientParser {
+
   /**
-   * @return usage string.
+   * @return
+   *   usage string.
    */
   def usage(): String =
     s"""
@@ -72,7 +75,7 @@ private[sql] object SparkConnectClientParser {
         if (args.isEmpty) {
           throw new IllegalArgumentException("--option requires a key-value pair")
         }
-        val Array(key, value, rest@_*) = tail.head.split('=')
+        val Array(key, value, rest @ _*) = tail.head.split('=')
         if (rest.nonEmpty) {
           throw new IllegalArgumentException(
             s"--option should contain key=value, found ${tail.head} instead")

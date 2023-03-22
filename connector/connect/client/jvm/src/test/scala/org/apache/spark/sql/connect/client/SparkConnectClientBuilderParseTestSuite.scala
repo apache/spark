@@ -48,9 +48,8 @@ class SparkConnectClientBuilderParseTestSuite extends ConnectFunSuite {
   argumentTest("user_agent", "MY APP", _.userAgent)
 
   test("Argument - remote") {
-    val builder = build(
-      "--remote",
-      "sc://srv.apache.org/;user_id=x127;user_name=Q;token=nahnah;param1=x")
+    val builder =
+      build("--remote", "sc://srv.apache.org/;user_id=x127;user_name=Q;token=nahnah;param1=x")
     assert(builder.host == "srv.apache.org")
     assert(builder.port == 15002)
     assert(builder.token.contains("nahnah"))
@@ -64,10 +63,8 @@ class SparkConnectClientBuilderParseTestSuite extends ConnectFunSuite {
   }
 
   test("Argument - option") {
-    val builder = build(
-      "--option", "foo=bar",
-      "--option", "c1=s8",
-      "--option", "ns.sns.setting=baz")
+    val builder =
+      build("--option", "foo=bar", "--option", "c1=s8", "--option", "ns.sns.setting=baz")
     assert(builder.options == Map(("foo", "bar"), ("c1", "s8"), ("ns.sns.setting", "baz")))
     val e1 = intercept[NoSuchElementException](build("--option"))
     // assert(e1.getMessage.contains("requires a key-value pair"))
@@ -84,10 +81,14 @@ class SparkConnectClientBuilderParseTestSuite extends ConnectFunSuite {
   test("SparkSession - create") {
     {
       val builder = build(
-        "--remote", "sc://localhost:15033",
-        "--port", "1507",
-        "--user_agent", "U8912",
-        "--user_id", "Q12")
+        "--remote",
+        "sc://localhost:15033",
+        "--port",
+        "1507",
+        "--user_agent",
+        "U8912",
+        "--user_id",
+        "Q12")
       assert(builder.host == "localhost")
       assert(builder.port == 1507)
       assert(builder.userAgent == "U8912")
@@ -100,9 +101,12 @@ class SparkConnectClientBuilderParseTestSuite extends ConnectFunSuite {
     {
       val builder = build(
         "--use_ssl",
-        "--user_name", "Nico",
-        "--option", "mode=turbo",
-        "--option", "cluster=mycl")
+        "--user_name",
+        "Nico",
+        "--option",
+        "mode=turbo",
+        "--option",
+        "cluster=mycl")
       assert(builder.host == "localhost")
       assert(builder.port == 15002)
       assert(builder.userAgent == "_SPARK_CONNECT_SCALA")

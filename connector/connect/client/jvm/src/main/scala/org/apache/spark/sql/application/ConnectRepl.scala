@@ -45,25 +45,26 @@ object ConnectRepl {
 
   def main(args: Array[String]): Unit = {
     // Build the client.
-    val client = try {
-      SparkConnectClient.builder()
-        .loadFromEnvironment()
-        .userAgent(name)
-        .parse(args)
-        .build()
-    } catch {
-      case NonFatal(e) =>
-        // scalastyle:off println
-        println(
-          s"""
+    val client =
+      try {
+        SparkConnectClient
+          .builder()
+          .loadFromEnvironment()
+          .userAgent(name)
+          .parse(args)
+          .build()
+      } catch {
+        case NonFatal(e) =>
+          // scalastyle:off println
+          println(s"""
              |$name
              |${e.getMessage}
              |${SparkConnectClientParser.usage()}
              |""".stripMargin)
-        // scalastyle:on println
-        System.exit(1)
-        return
-    }
+          // scalastyle:on println
+          System.exit(1)
+          return
+      }
 
     // Build the session.
     val spark = SparkSession.builder().client(client).build()
@@ -78,11 +79,11 @@ object ConnectRepl {
 
     // Please note that we make ammonite generate classes instead of objects.
     // Classes tend to have superior serialization behavior when using UDFs.
-     val main = ammonite.Main(
-       welcomeBanner = Option(splash),
-       predefCode = imports,
-       replCodeWrapper = CodeClassWrapper,
-       scriptCodeWrapper = CodeClassWrapper)
+    val main = ammonite.Main(
+      welcomeBanner = Option(splash),
+      predefCode = imports,
+      replCodeWrapper = CodeClassWrapper,
+      scriptCodeWrapper = CodeClassWrapper)
     main.run(new Bind("spark", spark))
   }
 }
