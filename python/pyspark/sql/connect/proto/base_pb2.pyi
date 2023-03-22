@@ -508,6 +508,30 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
             self, field_name: typing_extensions.Literal["relation", b"relation"]
         ) -> None: ...
 
+    class ExplainExpression(google.protobuf.message.Message):
+        """Explains the expression based on extended is true or not."""
+
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        EXPR_FIELD_NUMBER: builtins.int
+        EXTENDED_FIELD_NUMBER: builtins.int
+        @property
+        def expr(self) -> pyspark.sql.connect.proto.expressions_pb2.Expression:
+            """(Required) The expression to be analyzed."""
+        extended: builtins.bool
+        def __init__(
+            self,
+            *,
+            expr: pyspark.sql.connect.proto.expressions_pb2.Expression | None = ...,
+            extended: builtins.bool = ...,
+        ) -> None: ...
+        def HasField(
+            self, field_name: typing_extensions.Literal["expr", b"expr"]
+        ) -> builtins.bool: ...
+        def ClearField(
+            self, field_name: typing_extensions.Literal["expr", b"expr", "extended", b"extended"]
+        ) -> None: ...
+
     SESSION_ID_FIELD_NUMBER: builtins.int
     USER_CONTEXT_FIELD_NUMBER: builtins.int
     CLIENT_TYPE_FIELD_NUMBER: builtins.int
@@ -524,6 +548,7 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
     PERSIST_FIELD_NUMBER: builtins.int
     UNPERSIST_FIELD_NUMBER: builtins.int
     GET_STORAGE_LEVEL_FIELD_NUMBER: builtins.int
+    EXPLAIN_EXPRESSION_FIELD_NUMBER: builtins.int
     session_id: builtins.str
     """(Required)
 
@@ -565,6 +590,8 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
     def unpersist(self) -> global___AnalyzePlanRequest.Unpersist: ...
     @property
     def get_storage_level(self) -> global___AnalyzePlanRequest.GetStorageLevel: ...
+    @property
+    def explain_expression(self) -> global___AnalyzePlanRequest.ExplainExpression: ...
     def __init__(
         self,
         *,
@@ -584,6 +611,7 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
         persist: global___AnalyzePlanRequest.Persist | None = ...,
         unpersist: global___AnalyzePlanRequest.Unpersist | None = ...,
         get_storage_level: global___AnalyzePlanRequest.GetStorageLevel | None = ...,
+        explain_expression: global___AnalyzePlanRequest.ExplainExpression | None = ...,
     ) -> None: ...
     def HasField(
         self,
@@ -598,6 +626,8 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
             b"ddl_parse",
             "explain",
             b"explain",
+            "explain_expression",
+            b"explain_expression",
             "get_storage_level",
             b"get_storage_level",
             "input_files",
@@ -637,6 +667,8 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
             b"ddl_parse",
             "explain",
             b"explain",
+            "explain_expression",
+            b"explain_expression",
             "get_storage_level",
             b"get_storage_level",
             "input_files",
@@ -686,6 +718,7 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
         "persist",
         "unpersist",
         "get_storage_level",
+        "explain_expression",
     ] | None: ...
 
 global___AnalyzePlanRequest = AnalyzePlanRequest
@@ -880,6 +913,20 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
             self, field_name: typing_extensions.Literal["storage_level", b"storage_level"]
         ) -> None: ...
 
+    class ExplainExpression(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        EXPLAIN_STRING_FIELD_NUMBER: builtins.int
+        explain_string: builtins.str
+        def __init__(
+            self,
+            *,
+            explain_string: builtins.str = ...,
+        ) -> None: ...
+        def ClearField(
+            self, field_name: typing_extensions.Literal["explain_string", b"explain_string"]
+        ) -> None: ...
+
     SESSION_ID_FIELD_NUMBER: builtins.int
     SCHEMA_FIELD_NUMBER: builtins.int
     EXPLAIN_FIELD_NUMBER: builtins.int
@@ -894,6 +941,7 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
     PERSIST_FIELD_NUMBER: builtins.int
     UNPERSIST_FIELD_NUMBER: builtins.int
     GET_STORAGE_LEVEL_FIELD_NUMBER: builtins.int
+    EXPLAIN_EXPRESSION_FIELD_NUMBER: builtins.int
     session_id: builtins.str
     @property
     def schema(self) -> global___AnalyzePlanResponse.Schema: ...
@@ -921,6 +969,8 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
     def unpersist(self) -> global___AnalyzePlanResponse.Unpersist: ...
     @property
     def get_storage_level(self) -> global___AnalyzePlanResponse.GetStorageLevel: ...
+    @property
+    def explain_expression(self) -> global___AnalyzePlanResponse.ExplainExpression: ...
     def __init__(
         self,
         *,
@@ -938,6 +988,7 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
         persist: global___AnalyzePlanResponse.Persist | None = ...,
         unpersist: global___AnalyzePlanResponse.Unpersist | None = ...,
         get_storage_level: global___AnalyzePlanResponse.GetStorageLevel | None = ...,
+        explain_expression: global___AnalyzePlanResponse.ExplainExpression | None = ...,
     ) -> None: ...
     def HasField(
         self,
@@ -946,6 +997,8 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
             b"ddl_parse",
             "explain",
             b"explain",
+            "explain_expression",
+            b"explain_expression",
             "get_storage_level",
             b"get_storage_level",
             "input_files",
@@ -979,6 +1032,8 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
             b"ddl_parse",
             "explain",
             b"explain",
+            "explain_expression",
+            b"explain_expression",
             "get_storage_level",
             b"get_storage_level",
             "input_files",
@@ -1023,6 +1078,7 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
         "persist",
         "unpersist",
         "get_storage_level",
+        "explain_expression",
     ] | None: ...
 
 global___AnalyzePlanResponse = AnalyzePlanResponse
