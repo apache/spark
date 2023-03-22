@@ -218,6 +218,17 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
         Row(1, 7), Row(2, 2), Row(2, 8), Row(3, null), Row(4, null), Row(null, 3), Row(null, 4),
         Row(null, 5)))
 
+      // test one join with non-equi condition
+      val joinWithNonEquiDF2 = df1.join(df2.hint(hint),
+        $"k1" === $"k2" % 3 && $"k1" + 3 =!= $"k2" && $"k1" + 5 =!= $"k2", "full_outer")
+      assert(joinWithNonEquiDF2.queryExecution.executedPlan.collect {
+        case WholeStageCodegenExec(_: ShuffledHashJoinExec) if hint == "SHUFFLE_HASH" => true
+        case WholeStageCodegenExec(_: SortMergeJoinExec) if hint == "SHUFFLE_MERGE" => true
+      }.size === 1)
+      checkAnswer(joinWithNonEquiDF2, Seq(Row(0, 0), Row(0, 6), Row(0, 9), Row(1, 1),
+        Row(1, 7), Row(2, 2), Row(2, 8), Row(3, null), Row(4, null), Row(null, 3), Row(null, 4),
+        Row(null, 5)))
+
       // test two joins
       val twoJoinsDF = df1.join(df2.hint(hint), $"k1" === $"k2", "full_outer")
         .join(df3.hint(hint), $"k1" === $"k3" && $"k1" + $"k3" =!= 2, "full_outer")
