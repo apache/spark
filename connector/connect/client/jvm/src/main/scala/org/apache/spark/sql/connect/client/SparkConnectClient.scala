@@ -166,7 +166,8 @@ private[sql] class SparkConnectClient(
     analyze(builder)
   }
 
-  private def analyze(builder: proto.AnalyzePlanRequest.Builder): proto.AnalyzePlanResponse = {
+  private[sql] def analyze(
+      builder: proto.AnalyzePlanRequest.Builder): proto.AnalyzePlanResponse = {
     val request = builder
       .setUserContext(userContext)
       .setSessionId(sessionId)
@@ -450,7 +451,11 @@ object SparkConnectClient {
       if (metadata.nonEmpty) {
         channelBuilder.intercept(new MetadataHeaderClientInterceptor(metadata))
       }
-      new SparkConnectClient(userContextBuilder.build(), channelBuilder, _userAgent)
+      channelBuilder.maxInboundMessageSize(ConnectCommon.CONNECT_GRPC_MAX_MESSAGE_SIZE)
+      new SparkConnectClient(
+        userContextBuilder.build(),
+        channelBuilder,
+        _userAgent)
     }
   }
 

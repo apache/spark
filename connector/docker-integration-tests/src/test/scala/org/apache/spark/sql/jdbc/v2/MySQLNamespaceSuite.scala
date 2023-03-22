@@ -68,9 +68,6 @@ class MySQLNamespaceSuite extends DockerJDBCIntegrationSuite with V2JDBCNamespac
 
   override val supportsDropSchemaRestrict: Boolean = false
 
-  testListNamespaces()
-  testDropNamespaces()
-
   test("Create or remove comment of namespace unsupported") {
     val e1 = intercept[AnalysisException] {
       catalog.createNamespace(Array("foo"), Map("comment" -> "test comment").asJava)

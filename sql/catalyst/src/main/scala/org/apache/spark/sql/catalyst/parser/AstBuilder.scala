@@ -669,17 +669,26 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
     )
   }
 
-  override def visitNamedExpressionSeq(
-      ctx: NamedExpressionSeqContext): Seq[Expression] = {
-    Option(ctx).toSeq
-      .flatMap(_.namedExpression.asScala)
-      .map(typedVisit[Expression])
+  private def getAliasFunc(ctx: ParseTree): Option[Expression => String] = {
+    if (conf.getConf(SQLConf.STABLE_DERIVED_COLUMN_ALIAS_ENABLED)) {
+      Some(_ => toExprAlias(ctx))
+    } else {
+      None
+    }
   }
 
-  override def visitExpressionSeq(ctx: ExpressionSeqContext): Seq[Expression] = {
+  override def visitNamedExpressionSeq(
+      ctx: NamedExpressionSeqContext): Seq[(Expression, Option[Expression => String])] = {
+    Option(ctx).toSeq
+      .flatMap(_.namedExpression.asScala)
+      .map(ctx => (typedVisit[Expression](ctx), getAliasFunc(ctx)))
+  }
+
+  override def visitExpressionSeq(
+      ctx: ExpressionSeqContext): Seq[(Expression, Option[Expression => String])] = {
     Option(ctx).toSeq
       .flatMap(_.expression.asScala)
-      .map(typedVisit[Expression])
+      .map(ctx => (typedVisit[Expression](ctx), getAliasFunc(ctx)))
   }
 
   /**
@@ -793,7 +802,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
 
   def visitCommonSelectQueryClausePlan(
       relation: LogicalPlan,
-      expressions: Seq[Expression],
+      expressions: Seq[(Expression, Option[Expression => String])],
       lateralView: java.util.List[LateralViewContext],
       whereClause: WhereClauseContext,
       aggregationClause: AggregationClauseContext,
@@ -808,8 +817,8 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
 
     // Add aggregation or a project.
     val namedExpressions = expressions.map {
-      case e: NamedExpression => e
-      case e: Expression => UnresolvedAlias(e)
+      case (e: NamedExpression, _) => e
+      case (e: Expression, aliasFunc) => UnresolvedAlias(e, aliasFunc)
     }
 
     def createProject() = if (namedExpressions.nonEmpty) {
