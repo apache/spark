@@ -41,9 +41,9 @@ import google.protobuf.internal.containers
 import google.protobuf.internal.enum_type_wrapper
 import google.protobuf.message
 import pyspark.sql.connect.proto.commands_pb2
+import pyspark.sql.connect.proto.common_pb2
 import pyspark.sql.connect.proto.expressions_pb2
 import pyspark.sql.connect.proto.relations_pb2
-import pyspark.sql.connect.proto.storage_level_pb2
 import pyspark.sql.connect.proto.types_pb2
 import sys
 import typing
@@ -377,13 +377,13 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
         def relation(self) -> pyspark.sql.connect.proto.relations_pb2.Relation:
             """(Required) The logical plan to persist."""
         @property
-        def storage_level(self) -> pyspark.sql.connect.proto.storage_level_pb2.StorageLevel:
+        def storage_level(self) -> pyspark.sql.connect.proto.common_pb2.StorageLevel:
             """(Optional) The storage level."""
         def __init__(
             self,
             *,
             relation: pyspark.sql.connect.proto.relations_pb2.Relation | None = ...,
-            storage_level: pyspark.sql.connect.proto.storage_level_pb2.StorageLevel | None = ...,
+            storage_level: pyspark.sql.connect.proto.common_pb2.StorageLevel | None = ...,
         ) -> None: ...
         def HasField(
             self,
@@ -820,12 +820,12 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
 
         STORAGE_LEVEL_FIELD_NUMBER: builtins.int
         @property
-        def storage_level(self) -> pyspark.sql.connect.proto.storage_level_pb2.StorageLevel:
+        def storage_level(self) -> pyspark.sql.connect.proto.common_pb2.StorageLevel:
             """(Required) The StorageLevel as a result of get_storage_level request."""
         def __init__(
             self,
             *,
-            storage_level: pyspark.sql.connect.proto.storage_level_pb2.StorageLevel | None = ...,
+            storage_level: pyspark.sql.connect.proto.common_pb2.StorageLevel | None = ...,
         ) -> None: ...
         def HasField(
             self, field_name: typing_extensions.Literal["storage_level", b"storage_level"]
