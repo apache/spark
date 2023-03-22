@@ -2827,9 +2827,6 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         df = self.connect.read.table(self.tbl_name)
         for f in (
             "rdd",
-            "unpersist",
-            "cache",
-            "persist",
             "withWatermark",
             "foreach",
             "foreachPartition",
