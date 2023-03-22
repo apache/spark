@@ -20,6 +20,8 @@ package org.apache.spark.sql
 import java.io.{ByteArrayOutputStream, File}
 import java.nio.charset.StandardCharsets
 
+import scala.collection.mutable
+
 import org.apache.commons.io.FileUtils
 
 import org.apache.spark.SparkFunSuite
@@ -70,6 +72,8 @@ class ColumnExplainStabilitySuite extends SparkFunSuite {
     getWorkspaceFilePath("sql", "core", "src", "test", "resources", "column-stability").toFile
   }
 
+  private val referenceRegex = "#\\d+".r
+
   private def captureStdOut(block: => Unit): String = {
     val capturedOut = new ByteArrayOutputStream()
     Console.withOut(capturedOut)(block)
@@ -95,8 +99,8 @@ class ColumnExplainStabilitySuite extends SparkFunSuite {
   private def generateGoldenFile(column: Column, name: String): Unit = {
     val dir = new File(baseResourcePath, name)
 
-    val simplified = captureStdOut(column.explain(false))
-    val extended = captureStdOut(column.explain(true))
+    val simplified = normalizeIds(captureStdOut(column.explain(false)))
+    val extended = normalizeIds(captureStdOut(column.explain(true)))
     val foundMatch = dir.exists() && isApproved(dir, simplified, extended)
 
     if (!foundMatch) {
@@ -113,8 +117,8 @@ class ColumnExplainStabilitySuite extends SparkFunSuite {
   private def checkWithApproved(column: Column, name: String): Unit = {
     val dir = new File(baseResourcePath, name)
     val tempDir = FileUtils.getTempDirectory
-    val actualSimplified = captureStdOut(column.explain(false))
-    val actualExtended = captureStdOut(column.explain(true))
+    val actualSimplified = normalizeIds(captureStdOut(column.explain(false)))
+    val actualExtended = normalizeIds(captureStdOut(column.explain(true)))
     val foundMatch = isApproved(dir, actualSimplified, actualExtended)
 
     if (!foundMatch) {
@@ -155,6 +159,14 @@ class ColumnExplainStabilitySuite extends SparkFunSuite {
            |$actualExtended
         """.stripMargin)
     }
+  }
+
+  private def normalizeIds(explainString: String): String = {
+    val map = new mutable.HashMap[String, String]()
+    referenceRegex.findAllMatchIn(explainString).map(_.toString)
+      .foreach(map.getOrElseUpdate(_, (map.size + 1).toString))
+    referenceRegex.replaceAllIn(
+      explainString, regexMatch => s"#${map(regexMatch.toString)}")
   }
 
   /**
