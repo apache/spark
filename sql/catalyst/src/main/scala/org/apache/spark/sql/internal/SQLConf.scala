@@ -4176,6 +4176,15 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val STABLE_DERIVED_COLUMN_ALIAS_ENABLED =
+    buildConf("spark.sql.stableDerivedColumnAlias.enabled")
+      .internal()
+      .doc("Enable deriving of stable column aliases from the lexer tree instead of parse tree " +
+        "and form them via pretty SQL print.")
+      .version("3.5.0")
+      .booleanConf
+      .createWithDefault(false)
+
   /**
    * Holds information about keys that have been deprecated.
    *
