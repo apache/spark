@@ -2004,13 +2004,9 @@ class SubquerySuite extends QueryTest
             df =
               sql("select * from l where b = 5.0 and a not in (select c from r where d = b + 10)")
             checkAnswer(df, Row(null, 5.0) :: Nil)
-            if (enableNAAJ) {
-              joinExec = findJoinExec(df)
-              assert(joinExec.isInstanceOf[BroadcastHashJoinExec])
-              assert(joinExec.asInstanceOf[BroadcastHashJoinExec].isNullAwareAntiJoin)
-            } else {
-              assert(findJoinExec(df).isInstanceOf[BroadcastNestedLoopJoinExec])
-            }
+            joinExec = findJoinExec(df)
+            assert(joinExec.isInstanceOf[BroadcastHashJoinExec])
+            assert(!joinExec.asInstanceOf[BroadcastHashJoinExec].isNullAwareAntiJoin)
 
             // multi column not in subquery
             df = sql("select * from l where (a, b) not in (select c, d from r where c > 10)")

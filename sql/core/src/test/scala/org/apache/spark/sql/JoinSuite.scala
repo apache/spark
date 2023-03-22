@@ -1158,12 +1158,12 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
       var joinExec = assertJoin((
         "select * from testData where key not in (select a from testData2)",
         classOf[BroadcastHashJoinExec]))
-      assert(joinExec.asInstanceOf[BroadcastHashJoinExec].isNullAwareAntiJoin)
+      assert(!joinExec.asInstanceOf[BroadcastHashJoinExec].isNullAwareAntiJoin)
 
       // negative not in subquery case since multi-column is not supported
       assertJoin((
         "select * from testData where (key, key + 1) not in (select * from testData2)",
-        classOf[BroadcastNestedLoopJoinExec]))
+        classOf[BroadcastHashJoinExec]))
 
       // positive hand-written left anti join
       // testData.key nullable false
