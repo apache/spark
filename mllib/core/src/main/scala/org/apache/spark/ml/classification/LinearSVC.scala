@@ -312,7 +312,7 @@ class LinearSVC @Since("2.2.0") (
 
     val initialSolution = Array.ofDim[Double](numFeaturesPlusIntercept)
     if ($(fitIntercept)) {
-      // orginal `initialSolution` is for problem:
+      // original `initialSolution` is for problem:
       // y = f(w1 * x1 / std_x1, w2 * x2 / std_x2, ..., intercept)
       // we should adjust it to the initial solution for problem:
       // y = f(w1 * (x1 - avg_x1) / std_x1, w2 * (x2 - avg_x2) / std_x2, ..., intercept)

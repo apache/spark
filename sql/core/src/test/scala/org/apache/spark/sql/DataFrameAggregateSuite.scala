@@ -1538,6 +1538,13 @@ class DataFrameAggregateSuite extends QueryTest
     )
     checkAnswer(res, Row(1, 1, 1) :: Row(4, 1, 2) :: Nil)
   }
+
+  test("SPARK-42851: common subexpression should consistently handle aggregate and result exprs") {
+    val res = sql(
+      "select max(transform(array(id), x -> x)), max(transform(array(id), x -> x)) from range(2)"
+    )
+    checkAnswer(res, Row(Array(1), Array(1)))
+  }
 }
 
 case class B(c: Option[Double])
