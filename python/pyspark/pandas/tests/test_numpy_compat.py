@@ -25,7 +25,7 @@ from pyspark.testing.pandasutils import ComparisonTestBase
 from pyspark.testing.sqlutils import SQLTestUtils
 
 
-class NumPyCompatTest(ComparisonTestBase, SQLTestUtils):
+class NumPyCompatTestsMixin:
     blacklist = [
         # Koalas does not currently support
         "conj",
@@ -181,6 +181,10 @@ class NumPyCompatTest(ComparisonTestBase, SQLTestUtils):
                         raise AssertionError("Test in '%s' function was failed." % np_name) from e
         finally:
             reset_option("compute.ops_on_diff_frames")
+
+
+class NumPyCompatTests(NumPyCompatTestsMixin, ComparisonTestBase, SQLTestUtils):
+    pass
 
 
 if __name__ == "__main__":

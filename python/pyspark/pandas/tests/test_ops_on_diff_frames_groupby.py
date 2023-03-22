@@ -25,7 +25,7 @@ from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
 
 
-class OpsOnDiffFramesGroupByTest(PandasOnSparkTestCase, SQLTestUtils):
+class OpsOnDiffFramesGroupByTestsMixin:
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
@@ -521,7 +521,7 @@ class OpsOnDiffFramesGroupByTest(PandasOnSparkTestCase, SQLTestUtils):
         self.assert_eq(psdf.groupby(kkey).diff().sum(), pdf.groupby(pkey).diff().sum().astype(int))
         self.assert_eq(psdf.groupby(kkey)["a"].diff().sum(), pdf.groupby(pkey)["a"].diff().sum())
 
-    def test_rank(self):
+    def test_fillna(self):
         pdf = pd.DataFrame(
             {
                 "a": [1, 2, 3, 4, 5, 6] * 3,
@@ -624,6 +624,12 @@ class OpsOnDiffFramesGroupByTest(PandasOnSparkTestCase, SQLTestUtils):
             psdf.groupby(kkey)[["C"]].fillna(method="ffill").sort_index(),
             pdf.groupby(pkey)[["C"]].fillna(method="ffill").sort_index(),
         )
+
+
+class OpsOnDiffFramesGroupByTests(
+    OpsOnDiffFramesGroupByTestsMixin, PandasOnSparkTestCase, SQLTestUtils
+):
+    pass
 
 
 if __name__ == "__main__":

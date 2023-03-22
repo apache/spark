@@ -41,7 +41,7 @@ from pyspark.testing.pandasutils import (
 from pyspark.testing.sqlutils import SQLTestUtils
 
 
-class DataFrameSlowTest(ComparisonTestBase, SQLTestUtils):
+class DataFrameSlowTestsMixin:
     @property
     def pdf(self):
         return pd.DataFrame(
@@ -2643,6 +2643,10 @@ class DataFrameSlowTest(ComparisonTestBase, SQLTestUtils):
 
         with ps.option_context("compute.max_rows", None):
             check_style()
+
+
+class DataFrameSlowTests(DataFrameSlowTestsMixin, ComparisonTestBase, SQLTestUtils):
+    pass
 
 
 if __name__ == "__main__":

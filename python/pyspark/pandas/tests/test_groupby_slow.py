@@ -26,7 +26,7 @@ from pyspark import pandas as ps
 from pyspark.testing.pandasutils import PandasOnSparkTestCase, TestUtils
 
 
-class GroupBySlowTest(PandasOnSparkTestCase, TestUtils):
+class GroupBySlowTestsMixin:
     def test_split_apply_combine_on_series(self):
         pdf = pd.DataFrame(
             {
@@ -1046,6 +1046,10 @@ class GroupBySlowTest(PandasOnSparkTestCase, TestUtils):
             psdf.groupby([("x", "a"), ("x", "b")]).rank().sort_index(),
             pdf.groupby([("x", "a"), ("x", "b")]).rank().sort_index(),
         )
+
+
+class GroupBySlowTests(GroupBySlowTestsMixin, PandasOnSparkTestCase, TestUtils):
+    pass
 
 
 if __name__ == "__main__":

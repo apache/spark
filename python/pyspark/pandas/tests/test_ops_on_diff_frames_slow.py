@@ -27,7 +27,7 @@ from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
 
 
-class OpsOnDiffFramesEnabledSlowTest(PandasOnSparkTestCase, SQLTestUtils):
+class OpsOnDiffFramesEnabledSlowTestsMixin:
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
@@ -959,6 +959,12 @@ class OpsOnDiffFramesEnabledSlowTest(PandasOnSparkTestCase, SQLTestUtils):
         pandas_on_spark_other = ps.from_pandas(pandas_other)
         self.assert_eq(pser.eq(pandas_other), psser.eq(pandas_on_spark_other).sort_index())
         self.assert_eq(pser == pandas_other, (psser == pandas_on_spark_other).sort_index())
+
+
+class OpsOnDiffFramesEnabledSlowTests(
+    OpsOnDiffFramesEnabledSlowTestsMixin, PandasOnSparkTestCase, SQLTestUtils
+):
+    pass
 
 
 if __name__ == "__main__":

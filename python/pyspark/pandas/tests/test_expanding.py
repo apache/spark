@@ -25,7 +25,7 @@ from pyspark.pandas.window import Expanding
 from pyspark.testing.pandasutils import PandasOnSparkTestCase, TestUtils
 
 
-class ExpandingTest(PandasOnSparkTestCase, TestUtils):
+class ExpandingTestsMixin:
     def _test_expanding_func(self, ps_func, pd_func=None):
         if not pd_func:
             pd_func = ps_func
@@ -234,6 +234,10 @@ class ExpandingTest(PandasOnSparkTestCase, TestUtils):
 
     def test_groupby_expanding_kurt(self):
         self._test_groupby_expanding_func("kurt")
+
+
+class ExpandingTests(ExpandingTestsMixin, PandasOnSparkTestCase, TestUtils):
+    pass
 
 
 if __name__ == "__main__":

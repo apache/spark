@@ -24,7 +24,7 @@ from pyspark.testing.pandasutils import PandasOnSparkTestCase, TestUtils
 from pyspark.pandas.window import Rolling
 
 
-class RollingTest(PandasOnSparkTestCase, TestUtils):
+class RollingTestsMixin:
     def test_rolling_error(self):
         with self.assertRaisesRegex(ValueError, "window must be >= 0"):
             ps.range(10).rolling(window=-1)
@@ -235,6 +235,10 @@ class RollingTest(PandasOnSparkTestCase, TestUtils):
 
     def test_groupby_rolling_kurt(self):
         self._test_groupby_rolling_func("kurt")
+
+
+class RollingTests(RollingTestsMixin, PandasOnSparkTestCase, TestUtils):
+    pass
 
 
 if __name__ == "__main__":

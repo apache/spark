@@ -25,7 +25,7 @@ import pyspark.pandas as ps
 from pyspark.testing.pandasutils import ComparisonTestBase, TestUtils
 
 
-class CategoricalTest(ComparisonTestBase, TestUtils):
+class CategoricalTestsMixin:
     @property
     def pdf(self):
         return pd.DataFrame(
@@ -700,6 +700,10 @@ class CategoricalTest(ComparisonTestBase, TestUtils):
             "Parameter 'new_categories' must be list-like, was",
             lambda: psser.cat.set_categories(None),
         )
+
+
+class CategoricalTests(CategoricalTestsMixin, ComparisonTestBase, TestUtils):
+    pass
 
 
 if __name__ == "__main__":

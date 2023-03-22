@@ -33,7 +33,7 @@ from pyspark.pandas.groupby import is_multi_agg_with_relabel, SeriesGroupBy
 from pyspark.testing.pandasutils import PandasOnSparkTestCase, TestUtils
 
 
-class GroupByTest(PandasOnSparkTestCase, TestUtils):
+class GroupByTestsMixin:
     @property
     def pdf(self):
         return pd.DataFrame(
@@ -2215,6 +2215,10 @@ class GroupByTest(PandasOnSparkTestCase, TestUtils):
         )
 
         self.assertTrue(isinstance(psdf.groupby("a")["b"], SeriesGroupBy))
+
+
+class GroupByTests(GroupByTestsMixin, PandasOnSparkTestCase, TestUtils):
+    pass
 
 
 if __name__ == "__main__":

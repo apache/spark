@@ -32,7 +32,7 @@ from pyspark.pandas.typedef.typehints import (
 )
 
 
-class BooleanOpsTest(OpsTestBase):
+class BooleanOpsTestsMixin:
     @property
     def bool_pdf(self):
         return pd.DataFrame({"this": [True, False, True], "that": [False, True, True]})
@@ -807,6 +807,10 @@ class BooleanExtensionOpsTest(OpsTestBase):
         other_pser, other_psser = pdf["that"], psdf["that"]
         self.check_extension(pser >= other_pser, psser >= other_psser)
         self.check_extension(pser >= pser, psser >= psser)
+
+
+class BooleanOpsTests(BooleanOpsTestsMixin, OpsTestBase):
+    pass
 
 
 if __name__ == "__main__":

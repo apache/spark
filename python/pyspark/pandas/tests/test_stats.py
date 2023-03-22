@@ -29,7 +29,7 @@ from pyspark.testing.pandasutils import PandasOnSparkTestCase, SPARK_CONF_ARROW_
 from pyspark.testing.sqlutils import SQLTestUtils
 
 
-class StatsTest(PandasOnSparkTestCase, SQLTestUtils):
+class StatsTestsMixin:
     def _test_stat_functions(self, pdf_or_pser, psdf_or_psser):
         functions = ["max", "min", "mean", "sum", "count"]
         for funcname in functions:
@@ -547,6 +547,10 @@ class StatsTest(PandasOnSparkTestCase, SQLTestUtils):
 
         with self.assertRaisesRegex(TypeError, "Could not convert object \\(string\\) to numeric"):
             psdf.s.sum()
+
+
+class StatsTests(StatsTestsMixin, PandasOnSparkTestCase, SQLTestUtils):
+    pass
 
 
 if __name__ == "__main__":

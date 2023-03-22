@@ -24,7 +24,7 @@ from pyspark import pandas as ps
 from pyspark.pandas.tests.data_type_ops.testing_utils import OpsTestBase
 
 
-class DateOpsTest(OpsTestBase):
+class DateOpsTestsMixin:
     @property
     def pser(self):
         return pd.Series(
@@ -228,6 +228,10 @@ class DateOpsTest(OpsTestBase):
         pdf, psdf = self.date_pdf, self.date_psdf
         self.assert_eq(pdf["this"] >= pdf["that"], psdf["this"] >= psdf["that"])
         self.assert_eq(pdf["this"] >= pdf["this"], psdf["this"] >= psdf["this"])
+
+
+class DateOpsTests(DateOpsTestsMixin, OpsTestBase):
+    pass
 
 
 if __name__ == "__main__":

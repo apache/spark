@@ -39,7 +39,7 @@ if have_matplotlib:
 
 
 @unittest.skipIf(not have_matplotlib, matplotlib_requirement_message)
-class DataFramePlotMatplotlibTest(PandasOnSparkTestCase, TestUtils):
+class DataFramePlotMatplotlibTestsMixin:
     sample_ratio_default = None
 
     @classmethod
@@ -471,6 +471,12 @@ class DataFramePlotMatplotlibTest(PandasOnSparkTestCase, TestUtils):
         pdf1.columns = columns
         check_kde_plot(pdf1, psdf1, bw_method=0.3)
         check_kde_plot(pdf1, psdf1, ind=[1, 2, 3], bw_method=3.0)
+
+
+class DataFramePlotMatplotlibTests(
+    DataFramePlotMatplotlibTestsMixin, PandasOnSparkTestCase, TestUtils
+):
+    pass
 
 
 if __name__ == "__main__":

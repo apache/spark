@@ -55,7 +55,7 @@ from pyspark.pandas.typedef import (
 from pyspark import pandas as ps
 
 
-class TypeHintTests(unittest.TestCase):
+class TypeHintTestsMixin:
     def test_infer_schema_with_no_return(self):
         def try_infer_return_type():
             def f():
@@ -429,6 +429,10 @@ class TypeHintTests(unittest.TestCase):
         for extension_dtype, spark_type in type_mapper.items():
             self.assertEqual(as_spark_type(extension_dtype), spark_type)
             self.assertEqual(pandas_on_spark_type(extension_dtype), (extension_dtype, spark_type))
+
+
+class TypeHintTests(TypeHintTestsMixin, unittest.TestCase):
+    pass
 
 
 if __name__ == "__main__":

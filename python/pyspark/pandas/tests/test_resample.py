@@ -31,7 +31,7 @@ from pyspark.pandas.missing.resample import (
 from pyspark.testing.pandasutils import PandasOnSparkTestCase, TestUtils
 
 
-class ResampleTest(PandasOnSparkTestCase, TestUtils):
+class ResampleTestsMixin:
     @property
     def pdf1(self):
         np.random.seed(11)
@@ -281,6 +281,10 @@ class ResampleTest(PandasOnSparkTestCase, TestUtils):
             psdf.resample("2D", on=psdf.X).sum().sort_index(),
             almost=True,
         )
+
+
+class ResampleTests(ResampleTestsMixin, PandasOnSparkTestCase, TestUtils):
+    pass
 
 
 if __name__ == "__main__":

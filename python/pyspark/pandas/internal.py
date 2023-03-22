@@ -36,6 +36,12 @@ from pyspark.sql.types import (  # noqa: F401
 )
 from pyspark.sql.utils import is_timestamp_ntz_preferred
 
+# For supporting Spark Connect
+from pyspark.sql.connect.dataframe import DataFrame as SparkConnectDataFrame
+from pyspark.sql.connect.column import Column as SparkConnectColumn
+from pyspark.sql.connect.expressions import DistributedSequenceID
+from pyspark.sql.utils import is_remote
+
 # For running doctests and reference resolution in PyCharm.
 from pyspark import pandas as ps
 from pyspark.pandas._typing import Label
@@ -531,7 +537,7 @@ class InternalFrame:
 
     def __init__(
         self,
-        spark_frame: SparkDataFrame,
+        spark_frame: Union[SparkDataFrame, SparkConnectDataFrame],
         index_spark_columns: Optional[List[Column]],
         index_names: Optional[List[Optional[Label]]] = None,
         index_fields: Optional[List[InternalField]] = None,
@@ -616,8 +622,7 @@ class InternalFrame:
         >>> internal.column_label_names
         [('column_labels_a',), ('column_labels_b',)]
         """
-
-        assert isinstance(spark_frame, SparkDataFrame)
+        assert isinstance(spark_frame, (SparkDataFrame, SparkConnectDataFrame))
         assert not spark_frame.isStreaming, "pandas-on-Spark does not support Structured Streaming."
 
         if not index_spark_columns:
@@ -670,7 +675,8 @@ class InternalFrame:
 
         # index_spark_columns
         assert all(
-            isinstance(index_scol, Column) for index_scol in index_spark_columns
+            isinstance(index_scol, (Column, SparkConnectColumn))
+            for index_scol in index_spark_columns
         ), index_spark_columns
 
         self._index_spark_columns: List[Column] = index_spark_columns
@@ -687,7 +693,9 @@ class InternalFrame:
                 and col not in HIDDEN_COLUMNS
             ]
         else:
-            assert all(isinstance(scol, Column) for scol in data_spark_columns)
+            assert all(
+                isinstance(scol, (Column, SparkConnectColumn)) for scol in data_spark_columns
+            )
 
         self._data_spark_columns: List[Column] = data_spark_columns
 
@@ -911,10 +919,15 @@ class InternalFrame:
         +--------+---+
         """
         if len(sdf.columns) > 0:
-            return SparkDataFrame(
-                sdf._jdf.toDF().withSequenceColumn(column_name),
-                sdf.sparkSession,
-            )
+            if is_remote():
+                return sdf.select(
+                    SparkConnectColumn(DistributedSequenceID()).alias(column_name), "*"
+                )
+            else:
+                return SparkDataFrame(
+                    sdf._jdf.toDF().withSequenceColumn(column_name),
+                    sdf.sparkSession,
+                )
         else:
             cnt = sdf.count()
             if cnt > 0:
@@ -934,21 +947,21 @@ class InternalFrame:
 
     def spark_column_name_for(self, label_or_scol: Union[Label, Column]) -> str:
         """Return the actual Spark column name for the given column label."""
-        if isinstance(label_or_scol, Column):
+        if isinstance(label_or_scol, (Column, SparkConnectColumn)):
             return self.spark_frame.select(label_or_scol).columns[0]
         else:
             return self.field_for(label_or_scol).name
 
     def spark_type_for(self, label_or_scol: Union[Label, Column]) -> DataType:
         """Return DataType for the given column label."""
-        if isinstance(label_or_scol, Column):
+        if isinstance(label_or_scol, (Column, SparkConnectColumn)):
             return self.spark_frame.select(label_or_scol).schema[0].dataType
         else:
             return self.field_for(label_or_scol).spark_type
 
     def spark_column_nullable_for(self, label_or_scol: Union[Label, Column]) -> bool:
         """Return nullability for the given column label."""
-        if isinstance(label_or_scol, Column):
+        if isinstance(label_or_scol, (Column, SparkConnectColumn)):
             return self.spark_frame.select(label_or_scol).schema[0].nullable
         else:
             return self.field_for(label_or_scol).nullable

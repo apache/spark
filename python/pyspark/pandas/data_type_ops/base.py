@@ -24,7 +24,7 @@ import numpy as np
 import pandas as pd
 from pandas.api.types import CategoricalDtype
 
-from pyspark.sql import functions as F, Column
+from pyspark.sql import functions as F, Column as PySparkColumn
 from pyspark.sql.types import (
     ArrayType,
     BinaryType,
@@ -52,6 +52,10 @@ from pyspark.pandas.typedef.typehints import (
     extension_object_dtypes_available,
     spark_type_to_pandas_dtype,
 )
+
+# For supporting Spark Connect
+from pyspark.sql.connect.column import Column as SparkConnectColumn
+from pyspark.sql.utils import is_remote
 
 if extension_dtypes_available:
     from pandas import Int8Dtype, Int16Dtype, Int32Dtype, Int64Dtype
@@ -470,6 +474,7 @@ class DataTypeOps(object, metaclass=ABCMeta):
         else:
             from pyspark.pandas.base import column_op
 
+            Column = SparkConnectColumn if is_remote() else PySparkColumn
             return column_op(Column.__eq__)(left, right)
 
     def ne(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
@@ -477,6 +482,7 @@ class DataTypeOps(object, metaclass=ABCMeta):
 
         _sanitize_list_like(right)
 
+        Column = SparkConnectColumn if is_remote() else PySparkColumn
         return column_op(Column.__ne__)(left, right)
 
     def invert(self, operand: IndexOpsLike) -> IndexOpsLike:

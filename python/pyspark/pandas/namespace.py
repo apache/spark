@@ -94,6 +94,8 @@ from pyspark.pandas.spark.utils import as_nullable_spark_type, force_decimal_pre
 from pyspark.pandas.indexes import Index, DatetimeIndex, TimedeltaIndex
 from pyspark.pandas.indexes.multi import MultiIndex
 
+# For Supporting Spark Connect
+from pyspark.sql.connect.column import Column as SparkConnectColumn
 
 __all__ = [
     "from_pandas",
@@ -3427,7 +3429,7 @@ def merge_asof(
     else:
         on = None
 
-    if tolerance is not None and not isinstance(tolerance, Column):
+    if tolerance is not None and not isinstance(tolerance, (Column, SparkConnectColumn)):
         tolerance = F.lit(tolerance)
 
     as_of_joined_table = left_table._joinAsOf(

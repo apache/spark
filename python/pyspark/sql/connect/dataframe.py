@@ -79,6 +79,7 @@ if TYPE_CHECKING:
         ArrowMapIterFunction,
     )
     from pyspark.sql.connect.session import SparkSession
+    from pyspark.pandas.frame import DataFrame as PandasOnSparkDataFrame
 
 
 class DataFrame:
@@ -1565,11 +1566,15 @@ class DataFrame:
     def localCheckpoint(self, *args: Any, **kwargs: Any) -> None:
         raise NotImplementedError("localCheckpoint() is not implemented.")
 
-    def to_pandas_on_spark(self, *args: Any, **kwargs: Any) -> None:
-        raise NotImplementedError("to_pandas_on_spark() is not implemented.")
+    def to_pandas_on_spark(
+        self, index_col: Optional[Union[str, List[str]]] = None
+    ) -> "PandasOnSparkDataFrame":
+        return PySparkDataFrame.to_pandas_on_spark(self, index_col)
 
-    def pandas_api(self, *args: Any, **kwargs: Any) -> None:
-        raise NotImplementedError("pandas_api() is not implemented.")
+    def pandas_api(
+        self, index_col: Optional[Union[str, List[str]]] = None
+    ) -> "PandasOnSparkDataFrame":
+        return PySparkDataFrame.pandas_api(self, index_col)
 
     def registerTempTable(self, name: str) -> None:
         warnings.warn("Deprecated in 2.0, use createOrReplaceTempView instead.", FutureWarning)

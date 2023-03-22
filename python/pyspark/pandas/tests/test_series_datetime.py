@@ -26,7 +26,7 @@ from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
 
 
-class SeriesDateTimeTest(PandasOnSparkTestCase, SQLTestUtils):
+class SeriesDateTimeTestsMixin:
     @property
     def pdf1(self):
         date1 = pd.Series(pd.date_range("2012-1-1 12:45:31", periods=3, freq="M"))
@@ -281,6 +281,10 @@ class SeriesDateTimeTest(PandasOnSparkTestCase, SQLTestUtils):
         self.assertRaisesRegex(
             ValueError, "Cannot call DatetimeMethods on type LongType", lambda: ps.Series([0]).dt
         )
+
+
+class SeriesDateTimeTests(SeriesDateTimeTestsMixin, PandasOnSparkTestCase, SQLTestUtils):
+    pass
 
 
 if __name__ == "__main__":
