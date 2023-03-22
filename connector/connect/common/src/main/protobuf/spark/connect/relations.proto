@@ -108,8 +108,8 @@ message SQL {
   string query = 1;
 
   // (Optional) A map of parameter names to string values that are parsed as SQL literal expressions.
-  // For example, map keys: "abc", "def_1",
-  //              map values: "1", "'abc'", "DATE'2023-03-21'".
+  // For example, map keys: "rank", "name", "birthdate",
+  //              map values: "1", "'Steven'", "DATE'2023-03-21'".
   map<string, string> args = 2;
 }
 

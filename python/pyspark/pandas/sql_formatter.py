@@ -103,9 +103,9 @@ def sql(
 
             Also note that the index name(s) should be matched to the existing name.
     args : dict
-        A dictionary of parameter names to string values that are parsed as SQL literal expressions.
-        For example, dict keys: "abc", "def_1",
-                     dict values: "1", "'abc'", "DATE'2023-03-21'".
+        A dictionary of parameter names to string values that are parsed as SQL literal
+        expressions. For example, dict keys: "rank", "name", "birthdate"; dict values:
+        "1", "'Steven'", "DATE'2023-03-21'".
 
         .. versionadded:: 3.4.0
 
