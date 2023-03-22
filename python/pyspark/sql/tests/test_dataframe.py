@@ -43,6 +43,7 @@ from pyspark.sql.types import (
     FloatType,
     DayTimeIntervalType,
 )
+from pyspark.storagelevel import StorageLevel
 from pyspark.errors import (
     AnalysisException,
     IllegalArgumentException,
@@ -1029,7 +1030,30 @@ class DataFrameTestsMixin:
             # works with crossJoin
             self.assertEqual(1, df1.crossJoin(df2).count())
 
-    def test_cache(self):
+    def test_cache_dataframe(self):
+        df = self.spark.createDataFrame([(2, 2), (3, 3)])
+        try:
+            self.assertEqual(df.storageLevel, StorageLevel.NONE)
+
+            df.cache()
+            self.assertEqual(df.storageLevel, StorageLevel.MEMORY_AND_DISK)
+
+            df.unpersist()
+            self.assertEqual(df.storageLevel, StorageLevel.NONE)
+
+            df.persist()
+            self.assertEqual(df.storageLevel, StorageLevel.MEMORY_AND_DISK_DESER)
+
+            df.unpersist(blocking=True)
+            self.assertEqual(df.storageLevel, StorageLevel.NONE)
+
+            df.persist(StorageLevel.DISK_ONLY)
+            self.assertEqual(df.storageLevel, StorageLevel.DISK_ONLY)
+        finally:
+            df.unpersist()
+            self.assertEqual(df.storageLevel, StorageLevel.NONE)
+
+    def test_cache_table(self):
         spark = self.spark
         with self.tempView("tab1", "tab2"):
             spark.createDataFrame([(2, 2), (3, 3)]).createOrReplaceTempView("tab1")
