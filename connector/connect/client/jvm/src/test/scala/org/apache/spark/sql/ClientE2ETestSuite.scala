@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.StringEncoder
 import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.connect.client.util.{IntegrationTestUtils, RemoteSparkSession}
-import org.apache.spark.sql.functions.{aggregate, array, broadcast, col, count, lit, rand, sequence, shuffle, struct, transform, udf}
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 
 class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper {
@@ -486,6 +486,19 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper {
     }
   }
 
+  private def validateMyTypeResult(result: Array[(MyType, MyType, MyType)]): Unit = {
+    result.zipWithIndex.foreach { case (row, i) =>
+      val t1 = row._1
+      val t2 = row._2
+      val t3 = row._3
+      assert(t1 === t2)
+      assert(t2 === t3)
+      assert(t1.id == i)
+      assert(t1.a == t1.id % 2)
+      assert(t1.b == t1.id / 10.0d)
+    }
+  }
+
   test("Dataset collect complex type") {
     val session = spark
     import session.implicits._
@@ -502,12 +515,28 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper {
     assert(numRows === 1000)
   }
 
+  test("Dataset typed select - multiple columns") {
+    val result = spark.range(1000).select(count("id"), sum("id")).first()
+    assert(result.getLong(0) === 1000)
+    assert(result.getLong(1) === 499500)
+  }
+
   test("Dataset typed select - complex column") {
     val session = spark
     import session.implicits._
     val ds = session
       .range(3)
       .select(struct(generateMyTypeColumns: _*).as[MyType])
+    validateMyTypeResult(ds.collect())
+  }
+
+  test("Dataset typed select - multiple complex columns") {
+    val session = spark
+    import session.implicits._
+    val s = struct(generateMyTypeColumns: _*).as[MyType]
+    val ds = session
+      .range(3)
+      .select(s, s, s)
     validateMyTypeResult(ds.collect())
   }
 

@@ -47,7 +47,7 @@ class DateType private() extends DatetimeType {
    */
   override def defaultSize: Int = 4
 
-  override def physicalDataType: PhysicalDataType = PhysicalIntegerType
+  private[sql] override def physicalDataType: PhysicalDataType = PhysicalIntegerType
 
   private[spark] override def asNullable: DateType = this
 }

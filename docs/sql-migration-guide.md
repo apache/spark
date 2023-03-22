@@ -104,7 +104,7 @@ license: |
 
   - In Spark 3.2, the following meta-characters are escaped in the `show()` action. In Spark 3.1 or earlier, the following metacharacters are output as it is.
     * `\n` (new line)
-    * `\r` (carrige ret)
+    * `\r` (carriage ret)
     * `\t` (horizontal tab)
     * `\f` (form feed)
     * `\b` (backspace)

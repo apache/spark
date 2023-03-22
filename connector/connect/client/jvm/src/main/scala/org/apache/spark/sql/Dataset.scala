@@ -25,7 +25,7 @@ import scala.util.control.NonFatal
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
-import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{PrimitiveLongEncoder, StringEncoder, UnboundRowEncoder}
+import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{PrimitiveLongEncoder, ProductEncoder, StringEncoder, UnboundRowEncoder}
 import org.apache.spark.sql.catalyst.expressions.RowOrdering
 import org.apache.spark.sql.connect.client.SparkResult
 import org.apache.spark.sql.connect.common.DataTypeProtoConverter
@@ -1020,11 +1020,8 @@ class Dataset[T] private[sql] (
    * @since 3.4.0
    */
   @scala.annotation.varargs
-  def select(cols: Column*): DataFrame = sparkSession.newDataFrame { builder =>
-    builder.getProjectBuilder
-      .setInput(plan.getRoot)
-      .addAllExpressions(cols.map(_.expr).asJava)
-  }
+  def select(cols: Column*): DataFrame =
+    selectUntyped(UnboundRowEncoder, cols).asInstanceOf[DataFrame]
 
   /**
    * Selects a set of columns. This is a variant of `select` that can only select existing columns
@@ -1083,6 +1080,76 @@ class Dataset[T] private[sql] (
         .addExpressions(expr)
     }
   }
+
+  /**
+   * Internal helper function for building typed selects that return tuples. For simplicity and
+   * code reuse, we do this without the help of the type system and then use helper functions that
+   * cast appropriately for the user facing interface.
+   */
+  private def selectUntyped(columns: TypedColumn[_, _]*): Dataset[_] = {
+    val encoder = ProductEncoder.tuple(columns.map(_.encoder))
+    selectUntyped(encoder, columns)
+  }
+
+  /**
+   * Internal helper function for all select methods. The only difference between the select
+   * methods and typed select methods is the encoder used to build the return dataset.
+   */
+  private def selectUntyped(encoder: AgnosticEncoder[_], cols: Seq[Column]): Dataset[_] = {
+    sparkSession.newDataset(encoder) { builder =>
+      builder.getProjectBuilder
+        .setInput(plan.getRoot)
+        .addAllExpressions(cols.map(_.expr).asJava)
+    }
+  }
+
+  /**
+   * Returns a new Dataset by computing the given [[Column]] expressions for each element.
+   *
+   * @group typedrel
+   * @since 3.4.0
+   */
+  def select[U1, U2](c1: TypedColumn[T, U1], c2: TypedColumn[T, U2]): Dataset[(U1, U2)] =
+    selectUntyped(c1, c2).asInstanceOf[Dataset[(U1, U2)]]
+
+  /**
+   * Returns a new Dataset by computing the given [[Column]] expressions for each element.
+   *
+   * @group typedrel
+   * @since 3.4.0
+   */
+  def select[U1, U2, U3](
+      c1: TypedColumn[T, U1],
+      c2: TypedColumn[T, U2],
+      c3: TypedColumn[T, U3]): Dataset[(U1, U2, U3)] =
+    selectUntyped(c1, c2, c3).asInstanceOf[Dataset[(U1, U2, U3)]]
+
+  /**
+   * Returns a new Dataset by computing the given [[Column]] expressions for each element.
+   *
+   * @group typedrel
+   * @since 3.4.0
+   */
+  def select[U1, U2, U3, U4](
+      c1: TypedColumn[T, U1],
+      c2: TypedColumn[T, U2],
+      c3: TypedColumn[T, U3],
+      c4: TypedColumn[T, U4]): Dataset[(U1, U2, U3, U4)] =
+    selectUntyped(c1, c2, c3, c4).asInstanceOf[Dataset[(U1, U2, U3, U4)]]
+
+  /**
+   * Returns a new Dataset by computing the given [[Column]] expressions for each element.
+   *
+   * @group typedrel
+   * @since 3.4.0
+   */
+  def select[U1, U2, U3, U4, U5](
+      c1: TypedColumn[T, U1],
+      c2: TypedColumn[T, U2],
+      c3: TypedColumn[T, U3],
+      c4: TypedColumn[T, U4],
+      c5: TypedColumn[T, U5]): Dataset[(U1, U2, U3, U4, U5)] =
+    selectUntyped(c1, c2, c3, c4, c5).asInstanceOf[Dataset[(U1, U2, U3, U4, U5)]]
 
   /**
    * Filters rows using the given condition.

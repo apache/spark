@@ -401,8 +401,8 @@ class Summarizer:
         The following metrics are accepted (case sensitive):
          - mean: a vector that contains the coefficient-wise mean.
          - sum: a vector that contains the coefficient-wise sum.
-         - variance: a vector tha contains the coefficient-wise variance.
-         - std: a vector tha contains the coefficient-wise standard deviation.
+         - variance: a vector that contains the coefficient-wise variance.
+         - std: a vector that contains the coefficient-wise standard deviation.
          - count: the count of all vectors seen.
          - numNonzeros: a vector with the number of non-zeros for each coefficients
          - max: the maximum for each coefficient.
