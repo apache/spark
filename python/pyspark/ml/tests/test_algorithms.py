@@ -30,6 +30,7 @@ from pyspark.ml.classification import (
 from pyspark.ml.clustering import DistributedLDAModel, KMeans, LocalLDAModel, LDA, LDAModel
 from pyspark.ml.fpm import FPGrowth
 from pyspark.ml.linalg import Matrices, Vectors, DenseVector
+from pyspark.ml.functions import array_to_vector
 from pyspark.ml.recommendation import ALS
 from pyspark.ml.regression import GeneralizedLinearRegression, LinearRegression
 from pyspark.sql import Row
@@ -41,13 +42,13 @@ class LogisticRegressionTest(SparkSessionTestCase):
 
         df = self.spark.createDataFrame(
             [
-                (1.0, 1.0, Vectors.dense(0.0, 5.0)),
-                (0.0, 2.0, Vectors.dense(1.0, 2.0)),
-                (1.0, 3.0, Vectors.dense(2.0, 1.0)),
-                (0.0, 4.0, Vectors.dense(3.0, 3.0)),
+                (1.0, 1.0, [0.0, 5.0]),
+                (0.0, 2.0, [1.0, 2.0]),
+                (1.0, 3.0, [2.0, 1.0]),
+                (0.0, 4.0, [3.0, 3.0]),
             ],
             ["label", "weight", "features"],
-        )
+        ).withColumn("features", array_to_vector("features"))
 
         lor = LogisticRegression(
             regParam=0.01,

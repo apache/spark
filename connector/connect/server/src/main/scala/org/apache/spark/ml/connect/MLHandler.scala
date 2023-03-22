@@ -59,7 +59,7 @@ object MLHandler {
         val getModelAttrProto = mlCommand.getFetchModelAttr
         val (model, algo) =
           sessionHolder.mlCache.modelCache.get(getModelAttrProto.getModelRef.getId)
-        algo.getModelAttr(model, getModelAttrProto.getName).left.get
+        algo.getModelAttr(model, getModelAttrProto.getName).get.left.get
 
       case proto.MlCommand.MlCommandTypeCase.FETCH_MODEL_SUMMARY_ATTR =>
         val getModelSummaryAttrProto = mlCommand.getFetchModelSummaryAttr
@@ -200,7 +200,7 @@ object MLHandler {
         val modelAttrProto = mlRelationProto.getModelAttr
         val (model, algo) =
           sessionHolder.mlCache.modelCache.get(modelAttrProto.getModelRef.getId)
-        algo.getModelAttr(model, modelAttrProto.getName).right.get
+        algo.getModelAttr(model, modelAttrProto.getName).get.right.get
 
       case proto.MlRelation.MlRelationTypeCase.MODEL_SUMMARY_ATTR =>
         val modelSummaryAttr = mlRelationProto.getModelSummaryAttr

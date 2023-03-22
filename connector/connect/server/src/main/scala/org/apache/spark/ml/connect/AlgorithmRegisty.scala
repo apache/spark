@@ -21,7 +21,7 @@ import org.apache.spark.connect.proto
 import org.apache.spark.ml
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.classification.TrainingSummary
-import org.apache.spark.ml.util.MLWriter
+import org.apache.spark.ml.util.{HasTrainingSummary, MLWriter}
 import org.apache.spark.sql.DataFrame
 
 object AlgorithmRegistry {
@@ -40,7 +40,20 @@ abstract class Algorithm {
 
   def initiateEstimator(uid: String): Estimator[_]
 
-  def getModelAttr(model: Model[_], name: String): Either[proto.MlCommandResponse, DataFrame]
+  def getModelAttr(model: Model[_], name: String):
+      Option[Either[proto.MlCommandResponse, DataFrame]] = {
+
+    name match {
+      case "hasSummary" =>
+        if (model.isInstanceOf[HasTrainingSummary]) {
+          Some(Left(
+            Serializer.serializeResponseValue(model.asInstanceOf[HasTrainingSummary].hasSummary)
+          ))
+        } else None
+      case "toString" =>
+        Some(Left(Serializer.serializeResponseValue(model.toString)))
+    }
+  }
 
   def getModelSummaryAttr(
       model: Model[_],
@@ -108,20 +121,23 @@ class LogisticRegressionAlgorithm extends Algorithm {
 
   override def getModelAttr(
       model: Model[_],
-      name: String): Either[proto.MlCommandResponse, DataFrame] = {
-    val lorModel = model.asInstanceOf[ml.classification.LogisticRegressionModel]
-    // TODO: hasSummary
-    name match {
-      case "hasSummary" => Left(Serializer.serializeResponseValue(lorModel.hasSummary))
-      case "numClasses" => Left(Serializer.serializeResponseValue(lorModel.numClasses))
-      case "numFeatures" => Left(Serializer.serializeResponseValue(lorModel.numFeatures))
-      case "intercept" => Left(Serializer.serializeResponseValue(lorModel.intercept))
-      case "interceptVector" => Left(Serializer.serializeResponseValue(lorModel.interceptVector))
-      case "coefficients" => Left(Serializer.serializeResponseValue(lorModel.coefficients))
-      case "coefficientMatrix" =>
-        Left(Serializer.serializeResponseValue(lorModel.coefficientMatrix))
-      case _ =>
-        throw new IllegalArgumentException()
+      name: String): Option[Either[proto.MlCommandResponse, DataFrame]] = {
+
+    super.getModelAttr(model, name).orElse {
+      val lorModel = model.asInstanceOf[ml.classification.LogisticRegressionModel]
+
+      name match {
+        case "numClasses" => Some(Left(Serializer.serializeResponseValue(lorModel.numClasses)))
+        case "numFeatures" => Some(Left(Serializer.serializeResponseValue(lorModel.numFeatures)))
+        case "intercept" => Some(Left(Serializer.serializeResponseValue(lorModel.intercept)))
+        case "interceptVector" =>
+          Some(Left(Serializer.serializeResponseValue(lorModel.interceptVector)))
+        case "coefficients" => Some(Left(Serializer.serializeResponseValue(lorModel.coefficients)))
+        case "coefficientMatrix" =>
+          Some(Left(Serializer.serializeResponseValue(lorModel.coefficientMatrix)))
+        case _ =>
+          None
+      }
     }
   }
 
