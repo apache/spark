@@ -69,11 +69,6 @@ class CogroupedApplyInPandasTests(CogroupedApplyInPandasTestsMixin, ReusedConnec
     def test_wrong_return_type(self):
         super().test_wrong_return_type()
 
-    # TODO(SPARK-42889): Implement DataFrame.cache
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_with_window_function(self):
-        super().test_with_window_function()
-
 
 if __name__ == "__main__":
     from pyspark.sql.tests.connect.test_parity_pandas_cogrouped_map import *  # noqa: F401
