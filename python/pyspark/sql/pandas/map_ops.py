@@ -32,7 +32,9 @@ class PandasMapOpsMixin:
     """
 
     def mapInPandas(
-        self, func: "PandasMapIterFunction", schema: Union[StructType, str], is_barrier: bool
+        self,
+        func: "PandasMapIterFunction", schema: Union[StructType, str],
+        is_barrier: bool = False
     ) -> "DataFrame":
         """
         Maps an iterator of batches in the current :class:`DataFrame` using a Python native
@@ -60,6 +62,7 @@ class PandasMapOpsMixin:
         schema : :class:`pyspark.sql.types.DataType` or str
             the return type of the `func` in PySpark. The value can be either a
             :class:`pyspark.sql.types.DataType` object or a DDL-formatted type string.
+        is_barrier : Use barrier mode execution if True.
 
         Examples
         --------
@@ -97,7 +100,9 @@ class PandasMapOpsMixin:
         return DataFrame(jdf, self.sparkSession)
 
     def mapInArrow(
-        self, func: "ArrowMapIterFunction", schema: Union[StructType, str], is_barrier: bool
+        self,
+        func: "ArrowMapIterFunction", schema: Union[StructType, str],
+        is_barrier: bool = False
     ) -> "DataFrame":
         """
         Maps an iterator of batches in the current :class:`DataFrame` using a Python native
@@ -122,6 +127,7 @@ class PandasMapOpsMixin:
         schema : :class:`pyspark.sql.types.DataType` or str
             the return type of the `func` in PySpark. The value can be either a
             :class:`pyspark.sql.types.DataType` object or a DDL-formatted type string.
+        is_barrier : Use barrier mode execution if True.
 
         Examples
         --------
