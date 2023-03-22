@@ -697,6 +697,8 @@ private[spark] class MapOutputTrackerMaster(
     pool
   }
 
+  private val availableProcessors = Runtime.getRuntime.availableProcessors()
+
   // Make sure that we aren't going to exceed the max RPC message size by making sure
   // we use broadcast to send large map output statuses.
   if (minSizeForBroadcast > maxRpcMessageSize) {
@@ -966,7 +968,7 @@ private[spark] class MapOutputTrackerMaster(
       val parallelAggThreshold = conf.get(
         SHUFFLE_MAP_OUTPUT_PARALLEL_AGGREGATION_THRESHOLD)
       val parallelism = math.min(
-        Runtime.getRuntime.availableProcessors(),
+        availableProcessors,
         statuses.length.toLong * totalSizes.length / parallelAggThreshold + 1).toInt
       if (parallelism <= 1) {
         statuses.filter(_ != null).foreach { s =>

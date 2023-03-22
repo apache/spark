@@ -786,7 +786,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
     }
 
     // Skip no-arg constructors that are just there for kryo.
-    val ctors = allCtors.filter(allowEmptyArgs || _.getParameterTypes.size != 0)
+    val ctors = allCtors.filter(allowEmptyArgs || _.getParameterCount != 0)
     if (ctors.isEmpty) {
       throw QueryExecutionErrors.constructorNotFoundError(nodeName)
     }
@@ -796,7 +796,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
       newArgs ++ otherCopyArgs
     }
     val defaultCtor = ctors.find { ctor =>
-      if (ctor.getParameterTypes.length != allArgs.length) {
+      if (ctor.getParameterCount != allArgs.length) {
         false
       } else if (allArgs.contains(null)) {
         // if there is a `null`, we can't figure out the class, therefore we should just fallback
@@ -806,7 +806,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
         val argsArray: Array[Class[_]] = allArgs.map(_.getClass)
         ClassUtils.isAssignable(argsArray, ctor.getParameterTypes, true /* autoboxing */)
       }
-    }.getOrElse(ctors.maxBy(_.getParameterTypes.length)) // fall back to older heuristic
+    }.getOrElse(ctors.maxBy(_.getParameterCount)) // fall back to older heuristic
 
     try {
       CurrentOrigin.withOrigin(origin) {
@@ -885,7 +885,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
   private lazy val allChildren: Set[TreeNode[_]] = (children ++ innerChildren).toSet[TreeNode[_]]
 
   private def redactMapString[K, V](map: Map[K, V], maxFields: Int): List[String] = {
-    // For security reason, redact the map value if the key is in centain patterns
+    // For security reason, redact the map value if the key is in certain patterns
     val redactedMap = SQLConf.get.redactOptions(map.toMap)
     // construct the redacted map as strings of the format "key=value"
     val keyValuePairs = redactedMap.toSeq.map { item =>

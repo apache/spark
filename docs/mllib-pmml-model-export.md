@@ -9,9 +9,9 @@ license: |
   The ASF licenses this file to You under the Apache License, Version 2.0
   (the "License"); you may not use this file except in compliance with
   the License.  You may obtain a copy of the License at
- 
+
      http://www.apache.org/licenses/LICENSE-2.0
- 
+
   Unless required by applicable law or agreed to in writing, software
   distributed under the License is distributed on an "AS IS" BASIS,
   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -28,14 +28,14 @@ license: |
 
 The table below outlines the `spark.mllib` models that can be exported to PMML and their equivalent PMML model.
 
-<table class="table">
+<table class="table table-striped">
   <thead>
     <tr><th>spark.mllib model</th><th>PMML model</th></tr>
   </thead>
   <tbody>
     <tr>
       <td>KMeansModel</td><td>ClusteringModel</td>
-    </tr>    
+    </tr>
     <tr>
       <td>LinearRegressionModel</td><td>RegressionModel (functionName="regression")</td>
     </tr>

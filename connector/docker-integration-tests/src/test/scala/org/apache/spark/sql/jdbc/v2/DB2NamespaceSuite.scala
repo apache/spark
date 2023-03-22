@@ -68,7 +68,4 @@ class DB2NamespaceSuite extends DockerJDBCIntegrationSuite with V2JDBCNamespaceT
   }
 
   override val supportsDropSchemaCascade: Boolean = false
-
-  testListNamespaces()
-  testDropNamespaces()
 }
