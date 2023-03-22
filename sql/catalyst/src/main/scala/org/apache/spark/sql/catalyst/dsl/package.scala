@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.objects.Invoke
 import org.apache.spark.sql.catalyst.plans.{Inner, JoinType}
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -64,6 +65,7 @@ import org.apache.spark.unsafe.types.UTF8String
  */
 package object dsl {
   trait ImplicitOperators {
+    val conf = SQLConf.get
     def expr: Expression
 
     def unary_+ : Expression = UnaryPositive(expr)
@@ -100,35 +102,58 @@ package object dsl {
       case _ => In(expr, list)
     }
 
-    def like(other: Expression, escapeChar: Char = '\\'): Predicate =
-      Like(expr, other, escapeChar)
+    def like(other: Expression, escapeChar: Char = '\\'): Expression = {
+      if (conf.regexEngine == "joni") {
+        LikeJoni(expr, other, escapeChar)
+      } else {
+        Like(expr, other, escapeChar)
+      }
+    }
     def ilike(other: Expression, escapeChar: Char = '\\'): Expression =
       new ILike(expr, other, escapeChar)
-    def rlike(other: Expression): Predicate = RLike(expr, other)
-    def likeAll(others: Expression*): Predicate =
-      LikeAll(expr, others.map(_.eval(EmptyRow).asInstanceOf[UTF8String]))
-    def notLikeAll(others: Expression*): Predicate =
-      NotLikeAll(expr, others.map(_.eval(EmptyRow).asInstanceOf[UTF8String]))
-    def likeAny(others: Expression*): Predicate =
-      LikeAny(expr, others.map(_.eval(EmptyRow).asInstanceOf[UTF8String]))
-    def notLikeAny(others: Expression*): Predicate =
-      NotLikeAny(expr, others.map(_.eval(EmptyRow).asInstanceOf[UTF8String]))
+
+    def rlike(other: Expression): Expression = {
+      if (conf.regexEngine == "joni") {
+        RLikeJoni(expr, other)
+      } else {
+        RLike(expr, other)
+      }
+    }
+
+    def likeAll(others: Expression*): Expression = {
+      if (conf.regexEngine == "joni") {
+        LikeAllJoni(expr, others.map(_.eval(EmptyRow).asInstanceOf[UTF8String]))
+      } else {
+        LikeAll(expr, others.map(_.eval(EmptyRow).asInstanceOf[UTF8String]))
+      }
+    }
+
+    def notLikeAll(others: Expression*): Expression = {
+      if (conf.regexEngine == "joni") {
+        NotLikeAllJoni(expr, others.map(_.eval(EmptyRow).asInstanceOf[UTF8String]))
+      } else {
+        NotLikeAll(expr, others.map(_.eval(EmptyRow).asInstanceOf[UTF8String]))
+      }
+    }
+
+    def likeAny(others: Expression*): Expression = {
+      if (conf.regexEngine == "joni") {
+        LikeAnyJoni(expr, others.map(_.eval(EmptyRow).asInstanceOf[UTF8String]))
+      } else {
+        LikeAny(expr, others.map(_.eval(EmptyRow).asInstanceOf[UTF8String]))
+      }
+    }
+
+    def notLikeAny(others: Expression*): Expression = {
+      if (conf.regexEngine == "joni") {
+        NotLikeAnyJoni(expr, others.map(_.eval(EmptyRow).asInstanceOf[UTF8String]))
+      } else {
+        NotLikeAny(expr, others.map(_.eval(EmptyRow).asInstanceOf[UTF8String]))
+      }
+    }
     def contains(other: Expression): Predicate = Contains(expr, other)
     def startsWith(other: Expression): Predicate = StartsWith(expr, other)
     def endsWith(other: Expression): Predicate = EndsWith(expr, other)
-
-    def jLike(other: Expression, escapeChar: Char = '\\'): Predicate =
-      LikeJoni(expr, other, escapeChar) // just for test
-    def jRlike(other: Expression): Predicate = RLikeJoni(expr, other) // just for test
-    def jLikeAll(others: Expression*): Predicate =
-      LikeAllJoni(expr, others.map(_.eval(EmptyRow).asInstanceOf[UTF8String])) // just for test
-    def jNotLikeAll(others: Expression*): Predicate =
-      NotLikeAllJoni(expr, others.map(_.eval(EmptyRow).asInstanceOf[UTF8String])) // just for test
-    def jLikeAny(others: Expression*): Predicate =
-      LikeAnyJoni(expr, others.map(_.eval(EmptyRow).asInstanceOf[UTF8String])) // just for test
-    def jNotLikeAny(others: Expression*): Predicate =
-      NotLikeAnyJoni(expr, others.map(_.eval(EmptyRow).asInstanceOf[UTF8String])) // just for test
-
     def substr(pos: Expression, len: Expression = Literal(Int.MaxValue)): Expression =
       Substring(expr, pos, len)
     def substring(pos: Expression, len: Expression = Literal(Int.MaxValue)): Expression =

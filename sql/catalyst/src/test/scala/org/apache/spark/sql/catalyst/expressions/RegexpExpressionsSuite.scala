@@ -31,7 +31,7 @@ import org.apache.spark.sql.types.{IntegerType, StringType}
 /**
  * Unit tests for regular expression (regexp) related SQL expressions.
  */
-class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
+abstract class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   /**
    * Check if a given expression evaluates to an expected output, in case the input is
@@ -50,6 +50,13 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     val regex = $"a".string.at(0)
     checkEvaluation(mkExpr(regex), expected, create_row(input)) // check row input
+  }
+
+  def getRegexEngine(): String
+
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    conf.setConf(SQLConf.REGEX_ENGINE, getRegexEngine)
   }
 
   test("LIKE ALL") {
@@ -498,15 +505,6 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       StringSplit(Literal("\"quote"), Literal("\"quote"), Literal(-1)) :: Nil)
   }
 
-  test("SPARK-30759: cache initialization for literal patterns") {
-    val expr = "A" like Literal.create("a", StringType)
-    expr.eval()
-    val cache = expr.getClass.getSuperclass
-      .getDeclaredFields.filter(_.getName.endsWith("cache")).head
-    cache.setAccessible(true)
-    assert(cache.get(expr).asInstanceOf[java.util.regex.Pattern].pattern().contains("a"))
-  }
-
   test("SPARK-34814: LikeSimplification should handle NULL") {
     withSQLConf(SQLConf.OPTIMIZER_EXCLUDED_RULES.key ->
       ConstantFolding.getClass.getName.stripSuffix("$")) {
@@ -571,4 +569,21 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       )
     )
   }
+}
+
+class RegexpExpressionsJavaSuite extends RegexpExpressionsSuite {
+  override def getRegexEngine(): String = "java"
+
+  test("SPARK-30759: cache initialization for literal patterns") {
+    val expr = "A" like Literal.create("a", StringType)
+    expr.eval()
+    val cache = expr.getClass.getSuperclass
+      .getDeclaredFields.filter(_.getName.endsWith("cache")).head
+    cache.setAccessible(true)
+    assert(cache.get(expr).asInstanceOf[java.util.regex.Pattern].pattern().contains("a"))
+  }
+}
+
+class RegexpExpressionsJoniSuite extends RegexpExpressionsSuite {
+  override def getRegexEngine(): String = "joni"
 }

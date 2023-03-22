@@ -23,9 +23,17 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{BooleanType, StringType}
 
-class LikeSimplificationSuite extends PlanTest {
+abstract class LikeSimplificationSuite extends PlanTest {
+
+  def getRegexEngine(): String
+
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    conf.setConf(SQLConf.REGEX_ENGINE, getRegexEngine)
+  }
 
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =
@@ -261,4 +269,12 @@ class LikeSimplificationSuite extends PlanTest {
 
     comparePlans(Optimize.execute(originalQuery), originalQuery)
   }
+}
+
+class LikeSimplificationJavaSuite extends LikeSimplificationSuite {
+  override def getRegexEngine(): String = "java"
+}
+
+class LikeSimplificationJoniSuite extends LikeSimplificationSuite {
+  override def getRegexEngine(): String = "joni"
 }
