@@ -695,10 +695,11 @@ class SparkConnectPlanner(val session: SparkSession) {
         logical.LocalRelation(attributes, data.map(_.copy()).toSeq)
       } else {
         def udtToSqlType(dt: DataType): DataType = dt match {
-          case udt: UserDefinedType[_] => udt.sqlType
+          case udt: UserDefinedType[_] => udtToSqlType(udt.sqlType)
           case StructType(fields) =>
-            val newFields = fields.map { case StructField(name, dataType, nullable, metadata) =>
-              StructField(name, udtToSqlType(dataType), nullable, metadata)
+            val newFields = fields.zipWithIndex.map {
+              case (StructField(name, dataType, nullable, metadata), i) =>
+                StructField(s"${name}_$i", udtToSqlType(dataType), nullable, metadata)
             }
             StructType(newFields)
           case ArrayType(elementType, containsNull) =>
@@ -711,7 +712,10 @@ class SparkConnectPlanner(val session: SparkSession) {
         val sqlTypeOnlySchema = udtToSqlType(schema).asInstanceOf[StructType]
 
         val project = Dataset
-          .ofRows(session, logicalPlan = logical.LocalRelation(attributes))
+          .ofRows(
+            session,
+            logicalPlan = logical.LocalRelation(
+              udtToSqlType(structType).asInstanceOf[StructType].toAttributes))
           .toDF(sqlTypeOnlySchema.names: _*)
           .to(sqlTypeOnlySchema)
           .logicalPlan

@@ -898,11 +898,12 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         # |    |    |    |-- value: long (valueContainsNull = true)
 
         for data in [data1, data2, data3, data4, data5]:
-            cdf = self.connect.createDataFrame(data)
-            sdf = self.spark.createDataFrame(data)
+            with self.subTest(data=data):
+                cdf = self.connect.createDataFrame(data)
+                sdf = self.spark.createDataFrame(data)
 
-            self.assertEqual(cdf.schema, sdf.schema)
-            self.assertEqual(cdf.collect(), sdf.collect())
+                self.assertEqual(cdf.schema, sdf.schema)
+                self.assertEqual(cdf.collect(), sdf.collect())
 
     def test_create_df_from_objects(self):
         data = [MyObject(1, "1"), MyObject(2, "2")]
