@@ -34,7 +34,7 @@ class PandasMapOpsMixin:
     def mapInPandas(
         self,
         func: "PandasMapIterFunction", schema: Union[StructType, str],
-        is_barrier: bool = False
+        isBarrier: bool = False
     ) -> "DataFrame":
         """
         Maps an iterator of batches in the current :class:`DataFrame` using a Python native
@@ -62,7 +62,7 @@ class PandasMapOpsMixin:
         schema : :class:`pyspark.sql.types.DataType` or str
             the return type of the `func` in PySpark. The value can be either a
             :class:`pyspark.sql.types.DataType` object or a DDL-formatted type string.
-        is_barrier : Use barrier mode execution if True.
+        isBarrier : Use barrier mode execution if True.
 
         Examples
         --------
@@ -96,13 +96,13 @@ class PandasMapOpsMixin:
             func, returnType=schema, functionType=PythonEvalType.SQL_MAP_PANDAS_ITER_UDF
         )  # type: ignore[call-overload]
         udf_column = udf(*[self[col] for col in self.columns])
-        jdf = self._jdf.mapInPandas(udf_column._jc.expr(), is_barrier)
+        jdf = self._jdf.mapInPandas(udf_column._jc.expr(), isBarrier)
         return DataFrame(jdf, self.sparkSession)
 
     def mapInArrow(
         self,
         func: "ArrowMapIterFunction", schema: Union[StructType, str],
-        is_barrier: bool = False
+        isBarrier: bool = False
     ) -> "DataFrame":
         """
         Maps an iterator of batches in the current :class:`DataFrame` using a Python native
@@ -127,7 +127,7 @@ class PandasMapOpsMixin:
         schema : :class:`pyspark.sql.types.DataType` or str
             the return type of the `func` in PySpark. The value can be either a
             :class:`pyspark.sql.types.DataType` object or a DDL-formatted type string.
-        is_barrier : Use barrier mode execution if True.
+        isBarrier : Use barrier mode execution if True.
 
         Examples
         --------
@@ -163,7 +163,7 @@ class PandasMapOpsMixin:
             func, returnType=schema, functionType=PythonEvalType.SQL_MAP_ARROW_ITER_UDF
         )  # type: ignore[call-overload]
         udf_column = udf(*[self[col] for col in self.columns])
-        jdf = self._jdf.pythonMapInArrow(udf_column._jc.expr(), is_barrier)
+        jdf = self._jdf.pythonMapInArrow(udf_column._jc.expr(), isBarrier)
         return DataFrame(jdf, self.sparkSession)
 
 
