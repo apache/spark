@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.trees.{BinaryLike, SQLQueryContext, UnaryLike}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{ARRAYS_ZIP, CONCAT, TreePattern}
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
@@ -67,7 +68,7 @@ trait BinaryArrayExpressionWithImplicitCast
 
   override def checkInputDataTypes(): TypeCheckResult = {
     (left.dataType, right.dataType) match {
-      case (ArrayType(e1, _), ArrayType(e2, _)) if e1.sameType(e2) =>
+      case (ArrayType(e1, _), ArrayType(e2, _)) if DataTypeUtils.sameType(e1, e2) =>
         TypeCheckResult.TypeCheckSuccess
       case _ =>
         DataTypeMismatch(
@@ -245,7 +246,7 @@ case class MapContainsKey(left: Expression, right: Expression)
         DataTypeMismatch(
           errorSubClass = "NULL_TYPE",
           Map("functionName" -> toSQLId(prettyName)))
-      case (MapType(kt, _, _), dt) if kt.sameType(dt) =>
+      case (MapType(kt, _, _), dt) if DataTypeUtils.sameType(kt, dt) =>
         TypeUtils.checkForOrderingExpr(kt, prettyName)
       case _ =>
         DataTypeMismatch(
@@ -1327,7 +1328,7 @@ case class ArrayContains(left: Expression, right: Expression)
             "inputSql" -> toSQLExpr(left),
             "inputType" -> toSQLType(left.dataType))
         )
-      case (ArrayType(e1, _), e2) if e1.sameType(e2) =>
+      case (ArrayType(e1, _), e2) if DataTypeUtils.sameType(e1, e2) =>
         TypeUtils.checkForOrderingExpr(e2, prettyName)
       case _ =>
         DataTypeMismatch(
@@ -1512,7 +1513,7 @@ case class ArrayPrepend(left: Expression, right: Expression)
 
   override def checkInputDataTypes(): TypeCheckResult = {
     (left.dataType, right.dataType) match {
-      case (ArrayType(e1, _), e2) if e1.sameType(e2) => TypeCheckResult.TypeCheckSuccess
+      case (ArrayType(e1, _), e2) if DataTypeUtils.sameType(e1, e2) => TypeCheckResult.TypeCheckSuccess
       case (ArrayType(e1, _), e2) => DataTypeMismatch(
         errorSubClass = "ARRAY_FUNCTION_DIFF_TYPES",
         messageParameters = Map(
@@ -2266,7 +2267,7 @@ case class ArrayPosition(left: Expression, right: Expression)
             "inputSql" -> toSQLExpr(left),
             "inputType" -> toSQLType(left.dataType))
         )
-      case (ArrayType(e1, _), e2) if e1.sameType(e2) =>
+      case (ArrayType(e1, _), e2) if DataTypeUtils.sameType(e1, e2) =>
         TypeUtils.checkForOrderingExpr(e2, prettyName)
       case _ =>
         DataTypeMismatch(
@@ -2426,7 +2427,7 @@ case class ElementAt(
             "inputSql" -> toSQLExpr(right),
             "inputType" -> toSQLType(right.dataType))
         )
-      case (MapType(e1, _, _), e2) if (!e2.sameType(e1)) =>
+      case (MapType(e1, _, _), e2) if (!DataTypeUtils.sameType(e2, e1)) =>
         DataTypeMismatch(
           errorSubClass = "MAP_FUNCTION_DIFF_TYPES",
           messageParameters = Map(
@@ -3026,7 +3027,7 @@ case class Sequence(
     val startType = start.dataType
     def stepType = stepOpt.get.dataType
     val typesCorrect =
-      startType.sameType(stop.dataType) &&
+      DataTypeUtils.sameType(startType, stop.dataType) &&
         (startType match {
           case TimestampType | TimestampNTZType =>
             stepOpt.isEmpty || CalendarIntervalType.acceptsType(stepType) ||
@@ -3037,7 +3038,7 @@ case class Sequence(
               YearMonthIntervalType.acceptsType(stepType) ||
               DayTimeIntervalType.acceptsType(stepType)
           case _: IntegralType =>
-            stepOpt.isEmpty || stepType.sameType(startType)
+            stepOpt.isEmpty || DataTypeUtils.sameType(stepType, startType)
           case _ => false
         })
 
@@ -3715,7 +3716,7 @@ case class ArrayRemove(left: Expression, right: Expression)
 
   override def checkInputDataTypes(): TypeCheckResult = {
     (left.dataType, right.dataType) match {
-      case (ArrayType(e1, _), e2) if e1.sameType(e2) =>
+      case (ArrayType(e1, _), e2) if DataTypeUtils.sameType(e1, e2) =>
         TypeUtils.checkForOrderingExpr(e2, prettyName)
       case _ =>
         DataTypeMismatch(
@@ -4791,7 +4792,7 @@ case class ArrayInsert(srcArrayExpr: Expression, posExpr: Expression, itemExpr: 
             "inputSql" -> toSQLExpr(second),
             "inputType" -> toSQLType(second.dataType))
         )
-      case (ArrayType(e1, _), e2, e3) if e1.sameType(e3) =>
+      case (ArrayType(e1, _), e2, e3) if DataTypeUtils.sameType(e1, e3) =>
         TypeCheckResult.TypeCheckSuccess
       case _ =>
         DataTypeMismatch(
@@ -5078,7 +5079,7 @@ case class ArrayAppend(left: Expression, right: Expression)
 
   override def checkInputDataTypes(): TypeCheckResult = {
     (left.dataType, right.dataType) match {
-      case (ArrayType(e1, _), e2) if e1.sameType(e2) => TypeCheckResult.TypeCheckSuccess
+      case (ArrayType(e1, _), e2) if DataTypeUtils.sameType(e1, e2) => TypeCheckResult.TypeCheckSuccess
       case (ArrayType(e1, _), e2) => DataTypeMismatch(
         errorSubClass = "ARRAY_FUNCTION_DIFF_TYPES",
         messageParameters = Map(
