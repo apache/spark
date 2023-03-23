@@ -172,16 +172,16 @@ abstract class Optimizer(catalogManager: CatalogManager)
     Batch("Pullup Correlated Expressions", Once,
       OptimizeOneRowRelationSubquery,
       PullupCorrelatedPredicates) ::
-    // Subquery batch applies the optimizer rules recursively. Therefore, it makes no sense
-    // to enforce idempotence on it and we change this batch from Once to FixedPoint(1).
-    Batch("Subquery", FixedPoint(1),
-      OptimizeSubqueries) ::
     Batch("Preparation for RewriteSubquery", fixedPoint,
       // Boolean simplification is done before RewritePredicateSubquery so that predicates
       // containing IN and EXISTS are simplified before rewriting. Eg. NOT(NOT IN) = IN
       BooleanSimplification) ::
     Batch("RewriteSubquery", Once,
       RewritePredicateSubquery) ::
+    // Subquery batch applies the optimizer rules recursively. Therefore, it makes no sense
+    // to enforce idempotence on it and we change this batch from Once to FixedPoint(1).
+    Batch("Subquery", FixedPoint(1),
+      OptimizeSubqueries) ::
     Batch("Replace Operators", fixedPoint,
       RewriteExceptAll,
       RewriteIntersectAll,
