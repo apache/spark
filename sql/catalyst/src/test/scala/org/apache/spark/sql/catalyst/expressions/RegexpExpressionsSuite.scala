@@ -286,6 +286,12 @@ abstract class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalH
     checkLiteralRow("abc"  rlike _, "^bc", false)
     checkLiteralRow("abc"  rlike _, "^ab", true)
     checkLiteralRow("abc"  rlike _, "^bc", false)
+
+    val fun = if (conf.getConf(SQLConf.REGEX_ENGINE) == "java") {
+      "rlike"
+    } else {
+      "rlikejoni"
+    }
     checkError(
       exception = intercept[SparkRuntimeException] {
         evaluateWithoutCodegen("abbbbc" rlike "**")
