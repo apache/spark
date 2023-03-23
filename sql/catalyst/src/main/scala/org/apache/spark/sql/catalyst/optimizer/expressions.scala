@@ -783,12 +783,18 @@ object LikeSimplification extends Rule[LogicalPlan] with PredicateHelper {
       multi
     } else {
       multi match {
-        case l: LikeAllJoni => And(replacements.reduceLeft(And), l.copy(patterns = remainPatterns))
+        case l: LikeAllJoni =>
+          val and = buildBalancedPredicate(replacements, And)
+          if (remainPatterns.nonEmpty) And(and, l.copy(patterns = remainPatterns)) else and
         case l: NotLikeAllJoni =>
-          And(replacements.map(Not(_)).reduceLeft(And), l.copy(patterns = remainPatterns))
-        case l: LikeAnyJoni => Or(replacements.reduceLeft(Or), l.copy(patterns = remainPatterns))
+          val and = buildBalancedPredicate(replacements.map(Not(_)), And)
+          if (remainPatterns.nonEmpty) And(and, l.copy(patterns = remainPatterns)) else and
+        case l: LikeAnyJoni =>
+          val or = buildBalancedPredicate(replacements, Or)
+          if (remainPatterns.nonEmpty) Or(or, l.copy(patterns = remainPatterns)) else or
         case l: NotLikeAnyJoni =>
-          Or(replacements.map(Not(_)).reduceLeft(Or), l.copy(patterns = remainPatterns))
+          val or = buildBalancedPredicate(replacements.map(Not(_)), Or)
+          if (remainPatterns.nonEmpty) Or(or, l.copy(patterns = remainPatterns)) else or
       }
     }
   }

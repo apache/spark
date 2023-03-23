@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import java.nio.charset.StandardCharsets
 import java.util.Locale
 
 import scala.collection.JavaConverters._
@@ -30,6 +31,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.trees.TreePattern.{LIKE_FAMLIY, TreePattern}
 import org.apache.spark.sql.catalyst.util.StringUtils
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -54,9 +56,15 @@ abstract class StringRegexExpressionJoni extends BinaryExpression
     null
   } else {
     // Let it raise exception if couldn't compile the regex string
-    val escapedPattern = escape(pattern)
-    new Regex(escapedPattern, 0, escapedPattern.length,
-      Option.NONE, UTF8Encoding.INSTANCE, Syntax.Java)
+    try {
+      val escapedPattern = escape(pattern)
+      new Regex(escapedPattern, 0, escapedPattern.length,
+        Option.NONE, UTF8Encoding.INSTANCE, Syntax.Java)
+    } catch {
+      case e: org.joni.exception.SyntaxException =>
+        throw QueryExecutionErrors.invalidPatternError(
+          prettyName, new String(pattern, StandardCharsets.UTF_8), e)
+    }
   }
 
   protected def pattern(pattern: Array[Byte]) = if (cache == null) compile(pattern) else cache

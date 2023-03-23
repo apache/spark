@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.util
 
+import java.nio.charset.StandardCharsets
 import java.util.regex.{Pattern, PatternSyntaxException}
 
 import scala.collection.mutable.ArrayBuffer
@@ -73,7 +74,7 @@ object StringUtils extends Logging {
     out.appendAll("(?s)".getBytes())
 
     def fail(message: String) = throw QueryCompilationErrors.escapeCharacterInTheMiddleError(
-      pattern.toString, message)
+      new String(pattern, StandardCharsets.UTF_8), message)
 
     while (in.hasNext) {
       in.next match {
@@ -84,9 +85,12 @@ object StringUtils extends Logging {
               out.appendAll(Pattern.quote(Character.toString(c.toChar)).getBytes())
             case c if c == escapeChar =>
               out.appendAll(Pattern.quote(Character.toString(c.toChar)).getBytes())
-            case _ => fail(s"the escape character is not allowed to precede '$c'")
+            case _ => throw QueryCompilationErrors.escapeCharacterInTheMiddleError(
+              new String(pattern, StandardCharsets.UTF_8), Character.toString(c.toChar))
           }
-        case c if c == escapeChar => fail("it is not allowed to end with the escape character")
+        case c if c == escapeChar =>
+          throw QueryCompilationErrors.escapeCharacterAtTheEndError(
+            new String(pattern, StandardCharsets.UTF_8))
         case '_' => out += '.'
         case '%' => out.appendAll(Array[Byte]('.', '*'))
         case c if c < 0 => out.append(c)
