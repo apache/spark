@@ -43,7 +43,7 @@ if have_pyarrow:
     not have_pandas or not have_pyarrow,
     cast(str, pandas_requirement_message or pyarrow_requirement_message),
 )
-class CogroupedMapInPandasTests(ReusedSQLTestCase):
+class CogroupedApplyInPandasTestsMixin(ReusedSQLTestCase):
     @property
     def data1(self):
         return (
@@ -453,6 +453,10 @@ class CogroupedMapInPandasTests(ReusedSQLTestCase):
         expected = pd.merge(left, right, on=["id", "k"]).sort_values(by=["id", "k"])
 
         assert_frame_equal(expected, result)
+
+
+class CogroupedMapInPandasTests(CogroupedApplyInPandasTestsMixin, ReusedSQLTestCase):
+    pass
 
 
 if __name__ == "__main__":
