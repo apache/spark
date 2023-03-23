@@ -23,7 +23,7 @@ import shutil
 import tempfile
 from collections import defaultdict
 
-from pyspark.errors import PySparkAttributeError, PySparkTypeError
+from pyspark.errors import PySparkAttributeError, PySparkTypeError, PySparkValueError
 from pyspark.sql import SparkSession as PySparkSession, Row
 from pyspark.sql.types import (
     StructType,
@@ -2984,6 +2984,35 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             error_class="JVM_ATTRIBUTE_NOT_SUPPORTED",
             message_parameters={"attr_name": "_jreader"},
         )
+
+
+class SparkConnectSessionTests(SparkConnectSQLTestCase):
+    def test_stop_session(self):
+        self.connect.sql("select 1")
+        self.connect.stop()
+        funcs = [
+            ("table", [self.tbl_name]),
+            ("read", None),
+            ("createDataFrame", [[(1, "Alice"), (2, "Bob")], ["id", "name"]]),
+            ("sql", ["select 1"]),
+            ("range", [1, 3]),
+            ("catalog", None),
+            ("conf", None),
+            ("udf", None),
+            ("version", None)
+        ]
+        for (func, inputs) in funcs:
+            with self.assertRaises(PySparkValueError) as e:
+                if inputs is None:
+                    getattr(self.connect, func)
+                else:
+                    getattr(self.connect, func)(*inputs)
+
+            self.check_error(
+                exception=e.exception,
+                error_class="REMOTE_SESSION_STOPPED",
+                message_parameters=dict()
+            )
 
 
 @unittest.skipIf(not should_test_connect, connect_requirement_message)

@@ -18,6 +18,7 @@ from pyspark.sql.connect.utils import check_dependencies
 
 check_dependencies(__name__)
 
+import functools
 import os
 import warnings
 from collections.abc import Sized
@@ -67,7 +68,7 @@ from pyspark.sql.types import (
     TimestampType,
 )
 from pyspark.sql.utils import to_str
-from pyspark.errors import PySparkAttributeError
+from pyspark.errors import PySparkAttributeError, PySparkValueError
 
 if TYPE_CHECKING:
     from pyspark.sql.connect._typing import OptionalPrimitiveType
@@ -78,6 +79,17 @@ if TYPE_CHECKING:
 # `_active_spark_session` stores the active spark connect session created by
 # `SparkSession.builder.getOrCreate`. It is used by ML code.
 _active_spark_session = None
+
+
+def require_active_session(func):
+    @functools.wraps(func)
+    def wrapped(*args: Any, **kwargs: Any) -> Any:
+        global _active_spark_session
+        if _active_spark_session is None:
+            raise PySparkValueError(error_class="REMOTE_SESSION_STOPPED", message_parameters=dict())
+        return func(*args, **kwargs)
+
+    return wrapped
 
 
 class SparkSession:
@@ -156,12 +168,14 @@ class SparkSession:
         # Parse the connection string.
         self._client = SparkConnectClient(connectionString)
 
+    @require_active_session
     def table(self, tableName: str) -> DataFrame:
         return self.read.table(tableName)
 
     table.__doc__ = PySparkSession.table.__doc__
 
     @property
+    @require_active_session
     def read(self) -> "DataFrameReader":
         return DataFrameReader(self)
 
@@ -198,6 +212,7 @@ class SparkSession:
             ),
         )
 
+    @require_active_session
     def createDataFrame(
         self,
         data: Union["pd.DataFrame", "np.ndarray", Iterable[Any]],
@@ -391,6 +406,7 @@ class SparkSession:
 
     createDataFrame.__doc__ = PySparkSession.createDataFrame.__doc__
 
+    @require_active_session
     def sql(self, sqlQuery: str, args: Optional[Dict[str, str]] = None) -> "DataFrame":
         cmd = SQL(sqlQuery, args)
         data, properties = self.client.execute_command(cmd.command(self._client))
@@ -401,6 +417,7 @@ class SparkSession:
 
     sql.__doc__ = PySparkSession.sql.__doc__
 
+    @require_active_session
     def range(
         self,
         start: int,
@@ -427,6 +444,7 @@ class SparkSession:
     range.__doc__ = PySparkSession.range.__doc__
 
     @property
+    @require_active_session
     def catalog(self) -> "Catalog":
         from pyspark.sql.connect.catalog import Catalog
 
@@ -478,6 +496,7 @@ class SparkSession:
         raise NotImplementedError("newSession() is not implemented.")
 
     @property
+    @require_active_session
     def conf(self) -> RuntimeConf:
         return RuntimeConf(self.client)
 
@@ -519,6 +538,7 @@ class SparkSession:
         )
 
     @property
+    @require_active_session
     def udf(self) -> "UDFRegistration":
         from pyspark.sql.connect.udf import UDFRegistration
 
@@ -527,6 +547,7 @@ class SparkSession:
     udf.__doc__ = PySparkSession.udf.__doc__
 
     @property
+    @require_active_session
     def version(self) -> str:
         result = self._client._analyze(method="spark_version").spark_version
         assert result is not None

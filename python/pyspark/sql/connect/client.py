@@ -514,8 +514,11 @@ class SparkConnectClient(object):
     """
 
     @classmethod
-    def retry_exception(cls, e: grpc.RpcError) -> bool:
-        return e.code() == grpc.StatusCode.UNAVAILABLE
+    def retry_exception(cls, e: Exception) -> bool:
+        if isinstance(e, grpc.RpcError):
+            return e.code() == grpc.StatusCode.UNAVAILABLE
+        else:
+            return False
 
     def __init__(
         self,
