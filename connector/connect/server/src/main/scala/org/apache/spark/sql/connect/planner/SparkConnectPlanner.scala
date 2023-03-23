@@ -717,30 +717,30 @@ class SparkConnectPlanner(val session: SparkSession) {
       if (schema == null) {
         logical.LocalRelation(attributes, data.map(_.copy()).toSeq)
       } else {
-        def udtToSqlType(dt: DataType): DataType = dt match {
-          case udt: UserDefinedType[_] => udtToSqlType(udt.sqlType)
+        def normalize(dt: DataType): DataType = dt match {
+          case udt: UserDefinedType[_] => normalize(udt.sqlType)
           case StructType(fields) =>
             val newFields = fields.zipWithIndex.map {
-              case (StructField(name, dataType, nullable, metadata), i) =>
-                StructField(s"${name}_$i", udtToSqlType(dataType), nullable, metadata)
+              case (StructField(_, dataType, nullable, metadata), i) =>
+                StructField(s"col_$i", normalize(dataType), nullable, metadata)
             }
             StructType(newFields)
           case ArrayType(elementType, containsNull) =>
-            ArrayType(udtToSqlType(elementType), containsNull)
+            ArrayType(normalize(elementType), containsNull)
           case MapType(keyType, valueType, valueContainsNull) =>
-            MapType(udtToSqlType(keyType), udtToSqlType(valueType), valueContainsNull)
+            MapType(normalize(keyType), normalize(valueType), valueContainsNull)
           case _ => dt
         }
 
-        val sqlTypeOnlySchema = udtToSqlType(schema).asInstanceOf[StructType]
+        val normalized = normalize(schema).asInstanceOf[StructType]
 
         val project = Dataset
           .ofRows(
             session,
-            logicalPlan = logical.LocalRelation(
-              udtToSqlType(structType).asInstanceOf[StructType].toAttributes))
-          .toDF(sqlTypeOnlySchema.names: _*)
-          .to(sqlTypeOnlySchema)
+            logicalPlan =
+              logical.LocalRelation(normalize(structType).asInstanceOf[StructType].toAttributes))
+          .toDF(normalized.names: _*)
+          .to(normalized)
           .logicalPlan
           .asInstanceOf[Project]
 
