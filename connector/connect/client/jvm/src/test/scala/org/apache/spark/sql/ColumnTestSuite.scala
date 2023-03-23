@@ -166,15 +166,70 @@ class ColumnTestSuite extends ConnectFunSuite {
     capturedOut.toString()
   }
 
+  private def checkExplainInfo(col: Column, expected: String) = {
+    val explain1 = captureStdOut(col.explain(false))
+    val explain2 = captureStdOut(col.explain(true))
+    assert(explain1 == expected)
+    assert(explain2 == expected)
+  }
+
   test("explain") {
-    val x = fn.col("a") + fn.col("b")
-    val explain1 = captureStdOut(x.explain(false))
-    val explain2 = captureStdOut(x.explain(true))
-    assert(explain1 == explain2)
-    val expectedFragments = Seq("unresolved_function", "function_name: \"+\"", "arguments")
-    expectedFragments.foreach { fragment =>
-      assert(explain1.contains(fragment))
-    }
+    val colA = fn.col("a")
+    val colB = fn.col("b")
+    val colC = fn.col("c")
+
+    val col1 = colA + colB
+    checkExplainInfo(col1, "(a + b)\n")
+    val col2 = col1 - fn.lit(1)
+    checkExplainInfo(col2, "((a + b) - 1)\n")
+    val col3 = colA * fn.lit(10) / colB % fn.lit(3)
+    checkExplainInfo(col3, "(((a * 10) / b) % 3)\n")
+    val col4 = col1.apply(1)
+    checkExplainInfo(col4, "(a + b)[1]\n")
+    val col5 = col1.unary_-
+    checkExplainInfo(col5, "(- (a + b))\n")
+    val col6 = col1.unary_!
+    checkExplainInfo(col6, "(NOT (a + b))\n")
+    val col7 = colA === fn.lit(1) || colB =!= fn.lit(2)
+    checkExplainInfo(col7, "((a = 1) or (NOT (b = 2)))\n")
+    val col8 = col1 > fn.lit(1) && col1 < fn.lit(9) || colC >= fn.lit(1) && colC <= fn.lit(8)
+    checkExplainInfo(col8, "((((a + b) > 1) and ((a + b) < 9)) or ((c >= 1) and (c <= 8)))\n")
+    val col9 = col1 <=> fn.lit(1)
+    checkExplainInfo(col9, "((a + b) <=> 1)\n")
+    val col10 = fn.when(col1 === 1, -1).otherwise(0)
+    checkExplainInfo(col10, "CASE WHEN ((a + b) = 1) THEN -1 ELSE 0 END\n")
+    val col11 = fn.when(col1 === 1, -1).when(col1 > 1, colC).otherwise(0)
+    checkExplainInfo(
+      col11,
+      "CASE WHEN ((a + b) = 1) THEN -1 WHEN ((a + b) > 1) THEN c ELSE 0 END\n")
+    val col12 = col1.between(fn.lit(1), fn.lit(3))
+    checkExplainInfo(col12, "(((a + b) >= 1) and ((a + b) <= 3))\n")
+    val col13 = col1.isNaN
+    checkExplainInfo(col13, "isnan((a + b))\n")
+    val col14 = colA.isNull && colB.isNotNull
+    checkExplainInfo(col14, "((a IS NULL) and (b IS NOT NULL))\n")
+    val col15 = col1.isin(2, 3)
+    checkExplainInfo(col15, "((a + b) IN (2, 3))\n")
+    val col16 = colA.like("Tom*") || colB.rlike("^P.*$") || colC.ilike("a")
+    checkExplainInfo(col16, "(((a LIKE 'Tom*') or RLIKE(b, '^P.*$')) or ilike(c, 'a'))\n")
+    val col17 = colA.withField("b", fn.lit(2)).dropFields("a")
+    checkExplainInfo(col17, "update_fields(update_fields(a, WithField(2)), dropfield())\n")
+    val col18 = colA.substr(2, 5)
+    checkExplainInfo(col18, "substring(a, 2, 5)\n")
+    val col19 = colA.contains("mer") and colB.startsWith("Ari") or colA.endsWith(colC)
+    checkExplainInfo(col19, "((contains(a, 'mer') and startswith(b, 'Ari')) or endswith(a, c))\n")
+    val col20 = col1.as("add_alias")
+    checkExplainInfo(col20, "(a + b) AS add_alias\n")
+    val col21 = col1.as("add_alias").as("key" :: "value" :: Nil)
+    checkExplainInfo(col21, "multialias((a + b) AS add_alias)\n")
+    val col22 = col1.cast(IntegerType).cast("int")
+    checkExplainInfo(col22, "CAST(CAST((a + b) AS INT) AS INT)\n")
+    val col23 = colA.desc.withField("b1", colB.asc)
+    checkExplainInfo(col23, "update_fields(a DESC NULLS LAST, WithField(b ASC NULLS FIRST))\n")
+    val col24 = colA.desc_nulls_first.withField("b1", colB.asc_nulls_last)
+    checkExplainInfo(col24, "update_fields(a DESC NULLS FIRST, WithField(b ASC NULLS LAST))\n")
+    val col25 = colA.bitwiseAND(colB.bitwiseOR(colC).bitwiseXOR(fn.lit(3)))
+    checkExplainInfo(col25, "(a & ((b | c) ^ 3))\n")
   }
 
   private def testColName(dataType: DataType, f: ColumnName => StructField): Unit = {

@@ -26,7 +26,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.connect.common.DataTypeProtoConverter
-import org.apache.spark.sql.expressions.Window
+import org.apache.spark.sql.expressions.{ProtoExpressionSQLBuilder, Window}
 import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.types._
 
@@ -1213,11 +1213,8 @@ class Column private[sql] (@DeveloperApi val expr: proto.Expression) extends Log
    */
   def explain(extended: Boolean): Unit = {
     // scalastyle:off println
-    if (extended) {
-      println(expr)
-    } else {
-      println(toString)
-    }
+    val builder = new ProtoExpressionSQLBuilder(expr, extended)
+    println(builder.build())
     // scalastyle:on println
   }
 
