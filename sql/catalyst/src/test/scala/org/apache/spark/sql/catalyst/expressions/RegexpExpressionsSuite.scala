@@ -287,7 +287,7 @@ abstract class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalH
     checkLiteralRow("abc"  rlike _, "^ab", true)
     checkLiteralRow("abc"  rlike _, "^bc", false)
 
-    val fun = if (conf.getConf(SQLConf.REGEX_ENGINE) == "java") {
+    val func = if (conf.getConf(SQLConf.REGEX_ENGINE) == "java") {
       "rlike"
     } else {
       "rlikejoni"
@@ -299,7 +299,7 @@ abstract class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalH
       errorClass = "INVALID_PARAMETER_VALUE.PATTERN",
       parameters = Map(
         "parameter" -> toSQLId("regexp"),
-        "functionName" -> toSQLId("rlike"),
+        "functionName" -> toSQLId(func),
         "value" -> "'**'")
     )
     checkError(
@@ -310,7 +310,7 @@ abstract class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalH
       errorClass = "INVALID_PARAMETER_VALUE.PATTERN",
       parameters = Map(
         "parameter" -> toSQLId("regexp"),
-        "functionName" -> toSQLId("rlike"),
+        "functionName" -> toSQLId(func),
         "value" -> "'**'")
     )
   }
