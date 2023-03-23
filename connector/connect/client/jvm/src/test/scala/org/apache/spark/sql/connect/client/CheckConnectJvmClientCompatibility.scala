@@ -130,9 +130,6 @@ object CheckConnectJvmClientCompatibility {
       ProblemFilters.exclude[Problem]("org.sparkproject.*"),
       ProblemFilters.exclude[Problem]("org.apache.spark.connect.proto.*"),
 
-      // Catalog
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.catalog.Catalog.cacheTable"),
-
       // DataFrame Reader & Writer
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.DataFrameReader.json"), // deprecated
 

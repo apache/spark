@@ -22,8 +22,9 @@ import org.apache.spark.sql.catalog.{Catalog, CatalogMetadata, Column, Database,
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{PrimitiveBooleanEncoder, StringEncoder}
-import org.apache.spark.sql.connect.common.DataTypeProtoConverter
+import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, StorageLevelProtoConverter}
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.storage.StorageLevel
 
 class CatalogImpl(sparkSession: SparkSession) extends Catalog {
 
@@ -544,6 +545,20 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
   override def cacheTable(tableName: String): Unit = {
     sparkSession.execute { builder =>
       builder.getCatalogBuilder.getCacheTableBuilder.setTableName(tableName)
+    }
+  }
+
+  /**
+   * Caches the specified table or view with the given storage level.
+   *
+   * @group cachemgmt
+   * @since 3.4.0
+   */
+  override def cacheTable(tableName: String, storageLevel: StorageLevel): Unit = {
+    sparkSession.execute { builder =>
+      builder.getCatalogBuilder.getCacheTableBuilder
+        .setTableName(tableName)
+        .setStorageLevel(StorageLevelProtoConverter.toConnectProtoType(storageLevel))
     }
   }
 

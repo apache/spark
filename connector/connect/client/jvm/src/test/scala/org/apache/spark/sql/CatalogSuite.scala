@@ -24,6 +24,7 @@ import org.apache.commons.io.FileUtils
 
 import org.apache.spark.sql.connect.client.util.RemoteSparkSession
 import org.apache.spark.sql.types.{DoubleType, LongType, StructType}
+import org.apache.spark.storage.StorageLevel
 
 class CatalogSuite extends RemoteSparkSession with SQLHelper {
 
@@ -127,8 +128,7 @@ class CatalogSuite extends RemoteSparkSession with SQLHelper {
 
   test("Cache Table APIs") {
     val parquetTableName = "parquet_table"
-    val jsonTableName = "json_table"
-    withTable(parquetTableName, jsonTableName) {
+    withTable(parquetTableName) {
       withTempPath { table1Dir =>
         val session = spark
         import session.implicits._
@@ -142,8 +142,8 @@ class CatalogSuite extends RemoteSparkSession with SQLHelper {
         spark.catalog.uncacheTable(parquetTableName)
         assert(!spark.catalog.isCached(parquetTableName))
 
-        // Test clearCache
-        spark.catalog.cacheTable(parquetTableName)
+        // Test cache with `StorageLevel` and clearCache
+        spark.catalog.cacheTable(parquetTableName, StorageLevel.MEMORY_ONLY)
         assert(spark.catalog.isCached(parquetTableName))
         spark.catalog.clearCache()
         assert(!spark.catalog.isCached(parquetTableName))
