@@ -312,6 +312,9 @@ class SparkSession:
                     [pa.array(data[::, i]) for i in range(0, data.shape[1])], _cols
                 )
 
+            # The _table should already have the proper column names.
+            _cols = None
+
         else:
             _data = list(data)
 

@@ -522,11 +522,12 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             ["a", "b", "c", "d"],
             ("x1", "x2", "x3", "x4"),
         ]:
-            sdf = self.spark.createDataFrame(data, schema=schema)
-            cdf = self.connect.createDataFrame(data, schema=schema)
+            with self.subTest(schema=schema):
+                sdf = self.spark.createDataFrame(data, schema=schema)
+                cdf = self.connect.createDataFrame(data, schema=schema)
 
-            self.assertEqual(sdf.schema, cdf.schema)
-            self.assert_eq(sdf.toPandas(), cdf.toPandas())
+                self.assertEqual(sdf.schema, cdf.schema)
+                self.assert_eq(sdf.toPandas(), cdf.toPandas())
 
         with self.assertRaisesRegex(
             ValueError,
