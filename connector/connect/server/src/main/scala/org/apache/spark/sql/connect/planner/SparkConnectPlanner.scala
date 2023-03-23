@@ -54,6 +54,7 @@ import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JDBCPartiti
 import org.apache.spark.sql.execution.python.UserDefinedPythonFunction
 import org.apache.spark.sql.internal.CatalogImpl
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.Utils
 
 final case class InvalidCommandInput(
@@ -734,7 +735,9 @@ class SparkConnectPlanner(val session: SparkSession) {
       case proto.Read.ReadTypeCase.NAMED_TABLE =>
         val multipartIdentifier =
           CatalystSqlParser.parseMultipartIdentifier(rel.getNamedTable.getUnparsedIdentifier)
-        UnresolvedRelation(multipartIdentifier)
+        UnresolvedRelation(
+          multipartIdentifier,
+          new CaseInsensitiveStringMap(rel.getNamedTable.getOptionsMap))
 
       case proto.Read.ReadTypeCase.DATA_SOURCE =>
         val localMap = CaseInsensitiveMap[String](rel.getDataSource.getOptionsMap.asScala.toMap)
