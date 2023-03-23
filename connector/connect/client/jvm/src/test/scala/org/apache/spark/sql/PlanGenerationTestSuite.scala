@@ -69,7 +69,7 @@ class PlanGenerationTestSuite
   // Borrowed from SparkFunSuite
   private val regenerateGoldenFiles: Boolean = System.getenv("SPARK_GENERATE_GOLDEN_FILES") == "1"
 
-  protected val queryFilePath: Path = commonResourcePath.resolve("queries")
+  protected val queryFilePath: Path = commonResourcePath.resolve("query-tests/queries")
 
   // A relative path to /connector/connect/server, used by `ProtoToParsedPlanTestSuite` to run
   // with the datasource.
@@ -2161,5 +2161,10 @@ class PlanGenerationTestSuite
 
   test("replace") {
     simple.na.replace[Long]("id", Map(1L -> 8L))
+  }
+
+  /* Reader API  */
+  test("table API with options") {
+    session.read.options(Map("p1" -> "v1", "p2" -> "v2")).table("tempdb.myTable")
   }
 }
