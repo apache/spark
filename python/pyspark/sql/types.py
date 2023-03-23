@@ -1211,7 +1211,10 @@ def _parse_datatype_string(s: str) -> DataType:
     from pyspark import SparkContext
 
     sc = SparkContext._active_spark_context
-    assert sc is not None
+    if sc is None:
+        raise RuntimeError(
+            "SparkContext must be initialized in order to parse a DDL-formatted type string."
+        )
 
     def from_ddl_schema(type_str: str) -> DataType:
         assert sc is not None and sc._jvm is not None
