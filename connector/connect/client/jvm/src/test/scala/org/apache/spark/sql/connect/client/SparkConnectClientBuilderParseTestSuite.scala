@@ -50,11 +50,11 @@ class SparkConnectClientBuilderParseTestSuite extends ConnectFunSuite {
   test("Argument - remote") {
     val builder =
       build("--remote", "sc://srv.apache.org/;user_id=x127;user_name=Q;token=nahnah;param1=x")
-    assert(builder.host == "srv.apache.org")
-    assert(builder.port == 15002)
+    assert(builder.host === "srv.apache.org")
+    assert(builder.port === 15002)
     assert(builder.token.contains("nahnah"))
     assert(builder.userId.contains("x127"))
-    assert(builder.options == Map(("user_name", "Q"), ("param1", "x")))
+    assert(builder.options === Map(("user_name", "Q"), ("param1", "x")))
   }
 
   test("Argument - use_ssl") {
@@ -65,7 +65,7 @@ class SparkConnectClientBuilderParseTestSuite extends ConnectFunSuite {
   test("Argument - option") {
     val builder =
       build("--option", "foo=bar", "--option", "c1=s8", "--option", "ns.sns.setting=baz")
-    assert(builder.options == Map(("foo", "bar"), ("c1", "s8"), ("ns.sns.setting", "baz")))
+    assert(builder.options === Map(("foo", "bar"), ("c1", "s8"), ("ns.sns.setting", "baz")))
     val e1 = intercept[NoSuchElementException](build("--option"))
     // assert(e1.getMessage.contains("requires a key-value pair"))
     intercept[MatchError](build("--option", "not_a_config"))
@@ -89,9 +89,9 @@ class SparkConnectClientBuilderParseTestSuite extends ConnectFunSuite {
         "U8912",
         "--user_id",
         "Q12")
-      assert(builder.host == "localhost")
-      assert(builder.port == 1507)
-      assert(builder.userAgent == "U8912")
+      assert(builder.host === "localhost")
+      assert(builder.port === 1507)
+      assert(builder.userAgent === "U8912")
       assert(!builder.sslEnabled)
       assert(builder.token.isEmpty)
       assert(builder.userId.contains("Q12"))
@@ -107,20 +107,20 @@ class SparkConnectClientBuilderParseTestSuite extends ConnectFunSuite {
         "mode=turbo",
         "--option",
         "cluster=mycl")
-      assert(builder.host == "localhost")
-      assert(builder.port == 15002)
+      assert(builder.host === "localhost")
+      assert(builder.port === 15002)
       assert(builder.userAgent == "_SPARK_CONNECT_SCALA")
       assert(builder.sslEnabled)
       assert(builder.token.isEmpty)
       assert(builder.userId.isEmpty)
       assert(builder.userName.contains("Nico"))
-      assert(builder.options == Map(("mode", "turbo"), ("cluster", "mycl")))
+      assert(builder.options === Map(("mode", "turbo"), ("cluster", "mycl")))
     }
     {
       val builder = build("--token", "thisismysecret")
-      assert(builder.host == "localhost")
-      assert(builder.port == 15002)
-      assert(builder.userAgent == "_SPARK_CONNECT_SCALA")
+      assert(builder.host === "localhost")
+      assert(builder.port === 15002)
+      assert(builder.userAgent === "_SPARK_CONNECT_SCALA")
       assert(builder.sslEnabled)
       assert(builder.token.contains("thisismysecret"))
       assert(builder.userId.isEmpty)

@@ -62,8 +62,7 @@ object ConnectRepl {
              |${SparkConnectClientParser.usage()}
              |""".stripMargin)
           // scalastyle:on println
-          System.exit(1)
-          return
+          sys.exit(1)
       }
 
     // Build the session.
