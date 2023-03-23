@@ -19,12 +19,14 @@ package org.apache.spark.sql.catalyst.encoders
 import java.{sql => jsql}
 import java.math.{BigDecimal => JBigDecimal, BigInteger => JBigInt}
 import java.time.{Duration, Instant, LocalDate, LocalDateTime, Period}
+import java.util.concurrent.ConcurrentHashMap
 
 import scala.reflect.{classTag, ClassTag}
 
 import org.apache.spark.sql.{Encoder, Row}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
+import org.apache.spark.util.Utils
 
 /**
  * A non implementation specific encoder. This encoder containers all the information needed
@@ -105,6 +107,18 @@ object AgnosticEncoders {
     override def isPrimitive: Boolean = false
     override val schema: StructType = StructType(fields.map(_.structField))
     override def dataType: DataType = schema
+  }
+
+  object ProductEncoder {
+    val cachedCls = new ConcurrentHashMap[Int, Class[_]]
+    def tuple(encoders: Seq[AgnosticEncoder[_]]): AgnosticEncoder[_] = {
+      val fields = encoders.zipWithIndex.map {
+        case (e, id) => EncoderField(s"_${id + 1}", e, e.nullable, Metadata.empty)
+      }
+      val cls = cachedCls.computeIfAbsent(encoders.size,
+        _ => Utils.getContextOrSparkClassLoader.loadClass(s"scala.Tuple${encoders.size}"))
+      ProductEncoder[Any](ClassTag(cls), fields)
+    }
   }
 
   abstract class BaseRowEncoder extends AgnosticEncoder[Row] {

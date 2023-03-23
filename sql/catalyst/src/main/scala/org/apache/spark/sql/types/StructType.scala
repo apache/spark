@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, InterpretedOrdering}
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, LegacyTypeStringParser}
 import org.apache.spark.sql.catalyst.trees.Origin
-import org.apache.spark.sql.catalyst.types.{PhysicalDataType, PhysicalStructType}
+import org.apache.spark.sql.catalyst.types.{DataTypeUtils, PhysicalDataType, PhysicalStructType}
 import org.apache.spark.sql.catalyst.util.{truncatedString, StringUtils}
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
 import org.apache.spark.sql.catalyst.util.StringUtils.StringConcat
@@ -704,7 +704,7 @@ object StructType extends AbstractDataType {
         // Found a missing field in `source`.
         newFields += field
       } else if (bothStructType(found.get.dataType, field.dataType) &&
-          !found.get.dataType.sameType(field.dataType)) {
+          !DataTypeUtils.sameType(found.get.dataType, field.dataType)) {
         // Found a field with same name, but different data type.
         findMissingFields(found.get.dataType.asInstanceOf[StructType],
           field.dataType.asInstanceOf[StructType], resolver).map { missingType =>

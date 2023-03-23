@@ -127,8 +127,6 @@ import org.apache.spark.util.Utils
  * data from executing the query end-to-end.
  *
  * Each case has a golden result file in "spark/sql/core/src/test/resources/sql-tests/analyzer-results".
- * Only input filenames in the "analyzerTestCaseList" below are included for this type of testing.
- * In the future, we may expand the coverage to all of the input test files instead.
  */
 // scalastyle:on line.size.limit
 @ExtendedSQLTest
@@ -170,14 +168,12 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
   // Create all the test cases.
   listTestCases.foreach(createScalaTestCase)
 
-  /** List of test cases to perform analyzer tests for. */
-  protected def analyzerTestCaseList = Seq("array.sql")
-
   /** A test case. */
   protected trait TestCase {
     val name: String
     val inputFile: String
     val resultFile: String
+    def asAnalyzerTest(newName: String, newResultFile: String): TestCase
   }
 
   /**
@@ -190,7 +186,9 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
   protected trait AnsiTest
 
   /** Trait that indicates an analyzer test that shows the analyzed plan string as output. */
-  protected trait AnalyzerTest
+  protected trait AnalyzerTest extends TestCase {
+    override def asAnalyzerTest(newName: String, newResultFile: String): AnalyzerTest = this
+  }
 
   /** Trait that indicates the default timestamp type is TimestampNTZType. */
   protected trait TimestampNTZTest
@@ -201,11 +199,17 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
 
   /** A regular test case. */
   protected case class RegularTestCase(
-      name: String, inputFile: String, resultFile: String) extends TestCase
+      name: String, inputFile: String, resultFile: String) extends TestCase {
+    override def asAnalyzerTest(newName: String, newResultFile: String): TestCase =
+      RegularAnalyzerTestCase(newName, inputFile, newResultFile)
+  }
 
   /** An ANSI-related test case. */
   protected case class AnsiTestCase(
-      name: String, inputFile: String, resultFile: String) extends TestCase with AnsiTest
+      name: String, inputFile: String, resultFile: String) extends TestCase with AnsiTest {
+    override def asAnalyzerTest(newName: String, newResultFile: String): TestCase =
+      AnsiAnalyzerTestCase(newName, inputFile, newResultFile)
+  }
 
   /** An analyzer test that shows the analyzed plan string as output. */
   protected case class AnalyzerTestCase(
@@ -213,32 +217,70 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
 
   /** A PostgreSQL test case. */
   protected case class PgSQLTestCase(
-      name: String, inputFile: String, resultFile: String) extends TestCase with PgSQLTest
+      name: String, inputFile: String, resultFile: String) extends TestCase with PgSQLTest {
+    override def asAnalyzerTest(newName: String, newResultFile: String): TestCase =
+      PgSQLAnalyzerTestCase(newName, inputFile, newResultFile)
+  }
 
   /** A UDF test case. */
   protected case class UDFTestCase(
       name: String,
       inputFile: String,
       resultFile: String,
-      udf: TestUDF) extends TestCase with UDFTest
+      udf: TestUDF) extends TestCase with UDFTest {
+    override def asAnalyzerTest(newName: String, newResultFile: String): TestCase =
+      UDFAnalyzerTestCase(newName, inputFile, newResultFile, udf)
+  }
 
   /** A UDAF test case. */
   protected case class UDAFTestCase(
       name: String,
       inputFile: String,
       resultFile: String,
-      udf: TestUDF) extends TestCase with UDFTest
+      udf: TestUDF) extends TestCase with UDFTest {
+    override def asAnalyzerTest(newName: String, newResultFile: String): TestCase =
+      UDAFAnalyzerTestCase(newName, inputFile, newResultFile, udf)
+  }
 
   /** A UDF PostgreSQL test case. */
   protected case class UDFPgSQLTestCase(
       name: String,
       inputFile: String,
       resultFile: String,
-      udf: TestUDF) extends TestCase with UDFTest with PgSQLTest
+      udf: TestUDF) extends TestCase with UDFTest with PgSQLTest {
+    override def asAnalyzerTest(newName: String, newResultFile: String): TestCase =
+      UDFPgSQLAnalyzerTestCase(newName, inputFile, newResultFile, udf)
+  }
 
   /** An date time test case with default timestamp as TimestampNTZType */
   protected case class TimestampNTZTestCase(
-      name: String, inputFile: String, resultFile: String) extends TestCase with TimestampNTZTest
+      name: String, inputFile: String, resultFile: String) extends TestCase with TimestampNTZTest {
+    override def asAnalyzerTest(newName: String, newResultFile: String): TestCase =
+      TimestampNTZAnalyzerTestCase(newName, inputFile, newResultFile)
+  }
+
+  /** These are versions of the above test cases, but only exercising analysis. */
+  protected case class RegularAnalyzerTestCase(
+      name: String, inputFile: String, resultFile: String)
+      extends AnalyzerTest
+  protected case class AnsiAnalyzerTestCase(
+      name: String, inputFile: String, resultFile: String)
+      extends AnalyzerTest with AnsiTest
+  protected case class PgSQLAnalyzerTestCase(
+      name: String, inputFile: String, resultFile: String)
+      extends AnalyzerTest with PgSQLTest
+  protected case class UDFAnalyzerTestCase(
+      name: String, inputFile: String, resultFile: String, udf: TestUDF)
+      extends AnalyzerTest with UDFTest
+  protected case class UDAFAnalyzerTestCase(
+      name: String, inputFile: String, resultFile: String, udf: TestUDF)
+      extends AnalyzerTest with UDFTest
+  protected case class UDFPgSQLAnalyzerTestCase(
+      name: String, inputFile: String, resultFile: String, udf: TestUDF)
+      extends AnalyzerTest with UDFTest with PgSQLTest
+  protected case class TimestampNTZAnalyzerTestCase(
+      name: String, inputFile: String, resultFile: String)
+      extends AnalyzerTest with TimestampNTZTest
 
   protected def createScalaTestCase(testCase: TestCase): Unit = {
     if (ignoreList.exists(t =>
@@ -475,7 +517,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
 
     withClue(clue) {
       testCase match {
-        case _: AnalyzerTestCase =>
+        case _: AnalyzerTest =>
           readGoldenFileAndCompareResults(testCase.resultFile, outputs, AnalyzerOutput)
         case _ =>
           readGoldenFileAndCompareResults(testCase.resultFile, outputs, ExecutionOutput)
@@ -492,7 +534,8 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
       val testCaseName = absPath.stripPrefix(inputFilePath).stripPrefix(File.separator)
       val analyzerTestCaseName = s"${testCaseName}_analyzer_test"
 
-      val newTestCase = if (file.getAbsolutePath.startsWith(
+      // Create test cases of test types that depend on the input filename.
+      val newTestCases: Seq[TestCase] = if (file.getAbsolutePath.startsWith(
         s"$inputFilePath${File.separator}udf${File.separator}postgreSQL")) {
         Seq(TestScalaUDF("udf"), TestPythonUDF("udf"), TestScalarPandasUDF("udf")).map { udf =>
           UDFPgSQLTestCase(
@@ -517,10 +560,19 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
       } else {
         RegularTestCase(testCaseName, absPath, resultFile) :: Nil
       }
-      if (analyzerTestCaseList.contains(file.getName.toLowerCase(Locale.ROOT))) {
-        AnalyzerTestCase(analyzerTestCaseName, absPath, analyzerResultFile) +: newTestCase
-      } else {
-        newTestCase
+      // Also include a copy of each of the above test cases as an analyzer test.
+      newTestCases.flatMap { test =>
+        test match {
+          case _: UDAFTestCase =>
+            // Skip creating analyzer test cases for UDAF tests as they are hard to update locally.
+            Seq(test)
+          case _ =>
+            Seq(
+              test,
+              test.asAnalyzerTest(
+                newName = s"${test.name}_analyzer_test",
+                newResultFile = analyzerResultFile))
+        }
       }
     }.sortBy(_.name)
   }
