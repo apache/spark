@@ -123,6 +123,9 @@ message Read {
   message NamedTable {
     // (Required) Unparsed identifier for the table.
     string unparsed_identifier = 1;
+
+    // Options for the named table. The map key is case insensitive.
+    map<string, string> options = 2;
   }
 
   message DataSource {
