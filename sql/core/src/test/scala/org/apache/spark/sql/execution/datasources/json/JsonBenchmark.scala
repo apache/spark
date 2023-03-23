@@ -250,6 +250,16 @@ object JsonBenchmark extends SqlBasedBenchmark {
     }
   }
 
+  def jsonFunctionsCodeGen(rows: Int): Unit = {
+    runBenchmark("get_json_object") {
+      codegenBenchmark("get_json_object", rows) {
+        val in = spark.range(0, rows, 1, 1).map(_ => """{"a":1}""")
+        val get_json_object_ds = in.select(get_json_object($"value", "$.a"))
+        get_json_object_ds.noop()
+      }
+    }
+  }
+
   def jsonFunctions(rows: Int, iters: Int): Unit = {
     val benchmark = new Benchmark("JSON functions", rows, output = output)
 
@@ -272,9 +282,18 @@ object JsonBenchmark extends SqlBasedBenchmark {
       json_tuple_ds.noop()
     }
 
-    benchmark.addCase("get_json_object", iters) { _ =>
-      val get_json_object_ds = in.select(get_json_object($"value", "$.a"))
-      get_json_object_ds.noop()
+    benchmark.addCase("get_json_object wholestage off", iters) { _ =>
+      withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
+        val get_json_object_ds = in.select(get_json_object($"value", "$.a"))
+        get_json_object_ds.noop()
+      }
+    }
+
+    benchmark.addCase("get_json_object wholestage on", iters) { _ =>
+      withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true") {
+        val get_json_object_ds = in.select(get_json_object($"value", "$.a"))
+        get_json_object_ds.noop()
+      }
     }
 
     benchmark.run()
