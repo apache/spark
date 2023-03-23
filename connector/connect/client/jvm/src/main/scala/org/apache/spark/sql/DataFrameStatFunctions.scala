@@ -595,7 +595,7 @@ final class DataFrameStatFunctions private[sql] (sparkSession: SparkSession, roo
    *   expected number of items which will be put into the filter.
    * @param fpp
    *   expected false positive probability of the filter.
-   * @since 3.4.0
+   * @since 3.5.0
    */
   def bloomFilter(colName: String, expectedNumItems: Long, fpp: Double): BloomFilter = {
     buildBloomFilter(Column(colName), expectedNumItems, -1L, fpp)
@@ -610,7 +610,7 @@ final class DataFrameStatFunctions private[sql] (sparkSession: SparkSession, roo
    *   expected number of items which will be put into the filter.
    * @param fpp
    *   expected false positive probability of the filter.
-   * @since 3.4.0
+   * @since 3.5.0
    */
   def bloomFilter(col: Column, expectedNumItems: Long, fpp: Double): BloomFilter = {
     buildBloomFilter(col, expectedNumItems, -1L, fpp)
@@ -625,7 +625,7 @@ final class DataFrameStatFunctions private[sql] (sparkSession: SparkSession, roo
    *   expected number of items which will be put into the filter.
    * @param numBits
    *   expected number of bits of the filter.
-   * @since 3.4.0
+   * @since 3.5.0
    */
   def bloomFilter(colName: String, expectedNumItems: Long, numBits: Long): BloomFilter = {
     buildBloomFilter(Column(colName), expectedNumItems, numBits, Double.NaN)
@@ -640,7 +640,7 @@ final class DataFrameStatFunctions private[sql] (sparkSession: SparkSession, roo
    *   expected number of items which will be put into the filter.
    * @param numBits
    *   expected number of bits of the filter.
-   * @since 3.4.0
+   * @since 3.5.0
    */
   def bloomFilter(col: Column, expectedNumItems: Long, numBits: Long): BloomFilter = {
     buildBloomFilter(col, expectedNumItems, numBits, Double.NaN)
