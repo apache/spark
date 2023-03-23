@@ -15,13 +15,13 @@
     specific language governing permissions and limitations
     under the License.
 
-===========================
-Error conditions in PySpark
-===========================
+========================
+Error classes in PySpark
+========================
 
-This is a list of common, named error conditions returned by PySpark which are defined at `error_classes.py <https://github.com/apache/spark/blob/master/python/pyspark/errors/error_classes.py>`_.
+This is a list of common, named error classes returned by PySpark which are defined at `error_classes.py <https://github.com/apache/spark/blob/master/python/pyspark/errors/error_classes.py>`_.
 
-When writing PySpark errors, developers must use an error condition from the list. If an appropriate error condition is not available, add a new one into the list. For more information, please refer to `Contributing Error and Exception <https://spark.apache.org/docs/latest/api/python/development/contributing.html#contributing-error-and-exception>`_.
+When writing PySpark errors, developers must use an error class from the list. If an appropriate error class is not available, add a new one into the list. For more information, please refer to `Contributing Error and Exception <https://spark.apache.org/docs/latest/api/python/development/contributing.html#contributing-error-and-exception>`_.
 
 +------------------------------------------------------------+--------------------------------------------------------------------------------------------------------------+
 | Error class                                                | Error message                                                                                                |
