@@ -45,7 +45,7 @@ class LongType private() extends IntegralType {
    */
   override def defaultSize: Int = 8
 
-  override def physicalDataType: PhysicalDataType = PhysicalLongType
+  private[sql] override def physicalDataType: PhysicalDataType = PhysicalLongType
 
   override def simpleString: String = "bigint"
 

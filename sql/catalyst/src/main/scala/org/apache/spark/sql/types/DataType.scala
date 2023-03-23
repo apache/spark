@@ -119,7 +119,7 @@ abstract class DataType extends AbstractDataType {
 
   override private[sql] def acceptsType(other: DataType): Boolean = sameType(other)
 
-  def physicalDataType: PhysicalDataType = UninitializedPhysicalType
+  private[sql] def physicalDataType: PhysicalDataType = UninitializedPhysicalType
 }
 
 
