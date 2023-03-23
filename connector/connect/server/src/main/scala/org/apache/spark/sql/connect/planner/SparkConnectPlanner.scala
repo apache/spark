@@ -42,6 +42,7 @@ import org.apache.spark.sql.catalyst.plans.{Cross, FullOuter, Inner, JoinType, L
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical.{CollectMetrics, CommandResult, Deduplicate, Except, Intersect, LocalRelation, LogicalPlan, Project, Sample, Sort, SubqueryAlias, Union, Unpivot, UnresolvedHint}
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CharVarcharUtils}
+import org.apache.spark.sql.connect.artifact.SparkConnectArtifactManager
 import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, InvalidPlanInput, LiteralValueProtoConverter, UdfPacket}
 import org.apache.spark.sql.connect.config.Connect.CONNECT_GRPC_ARROW_MAX_BATCH_SIZE
 import org.apache.spark.sql.connect.plugin.SparkConnectPluginRegistry
@@ -119,6 +120,8 @@ class SparkConnectPlanner(val session: SparkSession) {
         transformMapPartitions(rel.getMapPartitions)
       case proto.Relation.RelTypeCase.GROUP_MAP =>
         transformGroupMap(rel.getGroupMap)
+      case proto.Relation.RelTypeCase.CO_GROUP_MAP =>
+        transformCoGroupMap(rel.getCoGroupMap)
       case proto.Relation.RelTypeCase.COLLECT_METRICS =>
         transformCollectMetrics(rel.getCollectMetrics)
       case proto.Relation.RelTypeCase.PARSE => transformParse(rel.getParse)
@@ -507,6 +510,26 @@ class SparkConnectPlanner(val session: SparkSession) {
       .groupBy(cols: _*)
       .flatMapGroupsInPandas(pythonUdf)
       .logicalPlan
+  }
+
+  private def transformCoGroupMap(rel: proto.CoGroupMap): LogicalPlan = {
+    val pythonUdf = transformPythonUDF(rel.getFunc)
+
+    val inputCols =
+      rel.getInputGroupingExpressionsList.asScala.toSeq.map(expr =>
+        Column(transformExpression(expr)))
+    val otherCols =
+      rel.getOtherGroupingExpressionsList.asScala.toSeq.map(expr =>
+        Column(transformExpression(expr)))
+
+    val input = Dataset
+      .ofRows(session, transformRelation(rel.getInput))
+      .groupBy(inputCols: _*)
+    val other = Dataset
+      .ofRows(session, transformRelation(rel.getOther))
+      .groupBy(otherCols: _*)
+
+    input.flatMapCoGroupsInPandas(other, pythonUdf).logicalPlan
   }
 
   private def transformWithColumnsRenamed(rel: proto.WithColumnsRenamed): LogicalPlan = {
@@ -989,7 +1012,9 @@ class SparkConnectPlanner(val session: SparkSession) {
   private def transformScalarScalaUDF(fun: proto.CommonInlineUserDefinedFunction): ScalaUDF = {
     val udf = fun.getScalarScalaUdf
     val udfPacket =
-      Utils.deserialize[UdfPacket](udf.getPayload.toByteArray, Utils.getContextOrSparkClassLoader)
+      Utils.deserialize[UdfPacket](
+        udf.getPayload.toByteArray,
+        SparkConnectArtifactManager.classLoaderWithArtifacts)
     ScalaUDF(
       function = udfPacket.function,
       dataType = udfPacket.outputEncoder.dataType,

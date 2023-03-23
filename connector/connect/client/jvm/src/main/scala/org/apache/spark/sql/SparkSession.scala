@@ -400,6 +400,13 @@ class SparkSession private[sql] (
     client.analyze(method, Some(plan), explainMode)
   }
 
+  private[sql] def analyze(
+      f: proto.AnalyzePlanRequest.Builder => Unit): proto.AnalyzePlanResponse = {
+    val builder = proto.AnalyzePlanRequest.newBuilder()
+    f(builder)
+    client.analyze(builder)
+  }
+
   private[sql] def sameSemantics(plan: proto.Plan, otherPlan: proto.Plan): Boolean = {
     client.sameSemantics(plan, otherPlan).getSameSemantics.getResult
   }

@@ -43,7 +43,7 @@ if have_pyarrow:
     not have_pandas or not have_pyarrow,
     cast(str, pandas_requirement_message or pyarrow_requirement_message),
 )
-class CogroupedApplyInPandasTests(ReusedSQLTestCase):
+class CogroupedApplyInPandasTestsMixin:
     @property
     def data1(self):
         return (
@@ -536,6 +536,10 @@ class CogroupedApplyInPandasTests(ReusedSQLTestCase):
         with QuietTest(self.sc):
             with self.assertRaisesRegex(error_class, error_message_regex):
                 self.__test_merge(left, right, by, fn, output_schema)
+
+
+class CogroupedApplyInPandasTests(CogroupedApplyInPandasTestsMixin, ReusedSQLTestCase):
+    pass
 
 
 if __name__ == "__main__":

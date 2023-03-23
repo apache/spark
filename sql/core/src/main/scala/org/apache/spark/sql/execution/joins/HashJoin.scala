@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, BuildSide}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.execution.{CodegenSupport, ExplainUtils, RowIterator}
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.types.{BooleanType, IntegralType, LongType}
@@ -109,7 +110,7 @@ trait HashJoin extends JoinCodegenSupport {
     require(leftKeys.length == rightKeys.length &&
       leftKeys.map(_.dataType)
         .zip(rightKeys.map(_.dataType))
-        .forall(types => types._1.sameType(types._2)),
+        .forall(types => DataTypeUtils.sameType(types._1, types._2)),
       "Join keys from two sides should have same length and types")
     buildSide match {
       case BuildLeft => (leftKeys, rightKeys)

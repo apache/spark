@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.trees.{BinaryLike, QuaternaryLike, TernaryLike}
 import org.apache.spark.sql.catalyst.trees.TreePattern._
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
@@ -1059,7 +1060,7 @@ case class MapZipWith(left: Expression, right: Expression, function: Expression)
   override def checkArgumentDataTypes(): TypeCheckResult = {
     super.checkArgumentDataTypes() match {
       case TypeCheckResult.TypeCheckSuccess =>
-        if (leftKeyType.sameType(rightKeyType)) {
+        if (DataTypeUtils.sameType(leftKeyType, rightKeyType)) {
           TypeUtils.checkForOrderingExpr(leftKeyType, prettyName)
         } else {
           DataTypeMismatch(

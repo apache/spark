@@ -1950,6 +1950,46 @@ class GroupMap(LogicalPlan):
         return plan
 
 
+class CoGroupMap(LogicalPlan):
+    """Logical plan object for a CoGroup Map API: applyInPandas."""
+
+    def __init__(
+        self,
+        input: Optional["LogicalPlan"],
+        input_grouping_cols: Sequence[Column],
+        other: Optional["LogicalPlan"],
+        other_grouping_cols: Sequence[Column],
+        function: "UserDefinedFunction",
+        cols: List[Column],
+    ):
+        assert isinstance(input_grouping_cols, list) and all(
+            isinstance(c, Column) for c in input_grouping_cols
+        )
+        assert isinstance(other_grouping_cols, list) and all(
+            isinstance(c, Column) for c in other_grouping_cols
+        )
+
+        super().__init__(input)
+        self._input_grouping_cols = input_grouping_cols
+        self._other_grouping_cols = other_grouping_cols
+        self._other = cast(LogicalPlan, other)
+        self._func = function._build_common_inline_user_defined_function(*cols)
+
+    def plan(self, session: "SparkConnectClient") -> proto.Relation:
+        assert self._child is not None
+        plan = self._create_proto_relation()
+        plan.co_group_map.input.CopyFrom(self._child.plan(session))
+        plan.co_group_map.input_grouping_expressions.extend(
+            [c.to_plan(session) for c in self._input_grouping_cols]
+        )
+        plan.co_group_map.other.CopyFrom(self._other.plan(session))
+        plan.co_group_map.other_grouping_expressions.extend(
+            [c.to_plan(session) for c in self._other_grouping_cols]
+        )
+        plan.co_group_map.func.CopyFrom(self._func.to_plan_udf(session))
+        return plan
+
+
 class CachedRelation(LogicalPlan):
     def __init__(self, plan: proto.Relation) -> None:
         super(CachedRelation, self).__init__(None)
