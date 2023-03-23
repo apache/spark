@@ -164,7 +164,6 @@ object CheckConnectJvmClientCompatibility {
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.flatMap"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.foreach"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.foreachPartition"),
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.storageLevel"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.rdd"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.toJavaRDD"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.javaRDD"),

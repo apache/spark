@@ -188,20 +188,8 @@ class SparkConnectService(debug: Boolean)
    * @return
    */
   override def addArtifacts(responseObserver: StreamObserver[AddArtifactsResponse])
-      : StreamObserver[AddArtifactsRequest] = {
-    // TODO: Handle artifact files
-    // No-Op StreamObserver
-    new StreamObserver[AddArtifactsRequest] {
-      override def onNext(v: AddArtifactsRequest): Unit = {}
-
-      override def onError(throwable: Throwable): Unit = responseObserver.onError(throwable)
-
-      override def onCompleted(): Unit = {
-        responseObserver.onNext(proto.AddArtifactsResponse.newBuilder().build())
-        responseObserver.onCompleted()
-      }
-    }
-  }
+      : StreamObserver[AddArtifactsRequest] = new SparkConnectAddArtifactsHandler(
+    responseObserver)
 }
 
 /**
