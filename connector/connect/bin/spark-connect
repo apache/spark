@@ -31,7 +31,7 @@ SCALA_BINARY_VER=`grep "scala.binary.version" "${SPARK_HOME}/pom.xml" | head -n1
 SCALA_ARG="-Pscala-${SCALA_BINARY_VER}"
 
 # Build the jars needed for spark submit and spark connect
-build/sbt "${SCALA_ARG}" -Phive -Pconnect package
+#build/sbt "${SCALA_ARG}" -Phive -Pconnect package
 
 # This jar is already in the classpath, but the submit commands wants a jar as the input.
 CONNECT_JAR=`ls "${SPARK_HOME}"/assembly/target/scala-"${SCALA_BINARY_VER}"/jars/spark-connect_*.jar | paste -sd ',' -`
