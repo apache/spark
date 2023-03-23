@@ -261,7 +261,7 @@ private[spark] object KubernetesConf {
       .toLowerCase(Locale.ROOT)
       .replaceAll("[^a-z0-9\\-]", "-")
       .replaceAll("-+", "-")
-      .replaceAll("^-", "")
+      .replaceAll("^[0-9\\-]+", "")
   }
 
   def getAppNameLabel(appName: String): String = {
