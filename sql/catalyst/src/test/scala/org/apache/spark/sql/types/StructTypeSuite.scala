@@ -22,6 +22,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{caseInsensitiveResolution, caseSensitiveResolution}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.SQLHelper
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DayTimeIntervalType => DT}
@@ -166,22 +167,22 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
     val source1 = StructType.fromDDL("c1 INT")
     val missing1 = StructType.fromDDL("c2 STRUCT<c3: INT, c4: STRUCT<c5: INT, c6: INT>>")
     assert(StructType.findMissingFields(source1, schema, resolver)
-      .exists(_.sameType(missing1)))
+      .exists(e => DataTypeUtils.sameType(e, missing1)))
 
     val source2 = StructType.fromDDL("c1 INT, c3 STRING")
     val missing2 = StructType.fromDDL("c2 STRUCT<c3: INT, c4: STRUCT<c5: INT, c6: INT>>")
     assert(StructType.findMissingFields(source2, schema, resolver)
-      .exists(_.sameType(missing2)))
+      .exists(e => DataTypeUtils.sameType(e, missing2)))
 
     val source3 = StructType.fromDDL("c1 INT, c2 STRUCT<c3: INT>")
     val missing3 = StructType.fromDDL("c2 STRUCT<c4: STRUCT<c5: INT, c6: INT>>")
     assert(StructType.findMissingFields(source3, schema, resolver)
-      .exists(_.sameType(missing3)))
+      .exists(e => DataTypeUtils.sameType(e, missing3)))
 
     val source4 = StructType.fromDDL("c1 INT, c2 STRUCT<c3: INT, c4: STRUCT<c6: INT>>")
     val missing4 = StructType.fromDDL("c2 STRUCT<c4: STRUCT<c5: INT>>")
     assert(StructType.findMissingFields(source4, schema, resolver)
-      .exists(_.sameType(missing4)))
+      .exists(e => DataTypeUtils.sameType(e, missing4)))
   }
 
   test("find missing (nested) fields: array and map") {
@@ -192,7 +193,7 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
     val missing5 = StructType.fromDDL("c2 ARRAY<STRUCT<c3: INT, c4: LONG>>")
     assert(
       StructType.findMissingFields(source5, schemaWithArray, resolver)
-        .exists(_.sameType(missing5)))
+        .exists(e => DataTypeUtils.sameType(e, missing5)))
 
     val schemaWithMap1 = StructType.fromDDL(
       "c1 INT, c2 MAP<STRUCT<c3: INT, c4: LONG>, STRING>, c3 LONG")
@@ -200,7 +201,7 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
     val missing6 = StructType.fromDDL("c2 MAP<STRUCT<c3: INT, c4: LONG>, STRING>")
     assert(
       StructType.findMissingFields(source6, schemaWithMap1, resolver)
-        .exists(_.sameType(missing6)))
+        .exists(e => DataTypeUtils.sameType(e, missing6)))
 
     val schemaWithMap2 = StructType.fromDDL(
       "c1 INT, c2 MAP<STRING, STRUCT<c3: INT, c4: LONG>>, c3 STRING")
@@ -208,7 +209,7 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
     val missing7 = StructType.fromDDL("c2 MAP<STRING, STRUCT<c3: INT, c4: LONG>>")
     assert(
       StructType.findMissingFields(source7, schemaWithMap2, resolver)
-        .exists(_.sameType(missing7)))
+        .exists(e => DataTypeUtils.sameType(e, missing7)))
 
     // Unsupported: nested struct in array, map
     val source8 = StructType.fromDDL("c1 INT, c2 ARRAY<STRUCT<c3: INT>>")
@@ -232,22 +233,22 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
       val source1 = StructType.fromDDL("c1 INT, C2 LONG")
       val missing1 = StructType.fromDDL("c2 STRUCT<c3: INT, C4: STRUCT<C5: INT, c6: INT>>")
       assert(StructType.findMissingFields(source1, schema, resolver)
-        .exists(_.sameType(missing1)))
+        .exists(e => DataTypeUtils.sameType(e, missing1)))
 
       val source2 = StructType.fromDDL("c2 LONG")
       val missing2 = StructType.fromDDL("c1 INT")
       assert(StructType.findMissingFields(source2, schema, resolver)
-        .exists(_.sameType(missing2)))
+        .exists(e => DataTypeUtils.sameType(e, missing2)))
 
       val source3 = StructType.fromDDL("c1 INT, c2 STRUCT<c3: INT, C4: STRUCT<c5: INT>>")
       val missing3 = StructType.fromDDL("c2 STRUCT<C4: STRUCT<C5: INT, c6: INT>>")
       assert(StructType.findMissingFields(source3, schema, resolver)
-        .exists(_.sameType(missing3)))
+        .exists(e => DataTypeUtils.sameType(e, missing3)))
 
       val source4 = StructType.fromDDL("c1 INT, c2 STRUCT<c3: INT, C4: STRUCT<C5: Int>>")
       val missing4 = StructType.fromDDL("c2 STRUCT<C4: STRUCT<c6: INT>>")
       assert(StructType.findMissingFields(source4, schema, resolver)
-        .exists(_.sameType(missing4)))
+        .exists(e => DataTypeUtils.sameType(e, missing4)))
     }
   }
 

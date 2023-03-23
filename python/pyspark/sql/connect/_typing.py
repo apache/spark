@@ -61,6 +61,8 @@ PandasGroupedMapFunction = Union[
 
 GroupedMapPandasUserDefinedFunction = NewType("GroupedMapPandasUserDefinedFunction", FunctionType)
 
+PandasCogroupedMapFunction = Callable[[DataFrameLike, DataFrameLike], DataFrameLike]
+
 
 class UserDefinedFunctionLike(Protocol):
     func: Callable[..., Any]

@@ -340,7 +340,7 @@ logging into the data sources.
       This option controls whether the kerberos configuration is to be refreshed or not for the JDBC client before
       establishing a new connection. Set to true if you want to refresh the configuration, otherwise set to false.
       The default value is false. Note that if you set this option to true and try to establish multiple connections,
-      a race condition can occur. One possble situation would be like as follows.
+      a race condition can occur. One possible situation would be like as follows.
       <ol>
         <li>refreshKrb5Config flag is set with security context 1</li>
         <li>A JDBC connection provider is used for the corresponding DBMS</li>

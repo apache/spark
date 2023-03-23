@@ -179,10 +179,15 @@ class SparkSession(SparkConversionMixin):
     ...         .getOrCreate()
     ... )
 
-    Create a Spark session from a Spark context.
+    Create a Spark session with Spark Connect.
 
-    >>> sc = spark.sparkContext
-    >>> spark = SparkSession(sc)
+    >>> spark = (
+    ...     SparkSession.builder
+    ...         .remote("sc://localhost")
+    ...         .appName("Word Count")
+    ...         .config("spark.some.config.option", "some-value")
+    ...         .getOrCreate()
+    ... )  # doctest: +SKIP
     """
 
     class Builder:
