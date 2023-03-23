@@ -69,7 +69,7 @@ class PlanGenerationTestSuite
   // Borrowed from SparkFunSuite
   private val regenerateGoldenFiles: Boolean = System.getenv("SPARK_GENERATE_GOLDEN_FILES") == "1"
 
-  protected val queryFilePath: Path = commonResourcePath.resolve("queries")
+  protected val queryFilePath: Path = commonResourcePath.resolve("query-tests/queries")
 
   // A relative path to /connector/connect/server, used by `ProtoToParsedPlanTestSuite` to run
   // with the datasource.

@@ -14,32 +14,19 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.connect.client.util
+package org.apache.spark.sql.connect
 
 import java.nio.file.Path
 
-import org.scalatest.funsuite.AnyFunSuite // scalastyle:ignore funsuite
+import org.apache.spark.SparkFunSuite
 
-/**
- * The basic testsuite the client tests should extend from.
- */
-trait ConnectFunSuite extends AnyFunSuite { // scalastyle:ignore funsuite
-
-  // Borrowed from SparkFunSuite
-  protected def getWorkspaceFilePath(first: String, more: String*): Path = {
-    if (!(sys.props.contains("spark.test.home") || sys.env.contains("SPARK_HOME"))) {
-      fail("spark.test.home or SPARK_HOME is not set.")
-    }
-    val sparkHome = sys.props.getOrElse("spark.test.home", sys.env("SPARK_HOME"))
-    java.nio.file.Paths.get(sparkHome, first +: more: _*)
-  }
+trait ResourceHelper extends SparkFunSuite {
 
   protected val baseResourcePath: Path = {
     getWorkspaceFilePath(
       "connector",
       "connect",
-      "client",
-      "jvm",
+      "server",
       "src",
       "test",
       "resources").toAbsolutePath
