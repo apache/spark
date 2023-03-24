@@ -2478,6 +2478,13 @@ def udf(
 udf.__doc__ = pysparkfuncs.udf.__doc__
 
 
+def _distributed_sequence_id() -> Column:
+    """
+    This is an internal function for creating a distributed-sequence index in pandas API on Spark.
+    """
+    return _invoke_function("distributed_sequence_id")
+
+
 def _test() -> None:
     import sys
     import doctest

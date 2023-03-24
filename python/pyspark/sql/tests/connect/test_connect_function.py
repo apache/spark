@@ -2413,6 +2413,16 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
 
         self.assert_eq(getattr(CF, "pandas_udf"), getattr(SF, "pandas_udf"))
 
+    def test_distributed_id(self):
+        from pyspark.sql.connect import functions as CF
+
+        cdf = self.connect.range(10)
+        expected = self.connect.range(0, 10).selectExpr("id as index", "id")
+        self.assertEqual(
+            cdf.select(CF._distributed_sequence_id().alias("index"), "*").collect(),
+            expected.collect(),
+        )
+
 
 if __name__ == "__main__":
     import os

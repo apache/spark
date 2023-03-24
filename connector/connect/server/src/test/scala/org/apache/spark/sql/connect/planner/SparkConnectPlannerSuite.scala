@@ -25,7 +25,7 @@ import io.grpc.stub.StreamObserver
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.ExecutePlanResponse
-import org.apache.spark.connect.proto.Expression.{Alias, DistributedSequenceID, ExpressionString, UnresolvedStar}
+import org.apache.spark.connect.proto.Expression.{Alias, ExpressionString, UnresolvedStar}
 import org.apache.spark.sql.{AnalysisException, Dataset, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
@@ -844,24 +844,5 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
         .build())
 
     intercept[AnalysisException](Dataset.ofRows(spark, logical))
-  }
-
-  test("Test DistributedSequenceID") {
-    val readWithTable = proto.Read
-      .newBuilder()
-      .setNamedTable(proto.Read.NamedTable.newBuilder.setUnparsedIdentifier("name").build())
-      .build()
-    val project =
-      proto.Project
-        .newBuilder()
-        .setInput(proto.Relation.newBuilder().setRead(readWithTable).build())
-        .addExpressions(
-          proto.Expression
-            .newBuilder()
-            .setDistributedSequenceId(DistributedSequenceID.newBuilder().build())
-            .build())
-        .build()
-    val res = transform(proto.Relation.newBuilder.setProject(project).build())
-    assert(res.containsPattern(DISTRIBUTED_SEQUENCE_ID))
   }
 }

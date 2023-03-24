@@ -45,7 +45,6 @@ message Expression {
     UpdateFields update_fields = 13;
     UnresolvedNamedLambdaVariable unresolved_named_lambda_variable = 14;
     CommonInlineUserDefinedFunction common_inline_user_defined_function = 15;
-    DistributedSequenceID distributed_sequence_id = 16;
 
     // This field is used to mark extensions to the protocol. When plugins generate arbitrary
     // relations they can add them here. During the planning the correct resolution is done.
@@ -307,10 +306,6 @@ message Expression {
 
     // (Required) a list of name parts for the variable. Must not be empty.
     repeated string name_parts = 1;
-  }
-
-  // DistributedSequenceID is used to generate distributed-sequence index for pandas API on Spark.
-  message DistributedSequenceID {
   }
 }
 
