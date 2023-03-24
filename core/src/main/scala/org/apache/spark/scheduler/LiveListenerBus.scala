@@ -55,12 +55,6 @@ private[spark] class LiveListenerBus(conf: SparkConf) {
   // Indicate if `stop()` is called
   private val stopped = new AtomicBoolean(false)
 
-  /** A counter for dropped events. It will be reset every time we log it. */
-  private val droppedEventsCounter = new AtomicLong(0L)
-
-  /** When `droppedEventsCounter` was logged last time in milliseconds. */
-  @volatile private var lastReportTimestamp = 0L
-
   private val queues = new CopyOnWriteArrayList[AsyncEventQueue]()
 
   // Visible for testing.
