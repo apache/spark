@@ -21,6 +21,7 @@ package spark.connect;
 
 import "google/protobuf/any.proto";
 import "spark/connect/commands.proto";
+import "spark/connect/common.proto";
 import "spark/connect/expressions.proto";
 import "spark/connect/relations.proto";
 import "spark/connect/types.proto";
@@ -82,6 +83,9 @@ message AnalyzePlanRequest {
     DDLParse ddl_parse = 11;
     SameSemantics same_semantics = 12;
     SemanticHash semantic_hash = 13;
+    Persist persist = 14;
+    Unpersist unpersist = 15;
+    GetStorageLevel get_storage_level = 16;
   }
 
   message Schema {
@@ -163,6 +167,27 @@ message AnalyzePlanRequest {
     // (Required) The logical plan to get a hashCode.
     Plan plan = 1;
   }
+
+  message Persist {
+    // (Required) The logical plan to persist.
+    Relation relation = 1;
+
+    // (Optional) The storage level.
+    optional StorageLevel storage_level = 2;
+  }
+
+  message Unpersist {
+    // (Required) The logical plan to unpersist.
+    Relation relation = 1;
+
+    // (Optional) Whether to block until all blocks are deleted.
+    optional bool blocking = 2;
+  }
+
+  message GetStorageLevel {
+    // (Required) The logical plan to get the storage level.
+    Relation relation = 1;
+  }
 }
 
 // Response to performing analysis of the query. Contains relevant metadata to be able to
@@ -181,6 +206,9 @@ message AnalyzePlanResponse {
     DDLParse ddl_parse = 9;
     SameSemantics same_semantics = 10;
     SemanticHash semantic_hash = 11;
+    Persist persist = 12;
+    Unpersist unpersist = 13;
+    GetStorageLevel get_storage_level = 14;
   }
 
   message Schema {
@@ -222,6 +250,15 @@ message AnalyzePlanResponse {
 
   message SemanticHash {
     int32 result = 1;
+  }
+
+  message Persist { }
+
+  message Unpersist { }
+
+  message GetStorageLevel {
+    // (Required) The StorageLevel as a result of get_storage_level request.
+    StorageLevel storage_level = 1;
   }
 }
 

@@ -595,6 +595,29 @@ class TypesTestsMixin:
             point = self.spark.sql("SELECT point FROM labeled_point").head().point
             self.assertEqual(point, PythonOnlyPoint(1.0, 2.0))
 
+    def test_infer_schema_with_udt_with_column_names(self):
+        row = (1.0, ExamplePoint(1.0, 2.0))
+        df = self.spark.createDataFrame([row], ["label", "point"])
+        schema = df.schema
+        field = [f for f in schema.fields if f.name == "point"][0]
+        self.assertEqual(type(field.dataType), ExamplePointUDT)
+
+        with self.tempView("labeled_point"):
+            df.createOrReplaceTempView("labeled_point")
+            point = self.spark.sql("SELECT point FROM labeled_point").head().point
+            self.assertEqual(point, ExamplePoint(1.0, 2.0))
+
+        row = (1.0, PythonOnlyPoint(1.0, 2.0))
+        df = self.spark.createDataFrame([row], ["label", "point"])
+        schema = df.schema
+        field = [f for f in schema.fields if f.name == "point"][0]
+        self.assertEqual(type(field.dataType), PythonOnlyUDT)
+
+        with self.tempView("labeled_point"):
+            df.createOrReplaceTempView("labeled_point")
+            point = self.spark.sql("SELECT point FROM labeled_point").head().point
+            self.assertEqual(point, PythonOnlyPoint(1.0, 2.0))
+
     def test_apply_schema_with_udt(self):
         row = (1.0, ExamplePoint(1.0, 2.0))
         schema = StructType(
@@ -617,6 +640,29 @@ class TypesTestsMixin:
         df = self.spark.createDataFrame([row], schema)
         point = df.head().point
         self.assertEqual(point, PythonOnlyPoint(1.0, 2.0))
+
+    def test_apply_schema_with_nullable_udt(self):
+        rows = [(1.0, ExamplePoint(1.0, 2.0)), (2.0, None)]
+        schema = StructType(
+            [
+                StructField("label", DoubleType(), False),
+                StructField("point", ExamplePointUDT(), True),
+            ]
+        )
+        df = self.spark.createDataFrame(rows, schema)
+        points = [row.point for row in df.collect()]
+        self.assertEqual(points, [ExamplePoint(1.0, 2.0), None])
+
+        rows = [(1.0, PythonOnlyPoint(1.0, 2.0)), (2.0, None)]
+        schema = StructType(
+            [
+                StructField("label", DoubleType(), False),
+                StructField("point", PythonOnlyUDT(), True),
+            ]
+        )
+        df = self.spark.createDataFrame(rows, schema)
+        points = [row.point for row in df.collect()]
+        self.assertEqual(points, [PythonOnlyPoint(1.0, 2.0), None])
 
     def test_udf_with_udt(self):
         row = Row(label=1.0, point=ExamplePoint(1.0, 2.0))

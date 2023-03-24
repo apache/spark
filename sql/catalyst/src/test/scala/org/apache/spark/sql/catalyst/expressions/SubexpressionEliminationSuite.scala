@@ -16,12 +16,14 @@
  */
 package org.apache.spark.sql.catalyst.expressions
 
+import java.util.Properties
+
 import org.apache.spark.{SparkFunSuite, TaskContext, TaskContextImpl}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{BinaryType, DataType, IntegerType}
+import org.apache.spark.sql.types.{BinaryType, DataType, IntegerType, ObjectType}
 
 class SubexpressionEliminationSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("Semantic equals and hash") {
@@ -424,7 +426,7 @@ class SubexpressionEliminationSuite extends SparkFunSuite with ExpressionEvalHel
   test("SPARK-38333: PlanExpression expression should skip addExprTree function in Executor") {
     try {
       // suppose we are in executor
-      val context1 = new TaskContextImpl(0, 0, 0, 0, 0, 1, null, null, null, cpus = 0)
+      val context1 = new TaskContextImpl(0, 0, 0, 0, 0, 1, null, new Properties, null, cpus = 0)
       TaskContext.setTaskContext(context1)
 
       val equivalence = new EquivalentExpressions
@@ -448,6 +450,49 @@ class SubexpressionEliminationSuite extends SparkFunSuite with ExpressionEvalHel
     e2.addExprTree(n2)
     assert(e2.getCommonSubexpressions.size == 1)
     assert(e2.getCommonSubexpressions.head == add)
+  }
+
+  test("SPARK-42851: Handle supportExpression consistently across add and get") {
+    val expr = {
+      val function = (lambda: Expression) => Add(lambda, Literal(1))
+      val elementType = IntegerType
+      val colClass = classOf[Array[Int]]
+      val inputType = ObjectType(colClass)
+      val inputObject = BoundReference(0, inputType, nullable = true)
+      objects.MapObjects(function, inputObject, elementType, true, Option(colClass))
+    }
+    val equivalence = new EquivalentExpressions
+    equivalence.addExpr(expr)
+    val hasMatching = equivalence.addExpr(expr)
+    val cseState = equivalence.getExprState(expr)
+    assert(hasMatching == cseState.isDefined)
+  }
+
+  test("SPARK-42815: Subexpression elimination support shortcut conditional expression") {
+    val add = Add(Literal(1), Literal(0))
+    val equal = EqualTo(add, add)
+
+    def checkShortcut(expr: Expression, numCommonExpr: Int): Unit = {
+      val e1 = If(expr, Literal(1), Literal(2))
+      val ee1 = new EquivalentExpressions(true)
+      ee1.addExprTree(e1)
+      assert(ee1.getCommonSubexpressions.size == numCommonExpr)
+
+      val e2 = expr
+      val ee2 = new EquivalentExpressions(true)
+      ee2.addExprTree(e2)
+      assert(ee2.getCommonSubexpressions.size == numCommonExpr)
+    }
+
+    // shortcut right child
+    checkShortcut(And(Literal(false), equal), 0)
+    checkShortcut(Or(Literal(true), equal), 0)
+    checkShortcut(Not(And(Literal(true), equal)), 0)
+
+    // always eliminate subexpression for left child
+    checkShortcut((And(equal, Literal(false))), 1)
+    checkShortcut(Or(equal, Literal(true)), 1)
+    checkShortcut(Not(And(equal, Literal(false))), 1)
   }
 }
 

@@ -385,10 +385,6 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         name : str
             Name of the view.
 
-        Returns
-        -------
-        None
-
         Examples
         --------
         Create a local temporary view named 'people'.
@@ -426,10 +422,6 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         name : str
             Name of the view.
 
-        Returns
-        -------
-        None
-
         Examples
         --------
         Create a global temporary view.
@@ -466,10 +458,6 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         ----------
         name : str
             Name of the view.
-
-        Returns
-        -------
-        None
 
         Examples
         --------
@@ -591,10 +579,6 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         .. versionchanged:: 3.4.0
             Supports Spark Connect.
-
-        Returns
-        -------
-        None
 
         Examples
         --------
@@ -856,10 +840,6 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         vertical : bool, optional
             If set to ``True``, print output rows vertically (one line
             per column value).
-
-        Returns
-        -------
-        None
 
         Examples
         --------
@@ -1421,6 +1401,9 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         .. versionadded:: 1.3.0
 
+        .. versionchanged:: 3.4.0
+            Supports Spark Connect.
+
         Notes
         -----
         The default storage level has changed to `MEMORY_AND_DISK` to match Scala in 2.0.
@@ -1435,6 +1418,10 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         >>> df = spark.range(1)
         >>> df.cache()
         DataFrame[id: bigint]
+
+        >>> df.explain()
+        == Physical Plan ==
+        InMemoryTableScan ...
         """
         self.is_cached = True
         self._jdf.cache()
@@ -1450,6 +1437,9 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         If no storage level is specified defaults to (`MEMORY_AND_DISK_DESER`)
 
         .. versionadded:: 1.3.0
+
+        .. versionchanged:: 3.4.0
+            Supports Spark Connect.
 
         Notes
         -----
@@ -1471,6 +1461,10 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         >>> df.persist()
         DataFrame[id: bigint]
 
+        >>> df.explain()
+        == Physical Plan ==
+        InMemoryTableScan ...
+
         Persists the data in the disk by specifying the storage level.
 
         >>> from pyspark.storagelevel import StorageLevel
@@ -1487,6 +1481,9 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         """Get the :class:`DataFrame`'s current storage level.
 
         .. versionadded:: 2.1.0
+
+        .. versionchanged:: 3.4.0
+            Supports Spark Connect.
 
         Returns
         -------
@@ -1520,6 +1517,9 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         memory and disk.
 
         .. versionadded:: 1.3.0
+
+        .. versionchanged:: 3.4.0
+            Supports Spark Connect.
 
         Notes
         -----
