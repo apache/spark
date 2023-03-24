@@ -77,6 +77,14 @@ class PandasMapOpsMixin:
         +---+---+
         |  1| 21|
         +---+---+
+        >>> # Set isBarrier=True to force the "mapInPandas" stage running in barrier mode,
+        >>> # it ensures all python UDF workers in the stage will be launched concurrently.
+        >>> df.mapInPandas(filter_func, df.schema, isBarrier=True).show()  # doctest: +SKIP
+        +---+---+
+        | id|age|
+        +---+---+
+        |  1| 21|
+        +---+---+
 
         Notes
         -----
@@ -138,6 +146,14 @@ class PandasMapOpsMixin:
         ...         pdf = batch.to_pandas()
         ...         yield pyarrow.RecordBatch.from_pandas(pdf[pdf.id == 1])
         >>> df.mapInArrow(filter_func, df.schema).show()  # doctest: +SKIP
+        +---+---+
+        | id|age|
+        +---+---+
+        |  1| 21|
+        +---+---+
+        >>> # Set isBarrier=True to force the "mapInArrow" stage running in barrier mode,
+        >>> # it ensures all python UDF workers in the stage will be launched concurrently.
+        >>> df.mapInArrow(filter_func, df.schema, isBarrier=True).show()  # doctest: +SKIP
         +---+---+
         | id|age|
         +---+---+
