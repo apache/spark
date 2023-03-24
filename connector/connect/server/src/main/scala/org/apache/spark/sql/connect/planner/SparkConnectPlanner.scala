@@ -55,6 +55,7 @@ import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JDBCPartiti
 import org.apache.spark.sql.execution.python.UserDefinedPythonFunction
 import org.apache.spark.sql.internal.CatalogImpl
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.Utils
 
 final case class InvalidCommandInput(
@@ -717,26 +718,30 @@ class SparkConnectPlanner(val session: SparkSession) {
       if (schema == null) {
         logical.LocalRelation(attributes, data.map(_.copy()).toSeq)
       } else {
-        def udtToSqlType(dt: DataType): DataType = dt match {
-          case udt: UserDefinedType[_] => udt.sqlType
+        def normalize(dt: DataType): DataType = dt match {
+          case udt: UserDefinedType[_] => normalize(udt.sqlType)
           case StructType(fields) =>
-            val newFields = fields.map { case StructField(name, dataType, nullable, metadata) =>
-              StructField(name, udtToSqlType(dataType), nullable, metadata)
+            val newFields = fields.zipWithIndex.map {
+              case (StructField(_, dataType, nullable, metadata), i) =>
+                StructField(s"col_$i", normalize(dataType), nullable, metadata)
             }
             StructType(newFields)
           case ArrayType(elementType, containsNull) =>
-            ArrayType(udtToSqlType(elementType), containsNull)
+            ArrayType(normalize(elementType), containsNull)
           case MapType(keyType, valueType, valueContainsNull) =>
-            MapType(udtToSqlType(keyType), udtToSqlType(valueType), valueContainsNull)
+            MapType(normalize(keyType), normalize(valueType), valueContainsNull)
           case _ => dt
         }
 
-        val sqlTypeOnlySchema = udtToSqlType(schema).asInstanceOf[StructType]
+        val normalized = normalize(schema).asInstanceOf[StructType]
 
         val project = Dataset
-          .ofRows(session, logicalPlan = logical.LocalRelation(attributes))
-          .toDF(sqlTypeOnlySchema.names: _*)
-          .to(sqlTypeOnlySchema)
+          .ofRows(
+            session,
+            logicalPlan =
+              logical.LocalRelation(normalize(structType).asInstanceOf[StructType].toAttributes))
+          .toDF(normalized.names: _*)
+          .to(normalized)
           .logicalPlan
           .asInstanceOf[Project]
 
@@ -757,7 +762,9 @@ class SparkConnectPlanner(val session: SparkSession) {
       case proto.Read.ReadTypeCase.NAMED_TABLE =>
         val multipartIdentifier =
           CatalystSqlParser.parseMultipartIdentifier(rel.getNamedTable.getUnparsedIdentifier)
-        UnresolvedRelation(multipartIdentifier)
+        UnresolvedRelation(
+          multipartIdentifier,
+          new CaseInsensitiveStringMap(rel.getNamedTable.getOptionsMap))
 
       case proto.Read.ReadTypeCase.DATA_SOURCE =>
         val localMap = CaseInsensitiveMap[String](rel.getDataSource.getOptionsMap.asScala.toMap)
