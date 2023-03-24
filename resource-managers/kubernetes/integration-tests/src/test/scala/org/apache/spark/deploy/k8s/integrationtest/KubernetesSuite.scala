@@ -192,9 +192,6 @@ class KubernetesSuite extends SparkFunSuite
       .set("spark.kubernetes.driver.label.spark-app-locator", appLocator)
       .set("spark.kubernetes.executor.label.spark-app-locator", appLocator)
       .set(NETWORK_AUTH_ENABLED.key, "true")
-      .set("spark.sql.maven.additionalRemoteRepositories",
-        "https://maven-central.storage-download.googleapis.com/maven2/," +
-          "https://repository.apache.org/content/groups/staging/")
     sys.props.get(CONFIG_DRIVER_REQUEST_CORES).map { cpu =>
       sparkAppConf.set("spark.kubernetes.driver.request.cores", cpu)
     }
