@@ -32,9 +32,7 @@ class PandasMapOpsMixin:
     """
 
     def mapInPandas(
-        self,
-        func: "PandasMapIterFunction", schema: Union[StructType, str],
-        isBarrier: bool = False
+        self, func: "PandasMapIterFunction", schema: Union[StructType, str], isBarrier: bool = False
     ) -> "DataFrame":
         """
         Maps an iterator of batches in the current :class:`DataFrame` using a Python native
@@ -108,9 +106,7 @@ class PandasMapOpsMixin:
         return DataFrame(jdf, self.sparkSession)
 
     def mapInArrow(
-        self,
-        func: "ArrowMapIterFunction", schema: Union[StructType, str],
-        isBarrier: bool = False
+        self, func: "ArrowMapIterFunction", schema: Union[StructType, str], isBarrier: bool = False
     ) -> "DataFrame":
         """
         Maps an iterator of batches in the current :class:`DataFrame` using a Python native
