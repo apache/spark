@@ -107,37 +107,37 @@ class SparkConnectGrpcException(SparkConnectException):
 
 class AnalysisException(SparkConnectGrpcException, BaseAnalysisException):
     """
-    Failed to analyze a SQL query plan from Spark Connect server.
+    Failed to analyze a SQL query plan, thrown from Spark Connect.
     """
 
 
 class ParseException(SparkConnectGrpcException, BaseParseException):
     """
-    Failed to parse a SQL command from Spark Connect server.
+    Failed to parse a SQL command, thrown from Spark Connect.
     """
 
 
 class IllegalArgumentException(SparkConnectGrpcException, BaseIllegalArgumentException):
     """
-    Passed an illegal or inappropriate argument from Spark Connect server.
+    Passed an illegal or inappropriate argument, thrown from Spark Connect.
     """
 
 
 class StreamingQueryException(SparkConnectGrpcException, BaseStreamingQueryException):
     """
-    Exception that stopped a :class:`StreamingQuery` from Spark Connect server.
+    Exception that stopped a :class:`StreamingQuery` thrown from Spark Connect.
     """
 
 
 class QueryExecutionException(SparkConnectGrpcException, BaseQueryExecutionException):
     """
-    Failed to execute a query from Spark Connect server.
+    Failed to execute a query, thrown from Spark Connect.
     """
 
 
 class PythonException(SparkConnectGrpcException, BasePythonException):
     """
-    Exceptions thrown from Spark Connect server.
+    Exceptions thrown from Spark Connect.
     """
 
 
