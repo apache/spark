@@ -255,17 +255,13 @@ private[spark] object KubernetesConf {
     s"spark-${UUID.randomUUID().toString.replaceAll("-", "")}"
 
   def getResourceNamePrefix(appName: String): String = {
-    var prefix = ""
-    while (prefix.isEmpty) {
-      val id = KubernetesUtils.uniqueID()
-      prefix = s"$appName-$id"
-        .trim
-        .toLowerCase(Locale.ROOT)
-        .replaceAll("[^a-z0-9\\-]", "-")
-        .replaceAll("-+", "-")
-        .replaceAll("^[0-9\\-]+", "")
-    }
-    prefix
+    val id = KubernetesUtils.uniqueID()
+    s"$appName-$id"
+      .trim
+      .toLowerCase(Locale.ROOT)
+      .replaceAll("[^a-z0-9\\-]", "x")
+      .replaceAll("-+", "-")
+      .replaceAll("^[0-9\\-]+", "")
   }
 
   def getAppNameLabel(appName: String): String = {
