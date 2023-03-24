@@ -193,6 +193,15 @@ def try_remote_windowspec(f: FuncT) -> FuncT:
     return cast(FuncT, wrapped)
 
 
+def require_spark_context_initialized() -> Optional[SparkContext]:
+    """Raise RuntimeError if SparkContext is not initialized,
+    otherwise, returns the active SparkContext."""
+    sc = SparkContext._active_spark_context
+    if sc is None or sc._jvm is None:
+        raise RuntimeError("SparkContext must be initialized for JVM access.")
+    return sc
+
+
 def try_remote_observation(f: FuncT) -> FuncT:
     """Mark API supported from Spark Connect."""
 
