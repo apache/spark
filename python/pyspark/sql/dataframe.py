@@ -385,10 +385,6 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         name : str
             Name of the view.
 
-        Returns
-        -------
-        None
-
         Examples
         --------
         Create a local temporary view named 'people'.
@@ -426,10 +422,6 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         name : str
             Name of the view.
 
-        Returns
-        -------
-        None
-
         Examples
         --------
         Create a global temporary view.
@@ -466,10 +458,6 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         ----------
         name : str
             Name of the view.
-
-        Returns
-        -------
-        None
 
         Examples
         --------
@@ -591,10 +579,6 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         .. versionchanged:: 3.4.0
             Supports Spark Connect.
-
-        Returns
-        -------
-        None
 
         Examples
         --------
@@ -856,10 +840,6 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         vertical : bool, optional
             If set to ``True``, print output rows vertically (one line
             per column value).
-
-        Returns
-        -------
-        None
 
         Examples
         --------

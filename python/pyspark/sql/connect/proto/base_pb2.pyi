@@ -41,6 +41,7 @@ import google.protobuf.internal.containers
 import google.protobuf.internal.enum_type_wrapper
 import google.protobuf.message
 import pyspark.sql.connect.proto.commands_pb2
+import pyspark.sql.connect.proto.common_pb2
 import pyspark.sql.connect.proto.expressions_pb2
 import pyspark.sql.connect.proto.relations_pb2
 import pyspark.sql.connect.proto.types_pb2
@@ -131,53 +132,6 @@ class UserContext(google.protobuf.message.Message):
     ) -> None: ...
 
 global___UserContext = UserContext
-
-class StorageLevel(google.protobuf.message.Message):
-    """StorageLevel for persisting Datasets/Tables."""
-
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
-
-    USE_DISK_FIELD_NUMBER: builtins.int
-    USE_MEMORY_FIELD_NUMBER: builtins.int
-    USE_OFF_HEAP_FIELD_NUMBER: builtins.int
-    DESERIALIZED_FIELD_NUMBER: builtins.int
-    REPLICATION_FIELD_NUMBER: builtins.int
-    use_disk: builtins.bool
-    """(Required) Whether the cache should use disk or not."""
-    use_memory: builtins.bool
-    """(Required) Whether the cache should use memory or not."""
-    use_off_heap: builtins.bool
-    """(Required) Whether the cache should use off-heap or not."""
-    deserialized: builtins.bool
-    """(Required) Whether the cached data is deserialized or not."""
-    replication: builtins.int
-    """(Required) The number of replicas."""
-    def __init__(
-        self,
-        *,
-        use_disk: builtins.bool = ...,
-        use_memory: builtins.bool = ...,
-        use_off_heap: builtins.bool = ...,
-        deserialized: builtins.bool = ...,
-        replication: builtins.int = ...,
-    ) -> None: ...
-    def ClearField(
-        self,
-        field_name: typing_extensions.Literal[
-            "deserialized",
-            b"deserialized",
-            "replication",
-            b"replication",
-            "use_disk",
-            b"use_disk",
-            "use_memory",
-            b"use_memory",
-            "use_off_heap",
-            b"use_off_heap",
-        ],
-    ) -> None: ...
-
-global___StorageLevel = StorageLevel
 
 class AnalyzePlanRequest(google.protobuf.message.Message):
     """Request to perform plan analyze, optionally to explain the plan."""
@@ -423,13 +377,13 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
         def relation(self) -> pyspark.sql.connect.proto.relations_pb2.Relation:
             """(Required) The logical plan to persist."""
         @property
-        def storage_level(self) -> global___StorageLevel:
+        def storage_level(self) -> pyspark.sql.connect.proto.common_pb2.StorageLevel:
             """(Optional) The storage level."""
         def __init__(
             self,
             *,
             relation: pyspark.sql.connect.proto.relations_pb2.Relation | None = ...,
-            storage_level: global___StorageLevel | None = ...,
+            storage_level: pyspark.sql.connect.proto.common_pb2.StorageLevel | None = ...,
         ) -> None: ...
         def HasField(
             self,
@@ -866,12 +820,12 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
 
         STORAGE_LEVEL_FIELD_NUMBER: builtins.int
         @property
-        def storage_level(self) -> global___StorageLevel:
+        def storage_level(self) -> pyspark.sql.connect.proto.common_pb2.StorageLevel:
             """(Required) The StorageLevel as a result of get_storage_level request."""
         def __init__(
             self,
             *,
-            storage_level: global___StorageLevel | None = ...,
+            storage_level: pyspark.sql.connect.proto.common_pb2.StorageLevel | None = ...,
         ) -> None: ...
         def HasField(
             self, field_name: typing_extensions.Literal["storage_level", b"storage_level"]

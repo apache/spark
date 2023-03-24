@@ -2162,4 +2162,9 @@ class PlanGenerationTestSuite
   test("replace") {
     simple.na.replace[Long]("id", Map(1L -> 8L))
   }
+
+  /* Reader API  */
+  test("table API with options") {
+    session.read.options(Map("p1" -> "v1", "p2" -> "v2")).table("tempdb.myTable")
+  }
 }
