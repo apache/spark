@@ -210,7 +210,7 @@ class AnalysisException(CapturedException, BaseAnalysisException):
     """
 
 
-class ParseException(CapturedException, BaseParseException):
+class ParseException(AnalysisException, BaseParseException):
     """
     Failed to parse a SQL command.
     """
@@ -258,7 +258,7 @@ class DateTimeException(CapturedException, BaseDateTimeException):
     """
 
 
-class NumberFormatException(CapturedException, BaseNumberFormatException):
+class NumberFormatException(IllegalArgumentException, BaseNumberFormatException):
     """
     Number format exception.
     """

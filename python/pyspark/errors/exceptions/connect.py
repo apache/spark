@@ -111,7 +111,7 @@ class AnalysisException(SparkConnectGrpcException, BaseAnalysisException):
     """
 
 
-class ParseException(SparkConnectGrpcException, BaseParseException):
+class ParseException(AnalysisException, BaseParseException):
     """
     Failed to parse a SQL command, thrown from Spark Connect.
     """
@@ -159,7 +159,7 @@ class DateTimeException(SparkConnectGrpcException, BaseDateTimeException):
     """
 
 
-class NumberFormatException(SparkConnectGrpcException, BaseNumberFormatException):
+class NumberFormatException(IllegalArgumentException, BaseNumberFormatException):
     """
     Number format exception thrown from Spark Connect.
     """

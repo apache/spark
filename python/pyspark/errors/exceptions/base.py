@@ -138,7 +138,7 @@ class DateTimeException(PySparkException):
     """
 
 
-class NumberFormatException(PySparkException):
+class NumberFormatException(IllegalArgumentException):
     """
     Number format exception thrown from Spark with an error class.
     """
