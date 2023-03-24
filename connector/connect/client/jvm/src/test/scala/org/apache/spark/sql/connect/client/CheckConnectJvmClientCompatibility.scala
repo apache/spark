@@ -106,6 +106,11 @@ object CheckConnectJvmClientCompatibility {
     val allProblems = mima.collectProblems(sqlJar, clientJar, List.empty)
     val includedRules = Seq(
       IncludeByName("org.apache.spark.sql.catalog.Catalog.*"),
+      IncludeByName("org.apache.spark.sql.catalog.CatalogMetadata.*"),
+      IncludeByName("org.apache.spark.sql.catalog.Column.*"),
+      IncludeByName("org.apache.spark.sql.catalog.Database.*"),
+      IncludeByName("org.apache.spark.sql.catalog.Function.*"),
+      IncludeByName("org.apache.spark.sql.catalog.Table.*"),
       IncludeByName("org.apache.spark.sql.Column.*"),
       IncludeByName("org.apache.spark.sql.ColumnName.*"),
       IncludeByName("org.apache.spark.sql.DataFrame.*"),
