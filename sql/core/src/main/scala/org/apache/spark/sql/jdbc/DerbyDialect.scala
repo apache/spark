@@ -67,8 +67,8 @@ private object DerbyDialect extends JdbcDialect {
   }
 
   // Derby Support 2 types of clauses for nullability constraint alteration
-  // columnName { SET | DROP } NOT NULL
-  // columnName [ NOT ] NULL
+  //   columnName { SET | DROP } NOT NULL
+  //   columnName [ NOT ] NULL
   // Here we use the 2nd one
   // For more information, https://db.apache.org/derby/docs/10.16/ref/rrefsqlj81859.html
   override def getUpdateColumnNullabilityQuery(
