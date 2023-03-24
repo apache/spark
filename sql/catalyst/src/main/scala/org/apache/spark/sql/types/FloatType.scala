@@ -50,7 +50,7 @@ class FloatType private() extends FractionalType {
    */
   override def defaultSize: Int = 4
 
-  override def physicalDataType: PhysicalDataType = PhysicalFloatType
+  private[sql] override def physicalDataType: PhysicalDataType = PhysicalFloatType
 
   private[spark] override def asNullable: FloatType = this
 }

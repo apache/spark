@@ -64,7 +64,7 @@ class RuntimeConfig private[sql](sqlConf: SQLConf = new SQLConf) {
   /**
    * Sets the given Spark runtime configuration property.
    */
-  protected[sql] def set[T](entry: ConfigEntry[T], value: T): Unit = {
+  private[sql] def set[T](entry: ConfigEntry[T], value: T): Unit = {
     requireNonStaticConf(entry.key)
     sqlConf.setConf(entry, value)
   }
@@ -94,18 +94,18 @@ class RuntimeConfig private[sql](sqlConf: SQLConf = new SQLConf) {
    * Returns the value of Spark runtime configuration property for the given key.
    */
   @throws[NoSuchElementException]("if the key is not set")
-  protected[sql] def get[T](entry: ConfigEntry[T]): T = {
+  private[sql] def get[T](entry: ConfigEntry[T]): T = {
     sqlConf.getConf(entry)
   }
 
-  protected[sql] def get[T](entry: OptionalConfigEntry[T]): Option[T] = {
+  private[sql] def get[T](entry: OptionalConfigEntry[T]): Option[T] = {
     sqlConf.getConf(entry)
   }
 
   /**
    * Returns the value of Spark runtime configuration property for the given key.
    */
-  protected[sql] def get[T](entry: ConfigEntry[T], default: T): T = {
+  private[sql] def get[T](entry: ConfigEntry[T], default: T): T = {
     sqlConf.getConf(entry, default)
   }
 
@@ -153,7 +153,7 @@ class RuntimeConfig private[sql](sqlConf: SQLConf = new SQLConf) {
   /**
    * Returns whether a particular key is set.
    */
-  protected[sql] def contains(key: String): Boolean = {
+  private[sql] def contains(key: String): Boolean = {
     sqlConf.contains(key)
   }
 

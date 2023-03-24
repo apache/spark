@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.expressions.Literal.FalseLiteral
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{BINARY_COMPARISON, IN, INSET}
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.types._
 
 /**
@@ -380,7 +381,7 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
       fromExp: Expression,
       toType: DataType,
       literalType: DataType): Boolean = {
-    toType.sameType(literalType) &&
+    DataTypeUtils.sameType(toType, literalType) &&
       !fromExp.foldable &&
       toType.isInstanceOf[NumericType] &&
       canUnwrapCast(fromExp.dataType, toType)
