@@ -257,11 +257,9 @@ class KubernetesConfSuite extends SparkFunSuite {
 
   test("SPARK-42906: Resource name prefix should start with an alphabetic character") {
     // scalastyle:off nonascii
-    assert(KubernetesConf.getResourceNamePrefix("你好-123").matches("[a-z]([-a-z0-9]*[a-z0-9])?"))
-    assert(KubernetesConf.getResourceNamePrefix("---123").matches("[a-z]([-a-z0-9]*[a-z0-9])?"))
-    assert(KubernetesConf.getResourceNamePrefix("123---").matches("[a-z]([-a-z0-9]*[a-z0-9])?"))
-    assert(KubernetesConf.getResourceNamePrefix("------").matches("[a-z]([-a-z0-9]*[a-z0-9])?"))
-    assert(KubernetesConf.getResourceNamePrefix("123456").matches("[a-z]([-a-z0-9]*[a-z0-9])?"))
+    Seq("你好-123", "---123", "123---", "------", "123456").foreach { appName =>
     // scalastyle:on nonascii
+      assert(KubernetesConf.getResourceNamePrefix(appName).matches("[a-z]([-a-z0-9]*[a-z0-9])?"))
+    }
   }
 }
