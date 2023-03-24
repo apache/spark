@@ -452,4 +452,18 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
       assert(m.contains("\"TABLEENGINENAME\" not found"))
     }
   }
+
+  test("SPARK-42904: CREATE TABLE with char/varchar") {
+    withTable("h2.test.new_table") {
+      sql("CREATE TABLE h2.test.new_table(c CHAR(10), v VARCHAR(100))")
+      checkAnswer(sql("SHOW TABLES IN h2.test LIKE 'new*'"), Row("test", "new_table", false))
+    }
+  }
+
+  test("SPARK-42904: CREATE TABLE with char/varchar with invalid char length") {
+    val e = intercept[AnalysisException]{
+      sql("CREATE TABLE h2.test.new_table(c CHAR(1000000001))")
+    }
+    assert(e.getCause.getMessage.contains("1000000001"))
+  }
 }
