@@ -22,7 +22,7 @@ import org.apache.logging.log4j.Level
 import org.apache.spark.sql.{AnalysisException, DataFrame}
 import org.apache.spark.sql.catalyst.analysis.{IndexAlreadyExistsException, NoSuchIndexException, UnresolvedAttribute}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, Sample, Sort}
-import org.apache.spark.sql.catalyst.util.quoteIdentifier
+import org.apache.spark.sql.catalyst.util.{quoteIdentifier, CharVarcharUtils}
 import org.apache.spark.sql.connector.catalog.{Catalogs, Identifier, TableCatalog}
 import org.apache.spark.sql.connector.catalog.index.SupportsIndex
 import org.apache.spark.sql.connector.expressions.NullOrdering
@@ -41,6 +41,12 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
 
   val namespaceOpt: Option[String] = None
 
+  val typeMapping: Map[DataType, DataType] = Map.empty
+
+  def getExpectedType(dt: DataType): DataType = {
+    typeMapping.getOrElse(dt, dt)
+  }
+
   private def catalogAndNamespace =
     namespaceOpt.map(namespace => s"$catalogName.$namespace").getOrElse(catalogName)
 
@@ -54,13 +60,16 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
   def testUpdateColumnNullability(tbl: String): Unit = {
     sql(s"CREATE TABLE $catalogName.alt_table (ID STRING NOT NULL)")
     var t = spark.table(s"$catalogName.alt_table")
+    val expectedType = getExpectedType(StringType)
     // nullable is true in the expectedSchema because Spark always sets nullable to true
     // regardless of the JDBC metadata https://github.com/apache/spark/pull/18445
-    var expectedSchema = new StructType().add("ID", StringType, true, defaultMetadata)
+    var expectedSchema = new StructType().add("ID", expectedType, true, defaultMetadata)
+    expectedSchema = CharVarcharUtils.replaceCharVarcharWithStringInSchema(expectedSchema)
     assert(t.schema === expectedSchema)
     sql(s"ALTER TABLE $catalogName.alt_table ALTER COLUMN ID DROP NOT NULL")
     t = spark.table(s"$catalogName.alt_table")
-    expectedSchema = new StructType().add("ID", StringType, true, defaultMetadata)
+    expectedSchema = new StructType().add("ID", expectedType, true, defaultMetadata)
+    expectedSchema = CharVarcharUtils.replaceCharVarcharWithStringInSchema(expectedSchema)
     assert(t.schema === expectedSchema)
     // Update nullability of not existing column
     val msg = intercept[AnalysisException] {
@@ -72,8 +81,12 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
   def testRenameColumn(tbl: String): Unit = {
     sql(s"ALTER TABLE $tbl RENAME COLUMN ID TO RENAMED")
     val t = spark.table(s"$tbl")
-    val expectedSchema = new StructType().add("RENAMED", StringType, true, defaultMetadata)
-      .add("ID1", StringType, true, defaultMetadata).add("ID2", StringType, true, defaultMetadata)
+    val expectedType = getExpectedType(StringType)
+    var expectedSchema = new StructType()
+      .add("RENAMED", expectedType, true, defaultMetadata)
+      .add("ID1", expectedType, true, defaultMetadata)
+      .add("ID2", expectedType, true, defaultMetadata)
+    expectedSchema = CharVarcharUtils.replaceCharVarcharWithStringInSchema(expectedSchema)
     assert(t.schema === expectedSchema)
   }
 
@@ -83,16 +96,20 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
     withTable(s"$catalogName.alt_table") {
       sql(s"CREATE TABLE $catalogName.alt_table (ID STRING)")
       var t = spark.table(s"$catalogName.alt_table")
-      var expectedSchema = new StructType().add("ID", StringType, true, defaultMetadata)
+      val expectedType = getExpectedType(StringType)
+      var expectedSchema = new StructType().add("ID", expectedType, true, defaultMetadata)
+      expectedSchema = CharVarcharUtils.replaceCharVarcharWithStringInSchema(expectedSchema)
       assert(t.schema === expectedSchema)
       sql(s"ALTER TABLE $catalogName.alt_table ADD COLUMNS (C1 STRING, C2 STRING)")
       t = spark.table(s"$catalogName.alt_table")
-      expectedSchema = expectedSchema.add("C1", StringType, true, defaultMetadata)
-        .add("C2", StringType, true, defaultMetadata)
+      expectedSchema = expectedSchema.add("C1", expectedType, true, defaultMetadata)
+        .add("C2", expectedType, true, defaultMetadata)
+      expectedSchema = CharVarcharUtils.replaceCharVarcharWithStringInSchema(expectedSchema)
       assert(t.schema === expectedSchema)
       sql(s"ALTER TABLE $catalogName.alt_table ADD COLUMNS (C3 STRING)")
       t = spark.table(s"$catalogName.alt_table")
-      expectedSchema = expectedSchema.add("C3", StringType, true, defaultMetadata)
+      expectedSchema = expectedSchema.add("C3", expectedType, true, defaultMetadata)
+      expectedSchema = CharVarcharUtils.replaceCharVarcharWithStringInSchema(expectedSchema)
       assert(t.schema === expectedSchema)
       // Add already existing column
       val msg = intercept[AnalysisException] {
@@ -115,7 +132,9 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
       sql(s"ALTER TABLE $catalogName.alt_table DROP COLUMN C1")
       sql(s"ALTER TABLE $catalogName.alt_table DROP COLUMN c3")
       val t = spark.table(s"$catalogName.alt_table")
-      val expectedSchema = new StructType().add("C2", StringType, true, defaultMetadata)
+      val expectedType = getExpectedType(StringType)
+      var expectedSchema = new StructType().add("C2", expectedType, true, defaultMetadata)
+      expectedSchema = CharVarcharUtils.replaceCharVarcharWithStringInSchema(expectedSchema)
       assert(t.schema === expectedSchema)
       // Drop not existing column
       val msg = intercept[AnalysisException] {

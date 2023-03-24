@@ -86,6 +86,8 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTes
       s"jdbc:oracle:thin:system/$oracle_password@//$ip:$port/xe"
   }
 
+  override val typeMapping: Map[DataType, DataType] = Map(StringType -> VarcharType(255))
+
   override def sparkConf: SparkConf = super.sparkConf
     .set("spark.sql.catalog.oracle", classOf[JDBCTableCatalog].getName)
     .set("spark.sql.catalog.oracle.url", db.getJdbcUrl(dockerIp, externalPort))

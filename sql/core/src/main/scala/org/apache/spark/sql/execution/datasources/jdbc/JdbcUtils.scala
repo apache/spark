@@ -37,7 +37,7 @@ import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions.SpecificInternalRow
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
-import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils, GenericArrayData}
+import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CharVarcharUtils, DateTimeUtils, GenericArrayData}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{instantToMicros, localDateTimeToMicros, localDateToDays, toJavaDate, toJavaTimestamp, toJavaTimestampNoRebase}
 import org.apache.spark.sql.connector.catalog.{Identifier, TableChange}
 import org.apache.spark.sql.connector.catalog.index.{SupportsIndex, TableIndex}
@@ -368,8 +368,10 @@ object JdbcUtils extends Logging with SQLConfHelper {
    * Creates `JDBCValueGetter`s according to [[StructType]], which can set
    * each value from `ResultSet` to each field of [[InternalRow]] correctly.
    */
-  private def makeGetters(schema: StructType): Array[JDBCValueGetter] =
-    schema.fields.map(sf => makeGetter(sf.dataType, sf.metadata))
+  private def makeGetters(schema: StructType): Array[JDBCValueGetter] = {
+    val replaced = CharVarcharUtils.replaceCharVarcharWithStringInSchema(schema)
+    replaced.fields.map(sf => makeGetter(sf.dataType, sf.metadata))
+  }
 
   private def makeGetter(dt: DataType, metadata: Metadata): JDBCValueGetter = dt match {
     case BooleanType =>
