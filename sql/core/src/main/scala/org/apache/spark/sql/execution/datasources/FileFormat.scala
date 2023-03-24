@@ -198,6 +198,10 @@ object FileFormat {
   // until they can be placed in the _metadata struct.
   val ROW_INDEX_TEMPORARY_COLUMN_NAME = s"_tmp_metadata_$ROW_INDEX"
 
+  // The field readers can use to access the generated row index column.
+  val ROW_INDEX_FIELD = FileSourceGeneratedMetadataStructField(
+    ROW_INDEX, ROW_INDEX_TEMPORARY_COLUMN_NAME, LongType, nullable = false)
+
   val METADATA_NAME = "_metadata"
 
   /**
@@ -221,14 +225,23 @@ object FileFormat {
     FileSourceConstantMetadataStructField(FILE_MODIFICATION_TIME, TimestampType, nullable = false))
 
   /**
-   * Create a file metadata struct column containing fields supported by the given file format.
+   * All fields the file format's _metadata struct defines.
    */
-  def createFileMetadataCol(fileFormat: FileFormat): AttributeReference = {
-    val fields = if (fileFormat.isInstanceOf[ParquetFileFormat]) {
-      BASE_METADATA_FIELDS :+ StructField(FileFormat.ROW_INDEX, LongType, nullable = false)
+  def metadataSchemaFields(fileFormat: FileFormat): Seq[StructField] =
+    if (fileFormat.isInstanceOf[ParquetFileFormat]) {
+      BASE_METADATA_FIELDS :+ ROW_INDEX_FIELD
     } else {
       BASE_METADATA_FIELDS
     }
+
+  /**
+   * Create a file metadata struct column containing fields supported by the given file format.
+   */
+  def createFileMetadataCol(fileFormat: FileFormat): AttributeReference = {
+    // Strip out the fields' metadata to avoid exposing it to the user. [[FileSourceStrategy]]
+    // avoids confusion by mapping back to [[metadataSchemaFields]].
+    val fields = metadataSchemaFields(fileFormat)
+      .map(FileSourceMetadataAttribute.cleanupFileSourceMetadataInformation)
     FileSourceMetadataAttribute(FileFormat.METADATA_NAME, StructType(fields))
   }
 

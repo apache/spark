@@ -519,6 +519,13 @@ object FileSourceMetadataAttribute {
   def cleanupFileSourceMetadataInformation(attr: Attribute): Attribute =
     attr.withMetadata(removeInternalMetadata(attr.metadata))
 
+  /**
+   * Cleanup the internal metadata information of a struct field, if it is
+   * a [[FileSourceConstantMetadataStructField]] or [[FileSourceGeneratedMetadataStructField]].
+   */
+  def cleanupFileSourceMetadataInformation(field: StructField): StructField =
+    field.copy(metadata = removeInternalMetadata(field.metadata))
+
   def apply(name: String, dataType: DataType, nullable: Boolean = false): AttributeReference =
     AttributeReference(name, dataType, nullable = nullable, METADATA)()
 
