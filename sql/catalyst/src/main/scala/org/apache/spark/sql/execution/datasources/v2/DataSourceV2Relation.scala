@@ -94,14 +94,9 @@ case class DataSourceV2Relation(
     copy(output = output.map(_.newInstance()))
   }
 
-  def withMetadataColumns(): DataSourceV2Relation = {
-    val newMetadata = metadataOutput.filterNot(outputSet.contains)
-    if (newMetadata.nonEmpty) {
-      DataSourceV2Relation(table, output ++ newMetadata, catalog, identifier, options)
-    } else {
-      this
-    }
-  }
+  override protected def withMetadataColumnsInternal(
+      metadataCols: Seq[AttributeReference]): LogicalPlan =
+    this.copy(output = output ++ metadataCols)
 }
 
 /**

@@ -41,7 +41,7 @@ abstract class LogicalPlan
    * Metadata fields that can be projected from this node.
    * Should be overridden if the plan does not propagate its children's output.
    */
-  def metadataOutput: Seq[Attribute] = children.flatMap(_.metadataOutput)
+  def metadataOutput: Seq[AttributeReference] = children.flatMap(_.metadataOutput)
 
   /** Returns true if this subtree has data from a streaming data source. */
   def isStreaming: Boolean = _isStreaming
@@ -336,7 +336,9 @@ trait ExposesMetadataColumns extends LogicalPlan {
     // If `metadataColFromOutput` is not empty that means `AddMetadataColumns` merged
     // metadata output into output. We should still return an available metadata output
     // so that the rule `ResolveReferences` can resolve metadata column correctly.
-    val metadataColFromOutput = output.filter(_.isMetadataCol)
+    val metadataColFromOutput = output.collect {
+      case a: AttributeReference if a.isMetadataCol => a
+    }
     if (metadataColFromOutput.isEmpty) {
       val resolve = conf.resolver
       val outputNames = outputSet.map(_.name)
@@ -353,5 +355,25 @@ trait ExposesMetadataColumns extends LogicalPlan {
     }
   }
 
-  def withMetadataColumns(): LogicalPlan
+  /**
+   * Returns a node whose output contains all requested metadata columns.
+   *
+   * No-op (returns this) if [[output]] already contains all requested columns. Analysis error if a
+   * requested column is not present in [[metadataOutput]].
+   */
+  def withMetadataColumns(requestedAttrIds: Set[ExprId]): LogicalPlan = {
+    val requestedCols = metadataOutput
+      .filter(a => requestedAttrIds.contains(a.exprId))
+      .filterNot(outputSet.contains)
+    if (requestedCols.isEmpty) this else withMetadataColumnsInternal(requestedCols)
+  }
+
+  /**
+   * Returns a copy of this node whose [[output]] includes the requested of metadata columns.
+   *
+   * Caller ensures the columns exist in [[metadataOutput]] and are not yet present in [[output]].
+   *
+   * For most node types, this simply requires appending the requested columns to the output.
+   */
+  protected def withMetadataColumnsInternal(metadataCols: Seq[AttributeReference]): LogicalPlan
 }

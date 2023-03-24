@@ -75,14 +75,9 @@ case class LogicalRelation(
     case _ => Nil
   }
 
-  override def withMetadataColumns(): LogicalRelation = {
-    val newMetadata = metadataOutput.filterNot(outputSet.contains)
-    if (newMetadata.nonEmpty) {
-      this.copy(output = output ++ newMetadata)
-    } else {
-      this
-    }
-  }
+  override protected def withMetadataColumnsInternal(
+      metadataCols: Seq[AttributeReference]): LogicalPlan =
+    this.copy(output = output ++ metadataCols)
 }
 
 object LogicalRelation {
