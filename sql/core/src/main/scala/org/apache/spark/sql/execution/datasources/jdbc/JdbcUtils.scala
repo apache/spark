@@ -149,6 +149,8 @@ object JdbcUtils extends Logging with SQLConfHelper {
       case BooleanType => Option(JdbcType("BIT(1)", java.sql.Types.BIT))
       case StringType => Option(JdbcType("TEXT", java.sql.Types.CLOB))
       case BinaryType => Option(JdbcType("BLOB", java.sql.Types.BLOB))
+      case CharType(n) => Option(JdbcType(s"CHAR($n)", java.sql.Types.CHAR))
+      case VarcharType(n) => Option(JdbcType(s"VARCHAR($n)", java.sql.Types.VARCHAR))
       case TimestampType => Option(JdbcType("TIMESTAMP", java.sql.Types.TIMESTAMP))
       // This is a common case of timestamp without time zone. Most of the databases either only
       // support TIMESTAMP type or use TIMESTAMP as an alias for TIMESTAMP WITHOUT TIME ZONE.
