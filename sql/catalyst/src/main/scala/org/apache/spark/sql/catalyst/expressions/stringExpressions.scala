@@ -2894,7 +2894,7 @@ case class Sentences(
     str: Expression,
     language: Expression = Literal(""),
     country: Expression = Literal(""))
-  extends TernaryExpression with ImplicitCastInputTypes with CodegenFallback {
+  extends TernaryExpression with ImplicitCastInputTypes {
 
   def this(str: Expression) = this(str, Literal(""), Literal(""))
   def this(str: Expression, language: Expression) = this(str, language, Literal(""))
@@ -2907,23 +2907,96 @@ case class Sentences(
   override def second: Expression = language
   override def third: Expression = country
 
+  @transient
+  private lazy val evaluator = new SentencesEvaluator
+
   override def eval(input: InternalRow): Any = {
-    val string = str.eval(input)
-    if (string == null) {
-      null
-    } else {
-      val languageStr = language.eval(input).asInstanceOf[UTF8String]
-      val countryStr = country.eval(input).asInstanceOf[UTF8String]
-      val locale = if (languageStr != null && countryStr != null) {
-        new Locale(languageStr.toString, countryStr.toString)
-      } else {
-        Locale.US
-      }
-      getSentences(string.asInstanceOf[UTF8String].toString, locale)
-    }
+    evaluator.setSentence(str.eval(input).asInstanceOf[UTF8String])
+    evaluator.setLanguage(language.eval(input).asInstanceOf[UTF8String])
+    evaluator.setCountry(country.eval(input).asInstanceOf[UTF8String])
+    evaluator.evaluate()
   }
 
-  private def getSentences(sentences: String, locale: Locale) = {
+  protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val refEvaluator = ctx.addReferenceObj("evaluator", evaluator)
+
+    val sentenceEval = str.genCode(ctx)
+    val setSentence =
+      s"""
+         |if (${sentenceEval.isNull}) {
+         |  $refEvaluator.setSentence(null);
+         |} else {
+         |  $refEvaluator.setSentence(${sentenceEval.value});
+         |}
+         |""".stripMargin
+
+    val languageEval = language.genCode(ctx)
+    val setLanguage =
+      s"""
+         |if (${languageEval.isNull}) {
+         |  $refEvaluator.setLanguage(null);
+         |} else {
+         |  $refEvaluator.setLanguage(${languageEval.value});
+         |}
+         |""".stripMargin
+
+    val countryEval = country.genCode(ctx)
+    val setCountry =
+      s"""
+         |if (${countryEval.isNull}) {
+         |  $refEvaluator.setCountry(null);
+         |} else {
+         |  $refEvaluator.setCountry(${countryEval.value});
+         |}
+         |""".stripMargin
+
+    val resultType = CodeGenerator.boxedType(dataType)
+    val resultTerm = ctx.freshName("result")
+    ev.copy(code =
+      code"""
+         |${sentenceEval.code}
+         |${languageEval.code}
+         |${countryEval.code}
+         |$setSentence
+         |$setLanguage
+         |$setCountry
+         |$resultType $resultTerm = ($resultType) $refEvaluator.evaluate();
+         |boolean ${ev.isNull} = $resultTerm == null;
+         |${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+         |if (!${ev.isNull}) {
+         |  ${ev.value} = $resultTerm;
+         |}
+         |""".stripMargin
+    )
+  }
+
+  override protected def withNewChildrenInternal(
+      newFirst: Expression, newSecond: Expression, newThird: Expression): Sentences =
+    copy(str = newFirst, language = newSecond, country = newThird)
+}
+
+class SentencesEvaluator extends Serializable {
+  private var sentence: UTF8String = null
+  private var language: UTF8String = null
+  private var country: UTF8String = null
+
+  def setSentence(arg: UTF8String): Unit = sentence = arg
+  def setLanguage(arg: UTF8String): Unit = language = arg
+  def setCountry(arg: UTF8String): Unit = country = arg
+
+  def evaluate(): Any = {
+    if (sentence == null) {
+      return null
+    }
+    val locale = if (language != null && country != null) {
+      new Locale(language.toString, country.toString)
+    } else {
+      Locale.US
+    }
+    getSentences(sentence.toString, locale)
+  }
+
+  private def getSentences(sentences: String, locale: Locale): GenericArrayData = {
     val bi = BreakIterator.getSentenceInstance(locale)
     bi.setText(sentences)
     var idx = 0
@@ -2945,11 +3018,6 @@ case class Sentences(
     }
     new GenericArrayData(result)
   }
-
-  override protected def withNewChildrenInternal(
-      newFirst: Expression, newSecond: Expression, newThird: Expression): Sentences =
-    copy(str = newFirst, language = newSecond, country = newThird)
-
 }
 
 /**
