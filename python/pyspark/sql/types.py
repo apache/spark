@@ -49,7 +49,7 @@ from py4j.protocol import register_input_converter
 from py4j.java_gateway import GatewayClient, JavaClass, JavaGateway, JavaObject
 
 from pyspark.serializers import CloudPickleSerializer
-from pyspark.sql.utils import has_numpy
+from pyspark.sql.utils import has_numpy, require_spark_context_initialized
 
 if has_numpy:
     import numpy as np
@@ -1210,20 +1210,14 @@ def _parse_datatype_string(s: str) -> DataType:
     """
     from pyspark import SparkContext
 
-    sc = SparkContext._active_spark_context
-    if sc is None:
-        raise RuntimeError(
-            "SparkContext must be initialized in order to parse a DDL-formatted type string."
-        )
+    sc = require_spark_context_initialized()
 
     def from_ddl_schema(type_str: str) -> DataType:
-        assert sc is not None and sc._jvm is not None
         return _parse_datatype_json_string(
             sc._jvm.org.apache.spark.sql.types.StructType.fromDDL(type_str).json()
         )
 
     def from_ddl_datatype(type_str: str) -> DataType:
-        assert sc is not None and sc._jvm is not None
         return _parse_datatype_json_string(
             sc._jvm.org.apache.spark.sql.api.python.PythonSQLUtils.parseDataType(type_str).json()
         )

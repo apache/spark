@@ -49,7 +49,12 @@ from pyspark.sql.udf import UserDefinedFunction, _create_py_udf  # noqa: F401
 
 # Keep pandas_udf and PandasUDFType import for backwards compatible import; moved in SPARK-28264
 from pyspark.sql.pandas.functions import pandas_udf, PandasUDFType  # noqa: F401
-from pyspark.sql.utils import to_str, has_numpy, try_remote_functions
+from pyspark.sql.utils import (
+    to_str,
+    has_numpy,
+    try_remote_functions,
+    require_spark_context_initialized,
+)
 
 if TYPE_CHECKING:
     from pyspark.sql._typing import (
@@ -101,8 +106,7 @@ def _invoke_function_over_seq_of_columns(name: str, cols: "Iterable[ColumnOrName
     Invokes unary JVM function identified by name with
     and wraps the result with :class:`~pyspark.sql.Column`.
     """
-    sc = SparkContext._active_spark_context
-    assert sc is not None and sc._jvm is not None
+    sc = require_spark_context_initialized()
     return _invoke_function(name, _to_seq(sc, cols, _to_java_column))
 
 
@@ -2676,8 +2680,7 @@ def broadcast(df: DataFrame) -> DataFrame:
     +-----+---+
     """
 
-    sc = SparkContext._active_spark_context
-    assert sc is not None and sc._jvm is not None
+    sc = require_spark_context_initialized()
     return DataFrame(sc._jvm.functions.broadcast(df._jdf), df.sparkSession)
 
 
@@ -2891,8 +2894,7 @@ def count_distinct(col: "ColumnOrName", *cols: "ColumnOrName") -> Column:
     |                           4|
     +----------------------------+
     """
-    sc = SparkContext._active_spark_context
-    assert sc is not None and sc._jvm is not None
+    sc = require_spark_context_initialized()
     return _invoke_function(
         "count_distinct", _to_java_column(col), _to_seq(sc, cols, _to_java_column)
     )
@@ -3304,8 +3306,7 @@ def percentile_approx(
      |-- key: long (nullable = true)
      |-- median: double (nullable = true)
     """
-    sc = SparkContext._active_spark_context
-    assert sc is not None and sc._jvm is not None
+    sc = require_spark_context_initialized()
 
     if isinstance(percentage, (list, tuple)):
         # A local list
@@ -6226,8 +6227,7 @@ def concat_ws(sep: str, *cols: "ColumnOrName") -> Column:
     >>> df.select(concat_ws('-', df.s, df.d).alias('s')).collect()
     [Row(s='abcd-123')]
     """
-    sc = SparkContext._active_spark_context
-    assert sc is not None and sc._jvm is not None
+    sc = require_spark_context_initialized()
     return _invoke_function("concat_ws", sep, _to_seq(sc, cols, _to_java_column))
 
 
@@ -6360,8 +6360,7 @@ def format_string(format: str, *cols: "ColumnOrName") -> Column:
     >>> df.select(format_string('%d %s', df.a, df.b).alias('v')).collect()
     [Row(v='5 hello')]
     """
-    sc = SparkContext._active_spark_context
-    assert sc is not None and sc._jvm is not None
+    sc = require_spark_context_initialized()
     return _invoke_function("format_string", format, _to_seq(sc, cols, _to_java_column))
 
 
@@ -7419,8 +7418,7 @@ def array_join(
     >>> df.select(array_join(df.data, ",", "NULL").alias("joined")).collect()
     [Row(joined='a,b,c'), Row(joined='a,NULL')]
     """
-    sc = SparkContext._active_spark_context
-    assert sc is not None and sc._jvm is not None
+    require_spark_context_initialized()
     if null_replacement is None:
         return _invoke_function("array_join", _to_java_column(col), delimiter)
     else:
@@ -8259,8 +8257,7 @@ def json_tuple(col: "ColumnOrName", *fields: str) -> Column:
     >>> df.select(df.key, json_tuple(df.jstring, 'f1', 'f2')).collect()
     [Row(key='1', c0='value1', c1='value2'), Row(key='2', c0='value12', c1=None)]
     """
-    sc = SparkContext._active_spark_context
-    assert sc is not None and sc._jvm is not None
+    sc = require_spark_context_initialized()
     return _invoke_function("json_tuple", _to_java_column(col), _to_seq(sc, fields))
 
 
@@ -9212,8 +9209,7 @@ def from_csv(
     [Row(csv=Row(s='abc'))]
     """
 
-    sc = SparkContext._active_spark_context
-    assert sc is not None and sc._jvm is not None
+    require_spark_context_initialized()
     if isinstance(schema, str):
         schema = _create_column_from_literal(schema)
     elif isinstance(schema, Column):
@@ -9239,8 +9235,7 @@ def _unresolved_named_lambda_variable(*name_parts: Any) -> Column:
     ----------
     name_parts : str
     """
-    sc = SparkContext._active_spark_context
-    assert sc is not None and sc._jvm is not None
+    sc = require_spark_context_initialized()
     name_parts_seq = _to_seq(sc, name_parts)
     expressions = sc._jvm.org.apache.spark.sql.catalyst.expressions
     return Column(sc._jvm.Column(expressions.UnresolvedNamedLambdaVariable(name_parts_seq)))
@@ -9288,8 +9283,7 @@ def _create_lambda(f: Callable) -> Callable:
     """
     parameters = _get_lambda_parameters(f)
 
-    sc = SparkContext._active_spark_context
-    assert sc is not None and sc._jvm is not None
+    sc = require_spark_context_initialized()
     expressions = sc._jvm.org.apache.spark.sql.catalyst.expressions
 
     argnames = ["x", "y", "z"]
@@ -9330,8 +9324,7 @@ def _invoke_higher_order_function(
 
     :return: a Column
     """
-    sc = SparkContext._active_spark_context
-    assert sc is not None and sc._jvm is not None
+    sc = require_spark_context_initialized()
     expressions = sc._jvm.org.apache.spark.sql.catalyst.expressions
     expr = getattr(expressions, name)
 
@@ -10047,8 +10040,7 @@ def bucket(numBuckets: Union[Column, int], col: "ColumnOrName") -> Column:
             message_parameters={"arg_name": "numBuckets", "arg_type": type(numBuckets).__name__},
         )
 
-    sc = SparkContext._active_spark_context
-    assert sc is not None and sc._jvm is not None
+    require_spark_context_initialized()
     numBuckets = (
         _create_column_from_literal(numBuckets)
         if isinstance(numBuckets, int)
@@ -10100,8 +10092,7 @@ def call_udf(udfName: str, *cols: "ColumnOrName") -> Column:
     |         cc|
     +-----------+
     """
-    sc = SparkContext._active_spark_context
-    assert sc is not None and sc._jvm is not None
+    sc = require_spark_context_initialized()
     return _invoke_function("call_udf", udfName, _to_seq(sc, cols, _to_java_column))
 
 
