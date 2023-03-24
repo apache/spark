@@ -252,11 +252,14 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
                   s"${FileFormat.METADATA_NAME}.${FileFormat.ROW_INDEX} column.")
               }
               generatedMetadataColumns +=
-                FileSourceGeneratedMetadataAttribute(
-                  FileFormat.ROW_INDEX_TEMPORARY_COLUMN_NAME, LongType, nullable = true)
+                FileSourceGeneratedMetadataStructField(
+                  name = FileFormat.ROW_INDEX_TEMPORARY_COLUMN_NAME,
+                  internalName = FileFormat.ROW_INDEX_TEMPORARY_COLUMN_NAME,
+                  dataType = LongType,
+                  nullable = true).toAttribute
             case _ =>
               constantMetadataColumns +=
-                FileSourceConstantMetadataAttribute(field.name, field.dataType)
+                FileSourceConstantMetadataStructField(field.name, field.dataType).toAttribute
           }
         }
       }
