@@ -301,7 +301,7 @@ class MetadataColumnSuite extends DatasourceV2SQLBase {
           df.metadataColumn("foo")
         },
         errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-        parameters = Map("objectName" -> "`foo`", "proposal" -> "`index`, `_partition`"),
+        parameters = Map("objectName" -> "`foo`", "proposal" -> "`index`"),
         queryContext = Array(ExpectedContext("select index from testcat.t", 0, 26)))
 
       // Name exists, but does not reference a metadata column
@@ -310,7 +310,7 @@ class MetadataColumnSuite extends DatasourceV2SQLBase {
           df.metadataColumn("data")
         },
         errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-        parameters = Map("objectName" -> "`data`", "proposal" -> "`index`, `_partition`"),
+        parameters = Map("objectName" -> "`data`", "proposal" -> "`index`"),
         queryContext = Array(ExpectedContext("select index from testcat.t", 0, 26)))
     }
   }

@@ -978,64 +978,49 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
   object AddMetadataColumns extends Rule[LogicalPlan] {
     import org.apache.spark.sql.catalyst.util._
 
+    object ResolvedNodeWithRequiredMetadataAttributes {
+      def unapply(plan: LogicalPlan): Option[(LogicalPlan, Set[ExprId])] = {
+        if (plan.children.isEmpty || !plan.resolved) return None
+
+        object MetadataAttributeReference {
+          def unapply(a: AttributeReference): Option[AttributeReference] = {
+            if (a.isMetadataCol) return Some(a)
+
+            object MatchingChildMetadataAttribute {
+              def unapply(child: LogicalPlan): Option[AttributeReference] =
+                child.metadataOutput.find(_.exprId == a.exprId)
+            }
+            plan.children.collectFirst { case MatchingChildMetadataAttribute(a) => a }
+          }
+        }
+        val metadataAttrs = plan.expressions
+          .flatMap(_.collect { case MetadataAttributeReference(a) => a })
+          .collect { case a if !plan.inputSet.contains(a) => a.exprId }
+        if (metadataAttrs.nonEmpty) Some(plan, metadataAttrs.toSet) else None
+      }
+    }
+
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsDownWithPruning(
       AlwaysProcess.fn, ruleId) {
       case hint: UnresolvedHint => hint
-      // Add metadata output to all node types
-      case node if node.children.nonEmpty && node.resolved && hasMetadataCol(node) =>
-        val inputAttrs = AttributeSet(node.children.flatMap(_.output))
-        val metaCols = getMetadataAttributes(node).filterNot(inputAttrs.contains)
-        if (metaCols.isEmpty) {
-          node
-        } else {
-          val newNode = node.mapChildren(addMetadataCol(_, metaCols.map(_.exprId).toSet))
-          // We should not change the output schema of the plan. We should project away the extra
-          // metadata columns if necessary.
-          if (newNode.sameOutput(node)) {
-            newNode
-          } else {
-            Project(node.output, newNode)
-          }
-        }
-    }
-
-    private def getMetadataAttributes(plan: LogicalPlan): Seq[Attribute] = {
-      plan.expressions.flatMap(_.collect {
-        case a: Attribute if a.isMetadataCol => a
-        case a: Attribute
-          if plan.children.exists(c => c.metadataOutput.exists(_.exprId == a.exprId)) =>
-          plan.children.collectFirst {
-            case c if c.metadataOutput.exists(_.exprId == a.exprId) =>
-              c.metadataOutput.find(_.exprId == a.exprId).get
-          }.get
-      })
-    }
-
-    private def hasMetadataCol(plan: LogicalPlan): Boolean = {
-      plan.expressions.exists(_.exists {
-        case a: Attribute =>
-          // If an attribute is resolved before being labeled as metadata
-          // (i.e. from the originating Dataset), we check with expression ID
-          a.isMetadataCol ||
-            plan.children.exists(c => c.metadataOutput.exists(_.exprId == a.exprId))
-        case _ => false
-      })
+      // Add metadata output to all node types that reference metadata attributes
+      case ResolvedNodeWithRequiredMetadataAttributes(node, requiredAttrIds) =>
+        node.mapChildren(addMetadataCol(_, requiredAttrIds))
     }
 
     private def addMetadataCol(
         plan: LogicalPlan,
         requiredAttrIds: Set[ExprId]): LogicalPlan = plan match {
-      case s: ExposesMetadataColumns if s.metadataOutput.exists( a =>
-        requiredAttrIds.contains(a.exprId)) =>
-        s.withMetadataColumns()
+      case s: ExposesMetadataColumns => s.withMetadataColumns(requiredAttrIds)
       case p: Project if p.metadataOutput.exists(a => requiredAttrIds.contains(a.exprId)) =>
+        val metadataCols = p.metadataOutput.filter(a => requiredAttrIds.contains(a.exprId))
         val newProj = p.copy(
           // Do not leak the qualified-access-only restriction to normal plan outputs.
-          projectList = p.projectList ++ p.metadataOutput.map(_.markAsAllowAnyAccess()),
+          projectList = p.projectList ++ metadataCols.map(_.markAsAllowAnyAccess()),
           child = addMetadataCol(p.child, requiredAttrIds))
         newProj.copyTagsFrom(p)
         newProj
-      case _ => plan.withNewChildren(plan.children.map(addMetadataCol(_, requiredAttrIds)))
+      case _ => plan.mapChildren(addMetadataCol(_, requiredAttrIds))
     }
   }
 
@@ -3487,7 +3472,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
     val project = Project(projectList, newJoin)
     project.setTagValue(
       Project.hiddenOutputTag,
-      hiddenList.map(_.markAsQualifiedAccessOnly()) ++
+      hiddenList.map(_.markAsQualifiedAccessOnly().asInstanceOf[AttributeReference]) ++
         project.child.metadataOutput.filter(_.qualifiedAccessOnly))
     project
   }

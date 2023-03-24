@@ -91,7 +91,7 @@ case class Project(projectList: Seq[NamedExpression], child: LogicalPlan)
   override lazy val validConstraints: ExpressionSet =
     getAllValidConstraints(projectList)
 
-  override def metadataOutput: Seq[Attribute] =
+  override def metadataOutput: Seq[AttributeReference] =
     getTagValue(Project.hiddenOutputTag).getOrElse(child.metadataOutput)
 
   override protected def withNewChildInternal(newChild: LogicalPlan): Project =
@@ -99,7 +99,8 @@ case class Project(projectList: Seq[NamedExpression], child: LogicalPlan)
 }
 
 object Project {
-  val hiddenOutputTag: TreeNodeTag[Seq[Attribute]] = TreeNodeTag[Seq[Attribute]]("hidden_output")
+  val hiddenOutputTag: TreeNodeTag[Seq[AttributeReference]] =
+    TreeNodeTag[Seq[AttributeReference]]("hidden_output")
 
   def matchSchema(plan: LogicalPlan, schema: StructType, conf: SQLConf): Project = {
     assert(plan.resolved)
@@ -354,7 +355,7 @@ case class Intersect(
       leftAttr.withNullability(leftAttr.nullable && rightAttr.nullable)
     }
 
-  override def metadataOutput: Seq[Attribute] = Nil
+  override def metadataOutput: Seq[AttributeReference] = Nil
 
   override protected lazy val validConstraints: ExpressionSet =
     leftConstraints.union(rightConstraints)
@@ -379,7 +380,7 @@ case class Except(
   /** We don't use right.output because those rows get excluded from the set. */
   override def output: Seq[Attribute] = left.output
 
-  override def metadataOutput: Seq[Attribute] = Nil
+  override def metadataOutput: Seq[AttributeReference] = Nil
 
   final override val nodePatterns : Seq[TreePattern] = Seq(EXCEPT)
 
@@ -467,7 +468,7 @@ case class Union(
     }
   }
 
-  override def metadataOutput: Seq[Attribute] = Nil
+  override def metadataOutput: Seq[AttributeReference] = Nil
 
   override lazy val resolved: Boolean = {
     // allChildrenCompatible needs to be evaluated after childrenResolved
@@ -574,7 +575,7 @@ case class Join(
     }
   }
 
-  override def metadataOutput: Seq[Attribute] = {
+  override def metadataOutput: Seq[AttributeReference] = {
     joinType match {
       case ExistenceJoin(_) =>
         left.metadataOutput
@@ -676,7 +677,7 @@ case class InsertIntoDir(
   extends UnaryNode {
 
   override def output: Seq[Attribute] = Seq.empty
-  override def metadataOutput: Seq[Attribute] = Nil
+  override def metadataOutput: Seq[AttributeReference] = Nil
   override lazy val resolved: Boolean = false
 
   override protected def withNewChildInternal(newChild: LogicalPlan): InsertIntoDir =
@@ -706,7 +707,7 @@ case class View(
 
   override def output: Seq[Attribute] = child.output
 
-  override def metadataOutput: Seq[Attribute] = Nil
+  override def metadataOutput: Seq[AttributeReference] = Nil
 
   override def simpleString(maxFields: Int): String = {
     s"View (${desc.identifier}, ${output.mkString("[", ",", "]")})"
@@ -1133,7 +1134,7 @@ case class Aggregate(
   }
 
   override def output: Seq[Attribute] = aggregateExpressions.map(_.toAttribute)
-  override def metadataOutput: Seq[Attribute] = Nil
+  override def metadataOutput: Seq[AttributeReference] = Nil
   override def maxRows: Option[Long] = {
     if (groupingExpressions.isEmpty) {
       Some(1L)
@@ -1338,7 +1339,7 @@ case class Expand(
     case _ => maxRows
   }
 
-  override def metadataOutput: Seq[Attribute] = Nil
+  override def metadataOutput: Seq[AttributeReference] = Nil
 
   override def producedAttributes: AttributeSet = AttributeSet(output diff child.output)
 
@@ -1396,7 +1397,7 @@ case class Pivot(
     }
     groupByExprsOpt.getOrElse(Seq.empty).map(_.toAttribute) ++ pivotAgg
   }
-  override def metadataOutput: Seq[Attribute] = Nil
+  override def metadataOutput: Seq[AttributeReference] = Nil
   final override val nodePatterns: Seq[TreePattern] = Seq(PIVOT)
 
   override protected def withNewChildInternal(newChild: LogicalPlan): Pivot = copy(child = newChild)
@@ -1491,7 +1492,7 @@ case class Unpivot(
 
   override lazy val resolved = false  // Unpivot will be replaced after being resolved.
   override def output: Seq[Attribute] = Nil
-  override def metadataOutput: Seq[Attribute] = Nil
+  override def metadataOutput: Seq[AttributeReference] = Nil
   final override val nodePatterns: Seq[TreePattern] = Seq(UNPIVOT)
 
   override protected def withNewChildInternal(newChild: LogicalPlan): Unpivot =
@@ -1656,7 +1657,7 @@ case class SubqueryAlias(
     child.output.map(_.withQualifier(qualifierList))
   }
 
-  override def metadataOutput: Seq[Attribute] = {
+  override def metadataOutput: Seq[AttributeReference] = {
     // Propagate metadata columns from leaf nodes through a chain of `SubqueryAlias`.
     if (child.isInstanceOf[LeafNode] || child.isInstanceOf[SubqueryAlias]) {
       val qualifierList = identifier.qualifier :+ alias

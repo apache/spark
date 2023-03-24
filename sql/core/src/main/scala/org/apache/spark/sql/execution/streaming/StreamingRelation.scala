@@ -69,14 +69,9 @@ case class StreamingRelation(dataSource: DataSource, sourceName: String, output:
     }
   }
 
-  override def withMetadataColumns(): LogicalPlan = {
-    val newMetadata = metadataOutput.filterNot(outputSet.contains)
-    if (newMetadata.nonEmpty) {
-      this.copy(output = output ++ newMetadata)
-    } else {
-      this
-    }
-  }
+  override protected def withMetadataColumnsInternal(
+      metadataCols: Seq[AttributeReference]): LogicalPlan =
+    this.copy(output = output ++ metadataCols)
 }
 
 /**
