@@ -58,6 +58,8 @@ private object PostgresDialect extends JdbcDialect with SQLConfHelper {
       // money type seems to be broken but one workaround is to handle it as string.
       // See SPARK-34333 and https://github.com/pgjdbc/pgjdbc/issues/100
       Some(StringType)
+    } else if (sqlType == Types.VARCHAR && "text".equalsIgnoreCase(typeName)) {
+      Some(StringType)
     } else if (sqlType == Types.OTHER) {
       Some(StringType)
     } else if (sqlType == Types.ARRAY) {
@@ -99,7 +101,7 @@ private object PostgresDialect extends JdbcDialect with SQLConfHelper {
   }
 
   override def getJDBCType(dt: DataType): Option[JdbcType] = dt match {
-    case StringType => Some(JdbcType("TEXT", Types.CHAR))
+    case StringType => Some(JdbcType("TEXT", Types.VARCHAR))
     case BinaryType => Some(JdbcType("BYTEA", Types.BINARY))
     case BooleanType => Some(JdbcType("BOOLEAN", Types.BOOLEAN))
     case FloatType => Some(JdbcType("FLOAT4", Types.FLOAT))
