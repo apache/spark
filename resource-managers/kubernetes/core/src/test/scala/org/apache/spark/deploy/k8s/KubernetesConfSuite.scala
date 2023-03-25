@@ -252,7 +252,7 @@ class KubernetesConfSuite extends SparkFunSuite {
   }
 
   test("SPARK-40869: Resource name prefix should not start with a hyphen") {
-    assert(KubernetesConf.getResourceNamePrefix("_hello_").startsWith("xhellox"))
+    assert(KubernetesConf.getResourceNamePrefix("_hello_").startsWith("hello"))
   }
 
   test("SPARK-42906: Resource name prefix should start with an alphabetic character") {

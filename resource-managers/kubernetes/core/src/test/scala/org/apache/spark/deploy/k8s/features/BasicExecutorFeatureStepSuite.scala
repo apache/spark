@@ -425,7 +425,7 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
       defaultProfile)
     val podConfigured1 = step1.configurePod(baseDriverPod)
     assert(podConfigured1.pod.getMetadata.getName
-      .startsWith("xyzxabcxxixamxaxappxnamexwxxsomexabbrs"))
+      .startsWith("xyz-abc-i-am-a-app-name-w-some-abbrs"))
 
     // scalastyle:off nonascii
     baseConf.set("spark.app.name", "time.is the#most￥valuable_—thing。it's&about?time.")
@@ -436,7 +436,7 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
 
     val podConfigured2 = step2.configurePod(baseDriverPod)
     assert(podConfigured2.pod.getMetadata.getName
-      .startsWith("timexisxthexmostxvaluablexxthingxitxsxaboutxtimex-"))
+      .startsWith("time-is-the-most-valuable-thing-it-s-about-time-"))
 
   }
 
