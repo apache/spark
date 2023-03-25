@@ -1214,9 +1214,6 @@ class SparkConnectPlanner(val session: SparkSession) {
       case "unwrap_udt" if fun.getArgumentsCount == 1 =>
         Some(UnwrapUDT(transformExpression(fun.getArguments(0))))
 
-      case "distributed_sequence_id" if fun.getArgumentsCount == 0 =>
-        Some(DistributedSequenceID())
-
       case "from_json" if Seq(2, 3).contains(fun.getArgumentsCount) =>
         // JsonToStructs constructor doesn't accept JSON-formatted schema.
         val children = fun.getArgumentsList.asScala.toSeq.map(transformExpression)
@@ -1255,6 +1252,10 @@ class SparkConnectPlanner(val session: SparkSession) {
         } else {
           None
         }
+
+      // PS(Pandas API on Spark)-specific functions
+      case "distributed_sequence_id" if fun.getArgumentsCount == 0 =>
+        Some(DistributedSequenceID())
 
       // ML-specific functions
       case "vector_to_array" if fun.getArgumentsCount == 2 =>
