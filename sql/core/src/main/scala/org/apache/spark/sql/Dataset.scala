@@ -884,6 +884,129 @@ class Dataset[T] private[sql](
   // scalastyle:on println
 
   /**
+   * Gets top 20 rows of Dataset as string in a tabular form. Strings more than 20 characters
+   * will be truncated, and all cells will be aligned right.
+   *
+   * @group action
+   * @since 3.5.0
+   */
+  def getString(): String = getString(20)
+
+  /**
+   * Gets the Dataset in a tabular form. Strings more than 20 characters will be truncated,
+   * and all cells will be aligned right. For example:
+   * {{{
+   *   year  month AVG('Adj Close) MAX('Adj Close)
+   *   1980  12    0.503218        0.595103
+   *   1981  01    0.523289        0.570307
+   *   1982  02    0.436504        0.475256
+   *   1983  03    0.410516        0.442194
+   *   1984  04    0.450090        0.483521
+   * }}}
+   *
+   * @param numRows Number of rows to get
+   * @group action
+   * @since 3.5.0
+   */
+  def getString(numRows: Int): String = getString(numRows, truncate = true)
+
+  /**
+   * Gets the top 20 rows of Dataset as string in a tabular form.
+   *
+   * @param truncate Whether truncate long strings. If true, strings more than 20 characters will
+   *                 be truncated and all cells will be aligned right
+   * @group action
+   * @since 3.5.0
+   */
+  def getString(truncate: Boolean): String = getString(20, truncate)
+
+  /**
+   * Gets top 20 rows of Dataset as string in a tabular form.
+   *
+   * @param truncate Whether truncate long strings. If true, strings more than 20 characters will
+   *                 be truncated and all cells will be aligned right
+   * @group action
+   * @since 3.5.0
+   */
+  def getString(numRows: Int, truncate: Boolean): String = if (truncate) {
+    showString(numRows, truncate = 20)
+  } else {
+    showString(numRows, truncate = 0)
+  }
+
+  /**
+   * Gets the Dataset as string in a tabular form. For example:
+   * {{{
+   *   year  month AVG('Adj Close) MAX('Adj Close)
+   *   1980  12    0.503218        0.595103
+   *   1981  01    0.523289        0.570307
+   *   1982  02    0.436504        0.475256
+   *   1983  03    0.410516        0.442194
+   *   1984  04    0.450090        0.483521
+   * }}}
+   *
+   * @param numRows  Number of rows to send
+   * @param truncate If set to more than 0, truncates strings to `truncate` characters and
+   *                 all cells will be aligned right.
+   * @group action
+   * @since 3.5.0
+   */
+  def getString(numRows: Int, truncate: Int): String =
+    showString(numRows, truncate, vertical = false)
+
+  /**
+   * Gets the Dataset as string in a tabular form. For example:
+   * {{{
+   *   year  month AVG('Adj Close) MAX('Adj Close)
+   *   1980  12    0.503218        0.595103
+   *   1981  01    0.523289        0.570307
+   *   1982  02    0.436504        0.475256
+   *   1983  03    0.410516        0.442194
+   *   1984  04    0.450090        0.483521
+   * }}}
+   *
+   * If `vertical` enabled, this command prints output rows vertically (one line per column value)?
+   *
+   * {{{
+   * -RECORD 0-------------------
+   *  year            | 1980
+   *  month           | 12
+   *  AVG('Adj Close) | 0.503218
+   *  AVG('Adj Close) | 0.595103
+   * -RECORD 1-------------------
+   *  year            | 1981
+   *  month           | 01
+   *  AVG('Adj Close) | 0.523289
+   *  AVG('Adj Close) | 0.570307
+   * -RECORD 2-------------------
+   *  year            | 1982
+   *  month           | 02
+   *  AVG('Adj Close) | 0.436504
+   *  AVG('Adj Close) | 0.475256
+   * -RECORD 3-------------------
+   *  year            | 1983
+   *  month           | 03
+   *  AVG('Adj Close) | 0.410516
+   *  AVG('Adj Close) | 0.442194
+   * -RECORD 4-------------------
+   *  year            | 1984
+   *  month           | 04
+   *  AVG('Adj Close) | 0.450090
+   *  AVG('Adj Close) | 0.483521
+   * }}}
+   *
+   * @param numRows  Number of rows to send
+   * @param truncate If set to more than 0, truncates strings to `truncate` characters and
+   *                 all cells will be aligned right.
+   * @param vertical If set to true, prints output rows vertically (one line per column value).
+   * @group action
+   * @since 3.5.0
+   */
+
+  def getString(numRows: Int, truncate: Int, vertical: Boolean): String =
+    showString(numRows, truncate, vertical)
+
+  /**
    * Returns a [[DataFrameNaFunctions]] for working with missing data.
    * {{{
    *   // Dropping rows containing any null values.
