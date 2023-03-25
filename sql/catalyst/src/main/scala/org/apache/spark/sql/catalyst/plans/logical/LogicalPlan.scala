@@ -23,9 +23,10 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.{AliasAwareQueryOutputOrdering, QueryPlan}
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.LogicalPlanStats
 import org.apache.spark.sql.catalyst.trees.{BinaryLike, LeafLike, TreeNodeTag, UnaryLike}
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.MetadataColumnHelper
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
-import org.apache.spark.sql.types.{DataType, StructType}
+import org.apache.spark.sql.types.StructType
 
 
 abstract class LogicalPlan
@@ -314,7 +315,7 @@ object LogicalPlanIntegrity {
       Some("Special expressions are placed in the wrong plan: " + currentPlan.treeString)
     } else {
       LogicalPlanIntegrity.validateExprIdUniqueness(currentPlan).orElse {
-        if (!DataType.equalsIgnoreNullability(previousPlan.schema, currentPlan.schema)) {
+        if (!DataTypeUtils.equalsIgnoreNullability(previousPlan.schema, currentPlan.schema)) {
           Some(s"The plan output schema has changed from ${previousPlan.schema.sql} to " +
             currentPlan.schema.sql + s". The previous plan: ${previousPlan.treeString}\nThe new " +
             "plan:\n" + currentPlan.treeString)

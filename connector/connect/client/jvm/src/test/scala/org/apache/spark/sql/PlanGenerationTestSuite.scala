@@ -69,7 +69,7 @@ class PlanGenerationTestSuite
   // Borrowed from SparkFunSuite
   private val regenerateGoldenFiles: Boolean = System.getenv("SPARK_GENERATE_GOLDEN_FILES") == "1"
 
-  protected val queryFilePath: Path = commonResourcePath.resolve("queries")
+  protected val queryFilePath: Path = commonResourcePath.resolve("query-tests/queries")
 
   // A relative path to /connector/connect/server, used by `ProtoToParsedPlanTestSuite` to run
   // with the datasource.
@@ -305,6 +305,41 @@ class PlanGenerationTestSuite
   test("select typed 1-arg") {
     val encoder = ScalaReflection.encoderFor[(Long, Int)]
     simple.select(fn.struct(fn.col("id"), fn.col("a")).as(encoder))
+  }
+
+  test("select typed 2-arg") {
+    val encoder = ScalaReflection.encoderFor[(Long, Int)]
+    val encoder2 = ScalaReflection.encoderFor[(Double, Double)]
+    val col = fn.struct(fn.col("id"), fn.col("a"))
+    val col2 = fn.struct(fn.col("a"), fn.col("b"))
+    simple.select(col.as(encoder), col2.as(encoder2))
+  }
+
+  test("select typed 3-arg") {
+    val encoder = ScalaReflection.encoderFor[(Long, Int)]
+    val encoder2 = ScalaReflection.encoderFor[(Double, Double)]
+    val col = fn.struct(fn.col("id"), fn.col("a"))
+    val col2 = fn.struct(fn.col("a"), fn.col("b"))
+    simple.select(col.as(encoder), col2.as(encoder2), col.as(encoder))
+  }
+
+  test("select typed 4-arg") {
+    val encoder = ScalaReflection.encoderFor[(Long, Int)]
+    val col = fn.struct(fn.col("id"), fn.col("a"))
+    simple.select(col.as(encoder), col.as(encoder), col.as(encoder), col.as(encoder))
+  }
+
+  test("select typed 5-arg") {
+    val encoder = ScalaReflection.encoderFor[(Long, Int)]
+    val encoder2 = ScalaReflection.encoderFor[(Double, Double)]
+    val col = fn.struct(fn.col("id"), fn.col("a"))
+    val col2 = fn.struct(fn.col("a"), fn.col("b"))
+    simple.select(
+      col.as(encoder),
+      col2.as(encoder2),
+      col.as(encoder),
+      col.as(encoder),
+      col2.as(encoder2))
   }
 
   test("limit") {
@@ -2126,5 +2161,10 @@ class PlanGenerationTestSuite
 
   test("replace") {
     simple.na.replace[Long]("id", Map(1L -> 8L))
+  }
+
+  /* Reader API  */
+  test("table API with options") {
+    session.read.options(Map("p1" -> "v1", "p2" -> "v2")).table("tempdb.myTable")
   }
 }

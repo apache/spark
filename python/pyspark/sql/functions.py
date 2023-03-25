@@ -138,7 +138,7 @@ def lit(col: Any) -> Column:
 
     Parameters
     ----------
-    col : :class:`~pyspark.sql.Column`, str, int, float, bool or list.
+    col : :class:`~pyspark.sql.Column`, str, int, float, bool or list, NumPy literals or ndarray.
         the value to make it as a PySpark literal. If a column is passed,
         it returns the column as is.
 
@@ -6391,7 +6391,7 @@ def instr(str: "ColumnOrName", substr: str) -> Column:
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        location of the first occurence of the substring as integer.
+        location of the first occurrence of the substring as integer.
 
     Examples
     --------
@@ -6575,7 +6575,7 @@ def substring_index(str: "ColumnOrName", delim: str, count: int) -> Column:
     delim : str
         delimiter of values.
     count : int
-        number of occurences.
+        number of occurrences.
 
     Returns
     -------
@@ -7882,7 +7882,7 @@ def array_compact(col: "ColumnOrName") -> Column:
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        an array by exluding the null values.
+        an array by excluding the null values.
 
     Examples
     --------

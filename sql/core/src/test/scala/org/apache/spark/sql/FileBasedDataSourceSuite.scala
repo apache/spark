@@ -33,6 +33,7 @@ import org.apache.spark.sql.TestingUDT.{IntervalUDT, NullData, NullUDT}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, GreaterThan, Literal}
 import org.apache.spark.sql.catalyst.expressions.IntegralLiteralTestUtils.{negativeInt, positiveInt}
 import org.apache.spark.sql.catalyst.plans.logical.Filter
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.execution.{FileSourceScanLike, SimpleMode}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.datasources.FilePartition
@@ -88,7 +89,7 @@ class FileBasedDataSourceSuite extends QueryTest
         df.write.format(format).option("header", "true").save(dir)
         val answerDf = spark.read.format(format).option("header", "true").load(dir)
 
-        assert(df.schema.sameType(answerDf.schema))
+        assert(DataTypeUtils.sameType(df.schema, answerDf.schema))
         checkAnswer(df, answerDf)
       }
     }
@@ -104,7 +105,7 @@ class FileBasedDataSourceSuite extends QueryTest
         emptyDf.write.format(format).save(path)
 
         val df = spark.read.format(format).load(path)
-        assert(df.schema.sameType(emptyDf.schema))
+        assert(DataTypeUtils.sameType(df.schema, emptyDf.schema))
         checkAnswer(df, emptyDf)
       }
     }
