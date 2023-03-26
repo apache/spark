@@ -1339,7 +1339,7 @@ class SparkSession(SparkConversionMixin):
             A dictionary of parameter names to string values that are parsed as SQL literal
             expressions. For example, dict keys: "rank", "name", "birthdate"; dict values:
             "1", "'Steven'", "DATE'2023-03-21'". The fragments of string values belonged to
-            SQL comments `--` or `/**/` are skipped while parsing.
+            SQL comments are skipped while parsing.
 
             .. versionadded:: 3.4.0
 
