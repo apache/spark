@@ -19,48 +19,82 @@ package org.apache.spark.sql.catalyst.types
 
 import org.apache.spark.sql.types._
 
-sealed abstract class PhysicalDataType
+sealed abstract class PhysicalDataType{
+  private[sql] def isPrimitive: Boolean
+}
 
-case class PhysicalArrayType(elementType: DataType, containsNull: Boolean) extends PhysicalDataType
+case class PhysicalArrayType(elementType: DataType, containsNull: Boolean) extends PhysicalDataType {
+  override def isPrimitive: Boolean = false
+}
 
-class PhysicalBinaryType() extends PhysicalDataType
+class PhysicalBinaryType() extends PhysicalDataType {
+  override def isPrimitive: Boolean = false
+}
 case object PhysicalBinaryType extends PhysicalBinaryType
 
-class PhysicalBooleanType() extends PhysicalDataType
+class PhysicalBooleanType() extends PhysicalDataType {
+  override def isPrimitive: Boolean = true
+}
 case object PhysicalBooleanType extends PhysicalBooleanType
 
-class PhysicalByteType() extends PhysicalDataType
+class PhysicalByteType() extends PhysicalDataType {
+  override def isPrimitive: Boolean = true
+}
 case object PhysicalByteType extends PhysicalByteType
 
-class PhysicalCalendarIntervalType() extends PhysicalDataType
+class PhysicalCalendarIntervalType() extends PhysicalDataType {
+  override def isPrimitive: Boolean = false
+}
 case object PhysicalCalendarIntervalType extends PhysicalCalendarIntervalType
 
-case class PhysicalDecimalType(precision: Int, scale: Int) extends PhysicalDataType
+case class PhysicalDecimalType(precision: Int, scale: Int) extends PhysicalDataType {
+  override def isPrimitive: Boolean = false
+}
 
-class PhysicalDoubleType() extends PhysicalDataType
+class PhysicalDoubleType() extends PhysicalDataType {
+  override def isPrimitive: Boolean = true
+}
 case object PhysicalDoubleType extends PhysicalDoubleType
 
-class PhysicalFloatType() extends PhysicalDataType
+class PhysicalFloatType() extends PhysicalDataType {
+  override def isPrimitive: Boolean = true
+}
 case object PhysicalFloatType extends PhysicalFloatType
 
-class PhysicalIntegerType() extends PhysicalDataType
+class PhysicalIntegerType() extends PhysicalDataType {
+  override def isPrimitive: Boolean = true
+}
 case object PhysicalIntegerType extends PhysicalIntegerType
 
-class PhysicalLongType() extends PhysicalDataType
+class PhysicalLongType() extends PhysicalDataType {
+  override def isPrimitive: Boolean = true
+}
 case object PhysicalLongType extends PhysicalLongType
 
 case class PhysicalMapType(keyType: DataType, valueType: DataType, valueContainsNull: Boolean)
-    extends PhysicalDataType
+    extends PhysicalDataType {
+  override def isPrimitive: Boolean = false
+}
 
-class PhysicalNullType() extends PhysicalDataType
+class PhysicalNullType() extends PhysicalDataType {
+  override def isPrimitive: Boolean = true
+}
 case object PhysicalNullType extends PhysicalNullType
 
-class PhysicalShortType() extends PhysicalDataType
+class PhysicalShortType() extends PhysicalDataType {
+  override def isPrimitive: Boolean = true
+}
 case object PhysicalShortType extends PhysicalShortType
 
-class PhysicalStringType() extends PhysicalDataType
+class PhysicalStringType() extends PhysicalDataType {
+  override def isPrimitive: Boolean = false
+}
 case object PhysicalStringType extends PhysicalStringType
 
-case class PhysicalStructType(fields: Array[StructField]) extends PhysicalDataType
+case class PhysicalStructType(fields: Array[StructField]) extends PhysicalDataType {
+  override def isPrimitive: Boolean = false
+}
 
-object UninitializedPhysicalType extends PhysicalDataType
+object UninitializedPhysicalType extends PhysicalDataType {
+  override def isPrimitive: Boolean = false
+}

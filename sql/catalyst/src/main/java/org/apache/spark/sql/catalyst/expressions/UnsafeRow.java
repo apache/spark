@@ -21,10 +21,6 @@ import java.io.*;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.nio.ByteBuffer;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.Set;
 
 import com.esotericsoftware.kryo.Kryo;
 import com.esotericsoftware.kryo.KryoSerializable;
@@ -41,7 +37,6 @@ import org.apache.spark.unsafe.hash.Murmur3_x86_32;
 import org.apache.spark.unsafe.types.CalendarInterval;
 import org.apache.spark.unsafe.types.UTF8String;
 
-import static org.apache.spark.sql.types.DataTypes.*;
 import static org.apache.spark.unsafe.Platform.BYTE_ARRAY_OFFSET;
 
 /**
@@ -71,27 +66,6 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
     return ((numFields + 63)/ 64) * 8;
   }
 
-  /**
-   * Field types that can be updated in place in UnsafeRows (e.g. we support set() for these types)
-   */
-  public static final Set<PhysicalDataType> mutableFieldTypes;
-
-  // DecimalType, DayTimeIntervalType and YearMonthIntervalType are also mutable
-  static {
-    mutableFieldTypes = Collections.unmodifiableSet(
-      new HashSet<>(
-        Arrays.asList(
-          PhysicalNullType$.MODULE$,
-          PhysicalBooleanType$.MODULE$,
-          PhysicalByteType$.MODULE$,
-          PhysicalShortType$.MODULE$,
-          PhysicalIntegerType$.MODULE$,
-          PhysicalLongType$.MODULE$,
-          PhysicalFloatType$.MODULE$,
-          PhysicalDoubleType$.MODULE$
-        )));
-  }
-
   public static boolean isFixedLength(DataType dt) {
     if (dt instanceof UserDefinedType) {
       return isFixedLength(((UserDefinedType<?>) dt).sqlType());
@@ -100,7 +74,7 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
     if (pdt instanceof PhysicalDecimalType) {
       return ((DecimalType) dt).precision() <= Decimal.MAX_LONG_DIGITS();
     } else {
-      return mutableFieldTypes.contains(pdt);
+      return pdt.isPrimitive();
     }
   }
 
@@ -109,8 +83,7 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
       return isMutable(((UserDefinedType<?>) dt).sqlType());
     }
     PhysicalDataType pdt = dt.physicalDataType();
-
-    return mutableFieldTypes.contains(pdt) || pdt instanceof PhysicalDecimalType ||
+    return pdt.isPrimitive() || pdt instanceof PhysicalDecimalType ||
       pdt instanceof PhysicalCalendarIntervalType;
   }
 
