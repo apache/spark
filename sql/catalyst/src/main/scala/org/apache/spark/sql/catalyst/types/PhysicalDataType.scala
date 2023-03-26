@@ -23,7 +23,8 @@ sealed abstract class PhysicalDataType{
   private[sql] def isPrimitive: Boolean
 }
 
-case class PhysicalArrayType(elementType: DataType, containsNull: Boolean) extends PhysicalDataType {
+case class PhysicalArrayType(elementType: DataType, containsNull: Boolean)
+  extends PhysicalDataType {
   override def isPrimitive: Boolean = false
 }
 
