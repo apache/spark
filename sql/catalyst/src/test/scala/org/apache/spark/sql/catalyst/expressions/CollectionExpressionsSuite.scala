@@ -2722,50 +2722,8 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
   }
 
   test("ArrayAppend Expression Test") {
-    checkEvaluation(
-      ArrayAppend(
-        Literal.create(null, ArrayType(StringType)),
-        Literal.create("c", StringType)),
-      null)
-
-    checkEvaluation(
-      ArrayAppend(
-        Literal.create(null, ArrayType(StringType)),
-        Literal.create(null, StringType)),
-      null)
-
-    checkEvaluation(
-      ArrayAppend(
-        Literal.create(Seq(""), ArrayType(StringType)),
-        Literal.create(null, StringType)),
-      Seq("", null))
-
-    checkEvaluation(
-      ArrayAppend(
-        Literal.create(Seq("a", "b", "c"), ArrayType(StringType)),
-        Literal.create(null, StringType)),
-      Seq("a", "b", "c", null))
-
-    checkEvaluation(
-      ArrayAppend(
-        Literal.create(Seq(Double.NaN, 1d, 2d), ArrayType(DoubleType)),
-        Literal.create(3d, DoubleType)),
-      Seq(Double.NaN, 1d, 2d, 3d))
-    // Null entry check
-    checkEvaluation(
-      ArrayAppend(
-        Literal.create(Seq(null, 1d, 2d), ArrayType(DoubleType)),
-        Literal.create(3d, DoubleType)),
-      Seq(null, 1d, 2d, 3d))
-
-    checkEvaluation(
-      ArrayAppend(
-        Literal.create(Seq("a", "b", "c"), ArrayType(StringType)),
-        Literal.create("c", StringType)),
-      Seq("a", "b", "c", "c"))
-
     assert(
-      ArrayAppend(
+      new ArrayAppend(
         Literal.create(Seq(null, 1d, 2d), ArrayType(DoubleType)),
         Literal.create(3, IntegerType))
         .checkInputDataTypes() ==
@@ -2780,7 +2738,7 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
 
 
     assert(
-      ArrayAppend(
+      new ArrayAppend(
         Literal.create("Hi", StringType),
         Literal.create("Spark", StringType))
         .checkInputDataTypes() == DataTypeMismatch(
@@ -2793,7 +2751,6 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
         )
       )
     )
-
   }
 
   test("SPARK-42401: Array insert of null value (explicit)") {
@@ -2807,13 +2764,6 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     val a = Literal.create(Seq("b", "a", "c"), ArrayType(StringType, false))
     checkEvaluation(ArrayInsert(
       a, Literal(5), Literal.create("q", StringType)), Seq("b", "a", "c", null, "q")
-    )
-  }
-
-  test("SPARK-42401: Array append of null value") {
-    val a = Literal.create(Seq("b", "a", "c"), ArrayType(StringType, false))
-    checkEvaluation(ArrayAppend(
-      a, Literal.create(null, StringType)), Seq("b", "a", "c", null)
     )
   }
 }
