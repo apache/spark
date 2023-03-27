@@ -25,7 +25,7 @@ import org.apache.spark.status.api.v1.AccumulableInfo
 import org.apache.spark.status.protobuf.Utils.{getOptional, getStringField, setStringField}
 import org.apache.spark.util.Utils.weakIntern
 
-private[protobuf] object AccumulableInfoSerializer {
+private[spark] object AccumulableInfoSerializer {
 
   def serialize(input: AccumulableInfo): StoreTypes.AccumulableInfo = {
     val builder = StoreTypes.AccumulableInfo.newBuilder()

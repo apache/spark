@@ -23,7 +23,7 @@ import org.apache.spark.sql.streaming.StateOperatorProgress
 import org.apache.spark.status.protobuf.StoreTypes
 import org.apache.spark.status.protobuf.Utils.{getStringField, setStringField}
 
-object StateOperatorProgressSerializer {
+private[spark] object StateOperatorProgressSerializer {
 
   def serialize(stateOperator: StateOperatorProgress): StoreTypes.StateOperatorProgress = {
     import org.apache.spark.status.protobuf.Utils.setJMapField

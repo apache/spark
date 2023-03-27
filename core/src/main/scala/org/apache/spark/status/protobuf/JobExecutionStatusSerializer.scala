@@ -20,7 +20,7 @@ package org.apache.spark.status.protobuf
 import org.apache.spark.JobExecutionStatus
 import org.apache.spark.status.protobuf.StoreTypes.{JobExecutionStatus => GJobExecutionStatus}
 
-private[protobuf] object JobExecutionStatusSerializer {
+private[spark] object JobExecutionStatusSerializer {
 
   def serialize(input: JobExecutionStatus): GJobExecutionStatus = {
     input match {

@@ -24,7 +24,7 @@ import org.apache.spark.status.ApplicationEnvironmentInfoWrapper
 import org.apache.spark.status.api.v1.{ApplicationEnvironmentInfo, ResourceProfileInfo, RuntimeInfo}
 import org.apache.spark.status.protobuf.Utils.{getStringField, setStringField}
 
-class ApplicationEnvironmentInfoWrapperSerializer
+private[spark] class ApplicationEnvironmentInfoWrapperSerializer
   extends ProtobufSerDe[ApplicationEnvironmentInfoWrapper] {
 
   override def serialize(input: ApplicationEnvironmentInfoWrapper): Array[Byte] = {

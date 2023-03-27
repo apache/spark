@@ -23,7 +23,7 @@ import org.apache.spark.sql.streaming.SourceProgress
 import org.apache.spark.status.protobuf.StoreTypes
 import org.apache.spark.status.protobuf.Utils.{getStringField, setJMapField, setStringField}
 
-private[protobuf] object SourceProgressSerializer {
+private[spark] object SourceProgressSerializer {
 
   def serialize(source: SourceProgress): StoreTypes.SourceProgress = {
     val builder = StoreTypes.SourceProgress.newBuilder()

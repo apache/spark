@@ -25,7 +25,7 @@ import org.apache.spark.status.protobuf.StoreTypes
 import org.apache.spark.status.protobuf.Utils.{getStringField, setStringField}
 import org.apache.spark.util.Utils.weakIntern
 
-class SparkPlanGraphWrapperSerializer extends ProtobufSerDe[SparkPlanGraphWrapper] {
+private[spark] class SparkPlanGraphWrapperSerializer extends ProtobufSerDe[SparkPlanGraphWrapper] {
 
   override def serialize(plan: SparkPlanGraphWrapper): Array[Byte] = {
     val builder = StoreTypes.SparkPlanGraphWrapper.newBuilder()
