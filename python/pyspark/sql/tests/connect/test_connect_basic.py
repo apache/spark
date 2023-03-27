@@ -23,7 +23,7 @@ import shutil
 import tempfile
 from collections import defaultdict
 
-from pyspark.errors import PySparkAttributeError, PySparkTypeError, PySparkValueError
+from pyspark.errors import PySparkAttributeError, PySparkTypeError, PySparkValueError, PySparkException
 from pyspark.sql import SparkSession as PySparkSession, Row
 from pyspark.sql.types import (
     StructType,
@@ -2987,32 +2987,41 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
 
 
 class SparkConnectSessionTests(SparkConnectSQLTestCase):
-    def test_stop_session(self):
-        self.connect.sql("select 1")
-        self.connect.stop()
-        funcs = [
-            ("table", [self.tbl_name]),
-            ("read", None),
-            ("createDataFrame", [[(1, "Alice"), (2, "Bob")], ["id", "name"]]),
-            ("sql", ["select 1"]),
-            ("range", [1, 3]),
-            ("catalog", None),
-            ("conf", None),
-            ("udf", None),
-            ("version", None)
-        ]
-        for (func, inputs) in funcs:
-            with self.assertRaises(PySparkValueError) as e:
-                if inputs is None:
-                    getattr(self.connect, func)
-                else:
-                    getattr(self.connect, func)(*inputs)
+    def _check_no_active_session_error(self, e: PySparkException):
+        self.check_error(
+            exception=e,
+            error_class="NO_ACTIVE_SESSION",
+            message_parameters=dict()
+        )
 
-            self.check_error(
-                exception=e.exception,
-                error_class="REMOTE_SESSION_STOPPED",
-                message_parameters=dict()
-            )
+    def test_stop_session(self):
+        df = self.connect.sql("select 1 as a, 2 as b")
+        catalog = self.connect.catalog
+        self.connect.stop()
+
+        # _execute_and_fetch
+        with self.assertRaises(SparkConnectException) as e:
+            self.connect.sql("select 1")
+        self._check_no_active_session_error(e.exception)
+
+        with self.assertRaises(SparkConnectException) as e:
+            catalog.tableExists(self.tbl_name)
+        self._check_no_active_session_error(e.exception)
+
+        # _execute
+        with self.assertRaises(SparkConnectException) as e:
+            self.connect.udf.register("test_func", lambda x: x + 1)
+        self._check_no_active_session_error(e.exception)
+
+        # _analyze
+        with self.assertRaises(SparkConnectException) as e:
+            df._explain_string(extended=True)
+        self._check_no_active_session_error(e.exception)
+
+        # Config
+        with self.assertRaises(SparkConnectException) as e:
+            self.connect.conf.get("some.conf")
+        self._check_no_active_session_error(e.exception)
 
 
 @unittest.skipIf(not should_test_connect, connect_requirement_message)

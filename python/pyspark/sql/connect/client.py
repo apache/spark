@@ -883,8 +883,8 @@ class SparkConnectClient(object):
                         )
                     return AnalyzeResult.fromProto(resp)
             raise SparkConnectException("Invalid state during retry exception handling.")
-        except grpc.RpcError as rpc_error:
-            self._handle_error(rpc_error)
+        except Exception as error:
+            self._handle_error(error)
 
     def _execute(self, req: pb2.ExecutePlanRequest) -> None:
         """
@@ -908,8 +908,8 @@ class SparkConnectClient(object):
                                 "Received incorrect session identifier for request: "
                                 f"{b.session_id} != {self._session_id}"
                             )
-        except grpc.RpcError as rpc_error:
-            self._handle_error(rpc_error)
+        except Exception as error:
+            self._handle_error(error)
 
     def _execute_and_fetch_as_iterator(
         self, req: pb2.ExecutePlanRequest
@@ -1035,10 +1035,36 @@ class SparkConnectClient(object):
                         )
                     return ConfigResult.fromProto(resp)
             raise SparkConnectException("Invalid state during retry exception handling.")
-        except grpc.RpcError as rpc_error:
-            self._handle_error(rpc_error)
+        except Exception as error:
+            self._handle_error(error)
 
-    def _handle_error(self, rpc_error: grpc.RpcError) -> NoReturn:
+    def _handle_error(self, error: Exception) -> NoReturn:
+        """
+        Handle errors that occur during RPC calls.
+
+        Parameters
+        ----------
+        error : Exception
+            An exception thrown during RPC calls.
+
+        Returns
+        -------
+        Throws the appropriate internal Python exception.
+        """
+        if isinstance(error, grpc.RpcError):
+            self._handle_rpc_error(cast(grpc.RpcError, error))
+        elif isinstance(error, ValueError):
+            if "Cannot invoke RPC" in str(error) and "closed" in str(error):
+                raise SparkConnectException(
+                    error_class="NO_ACTIVE_SESSION",
+                    message_parameters=dict()
+                )
+            else:
+                raise error
+        else:
+            raise error
+
+    def _handle_rpc_error(self, rpc_error: grpc.RpcError) -> NoReturn:
         """
         Error handling helper for dealing with GRPC Errors. On the server side, certain
         exceptions are enriched with additional RPC Status information. These are
