@@ -25,7 +25,7 @@ import org.apache.spark.status.JobDataWrapper
 import org.apache.spark.status.api.v1.JobData
 import org.apache.spark.status.protobuf.Utils.{getOptional, getStringField, setStringField}
 
-class JobDataWrapperSerializer extends ProtobufSerDe[JobDataWrapper] {
+private[protobuf] class JobDataWrapperSerializer extends ProtobufSerDe[JobDataWrapper] {
 
   override def serialize(j: JobDataWrapper): Array[Byte] = {
     val jobData = serializeJobData(j.info)

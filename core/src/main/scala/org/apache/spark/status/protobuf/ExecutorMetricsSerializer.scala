@@ -20,7 +20,7 @@ package org.apache.spark.status.protobuf
 import org.apache.spark.executor.ExecutorMetrics
 import org.apache.spark.metrics.ExecutorMetricType
 
-object ExecutorMetricsSerializer {
+private[protobuf] object ExecutorMetricsSerializer {
   def serialize(e: ExecutorMetrics): StoreTypes.ExecutorMetrics = {
     val builder = StoreTypes.ExecutorMetrics.newBuilder()
     ExecutorMetricType.metricToOffset.foreach { case (metric, _) =>

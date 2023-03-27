@@ -27,7 +27,7 @@ import org.apache.spark.status.api.v1.{ExecutorMetricsDistributions, ExecutorPea
 import org.apache.spark.status.protobuf.Utils._
 import org.apache.spark.util.Utils.weakIntern
 
-class StageDataWrapperSerializer extends ProtobufSerDe[StageDataWrapper] {
+private[protobuf] class StageDataWrapperSerializer extends ProtobufSerDe[StageDataWrapper] {
 
   override def serialize(input: StageDataWrapper): Array[Byte] = {
     val builder = StoreTypes.StageDataWrapper.newBuilder()
