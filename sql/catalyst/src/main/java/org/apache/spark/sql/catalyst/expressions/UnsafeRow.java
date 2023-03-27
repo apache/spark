@@ -66,6 +66,11 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
     return ((numFields + 63)/ 64) * 8;
   }
 
+  /**
+   *
+   * @param dt
+   * @return
+   */
   public static boolean isFixedLength(DataType dt) {
     if (dt instanceof UserDefinedType) {
       return isFixedLength(((UserDefinedType<?>) dt).sqlType());
@@ -74,16 +79,21 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
     if (pdt instanceof PhysicalDecimalType) {
       return ((DecimalType) dt).precision() <= Decimal.MAX_LONG_DIGITS();
     } else {
-      return pdt.isPrimitive();
+      return pdt instanceof PhysicalPrimitiveType;
     }
   }
 
+  /**
+   *
+   * @param dt
+   * @return
+   */
   public static boolean isMutable(DataType dt) {
     if (dt instanceof UserDefinedType) {
       return isMutable(((UserDefinedType<?>) dt).sqlType());
     }
     PhysicalDataType pdt = dt.physicalDataType();
-    return pdt.isPrimitive() || pdt instanceof PhysicalDecimalType ||
+    return pdt instanceof PhysicalPrimitiveType || pdt instanceof PhysicalDecimalType ||
       pdt instanceof PhysicalCalendarIntervalType;
   }
 
