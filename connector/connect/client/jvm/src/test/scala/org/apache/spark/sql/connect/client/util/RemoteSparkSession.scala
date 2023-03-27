@@ -58,10 +58,14 @@ object SparkConnectServerUtils {
 
   private lazy val sparkConnect: Process = {
     debug("Starting the Spark Connect Server...")
-    val jar = findJar(
+    val connectJar = findJar(
       "connector/connect/server",
       "spark-connect-assembly",
       "spark-connect").getCanonicalPath
+    val catalystTestJar = findJar(
+      "sql/catalyst",
+      "spark-catalyst",
+      "spark-catalyst", test = true).getCanonicalPath
     val catalogImplementation = if (IntegrationTestUtils.isSparkHiveJarAvailable) {
       "hive"
     } else {
@@ -78,7 +82,7 @@ object SparkConnectServerUtils {
       Seq(
         "bin/spark-submit",
         "--driver-class-path",
-        jar,
+        s"$connectJar:$catalystTestJar",
         "--conf",
         s"spark.connect.grpc.binding.port=$port",
         "--conf",
@@ -87,7 +91,7 @@ object SparkConnectServerUtils {
         s"spark.sql.catalogImplementation=$catalogImplementation",
         "--class",
         "org.apache.spark.sql.connect.SimpleSparkConnectService",
-        jar),
+        connectJar),
       new File(sparkHome))
 
     val io = new ProcessIO(
