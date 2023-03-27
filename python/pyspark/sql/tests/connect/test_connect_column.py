@@ -50,7 +50,7 @@ if should_test_connect:
     import pandas as pd
     from pyspark.sql.connect import functions as CF
     from pyspark.sql.connect.column import Column
-    from pyspark.sql.connect.expressions import LiteralExpression
+    from pyspark.sql.connect.expressions import DistributedSequenceID, LiteralExpression
     from pyspark.sql.connect.types import (
         JVM_BYTE_MIN,
         JVM_BYTE_MAX,
