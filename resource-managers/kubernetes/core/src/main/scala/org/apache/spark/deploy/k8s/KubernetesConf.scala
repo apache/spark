@@ -234,6 +234,7 @@ private[spark] object KubernetesConf {
       .replaceAll("[^a-z0-9\\-]", "-")
       .replaceAll("-+", "-")
       .replaceAll("^-", "")
+      .replaceAll("^[0-9]", "x")
   }
 
   /**
