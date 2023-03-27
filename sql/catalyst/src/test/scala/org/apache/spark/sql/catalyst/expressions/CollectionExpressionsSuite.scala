@@ -2723,7 +2723,7 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
 
   test("ArrayAppend Expression Test") {
     assert(
-      new ArrayAppend(
+      ArrayAppend(
         Literal.create(Seq(null, 1d, 2d), ArrayType(DoubleType)),
         Literal.create(3, IntegerType))
         .checkInputDataTypes() ==
@@ -2738,7 +2738,7 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
 
 
     assert(
-      new ArrayAppend(
+      ArrayAppend(
         Literal.create("Hi", StringType),
         Literal.create("Spark", StringType))
         .checkInputDataTypes() == DataTypeMismatch(
