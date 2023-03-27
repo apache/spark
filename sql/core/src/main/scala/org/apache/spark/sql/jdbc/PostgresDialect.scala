@@ -60,6 +60,8 @@ private object PostgresDialect extends JdbcDialect with SQLConfHelper {
       Some(StringType)
     } else if (sqlType == Types.OTHER) {
       Some(StringType)
+    } else if ("text".equalsIgnoreCase(typeName)) {
+      Some(StringType) // sqlType is  Types.VARCHAR
     } else if (sqlType == Types.ARRAY) {
       val scale = md.build.getLong("scale").toInt
       // postgres array type names start with underscore
