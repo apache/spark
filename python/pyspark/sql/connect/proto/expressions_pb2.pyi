@@ -988,15 +988,6 @@ class Expression(google.protobuf.message.Message):
             self, field_name: typing_extensions.Literal["name_parts", b"name_parts"]
         ) -> None: ...
 
-    class DistributedSequenceID(google.protobuf.message.Message):
-        """DistributedSequenceID is used to generate distributed-sequence index for pandas API on Spark."""
-
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
-
-        def __init__(
-            self,
-        ) -> None: ...
-
     LITERAL_FIELD_NUMBER: builtins.int
     UNRESOLVED_ATTRIBUTE_FIELD_NUMBER: builtins.int
     UNRESOLVED_FUNCTION_FIELD_NUMBER: builtins.int
@@ -1012,7 +1003,6 @@ class Expression(google.protobuf.message.Message):
     UPDATE_FIELDS_FIELD_NUMBER: builtins.int
     UNRESOLVED_NAMED_LAMBDA_VARIABLE_FIELD_NUMBER: builtins.int
     COMMON_INLINE_USER_DEFINED_FUNCTION_FIELD_NUMBER: builtins.int
-    DISTRIBUTED_SEQUENCE_ID_FIELD_NUMBER: builtins.int
     EXTENSION_FIELD_NUMBER: builtins.int
     @property
     def literal(self) -> global___Expression.Literal: ...
@@ -1047,8 +1037,6 @@ class Expression(google.protobuf.message.Message):
     @property
     def common_inline_user_defined_function(self) -> global___CommonInlineUserDefinedFunction: ...
     @property
-    def distributed_sequence_id(self) -> global___Expression.DistributedSequenceID: ...
-    @property
     def extension(self) -> google.protobuf.any_pb2.Any:
         """This field is used to mark extensions to the protocol. When plugins generate arbitrary
         relations they can add them here. During the planning the correct resolution is done.
@@ -1072,7 +1060,6 @@ class Expression(google.protobuf.message.Message):
         unresolved_named_lambda_variable: global___Expression.UnresolvedNamedLambdaVariable
         | None = ...,
         common_inline_user_defined_function: global___CommonInlineUserDefinedFunction | None = ...,
-        distributed_sequence_id: global___Expression.DistributedSequenceID | None = ...,
         extension: google.protobuf.any_pb2.Any | None = ...,
     ) -> None: ...
     def HasField(
@@ -1084,8 +1071,6 @@ class Expression(google.protobuf.message.Message):
             b"cast",
             "common_inline_user_defined_function",
             b"common_inline_user_defined_function",
-            "distributed_sequence_id",
-            b"distributed_sequence_id",
             "expr_type",
             b"expr_type",
             "expression_string",
@@ -1125,8 +1110,6 @@ class Expression(google.protobuf.message.Message):
             b"cast",
             "common_inline_user_defined_function",
             b"common_inline_user_defined_function",
-            "distributed_sequence_id",
-            b"distributed_sequence_id",
             "expr_type",
             b"expr_type",
             "expression_string",
@@ -1175,7 +1158,6 @@ class Expression(google.protobuf.message.Message):
         "update_fields",
         "unresolved_named_lambda_variable",
         "common_inline_user_defined_function",
-        "distributed_sequence_id",
         "extension",
     ] | None: ...
 

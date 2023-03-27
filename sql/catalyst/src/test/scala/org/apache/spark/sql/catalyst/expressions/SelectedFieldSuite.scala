@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.analysis.AnalysisTest
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.types._
 
 class SelectedFieldSuite extends AnalysisTest {
@@ -534,7 +535,7 @@ class SelectedFieldSuite extends AnalysisTest {
           indent("but it actually selected\n") +
           indent(StructType(actual :: Nil).treeString) +
           indent("Note that expected.dataType.sameType(actual.dataType) = " +
-          expected.dataType.sameType(actual.dataType)))
+          DataTypeUtils.sameType(expected.dataType, actual.dataType)))
         throw ex
     }
   }

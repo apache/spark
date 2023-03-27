@@ -58,7 +58,10 @@ import org.apache.spark.util.Utils
  * }}}
  */
 // scalastyle:on
-class ProtoToParsedPlanTestSuite extends SparkFunSuite with SharedSparkSession {
+class ProtoToParsedPlanTestSuite
+    extends SparkFunSuite
+    with SharedSparkSession
+    with ResourceHelper {
   val url = "jdbc:h2:mem:testdb0"
   var conn: java.sql.Connection = null
 
@@ -105,19 +108,9 @@ class ProtoToParsedPlanTestSuite extends SparkFunSuite with SharedSparkSession {
       .set(org.apache.spark.sql.internal.SQLConf.ANSI_ENABLED.key, false.toString)
   }
 
-  protected val baseResourcePath: Path = {
-    getWorkspaceFilePath(
-      "connector",
-      "connect",
-      "common",
-      "src",
-      "test",
-      "resources",
-      "query-tests").toAbsolutePath
-  }
-
-  protected val inputFilePath: Path = baseResourcePath.resolve("queries")
-  protected val goldenFilePath: Path = baseResourcePath.resolve("explain-results")
+  protected val suiteBaseResourcePath = commonResourcePath.resolve("query-tests")
+  protected val inputFilePath: Path = suiteBaseResourcePath.resolve("queries")
+  protected val goldenFilePath: Path = suiteBaseResourcePath.resolve("explain-results")
   private val emptyProps: util.Map[String, String] = util.Collections.emptyMap()
 
   private val analyzer = {
