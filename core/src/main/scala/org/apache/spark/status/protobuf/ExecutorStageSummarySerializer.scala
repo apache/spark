@@ -20,7 +20,7 @@ package org.apache.spark.status.protobuf
 import org.apache.spark.status.api.v1.ExecutorStageSummary
 import org.apache.spark.status.protobuf.Utils.getOptional
 
-private[spark] object ExecutorStageSummarySerializer {
+private[protobuf] object ExecutorStageSummarySerializer {
 
   def serialize(input: ExecutorStageSummary): StoreTypes.ExecutorStageSummary = {
     val builder = StoreTypes.ExecutorStageSummary.newBuilder()

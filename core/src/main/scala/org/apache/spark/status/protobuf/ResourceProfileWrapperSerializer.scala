@@ -19,7 +19,7 @@ package org.apache.spark.status.protobuf
 
 import org.apache.spark.status.ResourceProfileWrapper
 
-private[spark] class ResourceProfileWrapperSerializer
+private[protobuf] class ResourceProfileWrapperSerializer
   extends ProtobufSerDe[ResourceProfileWrapper] {
 
   private val appEnvSerializer = new ApplicationEnvironmentInfoWrapperSerializer

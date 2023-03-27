@@ -28,7 +28,7 @@ import org.apache.spark.sql.streaming.StreamingQueryProgress
 import org.apache.spark.status.protobuf.StoreTypes
 import org.apache.spark.status.protobuf.Utils.{getStringField, setJMapField, setStringField}
 
-private[spark] object StreamingQueryProgressSerializer {
+private[protobuf] object StreamingQueryProgressSerializer {
 
   private val mapper: JsonMapper = JsonMapper.builder()
     .addModule(DefaultScalaModule)

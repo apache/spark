@@ -20,7 +20,7 @@ package org.apache.spark.status.protobuf.sql
 import org.apache.spark.sql.streaming.ui.StreamingQueryProgressWrapper
 import org.apache.spark.status.protobuf.{ProtobufSerDe, StoreTypes}
 
-private[spark] class StreamingQueryProgressWrapperSerializer
+private[protobuf] class StreamingQueryProgressWrapperSerializer
   extends ProtobufSerDe[StreamingQueryProgressWrapper] {
 
   override def serialize(data: StreamingQueryProgressWrapper): Array[Byte] = {

@@ -23,7 +23,7 @@ import org.apache.spark.sql.streaming.SinkProgress
 import org.apache.spark.status.protobuf.StoreTypes
 import org.apache.spark.status.protobuf.Utils.{getStringField, setStringField}
 
-private[spark] object SinkProgressSerializer {
+private[protobuf] object SinkProgressSerializer {
 
   def serialize(sink: SinkProgress): StoreTypes.SinkProgress = {
     import org.apache.spark.status.protobuf.Utils.setJMapField

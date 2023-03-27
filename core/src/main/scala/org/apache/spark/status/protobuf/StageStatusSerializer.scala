@@ -20,7 +20,7 @@ package org.apache.spark.status.protobuf
 import org.apache.spark.status.api.v1.StageStatus
 import org.apache.spark.status.protobuf.StoreTypes.{StageStatus => GStageStatus}
 
-private[spark] object StageStatusSerializer {
+private[protobuf] object StageStatusSerializer {
 
   def serialize(input: StageStatus): GStageStatus = {
     input match {

@@ -25,7 +25,7 @@ import org.apache.spark.status.protobuf.StoreTypes.{DeterministicLevel => GDeter
 import org.apache.spark.status.protobuf.Utils.{getStringField, setStringField}
 import org.apache.spark.ui.scope.{RDDOperationEdge, RDDOperationNode}
 
-private[spark] class RDDOperationGraphWrapperSerializer
+private[protobuf] class RDDOperationGraphWrapperSerializer
   extends ProtobufSerDe[RDDOperationGraphWrapper] {
 
   override def serialize(op: RDDOperationGraphWrapper): Array[Byte] = {
