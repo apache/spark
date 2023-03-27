@@ -193,7 +193,7 @@ def try_remote_windowspec(f: FuncT) -> FuncT:
     return cast(FuncT, wrapped)
 
 
-def require_spark_context_initialized() -> Optional[SparkContext]:
+def require_spark_context_initialized() -> SparkContext:
     """Raise RuntimeError if SparkContext is not initialized,
     otherwise, returns the active SparkContext."""
     sc = SparkContext._active_spark_context

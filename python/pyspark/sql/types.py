@@ -1208,8 +1208,6 @@ def _parse_datatype_string(s: str) -> DataType:
         ...
     ParseException:...
     """
-    from pyspark import SparkContext
-
     sc = require_spark_context_initialized()
 
     def from_ddl_schema(type_str: str) -> DataType:
