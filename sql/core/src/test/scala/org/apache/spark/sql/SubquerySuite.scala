@@ -2696,7 +2696,7 @@ class SubquerySuite extends QueryTest
     }
   }
 
-  test("Outer join with subquery in condition") {
+  test("SPARK-42937: Outer join with subquery in condition") {
     withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
       SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
       withTempView("t2") {
