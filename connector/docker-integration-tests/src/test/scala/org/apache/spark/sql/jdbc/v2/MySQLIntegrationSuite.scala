@@ -72,7 +72,7 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest
         s"mysql?user=root&password=rootpass&allowPublicKeyRetrieval=true&useSSL=false"
   }
 
-  override val typeMapping: Map[DataType, DataType] = Map(StringType ->, VarcharType(65535))
+  override val typeMapping: Map[DataType, DataType] = Map(StringType -> VarcharType(65535))
 
   override def sparkConf: SparkConf = super.sparkConf
     .set("spark.sql.catalog.mysql", classOf[JDBCTableCatalog].getName)
