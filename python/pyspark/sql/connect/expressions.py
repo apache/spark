@@ -978,9 +978,8 @@ class WindowExpression(Expression):
 
 class DistributedSequenceID(Expression):
     def to_plan(self, session: "SparkConnectClient") -> proto.Expression:
-        expr = proto.Expression()
-        expr.distributed_sequence_id.SetInParent()
-        return expr
+        unresolved_function = UnresolvedFunction(name="distributed_sequence_id", args=[])
+        return unresolved_function.to_plan(session)
 
     def __repr__(self) -> str:
         return "DistributedSequenceID()"
