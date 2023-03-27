@@ -489,12 +489,14 @@ class SparkConnectPlanner(val session: SparkSession) {
         logical.MapInPandas(
           pythonUdf,
           pythonUdf.dataType.asInstanceOf[StructType].toAttributes,
-          transformRelation(rel.getInput))
+          transformRelation(rel.getInput),
+          false)
       case PythonEvalType.SQL_MAP_ARROW_ITER_UDF =>
         logical.PythonMapInArrow(
           pythonUdf,
           pythonUdf.dataType.asInstanceOf[StructType].toAttributes,
-          transformRelation(rel.getInput))
+          transformRelation(rel.getInput),
+          false)
       case _ =>
         throw InvalidPlanInput(s"Function with EvalType: ${pythonUdf.evalType} is not supported")
     }
@@ -901,8 +903,6 @@ class SparkConnectPlanner(val session: SparkSession) {
         transformExpressionPlugin(exp.getExtension)
       case proto.Expression.ExprTypeCase.COMMON_INLINE_USER_DEFINED_FUNCTION =>
         transformCommonInlineUserDefinedFunction(exp.getCommonInlineUserDefinedFunction)
-      case proto.Expression.ExprTypeCase.DISTRIBUTED_SEQUENCE_ID =>
-        transformDistributedSequenceID(exp.getDistributedSequenceId)
       case _ =>
         throw InvalidPlanInput(
           s"Expression with ID: ${exp.getExprTypeCase.getNumber} is not supported")
@@ -1254,6 +1254,10 @@ class SparkConnectPlanner(val session: SparkSession) {
         } else {
           None
         }
+
+      // PS(Pandas API on Spark)-specific functions
+      case "distributed_sequence_id" if fun.getArgumentsCount == 0 =>
+        Some(DistributedSequenceID())
 
       // ML-specific functions
       case "vector_to_array" if fun.getArgumentsCount == 2 =>
@@ -2185,10 +2189,5 @@ class SparkConnectPlanner(val session: SparkSession) {
 
   private def transformListCatalogs(getListCatalogs: proto.ListCatalogs): LogicalPlan = {
     session.catalog.listCatalogs().logicalPlan
-  }
-
-  private def transformDistributedSequenceID(
-      getDistributedSequenceID: proto.Expression.DistributedSequenceID): Expression = {
-    DistributedSequenceID()
   }
 }
