@@ -213,7 +213,10 @@ class SparkSession private[sql] (
    * @param sqlText
    *   A SQL statement with named parameters to execute.
    * @param args
-   *   A map of parameter names to literal values.
+   *   A map of parameter names to string values that are parsed as SQL literal expressions. For
+   *   example, map keys: "rank", "name", "birthdate"; map values: "1", "'Steven'",
+   *   "DATE'2023-03-21'". The fragments of string values belonged to SQL comments are skipped
+   *   while parsing.
    *
    * @since 3.4.0
    */
@@ -229,7 +232,10 @@ class SparkSession private[sql] (
    * @param sqlText
    *   A SQL statement with named parameters to execute.
    * @param args
-   *   A map of parameter names to literal values.
+   *   A map of parameter names to string values that are parsed as SQL literal expressions. For
+   *   example, map keys: "rank", "name", "birthdate"; map values: "1", "'Steven'",
+   *   "DATE'2023-03-21'". The fragments of string values belonged to SQL comments are skipped
+   *   while parsing.
    *
    * @since 3.4.0
    */
@@ -398,6 +404,13 @@ class SparkSession private[sql] (
       explainMode: Option[proto.AnalyzePlanRequest.Explain.ExplainMode] = None)
       : proto.AnalyzePlanResponse = {
     client.analyze(method, Some(plan), explainMode)
+  }
+
+  private[sql] def analyze(
+      f: proto.AnalyzePlanRequest.Builder => Unit): proto.AnalyzePlanResponse = {
+    val builder = proto.AnalyzePlanRequest.newBuilder()
+    f(builder)
+    client.analyze(builder)
   }
 
   private[sql] def sameSemantics(plan: proto.Plan, otherPlan: proto.Plan): Boolean = {
