@@ -61,6 +61,7 @@ from pyspark.sql.types import (
     Row,
     _parse_datatype_json_string,
 )
+from pyspark.sql.utils import require_spark_context_initialized
 from pyspark.sql.pandas.conversion import PandasConversionMixin
 from pyspark.sql.pandas.map_ops import PandasMapOpsMixin
 
@@ -4893,8 +4894,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
                 error_class="NOT_DICT",
                 message_parameters={"arg_name": "metadata", "arg_type": type(metadata).__name__},
             )
-        sc = SparkContext._active_spark_context
-        assert sc is not None and sc._jvm is not None
+        sc = require_spark_context_initialized()
         jmeta = sc._jvm.org.apache.spark.sql.types.Metadata.fromJson(json.dumps(metadata))
         return DataFrame(self._jdf.withMetadata(columnName, jmeta), self.sparkSession)
 

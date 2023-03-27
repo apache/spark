@@ -21,8 +21,8 @@ A collections of builtin protobuf functions
 
 
 from typing import Dict, Optional, TYPE_CHECKING
-from pyspark import SparkContext
 from pyspark.sql.column import Column, _to_java_column
+from pyspark.sql.utils import require_spark_context_initialized
 from pyspark.util import _print_missing_jar
 
 if TYPE_CHECKING:
@@ -117,8 +117,7 @@ def from_protobuf(
     +------------------+
     """
 
-    sc = SparkContext._active_spark_context
-    assert sc is not None and sc._jvm is not None
+    sc = require_spark_context_initialized()
     try:
         if descFilePath is not None:
             jc = sc._jvm.org.apache.spark.sql.protobuf.functions.from_protobuf(
@@ -212,8 +211,7 @@ def to_protobuf(
     +----------------------------+
     """
 
-    sc = SparkContext._active_spark_context
-    assert sc is not None and sc._jvm is not None
+    sc = require_spark_context_initialized()
     try:
         if descFilePath is not None:
             jc = sc._jvm.org.apache.spark.sql.protobuf.functions.to_protobuf(
