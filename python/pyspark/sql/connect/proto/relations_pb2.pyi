@@ -577,7 +577,11 @@ class SQL(google.protobuf.message.Message):
     """(Required) The SQL query."""
     @property
     def args(self) -> google.protobuf.internal.containers.ScalarMap[builtins.str, builtins.str]:
-        """(Optional) A map of parameter names to literal values."""
+        """(Optional) A map of parameter names to string values that are parsed as
+        SQL literal expressions. For example, map keys: "rank", "name", "birthdate";
+        map values: "1", "'Steven'", "DATE'2023-03-21'". The fragments of string values
+        belonged to SQL comments are skipped while parsing.
+        """
     def __init__(
         self,
         *,
