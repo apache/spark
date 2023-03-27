@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.ScanOperation
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.{FileSourceScanExec, SparkPlan}
-import org.apache.spark.sql.types.{DoubleType, FloatType, StructType}
+import org.apache.spark.sql.types.{DoubleType, FloatType, StructField, StructType}
 import org.apache.spark.util.collection.BitSet
 
 /**
@@ -258,7 +258,7 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
           .map(_.name.toLowerCase(Locale.ROOT))
           .toSet
 
-        metadataStruct.dataType.asInstanceOf[StructType].fields.foreach {
+        def createMetadataColumn(field: StructField) = field match {
           case FileSourceGeneratedMetadataStructField(field, internalName) =>
             if (schemaColumns.contains(internalName)) {
               throw new AnalysisException(internalName +
@@ -280,6 +280,8 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
 
           case field => throw new AnalysisException(s"Unrecognized file metadata field: $field")
         }
+
+        metadataStruct.dataType.asInstanceOf[StructType].fields.foreach(createMetadataColumn)
       }
 
       val outputDataSchema = (readDataColumns ++ generatedMetadataColumns).toStructType
@@ -332,11 +334,7 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
         val structColumns = metadataStruct.dataType.asInstanceOf[StructType].fields.map { field =>
           // Construct the metadata struct the query expects to see, using the columns we previously
           // created. Be sure to restore the proper name and nullability for each metadata field.
-          metadataColumnsByName(field.name) match {
-            case col if col.name != field.name =>
-              col.withName(field.name).withNullability(field.nullable)
-            case col => col
-          }
+          metadataColumnsByName(field.name).withName(field.name).withNullability(field.nullable)
         }
         // SPARK-41151: metadata column is not nullable for file sources.
         // Here, we *explicitly* enforce the not null to `CreateStruct(structColumns)`
