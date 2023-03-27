@@ -5060,8 +5060,7 @@ case class ArrayAppend(arr: Expression, ele: Expression) extends ArrayInsertEnd 
   since = "3.5.0")
 case class ArrayPrepend(arr: Expression, ele: Expression) extends ArrayInsertEnd {
 
-  override lazy val replacement: Expression =
-    ArrayInsert(arr, Literal(0), ele)
+  override lazy val replacement: Expression = ArrayInsert(arr, Literal(0), ele)
 
   override def prettyName: String = "array_prepend"
 
