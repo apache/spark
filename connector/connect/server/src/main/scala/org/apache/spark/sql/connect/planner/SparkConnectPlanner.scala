@@ -1250,6 +1250,10 @@ class SparkConnectPlanner(val session: SparkSession) {
           None
         }
 
+      // PS(Pandas API on Spark)-specific functions
+      case "distributed_sequence_id" if fun.getArgumentsCount == 0 =>
+        Some(DistributedSequenceID())
+
       case _ => None
     }
   }

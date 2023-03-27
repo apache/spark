@@ -1018,6 +1018,14 @@ class SparkConnectColumnTests(SparkConnectSQLTestCase):
         self.assertEqual(cdf1.schema, sdf1.schema)
         self.assertEqual(cdf1.collect(), sdf1.collect())
 
+    def test_distributed_sequence_id(self):
+        cdf = self.connect.range(10)
+        expected = self.connect.range(0, 10).selectExpr("id as index", "id")
+        self.assertEqual(
+            cdf.select(Column(DistributedSequenceID()).alias("index"), "*").collect(),
+            expected.collect(),
+        )
+
 
 if __name__ == "__main__":
     import os
