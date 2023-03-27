@@ -155,7 +155,7 @@ class StreamingDeduplicationWithinWatermarkSuite extends StateStoreMetricsTest {
       // Advances watermark to 23. no-data batch drops state row ("a" -> 23), ("c" -> 23)
       AddData(inputData, "d" -> 25),
       CheckNewAnswer("d" -> 25),
-      assertNumStateRows(total = 2, updated = 1),
+      assertNumStateRows(total = 2, updated = 1)
     )
   }
 
