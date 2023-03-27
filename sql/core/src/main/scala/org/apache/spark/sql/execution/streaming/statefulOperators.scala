@@ -999,7 +999,7 @@ case class StreamingDeduplicateWithinWatermarkExec(
     Array(StructField("expiresAt", LongType, nullable = false)))
   private val eventTimeCol: Attribute = WatermarkSupport.findEventTimeColumn(child.output,
     allowMultipleEventTimeColumns = false).get
-  private val delayThreshold = eventTimeCol.metadata.getLong(EventTimeWatermark.delayKey)
+  private val delayThresholdMillis = eventTimeCol.metadata.getLong(EventTimeWatermark.delayKey)
   private val eventTimeColOrdinal: Int = child.output.indexOf(eventTimeCol)
 
   override protected def doExecute(): RDD[InternalRow] = {
@@ -1038,9 +1038,10 @@ case class StreamingDeduplicateWithinWatermarkExec(
         val value = store.get(key)
         if (value == null) {
           val timestamp = row.getLong(eventTimeColOrdinal)
-          val timeoutTimestamp = timestamp + delayThreshold
+          // The unit of timestamp in Spark is microseconds, convert the delay threshold.
+          val expiresAt = timestamp + delayThresholdMillis * 1000
 
-          timeoutRow.setLong(0, timeoutTimestamp)
+          timeoutRow.setLong(0, expiresAt)
           store.put(key, timeoutRow)
 
           numUpdatedStateRows += 1
@@ -1056,13 +1057,13 @@ case class StreamingDeduplicateWithinWatermarkExec(
       CompletionIterator[InternalRow, Iterator[InternalRow]](result, {
         allUpdatesTimeMs += NANOSECONDS.toMillis(System.nanoTime - updatesStartTimeNs)
         allRemovalsTimeMs += timeTakenMs {
+          // Convert watermark value to microsecond
+          val watermarkForEviction = eventTimeWatermarkForEviction.get * 1000
           store.iterator().foreach { rowPair =>
             val valueRow = rowPair.value
 
-            val timeoutTimestamp = valueRow.getLong(0)
-            val timeoutTimestampInMillis = timeoutTimestamp / 1000
-
-            if (eventTimeWatermarkForEviction.get >= timeoutTimestampInMillis) {
+            val expiresAt = valueRow.getLong(0)
+            if (watermarkForEviction >= expiresAt) {
               store.remove(rowPair.key)
               numRemovedStateRows += 1
             }

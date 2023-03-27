@@ -104,7 +104,7 @@ class StreamingDeduplicationWithinWatermarkSuite extends StateStoreMetricsTest {
       // Advance watermark to 25 secs, no-data-batch drops state rows having expired time <= 25
       AddData(inputData, 35),
       CheckNewAnswer(35),
-      assertNumStateRows(total = 1, updated = 1),
+      assertNumStateRows(total = 3, updated = 1),
 
       // Advance watermark to 45 seconds, no-data-batch drops state rows having expired time <= 45
       AddData(inputData, 55),
@@ -140,17 +140,22 @@ class StreamingDeduplicationWithinWatermarkSuite extends StateStoreMetricsTest {
       assertNumStateRows(total = 1, updated = 0, droppedByWatermark = 1),
 
       // Advances watermark to 20. no-data batch drops state row ("a" -> 19)
-      AddData(inputData, "b" -> 22),
-      CheckNewAnswer("b" -> 22),
-      // expired time is set to 24
-      assertNumStateRows(total = 1, updated = 1),
+      AddData(inputData, "b" -> 22, "c" -> 21),
+      CheckNewAnswer("b" -> 22, "c" -> 21),
+      // expired time is set to 24 and 23
+      assertNumStateRows(total = 2, updated = 2),
 
       // Watermark does not advance
       AddData(inputData, "a" -> 21),
       // "a" is identified as new event since previous batch dropped state row ("a" -> 19)
       CheckNewAnswer("a" -> 21),
       // expired time is set to 23
-      assertNumStateRows(total = 2, updated = 1)
+      assertNumStateRows(total = 3, updated = 1),
+
+      // Advances watermark to 23. no-data batch drops state row ("a" -> 23), ("c" -> 23)
+      AddData(inputData, "d" -> 25),
+      CheckNewAnswer("d" -> 25),
+      assertNumStateRows(total = 2, updated = 1),
     )
   }
 
