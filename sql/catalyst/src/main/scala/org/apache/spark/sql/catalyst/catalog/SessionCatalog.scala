@@ -1719,7 +1719,8 @@ class SessionCatalog(
       name: FunctionIdentifier,
       arguments: Seq[Expression],
       registry: FunctionRegistryBase[T],
-      createFunctionBuilder: CatalogFunction => FunctionRegistryBase[T]#FunctionBuilder): T = {
+      createFunctionBuilder: CatalogFunction => FunctionRegistryBase[T]#FunctionBuilder
+  ): T = synchronized {
     val qualifiedIdent = qualifyIdentifier(name)
     val db = qualifiedIdent.database.get
     val funcName = qualifiedIdent.funcName
