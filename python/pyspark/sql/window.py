@@ -17,7 +17,7 @@
 import sys
 from typing import cast, Iterable, List, Tuple, TYPE_CHECKING, Union
 
-from py4j.java_gateway import JavaObject
+from py4j.java_gateway import JavaObject, JVMView
 
 from pyspark.sql.column import _to_seq, _to_java_column
 from pyspark.sql.utils import (
@@ -126,7 +126,9 @@ class Window:
         +---+--------+----------+
         """
         sc = require_spark_context_initialized()
-        jspec = sc._jvm.org.apache.spark.sql.expressions.Window.partitionBy(_to_java_cols(cols))
+        jspec = cast(JVMView, sc._jvm).org.apache.spark.sql.expressions.Window.partitionBy(
+            _to_java_cols(cols)
+        )
         return WindowSpec(jspec)
 
     @staticmethod
@@ -181,7 +183,9 @@ class Window:
         +---+--------+----------+
         """
         sc = require_spark_context_initialized()
-        jspec = sc._jvm.org.apache.spark.sql.expressions.Window.orderBy(_to_java_cols(cols))
+        jspec = cast(JVMView, sc._jvm).org.apache.spark.sql.expressions.Window.orderBy(
+            _to_java_cols(cols)
+        )
         return WindowSpec(jspec)
 
     @staticmethod
@@ -264,7 +268,9 @@ class Window:
         if end >= Window._FOLLOWING_THRESHOLD:
             end = Window.unboundedFollowing
         sc = require_spark_context_initialized()
-        jspec = sc._jvm.org.apache.spark.sql.expressions.Window.rowsBetween(start, end)
+        jspec = cast(JVMView, sc._jvm).org.apache.spark.sql.expressions.Window.rowsBetween(
+            start, end
+        )
         return WindowSpec(jspec)
 
     @staticmethod
@@ -350,7 +356,9 @@ class Window:
         if end >= Window._FOLLOWING_THRESHOLD:
             end = Window.unboundedFollowing
         sc = require_spark_context_initialized()
-        jspec = sc._jvm.org.apache.spark.sql.expressions.Window.rangeBetween(start, end)
+        jspec = cast(JVMView, sc._jvm).org.apache.spark.sql.expressions.Window.rangeBetween(
+            start, end
+        )
         return WindowSpec(jspec)
 
 

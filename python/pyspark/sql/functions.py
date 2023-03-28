@@ -37,6 +37,8 @@ from typing import (
     ValuesView,
 )
 
+from py4j.java_gateway import JVMView
+
 from pyspark import SparkContext
 from pyspark.errors import PySparkTypeError, PySparkValueError
 from pyspark.rdd import PythonEvalType
@@ -2681,7 +2683,7 @@ def broadcast(df: DataFrame) -> DataFrame:
     """
 
     sc = require_spark_context_initialized()
-    return DataFrame(sc._jvm.functions.broadcast(df._jdf), df.sparkSession)
+    return DataFrame(cast(JVMView, sc._jvm).functions.broadcast(df._jdf), df.sparkSession)
 
 
 @try_remote_functions
@@ -9237,8 +9239,10 @@ def _unresolved_named_lambda_variable(*name_parts: Any) -> Column:
     """
     sc = require_spark_context_initialized()
     name_parts_seq = _to_seq(sc, name_parts)
-    expressions = sc._jvm.org.apache.spark.sql.catalyst.expressions
-    return Column(sc._jvm.Column(expressions.UnresolvedNamedLambdaVariable(name_parts_seq)))
+    expressions = cast(JVMView, sc._jvm).org.apache.spark.sql.catalyst.expressions
+    return Column(
+        cast(JVMView, sc._jvm).Column(expressions.UnresolvedNamedLambdaVariable(name_parts_seq))
+    )
 
 
 def _get_lambda_parameters(f: Callable) -> ValuesView[inspect.Parameter]:
@@ -9284,7 +9288,7 @@ def _create_lambda(f: Callable) -> Callable:
     parameters = _get_lambda_parameters(f)
 
     sc = require_spark_context_initialized()
-    expressions = sc._jvm.org.apache.spark.sql.catalyst.expressions
+    expressions = cast(JVMView, sc._jvm).org.apache.spark.sql.catalyst.expressions
 
     argnames = ["x", "y", "z"]
     args = [
@@ -9325,13 +9329,13 @@ def _invoke_higher_order_function(
     :return: a Column
     """
     sc = require_spark_context_initialized()
-    expressions = sc._jvm.org.apache.spark.sql.catalyst.expressions
+    expressions = cast(JVMView, sc._jvm).org.apache.spark.sql.catalyst.expressions
     expr = getattr(expressions, name)
 
     jcols = [_to_java_column(col).expr() for col in cols]
     jfuns = [_create_lambda(f) for f in funs]
 
-    return Column(sc._jvm.Column(expr(*jcols + jfuns)))
+    return Column(cast(JVMView, sc._jvm).Column(expr(*jcols + jfuns)))
 
 
 @overload

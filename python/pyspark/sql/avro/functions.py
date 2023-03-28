@@ -20,7 +20,10 @@ A collections of builtin avro functions
 """
 
 
-from typing import Dict, Optional, TYPE_CHECKING
+from typing import Dict, Optional, TYPE_CHECKING, cast
+
+from py4j.java_gateway import JVMView
+
 from pyspark.sql.column import Column, _to_java_column
 from pyspark.sql.utils import require_spark_context_initialized
 from pyspark.util import _print_missing_jar
@@ -75,7 +78,7 @@ def from_avro(
 
     sc = require_spark_context_initialized()
     try:
-        jc = sc._jvm.org.apache.spark.sql.avro.functions.from_avro(
+        jc = cast(JVMView, sc._jvm).org.apache.spark.sql.avro.functions.from_avro(
             _to_java_column(data), jsonFormatSchema, options or {}
         )
     except TypeError as e:
@@ -121,9 +124,11 @@ def to_avro(data: "ColumnOrName", jsonFormatSchema: str = "") -> Column:
     sc = require_spark_context_initialized()
     try:
         if jsonFormatSchema == "":
-            jc = sc._jvm.org.apache.spark.sql.avro.functions.to_avro(_to_java_column(data))
+            jc = cast(JVMView, sc._jvm).org.apache.spark.sql.avro.functions.to_avro(
+                _to_java_column(data)
+            )
         else:
-            jc = sc._jvm.org.apache.spark.sql.avro.functions.to_avro(
+            jc = cast(JVMView, sc._jvm).org.apache.spark.sql.avro.functions.to_avro(
                 _to_java_column(data), jsonFormatSchema
             )
     except TypeError as e:

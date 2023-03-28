@@ -20,7 +20,10 @@ A collections of builtin protobuf functions
 """
 
 
-from typing import Dict, Optional, TYPE_CHECKING
+from typing import Dict, Optional, TYPE_CHECKING, cast
+
+from py4j.java_gateway import JVMView
+
 from pyspark.sql.column import Column, _to_java_column
 from pyspark.sql.utils import require_spark_context_initialized
 from pyspark.util import _print_missing_jar
@@ -120,11 +123,11 @@ def from_protobuf(
     sc = require_spark_context_initialized()
     try:
         if descFilePath is not None:
-            jc = sc._jvm.org.apache.spark.sql.protobuf.functions.from_protobuf(
+            jc = cast(JVMView, sc._jvm).org.apache.spark.sql.protobuf.functions.from_protobuf(
                 _to_java_column(data), messageName, descFilePath, options or {}
             )
         else:
-            jc = sc._jvm.org.apache.spark.sql.protobuf.functions.from_protobuf(
+            jc = cast(JVMView, sc._jvm).org.apache.spark.sql.protobuf.functions.from_protobuf(
                 _to_java_column(data), messageName, options or {}
             )
     except TypeError as e:
@@ -214,11 +217,11 @@ def to_protobuf(
     sc = require_spark_context_initialized()
     try:
         if descFilePath is not None:
-            jc = sc._jvm.org.apache.spark.sql.protobuf.functions.to_protobuf(
+            jc = cast(JVMView, sc._jvm).org.apache.spark.sql.protobuf.functions.to_protobuf(
                 _to_java_column(data), messageName, descFilePath, options or {}
             )
         else:
-            jc = sc._jvm.org.apache.spark.sql.protobuf.functions.to_protobuf(
+            jc = cast(JVMView, sc._jvm).org.apache.spark.sql.protobuf.functions.to_protobuf(
                 _to_java_column(data), messageName, options or {}
             )
 

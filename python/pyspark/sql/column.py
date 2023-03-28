@@ -31,7 +31,7 @@ from typing import (
     Union,
 )
 
-from py4j.java_gateway import JavaObject
+from py4j.java_gateway import JavaObject, JVMView
 
 from pyspark import copy_func
 from pyspark.context import SparkContext
@@ -48,12 +48,12 @@ __all__ = ["Column"]
 
 def _create_column_from_literal(literal: Union["LiteralType", "DecimalLiteral"]) -> "Column":
     sc = require_spark_context_initialized()
-    return sc._jvm.functions.lit(literal)
+    return cast(JVMView, sc._jvm).functions.lit(literal)
 
 
 def _create_column_from_name(name: str) -> "Column":
     sc = require_spark_context_initialized()
-    return sc._jvm.functions.col(name)
+    return cast(JVMView, sc._jvm).functions.col(name)
 
 
 def _to_java_column(col: "ColumnOrName") -> JavaObject:
@@ -122,7 +122,7 @@ def _unary_op(
 def _func_op(name: str, doc: str = "") -> Callable[["Column"], "Column"]:
     def _(self: "Column") -> "Column":
         sc = require_spark_context_initialized()
-        jc = getattr(sc._jvm.functions, name)(self._jc)
+        jc = getattr(cast(JVMView, sc._jvm).functions, name)(self._jc)
         return Column(jc)
 
     _.__doc__ = doc
@@ -136,7 +136,7 @@ def _bin_func_op(
 ) -> Callable[["Column", Union["Column", "LiteralType", "DecimalLiteral"]], "Column"]:
     def _(self: "Column", other: Union["Column", "LiteralType", "DecimalLiteral"]) -> "Column":
         sc = require_spark_context_initialized()
-        fn = getattr(sc._jvm.functions, name)
+        fn = getattr(cast(JVMView, sc._jvm).functions, name)
         jc = other._jc if isinstance(other, Column) else _create_column_from_literal(other)
         njc = fn(self._jc, jc) if not reverse else fn(jc, self._jc)
         return Column(njc)
