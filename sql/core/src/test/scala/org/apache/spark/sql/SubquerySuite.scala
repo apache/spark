@@ -2695,4 +2695,26 @@ class SubquerySuite extends QueryTest
       }
     }
   }
+
+  test("SPARK-42937: Outer join with subquery in condition") {
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+      SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
+      withTempView("t2") {
+        // this is the same as the view t created in beforeAll, but that gets dropped by
+        // one of the tests above
+        r.filter($"c".isNotNull && $"d".isNotNull).createOrReplaceTempView("t2")
+        val expected = Row(1, 2.0d, null, null) :: Row(1, 2.0d, null, null) ::
+          Row(3, 3.0d, 3, 2.0d) :: Row(null, 5.0d, null, null) :: Nil
+        checkAnswer(sql(
+          """
+            |select *
+            |from l
+            |left outer join r
+            |on a = c
+            |and a in (select c from t2 where d in (1.0, 2.0))
+            |where b > 1.0""".stripMargin),
+          expected)
+      }
+    }
+  }
 }

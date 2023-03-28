@@ -17,11 +17,14 @@
 import sys
 from typing import cast, Iterable, List, Tuple, TYPE_CHECKING, Union
 
-from py4j.java_gateway import JavaObject
+from py4j.java_gateway import JavaObject, JVMView
 
-from pyspark import SparkContext
 from pyspark.sql.column import _to_seq, _to_java_column
-from pyspark.sql.utils import try_remote_window, try_remote_windowspec
+from pyspark.sql.utils import (
+    try_remote_window,
+    try_remote_windowspec,
+    get_active_spark_context,
+)
 
 if TYPE_CHECKING:
     from pyspark.sql._typing import ColumnOrName, ColumnOrName_
@@ -30,10 +33,9 @@ __all__ = ["Window", "WindowSpec"]
 
 
 def _to_java_cols(cols: Tuple[Union["ColumnOrName", List["ColumnOrName_"]], ...]) -> JavaObject:
-    sc = SparkContext._active_spark_context
     if len(cols) == 1 and isinstance(cols[0], list):
         cols = cols[0]  # type: ignore[assignment]
-    assert sc is not None
+    sc = get_active_spark_context()
     return _to_seq(sc, cast(Iterable["ColumnOrName"], cols), _to_java_column)
 
 
@@ -123,9 +125,10 @@ class Window:
         |  3|       b|         3|
         +---+--------+----------+
         """
-        sc = SparkContext._active_spark_context
-        assert sc is not None and sc._jvm is not None
-        jspec = sc._jvm.org.apache.spark.sql.expressions.Window.partitionBy(_to_java_cols(cols))
+        sc = get_active_spark_context()
+        jspec = cast(JVMView, sc._jvm).org.apache.spark.sql.expressions.Window.partitionBy(
+            _to_java_cols(cols)
+        )
         return WindowSpec(jspec)
 
     @staticmethod
@@ -179,9 +182,10 @@ class Window:
         |  3|       b|         1|
         +---+--------+----------+
         """
-        sc = SparkContext._active_spark_context
-        assert sc is not None and sc._jvm is not None
-        jspec = sc._jvm.org.apache.spark.sql.expressions.Window.orderBy(_to_java_cols(cols))
+        sc = get_active_spark_context()
+        jspec = cast(JVMView, sc._jvm).org.apache.spark.sql.expressions.Window.orderBy(
+            _to_java_cols(cols)
+        )
         return WindowSpec(jspec)
 
     @staticmethod
@@ -263,9 +267,10 @@ class Window:
             start = Window.unboundedPreceding
         if end >= Window._FOLLOWING_THRESHOLD:
             end = Window.unboundedFollowing
-        sc = SparkContext._active_spark_context
-        assert sc is not None and sc._jvm is not None
-        jspec = sc._jvm.org.apache.spark.sql.expressions.Window.rowsBetween(start, end)
+        sc = get_active_spark_context()
+        jspec = cast(JVMView, sc._jvm).org.apache.spark.sql.expressions.Window.rowsBetween(
+            start, end
+        )
         return WindowSpec(jspec)
 
     @staticmethod
@@ -350,9 +355,10 @@ class Window:
             start = Window.unboundedPreceding
         if end >= Window._FOLLOWING_THRESHOLD:
             end = Window.unboundedFollowing
-        sc = SparkContext._active_spark_context
-        assert sc is not None and sc._jvm is not None
-        jspec = sc._jvm.org.apache.spark.sql.expressions.Window.rangeBetween(start, end)
+        sc = get_active_spark_context()
+        jspec = cast(JVMView, sc._jvm).org.apache.spark.sql.expressions.Window.rangeBetween(
+            start, end
+        )
         return WindowSpec(jspec)
 
 
