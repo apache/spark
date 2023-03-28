@@ -589,7 +589,7 @@ private[spark] object Utils extends Logging {
     if (lowerSrc.endsWith(".jar")) {
       RunJar.unJar(source, dest, RunJar.MATCH_ANY)
     } else if (lowerSrc.endsWith(".zip")) {
-      // TODO(SPARK-37677): should keep file permissions. Java implementation doesn't.
+      // After issue HADOOP-18145, unzip could keep file permissions.
       FileUtil.unZip(source, dest)
     } else if (lowerSrc.endsWith(".tar.gz") || lowerSrc.endsWith(".tgz")) {
       FileUtil.unTar(source, dest)
