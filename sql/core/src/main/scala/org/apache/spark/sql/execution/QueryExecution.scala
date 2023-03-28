@@ -265,6 +265,8 @@ class QueryExecution(
         queryExecution.stringWithStats(maxFields, append)
       case FormattedMode =>
         queryExecution.simpleString(formatted = true, maxFields = maxFields, append)
+      case AnalysedMode =>
+        queryExecution.analysisString(maxFields, append)
     }
   }
 
@@ -290,7 +292,6 @@ class QueryExecution(
       case e: AnalysisException => append(e.toString)
     }
   }
-
   override def toString: String = withRedaction {
     val concat = new PlanStringConcat()
     toString(SQLConf.get.maxToStringFields, concat.append)
@@ -301,6 +302,10 @@ class QueryExecution(
 
   private def toString(maxFields: Int, append: String => Unit): Unit = {
     writePlans(append, maxFields)
+  }
+
+  private def analysisString(maxFields: Int, append: String => Unit): Unit = {
+    writeAnalysisPlans(append, maxFields)
   }
 
   def stringWithStats: String = {
@@ -329,6 +334,25 @@ class QueryExecution(
     append("\n== Physical Plan ==\n")
     QueryPlan.append(executedPlan, append, verbose = true, addSuffix = false, maxFields)
     append("\n")
+  }
+
+  private def writeAnalysisPlans(append: String => Unit, maxFields: Int): Unit = {
+    val (verbose, addSuffix) = (true, false)
+    append("== Parsed Logical Plan ==\n")
+    QueryPlan.append(logical, append, verbose, addSuffix, maxFields)
+    append("\n== Analyzed Logical Plan ==\n")
+    try {
+      if (analyzed.output.nonEmpty) {
+        append(
+          truncatedString(
+            analyzed.output.map(o => s"${o.name}: ${o.dataType.simpleString}"), ", ", maxFields)
+        )
+        append("\n")
+      }
+      QueryPlan.append(analyzed, append, verbose, addSuffix, maxFields)
+    } catch {
+      case e: AnalysisException => append(e.toString)
+    }
   }
 
   /**
