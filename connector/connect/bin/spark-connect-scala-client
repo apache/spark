@@ -37,7 +37,6 @@ export SPARK_HOME=$FWDIR
 # Determine the Scala version used in Spark
 SCALA_BINARY_VER=`grep "scala.binary.version" "${SPARK_HOME}/pom.xml" | head -n1 | awk -F '[<>]' '{print $3}'`
 SCALA_VER=`grep "scala.version" "${SPARK_HOME}/pom.xml" | grep ${SCALA_BINARY_VER} | head -n1 | awk -F '[<>]' '{print $3}'`
-SCALA_BIN="${SPARK_HOME}/build/scala-${SCALA_VER}/bin/scala"
 SCALA_ARG="-Pscala-${SCALA_BINARY_VER}"
 
 # Build the jars needed for spark connect JVM client
@@ -46,6 +45,4 @@ build/sbt "${SCALA_ARG}" "sql/package;connect-client-jvm/assembly"
 CONNECT_CLASSPATH="$(build/sbt "${SCALA_ARG}" -DcopyDependencies=false "export connect-client-jvm/fullClasspath" | grep jar | tail -n1)"
 SQL_CLASSPATH="$(build/sbt "${SCALA_ARG}" -DcopyDependencies=false "export sql/fullClasspath" | grep jar | tail -n1)"
 
-INIT_SCRIPT="${SPARK_HOME}"/connector/connect/bin/spark-connect-scala-client.sc
-
-exec "${SCALA_BIN}" -cp "$CONNECT_CLASSPATH:$SQL_CLASSPATH" -i $INIT_SCRIPT
+exec java -cp "$CONNECT_CLASSPATH:$SQL_CLASSPATH" org.apache.spark.sql.application.ConnectRepl "$@"

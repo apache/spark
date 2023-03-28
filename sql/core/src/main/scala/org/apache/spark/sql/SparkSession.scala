@@ -612,7 +612,10 @@ class SparkSession private(
    * This API eagerly runs DDL/DML commands, but not for SELECT queries.
    *
    * @param sqlText A SQL statement with named parameters to execute.
-   * @param args A map of parameter names to literal values.
+   * @param args A map of parameter names to string values that are parsed as
+   *             SQL literal expressions. For example, map keys: "rank", "name", "birthdate";
+   *             map values: "1", "'Steven'", "DATE'2023-03-21'". The fragments of string values
+   *             belonged to SQL comments are skipped while parsing.
    *
    * @since 3.4.0
    */
@@ -637,7 +640,10 @@ class SparkSession private(
    * This API eagerly runs DDL/DML commands, but not for SELECT queries.
    *
    * @param sqlText A SQL statement with named parameters to execute.
-   * @param args A map of parameter names to literal values.
+   * @param args A map of parameter names to string values that are parsed as
+   *             SQL literal expressions. For example, map keys: "rank", "name", "birthdate";
+   *             map values: "1", "'Steven'", "DATE'2023-03-21'". The fragments of string values
+   *             belonged to SQL comments are skipped while parsing.
    *
    * @since 3.4.0
    */

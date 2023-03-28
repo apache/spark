@@ -32,7 +32,7 @@ class PandasMapOpsMixin:
     """
 
     def mapInPandas(
-        self, func: "PandasMapIterFunction", schema: Union[StructType, str]
+        self, func: "PandasMapIterFunction", schema: Union[StructType, str], isBarrier: bool = False
     ) -> "DataFrame":
         """
         Maps an iterator of batches in the current :class:`DataFrame` using a Python native
@@ -60,6 +60,7 @@ class PandasMapOpsMixin:
         schema : :class:`pyspark.sql.types.DataType` or str
             the return type of the `func` in PySpark. The value can be either a
             :class:`pyspark.sql.types.DataType` object or a DDL-formatted type string.
+        isBarrier : Use barrier mode execution if True.
 
         Examples
         --------
@@ -69,6 +70,14 @@ class PandasMapOpsMixin:
         ...     for pdf in iterator:
         ...         yield pdf[pdf.id == 1]
         >>> df.mapInPandas(filter_func, df.schema).show()  # doctest: +SKIP
+        +---+---+
+        | id|age|
+        +---+---+
+        |  1| 21|
+        +---+---+
+        >>> # Set isBarrier=True to force the "mapInPandas" stage running in barrier mode,
+        >>> # it ensures all python UDF workers in the stage will be launched concurrently.
+        >>> df.mapInPandas(filter_func, df.schema, isBarrier=True).show()  # doctest: +SKIP
         +---+---+
         | id|age|
         +---+---+
@@ -93,11 +102,11 @@ class PandasMapOpsMixin:
             func, returnType=schema, functionType=PythonEvalType.SQL_MAP_PANDAS_ITER_UDF
         )  # type: ignore[call-overload]
         udf_column = udf(*[self[col] for col in self.columns])
-        jdf = self._jdf.mapInPandas(udf_column._jc.expr())
+        jdf = self._jdf.mapInPandas(udf_column._jc.expr(), isBarrier)
         return DataFrame(jdf, self.sparkSession)
 
     def mapInArrow(
-        self, func: "ArrowMapIterFunction", schema: Union[StructType, str]
+        self, func: "ArrowMapIterFunction", schema: Union[StructType, str], isBarrier: bool = False
     ) -> "DataFrame":
         """
         Maps an iterator of batches in the current :class:`DataFrame` using a Python native
@@ -122,6 +131,7 @@ class PandasMapOpsMixin:
         schema : :class:`pyspark.sql.types.DataType` or str
             the return type of the `func` in PySpark. The value can be either a
             :class:`pyspark.sql.types.DataType` object or a DDL-formatted type string.
+        isBarrier : Use barrier mode execution if True.
 
         Examples
         --------
@@ -132,6 +142,14 @@ class PandasMapOpsMixin:
         ...         pdf = batch.to_pandas()
         ...         yield pyarrow.RecordBatch.from_pandas(pdf[pdf.id == 1])
         >>> df.mapInArrow(filter_func, df.schema).show()  # doctest: +SKIP
+        +---+---+
+        | id|age|
+        +---+---+
+        |  1| 21|
+        +---+---+
+        >>> # Set isBarrier=True to force the "mapInArrow" stage running in barrier mode,
+        >>> # it ensures all python UDF workers in the stage will be launched concurrently.
+        >>> df.mapInArrow(filter_func, df.schema, isBarrier=True).show()  # doctest: +SKIP
         +---+---+
         | id|age|
         +---+---+
@@ -157,7 +175,7 @@ class PandasMapOpsMixin:
             func, returnType=schema, functionType=PythonEvalType.SQL_MAP_ARROW_ITER_UDF
         )  # type: ignore[call-overload]
         udf_column = udf(*[self[col] for col in self.columns])
-        jdf = self._jdf.pythonMapInArrow(udf_column._jc.expr())
+        jdf = self._jdf.pythonMapInArrow(udf_column._jc.expr(), isBarrier)
         return DataFrame(jdf, self.sparkSession)
 
 
