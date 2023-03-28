@@ -484,20 +484,20 @@ class SparkConnectPlanner(val session: SparkSession) {
   private def transformMapPartitions(rel: proto.MapPartitions): LogicalPlan = {
     val commonUdf = rel.getFunc
     val pythonUdf = transformPythonUDF(commonUdf)
-    val barrier = if (rel.hasBarrier) rel.getBarrier else false
+    val isBarrier = if (rel.hasIsBarrier) rel.getIsBarrier else false
     pythonUdf.evalType match {
       case PythonEvalType.SQL_MAP_PANDAS_ITER_UDF =>
         logical.MapInPandas(
           pythonUdf,
           pythonUdf.dataType.asInstanceOf[StructType].toAttributes,
           transformRelation(rel.getInput),
-          barrier)
+          isBarrier)
       case PythonEvalType.SQL_MAP_ARROW_ITER_UDF =>
         logical.PythonMapInArrow(
           pythonUdf,
           pythonUdf.dataType.asInstanceOf[StructType].toAttributes,
           transformRelation(rel.getInput),
-          barrier)
+          isBarrier)
       case _ =>
         throw InvalidPlanInput(s"Function with EvalType: ${pythonUdf.evalType} is not supported")
     }

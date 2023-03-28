@@ -2759,14 +2759,14 @@ class MapPartitions(google.protobuf.message.Message):
 
     INPUT_FIELD_NUMBER: builtins.int
     FUNC_FIELD_NUMBER: builtins.int
-    BARRIER_FIELD_NUMBER: builtins.int
+    IS_BARRIER_FIELD_NUMBER: builtins.int
     @property
     def input(self) -> global___Relation:
         """(Required) Input relation for a mapPartitions-equivalent API: mapInPandas, mapInArrow."""
     @property
     def func(self) -> pyspark.sql.connect.proto.expressions_pb2.CommonInlineUserDefinedFunction:
         """(Required) Input user-defined function."""
-    barrier: builtins.bool
+    is_barrier: builtins.bool
     """(Optional) Whether to use barrier mode execution or not."""
     def __init__(
         self,
@@ -2774,23 +2774,37 @@ class MapPartitions(google.protobuf.message.Message):
         input: global___Relation | None = ...,
         func: pyspark.sql.connect.proto.expressions_pb2.CommonInlineUserDefinedFunction
         | None = ...,
-        barrier: builtins.bool | None = ...,
+        is_barrier: builtins.bool | None = ...,
     ) -> None: ...
     def HasField(
         self,
         field_name: typing_extensions.Literal[
-            "_barrier", b"_barrier", "barrier", b"barrier", "func", b"func", "input", b"input"
+            "_is_barrier",
+            b"_is_barrier",
+            "func",
+            b"func",
+            "input",
+            b"input",
+            "is_barrier",
+            b"is_barrier",
         ],
     ) -> builtins.bool: ...
     def ClearField(
         self,
         field_name: typing_extensions.Literal[
-            "_barrier", b"_barrier", "barrier", b"barrier", "func", b"func", "input", b"input"
+            "_is_barrier",
+            b"_is_barrier",
+            "func",
+            b"func",
+            "input",
+            b"input",
+            "is_barrier",
+            b"is_barrier",
         ],
     ) -> None: ...
     def WhichOneof(
-        self, oneof_group: typing_extensions.Literal["_barrier", b"_barrier"]
-    ) -> typing_extensions.Literal["barrier"] | None: ...
+        self, oneof_group: typing_extensions.Literal["_is_barrier", b"_is_barrier"]
+    ) -> typing_extensions.Literal["is_barrier"] | None: ...
 
 global___MapPartitions = MapPartitions
 

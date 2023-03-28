@@ -1660,7 +1660,7 @@ class DataFrame:
 
         return DataFrame.withPlan(
             plan.MapPartitions(
-                child=self._plan, function=udf_obj, cols=self.columns, barrier=barrier
+                child=self._plan, function=udf_obj, cols=self.columns, is_barrier=barrier
             ),
             session=self._session,
         )
