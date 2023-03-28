@@ -23,7 +23,7 @@ from pyspark.sql.column import _to_seq, _to_java_column
 from pyspark.sql.utils import (
     try_remote_window,
     try_remote_windowspec,
-    require_spark_context_initialized,
+    get_active_spark_context,
 )
 
 if TYPE_CHECKING:
@@ -35,7 +35,7 @@ __all__ = ["Window", "WindowSpec"]
 def _to_java_cols(cols: Tuple[Union["ColumnOrName", List["ColumnOrName_"]], ...]) -> JavaObject:
     if len(cols) == 1 and isinstance(cols[0], list):
         cols = cols[0]  # type: ignore[assignment]
-    sc = require_spark_context_initialized()
+    sc = get_active_spark_context()
     return _to_seq(sc, cast(Iterable["ColumnOrName"], cols), _to_java_column)
 
 
@@ -125,7 +125,7 @@ class Window:
         |  3|       b|         3|
         +---+--------+----------+
         """
-        sc = require_spark_context_initialized()
+        sc = get_active_spark_context()
         jspec = cast(JVMView, sc._jvm).org.apache.spark.sql.expressions.Window.partitionBy(
             _to_java_cols(cols)
         )
@@ -182,7 +182,7 @@ class Window:
         |  3|       b|         1|
         +---+--------+----------+
         """
-        sc = require_spark_context_initialized()
+        sc = get_active_spark_context()
         jspec = cast(JVMView, sc._jvm).org.apache.spark.sql.expressions.Window.orderBy(
             _to_java_cols(cols)
         )
@@ -267,7 +267,7 @@ class Window:
             start = Window.unboundedPreceding
         if end >= Window._FOLLOWING_THRESHOLD:
             end = Window.unboundedFollowing
-        sc = require_spark_context_initialized()
+        sc = get_active_spark_context()
         jspec = cast(JVMView, sc._jvm).org.apache.spark.sql.expressions.Window.rowsBetween(
             start, end
         )
@@ -355,7 +355,7 @@ class Window:
             start = Window.unboundedPreceding
         if end >= Window._FOLLOWING_THRESHOLD:
             end = Window.unboundedFollowing
-        sc = require_spark_context_initialized()
+        sc = get_active_spark_context()
         jspec = cast(JVMView, sc._jvm).org.apache.spark.sql.expressions.Window.rangeBetween(
             start, end
         )

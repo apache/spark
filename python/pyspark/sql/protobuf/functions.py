@@ -25,7 +25,7 @@ from typing import Dict, Optional, TYPE_CHECKING, cast
 from py4j.java_gateway import JVMView
 
 from pyspark.sql.column import Column, _to_java_column
-from pyspark.sql.utils import require_spark_context_initialized
+from pyspark.sql.utils import get_active_spark_context
 from pyspark.util import _print_missing_jar
 
 if TYPE_CHECKING:
@@ -120,7 +120,7 @@ def from_protobuf(
     +------------------+
     """
 
-    sc = require_spark_context_initialized()
+    sc = get_active_spark_context()
     try:
         if descFilePath is not None:
             jc = cast(JVMView, sc._jvm).org.apache.spark.sql.protobuf.functions.from_protobuf(
@@ -214,7 +214,7 @@ def to_protobuf(
     +----------------------------+
     """
 
-    sc = require_spark_context_initialized()
+    sc = get_active_spark_context()
     try:
         if descFilePath is not None:
             jc = cast(JVMView, sc._jvm).org.apache.spark.sql.protobuf.functions.to_protobuf(

@@ -40,7 +40,7 @@ from pyspark.sql.types import (
     StructType,
     _parse_datatype_string,
 )
-from pyspark.sql.utils import require_spark_context_initialized
+from pyspark.sql.utils import get_active_spark_context
 from pyspark.sql.pandas.types import to_arrow_type
 from pyspark.sql.pandas.utils import require_minimum_pandas_version, require_minimum_pyarrow_version
 
@@ -340,7 +340,7 @@ class UserDefinedFunction:
         return judf
 
     def __call__(self, *cols: "ColumnOrName") -> Column:
-        sc = require_spark_context_initialized()
+        sc = get_active_spark_context()
         profiler: Optional[Profiler] = None
         memory_profiler: Optional[Profiler] = None
         if sc.profiler_collector:

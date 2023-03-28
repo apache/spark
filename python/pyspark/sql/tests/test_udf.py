@@ -902,7 +902,7 @@ class UDFInitializationTests(unittest.TestCase):
     def test_err_parse_type_when_no_sc(self):
         with self.assertRaisesRegex(
             RuntimeError,
-            "SparkContext must be initialized for JVM access.",
+            "SparkContext or SparkSession should be created first",
         ):
             udf(lambda x: x, "integer")
 

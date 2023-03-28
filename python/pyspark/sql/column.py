@@ -37,7 +37,7 @@ from pyspark import copy_func
 from pyspark.context import SparkContext
 from pyspark.errors import PySparkTypeError
 from pyspark.sql.types import DataType
-from pyspark.sql.utils import require_spark_context_initialized
+from pyspark.sql.utils import get_active_spark_context
 
 if TYPE_CHECKING:
     from pyspark.sql._typing import ColumnOrName, LiteralType, DecimalLiteral, DateTimeLiteral
@@ -47,12 +47,12 @@ __all__ = ["Column"]
 
 
 def _create_column_from_literal(literal: Union["LiteralType", "DecimalLiteral"]) -> "Column":
-    sc = require_spark_context_initialized()
+    sc = get_active_spark_context()
     return cast(JVMView, sc._jvm).functions.lit(literal)
 
 
 def _create_column_from_name(name: str) -> "Column":
-    sc = require_spark_context_initialized()
+    sc = get_active_spark_context()
     return cast(JVMView, sc._jvm).functions.col(name)
 
 
@@ -121,7 +121,7 @@ def _unary_op(
 
 def _func_op(name: str, doc: str = "") -> Callable[["Column"], "Column"]:
     def _(self: "Column") -> "Column":
-        sc = require_spark_context_initialized()
+        sc = get_active_spark_context()
         jc = getattr(cast(JVMView, sc._jvm).functions, name)(self._jc)
         return Column(jc)
 
@@ -135,7 +135,7 @@ def _bin_func_op(
     doc: str = "binary function",
 ) -> Callable[["Column", Union["Column", "LiteralType", "DecimalLiteral"]], "Column"]:
     def _(self: "Column", other: Union["Column", "LiteralType", "DecimalLiteral"]) -> "Column":
-        sc = require_spark_context_initialized()
+        sc = get_active_spark_context()
         fn = getattr(cast(JVMView, sc._jvm).functions, name)
         jc = other._jc if isinstance(other, Column) else _create_column_from_literal(other)
         njc = fn(self._jc, jc) if not reverse else fn(jc, self._jc)
@@ -630,7 +630,7 @@ class Column:
         +--------------+
 
         """
-        sc = require_spark_context_initialized()
+        sc = get_active_spark_context()
         jc = self._jc.dropFields(_to_seq(sc, fieldNames))
         return Column(jc)
 
@@ -958,7 +958,7 @@ class Column:
             Tuple,
             [c._jc if isinstance(c, Column) else _create_column_from_literal(c) for c in cols],
         )
-        sc = require_spark_context_initialized()
+        sc = get_active_spark_context()
         jc = getattr(self._jc, "isin")(_to_seq(sc, cols))
         return Column(jc)
 
@@ -1139,7 +1139,7 @@ class Column:
         metadata = kwargs.pop("metadata", None)
         assert not kwargs, "Unexpected kwargs where passed: %s" % kwargs
 
-        sc = require_spark_context_initialized()
+        sc = get_active_spark_context()
         if len(alias) == 1:
             if metadata:
                 assert sc._jvm is not None
