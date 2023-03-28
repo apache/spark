@@ -283,6 +283,7 @@ private[spark] object JsonProtocol {
     g.writeStartObject()
     g.writeStringField("Event", SPARK_LISTENER_EVENT_FORMATTED_CLASS_NAMES.applicationEnd)
     g.writeNumberField("Timestamp", applicationEnd.time)
+    applicationEnd.exitCode.foreach(g.writeNumberField("Exit Code", _))
     g.writeEndObject()
   }
 
@@ -1054,7 +1055,9 @@ private[spark] object JsonProtocol {
   }
 
   def applicationEndFromJson(json: JsonNode): SparkListenerApplicationEnd = {
-    SparkListenerApplicationEnd(json.get("Timestamp").extractLong)
+    val time = json.get("Timestamp").extractLong
+    val exitCode = jsonOption(json.get("Exit Code")).map(_.extractInt)
+    SparkListenerApplicationEnd(time, exitCode)
   }
 
   def executorAddedFromJson(json: JsonNode): SparkListenerExecutorAdded = {

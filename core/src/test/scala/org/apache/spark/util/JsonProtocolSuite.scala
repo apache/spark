@@ -107,7 +107,7 @@ class JsonProtocolSuite extends SparkFunSuite {
       42L, "Garfield", Some("appAttempt"))
     val applicationStartWithLogs = SparkListenerApplicationStart("The winner of all", Some("appId"),
       42L, "Garfield", Some("appAttempt"), Some(logUrlMap))
-    val applicationEnd = SparkListenerApplicationEnd(42L)
+    val applicationEnd = SparkListenerApplicationEnd(42L, Some(1))
     val executorAdded = SparkListenerExecutorAdded(executorAddedTime, "exec1",
       new ExecutorInfo("Hostee.awesome.com", 11, logUrlMap, attributes, resources, 4))
     val executorAddedWithTime = SparkListenerExecutorAdded(executorAddedTime, "exec1",
@@ -808,6 +808,19 @@ class JsonProtocolSuite extends SparkFunSuite {
     val exceptionFailure =
       JsonProtocol.taskEndReasonFromJson(exceptionFailureJson).asInstanceOf[ExceptionFailure]
     assert(exceptionFailure.description == null)
+  }
+
+  test("SPARK-42950: SparkListenerApplicationEnd backward compatibility") {
+    val newJson =
+      """
+      {
+        "Event": "SparkListenerApplicationEnd",
+        "Timestamp": 42,
+        "Exit Code": 1
+      }
+      """.stripMargin
+    val oldJson = newJson.removeField("Exit Code")
+    assert(JsonProtocol.applicationEndFromJson(oldJson).exitCode.isEmpty)
   }
 }
 
@@ -2482,7 +2495,8 @@ private[spark] object JsonProtocolSuite extends Assertions {
     """
       |{
       |  "Event": "SparkListenerApplicationEnd",
-      |  "Timestamp": 42
+      |  "Timestamp": 42,
+      |  "Exit Code": 1
       |}
     """.stripMargin
 
