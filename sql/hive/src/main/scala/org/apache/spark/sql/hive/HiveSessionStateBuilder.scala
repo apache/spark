@@ -100,7 +100,7 @@ class HiveSessionStateBuilder(
         RelationConversions(catalog) +:
         PreprocessTableCreation(catalog) +:
         PreprocessTableInsertion +:
-        DataSourceAnalysis() +:
+        DataSourceAnalysis +:
         ApplyCharTypePadding +:
         HiveAnalysis +:
         ReplaceCharWithVarchar +:
