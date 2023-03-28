@@ -47,8 +47,8 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "PARSE_SYNTAX_ERROR",
   "sqlState" : "42601",
   "messageParameters" : {
-    "error" : "'InvalidType'",
-    "hint" : ": extra input 'InvalidType'"
+    "error" : "'a'",
+    "hint" : ""
   },
   "queryContext" : [ {
     "objectType" : "",

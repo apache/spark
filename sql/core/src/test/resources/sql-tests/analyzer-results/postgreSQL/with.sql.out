@@ -371,18 +371,12 @@ create table foo (with baz)
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "UNSUPPORTED_DATATYPE",
-  "sqlState" : "0A000",
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
   "messageParameters" : {
-    "typeName" : "\"BAZ\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 24,
-    "stopIndex" : 26,
-    "fragment" : "baz"
-  } ]
+    "error" : "')'",
+    "hint" : ""
+  }
 }
 
 
@@ -391,18 +385,12 @@ create table foo (with ordinality)
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "UNSUPPORTED_DATATYPE",
-  "sqlState" : "0A000",
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
   "messageParameters" : {
-    "typeName" : "\"ORDINALITY\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 24,
-    "stopIndex" : 33,
-    "fragment" : "ordinality"
-  } ]
+    "error" : "')'",
+    "hint" : ""
+  }
 }
 
 
