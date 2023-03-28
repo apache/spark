@@ -24,8 +24,7 @@ sealed abstract class PhysicalDataType
 
 sealed abstract class PhysicalPrimitiveType extends PhysicalDataType
 
-case class PhysicalArrayType(elementType: DataType, containsNull: Boolean)
-  extends PhysicalDataType
+case class PhysicalArrayType(elementType: DataType, containsNull: Boolean) extends PhysicalDataType
 
 class PhysicalBinaryType() extends PhysicalDataType
 case object PhysicalBinaryType extends PhysicalBinaryType
