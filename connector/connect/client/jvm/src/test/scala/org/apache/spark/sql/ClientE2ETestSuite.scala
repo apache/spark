@@ -307,7 +307,9 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper {
       val outputRows = spark.table("testcat.myTableV2").collect()
       assert(outputRows.length == 3)
 
-      spark.createDataFrame(rows2.asJava, schema).writeTo("testcat.myTableV2")
+      spark
+        .createDataFrame(rows2.asJava, schema)
+        .writeTo("testcat.myTableV2")
         .overwrite(functions.expr("true"))
       val outputRows2 = spark.table("testcat.myTableV2").collect()
       assert(outputRows2.length == 4)
@@ -332,7 +334,9 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper {
 
       assert(spark.table("testcat.myTableV2").collect().isEmpty)
 
-      spark.createDataFrame(rows.asJava, schema).writeTo("testcat.myTableV2")
+      spark
+        .createDataFrame(rows.asJava, schema)
+        .writeTo("testcat.myTableV2")
         .overwritePartitions()
       val outputRows = spark.table("testcat.myTableV2").collect()
       assert(outputRows.length == 4)
