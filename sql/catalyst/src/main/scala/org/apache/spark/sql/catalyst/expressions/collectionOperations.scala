@@ -5030,12 +5030,12 @@ case class ArrayCompact(child: Expression)
 case class ArrayAppend(arr: Expression, ele: Expression) extends InsertArrayOneSide {
 
   override lazy val replacement: Expression =
-    ArrayInsert(arr, Add(ArraySize(left), Literal(1)), ele)
+    ArrayInsert(arr, Add(ArraySize(arr), Literal(1)), ele)
 
   override def prettyName: String = "array_append"
 
   override protected def withNewChildrenInternal(
-      newLeft: Expression, newRight: Expression): Expression = {
+      newLeft: Expression, newRight: Expression): ArrayAppend = {
     copy(arr = newLeft, ele = newRight)
   }
 }
@@ -5065,7 +5065,7 @@ case class ArrayPrepend(arr: Expression, ele: Expression) extends InsertArrayOne
   override def prettyName: String = "array_prepend"
 
   override protected def withNewChildrenInternal(
-      newLeft: Expression, newRight: Expression): Expression = {
+      newLeft: Expression, newRight: Expression): ArrayPrepend = {
     copy(arr = newLeft, ele = newRight)
   }
 }
