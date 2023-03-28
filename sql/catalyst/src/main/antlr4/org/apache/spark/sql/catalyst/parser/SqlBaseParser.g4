@@ -1328,6 +1328,7 @@ ansiNonReserved
     | LOCK
     | LOCKS
     | LOGICAL
+    | LONG
     | MACRO
     | MAP
     | MATCHED
