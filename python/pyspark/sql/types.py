@@ -46,10 +46,10 @@ from typing import (
 )
 
 from py4j.protocol import register_input_converter
-from py4j.java_gateway import GatewayClient, JavaClass, JavaGateway, JavaObject
+from py4j.java_gateway import GatewayClient, JavaClass, JavaGateway, JavaObject, JVMView
 
 from pyspark.serializers import CloudPickleSerializer
-from pyspark.sql.utils import has_numpy
+from pyspark.sql.utils import has_numpy, get_active_spark_context
 
 if has_numpy:
     import numpy as np
@@ -1208,21 +1208,18 @@ def _parse_datatype_string(s: str) -> DataType:
         ...
     ParseException:...
     """
-    from pyspark import SparkContext
-
-    sc = SparkContext._active_spark_context
-    assert sc is not None
+    sc = get_active_spark_context()
 
     def from_ddl_schema(type_str: str) -> DataType:
-        assert sc is not None and sc._jvm is not None
         return _parse_datatype_json_string(
-            sc._jvm.org.apache.spark.sql.types.StructType.fromDDL(type_str).json()
+            cast(JVMView, sc._jvm).org.apache.spark.sql.types.StructType.fromDDL(type_str).json()
         )
 
     def from_ddl_datatype(type_str: str) -> DataType:
-        assert sc is not None and sc._jvm is not None
         return _parse_datatype_json_string(
-            sc._jvm.org.apache.spark.sql.api.python.PythonSQLUtils.parseDataType(type_str).json()
+            cast(JVMView, sc._jvm)
+            .org.apache.spark.sql.api.python.PythonSQLUtils.parseDataType(type_str)
+            .json()
         )
 
     try:
