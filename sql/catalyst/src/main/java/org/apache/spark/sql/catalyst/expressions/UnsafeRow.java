@@ -67,9 +67,7 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
   }
 
   /**
-   *
-   * @param dt
-   * @return
+   * Field types that hold fixed-length, store the value directly in an 8-byte word
    */
   public static boolean isFixedLength(DataType dt) {
     if (dt instanceof UserDefinedType) {
@@ -84,9 +82,7 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
   }
 
   /**
-   *
-   * @param dt
-   * @return
+   * Field types that can be updated in place in UnsafeRows (e.g. we support set() for these types)
    */
   public static boolean isMutable(DataType dt) {
     if (dt instanceof UserDefinedType) {
