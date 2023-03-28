@@ -2726,7 +2726,7 @@ class Frame(object, metaclass=ABCMeta):
         return Rolling(self, window=window, min_periods=min_periods)
 
     # TODO: 'center' and 'axis' parameter should be implemented.
-    #   'axis' implementation, refer https://github.com/pyspark.pandas/pull/607
+    #   'axis' implementation, refer https://github.com/databricks/koalas/pull/607
     def expanding(self: FrameLike, min_periods: int = 1) -> "Expanding[FrameLike]":
         """
         Provide expanding transformations.
