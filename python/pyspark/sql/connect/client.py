@@ -959,8 +959,8 @@ class SparkConnectClient(object):
                                 for batch in reader:
                                     assert isinstance(batch, pa.RecordBatch)
                                     yield batch
-        except grpc.RpcError as rpc_error:
-            self._handle_error(rpc_error)
+        except Exception as error:
+            self._handle_error(error)
 
     def _execute_and_fetch(
         self, req: pb2.ExecutePlanRequest
@@ -1057,7 +1057,7 @@ class SparkConnectClient(object):
             if "Cannot invoke RPC" in str(error) and "closed" in str(error):
                 raise SparkConnectException(
                     error_class="NO_ACTIVE_SESSION", message_parameters=dict()
-                )
+                ) from None
         raise error
 
     def _handle_rpc_error(self, rpc_error: grpc.RpcError) -> NoReturn:
