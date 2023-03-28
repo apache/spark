@@ -150,7 +150,7 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest
     val tableName = catalogName + ".t1"
     withTable(tableName) {
       sql(s"CREATE TABLE $tableName(c1 string)")
-      sql(s"INSERT INTO $tableName SELECT rpad('hi', 65536, 'spark');")
+      sql(s"INSERT INTO $tableName SELECT rpad('hi', 65536, 'spark')")
       assert(sql(s"SELECT char_length(c1) from $tableName").head().get(0) === 65536)
     }
   }
