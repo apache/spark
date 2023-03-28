@@ -250,6 +250,17 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         with self.assertRaises(AnalysisException):
             df.collect()
 
+    def test_error_stack_trace(self):
+        self.connect.conf.set("spark.sql.pyspark.jvmStacktrace.enabled", "true")
+        with self.assertRaises(AnalysisException) as e:
+            self.connect.sql("select x").collect()
+        self.assertTrue("JVM stacktrace" in e.exception.message)
+
+        self.connect.conf.set("spark.sql.pyspark.jvmStacktrace.enabled", "false")
+        with self.assertRaises(AnalysisException) as e:
+            self.connect.sql("select x").collect()
+        self.assertTrue("JVM stacktrace" not in e.exception.message)
+
     def test_simple_read(self):
         df = self.connect.read.table(self.tbl_name)
         data = df.limit(10).toPandas()
