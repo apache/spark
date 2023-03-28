@@ -2832,7 +2832,6 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             "withWatermark",
             "foreach",
             "foreachPartition",
-            "toLocalIterator",
             "checkpoint",
             "localCheckpoint",
             "_repr_html_",
