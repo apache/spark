@@ -23,7 +23,12 @@ import shutil
 import tempfile
 from collections import defaultdict
 
-from pyspark.errors import PySparkAttributeError, PySparkTypeError, PySparkValueError, PySparkException
+from pyspark.errors import (
+    PySparkAttributeError,
+    PySparkTypeError,
+    PySparkValueError,
+    PySparkException,
+)
 from pyspark.sql import SparkSession as PySparkSession, Row
 from pyspark.sql.types import (
     StructType,
@@ -143,6 +148,8 @@ class SparkConnectSQLTestCase(ReusedConnectTestCase, SQLTestUtils, PandasOnSpark
     def spark_connect_clean_up_test_data(cls):
         cls.spark.sql("DROP TABLE IF EXISTS {}".format(cls.tbl_name))
         cls.spark.sql("DROP TABLE IF EXISTS {}".format(cls.tbl_name2))
+        cls.spark.sql("DROP TABLE IF EXISTS {}".format(cls.tbl_name3))
+        cls.spark.sql("DROP TABLE IF EXISTS {}".format(cls.tbl_name4))
         cls.spark.sql("DROP TABLE IF EXISTS {}".format(cls.tbl_name_empty))
 
 
@@ -2988,11 +2995,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
 
 class SparkConnectSessionTests(SparkConnectSQLTestCase):
     def _check_no_active_session_error(self, e: PySparkException):
-        self.check_error(
-            exception=e,
-            error_class="NO_ACTIVE_SESSION",
-            message_parameters=dict()
-        )
+        self.check_error(exception=e, error_class="NO_ACTIVE_SESSION", message_parameters=dict())
 
     def test_stop_session(self):
         df = self.connect.sql("select 1 as a, 2 as b")

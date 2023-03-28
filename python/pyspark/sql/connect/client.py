@@ -1056,13 +1056,9 @@ class SparkConnectClient(object):
         elif isinstance(error, ValueError):
             if "Cannot invoke RPC" in str(error) and "closed" in str(error):
                 raise SparkConnectException(
-                    error_class="NO_ACTIVE_SESSION",
-                    message_parameters=dict()
+                    error_class="NO_ACTIVE_SESSION", message_parameters=dict()
                 )
-            else:
-                raise error
-        else:
-            raise error
+        raise error
 
     def _handle_rpc_error(self, rpc_error: grpc.RpcError) -> NoReturn:
         """
