@@ -89,21 +89,13 @@ class RelationalGroupedDataset protected[sql](
     case expr: NamedExpression => expr
     case a: AggregateExpression if a.aggregateFunction.isInstanceOf[TypedAggregateExpression] =>
       UnresolvedAlias(a, Some(Column.generateAlias))
-    case ag: UnresolvedFunction if (containsStar(Seq(ag))) || ag.isDistinct =>
-             UnresolvedAlias(expr, None)
     case expr: Expression =>
-       if (containsStar(Seq(expr))) {
+         if (expr.isInstanceOf[UnresolvedFunction]) {
             UnresolvedAlias(expr, None)
         } else {
           Alias(expr, toPrettySQL(expr))()
         }
   }
-
-  /**
-   * Returns true if `exprs` contains a star.
-   */
-   private[this] def containsStar(exprs: Seq[Expression]): Boolean =
-    exprs.exists(_.collect { case _: Star => true }.nonEmpty)
 
   private[this] def aggregateNumericColumns(colNames: String*)(f: Expression => AggregateFunction)
     : DataFrame = {
