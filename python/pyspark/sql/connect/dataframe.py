@@ -21,6 +21,7 @@ check_dependencies(__name__)
 from typing import (
     Any,
     Dict,
+    Iterator,
     List,
     Optional,
     Tuple,
@@ -36,6 +37,7 @@ from typing import (
 import sys
 import random
 import pandas
+import pyarrow as pa
 import json
 import warnings
 from collections.abc import Iterable
@@ -1597,8 +1599,28 @@ class DataFrame:
     def foreachPartition(self, *args: Any, **kwargs: Any) -> None:
         raise NotImplementedError("foreachPartition() is not implemented.")
 
-    def toLocalIterator(self, *args: Any, **kwargs: Any) -> None:
-        raise NotImplementedError("toLocalIterator() is not implemented.")
+    def toLocalIterator(self, prefetchPartitions: bool = False) -> Iterator[Row]:
+        from pyspark.sql.connect.conversion import ArrowTableToRowsConversion
+
+        if self._plan is None:
+            raise Exception("Cannot collect on empty plan.")
+        if self._session is None:
+            raise Exception("Cannot collect on empty session.")
+        query = self._plan.to_proto(self._session.client)
+
+        schema: Optional[StructType] = None
+        for schema_or_table in self._session.client.to_table_as_iterator(query):
+            if isinstance(schema_or_table, StructType):
+                assert schema is None
+                schema = schema_or_table
+            else:
+                assert isinstance(schema_or_table, pa.Table)
+                table = schema_or_table
+                if schema is None:
+                    schema = from_arrow_schema(table.schema)
+                yield from ArrowTableToRowsConversion.convert(table, schema)
+
+    toLocalIterator.__doc__ = PySparkDataFrame.toLocalIterator.__doc__
 
     def checkpoint(self, *args: Any, **kwargs: Any) -> None:
         raise NotImplementedError("checkpoint() is not implemented.")
