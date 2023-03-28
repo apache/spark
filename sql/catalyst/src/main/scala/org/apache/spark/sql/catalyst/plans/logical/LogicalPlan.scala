@@ -360,7 +360,8 @@ object LogicalPlanIntegrity {
  */
 trait ExposesMetadataColumns extends LogicalPlan {
   protected def metadataOutputWithOutConflicts(
-      metadataOutput: Seq[AttributeReference]): Seq[AttributeReference] = {
+      metadataOutput: Seq[AttributeReference],
+      renameOnConflict: Boolean = true): Seq[AttributeReference] = {
     // If `metadataColFromOutput` is not empty that means `AddMetadataColumns` merged
     // metadata output into output. We should still return an available metadata output
     // so that the rule `ResolveReferences` can resolve metadata column correctly.
@@ -369,17 +370,18 @@ trait ExposesMetadataColumns extends LogicalPlan {
       val resolve = conf.resolver
       val outputNames = outputSet.map(_.name)
 
-      // Generate a unique name by prepending underscores.
-      @scala.annotation.tailrec
-      def makeUnique(name: String): String = name match {
-        case name if outputNames.exists(resolve(_, name)) => makeUnique(s"_$name")
-        case name => name
-      }
+      def isOutputColumn(colName: String): Boolean = outputNames.exists(resolve(colName, _))
 
-      // Rename any metadata column whose name conflicts with an output column.
-      //
-      // Use [[LogicalPlan.getMetadataAttributeByName]] to reliably find renamed metadata columns.
-      metadataOutput.map(attr => attr.withName(makeUnique(attr.name)))
+      @scala.annotation.tailrec
+      def makeUnique(name: String): String =
+        if (isOutputColumn(name)) makeUnique(s"_$name") else name
+
+      // If allowed to, resolve any name conflicts between metadata and output columns by renaming
+      // the conflicting metadata columns; otherwise, suppress them.
+      metadataOutput.collect {
+        case attr if !isOutputColumn(attr.name) => attr
+        case attr if renameOnConflict => attr.withName(makeUnique(attr.name))
+      }
     } else {
       metadataColFromOutput.asInstanceOf[Seq[AttributeReference]]
     }

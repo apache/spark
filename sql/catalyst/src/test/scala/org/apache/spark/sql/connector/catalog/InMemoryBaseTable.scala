@@ -76,6 +76,10 @@ abstract class InMemoryBaseTable(
   override val metadataColumns: Array[MetadataColumn] = Array(IndexColumn, PartitionKeyColumn)
   private val metadataColumnNames = metadataColumns.map(_.name).toSet
 
+  // Metadata column renaming is supported -- see [[InMemoryScanBuilder.pruneColumns]] and
+  // [[BatchScanBaseClass.createReaderFactory]] for implementation details.
+  override val canRenameConflictingMetadataColumns: Boolean = true
+
   private val allowUnsupportedTransforms =
     properties.getOrDefault("allow-unsupported-transforms", "false").toBoolean
 
