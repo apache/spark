@@ -1400,9 +1400,6 @@ case class ArrayContains(left: Expression, right: Expression)
 trait InsertArrayOneSide extends RuntimeReplaceable
   with ImplicitCastInputTypes with BinaryLike[Expression] with QueryErrorsBase {
 
-  protected def arr: Expression
-  protected def ele: Expression
-
   override def inputTypes: Seq[AbstractDataType] = {
     (left.dataType, right.dataType) match {
       case (ArrayType(e1, hasNull), e2) =>
@@ -1438,9 +1435,6 @@ trait InsertArrayOneSide extends RuntimeReplaceable
         )
     }
   }
-
-  override def left: Expression = arr
-  override def right: Expression = ele
 }
 
 /**
@@ -5027,16 +5021,16 @@ case class ArrayCompact(child: Expression)
   """,
   since = "3.4.0",
   group = "array_funcs")
-case class ArrayAppend(arr: Expression, ele: Expression) extends InsertArrayOneSide {
+case class ArrayAppend(left: Expression, right: Expression) extends InsertArrayOneSide {
 
   override lazy val replacement: Expression =
-    ArrayInsert(arr, Add(ArraySize(arr), Literal(1)), ele)
+    ArrayInsert(left, Add(ArraySize(left), Literal(1)), right)
 
   override def prettyName: String = "array_append"
 
   override protected def withNewChildrenInternal(
       newLeft: Expression, newRight: Expression): ArrayAppend = {
-    copy(arr = newLeft, ele = newRight)
+    copy(left = newLeft, right = newRight)
   }
 }
 
@@ -5058,14 +5052,14 @@ case class ArrayAppend(arr: Expression, ele: Expression) extends InsertArrayOneS
   """,
   group = "array_funcs",
   since = "3.5.0")
-case class ArrayPrepend(arr: Expression, ele: Expression) extends InsertArrayOneSide {
+case class ArrayPrepend(left: Expression, right: Expression) extends InsertArrayOneSide {
 
-  override lazy val replacement: Expression = ArrayInsert(arr, Literal(0), ele)
+  override lazy val replacement: Expression = ArrayInsert(left, Literal(0), right)
 
   override def prettyName: String = "array_prepend"
 
   override protected def withNewChildrenInternal(
       newLeft: Expression, newRight: Expression): ArrayPrepend = {
-    copy(arr = newLeft, ele = newRight)
+    copy(left = newLeft, right = newRight)
   }
 }
