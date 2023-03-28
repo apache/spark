@@ -2318,6 +2318,24 @@ class Dataset[T] private[sql] (
     dropDuplicates(colNames)
   }
 
+  def dropDuplicatesWithinWatermark(): Dataset[T] = {
+    dropDuplicatesWithinWatermark(this.columns)
+  }
+
+  def dropDuplicatesWithinWatermark(colNames: Seq[String]): Dataset[T] = {
+    throw new UnsupportedOperationException("dropDuplicatesWithinWatermark is not implemented.")
+  }
+
+  def dropDuplicatesWithinWatermark(colNames: Array[String]): Dataset[T] = {
+    dropDuplicatesWithinWatermark(colNames.toSeq)
+  }
+
+  @scala.annotation.varargs
+  def dropDuplicatesWithinWatermark(col1: String, cols: String*): Dataset[T] = {
+    val colNames: Seq[String] = col1 +: cols
+    dropDuplicatesWithinWatermark(colNames)
+  }
+
   /**
    * Computes basic statistics for numeric and string columns, including count, mean, stddev, min,
    * and max. If no columns are given, this function computes statistics for all numerical or
