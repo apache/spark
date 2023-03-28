@@ -226,12 +226,12 @@ object FileFormat {
   /**
    * Supported metadata fields of the given [[FileFormat]].
    */
-  def metadataSchemaFields(fileFormat: FileFormat): Seq[StructField] =
-    if (fileFormat.isInstanceOf[ParquetFileFormat]) {
+  def metadataSchemaFields(fileFormat: FileFormat): Seq[StructField] = fileFormat match {
+    case _: ParquetFileFormat =>
       BASE_METADATA_FIELDS :+ ROW_INDEX_FIELD
-    } else {
+    case _ =>
       BASE_METADATA_FIELDS
-    }
+  }
 
   /**
    * Create a file metadata struct column containing fields supported by the given [[FileFormat]].

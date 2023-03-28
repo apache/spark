@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.ScanOperation
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.{FileSourceScanExec, SparkPlan}
-import org.apache.spark.sql.types.{DoubleType, FloatType, StructField, StructType}
+import org.apache.spark.sql.types.{DoubleType, FloatType, StructType}
 import org.apache.spark.util.collection.BitSet
 
 /**
@@ -258,7 +258,7 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
           .map(_.name.toLowerCase(Locale.ROOT))
           .toSet
 
-        def createMetadataColumn(field: StructField) = field match {
+        metadataStruct.dataType.asInstanceOf[StructType].fields.foreach {
           case FileSourceGeneratedMetadataStructField(field, internalName) =>
             if (schemaColumns.contains(internalName)) {
               throw new AnalysisException(internalName +
@@ -280,8 +280,6 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
 
           case field => throw new AnalysisException(s"Unrecognized file metadata field: $field")
         }
-
-        metadataStruct.dataType.asInstanceOf[StructType].fields.foreach(createMetadataColumn)
       }
 
       val outputDataSchema = (readDataColumns ++ generatedMetadataColumns).toStructType
@@ -307,7 +305,7 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
           filter.transform {
             // Replace references to the _metadata column. This will affect references to the column
             // itself but also where fields from the metadata struct are used.
-            case MetadataStructColumn(AttributeReference(_, fields @ StructType(_), _, _)) =>
+            case MetadataStructColumn(AttributeReference(_, fields: StructType, _, _)) =>
               val reboundFields = fields.map(field => metadataColumnsByName(field.name))
               CreateStruct(reboundFields)
           }.transform {

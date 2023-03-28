@@ -508,7 +508,6 @@ object FileSourceMetadataAttribute {
 
   val METADATA: Metadata = new MetadataBuilder()
     .withMetadata(MetadataAttribute.METADATA)
-    .putBoolean(METADATA_COL_ATTR_KEY, value = true)
     .putBoolean(FILE_SOURCE_METADATA_COL_ATTR_KEY, value = true)
     .build()
 
@@ -528,9 +527,8 @@ object FileSourceMetadataAttribute {
     AttributeReference(name, dataType, nullable = nullable, METADATA)()
 
   /** Matches if attr is any File source metadata attribute (including constant and generated). */
-  def unapply(attr: AttributeReference): Option[AttributeReference] = {
+  def unapply(attr: AttributeReference): Option[AttributeReference] =
     if (isValid(attr.metadata)) Some(attr) else None
-  }
 
   def isValid(metadata: Metadata): Boolean = {
     MetadataAttribute.isValid(metadata) &&
@@ -607,12 +605,11 @@ object FileSourceGeneratedMetadataStructField {
    *    See `FileSourceStrategy` for more information
    */
   def apply(
-    name: String,
-    internalName: String,
-    dataType: DataType,
-    nullable: Boolean = true): StructField = {
+      name: String,
+      internalName: String,
+      dataType: DataType,
+      nullable: Boolean = true): StructField =
     StructField(name, dataType, nullable, metadata(internalName))
-  }
 
   def unapply(field: StructField): Option[(StructField, String)] =
     getInternalNameIfValid(field.metadata).map(field -> _)
