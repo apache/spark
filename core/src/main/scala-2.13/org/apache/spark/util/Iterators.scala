@@ -17,7 +17,7 @@
 
 package org.apache.spark.util
 
-private[spark] object Iterators {
+private[util] object Iterators {
 
   /**
    * Counts the number of elements of an iterator.
