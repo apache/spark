@@ -119,7 +119,7 @@
     <slf4j.version>2.0.7</slf4j.version>
     <log4j.version>2.20.0</log4j.version>
     <!-- make sure to update IsolatedClientLoader whenever this version is changed -->
-    <hadoop.version>3.3.4</hadoop.version>
+    <hadoop.version>3.3.5</hadoop.version>
     <!-- Protobuf version for building with Hadoop/Yarn dependencies -->
     <protobuf.hadoopDependency.version>2.5.0</protobuf.hadoopDependency.version>
     <!-- Actual Protobuf version in Spark modules like Spark Connect, protobuf connector, etc. -->
@@ -3026,6 +3026,8 @@
               <spark.test.docker.removePulledImage>${spark.test.docker.removePulledImage}</spark.test.docker.removePulledImage>
               <!-- Needed by sql/hive tests. -->
               <test.src.tables>__not_used__</test.src.tables>
+              <!--SPARK-42934: Need by `OrcEncryptionSuite` -->
+              <spark.hadoop.hadoop.security.key.provider.path>test:///</spark.hadoop.hadoop.security.key.provider.path>
             </systemProperties>
             <tagsToExclude>${test.exclude.tags},${test.default.exclude.tags}</tagsToExclude>
             <tagsToInclude>${test.include.tags}</tagsToInclude>

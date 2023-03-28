@@ -1623,6 +1623,7 @@ class DataFrame:
         func: "PandasMapIterFunction",
         schema: Union[StructType, str],
         evalType: int,
+        is_barrier: bool,
     ) -> "DataFrame":
         from pyspark.sql.connect.udf import UserDefinedFunction
 
@@ -1636,21 +1637,31 @@ class DataFrame:
         )
 
         return DataFrame.withPlan(
-            plan.MapPartitions(child=self._plan, function=udf_obj, cols=self.columns),
+            plan.MapPartitions(
+                child=self._plan, function=udf_obj, cols=self.columns, is_barrier=is_barrier
+            ),
             session=self._session,
         )
 
     def mapInPandas(
-        self, func: "PandasMapIterFunction", schema: Union[StructType, str]
+        self,
+        func: "PandasMapIterFunction",
+        schema: Union[StructType, str],
+        is_barrier: bool = False,
     ) -> "DataFrame":
-        return self._map_partitions(func, schema, PythonEvalType.SQL_MAP_PANDAS_ITER_UDF)
+        return self._map_partitions(
+            func, schema, PythonEvalType.SQL_MAP_PANDAS_ITER_UDF, is_barrier
+        )
 
     mapInPandas.__doc__ = PySparkDataFrame.mapInPandas.__doc__
 
     def mapInArrow(
-        self, func: "ArrowMapIterFunction", schema: Union[StructType, str]
+        self,
+        func: "ArrowMapIterFunction",
+        schema: Union[StructType, str],
+        is_barrier: bool = False,
     ) -> "DataFrame":
-        return self._map_partitions(func, schema, PythonEvalType.SQL_MAP_ARROW_ITER_UDF)
+        return self._map_partitions(func, schema, PythonEvalType.SQL_MAP_ARROW_ITER_UDF, is_barrier)
 
     mapInArrow.__doc__ = PySparkDataFrame.mapInArrow.__doc__
 
