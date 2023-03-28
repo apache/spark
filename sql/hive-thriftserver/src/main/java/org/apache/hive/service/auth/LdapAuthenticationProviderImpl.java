@@ -47,40 +47,12 @@ public class LdapAuthenticationProviderImpl implements PasswdAuthenticationProvi
 
   @Override
   public void Authenticate(String user, String password) throws AuthenticationException {
-
-    // If the domain is available in the config, then append it unless domain is
-    // already part of the username. LDAP providers like Active Directory use a
-    // fully qualified user name like foo@bar.com.
-    if (!hasDomain(user) && ldapDomain != null) {
-      user  = user + "@" + ldapDomain;
-    }
-
     if (password == null || password.isEmpty() || password.getBytes()[0] == 0) {
       throw new AuthenticationException("Error validating LDAP user:" +
           " a null or blank password has been provided");
     }
 
-    // setup the security principal
-    List<String> candidatePrincipals = new ArrayList<>();
-    if (StringUtils.isBlank(userDNPattern)) {
-      if (StringUtils.isNotBlank(baseDN)) {
-        String pattern = "uid=" + user + "," + baseDN;
-        candidatePrincipals.add(pattern);
-      }
-    } else {
-      String[] patterns = userDNPattern.split(":");
-      for (String pattern : patterns) {
-        if (StringUtils.contains(pattern, ",") && StringUtils.contains(pattern, "=")) {
-          candidatePrincipals.add(pattern.replaceAll("%s", user));
-        }
-      }
-    }
-
-    if (candidatePrincipals.isEmpty()) {
-      candidatePrincipals = Collections.singletonList(user);
-    }
-
-    for (Iterator<String> iterator = candidatePrincipals.iterator(); iterator.hasNext();) {
+    for (Iterator<String> iterator = createCandidatePrincipals(user).iterator(); iterator.hasNext();) {
       String principal = iterator.next();
 
       Hashtable<String, Object> env = new Hashtable<String, Object>();
@@ -106,5 +78,40 @@ public class LdapAuthenticationProviderImpl implements PasswdAuthenticationProvi
 
   private boolean hasDomain(String userName) {
     return (ServiceUtils.indexOfDomainMatch(userName) > 0);
+  }
+
+  private List<String> createCandidatePrincipals(String user) {
+    // If the domain is available in the config, then append it unless domain is
+    // already part of the username. LDAP providers like Active Directory use a
+    // fully qualified user name like foo@bar.com.
+    if (hasDomain(user)) {
+      return Collections.singletonList(user);
+    }
+
+    if (StringUtils.isNotBlank(ldapDomain)) {
+      return Collections.singletonList(user + "@" + ldapDomain);
+    }
+
+    // setup the security principal
+    List<String> candidatePrincipals = new ArrayList<>();
+    if (StringUtils.isBlank(userDNPattern)) {
+      if (StringUtils.isNotBlank(baseDN)) {
+        String pattern = "uid=" + user + "," + baseDN;
+        candidatePrincipals.add(pattern);
+      }
+    } else {
+      String[] patterns = userDNPattern.split(":");
+      for (String pattern : patterns) {
+        if (StringUtils.contains(pattern, ",") && StringUtils.contains(pattern, "=")) {
+          candidatePrincipals.add(pattern.replaceAll("%s", user));
+        }
+      }
+    }
+
+    if (candidatePrincipals.isEmpty()) {
+      candidatePrincipals = Collections.singletonList(user);
+    }
+
+    return candidatePrincipals;
   }
 }
