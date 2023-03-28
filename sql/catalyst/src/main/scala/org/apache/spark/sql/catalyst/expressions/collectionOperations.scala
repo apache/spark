@@ -1397,7 +1397,7 @@ case class ArrayContains(left: Expression, right: Expression)
     copy(left = newLeft, right = newRight)
 }
 
-trait ArrayInsertEnd extends RuntimeReplaceable
+trait InsertArrayOneSide extends RuntimeReplaceable
   with ImplicitCastInputTypes with BinaryLike[Expression] with QueryErrorsBase {
 
   protected def arr: Expression
@@ -5027,7 +5027,7 @@ case class ArrayCompact(child: Expression)
   """,
   since = "3.4.0",
   group = "array_funcs")
-case class ArrayAppend(arr: Expression, ele: Expression) extends ArrayInsertEnd {
+case class ArrayAppend(arr: Expression, ele: Expression) extends InsertArrayOneSide {
 
   override lazy val replacement: Expression =
     ArrayInsert(arr, Add(ArraySize(left), Literal(1)), ele)
@@ -5058,7 +5058,7 @@ case class ArrayAppend(arr: Expression, ele: Expression) extends ArrayInsertEnd 
   """,
   group = "array_funcs",
   since = "3.5.0")
-case class ArrayPrepend(arr: Expression, ele: Expression) extends ArrayInsertEnd {
+case class ArrayPrepend(arr: Expression, ele: Expression) extends InsertArrayOneSide {
 
   override lazy val replacement: Expression = ArrayInsert(arr, Literal(0), ele)
 
