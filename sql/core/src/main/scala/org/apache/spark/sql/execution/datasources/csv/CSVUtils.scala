@@ -46,10 +46,8 @@ object CSVUtils {
     // Note that unlike actual CSV reading path, it simply filters the given skipped lines.
     // Therefore, this skips the line same with the skipped lines if exists.
     val linesToSkip = commentFilteredLines.head(options.skipLines)
-    commentFilteredLines.rdd
-      .mapPartitions { iter =>
-        iter.filterNot(linesToSkip.contains(_))
-      }
+    commentFilteredLines
+      .mapPartitions(_.filterNot(linesToSkip.contains))
       .toDF("value")
       .as[String]
   }

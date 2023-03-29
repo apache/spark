@@ -414,9 +414,7 @@ private[sql] object UnivocityParser {
       tokenizer,
       handleHeader,
       handleSkipLines,
-      parser.options.charset) { tokens =>
-      safeParser.parse(tokens)
-    }.flatten
+      parser.options.charset)(safeParser.parse).flatten
   }
 
   private def convertStream[T](
