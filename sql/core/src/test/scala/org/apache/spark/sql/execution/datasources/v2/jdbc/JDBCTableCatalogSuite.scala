@@ -21,7 +21,7 @@ import java.util.Properties
 
 import org.apache.logging.log4j.Level
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{SparkConf, SparkIllegalArgumentException}
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.analysis.{NoSuchNamespaceException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.parser.ParseException
@@ -465,5 +465,15 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
       sql("CREATE TABLE h2.test.new_table(c CHAR(1000000001))")
     }
     assert(e.getCause.getMessage.contains("1000000001"))
+  }
+
+  test("SPARK-42955: Skip classifyException and wrap AnalysisException for SparkThrowable") {
+    checkError(
+      exception = intercept[SparkIllegalArgumentException](
+        sql("CREATE TABLE h2.test.new_table(c array<int>)")
+      ),
+      errorClass = "_LEGACY_ERROR_TEMP_2082",
+      parameters = Map("catalogString" -> "array<int>")
+    )
   }
 }
