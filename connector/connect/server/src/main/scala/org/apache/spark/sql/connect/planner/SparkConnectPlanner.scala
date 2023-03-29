@@ -2090,7 +2090,6 @@ class SparkConnectPlanner(val session: SparkSession) {
       // TODO(SPARK-42962): Handle this better. May be cache stopped queries for a few minutes.
     }
 
-    System.currentTimeMillis()
     command.getCommandTypeCase match {
       case StreamingQueryCommand.CommandTypeCase.STATUS =>
         val recentProgress: Seq[String] = command.getStatus.getRecentProgressLimit match {
