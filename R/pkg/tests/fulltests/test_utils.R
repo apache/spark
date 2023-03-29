@@ -190,7 +190,7 @@ test_that("captureJVMException", {
                         error = function(e) {
                           captureJVMException(e, method)
                         }),
-               ".*Syntax error at or near 'unknown'.*")
+               ".*Unsupported data type \"UNKNOWN\".*")
 })
 
 test_that("hashCode", {

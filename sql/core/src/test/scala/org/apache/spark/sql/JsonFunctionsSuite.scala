@@ -544,7 +544,10 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
       },
       errorClass = "PARSE_SYNTAX_ERROR",
       sqlState = "42601",
-      parameters = Map("error" -> "'time'", "hint" -> ""),
+      parameters = Map(
+        "error" -> "'InvalidType'",
+        "hint" -> ": extra input 'InvalidType'"
+      ),
       context = ExpectedContext(
         fragment = "from_json(value, 'time InvalidType')",
         start = 0,

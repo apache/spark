@@ -138,13 +138,13 @@ class DataTypeParserSuite extends SparkFunSuite with SQLHelper {
   test("Do not print empty parentheses for no params") {
     checkError(
       exception = intercept("unknown"),
-      errorClass = "PARSE_SYNTAX_ERROR",
-      parameters = Map("error" -> "'unknown'", "hint" -> "")
+      errorClass = "UNSUPPORTED_DATATYPE",
+      parameters = Map("typeName" -> "\"UNKNOWN\"")
     )
     checkError(
       exception = intercept("unknown(1,2,3)"),
-      errorClass = "PARSE_SYNTAX_ERROR",
-      parameters = Map("error" -> "'unknown'", "hint" -> "")
+      errorClass = "UNSUPPORTED_DATATYPE",
+      parameters = Map("typeName" -> "\"UNKNOWN(1,2,3)\"")
     )
   }
 

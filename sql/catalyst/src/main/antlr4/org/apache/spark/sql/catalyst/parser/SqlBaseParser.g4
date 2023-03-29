@@ -1011,6 +1011,7 @@ type
     | VOID
     | INTERVAL
     | ARRAY | STRUCT | MAP
+    | unsupportedType=identifier
     ;
 
 dataType

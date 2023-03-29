@@ -130,7 +130,7 @@ test_that("Specify a schema by using a DDL-formatted string when reading", {
   stopQuery(q)
 
   expect_error(read.stream(path = parquetPath, schema = "name stri"),
-               ".*Syntax error at or near 'stri'.*")
+               ".*Unsupported data type \"STRI\".*")
 
   unlink(parquetPath)
 })

@@ -360,12 +360,18 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42601",
+  "errorClass" : "UNSUPPORTED_DATATYPE",
+  "sqlState" : "0A000",
   "messageParameters" : {
-    "error" : "')'",
-    "hint" : ""
-  }
+    "typeName" : "\"BAZ\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 24,
+    "stopIndex" : 26,
+    "fragment" : "baz"
+  } ]
 }
 
 
@@ -376,12 +382,18 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42601",
+  "errorClass" : "UNSUPPORTED_DATATYPE",
+  "sqlState" : "0A000",
   "messageParameters" : {
-    "error" : "')'",
-    "hint" : ""
-  }
+    "typeName" : "\"ORDINALITY\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 24,
+    "stopIndex" : 33,
+    "fragment" : "ordinality"
+  } ]
 }
 
 

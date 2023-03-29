@@ -2898,12 +2898,13 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
         DecimalType(precision.getText.toInt, scale.getText.toInt)
       case (VOID, Nil) => NullType
       case (INTERVAL, Nil) => CalendarIntervalType
-      case (dt @ (CHARACTER | CHAR | VARCHAR), Nil) =>
+      case (CHARACTER | CHAR | VARCHAR, Nil) =>
         throw QueryParsingErrors.charTypeMissingLengthError(ctx.`type`.getText, ctx)
-      case (dt @ (ARRAY | STRUCT | MAP), Nil) =>
+      case (ARRAY | STRUCT | MAP, Nil) =>
         throw QueryParsingErrors.nestedTypeMissingElementTypeError(ctx.`type`.getText, ctx)
-      case (dt, params) =>
-        val dtStr = if (params.nonEmpty) s"$dt(${params.mkString(",")})" else ctx.`type`.getText
+      case (_, params) =>
+        val badType = ctx.`type`.getText
+        val dtStr = if (params.nonEmpty) s"$badType(${params.mkString(",")})" else badType
         throw QueryParsingErrors.dataTypeUnsupportedError(dtStr, ctx)
     }
   }

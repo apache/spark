@@ -265,8 +265,9 @@ class ErrorParserSuite extends AnalysisTest {
     // general bad types
     checkError(
       exception = parseException("SELECT cast(1 as badtype)"),
-      errorClass = "PARSE_SYNTAX_ERROR",
-      parameters = Map("error" -> "'badtype'", "hint" -> ""))
+      errorClass = "UNSUPPORTED_DATATYPE",
+      parameters = Map("typeName" -> "\"BADTYPE\""),
+      context = ExpectedContext(fragment = "badtype", start = 17, stop = 23))
     // special handling on char and varchar
     checkError(
       exception = parseException("SELECT cast('a' as CHAR)"),
