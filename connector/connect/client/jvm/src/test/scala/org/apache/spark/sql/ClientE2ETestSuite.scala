@@ -221,6 +221,7 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper {
   }
 
   test("writeTo with create") {
+    assume(IntegrationTestUtils.isCatalystTestJarAvailable)
     withTable("testcat.myTableV2") {
       spark.conf.set(
         "spark.sql.catalog.testcat",
@@ -238,6 +239,7 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper {
   }
 
   test("writeTo with create and using") {
+    assume(IntegrationTestUtils.isCatalystTestJarAvailable)
     withTable("testcat.myTableV2") {
       spark.conf.set(
         "spark.sql.catalog.testcat",
@@ -263,6 +265,7 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper {
   }
 
   test("writeTo with create and append") {
+    assume(IntegrationTestUtils.isCatalystTestJarAvailable)
     withTable("testcat.myTableV2") {
       spark.conf.set(
         "spark.sql.catalog.testcat",
@@ -284,6 +287,7 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper {
   }
 
   test("WriteTo with overwrite") {
+    assume(IntegrationTestUtils.isCatalystTestJarAvailable)
     withTable("testcat.myTableV2") {
       spark.conf.set(
         "spark.sql.catalog.testcat",
@@ -318,6 +322,7 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper {
   }
 
   test("WriteTo with overwritePartitions") {
+    assume(IntegrationTestUtils.isCatalystTestJarAvailable)
     withTable("testcat.myTableV2") {
       spark.conf.set(
         "spark.sql.catalog.testcat",
