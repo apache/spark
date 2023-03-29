@@ -2181,10 +2181,7 @@ class PlanGenerationTestSuite
 
   test("to_avro") {
     simple.select(
-      avroFn.to_avro(
-        fn.col("id")),
-      avroFn.to_avro(
-        fn.col("a"),
-        """{"type": "int", "name": "id"}"""))
+      avroFn.to_avro(fn.col("id")),
+      avroFn.to_avro(fn.col("a"), """{"type": "int", "name": "id"}"""))
   }
 }
