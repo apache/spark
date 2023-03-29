@@ -35,6 +35,7 @@ from pyspark.sql.types import (
     DateType,
     TimestampType,
     DayTimeIntervalType,
+    YearMonthIntervalType,
     MapType,
     StringType,
     CharType,
@@ -1189,6 +1190,37 @@ class TypesTestsMixin:
 
         for n, (a, e) in enumerate(zip(actual, expected)):
             self.assertEqual(a, e, "%s does not match with %s" % (exprs[n], expected[n]))
+
+    def test_yearmonth_interval_type_constructor(self):
+        self.assertEqual(YearMonthIntervalType().simpleString(), "interval year to month")
+        self.assertEqual(
+            YearMonthIntervalType(YearMonthIntervalType.YEAR).simpleString(), "interval year"
+        )
+        self.assertEqual(
+            YearMonthIntervalType(
+                YearMonthIntervalType.YEAR, YearMonthIntervalType.MONTH
+            ).simpleString(),
+            "interval year to month",
+        )
+
+        with self.assertRaisesRegex(RuntimeError, "interval None to 3 is invalid"):
+            YearMonthIntervalType(endField=3)
+
+        with self.assertRaisesRegex(RuntimeError, "interval 123 to 123 is invalid"):
+            YearMonthIntervalType(123)
+
+        with self.assertRaisesRegex(RuntimeError, "interval 0 to 321 is invalid"):
+            YearMonthIntervalType(YearMonthIntervalType.YEAR, 321)
+
+    def test_yearmonth_interval_type(self):
+        schema1 = self.spark.sql("SELECT INTERVAL '10-8' YEAR TO MONTH AS interval").schema
+        self.assertEqual(schema1.fields[0].dataType, YearMonthIntervalType(0, 1))
+
+        schema2 = self.spark.sql("SELECT INTERVAL '10' YEAR AS interval").schema
+        self.assertEqual(schema2.fields[0].dataType, YearMonthIntervalType(0, 0))
+
+        schema3 = self.spark.sql("SELECT INTERVAL '8' MONTH AS interval").schema
+        self.assertEqual(schema3.fields[0].dataType, YearMonthIntervalType(1, 1))
 
 
 class DataTypeTests(unittest.TestCase):

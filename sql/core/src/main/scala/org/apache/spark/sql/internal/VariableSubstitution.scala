@@ -29,7 +29,10 @@ import org.apache.spark.sql.catalyst.SQLConfHelper
 class VariableSubstitution extends SQLConfHelper {
 
   private val provider = new ConfigProvider {
-    override def get(key: String): Option[String] = Option(conf.getConfString(key, ""))
+    override def get(key: String): Option[String] = {
+      val value = conf.getConfString(key, "")
+      conf.redactOptions(Seq((key, value))).headOption.map(_._2)
+    }
   }
 
   private val reader = new ConfigReader(provider)
