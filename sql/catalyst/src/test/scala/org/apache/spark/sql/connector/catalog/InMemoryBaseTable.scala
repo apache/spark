@@ -409,7 +409,7 @@ abstract class InMemoryBaseTable(
           false
         case _ => true
       }
-      new BufferedRowsReaderFactory(metadataColumns, nonMetadataColumns, tableSchema)
+      new BufferedRowsReaderFactory(metadataColumns.toSeq, nonMetadataColumns, tableSchema)
     }
   }
 
