@@ -66,6 +66,19 @@ private object DerbyDialect extends JdbcDialect {
     throw QueryExecutionErrors.commentOnTableUnsupportedError()
   }
 
+  // Derby Support 2 types of clauses for nullability constraint alteration
+  //   columnName { SET | DROP } NOT NULL
+  //   columnName [ NOT ] NULL
+  // Here we use the 2nd one
+  // For more information, https://db.apache.org/derby/docs/10.16/ref/rrefsqlj81859.html
+  override def getUpdateColumnNullabilityQuery(
+      tableName: String,
+      columnName: String,
+      isNullable: Boolean): String = {
+    val nullable = if (isNullable) "NULL" else "NOT NULL"
+    s"ALTER TABLE $tableName ALTER COLUMN ${quoteIdentifier(columnName)} $nullable"
+  }
+
   override def getLimitClause(limit: Integer): String = {
     ""
   }

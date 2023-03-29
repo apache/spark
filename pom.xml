@@ -84,9 +84,8 @@
     <module>common/tags</module>
     <module>core</module>
     <module>graphx</module>
-    <module>mllib/core</module>
-    <module>mllib/common</module>
-    <module>mllib/local</module>
+    <module>mllib</module>
+    <module>mllib-local</module>
     <module>tools</module>
     <module>streaming</module>
     <module>sql/catalyst</module>
@@ -117,10 +116,10 @@
     <maven.version>3.8.7</maven.version>
     <exec-maven-plugin.version>1.6.0</exec-maven-plugin.version>
     <sbt.project.name>spark</sbt.project.name>
-    <slf4j.version>2.0.6</slf4j.version>
-    <log4j.version>2.19.0</log4j.version>
+    <slf4j.version>2.0.7</slf4j.version>
+    <log4j.version>2.20.0</log4j.version>
     <!-- make sure to update IsolatedClientLoader whenever this version is changed -->
-    <hadoop.version>3.3.4</hadoop.version>
+    <hadoop.version>3.3.5</hadoop.version>
     <!-- Protobuf version for building with Hadoop/Yarn dependencies -->
     <protobuf.hadoopDependency.version>2.5.0</protobuf.hadoopDependency.version>
     <!-- Actual Protobuf version in Spark modules like Spark Connect, protobuf connector, etc. -->
@@ -161,7 +160,7 @@
     <aws.java.sdk.version>1.11.655</aws.java.sdk.version>
     <!-- the producer is used in tests -->
     <aws.kinesis.producer.version>0.12.8</aws.kinesis.producer.version>
-    <gcs-connector.version>hadoop3-2.2.7</gcs-connector.version>
+    <gcs-connector.version>hadoop3-2.2.11</gcs-connector.version>
     <!--  org.apache.httpcomponents/httpclient-->
     <commons.httpclient.version>4.5.14</commons.httpclient.version>
     <commons.httpcore.version>4.4.16</commons.httpcore.version>
@@ -222,9 +221,11 @@
     ./python/pyspark/sql/pandas/utils.py, and ./python/setup.py too.
     -->
     <arrow.version>11.0.0</arrow.version>
+    <ammonite.version>2.5.8</ammonite.version>
+
     <!-- org.fusesource.leveldbjni will be used except on arm64 platform. -->
     <leveldbjni.group>org.fusesource.leveldbjni</leveldbjni.group>
-    <kubernetes-client.version>6.5.0</kubernetes-client.version>
+    <kubernetes-client.version>6.5.1</kubernetes-client.version>
 
     <test.java.home>${java.home}</test.java.home>
 
@@ -3025,6 +3026,8 @@
               <spark.test.docker.removePulledImage>${spark.test.docker.removePulledImage}</spark.test.docker.removePulledImage>
               <!-- Needed by sql/hive tests. -->
               <test.src.tables>__not_used__</test.src.tables>
+              <!--SPARK-42934: Need by `OrcEncryptionSuite` -->
+              <spark.hadoop.hadoop.security.key.provider.path>test:///</spark.hadoop.hadoop.security.key.provider.path>
             </systemProperties>
             <tagsToExclude>${test.exclude.tags},${test.default.exclude.tags}</tagsToExclude>
             <tagsToInclude>${test.include.tags}</tagsToInclude>
@@ -3514,7 +3517,7 @@
         <hadoop-client-api.artifact>hadoop-client</hadoop-client-api.artifact>
         <hadoop-client-runtime.artifact>hadoop-yarn-api</hadoop-client-runtime.artifact>
         <hadoop-client-minicluster.artifact>hadoop-client</hadoop-client-minicluster.artifact>
-        <gcs-connector.version>hadoop2-2.2.7</gcs-connector.version>
+        <gcs-connector.version>hadoop2-2.2.11</gcs-connector.version>
         <!-- SPARK-36547: Please don't upgrade the version below, otherwise there will be an error on building Hadoop 2.7 package -->
         <scala-maven-plugin.version>4.3.0</scala-maven-plugin.version>
       </properties>

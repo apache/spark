@@ -37,6 +37,7 @@ import org.apache.spark.connect.proto.WriteStreamOperation
 import org.apache.spark.connect.proto.WriteStreamOperation.TriggerCase
 import org.apache.spark.ml.{functions => MLFunctions}
 import org.apache.spark.sql.{Column, Dataset, Encoders, SparkSession}
+import org.apache.spark.sql.avro.{AvroDataToCatalyst, CatalystDataToAvro}
 import org.apache.spark.sql.catalyst.{expressions, AliasIdentifier, FunctionIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{GlobalTempView, LocalTempView, MultiAlias, ParameterizedQuery, UnresolvedAlias, UnresolvedAttribute, UnresolvedExtractValue, UnresolvedFunction, UnresolvedRegex, UnresolvedRelation, UnresolvedStar}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
@@ -46,9 +47,9 @@ import org.apache.spark.sql.catalyst.plans.{Cross, FullOuter, Inner, JoinType, L
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical.{CollectMetrics, CommandResult, Deduplicate, Except, Intersect, LocalRelation, LogicalPlan, Project, Sample, Sort, SubqueryAlias, Union, Unpivot, UnresolvedHint}
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CharVarcharUtils}
-import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, InvalidPlanInput, UdfPacket}
+import org.apache.spark.sql.connect.artifact.SparkConnectArtifactManager
+import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, InvalidPlanInput, LiteralValueProtoConverter, UdfPacket}
 import org.apache.spark.sql.connect.config.Connect.CONNECT_GRPC_ARROW_MAX_BATCH_SIZE
-import org.apache.spark.sql.connect.planner.LiteralExpressionProtoConverter.{toCatalystExpression, toCatalystValue}
 import org.apache.spark.sql.connect.plugin.SparkConnectPluginRegistry
 import org.apache.spark.sql.connect.service.SparkConnectStreamHandler
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -63,6 +64,7 @@ import org.apache.spark.sql.execution.streaming.StreamingQueryWrapper
 import org.apache.spark.sql.internal.CatalogImpl
 import org.apache.spark.sql.streaming.Trigger
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.Utils
 
 final case class InvalidCommandInput(
@@ -129,6 +131,8 @@ class SparkConnectPlanner(val session: SparkSession) {
         transformMapPartitions(rel.getMapPartitions)
       case proto.Relation.RelTypeCase.GROUP_MAP =>
         transformGroupMap(rel.getGroupMap)
+      case proto.Relation.RelTypeCase.CO_GROUP_MAP =>
+        transformCoGroupMap(rel.getCoGroupMap)
       case proto.Relation.RelTypeCase.COLLECT_METRICS =>
         transformCollectMetrics(rel.getCollectMetrics)
       case proto.Relation.RelTypeCase.PARSE => transformParse(rel.getParse)
@@ -338,7 +342,7 @@ class SparkConnectPlanner(val session: SparkSession) {
     } else {
       val valueMap = mutable.Map.empty[String, Any]
       cols.zip(values).foreach { case (col, value) =>
-        valueMap.update(col, toCatalystValue(value))
+        valueMap.update(col, LiteralValueProtoConverter.toCatalystValue(value))
       }
       dataset.na.fill(valueMap = valueMap.toMap).logicalPlan
     }
@@ -365,8 +369,8 @@ class SparkConnectPlanner(val session: SparkSession) {
     val replacement = mutable.Map.empty[Any, Any]
     rel.getReplacementsList.asScala.foreach { replace =>
       replacement.update(
-        toCatalystValue(replace.getOldValue),
-        toCatalystValue(replace.getNewValue))
+        LiteralValueProtoConverter.toCatalystValue(replace.getOldValue),
+        LiteralValueProtoConverter.toCatalystValue(replace.getNewValue))
     }
 
     if (rel.getColsCount == 0) {
@@ -491,17 +495,20 @@ class SparkConnectPlanner(val session: SparkSession) {
   private def transformMapPartitions(rel: proto.MapPartitions): LogicalPlan = {
     val commonUdf = rel.getFunc
     val pythonUdf = transformPythonUDF(commonUdf)
+    val isBarrier = if (rel.hasIsBarrier) rel.getIsBarrier else false
     pythonUdf.evalType match {
       case PythonEvalType.SQL_MAP_PANDAS_ITER_UDF =>
         logical.MapInPandas(
           pythonUdf,
           pythonUdf.dataType.asInstanceOf[StructType].toAttributes,
-          transformRelation(rel.getInput))
+          transformRelation(rel.getInput),
+          isBarrier)
       case PythonEvalType.SQL_MAP_ARROW_ITER_UDF =>
         logical.PythonMapInArrow(
           pythonUdf,
           pythonUdf.dataType.asInstanceOf[StructType].toAttributes,
-          transformRelation(rel.getInput))
+          transformRelation(rel.getInput),
+          isBarrier)
       case _ =>
         throw InvalidPlanInput(s"Function with EvalType: ${pythonUdf.evalType} is not supported")
     }
@@ -517,6 +524,26 @@ class SparkConnectPlanner(val session: SparkSession) {
       .groupBy(cols: _*)
       .flatMapGroupsInPandas(pythonUdf)
       .logicalPlan
+  }
+
+  private def transformCoGroupMap(rel: proto.CoGroupMap): LogicalPlan = {
+    val pythonUdf = transformPythonUDF(rel.getFunc)
+
+    val inputCols =
+      rel.getInputGroupingExpressionsList.asScala.toSeq.map(expr =>
+        Column(transformExpression(expr)))
+    val otherCols =
+      rel.getOtherGroupingExpressionsList.asScala.toSeq.map(expr =>
+        Column(transformExpression(expr)))
+
+    val input = Dataset
+      .ofRows(session, transformRelation(rel.getInput))
+      .groupBy(inputCols: _*)
+    val other = Dataset
+      .ofRows(session, transformRelation(rel.getOther))
+      .groupBy(otherCols: _*)
+
+    input.flatMapCoGroupsInPandas(other, pythonUdf).logicalPlan
   }
 
   private def transformWithColumnsRenamed(rel: proto.WithColumnsRenamed): LogicalPlan = {
@@ -712,26 +739,30 @@ class SparkConnectPlanner(val session: SparkSession) {
       if (schema == null) {
         logical.LocalRelation(attributes, data.map(_.copy()).toSeq)
       } else {
-        def udtToSqlType(dt: DataType): DataType = dt match {
-          case udt: UserDefinedType[_] => udt.sqlType
+        def normalize(dt: DataType): DataType = dt match {
+          case udt: UserDefinedType[_] => normalize(udt.sqlType)
           case StructType(fields) =>
-            val newFields = fields.map { case StructField(name, dataType, nullable, metadata) =>
-              StructField(name, udtToSqlType(dataType), nullable, metadata)
+            val newFields = fields.zipWithIndex.map {
+              case (StructField(_, dataType, nullable, metadata), i) =>
+                StructField(s"col_$i", normalize(dataType), nullable, metadata)
             }
             StructType(newFields)
           case ArrayType(elementType, containsNull) =>
-            ArrayType(udtToSqlType(elementType), containsNull)
+            ArrayType(normalize(elementType), containsNull)
           case MapType(keyType, valueType, valueContainsNull) =>
-            MapType(udtToSqlType(keyType), udtToSqlType(valueType), valueContainsNull)
+            MapType(normalize(keyType), normalize(valueType), valueContainsNull)
           case _ => dt
         }
 
-        val sqlTypeOnlySchema = udtToSqlType(schema).asInstanceOf[StructType]
+        val normalized = normalize(schema).asInstanceOf[StructType]
 
         val project = Dataset
-          .ofRows(session, logicalPlan = logical.LocalRelation(attributes))
-          .toDF(sqlTypeOnlySchema.names: _*)
-          .to(sqlTypeOnlySchema)
+          .ofRows(
+            session,
+            logicalPlan =
+              logical.LocalRelation(normalize(structType).asInstanceOf[StructType].toAttributes))
+          .toDF(normalized.names: _*)
+          .to(normalized)
           .logicalPlan
           .asInstanceOf[Project]
 
@@ -763,7 +794,9 @@ class SparkConnectPlanner(val session: SparkSession) {
       case proto.Read.ReadTypeCase.NAMED_TABLE if !rel.getIsStreaming =>
         val multipartIdentifier =
           CatalystSqlParser.parseMultipartIdentifier(rel.getNamedTable.getUnparsedIdentifier)
-        UnresolvedRelation(multipartIdentifier)
+        UnresolvedRelation(
+          multipartIdentifier,
+          new CaseInsensitiveStringMap(rel.getNamedTable.getOptionsMap))
 
       case proto.Read.ReadTypeCase.DATA_SOURCE if !rel.getIsStreaming =>
         val localMap = CaseInsensitiveMap[String](rel.getDataSource.getOptionsMap.asScala.toMap)
@@ -951,7 +984,7 @@ class SparkConnectPlanner(val session: SparkSession) {
    *   Expression
    */
   private def transformLiteral(lit: proto.Expression.Literal): Literal = {
-    toCatalystExpression(lit)
+    LiteralExpressionProtoConverter.toCatalystExpression(lit)
   }
 
   private def transformLimit(limit: proto.Limit): LogicalPlan = {
@@ -1028,7 +1061,9 @@ class SparkConnectPlanner(val session: SparkSession) {
   private def transformScalarScalaUDF(fun: proto.CommonInlineUserDefinedFunction): ScalaUDF = {
     val udf = fun.getScalarScalaUdf
     val udfPacket =
-      Utils.deserialize[UdfPacket](udf.getPayload.toByteArray, Utils.getContextOrSparkClassLoader)
+      Utils.deserialize[UdfPacket](
+        udf.getPayload.toByteArray,
+        SparkConnectArtifactManager.classLoaderWithArtifacts)
     ScalaUDF(
       function = udfPacket.function,
       dataType = udfPacket.outputEncoder.dataType,
@@ -1262,6 +1297,44 @@ class SparkConnectPlanner(val session: SparkSession) {
         } else {
           None
         }
+
+      // Avro-specific functions
+      case "from_avro" if Seq(2, 3).contains(fun.getArgumentsCount) =>
+        val children = fun.getArgumentsList.asScala.toSeq.map(transformExpression)
+        val jsonFormatSchema = children(1) match {
+          case Literal(s, StringType) if s != null => s.toString
+          case other =>
+            throw InvalidPlanInput(
+              s"jsonFormatSchema in from_avro should be a literal string, but got $other")
+        }
+        var options = Map.empty[String, String]
+        if (fun.getArgumentsCount == 3) {
+          children(2) match {
+            case UnresolvedFunction(Seq("map"), arguments, _, _, _) =>
+              options = ExprUtils.convertToMapData(CreateMap(arguments))
+            case other =>
+              throw InvalidPlanInput(
+                s"Options in from_json should be created by map, but got $other")
+          }
+        }
+        Some(AvroDataToCatalyst(children.head, jsonFormatSchema, options))
+
+      case "to_avro" if Seq(1, 2).contains(fun.getArgumentsCount) =>
+        val children = fun.getArgumentsList.asScala.toSeq.map(transformExpression)
+        var jsonFormatSchema = Option.empty[String]
+        if (fun.getArgumentsCount == 2) {
+          children(1) match {
+            case Literal(s, StringType) if s != null => jsonFormatSchema = Some(s.toString)
+            case other =>
+              throw InvalidPlanInput(
+                s"jsonFormatSchema in to_avro should be a literal string, but got $other")
+          }
+        }
+        Some(CatalystDataToAvro(children.head, jsonFormatSchema))
+
+      // PS(Pandas API on Spark)-specific functions
+      case "distributed_sequence_id" if fun.getArgumentsCount == 0 =>
+        Some(DistributedSequenceID())
 
       // ML-specific functions
       case "vector_to_array" if fun.getArgumentsCount == 2 =>

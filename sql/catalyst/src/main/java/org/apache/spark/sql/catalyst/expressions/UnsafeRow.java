@@ -21,10 +21,6 @@ import java.io.*;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.nio.ByteBuffer;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.Set;
 
 import com.esotericsoftware.kryo.Kryo;
 import com.esotericsoftware.kryo.KryoSerializable;
@@ -32,6 +28,7 @@ import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
 
 import org.apache.spark.sql.catalyst.InternalRow;
+import org.apache.spark.sql.catalyst.types.*;
 import org.apache.spark.sql.types.*;
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.array.ByteArrayMethods;
@@ -40,7 +37,6 @@ import org.apache.spark.unsafe.hash.Murmur3_x86_32;
 import org.apache.spark.unsafe.types.CalendarInterval;
 import org.apache.spark.unsafe.types.UTF8String;
 
-import static org.apache.spark.sql.types.DataTypes.*;
 import static org.apache.spark.unsafe.Platform.BYTE_ARRAY_OFFSET;
 
 /**
@@ -71,50 +67,30 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
   }
 
   /**
-   * Field types that can be updated in place in UnsafeRows (e.g. we support set() for these types)
+   * Field types that hold fixed-length, store the value directly in an 8-byte word
    */
-  public static final Set<DataType> mutableFieldTypes;
-
-  // DecimalType, DayTimeIntervalType and YearMonthIntervalType are also mutable
-  static {
-    mutableFieldTypes = Collections.unmodifiableSet(
-      new HashSet<>(
-        Arrays.asList(
-          NullType,
-          BooleanType,
-          ByteType,
-          ShortType,
-          IntegerType,
-          LongType,
-          FloatType,
-          DoubleType,
-          DateType,
-          TimestampType,
-          TimestampNTZType
-        )));
-  }
-
   public static boolean isFixedLength(DataType dt) {
     if (dt instanceof UserDefinedType) {
-      return isFixedLength(((UserDefinedType) dt).sqlType());
+      return isFixedLength(((UserDefinedType<?>) dt).sqlType());
     }
-
-    if (dt instanceof DecimalType) {
+    PhysicalDataType pdt = dt.physicalDataType();
+    if (pdt instanceof PhysicalDecimalType) {
       return ((DecimalType) dt).precision() <= Decimal.MAX_LONG_DIGITS();
     } else {
-      return dt instanceof DayTimeIntervalType || dt instanceof YearMonthIntervalType ||
-        mutableFieldTypes.contains(dt);
+      return pdt instanceof PhysicalPrimitiveType;
     }
   }
 
+  /**
+   * Field types that can be updated in place in UnsafeRows (e.g. we support set() for these types)
+   */
   public static boolean isMutable(DataType dt) {
     if (dt instanceof UserDefinedType) {
-      return isMutable(((UserDefinedType) dt).sqlType());
+      return isMutable(((UserDefinedType<?>) dt).sqlType());
     }
-
-    return mutableFieldTypes.contains(dt) || dt instanceof DecimalType ||
-      dt instanceof CalendarIntervalType || dt instanceof DayTimeIntervalType ||
-      dt instanceof YearMonthIntervalType;
+    PhysicalDataType pdt = dt.physicalDataType();
+    return pdt instanceof PhysicalPrimitiveType || pdt instanceof PhysicalDecimalType ||
+      pdt instanceof PhysicalCalendarIntervalType;
   }
 
   //////////////////////////////////////////////////////////////////////////////

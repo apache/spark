@@ -41,6 +41,7 @@ import google.protobuf.internal.containers
 import google.protobuf.internal.enum_type_wrapper
 import google.protobuf.message
 import pyspark.sql.connect.proto.commands_pb2
+import pyspark.sql.connect.proto.common_pb2
 import pyspark.sql.connect.proto.expressions_pb2
 import pyspark.sql.connect.proto.relations_pb2
 import pyspark.sql.connect.proto.types_pb2
@@ -367,6 +368,100 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
         ) -> builtins.bool: ...
         def ClearField(self, field_name: typing_extensions.Literal["plan", b"plan"]) -> None: ...
 
+    class Persist(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        RELATION_FIELD_NUMBER: builtins.int
+        STORAGE_LEVEL_FIELD_NUMBER: builtins.int
+        @property
+        def relation(self) -> pyspark.sql.connect.proto.relations_pb2.Relation:
+            """(Required) The logical plan to persist."""
+        @property
+        def storage_level(self) -> pyspark.sql.connect.proto.common_pb2.StorageLevel:
+            """(Optional) The storage level."""
+        def __init__(
+            self,
+            *,
+            relation: pyspark.sql.connect.proto.relations_pb2.Relation | None = ...,
+            storage_level: pyspark.sql.connect.proto.common_pb2.StorageLevel | None = ...,
+        ) -> None: ...
+        def HasField(
+            self,
+            field_name: typing_extensions.Literal[
+                "_storage_level",
+                b"_storage_level",
+                "relation",
+                b"relation",
+                "storage_level",
+                b"storage_level",
+            ],
+        ) -> builtins.bool: ...
+        def ClearField(
+            self,
+            field_name: typing_extensions.Literal[
+                "_storage_level",
+                b"_storage_level",
+                "relation",
+                b"relation",
+                "storage_level",
+                b"storage_level",
+            ],
+        ) -> None: ...
+        def WhichOneof(
+            self, oneof_group: typing_extensions.Literal["_storage_level", b"_storage_level"]
+        ) -> typing_extensions.Literal["storage_level"] | None: ...
+
+    class Unpersist(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        RELATION_FIELD_NUMBER: builtins.int
+        BLOCKING_FIELD_NUMBER: builtins.int
+        @property
+        def relation(self) -> pyspark.sql.connect.proto.relations_pb2.Relation:
+            """(Required) The logical plan to unpersist."""
+        blocking: builtins.bool
+        """(Optional) Whether to block until all blocks are deleted."""
+        def __init__(
+            self,
+            *,
+            relation: pyspark.sql.connect.proto.relations_pb2.Relation | None = ...,
+            blocking: builtins.bool | None = ...,
+        ) -> None: ...
+        def HasField(
+            self,
+            field_name: typing_extensions.Literal[
+                "_blocking", b"_blocking", "blocking", b"blocking", "relation", b"relation"
+            ],
+        ) -> builtins.bool: ...
+        def ClearField(
+            self,
+            field_name: typing_extensions.Literal[
+                "_blocking", b"_blocking", "blocking", b"blocking", "relation", b"relation"
+            ],
+        ) -> None: ...
+        def WhichOneof(
+            self, oneof_group: typing_extensions.Literal["_blocking", b"_blocking"]
+        ) -> typing_extensions.Literal["blocking"] | None: ...
+
+    class GetStorageLevel(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        RELATION_FIELD_NUMBER: builtins.int
+        @property
+        def relation(self) -> pyspark.sql.connect.proto.relations_pb2.Relation:
+            """(Required) The logical plan to get the storage level."""
+        def __init__(
+            self,
+            *,
+            relation: pyspark.sql.connect.proto.relations_pb2.Relation | None = ...,
+        ) -> None: ...
+        def HasField(
+            self, field_name: typing_extensions.Literal["relation", b"relation"]
+        ) -> builtins.bool: ...
+        def ClearField(
+            self, field_name: typing_extensions.Literal["relation", b"relation"]
+        ) -> None: ...
+
     SESSION_ID_FIELD_NUMBER: builtins.int
     USER_CONTEXT_FIELD_NUMBER: builtins.int
     CLIENT_TYPE_FIELD_NUMBER: builtins.int
@@ -380,6 +475,9 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
     DDL_PARSE_FIELD_NUMBER: builtins.int
     SAME_SEMANTICS_FIELD_NUMBER: builtins.int
     SEMANTIC_HASH_FIELD_NUMBER: builtins.int
+    PERSIST_FIELD_NUMBER: builtins.int
+    UNPERSIST_FIELD_NUMBER: builtins.int
+    GET_STORAGE_LEVEL_FIELD_NUMBER: builtins.int
     session_id: builtins.str
     """(Required)
 
@@ -415,6 +513,12 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
     def same_semantics(self) -> global___AnalyzePlanRequest.SameSemantics: ...
     @property
     def semantic_hash(self) -> global___AnalyzePlanRequest.SemanticHash: ...
+    @property
+    def persist(self) -> global___AnalyzePlanRequest.Persist: ...
+    @property
+    def unpersist(self) -> global___AnalyzePlanRequest.Unpersist: ...
+    @property
+    def get_storage_level(self) -> global___AnalyzePlanRequest.GetStorageLevel: ...
     def __init__(
         self,
         *,
@@ -431,6 +535,9 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
         ddl_parse: global___AnalyzePlanRequest.DDLParse | None = ...,
         same_semantics: global___AnalyzePlanRequest.SameSemantics | None = ...,
         semantic_hash: global___AnalyzePlanRequest.SemanticHash | None = ...,
+        persist: global___AnalyzePlanRequest.Persist | None = ...,
+        unpersist: global___AnalyzePlanRequest.Unpersist | None = ...,
+        get_storage_level: global___AnalyzePlanRequest.GetStorageLevel | None = ...,
     ) -> None: ...
     def HasField(
         self,
@@ -445,12 +552,16 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
             b"ddl_parse",
             "explain",
             b"explain",
+            "get_storage_level",
+            b"get_storage_level",
             "input_files",
             b"input_files",
             "is_local",
             b"is_local",
             "is_streaming",
             b"is_streaming",
+            "persist",
+            b"persist",
             "same_semantics",
             b"same_semantics",
             "schema",
@@ -461,6 +572,8 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
             b"spark_version",
             "tree_string",
             b"tree_string",
+            "unpersist",
+            b"unpersist",
             "user_context",
             b"user_context",
         ],
@@ -478,12 +591,16 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
             b"ddl_parse",
             "explain",
             b"explain",
+            "get_storage_level",
+            b"get_storage_level",
             "input_files",
             b"input_files",
             "is_local",
             b"is_local",
             "is_streaming",
             b"is_streaming",
+            "persist",
+            b"persist",
             "same_semantics",
             b"same_semantics",
             "schema",
@@ -496,6 +613,8 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
             b"spark_version",
             "tree_string",
             b"tree_string",
+            "unpersist",
+            b"unpersist",
             "user_context",
             b"user_context",
         ],
@@ -518,6 +637,9 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
         "ddl_parse",
         "same_semantics",
         "semantic_hash",
+        "persist",
+        "unpersist",
+        "get_storage_level",
     ] | None: ...
 
 global___AnalyzePlanRequest = AnalyzePlanRequest
@@ -679,6 +801,39 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
             self, field_name: typing_extensions.Literal["result", b"result"]
         ) -> None: ...
 
+    class Persist(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        def __init__(
+            self,
+        ) -> None: ...
+
+    class Unpersist(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        def __init__(
+            self,
+        ) -> None: ...
+
+    class GetStorageLevel(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        STORAGE_LEVEL_FIELD_NUMBER: builtins.int
+        @property
+        def storage_level(self) -> pyspark.sql.connect.proto.common_pb2.StorageLevel:
+            """(Required) The StorageLevel as a result of get_storage_level request."""
+        def __init__(
+            self,
+            *,
+            storage_level: pyspark.sql.connect.proto.common_pb2.StorageLevel | None = ...,
+        ) -> None: ...
+        def HasField(
+            self, field_name: typing_extensions.Literal["storage_level", b"storage_level"]
+        ) -> builtins.bool: ...
+        def ClearField(
+            self, field_name: typing_extensions.Literal["storage_level", b"storage_level"]
+        ) -> None: ...
+
     SESSION_ID_FIELD_NUMBER: builtins.int
     SCHEMA_FIELD_NUMBER: builtins.int
     EXPLAIN_FIELD_NUMBER: builtins.int
@@ -690,6 +845,9 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
     DDL_PARSE_FIELD_NUMBER: builtins.int
     SAME_SEMANTICS_FIELD_NUMBER: builtins.int
     SEMANTIC_HASH_FIELD_NUMBER: builtins.int
+    PERSIST_FIELD_NUMBER: builtins.int
+    UNPERSIST_FIELD_NUMBER: builtins.int
+    GET_STORAGE_LEVEL_FIELD_NUMBER: builtins.int
     session_id: builtins.str
     @property
     def schema(self) -> global___AnalyzePlanResponse.Schema: ...
@@ -711,6 +869,12 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
     def same_semantics(self) -> global___AnalyzePlanResponse.SameSemantics: ...
     @property
     def semantic_hash(self) -> global___AnalyzePlanResponse.SemanticHash: ...
+    @property
+    def persist(self) -> global___AnalyzePlanResponse.Persist: ...
+    @property
+    def unpersist(self) -> global___AnalyzePlanResponse.Unpersist: ...
+    @property
+    def get_storage_level(self) -> global___AnalyzePlanResponse.GetStorageLevel: ...
     def __init__(
         self,
         *,
@@ -725,6 +889,9 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
         ddl_parse: global___AnalyzePlanResponse.DDLParse | None = ...,
         same_semantics: global___AnalyzePlanResponse.SameSemantics | None = ...,
         semantic_hash: global___AnalyzePlanResponse.SemanticHash | None = ...,
+        persist: global___AnalyzePlanResponse.Persist | None = ...,
+        unpersist: global___AnalyzePlanResponse.Unpersist | None = ...,
+        get_storage_level: global___AnalyzePlanResponse.GetStorageLevel | None = ...,
     ) -> None: ...
     def HasField(
         self,
@@ -733,12 +900,16 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
             b"ddl_parse",
             "explain",
             b"explain",
+            "get_storage_level",
+            b"get_storage_level",
             "input_files",
             b"input_files",
             "is_local",
             b"is_local",
             "is_streaming",
             b"is_streaming",
+            "persist",
+            b"persist",
             "result",
             b"result",
             "same_semantics",
@@ -751,6 +922,8 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
             b"spark_version",
             "tree_string",
             b"tree_string",
+            "unpersist",
+            b"unpersist",
         ],
     ) -> builtins.bool: ...
     def ClearField(
@@ -760,12 +933,16 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
             b"ddl_parse",
             "explain",
             b"explain",
+            "get_storage_level",
+            b"get_storage_level",
             "input_files",
             b"input_files",
             "is_local",
             b"is_local",
             "is_streaming",
             b"is_streaming",
+            "persist",
+            b"persist",
             "result",
             b"result",
             "same_semantics",
@@ -780,6 +957,8 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
             b"spark_version",
             "tree_string",
             b"tree_string",
+            "unpersist",
+            b"unpersist",
         ],
     ) -> None: ...
     def WhichOneof(
@@ -795,6 +974,9 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
         "ddl_parse",
         "same_semantics",
         "semantic_hash",
+        "persist",
+        "unpersist",
+        "get_storage_level",
     ] | None: ...
 
 global___AnalyzePlanResponse = AnalyzePlanResponse

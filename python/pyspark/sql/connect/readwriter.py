@@ -131,7 +131,7 @@ class DataFrameReader(OptionUtils):
         return DataFrame.withPlan(plan, self._client)
 
     def table(self, tableName: str) -> "DataFrame":
-        return self._df(Read(tableName))
+        return self._df(Read(tableName, self._options))
 
     table.__doc__ = PySparkDataFrameReader.table.__doc__
 
