@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.expressions.WindowExpression.hasWindowExpre
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.trees.TreePattern.{LATERAL_COLUMN_ALIAS_REFERENCE, TEMP_RESOLVED_COLUMN}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{LATERAL_COLUMN_ALIAS_REFERENCE, TEMP_RESOLVED_COLUMN, UNRESOLVED_HAVING}
 import org.apache.spark.sql.catalyst.util.toPrettySQL
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
@@ -134,10 +134,11 @@ object ResolveLateralColumnAliasReference extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = {
     if (!conf.getConf(SQLConf.LATERAL_COLUMN_ALIAS_IMPLICIT_ENABLED)) {
       plan
-    } else if (plan.containsPattern(TEMP_RESOLVED_COLUMN)) {
-      // We should not change the plan if `TempResolvedColumn` is present in the query plan. It
-      // needs certain plan shape to get resolved, such as Filter/Sort + Aggregate. LCA resolution
-      // may break the plan shape, like adding Project above Aggregate.
+    } else if (plan.containsAnyPattern(TEMP_RESOLVED_COLUMN, UNRESOLVED_HAVING)) {
+      // It should not change the plan if `TempResolvedColumn` or `UnresolvedHaving` is present in
+      // the query plan. These plans need certain plan shape to get recognized and resolved by other
+      // rules, such as Filter/Sort + Aggregate to be matched by ResolveAggregateFunctions.
+      // LCA resolution can break the plan shape, like adding Project above Aggregate.
       plan
     } else {
       // phase 2: unwrap
