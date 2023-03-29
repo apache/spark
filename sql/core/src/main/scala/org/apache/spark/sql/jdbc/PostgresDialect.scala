@@ -218,10 +218,17 @@ private object PostgresDialect extends JdbcDialect with SQLConfHelper {
           case "42P07" =>
             // The message is: Failed to create index indexName in tableName
             val regex = "(?s)Failed to create index (.*) in (.*)".r
-            val indexName = regex.findFirstMatchIn(message).get.group(1)
-            val tableName = regex.findFirstMatchIn(message).get.group(2)
-            throw new IndexAlreadyExistsException(
-              indexName = indexName, tableName = tableName, cause = Some(e))
+            val maybeMatchIndex = regex.findFirstMatchIn(message)
+            if (maybeMatchIndex.nonEmpty) {
+              val indexName = maybeMatchIndex.get.group(1)
+              val tableName = maybeMatchIndex.get.group(2)
+              throw new IndexAlreadyExistsException(
+                indexName = indexName, tableName = tableName, cause = Some(e))
+            } else {
+              val regex = """relation "(.*)" already exists""".r
+              val tableName = regex.findFirstMatchIn(message).get.group(1)
+              throw QueryCompilationErrors.tableAlreadyExistsError(tableName)
+            }
           case "42704" =>
             // The message is: Failed to drop index indexName in tableName
             val regex = "(?s)Failed to drop index (.*) in (.*)".r
