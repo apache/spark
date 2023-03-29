@@ -885,15 +885,14 @@ case class SessionWindowStateStoreSaveExec(
   }
 }
 
-
-/** Physical operator for executing streaming Deduplicate. */
-case class StreamingDeduplicateExec(
-    keyExpressions: Seq[Attribute],
-    child: SparkPlan,
-    stateInfo: Option[StatefulOperatorStateInfo] = None,
-    eventTimeWatermarkForLateEvents: Option[Long] = None,
-    eventTimeWatermarkForEviction: Option[Long] = None)
+abstract class BaseStreamingDeduplicateExec
   extends UnaryExecNode with StateStoreWriter with WatermarkSupport {
+
+  def keyExpressions: Seq[Attribute]
+  def child: SparkPlan
+  def stateInfo: Option[StatefulOperatorStateInfo]
+  def eventTimeWatermarkForLateEvents: Option[Long]
+  def eventTimeWatermarkForEviction: Option[Long]
 
   /** Distribute by grouping attributes */
   override def requiredChildDistribution: Seq[Distribution] = {
@@ -901,7 +900,8 @@ case class StreamingDeduplicateExec(
       keyExpressions, getStateInfo, conf) :: Nil
   }
 
-  private val schemaForEmptyRow: StructType = StructType(Array(StructField("__dummy__", NullType)))
+  protected val schemaForValueRow: StructType
+  protected val extraOptionOnStateStore: Map[String, String]
 
   override protected def doExecute(): RDD[InternalRow] = {
     metrics // force lazy init at driver
@@ -909,13 +909,11 @@ case class StreamingDeduplicateExec(
     child.execute().mapPartitionsWithStateStore(
       getStateInfo,
       keyExpressions.toStructType,
-      schemaForEmptyRow,
+      schemaForValueRow,
       numColsPrefixKey = 0,
       session.sessionState,
       Some(session.streams.stateStoreCoordinator),
-      // We won't check value row in state store since the value StreamingDeduplicateExec.EMPTY_ROW
-      // is unrelated to the output schema.
-      Map(StateStoreConf.FORMAT_VALIDATION_CHECK_VALUE_CONFIG -> "false")) { (store, iter) =>
+      extraOptionOnStateStore) { (store, iter) =>
       val getKey = GenerateUnsafeProjection.generate(keyExpressions, child.output)
       val numOutputRows = longMetric("numOutputRows")
       val numUpdatedStateRows = longMetric("numUpdatedStateRows")
@@ -929,6 +927,8 @@ case class StreamingDeduplicateExec(
         case None => iter
       }
 
+      val reusedDupInfoRow = initializeReusedDupInfoRow()
+
       val updatesStartTimeNs = System.nanoTime
 
       val result = baseIterator.filter { r =>
@@ -936,7 +936,7 @@ case class StreamingDeduplicateExec(
         val key = getKey(row)
         val value = store.get(key)
         if (value == null) {
-          store.put(key, StreamingDeduplicateExec.EMPTY_ROW)
+          putDupInfoIntoState(store, row, key, reusedDupInfoRow)
           numUpdatedStateRows += 1
           numOutputRows += 1
           true
@@ -949,13 +949,23 @@ case class StreamingDeduplicateExec(
 
       CompletionIterator[InternalRow, Iterator[InternalRow]](result, {
         allUpdatesTimeMs += NANOSECONDS.toMillis(System.nanoTime - updatesStartTimeNs)
-        allRemovalsTimeMs += timeTakenMs { removeKeysOlderThanWatermark(store) }
+        allRemovalsTimeMs += timeTakenMs { evictDupInfoFromState(store) }
         commitTimeMs += timeTakenMs { store.commit() }
         setStoreMetrics(store)
         setOperatorMetrics()
       })
     }
   }
+
+  protected def initializeReusedDupInfoRow(): Option[UnsafeRow]
+
+  protected def putDupInfoIntoState(
+      store: StateStore,
+      data: UnsafeRow,
+      key: UnsafeRow,
+      reusedDupInfoRow: Option[UnsafeRow]): Unit
+
+  protected def evictDupInfoFromState(store: StateStore): Unit
 
   override def output: Seq[Attribute] = child.output
 
@@ -965,12 +975,44 @@ case class StreamingDeduplicateExec(
     Seq(StatefulOperatorCustomSumMetric("numDroppedDuplicateRows", "number of duplicates dropped"))
   }
 
-  override def shortName: String = "dedupe"
-
   override def shouldRunAnotherBatch(newInputWatermark: Long): Boolean = {
     eventTimeWatermarkForEviction.isDefined &&
       newInputWatermark > eventTimeWatermarkForEviction.get
   }
+}
+
+/** Physical operator for executing streaming Deduplicate. */
+case class StreamingDeduplicateExec(
+    keyExpressions: Seq[Attribute],
+    child: SparkPlan,
+    stateInfo: Option[StatefulOperatorStateInfo] = None,
+    eventTimeWatermarkForLateEvents: Option[Long] = None,
+    eventTimeWatermarkForEviction: Option[Long] = None)
+  extends BaseStreamingDeduplicateExec {
+
+  protected val schemaForValueRow: StructType =
+    StructType(Array(StructField("__dummy__", NullType)))
+
+  // We won't check value row in state store since the value StreamingDeduplicateExec.EMPTY_ROW
+  // is unrelated to the output schema.
+  protected val extraOptionOnStateStore: Map[String, String] =
+    Map(StateStoreConf.FORMAT_VALIDATION_CHECK_VALUE_CONFIG -> "false")
+
+  protected def initializeReusedDupInfoRow(): Option[UnsafeRow] = None
+
+  protected def putDupInfoIntoState(
+      store: StateStore,
+      data: UnsafeRow,
+      key: UnsafeRow,
+      reusedDupInfoRow: Option[UnsafeRow]): Unit = {
+    store.put(key, StreamingDeduplicateExec.EMPTY_ROW)
+  }
+
+  protected def evictDupInfoFromState(store: StateStore): Unit = {
+    removeKeysOlderThanWatermark(store)
+  }
+
+  override def shortName: String = "dedupe"
 
   override protected def withNewChildInternal(newChild: SparkPlan): StreamingDeduplicateExec =
     copy(child = newChild)
@@ -987,109 +1029,57 @@ case class StreamingDeduplicateWithinWatermarkExec(
     stateInfo: Option[StatefulOperatorStateInfo] = None,
     eventTimeWatermarkForLateEvents: Option[Long] = None,
     eventTimeWatermarkForEviction: Option[Long] = None)
-  extends UnaryExecNode with StateStoreWriter with WatermarkSupport {
+  extends BaseStreamingDeduplicateExec {
 
-  /** Distribute by grouping attributes */
-  override def requiredChildDistribution: Seq[Distribution] = {
-    StatefulOperatorPartitioning.getCompatibleDistribution(
-      keyExpressions, getStateInfo, conf) :: Nil
-  }
-
-  private val schemaForTimeoutRow: StructType = StructType(
+  protected val schemaForValueRow: StructType = StructType(
     Array(StructField("expiresAt", LongType, nullable = false)))
+
+  protected val extraOptionOnStateStore: Map[String, String] = Map.empty
+
   private val eventTimeCol: Attribute = WatermarkSupport.findEventTimeColumn(child.output,
     allowMultipleEventTimeColumns = false).get
-  private val delayThresholdMillis = eventTimeCol.metadata.getLong(EventTimeWatermark.delayKey)
+  private val delayThresholdMs = eventTimeCol.metadata.getLong(EventTimeWatermark.delayKey)
   private val eventTimeColOrdinal: Int = child.output.indexOf(eventTimeCol)
 
-  override protected def doExecute(): RDD[InternalRow] = {
-    metrics // force lazy init at driver
+  protected def initializeReusedDupInfoRow(): Option[UnsafeRow] = {
+    val timeoutToUnsafeRow = UnsafeProjection.create(schemaForValueRow)
+    val timeoutRow = timeoutToUnsafeRow(new SpecificInternalRow(schemaForValueRow))
+    Some(timeoutRow)
+  }
 
-    child.execute().mapPartitionsWithStateStore(
-      getStateInfo,
-      keyExpressions.toStructType,
-      schemaForTimeoutRow,
-      numColsPrefixKey = 0,
-      session.sessionState,
-      Some(session.streams.stateStoreCoordinator)) { (store, iter) =>
-      val getKey = GenerateUnsafeProjection.generate(keyExpressions, child.output)
+  protected def putDupInfoIntoState(
+      store: StateStore,
+      data: UnsafeRow,
+      key: UnsafeRow,
+      reusedDupInfoRow: Option[UnsafeRow]): Unit = {
+    assert(reusedDupInfoRow.isDefined, "This should have reused row.")
+    val timeoutRow = reusedDupInfoRow.get
 
-      val timeoutToUnsafeRow = UnsafeProjection.create(schemaForTimeoutRow)
-      val timeoutRow = timeoutToUnsafeRow(new SpecificInternalRow(schemaForTimeoutRow))
+    val timestamp = data.getLong(eventTimeColOrdinal)
+    // The unit of timestamp in Spark is microseconds, convert the delay threshold to micros.
+    val expiresAt = timestamp + delayThresholdMs * 1000
 
-      val numOutputRows = longMetric("numOutputRows")
-      val numUpdatedStateRows = longMetric("numUpdatedStateRows")
-      val numRemovedStateRows = longMetric("numRemovedStateRows")
-      val allUpdatesTimeMs = longMetric("allUpdatesTimeMs")
-      val allRemovalsTimeMs = longMetric("allRemovalsTimeMs")
-      val commitTimeMs = longMetric("commitTimeMs")
-      val numDroppedDuplicateRows = longMetric("numDroppedDuplicateRows")
+    timeoutRow.setLong(0, expiresAt)
+    store.put(key, timeoutRow)
+  }
 
-      val baseIterator = watermarkPredicateForDataForLateEvents match {
-        case Some(predicate) => applyRemovingRowsOlderThanWatermark(iter, predicate)
-        case None => iter
+  protected def evictDupInfoFromState(store: StateStore): Unit = {
+    val numRemovedStateRows = longMetric("numRemovedStateRows")
+
+    // Convert watermark value to micros.
+    val watermarkForEviction = eventTimeWatermarkForEviction.get * 1000
+    store.iterator().foreach { rowPair =>
+      val valueRow = rowPair.value
+
+      val expiresAt = valueRow.getLong(0)
+      if (watermarkForEviction >= expiresAt) {
+        store.remove(rowPair.key)
+        numRemovedStateRows += 1
       }
-
-      val updatesStartTimeNs = System.nanoTime
-
-      val result = baseIterator.filter { r =>
-        val row = r.asInstanceOf[UnsafeRow]
-        val key = getKey(row)
-        val value = store.get(key)
-        if (value == null) {
-          val timestamp = row.getLong(eventTimeColOrdinal)
-          // The unit of timestamp in Spark is microseconds, convert the delay threshold.
-          val expiresAt = timestamp + delayThresholdMillis * 1000
-
-          timeoutRow.setLong(0, expiresAt)
-          store.put(key, timeoutRow)
-
-          numUpdatedStateRows += 1
-          numOutputRows += 1
-          true
-        } else {
-          // Drop duplicated rows
-          numDroppedDuplicateRows += 1
-          false
-        }
-      }
-
-      CompletionIterator[InternalRow, Iterator[InternalRow]](result, {
-        allUpdatesTimeMs += NANOSECONDS.toMillis(System.nanoTime - updatesStartTimeNs)
-        allRemovalsTimeMs += timeTakenMs {
-          // Convert watermark value to microsecond
-          val watermarkForEviction = eventTimeWatermarkForEviction.get * 1000
-          store.iterator().foreach { rowPair =>
-            val valueRow = rowPair.value
-
-            val expiresAt = valueRow.getLong(0)
-            if (watermarkForEviction >= expiresAt) {
-              store.remove(rowPair.key)
-              numRemovedStateRows += 1
-            }
-          }
-        }
-        commitTimeMs += timeTakenMs { store.commit() }
-        setStoreMetrics(store)
-        setOperatorMetrics()
-      })
     }
   }
 
-  override def output: Seq[Attribute] = child.output
-
-  override def outputPartitioning: Partitioning = child.outputPartitioning
-
-  override def customStatefulOperatorMetrics: Seq[StatefulOperatorCustomMetric] = {
-    Seq(StatefulOperatorCustomSumMetric("numDroppedDuplicateRows", "number of duplicates dropped"))
-  }
-
   override def shortName: String = "dedupeWithinWatermark"
-
-  override def shouldRunAnotherBatch(newInputWatermark: Long): Boolean = {
-    eventTimeWatermarkForEviction.isDefined &&
-      newInputWatermark > eventTimeWatermarkForEviction.get
-  }
 
   override protected def withNewChildInternal(
       newChild: SparkPlan): StreamingDeduplicateWithinWatermarkExec = copy(child = newChild)
