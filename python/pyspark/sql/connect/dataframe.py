@@ -755,7 +755,7 @@ class DataFrame:
             parameters = parameters[0]  # type: ignore[assignment]
 
         if not isinstance(name, str):
-            raise TypeError("name should be prtovided as str, got {0}".format(type(name)))
+            raise TypeError("name should be provided as str, got {0}".format(type(name)))
 
         allowed_types = (str, list, float, int)
         for p in parameters:
@@ -1424,7 +1424,6 @@ class DataFrame:
     def isStreaming(self) -> bool:
         if self._plan is None:
             raise Exception("Cannot analyze on empty plan.")
-        # TODO: Revisit this.
         query = self._plan.to_proto(self._session.client)
         result = self._session.client._analyze(method="is_streaming", plan=query).is_streaming
         assert result is not None
@@ -1577,7 +1576,6 @@ class DataFrame:
         raise NotImplementedError("persist() is not implemented.")
 
     def foreach(self, *args: Any, **kwargs: Any) -> None:
-        # TODO: Need to support
         raise NotImplementedError("foreach() is not implemented.")
 
     def foreachPartition(self, *args: Any, **kwargs: Any) -> None:
@@ -1646,7 +1644,6 @@ class DataFrame:
     @property
     def writeStream(self) -> DataStreamWriter:
         return DataStreamWriter(plan=self._plan, session=self._session)
-    # TODO: Move it to same relative place in sql/dataframe.py.
 
     writeStream.__doc__ = PySparkDataFrame.writeStream.__doc__
 
