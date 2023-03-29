@@ -2171,7 +2171,7 @@ class PlanGenerationTestSuite
   }
 
   /* Avro functions */
-  test("from_avro") {
+  test("from_avro with options") {
     binary.select(
       avroFn.from_avro(
         fn.col("bytes"),
@@ -2179,9 +2179,15 @@ class PlanGenerationTestSuite
         Map("mode" -> "FAILFAST", "compression" -> "zstandard").asJava))
   }
 
-  test("to_avro") {
-    simple.select(
-      avroFn.to_avro(fn.col("id")),
-      avroFn.to_avro(fn.col("a"), """{"type": "int", "name": "id"}"""))
+  test("from_avro without options") {
+    binary.select(avroFn.from_avro(fn.col("bytes"), """{"type": "string", "name": "name"}"""))
+  }
+
+  test("to_avro with schema") {
+    simple.select(avroFn.to_avro(fn.col("a"), """{"type": "int", "name": "id"}"""))
+  }
+
+  test("to_avro without schema") {
+    simple.select(avroFn.to_avro(fn.col("id")))
   }
 }

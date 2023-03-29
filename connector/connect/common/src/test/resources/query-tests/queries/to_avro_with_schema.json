@@ -16,15 +16,6 @@
         "functionName": "to_avro",
         "arguments": [{
           "unresolvedAttribute": {
-            "unparsedIdentifier": "id"
-          }
-        }]
-      }
-    }, {
-      "unresolvedFunction": {
-        "functionName": "to_avro",
-        "arguments": [{
-          "unresolvedAttribute": {
             "unparsedIdentifier": "a"
           }
         }, {
