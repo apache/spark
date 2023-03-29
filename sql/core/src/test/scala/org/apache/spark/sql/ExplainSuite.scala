@@ -381,6 +381,12 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
       "* LocalTableScan (1)" ::
         "(1) LocalTableScan [codegen id :" ::
         Nil: _*)
+    checkKeywordsExistsInExplain(
+      testDf,
+      ValidationMode,
+      "== Parsed Logical Plan ==" ::
+        "== Analyzed Logical Plan ==" ::
+        Nil: _*)
   }
 
   test("SPARK-34970: Redact Map type options in explain output") {
@@ -394,7 +400,8 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
     Seq(SimpleMode, ExtendedMode, FormattedMode).foreach { mode =>
       checkKeywordsExistsInExplain(cmd, mode, value)
     }
-    Seq(SimpleMode, ExtendedMode, CodegenMode, CostMode, FormattedMode).foreach { mode =>
+    Seq(SimpleMode, ExtendedMode, CodegenMode, CostMode, FormattedMode, ValidationMode)
+      .foreach { mode =>
       checkKeywordsNotExistsInExplain(cmd, mode, password)
       checkKeywordsNotExistsInExplain(cmd, mode, token)
     }
@@ -415,7 +422,8 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
         .table(tableName)
 
       checkKeywordsExistsInExplain(df2, ExtendedMode, value)
-      Seq(SimpleMode, ExtendedMode, CodegenMode, CostMode, FormattedMode).foreach { mode =>
+      Seq(SimpleMode, ExtendedMode, CodegenMode, CostMode, FormattedMode, ValidationMode)
+        .foreach { mode =>
         checkKeywordsNotExistsInExplain(df2, mode, password)
         checkKeywordsNotExistsInExplain(df2, mode, token)
       }
@@ -433,6 +441,8 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
     assertExplainOutput(CodegenMode)
     assertExplainOutput(CostMode)
     assertExplainOutput(FormattedMode)
+    assertExplainOutput(ValidationMode)
+
 
     val errMsg = intercept[IllegalArgumentException] {
       ExplainMode.fromString("unknown")
@@ -617,7 +627,7 @@ class ExplainSuiteAE extends ExplainSuiteHelper with EnableAdaptiveExecutionSuit
 
   test("SPARK-35884: Explain should only display one plan before AQE takes effect") {
     val df = (0 to 10).toDF("id").where($"id" > 5)
-    val modes = Seq(SimpleMode, ExtendedMode, CostMode, FormattedMode)
+    val modes = Seq(SimpleMode, ExtendedMode, CostMode, FormattedMode, ValidationMode)
     modes.foreach { mode =>
       checkKeywordsExistsInExplain(df, mode, "AdaptiveSparkPlan")
       checkKeywordsNotExistsInExplain(df, mode, "Initial Plan", "Current Plan")

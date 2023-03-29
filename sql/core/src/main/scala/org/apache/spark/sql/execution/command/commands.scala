@@ -147,7 +147,7 @@ case class DataWritingCommandExec(cmd: DataWritingCommand, child: SparkPlan)
  * (but do NOT actually execute it).
  *
  * {{{
- *   EXPLAIN (EXTENDED | CODEGEN | COST | FORMATTED) SELECT * FROM ...
+ *   EXPLAIN (EXTENDED | CODEGEN | COST | FORMATTED | ANALYSED) SELECT * FROM ...
  * }}}
  *
  * @param logicalPlan plan to explain
