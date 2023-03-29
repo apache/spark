@@ -2712,8 +2712,7 @@ class Dataset[T] private[sql] (
    * @since 3.4.0
    */
   def toLocalIterator(): java.util.Iterator[T] = {
-    // TODO make this a destructive iterator.
-    collectResult().iterator
+    collectResult().destructiveIterator
   }
 
   /**

@@ -142,24 +142,41 @@ private[sql] class SparkResult[T](
   /**
    * Returns an iterator over the contents of the result.
    */
-  def iterator: java.util.Iterator[T] with AutoCloseable = {
+  def iterator: java.util.Iterator[T] with AutoCloseable =
+    buildIterator(destructive = false)
+
+  /**
+   * Returns an destructive iterator over the contents of the result.
+   */
+  def destructiveIterator: java.util.Iterator[T] with AutoCloseable =
+    buildIterator(destructive = true)
+
+  private def buildIterator(destructive: Boolean): java.util.Iterator[T] with AutoCloseable = {
     new java.util.Iterator[T] with AutoCloseable {
-      private[this] var batchIndex: Int = -1
       private[this] var iterator: java.util.Iterator[InternalRow] = Collections.emptyIterator()
       private[this] var deserializer: Deserializer[T] = _
+      private[this] var currentBatch: ColumnarBatch = _
+      private[this] val _destructive: Boolean = destructive
+
       override def hasNext: Boolean = {
         if (iterator.hasNext) {
           return true
         }
-        val nextBatchIndex = batchIndex + 1
+        val batchIndex = batches.indexOf(currentBatch)
+        var nextBatchIndex = batchIndex + 1
+        if (_destructive && currentBatch != null) {
+          batches.remove(batchIndex)
+          currentBatch.close()
+          nextBatchIndex -= 1
+        }
         val hasNextBatch = if (nextBatchIndex == batches.size) {
           processResponses(stopOnFirstNonEmptyResponse = true)
         } else {
           true
         }
         if (hasNextBatch) {
-          batchIndex = nextBatchIndex
-          iterator = batches(nextBatchIndex).rowIterator()
+          currentBatch = batches(nextBatchIndex)
+          iterator = currentBatch.rowIterator()
           if (deserializer == null) {
             deserializer = boundEncoder.createDeserializer()
           }
@@ -176,14 +193,6 @@ private[sql] class SparkResult[T](
 
       override def close(): Unit = SparkResult.this.close()
     }
-  }
-
-  /**
-   * Returns an destructive iterator over the contents of the result.
-   */
-  def destructiveIterator: java.util.Iterator[T] with AutoCloseable = {
-    // TODO: implementation
-    iterator
   }
 
   /**
