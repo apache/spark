@@ -795,7 +795,7 @@ class InternalFrame:
                 # in a few tests when using Spark Connect. However, the function works properly.
                 # Therefore, we temporarily perform Spark Connect tests by excluding metadata
                 # until the issue is resolved.
-                def remove_metadata(struct_field):
+                def remove_metadata(struct_field: StructField) -> StructField:
                     new_struct_field = StructField(
                         struct_field.name, struct_field.dataType, struct_field.nullable
                     )
