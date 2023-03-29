@@ -89,12 +89,8 @@ class RelationalGroupedDataset protected[sql](
     case expr: NamedExpression => expr
     case a: AggregateExpression if a.aggregateFunction.isInstanceOf[TypedAggregateExpression] =>
       UnresolvedAlias(a, Some(Column.generateAlias))
-    case expr: Expression =>
-         if (expr.isInstanceOf[UnresolvedFunction]) {
-            UnresolvedAlias(expr, None)
-        } else {
-          Alias(expr, toPrettySQL(expr))()
-        }
+    case u: UnresolvedFunction => UnresolvedAlias(expr, None)
+    case expr: Expression => Alias(expr, toPrettySQL(expr))()
   }
 
   private[this] def aggregateNumericColumns(colNames: String*)(f: Expression => AggregateFunction)

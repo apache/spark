@@ -40,7 +40,7 @@ abstract class SQLImplicits extends LowPrioritySQLImplicits {
    */
   implicit class StringToColumn(val sc: StringContext) {
     def $(args: Any*): ColumnName = {
-        new ColumnName(sc.s(args: _*))
+      new ColumnName(sc.s(args: _*))
     }
   }
 
