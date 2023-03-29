@@ -69,7 +69,7 @@ object IntegrationTestUtils {
       path: String,
       sbtName: String,
       mvnName: String,
-      test: Boolean): File = {
+      test: Boolean = false): File = {
     val targetDir = new File(new File(sparkHome, path), "target")
     assert(
       targetDir.exists(),
@@ -91,10 +91,6 @@ object IntegrationTestUtils {
     assert(jars.nonEmpty, s"Failed to find the jar inside folder: ${targetDir.getCanonicalPath}")
     debug("Using jar: " + jars(0).getCanonicalPath)
     jars(0) // return the first jar found
-  }
-
-  private[sql] def findJar(path: String, sbtName: String, mvnName: String): File = {
-    findJar(path, sbtName, mvnName, test = false)
   }
 
   private def recursiveListFiles(f: File): Array[File] = {

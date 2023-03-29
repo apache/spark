@@ -770,7 +770,7 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper {
     checkSameResult(list.asScala, session.createDataset(list))
     checkSameResult(
       list.asScala.map(kv => Row(kv.key, kv.value)),
-      session.createDataFrame(list.asScala))
+      session.createDataFrame(list.asScala.toSeq))
   }
 
   test("SparkSession newSession") {
