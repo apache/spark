@@ -487,7 +487,7 @@ class SparkConnectPlanner(val session: SparkSession) {
     commonUdf.getFunctionCase match {
       case proto.CommonInlineUserDefinedFunction.FunctionCase.SCALAR_SCALA_UDF =>
         transformTypedMapPartitions(commonUdf, baseRel)
-      case _ =>
+      case proto.CommonInlineUserDefinedFunction.FunctionCase.PYTHON_UDF =>
         val pythonUdf = transformPythonUDF(commonUdf)
         val isBarrier = if (rel.hasIsBarrier) rel.getIsBarrier else false
         pythonUdf.evalType match {
@@ -507,6 +507,9 @@ class SparkConnectPlanner(val session: SparkSession) {
             throw InvalidPlanInput(
               s"Function with EvalType: ${pythonUdf.evalType} is not supported")
         }
+      case _ =>
+        throw InvalidPlanInput(
+          s"Function with ID: ${commonUdf.getFunctionCase.getNumber} is not supported")
     }
   }
 

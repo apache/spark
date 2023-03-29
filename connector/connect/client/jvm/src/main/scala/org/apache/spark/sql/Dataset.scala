@@ -2475,7 +2475,7 @@ class Dataset[T] private[sql] (
    * `true`.
    *
    * @group typedrel
-   * @since 3.4.0
+   * @since 3.5.0
    */
   def filter(func: T => Boolean): Dataset[T] = {
     val udf = ScalarUserDefinedFunction(
@@ -2497,7 +2497,7 @@ class Dataset[T] private[sql] (
    * `true`.
    *
    * @group typedrel
-   * @since 3.4.0
+   * @since 3.5.0
    */
   def filter(f: FilterFunction[T]): Dataset[T] = {
     filter(UdfUtils.filterFuncToScalaFunc(f))
@@ -2508,7 +2508,7 @@ class Dataset[T] private[sql] (
    * element.
    *
    * @group typedrel
-   * @since 3.4.0
+   * @since 3.5.0
    */
   def map[U: Encoder](f: T => U): Dataset[U] = {
     mapPartitions(UdfUtils.mapFuncToMapPartitionsAdaptor(f))
@@ -2519,7 +2519,7 @@ class Dataset[T] private[sql] (
    * element.
    *
    * @group typedrel
-   * @since 3.4.0
+   * @since 3.5.0
    */
   def map[U](f: MapFunction[T, U], encoder: Encoder[U]): Dataset[U] = {
     map(UdfUtils.mapFunctionToScalaFunc(f))(encoder)
@@ -2530,7 +2530,7 @@ class Dataset[T] private[sql] (
    * partition.
    *
    * @group typedrel
-   * @since 3.4.0
+   * @since 3.5.0
    */
   def mapPartitions[U: Encoder](func: Iterator[T] => Iterator[U]): Dataset[U] = {
     val outputEncoder = encoderFor[U]
@@ -2550,7 +2550,7 @@ class Dataset[T] private[sql] (
    * partition.
    *
    * @group typedrel
-   * @since 3.4.0
+   * @since 3.5.0
    */
   def mapPartitions[U](f: MapPartitionsFunction[T, U], encoder: Encoder[U]): Dataset[U] = {
     mapPartitions(UdfUtils.mapPartitionsFuncToScalaFunc(f))(encoder)
@@ -2561,7 +2561,7 @@ class Dataset[T] private[sql] (
    * Dataset, and then flattening the results.
    *
    * @group typedrel
-   * @since 3.4.0
+   * @since 3.5.0
    */
   def flatMap[U: Encoder](func: T => TraversableOnce[U]): Dataset[U] =
     mapPartitions(UdfUtils.flatMapFuncToMapPartitionsAdaptor(func))
@@ -2571,7 +2571,7 @@ class Dataset[T] private[sql] (
    * Dataset, and then flattening the results.
    *
    * @group typedrel
-   * @since 3.4.0
+   * @since 3.5.0
    */
   def flatMap[U](f: FlatMapFunction[T, U], encoder: Encoder[U]): Dataset[U] = {
     flatMap(UdfUtils.flatMapFuncToScalaFunc(f))(encoder)

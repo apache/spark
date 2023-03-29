@@ -26,7 +26,7 @@ import org.apache.spark.api.java.function._
  * cause Dataset sync conflicts when used together with UDFs. Thus we define them outside, in the
  * client package.
  */
-object UdfUtils {
+private[sql] object UdfUtils {
 
   def mapFuncToMapPartitionsAdaptor[T, U](f: T => U): Iterator[T] => Iterator[U] = _.map(f(_))
 
