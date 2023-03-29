@@ -297,9 +297,8 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
             // Replace references to the _metadata column. This will affect references to the column
             // itself but also where fields from the metadata struct are used.
             case MetadataStructColumn(AttributeReference(_, fields @ StructType(_), _, _)) =>
-              val reboundFields = fields.map(
-                field => metadataColumns.find(attr => attr.name == newFieldName(field.name)).get)
-              CreateStruct(reboundFields)
+              CreateStruct(fields.map(
+                field => metadataColumns.find(attr => attr.name == newFieldName(field.name)).get))
           }.transform {
             // Replace references to struct fields with the field values. This is to avoid creating
             // temporaries to improve performance.

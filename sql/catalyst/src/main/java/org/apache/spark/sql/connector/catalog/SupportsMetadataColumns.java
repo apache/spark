@@ -57,8 +57,10 @@ public interface SupportsMetadataColumns extends Table {
   /**
    * Determines how this data source handles name conflicts between metadata and data columns.
    * <p>
-   * If true, spark will automatically rename the metadata column to resolve the conflict; metadata
-   * columns (renamed or not) can be reliably accessed by calling {@link Dataset.metadataColumn}.
+   * If true, spark will automatically rename the metadata column to resolve the conflict. End users
+   * can reliably select metadata columns (renamed or not) with {@link Dataset.metadataColumn}, and
+   * internal code can use {@link MetadataAttributeWithLogicalName} to extract the logical name from
+   * a metadata attribute.
    * <p>
    * If false, the data column will hide the metadata column. It is recommended that Table
    * implementations which do not support renaming should reject data column names that conflict
