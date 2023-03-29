@@ -1204,7 +1204,7 @@ class TypesTestsMixin:
         )
 
         with self.assertRaisesRegex(RuntimeError, "interval None to 3 is invalid"):
-            YearMonthIntervalType(endField=DayTimeIntervalType.SECOND)
+            YearMonthIntervalType(endField=3)
 
         with self.assertRaisesRegex(RuntimeError, "interval 123 to 123 is invalid"):
             YearMonthIntervalType(123)
