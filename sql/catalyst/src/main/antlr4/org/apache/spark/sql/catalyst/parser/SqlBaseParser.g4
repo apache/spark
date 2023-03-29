@@ -928,11 +928,19 @@ primaryExpression
         (FILTER LEFT_PAREN WHERE where=booleanExpression RIGHT_PAREN)? ( OVER windowSpec)?     #percentile
     ;
 
+valueType
+    : DATE
+    | TIMESTAMP | TIMESTAMP_LTZ | TIMESTAMP_NTZ
+    | INTERVAL
+    | HEX
+    | unsupportedType=identifier
+    ;
+
 constant
     : NULL                                                                                     #nullLiteral
     | COLON identifier                                                                         #parameterLiteral
     | interval                                                                                 #intervalLiteral
-    | identifier stringLit                                                                     #typeConstructor
+    | valueType stringLit                                                                     #typeConstructor
     | number                                                                                   #numericLiteral
     | booleanValue                                                                             #booleanLiteral
     | stringLit+                                                                               #stringLiteral
@@ -1300,6 +1308,7 @@ ansiNonReserved
     | GENERATED
     | GLOBAL
     | GROUPING
+    | HEX
     | HOUR
     | HOURS
     | IF
@@ -1612,6 +1621,7 @@ nonReserved
     | GROUP
     | GROUPING
     | HAVING
+    | HEX
     | HOUR
     | HOURS
     | IF
