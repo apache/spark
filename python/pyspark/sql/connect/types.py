@@ -241,12 +241,12 @@ def proto_schema_to_pyspark_data_type(schema: pb2.DataType) -> DataType:
         )
         return DayTimeIntervalType(startField=start, endField=end)
     elif schema.HasField("year_month_interval"):
-        start: Optional[int] = (
+        start: Optional[int] = (  # type: ignore[no-redef]
             schema.year_month_interval.start_field
             if schema.year_month_interval.HasField("start_field")
             else None
         )
-        end: Optional[int] = (
+        end: Optional[int] = (  # type: ignore[no-redef]
             schema.year_month_interval.end_field
             if schema.year_month_interval.HasField("end_field")
             else None
