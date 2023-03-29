@@ -1052,7 +1052,7 @@ class SparkConnectClient(object):
         Throws the appropriate internal Python exception.
         """
         if isinstance(error, grpc.RpcError):
-            self._handle_rpc_error(cast(grpc.RpcError, error))
+            self._handle_rpc_error(error)
         elif isinstance(error, ValueError):
             if "Cannot invoke RPC" in str(error) and "closed" in str(error):
                 raise SparkConnectException(

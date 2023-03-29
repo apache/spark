@@ -26,7 +26,6 @@ from collections import defaultdict
 from pyspark.errors import (
     PySparkAttributeError,
     PySparkTypeError,
-    PySparkValueError,
     PySparkException,
 )
 from pyspark.sql import SparkSession as PySparkSession, Row
