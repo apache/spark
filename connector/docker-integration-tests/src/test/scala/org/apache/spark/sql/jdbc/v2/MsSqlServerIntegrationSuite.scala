@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.jdbc.v2
 
-import java.sql.{Connection, SQLFeatureNotSupportedException}
+import java.sql.Connection
 
 import org.scalatest.time.SpanSugar._
 
