@@ -19,6 +19,7 @@ package org.apache.spark.sql.internal
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.plans.SQLHelper
+import org.apache.spark.util.Utils
 
 class VariableSubstitutionSuite extends SparkFunSuite with SQLHelper {
 
@@ -53,6 +54,14 @@ class VariableSubstitutionSuite extends SparkFunSuite with SQLHelper {
     val q = "select ${bar} ${foo} this is great"
     withSQLConf("bar"-> "1", "foo"-> "${bar}") {
       assert(sub.substitute(q) == "select 1 1 this is great")
+    }
+  }
+
+  test("SPARK-42946: redact sensitive data in query with variable substitution") {
+    val q = "select '${password}', ${spark:password} this is great"
+    val rt = Utils.REDACTION_REPLACEMENT_TEXT
+    withSQLConf("bar" -> "1", "foo" -> "${bar}") {
+      assert(sub.substitute(q) === s"select '$rt', $rt this is great")
     }
   }
 

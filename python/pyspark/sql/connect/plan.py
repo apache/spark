@@ -259,6 +259,7 @@ class DataSource(LogicalPlan):
         schema: Optional[str] = None,
         options: Optional[Mapping[str, str]] = None,
         paths: Optional[List[str]] = None,
+        predicates: Optional[List[str]] = None,
     ) -> None:
         super().__init__(None)
 
@@ -274,10 +275,15 @@ class DataSource(LogicalPlan):
             assert isinstance(paths, list)
             assert all(isinstance(path, str) for path in paths)
 
+        if predicates is not None:
+            assert isinstance(predicates, list)
+            assert all(isinstance(predicate, str) for predicate in predicates)
+
         self._format = format
         self._schema = schema
         self._options = options
         self._paths = paths
+        self._predicates = predicates
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
         plan = self._create_proto_relation()
@@ -290,17 +296,22 @@ class DataSource(LogicalPlan):
                 plan.read.data_source.options[k] = v
         if self._paths is not None and len(self._paths) > 0:
             plan.read.data_source.paths.extend(self._paths)
+        if self._predicates is not None and len(self._predicates) > 0:
+            plan.read.data_source.predicates.extend(self._predicates)
         return plan
 
 
 class Read(LogicalPlan):
-    def __init__(self, table_name: str) -> None:
+    def __init__(self, table_name: str, options: Optional[Dict[str, str]] = None) -> None:
         super().__init__(None)
         self.table_name = table_name
+        self.options = options or {}
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
         plan = self._create_proto_relation()
         plan.read.named_table.unparsed_identifier = self.table_name
+        for k, v in self.options.items():
+            plan.read.named_table.options[k] = v
         return plan
 
     def print(self, indent: int = 0) -> str:
@@ -1901,17 +1912,90 @@ class MapPartitions(LogicalPlan):
     """Logical plan object for a mapPartitions-equivalent API: mapInPandas, mapInArrow."""
 
     def __init__(
-        self, child: Optional["LogicalPlan"], function: "UserDefinedFunction", cols: List[str]
+        self,
+        child: Optional["LogicalPlan"],
+        function: "UserDefinedFunction",
+        cols: List[str],
+        is_barrier: bool,
     ) -> None:
         super().__init__(child)
 
         self._func = function._build_common_inline_user_defined_function(*cols)
+        self._is_barrier = is_barrier
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
         assert self._child is not None
         plan = self._create_proto_relation()
         plan.map_partitions.input.CopyFrom(self._child.plan(session))
         plan.map_partitions.func.CopyFrom(self._func.to_plan_udf(session))
+        plan.map_partitions.is_barrier = self._is_barrier
+        return plan
+
+
+class GroupMap(LogicalPlan):
+    """Logical plan object for a Group Map API: apply, applyInPandas."""
+
+    def __init__(
+        self,
+        child: Optional["LogicalPlan"],
+        grouping_cols: Sequence[Column],
+        function: "UserDefinedFunction",
+        cols: List[str],
+    ):
+        assert isinstance(grouping_cols, list) and all(isinstance(c, Column) for c in grouping_cols)
+
+        super().__init__(child)
+        self._grouping_cols = grouping_cols
+        self._func = function._build_common_inline_user_defined_function(*cols)
+
+    def plan(self, session: "SparkConnectClient") -> proto.Relation:
+        assert self._child is not None
+        plan = self._create_proto_relation()
+        plan.group_map.input.CopyFrom(self._child.plan(session))
+        plan.group_map.grouping_expressions.extend(
+            [c.to_plan(session) for c in self._grouping_cols]
+        )
+        plan.group_map.func.CopyFrom(self._func.to_plan_udf(session))
+        return plan
+
+
+class CoGroupMap(LogicalPlan):
+    """Logical plan object for a CoGroup Map API: applyInPandas."""
+
+    def __init__(
+        self,
+        input: Optional["LogicalPlan"],
+        input_grouping_cols: Sequence[Column],
+        other: Optional["LogicalPlan"],
+        other_grouping_cols: Sequence[Column],
+        function: "UserDefinedFunction",
+        cols: List[Column],
+    ):
+        assert isinstance(input_grouping_cols, list) and all(
+            isinstance(c, Column) for c in input_grouping_cols
+        )
+        assert isinstance(other_grouping_cols, list) and all(
+            isinstance(c, Column) for c in other_grouping_cols
+        )
+
+        super().__init__(input)
+        self._input_grouping_cols = input_grouping_cols
+        self._other_grouping_cols = other_grouping_cols
+        self._other = cast(LogicalPlan, other)
+        self._func = function._build_common_inline_user_defined_function(*cols)
+
+    def plan(self, session: "SparkConnectClient") -> proto.Relation:
+        assert self._child is not None
+        plan = self._create_proto_relation()
+        plan.co_group_map.input.CopyFrom(self._child.plan(session))
+        plan.co_group_map.input_grouping_expressions.extend(
+            [c.to_plan(session) for c in self._input_grouping_cols]
+        )
+        plan.co_group_map.other.CopyFrom(self._other.plan(session))
+        plan.co_group_map.other_grouping_expressions.extend(
+            [c.to_plan(session) for c in self._other_grouping_cols]
+        )
+        plan.co_group_map.func.CopyFrom(self._func.to_plan_udf(session))
         return plan
 
 

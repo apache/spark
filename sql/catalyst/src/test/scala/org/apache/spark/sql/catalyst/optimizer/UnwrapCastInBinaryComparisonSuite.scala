@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import java.time.{LocalDate, LocalDateTime}
+
 import scala.collection.immutable.HashSet
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
@@ -35,15 +37,17 @@ class UnwrapCastInBinaryComparisonSuite extends PlanTest with ExpressionEvalHelp
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches: List[Batch] =
       Batch("Unwrap casts in binary comparison", FixedPoint(10),
-        NullPropagation, UnwrapCastInBinaryComparison) :: Nil
+        UnwrapCastInBinaryComparison) :: Nil
   }
 
   val testRelation: LocalRelation = LocalRelation($"a".short, $"b".float,
-    $"c".decimal(5, 2), $"d".boolean)
+    $"c".decimal(5, 2), $"d".boolean, $"e".timestamp, $"f".timestampNTZ)
   val f: BoundReference = $"a".short.canBeNull.at(0)
   val f2: BoundReference = $"b".float.canBeNull.at(1)
   val f3: BoundReference = $"c".decimal(5, 2).canBeNull.at(2)
   val f4: BoundReference = $"d".boolean.canBeNull.at(3)
+  val f5: BoundReference = $"e".timestamp.canBeNull.at(4)
+  val f6: BoundReference = $"f".timestampNTZ.canBeNull.at(5)
 
   test("unwrap casts when literal == max") {
     val v = Short.MaxValue
@@ -192,15 +196,12 @@ class UnwrapCastInBinaryComparisonSuite extends PlanTest with ExpressionEvalHelp
     })
   }
 
-  test("unwrap casts when literal is null") {
+  test("SPARK-42741: Do not unwrap casts in binary comparison when literal is null") {
     val intLit = Literal.create(null, IntegerType)
-    val nullLit = Literal.create(null, BooleanType)
-    assertEquivalent(castInt(f) > intLit, nullLit)
-    assertEquivalent(castInt(f) >= intLit, nullLit)
-    assertEquivalent(castInt(f) === intLit, nullLit)
-    assertEquivalent(castInt(f) <=> intLit, IsNull(castInt(f)))
-    assertEquivalent(castInt(f) <= intLit, nullLit)
-    assertEquivalent(castInt(f) < intLit, nullLit)
+    Seq(castInt(f) > intLit, castInt(f) >= intLit, castInt(f) === intLit, castInt(f) <=> intLit,
+      castInt(f) <= intLit, castInt(f) < intLit).foreach { be =>
+      assertEquivalent(be, be)
+    }
   }
 
   test("unwrap casts should skip if downcast failed") {
@@ -268,18 +269,19 @@ class UnwrapCastInBinaryComparisonSuite extends PlanTest with ExpressionEvalHelp
 
     // in.list contains null value
     checkInAndInSet(
-      In(Cast(f, IntegerType), Seq(intLit)), f.in(shortLit))
+      In(Cast(f, IntegerType), Seq(intLit)), f.in(intLit.cast(ShortType)))
     checkInAndInSet(
-      In(Cast(f, IntegerType), Seq(intLit, intLit)), f.in(shortLit, shortLit))
+      In(Cast(f, IntegerType), Seq(intLit, intLit)),
+      f.in(intLit.cast(ShortType), intLit.cast(ShortType)))
     checkInAndInSet(
-      In(Cast(f, IntegerType), Seq(intLit, 1)), f.in(shortLit, 1.toShort))
+      In(Cast(f, IntegerType), Seq(intLit, 1)), f.in(intLit.cast(ShortType), 1.toShort))
     checkInAndInSet(
       In(Cast(f, LongType), Seq(longLit, 1.toLong, Long.MaxValue)),
-      f.in(shortLit, 1.toShort)
+      f.in(longLit.cast(ShortType), 1.toShort)
     )
     checkInAndInSet(
       In(Cast(f, LongType), Seq(longLit, Long.MaxValue)),
-      f.in(shortLit)
+      f.in(longLit.cast(ShortType))
     )
   }
 
@@ -368,9 +370,54 @@ class UnwrapCastInBinaryComparisonSuite extends PlanTest with ExpressionEvalHelp
     assertEquivalent(castInt(f4) < t, trueIfNotNull(f4))
   }
 
+  test("SPARK-42597: Support unwrap date to timestamp type") {
+    val dateLit = Literal.create(LocalDate.of(2023, 1, 1), DateType)
+    val dateAddOne = DateAdd(dateLit, Literal(1))
+    val nullLit = Literal.create(null, DateType)
+
+    assertEquivalent(
+      castDate(f5) > dateLit || castDate(f6) > dateLit,
+      f5 >= castTimestamp(dateAddOne) || f6 >= castTimestampNTZ(dateAddOne))
+    assertEquivalent(
+      castDate(f5) >= dateLit || castDate(f6) >= dateLit,
+      f5 >= castTimestamp(dateLit) || f6 >= castTimestampNTZ(dateLit))
+    assertEquivalent(
+      castDate(f5) < dateLit || castDate(f6) < dateLit,
+      f5 < castTimestamp(dateLit) || f6 < castTimestampNTZ(dateLit))
+    assertEquivalent(
+      castDate(f5) <= dateLit || castDate(f6) <= dateLit,
+      f5 < castTimestamp(dateAddOne) || f6 < castTimestampNTZ(dateAddOne))
+    assertEquivalent(
+      castDate(f5) === dateLit || castDate(f6) === dateLit,
+      (f5 >= castTimestamp(dateLit) && f5 < castTimestamp(dateAddOne)) ||
+        (f6 >= castTimestampNTZ(dateLit) && f6 < castTimestampNTZ(dateAddOne)))
+    assertEquivalent(
+      castDate(f5) <=> dateLit || castDate(f6) === dateLit,
+      (f5 >= castTimestamp(dateLit) && f5 < castTimestamp(dateAddOne)) ||
+        (f6 >= castTimestampNTZ(dateLit) && f6 < castTimestampNTZ(dateAddOne)))
+    assertEquivalent(
+      dateLit < castDate(f5) || dateLit < castDate(f6),
+      castTimestamp(dateAddOne) <= f5 || castTimestampNTZ(dateAddOne) <= f6)
+
+    // Null date literal should be handled by NullPropagation
+    assertEquivalent(castDate(f5) > nullLit || castDate(f6) > nullLit,
+      castDate(f5) > nullLit || castDate(f6) > nullLit)
+  }
+
+  private val ts1 = LocalDateTime.of(2023, 1, 1, 23, 59, 59, 99999000)
+  private val ts2 = LocalDateTime.of(2023, 1, 1, 23, 59, 59, 999998000)
+  private val ts3 = LocalDateTime.of(9999, 12, 31, 23, 59, 59, 999999999)
+  private val ts4 = LocalDateTime.of(1, 1, 1, 0, 0, 0, 0)
+
   private def castInt(e: Expression): Expression = Cast(e, IntegerType)
   private def castDouble(e: Expression): Expression = Cast(e, DoubleType)
   private def castDecimal2(e: Expression): Expression = Cast(e, DecimalType(10, 4))
+  private def castDate(e: Expression): Expression =
+    Cast(e, DateType, Some(conf.sessionLocalTimeZone))
+  private def castTimestamp(e: Expression): Expression =
+    Cast(e, TimestampType, Some(conf.sessionLocalTimeZone))
+  private def castTimestampNTZ(e: Expression): Expression =
+    Cast(e, TimestampNTZType, Some(conf.sessionLocalTimeZone))
 
   private def decimal(v: Decimal): Decimal = Decimal(v.toJavaBigDecimal, 5, 2)
   private def decimal2(v: BigDecimal): Decimal = Decimal(v, 10, 4)
@@ -383,16 +430,16 @@ class UnwrapCastInBinaryComparisonSuite extends PlanTest with ExpressionEvalHelp
 
     if (evaluate) {
       Seq(
-        (100.toShort, 3.14.toFloat, decimal2(100), true),
-        (-300.toShort, 3.1415927.toFloat, decimal2(-3000.50), false),
-        (null, Float.NaN, decimal2(12345.6789), null),
-        (null, null, null, null),
-        (Short.MaxValue, Float.PositiveInfinity, decimal2(Short.MaxValue), true),
-        (Short.MinValue, Float.NegativeInfinity, decimal2(Short.MinValue), false),
-        (0.toShort, Float.MaxValue, decimal2(0), null),
-        (0.toShort, Float.MinValue, decimal2(0.01), null)
+        (100.toShort, 3.14.toFloat, decimal2(100), true, ts1, ts1),
+        (-300.toShort, 3.1415927.toFloat, decimal2(-3000.50), false, ts2, ts2),
+        (null, Float.NaN, decimal2(12345.6789), null, null, null),
+        (null, null, null, null, null, null),
+        (Short.MaxValue, Float.PositiveInfinity, decimal2(Short.MaxValue), true, ts3, ts3),
+        (Short.MinValue, Float.NegativeInfinity, decimal2(Short.MinValue), false, ts4, ts4),
+        (0.toShort, Float.MaxValue, decimal2(0), null, null, null),
+        (0.toShort, Float.MinValue, decimal2(0.01), null, null, null)
       ).foreach(v => {
-        val row = create_row(v._1, v._2, v._3, v._4)
+        val row = create_row(v._1, v._2, v._3, v._4, v._5, v._6)
         checkEvaluation(e1, e2.eval(row), row)
       })
     }

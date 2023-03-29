@@ -26,6 +26,7 @@ import scala.collection.mutable
 import scala.concurrent.ExecutionContext
 import scala.util.control.NonFatal
 
+import org.apache.spark.SparkException
 import org.apache.spark.broadcast
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SparkSession
@@ -513,14 +514,13 @@ case class AdaptiveSparkPlanExec(
           val newPlan = e.withNewChildren(Seq(result.newPlan)).asInstanceOf[Exchange]
           // Create a query stage only when all the child query stages are ready.
           if (result.allChildStagesMaterialized) {
-            var newStage = newQueryStage(newPlan)
-            assert(newStage.isInstanceOf[ReusableQueryStageExec])
+            var newStage = newQueryStage(newPlan).asInstanceOf[ExchangeQueryStageExec]
             if (conf.exchangeReuseEnabled) {
               // Check the `stageCache` again for reuse. If a match is found, ditch the new stage
               // and reuse the existing stage found in the `stageCache`, otherwise update the
               // `stageCache` with the new stage.
               val queryStage = context.stageCache.getOrElseUpdate(
-                newStage.plan.canonicalized, newStage.asInstanceOf[ReusableQueryStageExec])
+                newStage.plan.canonicalized, newStage)
               if (queryStage.ne(newStage)) {
                 newStage = reuseQueryStage(queryStage, e)
               }
@@ -537,12 +537,13 @@ case class AdaptiveSparkPlanExec(
       }
 
     case i: InMemoryTableScanExec =>
+      // There is no reuse for `InMemoryTableScanExec`, which is different from `Exchange`. If we
+      // hit it the first time, we should always create a new query stage.
       val newStage = newQueryStage(i)
-      val isMaterialized = newStage.isMaterialized
       CreateStageResult(
         newPlan = newStage,
-        allChildStagesMaterialized = isMaterialized,
-        newStages = if (isMaterialized) Seq.empty else Seq(newStage))
+        allChildStagesMaterialized = false,
+        newStages = Seq(newStage))
 
     case q: QueryStageExec =>
       CreateStageResult(newPlan = q,
@@ -562,39 +563,29 @@ case class AdaptiveSparkPlanExec(
 
   private def newQueryStage(plan: SparkPlan): QueryStageExec = {
     val queryStage = plan match {
-      case s: ShuffleExchangeLike =>
-        val optimizedPlan = optimizeQueryStage(s.child, isFinalStage = false)
-        val newShuffle = applyPhysicalRules(
-          s.withNewChildren(Seq(optimizedPlan)),
-          postStageCreationRules(outputsColumnar = s.supportsColumnar),
+      case e: Exchange =>
+        val optimized = e.withNewChildren(Seq(optimizeQueryStage(e.child, isFinalStage = false)))
+        val newPlan = applyPhysicalRules(
+          optimized,
+          postStageCreationRules(outputsColumnar = plan.supportsColumnar),
           Some((planChangeLogger, "AQE Post Stage Creation")))
-        if (!newShuffle.isInstanceOf[ShuffleExchangeLike]) {
-          throw new IllegalStateException(
-            "Custom columnar rules cannot transform shuffle node to something else.")
+        if (e.isInstanceOf[ShuffleExchangeLike]) {
+          if (!newPlan.isInstanceOf[ShuffleExchangeLike]) {
+            throw SparkException.internalError(
+              "Custom columnar rules cannot transform shuffle node to something else.")
+          }
+          ShuffleQueryStageExec(currentStageId, newPlan, e.canonicalized)
+        } else {
+          assert(e.isInstanceOf[BroadcastExchangeLike])
+          if (!newPlan.isInstanceOf[BroadcastExchangeLike]) {
+            throw SparkException.internalError(
+              "Custom columnar rules cannot transform broadcast node to something else.")
+          }
+          BroadcastQueryStageExec(currentStageId, newPlan, e.canonicalized)
         }
-        ShuffleQueryStageExec(currentStageId, newShuffle, s.canonicalized)
-      case b: BroadcastExchangeLike =>
-        val optimizedPlan = optimizeQueryStage(b.child, isFinalStage = false)
-        val newBroadcast = applyPhysicalRules(
-          b.withNewChildren(Seq(optimizedPlan)),
-          postStageCreationRules(outputsColumnar = b.supportsColumnar),
-          Some((planChangeLogger, "AQE Post Stage Creation")))
-        if (!newBroadcast.isInstanceOf[BroadcastExchangeLike]) {
-          throw new IllegalStateException(
-            "Custom columnar rules cannot transform broadcast node to something else.")
-        }
-        BroadcastQueryStageExec(currentStageId, newBroadcast, b.canonicalized)
       case i: InMemoryTableScanExec =>
-        val newInMemoryTableScan = applyPhysicalRules(
-          i,
-          postStageCreationRules(outputsColumnar = i.supportsColumnar),
-          Some((planChangeLogger, "AQE Post Stage Creation")))
-        if (!newInMemoryTableScan.isInstanceOf[InMemoryTableScanExec]) {
-          throw new IllegalStateException("Custom columnar rules cannot transform " +
-            "`InMemoryTableScanExec` node to something else.")
-        }
-        TableCacheQueryStageExec(
-          currentStageId, newInMemoryTableScan.asInstanceOf[InMemoryTableScanExec])
+        // No need to optimize `InMemoryTableScanExec` as it's a leaf node.
+        TableCacheQueryStageExec(currentStageId, i)
     }
     currentStageId += 1
     setLogicalLinkForNewQueryStage(queryStage, plan)
@@ -602,8 +593,8 @@ case class AdaptiveSparkPlanExec(
   }
 
   private def reuseQueryStage(
-      existing: ReusableQueryStageExec,
-      exchange: Exchange): QueryStageExec = {
+      existing: ExchangeQueryStageExec,
+      exchange: Exchange): ExchangeQueryStageExec = {
     val queryStage = existing.newReuseInstance(currentStageId, exchange.output)
     currentStageId += 1
     setLogicalLinkForNewQueryStage(queryStage, exchange)
@@ -770,7 +761,7 @@ case class AdaptiveSparkPlanExec(
     currentPhysicalPlan.foreach {
       // earlyFailedStage is the stage which failed before calling doMaterialize,
       // so we should avoid calling cancel on it to re-trigger the failure again.
-      case s: QueryStageExec if !earlyFailedStage.contains(s.id) =>
+      case s: ExchangeQueryStageExec if !earlyFailedStage.contains(s.id) =>
         try {
           s.cancel()
         } catch {
@@ -847,8 +838,8 @@ case class AdaptiveExecutionContext(session: SparkSession, qe: QueryExecution) {
   /**
    * The exchange-reuse map shared across the entire query, including sub-queries.
    */
-  val stageCache: TrieMap[SparkPlan, ReusableQueryStageExec] =
-    new TrieMap[SparkPlan, ReusableQueryStageExec]()
+  val stageCache: TrieMap[SparkPlan, ExchangeQueryStageExec] =
+    new TrieMap[SparkPlan, ExchangeQueryStageExec]()
 }
 
 /**

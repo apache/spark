@@ -24,8 +24,10 @@ import scala.collection.JavaConverters._
 import org.apache.spark.annotation.Stable
 import org.apache.spark.connect.proto.Parse.ParseFormat
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.StringEncoder
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CharVarcharUtils}
 import org.apache.spark.sql.connect.common.DataTypeProtoConverter
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -456,7 +458,9 @@ class DataFrameReader private[sql] (sparkSession: SparkSession) extends Logging 
    */
   def table(tableName: String): DataFrame = {
     sparkSession.newDataFrame { builder =>
-      builder.getReadBuilder.getNamedTableBuilder.setUnparsedIdentifier(tableName)
+      builder.getReadBuilder.getNamedTableBuilder
+        .setUnparsedIdentifier(tableName)
+        .putAllOptions(extraOptions.toMap.asJava)
     }
   }
 
@@ -531,10 +535,8 @@ class DataFrameReader private[sql] (sparkSession: SparkSession) extends Logging 
    */
   @scala.annotation.varargs
   def textFile(paths: String*): Dataset[String] = {
-    // scalastyle:off throwerror
-    // TODO: this method can be supported and should be included in the client API.
-    throw new NotImplementedError()
-    // scalastyle:on throwerror
+    assertNoSpecifiedSchema("textFile")
+    text(paths: _*).select("value").as(StringEncoder)
   }
 
   private def assertSourceFormatSpecified(): Unit = {
@@ -553,6 +555,15 @@ class DataFrameReader private[sql] (sparkSession: SparkSession) extends Logging 
       extraOptions.foreach { case (k, v) =>
         parseBuilder.putOptions(k, v)
       }
+    }
+  }
+
+  /**
+   * A convenient function for schema validation in APIs.
+   */
+  private def assertNoSpecifiedSchema(operation: String): Unit = {
+    if (userSpecifiedSchema.nonEmpty) {
+      throw QueryCompilationErrors.userSpecifiedSchemaUnsupportedError(operation)
     }
   }
 

@@ -20,6 +20,7 @@ import java.nio.file.{Files, Path}
 import java.util.{Collections, Properties}
 import java.util.concurrent.atomic.AtomicLong
 
+import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.util.{Failure, Success, Try}
 
@@ -31,6 +32,7 @@ import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach}
 import org.apache.spark.connect.proto
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{functions => fn}
+import org.apache.spark.sql.avro.{functions => avroFn}
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.StringEncoder
 import org.apache.spark.sql.connect.client.SparkConnectClient
@@ -69,7 +71,7 @@ class PlanGenerationTestSuite
   // Borrowed from SparkFunSuite
   private val regenerateGoldenFiles: Boolean = System.getenv("SPARK_GENERATE_GOLDEN_FILES") == "1"
 
-  protected val queryFilePath: Path = commonResourcePath.resolve("queries")
+  protected val queryFilePath: Path = commonResourcePath.resolve("query-tests/queries")
 
   // A relative path to /connector/connect/server, used by `ProtoToParsedPlanTestSuite` to run
   // with the datasource.
@@ -305,6 +307,41 @@ class PlanGenerationTestSuite
   test("select typed 1-arg") {
     val encoder = ScalaReflection.encoderFor[(Long, Int)]
     simple.select(fn.struct(fn.col("id"), fn.col("a")).as(encoder))
+  }
+
+  test("select typed 2-arg") {
+    val encoder = ScalaReflection.encoderFor[(Long, Int)]
+    val encoder2 = ScalaReflection.encoderFor[(Double, Double)]
+    val col = fn.struct(fn.col("id"), fn.col("a"))
+    val col2 = fn.struct(fn.col("a"), fn.col("b"))
+    simple.select(col.as(encoder), col2.as(encoder2))
+  }
+
+  test("select typed 3-arg") {
+    val encoder = ScalaReflection.encoderFor[(Long, Int)]
+    val encoder2 = ScalaReflection.encoderFor[(Double, Double)]
+    val col = fn.struct(fn.col("id"), fn.col("a"))
+    val col2 = fn.struct(fn.col("a"), fn.col("b"))
+    simple.select(col.as(encoder), col2.as(encoder2), col.as(encoder))
+  }
+
+  test("select typed 4-arg") {
+    val encoder = ScalaReflection.encoderFor[(Long, Int)]
+    val col = fn.struct(fn.col("id"), fn.col("a"))
+    simple.select(col.as(encoder), col.as(encoder), col.as(encoder), col.as(encoder))
+  }
+
+  test("select typed 5-arg") {
+    val encoder = ScalaReflection.encoderFor[(Long, Int)]
+    val encoder2 = ScalaReflection.encoderFor[(Double, Double)]
+    val col = fn.struct(fn.col("id"), fn.col("a"))
+    val col2 = fn.struct(fn.col("a"), fn.col("b"))
+    simple.select(
+      col.as(encoder),
+      col2.as(encoder2),
+      col.as(encoder),
+      col.as(encoder),
+      col2.as(encoder2))
   }
 
   test("limit") {
@@ -1714,6 +1751,10 @@ class PlanGenerationTestSuite
     fn.array_distinct(fn.col("e"))
   }
 
+  functionTest("array_prepend") {
+    fn.array_prepend(fn.col("e"), lit(1))
+  }
+
   functionTest("array_intersect") {
     fn.array_intersect(fn.col("e"), fn.array(lit(10), lit(4)))
   }
@@ -2122,5 +2163,31 @@ class PlanGenerationTestSuite
 
   test("replace") {
     simple.na.replace[Long]("id", Map(1L -> 8L))
+  }
+
+  /* Reader API  */
+  test("table API with options") {
+    session.read.options(Map("p1" -> "v1", "p2" -> "v2")).table("tempdb.myTable")
+  }
+
+  /* Avro functions */
+  test("from_avro with options") {
+    binary.select(
+      avroFn.from_avro(
+        fn.col("bytes"),
+        """{"type": "int", "name": "id"}""",
+        Map("mode" -> "FAILFAST", "compression" -> "zstandard").asJava))
+  }
+
+  test("from_avro without options") {
+    binary.select(avroFn.from_avro(fn.col("bytes"), """{"type": "string", "name": "name"}"""))
+  }
+
+  test("to_avro with schema") {
+    simple.select(avroFn.to_avro(fn.col("a"), """{"type": "int", "name": "id"}"""))
+  }
+
+  test("to_avro without schema") {
+    simple.select(avroFn.to_avro(fn.col("id")))
   }
 }

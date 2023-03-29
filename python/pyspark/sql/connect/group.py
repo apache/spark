@@ -14,6 +14,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import warnings
+
 from pyspark.sql.connect.utils import check_dependencies
 
 check_dependencies(__name__)
@@ -30,7 +32,9 @@ from typing import (
     cast,
 )
 
+from pyspark.rdd import PythonEvalType
 from pyspark.sql.group import GroupedData as PySparkGroupedData
+from pyspark.sql.pandas.group_ops import PandasCogroupedOps as PySparkPandasCogroupedOps
 from pyspark.sql.types import NumericType
 
 import pyspark.sql.connect.plan as plan
@@ -38,8 +42,14 @@ from pyspark.sql.connect.column import Column
 from pyspark.sql.connect.functions import _invoke_function, col, lit
 
 if TYPE_CHECKING:
-    from pyspark.sql.connect._typing import LiteralType
+    from pyspark.sql.connect._typing import (
+        LiteralType,
+        PandasGroupedMapFunction,
+        GroupedMapPandasUserDefinedFunction,
+        PandasCogroupedMapFunction,
+    )
     from pyspark.sql.connect.dataframe import DataFrame
+    from pyspark.sql.types import StructType
 
 
 class GroupedData:
@@ -203,20 +213,106 @@ class GroupedData:
 
     pivot.__doc__ = PySparkGroupedData.pivot.__doc__
 
-    def apply(self, *args: Any, **kwargs: Any) -> None:
-        raise NotImplementedError("apply() is not implemented.")
+    def apply(self, udf: "GroupedMapPandasUserDefinedFunction") -> "DataFrame":
+        # Columns are special because hasattr always return True
+        if (
+            isinstance(udf, Column)
+            or not hasattr(udf, "func")
+            or (
+                udf.evalType  # type: ignore[attr-defined]
+                != PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF
+            )
+        ):
+            raise ValueError(
+                "Invalid udf: the udf argument must be a pandas_udf of type " "GROUPED_MAP."
+            )
 
-    def applyInPandas(self, *args: Any, **kwargs: Any) -> None:
-        raise NotImplementedError("applyInPandas() is not implemented.")
+        warnings.warn(
+            "It is preferred to use 'applyInPandas' over this "
+            "API. This API will be deprecated in the future releases. See SPARK-28264 for "
+            "more details.",
+            UserWarning,
+        )
+
+        return self.applyInPandas(udf.func, schema=udf.returnType)  # type: ignore[attr-defined]
+
+    apply.__doc__ = PySparkGroupedData.apply.__doc__
+
+    def applyInPandas(
+        self, func: "PandasGroupedMapFunction", schema: Union["StructType", str]
+    ) -> "DataFrame":
+        from pyspark.sql.connect.udf import UserDefinedFunction
+        from pyspark.sql.connect.dataframe import DataFrame
+
+        udf_obj = UserDefinedFunction(
+            func,
+            returnType=schema,
+            evalType=PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
+        )
+
+        return DataFrame.withPlan(
+            plan.GroupMap(
+                child=self._df._plan,
+                grouping_cols=self._grouping_cols,
+                function=udf_obj,
+                cols=self._df.columns,
+            ),
+            session=self._df._session,
+        )
+
+    applyInPandas.__doc__ = PySparkGroupedData.applyInPandas.__doc__
 
     def applyInPandasWithState(self, *args: Any, **kwargs: Any) -> None:
         raise NotImplementedError("applyInPandasWithState() is not implemented.")
 
-    def cogroup(self, *args: Any, **kwargs: Any) -> None:
-        raise NotImplementedError("cogroup() is not implemented.")
+    def cogroup(self, other: "GroupedData") -> "PandasCogroupedOps":
+        return PandasCogroupedOps(self, other)
+
+    cogroup.__doc__ = PySparkGroupedData.cogroup.__doc__
 
 
 GroupedData.__doc__ = PySparkGroupedData.__doc__
+
+
+class PandasCogroupedOps:
+    def __init__(self, gd1: "GroupedData", gd2: "GroupedData"):
+        self._gd1 = gd1
+        self._gd2 = gd2
+
+    def applyInPandas(
+        self, func: "PandasCogroupedMapFunction", schema: Union["StructType", str]
+    ) -> "DataFrame":
+        from pyspark.sql.connect.udf import UserDefinedFunction
+        from pyspark.sql.connect.dataframe import DataFrame
+
+        udf_obj = UserDefinedFunction(
+            func,
+            returnType=schema,
+            evalType=PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF,
+        )
+
+        all_cols = self._extract_cols(self._gd1) + self._extract_cols(self._gd2)
+        return DataFrame.withPlan(
+            plan.CoGroupMap(
+                input=self._gd1._df._plan,
+                input_grouping_cols=self._gd1._grouping_cols,
+                other=self._gd2._df._plan,
+                other_grouping_cols=self._gd2._grouping_cols,
+                function=udf_obj,
+                cols=all_cols,
+            ),
+            session=self._gd1._df._session,
+        )
+
+    applyInPandas.__doc__ = PySparkPandasCogroupedOps.applyInPandas.__doc__
+
+    @staticmethod
+    def _extract_cols(gd: "GroupedData") -> List[Column]:
+        df = gd._df
+        return [df[col] for col in df.columns]
+
+
+PandasCogroupedOps.__doc__ = PySparkPandasCogroupedOps.__doc__
 
 
 def _test() -> None:

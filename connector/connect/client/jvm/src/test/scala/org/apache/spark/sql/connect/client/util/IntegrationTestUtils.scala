@@ -17,6 +17,7 @@
 package org.apache.spark.sql.connect.client.util
 
 import java.io.File
+import java.nio.file.{Files, Paths}
 
 import scala.util.Properties.versionNumberString
 
@@ -27,13 +28,14 @@ object IntegrationTestUtils {
   // System properties used for testing and debugging
   private val DEBUG_SC_JVM_CLIENT = "spark.debug.sc.jvm.client"
 
-  private[sql] lazy val scalaDir = {
-    val version = versionNumberString.split('.') match {
+  private[sql] lazy val scalaVersion = {
+    versionNumberString.split('.') match {
       case Array(major, minor, _*) => major + "." + minor
       case _ => versionNumberString
     }
-    "scala-" + version
   }
+
+  private[sql] lazy val scalaDir = s"scala-$scalaVersion"
 
   private[sql] lazy val sparkHome: String = {
     if (!(sys.props.contains("spark.test.home") || sys.env.contains("SPARK_HOME"))) {
@@ -48,6 +50,12 @@ object IntegrationTestUtils {
   private[connect] def debug(msg: String): Unit = if (isDebug) println(msg)
   // scalastyle:on println
   private[connect] def debug(error: Throwable): Unit = if (isDebug) error.printStackTrace()
+
+  private[sql] lazy val isSparkHiveJarAvailable: Boolean = {
+    val filePath = s"$sparkHome/assembly/target/$scalaDir/jars/" +
+      s"spark-hive_$scalaVersion-${org.apache.spark.SPARK_VERSION}.jar"
+    Files.exists(Paths.get(filePath))
+  }
 
   /**
    * Find a jar in the Spark project artifacts. It requires a build first (e.g. build/sbt package,

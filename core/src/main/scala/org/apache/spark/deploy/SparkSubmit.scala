@@ -162,7 +162,7 @@ private[spark] class SparkSubmit extends Logging {
         // deploy mode with k8s resource manager, the spark submit in the driver container
         // is done in client mode.
         val isKubernetesClusterModeDriver = args.master.startsWith("k8s") &&
-          args.deployMode.equals("client") &&
+          "client".equals(args.deployMode) &&
           args.toSparkConf().getBoolean("spark.kubernetes.submitInDriver", false)
         if (isKubernetesClusterModeDriver) {
           logInfo("Running driver with proxy user. Cluster manager: Kubernetes")

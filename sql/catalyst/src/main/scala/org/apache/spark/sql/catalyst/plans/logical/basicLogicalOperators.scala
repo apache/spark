@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, RangePartitioning, RoundRobinPartitioning, SinglePartition}
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.catalyst.trees.TreePattern._
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
@@ -118,7 +119,11 @@ object Project {
       case (StructType(fields), expected: StructType) =>
         val newFields = reorderFields(
           fields.zipWithIndex.map { case (f, index) =>
-            (f.name, GetStructField(col, index))
+            if (col.nullable) {
+              (f.name, GetStructField(KnownNotNull(col), index))
+            } else {
+              (f.name, GetStructField(col, index))
+            }
           },
           expected.fields,
           columnPath,
@@ -330,7 +335,7 @@ abstract class SetOperation(left: LogicalPlan, right: LogicalPlan) extends Binar
     childrenResolved &&
       left.output.length == right.output.length &&
       left.output.zip(right.output).forall { case (l, r) =>
-        l.dataType.sameType(r.dataType)
+        DataTypeUtils.sameType(l.dataType, r.dataType)
       } && duplicateResolved
 }
 
@@ -1280,7 +1285,9 @@ object Expand {
       } :+ {
         val bitMask = buildBitmask(groupingSetAttrs, attrMap)
         val dataType = GroupingID.dataType
-        Literal.create(if (dataType.sameType(IntegerType)) bitMask.toInt else bitMask, dataType)
+        Literal.create(
+          if (DataTypeUtils.sameType(dataType, IntegerType)) bitMask.toInt
+          else bitMask, dataType)
       }
 
       if (hasDuplicateGroupingSets) {
@@ -1502,7 +1509,7 @@ case class Unpivot(
   def valuesTypeCoercioned: Boolean = canBeCoercioned &&
     // all inner values at position idx must have the same data type
     values.get.head.zipWithIndex.forall { case (v, idx) =>
-      values.get.tail.forall(vals => vals(idx).dataType.sameType(v.dataType))
+      values.get.tail.forall(vals => DataTypeUtils.sameType(vals(idx).dataType, v.dataType))
     }
 
 }
@@ -1790,6 +1797,8 @@ trait HasPartitionExpressions extends SQLConfHelper {
 
   def optNumPartitions: Option[Int]
 
+  def optAdvisoryPartitionSize: Option[Long]
+
   protected def partitioning: Partitioning = if (partitionExpressions.isEmpty) {
     RoundRobinPartitioning(numPartitions)
   } else {
@@ -1820,7 +1829,11 @@ trait HasPartitionExpressions extends SQLConfHelper {
 case class RepartitionByExpression(
     partitionExpressions: Seq[Expression],
     child: LogicalPlan,
-    optNumPartitions: Option[Int]) extends RepartitionOperation with HasPartitionExpressions {
+    optNumPartitions: Option[Int],
+    optAdvisoryPartitionSize: Option[Long] = None)
+  extends RepartitionOperation with HasPartitionExpressions {
+
+  require(optNumPartitions.isEmpty || optAdvisoryPartitionSize.isEmpty)
 
   override val partitioning: Partitioning = {
     if (numPartitions == 1) {
@@ -1857,7 +1870,11 @@ object RepartitionByExpression {
 case class RebalancePartitions(
     partitionExpressions: Seq[Expression],
     child: LogicalPlan,
-    optNumPartitions: Option[Int] = None) extends UnaryNode with HasPartitionExpressions {
+    optNumPartitions: Option[Int] = None,
+    optAdvisoryPartitionSize: Option[Long] = None) extends UnaryNode with HasPartitionExpressions {
+
+  require(optNumPartitions.isEmpty || optAdvisoryPartitionSize.isEmpty)
+
   override def maxRows: Option[Long] = child.maxRows
   override def output: Seq[Attribute] = child.output
   override val nodePatterns: Seq[TreePattern] = Seq(REBALANCE_PARTITIONS)

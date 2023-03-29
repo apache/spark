@@ -130,9 +130,7 @@ object CheckConnectJvmClientCompatibility {
       ProblemFilters.exclude[Problem]("org.apache.spark.connect.proto.*"),
 
       // DataFrame Reader & Writer
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.DataFrameReader.json"),
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.DataFrameReader.jdbc"),
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.DataFrameWriter.jdbc"),
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.DataFrameReader.json"), // deprecated
 
       // DataFrameNaFunctions
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.DataFrameNaFunctions.this"),
@@ -152,8 +150,7 @@ object CheckConnectJvmClientCompatibility {
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.encoder"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.sqlContext"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.joinWith"),
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.select"),
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.selectUntyped"),
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.selectUntyped"), // protected
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.reduce"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.groupByKey"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.explode"), // deprecated
@@ -163,7 +160,6 @@ object CheckConnectJvmClientCompatibility {
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.flatMap"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.foreach"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.foreachPartition"),
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.storageLevel"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.rdd"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.toJavaRDD"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.javaRDD"),
@@ -176,7 +172,6 @@ object CheckConnectJvmClientCompatibility {
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.functions.callUDF"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.functions.unwrap_udt"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.functions.udaf"),
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.functions.broadcast"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.functions.typedlit"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.functions.typedLit"),
 

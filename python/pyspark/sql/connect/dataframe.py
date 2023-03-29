@@ -21,6 +21,7 @@ check_dependencies(__name__)
 from typing import (
     Any,
     Dict,
+    Iterator,
     List,
     Optional,
     Tuple,
@@ -36,6 +37,7 @@ from typing import (
 import sys
 import random
 import pandas
+import pyarrow as pa
 import json
 import warnings
 from collections.abc import Iterable
@@ -50,9 +52,10 @@ from pyspark.sql.dataframe import (
     DataFrameStatFunctions as PySparkDataFrameStatFunctions,
 )
 
-from pyspark.errors import PySparkTypeError
+from pyspark.errors import PySparkTypeError, PySparkAttributeError
 from pyspark.errors.exceptions.connect import SparkConnectException
 from pyspark.rdd import PythonEvalType
+from pyspark.storagelevel import StorageLevel
 import pyspark.sql.connect.plan as plan
 from pyspark.sql.connect.group import GroupedData
 from pyspark.sql.connect.readwriter import DataFrameWriter, DataFrameWriterV2
@@ -1304,6 +1307,10 @@ class DataFrame:
         return None
 
     def __getattr__(self, name: str) -> "Column":
+        if name in ["_jseq", "_jdf", "_jmap", "_jcols"]:
+            raise PySparkAttributeError(
+                error_class="JVM_ATTRIBUTE_NOT_SUPPORTED", message_parameters={"attr_name": name}
+            )
         return self[name]
 
     @overload
@@ -1344,9 +1351,9 @@ class DataFrame:
         if self._session is None:
             raise Exception("Cannot collect on empty session.")
         query = self._plan.to_proto(self._session.client)
-        table = self._session.client.to_table(query)
+        table, schema = self._session.client.to_table(query)
 
-        schema = from_arrow_schema(table.schema)
+        schema = schema or from_arrow_schema(table.schema)
 
         assert schema is not None and isinstance(schema, StructType)
 
@@ -1534,14 +1541,54 @@ class DataFrame:
     def rdd(self, *args: Any, **kwargs: Any) -> None:
         raise NotImplementedError("RDD Support for Spark Connect is not implemented.")
 
-    def unpersist(self, *args: Any, **kwargs: Any) -> None:
-        raise NotImplementedError("unpersist() is not implemented.")
+    def cache(self) -> "DataFrame":
+        if self._plan is None:
+            raise Exception("Cannot cache on empty plan.")
+        relation = self._plan.plan(self._session.client)
+        self._session.client._analyze(method="persist", relation=relation)
+        return self
 
-    def cache(self, *args: Any, **kwargs: Any) -> None:
-        raise NotImplementedError("cache() is not implemented.")
+    cache.__doc__ = PySparkDataFrame.cache.__doc__
 
-    def persist(self, *args: Any, **kwargs: Any) -> None:
-        raise NotImplementedError("persist() is not implemented.")
+    def persist(
+        self,
+        storageLevel: StorageLevel = (StorageLevel.MEMORY_AND_DISK_DESER),
+    ) -> "DataFrame":
+        if self._plan is None:
+            raise Exception("Cannot persist on empty plan.")
+        relation = self._plan.plan(self._session.client)
+        self._session.client._analyze(
+            method="persist", relation=relation, storage_level=storageLevel
+        )
+        return self
+
+    persist.__doc__ = PySparkDataFrame.persist.__doc__
+
+    @property
+    def storageLevel(self) -> StorageLevel:
+        if self._plan is None:
+            raise Exception("Cannot persist on empty plan.")
+        relation = self._plan.plan(self._session.client)
+        storage_level = self._session.client._analyze(
+            method="get_storage_level", relation=relation
+        ).storage_level
+        assert storage_level is not None
+        return storage_level
+
+    storageLevel.__doc__ = PySparkDataFrame.storageLevel.__doc__
+
+    def unpersist(self, blocking: bool = False) -> "DataFrame":
+        if self._plan is None:
+            raise Exception("Cannot unpersist on empty plan.")
+        relation = self._plan.plan(self._session.client)
+        self._session.client._analyze(method="unpersist", relation=relation, blocking=blocking)
+        return self
+
+    unpersist.__doc__ = PySparkDataFrame.unpivot.__doc__
+
+    @property
+    def is_cached(self) -> bool:
+        return self.storageLevel != StorageLevel.NONE
 
     def withWatermark(self, *args: Any, **kwargs: Any) -> None:
         raise NotImplementedError("withWatermark() is not implemented.")
@@ -1552,8 +1599,28 @@ class DataFrame:
     def foreachPartition(self, *args: Any, **kwargs: Any) -> None:
         raise NotImplementedError("foreachPartition() is not implemented.")
 
-    def toLocalIterator(self, *args: Any, **kwargs: Any) -> None:
-        raise NotImplementedError("toLocalIterator() is not implemented.")
+    def toLocalIterator(self, prefetchPartitions: bool = False) -> Iterator[Row]:
+        from pyspark.sql.connect.conversion import ArrowTableToRowsConversion
+
+        if self._plan is None:
+            raise Exception("Cannot collect on empty plan.")
+        if self._session is None:
+            raise Exception("Cannot collect on empty session.")
+        query = self._plan.to_proto(self._session.client)
+
+        schema: Optional[StructType] = None
+        for schema_or_table in self._session.client.to_table_as_iterator(query):
+            if isinstance(schema_or_table, StructType):
+                assert schema is None
+                schema = schema_or_table
+            else:
+                assert isinstance(schema_or_table, pa.Table)
+                table = schema_or_table
+                if schema is None:
+                    schema = from_arrow_schema(table.schema)
+                yield from ArrowTableToRowsConversion.convert(table, schema)
+
+    toLocalIterator.__doc__ = PySparkDataFrame.toLocalIterator.__doc__
 
     def checkpoint(self, *args: Any, **kwargs: Any) -> None:
         raise NotImplementedError("checkpoint() is not implemented.")
@@ -1567,17 +1634,18 @@ class DataFrame:
     def pandas_api(self, *args: Any, **kwargs: Any) -> None:
         raise NotImplementedError("pandas_api() is not implemented.")
 
-    def registerTempTable(self, *args: Any, **kwargs: Any) -> None:
-        raise NotImplementedError("registerTempTable() is not implemented.")
+    def registerTempTable(self, name: str) -> None:
+        warnings.warn("Deprecated in 2.0, use createOrReplaceTempView instead.", FutureWarning)
+        self.createOrReplaceTempView(name)
 
-    def storageLevel(self, *args: Any, **kwargs: Any) -> None:
-        raise NotImplementedError("storageLevel() is not implemented.")
+    registerTempTable.__doc__ = PySparkDataFrame.registerTempTable.__doc__
 
     def _map_partitions(
         self,
         func: "PandasMapIterFunction",
         schema: Union[StructType, str],
         evalType: int,
+        barrier: bool,
     ) -> "DataFrame":
         from pyspark.sql.connect.udf import UserDefinedFunction
 
@@ -1591,21 +1659,29 @@ class DataFrame:
         )
 
         return DataFrame.withPlan(
-            plan.MapPartitions(child=self._plan, function=udf_obj, cols=self.columns),
+            plan.MapPartitions(
+                child=self._plan, function=udf_obj, cols=self.columns, is_barrier=barrier
+            ),
             session=self._session,
         )
 
     def mapInPandas(
-        self, func: "PandasMapIterFunction", schema: Union[StructType, str]
+        self,
+        func: "PandasMapIterFunction",
+        schema: Union[StructType, str],
+        barrier: bool = False,
     ) -> "DataFrame":
-        return self._map_partitions(func, schema, PythonEvalType.SQL_MAP_PANDAS_ITER_UDF)
+        return self._map_partitions(func, schema, PythonEvalType.SQL_MAP_PANDAS_ITER_UDF, barrier)
 
     mapInPandas.__doc__ = PySparkDataFrame.mapInPandas.__doc__
 
     def mapInArrow(
-        self, func: "ArrowMapIterFunction", schema: Union[StructType, str]
+        self,
+        func: "ArrowMapIterFunction",
+        schema: Union[StructType, str],
+        barrier: bool = False,
     ) -> "DataFrame":
-        return self._map_partitions(func, schema, PythonEvalType.SQL_MAP_ARROW_ITER_UDF)
+        return self._map_partitions(func, schema, PythonEvalType.SQL_MAP_ARROW_ITER_UDF, barrier)
 
     mapInArrow.__doc__ = PySparkDataFrame.mapInArrow.__doc__
 

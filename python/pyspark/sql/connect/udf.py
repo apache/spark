@@ -98,7 +98,7 @@ class UserDefinedFunction:
             )
 
         self.func = func
-        self._returnType: DataType = (
+        self.returnType: DataType = (
             UnparsedDataType(returnType) if isinstance(returnType, str) else returnType
         )
         self._name = name or (
@@ -116,7 +116,7 @@ class UserDefinedFunction:
         arg_exprs = [col._expr for col in arg_cols]
 
         py_udf = PythonUDF(
-            output_type=self._returnType,
+            output_type=self.returnType,
             eval_type=self.evalType,
             func=self.func,
             python_ver="%d.%d" % sys.version_info[:2],
@@ -160,7 +160,7 @@ class UserDefinedFunction:
         )
 
         wrapper.func = self.func  # type: ignore[attr-defined]
-        wrapper.returnType = self._returnType  # type: ignore[attr-defined]
+        wrapper.returnType = self.returnType  # type: ignore[attr-defined]
         wrapper.evalType = self.evalType  # type: ignore[attr-defined]
         wrapper.deterministic = self.deterministic  # type: ignore[attr-defined]
         wrapper.asNondeterministic = functools.wraps(  # type: ignore[attr-defined]

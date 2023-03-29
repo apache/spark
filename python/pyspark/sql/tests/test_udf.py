@@ -106,10 +106,13 @@ class BaseUDFTestsMixin(object):
 
     def test_udf_registration_return_type_not_none(self):
         with QuietTest(self.sc):
-            with self.assertRaisesRegex(TypeError, "Invalid return type"):
-                self.spark.catalog.registerFunction(
-                    "f", UserDefinedFunction(lambda x, y: len(x) + y, StringType()), StringType()
-                )
+            self.check_udf_registration_return_type_not_none()
+
+    def check_udf_registration_return_type_not_none(self):
+        with self.assertRaisesRegex(TypeError, "Invalid return type"):
+            self.spark.catalog.registerFunction(
+                "f", UserDefinedFunction(lambda x, y: len(x) + y, StringType()), StringType()
+            )
 
     def test_nondeterministic_udf(self):
         # Test that nondeterministic UDFs are evaluated only once in chained UDF evaluations
@@ -154,17 +157,20 @@ class BaseUDFTestsMixin(object):
         self.assertFalse(deterministic)
 
     def test_nondeterministic_udf_in_aggregate(self):
+        with QuietTest(self.sc):
+            self.check_nondeterministic_udf_in_aggregate()
+
+    def check_nondeterministic_udf_in_aggregate(self):
         from pyspark.sql.functions import sum
         import random
 
         udf_random_col = udf(lambda: int(100 * random.random()), "int").asNondeterministic()
         df = self.spark.range(10)
 
-        with QuietTest(self.sc):
-            with self.assertRaisesRegex(AnalysisException, "nondeterministic"):
-                df.groupby("id").agg(sum(udf_random_col())).collect()
-            with self.assertRaisesRegex(AnalysisException, "nondeterministic"):
-                df.agg(sum(udf_random_col())).collect()
+        with self.assertRaisesRegex(AnalysisException, "nondeterministic"):
+            df.groupby("id").agg(sum(udf_random_col())).collect()
+        with self.assertRaisesRegex(AnalysisException, "nondeterministic"):
+            df.agg(sum(udf_random_col())).collect()
 
     def test_chained_udf(self):
         self.spark.catalog.registerFunction("double", lambda x: x + x, IntegerType())
@@ -892,6 +898,13 @@ class UDFInitializationTests(unittest.TestCase):
             SparkSession._instantiatedSession,
             "SparkSession shouldn't be initialized when UserDefinedFunction is created.",
         )
+
+    def test_err_parse_type_when_no_sc(self):
+        with self.assertRaisesRegex(
+            RuntimeError,
+            "SparkContext or SparkSession should be created first",
+        ):
+            udf(lambda x: x, "integer")
 
 
 if __name__ == "__main__":

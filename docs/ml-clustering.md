@@ -9,9 +9,9 @@ license: |
   The ASF licenses this file to You under the Apache License, Version 2.0
   (the "License"); you may not use this file except in compliance with
   the License.  You may obtain a copy of the License at
- 
+
      http://www.apache.org/licenses/LICENSE-2.0
- 
+
   Unless required by applicable law or agreed to in writing, software
   distributed under the License is distributed on an "AS IS" BASIS,
   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -40,7 +40,7 @@ called [kmeans||](http://theory.stanford.edu/~sergei/papers/vldb12-kmpar.pdf).
 
 ### Input Columns
 
-<table class="table">
+<table class="table table-striped">
   <thead>
     <tr>
       <th align="left">Param name</th>
@@ -61,7 +61,7 @@ called [kmeans||](http://theory.stanford.edu/~sergei/papers/vldb12-kmpar.pdf).
 
 ### Output Columns
 
-<table class="table">
+<table class="table table-striped">
   <thead>
     <tr>
       <th align="left">Param name</th>
@@ -185,7 +185,7 @@ Refer to the [Java API docs](api/java/org/apache/spark/ml/clustering/BisectingKM
 
 <div data-lang="r" markdown="1">
 
-Refer to the [R API docs](api/R/reference/spark.bisectingKmeans.html) for more details. 
+Refer to the [R API docs](api/R/reference/spark.bisectingKmeans.html) for more details.
 
 {% include_example r/ml/bisectingKmeans.R %}
 </div>
@@ -204,7 +204,7 @@ model.
 
 ### Input Columns
 
-<table class="table">
+<table class="table table-striped">
   <thead>
     <tr>
       <th align="left">Param name</th>
@@ -225,7 +225,7 @@ model.
 
 ### Output Columns
 
-<table class="table">
+<table class="table table-striped">
   <thead>
     <tr>
       <th align="left">Param name</th>
