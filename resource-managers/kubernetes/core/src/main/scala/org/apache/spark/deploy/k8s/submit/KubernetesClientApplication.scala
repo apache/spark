@@ -210,6 +210,9 @@ private[spark] class Client(
           System.exit(exitCode)
         }
       }
+    } else {
+      logInfo(s"Deployed Spark application ${conf.appName} with application ID ${conf.appId} " +
+        s"and submission ID $sId into Kubernetes")
     }
   }
 }

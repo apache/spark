@@ -32,6 +32,13 @@ import org.apache.spark.internal.Logging
 private[k8s] trait LoggingPodStatusWatcher extends Watcher[Pod] {
   def watchOrStop(submissionId: String): Boolean
   def reset(): Unit
+
+  /**
+   * Get spark driver container exit code.
+   * Will return [[SparkException]], when call getDriverExitCode if app is not completed.
+   * Will return [[SparkException]], when can't find specify spark driver container.
+   * @return exit code from driver container
+   */
   def getDriverExitCode(): Option[Int]
 }
 
@@ -74,7 +81,7 @@ private[k8s] class LoggingPodStatusWatcherImpl(conf: KubernetesDriverConf)
 
   override def onClose(e: WatcherException): Unit = {
     logDebug(s"Stopping watching application $appId with last-observed phase $phase")
-    if (e != null && e.isHttpGone) {
+    if(e != null && e.isHttpGone) {
       resourceTooOldReceived = true
       logDebug(s"Got HTTP Gone code, resource version changed in k8s api: $e")
     } else {
@@ -115,7 +122,7 @@ private[k8s] class LoggingPodStatusWatcherImpl(conf: KubernetesDriverConf)
             return None
         }
       }
-      throw new SparkException("Fail to get driver exit code, when the application completed")
+      throw new SparkException(s"Fail to find driver container named: $driverContainerName")
     } else {
       throw new SparkException("Call getDriverExitCode() when the application has not completed")
     }
@@ -132,7 +139,7 @@ private[k8s] class LoggingPodStatusWatcherImpl(conf: KubernetesDriverConf)
       }
     }
 
-    if (podCompleted) {
+    if(podCompleted) {
       logInfo(
         pod.map { p => s"Container final statuses:\n\n${containersDescription(p)}" }
           .getOrElse("No containers were found in the driver pod."))

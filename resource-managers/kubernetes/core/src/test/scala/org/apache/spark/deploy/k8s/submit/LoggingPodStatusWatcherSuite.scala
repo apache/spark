@@ -20,6 +20,7 @@ import io.fabric8.kubernetes.api.model.{PodBuilder, PodStatusBuilder}
 import io.fabric8.kubernetes.client.Watcher.Action
 
 import org.apache.spark.SparkConf
+import org.apache.spark.SparkException
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.deploy.k8s.Constants.DEFAULT_DRIVER_CONTAINER_NAME
 import org.apache.spark.deploy.k8s.KubernetesTestConf
@@ -40,8 +41,7 @@ class LoggingPodStatusWatcherSuite extends SparkFunSuite {
     .build()
 
 
-  test("[SPARK-26365] Get watched driver container exit code") {
-    import org.apache.spark.SparkException
+  test("SPARK-26365: Get watched driver container exit code") {
     val sparkConf = new SparkConf()
     val kubernetesConf = KubernetesTestConf.createDriverConf(sparkConf)
     val watcher = new LoggingPodStatusWatcherImpl(kubernetesConf)
@@ -73,10 +73,6 @@ class LoggingPodStatusWatcherSuite extends SparkFunSuite {
         .endContainerStatus()
       .build()
 
-    val runningState = new PodStatusBuilder()
-      .withPhase("Running")
-      .build()
-
     val errorPod = new PodBuilder(pod).withStatus(errorState).build()
     watcher.eventReceived(Action.MODIFIED, errorPod)
 
@@ -88,13 +84,24 @@ class LoggingPodStatusWatcherSuite extends SparkFunSuite {
 
     assert(watcher.getDriverExitCode().nonEmpty)
     assert(watcher.getDriverExitCode().get == completedCode)
+  }
+
+  test("SPARK-26365: Throw exception when get driver exit code in un-completed state") {
+    val sparkConf = new SparkConf()
+    val kubernetesConf = KubernetesTestConf.createDriverConf(sparkConf)
+    val watcher = new LoggingPodStatusWatcherImpl(kubernetesConf)
+
+    val runningState = new PodStatusBuilder()
+      .withPhase("Running")
+      .build()
 
     val runningPod = new PodBuilder(pod).withStatus(runningState).build()
     watcher.eventReceived(Action.MODIFIED, runningPod)
 
-    // non-completed case
-    assertThrows[SparkException] {
+    val e = intercept[SparkException] {
       watcher.getDriverExitCode()
     }
+
+    assert(e.getMessage.contains("Call getDriverExitCode() when the application has not completed"))
   }
 }
