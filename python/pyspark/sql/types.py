@@ -448,13 +448,7 @@ class DayTimeIntervalType(AnsiIntervalType):
 
 
 class YearMonthIntervalType(AnsiIntervalType):
-    """YearMonthIntervalType.
-
-    The type represents year-month intervals of the SQL standard. A year-month interval is made up
-    of a contiguous subset of the following fields:
-        - MONTH, months within years [0..11],
-        - YEAR, years in the range [0..178956970].
-    """
+    """YearMonthIntervalType, represents year-month intervals of the SQL standard"""
 
     YEAR = 0
     MONTH = 1
