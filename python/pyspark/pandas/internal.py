@@ -814,7 +814,10 @@ class InternalFrame:
         # column_labels
         if column_labels is None:
             column_labels = [
-                (col,) for col in spark_frame.select(self._data_spark_columns).columns  # type: ignore[arg-type]
+                (col,)
+                for col in spark_frame.select(
+                    self._data_spark_columns  # type: ignore[arg-type]
+                ).columns
             ]
         else:
             assert len(column_labels) == len(self._data_spark_columns), (
@@ -913,7 +916,9 @@ class InternalFrame:
         tag = jvm.org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FUNC_ALIAS()
         jexpr = F.monotonically_increasing_id()._jc.expr()
         jexpr.setTagValue(tag, "distributed_index")
-        return sdf.select(Column(jvm.Column(jexpr)).alias(column_name), *scols)  # type: ignore[arg-type]
+        return sdf.select(
+            Column(jvm.Column(jexpr)).alias(column_name), *scols  # type: ignore[arg-type]
+        )
 
     @staticmethod
     def attach_distributed_sequence_column(sdf: SparkDataFrame, column_name: str) -> SparkDataFrame:
@@ -1322,10 +1327,13 @@ class InternalFrame:
 
         sdf = self.spark_frame
         if not keep_order:
-            sdf = self.spark_frame.select(self.index_spark_columns + data_spark_columns)  # type: ignore
+            sdf = self.spark_frame.select(
+                self.index_spark_columns + data_spark_columns  # type: ignore[operator]
+            )
             index_spark_columns = [scol_for(sdf, col) for col in self.index_spark_column_names]
             data_spark_columns = [
-                scol_for(sdf, col) for col in self.spark_frame.select(data_spark_columns).columns  # type: ignore
+                scol_for(sdf, col)
+                for col in self.spark_frame.select(data_spark_columns).columns  # type: ignore
             ]
         else:
             index_spark_columns = self.index_spark_columns

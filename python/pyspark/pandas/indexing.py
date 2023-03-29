@@ -315,7 +315,9 @@ class LocIndexerLike(IndexerLike, metaclass=ABCMeta):
         elif isinstance(cols_sel, Series):
             return self._select_cols_by_series(cols_sel, missing_keys)
         elif isinstance(cols_sel, (Column, SparkConnectColumn)):
-            return self._select_cols_by_spark_column(cols_sel, missing_keys)  # type: ignore[return-value]
+            return self._select_cols_by_spark_column(
+                cols_sel, missing_keys
+            )  # type: ignore[return-value]
         elif isinstance(cols_sel, slice):
             if cols_sel == slice(None):
                 # If slice is None - select everything, so nothing to do
@@ -526,7 +528,9 @@ class LocIndexerLike(IndexerLike, metaclass=ABCMeta):
             if cond is not None:
                 index_columns = sdf.select(index_spark_columns).columns
                 data_columns = sdf.select(data_spark_columns).columns
-                sdf = sdf.filter(cond).select(index_spark_columns + data_spark_columns)  # type: ignore[arg-type]
+                sdf = sdf.filter(cond).select(  # type: ignore[arg-type]
+                    index_spark_columns + data_spark_columns
+                )
                 index_spark_columns = [scol_for(sdf, col) for col in index_columns]
                 data_spark_columns = [scol_for(sdf, col) for col in data_columns]
 
@@ -742,7 +746,11 @@ class LocIndexerLike(IndexerLike, metaclass=ABCMeta):
             ):
                 for scol in data_spark_columns:
                     if spark_column_equals(new_scol, scol):
-                        new_scol = F.when(cond, value).otherwise(scol).alias(spark_column_name)  # type: ignore[arg-type]
+                        new_scol = (
+                            F.when(cond, value)  # type: ignore[arg-type]
+                            .otherwise(scol)
+                            .alias(spark_column_name)
+                        )
                         new_field = InternalField.from_struct_field(
                             self._internal.spark_frame.select(new_scol).schema[0],
                             use_extension_dtypes=new_field.is_extension_dtype,
@@ -768,7 +776,9 @@ class LocIndexerLike(IndexerLike, metaclass=ABCMeta):
                         )
                     )
                 column_labels.append(label)
-                new_data_spark_columns.append(F.when(cond, value).alias(name_like_string(label)))  # type: ignore[arg-type]
+                new_data_spark_columns.append(
+                    F.when(cond, value).alias(name_like_string(label))  # type: ignore[arg-type]
+                )
                 new_fields.append(None)
 
             internal = self._internal.with_new_columns(
@@ -1000,7 +1010,9 @@ class LocIndexer(LocIndexerLike):
     def _select_rows_by_spark_column(
         self, rows_sel: SparkColumn
     ) -> Tuple[Optional[SparkColumn], Optional[int], Optional[int]]:
-        spark_type = self._internal.spark_frame.select(rows_sel).schema[0].dataType  # type: ignore[arg-type]
+        spark_type = (
+            self._internal.spark_frame.select(rows_sel).schema[0].dataType  # type: ignore[arg-type]
+        )
         assert isinstance(spark_type, BooleanType), spark_type
         return rows_sel, None, None
 
@@ -1258,7 +1270,9 @@ class LocIndexer(LocIndexerLike):
         bool,
         Optional[Name],
     ]:
-        column_labels: List[Label] = [(self._internal.spark_frame.select(cols_sel).columns[0],)]  # type: ignore[arg-type]
+        column_labels: List[Label] = [
+            (self._internal.spark_frame.select(cols_sel).columns[0],)  # type: ignore[arg-type]
+        ]
         data_spark_columns = [cols_sel]
         return column_labels, data_spark_columns, None, True, None
 

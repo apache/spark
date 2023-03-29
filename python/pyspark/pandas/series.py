@@ -6311,8 +6311,10 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         sdf_for_index = notnull._internal.spark_frame.select(notnull._internal.index_spark_columns)
 
         tmp_join_key = verify_temp_column_name(sdf_for_index, "__tmp_join_key__")
-        sdf_for_index = InternalFrame.attach_distributed_sequence_column(  # type: ignore[assignment]
-            sdf_for_index, tmp_join_key
+        sdf_for_index = (
+            InternalFrame.attach_distributed_sequence_column(  # type: ignore[assignment]
+                sdf_for_index, tmp_join_key
+            )
         )
         # sdf_for_index:
         # +----------------+-----------------+
@@ -6347,7 +6349,9 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         ).drop("values", NATURAL_ORDER_COLUMN_NAME)
 
         tmp_join_key = verify_temp_column_name(sdf_for_data, "__tmp_join_key__")
-        sdf_for_data = InternalFrame.attach_distributed_sequence_column(sdf_for_data, tmp_join_key)  # type: ignore[assignment]
+        sdf_for_data = InternalFrame.attach_distributed_sequence_column(
+            sdf_for_data, tmp_join_key
+        )  # type: ignore[assignment]
         # sdf_for_index:                         sdf_for_data:
         # +----------------+-----------------+   +----------------+---+
         # |__tmp_join_key__|__index_level_0__|   |__tmp_join_key__|  0|

@@ -270,7 +270,8 @@ class IntegralOps(NumericOps):
         def floordiv(left: SparkColumn, right: Any) -> SparkColumn:
             return F.when(F.lit(right is np.nan), np.nan).otherwise(
                 F.when(
-                    F.lit(right != 0) | F.lit(right).isNull(), F.floor(left.__div__(right))  # type: ignore[arg-type]
+                    F.lit(right != 0) | F.lit(right).isNull(),
+                    F.floor(left.__div__(right)),  # type: ignore[arg-type]
                 ).otherwise(
                     F.lit(np.inf).__div__(left)  # type: ignore[arg-type]
                 )
@@ -285,7 +286,9 @@ class IntegralOps(NumericOps):
             raise TypeError("True division can not be applied to given types.")
 
         def rtruediv(left: SparkColumn, right: Any) -> SparkColumn:
-            return F.when(left == 0, F.lit(np.inf).__div__(right)).otherwise(  # type: ignore[arg-type]
+            return F.when(
+                left == 0, F.lit(np.inf).__div__(right)  # type: ignore[arg-type]
+            ).otherwise(
                 F.lit(right).__truediv__(left)  # type: ignore[arg-type]
             )
 
@@ -357,7 +360,8 @@ class FractionalOps(NumericOps):
         def floordiv(left: SparkColumn, right: Any) -> SparkColumn:
             return F.when(F.lit(right is np.nan), np.nan).otherwise(
                 F.when(
-                    F.lit(right != 0) | F.lit(right).isNull(), F.floor(left.__div__(right))  # type: ignore[arg-type]
+                    F.lit(right != 0) | F.lit(right).isNull(),
+                    F.floor(left.__div__(right)),  # type: ignore[arg-type]
                 ).otherwise(
                     F.when(F.lit(left == np.inf) | F.lit(left == -np.inf), left).otherwise(
                         F.lit(np.inf).__div__(left)  # type: ignore[arg-type]
@@ -374,7 +378,9 @@ class FractionalOps(NumericOps):
             raise TypeError("True division can not be applied to given types.")
 
         def rtruediv(left: SparkColumn, right: Any) -> SparkColumn:
-            return F.when(left == 0, F.lit(np.inf).__div__(right)).otherwise(  # type: ignore[arg-type]
+            return F.when(
+                left == 0, F.lit(np.inf).__div__(right)  # type: ignore[arg-type]
+            ).otherwise(
                 F.lit(right).__truediv__(left)  # type: ignore[arg-type]
             )
 
@@ -388,7 +394,9 @@ class FractionalOps(NumericOps):
 
         def rfloordiv(left: SparkColumn, right: Any) -> SparkColumn:
             return F.when(F.lit(left == 0), F.lit(np.inf).__div__(right)).otherwise(
-                F.when(F.lit(left) == np.nan, np.nan).otherwise(F.floor(F.lit(right).__div__(left)))  # type: ignore[arg-type]
+                F.when(F.lit(left) == np.nan, np.nan).otherwise(
+                    F.floor(F.lit(right).__div__(left))  # type: ignore[arg-type]
+                )
             )
 
         right = transform_boolean_operand_to_numeric(right, spark_type=left.spark.data_type)

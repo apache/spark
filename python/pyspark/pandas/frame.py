@@ -1540,8 +1540,12 @@ class DataFrame(Frame, Generic[T]):
                     F.struct(
                         F.lit(i).alias(index_1_col_name),
                         F.lit(j).alias(index_2_col_name),
-                        numeric_scols[i].alias(CORRELATION_VALUE_1_COLUMN),  # type: ignore[arg-type]
-                        numeric_scols[j].alias(CORRELATION_VALUE_2_COLUMN),  # type: ignore[arg-type]
+                        numeric_scols[i].alias(
+                            CORRELATION_VALUE_1_COLUMN
+                        ),  # type: ignore[arg-type]
+                        numeric_scols[j].alias(
+                            CORRELATION_VALUE_2_COLUMN
+                        ),  # type: ignore[arg-type]
                     )
                 )
 
@@ -7496,7 +7500,10 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             (False, "first"): cast(SparkColumn, Column).desc_nulls_first,
             (False, "last"): cast(SparkColumn, Column).desc_nulls_last,
         }
-        by = [mapper[(asc, na_position)](scol) for scol, asc in zip(by, ascending)]  # type: ignore[call-arg]
+        by = [
+            mapper[(asc, na_position)](scol)  # type: ignore[call-arg]
+            for scol, asc in zip(by, ascending)
+        ]
 
         natural_order_scol = F.col(NATURAL_ORDER_COLUMN_NAME)
 
@@ -8549,7 +8556,11 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                     if how == "right":
                         scol = right_scol.alias(col)
                     elif how == "full":
-                        scol = F.when(scol.isNotNull(), scol).otherwise(right_scol).alias(col)  # type: ignore[arg-type]
+                        scol = (
+                            F.when(scol.isNotNull(), scol)  # type: ignore[arg-type]
+                            .otherwise(right_scol)
+                            .alias(col)
+                        )
                     else:
                         pass
                 else:
@@ -12766,7 +12777,9 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                     new_column_labels.append(label)
 
             new_columns = [
-                F.avg(get_spark_column(self, label)).alias(name_like_string(label))  # type: ignore[arg-type]
+                F.avg(get_spark_column(self, label)).alias(  # type: ignore[arg-type]
+                    name_like_string(label)
+                )
                 for label in new_column_labels
             ]
 

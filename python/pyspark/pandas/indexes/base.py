@@ -47,7 +47,7 @@ from pandas.io.formats.printing import pprint_thing
 from pandas.api.types import CategoricalDtype, is_hashable  # type: ignore[attr-defined]
 from pandas._libs import lib
 
-from pyspark.sql import functions as F, Column
+from pyspark.sql import functions as F
 from pyspark.sql.types import (
     DayTimeIntervalType,
     FractionalType,
@@ -1642,7 +1642,9 @@ class Index(IndexOpsMixin):
             sequence_col = verify_temp_column_name(sdf, "__distributed_sequence_column__")
             sdf = InternalFrame.attach_distributed_sequence_column(sdf, column_name=sequence_col)
 
-        ordered_sdf = sdf.orderBy(*self._internal.index_spark_columns, ascending=ascending)  # type: ignore[arg-type]
+        ordered_sdf = sdf.orderBy(
+            *self._internal.index_spark_columns, ascending=ascending  # type: ignore[arg-type]
+        )
         sdf = ordered_sdf.select(self._internal.index_spark_columns)  # type: ignore[arg-type]
 
         internal = InternalFrame(
@@ -1988,7 +1990,9 @@ class Index(IndexOpsMixin):
 
         return (
             sdf.orderBy(
-                scol_for(sdf, self._internal.data_spark_column_names[0]).desc(),  # type: ignore[arg-type]
+                scol_for(
+                    sdf, self._internal.data_spark_column_names[0]
+                ).desc(),  # type: ignore[arg-type]
                 F.col(sequence_col).asc(),  # type: ignore[arg-type]
             )
             .select(sequence_col)
@@ -2022,7 +2026,9 @@ class Index(IndexOpsMixin):
 
         return (
             sdf.orderBy(
-                scol_for(sdf, self._internal.data_spark_column_names[0]).asc(),  # type: ignore[arg-type]
+                scol_for(
+                    sdf, self._internal.data_spark_column_names[0]
+                ).asc(),  # type: ignore[arg-type]
                 F.col(sequence_col).asc(),  # type: ignore[arg-type]
             )
             .select(sequence_col)

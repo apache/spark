@@ -131,7 +131,9 @@ class SparkIndexOpsMethods(Generic[IndexOpsLike], metaclass=ABCMeta):
         # within the function, for example,
         # `df1.a.spark.transform(lambda _: F.col("non-existent"))`.
         field = InternalField.from_struct_field(
-            self._data._internal.spark_frame.select(output).schema.fields[0]  # type: ignore[arg-type]
+            self._data._internal.spark_frame.select(output).schema.fields[  # type: ignore[arg-type]
+                0
+            ]
         )
         return self._data._with_new_scol(scol=output, field=field)
 
@@ -204,7 +206,9 @@ class SparkSeriesMethods(SparkIndexOpsMethods["ps.Series"]):
             )
         assert isinstance(self._data, Series)
 
-        sdf = self._data._internal.spark_frame.drop(*HIDDEN_COLUMNS).select(output)  # type: ignore[arg-type]
+        sdf = self._data._internal.spark_frame.drop(*HIDDEN_COLUMNS).select(
+            output  # type: ignore[arg-type]
+        )
         # Lose index.
         return first_series(DataFrame(sdf)).rename(self._data.name)
 

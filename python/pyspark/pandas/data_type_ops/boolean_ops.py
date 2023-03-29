@@ -282,7 +282,9 @@ class BooleanOps(DataTypeOps):
                     return F.lit(False)
                 else:
                     scol = left | F.lit(right)
-                    return F.when(left.isNull() | scol.isNull(), False).otherwise(scol)  # type: ignore
+                    return F.when(left.isNull() | scol.isNull(), False).otherwise(  # type: ignore
+                        scol
+                    )
 
             return column_op(or_func)(left, right)
 
