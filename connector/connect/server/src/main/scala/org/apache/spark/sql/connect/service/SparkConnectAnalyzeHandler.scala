@@ -27,7 +27,7 @@ import org.apache.spark.sql.{Dataset, SparkSession}
 import org.apache.spark.sql.connect.artifact.SparkConnectArtifactManager
 import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, InvalidPlanInput, StorageLevelProtoConverter}
 import org.apache.spark.sql.connect.planner.SparkConnectPlanner
-import org.apache.spark.sql.execution.{CodegenMode, CostMode, ExtendedMode, FormattedMode, SimpleMode}
+import org.apache.spark.sql.execution.{AnalysedMode, CodegenMode, CostMode, ExtendedMode, FormattedMode, SimpleMode}
 
 private[connect] class SparkConnectAnalyzeHandler(
     responseObserver: StreamObserver[proto.AnalyzePlanResponse])
@@ -78,6 +78,8 @@ private[connect] class SparkConnectAnalyzeHandler(
             queryExecution.explainString(CostMode)
           case proto.AnalyzePlanRequest.Explain.ExplainMode.EXPLAIN_MODE_FORMATTED =>
             queryExecution.explainString(FormattedMode)
+          case proto.AnalyzePlanRequest.Explain.ExplainMode.EXPLAIN_MODE_ANALYSED =>
+            queryExecution.explainString(AnalysedMode)
           case other => throw new UnsupportedOperationException(s"Unknown Explain Mode $other!")
         }
         builder.setExplain(

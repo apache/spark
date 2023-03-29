@@ -394,7 +394,8 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
     Seq(SimpleMode, ExtendedMode, FormattedMode).foreach { mode =>
       checkKeywordsExistsInExplain(cmd, mode, value)
     }
-    Seq(SimpleMode, ExtendedMode, CodegenMode, CostMode, FormattedMode).foreach { mode =>
+    Seq(SimpleMode, ExtendedMode, CodegenMode, CostMode, FormattedMode, AnalysedMode)
+      .foreach { mode =>
       checkKeywordsNotExistsInExplain(cmd, mode, password)
       checkKeywordsNotExistsInExplain(cmd, mode, token)
     }
@@ -415,7 +416,8 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
         .table(tableName)
 
       checkKeywordsExistsInExplain(df2, ExtendedMode, value)
-      Seq(SimpleMode, ExtendedMode, CodegenMode, CostMode, FormattedMode).foreach { mode =>
+      Seq(SimpleMode, ExtendedMode, CodegenMode, CostMode, FormattedMode, AnalysedMode)
+        .foreach { mode =>
         checkKeywordsNotExistsInExplain(df2, mode, password)
         checkKeywordsNotExistsInExplain(df2, mode, token)
       }
@@ -433,6 +435,8 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
     assertExplainOutput(CodegenMode)
     assertExplainOutput(CostMode)
     assertExplainOutput(FormattedMode)
+    assertExplainOutput(AnalysedMode)
+
 
     val errMsg = intercept[IllegalArgumentException] {
       ExplainMode.fromString("unknown")
