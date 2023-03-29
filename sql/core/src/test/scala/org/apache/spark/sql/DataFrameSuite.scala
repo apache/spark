@@ -1136,7 +1136,7 @@ class DataFrameSuite extends QueryTest
     assert(getSchemaAsSeq(summaryDF) === Seq("summary", "name", "age", "height"))
     checkAnswer(approxSummaryDF, approxSummaryResult)
   }
-  
+
   test("SPARK-41391: Correct the output column name of groupBy.agg(count_distinct)") {
     withTempView("person") {
       person.createOrReplaceTempView("person")
