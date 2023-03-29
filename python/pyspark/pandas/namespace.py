@@ -49,7 +49,7 @@ from pandas.api.types import (  # type: ignore[attr-defined]
 from pandas.tseries.offsets import DateOffset
 import pyarrow as pa
 import pyarrow.parquet as pq
-from pyspark.sql import functions as F, Column, DataFrame as SparkDataFrame
+from pyspark.sql import functions as F, Column
 from pyspark.sql.functions import pandas_udf
 from pyspark.sql.types import (
     ByteType,
@@ -69,7 +69,7 @@ from pyspark.sql.types import (
 )
 
 from pyspark import pandas as ps
-from pyspark.pandas._typing import Axis, Dtype, Label, Name
+from pyspark.pandas._typing import Axis, Dtype, Label, Name, SparkDataFrame
 from pyspark.pandas.base import IndexOpsMixin
 from pyspark.pandas.utils import (
     align_diff_frames,

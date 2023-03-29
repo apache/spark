@@ -45,7 +45,7 @@ from pandas.api.types import is_list_like  # type: ignore[attr-defined]
 
 # For running doctests and reference resolution in PyCharm.
 from pyspark import pandas as ps  # noqa: F401
-from pyspark.pandas._typing import Axis, Label, Name, DataFrameOrSeries
+from pyspark.pandas._typing import Axis, Label, Name, DataFrameOrSeries, SparkColumn
 from pyspark.pandas.typedef.typehints import as_spark_type
 
 # For Supporting Spark Connect
@@ -606,7 +606,7 @@ def lazy_property(fn: Callable[[Any], Any]) -> property:
 
 def scol_for(sdf: Union[SparkDataFrame, SparkConnectDataFrame], column_name: str) -> Column:
     """Return Spark Column for the given column name."""
-    return sdf["`{}`".format(column_name)]
+    return sdf["`{}`".format(column_name)]  # type: ignore[return-value]
 
 
 def column_labels_level(column_labels: List[Label]) -> int:
@@ -949,10 +949,10 @@ def compare_null_first(
     left: Column,
     right: Column,
     comp: Callable[
-        [Union[Column, SparkConnectColumn], Union[Column, SparkConnectColumn]],
-        Union[Column, SparkConnectColumn],
+        [SparkColumn, SparkColumn],
+        SparkColumn,
     ],
-) -> Column:
+) -> SparkColumn:
     return (left.isNotNull() & right.isNotNull() & comp(left, right)) | (
         left.isNull() & right.isNotNull()
     )
@@ -962,10 +962,10 @@ def compare_null_last(
     left: Column,
     right: Column,
     comp: Callable[
-        [Union[Column, SparkConnectColumn], Union[Column, SparkConnectColumn]],
-        Union[Column, SparkConnectColumn],
+        [SparkColumn, SparkColumn],
+        SparkColumn,
     ],
-) -> Column:
+) -> SparkColumn:
     return (left.isNotNull() & right.isNotNull() & comp(left, right)) | (
         left.isNotNull() & right.isNull()
     )
@@ -975,10 +975,10 @@ def compare_disallow_null(
     left: Column,
     right: Column,
     comp: Callable[
-        [Union[Column, SparkConnectColumn], Union[Column, SparkConnectColumn]],
-        Union[Column, SparkConnectColumn],
+        [SparkColumn, SparkColumn],
+        SparkColumn,
     ],
-) -> Column:
+) -> SparkColumn:
     return left.isNotNull() & right.isNotNull() & comp(left, right)
 
 
@@ -986,10 +986,10 @@ def compare_allow_null(
     left: Column,
     right: Column,
     comp: Callable[
-        [Union[Column, SparkConnectColumn], Union[Column, SparkConnectColumn]],
-        Union[Column, SparkConnectColumn],
+        [SparkColumn, SparkColumn],
+        SparkColumn,
     ],
-) -> Column:
+) -> SparkColumn:
     return left.isNull() | right.isNull() | comp(left, right)
 
 

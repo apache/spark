@@ -1632,12 +1632,26 @@ class DataFrame:
     def to_pandas_on_spark(
         self, index_col: Optional[Union[str, List[str]]] = None
     ) -> "PandasOnSparkDataFrame":
-        return PySparkDataFrame.to_pandas_on_spark(self, index_col)
+        warnings.warn(
+            "DataFrame.to_pandas_on_spark is deprecated. Use DataFrame.pandas_api instead.",
+            FutureWarning,
+        )
+        return self.pandas_api(index_col)
 
     def pandas_api(
         self, index_col: Optional[Union[str, List[str]]] = None
     ) -> "PandasOnSparkDataFrame":
-        return PySparkDataFrame.pandas_api(self, index_col)
+        from pyspark.pandas.namespace import _get_index_map
+        from pyspark.pandas.frame import DataFrame as PandasOnSparkDataFrame
+        from pyspark.pandas.internal import InternalFrame
+
+        index_spark_columns, index_names = _get_index_map(self, index_col)
+        internal = InternalFrame(
+            spark_frame=self,
+            index_spark_columns=index_spark_columns,
+            index_names=index_names,  # type: ignore[arg-type]
+        )
+        return PandasOnSparkDataFrame(internal)
 
     def registerTempTable(self, name: str) -> None:
         warnings.warn("Deprecated in 2.0, use createOrReplaceTempView instead.", FutureWarning)

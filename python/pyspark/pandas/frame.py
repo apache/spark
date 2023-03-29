@@ -85,7 +85,16 @@ from pyspark.sql.types import (
 from pyspark.sql.window import Window
 
 from pyspark import pandas as ps  # For running doctests and reference resolution in PyCharm.
-from pyspark.pandas._typing import Axis, DataFrameOrSeries, Dtype, Label, Name, Scalar, T
+from pyspark.pandas._typing import (
+    Axis,
+    DataFrameOrSeries,
+    Dtype,
+    Label,
+    Name,
+    Scalar,
+    T,
+    SparkColumn,
+)
 from pyspark.pandas.accessors import PandasOnSparkFrameMethods
 from pyspark.pandas.config import option_context, get_option
 from pyspark.pandas.correlation import (
@@ -734,7 +743,7 @@ class DataFrame(Frame, Generic[T]):
 
     def _reduce_for_stat_function(
         self,
-        sfun: Callable[["Series"], Union[PySparkColumn, SparkConnectColumn]],
+        sfun: Callable[["Series"], SparkColumn],
         name: str,
         axis: Optional[Axis] = None,
         numeric_only: bool = True,
@@ -765,7 +774,9 @@ class DataFrame(Frame, Generic[T]):
         if axis == 0:
             min_count = kwargs.get("min_count", 0)
 
-            exprs = [F.lit(None).cast(StringType()).alias(SPARK_DEFAULT_INDEX_NAME)]
+            exprs = [
+                cast(SparkColumn, F.lit(None).cast(StringType()).alias(SPARK_DEFAULT_INDEX_NAME))
+            ]
             new_column_labels = []
             for label in self._internal.column_labels:
                 psser = self._psser_for(label)
@@ -777,7 +788,7 @@ class DataFrame(Frame, Generic[T]):
 
                 if keep_column:
                     if not skipna and get_option("compute.eager_check") and psser.hasnans:
-                        scol = F.first(F.lit(np.nan))
+                        scol: SparkColumn = F.first(F.lit(np.nan))
                     else:
                         scol = sfun(psser)
 
@@ -790,7 +801,7 @@ class DataFrame(Frame, Generic[T]):
             if len(exprs) == 1:
                 return Series([])
 
-            sdf = self._internal.spark_frame.select(*exprs)
+            sdf = self._internal.spark_frame.select(*exprs)  # type: ignore[arg-type]
 
             # The data is expected to be small so it's fine to transpose/use the default index.
             with ps.option_context("compute.max_rows", 1):
@@ -866,7 +877,7 @@ class DataFrame(Frame, Generic[T]):
 
     def _apply_series_op(
         self,
-        op: Callable[["Series"], Union["Series", PySparkColumn, SparkConnectColumn]],
+        op: Callable[["Series"], Union["Series", SparkColumn]],
         should_resolve: bool = False,
     ) -> "DataFrame":
         applied = []
@@ -1504,7 +1515,7 @@ class DataFrame(Frame, Generic[T]):
             for label in internal.column_labels
             if isinstance(internal.spark_type_for(label), (NumericType, BooleanType))
         ]
-        numeric_scols: List[Union[SparkConnectColumn, PySparkColumn]] = [
+        numeric_scols: List[SparkColumn] = [
             internal.spark_column_for(label).cast("double") for label in numeric_labels
         ]
         numeric_col_names: List[str] = [name_like_string(label) for label in numeric_labels]
@@ -1522,15 +1533,15 @@ class DataFrame(Frame, Generic[T]):
         # |  4|  1|null|
         # +---+---+----+
 
-        pair_scols: List[Union[SparkConnectColumn, PySparkColumn]] = []
+        pair_scols: List[SparkColumn] = []
         for i in range(0, num_scols):
             for j in range(i, num_scols):
                 pair_scols.append(
                     F.struct(
                         F.lit(i).alias(index_1_col_name),
                         F.lit(j).alias(index_2_col_name),
-                        numeric_scols[i].alias(CORRELATION_VALUE_1_COLUMN),
-                        numeric_scols[j].alias(CORRELATION_VALUE_2_COLUMN),
+                        numeric_scols[i].alias(CORRELATION_VALUE_1_COLUMN),  # type: ignore[arg-type]
+                        numeric_scols[j].alias(CORRELATION_VALUE_2_COLUMN),  # type: ignore[arg-type]
                     )
                 )
 
@@ -1550,7 +1561,7 @@ class DataFrame(Frame, Generic[T]):
         # |                  1|                  2|               null|               null|
         # |                  2|                  2|               null|               null|
         # +-------------------+-------------------+-------------------+-------------------+
-        sdf = sdf.select(F.inline(F.array(*pair_scols)))
+        sdf = sdf.select(F.inline(F.array(*pair_scols)))  # type: ignore[arg-type]
 
         sdf = compute(sdf=sdf, groupKeys=[index_1_col_name, index_2_col_name], method=method)
         if method == "kendall":
@@ -1772,7 +1783,7 @@ class DataFrame(Frame, Generic[T]):
 
         intersect_numeric_column_labels: List[Label] = []
         diff_numeric_column_labels: List[Label] = []
-        pair_scols: List[Union[SparkConnectColumn, PySparkColumn]] = []
+        pair_scols: List[SparkColumn] = []
         if right_is_series:
             intersect_numeric_column_labels = this_numeric_column_labels
             that_scol = that._internal.spark_column_for(that_numeric_column_labels[0]).cast(
@@ -1808,7 +1819,7 @@ class DataFrame(Frame, Generic[T]):
                 )
 
         if len(pair_scols) > 0:
-            sdf = sdf.select(F.inline(F.array(*pair_scols)))
+            sdf = sdf.select(F.inline(F.array(*pair_scols)))  # type: ignore[arg-type]
 
             sdf = compute(sdf=sdf, groupKeys=[index_col_name], method=method).select(
                 index_col_name, CORRELATION_CORR_OUTPUT_COLUMN
@@ -4856,7 +4867,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         else:
             raise TypeError("decimals must be an integer, a dict-like or a Series")
 
-        def op(psser: ps.Series) -> Union[ps.Series, Union[SparkConnectColumn, PySparkColumn]]:
+        def op(psser: ps.Series) -> Union[ps.Series, SparkColumn]:
             label = psser._column_label
             if label in decimals_dict:
                 return F.round(psser.spark.column, decimals_dict[label])
@@ -5521,7 +5532,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                     scol, field = pairs[label[: len(label) - i]]
 
                     name = self._internal.spark_column_name_for(label)
-                    scol = scol.alias(name)
+                    scol = scol.alias(name)  # type: ignore[attr-defined]
                     if field is not None:
                         field = field.copy(name=name)
                     break
@@ -5535,7 +5546,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         for label, (scol, field) in pairs.items():
             if label not in set(i[: len(label)] for i in self._internal.column_labels):
                 name = name_like_string(label)
-                scols.append(scol.alias(name))
+                scols.append(scol.alias(name))  # type: ignore[attr-defined]
                 if field is not None:
                     field = field.copy(name=name)
                 data_fields.append(field)
@@ -5548,7 +5559,9 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         ]
 
         internal = self._internal.with_new_columns(
-            scols, column_labels=column_labels, data_fields=data_fields
+            cast(Sequence[Union[SparkColumn, "Series"]], scols),
+            column_labels=column_labels,
+            data_fields=data_fields,
         )
         return DataFrame(internal)
 
@@ -7442,9 +7455,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                     )
             return DataFrame(internal)
 
-    def _prepare_sort_by_scols(
-        self, by: Union[Name, List[Name]]
-    ) -> List[Union[PySparkColumn, SparkConnectColumn]]:
+    def _prepare_sort_by_scols(self, by: Union[Name, List[Name]]) -> List[SparkColumn]:
         if is_name_like_value(by):
             by = [by]
         else:
@@ -7457,12 +7468,12 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                     "The column %s is not unique. For a multi-index, the label must be a tuple "
                     "with elements corresponding to each level." % name_like_string(colname)
                 )
-            new_by.append(ser.spark.column)
+            new_by.append(cast(SparkColumn, ser.spark.column))
         return new_by
 
     def _sort(
         self,
-        by: List[Union[PySparkColumn, SparkConnectColumn]],
+        by: Sequence[SparkColumn],
         ascending: Union[bool, List[bool]],
         na_position: str,
         keep: str = "first",
@@ -7480,17 +7491,17 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         # Mapper: Get a spark colum
         # n function for (ascending, na_position) combination
         mapper = {
-            (True, "first"): Column.asc_nulls_first,
-            (True, "last"): Column.asc_nulls_last,
-            (False, "first"): Column.desc_nulls_first,
-            (False, "last"): Column.desc_nulls_last,
+            (True, "first"): cast(SparkColumn, Column).asc_nulls_first,
+            (True, "last"): cast(SparkColumn, Column).asc_nulls_last,
+            (False, "first"): cast(SparkColumn, Column).desc_nulls_first,
+            (False, "last"): cast(SparkColumn, Column).desc_nulls_last,
         }
-        by = [mapper[(asc, na_position)](scol) for scol, asc in zip(by, ascending)]
+        by = [mapper[(asc, na_position)](scol) for scol, asc in zip(by, ascending)]  # type: ignore[call-arg]
 
         natural_order_scol = F.col(NATURAL_ORDER_COLUMN_NAME)
 
         if keep == "last":
-            natural_order_scol = Column.desc(natural_order_scol)
+            natural_order_scol = Column.desc(natural_order_scol)  # type: ignore[attr-defined]
         elif keep == "all":
             raise NotImplementedError("`keep`=all is not implemented yet.")
         elif keep != "first":
@@ -8519,10 +8530,10 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         data_columns = []
         column_labels = []
 
-        def left_scol_for(label: Label) -> Union[SparkConnectColumn, PySparkColumn]:
+        def left_scol_for(label: Label) -> SparkColumn:
             return scol_for(left_table, left_internal.spark_column_name_for(label))
 
-        def right_scol_for(label: Label) -> Union[SparkConnectColumn, PySparkColumn]:
+        def right_scol_for(label: Label) -> SparkColumn:
             return scol_for(right_table, right_internal.spark_column_name_for(label))
 
         for label in left_internal.column_labels:
@@ -8538,7 +8549,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                     if how == "right":
                         scol = right_scol.alias(col)
                     elif how == "full":
-                        scol = F.when(scol.isNotNull(), scol).otherwise(right_scol).alias(col)
+                        scol = F.when(scol.isNotNull(), scol).otherwise(right_scol).alias(col)  # type: ignore[arg-type]
                     else:
                         pass
                 else:
@@ -10200,7 +10211,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                     "shape (1,{}) doesn't match the shape (1,{})".format(len(col), level)
                 )
         fill_value = np.nan if fill_value is None else fill_value
-        scols_or_pssers: List[Union[SparkConnectColumn, PySparkColumn]] = []
+        scols_or_pssers: List[Union[SparkColumn, "Series"]] = []
         labels = []
         for label in label_columns:
             if label in self._internal.column_labels:
@@ -10629,9 +10640,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 ).with_filter(F.lit(False))
             )
 
-        column_labels: Dict[
-            Label, Dict[Any, Union[SparkConnectColumn, PySparkColumn]]
-        ] = defaultdict(dict)
+        column_labels: Dict[Label, Dict[Any, SparkColumn]] = defaultdict(dict)
         index_values = set()
         should_returns_series = False
         for label in self._internal.column_labels:
@@ -10659,7 +10668,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         structs = [
             F.struct(
                 *[F.lit(value).alias(index_column)],
-                *[
+                *[  # type: ignore[arg-type]
                     (
                         column_labels[label][value]
                         if value in column_labels[label]
@@ -10937,7 +10946,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         if len(column_labels) == 0:
             return ps.Series([], dtype=bool)
 
-        applied = []
+        applied: List[SparkColumn] = []
         for label in column_labels:
             scol = self._internal.spark_column_for(label)
 
@@ -11020,7 +11029,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         if len(column_labels) == 0:
             return ps.Series([], dtype=bool)
 
-        applied = []
+        applied: List[SparkColumn] = []
         for label in column_labels:
             scol = self._internal.spark_column_for(label)
             any_col = F.max(F.coalesce(scol.cast("boolean"), F.lit(False)))
@@ -11043,7 +11052,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         return bool_column_labels
 
     def _result_aggregated(
-        self, column_labels: List[Label], scols: List[Union[PySparkColumn, SparkConnectColumn]]
+        self, column_labels: List[Label], scols: Sequence[SparkColumn]
     ) -> "Series":
         """
         Given aggregated Spark columns and respective column labels from the original
@@ -11057,7 +11066,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             cols.append(
                 F.struct(
                     *[F.lit(col).alias(SPARK_INDEX_NAME_FORMAT(i)) for i, col in enumerate(label)],
-                    *[applied_col.alias(result_scol_name)],
+                    *[applied_col.alias(result_scol_name)],  # type: ignore[arg-type]
                 )
             )
         # Statements under this comment implement spark frame transformations as below:
@@ -11871,7 +11880,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         """
         window = Window.orderBy(NATURAL_ORDER_COLUMN_NAME).rowsBetween(-periods, -periods)
 
-        def op(psser: ps.Series) -> Union[SparkConnectColumn, PySparkColumn]:
+        def op(psser: ps.Series) -> SparkColumn:
             prev_row = F.lag(psser.spark.column, periods).over(window)
             return ((psser.spark.column - prev_row) / prev_row).alias(
                 psser._internal.data_spark_column_names[0]
@@ -12231,7 +12240,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             if v < 0.0 or v > 1.0:
                 raise ValueError("percentiles should all be in the interval [0, 1].")
 
-        def quantile(psser: "Series") -> Union[SparkConnectColumn, PySparkColumn]:
+        def quantile(psser: "Series") -> SparkColumn:
             spark_type = psser.spark.data_type
             spark_column = psser.spark.column
             if isinstance(spark_type, (BooleanType, NumericType)):
@@ -12253,7 +12262,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             # |[[0.25, 2, 6], [0.5, 3, 7], [0.75, 4, 8]]|
             # +-----------------------------------------+
 
-            percentile_cols: List[Union[SparkConnectColumn, PySparkColumn]] = []
+            percentile_cols: List[SparkColumn] = []
             percentile_col_names: List[str] = []
             column_labels: List[Label] = []
             for label, column in zip(
@@ -12275,7 +12284,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             if len(percentile_cols) == 0:
                 return DataFrame(index=qq)
 
-            sdf = self._internal.spark_frame.select(percentile_cols)
+            sdf = self._internal.spark_frame.select(percentile_cols)  # type: ignore[arg-type]
             # Here, after select percentile cols, a spark_frame looks like below:
             # +---------+---------+
             # |        a|        b|
@@ -12283,7 +12292,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             # |[2, 3, 4]|[6, 7, 8]|
             # +---------+---------+
 
-            cols_dict: Dict[str, List[Union[SparkConnectColumn, PySparkColumn]]] = {}
+            cols_dict: Dict[str, List[SparkColumn]] = {}
             for column in percentile_col_names:
                 cols_dict[column] = list()
                 for i in range(len(qq)):
@@ -12740,9 +12749,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         if axis == 0:
 
-            def get_spark_column(
-                psdf: DataFrame, label: Label
-            ) -> Union[SparkConnectColumn, PySparkColumn]:
+            def get_spark_column(psdf: DataFrame, label: Label) -> SparkColumn:
                 scol = psdf._internal.spark_column_for(label)
                 col_type = psdf._internal.spark_type_for(label)
 
@@ -12759,7 +12766,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                     new_column_labels.append(label)
 
             new_columns = [
-                F.avg(get_spark_column(self, label)).alias(name_like_string(label))
+                F.avg(get_spark_column(self, label)).alias(name_like_string(label))  # type: ignore[arg-type]
                 for label in new_column_labels
             ]
 
@@ -12877,7 +12884,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         if numeric_only is None and axis == 0:
             numeric_only = True
 
-        mode_scols: List[Union[SparkConnectColumn, PySparkColumn]] = []
+        mode_scols: List[SparkColumn] = []
         mode_col_names: List[str] = []
         mode_labels: List[Label] = []
         for label, col_name in zip(
@@ -12899,7 +12906,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         # +-------+----+----------+
         # | [bird]| [2]|[0.0, 2.0]|
         # +-------+----+----------+
-        sdf = self._internal.spark_frame.select(mode_scols)
+        sdf = self._internal.spark_frame.select(mode_scols)  # type: ignore[arg-type]
         sdf = sdf.select(*[F.array_sort(F.col(name)).alias(name) for name in mode_col_names])
 
         zip_col_name = verify_temp_column_name(sdf, "__mode_zip_tmp_col__")
@@ -13624,14 +13631,12 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         return create_tuple_for_frame_type(params)
 
 
-def _reduce_spark_multi(
-    sdf: SparkDataFrame, aggs: List[Union[PySparkColumn, SparkConnectColumn]]
-) -> Any:
+def _reduce_spark_multi(sdf: SparkDataFrame, aggs: List[SparkColumn]) -> Any:
     """
     Performs a reduction on a spark DataFrame, the functions being known SQL aggregate functions.
     """
     assert isinstance(sdf, (SparkDataFrame, SparkConnectDataFrame))
-    sdf0 = sdf.agg(*aggs)
+    sdf0 = sdf.agg(*aggs)  # type: ignore[arg-type]
     lst = sdf0.limit(2).toPandas()
     assert len(lst) == 1, (sdf, lst)
     row = lst.iloc[0]

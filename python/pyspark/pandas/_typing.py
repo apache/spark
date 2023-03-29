@@ -16,10 +16,16 @@
 #
 import datetime
 import decimal
-from typing import Any, Tuple, TypeVar, Union, TYPE_CHECKING
+from typing import Any, Tuple, TypeVar, Union, TYPE_CHECKING, Type
 
 import numpy as np
 from pandas.api.extensions import ExtensionDtype
+
+from pyspark.sql.column import Column as PySparkColumn
+from pyspark.sql.connect.column import Column as SparkConnectColumn
+from pyspark.sql.dataframe import DataFrame as PySparkDataFrame
+from pyspark.sql.connect.dataframe import DataFrame as SparkConnectDataFrame
+
 
 if TYPE_CHECKING:
     from pyspark.pandas.base import IndexOpsMixin
@@ -49,3 +55,7 @@ Dtype = Union[np.dtype, ExtensionDtype]
 
 DataFrameOrSeries = Union["DataFrame", "Series"]
 SeriesOrIndex = Union["Series", "Index"]
+
+# For Spark Connect compatibility.
+SparkColumn = Union[PySparkColumn, SparkConnectColumn]
+SparkDataFrame = Union[PySparkDataFrame, SparkConnectDataFrame]

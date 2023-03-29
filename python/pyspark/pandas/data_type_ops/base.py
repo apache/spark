@@ -18,7 +18,7 @@
 import numbers
 from abc import ABCMeta
 from itertools import chain
-from typing import Any, Optional, Union
+from typing import cast, Callable, Any, Optional, Union
 
 import numpy as np
 import pandas as pd
@@ -44,7 +44,7 @@ from pyspark.sql.types import (
     TimestampNTZType,
     UserDefinedType,
 )
-from pyspark.pandas._typing import Dtype, IndexOpsLike, SeriesOrIndex
+from pyspark.pandas._typing import Dtype, IndexOpsLike, SeriesOrIndex, SparkColumn
 from pyspark.pandas.typedef import extension_dtypes
 from pyspark.pandas.typedef.typehints import (
     extension_dtypes_available,
@@ -475,7 +475,7 @@ class DataTypeOps(object, metaclass=ABCMeta):
             from pyspark.pandas.base import column_op
 
             Column = SparkConnectColumn if is_remote() else PySparkColumn
-            return column_op(Column.__eq__)(left, right)
+            return column_op(cast(Callable[..., SparkColumn], Column.__eq__))(left, right)
 
     def ne(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         from pyspark.pandas.base import column_op
@@ -483,7 +483,7 @@ class DataTypeOps(object, metaclass=ABCMeta):
         _sanitize_list_like(right)
 
         Column = SparkConnectColumn if is_remote() else PySparkColumn
-        return column_op(Column.__ne__)(left, right)
+        return column_op(cast(Callable[..., SparkColumn], Column.__ne__))(left, right)
 
     def invert(self, operand: IndexOpsLike) -> IndexOpsLike:
         raise TypeError("Unary ~ can not be applied to %s." % self.pretty_name)
