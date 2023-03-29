@@ -38,10 +38,6 @@ class IndexesParityTests(
         return ps.from_pandas(self.pdf)
 
     @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_abs(self):
-        super().test_abs()
-
-    @unittest.skip("Fails in Spark Connect, should enable.")
     def test_append(self):
         super().test_append()
 
@@ -50,40 +46,12 @@ class IndexesParityTests(
         super().test_drop_duplicates()
 
     @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_dropna(self):
-        super().test_dropna()
-
-    @unittest.skip("Fails in Spark Connect, should enable.")
     def test_factorize(self):
         super().test_factorize()
 
     @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_index_drop(self):
-        super().test_index_drop()
-
-    @unittest.skip("Fails in Spark Connect, should enable.")
     def test_index_drop_duplicates(self):
         super().test_index_drop_duplicates()
-
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_index_ops(self):
-        super().test_index_ops()
-
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_index_symmetric_difference(self):
-        super().test_index_symmetric_difference()
-
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_index_unique(self):
-        super().test_index_unique()
-
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_intersection(self):
-        super().test_intersection()
-
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_map(self):
-        super().test_map()
 
     @unittest.skip("Fails in Spark Connect, should enable.")
     def test_monotonic(self):
