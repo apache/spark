@@ -847,6 +847,15 @@ object SQLConf {
       .stringConf
       .createOptional
 
+  val COALESCE_CACHE_PARTITIONS_ENABLED =
+    buildConf("spark.sql.adaptive.coalesceCachePartitions.enabled")
+      .doc(s"When true and '${ADAPTIVE_EXECUTION_ENABLED.key}' is true, Spark will coalesce " +
+        "contiguous table cache partitions according to the target size (specified by " +
+        s"'${ADVISORY_PARTITION_SIZE_IN_BYTES.key}'), to avoid too many small tasks.")
+      .version("3.5.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val SUBEXPRESSION_ELIMINATION_ENABLED =
     buildConf("spark.sql.subexpressionElimination.enabled")
       .internal()

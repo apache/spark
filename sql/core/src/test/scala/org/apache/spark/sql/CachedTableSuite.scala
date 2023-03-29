@@ -1604,7 +1604,8 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
   test("SPARK-35332: Make cache plan disable configs configurable - check AQE") {
     withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "2",
       SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_NUM.key -> "1",
-      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.COALESCE_CACHE_PARTITIONS_ENABLED.key -> "false") {
 
       withTempView("t1", "t2", "t3") {
         withSQLConf(SQLConf.CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING.key -> "false") {
@@ -1641,7 +1642,8 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
       withCache("t1", "t2", "t3") {
         withSQLConf(SQLConf.BUCKETING_ENABLED.key -> "true",
           SQLConf.FILES_MIN_PARTITION_NUM.key -> "1",
-          SQLConf.CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING.key -> "false") {
+          SQLConf.CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING.key -> "false",
+          SQLConf.COALESCE_CACHE_PARTITIONS_ENABLED.key -> "false") {
           sql("CACHE TABLE t1")
           assert(spark.table("t1").rdd.partitions.length == 2)
 

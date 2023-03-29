@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.columnar
 
+import scala.collection.JavaConverters._
+
 import org.apache.commons.lang3.StringUtils
 
 import org.apache.spark.TaskContext
@@ -211,7 +213,8 @@ case class CachedRDDBuilder(
 
   val sizeInBytesStats: LongAccumulator = cachedPlan.session.sparkContext.longAccumulator
   val rowCountStats: LongAccumulator = cachedPlan.session.sparkContext.longAccumulator
-  private val materializedPartitions = cachedPlan.session.sparkContext.longAccumulator
+  val bytesByPartitionId = cachedPlan.session.sparkContext.collectionAccumulator[(Int, Long)]
+  val materializedPartitions = cachedPlan.session.sparkContext.longAccumulator
 
   val cachedName = tableName.map(n => s"In-memory table $n")
     .getOrElse(StringUtils.abbreviate(cachedPlan.toString, 1024))
@@ -249,6 +252,10 @@ case class CachedRDDBuilder(
 
   private def isCachedRDDLoaded: Boolean = {
     _cachedColumnBuffersAreLoaded || {
+      // We must make sure the statistics of `sizeInBytes` and `rowCount` are accurate if
+      // `isCachedRDDLoaded` return true. Otherwise, AQE would do a wrong optimization,
+      // e.g., convert a non-empty plan to local relation. So use an accumulator to track if
+      // all partitions are materialized.
       val rddLoaded = _cachedColumnBuffers.partitions.length == materializedPartitions.value
       if (rddLoaded) {
         _cachedColumnBuffersAreLoaded = rddLoaded
@@ -273,8 +280,9 @@ case class CachedRDDBuilder(
         cachedPlan.conf)
     }
     val cached = cb.mapPartitionsInternal { it =>
-      TaskContext.get().addTaskCompletionListener[Unit](_ => {
+      TaskContext.get().addTaskCompletionListener[Unit](context => {
         materializedPartitions.add(1L)
+        bytesByPartitionId.add((context.partitionId(), sizeInBytesStats.value))
       })
       new Iterator[CachedBatch] {
         override def hasNext: Boolean = it.hasNext
@@ -414,6 +422,15 @@ case class InMemoryRelation(
         sizeInBytes = cacheBuilder.sizeInBytesStats.value.longValue,
         rowCount = Some(cacheBuilder.rowCountStats.value.longValue)
       )
+    }
+  }
+
+  def bytesByPartitionId(): Option[Array[Long]] = {
+    if (cacheBuilder.materializedPartitions.value == 0) {
+      // cached RDD is empty or not materialized
+      None
+    } else {
+      Some(cacheBuilder.bytesByPartitionId.value.asScala.sortBy(_._1).map(_._2).toArray)
     }
   }
 

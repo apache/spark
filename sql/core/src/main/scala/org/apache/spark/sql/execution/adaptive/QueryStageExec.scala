@@ -275,9 +275,13 @@ case class TableCacheQueryStageExec(
   }
 
   @transient
-  private lazy val future: Future[Unit] = {
+  private lazy val future: Future[Any] = {
+    def result: Option[TableCacheOutputStatistics] = {
+      inMemoryTableScan.relation.bytesByPartitionId()
+        .map(TableCacheOutputStatistics(id, _))
+    }
     if (inMemoryTableScan.isMaterialized) {
-      Future.successful(())
+      Future.successful(result)
     } else {
       val rdd = inMemoryTableScan.baseCacheRDD()
       sparkContext.submitJob(
@@ -285,12 +289,25 @@ case class TableCacheQueryStageExec(
         (_: Iterator[CachedBatch]) => (),
         (0 until rdd.getNumPartitions).toSeq,
         (_: Int, _: Unit) => (),
-        ()
-      )
+        result)
     }
+  }
+
+  def outputStats(): Option[TableCacheOutputStatistics] = {
+    assert(resultOption.get().isDefined, s"${getClass.getSimpleName} should already be ready")
+    resultOption.get().get.asInstanceOf[Option[TableCacheOutputStatistics]]
   }
 
   override protected def doMaterialize(): Future[Any] = future
 
   override def getRuntimeStatistics: Statistics = inMemoryTableScan.relation.computeStats()
 }
+
+
+/**
+ * Holds statistics about the output sizes in a [[TableCacheQueryStageExec]].
+ *
+ * @param id ID of the [[TableCacheQueryStageExec]]
+ * @param bytesByPartitionId output bytes for each table cache query stage output partition
+ */
+case class TableCacheOutputStatistics(id: Int, bytesByPartitionId: Array[Long])

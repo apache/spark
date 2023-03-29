@@ -21,9 +21,8 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression}
-import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, RangePartitioning, RoundRobinPartitioning, SinglePartition, UnknownPartitioning}
-import org.apache.spark.sql.catalyst.trees.CurrentOrigin
+import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, UnknownPartitioning}
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.exchange.{ReusedExchangeExec, ShuffleExchangeLike}
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
@@ -39,18 +38,12 @@ import org.apache.spark.sql.vectorized.ColumnarBatch
  */
 case class AQEShuffleReadExec private(
     child: SparkPlan,
-    partitionSpecs: Seq[ShufflePartitionSpec]) extends UnaryExecNode {
-  assert(partitionSpecs.nonEmpty, s"${getClass.getSimpleName} requires at least one partition")
-
+    partitionSpecs: Seq[ShufflePartitionSpec]) extends AQERead {
   // If this is to read shuffle files locally, then all partition specs should be
   // `PartialMapperPartitionSpec`.
   if (partitionSpecs.exists(_.isInstanceOf[PartialMapperPartitionSpec])) {
     assert(partitionSpecs.forall(_.isInstanceOf[PartialMapperPartitionSpec]))
   }
-
-  override def supportsColumnar: Boolean = child.supportsColumnar
-
-  override def output: Seq[Attribute] = child.output
 
   override lazy val outputPartitioning: Partitioning = {
     // If it is a local shuffle read with one mapper per task, then the output partitioning is
@@ -71,26 +64,7 @@ case class AQEShuffleReadExec private(
           throw new IllegalStateException("operating on canonicalization plan")
       }
     } else if (isCoalescedRead) {
-      // For coalesced shuffle read, the data distribution is not changed, only the number of
-      // partitions is changed.
-      child.outputPartitioning match {
-        case h: HashPartitioning =>
-          CurrentOrigin.withOrigin(h.origin)(h.copy(numPartitions = partitionSpecs.length))
-        case r: RangePartitioning =>
-          CurrentOrigin.withOrigin(r.origin)(r.copy(numPartitions = partitionSpecs.length))
-        // This can only happen for `REBALANCE_PARTITIONS_BY_NONE`, which uses
-        // `RoundRobinPartitioning` but we don't need to retain the number of partitions.
-        case r: RoundRobinPartitioning =>
-          r.copy(numPartitions = partitionSpecs.length)
-        case other @ SinglePartition =>
-          throw new IllegalStateException(
-            "Unexpected partitioning for coalesced shuffle read: " + other)
-        case _ =>
-          // Spark plugins may have custom partitioning and may replace this operator
-          // during the postStageOptimization phase, so return UnknownPartitioning here
-          // rather than throw an exception
-          UnknownPartitioning(partitionSpecs.length)
-      }
+      outputPartitionWithCoalesced(partitionSpecs.length)
     } else {
       UnknownPartitioning(partitionSpecs.length)
     }

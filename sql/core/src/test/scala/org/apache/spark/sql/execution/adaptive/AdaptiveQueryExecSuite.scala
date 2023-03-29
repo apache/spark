@@ -26,7 +26,7 @@ import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.SparkException
 import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent, SparkListenerJobStart}
-import org.apache.spark.sql.{Dataset, QueryTest, Row, SparkSession, Strategy}
+import org.apache.spark.sql.{DataFrame, Dataset, QueryTest, Row, SparkSession, Strategy}
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan}
 import org.apache.spark.sql.execution.{CollectLimitExec, ColumnarToRowExec, LocalTableScanExec, PartialReducerPartitionSpec, QueryExecution, ReusedSubqueryExec, ShuffledRowRDD, SortExec, SparkPlan, SparkPlanInfo, UnionExec}
@@ -2814,6 +2814,133 @@ class AdaptiveQueryExecSuite
       assert(collect(df.queryExecution.executedPlan) {
         case c: TableCacheQueryStageExec => c
       }.size == 1)
+    }
+  }
+
+  test("SPARK-42942: Support coalesce table cache stage partitions") {
+    def checkAQECacheRead(df: => DataFrame, numPartitionSpecs: Seq[Int]): Unit = {
+      var expectedRows: Seq[Row] = null
+      var finalPlan: SparkPlan = null
+      withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+        expectedRows = df.collect().toSeq
+      }
+      spark.catalog.clearCache()
+
+      withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
+        val withAQE = df
+        checkAnswer(withAQE, expectedRows)
+        finalPlan = withAQE.queryExecution.executedPlan
+      }
+
+      val cacheReads = collect(finalPlan) {
+        case cacheRead: AQECacheReadExec => cacheRead
+      }
+      try {
+        assert(cacheReads.size == numPartitionSpecs.size)
+        assert(cacheReads.zip(numPartitionSpecs).forall { case (read, partSpec) =>
+          read.partitionSpecs.size == partSpec && read.metrics("numPartitions").value == partSpec
+        })
+      } finally {
+        spark.catalog.clearCache()
+      }
+    }
+
+    // empty
+    checkAQECacheRead(
+      spark.emptyDataFrame.cache(),
+      Seq.empty)
+
+    def onePartitionData: DataFrame = spark.range(1, 5, 1, numPartitions = 1).toDF()
+    def data1: DataFrame = spark.range(1, 3, 1, numPartitions = 10).toDF()
+    def data2: DataFrame = spark.range(1, 5, 1, numPartitions = 10).toDF()
+
+    // coalesced
+    checkAQECacheRead(
+      data1.cache().where("id > 0"),
+      Seq(1))
+
+    // no AQECacheRead if can not coalesce
+    checkAQECacheRead(
+      onePartitionData.cache().where("id > 0"),
+      Seq.empty)
+
+    // Union
+    //   TableCacheQueryStage
+    //   TableCacheQueryStage
+    checkAQECacheRead(
+      data1.cache().unionAll(data2.cache()),
+      Seq(1, 1))
+
+    // Union
+    //  TableCacheQueryStage
+    //  other
+    checkAQECacheRead(
+      data1.cache().unionAll(data2),
+      Seq(1))
+
+    // Union
+    //  TableCacheQueryStage
+    //  TableCacheQueryStage (one partition)
+    checkAQECacheRead(
+      data1.cache().unionAll(onePartitionData.cache()),
+      Seq(1))
+
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "100000") {
+      // BroadcastHashJoin
+      //   BroadcastQueryStage
+      //     BroadcastExchange
+      //       AQECacheRead
+      //         TableCacheQueryStage
+      //   TableCacheQueryStage
+      checkAQECacheRead(
+        data1.cache().join(data2.cache(), "id"),
+        Seq(1))
+    }
+
+    withSQLConf(
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+        SQLConf.SHUFFLE_PARTITIONS.key -> "5") {
+      // SortMergeJoin
+      //   AQEShuffleRead
+      //     ShuffleQueryStage
+      //       AQECacheRead
+      //         TableCacheQueryStage
+      //   AQEShuffleRead
+      //     ShuffleQueryStage
+      //       AQECacheRead
+      //         TableCacheQueryStage
+      checkAQECacheRead(
+        data1.cache().join(data2.cache(), "id"),
+        Seq(1, 1))
+
+      // SortMergeJoin
+      //   AQEShuffleRead
+      //     ShuffleQueryStage
+      //       AQECacheRead
+      //         TableCacheQueryStage
+      //   AQEShuffleRead
+      //     ShuffleQueryStage
+      checkAQECacheRead(
+        data1.cache().join(data2, "id"),
+        Seq(1))
+
+      // SortMergeJoin
+      //   AQECacheRead
+      //     TableCacheQueryStage
+      //   AQECacheRead
+      //     TableCacheQueryStage
+      checkAQECacheRead(
+        data1.repartition(3, $"id").cache()
+          .join(data2.repartition(3, $"id").cache(), "id"),
+        Seq(1, 1))
+
+      // SortMergeJoin
+      //   TableCacheQueryStage
+      //   ShuffleQueryStage
+      checkAQECacheRead(
+        data1.repartition(5, $"id").cache()
+          .join(onePartitionData, "id"),
+        Seq.empty)
     }
   }
 }

@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference,
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.columnar.CachedBatch
 import org.apache.spark.sql.execution.{FilterExec, InputAdapter, WholeStageCodegenExec}
+import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -48,7 +49,8 @@ class TestCachedBatchSerializer(
   }
 }
 
-class InMemoryColumnarQuerySuite extends QueryTest with SharedSparkSession {
+class InMemoryColumnarQuerySuite extends QueryTest
+  with SharedSparkSession with AdaptiveSparkPlanHelper {
   import testImplicits._
 
   setupTestData()
@@ -504,7 +506,7 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSparkSession {
     // Push predicate to the cached table.
     val df2 = df1.where("y = 3")
 
-    val planBeforeFilter = df2.queryExecution.executedPlan.collect {
+    val planBeforeFilter = collect(df2.queryExecution.executedPlan) {
       case f: FilterExec => f.child
       case WholeStageCodegenExec(FilterExec(_, i: InputAdapter)) => i.child
     }

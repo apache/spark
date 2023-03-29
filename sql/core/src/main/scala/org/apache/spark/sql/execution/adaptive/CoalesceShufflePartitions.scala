@@ -17,14 +17,11 @@
 
 package org.apache.spark.sql.execution.adaptive
 
-import scala.collection.mutable
-
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.plans.physical.SinglePartition
 import org.apache.spark.sql.execution.{ShufflePartitionSpec, SparkPlan, UnaryExecNode, UnionExec}
 import org.apache.spark.sql.execution.exchange.{ENSURE_REQUIREMENTS, REBALANCE_PARTITIONS_BY_COL, REBALANCE_PARTITIONS_BY_NONE, REPARTITION_BY_COL, ShuffleExchangeLike, ShuffleOrigin}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.util.Utils
 
 /**
  * A rule to coalesce the shuffle partitions based on the map output statistics, which can
@@ -45,78 +42,22 @@ case class CoalesceShufflePartitions(session: SparkSession) extends AQEShuffleRe
       return plan
     }
 
-    // Ideally, this rule should simply coalesce partitions w.r.t. the target size specified by
-    // ADVISORY_PARTITION_SIZE_IN_BYTES (default 64MB). To avoid perf regression in AQE, this
-    // rule by default tries to maximize the parallelism and set the target size to
-    // `total shuffle size / Spark default parallelism`. In case the `Spark default parallelism`
-    // is too big, this rule also respect the minimum partition size specified by
-    // COALESCE_PARTITIONS_MIN_PARTITION_SIZE (default 1MB).
-    // For history reason, this rule also need to support the config
-    // COALESCE_PARTITIONS_MIN_PARTITION_NUM. We should remove this config in the future.
-    val minNumPartitions = conf.getConf(SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_NUM).getOrElse {
-      if (conf.getConf(SQLConf.COALESCE_PARTITIONS_PARALLELISM_FIRST)) {
-        // We fall back to Spark default parallelism if the minimum number of coalesced partitions
-        // is not set, so to avoid perf regressions compared to no coalescing.
-        session.sparkContext.defaultParallelism
-      } else {
-        // If we don't need to maximize the parallelism, we set `minPartitionNum` to 1, so that
-        // the specified advisory partition size will be respected.
-        1
-      }
-    }
-
     // Sub-plans under the Union operator can be coalesced independently, so we can divide them
     // into independent "coalesce groups", and all shuffle stages within each group have to be
     // coalesced together.
     val coalesceGroups = collectCoalesceGroups(plan)
-
-    // Divide minimum task parallelism among coalesce groups according to their data sizes.
-    val minNumPartitionsByGroup = if (coalesceGroups.length == 1) {
-      Seq(math.max(minNumPartitions, 1))
-    } else {
-      val sizes =
-        coalesceGroups.map(_.flatMap(_.shuffleStage.mapStats.map(_.bytesByPartitionId.sum)).sum)
-      val totalSize = sizes.sum
-      sizes.map { size =>
-        val num = if (totalSize > 0) {
-          math.round(minNumPartitions * 1.0 * size / totalSize)
-        } else {
-          minNumPartitions
-        }
-        math.max(num.toInt, 1)
-      }
-    }
-
-    val specsMap = mutable.HashMap.empty[Int, Seq[ShufflePartitionSpec]]
-    // Coalesce partitions for each coalesce group independently.
-    coalesceGroups.zip(minNumPartitionsByGroup).foreach { case (shuffleStages, minNumPartitions) =>
-      val advisoryTargetSize = advisoryPartitionSize(shuffleStages)
-      val minPartitionSize = if (Utils.isTesting) {
-        // In the tests, we usually set the target size to a very small value that is even smaller
-        // than the default value of the min partition size. Here we also adjust the min partition
-        // size to be not larger than 20% of the target size, so that the tests don't need to set
-        // both configs all the time to check the coalescing behavior.
-        conf.getConf(SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_SIZE).min(advisoryTargetSize / 5)
-      } else {
-        conf.getConf(SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_SIZE)
-      }
-
-      val newPartitionSpecs = ShufflePartitionsUtil.coalescePartitions(
-        shuffleStages.map(_.shuffleStage.mapStats),
+    val groups = coalesceGroups.map { shuffleStages =>
+      val shuffleIds = shuffleStages.flatMap(_.shuffleStage.mapStats.map(_.shuffleId))
+      (shuffleStages.map(_.shuffleStage.id),
+        advisoryPartitionSize(shuffleStages),
+        shuffleStages.map(_.shuffleStage.mapStats.map(_.bytesByPartitionId)),
         shuffleStages.map(_.partitionSpecs),
-        advisoryTargetSize = advisoryTargetSize,
-        minNumPartitions = minNumPartitions,
-        minPartitionSize = minPartitionSize)
-
-      if (newPartitionSpecs.nonEmpty) {
-        shuffleStages.zip(newPartitionSpecs).map { case (stageInfo, partSpecs) =>
-          specsMap.put(stageInfo.shuffleStage.id, partSpecs)
-        }
-      }
+        s"For shuffle(${shuffleIds.mkString(", ")})")
     }
-
+    val specsMap = ShufflePartitionsUtil.coalescePartitionsByGroup(
+      groups, session.sparkContext.defaultParallelism)
     if (specsMap.nonEmpty) {
-      updateShuffleReads(plan, specsMap.toMap)
+      updateShuffleReads(plan, specsMap)
     } else {
       plan
     }
