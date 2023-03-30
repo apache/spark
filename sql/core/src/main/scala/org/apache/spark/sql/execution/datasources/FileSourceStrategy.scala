@@ -219,6 +219,7 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
         def unapply(attributeReference: AttributeReference): Option[AttributeReference] = {
           attributeReference match {
             case attr @ FileSourceMetadataAttribute(
+<<<<<<< HEAD
                 AttributeReference("_metadata", schema: StructType, _, _)) =>
               // The column returned by [[FileFormat.createFileMetadataCol]] is sanitized and lacks
               // the internal metadata we rely on here. Map back to the real fields by field name,
@@ -232,6 +233,12 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
                 field.copy(metadata = metadata)
               }
               Some(attr.withDataType(StructType(adjustedFields)))
+=======
+                MetadataAttributeWithLogicalName(
+                  AttributeReference(_, StructType(_), _, _),
+                  FileFormat.METADATA_NAME)) =>
+              Some(attr)
+>>>>>>> spark/master
             case _ => None
           }
         }

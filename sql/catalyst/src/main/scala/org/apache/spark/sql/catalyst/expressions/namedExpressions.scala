@@ -481,6 +481,7 @@ object MetadataAttribute {
     .build()
 
   def apply(name: String, dataType: DataType, nullable: Boolean = true): AttributeReference =
+<<<<<<< HEAD
     AttributeReference(name, dataType, nullable, METADATA)()
 
   def unapply(attr: AttributeReference): Option[AttributeReference] = {
@@ -490,7 +491,34 @@ object MetadataAttribute {
   def isValid(metadata: Metadata): Boolean = {
     metadata.contains(METADATA_COL_ATTR_KEY) &&
     metadata.getBoolean(METADATA_COL_ATTR_KEY)
+=======
+    AttributeReference(name, dataType, nullable,
+      new MetadataBuilder().putString(METADATA_COL_ATTR_KEY, value = name).build())()
+
+  def unapply(attr: AttributeReference): Option[AttributeReference] = {
+    if (attr.metadata.contains(METADATA_COL_ATTR_KEY)) Some(attr) else None
+>>>>>>> spark/master
   }
+}
+
+/**
+ * A [[MetadataAttribute]] that works even if the attribute was renamed to avoid a conflict with
+ * some column name in the schema. See also [[LogicalPlan.getMetadataAttributeByName]].
+ *
+ * - apply() creates a logically-named attribute with the given physical name.
+ * - unapply() matches a [[MetadataAttribute]] and also returns its logical name.
+ */
+object MetadataAttributeWithLogicalName {
+  def unapply(attr: AttributeReference): Option[(AttributeReference, String)] = attr match {
+    case MetadataAttribute(a) => Some(a -> a.metadata.getString(METADATA_COL_ATTR_KEY))
+    case _ => None
+  }
+}
+
+object MetadataStructFieldWithLogicalName {
+  def unapply(field: StructField): Option[(StructField, String)] = MetadataAttributeWithLogicalName
+    .unapply(field.toAttribute)
+    .map { case (_, name) => field -> name }
 }
 
 /**
@@ -524,7 +552,14 @@ object FileSourceMetadataAttribute {
     field.copy(metadata = removeInternalMetadata(field.metadata))
 
   def apply(name: String, dataType: DataType, nullable: Boolean = false): AttributeReference =
+<<<<<<< HEAD
     AttributeReference(name, dataType, nullable = nullable, METADATA)()
+=======
+    AttributeReference(name, dataType, nullable = nullable,
+      new MetadataBuilder()
+        .putString(METADATA_COL_ATTR_KEY, value = name)
+        .putBoolean(FILE_SOURCE_METADATA_COL_ATTR_KEY, value = true).build())()
+>>>>>>> spark/master
 
   /** Matches if attr is any File source metadata attribute (including constant and generated). */
   def unapply(attr: AttributeReference): Option[AttributeReference] =
@@ -579,6 +614,19 @@ object FileSourceConstantMetadataStructField {
  * usually appended to the output and not generated per row.
  */
 object FileSourceConstantMetadataAttribute {
+<<<<<<< HEAD
+=======
+
+  val FILE_SOURCE_CONSTANT_METADATA_COL_ATTR_KEY = "__file_source_constant_metadata_col"
+
+  def apply(name: String, dataType: DataType, nullable: Boolean = false): AttributeReference =
+    AttributeReference(name, dataType, nullable = nullable,
+      new MetadataBuilder()
+        .putString(METADATA_COL_ATTR_KEY, value = name)
+        .putBoolean(FileSourceMetadataAttribute.FILE_SOURCE_METADATA_COL_ATTR_KEY, value = true)
+        .putBoolean(FILE_SOURCE_CONSTANT_METADATA_COL_ATTR_KEY, value = true).build())()
+
+>>>>>>> spark/master
   def unapply(attr: AttributeReference): Option[AttributeReference] =
     if (FileSourceConstantMetadataStructField.isValid(attr.metadata)) Some(attr) else None
 }
@@ -604,12 +652,21 @@ object FileSourceGeneratedMetadataStructField {
    *    so it will not be null in the returned output.
    *    See `FileSourceStrategy` for more information
    */
+<<<<<<< HEAD
   def apply(
       name: String,
       internalName: String,
       dataType: DataType,
       nullable: Boolean = true): StructField =
     StructField(name, dataType, nullable, metadata(internalName))
+=======
+  def apply(name: String, dataType: DataType, nullable: Boolean = false): AttributeReference =
+    AttributeReference(name, dataType, nullable = nullable,
+      new MetadataBuilder()
+        .putString(METADATA_COL_ATTR_KEY, value = name)
+        .putBoolean(FileSourceMetadataAttribute.FILE_SOURCE_METADATA_COL_ATTR_KEY, value = true)
+        .putBoolean(FILE_SOURCE_GENERATED_METADATA_COL_ATTR_KEY, value = true).build())()
+>>>>>>> spark/master
 
   def unapply(field: StructField): Option[(StructField, String)] =
     getInternalNameIfValid(field.metadata).map(field -> _)

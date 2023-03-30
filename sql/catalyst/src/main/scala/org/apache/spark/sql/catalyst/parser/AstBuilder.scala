@@ -2874,36 +2874,37 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
    * Resolve/create a primitive type.
    */
   override def visitPrimitiveDataType(ctx: PrimitiveDataTypeContext): DataType = withOrigin(ctx) {
-    val dataType = ctx.identifier.getText.toLowerCase(Locale.ROOT)
-    (dataType, ctx.INTEGER_VALUE().asScala.toList) match {
-      case ("boolean", Nil) => BooleanType
-      case ("tinyint" | "byte", Nil) => ByteType
-      case ("smallint" | "short", Nil) => ShortType
-      case ("int" | "integer", Nil) => IntegerType
-      case ("bigint" | "long", Nil) => LongType
-      case ("float" | "real", Nil) => FloatType
-      case ("double", Nil) => DoubleType
-      case ("date", Nil) => DateType
-      case ("timestamp", Nil) => SQLConf.get.timestampType
-      case ("timestamp_ntz", Nil) => TimestampNTZType
-      case ("timestamp_ltz", Nil) => TimestampType
-      case ("string", Nil) => StringType
-      case ("character" | "char", length :: Nil) => CharType(length.getText.toInt)
-      case ("varchar", length :: Nil) => VarcharType(length.getText.toInt)
-      case ("binary", Nil) => BinaryType
-      case ("decimal" | "dec" | "numeric", Nil) => DecimalType.USER_DEFAULT
-      case ("decimal" | "dec" | "numeric", precision :: Nil) =>
+    val typeName = ctx.`type`.start.getType
+    (typeName, ctx.INTEGER_VALUE().asScala.toList) match {
+      case (BOOLEAN, Nil) => BooleanType
+      case (TINYINT | BYTE, Nil) => ByteType
+      case (SMALLINT | SHORT, Nil) => ShortType
+      case (INT | INTEGER, Nil) => IntegerType
+      case (BIGINT | LONG, Nil) => LongType
+      case (FLOAT | REAL, Nil) => FloatType
+      case (DOUBLE, Nil) => DoubleType
+      case (DATE, Nil) => DateType
+      case (TIMESTAMP, Nil) => SQLConf.get.timestampType
+      case (TIMESTAMP_NTZ, Nil) => TimestampNTZType
+      case (TIMESTAMP_LTZ, Nil) => TimestampType
+      case (STRING, Nil) => StringType
+      case (CHARACTER | CHAR, length :: Nil) => CharType(length.getText.toInt)
+      case (VARCHAR, length :: Nil) => VarcharType(length.getText.toInt)
+      case (BINARY, Nil) => BinaryType
+      case (DECIMAL | DEC | NUMERIC, Nil) => DecimalType.USER_DEFAULT
+      case (DECIMAL | DEC | NUMERIC, precision :: Nil) =>
         DecimalType(precision.getText.toInt, 0)
-      case ("decimal" | "dec" | "numeric", precision :: scale :: Nil) =>
+      case (DECIMAL | DEC | NUMERIC, precision :: scale :: Nil) =>
         DecimalType(precision.getText.toInt, scale.getText.toInt)
-      case ("void", Nil) => NullType
-      case ("interval", Nil) => CalendarIntervalType
-      case (dt @ ("character" | "char" | "varchar"), Nil) =>
-        throw QueryParsingErrors.charTypeMissingLengthError(dt, ctx)
-      case (dt @ ("array" | "struct" | "map"), Nil) =>
-        throw QueryParsingErrors.nestedTypeMissingElementTypeError(dt, ctx)
-      case (dt, params) =>
-        val dtStr = if (params.nonEmpty) s"$dt(${params.mkString(",")})" else dt
+      case (VOID, Nil) => NullType
+      case (INTERVAL, Nil) => CalendarIntervalType
+      case (CHARACTER | CHAR | VARCHAR, Nil) =>
+        throw QueryParsingErrors.charTypeMissingLengthError(ctx.`type`.getText, ctx)
+      case (ARRAY | STRUCT | MAP, Nil) =>
+        throw QueryParsingErrors.nestedTypeMissingElementTypeError(ctx.`type`.getText, ctx)
+      case (_, params) =>
+        val badType = ctx.`type`.getText
+        val dtStr = if (params.nonEmpty) s"$badType(${params.mkString(",")})" else badType
         throw QueryParsingErrors.dataTypeUnsupportedError(dtStr, ctx)
     }
   }
@@ -3250,8 +3251,8 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
 
   override def visitStringLit(ctx: StringLitContext): Token = {
     if (ctx != null) {
-      if (ctx.STRING != null) {
-        ctx.STRING.getSymbol
+      if (ctx.STRING_LITERAL != null) {
+        ctx.STRING_LITERAL.getSymbol
       } else {
         ctx.DOUBLEQUOTED_STRING.getSymbol
       }

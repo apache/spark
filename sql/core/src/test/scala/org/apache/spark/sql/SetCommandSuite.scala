@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{SharedSparkSession, TestSQLContext}
 import org.apache.spark.util.ResetSystemProperties
@@ -141,6 +142,17 @@ class SetCommandSuite extends QueryTest with SharedSparkSession with ResetSystem
       checkAnswer(sql(s"SET $key2"), Row(key2, "*********(redacted)"))
       val allValues = sql("SET").collect().map(_.getString(1))
       assert(!allValues.exists(v => v.contains(value1) || v.contains(value2)))
+    }
+  }
+
+  test("SPARK-42946: Set command could expose sensitive data through key") {
+    val key1 = "test.password"
+    val value1 = "test.value1"
+    withSQLConf(key1 -> value1) {
+      checkError(
+        intercept[ParseException](sql("SET ${test.password}")),
+        errorClass = "INVALID_SET_SYNTAX"
+      )
     }
   }
 }

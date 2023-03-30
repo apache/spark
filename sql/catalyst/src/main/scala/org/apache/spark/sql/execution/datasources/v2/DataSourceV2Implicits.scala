@@ -99,11 +99,16 @@ object DataSourceV2Implicits {
   implicit class MetadataColumnsHelper(metadata: Array[MetadataColumn]) {
     def asStruct: StructType = {
       val fields = metadata.map { metaCol =>
+<<<<<<< HEAD
         val field = StructField(
           name = metaCol.name,
           dataType = metaCol.dataType,
           nullable = metaCol.isNullable,
           metadata = MetadataAttribute.METADATA)
+=======
+        val fieldMeta = new MetadataBuilder().putString(METADATA_COL_ATTR_KEY, metaCol.name).build()
+        val field = StructField(metaCol.name, metaCol.dataType, metaCol.isNullable, fieldMeta)
+>>>>>>> spark/master
         Option(metaCol.comment).map(field.withComment).getOrElse(field)
       }
       StructType(fields)

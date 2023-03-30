@@ -32,6 +32,7 @@ import org.apache.spark.connect.proto.ExecutePlanResponse.SqlCommandResult
 import org.apache.spark.connect.proto.Parse.ParseFormat
 import org.apache.spark.ml.{functions => MLFunctions}
 import org.apache.spark.sql.{Column, Dataset, Encoders, SparkSession}
+import org.apache.spark.sql.avro.{AvroDataToCatalyst, CatalystDataToAvro}
 import org.apache.spark.sql.catalyst.{expressions, AliasIdentifier, FunctionIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{GlobalTempView, LocalTempView, MultiAlias, ParameterizedQuery, UnresolvedAlias, UnresolvedAttribute, UnresolvedExtractValue, UnresolvedFunction, UnresolvedRegex, UnresolvedRelation, UnresolvedStar}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
@@ -484,17 +485,20 @@ class SparkConnectPlanner(val session: SparkSession) {
   private def transformMapPartitions(rel: proto.MapPartitions): LogicalPlan = {
     val commonUdf = rel.getFunc
     val pythonUdf = transformPythonUDF(commonUdf)
+    val isBarrier = if (rel.hasIsBarrier) rel.getIsBarrier else false
     pythonUdf.evalType match {
       case PythonEvalType.SQL_MAP_PANDAS_ITER_UDF =>
         logical.MapInPandas(
           pythonUdf,
           pythonUdf.dataType.asInstanceOf[StructType].toAttributes,
-          transformRelation(rel.getInput))
+          transformRelation(rel.getInput),
+          isBarrier)
       case PythonEvalType.SQL_MAP_ARROW_ITER_UDF =>
         logical.PythonMapInArrow(
           pythonUdf,
           pythonUdf.dataType.asInstanceOf[StructType].toAttributes,
-          transformRelation(rel.getInput))
+          transformRelation(rel.getInput),
+          isBarrier)
       case _ =>
         throw InvalidPlanInput(s"Function with EvalType: ${pythonUdf.evalType} is not supported")
     }
@@ -901,8 +905,6 @@ class SparkConnectPlanner(val session: SparkSession) {
         transformExpressionPlugin(exp.getExtension)
       case proto.Expression.ExprTypeCase.COMMON_INLINE_USER_DEFINED_FUNCTION =>
         transformCommonInlineUserDefinedFunction(exp.getCommonInlineUserDefinedFunction)
-      case proto.Expression.ExprTypeCase.DISTRIBUTED_SEQUENCE_ID =>
-        transformDistributedSequenceID(exp.getDistributedSequenceId)
       case _ =>
         throw InvalidPlanInput(
           s"Expression with ID: ${exp.getExprTypeCase.getNumber} is not supported")
@@ -1254,6 +1256,44 @@ class SparkConnectPlanner(val session: SparkSession) {
         } else {
           None
         }
+
+      // Avro-specific functions
+      case "from_avro" if Seq(2, 3).contains(fun.getArgumentsCount) =>
+        val children = fun.getArgumentsList.asScala.toSeq.map(transformExpression)
+        val jsonFormatSchema = children(1) match {
+          case Literal(s, StringType) if s != null => s.toString
+          case other =>
+            throw InvalidPlanInput(
+              s"jsonFormatSchema in from_avro should be a literal string, but got $other")
+        }
+        var options = Map.empty[String, String]
+        if (fun.getArgumentsCount == 3) {
+          children(2) match {
+            case UnresolvedFunction(Seq("map"), arguments, _, _, _) =>
+              options = ExprUtils.convertToMapData(CreateMap(arguments))
+            case other =>
+              throw InvalidPlanInput(
+                s"Options in from_json should be created by map, but got $other")
+          }
+        }
+        Some(AvroDataToCatalyst(children.head, jsonFormatSchema, options))
+
+      case "to_avro" if Seq(1, 2).contains(fun.getArgumentsCount) =>
+        val children = fun.getArgumentsList.asScala.toSeq.map(transformExpression)
+        var jsonFormatSchema = Option.empty[String]
+        if (fun.getArgumentsCount == 2) {
+          children(1) match {
+            case Literal(s, StringType) if s != null => jsonFormatSchema = Some(s.toString)
+            case other =>
+              throw InvalidPlanInput(
+                s"jsonFormatSchema in to_avro should be a literal string, but got $other")
+          }
+        }
+        Some(CatalystDataToAvro(children.head, jsonFormatSchema))
+
+      // PS(Pandas API on Spark)-specific functions
+      case "distributed_sequence_id" if fun.getArgumentsCount == 0 =>
+        Some(DistributedSequenceID())
 
       // ML-specific functions
       case "vector_to_array" if fun.getArgumentsCount == 2 =>
@@ -2185,10 +2225,5 @@ class SparkConnectPlanner(val session: SparkSession) {
 
   private def transformListCatalogs(getListCatalogs: proto.ListCatalogs): LogicalPlan = {
     session.catalog.listCatalogs().logicalPlan
-  }
-
-  private def transformDistributedSequenceID(
-      getDistributedSequenceID: proto.Expression.DistributedSequenceID): Expression = {
-    DistributedSequenceID()
   }
 }

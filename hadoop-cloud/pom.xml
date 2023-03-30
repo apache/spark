@@ -313,6 +313,14 @@
               <groupId>org.jacoco</groupId>
               <artifactId>org.jacoco.agent</artifactId>
             </exclusion>
+            <!--
+              SPARK-42913: `hadoop-cos`is not a dependency of `hadoop-cloud-storage` 3.3.4,
+              manually exclude it to avoid recurring issues similar to HADOOP-18159 in Spark.
+            -->
+            <exclusion>
+              <groupId>org.apache.hadoop</groupId>
+              <artifactId>hadoop-cos</artifactId>
+            </exclusion>
           </exclusions>
         </dependency>
         <!--
