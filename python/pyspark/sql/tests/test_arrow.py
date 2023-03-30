@@ -63,17 +63,13 @@ if have_pyarrow:
     import pyarrow as pa  # noqa: F401
 
 
-@unittest.skipIf(
-    not have_pandas or not have_pyarrow,
-    cast(str, pandas_requirement_message or pyarrow_requirement_message),
-)
-class ArrowTests(ReusedSQLTestCase):
+class ArrowTestsMixin:
     @classmethod
     def setUpClass(cls):
         from datetime import date, datetime
         from decimal import Decimal
 
-        super(ArrowTests, cls).setUpClass()
+        super().setUpClass()
         cls.warnings_lock = threading.Lock()
 
         # Synchronize default timezone between Python and Java
@@ -168,7 +164,7 @@ class ArrowTests(ReusedSQLTestCase):
         if cls.tz_prev is not None:
             os.environ["TZ"] = cls.tz_prev
         time.tzset()
-        super(ArrowTests, cls).tearDownClass()
+        super().tearDownClass()
 
     def create_pandas_data_frame(self):
         import numpy as np
@@ -395,6 +391,10 @@ class ArrowTests(ReusedSQLTestCase):
         self.assertTrue(pdf.empty)
 
     def test_propagates_spark_exception(self):
+        with QuietTest(self.sc):
+            self.check_propagates_spark_exception()
+
+    def check_propagates_spark_exception(self):
         df = self.spark.range(3).toDF("i")
 
         def raise_exception():
@@ -402,9 +402,9 @@ class ArrowTests(ReusedSQLTestCase):
 
         exception_udf = udf(raise_exception, IntegerType())
         df = df.withColumn("error", exception_udf())
-        with QuietTest(self.sc):
-            with self.assertRaisesRegex(Exception, "My error"):
-                df.toPandas()
+
+        with self.assertRaisesRegex(Exception, "My error"):
+            df.toPandas()
 
     def _createDataFrame_toggle(self, data, schema=None):
         with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": False}):
@@ -459,14 +459,17 @@ class ArrowTests(ReusedSQLTestCase):
         assert_frame_equal(pdf_arrow, pdf)
 
     def test_createDataFrame_with_incorrect_schema(self):
+        with QuietTest(self.sc):
+            self.check_createDataFrame_with_incorrect_schema()
+
+    def check_createDataFrame_with_incorrect_schema(self):
         pdf = self.create_pandas_data_frame()
         fields = list(self.schema)
         fields[5], fields[6] = fields[6], fields[5]  # swap decimal with date
         wrong_schema = StructType(fields)
         with self.sql_conf({"spark.sql.execution.pandas.convertToArrowArraySafely": False}):
-            with QuietTest(self.sc):
-                with self.assertRaisesRegex(Exception, "[D|d]ecimal.*got.*date"):
-                    self.spark.createDataFrame(pdf, schema=wrong_schema)
+            with self.assertRaisesRegex(Exception, "[D|d]ecimal.*got.*date"):
+                self.spark.createDataFrame(pdf, schema=wrong_schema)
 
     def test_createDataFrame_with_names(self):
         pdf = self.create_pandas_data_frame()
@@ -769,6 +772,14 @@ class ArrowTests(ReusedSQLTestCase):
         df = self.spark.createDataFrame(pdf)
         self.assertEqual([Row(c1=1, c2="string")], df.collect())
         self.assertGreater(self.spark.sparkContext.defaultParallelism, len(pdf))
+
+
+@unittest.skipIf(
+    not have_pandas or not have_pyarrow,
+    cast(str, pandas_requirement_message or pyarrow_requirement_message),
+)
+class ArrowTests(ArrowTestsMixin, ReusedSQLTestCase):
+    pass
 
 
 @unittest.skipIf(
