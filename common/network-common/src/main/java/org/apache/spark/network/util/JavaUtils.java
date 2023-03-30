@@ -381,7 +381,8 @@ public class JavaUtils {
    * automatically deleted when the VM shuts down if `useDeleteOnExit` is true, otherwise,
    * user needs to manually clean `tempdir`.
    */
-  public static File createTempDir(String root, String namePrefix, boolean useDeleteOnExit) throws IOException {
+  public static File createTempDir(
+      String root, String namePrefix, boolean useDeleteOnExit) throws IOException {
     if (root == null) root = System.getProperty("java.io.tmpdir");
     if (namePrefix == null) namePrefix = "spark";
     File dir = createDirectory(root, namePrefix);
