@@ -58,9 +58,12 @@ object IntegrationTestUtils {
   }
 
   private[sql] lazy val isCatalystTestJarAvailable: Boolean = {
-    val filePath = s"$sparkHome/sql/catalyst/target/" +
-      s"spark-catalyst_$scalaVersion-${org.apache.spark.SPARK_VERSION}-tests.jar"
-    Files.exists(Paths.get(filePath))
+    try {
+      findJar("sql/catalyst", "spark-catalyst", "spark-catalyst", test = true)
+      true
+    } catch {
+      case _: AssertionError => false
+    }
   }
 
   /**
