@@ -23,7 +23,7 @@ from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
-class DateOpsParityTests(
+class UDTOpsParityTests(
     UDTOpsTestsMixin, PandasOnSparkTestUtils, OpsTestBase, ReusedConnectTestCase
 ):
     @unittest.skip("Fails in Spark Connect, should enable.")
@@ -60,7 +60,7 @@ class DateOpsParityTests(
 
 
 if __name__ == "__main__":
-    from pyspark.pandas.tests.connect.data_type_ops.test_parity_udf_ops import *  # noqa: F401
+    from pyspark.pandas.tests.connect.data_type_ops.test_parity_udt_ops import *  # noqa: F401
 
     try:
         import xmlrunner  # type: ignore[import]
