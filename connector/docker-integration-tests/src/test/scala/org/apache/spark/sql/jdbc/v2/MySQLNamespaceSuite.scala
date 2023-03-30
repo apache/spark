@@ -88,9 +88,7 @@ class MySQLNamespaceSuite extends DockerJDBCIntegrationSuite with V2JDBCNamespac
 
     checkError(
       exception = intercept[SparkSQLFeatureNotSupportedException] {
-        catalog.alterNamespace(
-          Array("foo"),
-          NamespaceChange.setProperty("comment", "comment for foo"))
+        catalog.alterNamespace(Array("foo"), NamespaceChange.removeProperty("comment"))
       },
       errorClass = "_LEGACY_ERROR_TEMP_2281")
     catalog.dropNamespace(Array("foo"), cascade = true)
