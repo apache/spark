@@ -398,8 +398,9 @@ abstract class JdbcDialect extends Serializable with Logging {
    * @param newTable New name of the table.
    * @return The SQL statement to use for renaming the table.
    */
-  def renameTable(oldTable: String, newTable: String): String = {
-    s"ALTER TABLE $oldTable RENAME TO $newTable"
+  def renameTable(oldTable: Identifier, newTable: Identifier): String = {
+    s"ALTER TABLE ${getFullyQualifiedQuotedTableName(oldTable)} RENAME TO " +
+      s"${getFullyQualifiedQuotedTableName(newTable)}"
   }
 
   /**
@@ -598,6 +599,14 @@ abstract class JdbcDialect extends Serializable with Logging {
 
   def getTableSample(sample: TableSampleInfo): String =
     throw new UnsupportedOperationException("TableSample is not supported by this data source")
+
+  /**
+   * Return the DB-specific quoted and fully qualified table name
+   */
+  @Since("3.5.0")
+  def getFullyQualifiedQuotedTableName(ident: Identifier): String = {
+    (ident.namespace() :+ ident.name()).map(quoteIdentifier).mkString(".")
+  }
 }
 
 /**
