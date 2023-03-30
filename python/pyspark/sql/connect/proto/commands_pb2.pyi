@@ -64,7 +64,7 @@ class Command(google.protobuf.message.Message):
     CREATE_DATAFRAME_VIEW_FIELD_NUMBER: builtins.int
     WRITE_OPERATION_V2_FIELD_NUMBER: builtins.int
     SQL_COMMAND_FIELD_NUMBER: builtins.int
-    WRITE_STREAM_OPERATION_FIELD_NUMBER: builtins.int
+    WRITE_STREAM_OPERATION_START_FIELD_NUMBER: builtins.int
     STREAMING_QUERY_COMMAND_FIELD_NUMBER: builtins.int
     EXTENSION_FIELD_NUMBER: builtins.int
     @property
@@ -80,7 +80,7 @@ class Command(google.protobuf.message.Message):
     @property
     def sql_command(self) -> global___SqlCommand: ...
     @property
-    def write_stream_operation(self) -> global___WriteStreamOperation: ...
+    def write_stream_operation_start(self) -> global___WriteStreamOperationStart: ...
     @property
     def streaming_query_command(self) -> global___StreamingQueryCommand: ...
     @property
@@ -97,7 +97,7 @@ class Command(google.protobuf.message.Message):
         create_dataframe_view: global___CreateDataFrameViewCommand | None = ...,
         write_operation_v2: global___WriteOperationV2 | None = ...,
         sql_command: global___SqlCommand | None = ...,
-        write_stream_operation: global___WriteStreamOperation | None = ...,
+        write_stream_operation_start: global___WriteStreamOperationStart | None = ...,
         streaming_query_command: global___StreamingQueryCommand | None = ...,
         extension: google.protobuf.any_pb2.Any | None = ...,
     ) -> None: ...
@@ -120,8 +120,8 @@ class Command(google.protobuf.message.Message):
             b"write_operation",
             "write_operation_v2",
             b"write_operation_v2",
-            "write_stream_operation",
-            b"write_stream_operation",
+            "write_stream_operation_start",
+            b"write_stream_operation_start",
         ],
     ) -> builtins.bool: ...
     def ClearField(
@@ -143,8 +143,8 @@ class Command(google.protobuf.message.Message):
             b"write_operation",
             "write_operation_v2",
             b"write_operation_v2",
-            "write_stream_operation",
-            b"write_stream_operation",
+            "write_stream_operation_start",
+            b"write_stream_operation_start",
         ],
     ) -> None: ...
     def WhichOneof(
@@ -155,7 +155,7 @@ class Command(google.protobuf.message.Message):
         "create_dataframe_view",
         "write_operation_v2",
         "sql_command",
-        "write_stream_operation",
+        "write_stream_operation_start",
         "streaming_query_command",
         "extension",
     ] | None: ...
@@ -636,7 +636,11 @@ class WriteOperationV2(google.protobuf.message.Message):
 
 global___WriteOperationV2 = WriteOperationV2
 
-class WriteStreamOperation(google.protobuf.message.Message):
+class WriteStreamOperationStart(google.protobuf.message.Message):
+    """Starts write stream operation as streaming query. Query ID and Run ID of the streaming
+    query are returned.
+    """
+
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
     class OptionsEntry(google.protobuf.message.Message):
@@ -672,6 +676,9 @@ class WriteStreamOperation(google.protobuf.message.Message):
     def input(self) -> pyspark.sql.connect.proto.relations_pb2.Relation:
         """(Required) The output of the `input` streaming relation will be written."""
     format: builtins.str
+    """The following fields directly map to API for DataStreamWriter().
+    Consult API documentation unless explicitly documented here.
+    """
     @property
     def options(
         self,
@@ -771,34 +778,39 @@ class WriteStreamOperation(google.protobuf.message.Message):
         "processing_time_interval", "available_now", "one_time", "continuous_checkpoint_interval"
     ] | None: ...
 
-global___WriteStreamOperation = WriteStreamOperation
+global___WriteStreamOperationStart = WriteStreamOperationStart
 
-class StreamingQueryStartResult(google.protobuf.message.Message):
+class WriteStreamOperationStartResult(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-    NAME_FIELD_NUMBER: builtins.int
-    ID_FIELD_NUMBER: builtins.int
+    QUERY_ID_FIELD_NUMBER: builtins.int
     RUN_ID_FIELD_NUMBER: builtins.int
-    name: builtins.str
-    id: builtins.str
+    NAME_FIELD_NUMBER: builtins.int
+    query_id: builtins.str
     """(Required)"""
     run_id: builtins.str
     """(Required)"""
+    name: builtins.str
+    """An optional query name."""
     def __init__(
         self,
         *,
-        name: builtins.str = ...,
-        id: builtins.str = ...,
+        query_id: builtins.str = ...,
         run_id: builtins.str = ...,
+        name: builtins.str = ...,
     ) -> None: ...
     def ClearField(
         self,
-        field_name: typing_extensions.Literal["id", b"id", "name", b"name", "run_id", b"run_id"],
+        field_name: typing_extensions.Literal[
+            "name", b"name", "query_id", b"query_id", "run_id", b"run_id"
+        ],
     ) -> None: ...
 
-global___StreamingQueryStartResult = StreamingQueryStartResult
+global___WriteStreamOperationStartResult = WriteStreamOperationStartResult
 
 class StreamingQueryCommand(google.protobuf.message.Message):
+    """Commands for a streaming query."""
+
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
     class StatusCommand(google.protobuf.message.Message):
@@ -806,6 +818,7 @@ class StreamingQueryCommand(google.protobuf.message.Message):
 
         RECENT_PROGRESS_LIMIT_FIELD_NUMBER: builtins.int
         recent_progress_limit: builtins.int
+        """A limit on how many progress reports to return."""
         def __init__(
             self,
             *,
@@ -823,6 +836,9 @@ class StreamingQueryCommand(google.protobuf.message.Message):
 
         EXTENDED_FIELD_NUMBER: builtins.int
         extended: builtins.bool
+        """TODO: Consider reusing Explain from AnalyzePlanRequest message.
+              We can not do this right now since it base.proto imports this file.
+        """
         def __init__(
             self,
             *,
@@ -832,23 +848,31 @@ class StreamingQueryCommand(google.protobuf.message.Message):
             self, field_name: typing_extensions.Literal["extended", b"extended"]
         ) -> None: ...
 
-    ID_FIELD_NUMBER: builtins.int
+    QUERY_ID_FIELD_NUMBER: builtins.int
+    RUN_ID_FIELD_NUMBER: builtins.int
     STATUS_FIELD_NUMBER: builtins.int
     STOP_FIELD_NUMBER: builtins.int
     PROCESS_ALL_AVAILABLE_FIELD_NUMBER: builtins.int
     EXPLAIN_FIELD_NUMBER: builtins.int
-    id: builtins.str
-    """(Required)"""
+    query_id: builtins.str
+    """(Required) query id of the streaming query."""
+    run_id: builtins.str
+    """(Required) run id of the streaming query."""
     @property
-    def status(self) -> global___StreamingQueryCommand.StatusCommand: ...
+    def status(self) -> global___StreamingQueryCommand.StatusCommand:
+        """Status of the query. Used to support multiple status related API like lastProgress()."""
     stop: builtins.bool
+    """Stops the query."""
     process_all_available: builtins.bool
+    """Waits till all the available data is processed. See processAllAvailable() API doc."""
     @property
-    def explain(self) -> global___StreamingQueryCommand.ExplainCommand: ...
+    def explain(self) -> global___StreamingQueryCommand.ExplainCommand:
+        """Returns logical and physical plans."""
     def __init__(
         self,
         *,
-        id: builtins.str = ...,
+        query_id: builtins.str = ...,
+        run_id: builtins.str = ...,
         status: global___StreamingQueryCommand.StatusCommand | None = ...,
         stop: builtins.bool = ...,
         process_all_available: builtins.bool = ...,
@@ -876,10 +900,12 @@ class StreamingQueryCommand(google.protobuf.message.Message):
             b"command_type",
             "explain",
             b"explain",
-            "id",
-            b"id",
             "process_all_available",
             b"process_all_available",
+            "query_id",
+            b"query_id",
+            "run_id",
+            b"run_id",
             "status",
             b"status",
             "stop",
@@ -893,6 +919,8 @@ class StreamingQueryCommand(google.protobuf.message.Message):
 global___StreamingQueryCommand = StreamingQueryCommand
 
 class StreamingQueryCommandResult(google.protobuf.message.Message):
+    """Response for commands on a streaming query."""
+
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
     class StatusResult(google.protobuf.message.Message):
@@ -914,7 +942,7 @@ class StreamingQueryCommandResult(google.protobuf.message.Message):
         def recent_progress_json(
             self,
         ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
-            """Progress as json."""
+            """Progress reports as an array of json strings."""
         def __init__(
             self,
             *,
@@ -945,6 +973,7 @@ class StreamingQueryCommandResult(google.protobuf.message.Message):
 
         RESULT_FIELD_NUMBER: builtins.int
         result: builtins.str
+        """Logical and physical plans as string"""
         def __init__(
             self,
             *,
@@ -954,10 +983,10 @@ class StreamingQueryCommandResult(google.protobuf.message.Message):
             self, field_name: typing_extensions.Literal["result", b"result"]
         ) -> None: ...
 
-    ID_FIELD_NUMBER: builtins.int
+    QUERY_ID_FIELD_NUMBER: builtins.int
     STATUS_FIELD_NUMBER: builtins.int
     EXPLAIN_FIELD_NUMBER: builtins.int
-    id: builtins.str
+    query_id: builtins.str
     """(Required)"""
     @property
     def status(self) -> global___StreamingQueryCommandResult.StatusResult: ...
@@ -966,7 +995,7 @@ class StreamingQueryCommandResult(google.protobuf.message.Message):
     def __init__(
         self,
         *,
-        id: builtins.str = ...,
+        query_id: builtins.str = ...,
         status: global___StreamingQueryCommandResult.StatusResult | None = ...,
         explain: global___StreamingQueryCommandResult.ExplainResult | None = ...,
     ) -> None: ...
@@ -979,7 +1008,14 @@ class StreamingQueryCommandResult(google.protobuf.message.Message):
     def ClearField(
         self,
         field_name: typing_extensions.Literal[
-            "explain", b"explain", "id", b"id", "result_type", b"result_type", "status", b"status"
+            "explain",
+            b"explain",
+            "query_id",
+            b"query_id",
+            "result_type",
+            b"result_type",
+            "status",
+            b"status",
         ],
     ) -> None: ...
     def WhichOneof(

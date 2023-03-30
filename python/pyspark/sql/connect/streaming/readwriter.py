@@ -405,10 +405,10 @@ class DataStreamWriter:
         cmd = self._write_stream.command(self._session.client)
         (_, properties) = self._session.client.execute_command(cmd)
 
-        start_result = cast(pb2.StreamingQueryStartResult, properties["streaming_query_start_result"])
+        start_result = cast(pb2.WriteStreamOperationStartResult, properties["write_stream_operation_start_result"])
         return StreamingQuery(
             session=self._session,
-            queryId=start_result.id,
+            queryId=start_result.query_id,
             runId=start_result.run_id,
             name=start_result.name
         )

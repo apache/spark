@@ -32,9 +32,9 @@ import org.apache.spark.connect.proto.ExecutePlanResponse.SqlCommandResult
 import org.apache.spark.connect.proto.Parse.ParseFormat
 import org.apache.spark.connect.proto.StreamingQueryCommand
 import org.apache.spark.connect.proto.StreamingQueryCommandResult
-import org.apache.spark.connect.proto.StreamingQueryStartResult
-import org.apache.spark.connect.proto.WriteStreamOperation
-import org.apache.spark.connect.proto.WriteStreamOperation.TriggerCase
+import org.apache.spark.connect.proto.WriteStreamOperationStart
+import org.apache.spark.connect.proto.WriteStreamOperationStart.TriggerCase
+import org.apache.spark.connect.proto.WriteStreamOperationStartResult
 import org.apache.spark.ml.{functions => MLFunctions}
 import org.apache.spark.sql.{Column, Dataset, Encoders, SparkSession}
 import org.apache.spark.sql.avro.{AvroDataToCatalyst, CatalystDataToAvro}
@@ -1722,8 +1722,10 @@ class SparkConnectPlanner(val session: SparkSession) {
         handleCommandPlugin(command.getExtension)
       case proto.Command.CommandTypeCase.SQL_COMMAND =>
         handleSqlCommand(command.getSqlCommand, sessionId, responseObserver)
-      case proto.Command.CommandTypeCase.WRITE_STREAM_OPERATION =>
-        handleWriteStreamOperation(command.getWriteStreamOperation, sessionId, responseObserver)
+      case proto.Command.CommandTypeCase.WRITE_STREAM_OPERATION_START =>
+        handleWriteStreamOperationStart(
+          command.getWriteStreamOperationStart, sessionId, responseObserver
+        )
       case proto.Command.CommandTypeCase.STREAMING_QUERY_COMMAND =>
         handleStreamingQueryCommand(command.getStreamingQueryCommand, sessionId, responseObserver)
       case _ => throw new UnsupportedOperationException(s"$command not supported.")
@@ -2014,8 +2016,8 @@ class SparkConnectPlanner(val session: SparkSession) {
     }
   }
 
-  def handleWriteStreamOperation(
-      writeOp: WriteStreamOperation,
+  def handleWriteStreamOperationStart(
+      writeOp: WriteStreamOperationStart,
       sessionId: String,
       responseObserver: StreamObserver[ExecutePlanResponse]): Unit = {
     val plan = transformRelation(writeOp.getInput)
@@ -2059,9 +2061,9 @@ class SparkConnectPlanner(val session: SparkSession) {
       case path => writer.start(path)
     }
 
-    val result = StreamingQueryStartResult
+    val result = WriteStreamOperationStartResult
       .newBuilder()
-      .setId(query.id.toString)
+      .setQueryId(query.id.toString)
       .setRunId(query.runId.toString)
       .setName(Option(query.name).getOrElse(""))
       .build()
@@ -2070,7 +2072,7 @@ class SparkConnectPlanner(val session: SparkSession) {
       ExecutePlanResponse
         .newBuilder()
         .setSessionId(sessionId)
-        .setStreamingQueryStartResult(result)
+        .setWriteStreamOperationStartResult(result)
         .build())
   }
 
@@ -2079,14 +2081,22 @@ class SparkConnectPlanner(val session: SparkSession) {
       sessionId: String,
       responseObserver: StreamObserver[ExecutePlanResponse]): Unit = {
 
-    val id = command.getId
+    val queryId = command.getQueryId
 
     val respBuilder = StreamingQueryCommandResult
       .newBuilder()
-      .setId(command.getId)
+      .setQueryId(command.getQueryId)
 
-    val query = Option(session.streams.get(command.getId)).getOrElse {
-      throw new IllegalArgumentException(s"Streaming query $id is not found")
+    val query = Option(session.streams.get(queryId)) match {
+      case Some(query) if query.runId.toString == command.getRunId =>
+        query
+      case Some(query) =>
+        throw new IllegalArgumentException(
+          s"Run id mismatch for query id $queryId. Run id in the request ${command.getRunId} " +
+          s"does not match one on the serve ${query.runId}. The query might have restarted."
+        )
+      case None =>
+        throw new IllegalArgumentException(s"Streaming query $queryId is not found")
       // TODO(SPARK-42962): Handle this better. May be cache stopped queries for a few minutes.
     }
 

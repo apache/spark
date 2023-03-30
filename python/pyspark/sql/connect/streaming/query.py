@@ -32,23 +32,24 @@ __all__ = [
 if TYPE_CHECKING:
     from pyspark.sql.connect.session import SparkSession
 
+
 class StreamingQuery:
 
     def __init__(self, session: "SparkSession", queryId: str, runId: str, name: Optional[str] = None) -> None:
         self._session = session
-        self._id = queryId
-        self._runId = runId
+        self._query_id = queryId
+        self._run_id = runId
         self._name = name
 
     @property
     def id(self) -> str:
-        return self._id
+        return self._query_id
 
     id.__doc__ = PySparkStreamingQuery.id.__doc__
 
     @property
     def runId(self) -> str:
-        return self._runId
+        return self._run_id
 
     runId.__doc__ = PySparkStreamingQuery.runId.__doc__
 
@@ -131,7 +132,8 @@ class StreamingQuery:
         return self._execute_streaming_query_cmd(cmd).status
 
     def _execute_streaming_query_cmd(self, cmd: pb2.StreamingQueryCommand) -> pb2.StreamingQueryCommandResult:
-        cmd.id = self._id
+        cmd.query_id = self._query_id
+        cmd.run_id = self._run_id
         exec_cmd = pb2.Command()
         exec_cmd.streaming_query_command.CopyFrom(cmd)
         (_, properties) = self._session.client.execute_command(exec_cmd)

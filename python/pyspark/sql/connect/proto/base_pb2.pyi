@@ -1235,7 +1235,7 @@ class ExecutePlanResponse(google.protobuf.message.Message):
     SESSION_ID_FIELD_NUMBER: builtins.int
     ARROW_BATCH_FIELD_NUMBER: builtins.int
     SQL_COMMAND_RESULT_FIELD_NUMBER: builtins.int
-    STREAMING_QUERY_START_RESULT_FIELD_NUMBER: builtins.int
+    WRITE_STREAM_OPERATION_START_RESULT_FIELD_NUMBER: builtins.int
     STREAMING_QUERY_COMMAND_RESULT_FIELD_NUMBER: builtins.int
     EXTENSION_FIELD_NUMBER: builtins.int
     METRICS_FIELD_NUMBER: builtins.int
@@ -1248,13 +1248,15 @@ class ExecutePlanResponse(google.protobuf.message.Message):
     def sql_command_result(self) -> global___ExecutePlanResponse.SqlCommandResult:
         """Special case for executing SQL commands."""
     @property
-    def streaming_query_start_result(
+    def write_stream_operation_start_result(
         self,
-    ) -> pyspark.sql.connect.proto.commands_pb2.StreamingQueryStartResult: ...
+    ) -> pyspark.sql.connect.proto.commands_pb2.WriteStreamOperationStartResult:
+        """Response for a streaming query."""
     @property
     def streaming_query_command_result(
         self,
-    ) -> pyspark.sql.connect.proto.commands_pb2.StreamingQueryCommandResult: ...
+    ) -> pyspark.sql.connect.proto.commands_pb2.StreamingQueryCommandResult:
+        """Response for commands on a streaming query."""
     @property
     def extension(self) -> google.protobuf.any_pb2.Any:
         """Support arbitrary result objects."""
@@ -1279,7 +1281,7 @@ class ExecutePlanResponse(google.protobuf.message.Message):
         session_id: builtins.str = ...,
         arrow_batch: global___ExecutePlanResponse.ArrowBatch | None = ...,
         sql_command_result: global___ExecutePlanResponse.SqlCommandResult | None = ...,
-        streaming_query_start_result: pyspark.sql.connect.proto.commands_pb2.StreamingQueryStartResult
+        write_stream_operation_start_result: pyspark.sql.connect.proto.commands_pb2.WriteStreamOperationStartResult
         | None = ...,
         streaming_query_command_result: pyspark.sql.connect.proto.commands_pb2.StreamingQueryCommandResult
         | None = ...,
@@ -1306,8 +1308,8 @@ class ExecutePlanResponse(google.protobuf.message.Message):
             b"sql_command_result",
             "streaming_query_command_result",
             b"streaming_query_command_result",
-            "streaming_query_start_result",
-            b"streaming_query_start_result",
+            "write_stream_operation_start_result",
+            b"write_stream_operation_start_result",
         ],
     ) -> builtins.bool: ...
     def ClearField(
@@ -1331,8 +1333,8 @@ class ExecutePlanResponse(google.protobuf.message.Message):
             b"sql_command_result",
             "streaming_query_command_result",
             b"streaming_query_command_result",
-            "streaming_query_start_result",
-            b"streaming_query_start_result",
+            "write_stream_operation_start_result",
+            b"write_stream_operation_start_result",
         ],
     ) -> None: ...
     def WhichOneof(
@@ -1340,7 +1342,7 @@ class ExecutePlanResponse(google.protobuf.message.Message):
     ) -> typing_extensions.Literal[
         "arrow_batch",
         "sql_command_result",
-        "streaming_query_start_result",
+        "write_stream_operation_start_result",
         "streaming_query_command_result",
         "extension",
     ] | None: ...

@@ -35,7 +35,7 @@ from pyspark.sql.connect.proto import relations_pb2 as spark_dot_connect_dot_rel
 
 
 DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(
-    b'\n\x1cspark/connect/commands.proto\x12\rspark.connect\x1a\x19google/protobuf/any.proto\x1a\x1fspark/connect/expressions.proto\x1a\x1dspark/connect/relations.proto"\xa6\x05\n\x07\x43ommand\x12]\n\x11register_function\x18\x01 \x01(\x0b\x32..spark.connect.CommonInlineUserDefinedFunctionH\x00R\x10registerFunction\x12H\n\x0fwrite_operation\x18\x02 \x01(\x0b\x32\x1d.spark.connect.WriteOperationH\x00R\x0ewriteOperation\x12_\n\x15\x63reate_dataframe_view\x18\x03 \x01(\x0b\x32).spark.connect.CreateDataFrameViewCommandH\x00R\x13\x63reateDataframeView\x12O\n\x12write_operation_v2\x18\x04 \x01(\x0b\x32\x1f.spark.connect.WriteOperationV2H\x00R\x10writeOperationV2\x12<\n\x0bsql_command\x18\x05 \x01(\x0b\x32\x19.spark.connect.SqlCommandH\x00R\nsqlCommand\x12[\n\x16write_stream_operation\x18\x06 \x01(\x0b\x32#.spark.connect.WriteStreamOperationH\x00R\x14writeStreamOperation\x12^\n\x17streaming_query_command\x18\x07 \x01(\x0b\x32$.spark.connect.StreamingQueryCommandH\x00R\x15streamingQueryCommand\x12\x35\n\textension\x18\xe7\x07 \x01(\x0b\x32\x14.google.protobuf.AnyH\x00R\textensionB\x0e\n\x0c\x63ommand_type"\x90\x01\n\nSqlCommand\x12\x10\n\x03sql\x18\x01 \x01(\tR\x03sql\x12\x37\n\x04\x61rgs\x18\x02 \x03(\x0b\x32#.spark.connect.SqlCommand.ArgsEntryR\x04\x61rgs\x1a\x37\n\tArgsEntry\x12\x10\n\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n\x05value\x18\x02 \x01(\tR\x05value:\x02\x38\x01"\x96\x01\n\x1a\x43reateDataFrameViewCommand\x12-\n\x05input\x18\x01 \x01(\x0b\x32\x17.spark.connect.RelationR\x05input\x12\x12\n\x04name\x18\x02 \x01(\tR\x04name\x12\x1b\n\tis_global\x18\x03 \x01(\x08R\x08isGlobal\x12\x18\n\x07replace\x18\x04 \x01(\x08R\x07replace"\x9b\x08\n\x0eWriteOperation\x12-\n\x05input\x18\x01 \x01(\x0b\x32\x17.spark.connect.RelationR\x05input\x12\x1b\n\x06source\x18\x02 \x01(\tH\x01R\x06source\x88\x01\x01\x12\x14\n\x04path\x18\x03 \x01(\tH\x00R\x04path\x12?\n\x05table\x18\x04 \x01(\x0b\x32\'.spark.connect.WriteOperation.SaveTableH\x00R\x05table\x12:\n\x04mode\x18\x05 \x01(\x0e\x32&.spark.connect.WriteOperation.SaveModeR\x04mode\x12*\n\x11sort_column_names\x18\x06 \x03(\tR\x0fsortColumnNames\x12\x31\n\x14partitioning_columns\x18\x07 \x03(\tR\x13partitioningColumns\x12\x43\n\tbucket_by\x18\x08 \x01(\x0b\x32&.spark.connect.WriteOperation.BucketByR\x08\x62ucketBy\x12\x44\n\x07options\x18\t \x03(\x0b\x32*.spark.connect.WriteOperation.OptionsEntryR\x07options\x1a:\n\x0cOptionsEntry\x12\x10\n\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n\x05value\x18\x02 \x01(\tR\x05value:\x02\x38\x01\x1a\x82\x02\n\tSaveTable\x12\x1d\n\ntable_name\x18\x01 \x01(\tR\ttableName\x12X\n\x0bsave_method\x18\x02 \x01(\x0e\x32\x37.spark.connect.WriteOperation.SaveTable.TableSaveMethodR\nsaveMethod"|\n\x0fTableSaveMethod\x12!\n\x1dTABLE_SAVE_METHOD_UNSPECIFIED\x10\x00\x12#\n\x1fTABLE_SAVE_METHOD_SAVE_AS_TABLE\x10\x01\x12!\n\x1dTABLE_SAVE_METHOD_INSERT_INTO\x10\x02\x1a[\n\x08\x42ucketBy\x12.\n\x13\x62ucket_column_names\x18\x01 \x03(\tR\x11\x62ucketColumnNames\x12\x1f\n\x0bnum_buckets\x18\x02 \x01(\x05R\nnumBuckets"\x89\x01\n\x08SaveMode\x12\x19\n\x15SAVE_MODE_UNSPECIFIED\x10\x00\x12\x14\n\x10SAVE_MODE_APPEND\x10\x01\x12\x17\n\x13SAVE_MODE_OVERWRITE\x10\x02\x12\x1d\n\x19SAVE_MODE_ERROR_IF_EXISTS\x10\x03\x12\x14\n\x10SAVE_MODE_IGNORE\x10\x04\x42\x0b\n\tsave_typeB\t\n\x07_source"\xad\x06\n\x10WriteOperationV2\x12-\n\x05input\x18\x01 \x01(\x0b\x32\x17.spark.connect.RelationR\x05input\x12\x1d\n\ntable_name\x18\x02 \x01(\tR\ttableName\x12\x1f\n\x08provider\x18\x03 \x01(\tH\x00R\x08provider\x88\x01\x01\x12L\n\x14partitioning_columns\x18\x04 \x03(\x0b\x32\x19.spark.connect.ExpressionR\x13partitioningColumns\x12\x46\n\x07options\x18\x05 \x03(\x0b\x32,.spark.connect.WriteOperationV2.OptionsEntryR\x07options\x12_\n\x10table_properties\x18\x06 \x03(\x0b\x32\x34.spark.connect.WriteOperationV2.TablePropertiesEntryR\x0ftableProperties\x12\x38\n\x04mode\x18\x07 \x01(\x0e\x32$.spark.connect.WriteOperationV2.ModeR\x04mode\x12J\n\x13overwrite_condition\x18\x08 \x01(\x0b\x32\x19.spark.connect.ExpressionR\x12overwriteCondition\x1a:\n\x0cOptionsEntry\x12\x10\n\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n\x05value\x18\x02 \x01(\tR\x05value:\x02\x38\x01\x1a\x42\n\x14TablePropertiesEntry\x12\x10\n\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n\x05value\x18\x02 \x01(\tR\x05value:\x02\x38\x01"\x9f\x01\n\x04Mode\x12\x14\n\x10MODE_UNSPECIFIED\x10\x00\x12\x0f\n\x0bMODE_CREATE\x10\x01\x12\x12\n\x0eMODE_OVERWRITE\x10\x02\x12\x1d\n\x19MODE_OVERWRITE_PARTITIONS\x10\x03\x12\x0f\n\x0bMODE_APPEND\x10\x04\x12\x10\n\x0cMODE_REPLACE\x10\x05\x12\x1a\n\x16MODE_CREATE_OR_REPLACE\x10\x06\x42\x0b\n\t_provider"\xff\x04\n\x14WriteStreamOperation\x12-\n\x05input\x18\x01 \x01(\x0b\x32\x17.spark.connect.RelationR\x05input\x12\x16\n\x06\x66ormat\x18\x02 \x01(\tR\x06\x66ormat\x12J\n\x07options\x18\x03 \x03(\x0b\x32\x30.spark.connect.WriteStreamOperation.OptionsEntryR\x07options\x12:\n\x19partitioning_column_names\x18\x04 \x03(\tR\x17partitioningColumnNames\x12:\n\x18processing_time_interval\x18\x05 \x01(\tH\x00R\x16processingTimeInterval\x12%\n\ravailable_now\x18\x06 \x01(\x08H\x00R\x0c\x61vailableNow\x12\x1b\n\x08one_time\x18\x07 \x01(\x08H\x00R\x07oneTime\x12\x46\n\x1e\x63ontinuous_checkpoint_interval\x18\x08 \x01(\tH\x00R\x1c\x63ontinuousCheckpointInterval\x12\x1f\n\x0boutput_mode\x18\t \x01(\tR\noutputMode\x12\x1d\n\nquery_name\x18\n \x01(\tR\tqueryName\x12\x14\n\x04path\x18\x0b \x01(\tH\x01R\x04path\x12\x1f\n\ntable_name\x18\x0c \x01(\tH\x01R\ttableName\x1a:\n\x0cOptionsEntry\x12\x10\n\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n\x05value\x18\x02 \x01(\tR\x05value:\x02\x38\x01\x42\t\n\x07triggerB\x12\n\x10sink_destination"V\n\x19StreamingQueryStartResult\x12\x12\n\x04name\x18\x01 \x01(\tR\x04name\x12\x0e\n\x02id\x18\x02 \x01(\tR\x02id\x12\x15\n\x06run_id\x18\x03 \x01(\tR\x05runId"\x95\x03\n\x15StreamingQueryCommand\x12\x0e\n\x02id\x18\x01 \x01(\tR\x02id\x12L\n\x06status\x18\x02 \x01(\x0b\x32\x32.spark.connect.StreamingQueryCommand.StatusCommandH\x00R\x06status\x12\x14\n\x04stop\x18\x03 \x01(\x08H\x00R\x04stop\x12\x34\n\x15process_all_available\x18\x04 \x01(\x08H\x00R\x13processAllAvailable\x12O\n\x07\x65xplain\x18\x05 \x01(\x0b\x32\x33.spark.connect.StreamingQueryCommand.ExplainCommandH\x00R\x07\x65xplain\x1a\x43\n\rStatusCommand\x12\x32\n\x15recent_progress_limit\x18\x01 \x01(\x05R\x13recentProgressLimit\x1a,\n\x0e\x45xplainCommand\x12\x1a\n\x08\x65xtended\x18\x01 \x01(\x08R\x08\x65xtendedB\x0e\n\x0c\x63ommand_type"\xed\x03\n\x1bStreamingQueryCommandResult\x12\x0e\n\x02id\x18\x01 \x01(\tR\x02id\x12Q\n\x06status\x18\x02 \x01(\x0b\x32\x37.spark.connect.StreamingQueryCommandResult.StatusResultH\x00R\x06status\x12T\n\x07\x65xplain\x18\x03 \x01(\x0b\x32\x38.spark.connect.StreamingQueryCommandResult.ExplainResultH\x00R\x07\x65xplain\x1a\xdc\x01\n\x0cStatusResult\x12%\n\x0estatus_message\x18\x01 \x01(\tR\rstatusMessage\x12*\n\x11is_data_available\x18\x02 \x01(\x08R\x0fisDataAvailable\x12*\n\x11is_trigger_active\x18\x03 \x01(\x08R\x0fisTriggerActive\x12\x1b\n\tis_active\x18\x04 \x01(\x08R\x08isActive\x12\x30\n\x14recent_progress_json\x18\x05 \x03(\tR\x12recentProgressJson\x1a\'\n\rExplainResult\x12\x16\n\x06result\x18\x01 \x01(\tR\x06resultB\r\n\x0bresult_typeB"\n\x1eorg.apache.spark.connect.protoP\x01\x62\x06proto3'
+    b'\n\x1cspark/connect/commands.proto\x12\rspark.connect\x1a\x19google/protobuf/any.proto\x1a\x1fspark/connect/expressions.proto\x1a\x1dspark/connect/relations.proto"\xb6\x05\n\x07\x43ommand\x12]\n\x11register_function\x18\x01 \x01(\x0b\x32..spark.connect.CommonInlineUserDefinedFunctionH\x00R\x10registerFunction\x12H\n\x0fwrite_operation\x18\x02 \x01(\x0b\x32\x1d.spark.connect.WriteOperationH\x00R\x0ewriteOperation\x12_\n\x15\x63reate_dataframe_view\x18\x03 \x01(\x0b\x32).spark.connect.CreateDataFrameViewCommandH\x00R\x13\x63reateDataframeView\x12O\n\x12write_operation_v2\x18\x04 \x01(\x0b\x32\x1f.spark.connect.WriteOperationV2H\x00R\x10writeOperationV2\x12<\n\x0bsql_command\x18\x05 \x01(\x0b\x32\x19.spark.connect.SqlCommandH\x00R\nsqlCommand\x12k\n\x1cwrite_stream_operation_start\x18\x06 \x01(\x0b\x32(.spark.connect.WriteStreamOperationStartH\x00R\x19writeStreamOperationStart\x12^\n\x17streaming_query_command\x18\x07 \x01(\x0b\x32$.spark.connect.StreamingQueryCommandH\x00R\x15streamingQueryCommand\x12\x35\n\textension\x18\xe7\x07 \x01(\x0b\x32\x14.google.protobuf.AnyH\x00R\textensionB\x0e\n\x0c\x63ommand_type"\x90\x01\n\nSqlCommand\x12\x10\n\x03sql\x18\x01 \x01(\tR\x03sql\x12\x37\n\x04\x61rgs\x18\x02 \x03(\x0b\x32#.spark.connect.SqlCommand.ArgsEntryR\x04\x61rgs\x1a\x37\n\tArgsEntry\x12\x10\n\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n\x05value\x18\x02 \x01(\tR\x05value:\x02\x38\x01"\x96\x01\n\x1a\x43reateDataFrameViewCommand\x12-\n\x05input\x18\x01 \x01(\x0b\x32\x17.spark.connect.RelationR\x05input\x12\x12\n\x04name\x18\x02 \x01(\tR\x04name\x12\x1b\n\tis_global\x18\x03 \x01(\x08R\x08isGlobal\x12\x18\n\x07replace\x18\x04 \x01(\x08R\x07replace"\x9b\x08\n\x0eWriteOperation\x12-\n\x05input\x18\x01 \x01(\x0b\x32\x17.spark.connect.RelationR\x05input\x12\x1b\n\x06source\x18\x02 \x01(\tH\x01R\x06source\x88\x01\x01\x12\x14\n\x04path\x18\x03 \x01(\tH\x00R\x04path\x12?\n\x05table\x18\x04 \x01(\x0b\x32\'.spark.connect.WriteOperation.SaveTableH\x00R\x05table\x12:\n\x04mode\x18\x05 \x01(\x0e\x32&.spark.connect.WriteOperation.SaveModeR\x04mode\x12*\n\x11sort_column_names\x18\x06 \x03(\tR\x0fsortColumnNames\x12\x31\n\x14partitioning_columns\x18\x07 \x03(\tR\x13partitioningColumns\x12\x43\n\tbucket_by\x18\x08 \x01(\x0b\x32&.spark.connect.WriteOperation.BucketByR\x08\x62ucketBy\x12\x44\n\x07options\x18\t \x03(\x0b\x32*.spark.connect.WriteOperation.OptionsEntryR\x07options\x1a:\n\x0cOptionsEntry\x12\x10\n\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n\x05value\x18\x02 \x01(\tR\x05value:\x02\x38\x01\x1a\x82\x02\n\tSaveTable\x12\x1d\n\ntable_name\x18\x01 \x01(\tR\ttableName\x12X\n\x0bsave_method\x18\x02 \x01(\x0e\x32\x37.spark.connect.WriteOperation.SaveTable.TableSaveMethodR\nsaveMethod"|\n\x0fTableSaveMethod\x12!\n\x1dTABLE_SAVE_METHOD_UNSPECIFIED\x10\x00\x12#\n\x1fTABLE_SAVE_METHOD_SAVE_AS_TABLE\x10\x01\x12!\n\x1dTABLE_SAVE_METHOD_INSERT_INTO\x10\x02\x1a[\n\x08\x42ucketBy\x12.\n\x13\x62ucket_column_names\x18\x01 \x03(\tR\x11\x62ucketColumnNames\x12\x1f\n\x0bnum_buckets\x18\x02 \x01(\x05R\nnumBuckets"\x89\x01\n\x08SaveMode\x12\x19\n\x15SAVE_MODE_UNSPECIFIED\x10\x00\x12\x14\n\x10SAVE_MODE_APPEND\x10\x01\x12\x17\n\x13SAVE_MODE_OVERWRITE\x10\x02\x12\x1d\n\x19SAVE_MODE_ERROR_IF_EXISTS\x10\x03\x12\x14\n\x10SAVE_MODE_IGNORE\x10\x04\x42\x0b\n\tsave_typeB\t\n\x07_source"\xad\x06\n\x10WriteOperationV2\x12-\n\x05input\x18\x01 \x01(\x0b\x32\x17.spark.connect.RelationR\x05input\x12\x1d\n\ntable_name\x18\x02 \x01(\tR\ttableName\x12\x1f\n\x08provider\x18\x03 \x01(\tH\x00R\x08provider\x88\x01\x01\x12L\n\x14partitioning_columns\x18\x04 \x03(\x0b\x32\x19.spark.connect.ExpressionR\x13partitioningColumns\x12\x46\n\x07options\x18\x05 \x03(\x0b\x32,.spark.connect.WriteOperationV2.OptionsEntryR\x07options\x12_\n\x10table_properties\x18\x06 \x03(\x0b\x32\x34.spark.connect.WriteOperationV2.TablePropertiesEntryR\x0ftableProperties\x12\x38\n\x04mode\x18\x07 \x01(\x0e\x32$.spark.connect.WriteOperationV2.ModeR\x04mode\x12J\n\x13overwrite_condition\x18\x08 \x01(\x0b\x32\x19.spark.connect.ExpressionR\x12overwriteCondition\x1a:\n\x0cOptionsEntry\x12\x10\n\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n\x05value\x18\x02 \x01(\tR\x05value:\x02\x38\x01\x1a\x42\n\x14TablePropertiesEntry\x12\x10\n\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n\x05value\x18\x02 \x01(\tR\x05value:\x02\x38\x01"\x9f\x01\n\x04Mode\x12\x14\n\x10MODE_UNSPECIFIED\x10\x00\x12\x0f\n\x0bMODE_CREATE\x10\x01\x12\x12\n\x0eMODE_OVERWRITE\x10\x02\x12\x1d\n\x19MODE_OVERWRITE_PARTITIONS\x10\x03\x12\x0f\n\x0bMODE_APPEND\x10\x04\x12\x10\n\x0cMODE_REPLACE\x10\x05\x12\x1a\n\x16MODE_CREATE_OR_REPLACE\x10\x06\x42\x0b\n\t_provider"\x89\x05\n\x19WriteStreamOperationStart\x12-\n\x05input\x18\x01 \x01(\x0b\x32\x17.spark.connect.RelationR\x05input\x12\x16\n\x06\x66ormat\x18\x02 \x01(\tR\x06\x66ormat\x12O\n\x07options\x18\x03 \x03(\x0b\x32\x35.spark.connect.WriteStreamOperationStart.OptionsEntryR\x07options\x12:\n\x19partitioning_column_names\x18\x04 \x03(\tR\x17partitioningColumnNames\x12:\n\x18processing_time_interval\x18\x05 \x01(\tH\x00R\x16processingTimeInterval\x12%\n\ravailable_now\x18\x06 \x01(\x08H\x00R\x0c\x61vailableNow\x12\x1b\n\x08one_time\x18\x07 \x01(\x08H\x00R\x07oneTime\x12\x46\n\x1e\x63ontinuous_checkpoint_interval\x18\x08 \x01(\tH\x00R\x1c\x63ontinuousCheckpointInterval\x12\x1f\n\x0boutput_mode\x18\t \x01(\tR\noutputMode\x12\x1d\n\nquery_name\x18\n \x01(\tR\tqueryName\x12\x14\n\x04path\x18\x0b \x01(\tH\x01R\x04path\x12\x1f\n\ntable_name\x18\x0c \x01(\tH\x01R\ttableName\x1a:\n\x0cOptionsEntry\x12\x10\n\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n\x05value\x18\x02 \x01(\tR\x05value:\x02\x38\x01\x42\t\n\x07triggerB\x12\n\x10sink_destination"g\n\x1fWriteStreamOperationStartResult\x12\x19\n\x08query_id\x18\x01 \x01(\tR\x07queryId\x12\x15\n\x06run_id\x18\x02 \x01(\tR\x05runId\x12\x12\n\x04name\x18\x03 \x01(\tR\x04name"\xb7\x03\n\x15StreamingQueryCommand\x12\x19\n\x08query_id\x18\x01 \x01(\tR\x07queryId\x12\x15\n\x06run_id\x18\x02 \x01(\tR\x05runId\x12L\n\x06status\x18\x03 \x01(\x0b\x32\x32.spark.connect.StreamingQueryCommand.StatusCommandH\x00R\x06status\x12\x14\n\x04stop\x18\x04 \x01(\x08H\x00R\x04stop\x12\x34\n\x15process_all_available\x18\x05 \x01(\x08H\x00R\x13processAllAvailable\x12O\n\x07\x65xplain\x18\x06 \x01(\x0b\x32\x33.spark.connect.StreamingQueryCommand.ExplainCommandH\x00R\x07\x65xplain\x1a\x43\n\rStatusCommand\x12\x32\n\x15recent_progress_limit\x18\x01 \x01(\x05R\x13recentProgressLimit\x1a,\n\x0e\x45xplainCommand\x12\x1a\n\x08\x65xtended\x18\x01 \x01(\x08R\x08\x65xtendedB\x0e\n\x0c\x63ommand_type"\xf8\x03\n\x1bStreamingQueryCommandResult\x12\x19\n\x08query_id\x18\x01 \x01(\tR\x07queryId\x12Q\n\x06status\x18\x02 \x01(\x0b\x32\x37.spark.connect.StreamingQueryCommandResult.StatusResultH\x00R\x06status\x12T\n\x07\x65xplain\x18\x03 \x01(\x0b\x32\x38.spark.connect.StreamingQueryCommandResult.ExplainResultH\x00R\x07\x65xplain\x1a\xdc\x01\n\x0cStatusResult\x12%\n\x0estatus_message\x18\x01 \x01(\tR\rstatusMessage\x12*\n\x11is_data_available\x18\x02 \x01(\x08R\x0fisDataAvailable\x12*\n\x11is_trigger_active\x18\x03 \x01(\x08R\x0fisTriggerActive\x12\x1b\n\tis_active\x18\x04 \x01(\x08R\x08isActive\x12\x30\n\x14recent_progress_json\x18\x05 \x03(\tR\x12recentProgressJson\x1a\'\n\rExplainResult\x12\x16\n\x06result\x18\x01 \x01(\tR\x06resultB\r\n\x0bresult_typeB"\n\x1eorg.apache.spark.connect.protoP\x01\x62\x06proto3'
 )
 
 
@@ -52,9 +52,13 @@ _WRITEOPERATIONV2_OPTIONSENTRY = _WRITEOPERATIONV2.nested_types_by_name["Options
 _WRITEOPERATIONV2_TABLEPROPERTIESENTRY = _WRITEOPERATIONV2.nested_types_by_name[
     "TablePropertiesEntry"
 ]
-_WRITESTREAMOPERATION = DESCRIPTOR.message_types_by_name["WriteStreamOperation"]
-_WRITESTREAMOPERATION_OPTIONSENTRY = _WRITESTREAMOPERATION.nested_types_by_name["OptionsEntry"]
-_STREAMINGQUERYSTARTRESULT = DESCRIPTOR.message_types_by_name["StreamingQueryStartResult"]
+_WRITESTREAMOPERATIONSTART = DESCRIPTOR.message_types_by_name["WriteStreamOperationStart"]
+_WRITESTREAMOPERATIONSTART_OPTIONSENTRY = _WRITESTREAMOPERATIONSTART.nested_types_by_name[
+    "OptionsEntry"
+]
+_WRITESTREAMOPERATIONSTARTRESULT = DESCRIPTOR.message_types_by_name[
+    "WriteStreamOperationStartResult"
+]
 _STREAMINGQUERYCOMMAND = DESCRIPTOR.message_types_by_name["StreamingQueryCommand"]
 _STREAMINGQUERYCOMMAND_STATUSCOMMAND = _STREAMINGQUERYCOMMAND.nested_types_by_name["StatusCommand"]
 _STREAMINGQUERYCOMMAND_EXPLAINCOMMAND = _STREAMINGQUERYCOMMAND.nested_types_by_name[
@@ -187,37 +191,37 @@ _sym_db.RegisterMessage(WriteOperationV2)
 _sym_db.RegisterMessage(WriteOperationV2.OptionsEntry)
 _sym_db.RegisterMessage(WriteOperationV2.TablePropertiesEntry)
 
-WriteStreamOperation = _reflection.GeneratedProtocolMessageType(
-    "WriteStreamOperation",
+WriteStreamOperationStart = _reflection.GeneratedProtocolMessageType(
+    "WriteStreamOperationStart",
     (_message.Message,),
     {
         "OptionsEntry": _reflection.GeneratedProtocolMessageType(
             "OptionsEntry",
             (_message.Message,),
             {
-                "DESCRIPTOR": _WRITESTREAMOPERATION_OPTIONSENTRY,
+                "DESCRIPTOR": _WRITESTREAMOPERATIONSTART_OPTIONSENTRY,
                 "__module__": "spark.connect.commands_pb2"
-                # @@protoc_insertion_point(class_scope:spark.connect.WriteStreamOperation.OptionsEntry)
+                # @@protoc_insertion_point(class_scope:spark.connect.WriteStreamOperationStart.OptionsEntry)
             },
         ),
-        "DESCRIPTOR": _WRITESTREAMOPERATION,
+        "DESCRIPTOR": _WRITESTREAMOPERATIONSTART,
         "__module__": "spark.connect.commands_pb2"
-        # @@protoc_insertion_point(class_scope:spark.connect.WriteStreamOperation)
+        # @@protoc_insertion_point(class_scope:spark.connect.WriteStreamOperationStart)
     },
 )
-_sym_db.RegisterMessage(WriteStreamOperation)
-_sym_db.RegisterMessage(WriteStreamOperation.OptionsEntry)
+_sym_db.RegisterMessage(WriteStreamOperationStart)
+_sym_db.RegisterMessage(WriteStreamOperationStart.OptionsEntry)
 
-StreamingQueryStartResult = _reflection.GeneratedProtocolMessageType(
-    "StreamingQueryStartResult",
+WriteStreamOperationStartResult = _reflection.GeneratedProtocolMessageType(
+    "WriteStreamOperationStartResult",
     (_message.Message,),
     {
-        "DESCRIPTOR": _STREAMINGQUERYSTARTRESULT,
+        "DESCRIPTOR": _WRITESTREAMOPERATIONSTARTRESULT,
         "__module__": "spark.connect.commands_pb2"
-        # @@protoc_insertion_point(class_scope:spark.connect.StreamingQueryStartResult)
+        # @@protoc_insertion_point(class_scope:spark.connect.WriteStreamOperationStartResult)
     },
 )
-_sym_db.RegisterMessage(StreamingQueryStartResult)
+_sym_db.RegisterMessage(WriteStreamOperationStartResult)
 
 StreamingQueryCommand = _reflection.GeneratedProtocolMessageType(
     "StreamingQueryCommand",
@@ -293,52 +297,52 @@ if _descriptor._USE_C_DESCRIPTORS == False:
     _WRITEOPERATIONV2_OPTIONSENTRY._serialized_options = b"8\001"
     _WRITEOPERATIONV2_TABLEPROPERTIESENTRY._options = None
     _WRITEOPERATIONV2_TABLEPROPERTIESENTRY._serialized_options = b"8\001"
-    _WRITESTREAMOPERATION_OPTIONSENTRY._options = None
-    _WRITESTREAMOPERATION_OPTIONSENTRY._serialized_options = b"8\001"
+    _WRITESTREAMOPERATIONSTART_OPTIONSENTRY._options = None
+    _WRITESTREAMOPERATIONSTART_OPTIONSENTRY._serialized_options = b"8\001"
     _COMMAND._serialized_start = 139
-    _COMMAND._serialized_end = 817
-    _SQLCOMMAND._serialized_start = 820
-    _SQLCOMMAND._serialized_end = 964
-    _SQLCOMMAND_ARGSENTRY._serialized_start = 909
-    _SQLCOMMAND_ARGSENTRY._serialized_end = 964
-    _CREATEDATAFRAMEVIEWCOMMAND._serialized_start = 967
-    _CREATEDATAFRAMEVIEWCOMMAND._serialized_end = 1117
-    _WRITEOPERATION._serialized_start = 1120
-    _WRITEOPERATION._serialized_end = 2171
-    _WRITEOPERATION_OPTIONSENTRY._serialized_start = 1595
-    _WRITEOPERATION_OPTIONSENTRY._serialized_end = 1653
-    _WRITEOPERATION_SAVETABLE._serialized_start = 1656
-    _WRITEOPERATION_SAVETABLE._serialized_end = 1914
-    _WRITEOPERATION_SAVETABLE_TABLESAVEMETHOD._serialized_start = 1790
-    _WRITEOPERATION_SAVETABLE_TABLESAVEMETHOD._serialized_end = 1914
-    _WRITEOPERATION_BUCKETBY._serialized_start = 1916
-    _WRITEOPERATION_BUCKETBY._serialized_end = 2007
-    _WRITEOPERATION_SAVEMODE._serialized_start = 2010
-    _WRITEOPERATION_SAVEMODE._serialized_end = 2147
-    _WRITEOPERATIONV2._serialized_start = 2174
-    _WRITEOPERATIONV2._serialized_end = 2987
-    _WRITEOPERATIONV2_OPTIONSENTRY._serialized_start = 1595
-    _WRITEOPERATIONV2_OPTIONSENTRY._serialized_end = 1653
-    _WRITEOPERATIONV2_TABLEPROPERTIESENTRY._serialized_start = 2746
-    _WRITEOPERATIONV2_TABLEPROPERTIESENTRY._serialized_end = 2812
-    _WRITEOPERATIONV2_MODE._serialized_start = 2815
-    _WRITEOPERATIONV2_MODE._serialized_end = 2974
-    _WRITESTREAMOPERATION._serialized_start = 2990
-    _WRITESTREAMOPERATION._serialized_end = 3629
-    _WRITESTREAMOPERATION_OPTIONSENTRY._serialized_start = 1595
-    _WRITESTREAMOPERATION_OPTIONSENTRY._serialized_end = 1653
-    _STREAMINGQUERYSTARTRESULT._serialized_start = 3631
-    _STREAMINGQUERYSTARTRESULT._serialized_end = 3717
-    _STREAMINGQUERYCOMMAND._serialized_start = 3720
-    _STREAMINGQUERYCOMMAND._serialized_end = 4125
-    _STREAMINGQUERYCOMMAND_STATUSCOMMAND._serialized_start = 3996
-    _STREAMINGQUERYCOMMAND_STATUSCOMMAND._serialized_end = 4063
-    _STREAMINGQUERYCOMMAND_EXPLAINCOMMAND._serialized_start = 4065
-    _STREAMINGQUERYCOMMAND_EXPLAINCOMMAND._serialized_end = 4109
-    _STREAMINGQUERYCOMMANDRESULT._serialized_start = 4128
-    _STREAMINGQUERYCOMMANDRESULT._serialized_end = 4621
-    _STREAMINGQUERYCOMMANDRESULT_STATUSRESULT._serialized_start = 4345
-    _STREAMINGQUERYCOMMANDRESULT_STATUSRESULT._serialized_end = 4565
-    _STREAMINGQUERYCOMMANDRESULT_EXPLAINRESULT._serialized_start = 4567
-    _STREAMINGQUERYCOMMANDRESULT_EXPLAINRESULT._serialized_end = 4606
+    _COMMAND._serialized_end = 833
+    _SQLCOMMAND._serialized_start = 836
+    _SQLCOMMAND._serialized_end = 980
+    _SQLCOMMAND_ARGSENTRY._serialized_start = 925
+    _SQLCOMMAND_ARGSENTRY._serialized_end = 980
+    _CREATEDATAFRAMEVIEWCOMMAND._serialized_start = 983
+    _CREATEDATAFRAMEVIEWCOMMAND._serialized_end = 1133
+    _WRITEOPERATION._serialized_start = 1136
+    _WRITEOPERATION._serialized_end = 2187
+    _WRITEOPERATION_OPTIONSENTRY._serialized_start = 1611
+    _WRITEOPERATION_OPTIONSENTRY._serialized_end = 1669
+    _WRITEOPERATION_SAVETABLE._serialized_start = 1672
+    _WRITEOPERATION_SAVETABLE._serialized_end = 1930
+    _WRITEOPERATION_SAVETABLE_TABLESAVEMETHOD._serialized_start = 1806
+    _WRITEOPERATION_SAVETABLE_TABLESAVEMETHOD._serialized_end = 1930
+    _WRITEOPERATION_BUCKETBY._serialized_start = 1932
+    _WRITEOPERATION_BUCKETBY._serialized_end = 2023
+    _WRITEOPERATION_SAVEMODE._serialized_start = 2026
+    _WRITEOPERATION_SAVEMODE._serialized_end = 2163
+    _WRITEOPERATIONV2._serialized_start = 2190
+    _WRITEOPERATIONV2._serialized_end = 3003
+    _WRITEOPERATIONV2_OPTIONSENTRY._serialized_start = 1611
+    _WRITEOPERATIONV2_OPTIONSENTRY._serialized_end = 1669
+    _WRITEOPERATIONV2_TABLEPROPERTIESENTRY._serialized_start = 2762
+    _WRITEOPERATIONV2_TABLEPROPERTIESENTRY._serialized_end = 2828
+    _WRITEOPERATIONV2_MODE._serialized_start = 2831
+    _WRITEOPERATIONV2_MODE._serialized_end = 2990
+    _WRITESTREAMOPERATIONSTART._serialized_start = 3006
+    _WRITESTREAMOPERATIONSTART._serialized_end = 3655
+    _WRITESTREAMOPERATIONSTART_OPTIONSENTRY._serialized_start = 1611
+    _WRITESTREAMOPERATIONSTART_OPTIONSENTRY._serialized_end = 1669
+    _WRITESTREAMOPERATIONSTARTRESULT._serialized_start = 3657
+    _WRITESTREAMOPERATIONSTARTRESULT._serialized_end = 3760
+    _STREAMINGQUERYCOMMAND._serialized_start = 3763
+    _STREAMINGQUERYCOMMAND._serialized_end = 4202
+    _STREAMINGQUERYCOMMAND_STATUSCOMMAND._serialized_start = 4073
+    _STREAMINGQUERYCOMMAND_STATUSCOMMAND._serialized_end = 4140
+    _STREAMINGQUERYCOMMAND_EXPLAINCOMMAND._serialized_start = 4142
+    _STREAMINGQUERYCOMMAND_EXPLAINCOMMAND._serialized_end = 4186
+    _STREAMINGQUERYCOMMANDRESULT._serialized_start = 4205
+    _STREAMINGQUERYCOMMANDRESULT._serialized_end = 4709
+    _STREAMINGQUERYCOMMANDRESULT_STATUSRESULT._serialized_start = 4433
+    _STREAMINGQUERYCOMMANDRESULT_STATUSRESULT._serialized_end = 4653
+    _STREAMINGQUERYCOMMANDRESULT_EXPLAINRESULT._serialized_start = 4655
+    _STREAMINGQUERYCOMMANDRESULT_EXPLAINRESULT._serialized_end = 4694
 # @@protoc_insertion_point(module_scope)

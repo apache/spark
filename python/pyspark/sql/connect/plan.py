@@ -1582,13 +1582,13 @@ class WriteOperationV2(LogicalPlan):
 class WriteStreamOperation(LogicalPlan):
     def __init__(self, child: "LogicalPlan") -> None:
         super(WriteStreamOperation, self).__init__(child)
-        self.write_op = proto.WriteStreamOperation()
+        self.write_op = proto.WriteStreamOperationStart()
 
     def command(self, session: "SparkConnectClient") -> proto.Command:
         assert self._child is not None
         self.write_op.input.CopyFrom(self._child.plan(session))
         cmd = proto.Command()
-        cmd.write_stream_operation.CopyFrom(self.write_op)
+        cmd.write_stream_operation_start.CopyFrom(self.write_op)
         return cmd
 
 

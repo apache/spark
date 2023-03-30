@@ -725,7 +725,7 @@ class DataFrame:
     melt = unpivot
 
     def withWatermark(self, eventTime: str, delayThreshold: str) -> "DataFrame":
-        # TODO: reuse error handling code sql.DataFrame.
+        # TODO: reuse error handling code in sql.DataFrame.withWatermark()
         if not eventTime or type(eventTime) is not str:
             raise PySparkTypeError(
                 error_class="NOT_STR",
