@@ -102,6 +102,11 @@ private[streaming] class ExecutorAllocationManager(
         logDebug("Killing executors")
         killExecutor()
       }
+    } else {
+      if (client.getExecutorIds().isEmpty) {
+        logWarning("All executors down, Requesting new executors")
+        requestExecutors(minNumExecutors)
+      }
     }
     batchProcTimeSum = 0
     batchProcTimeCount = 0
