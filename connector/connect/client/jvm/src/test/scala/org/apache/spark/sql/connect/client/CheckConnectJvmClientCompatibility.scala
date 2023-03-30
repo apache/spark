@@ -62,15 +62,28 @@ object CheckConnectJvmClientCompatibility {
           "spark-connect-client-jvm-assembly",
           "spark-connect-client-jvm")
       val sqlJar: File = findJar("sql/core", "spark-sql", "spark-sql")
-      val problems = checkMiMaCompatibility(clientJar, sqlJar)
-      if (problems.nonEmpty) {
+      val problemsWithSqlModule = checkMiMaCompatibilityWithSqlModule(clientJar, sqlJar)
+      if (problemsWithSqlModule.nonEmpty) {
         resultWriter.write(s"ERROR: Comparing client jar: $clientJar and and sql jar: $sqlJar \n")
-        resultWriter.write(s"problems: \n")
-        resultWriter.write(s"${problems.map(p => p.description("client")).mkString("\n")}")
+        resultWriter.write(s"problemsWithSqlModule: \n")
+        resultWriter.write(
+          s"${problemsWithSqlModule.map(p => p.description("client")).mkString("\n")}")
         resultWriter.write("\n")
         resultWriter.write(
           "Exceptions to binary compatibility can be added in " +
-            "'CheckConnectJvmClientCompatibility#checkMiMaCompatibility'\n")
+            "'CheckConnectJvmClientCompatibility#checkMiMaCompatibilityWithSqlModule'\n")
+      }
+      val avroJar: File = findJar("connector/avro", "spark-avro", "spark-avro")
+      val problemsWithAvroModule = checkMiMaCompatibilityWithAvroModule(clientJar, sqlJar)
+      if (problemsWithAvroModule.nonEmpty) {
+        resultWriter.write(s"ERROR: Comparing client jar: $clientJar and and avro jar: $avroJar \n")
+        resultWriter.write(s"problemsWithAvroModule: \n")
+        resultWriter.write(
+          s"${problemsWithAvroModule.map(p => p.description("client")).mkString("\n")}")
+        resultWriter.write("\n")
+        resultWriter.write(
+          "Exceptions to binary compatibility can be added in " +
+            "'CheckConnectJvmClientCompatibility#checkMiMaCompatibilityWithAvroModule'\n")
       }
       val incompatibleApis = checkDatasetApiCompatibility(clientJar, sqlJar)
       if (incompatibleApis.nonEmpty) {
@@ -94,16 +107,16 @@ object CheckConnectJvmClientCompatibility {
     }
   }
 
-  /**
-   * MiMa takes an old jar (sql jar) and a new jar (client jar) as inputs and then reports all
-   * incompatibilities found in the new jar. The incompatibility result is then filtered using
-   * include and exclude rules. Include rules are first applied to find all client classes that
-   * need to be checked. Then exclude rules are applied to filter out all unsupported methods in
-   * the client classes.
-   */
-  private def checkMiMaCompatibility(clientJar: File, sqlJar: File): List[Problem] = {
-    val mima = new MiMaLib(Seq(clientJar, sqlJar))
-    val allProblems = mima.collectProblems(sqlJar, clientJar, List.empty)
+  private def checkMiMaCompatibilityWithAvroModule(
+      clientJar: File, avroJar: File): List[Problem] = {
+    val includedRules = Seq(IncludeByName("org.apache.spark.sql.avro.functions.*"))
+    val excludeRules = Seq.empty
+    checkMiMaCompatibility(clientJar, avroJar, includedRules, excludeRules)
+  }
+
+  private def checkMiMaCompatibilityWithSqlModule(
+      clientJar: File,
+      sqlJar: File): List[Problem] = {
     val includedRules = Seq(
       IncludeByName("org.apache.spark.sql.Column.*"),
       IncludeByName("org.apache.spark.sql.ColumnName.*"),
@@ -210,6 +223,23 @@ object CheckConnectJvmClientCompatibility {
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SQLImplicits.this"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SQLImplicits.rddToDatasetHolder"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SQLImplicits._sqlContext"))
+    checkMiMaCompatibility(clientJar, sqlJar, includedRules, excludeRules)
+  }
+
+  /**
+   * MiMa takes an old jar (sql jar) and a new jar (client jar) as inputs and then reports all
+   * incompatibilities found in the new jar. The incompatibility result is then filtered using
+   * include and exclude rules. Include rules are first applied to find all client classes that
+   * need to be checked. Then exclude rules are applied to filter out all unsupported methods in
+   * the client classes.
+   */
+  private def checkMiMaCompatibility(
+      clientJar: File,
+      sqlJar: File,
+      includedRules: Seq[IncludeByName],
+      excludeRules: Seq[ProblemFilter]): List[Problem] = {
+    val mima = new MiMaLib(Seq(clientJar, sqlJar))
+    val allProblems = mima.collectProblems(sqlJar, clientJar, List.empty)
     val problems = allProblems
       .filter { p =>
         includedRules.exists(rule => rule(p))
