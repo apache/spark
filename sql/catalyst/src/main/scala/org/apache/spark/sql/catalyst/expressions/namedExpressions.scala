@@ -476,29 +476,19 @@ object VirtualColumn {
  * - unapply() will check if an attribute reference is the metadata attribute reference
  */
 object MetadataAttribute {
-  val METADATA: Metadata = new MetadataBuilder()
-    .putBoolean(METADATA_COL_ATTR_KEY, value = true)
-    .build()
 
   def apply(name: String, dataType: DataType, nullable: Boolean = true): AttributeReference =
-<<<<<<< HEAD
-    AttributeReference(name, dataType, nullable, METADATA)()
+    AttributeReference(name, dataType, nullable, metadata(name))()
 
-  def unapply(attr: AttributeReference): Option[AttributeReference] = {
+  def unapply(attr: AttributeReference): Option[AttributeReference] =
     if (isValid(attr.metadata)) Some(attr) else None
-  }
 
-  def isValid(metadata: Metadata): Boolean = {
-    metadata.contains(METADATA_COL_ATTR_KEY) &&
-    metadata.getBoolean(METADATA_COL_ATTR_KEY)
-=======
-    AttributeReference(name, dataType, nullable,
-      new MetadataBuilder().putString(METADATA_COL_ATTR_KEY, value = name).build())()
+  def metadata(name: String): Metadata = new MetadataBuilder()
+    .putString(METADATA_COL_ATTR_KEY, name)
+    .build()
 
-  def unapply(attr: AttributeReference): Option[AttributeReference] = {
-    if (attr.metadata.contains(METADATA_COL_ATTR_KEY)) Some(attr) else None
->>>>>>> spark/master
-  }
+  def isValid(metadata: Metadata): Boolean =
+    metadata.contains(METADATA_COL_ATTR_KEY)
 }
 
 /**
@@ -534,11 +524,6 @@ object FileSourceMetadataAttribute {
 
   val FILE_SOURCE_METADATA_COL_ATTR_KEY = "__file_source_metadata_col"
 
-  val METADATA: Metadata = new MetadataBuilder()
-    .withMetadata(MetadataAttribute.METADATA)
-    .putBoolean(FILE_SOURCE_METADATA_COL_ATTR_KEY, value = true)
-    .build()
-
   /**
    * Removes the internal field metadata.
    */
@@ -552,18 +537,16 @@ object FileSourceMetadataAttribute {
     field.copy(metadata = removeInternalMetadata(field.metadata))
 
   def apply(name: String, dataType: DataType, nullable: Boolean = false): AttributeReference =
-<<<<<<< HEAD
-    AttributeReference(name, dataType, nullable = nullable, METADATA)()
-=======
-    AttributeReference(name, dataType, nullable = nullable,
-      new MetadataBuilder()
-        .putString(METADATA_COL_ATTR_KEY, value = name)
-        .putBoolean(FILE_SOURCE_METADATA_COL_ATTR_KEY, value = true).build())()
->>>>>>> spark/master
+    AttributeReference(name, dataType, nullable = nullable, metadata(name))()
 
   /** Matches if attr is any File source metadata attribute (including constant and generated). */
   def unapply(attr: AttributeReference): Option[AttributeReference] =
     if (isValid(attr.metadata)) Some(attr) else None
+
+  def metadata(name: String): Metadata = new MetadataBuilder()
+    .withMetadata(MetadataAttribute.metadata(name))
+    .putBoolean(FILE_SOURCE_METADATA_COL_ATTR_KEY, value = true)
+    .build()
 
   def isValid(metadata: Metadata): Boolean = {
     MetadataAttribute.isValid(metadata) &&
@@ -589,17 +572,17 @@ object FileSourceConstantMetadataStructField {
 
   val FILE_SOURCE_CONSTANT_METADATA_COL_ATTR_KEY = "__file_source_constant_metadata_col"
 
-  val METADATA: Metadata = new MetadataBuilder()
-    .withMetadata(FileSourceMetadataAttribute.METADATA)
-    .putBoolean(FILE_SOURCE_CONSTANT_METADATA_COL_ATTR_KEY, value = true)
-    .build()
-
   /** Constructs a new metadata struct field of the given type; nullable by default */
   def apply(name: String, dataType: DataType, nullable: Boolean = true): StructField =
-    StructField(name, dataType, nullable, METADATA)
+    StructField(name, dataType, nullable, metadata(name))
 
   def unapply(field: StructField): Option[StructField] =
     if (isValid(field.metadata)) Some(field) else None
+
+  def metadata(name: String): Metadata = new MetadataBuilder()
+    .withMetadata(FileSourceMetadataAttribute.metadata(name))
+    .putBoolean(FILE_SOURCE_CONSTANT_METADATA_COL_ATTR_KEY, value = true)
+    .build()
 
   def isValid(metadata: Metadata): Boolean = {
     FileSourceMetadataAttribute.isValid(metadata) &&
@@ -614,19 +597,6 @@ object FileSourceConstantMetadataStructField {
  * usually appended to the output and not generated per row.
  */
 object FileSourceConstantMetadataAttribute {
-<<<<<<< HEAD
-=======
-
-  val FILE_SOURCE_CONSTANT_METADATA_COL_ATTR_KEY = "__file_source_constant_metadata_col"
-
-  def apply(name: String, dataType: DataType, nullable: Boolean = false): AttributeReference =
-    AttributeReference(name, dataType, nullable = nullable,
-      new MetadataBuilder()
-        .putString(METADATA_COL_ATTR_KEY, value = name)
-        .putBoolean(FileSourceMetadataAttribute.FILE_SOURCE_METADATA_COL_ATTR_KEY, value = true)
-        .putBoolean(FILE_SOURCE_CONSTANT_METADATA_COL_ATTR_KEY, value = true).build())()
-
->>>>>>> spark/master
   def unapply(attr: AttributeReference): Option[AttributeReference] =
     if (FileSourceConstantMetadataStructField.isValid(attr.metadata)) Some(attr) else None
 }
@@ -652,27 +622,18 @@ object FileSourceGeneratedMetadataStructField {
    *    so it will not be null in the returned output.
    *    See `FileSourceStrategy` for more information
    */
-<<<<<<< HEAD
   def apply(
       name: String,
       internalName: String,
       dataType: DataType,
       nullable: Boolean = true): StructField =
-    StructField(name, dataType, nullable, metadata(internalName))
-=======
-  def apply(name: String, dataType: DataType, nullable: Boolean = false): AttributeReference =
-    AttributeReference(name, dataType, nullable = nullable,
-      new MetadataBuilder()
-        .putString(METADATA_COL_ATTR_KEY, value = name)
-        .putBoolean(FileSourceMetadataAttribute.FILE_SOURCE_METADATA_COL_ATTR_KEY, value = true)
-        .putBoolean(FILE_SOURCE_GENERATED_METADATA_COL_ATTR_KEY, value = true).build())()
->>>>>>> spark/master
+    StructField(name, dataType, nullable, metadata(name, internalName))
 
   def unapply(field: StructField): Option[(StructField, String)] =
     getInternalNameIfValid(field.metadata).map(field -> _)
 
-  def metadata(internalName: String): Metadata = new MetadataBuilder()
-    .withMetadata(FileSourceMetadataAttribute.METADATA)
+  def metadata(name: String, internalName: String): Metadata = new MetadataBuilder()
+    .withMetadata(FileSourceMetadataAttribute.metadata(name))
     .putString(FILE_SOURCE_GENERATED_METADATA_COL_ATTR_KEY, internalName)
     .build()
 
