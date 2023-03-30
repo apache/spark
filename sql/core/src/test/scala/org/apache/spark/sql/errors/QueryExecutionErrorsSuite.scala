@@ -639,7 +639,6 @@ class QueryExecutionErrorsSuite
       sqlState = "22003")
   }
 
-
   test("UNSUPPORTED_DATATYPE: invalid StructType raw format") {
     checkError(
       exception = intercept[SparkIllegalArgumentException] {
