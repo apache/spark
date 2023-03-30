@@ -737,15 +737,16 @@ def main(infile, outfile):
                 lineno = (
                     getframeinfo(currentframe()).lineno + 1 if currentframe() is not None else 0
                 )
-                print(
-                    warnings.formatwarning(
-                        "Failed to set memory limit: {0}".format(e),
-                        ResourceWarning,
-                        __file__,
-                        lineno,
-                    ),
-                    file=sys.stderr,
-                )
+                if "__file__" in globals():
+                    print(
+                        warnings.formatwarning(
+                            "Failed to set memory limit: {0}".format(e),
+                            ResourceWarning,
+                            __file__,
+                            lineno,
+                        ),
+                        file=sys.stderr,
+                    )
 
         # initialize global state
         taskContext = None
@@ -903,7 +904,7 @@ if __name__ == "__main__":
     java_port = int(os.environ["PYTHON_WORKER_FACTORY_PORT"])
     auth_secret = os.environ["PYTHON_WORKER_FACTORY_SECRET"]
     (sock_file, _) = local_connect_and_auth(java_port, auth_secret)
-    # TODO: Remove thw following two lines and use `Process.pid()` when we drop JDK 8.
+    # TODO: Remove the following two lines and use `Process.pid()` when we drop JDK 8.
     write_int(os.getpid(), sock_file)
     sock_file.flush()
     main(sock_file, sock_file)

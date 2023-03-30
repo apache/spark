@@ -19,17 +19,20 @@ package org.apache.spark.sql.catalyst.types
 
 import org.apache.spark.sql.types._
 
+
 sealed abstract class PhysicalDataType
+
+sealed abstract class PhysicalPrimitiveType extends PhysicalDataType
 
 case class PhysicalArrayType(elementType: DataType, containsNull: Boolean) extends PhysicalDataType
 
 class PhysicalBinaryType() extends PhysicalDataType
 case object PhysicalBinaryType extends PhysicalBinaryType
 
-class PhysicalBooleanType() extends PhysicalDataType
+class PhysicalBooleanType() extends PhysicalPrimitiveType
 case object PhysicalBooleanType extends PhysicalBooleanType
 
-class PhysicalByteType() extends PhysicalDataType
+class PhysicalByteType() extends PhysicalPrimitiveType
 case object PhysicalByteType extends PhysicalByteType
 
 class PhysicalCalendarIntervalType() extends PhysicalDataType
@@ -37,25 +40,25 @@ case object PhysicalCalendarIntervalType extends PhysicalCalendarIntervalType
 
 case class PhysicalDecimalType(precision: Int, scale: Int) extends PhysicalDataType
 
-class PhysicalDoubleType() extends PhysicalDataType
+class PhysicalDoubleType() extends PhysicalPrimitiveType
 case object PhysicalDoubleType extends PhysicalDoubleType
 
-class PhysicalFloatType() extends PhysicalDataType
+class PhysicalFloatType() extends PhysicalPrimitiveType
 case object PhysicalFloatType extends PhysicalFloatType
 
-class PhysicalIntegerType() extends PhysicalDataType
+class PhysicalIntegerType() extends PhysicalPrimitiveType
 case object PhysicalIntegerType extends PhysicalIntegerType
 
-class PhysicalLongType() extends PhysicalDataType
+class PhysicalLongType() extends PhysicalPrimitiveType
 case object PhysicalLongType extends PhysicalLongType
 
 case class PhysicalMapType(keyType: DataType, valueType: DataType, valueContainsNull: Boolean)
     extends PhysicalDataType
 
-class PhysicalNullType() extends PhysicalDataType
+class PhysicalNullType() extends PhysicalPrimitiveType
 case object PhysicalNullType extends PhysicalNullType
 
-class PhysicalShortType() extends PhysicalDataType
+class PhysicalShortType() extends PhysicalPrimitiveType
 case object PhysicalShortType extends PhysicalShortType
 
 class PhysicalStringType() extends PhysicalDataType

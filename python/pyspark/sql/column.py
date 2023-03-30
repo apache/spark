@@ -31,12 +31,13 @@ from typing import (
     Union,
 )
 
-from py4j.java_gateway import JavaObject
+from py4j.java_gateway import JavaObject, JVMView
 
 from pyspark import copy_func
 from pyspark.context import SparkContext
 from pyspark.errors import PySparkTypeError
 from pyspark.sql.types import DataType
+from pyspark.sql.utils import get_active_spark_context
 
 if TYPE_CHECKING:
     from pyspark.sql._typing import ColumnOrName, LiteralType, DecimalLiteral, DateTimeLiteral
@@ -46,15 +47,13 @@ __all__ = ["Column"]
 
 
 def _create_column_from_literal(literal: Union["LiteralType", "DecimalLiteral"]) -> "Column":
-    sc = SparkContext._active_spark_context
-    assert sc is not None and sc._jvm is not None
-    return sc._jvm.functions.lit(literal)
+    sc = get_active_spark_context()
+    return cast(JVMView, sc._jvm).functions.lit(literal)
 
 
 def _create_column_from_name(name: str) -> "Column":
-    sc = SparkContext._active_spark_context
-    assert sc is not None and sc._jvm is not None
-    return sc._jvm.functions.col(name)
+    sc = get_active_spark_context()
+    return cast(JVMView, sc._jvm).functions.col(name)
 
 
 def _to_java_column(col: "ColumnOrName") -> JavaObject:
@@ -122,9 +121,8 @@ def _unary_op(
 
 def _func_op(name: str, doc: str = "") -> Callable[["Column"], "Column"]:
     def _(self: "Column") -> "Column":
-        sc = SparkContext._active_spark_context
-        assert sc is not None and sc._jvm is not None
-        jc = getattr(sc._jvm.functions, name)(self._jc)
+        sc = get_active_spark_context()
+        jc = getattr(cast(JVMView, sc._jvm).functions, name)(self._jc)
         return Column(jc)
 
     _.__doc__ = doc
@@ -137,9 +135,8 @@ def _bin_func_op(
     doc: str = "binary function",
 ) -> Callable[["Column", Union["Column", "LiteralType", "DecimalLiteral"]], "Column"]:
     def _(self: "Column", other: Union["Column", "LiteralType", "DecimalLiteral"]) -> "Column":
-        sc = SparkContext._active_spark_context
-        assert sc is not None and sc._jvm is not None
-        fn = getattr(sc._jvm.functions, name)
+        sc = get_active_spark_context()
+        fn = getattr(cast(JVMView, sc._jvm).functions, name)
         jc = other._jc if isinstance(other, Column) else _create_column_from_literal(other)
         njc = fn(self._jc, jc) if not reverse else fn(jc, self._jc)
         return Column(njc)
@@ -191,7 +188,7 @@ class Column:
     .. versionadded:: 1.3.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Examples
     --------
@@ -286,7 +283,7 @@ class Column:
     .. versionadded:: 2.3.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -365,7 +362,7 @@ class Column:
     Compute bitwise OR of this expression with another expression.
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -384,7 +381,7 @@ class Column:
     Compute bitwise AND of this expression with another expression.
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -403,7 +400,7 @@ class Column:
     Compute bitwise XOR of this expression with another expression.
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -431,7 +428,7 @@ class Column:
         .. versionadded:: 1.3.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -473,7 +470,7 @@ class Column:
         .. versionadded:: 1.3.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -521,7 +518,7 @@ class Column:
         .. versionadded:: 3.1.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -577,7 +574,7 @@ class Column:
         .. versionadded:: 3.1.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -633,17 +630,75 @@ class Column:
         +--------------+
 
         """
-        sc = SparkContext._active_spark_context
-        assert sc is not None
+        sc = get_active_spark_context()
         jc = self._jc.dropFields(_to_seq(sc, fieldNames))
         return Column(jc)
 
     def __getattr__(self, item: Any) -> "Column":
+        """
+        An expression that gets an item at position ``ordinal`` out of a list,
+        or gets an item by key out of a dict.
+
+        .. versionadded:: 1.3.0
+
+        .. versionchanged:: 3.4.0
+            Supports Spark Connect.
+
+        Parameters
+        ----------
+        item
+            a literal value.
+
+        Returns
+        -------
+        :class:`Column`
+            Column representing the item got by key out of a dict.
+
+        Examples
+        --------
+        >>> df = spark.createDataFrame([('abcedfg', {"key": "value"})], ["l", "d"])
+        >>> df.select(df.d.key).show()
+        +------+
+        |d[key]|
+        +------+
+        | value|
+        +------+
+        """
         if item.startswith("__"):
             raise AttributeError(item)
         return self[item]
 
     def __getitem__(self, k: Any) -> "Column":
+        """
+        An expression that gets an item at position ``ordinal`` out of a list,
+        or gets an item by key out of a dict.
+
+        .. versionadded:: 1.3.0
+
+        .. versionchanged:: 3.4.0
+            Supports Spark Connect.
+
+        Parameters
+        ----------
+        k
+            a literal value, or a slice object without step.
+
+        Returns
+        -------
+        :class:`Column`
+            Column representing the item got by key out of a dict, or substrings sliced by
+            the given slice object.
+
+        Examples
+        --------
+        >>> df = spark.createDataFrame([('abcedfg', {"key": "value"})], ["l", "d"])
+        >>> df.select(df.l[slice(1, 3)], df.d['key']).show()
+        +------------------+------+
+        |substring(l, 1, 3)|d[key]|
+        +------------------+------+
+        |               abc| value|
+        +------------------+------+
+        """
         if isinstance(k, slice):
             if k.step is not None:
                 raise ValueError("slice with step is not supported.")
@@ -659,7 +714,7 @@ class Column:
     Contains the other element. Returns a boolean :class:`Column` based on a string match.
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -677,7 +732,7 @@ class Column:
     String starts with. Returns a boolean :class:`Column` based on a string match.
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -697,7 +752,7 @@ class Column:
     String ends with. Returns a boolean :class:`Column` based on a string match.
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -723,7 +778,7 @@ class Column:
         SQL like expression. Returns a boolean :class:`Column` based on a SQL LIKE match.
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -756,7 +811,7 @@ class Column:
         match.
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -787,7 +842,7 @@ class Column:
         .. versionadded:: 3.3.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -829,7 +884,7 @@ class Column:
         .. versionadded:: 1.3.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -876,7 +931,7 @@ class Column:
         .. versionadded:: 1.5.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -903,8 +958,7 @@ class Column:
             Tuple,
             [c._jc if isinstance(c, Column) else _create_column_from_literal(c) for c in cols],
         )
-        sc = SparkContext._active_spark_context
-        assert sc is not None
+        sc = get_active_spark_context()
         jc = getattr(self._jc, "isin")(_to_seq(sc, cols))
         return Column(jc)
 
@@ -913,7 +967,7 @@ class Column:
     Returns a sort expression based on the ascending order of the column.
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Examples
     --------
@@ -929,7 +983,7 @@ class Column:
     .. versionadded:: 2.4.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Examples
     --------
@@ -946,7 +1000,7 @@ class Column:
     .. versionadded:: 2.4.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Examples
     --------
@@ -962,7 +1016,7 @@ class Column:
     .. versionadded:: 2.4.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Examples
     --------
@@ -978,7 +1032,7 @@ class Column:
     .. versionadded:: 2.4.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Examples
     --------
@@ -995,7 +1049,7 @@ class Column:
     .. versionadded:: 2.4.0
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Examples
     --------
@@ -1016,7 +1070,7 @@ class Column:
     True if the current expression is null.
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Examples
     --------
@@ -1029,7 +1083,7 @@ class Column:
     True if the current expression is NOT null.
 
     .. versionchanged:: 3.4.0
-        Support Spark Connect.
+        Supports Spark Connect.
 
     Examples
     --------
@@ -1050,7 +1104,7 @@ class Column:
         .. versionadded:: 1.3.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -1085,8 +1139,7 @@ class Column:
         metadata = kwargs.pop("metadata", None)
         assert not kwargs, "Unexpected kwargs where passed: %s" % kwargs
 
-        sc = SparkContext._active_spark_context
-        assert sc is not None
+        sc = get_active_spark_context()
         if len(alias) == 1:
             if metadata:
                 assert sc._jvm is not None
@@ -1108,7 +1161,7 @@ class Column:
         .. versionadded:: 1.3.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -1156,7 +1209,7 @@ class Column:
         .. versionadded:: 1.3.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -1193,7 +1246,7 @@ class Column:
         .. versionadded:: 1.4.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -1238,7 +1291,7 @@ class Column:
         .. versionadded:: 1.4.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -1278,7 +1331,7 @@ class Column:
         .. versionadded:: 1.4.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------

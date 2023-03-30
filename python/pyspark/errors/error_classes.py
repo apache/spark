@@ -39,6 +39,11 @@ ERROR_CLASSES_JSON = """
       "Function `<func_name>` should return Column, got <return_type>."
     ]
   },
+  "JVM_ATTRIBUTE_NOT_SUPPORTED" : {
+    "message" : [
+      "Attribute `<attr_name>` is not supported in Spark Connect as it depends on the JVM. If you need to use this attribute, do not use Spark Connect when creating your session."
+    ]
+  },
   "NOT_BOOL" : {
     "message" : [
       "Argument `<arg_name>` should be a bool, got <arg_type>."
@@ -157,6 +162,11 @@ ERROR_CLASSES_JSON = """
   "NOT_WINDOWSPEC" : {
     "message" : [
       "Argument `<arg_name>` should be a WindowSpec, got <arg_type>."
+    ]
+  },
+  "NO_ACTIVE_SESSION" : {
+    "message" : [
+      "No active Spark session found. Please create a new Spark session before running the code."
     ]
   },
   "UNSUPPORTED_NUMPY_ARRAY_SCALAR" : {

@@ -1088,6 +1088,20 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
             sdf.select(SF.array_append(sdf.a, sdf.f)).toPandas(),
         )
 
+        # test array_prepend
+        self.assert_eq(
+            cdf.select(CF.array_prepend(cdf.a, "xyz")).toPandas(),
+            sdf.select(SF.array_prepend(sdf.a, "xyz")).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(CF.array_prepend(cdf.a, CF.lit("ab"))).toPandas(),
+            sdf.select(SF.array_prepend(sdf.a, SF.lit("ab"))).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(CF.array_prepend(cdf.a, cdf.f)).toPandas(),
+            sdf.select(SF.array_prepend(sdf.a, sdf.f)).toPandas(),
+        )
+
         # test array_insert
         self.assert_eq(
             cdf.select(CF.array_insert(cdf.a, -5, "ab")).toPandas(),
@@ -2393,14 +2407,11 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
             sdf.withColumn("A", sfun(sdf.c)).toPandas(),
         )
 
-    def test_unsupported_functions(self):
-        # SPARK-41928: Disable unsupported functions.
-
+    def test_pandas_udf_import(self):
         from pyspark.sql.connect import functions as CF
+        from pyspark.sql import functions as SF
 
-        for f in ("pandas_udf",):
-            with self.assertRaises(NotImplementedError):
-                getattr(CF, f)()
+        self.assert_eq(getattr(CF, "pandas_udf"), getattr(SF, "pandas_udf"))
 
 
 if __name__ == "__main__":

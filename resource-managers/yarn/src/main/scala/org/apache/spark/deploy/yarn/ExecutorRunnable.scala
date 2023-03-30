@@ -115,7 +115,6 @@ private[yarn] class ExecutorRunnable(
           ByteBuffer.allocate(0)
         }
       val serviceName = sparkConf.get(SHUFFLE_SERVICE_NAME)
-      logInfo(s"Initializing service data for shuffle service using name '$serviceName'")
       ctx.setServiceData(Collections.singletonMap(serviceName, secretBytes))
     }
 

@@ -1038,7 +1038,7 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
         .withLimit(123)
         .build()
         .trim() ==
-      "SELECT a,b FROM test     FETCH FIRST 123 ROWS ONLY")
+      "SELECT a,b FROM test      FETCH FIRST 123 ROWS ONLY")
   }
 
   test("table exists query by jdbc dialect") {
@@ -1324,7 +1324,7 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
       df.schema,
       df.sqlContext.conf.caseSensitiveAnalysis,
       "jdbc:mysql://localhost:3306/temp")
-    assert(schema.contains("`order` TEXT"))
+    assert(schema.contains("`order` LONGTEXT"))
   }
 
   test("SPARK-18141: Predicates on quoted column names in the jdbc data source") {

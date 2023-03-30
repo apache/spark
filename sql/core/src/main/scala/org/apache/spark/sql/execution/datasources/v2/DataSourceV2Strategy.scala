@@ -22,6 +22,7 @@ import scala.collection.mutable
 
 import org.apache.commons.lang3.StringUtils
 
+import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{SparkSession, Strategy}
 import org.apache.spark.sql.catalyst.analysis.{ResolvedIdentifier, ResolvedNamespace, ResolvedPartitionSpec, ResolvedTable}
@@ -175,11 +176,12 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
 
     case CreateTable(ResolvedIdentifier(catalog, ident), schema, partitioning,
         tableSpec, ifNotExists) =>
+      ResolveDefaultColumns.validateCatalogForDefaultValue(schema, catalog.asTableCatalog, ident)
       val newSchema: StructType =
         ResolveDefaultColumns.constantFoldCurrentDefaultsToExistDefaults(
-          schema, tableSpec.provider, "CREATE TABLE", false)
+          schema, "CREATE TABLE")
       GeneratedColumn.validateGeneratedColumns(
-        newSchema, catalog.asTableCatalog, ident.asMultipartIdentifier, "CREATE TABLE")
+        newSchema, catalog.asTableCatalog, ident, "CREATE TABLE")
 
       CreateTableExec(catalog.asTableCatalog, ident, structTypeToV2Columns(newSchema),
         partitioning, qualifyLocInTableSpec(tableSpec), ifNotExists) :: Nil
@@ -201,11 +203,12 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       RefreshTableExec(r.catalog, r.identifier, recacheTable(r)) :: Nil
 
     case ReplaceTable(ResolvedIdentifier(catalog, ident), schema, parts, tableSpec, orCreate) =>
+      ResolveDefaultColumns.validateCatalogForDefaultValue(schema, catalog.asTableCatalog, ident)
       val newSchema: StructType =
         ResolveDefaultColumns.constantFoldCurrentDefaultsToExistDefaults(
-          schema, tableSpec.provider, "CREATE TABLE", false)
+          schema, "CREATE TABLE")
       GeneratedColumn.validateGeneratedColumns(
-        newSchema, catalog.asTableCatalog, ident.asMultipartIdentifier, "CREATE TABLE")
+        newSchema, catalog.asTableCatalog, ident, "CREATE TABLE")
 
       val v2Columns = structTypeToV2Columns(newSchema)
       catalog match {
@@ -308,12 +311,11 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
           }
         case LogicalRelation(_, _, catalogTable, _) =>
           val tableIdentifier = catalogTable.get.identifier
-          throw QueryCompilationErrors.operationOnlySupportedWithV2TableError(
-            Seq(tableIdentifier.catalog.get, tableIdentifier.database.get, tableIdentifier.table),
+          throw QueryCompilationErrors.unsupportedTableOperationError(
+            tableIdentifier,
             "DELETE")
-        case _ =>
-          throw QueryCompilationErrors.operationOnlySupportedWithV2TableError(
-            Seq(), "DELETE")
+        case other =>
+          throw SparkException.internalError("Unexpected table relation: " + other)
       }
 
     case ReplaceData(_: DataSourceV2Relation, _, query, r: DataSourceV2Relation, Some(write)) =>

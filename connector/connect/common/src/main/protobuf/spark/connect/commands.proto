@@ -53,7 +53,10 @@ message SqlCommand {
   // (Required) SQL Query.
   string sql = 1;
 
-  // (Optional) A map of parameter names to literal values.
+  // (Optional) A map of parameter names to string values that are parsed as
+  // SQL literal expressions. For example, map keys: "rank", "name", "birthdate";
+  // map values: "1", "'Steven'", "DATE'2023-03-21'". The fragments of string values
+  // belonged to SQL comments are skipped while parsing.
   map<string, string> args = 2;
 }
 
@@ -83,7 +86,11 @@ message WriteOperation {
   // (Optional) Format value according to the Spark documentation. Examples are: text, parquet, delta.
   optional string source = 2;
 
-  // The destination of the write operation must be either a path or a table.
+  // (Optional)
+  //
+  // The destination of the write operation can be either a path or a table.
+  // If the destination is neither a path nor a table, such as jdbc and noop,
+  // the `save_type` should not be set.
   oneof save_type {
     string path = 3;
     SaveTable table = 4;

@@ -22,16 +22,21 @@ import java.nio.file.Files
 import scala.collection.JavaConverters._
 
 import io.grpc.StatusRuntimeException
+import java.util.Properties
 import org.apache.commons.io.FileUtils
 import org.apache.commons.io.output.TeeOutputStream
+import org.apache.commons.lang3.{JavaVersion, SystemUtils}
 import org.scalactic.TolerantNumerics
 
 import org.apache.spark.SPARK_VERSION
+import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.StringEncoder
+import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
+import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.connect.client.util.{IntegrationTestUtils, RemoteSparkSession}
-import org.apache.spark.sql.functions.{aggregate, array, broadcast, col, count, lit, rand, sequence, shuffle, struct, transform, udf}
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 
-class ClientE2ETestSuite extends RemoteSparkSession {
+class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper {
 
   // Spark Result
   test("spark result schema") {
@@ -51,6 +56,7 @@ class ClientE2ETestSuite extends RemoteSparkSession {
   }
 
   test("eager execution of sql") {
+    assume(IntegrationTestUtils.isSparkHiveJarAvailable)
     withTable("test_martin") {
       // Fails, because table does not exist.
       assertThrows[StatusRuntimeException] {
@@ -76,7 +82,7 @@ class ClientE2ETestSuite extends RemoteSparkSession {
     assert(result(2) == 2)
   }
 
-  test("simple udf") {
+  ignore("SPARK-42665: Ignore simple udf test until the udf is fully implemented.") {
     def dummyUdf(x: Int): Int = x + 5
     val myUdf = udf(dummyUdf _)
     val df = spark.range(5).select(myUdf(Column("id")))
@@ -157,6 +163,26 @@ class ClientE2ETestSuite extends RemoteSparkSession {
     }
   }
 
+  test("textFile") {
+    val testDataPath = java.nio.file.Paths
+      .get(
+        IntegrationTestUtils.sparkHome,
+        "connector",
+        "connect",
+        "common",
+        "src",
+        "test",
+        "resources",
+        "query-tests",
+        "test-data",
+        "people.txt")
+      .toAbsolutePath
+    val result = spark.read.textFile(testDataPath.toString).collect()
+    val expected = Array("Michael, 29", "Andy, 30", "Justin, 19")
+    assert(result.length == 3)
+    assert(result === expected)
+  }
+
   test("write table") {
     withTable("myTable") {
       val df = spark.range(10).limit(3)
@@ -169,6 +195,28 @@ class ClientE2ETestSuite extends RemoteSparkSession {
       assert(result(2).getLong(0) == 1)
       assert(result(3).getLong(0) == 1)
       assert(result(4).getLong(0) == 2)
+    }
+  }
+
+  test("write without table or path") {
+    // Should receive no error to write noop
+    spark.range(10).write.format("noop").mode("append").save()
+  }
+
+  test("write jdbc") {
+    if (SystemUtils.isJavaVersionAtLeast(JavaVersion.JAVA_9)) {
+      val url = "jdbc:derby:memory:1234"
+      val table = "t1"
+      try {
+        spark.range(10).write.jdbc(url = s"$url;create=true", table, new Properties())
+        val result = spark.read.jdbc(url = url, table, new Properties()).collect()
+        assert(result.length == 10)
+      } finally {
+        // clean up
+        assertThrows[StatusRuntimeException] {
+          spark.read.jdbc(url = s"$url;drop=true", table, new Properties()).collect()
+        }
+      }
     }
   }
 
@@ -203,6 +251,7 @@ class ClientE2ETestSuite extends RemoteSparkSession {
   // TODO (SPARK-42519): Revisit this test after we can set configs.
   //  e.g. spark.conf.set("spark.sql.catalog.testcat", classOf[InMemoryTableCatalog].getName)
   test("writeTo with create") {
+    assume(IntegrationTestUtils.isSparkHiveJarAvailable)
     withTable("myTableV2") {
       // Failed to create as Hive support is required.
       spark.range(3).writeTo("myTableV2").create()
@@ -437,6 +486,19 @@ class ClientE2ETestSuite extends RemoteSparkSession {
     }
   }
 
+  private def validateMyTypeResult(result: Array[(MyType, MyType, MyType)]): Unit = {
+    result.zipWithIndex.foreach { case (row, i) =>
+      val t1 = row._1
+      val t2 = row._2
+      val t3 = row._3
+      assert(t1 === t2)
+      assert(t2 === t3)
+      assert(t1.id == i)
+      assert(t1.a == t1.id % 2)
+      assert(t1.b == t1.id / 10.0d)
+    }
+  }
+
   test("Dataset collect complex type") {
     val session = spark
     import session.implicits._
@@ -453,12 +515,28 @@ class ClientE2ETestSuite extends RemoteSparkSession {
     assert(numRows === 1000)
   }
 
+  test("Dataset typed select - multiple columns") {
+    val result = spark.range(1000).select(count("id"), sum("id")).first()
+    assert(result.getLong(0) === 1000)
+    assert(result.getLong(1) === 499500)
+  }
+
   test("Dataset typed select - complex column") {
     val session = spark
     import session.implicits._
     val ds = session
       .range(3)
       .select(struct(generateMyTypeColumns: _*).as[MyType])
+    validateMyTypeResult(ds.collect())
+  }
+
+  test("Dataset typed select - multiple complex columns") {
+    val session = spark
+    import session.implicits._
+    val s = struct(generateMyTypeColumns: _*).as[MyType]
+    val ds = session
+      .range(3)
+      .select(s, s, s)
     validateMyTypeResult(ds.collect())
   }
 
@@ -501,16 +579,13 @@ class ClientE2ETestSuite extends RemoteSparkSession {
   }
 
   test("broadcast join") {
-    spark.conf.set("spark.sql.autoBroadcastJoinThreshold", "-1")
-    try {
+    withSQLConf("spark.sql.autoBroadcastJoinThreshold" -> "-1") {
       val left = spark.range(100).select(col("id"), rand(10).as("a"))
       val right = spark.range(100).select(col("id"), rand(12).as("a"))
       val joined =
         left.join(broadcast(right), left("id") === right("id")).select(left("id"), right("a"))
       assert(joined.schema.catalogString === "struct<id:bigint,a:double>")
       testCapturedStdOut(joined.explain(), "BroadcastHashJoin")
-    } finally {
-      spark.conf.set("spark.sql.autoBroadcastJoinThreshold", "10MB")
     }
   }
 
@@ -612,8 +687,8 @@ class ClientE2ETestSuite extends RemoteSparkSession {
   }
 
   test("SparkSession newSession") {
-    val oldId = spark.sql("SELECT 1").analyze.getClientId
-    val newId = spark.newSession().sql("SELECT 1").analyze.getClientId
+    val oldId = spark.sql("SELECT 1").analyze.getSessionId
+    val newId = spark.newSession().sql("SELECT 1").analyze.getSessionId
     assert(oldId != newId)
   }
 
@@ -627,6 +702,101 @@ class ClientE2ETestSuite extends RemoteSparkSession {
     val data = Seq(Row(Row(null, "a2")), Row(Row("b1", "b2")), Row(null))
     val result = spark.createDataFrame(data.asJava, schema).collect()
     assert(result === data)
+  }
+
+  test("SameSemantics") {
+    val plan = spark.sql("select 1")
+    val otherPlan = spark.sql("select 1")
+    assert(plan.sameSemantics(otherPlan))
+  }
+
+  test("sameSemantics and semanticHash") {
+    val df1 = spark.createDataFrame(Seq((1, 2), (4, 5)))
+    val df2 = spark.createDataFrame(Seq((1, 2), (4, 5)))
+    val df3 = spark.createDataFrame(Seq((0, 2), (4, 5)))
+    val df4 = spark.createDataFrame(Seq((0, 2), (4, 5)))
+
+    assert(df1.sameSemantics(df2) === true)
+    assert(df1.sameSemantics(df3) === false)
+    assert(df3.sameSemantics(df4) === true)
+
+    assert(df1.semanticHash === df2.semanticHash)
+    assert(df1.semanticHash !== df3.semanticHash)
+    assert(df3.semanticHash === df4.semanticHash)
+  }
+
+  test("toJSON") {
+    val expected = Array(
+      """{"b":0.0,"id":0,"d":"world","a":0}""",
+      """{"b":0.1,"id":1,"d":"world","a":1}""",
+      """{"b":0.2,"id":2,"d":"world","a":0}""")
+    val result = spark
+      .range(3)
+      .select(generateMyTypeColumns: _*)
+      .toJSON
+      .collect()
+    assert(result sameElements expected)
+  }
+
+  test("json from Dataset[String] inferSchema") {
+    val session = spark
+    import session.implicits._
+    val expected = Seq(
+      new GenericRowWithSchema(
+        Array(73, "Shandong", "Kong"),
+        new StructType().add("age", LongType).add("city", StringType).add("name", StringType)))
+    val ds = Seq("""{"name":"Kong","age":73,"city":'Shandong'}""").toDS()
+    val result = spark.read.option("allowSingleQuotes", "true").json(ds)
+    checkSameResult(expected, result)
+  }
+
+  test("json from Dataset[String] with schema") {
+    val session = spark
+    import session.implicits._
+    val schema = new StructType().add("city", StringType).add("name", StringType)
+    val expected = Seq(new GenericRowWithSchema(Array("Shandong", "Kong"), schema))
+    val ds = Seq("""{"name":"Kong","age":73,"city":'Shandong'}""").toDS()
+    val result = spark.read.schema(schema).option("allowSingleQuotes", "true").json(ds)
+    checkSameResult(expected, result)
+  }
+
+  test("json from Dataset[String] with invalid schema") {
+    val message = intercept[ParseException] {
+      spark.read.schema("123").json(spark.createDataset(Seq.empty[String])(StringEncoder))
+    }.getMessage
+    assert(message.contains("PARSE_SYNTAX_ERROR"))
+  }
+
+  test("csv from Dataset[String] inferSchema") {
+    val session = spark
+    import session.implicits._
+    val expected = Seq(
+      new GenericRowWithSchema(
+        Array("Meng", 84, "Shandong"),
+        new StructType().add("name", StringType).add("age", LongType).add("city", StringType)))
+    val ds = Seq("name,age,city", """"Meng",84,"Shandong"""").toDS()
+    val result = spark.read
+      .option("header", "true")
+      .option("inferSchema", "true")
+      .csv(ds)
+    checkSameResult(expected, result)
+  }
+
+  test("csv from Dataset[String] with schema") {
+    val session = spark
+    import session.implicits._
+    val schema = new StructType().add("name", StringType).add("age", LongType)
+    val expected = Seq(new GenericRowWithSchema(Array("Meng", 84), schema))
+    val ds = Seq(""""Meng",84,"Shandong"""").toDS()
+    val result = spark.read.schema(schema).csv(ds)
+    checkSameResult(expected, result)
+  }
+
+  test("csv from Dataset[String] with invalid schema") {
+    val message = intercept[ParseException] {
+      spark.read.schema("123").csv(spark.createDataset(Seq.empty[String])(StringEncoder))
+    }.getMessage
+    assert(message.contains("PARSE_SYNTAX_ERROR"))
   }
 }
 

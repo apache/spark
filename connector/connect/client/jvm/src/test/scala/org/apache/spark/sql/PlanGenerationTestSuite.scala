@@ -20,6 +20,7 @@ import java.nio.file.{Files, Path}
 import java.util.{Collections, Properties}
 import java.util.concurrent.atomic.AtomicLong
 
+import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.util.{Failure, Success, Try}
 
@@ -31,7 +32,9 @@ import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach}
 import org.apache.spark.connect.proto
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{functions => fn}
+import org.apache.spark.sql.avro.{functions => avroFn}
 import org.apache.spark.sql.catalyst.ScalaReflection
+import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.StringEncoder
 import org.apache.spark.sql.connect.client.SparkConnectClient
 import org.apache.spark.sql.connect.client.util.ConnectFunSuite
 import org.apache.spark.sql.expressions.Window
@@ -68,7 +71,7 @@ class PlanGenerationTestSuite
   // Borrowed from SparkFunSuite
   private val regenerateGoldenFiles: Boolean = System.getenv("SPARK_GENERATE_GOLDEN_FILES") == "1"
 
-  protected val queryFilePath: Path = commonResourcePath.resolve("queries")
+  protected val queryFilePath: Path = commonResourcePath.resolve("query-tests/queries")
 
   // A relative path to /connector/connect/server, used by `ProtoToParsedPlanTestSuite` to run
   // with the datasource.
@@ -96,7 +99,7 @@ class PlanGenerationTestSuite
     super.beforeAll()
     val client = SparkConnectClient(
       proto.UserContext.newBuilder().build(),
-      InProcessChannelBuilder.forName("/dev/null").build())
+      InProcessChannelBuilder.forName("/dev/null"))
     session =
       new SparkSession(client, cleaner = SparkSession.cleaner, planIdGenerator = new AtomicLong)
   }
@@ -162,6 +165,8 @@ class PlanGenerationTestSuite
       writer.close()
     }
   }
+
+  private val urlWithUserAndPass = "jdbc:h2:mem:testdb0;user=testUser;password=testPass"
 
   private val simpleSchema = new StructType()
     .add("id", "long")
@@ -236,29 +241,42 @@ class PlanGenerationTestSuite
   }
 
   test("read jdbc") {
-    session.read.jdbc(
-      "jdbc:h2:mem:testdb0;user=testUser;password=testPass",
-      "TEST.TIMETYPES",
-      new Properties())
+    session.read.jdbc(urlWithUserAndPass, "TEST.TIMETYPES", new Properties())
   }
 
   test("read jdbc with partition") {
-    session.read.jdbc(
-      "jdbc:h2:mem:testdb0;user=testUser;password=testPass",
-      "TEST.EMP",
-      "THEID",
-      0,
-      4,
-      3,
-      new Properties())
+    session.read.jdbc(urlWithUserAndPass, "TEST.EMP", "THEID", 0, 4, 3, new Properties())
+  }
+
+  test("read jdbc with predicates") {
+    val parts = Array[String]("THEID < 2", "THEID >= 2")
+    session.read.jdbc(urlWithUserAndPass, "TEST.PEOPLE", parts, new Properties())
   }
 
   test("read json") {
     session.read.json(testDataPath.resolve("people.json").toString)
   }
 
+  test("json from dataset") {
+    session.read
+      .schema(new StructType().add("c1", StringType).add("c2", IntegerType))
+      .option("allowSingleQuotes", "true")
+      .json(session.emptyDataset(StringEncoder))
+  }
+
+  test("toJSON") {
+    complex.toJSON
+  }
+
   test("read csv") {
     session.read.csv(testDataPath.resolve("people.csv").toString)
+  }
+
+  test("csv from dataset") {
+    session.read
+      .schema(new StructType().add("c1", StringType).add("c2", IntegerType))
+      .option("header", "true")
+      .csv(session.emptyDataset(StringEncoder))
   }
 
   test("read parquet") {
@@ -289,6 +307,41 @@ class PlanGenerationTestSuite
   test("select typed 1-arg") {
     val encoder = ScalaReflection.encoderFor[(Long, Int)]
     simple.select(fn.struct(fn.col("id"), fn.col("a")).as(encoder))
+  }
+
+  test("select typed 2-arg") {
+    val encoder = ScalaReflection.encoderFor[(Long, Int)]
+    val encoder2 = ScalaReflection.encoderFor[(Double, Double)]
+    val col = fn.struct(fn.col("id"), fn.col("a"))
+    val col2 = fn.struct(fn.col("a"), fn.col("b"))
+    simple.select(col.as(encoder), col2.as(encoder2))
+  }
+
+  test("select typed 3-arg") {
+    val encoder = ScalaReflection.encoderFor[(Long, Int)]
+    val encoder2 = ScalaReflection.encoderFor[(Double, Double)]
+    val col = fn.struct(fn.col("id"), fn.col("a"))
+    val col2 = fn.struct(fn.col("a"), fn.col("b"))
+    simple.select(col.as(encoder), col2.as(encoder2), col.as(encoder))
+  }
+
+  test("select typed 4-arg") {
+    val encoder = ScalaReflection.encoderFor[(Long, Int)]
+    val col = fn.struct(fn.col("id"), fn.col("a"))
+    simple.select(col.as(encoder), col.as(encoder), col.as(encoder), col.as(encoder))
+  }
+
+  test("select typed 5-arg") {
+    val encoder = ScalaReflection.encoderFor[(Long, Int)]
+    val encoder2 = ScalaReflection.encoderFor[(Double, Double)]
+    val col = fn.struct(fn.col("id"), fn.col("a"))
+    val col2 = fn.struct(fn.col("a"), fn.col("b"))
+    simple.select(
+      col.as(encoder),
+      col2.as(encoder2),
+      col.as(encoder),
+      col.as(encoder),
+      col2.as(encoder2))
   }
 
   test("limit") {
@@ -1698,6 +1751,10 @@ class PlanGenerationTestSuite
     fn.array_distinct(fn.col("e"))
   }
 
+  functionTest("array_prepend") {
+    fn.array_prepend(fn.col("e"), lit(1))
+  }
+
   functionTest("array_intersect") {
     fn.array_intersect(fn.col("e"), fn.array(lit(10), lit(4)))
   }
@@ -2012,6 +2069,43 @@ class PlanGenerationTestSuite
       fn.lit(new CalendarInterval(2, 20, 100L)))
   }
 
+  test("function lit array") {
+    simple.select(
+      fn.lit(Array.emptyDoubleArray),
+      fn.lit(Array(Array(1), Array(2), Array(3))),
+      fn.lit(Array(Array(Array(1)), Array(Array(2)), Array(Array(3)))),
+      fn.lit(Array(true, false)),
+      fn.lit(Array(67.toByte, 68.toByte, 69.toByte)),
+      fn.lit(Array(9872.toShort, 9873.toShort, 9874.toShort)),
+      fn.lit(Array(-8726532, 8726532, -8726533)),
+      fn.lit(Array(7834609328726531L, 7834609328726532L, 7834609328726533L)),
+      fn.lit(Array(Math.E, 1.toDouble, 2.toDouble)),
+      fn.lit(Array(-0.8f, -0.7f, -0.9f)),
+      fn.lit(Array(BigDecimal(8997620, 5), BigDecimal(8997621, 5))),
+      fn.lit(
+        Array(BigDecimal(898897667231L, 7).bigDecimal, BigDecimal(898897667231L, 7).bigDecimal)),
+      fn.lit(Array("connect!", "disconnect!")),
+      fn.lit(Array('T', 'F')),
+      fn.lit(
+        Array(
+          Array.tabulate(10)(i => ('A' + i).toChar),
+          Array.tabulate(10)(i => ('B' + i).toChar))),
+      fn.lit(Array(java.time.LocalDate.of(2020, 10, 10), java.time.LocalDate.of(2020, 10, 11))),
+      fn.lit(
+        Array(
+          java.time.Instant.ofEpochMilli(1677155519808L),
+          java.time.Instant.ofEpochMilli(1677155519809L))),
+      fn.lit(Array(new java.sql.Timestamp(12345L), new java.sql.Timestamp(23456L))),
+      fn.lit(
+        Array(
+          java.time.LocalDateTime.of(2023, 2, 23, 20, 36),
+          java.time.LocalDateTime.of(2023, 2, 23, 21, 36))),
+      fn.lit(Array(java.sql.Date.valueOf("2023-02-23"), java.sql.Date.valueOf("2023-03-01"))),
+      fn.lit(Array(java.time.Duration.ofSeconds(100L), java.time.Duration.ofSeconds(200L))),
+      fn.lit(Array(java.time.Period.ofDays(100), java.time.Period.ofDays(200))),
+      fn.lit(Array(new CalendarInterval(2, 20, 100L), new CalendarInterval(2, 21, 200L))))
+  }
+
   /* Window API */
   test("window") {
     simple.select(
@@ -2057,5 +2151,43 @@ class PlanGenerationTestSuite
 
   test("sampleBy") {
     simple.stat.sampleBy("id", Map(0 -> 0.1, 1 -> 0.2), 0L)
+  }
+
+  test("drop") {
+    simple.na.drop(5, Seq("id", "a"))
+  }
+
+  test("fill") {
+    simple.na.fill(8L, Seq("id"))
+  }
+
+  test("replace") {
+    simple.na.replace[Long]("id", Map(1L -> 8L))
+  }
+
+  /* Reader API  */
+  test("table API with options") {
+    session.read.options(Map("p1" -> "v1", "p2" -> "v2")).table("tempdb.myTable")
+  }
+
+  /* Avro functions */
+  test("from_avro with options") {
+    binary.select(
+      avroFn.from_avro(
+        fn.col("bytes"),
+        """{"type": "int", "name": "id"}""",
+        Map("mode" -> "FAILFAST", "compression" -> "zstandard").asJava))
+  }
+
+  test("from_avro without options") {
+    binary.select(avroFn.from_avro(fn.col("bytes"), """{"type": "string", "name": "name"}"""))
+  }
+
+  test("to_avro with schema") {
+    simple.select(avroFn.to_avro(fn.col("a"), """{"type": "int", "name": "id"}"""))
+  }
+
+  test("to_avro without schema") {
+    simple.select(avroFn.to_avro(fn.col("id")))
   }
 }
