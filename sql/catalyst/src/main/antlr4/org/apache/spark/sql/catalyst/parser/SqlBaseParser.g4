@@ -928,11 +928,11 @@ primaryExpression
         (FILTER LEFT_PAREN WHERE where=booleanExpression RIGHT_PAREN)? ( OVER windowSpec)?     #percentile
     ;
 
-valueType
+literalType
     : DATE
     | TIMESTAMP | TIMESTAMP_LTZ | TIMESTAMP_NTZ
     | INTERVAL
-    | HEX
+    | BINARY_HEX
     | unsupportedType=identifier
     ;
 
@@ -940,7 +940,7 @@ constant
     : NULL                                                                                     #nullLiteral
     | COLON identifier                                                                         #parameterLiteral
     | interval                                                                                 #intervalLiteral
-    | valueType stringLit                                                                     #typeConstructor
+    | literalType stringLit                                                                     #typeConstructor
     | number                                                                                   #numericLiteral
     | booleanValue                                                                             #booleanLiteral
     | stringLit+                                                                               #stringLiteral
@@ -1235,6 +1235,7 @@ ansiNonReserved
     | BETWEEN
     | BIGINT
     | BINARY
+    | BINARY_HEX
     | BOOLEAN
     | BUCKET
     | BUCKETS
@@ -1308,7 +1309,6 @@ ansiNonReserved
     | GENERATED
     | GLOBAL
     | GROUPING
-    | HEX
     | HOUR
     | HOURS
     | IF
@@ -1523,6 +1523,7 @@ nonReserved
     | BETWEEN
     | BIGINT
     | BINARY
+    | BINARY_HEX
     | BOOLEAN
     | BOTH
     | BUCKET
@@ -1621,7 +1622,6 @@ nonReserved
     | GROUP
     | GROUPING
     | HAVING
-    | HEX
     | HOUR
     | HOURS
     | IF

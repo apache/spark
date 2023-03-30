@@ -2398,11 +2398,11 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
    */
   override def visitTypeConstructor(ctx: TypeConstructorContext): Literal = withOrigin(ctx) {
     val value = string(visitStringLit(ctx.stringLit))
-    val valueType = ctx.valueType.start.getType
+    val valueType = ctx.literalType.start.getType
 
     def toLiteral[T](f: UTF8String => Option[T], t: DataType): Literal = {
       f(UTF8String.fromString(value)).map(Literal(_, t)).getOrElse {
-        throw QueryParsingErrors.cannotParseValueTypeError(ctx.valueType.getText, value, ctx)
+        throw QueryParsingErrors.cannotParseValueTypeError(ctx.literalType.getText, value, ctx)
       }
     }
 
@@ -2449,7 +2449,8 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
           IntervalUtils.stringToInterval(UTF8String.fromString(value))
         } catch {
           case e: IllegalArgumentException =>
-            val ex = QueryParsingErrors.cannotParseValueTypeError(ctx.valueType.getText, value, ctx)
+            val ex = QueryParsingErrors.cannotParseValueTypeError(
+              ctx.literalType.getText, value, ctx)
             ex.setStackTrace(e.getStackTrace)
             throw ex
         }
@@ -2462,7 +2463,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
         } else {
           Literal(interval, CalendarIntervalType)
         }
-      case HEX =>
+      case BINARY_HEX =>
         val padding = if (value.length % 2 != 0) "0" else ""
         try {
           Literal(Hex.decodeHex(padding + value))
@@ -2472,9 +2473,9 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
             ex.setStackTrace(e.getStackTrace)
             throw ex
         }
-      case other =>
+      case _ =>
         throw QueryParsingErrors.literalValueTypeUnsupportedError(
-          unsupportedType = ctx.valueType.getText,
+          unsupportedType = ctx.literalType.getText,
           supportedTypes =
             Seq("DATE", "TIMESTAMP_NTZ", "TIMESTAMP_LTZ", "TIMESTAMP", "INTERVAL", "X"),
           ctx)
