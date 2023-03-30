@@ -23,10 +23,10 @@ import scala.collection.mutable
 import scala.util.control.NonFatal
 
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.api.java.function.{FilterFunction, FlatMapFunction, MapFunction, MapPartitionsFunction}
+import org.apache.spark.api.java.function._
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
-import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{PrimitiveBooleanEncoder, PrimitiveLongEncoder, ProductEncoder, StringEncoder, UnboundRowEncoder}
+import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders._
 import org.apache.spark.sql.catalyst.expressions.RowOrdering
 import org.apache.spark.sql.connect.client.{SparkResult, UdfUtils}
 import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, StorageLevelProtoConverter}
@@ -2575,6 +2575,46 @@ class Dataset[T] private[sql] (
   }
 
   /**
+   * Applies a function `f` to all rows.
+   *
+   * @group action
+   * @since 3.5.0
+   */
+  def foreach(f: T => Unit): Unit = {
+    foreachPartition(UdfUtils.foreachFuncToForeachPartitionsAdaptor(f))
+  }
+
+  /**
+   * (Java-specific) Runs `func` on each element of this Dataset.
+   *
+   * @group action
+   * @since 3.5.0
+   */
+  def foreach(func: ForeachFunction[T]): Unit = foreach(UdfUtils.foreachFuncToScalaFunc(func))
+
+  /**
+   * Applies a function `f` to each partition of this Dataset.
+   *
+   * @group action
+   * @since 3.5.0
+   */
+  def foreachPartition(f: Iterator[T] => Unit): Unit = {
+    // Delegate to mapPartition followed by a count to drop any result.
+    mapPartitions(UdfUtils.foreachPartitionFuncToMapPartitionsAdaptor(f))(PrimitiveBooleanEncoder)
+      .collectAsList()
+  }
+
+  /**
+   * (Java-specific) Runs `func` on each partition of this Dataset.
+   *
+   * @group action
+   * @since 3.5.0
+   */
+  def foreachPartition(func: ForeachPartitionFunction[T]): Unit = {
+    foreachPartition(UdfUtils.foreachPartitionFuncToScalaFunc(func))
+  }
+
+  /**
    * Returns the first `n` rows in the Dataset.
    *
    * Running take requires moving data into the application's driver process, and doing so with a
@@ -2965,14 +3005,6 @@ class Dataset[T] private[sql] (
 
   def observe(name: String, expr: Column, exprs: Column*): Dataset[T] = {
     throw new UnsupportedOperationException("observe is not implemented.")
-  }
-
-  def foreach(f: T => Unit): Unit = {
-    throw new UnsupportedOperationException("foreach is not implemented.")
-  }
-
-  def foreachPartition(f: Iterator[T] => Unit): Unit = {
-    throw new UnsupportedOperationException("foreach is not implemented.")
   }
 
   def checkpoint(): Dataset[T] = {

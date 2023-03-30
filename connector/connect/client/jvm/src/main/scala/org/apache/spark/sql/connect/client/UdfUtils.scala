@@ -30,6 +30,16 @@ private[sql] object UdfUtils {
 
   def mapFuncToMapPartitionsAdaptor[T, U](f: T => U): Iterator[T] => Iterator[U] = _.map(f(_))
 
+  def foreachFuncToForeachPartitionsAdaptor[T](f: T => Unit): Iterator[T] => Unit =
+    _.foreach(f(_))
+
+  def foreachPartitionFuncToMapPartitionsAdaptor[T](
+      f: Iterator[T] => Unit): Iterator[T] => Iterator[Boolean] = x => {
+    f(x)
+    // The return constructs a minimal return iterator for mapPartitions
+    Iterator(true)
+  }
+
   def flatMapFuncToMapPartitionsAdaptor[T, U](
       f: T => TraversableOnce[U]): Iterator[T] => Iterator[U] = _.flatMap(f)
 
@@ -43,4 +53,8 @@ private[sql] object UdfUtils {
   def mapPartitionsFuncToScalaFunc[T, U](
       f: MapPartitionsFunction[T, U]): Iterator[T] => Iterator[U] = x => f.call(x.asJava).asScala
 
+  def foreachFuncToScalaFunc[T](f: ForeachFunction[T]): T => Unit = f.call
+
+  def foreachPartitionFuncToScalaFunc[T](f: ForeachPartitionFunction[T]): Iterator[T] => Unit =
+    x => f.call(x.asJava)
 }
