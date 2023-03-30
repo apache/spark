@@ -33,7 +33,6 @@ from typing import Union, Callable, List, Dict, Optional, Any, Tuple, Generator
 from pyspark import cloudpickle
 from pyspark.sql import SparkSession
 from pyspark.ml.torch.log_communication import (  # type: ignore
-    get_driver_host,
     LogStreamingClient,
     LogStreamingServer,
 )
@@ -158,7 +157,7 @@ class Distributor:
         self.local_mode = local_mode
         self.use_gpu = use_gpu
         # self.spark = spark
-        if hasattr(self.spark, "sparkContext"):
+        if not is_remote():
             self.sc = self.spark.sparkContext
         self.num_tasks = self._get_num_tasks()
         self.ssl_conf = None
@@ -166,7 +165,10 @@ class Distributor:
     def _create_input_params(self) -> Dict[str, Any]:
         input_params = self.__dict__.copy()
         for unneeded_param in ["spark", "sc", "ssl_conf", "logger"]:
-            del input_params[unneeded_param]
+            try:
+                del input_params[unneeded_param]
+            except KeyError:
+                pass
         return input_params
 
     def _get_num_tasks(self) -> int:
@@ -580,7 +582,7 @@ class TorchDistributor(Distributor):
             raise RuntimeError("Unknown combination of parameters")
 
         log_streaming_server = LogStreamingServer()
-        self.driver_address = get_driver_host(self.sc)
+        self.driver_address = self.spark.conf.get("spark.driver.host")  # type: ignore[union-attr]
         log_streaming_server.start(spark_host_address=self.driver_address)
         time.sleep(1)  # wait for the server to start
         self.log_streaming_server_port = log_streaming_server.port
@@ -597,7 +599,7 @@ class TorchDistributor(Distributor):
             result = (
                 self.spark.range(start=0, end=self.num_tasks, step=1, numPartitions=self.num_tasks)
                 .mapInPandas(func=spark_task_function, schema="output binary", barrier=True)
-                .first()["output"]
+                .collect()[0]["output"]
             )
         finally:
             log_streaming_server.shutdown()

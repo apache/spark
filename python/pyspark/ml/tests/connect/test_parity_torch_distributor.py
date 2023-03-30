@@ -35,7 +35,6 @@ try:
 except ImportError:
     have_torch = False
 
-from pyspark import SparkConf
 from pyspark.ml.torch.distributor import TorchDistributor
 from pyspark.ml.torch.torch_run_process_wrapper import clean_and_terminate, check_parent_alive
 from pyspark.sql import SparkSession
@@ -406,19 +405,16 @@ class TorchDistributorDistributedUnitTests(unittest.TestCase):
             self.gpu_discovery_script_file.name,
             stat.S_IRWXU | stat.S_IXGRP | stat.S_IRGRP | stat.S_IROTH | stat.S_IXOTH,
         )
-        conf = SparkConf().set("spark.test.home", SPARK_HOME)
-
-        conf = conf.set(
-            "spark.worker.resource.gpu.discoveryScript", self.gpu_discovery_script_file.name
-        )
-        conf = conf.set("spark.worker.resource.gpu.amount", "3")
-        conf = conf.set("spark.task.cpus", "2")
-        conf = conf.set("spark.task.resource.gpu.amount", "1")
-        conf = conf.set("spark.executor.resource.gpu.amount", "1")
-
         self.spark = (
             SparkSession.builder.appName(class_name)
-            .config(conf=conf)
+            .config("spark.test.home", SPARK_HOME)
+            .config(
+                "spark.worker.resource.gpu.discoveryScript", self.gpu_discovery_script_file.name
+            )
+            .config("spark.worker.resource.gpu.amount", "3")
+            .config("spark.task.cpus", "2")
+            .config("spark.task.resource.gpu.amount", "1")
+            .config("spark.executor.resource.gpu.amount", "1")
             .remote("local-cluster[2,2,1024]")
             .getOrCreate()
         )
