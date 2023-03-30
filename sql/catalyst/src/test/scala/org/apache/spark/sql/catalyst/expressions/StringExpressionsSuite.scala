@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch,
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
+import org.apache.spark.sql.errors.QueryExecutionErrors.toSQLConf
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -1839,7 +1840,19 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       }.getMessage
       assert(msg.contains("Find an invalid url string"))
     }
-    withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      val url = "https://a.b.c/index.php?params1=a|b&params2=x"
+            checkError(exception = intercept[SparkIllegalArgumentException]{
+              evaluateWithoutCodegen(
+             ParseUrl(Seq(url, "HOST")))
+            },
+              errorClass = "INVALID_URL_STRING",
+              parameters = Map(
+                "url" -> url,
+                "ansiConfig" -> toSQLConf(SQLConf.ANSI_ENABLED.key)
+              ))
+    }
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
       checkEvaluation(
         ParseUrl(Seq("https://a.b.c/index.php?params1=a|b&params2=x", "HOST")), null)
     }
