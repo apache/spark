@@ -1754,6 +1754,8 @@ class DataFrameSuite extends QueryTest
       Seq(Row(2, 1, 2), Row(1, 2, 1), Row(1, 1, 1), Row(2, 2, 2)))
   }
 
+  // FIXME: add dropDuplicatesWithinWatermark
+
   test("SPARK-8621: support empty string column name") {
     val df = Seq(Tuple1(1)).toDF("").as("t")
     // We should allow empty string as column name

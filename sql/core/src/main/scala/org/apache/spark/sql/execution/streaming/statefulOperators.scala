@@ -32,6 +32,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjectio
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark
 import org.apache.spark.sql.catalyst.plans.physical.{AllTuples, Distribution, Partitioning}
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
@@ -1031,13 +1032,17 @@ case class StreamingDeduplicateWithinWatermarkExec(
     eventTimeWatermarkForEviction: Option[Long] = None)
   extends BaseStreamingDeduplicateExec {
 
+  private val eventTimeCol: Attribute = WatermarkSupport.findEventTimeColumn(child.output,
+    allowMultipleEventTimeColumns = false).get
+  private val eventTimeColType: DataType = eventTimeCol.dataType
+
+  assert(eventTimeColType == TimestampType || eventTimeColType == TimestampNTZType)
+
   protected val schemaForValueRow: StructType = StructType(
-    Array(StructField("expiresAt", LongType, nullable = false)))
+    Array(StructField("expiresAt", eventTimeColType, nullable = false)))
 
   protected val extraOptionOnStateStore: Map[String, String] = Map.empty
 
-  private val eventTimeCol: Attribute = WatermarkSupport.findEventTimeColumn(child.output,
-    allowMultipleEventTimeColumns = false).get
   private val delayThresholdMs = eventTimeCol.metadata.getLong(EventTimeWatermark.delayKey)
   private val eventTimeColOrdinal: Int = child.output.indexOf(eventTimeCol)
 
@@ -1055,9 +1060,11 @@ case class StreamingDeduplicateWithinWatermarkExec(
     assert(reusedDupInfoRow.isDefined, "This should have reused row.")
     val timeoutRow = reusedDupInfoRow.get
 
+    // We expect data type of event time column to be TimestampType or TimestampNTZType which both
+    // are internally represented as Long.
     val timestamp = data.getLong(eventTimeColOrdinal)
     // The unit of timestamp in Spark is microseconds, convert the delay threshold to micros.
-    val expiresAt = timestamp + delayThresholdMs * 1000
+    val expiresAt = timestamp + DateTimeUtils.millisToMicros(delayThresholdMs)
 
     timeoutRow.setLong(0, expiresAt)
     store.put(key, timeoutRow)
@@ -1067,7 +1074,7 @@ case class StreamingDeduplicateWithinWatermarkExec(
     val numRemovedStateRows = longMetric("numRemovedStateRows")
 
     // Convert watermark value to micros.
-    val watermarkForEviction = eventTimeWatermarkForEviction.get * 1000
+    val watermarkForEviction = DateTimeUtils.millisToMicros(eventTimeWatermarkForEviction.get)
     store.iterator().foreach { rowPair =>
       val valueRow = rowPair.value
 

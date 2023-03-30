@@ -1534,6 +1534,8 @@ class DatasetSuite extends QueryTest
       (1, 2), (1, 1), (2, 1), (2, 2))
   }
 
+  // FIXME: dropDuplicatesWithinWatermark
+
   test("SPARK-16097: Encoders.tuple should handle null object correctly") {
     val enc = Encoders.tuple(Encoders.tuple(Encoders.STRING, Encoders.STRING), Encoders.STRING)
     val data = Seq((("a", "b"), "c"), (null, "d"))

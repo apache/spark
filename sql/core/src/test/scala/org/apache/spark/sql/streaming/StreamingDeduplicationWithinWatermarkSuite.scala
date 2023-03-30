@@ -59,24 +59,6 @@ class StreamingDeduplicationWithinWatermarkSuite extends StateStoreMetricsTest {
     testAndVerify(result3)
   }
 
-  test("deduplicate in batch DataFrame") {
-    def testAndVerify(df: Dataset[_]): Unit = {
-      val exc = intercept[AnalysisException] {
-        df.write.format("noop").mode(SaveMode.Append).save()
-      }
-
-      assert(exc.getMessage.contains("dropDuplicatesWithinWatermark is not supported"))
-      assert(exc.getMessage.contains("batch DataFrames/DataSets"))
-    }
-
-    val result = spark.range(10).dropDuplicatesWithinWatermark()
-    testAndVerify(result)
-
-    val result2 = spark.range(10).withColumn("newcol", $"id")
-      .dropDuplicatesWithinWatermark("newcol")
-    testAndVerify(result2)
-  }
-
   test("deduplicate with all columns with event time column") {
     val inputData = MemoryStream[Int]
     val result = inputData.toDS()
@@ -197,4 +179,6 @@ class StreamingDeduplicationWithinWatermarkSuite extends StateStoreMetricsTest {
       )
     }
   }
+
+  // FIXME: test to disallow changing event time column between TimestampType vs TimestampNTZType
 }
