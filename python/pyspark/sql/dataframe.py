@@ -706,6 +706,25 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         assert self._sc._jvm is not None
         print(self._sc._jvm.PythonSQLUtils.explainString(self._jdf.queryExecution(), explain_mode))
 
+    def debugCodegen(self) -> None:
+        """For debugging purposes, prints to stdout all the generated code found
+        in this :class:`DataFrame` plan (i.e., the output of each WholeStageCodegen subtree).
+
+        .. versionadded:: 3.4.0
+
+        Examples
+        --------
+        >>> spark.sql("select 1").debugCodegen()  # doctest: +SKIP
+        Found 1 WholeStageCodegen subtrees.
+        == Subtree 1 / 1 (...) ==
+        *(1) Project [1 AS 1#...]
+        +- *(1) Scan OneRowRelation[]
+
+        Generated code:
+        ...
+        """
+        self._jdf.debugCodegen()
+
     def exceptAll(self, other: "DataFrame") -> "DataFrame":
         """Return a new :class:`DataFrame` containing rows in this :class:`DataFrame` but
         not in another :class:`DataFrame` while preserving duplicates.

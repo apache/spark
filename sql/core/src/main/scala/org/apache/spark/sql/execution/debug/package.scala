@@ -46,7 +46,6 @@ import org.apache.spark.util.{AccumulatorV2, LongAccumulator}
  * {{{
  *   import org.apache.spark.sql.execution.debug._
  *   sql("SELECT 1").debug()
- *   sql("SELECT 1").debugCodegen()
  * }}}
  *
  * or for streaming case (structured streaming):
@@ -189,14 +188,6 @@ package object debug {
         case d: DebugExec => d.dumpStats()
         case _ =>
       }
-    }
-
-    /**
-     * Prints to stdout all the generated code found in this plan (i.e. the output of each
-     * WholeStageCodegen subtree).
-     */
-    def debugCodegen(): Unit = {
-      debugPrint(codegenString(query.queryExecution.executedPlan))
     }
   }
 
