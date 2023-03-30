@@ -76,7 +76,8 @@ object CheckConnectJvmClientCompatibility {
       val avroJar: File = findJar("connector/avro", "spark-avro", "spark-avro")
       val problemsWithAvroModule = checkMiMaCompatibilityWithAvroModule(clientJar, sqlJar)
       if (problemsWithAvroModule.nonEmpty) {
-        resultWriter.write(s"ERROR: Comparing client jar: $clientJar and and avro jar: $avroJar \n")
+        resultWriter.write(
+          s"ERROR: Comparing client jar: $clientJar and and avro jar: $avroJar \n")
         resultWriter.write(s"problemsWithAvroModule: \n")
         resultWriter.write(
           s"${problemsWithAvroModule.map(p => p.description("client")).mkString("\n")}")
@@ -108,7 +109,8 @@ object CheckConnectJvmClientCompatibility {
   }
 
   private def checkMiMaCompatibilityWithAvroModule(
-      clientJar: File, avroJar: File): List[Problem] = {
+      clientJar: File,
+      avroJar: File): List[Problem] = {
     val includedRules = Seq(IncludeByName("org.apache.spark.sql.avro.functions.*"))
     val excludeRules = Seq.empty
     checkMiMaCompatibility(clientJar, avroJar, includedRules, excludeRules)
