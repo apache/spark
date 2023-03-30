@@ -20,6 +20,7 @@ import java.io.{ByteArrayOutputStream, PrintStream}
 import java.nio.file.Files
 
 import scala.collection.JavaConverters._
+import scala.collection.mutable
 
 import io.grpc.StatusRuntimeException
 import java.util.Properties
@@ -35,6 +36,7 @@ import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.connect.client.util.{IntegrationTestUtils, RemoteSparkSession}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.vectorized.ColumnarBatch
 
 class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper {
 
@@ -852,6 +854,34 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper {
       spark.read.schema("123").csv(spark.createDataset(Seq.empty[String])(StringEncoder))
     }.getMessage
     assert(message.contains("PARSE_SYNTAX_ERROR"))
+  }
+
+  test("Dataset result destructive iterator") {
+    val df = spark.range(10).filter("id > 5 and id < 9")
+    val res = df.collectResult()
+
+    try {
+      // build and verify the destructive iterator
+      val iterator = res.destructiveIterator
+      // batches is empty before traversing the result iterator
+      assert(res.batches.isEmpty)
+      var previousBatch: ColumnarBatch = null
+      val buffer = mutable.Buffer.empty[Long]
+      while (iterator.hasNext) {
+        // always having 1 batch, since a columnar batch will be removed and closed after
+        // its data got consumed.
+        assert(res.batches.size === 1)
+        assert(res.batches.head != previousBatch)
+        previousBatch = res.batches.head
+
+        buffer.append(iterator.next())
+      }
+
+      val expectedResult = Seq(6L, 7L, 8L)
+      assert(buffer.size === 3 && expectedResult.forall(buffer.contains))
+    } finally {
+      res.close()
+    }
   }
 }
 
