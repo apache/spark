@@ -741,7 +741,7 @@ message WithWatermark {
   // (Required) The input relation
   Relation input = 1;
 
-  // (Required)
+  // (Required) Name of the column containing event time.
   string event_time = 2;
 
   // (Required)

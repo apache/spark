@@ -59,7 +59,6 @@ import org.apache.spark.sql.execution.command.CreateViewCommand
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JDBCPartition, JDBCRelation}
 import org.apache.spark.sql.execution.python.UserDefinedPythonFunction
-import org.apache.spark.sql.execution.streaming.StreamExecution
 import org.apache.spark.sql.execution.streaming.StreamingQueryWrapper
 import org.apache.spark.sql.internal.CatalogImpl
 import org.apache.spark.sql.streaming.Trigger
@@ -778,17 +777,18 @@ class SparkConnectPlanner(val session: SparkSession) {
     }
   }
 
-  private def transformReadRel(rel: proto.Read): LogicalPlan = {
-
-    def parseSchema(schema: String): StructType = {
-      DataType.parseTypeWithFallback(
-        schema,
-        StructType.fromDDL,
-        fallbackParser = DataType.fromJson) match {
-        case s: StructType => s
-        case other => throw InvalidPlanInput(s"Invalid schema $other")
-      }
+  /** Parse as DDL, with a fallback to JSON. Throws an exception if if fails to parse. */
+  private def parseSchema(schema: String): StructType = {
+    DataType.parseTypeWithFallback(
+      schema,
+      StructType.fromDDL,
+      fallbackParser = DataType.fromJson) match {
+      case s: StructType => s
+      case other => throw InvalidPlanInput(s"Invalid schema $other")
     }
+  }
+
+  private def transformReadRel(rel: proto.Read): LogicalPlan = {
 
     rel.getReadTypeCase match {
       case proto.Read.ReadTypeCase.NAMED_TABLE if !rel.getIsStreaming =>
@@ -2130,7 +2130,6 @@ class SparkConnectPlanner(val session: SparkSession) {
 
       case StreamingQueryCommand.CommandTypeCase.EXPLAIN =>
         val result = query match {
-          case q: StreamExecution => q.explainInternal(command.getExplain.getExtended)
           case q: StreamingQueryWrapper =>
             q.streamingQuery.explainInternal(command.getExplain.getExtended)
           case _ => throw new IllegalStateException(s"Unexpected type for streaming query: $query")
