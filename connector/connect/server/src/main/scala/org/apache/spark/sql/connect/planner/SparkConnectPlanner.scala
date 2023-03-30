@@ -887,7 +887,9 @@ class SparkConnectPlanner(val session: SparkSession) {
     val baseRel = transformRelation(rel.getInput)
     val cond = rel.getCondition
     cond.getExprTypeCase match {
-      case proto.Expression.ExprTypeCase.COMMON_INLINE_USER_DEFINED_FUNCTION =>
+      case proto.Expression.ExprTypeCase.COMMON_INLINE_USER_DEFINED_FUNCTION
+          if cond.getCommonInlineUserDefinedFunction.getFunctionCase ==
+            proto.CommonInlineUserDefinedFunction.FunctionCase.SCALAR_SCALA_UDF =>
         transformTypedFilter(cond.getCommonInlineUserDefinedFunction, baseRel)
       case _ =>
         logical.Filter(condition = transformExpression(cond), child = baseRel)
@@ -897,9 +899,6 @@ class SparkConnectPlanner(val session: SparkSession) {
   private def transformTypedFilter(
       fun: proto.CommonInlineUserDefinedFunction,
       child: LogicalPlan): TypedFilter = {
-    assert(
-      fun.getFunctionCase ==
-        proto.CommonInlineUserDefinedFunction.FunctionCase.SCALAR_SCALA_UDF)
     val udf = fun.getScalarScalaUdf
     val udfPacket =
       Utils.deserialize[UdfPacket](
