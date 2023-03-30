@@ -2093,7 +2093,7 @@ class SparkConnectPlanner(val session: SparkSession) {
       case Some(query) =>
         throw new IllegalArgumentException(
           s"Run id mismatch for query id $queryId. Run id in the request ${command.getRunId} " +
-          s"does not match one on the serve ${query.runId}. The query might have restarted."
+          s"does not match one on the server ${query.runId}. The query might have restarted."
         )
       case None =>
         throw new IllegalArgumentException(s"Streaming query $queryId is not found")
