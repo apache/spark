@@ -469,7 +469,6 @@ Below is a list of all the keywords in Spark SQL.
 |GROUP|reserved|non-reserved|reserved|
 |GROUPING|non-reserved|non-reserved|reserved|
 |HAVING|reserved|non-reserved|reserved|
-|HEX|non-reserved|non-reserved|non-reserved|
 |HOUR|non-reserved|non-reserved|non-reserved|
 |HOURS|non-reserved|non-reserved|non-reserved|
 |IF|non-reserved|non-reserved|not a keyword|
@@ -673,6 +672,7 @@ Below is a list of all the keywords in Spark SQL.
 |WINDOW|non-reserved|non-reserved|reserved|
 |WITH|reserved|non-reserved|reserved|
 |WITHIN|reserved|non-reserved|reserved|
+|X|non-reserved|non-reserved|non-reserved|
 |YEAR|non-reserved|non-reserved|non-reserved|
 |YEARS|non-reserved|non-reserved|non-reserved|
 |ZONE|non-reserved|non-reserved|non-reserved|
