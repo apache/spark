@@ -35,6 +35,12 @@
     ],
     "sqlState" : "22003"
   },
+  "BINARY_ARITHMETIC_CAUSE_OVERFLOW" : {
+    "message" : [
+      "<value1> <symbol> <value2> caused overflow."
+    ],
+    "sqlState" : "22003"
+  },
   "CANNOT_CAST_DATATYPE" : {
     "message" : [
       "Cannot cast <sourceType> to <targetType>."
@@ -3872,11 +3878,6 @@
   "_LEGACY_ERROR_TEMP_2043" : {
     "message" : [
       "- <sqlValue> caused overflow."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2044" : {
-    "message" : [
-      "<sqlValue1> <symbol> <sqlValue2> caused overflow."
     ]
   },
   "_LEGACY_ERROR_TEMP_2045" : {

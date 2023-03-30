@@ -21,11 +21,9 @@ import java.io.{File, IOException}
 import java.net.{URI, URL}
 import java.sql.{Connection, Driver, DriverManager, PreparedStatement, ResultSet, ResultSetMetaData}
 import java.util.{Locale, Properties, ServiceConfigurationError}
-
 import org.apache.hadoop.fs.{LocalFileSystem, Path}
 import org.apache.hadoop.fs.permission.FsPermission
 import org.mockito.Mockito.{mock, spy, when}
-
 import org.apache.spark._
 import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.FunctionIdentifier
@@ -624,6 +622,21 @@ class QueryExecutionErrorsSuite
       }
     }
   }
+
+  test("BINARY_ARITHMETIC_CAUSE_OVERFLOW: byte plus byte result overflow") {
+    checkError(
+      exception = intercept[SparkArithmeticException] {
+        sql(s"select CAST('5' AS TINYINT) + CAST('5' AS TINYINT)").collect()
+      },
+      errorClass = "BINARY_ARITHMETIC_CAUSE_OVERFLOW",
+      parameters = Map(
+        "value1" -> "5",
+        "symbol" -> "+",
+        "value2" -> "5",
+      ),
+      sqlState = "22003")
+  }
+
 
   test("UNSUPPORTED_DATATYPE: invalid StructType raw format") {
     checkError(
