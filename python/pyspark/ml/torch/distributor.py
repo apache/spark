@@ -37,13 +37,12 @@ from pyspark.ml.torch.log_communication import (  # type: ignore
     LogStreamingServer,
 )
 from pyspark.sql.utils import is_remote
-from pyspark.context import SparkContext
 from pyspark.taskcontext import BarrierTaskContext
 
 
 # TODO(SPARK-41589): will move the functions and tests to an external file
 #       once we are in agreement about which functions should be in utils.py
-def get_conf_boolean(sc: SparkContext, key: str, default_value: str) -> bool:
+def get_conf_boolean(spark: SparkSession, key: str, default_value: str) -> bool:
     """Get the conf "key" from the given spark context,
     or return the default value if the conf is not set.
     This expects the conf value to be a boolean or string;
@@ -52,8 +51,9 @@ def get_conf_boolean(sc: SparkContext, key: str, default_value: str) -> bool:
 
     Parameters
     ----------
-    sc : :class:`SparkContext`
-        The :class:`SparkContext` for the distributor.
+
+    spark : :class:`SparkSession`
+        The :class:`SparkSession` for the distributor.
     key : str
         string for conf name
     default_value : str
@@ -69,7 +69,8 @@ def get_conf_boolean(sc: SparkContext, key: str, default_value: str) -> bool:
     ValueError
         Thrown when the conf value is not a valid boolean
     """
-    val = sc.getConf().get(key, default_value)
+    val = spark.conf.get(key, default_value)
+    assert val is not None
     lowercase_val = val.lower()
     if lowercase_val == "true":
         return True
@@ -95,13 +96,13 @@ def get_logger(name: str) -> logging.Logger:
     return logger
 
 
-def get_gpus_owned(context: Union[SparkContext, BarrierTaskContext]) -> List[str]:
+def get_gpus_owned(context: Union[SparkSession, BarrierTaskContext]) -> List[str]:
     """Gets the number of GPUs that Spark scheduled to the calling task.
 
     Parameters
     ----------
-    context : :class:`SparkContext` or :class:`BarrierTaskContext`
-        The :class:`SparkContext` or :class:`BarrierTaskContext` that has GPUs available.
+    context : :class:`SparkSession` or :class:`BarrierTaskContext`
+        The :class:`SparkSession` or :class:`BarrierTaskContext` that has GPUs available.
 
     Returns
     -------
@@ -115,8 +116,8 @@ def get_gpus_owned(context: Union[SparkContext, BarrierTaskContext]) -> List[str
     """
     CUDA_VISIBLE_DEVICES = "CUDA_VISIBLE_DEVICES"
     pattern = re.compile("^[1-9][0-9]*|0$")
-    if isinstance(context, SparkContext):
-        addresses = context.resources["gpu"].addresses
+    if isinstance(context, SparkSession):
+        addresses = context.sparkContext.resources["gpu"].addresses
     else:
         addresses = context.resources()["gpu"].addresses
     if any(not pattern.match(address) for address in addresses):
@@ -156,19 +157,13 @@ class Distributor:
         self.num_processes = num_processes
         self.local_mode = local_mode
         self.use_gpu = use_gpu
-        # self.spark = spark
-        if not is_remote():
-            self.sc = self.spark.sparkContext
         self.num_tasks = self._get_num_tasks()
         self.ssl_conf = None
 
     def _create_input_params(self) -> Dict[str, Any]:
         input_params = self.__dict__.copy()
-        for unneeded_param in ["spark", "sc", "ssl_conf", "logger"]:
-            try:
-                del input_params[unneeded_param]
-            except KeyError:
-                pass
+        for unneeded_param in ["spark", "ssl_conf", "logger"]:
+            del input_params[unneeded_param]
         return input_params
 
     def _get_num_tasks(self) -> int:
@@ -187,18 +182,19 @@ class Distributor:
         """
 
         if self.use_gpu:
+            assert self.spark is not None
             if not self.local_mode:
                 key = "spark.task.resource.gpu.amount"
-                task_gpu_amount = int(self.sc.getConf().get(key, "0"))
+                task_gpu_amount = int(self.spark.conf.get(key, "0"))  # type: ignore[arg-type]
                 if task_gpu_amount < 1:
                     raise RuntimeError(f"'{key}' was unset, so gpu usage is unavailable.")
                 # TODO(SPARK-41916): Address situation when spark.task.resource.gpu.amount > 1
                 return math.ceil(self.num_processes / task_gpu_amount)
             else:
                 key = "spark.driver.resource.gpu.amount"
-                if "gpu" not in self.sc.resources:
+                if "gpu" not in self.spark.sparkContext.resources:
                     raise RuntimeError("GPUs were unable to be found on the driver.")
-                num_available_gpus = int(self.sc.getConf().get(key, "0"))
+                num_available_gpus = int(self.spark.conf.get(key, "0"))  # type: ignore[arg-type]
                 if num_available_gpus == 0:
                     raise RuntimeError("GPU resources were not configured properly on the driver.")
                 if self.num_processes > num_available_gpus:
@@ -231,8 +227,9 @@ class Distributor:
             raise RuntimeError(
                 "Distributor doesn't have this functionality. Use TorchDistributor instead."
             )
-        is_ssl_enabled = get_conf_boolean(self.sc, "spark.ssl.enabled", "false")
-        ignore_ssl = get_conf_boolean(self.sc, self.ssl_conf, "false")  # type: ignore
+        assert self.spark is not None
+        is_ssl_enabled = get_conf_boolean(self.spark, "spark.ssl.enabled", "false")
+        ignore_ssl = get_conf_boolean(self.spark, self.ssl_conf, "false")  # type: ignore
         if is_ssl_enabled:
             name = self.__class__.__name__
             if ignore_ssl:
@@ -464,7 +461,8 @@ class TorchDistributor(Distributor):
         old_cuda_visible_devices = os.environ.get(CUDA_VISIBLE_DEVICES, "")
         try:
             if self.use_gpu:
-                gpus_owned = get_gpus_owned(self.sc)
+                assert self.spark is not None
+                gpus_owned = get_gpus_owned(self.spark)
                 random.seed(hash(train_object))
                 selected_gpus = [str(e) for e in random.sample(gpus_owned, self.num_processes)]
                 os.environ[CUDA_VISIBLE_DEVICES] = ",".join(selected_gpus)
@@ -568,7 +566,7 @@ class TorchDistributor(Distributor):
                     pass
 
             if context.partitionId() == 0:
-                yield pd.DataFrame(data={"output": [cloudpickle.dump(output)]})
+                yield pd.DataFrame(data={"output": [cloudpickle.dumps(output)]})
 
         return wrapped_train_fn
 
