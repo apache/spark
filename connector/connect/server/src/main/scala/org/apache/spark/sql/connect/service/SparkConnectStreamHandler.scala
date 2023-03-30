@@ -21,6 +21,7 @@ import scala.collection.JavaConverters._
 
 import com.google.protobuf.ByteString
 import io.grpc.stub.StreamObserver
+import org.apache.commons.lang3.StringUtils
 
 import org.apache.spark.SparkEnv
 import org.apache.spark.connect.proto
@@ -59,6 +60,12 @@ class SparkConnectStreamHandler(responseObserver: StreamObserver[ExecutePlanResp
   }
 
   private def handlePlan(session: SparkSession, request: ExecutePlanRequest): Unit = {
+    val debugString = request.toString
+    session.sparkContext.setLocalProperty(
+      "callSite.short", s"Spark Connect - ${StringUtils.abbreviate(debugString, 128)}" )
+    session.sparkContext.setLocalProperty(
+      "callSite.long", StringUtils.abbreviate(debugString, 2048))
+
     // Extract the plan from the request and convert it to a logical plan
     val planner = new SparkConnectPlanner(session)
     val dataframe = Dataset.ofRows(session, planner.transformRelation(request.getPlan.getRoot))
