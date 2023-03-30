@@ -330,7 +330,9 @@ private[spark] object Utils extends Logging {
   def createTempDir(
       root: String = System.getProperty("java.io.tmpdir"),
       namePrefix: String = "spark"): File = {
-    JavaUtils.createTempDir(root, namePrefix)
+    val dir = JavaUtils.createTempDir(root, namePrefix, false)
+    ShutdownHookManager.registerShutdownDeleteDir(dir)
+    dir
   }
 
   /**
