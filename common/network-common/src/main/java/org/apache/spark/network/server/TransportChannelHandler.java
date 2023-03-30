@@ -184,6 +184,10 @@ public class TransportChannelHandler extends SimpleChannelInboundHandler<Message
     return responseHandler;
   }
 
+  public TransportRequestHandler getRequestHandler () {
+    return requestHandler;
+  }
+
   @Override
   public void channelRegistered(ChannelHandlerContext ctx) throws Exception {
     transportContext.getRegisteredConnections().inc();

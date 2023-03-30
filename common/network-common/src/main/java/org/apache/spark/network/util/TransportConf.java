@@ -17,6 +17,8 @@
 
 package org.apache.spark.network.util;
 
+import com.google.common.base.Preconditions;
+
 import java.util.Locale;
 import java.util.Properties;
 import java.util.concurrent.TimeUnit;
@@ -322,6 +324,28 @@ public class TransportConf {
    */
   public boolean separateChunkFetchRequest() {
     return conf.getInt("spark.shuffle.server.chunkFetchHandlerThreadsPercent", 0) > 0;
+  }
+
+  /**
+   * Number of threads to process FinalizeShuffleMerge. Shuffle server will use a separate
+   * EventLoopGroup to process FinalizeShuffleMerge messages, which are I/O intensive and
+   * could take long time to process due to disk contentions.
+   */
+  public int finalizeShuffleMergeHandlerThreads() {
+    if (!this.getModuleName().equalsIgnoreCase("shuffle")) {
+      return 0;
+    }
+    Preconditions.checkArgument(separateFinalizeShuffleMerge(),
+      "Please set spark.shuffle.server.finalizeShuffleMergeThreads to a positive value");
+    return Integer.parseInt(conf.get("spark.shuffle.server.finalizeShuffleMergeThreads"));
+  }
+
+  /**
+   * Whether to use a separate EventLoopGroup to process FinalizeShuffleMerge messages, it is
+   * decided by the config `spark.shuffle.server.finalizeShuffleMergeThreads` is set or not.
+   */
+  public boolean separateFinalizeShuffleMerge() {
+    return conf.getInt("spark.shuffle.server.finalizeShuffleMergeThreads", 0) > 0;
   }
 
   /**

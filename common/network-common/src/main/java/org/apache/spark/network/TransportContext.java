@@ -17,6 +17,9 @@
 
 package org.apache.spark.network;
 
+import io.netty.buffer.ByteBuf;
+import io.netty.handler.codec.MessageToMessageDecoder;
+
 import java.io.Closeable;
 import java.util.ArrayList;
 import java.util.List;
@@ -196,7 +199,7 @@ public class TransportContext implements Closeable {
       pipeline
         .addLast("encoder", ENCODER)
         .addLast(TransportFrameDecoder.HANDLER_NAME, NettyUtils.createFrameDecoder())
-        .addLast("decoder", DECODER)
+        .addLast("decoder", getDecoder())
         .addLast("idleStateHandler",
           new IdleStateHandler(0, 0, conf.connectionTimeoutMs() / 1000))
         // NOTE: Chunks are currently guaranteed to be returned in the order of request, but this
@@ -214,6 +217,10 @@ public class TransportContext implements Closeable {
       logger.error("Error while initializing Netty pipeline", e);
       throw e;
     }
+  }
+
+  protected MessageToMessageDecoder<ByteBuf> getDecoder() {
+    return DECODER;
   }
 
   /**
