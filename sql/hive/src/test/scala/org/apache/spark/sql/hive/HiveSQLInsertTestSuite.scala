@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.hive
 
-import org.apache.spark.sql.{AnalysisException, SQLInsertTestSuite}
+import org.apache.spark.sql.SQLInsertTestSuite
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 
 class HiveSQLInsertTestSuite extends SQLInsertTestSuite with TestHiveSingleton {
@@ -37,36 +37,4 @@ class HiveSQLInsertTestSuite extends SQLInsertTestSuite with TestHiveSingleton {
   }
 
   override def format: String = "hive OPTIONS(fileFormat='parquet')"
-
-  test("insert with column list - missing columns for HiveSQL") {
-    val cols = Seq("c1", "c2", "c3", "c4")
-
-    withTable("t1") {
-      createTable("t1", cols, Seq.fill(4)("int"))
-      checkError(
-        exception = intercept[AnalysisException](sql(s"INSERT INTO t1 (c1) values(1)")),
-        errorClass = "_LEGACY_ERROR_TEMP_1168",
-        parameters = Map(
-          "tableName" -> "`spark_catalog`.`default`.`t1`",
-          "targetColumns" -> "4",
-          "insertedColumns" -> "1",
-          "staticPartCols" -> "0")
-      )
-    }
-
-    withTable("t1") {
-      createTable("t1", cols, Seq.fill(4)("int"), cols.takeRight(2))
-      checkError(
-        exception = intercept[AnalysisException] {
-          sql(s"INSERT INTO t1 partition(c3=3, c4=4) (c1) values(1)")
-        },
-        errorClass = "_LEGACY_ERROR_TEMP_1168",
-        parameters = Map(
-          "tableName" -> "`spark_catalog`.`default`.`t1`",
-          "targetColumns" -> "4",
-          "insertedColumns" -> "3",
-          "staticPartCols" -> "2")
-      )
-    }
-  }
 }

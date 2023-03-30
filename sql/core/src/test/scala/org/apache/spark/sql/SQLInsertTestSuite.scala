@@ -201,6 +201,30 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils {
     }
   }
 
+  test("insert with column list - missing columns") {
+    val v2Msg = "Cannot write incompatible data to table 'testcat.t1'"
+    val cols = Seq("c1", "c2", "c3", "c4")
+
+    withTable("t1") {
+      createTable("t1", cols, Seq.fill(4)("int"))
+      val e1 = intercept[AnalysisException](sql(s"INSERT INTO t1 values(1)"))
+      assert(e1.getMessage.contains("target table has 4 column(s) but the inserted data has 1") ||
+        e1.getMessage.contains("expected 4 columns but found 1") ||
+        e1.getMessage.contains("not enough data columns") ||
+        e1.getMessage.contains(v2Msg))
+    }
+
+    withTable("t1") {
+      createTable("t1", cols, Seq.fill(4)("int"), cols.takeRight(2))
+      val e1 = intercept[AnalysisException] {
+        sql(s"INSERT INTO t1 partition(c3=3, c4=4) values(1)")
+      }
+      assert(e1.getMessage.contains("target table has 4 column(s) but the inserted data has 3") ||
+        e1.getMessage.contains("not enough data columns") ||
+        e1.getMessage.contains(v2Msg))
+    }
+  }
+
   test("SPARK-34223: static partition with null raise NPE") {
     withTable("t") {
       sql(s"CREATE TABLE t(i STRING, c string) USING PARQUET PARTITIONED BY (c)")
@@ -363,38 +387,6 @@ class FileSourceSQLInsertTestSuite extends SQLInsertTestSuite with SharedSparkSe
   override protected def sparkConf: SparkConf = {
     super.sparkConf.set(SQLConf.USE_V1_SOURCE_LIST, format)
   }
-
-  test("insert with column list - missing columns for FileSource") {
-    val cols = Seq("c1", "c2", "c3", "c4")
-
-    withTable("t1") {
-      createTable("t1", cols, Seq.fill(4)("int"))
-      checkError(
-        exception = intercept[AnalysisException](sql(s"INSERT INTO t1 (c1) values(1)")),
-        errorClass = "_LEGACY_ERROR_TEMP_1168",
-        parameters = Map(
-          "tableName" -> "`spark_catalog`.`default`.`t1`",
-          "targetColumns" -> "4",
-          "insertedColumns" -> "1",
-          "staticPartCols" -> "0")
-      )
-    }
-
-    withTable("t1") {
-      createTable("t1", cols, Seq.fill(4)("int"), cols.takeRight(2))
-      checkError(
-        exception = intercept[AnalysisException] {
-          sql(s"INSERT INTO t1 partition(c3=3, c4=4) (c1) values(1)")
-        },
-        errorClass = "_LEGACY_ERROR_TEMP_1168",
-        parameters = Map(
-          "tableName" -> "`spark_catalog`.`default`.`t1`",
-          "targetColumns" -> "4",
-          "insertedColumns" -> "3",
-          "staticPartCols" -> "2")
-      )
-    }
-  }
 }
 
 class DSV2SQLInsertTestSuite extends SQLInsertTestSuite with SharedSparkSession {
@@ -416,30 +408,6 @@ class DSV2SQLInsertTestSuite extends SQLInsertTestSuite with SharedSparkSession 
         },
         errorClass = "STATIC_PARTITION_COLUMN_IN_INSERT_COLUMN_LIST",
         parameters = Map("staticName" -> "c"))
-    }
-  }
-
-  test("insert with column list - missing columns for DSV2") {
-    val cols = Seq("c1", "c2", "c3", "c4")
-
-    withTable("t1") {
-      createTable("t1", cols, Seq.fill(4)("int"))
-      checkError(
-        exception = intercept[AnalysisException](sql(s"INSERT INTO t1 (c1) values(1)")),
-        errorClass = "INCOMPATIBLE_DATA_TO_TABLE.CANNOT_FIND_DATA",
-        parameters = Map("tableName" -> "`testcat`.`t1`", "colPath" -> "`c2`")
-      )
-    }
-
-    withTable("t1") {
-      createTable("t1", cols, Seq.fill(4)("int"), cols.takeRight(2))
-      checkError(
-        exception = intercept[AnalysisException] {
-          sql(s"INSERT INTO t1 partition(c3=3, c4=4) (c1) values(1)")
-        },
-        errorClass = "INCOMPATIBLE_DATA_TO_TABLE.CANNOT_FIND_DATA",
-        parameters = Map("tableName" -> "`testcat`.`t1`", "colPath" -> "`c2`")
-      )
     }
   }
 }

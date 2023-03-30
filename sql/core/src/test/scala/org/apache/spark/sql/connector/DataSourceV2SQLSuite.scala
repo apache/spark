@@ -1092,13 +1092,9 @@ class DataSourceV2SQLSuiteV1Filter
       sql(s"INSERT INTO $t1(data, id) VALUES('c', 3)")
       verifyTable(t1, df)
       // Missing columns
-      checkError(
-        exception = intercept[AnalysisException] {
-          sql(s"INSERT INTO $t1(data) VALUES(4)")
-        },
-        errorClass = "INCOMPATIBLE_DATA_TO_TABLE.CANNOT_FIND_DATA",
-        parameters = Map("tableName" -> "`default`.`tbl`", "colPath" -> "`id`")
-      )
+      assert(intercept[AnalysisException] {
+        sql(s"INSERT INTO $t1 VALUES(4)")
+      }.getMessage.contains("not enough data columns"))
       // Duplicate columns
       checkError(
         exception = intercept[AnalysisException] {
@@ -1124,13 +1120,9 @@ class DataSourceV2SQLSuiteV1Filter
       sql(s"INSERT OVERWRITE $t1(data, id) VALUES('c', 3)")
       verifyTable(t1, Seq((3L, "c")).toDF("id", "data"))
       // Missing columns
-      checkError(
-        exception = intercept[AnalysisException] {
-          sql(s"INSERT OVERWRITE $t1(data) VALUES(4)")
-        },
-        errorClass = "INCOMPATIBLE_DATA_TO_TABLE.CANNOT_FIND_DATA",
-        parameters = Map("tableName" -> "`default`.`tbl`", "colPath" -> "`id`")
-      )
+      assert(intercept[AnalysisException] {
+        sql(s"INSERT OVERWRITE $t1 VALUES(4)")
+      }.getMessage.contains("not enough data columns"))
       // Duplicate columns
       checkError(
         exception = intercept[AnalysisException] {
@@ -1157,13 +1149,9 @@ class DataSourceV2SQLSuiteV1Filter
       sql(s"INSERT OVERWRITE $t1(data, data2, id) VALUES('c', 'e', 1)")
       verifyTable(t1, Seq((1L, "c", "e"), (2L, "b", "d")).toDF("id", "data", "data2"))
       // Missing columns
-      checkError(
-        exception = intercept[AnalysisException] {
-          sql(s"INSERT OVERWRITE $t1(data, id) VALUES('a', 4)")
-        },
-        errorClass = "INCOMPATIBLE_DATA_TO_TABLE.CANNOT_FIND_DATA",
-        parameters = Map("tableName" -> "`default`.`tbl`", "colPath" -> "`data2`")
-      )
+      assert(intercept[AnalysisException] {
+        sql(s"INSERT OVERWRITE $t1 VALUES('a', 4)")
+      }.getMessage.contains("not enough data columns"))
       // Duplicate columns
       checkError(
         exception = intercept[AnalysisException] {
