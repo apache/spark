@@ -37,6 +37,7 @@ from pyspark.ml.torch.log_communication import (  # type: ignore
     LogStreamingClient,
     LogStreamingServer,
 )
+from pyspark.sql.utils import is_remote
 from pyspark.context import SparkContext
 from pyspark.taskcontext import BarrierTaskContext
 
@@ -144,15 +145,21 @@ class Distributor:
         num_processes: int = 1,
         local_mode: bool = True,
         use_gpu: bool = True,
+        spark: Optional[SparkSession] = None,
     ):
+        if spark is None:
+            self.spark = SparkSession.getActiveSession()
+        else:
+            self.spark = spark
+        if not self.spark:
+            raise RuntimeError("An active SparkSession is required for the distributor.")
         self.logger = get_logger(self.__class__.__name__)
         self.num_processes = num_processes
         self.local_mode = local_mode
         self.use_gpu = use_gpu
-        self.spark = SparkSession.getActiveSession()
-        if not self.spark:
-            raise RuntimeError("An active SparkSession is required for the distributor.")
-        self.sc = self.spark.sparkContext
+        # self.spark = spark
+        if hasattr(self.spark, "sparkContext"):
+            self.sc = self.spark.sparkContext
         self.num_tasks = self._get_num_tasks()
         self.ssl_conf = None
 
@@ -215,6 +222,9 @@ class Distributor:
             Thrown when the user requires ssl encryption or when the user initializes
             the Distributor parent class.
         """
+        # TODO: should enable ssl with spark connect
+        if is_remote():
+            return
         if not "ssl_conf":
             raise RuntimeError(
                 "Distributor doesn't have this functionality. Use TorchDistributor instead."
@@ -330,6 +340,7 @@ class TorchDistributor(Distributor):
         num_processes: int = 1,
         local_mode: bool = True,
         use_gpu: bool = True,
+        spark: Optional[SparkSession] = None,
     ):
         """Initializes the distributor.
 
@@ -355,7 +366,7 @@ class TorchDistributor(Distributor):
         RuntimeError
             If an active SparkSession is unavailable.
         """
-        super().__init__(num_processes, local_mode, use_gpu)
+        super().__init__(num_processes, local_mode, use_gpu, spark)
         self.ssl_conf = "pytorch.spark.distributor.ignoreSsl"  # type: ignore
         self._validate_input_params()
         self.input_params = self._create_input_params()
@@ -499,6 +510,7 @@ class TorchDistributor(Distributor):
         # Spark task program
         def wrapped_train_fn(_):  # type: ignore[no-untyped-def]
             import os
+            import pandas as pd
             from pyspark import BarrierTaskContext
 
             CUDA_VISIBLE_DEVICES = "CUDA_VISIBLE_DEVICES"
@@ -554,7 +566,7 @@ class TorchDistributor(Distributor):
                     pass
 
             if context.partitionId() == 0:
-                yield output
+                yield pd.DataFrame(data={"output": [cloudpickle.dump(output)]})
 
         return wrapped_train_fn
 
@@ -581,11 +593,11 @@ class TorchDistributor(Distributor):
             f"Started distributed training with {self.num_processes} executor proceses"
         )
         try:
+            assert self.spark is not None
             result = (
-                self.sc.parallelize(range(self.num_tasks), self.num_tasks)
-                .barrier()
-                .mapPartitions(spark_task_function)
-                .collect()[0]
+                self.spark.range(start=0, end=self.num_tasks, step=1, numPartitions=self.num_tasks)
+                .mapInPandas(func=spark_task_function, schema="output binary", barrier=True)
+                .first()["output"]
             )
         finally:
             log_streaming_server.shutdown()
