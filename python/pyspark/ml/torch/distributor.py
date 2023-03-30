@@ -594,11 +594,12 @@ class TorchDistributor(Distributor):
         )
         try:
             assert self.spark is not None
-            result = (
+            row = (
                 self.spark.range(start=0, end=self.num_tasks, step=1, numPartitions=self.num_tasks)
                 .mapInPandas(func=spark_task_function, schema="output binary", barrier=True)
-                .collect()[0]["output"]
+                .collect()[0]
             )
+            result = cloudpickle.loads(row.output)
         finally:
             log_streaming_server.shutdown()
         self.logger.info(
