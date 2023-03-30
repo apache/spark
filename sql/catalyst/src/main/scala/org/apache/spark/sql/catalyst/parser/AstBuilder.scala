@@ -2398,11 +2398,11 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
    */
   override def visitTypeConstructor(ctx: TypeConstructorContext): Literal = withOrigin(ctx) {
     val value = string(visitStringLit(ctx.stringLit))
-    val valueType = ctx.identifier.getText.toUpperCase(Locale.ROOT)
+    val valueType = ctx.literalType.start.getType
 
     def toLiteral[T](f: UTF8String => Option[T], t: DataType): Literal = {
       f(UTF8String.fromString(value)).map(Literal(_, t)).getOrElse {
-        throw QueryParsingErrors.cannotParseValueTypeError(valueType, value, ctx)
+        throw QueryParsingErrors.cannotParseValueTypeError(ctx.literalType.getText, value, ctx)
       }
     }
 
@@ -2413,17 +2413,17 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
     }
 
     valueType match {
-      case "DATE" =>
+      case DATE =>
         val zoneId = getZoneId(conf.sessionLocalTimeZone)
         val specialDate = convertSpecialDate(value, zoneId).map(Literal(_, DateType))
         specialDate.getOrElse(toLiteral(stringToDate, DateType))
-      case "TIMESTAMP_NTZ" =>
+      case TIMESTAMP_NTZ =>
         convertSpecialTimestampNTZ(value, getZoneId(conf.sessionLocalTimeZone))
           .map(Literal(_, TimestampNTZType))
           .getOrElse(toLiteral(stringToTimestampWithoutTimeZone, TimestampNTZType))
-      case "TIMESTAMP_LTZ" =>
+      case TIMESTAMP_LTZ =>
         constructTimestampLTZLiteral(value)
-      case "TIMESTAMP" =>
+      case TIMESTAMP =>
         SQLConf.get.timestampType match {
           case TimestampNTZType =>
             convertSpecialTimestampNTZ(value, getZoneId(conf.sessionLocalTimeZone))
@@ -2444,12 +2444,13 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
             constructTimestampLTZLiteral(value)
         }
 
-      case "INTERVAL" =>
+      case INTERVAL =>
         val interval = try {
           IntervalUtils.stringToInterval(UTF8String.fromString(value))
         } catch {
           case e: IllegalArgumentException =>
-            val ex = QueryParsingErrors.cannotParseValueTypeError(valueType, value, ctx)
+            val ex = QueryParsingErrors.cannotParseValueTypeError(
+              ctx.literalType.getText, value, ctx)
             ex.setStackTrace(e.getStackTrace)
             throw ex
         }
@@ -2462,7 +2463,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
         } else {
           Literal(interval, CalendarIntervalType)
         }
-      case "X" =>
+      case BINARY_HEX =>
         val padding = if (value.length % 2 != 0) "0" else ""
         try {
           Literal(Hex.decodeHex(padding + value))
@@ -2472,9 +2473,9 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
             ex.setStackTrace(e.getStackTrace)
             throw ex
         }
-      case other =>
+      case _ =>
         throw QueryParsingErrors.literalValueTypeUnsupportedError(
-          unsupportedType = other,
+          unsupportedType = ctx.literalType.getText,
           supportedTypes =
             Seq("DATE", "TIMESTAMP_NTZ", "TIMESTAMP_LTZ", "TIMESTAMP", "INTERVAL", "X"),
           ctx)

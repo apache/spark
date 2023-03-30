@@ -103,9 +103,9 @@ class ResolveAliasesSuite extends AnalysisTest {
         """"abc"""" -> """"abc"""",
         """'\t\n xyz \t\r'""" -> """'\t\n xyz \t\r'""",
         "1l" -> "1L", "1S" -> "1S",
-        "date'-0001-1-28'" -> "date'-0001-1-28'",
+        "date'-0001-1-28'" -> "DATE'-0001-1-28'",
         "interval 3 year 1 month" -> "INTERVAL3YEAR1MONTH",
-        "x'00'" -> "x'00'",
+        "x'00'" -> "X'00'",
         // Preserve case
         "CAST(1 as tinyint)" -> "CAST(1ASTINYINT)",
         // Brackets
