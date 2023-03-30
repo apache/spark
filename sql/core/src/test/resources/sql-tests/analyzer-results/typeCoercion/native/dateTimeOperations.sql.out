@@ -178,14 +178,14 @@ org.apache.spark.sql.AnalysisException
 -- !query
 select cast('2017-12-11' as string) + interval 2 day
 -- !query analysis
-Project [cast(cast(cast(2017-12-11 as string) as timestamp) + INTERVAL '2' DAY as string) AS CAST(2017-12-11 AS STRING) + INTERVAL '2' DAY#x]
+Project [cast(cast(cast(2017-12-11 as string) as timestamp) + INTERVAL '2' DAY as timestamp) AS CAST(2017-12-11 AS STRING) + INTERVAL '2' DAY#x]
 +- OneRowRelation
 
 
 -- !query
 select cast('2017-12-11 09:30:00' as string) + interval 2 day
 -- !query analysis
-Project [cast(cast(cast(2017-12-11 09:30:00 as string) as timestamp) + INTERVAL '2' DAY as string) AS CAST(2017-12-11 09:30:00 AS STRING) + INTERVAL '2' DAY#x]
+Project [cast(cast(cast(2017-12-11 09:30:00 as string) as timestamp) + INTERVAL '2' DAY as timestamp) AS CAST(2017-12-11 09:30:00 AS STRING) + INTERVAL '2' DAY#x]
 +- OneRowRelation
 
 
@@ -422,14 +422,14 @@ org.apache.spark.sql.AnalysisException
 -- !query
 select interval 2 day + cast('2017-12-11' as string)
 -- !query analysis
-Project [cast(cast(cast(2017-12-11 as string) as timestamp) + INTERVAL '2' DAY as string) AS CAST(2017-12-11 AS STRING) + INTERVAL '2' DAY#x]
+Project [cast(cast(cast(2017-12-11 as string) as timestamp) + INTERVAL '2' DAY as timestamp) AS CAST(2017-12-11 AS STRING) + INTERVAL '2' DAY#x]
 +- OneRowRelation
 
 
 -- !query
 select interval 2 day + cast('2017-12-11 09:30:00' as string)
 -- !query analysis
-Project [cast(cast(cast(2017-12-11 09:30:00 as string) as timestamp) + INTERVAL '2' DAY as string) AS CAST(2017-12-11 09:30:00 AS STRING) + INTERVAL '2' DAY#x]
+Project [cast(cast(cast(2017-12-11 09:30:00 as string) as timestamp) + INTERVAL '2' DAY as timestamp) AS CAST(2017-12-11 09:30:00 AS STRING) + INTERVAL '2' DAY#x]
 +- OneRowRelation
 
 
@@ -666,14 +666,14 @@ org.apache.spark.sql.AnalysisException
 -- !query
 select cast('2017-12-11' as string) - interval 2 day
 -- !query analysis
-Project [cast(cast(2017-12-11 as string) - INTERVAL '2' DAY as string) AS CAST(2017-12-11 AS STRING) - INTERVAL '2' DAY#x]
+Project [cast(cast(2017-12-11 as string) - INTERVAL '2' DAY as timestamp) AS CAST(2017-12-11 AS STRING) - INTERVAL '2' DAY#x]
 +- OneRowRelation
 
 
 -- !query
 select cast('2017-12-11 09:30:00' as string) - interval 2 day
 -- !query analysis
-Project [cast(cast(2017-12-11 09:30:00 as string) - INTERVAL '2' DAY as string) AS CAST(2017-12-11 09:30:00 AS STRING) - INTERVAL '2' DAY#x]
+Project [cast(cast(2017-12-11 09:30:00 as string) - INTERVAL '2' DAY as timestamp) AS CAST(2017-12-11 09:30:00 AS STRING) - INTERVAL '2' DAY#x]
 +- OneRowRelation
 
 

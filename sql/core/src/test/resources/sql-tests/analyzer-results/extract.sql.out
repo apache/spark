@@ -1126,7 +1126,7 @@ Project [extract(second, c#x) AS extract(second FROM c)#x]
 -- !query
 select c - j from t
 -- !query analysis
-Project [cast(c#x - j#x as string) AS c - j#x]
+Project [cast(c#x - j#x as timestamp) AS c - j#x]
 +- SubqueryAlias t
    +- View (`t`, [c#x,ntz#x,i#x,j#x])
       +- Project [cast(c#x as string) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
@@ -1137,7 +1137,7 @@ Project [cast(c#x - j#x as string) AS c - j#x]
 -- !query
 select day(c - j) from t
 -- !query analysis
-Project [day(cast(cast(c#x - j#x as string) as date)) AS day(c - j)#x]
+Project [day(cast(cast(c#x - j#x as timestamp) as date)) AS day(c - j)#x]
 +- SubqueryAlias t
    +- View (`t`, [c#x,ntz#x,i#x,j#x])
       +- Project [cast(c#x as string) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]
@@ -1148,7 +1148,7 @@ Project [day(cast(cast(c#x - j#x as string) as date)) AS day(c - j)#x]
 -- !query
 select extract(day from c - j) from t
 -- !query analysis
-Project [extract(day, cast(c#x - j#x as string)) AS extract(day FROM c - j)#x]
+Project [extract(day, cast(c#x - j#x as timestamp)) AS extract(day FROM c - j)#x]
 +- SubqueryAlias t
    +- View (`t`, [c#x,ntz#x,i#x,j#x])
       +- Project [cast(c#x as string) AS c#x, cast(ntz#x as timestamp_ntz) AS ntz#x, cast(i#x as interval year to month) AS i#x, cast(j#x as interval day to second) AS j#x]

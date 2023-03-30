@@ -868,7 +868,7 @@ struct<extract(second FROM c):decimal(8,6)>
 -- !query
 select c - j from t
 -- !query schema
-struct<c - j:string>
+struct<c - j:timestamp>
 -- !query output
 2011-04-04 14:18:02.334456
 
