@@ -155,3 +155,7 @@ select timestampdiff(MONTH, timestamp'2022-02-14 01:02:03', timestamp'2022-01-14
 select timestampdiff(MINUTE, timestamp'2022-02-14 01:02:03', timestamp'2022-02-14 02:00:03');
 select timestampdiff(YEAR, date'2022-02-15', date'2023-02-15');
 select timestampdiff(SECOND, date'2022-02-15', timestamp'2022-02-14 23:59:59');
+
+-- string +/- interval and interval + string
+select '2023-01-01' + interval '7' day, interval '7' day + '2023-01-01';
+select '2023-01-08' - interval '7' day, '2023-01-01' >= '2023-01-08' - interval '7' day;

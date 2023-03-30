@@ -1037,3 +1037,19 @@ select timestampdiff(SECOND, date'2022-02-15', timestamp'2022-02-14 23:59:59')
 struct<timestampdiff(SECOND, DATE '2022-02-15', TIMESTAMP '2022-02-14 23:59:59'):bigint>
 -- !query output
 -1
+
+
+-- !query
+select '2023-01-01' + interval '7' day, interval '7' day + '2023-01-01'
+-- !query schema
+struct<2023-01-01 + INTERVAL '7' DAY:timestamp,2023-01-01 + INTERVAL '7' DAY:timestamp>
+-- !query output
+2023-01-08 00:00:00	2023-01-08 00:00:00
+
+
+-- !query
+select '2023-01-08' - interval '7' day, '2023-01-01' >= '2023-01-08' - interval '7' day
+-- !query schema
+struct<2023-01-08 - INTERVAL '7' DAY:timestamp,(2023-01-01 >= 2023-01-08 - INTERVAL '7' DAY):boolean>
+-- !query output
+2023-01-01 00:00:00	true

@@ -398,9 +398,13 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
             a.copy(right = Cast(a.right, a.left.dataType))
           case (DateType, CalendarIntervalType) =>
             DateAddInterval(l, r, ansiEnabled = mode == EvalMode.ANSI)
+          case (StringType, CalendarIntervalType | _: DayTimeIntervalType) =>
+            Cast(TimeAdd(l, r), TimestampType)
           case (_, CalendarIntervalType | _: DayTimeIntervalType) => Cast(TimeAdd(l, r), l.dataType)
           case (CalendarIntervalType, DateType) =>
             DateAddInterval(r, l, ansiEnabled = mode == EvalMode.ANSI)
+          case (CalendarIntervalType | _: DayTimeIntervalType, StringType) =>
+            Cast(TimeAdd(r, l), TimestampType)
           case (CalendarIntervalType | _: DayTimeIntervalType, _) => Cast(TimeAdd(r, l), r.dataType)
           case (DateType, dt) if dt != StringType => DateAdd(l, r)
           case (dt, DateType) if dt != StringType => DateAdd(r, l)
@@ -424,6 +428,8 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
           case (DateType, CalendarIntervalType) =>
             DatetimeSub(l, r, DateAddInterval(l,
               UnaryMinus(r, mode == EvalMode.ANSI), ansiEnabled = mode == EvalMode.ANSI))
+          case (StringType, CalendarIntervalType | _: DayTimeIntervalType) =>
+            Cast(DatetimeSub(l, r, TimeAdd(l, UnaryMinus(r, mode == EvalMode.ANSI))), TimestampType)
           case (_, CalendarIntervalType | _: DayTimeIntervalType) =>
             Cast(DatetimeSub(l, r, TimeAdd(l, UnaryMinus(r, mode == EvalMode.ANSI))), l.dataType)
           case _ if AnyTimestampType.unapply(l) || AnyTimestampType.unapply(r) =>

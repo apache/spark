@@ -866,3 +866,17 @@ select timestampdiff(YEAR, date'2022-02-15', date'2023-02-15')
 select timestampdiff(SECOND, date'2022-02-15', timestamp'2022-02-14 23:59:59')
 -- !query analysis
 [Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+select '2023-01-01' + interval '7' day, interval '7' day + '2023-01-01'
+-- !query analysis
+Project [cast(cast(2023-01-01 as timestamp) + INTERVAL '7' DAY as timestamp) AS 2023-01-01 + INTERVAL '7' DAY#x, cast(cast(2023-01-01 as timestamp) + INTERVAL '7' DAY as timestamp) AS 2023-01-01 + INTERVAL '7' DAY#x]
++- OneRowRelation
+
+
+-- !query
+select '2023-01-08' - interval '7' day, '2023-01-01' >= '2023-01-08' - interval '7' day
+-- !query analysis
+Project [cast(2023-01-08 - INTERVAL '7' DAY as timestamp) AS 2023-01-08 - INTERVAL '7' DAY#x, (cast(2023-01-01 as timestamp) >= cast(2023-01-08 - INTERVAL '7' DAY as timestamp)) AS (2023-01-01 >= 2023-01-08 - INTERVAL '7' DAY)#x]
++- OneRowRelation
