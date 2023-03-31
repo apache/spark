@@ -1596,14 +1596,14 @@ org.apache.spark.sql.AnalysisException
 -- !query
 select '4 11:11' - interval '4 22:12' day to minute
 -- !query analysis
-Project [cast(4 11:11 - INTERVAL '4 22:12' DAY TO MINUTE as string) AS 4 11:11 - INTERVAL '4 22:12' DAY TO MINUTE#x]
+Project [cast(4 11:11 - INTERVAL '4 22:12' DAY TO MINUTE as timestamp) AS 4 11:11 - INTERVAL '4 22:12' DAY TO MINUTE#x]
 +- OneRowRelation
 
 
 -- !query
 select '4 12:12:12' + interval '4 22:12' day to minute
 -- !query analysis
-Project [cast(cast(4 12:12:12 as timestamp) + INTERVAL '4 22:12' DAY TO MINUTE as string) AS 4 12:12:12 + INTERVAL '4 22:12' DAY TO MINUTE#x]
+Project [cast(cast(4 12:12:12 as timestamp) + INTERVAL '4 22:12' DAY TO MINUTE as timestamp) AS 4 12:12:12 + INTERVAL '4 22:12' DAY TO MINUTE#x]
 +- OneRowRelation
 
 
@@ -1662,7 +1662,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 select str - interval '4 22:12' day to minute from interval_view
 -- !query analysis
-Project [cast(str#x - INTERVAL '4 22:12' DAY TO MINUTE as string) AS str - INTERVAL '4 22:12' DAY TO MINUTE#x]
+Project [cast(str#x - INTERVAL '4 22:12' DAY TO MINUTE as timestamp) AS str - INTERVAL '4 22:12' DAY TO MINUTE#x]
 +- SubqueryAlias interval_view
    +- View (`interval_view`, [str#x])
       +- Project [cast(str#x as string) AS str#x]
@@ -1673,7 +1673,7 @@ Project [cast(str#x - INTERVAL '4 22:12' DAY TO MINUTE as string) AS str - INTER
 -- !query
 select str + interval '4 22:12' day to minute from interval_view
 -- !query analysis
-Project [cast(cast(str#x as timestamp) + INTERVAL '4 22:12' DAY TO MINUTE as string) AS str + INTERVAL '4 22:12' DAY TO MINUTE#x]
+Project [cast(cast(str#x as timestamp) + INTERVAL '4 22:12' DAY TO MINUTE as timestamp) AS str + INTERVAL '4 22:12' DAY TO MINUTE#x]
 +- SubqueryAlias interval_view
    +- View (`interval_view`, [str#x])
       +- Project [cast(str#x as string) AS str#x]

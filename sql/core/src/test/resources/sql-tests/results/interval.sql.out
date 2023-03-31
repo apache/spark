@@ -1824,7 +1824,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 select '4 11:11' - interval '4 22:12' day to minute
 -- !query schema
-struct<4 11:11 - INTERVAL '4 22:12' DAY TO MINUTE:string>
+struct<4 11:11 - INTERVAL '4 22:12' DAY TO MINUTE:timestamp>
 -- !query output
 NULL
 
@@ -1832,7 +1832,7 @@ NULL
 -- !query
 select '4 12:12:12' + interval '4 22:12' day to minute
 -- !query schema
-struct<4 12:12:12 + INTERVAL '4 22:12' DAY TO MINUTE:string>
+struct<4 12:12:12 + INTERVAL '4 22:12' DAY TO MINUTE:timestamp>
 -- !query output
 NULL
 
@@ -1896,7 +1896,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 select str - interval '4 22:12' day to minute from interval_view
 -- !query schema
-struct<str - INTERVAL '4 22:12' DAY TO MINUTE:string>
+struct<str - INTERVAL '4 22:12' DAY TO MINUTE:timestamp>
 -- !query output
 NULL
 
@@ -1904,7 +1904,7 @@ NULL
 -- !query
 select str + interval '4 22:12' day to minute from interval_view
 -- !query schema
-struct<str + INTERVAL '4 22:12' DAY TO MINUTE:string>
+struct<str + INTERVAL '4 22:12' DAY TO MINUTE:timestamp>
 -- !query output
 NULL
 
