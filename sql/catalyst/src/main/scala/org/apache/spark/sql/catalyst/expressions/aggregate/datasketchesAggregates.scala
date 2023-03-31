@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
+import java.util.Locale
+
 import org.apache.datasketches.hll.{HllSketch, TgtHllType, Union}
 import org.apache.datasketches.memory.WritableMemory
 
@@ -25,7 +27,6 @@ import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionDescript
 import org.apache.spark.sql.catalyst.trees.UnaryLike
 import org.apache.spark.sql.types.{BinaryType, DataType, DoubleType, IntegerType, LongType, StringType}
 import org.apache.spark.unsafe.types.UTF8String
-
 
 /**
  * This datasketchesAggregates file is intended to encapsulate all of the
@@ -55,9 +56,7 @@ sealed trait HllSketchAggregate
    * @return an HllSketch instance
    */
   override def createAggregationBuffer(): HllSketch = {
-    // scalastyle:off caselocale
-    new HllSketch(lgConfigK, TgtHllType.valueOf(tgtHllType.toUpperCase))
-    // scalastyle:on caselocale
+    new HllSketch(lgConfigK, TgtHllType.valueOf(tgtHllType.toUpperCase(Locale.ROOT)))
   }
 
   /**
@@ -186,7 +185,7 @@ case class HllSketchEstimate(
  */
 @ExpressionDescription(
   usage = """
-    _FUNC_(expr[, lgConfigK, tgtHllType]) - Returns the compact binary representation of the HllSketch.
+    _FUNC_(expr[, lgConfigK, tgtHllType]) - Returns the HllSketch's compact binary representation.
       `lgConfigK` the log-base-2 of K, where K is the number of buckets or slots for the HllSketch.
       `tgtHllType` the target type of the HllSketch to be used (HLL_4, HLL_6, HLL_8). """,
   group = "agg_funcs",
