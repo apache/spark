@@ -1945,15 +1945,14 @@ select '4 11:11' - interval '4 22:12' day to minute
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.SparkDateTimeException
+org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "CAST_INVALID_INPUT",
-  "sqlState" : "22018",
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
-    "expression" : "'4 11:11'",
-    "sourceType" : "\"STRING\"",
-    "targetType" : "\"TIMESTAMP\""
+    "left" : "\"STRING\"",
+    "right" : "\"INTERVAL DAY TO MINUTE\"",
+    "sqlExpr" : "\"(4 11:11 - INTERVAL '4 22:12' DAY TO MINUTE)\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1970,15 +1969,14 @@ select '4 12:12:12' + interval '4 22:12' day to minute
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.SparkDateTimeException
+org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "CAST_INVALID_INPUT",
-  "sqlState" : "22018",
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
-    "expression" : "'4 12:12:12'",
-    "sourceType" : "\"STRING\"",
-    "targetType" : "\"TIMESTAMP\""
+    "left" : "\"STRING\"",
+    "right" : "\"INTERVAL DAY TO MINUTE\"",
+    "sqlExpr" : "\"(4 12:12:12 + INTERVAL '4 22:12' DAY TO MINUTE)\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2051,15 +2049,14 @@ select str - interval '4 22:12' day to minute from interval_view
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.SparkDateTimeException
+org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "CAST_INVALID_INPUT",
-  "sqlState" : "22018",
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
-    "expression" : "'1'",
-    "sourceType" : "\"STRING\"",
-    "targetType" : "\"TIMESTAMP\""
+    "left" : "\"STRING\"",
+    "right" : "\"INTERVAL DAY TO MINUTE\"",
+    "sqlExpr" : "\"(str - INTERVAL '4 22:12' DAY TO MINUTE)\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2076,15 +2073,14 @@ select str + interval '4 22:12' day to minute from interval_view
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.SparkDateTimeException
+org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "CAST_INVALID_INPUT",
-  "sqlState" : "22018",
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
   "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
-    "expression" : "'1'",
-    "sourceType" : "\"STRING\"",
-    "targetType" : "\"TIMESTAMP\""
+    "left" : "\"STRING\"",
+    "right" : "\"INTERVAL DAY TO MINUTE\"",
+    "sqlExpr" : "\"(str + INTERVAL '4 22:12' DAY TO MINUTE)\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2103,14 +2099,12 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
-    "inputSql" : "\"INTERVAL '2-2' YEAR TO MONTH\"",
-    "inputType" : "\"INTERVAL YEAR TO MONTH\"",
-    "paramIndex" : "1",
-    "requiredType" : "\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\"",
-    "sqlExpr" : "\"INTERVAL '2-2' YEAR TO MONTH + INTERVAL '3' DAY\""
+    "left" : "\"INTERVAL YEAR TO MONTH\"",
+    "right" : "\"INTERVAL DAY\"",
+    "sqlExpr" : "\"(INTERVAL '2-2' YEAR TO MONTH + INTERVAL '3' DAY)\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2129,14 +2123,12 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
-    "inputSql" : "\"INTERVAL '2-2' YEAR TO MONTH\"",
-    "inputType" : "\"INTERVAL YEAR TO MONTH\"",
-    "paramIndex" : "1",
-    "requiredType" : "\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\"",
-    "sqlExpr" : "\"INTERVAL '2-2' YEAR TO MONTH + INTERVAL '3' DAY\""
+    "left" : "\"INTERVAL DAY\"",
+    "right" : "\"INTERVAL YEAR TO MONTH\"",
+    "sqlExpr" : "\"(INTERVAL '3' DAY + INTERVAL '2-2' YEAR TO MONTH)\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2155,14 +2147,12 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
-    "inputSql" : "\"INTERVAL '2-2' YEAR TO MONTH\"",
-    "inputType" : "\"INTERVAL YEAR TO MONTH\"",
-    "paramIndex" : "1",
-    "requiredType" : "\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\"",
-    "sqlExpr" : "\"INTERVAL '2-2' YEAR TO MONTH + (- INTERVAL '3' DAY)\""
+    "left" : "\"INTERVAL YEAR TO MONTH\"",
+    "right" : "\"INTERVAL DAY\"",
+    "sqlExpr" : "\"(INTERVAL '2-2' YEAR TO MONTH - INTERVAL '3' DAY)\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2205,14 +2195,12 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
-    "inputSql" : "\"1\"",
-    "inputType" : "\"INT\"",
-    "paramIndex" : "1",
-    "requiredType" : "\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\"",
-    "sqlExpr" : "\"1 + (- INTERVAL '02' SECOND)\""
+    "left" : "\"INT\"",
+    "right" : "\"INTERVAL SECOND\"",
+    "sqlExpr" : "\"(1 - INTERVAL '02' SECOND)\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2255,14 +2243,12 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
-    "inputSql" : "\"1\"",
-    "inputType" : "\"INT\"",
-    "paramIndex" : "1",
-    "requiredType" : "\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\"",
-    "sqlExpr" : "\"1 + INTERVAL '02' SECOND\""
+    "left" : "\"INTERVAL SECOND\"",
+    "right" : "\"INT\"",
+    "sqlExpr" : "\"(INTERVAL '02' SECOND + 1)\""
   },
   "queryContext" : [ {
     "objectType" : "",
