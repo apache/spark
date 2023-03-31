@@ -245,9 +245,11 @@ class SparkSession private[sql] (
     builder =>
       // Send the SQL once to the server and then check the output.
       val cmd = newCommand(b =>
-        b.setSqlCommand(proto.SqlCommand.newBuilder()
-          .setSql(sqlText)
-          .putAllArgs(args.asScala.mapValues(toLiteralProto).asJava)))
+        b.setSqlCommand(
+          proto.SqlCommand
+            .newBuilder()
+            .setSql(sqlText)
+            .putAllArgs(args.asScala.mapValues(toLiteralProto).toMap.asJava)))
       val plan = proto.Plan.newBuilder().setCommand(cmd)
       val responseIter = client.execute(plan.build())
 
