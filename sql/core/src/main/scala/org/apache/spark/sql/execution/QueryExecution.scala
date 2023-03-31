@@ -265,8 +265,8 @@ class QueryExecution(
         queryExecution.stringWithStats(maxFields, append)
       case FormattedMode =>
         queryExecution.simpleString(formatted = true, maxFields = maxFields, append)
-      case AnalysedMode =>
-        queryExecution.analysisString(maxFields, append)
+      case ValidationMode =>
+        queryExecution.validationString(maxFields, append)
     }
   }
 
@@ -304,8 +304,8 @@ class QueryExecution(
     writePlans(append, maxFields)
   }
 
-  private def analysisString(maxFields: Int, append: String => Unit): Unit = {
-    writeAnalysisPlans(append, maxFields)
+  private def validationString(maxFields: Int, append: String => Unit): Unit = {
+    writeValidationPlans(append, maxFields)
   }
 
   def stringWithStats: String = {
@@ -336,7 +336,7 @@ class QueryExecution(
     append("\n")
   }
 
-  private def writeAnalysisPlans(append: String => Unit, maxFields: Int): Unit = {
+  private def writeValidationPlans(append: String => Unit, maxFields: Int): Unit = {
     val (verbose, addSuffix) = (true, false)
     append("== Parsed Logical Plan ==\n")
     QueryPlan.append(logical, append, verbose, addSuffix, maxFields)

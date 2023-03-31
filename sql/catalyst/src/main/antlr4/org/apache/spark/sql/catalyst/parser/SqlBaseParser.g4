@@ -166,7 +166,7 @@ statement
         multipartIdentifier AS className=stringLit
         (USING resource (COMMA resource)*)?                            #createFunction
     | DROP TEMPORARY? FUNCTION (IF EXISTS)? multipartIdentifier        #dropFunction
-    | EXPLAIN (LOGICAL | FORMATTED | EXTENDED | CODEGEN | COST | ANALYSED)?
+    | EXPLAIN (LOGICAL | FORMATTED | EXTENDED | CODEGEN | COST | VALIDATION)?
         statement                                                      #explain
     | SHOW TABLES ((FROM | IN) multipartIdentifier)?
         (LIKE? pattern=stringLit)?                                        #showTables
@@ -1737,3 +1737,4 @@ nonReserved
     | ZONE
 //--DEFAULT-NON-RESERVED-END
     ;
+
