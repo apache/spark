@@ -1721,18 +1721,19 @@ class DataFrameSuite extends QueryTest
         cols: Seq[String],
         expectedAnswer: Row*): Unit = {
       if (cols.isEmpty) {
-        checkDataset(df.dropDuplicates(), expectedAnswer)
-        checkDataset(df.dropDuplicatesWithinWatermark(), expectedAnswer)
+        checkDataset(df.dropDuplicates(), expectedAnswer: _*)
+        checkDataset(df.dropDuplicatesWithinWatermark(), expectedAnswer: _*)
       } else {
-        checkDataset(df.dropDuplicates(cols), expectedAnswer)
-        checkDataset(df.dropDuplicatesWithinWatermark(cols), expectedAnswer)
+        checkDataset(df.dropDuplicates(cols), expectedAnswer: _*)
+        checkDataset(df.dropDuplicatesWithinWatermark(cols), expectedAnswer: _*)
 
         if (cols.length > 1) {
-          checkDataset(df.dropDuplicates(cols.head, cols.tail: _*), expectedAnswer)
-          checkDataset(df.dropDuplicatesWithinWatermark(cols.head, cols.tail: _*), expectedAnswer)
+          checkDataset(df.dropDuplicates(cols.head, cols.tail: _*), expectedAnswer: _*)
+          checkDataset(df.dropDuplicatesWithinWatermark(cols.head, cols.tail: _*),
+            expectedAnswer: _*)
         } else {
-          checkDataset(df.dropDuplicates(cols.head), expectedAnswer)
-          checkDataset(df.dropDuplicatesWithinWatermark(cols.head), expectedAnswer)
+          checkDataset(df.dropDuplicates(cols.head), expectedAnswer: _*)
+          checkDataset(df.dropDuplicatesWithinWatermark(cols.head), expectedAnswer: _*)
         }
       }
     }
@@ -1744,21 +1745,21 @@ class DataFrameSuite extends QueryTest
       (2, 1, 1) :: (1, 1, 2) ::
       (1, 2, 2) :: (1, 2, 1) :: Nil).toDF("key", "value1", "value2")
 
-    verify(testData,
+    verify(testData, Seq(),
       Row(2, 1, 2), Row(1, 1, 1), Row(1, 2, 1),
       Row(2, 2, 2), Row(2, 1, 1), Row(2, 2, 1),
       Row(1, 1, 2), Row(1, 2, 2))
 
-    verify2(testData, Seq("key", "value1"), Row(2, 1, 2), Row(1, 2, 1), Row(1, 1, 1), Row(2, 2, 2))
+    verify(testData, Seq("key", "value1"), Row(2, 1, 2), Row(1, 2, 1), Row(1, 1, 1), Row(2, 2, 2))
 
-    verify2(testData, Seq("value1", "value2"),
+    verify(testData, Seq("value1", "value2"),
       Row(2, 1, 2), Row(1, 2, 1), Row(1, 1, 1), Row(2, 2, 2))
 
-    verify2(testData, Seq("key"), Row(2, 1, 2), Row(1, 1, 1))
+    verify(testData, Seq("key"), Row(2, 1, 2), Row(1, 1, 1))
 
-    verify2(testData, Seq("value1"), Row(2, 1, 2), Row(1, 2, 1))
+    verify(testData, Seq("value1"), Row(2, 1, 2), Row(1, 2, 1))
 
-    verify2(testData, Seq("value2"), Row(2, 1, 2), Row(1, 1, 1))
+    verify(testData, Seq("value2"), Row(2, 1, 2), Row(1, 1, 1))
   }
 
   test("SPARK-8621: support empty string column name") {

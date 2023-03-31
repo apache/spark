@@ -1526,23 +1526,24 @@ class DatasetSuite extends QueryTest
     verifyDropDuplicates(joined, Seq(), (1, 2), (1, 1), (2, 1), (2, 2))
   }
 
-  private def verifyDropDuplicates(
-      ds: Dataset[(String, Int)],
+  private def verifyDropDuplicates[T](
+      ds: Dataset[T],
       cols: Seq[String],
-      expectedAnswer: (String, Int)*): Unit = {
+      expectedAnswer: T*): Unit = {
     if (cols.isEmpty) {
-      checkDataset(ds.dropDuplicates(), expectedAnswer)
-      checkDataset(ds.dropDuplicatesWithinWatermark(), expectedAnswer)
+      checkDataset(ds.dropDuplicates(), expectedAnswer: _*)
+      checkDataset(ds.dropDuplicatesWithinWatermark(), expectedAnswer: _*)
     } else {
-      checkDataset(ds.dropDuplicates(cols), expectedAnswer)
-      checkDataset(ds.dropDuplicatesWithinWatermark(cols), expectedAnswer)
+      checkDataset(ds.dropDuplicates(cols), expectedAnswer: _*)
+      checkDataset(ds.dropDuplicatesWithinWatermark(cols), expectedAnswer: _*)
 
       if (cols.length > 1) {
-        checkDataset(ds.dropDuplicates(cols.head, cols.tail: _*), expectedAnswer)
-        checkDataset(ds.dropDuplicatesWithinWatermark(cols.head, cols.tail: _*), expectedAnswer)
+        checkDataset(ds.dropDuplicates(cols.head, cols.tail: _*), expectedAnswer: _*)
+        checkDataset(ds.dropDuplicatesWithinWatermark(cols.head, cols.tail: _*),
+          expectedAnswer: _*)
       } else {
-        checkDataset(ds.dropDuplicates(cols.head), expectedAnswer)
-        checkDataset(ds.dropDuplicatesWithinWatermark(cols.head), expectedAnswer)
+        checkDataset(ds.dropDuplicates(cols.head), expectedAnswer: _*)
+        checkDataset(ds.dropDuplicatesWithinWatermark(cols.head), expectedAnswer: _*)
       }
     }
   }
