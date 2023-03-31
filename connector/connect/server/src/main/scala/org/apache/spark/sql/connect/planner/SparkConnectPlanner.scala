@@ -1124,14 +1124,14 @@ class SparkConnectPlanner(val session: SparkSession) {
               s"The valid type for the 3rd arg in $functionName is string or map, but got $other")
         }
       } else if (argumentsCount == 4) {
-        val filePathOpt = children(3) match {
+        val filePathOpt = children(2) match {
           case Literal(s, StringType) if s != null =>
             Some(s.toString)
           case other =>
             throw InvalidPlanInput(
               s"DescFilePath in $functionName should be a literal string, but got $other")
         }
-        val map = children(4) match {
+        val map = children(3) match {
           case UnresolvedFunction(Seq("map"), arguments, _, _, _) =>
             ExprUtils.convertToMapData(CreateMap(arguments))
           case other =>

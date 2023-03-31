@@ -20,7 +20,7 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql.Column
-import org.apache.spark.sql.functions.{dayofweek, fnWithOptions, lit}
+import org.apache.spark.sql.functions.{fnWithOptions, lit}
 
 // scalastyle:off: object.name
 object functions {

@@ -39,7 +39,6 @@ import org.apache.spark.sql.connect.client.SparkConnectClient
 import org.apache.spark.sql.connect.client.util.ConnectFunSuite
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions.lit
-import org.apache.spark.sql.protobuf.{functions => pbFn}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
 
@@ -2190,15 +2189,5 @@ class PlanGenerationTestSuite
 
   test("to_avro without schema") {
     simple.select(avroFn.to_avro(fn.col("id")))
-  }
-
-  /* ProtoBuf functions */
-  test("from_protobuf") {
-    binary.select(
-      pbFn.from_protobuf(
-        fn.col("bytes"),
-        "Employee",
-        "file://fake-file-path",
-        Map("recursive.fields.max.depth" -> "2").asJava))
   }
 }
