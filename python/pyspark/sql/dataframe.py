@@ -39,7 +39,7 @@ from typing import (
     TYPE_CHECKING,
 )
 
-from py4j.java_gateway import JavaObject
+from py4j.java_gateway import JavaObject, JVMView
 
 from pyspark import copy_func, _NoValue
 from pyspark._globals import _NoValueType
@@ -61,6 +61,7 @@ from pyspark.sql.types import (
     Row,
     _parse_datatype_json_string,
 )
+from pyspark.sql.utils import get_active_spark_context
 from pyspark.sql.pandas.conversion import PandasConversionMixin
 from pyspark.sql.pandas.map_ops import PandasMapOpsMixin
 
@@ -1224,10 +1225,16 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         .. versionadded:: 2.0.0
 
+        .. versionchanged:: 3.4.0
+            Supports Spark Connect.
+
         Parameters
         ----------
         prefetchPartitions : bool, optional
-            If Spark should pre-fetch the next partition  before it is needed.
+            If Spark should pre-fetch the next partition before it is needed.
+
+            .. versionchanged:: 3.4.0
+                This argument does not take effect for Spark Connect.
 
         Returns
         -------
@@ -4893,9 +4900,10 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
                 error_class="NOT_DICT",
                 message_parameters={"arg_name": "metadata", "arg_type": type(metadata).__name__},
             )
-        sc = SparkContext._active_spark_context
-        assert sc is not None and sc._jvm is not None
-        jmeta = sc._jvm.org.apache.spark.sql.types.Metadata.fromJson(json.dumps(metadata))
+        sc = get_active_spark_context()
+        jmeta = cast(JVMView, sc._jvm).org.apache.spark.sql.types.Metadata.fromJson(
+            json.dumps(metadata)
+        )
         return DataFrame(self._jdf.withMetadata(columnName, jmeta), self.sparkSession)
 
     @overload

@@ -34,6 +34,7 @@ from pyspark.sql.types import (
     TimestampType,
     TimestampNTZType,
     DayTimeIntervalType,
+    YearMonthIntervalType,
     MapType,
     StringType,
     CharType,
@@ -154,6 +155,9 @@ def pyspark_types_to_proto_types(data_type: DataType) -> pb2.DataType:
     elif isinstance(data_type, DayTimeIntervalType):
         ret.day_time_interval.start_field = data_type.startField
         ret.day_time_interval.end_field = data_type.endField
+    elif isinstance(data_type, YearMonthIntervalType):
+        ret.year_month_interval.start_field = data_type.startField
+        ret.year_month_interval.end_field = data_type.endField
     elif isinstance(data_type, StructType):
         for field in data_type.fields:
             struct_field = pb2.DataType.StructField()
@@ -236,6 +240,18 @@ def proto_schema_to_pyspark_data_type(schema: pb2.DataType) -> DataType:
             else None
         )
         return DayTimeIntervalType(startField=start, endField=end)
+    elif schema.HasField("year_month_interval"):
+        start: Optional[int] = (  # type: ignore[no-redef]
+            schema.year_month_interval.start_field
+            if schema.year_month_interval.HasField("start_field")
+            else None
+        )
+        end: Optional[int] = (  # type: ignore[no-redef]
+            schema.year_month_interval.end_field
+            if schema.year_month_interval.HasField("end_field")
+            else None
+        )
+        return YearMonthIntervalType(startField=start, endField=end)
     elif schema.HasField("array"):
         return ArrayType(
             proto_schema_to_pyspark_data_type(schema.array.element_type),

@@ -899,6 +899,13 @@ class UDFInitializationTests(unittest.TestCase):
             "SparkSession shouldn't be initialized when UserDefinedFunction is created.",
         )
 
+    def test_err_parse_type_when_no_sc(self):
+        with self.assertRaisesRegex(
+            RuntimeError,
+            "SparkContext or SparkSession should be created first",
+        ):
+            udf(lambda x: x, "integer")
+
 
 if __name__ == "__main__":
     from pyspark.sql.tests.test_udf import *  # noqa: F401

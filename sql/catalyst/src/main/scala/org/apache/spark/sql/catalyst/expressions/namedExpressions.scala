@@ -478,14 +478,31 @@ object VirtualColumn {
 object MetadataAttribute {
   def apply(name: String, dataType: DataType, nullable: Boolean = true): AttributeReference =
     AttributeReference(name, dataType, nullable,
-      new MetadataBuilder().putBoolean(METADATA_COL_ATTR_KEY, value = true).build())()
+      new MetadataBuilder().putString(METADATA_COL_ATTR_KEY, value = name).build())()
 
   def unapply(attr: AttributeReference): Option[AttributeReference] = {
-    if (attr.metadata.contains(METADATA_COL_ATTR_KEY)
-      && attr.metadata.getBoolean(METADATA_COL_ATTR_KEY)) {
-      Some(attr)
-    } else None
+    if (attr.metadata.contains(METADATA_COL_ATTR_KEY)) Some(attr) else None
   }
+}
+
+/**
+ * A [[MetadataAttribute]] that works even if the attribute was renamed to avoid a conflict with
+ * some column name in the schema. See also [[LogicalPlan.getMetadataAttributeByName]].
+ *
+ * - apply() creates a logically-named attribute with the given physical name.
+ * - unapply() matches a [[MetadataAttribute]] and also returns its logical name.
+ */
+object MetadataAttributeWithLogicalName {
+  def unapply(attr: AttributeReference): Option[(AttributeReference, String)] = attr match {
+    case MetadataAttribute(a) => Some(a -> a.metadata.getString(METADATA_COL_ATTR_KEY))
+    case _ => None
+  }
+}
+
+object MetadataStructFieldWithLogicalName {
+  def unapply(field: StructField): Option[(StructField, String)] = MetadataAttributeWithLogicalName
+    .unapply(field.toAttribute)
+    .map { case (_, name) => field -> name }
 }
 
 /**
@@ -511,7 +528,7 @@ object FileSourceMetadataAttribute {
   def apply(name: String, dataType: DataType, nullable: Boolean = false): AttributeReference =
     AttributeReference(name, dataType, nullable = nullable,
       new MetadataBuilder()
-        .putBoolean(METADATA_COL_ATTR_KEY, value = true)
+        .putString(METADATA_COL_ATTR_KEY, value = name)
         .putBoolean(FILE_SOURCE_METADATA_COL_ATTR_KEY, value = true).build())()
 
   /** Matches if attr is any File source metadata attribute (including constant and generated). */
@@ -551,7 +568,7 @@ object FileSourceConstantMetadataAttribute {
   def apply(name: String, dataType: DataType, nullable: Boolean = false): AttributeReference =
     AttributeReference(name, dataType, nullable = nullable,
       new MetadataBuilder()
-        .putBoolean(METADATA_COL_ATTR_KEY, value = true)
+        .putString(METADATA_COL_ATTR_KEY, value = name)
         .putBoolean(FileSourceMetadataAttribute.FILE_SOURCE_METADATA_COL_ATTR_KEY, value = true)
         .putBoolean(FILE_SOURCE_CONSTANT_METADATA_COL_ATTR_KEY, value = true).build())()
 
@@ -591,7 +608,7 @@ object FileSourceGeneratedMetadataAttribute {
   def apply(name: String, dataType: DataType, nullable: Boolean = false): AttributeReference =
     AttributeReference(name, dataType, nullable = nullable,
       new MetadataBuilder()
-        .putBoolean(METADATA_COL_ATTR_KEY, value = true)
+        .putString(METADATA_COL_ATTR_KEY, value = name)
         .putBoolean(FileSourceMetadataAttribute.FILE_SOURCE_METADATA_COL_ATTR_KEY, value = true)
         .putBoolean(FILE_SOURCE_GENERATED_METADATA_COL_ATTR_KEY, value = true).build())()
 

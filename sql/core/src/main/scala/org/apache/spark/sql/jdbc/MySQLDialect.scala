@@ -32,7 +32,7 @@ import org.apache.spark.sql.connector.catalog.index.TableIndex
 import org.apache.spark.sql.connector.expressions.{Expression, FieldReference, NamedReference, NullOrdering, SortDirection}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcUtils}
-import org.apache.spark.sql.types.{BooleanType, DataType, FloatType, LongType, MetadataBuilder}
+import org.apache.spark.sql.types.{BooleanType, DataType, FloatType, LongType, MetadataBuilder, StringType}
 
 private case object MySQLDialect extends JdbcDialect with SQLConfHelper {
 
@@ -176,6 +176,7 @@ private case object MySQLDialect extends JdbcDialect with SQLConfHelper {
     // See SPARK-35446: MySQL treats REAL as a synonym to DOUBLE by default
     // We override getJDBCType so that FloatType is mapped to FLOAT instead
     case FloatType => Option(JdbcType("FLOAT", java.sql.Types.FLOAT))
+    case StringType => Option(JdbcType("LONGTEXT", java.sql.Types.LONGVARCHAR))
     case _ => JdbcUtils.getCommonJDBCType(dt)
   }
 

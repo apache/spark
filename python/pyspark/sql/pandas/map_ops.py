@@ -32,7 +32,7 @@ class PandasMapOpsMixin:
     """
 
     def mapInPandas(
-        self, func: "PandasMapIterFunction", schema: Union[StructType, str], isBarrier: bool = False
+        self, func: "PandasMapIterFunction", schema: Union[StructType, str], barrier: bool = False
     ) -> "DataFrame":
         """
         Maps an iterator of batches in the current :class:`DataFrame` using a Python native
@@ -60,7 +60,11 @@ class PandasMapOpsMixin:
         schema : :class:`pyspark.sql.types.DataType` or str
             the return type of the `func` in PySpark. The value can be either a
             :class:`pyspark.sql.types.DataType` object or a DDL-formatted type string.
-        isBarrier : Use barrier mode execution if True.
+        barrier : bool, optional, default True
+            Use barrier mode execution.
+
+            .. versionchanged: 3.5.0
+                Added ``barrier`` argument.
 
         Examples
         --------
@@ -75,9 +79,12 @@ class PandasMapOpsMixin:
         +---+---+
         |  1| 21|
         +---+---+
-        >>> # Set isBarrier=True to force the "mapInPandas" stage running in barrier mode,
-        >>> # it ensures all python UDF workers in the stage will be launched concurrently.
-        >>> df.mapInPandas(filter_func, df.schema, isBarrier=True).show()  # doctest: +SKIP
+
+        Set ``barrier`` to ``True`` to force the ``mapInPandas`` stage running in the
+        barrier mode, it ensures all Python workers in the stage will be
+        launched concurrently.
+
+        >>> df.mapInPandas(filter_func, df.schema, barrier=True).show()  # doctest: +SKIP
         +---+---+
         | id|age|
         +---+---+
@@ -102,11 +109,11 @@ class PandasMapOpsMixin:
             func, returnType=schema, functionType=PythonEvalType.SQL_MAP_PANDAS_ITER_UDF
         )  # type: ignore[call-overload]
         udf_column = udf(*[self[col] for col in self.columns])
-        jdf = self._jdf.mapInPandas(udf_column._jc.expr(), isBarrier)
+        jdf = self._jdf.mapInPandas(udf_column._jc.expr(), barrier)
         return DataFrame(jdf, self.sparkSession)
 
     def mapInArrow(
-        self, func: "ArrowMapIterFunction", schema: Union[StructType, str], isBarrier: bool = False
+        self, func: "ArrowMapIterFunction", schema: Union[StructType, str], barrier: bool = False
     ) -> "DataFrame":
         """
         Maps an iterator of batches in the current :class:`DataFrame` using a Python native
@@ -131,7 +138,11 @@ class PandasMapOpsMixin:
         schema : :class:`pyspark.sql.types.DataType` or str
             the return type of the `func` in PySpark. The value can be either a
             :class:`pyspark.sql.types.DataType` object or a DDL-formatted type string.
-        isBarrier : Use barrier mode execution if True.
+        barrier : bool, optional, default True
+            Use barrier mode execution.
+
+            .. versionchanged: 3.5.0
+                Added ``barrier`` argument.
 
         Examples
         --------
@@ -147,9 +158,12 @@ class PandasMapOpsMixin:
         +---+---+
         |  1| 21|
         +---+---+
-        >>> # Set isBarrier=True to force the "mapInArrow" stage running in barrier mode,
-        >>> # it ensures all python UDF workers in the stage will be launched concurrently.
-        >>> df.mapInArrow(filter_func, df.schema, isBarrier=True).show()  # doctest: +SKIP
+
+        Set ``barrier`` to ``True`` to force the ``mapInArrow`` stage running in the
+        barrier mode, it ensures all Python workers in the stage will be
+        launched concurrently.
+
+        >>> df.mapInArrow(filter_func, df.schema, barrier=True).show()  # doctest: +SKIP
         +---+---+
         | id|age|
         +---+---+
@@ -175,7 +189,7 @@ class PandasMapOpsMixin:
             func, returnType=schema, functionType=PythonEvalType.SQL_MAP_ARROW_ITER_UDF
         )  # type: ignore[call-overload]
         udf_column = udf(*[self[col] for col in self.columns])
-        jdf = self._jdf.pythonMapInArrow(udf_column._jc.expr(), isBarrier)
+        jdf = self._jdf.pythonMapInArrow(udf_column._jc.expr(), barrier)
         return DataFrame(jdf, self.sparkSession)
 
 
