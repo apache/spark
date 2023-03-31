@@ -1575,6 +1575,21 @@ class SparkContext(config: SparkConf) extends Logging {
   }
 
   /**
+   * Lightweight in-memory only broadcast, which is more efficient for small data compared to
+   * TorrentBroadcast
+   * @param value value to broadcast to the Spark nodes
+   * @return `Broadcast` object, a read-only variable cached on each machine
+   */
+  def smallBroadcast[T: ClassTag](value: T): Broadcast[T] = {
+    assertNotStopped()
+    require(!classOf[RDD[_]].isAssignableFrom(classTag[T].runtimeClass),
+      "Can not directly broadcast RDDs; instead, call collect() and broadcast the result.")
+    val bc = env.broadcastManager.newSmallBroadcast[T](value, isLocal)
+    cleaner.foreach(_.registerSmallBroadcastForCleanup(bc))
+    bc
+  }
+
+  /**
    * Add a file to be downloaded with this Spark job on every node.
    *
    * If a file is added during execution, it will not be available until the next TaskSet starts.

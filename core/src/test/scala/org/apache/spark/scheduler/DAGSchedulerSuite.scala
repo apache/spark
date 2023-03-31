@@ -401,7 +401,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     cacheLocations.clear()
     results.clear()
     securityMgr = new SecurityManager(sc.getConf)
-    broadcastManager = new BroadcastManager(true, sc.getConf)
+    broadcastManager = new BroadcastManager(true, sc.getConf, null)
     mapOutputTracker = spy(new MyMapOutputTrackerMaster(sc.getConf, broadcastManager))
     blockManagerMaster = spy(new MyBlockManagerMaster(sc.getConf))
     doNothing().when(blockManagerMaster).updateRDDBlockVisibility(any(), any())

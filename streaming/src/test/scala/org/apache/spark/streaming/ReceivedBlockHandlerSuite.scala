@@ -71,7 +71,7 @@ abstract class BaseReceivedBlockHandlerSuite(enableEncryption: Boolean)
   val hadoopConf = new Configuration()
   val streamId = 1
   val securityMgr = new SecurityManager(conf, encryptionKey)
-  val broadcastManager = new BroadcastManager(true, conf)
+  val broadcastManager = new BroadcastManager(true, conf, null)
   val mapOutputTracker = new MapOutputTrackerMaster(conf, broadcastManager, true)
   val shuffleManager = new SortShuffleManager(conf)
   val serializer = new KryoSerializer(conf)

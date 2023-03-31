@@ -31,6 +31,7 @@ import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.api.python.PythonWorkerFactory
+import org.apache.spark.broadcast.{SmallBroadcastTracker, SmallBroadcastTrackerMaster, SmallBroadcastTrackerMasterEndpoint, SmallBroadcastTrackerWorker}
 import org.apache.spark.broadcast.BroadcastManager
 import org.apache.spark.executor.ExecutorBackend
 import org.apache.spark.internal.{config, Logging}
@@ -298,7 +299,18 @@ object SparkEnv extends Logging {
       }
     }
 
-    val broadcastManager = new BroadcastManager(isDriver, conf)
+    // create SmallBroadcastTracker
+    val (smallBroadcastTracker, endpointRef) = if (isDriver) {
+      val master = new SmallBroadcastTrackerMaster(conf)
+      (master, rpcEnv.setupEndpoint(SmallBroadcastTracker.ENDPOINT_NAME,
+        new SmallBroadcastTrackerMasterEndpoint(rpcEnv, master)))
+    } else {
+      (new SmallBroadcastTrackerWorker(conf), RpcUtils
+        .makeDriverRef(SmallBroadcastTracker.ENDPOINT_NAME, conf, rpcEnv))
+    }
+    smallBroadcastTracker.trackerEndpoint = endpointRef
+
+    val broadcastManager = new BroadcastManager(isDriver, conf, smallBroadcastTracker)
 
     val mapOutputTracker = if (isDriver) {
       new MapOutputTrackerMaster(conf, broadcastManager, isLocal)

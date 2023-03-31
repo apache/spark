@@ -38,6 +38,7 @@ private sealed trait CleanupTask
 private case class CleanRDD(rddId: Int) extends CleanupTask
 private case class CleanShuffle(shuffleId: Int) extends CleanupTask
 private case class CleanBroadcast(broadcastId: Long) extends CleanupTask
+private case class CleanSmallBroadcast(broadcastId: Long) extends CleanupTask
 private case class CleanAccum(accId: Long) extends CleanupTask
 private case class CleanCheckpoint(rddId: Int) extends CleanupTask
 private case class CleanSparkListener(listener: SparkListener) extends CleanupTask
@@ -167,6 +168,11 @@ private[spark] class ContextCleaner(
     registerForCleanup(broadcast, CleanBroadcast(broadcast.id))
   }
 
+  /** Register a SmallBroadcast for cleanup when it is garbage collected. */
+  def registerSmallBroadcastForCleanup[T](broadcast: Broadcast[T]): Unit = {
+    registerForCleanup(broadcast, CleanSmallBroadcast(broadcast.id))
+  }
+
   /** Register a RDDCheckpointData for cleanup when it is garbage collected. */
   def registerRDDCheckpointDataForCleanup[T](rdd: RDD[_], parentId: Int): Unit = {
     registerForCleanup(rdd, CleanCheckpoint(parentId))
@@ -202,6 +208,8 @@ private[spark] class ContextCleaner(
                 doCleanupShuffle(shuffleId, blocking = blockOnShuffleCleanupTasks)
               case CleanBroadcast(broadcastId) =>
                 doCleanupBroadcast(broadcastId, blocking = blockOnCleanupTasks)
+              case CleanSmallBroadcast(broadcastId) =>
+                doCleanupSmallBroadcast(broadcastId, blocking = blockOnCleanupTasks)
               case CleanAccum(accId) =>
                 doCleanupAccum(accId, blocking = blockOnCleanupTasks)
               case CleanCheckpoint(rddId) =>
@@ -258,6 +266,17 @@ private[spark] class ContextCleaner(
       logDebug(s"Cleaned broadcast $broadcastId")
     } catch {
       case e: Exception => logError("Error cleaning broadcast " + broadcastId, e)
+    }
+  }
+
+  /** Perform small broadcast cleanup. */
+  def doCleanupSmallBroadcast(broadcastId: Long, blocking: Boolean): Unit = {
+    try {
+      logDebug(s"Cleaning small broadcast $broadcastId")
+      broadcastManager.unbroadcastSmall(broadcastId, true, blocking)
+      logDebug(s"Cleaned small broadcast $broadcastId")
+    } catch {
+      case e: Exception => logError("Error cleaning small broadcast " + broadcastId, e)
     }
   }
 

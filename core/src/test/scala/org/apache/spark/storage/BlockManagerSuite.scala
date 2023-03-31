@@ -82,7 +82,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
   var master: BlockManagerMaster = null
   var liveListenerBus: LiveListenerBus = null
   val securityMgr = new SecurityManager(new SparkConf(false))
-  val bcastManager = new BroadcastManager(true, new SparkConf(false))
+  val bcastManager = new BroadcastManager(true, new SparkConf(false), null)
   val mapOutputTracker = new MapOutputTrackerMaster(new SparkConf(false), bcastManager, true)
   val shuffleManager = new SortShuffleManager(new SparkConf(false))
 

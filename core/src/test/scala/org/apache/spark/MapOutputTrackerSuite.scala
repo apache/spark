@@ -43,7 +43,7 @@ class MapOutputTrackerSuite extends SparkFunSuite with LocalSparkContext {
   private val conf = new SparkConf
 
   private def newTrackerMaster(sparkConf: SparkConf = conf) = {
-    val broadcastManager = new BroadcastManager(true, sparkConf)
+    val broadcastManager = new BroadcastManager(true, sparkConf, null)
     new MapOutputTrackerMaster(sparkConf, broadcastManager, true)
   }
 

@@ -1942,6 +1942,22 @@ package object config {
       .checkValue(v => v >= 0, "The threshold should be non-negative.")
       .createWithDefault(1L * 1024 * 1024)
 
+  private[spark] val SMALL_BROADCAST_EXECUTOR_CACHE_SIZE =
+    ConfigBuilder("spark.smallBroadcast.executor.cacheSize")
+      .internal()
+      .doc("Small broadcast cache size in executor side")
+      .version("3.5.0")
+      .intConf
+      .createWithDefault(1000)
+
+  private[spark] val SMALL_BROADCAST_EXECUTOR_CACHE_EXPIRE_SECONDS =
+    ConfigBuilder("spark.smallBroadcast.executor.cacheExpireSeconds")
+      .internal()
+      .doc("Expire duration for small broadcast cache in executor side")
+      .version("3.5.0")
+      .intConf
+      .createWithDefault(600)
+
   private[spark] val RDD_COMPRESS = ConfigBuilder("spark.rdd.compress")
     .doc("Whether to compress serialized RDD partitions " +
       "(e.g. for StorageLevel.MEMORY_ONLY_SER in Scala " +

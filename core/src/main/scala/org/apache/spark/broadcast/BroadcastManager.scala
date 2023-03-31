@@ -30,10 +30,13 @@ import org.apache.spark.api.python.PythonBroadcast
 import org.apache.spark.internal.Logging
 
 private[spark] class BroadcastManager(
-    val isDriver: Boolean, conf: SparkConf) extends Logging {
+    val isDriver: Boolean,
+    conf: SparkConf,
+    val smallBroadcastTracker: SmallBroadcastTracker) extends Logging {
 
   private var initialized = false
   private var broadcastFactory: BroadcastFactory = null
+  private var smallBroadcastFactory: BroadcastFactory = null
 
   initialize()
 
@@ -43,6 +46,8 @@ private[spark] class BroadcastManager(
       if (!initialized) {
         broadcastFactory = new TorrentBroadcastFactory
         broadcastFactory.initialize(isDriver, conf)
+        smallBroadcastFactory = new SmallBroadcastFactory
+        smallBroadcastFactory.initialize(isDriver, conf)
         initialized = true
       }
     }
@@ -50,6 +55,8 @@ private[spark] class BroadcastManager(
 
   def stop(): Unit = {
     broadcastFactory.stop()
+    smallBroadcastFactory.stop()
+    smallBroadcastTracker.stop()
   }
 
   private val nextBroadcastId = new AtomicLong(0)
@@ -60,10 +67,11 @@ private[spark] class BroadcastManager(
         .asInstanceOf[java.util.Map[Any, Any]]
     )
 
-  def newBroadcast[T: ClassTag](
-      value_ : T,
-      isLocal: Boolean,
-      serializedOnly: Boolean = false): Broadcast[T] = {
+  private def newBroadcastImpl[T: ClassTag](
+    factory: BroadcastFactory,
+    value_ : T,
+    isLocal: Boolean,
+    serializedOnly: Boolean = false): Broadcast[T] = {
     val bid = nextBroadcastId.getAndIncrement()
     value_ match {
       case pb: PythonBroadcast =>
@@ -75,10 +83,28 @@ private[spark] class BroadcastManager(
 
       case _ => // do nothing
     }
-    broadcastFactory.newBroadcast[T](value_, isLocal, bid, serializedOnly)
+    factory.newBroadcast[T](value_, isLocal, bid, serializedOnly)
+  }
+
+  def newBroadcast[T: ClassTag](
+      value_ : T,
+      isLocal: Boolean,
+      serializedOnly: Boolean = false): Broadcast[T] = {
+    newBroadcastImpl(broadcastFactory, value_, isLocal, serializedOnly)
+  }
+
+  def newSmallBroadcast[T: ClassTag](
+    value_ : T,
+    isLocal: Boolean
+  ): Broadcast[T] = {
+    newBroadcastImpl(smallBroadcastFactory, value_, isLocal)
   }
 
   def unbroadcast(id: Long, removeFromDriver: Boolean, blocking: Boolean): Unit = {
     broadcastFactory.unbroadcast(id, removeFromDriver, blocking)
+  }
+
+  def unbroadcastSmall(id: Long, removeFromDriver: Boolean, blocking: Boolean): Unit = {
+    smallBroadcastFactory.unbroadcast(id, removeFromDriver, blocking)
   }
 }
