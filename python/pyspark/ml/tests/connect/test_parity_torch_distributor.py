@@ -35,7 +35,7 @@ try:
 except ImportError:
     have_torch = False
 
-from pyspark.ml.torch.distributor import TorchDistributor
+from pyspark.ml.torch.distributor import TorchDistributor, get_gpus_owned
 from pyspark.ml.torch.torch_run_process_wrapper import clean_and_terminate, check_parent_alive
 from pyspark.sql import SparkSession
 from pyspark.testing.utils import SPARK_HOME
@@ -319,6 +319,7 @@ class TorchDistributorLocalUnitTests(unittest.TestCase):
         for key in input_map.keys():
             del os.environ[key]
 
+    @unittest.skip("need to support sc.resources")
     def test_get_num_tasks_locally(self) -> None:
         succeeds = [1, 2]
         fails = [4, 8]
@@ -335,16 +336,17 @@ class TorchDistributorLocalUnitTests(unittest.TestCase):
                     self.assertEqual(len(log.records), 1)
                     self.assertEqual(distributor.num_processes, 3)
 
-    # TODO: support SparkConf
-    # def test_get_gpus_owned_local(self) -> None:
-    #     addresses = ["0", "1", "2"]
-    #     self.assertEqual(get_gpus_owned(self.sc), addresses)
-    #
-    #     env_vars = {"CUDA_VISIBLE_DEVICES": "3,4,5"}
-    #     self.setup_env_vars(env_vars)
-    #     self.assertEqual(get_gpus_owned(self.sc), ["3", "4", "5"])
-    #     self.delete_env_vars(env_vars)
+    @unittest.skip("need to support sc.resources")
+    def test_get_gpus_owned_local(self) -> None:
+        addresses = ["0", "1", "2"]
+        self.assertEqual(get_gpus_owned(self.spark), addresses)
 
+        env_vars = {"CUDA_VISIBLE_DEVICES": "3,4,5"}
+        self.setup_env_vars(env_vars)
+        self.assertEqual(get_gpus_owned(self.spark), ["3", "4", "5"])
+        self.delete_env_vars(env_vars)
+
+    @unittest.skip("need to support sc.resources")
     def test_local_training_succeeds(self) -> None:
         CUDA_VISIBLE_DEVICES = "CUDA_VISIBLE_DEVICES"
         inputs = [
@@ -373,19 +375,17 @@ class TorchDistributorLocalUnitTests(unittest.TestCase):
                     self.delete_env_vars({CUDA_VISIBLE_DEVICES: cuda_env_var})
 
     def test_local_file_with_pytorch(self) -> None:
-        spark = SparkSession.builder.remote("local[4]").getOrCreate()
         test_file_path = "python/test_support/test_pytorch_training_file.py"
         learning_rate_str = "0.01"
-        TorchDistributor(num_processes=2, local_mode=True, use_gpu=False, spark=spark).run(
+        TorchDistributor(num_processes=2, local_mode=True, use_gpu=False, spark=self.spark).run(
             test_file_path, learning_rate_str
         )
 
     def test_end_to_end_run_locally(self) -> None:
-        spark = SparkSession.builder.remote("local[4]").getOrCreate()
         train_fn = create_training_function(self.mnist_dir_path)
-        output = TorchDistributor(num_processes=2, local_mode=True, use_gpu=False, spark=spark).run(
-            train_fn, 0.001
-        )
+        output = TorchDistributor(
+            num_processes=2, local_mode=True, use_gpu=False, spark=self.spark
+        ).run(train_fn, 0.001)
         self.assertEqual(output, "success")
 
 

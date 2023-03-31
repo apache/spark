@@ -40,6 +40,18 @@ from pyspark.sql.utils import is_remote
 from pyspark.taskcontext import BarrierTaskContext
 
 
+def _safe_get_conf(spark: SparkSession, key: str, default_value: str) -> str:
+    if is_remote():
+        value = spark.conf.get(key, default_value)
+    else:
+        try:
+            value = spark.sparkContext.getConf().get(key, default_value)
+        except BaseException:
+            value = spark.conf.get(key, default_value)
+    assert value is not None
+    return value
+
+
 # TODO(SPARK-41589): will move the functions and tests to an external file
 #       once we are in agreement about which functions should be in utils.py
 def get_conf_boolean(spark: SparkSession, key: str, default_value: str) -> bool:
@@ -69,17 +81,14 @@ def get_conf_boolean(spark: SparkSession, key: str, default_value: str) -> bool:
     ValueError
         Thrown when the conf value is not a valid boolean
     """
-    val = spark.conf.get(key, default_value)
-    assert val is not None
-    lowercase_val = val.lower()
-    if lowercase_val == "true":
+    value = _safe_get_conf(spark=spark, key=key, default_value=default_value)
+    lowercase_value = value.lower()
+    if lowercase_value == "true":
         return True
-    if lowercase_val == "false":
+    if lowercase_value == "false":
         return False
     raise ValueError(
-        f"The conf value for '{key}' was expected to be a boolean "
-        f"value but found value of type {type(val)} "
-        f"with value: {val}"
+        f"The conf value for '{key}' was expected to be a boolean " f"value but found value {value}"
     )
 
 
@@ -185,7 +194,7 @@ class Distributor:
             assert self.spark is not None
             if not self.local_mode:
                 key = "spark.task.resource.gpu.amount"
-                task_gpu_amount = int(self.spark.conf.get(key, "0"))  # type: ignore[arg-type]
+                task_gpu_amount = int(_safe_get_conf(self.spark, key, "0"))
                 if task_gpu_amount < 1:
                     raise RuntimeError(f"'{key}' was unset, so gpu usage is unavailable.")
                 # TODO(SPARK-41916): Address situation when spark.task.resource.gpu.amount > 1
@@ -194,7 +203,7 @@ class Distributor:
                 key = "spark.driver.resource.gpu.amount"
                 if "gpu" not in self.spark.sparkContext.resources:
                     raise RuntimeError("GPUs were unable to be found on the driver.")
-                num_available_gpus = int(self.spark.conf.get(key, "0"))  # type: ignore[arg-type]
+                num_available_gpus = int(_safe_get_conf(self.spark, key, "0"))
                 if num_available_gpus == 0:
                     raise RuntimeError("GPU resources were not configured properly on the driver.")
                 if self.num_processes > num_available_gpus:
@@ -220,9 +229,6 @@ class Distributor:
             Thrown when the user requires ssl encryption or when the user initializes
             the Distributor parent class.
         """
-        # TODO: should enable ssl with spark connect
-        if is_remote():
-            return
         if not "ssl_conf":
             raise RuntimeError(
                 "Distributor doesn't have this functionality. Use TorchDistributor instead."
@@ -580,7 +586,9 @@ class TorchDistributor(Distributor):
             raise RuntimeError("Unknown combination of parameters")
 
         log_streaming_server = LogStreamingServer()
-        self.driver_address = self.spark.conf.get("spark.driver.host")  # type: ignore[union-attr]
+        assert self.spark is not None
+        self.driver_address = _safe_get_conf(self.spark, "spark.driver.host", "")
+        assert self.driver_address != ""
         log_streaming_server.start(spark_host_address=self.driver_address)
         time.sleep(1)  # wait for the server to start
         self.log_streaming_server_port = log_streaming_server.port

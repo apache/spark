@@ -336,11 +336,11 @@ class TorchDistributorLocalUnitTests(unittest.TestCase):
 
     def test_get_gpus_owned_local(self) -> None:
         addresses = ["0", "1", "2"]
-        self.assertEqual(get_gpus_owned(self.sc), addresses)
+        self.assertEqual(get_gpus_owned(self.spark), addresses)
 
         env_vars = {"CUDA_VISIBLE_DEVICES": "3,4,5"}
         self.setup_env_vars(env_vars)
-        self.assertEqual(get_gpus_owned(self.sc), ["3", "4", "5"])
+        self.assertEqual(get_gpus_owned(self.spark), ["3", "4", "5"])
         self.delete_env_vars(env_vars)
 
     def test_local_training_succeeds(self) -> None:
