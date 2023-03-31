@@ -329,7 +329,7 @@ class ArrowTableToRowsConversion:
 
             def convert_struct(value: Any) -> Row:
                 if value is None:
-                    return Row()
+                    return None
                 else:
                     assert isinstance(value, dict)
 
