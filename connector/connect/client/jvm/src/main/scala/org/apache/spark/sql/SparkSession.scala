@@ -34,6 +34,7 @@ import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, RowEncoder}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{BoxedLongEncoder, UnboundRowEncoder}
 import org.apache.spark.sql.connect.client.{SparkConnectClient, SparkResult}
 import org.apache.spark.sql.connect.client.util.{Cleaner, ConvertToArrow}
+import org.apache.spark.sql.connect.common.LiteralValueProtoConverter.toLiteralProto
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -221,7 +222,7 @@ class SparkSession private[sql] (
    * @since 3.4.0
    */
   @Experimental
-  def sql(sqlText: String, args: Map[String, String]): DataFrame = {
+  def sql(sqlText: String, args: Map[String, Any]): DataFrame = {
     sql(sqlText, args.asJava)
   }
 
@@ -240,11 +241,13 @@ class SparkSession private[sql] (
    * @since 3.4.0
    */
   @Experimental
-  def sql(sqlText: String, args: java.util.Map[String, String]): DataFrame = newDataFrame {
+  def sql(sqlText: String, args: java.util.Map[String, Any]): DataFrame = newDataFrame {
     builder =>
       // Send the SQL once to the server and then check the output.
       val cmd = newCommand(b =>
-        b.setSqlCommand(proto.SqlCommand.newBuilder().setSql(sqlText).putAllArgs(args)))
+        b.setSqlCommand(proto.SqlCommand.newBuilder()
+          .setSql(sqlText)
+          .putAllArgs(args.asScala.mapValues(toLiteralProto).asJava)))
       val plan = proto.Plan.newBuilder().setCommand(cmd)
       val responseIter = client.execute(plan.build())
 
