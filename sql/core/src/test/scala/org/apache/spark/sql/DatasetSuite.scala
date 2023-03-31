@@ -1523,29 +1523,27 @@ class DatasetSuite extends QueryTest
     val ds2 = Seq(("a", 1), ("a", 2), ("b", 1), ("a", 1)).toDS()
     // The dataset joined has two columns of the same name "_2".
     val joined = ds1.join(ds2, "_1").select(ds1("_2").as[Int], ds2("_2").as[Int])
-    verifyDropDuplicates(joined, (1, 2), (1, 1), (2, 1), (2, 2))
+    verifyDropDuplicates(joined, Seq(), (1, 2), (1, 1), (2, 1), (2, 2))
   }
 
-  private def verifyDropDuplicates[T](
-      ds: Dataset[T],
-      expectedAnswer: T*): Unit = {
-    checkDataset(ds.dropDuplicates(), expectedAnswer)
-    checkDataset(ds.dropDuplicatesWithinWatermark(), expectedAnswer)
-  }
-
-  private def verifyDropDuplicates[T](
-      ds: Dataset[T],
+  private def verifyDropDuplicates(
+      ds: Dataset[(String, Int)],
       cols: Seq[String],
-      expectedAnswer: T*): Unit = {
-    checkDataset(ds.dropDuplicates(cols), expectedAnswer)
-    checkDataset(ds.dropDuplicatesWithinWatermark(cols), expectedAnswer)
-
-    if (cols.length > 1) {
-      checkDataset(ds.dropDuplicates(cols.head, cols.tail: _*), expectedAnswer)
-      checkDataset(ds.dropDuplicatesWithinWatermark(cols.head, cols.tail: _*), expectedAnswer)
+      expectedAnswer: (String, Int)*): Unit = {
+    if (cols.isEmpty) {
+      checkDataset(ds.dropDuplicates(), expectedAnswer)
+      checkDataset(ds.dropDuplicatesWithinWatermark(), expectedAnswer)
     } else {
-      checkDataset(ds.dropDuplicates(cols.head), expectedAnswer)
-      checkDataset(ds.dropDuplicatesWithinWatermark(cols.head), expectedAnswer)
+      checkDataset(ds.dropDuplicates(cols), expectedAnswer)
+      checkDataset(ds.dropDuplicatesWithinWatermark(cols), expectedAnswer)
+
+      if (cols.length > 1) {
+        checkDataset(ds.dropDuplicates(cols.head, cols.tail: _*), expectedAnswer)
+        checkDataset(ds.dropDuplicatesWithinWatermark(cols.head, cols.tail: _*), expectedAnswer)
+      } else {
+        checkDataset(ds.dropDuplicates(cols.head), expectedAnswer)
+        checkDataset(ds.dropDuplicatesWithinWatermark(cols.head), expectedAnswer)
+      }
     }
   }
 

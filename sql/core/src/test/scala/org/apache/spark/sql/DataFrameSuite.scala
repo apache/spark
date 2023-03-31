@@ -1716,24 +1716,24 @@ class DataFrameSuite extends QueryTest
   }
 
   test("SPARK-7324 dropDuplicates") {
-    def verify(df: DataFrame, expectedAnswer: Row*): Unit = {
-      checkDataset(df.dropDuplicates(), expectedAnswer)
-      checkDataset(df.dropDuplicatesWithinWatermark(), expectedAnswer)
-    }
-
     def verify(
         df: DataFrame,
         cols: Seq[String],
         expectedAnswer: Row*): Unit = {
-      checkDataset(df.dropDuplicates(cols), expectedAnswer)
-      checkDataset(df.dropDuplicatesWithinWatermark(cols), expectedAnswer)
-
-      if (cols.length > 1) {
-        checkDataset(df.dropDuplicates(cols.head, cols.tail: _*), expectedAnswer)
-        checkDataset(df.dropDuplicatesWithinWatermark(cols.head, cols.tail: _*), expectedAnswer)
+      if (cols.isEmpty) {
+        checkDataset(df.dropDuplicates(), expectedAnswer)
+        checkDataset(df.dropDuplicatesWithinWatermark(), expectedAnswer)
       } else {
-        checkDataset(df.dropDuplicates(cols.head), expectedAnswer)
-        checkDataset(df.dropDuplicatesWithinWatermark(cols.head), expectedAnswer)
+        checkDataset(df.dropDuplicates(cols), expectedAnswer)
+        checkDataset(df.dropDuplicatesWithinWatermark(cols), expectedAnswer)
+
+        if (cols.length > 1) {
+          checkDataset(df.dropDuplicates(cols.head, cols.tail: _*), expectedAnswer)
+          checkDataset(df.dropDuplicatesWithinWatermark(cols.head, cols.tail: _*), expectedAnswer)
+        } else {
+          checkDataset(df.dropDuplicates(cols.head), expectedAnswer)
+          checkDataset(df.dropDuplicatesWithinWatermark(cols.head), expectedAnswer)
+        }
       }
     }
 
@@ -1749,16 +1749,16 @@ class DataFrameSuite extends QueryTest
       Row(2, 2, 2), Row(2, 1, 1), Row(2, 2, 1),
       Row(1, 1, 2), Row(1, 2, 2))
 
-    verify(testData, Seq("key", "value1"), Row(2, 1, 2), Row(1, 2, 1), Row(1, 1, 1), Row(2, 2, 2))
+    verify2(testData, Seq("key", "value1"), Row(2, 1, 2), Row(1, 2, 1), Row(1, 1, 1), Row(2, 2, 2))
 
-    verify(testData, Seq("value1", "value2"),
+    verify2(testData, Seq("value1", "value2"),
       Row(2, 1, 2), Row(1, 2, 1), Row(1, 1, 1), Row(2, 2, 2))
 
-    verify(testData, Seq("key"), Row(2, 1, 2), Row(1, 1, 1))
+    verify2(testData, Seq("key"), Row(2, 1, 2), Row(1, 1, 1))
 
-    verify(testData, Seq("value1"), Row(2, 1, 2), Row(1, 2, 1))
+    verify2(testData, Seq("value1"), Row(2, 1, 2), Row(1, 2, 1))
 
-    verify(testData, Seq("value2"), Row(2, 1, 2), Row(1, 1, 1))
+    verify2(testData, Seq("value2"), Row(2, 1, 2), Row(1, 1, 1))
   }
 
   test("SPARK-8621: support empty string column name") {
