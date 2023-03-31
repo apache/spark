@@ -628,12 +628,11 @@ class QueryExecutionErrorsSuite
   test("BINARY_ARITHMETIC_CAUSE_OVERFLOW: byte plus byte result overflow") {
     checkError(
       exception = intercept[SparkArithmeticException] {
-          sql(s"select CAST('${Short.MaxValue}' AS TINYINT) + CAST('5' AS TINYINT)")
-            .collect()
+          sql(s"select CAST('127' AS TINYINT) + CAST('5' AS TINYINT)").collect()
       },
       errorClass = "BINARY_ARITHMETIC_CAUSE_OVERFLOW",
       parameters = Map(
-        "value1" -> Short.MaxValue.toString,
+        "value1" -> "127",
         "symbol" -> "+",
         "value2" -> "5"),
       sqlState = "22003")
