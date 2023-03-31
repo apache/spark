@@ -327,7 +327,7 @@ class ArrowTableToRowsConversion:
                 ArrowTableToRowsConversion._need_converter(f.dataType) for f in dataType.fields
             )
 
-            def convert_struct(value: Any) -> Row:
+            def convert_struct(value: Any) -> Any:
                 if value is None:
                     return None
                 else:
