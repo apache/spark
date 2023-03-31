@@ -26,7 +26,7 @@ class StreamingDeduplicationWithinWatermarkSuite extends StateStoreMetricsTest {
 
   import testImplicits._
 
-  test("deduplicate without event time column") {
+  test("deduplicate without event time column should result in error") {
     def testAndVerify(df: Dataset[_]): Unit = {
       val exc = intercept[AnalysisException] {
         df.writeStream.format("noop").start()
@@ -59,7 +59,7 @@ class StreamingDeduplicationWithinWatermarkSuite extends StateStoreMetricsTest {
     testAndVerify(result3)
   }
 
-  test("deduplicate with all columns with event time column") {
+  test("deduplicate with all columns with event time column in DataFrame") {
     val inputData = MemoryStream[Int]
     val result = inputData.toDS()
       .withColumn("eventTime", timestamp_seconds($"value"))
@@ -95,7 +95,7 @@ class StreamingDeduplicationWithinWatermarkSuite extends StateStoreMetricsTest {
     )
   }
 
-  test("deduplicate with some columns with event time column") {
+  test("deduplicate with subset of columns which event time column is not in subset") {
     val inputData = MemoryStream[(String, Int)]
     val result = inputData.toDS()
       .withColumn("eventTime", timestamp_seconds($"_2"))
@@ -179,6 +179,4 @@ class StreamingDeduplicationWithinWatermarkSuite extends StateStoreMetricsTest {
       )
     }
   }
-
-  // FIXME: test to disallow changing event time column between TimestampType vs TimestampNTZType
 }

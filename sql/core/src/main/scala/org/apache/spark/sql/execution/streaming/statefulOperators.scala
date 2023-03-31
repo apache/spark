@@ -1032,17 +1032,13 @@ case class StreamingDeduplicateWithinWatermarkExec(
     eventTimeWatermarkForEviction: Option[Long] = None)
   extends BaseStreamingDeduplicateExec {
 
-  private val eventTimeCol: Attribute = WatermarkSupport.findEventTimeColumn(child.output,
-    allowMultipleEventTimeColumns = false).get
-  private val eventTimeColType: DataType = eventTimeCol.dataType
-
-  assert(eventTimeColType == TimestampType || eventTimeColType == TimestampNTZType)
-
   protected val schemaForValueRow: StructType = StructType(
-    Array(StructField("expiresAt", eventTimeColType, nullable = false)))
+    Array(StructField("expiresAt", LongType, nullable = false)))
 
   protected val extraOptionOnStateStore: Map[String, String] = Map.empty
 
+  private val eventTimeCol: Attribute = WatermarkSupport.findEventTimeColumn(child.output,
+    allowMultipleEventTimeColumns = false).get
   private val delayThresholdMs = eventTimeCol.metadata.getLong(EventTimeWatermark.delayKey)
   private val eventTimeColOrdinal: Int = child.output.indexOf(eventTimeCol)
 
