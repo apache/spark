@@ -398,7 +398,7 @@ abstract class JdbcDialect extends Serializable with Logging {
    * @param newTable New name of the table.
    * @return The SQL statement to use for renaming the table.
    */
-  @deprecated("Please use renameTable method with identifiers", "3.5.0")
+  @deprecated("Please override renameTable method with identifiers", "3.5.0")
   def renameTable(oldTable: String, newTable: String): String = {
     s"ALTER TABLE $oldTable RENAME TO $newTable"
   }

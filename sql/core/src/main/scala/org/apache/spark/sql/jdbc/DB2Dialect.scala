@@ -115,7 +115,7 @@ private object DB2Dialect extends JdbcDialect {
   // See https://www.ibm.com/support/knowledgecenter/en/SSEPGG_11.5.0/com.ibm.db2.luw.sql.ref.doc/doc/r0000980.html
   // scalastyle:on line.size.limit
   override def renameTable(oldTable: Identifier, newTable: Identifier): String = {
-    s" RENAME TABLE ${getFullyQualifiedQuotedTableName(oldTable)} TO " +
+    s"RENAME TABLE ${getFullyQualifiedQuotedTableName(oldTable)} TO " +
       s"${getFullyQualifiedQuotedTableName(newTable)}"
   }
 

@@ -65,7 +65,7 @@ private case object TeradataDialect extends JdbcDialect {
 
   // See https://docs.teradata.com/reader/scPHvjfglIlB8F70YliLAw/wysTNUMsP~0aGzksLCl1kg
   override def renameTable(oldTable: Identifier, newTable: Identifier): String = {
-    s" RENAME TABLE ${getFullyQualifiedQuotedTableName(oldTable)} TO " +
+    s"RENAME TABLE ${getFullyQualifiedQuotedTableName(oldTable)} TO " +
       s"${getFullyQualifiedQuotedTableName(newTable)}"
   }
 
