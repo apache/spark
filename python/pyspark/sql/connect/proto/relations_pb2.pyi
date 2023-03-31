@@ -2767,7 +2767,7 @@ class MapPartitions(google.protobuf.message.Message):
     def func(self) -> pyspark.sql.connect.proto.expressions_pb2.CommonInlineUserDefinedFunction:
         """(Required) Input user-defined function."""
     is_barrier: builtins.bool
-    """(Optional) isBarrier."""
+    """(Optional) Whether to use barrier mode execution or not."""
     def __init__(
         self,
         *,
