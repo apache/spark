@@ -369,6 +369,14 @@ public class JavaUtils {
   }
 
   /**
+   * Create a directory inside the given parent directory with default namePrefix "spark".
+   * The directory is guaranteed to be newly created, and is not marked for automatic deletion.
+   */
+  public static File createDirectory(String root) throws IOException {
+    return createDirectory(root, "spark");
+  }
+
+  /**
    * Create a directory inside the given parent directory. The directory is guaranteed to be
    * newly created, and is not marked for automatic deletion.
    */
