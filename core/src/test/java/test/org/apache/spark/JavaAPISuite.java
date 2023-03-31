@@ -40,6 +40,7 @@ import org.apache.spark.SparkConf;
 import org.apache.spark.TaskContext;
 import org.apache.spark.TaskContext$;
 import org.apache.spark.network.util.JavaUtils;
+import org.apache.spark.util.Utils;
 import scala.Tuple2;
 import scala.Tuple3;
 import scala.Tuple4;
@@ -93,7 +94,7 @@ public class JavaAPISuite implements Serializable {
   @Before
   public void setUp() throws IOException {
     sc = new JavaSparkContext("local", "JavaAPISuite");
-    tempDir = JavaUtils.createTempDir();
+    tempDir = Utils.createTempDir(System.getProperty("java.io.tmpdir"), "spark");
     tempDir.deleteOnExit();
   }
 

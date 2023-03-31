@@ -49,7 +49,7 @@ class StreamTestHelper {
   }
 
   StreamTestHelper() throws Exception {
-    tempDir = JavaUtils.createTempDir();
+    tempDir = JavaUtils.createDirectory(System.getProperty("java.io.tmpdir"), "spark");
     emptyBuffer = createBuffer(0);
     smallBuffer = createBuffer(100);
     largeBuffer = createBuffer(100000);

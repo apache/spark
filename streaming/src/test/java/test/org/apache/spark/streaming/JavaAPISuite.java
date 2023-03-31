@@ -1476,7 +1476,7 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
         Arrays.asList(1,4),
         Arrays.asList(8,7));
 
-    File tempDir = JavaUtils.createTempDir();
+    File tempDir = Utils.createTempDir(System.getProperty("java.io.tmpdir"), "spark");
     tempDir.deleteOnExit();
     ssc.checkpoint(tempDir.getAbsolutePath());
 
@@ -1507,7 +1507,7 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
         .setAppName("test")
         .set("newContext", "true");
 
-    File emptyDir = JavaUtils.createTempDir();
+    File emptyDir = Utils.createTempDir(System.getProperty("java.io.tmpdir"), "spark");
     emptyDir.deleteOnExit();
     StreamingContextSuite contextSuite = new StreamingContextSuite();
     String corruptedCheckpointDir = contextSuite.createCorruptedCheckpoint();
