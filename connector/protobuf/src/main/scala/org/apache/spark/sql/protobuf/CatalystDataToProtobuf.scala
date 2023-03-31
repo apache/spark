@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCo
 import org.apache.spark.sql.protobuf.utils.ProtobufUtils
 import org.apache.spark.sql.types.{BinaryType, DataType}
 
-private[protobuf] case class CatalystDataToProtobuf(
+private[sql] case class CatalystDataToProtobuf(
     child: Expression,
     messageName: String,
     descFilePath: Option[String] = None,
