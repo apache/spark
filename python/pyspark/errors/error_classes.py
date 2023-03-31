@@ -59,6 +59,21 @@ ERROR_CLASSES_JSON = """
       "Argument `<arg_name>` should be a bool, dict, float, int or str, got <arg_type>."
     ]
   },
+  "NOT_BOOL_OR_FLOAT_OR_INT" : {
+    "message" : [
+      "Argument `<arg_name>` should be a bool, float or str, got <arg_type>."
+    ]
+  },
+  "NOT_BOOL_OR_FLOAT_OR_INT_OR_LIST_OR_NONE_OR_STR_OR_TUPLE" : {
+    "message" : [
+      "Argument `<arg_name>` should be a bool, float, int, list, None, str or tuple, got <arg_type>."
+    ]
+  },
+  "NOT_BOOL_OR_FLOAT_OR_INT_OR_STR" : {
+    "message" : [
+      "Argument `<arg_name>` should be a bool, float, int or str, got <arg_type>."
+    ]
+  },
   "NOT_BOOL_OR_LIST" : {
     "message" : [
       "Argument `<arg_name>` should be a bool or list, got <arg_type>."
@@ -87,6 +102,11 @@ ERROR_CLASSES_JSON = """
   "NOT_COLUMN_OR_INT" : {
     "message" : [
       "Argument `<arg_name>` should be a Column or int, got <arg_type>."
+    ]
+  },
+  "NOT_COLUMN_OR_INT_OR_LIST_OR_STR_OR_TUPLE" : {
+    "message" : [
+      "Argument `<arg_name>` should be a Column, int, list, str or tuple, got <arg_type>."
     ]
   },
   "NOT_COLUMN_OR_INT_OR_STR" : {
@@ -137,6 +157,11 @@ ERROR_CLASSES_JSON = """
   "NOT_ITERABLE" : {
     "message" : [
       "<objectName> is not iterable."
+    ]
+  },
+  "NOT_LIST_OF_STR" : {
+    "message" : [
+      "Argument `<arg_name>` should be a list[str], got <arg_type>."
     ]
   },
   "NOT_LIST_OR_STR_OR_TUPLE" : {
