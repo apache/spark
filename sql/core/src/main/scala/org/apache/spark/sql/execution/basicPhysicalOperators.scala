@@ -293,6 +293,11 @@ case class FilterExec(condition: Expression, child: SparkPlan)
 
   override protected def withNewChildInternal(newChild: SparkPlan): FilterExec =
     copy(child = newChild)
+
+  def getMaxConditionalSize: Int = {
+    if (otherPreds == null || otherPreds.isEmpty) 0
+    else otherPreds.map(getConditionalSize).max
+  }
 }
 
 /**

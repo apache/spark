@@ -574,6 +574,17 @@ object WholeStageCodegenExec {
     numOfNestedFields(dataType) > conf.wholeStageMaxNumFields
   }
 
+  def hasLargeConditionalExpressionInFilter(conf: SQLConf, plan: SparkPlan): Boolean = {
+    val thresh = conf.wholeStageMaxConditionalsInFilter
+    if (thresh >= 0) {
+      plan match {
+        case f: FilterExec =>
+          f.getMaxConditionalSize > thresh
+        case _ => false
+      }
+    } else false
+  }
+
   // The whole-stage codegen generates Java code on the driver side and sends it to the Executors
   // for compilation and execution. The whole-stage codegen can bring significant performance
   // improvements with large dataset in distributed environments. However, in the test environment,
@@ -897,7 +908,10 @@ case class CollapseCodegenStages(
         WholeStageCodegenExec.isTooManyFields(conf, plan.schema)
       val hasTooManyInputFields =
         plan.children.exists(p => WholeStageCodegenExec.isTooManyFields(conf, p.schema))
-      !willFallback && !hasTooManyOutputFields && !hasTooManyInputFields
+      val hasLargeExpressionInFilter = //
+        WholeStageCodegenExec.hasLargeConditionalExpressionInFilter(conf, plan)
+      !willFallback && !hasTooManyOutputFields && !hasTooManyInputFields && //
+        !hasLargeExpressionInFilter
     case _ => false
   }
 
