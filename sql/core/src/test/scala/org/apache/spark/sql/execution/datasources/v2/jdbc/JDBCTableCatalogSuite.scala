@@ -335,13 +335,12 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
     val tableName = "h2.test.alt_table"
     withTable(tableName) {
       sql(s"CREATE TABLE $tableName (ID INTEGER)")
-      checkError(
-        exception = intercept[AnalysisException] {
-          sql(s"ALTER TABLE $tableName ALTER COLUMN ID COMMENT 'test'")
-        },
-        errorClass = "_LEGACY_ERROR_TEMP_1305",
-        parameters = Map("change" -> "UpdateColumnComment(ID, test)")
-      )
+      val exp = intercept[AnalysisException] {
+        sql(s"ALTER TABLE $tableName ALTER COLUMN ID COMMENT 'test'")
+      }
+      assert(exp.getErrorClass === "_LEGACY_ERROR_TEMP_1305")
+      assert("Unsupported TableChange (.*) in JDBC catalog\\.".r.pattern.matcher(exp.getMessage)
+        .matches())
       // Update comment for not existing column
       val msg = intercept[AnalysisException] {
         sql(s"ALTER TABLE $tableName ALTER COLUMN bad_column COMMENT 'test'")

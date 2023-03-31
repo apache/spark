@@ -19,11 +19,9 @@ package org.apache.spark.sql.connector.catalog;
 
 import java.util.Arrays;
 import java.util.Objects;
-import java.util.StringJoiner;
 import javax.annotation.Nullable;
 
 import org.apache.spark.annotation.Evolving;
-import org.apache.spark.sql.catalyst.util.package$;
 import org.apache.spark.sql.types.DataType;
 
 /**
@@ -629,16 +627,6 @@ public interface TableChange {
       int result = Objects.hash(newComment);
       result = 31 * result + Arrays.hashCode(fieldNames);
       return result;
-    }
-
-    @Override
-    public String toString() {
-      StringJoiner sj =
-          new StringJoiner(".", getClass().getSimpleName() + "(", ", " + newComment + ")");
-      for (String s : fieldNames) {
-        sj.add(package$.MODULE$.quoteIfNeeded(s));
-      }
-      return sj.toString();
     }
   }
 
