@@ -32,38 +32,36 @@ from typing import Union, Callable, List, Dict, Optional, Any, Tuple, Generator
 
 from pyspark import cloudpickle
 from pyspark.sql import SparkSession
+from pyspark.taskcontext import BarrierTaskContext
 from pyspark.ml.torch.log_communication import (  # type: ignore
     LogStreamingClient,
     LogStreamingServer,
 )
-from pyspark.sql.utils import is_remote
-from pyspark.taskcontext import BarrierTaskContext
 
 
-def _safe_get_conf(spark: SparkSession, key: str, default_value: str) -> str:
-    if is_remote():
-        value = spark.conf.get(key, default_value)
+def _get_active_session() -> SparkSession:
+    from pyspark.sql.utils import is_remote
+
+    if not is_remote():
+        spark = SparkSession.getActiveSession()
     else:
-        try:
-            value = spark.sparkContext.getConf().get(key, default_value)
-        except BaseException:
-            value = spark.conf.get(key, default_value)
-    assert value is not None
-    return value
+        from pyspark.sql.connect.session import _active_spark_session
+
+        spark = _active_spark_session  # type: ignore[assignment]
+
+    if spark is None:
+        raise RuntimeError("An active SparkSession is required for the distributor.")
+    return spark
 
 
-# TODO(SPARK-41589): will move the functions and tests to an external file
-#       once we are in agreement about which functions should be in utils.py
-def get_conf_boolean(spark: SparkSession, key: str, default_value: str) -> bool:
-    """Get the conf "key" from the given spark context,
+def _get_conf(spark: SparkSession, key: str, default_value: str) -> str:
+    """Get the conf "key" from the given spark session,
     or return the default value if the conf is not set.
-    This expects the conf value to be a boolean or string;
-    if the value is a string, this checks for all capitalization
-    patterns of "true" and "false" to match Scala.
+    If this session is a remote connect session, the SparkConf
+    code path always fail, and fallback to the RuntimeConf.
 
     Parameters
     ----------
-
     spark : :class:`SparkSession`
         The :class:`SparkSession` for the distributor.
     key : str
@@ -73,23 +71,26 @@ def get_conf_boolean(spark: SparkSession, key: str, default_value: str) -> bool:
 
     Returns
     -------
-    bool
-        Returns the boolean value that corresponds to the conf
-
-    Raises
-    ------
-    ValueError
-        Thrown when the conf value is not a valid boolean
+    str
+        Returns the string value that corresponds to the conf
     """
-    value = _safe_get_conf(spark=spark, key=key, default_value=default_value)
-    lowercase_value = value.lower()
-    if lowercase_value == "true":
-        return True
-    if lowercase_value == "false":
-        return False
-    raise ValueError(
-        f"The conf value for '{key}' was expected to be a boolean " f"value but found value {value}"
-    )
+    from pyspark.sql.utils import is_remote
+
+    if not is_remote():
+        value = spark.sparkContext.getConf().get(key, default_value)
+    else:
+        value = spark.conf.get(key, default_value)  # type: ignore[assignment]
+    assert value is not None
+    return value
+
+
+# TODO(SPARK-41589): will move the functions and tests to an external file
+#       once we are in agreement about which functions should be in utils.py
+def _get_conf_boolean(spark: SparkSession, key: str, default_value: str) -> bool:
+    value = _get_conf(spark=spark, key=key, default_value=default_value)
+    value = value.lower()
+    assert value in ["true", "false"]
+    return value == "true"
 
 
 def get_logger(name: str) -> logging.Logger:
@@ -154,14 +155,8 @@ class Distributor:
         num_processes: int = 1,
         local_mode: bool = True,
         use_gpu: bool = True,
-        spark: Optional[SparkSession] = None,
     ):
-        if spark is None:
-            self.spark = SparkSession.getActiveSession()
-        else:
-            self.spark = spark
-        if not self.spark:
-            raise RuntimeError("An active SparkSession is required for the distributor.")
+        self.spark = _get_active_session()
         self.logger = get_logger(self.__class__.__name__)
         self.num_processes = num_processes
         self.local_mode = local_mode
@@ -189,12 +184,10 @@ class Distributor:
         RuntimeError
             Raised when the SparkConf was misconfigured.
         """
-
         if self.use_gpu:
-            assert self.spark is not None
             if not self.local_mode:
                 key = "spark.task.resource.gpu.amount"
-                task_gpu_amount = int(_safe_get_conf(self.spark, key, "0"))
+                task_gpu_amount = int(_get_conf(self.spark, key, "0"))
                 if task_gpu_amount < 1:
                     raise RuntimeError(f"'{key}' was unset, so gpu usage is unavailable.")
                 # TODO(SPARK-41916): Address situation when spark.task.resource.gpu.amount > 1
@@ -203,7 +196,7 @@ class Distributor:
                 key = "spark.driver.resource.gpu.amount"
                 if "gpu" not in self.spark.sparkContext.resources:
                     raise RuntimeError("GPUs were unable to be found on the driver.")
-                num_available_gpus = int(_safe_get_conf(self.spark, key, "0"))
+                num_available_gpus = int(_get_conf(self.spark, key, "0"))
                 if num_available_gpus == 0:
                     raise RuntimeError("GPU resources were not configured properly on the driver.")
                 if self.num_processes > num_available_gpus:
@@ -233,9 +226,8 @@ class Distributor:
             raise RuntimeError(
                 "Distributor doesn't have this functionality. Use TorchDistributor instead."
             )
-        assert self.spark is not None
-        is_ssl_enabled = get_conf_boolean(self.spark, "spark.ssl.enabled", "false")
-        ignore_ssl = get_conf_boolean(self.spark, self.ssl_conf, "false")  # type: ignore
+        is_ssl_enabled = _get_conf_boolean(self.spark, "spark.ssl.enabled", "false")
+        ignore_ssl = _get_conf_boolean(self.spark, self.ssl_conf, "false")  # type: ignore
         if is_ssl_enabled:
             name = self.__class__.__name__
             if ignore_ssl:
@@ -345,7 +337,6 @@ class TorchDistributor(Distributor):
         num_processes: int = 1,
         local_mode: bool = True,
         use_gpu: bool = True,
-        spark: Optional[SparkSession] = None,
     ):
         """Initializes the distributor.
 
@@ -371,7 +362,7 @@ class TorchDistributor(Distributor):
         RuntimeError
             If an active SparkSession is unavailable.
         """
-        super().__init__(num_processes, local_mode, use_gpu, spark)
+        super().__init__(num_processes, local_mode, use_gpu)
         self.ssl_conf = "pytorch.spark.distributor.ignoreSsl"  # type: ignore
         self._validate_input_params()
         self.input_params = self._create_input_params()
@@ -467,7 +458,6 @@ class TorchDistributor(Distributor):
         old_cuda_visible_devices = os.environ.get(CUDA_VISIBLE_DEVICES, "")
         try:
             if self.use_gpu:
-                assert self.spark is not None
                 gpus_owned = get_gpus_owned(self.spark)
                 random.seed(hash(train_object))
                 selected_gpus = [str(e) for e in random.sample(gpus_owned, self.num_processes)]
@@ -586,8 +576,7 @@ class TorchDistributor(Distributor):
             raise RuntimeError("Unknown combination of parameters")
 
         log_streaming_server = LogStreamingServer()
-        assert self.spark is not None
-        self.driver_address = _safe_get_conf(self.spark, "spark.driver.host", "")
+        self.driver_address = _get_conf(self.spark, "spark.driver.host", "")
         assert self.driver_address != ""
         log_streaming_server.start(spark_host_address=self.driver_address)
         time.sleep(1)  # wait for the server to start
@@ -601,7 +590,6 @@ class TorchDistributor(Distributor):
             f"Started distributed training with {self.num_processes} executor proceses"
         )
         try:
-            assert self.spark is not None
             row = (
                 self.spark.range(start=0, end=self.num_tasks, step=1, numPartitions=self.num_tasks)
                 .mapInPandas(func=spark_task_function, schema="output binary", barrier=True)
