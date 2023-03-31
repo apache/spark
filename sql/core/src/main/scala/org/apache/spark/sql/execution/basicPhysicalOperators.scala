@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReferences
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.plans.physical._
+import org.apache.spark.sql.execution.exchange.UnionZipRDD
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.types.{LongType, StructType}
@@ -708,6 +709,47 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan {
 
   override protected def withNewChildrenInternal(newChildren: IndexedSeq[SparkPlan]): UnionExec =
     copy(children = newChildren)
+}
+
+/**
+ * Physical plan for unioning two plans, without a distinct. This is UNION ALL in SQL.
+ * This plan has custom distribution and output partitioning, used by optimizing union with
+ * shuffle plan
+ */
+case class UnionZipExec(override val children: Seq[SparkPlan],
+                        override val requiredChildDistribution: Seq[Distribution],
+                        override val outputPartitioning: Partitioning) extends SparkPlan {
+  // updating nullability to make all the children consistent
+  override def output: Seq[Attribute] = {
+    children.map(_.output).transpose.map { attrs =>
+      val firstAttr = attrs.head
+      val nullable = attrs.exists(_.nullable)
+      val newDt = attrs.map(_.dataType).reduce(StructType.merge)
+      if (firstAttr.dataType == newDt) {
+        firstAttr.withNullability(nullable)
+      } else {
+        AttributeReference(firstAttr.name, newDt, nullable, firstAttr.metadata)(
+          firstAttr.exprId, firstAttr.qualifier)
+      }
+    }
+  }
+
+  protected override def doExecute(): RDD[InternalRow] = {
+    new UnionZipRDD(sparkContext, children.map(_.execute()))
+  }
+
+  override def supportsColumnar: Boolean = children.forall(_.supportsColumnar)
+
+  override def supportsRowBased: Boolean = children.forall(_.supportsRowBased)
+
+  protected override def doExecuteColumnar(): RDD[ColumnarBatch] = {
+    new UnionZipRDD(sparkContext, children.map(_.executeColumnar()))
+  }
+
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[SparkPlan])
+    : UnionZipExec = {
+    copy(children = newChildren)
+  }
 }
 
 /**

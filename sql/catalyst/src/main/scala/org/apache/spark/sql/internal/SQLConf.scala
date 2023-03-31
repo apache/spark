@@ -4195,6 +4195,15 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val UNION_REQUIRED_DISTRIBUTION_PUSHDOWN =
+    buildConf("spark.sql.unionRequiredDistributionPushdown.enabled")
+      .internal()
+      .doc("Enables union spark plan required children distribution pushdown. This is useful " +
+        "when children output partitioning match union parent plan's required distribution")
+      .version("3.5.0")
+      .booleanConf
+      .createWithDefault(false)
+
   /**
    * Holds information about keys that have been deprecated.
    *

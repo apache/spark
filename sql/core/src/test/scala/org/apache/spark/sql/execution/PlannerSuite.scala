@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, DisableAdaptiveExecution}
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAggregateExec, SortAggregateExec}
 import org.apache.spark.sql.execution.columnar.{InMemoryRelation, InMemoryTableScanExec}
-import org.apache.spark.sql.execution.exchange.{EnsureRequirements, REPARTITION_BY_COL, ReusedExchangeExec, ShuffleExchangeExec}
+import org.apache.spark.sql.execution.exchange.{EnsureRequirements, REPARTITION_BY_COL, ReusedExchangeExec, ShuffleExchangeExec, UnionDistributionPushdown}
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.execution.reuse.ReuseExchangeAndSubquery
 import org.apache.spark.sql.functions._
@@ -1372,6 +1372,38 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
       assert(numOutputPartitioning.size == 8)
     }
   }
+
+  test("SPARK-42935: UnionDistributionPushdown will remove shuffle when children output hash " +
+    "partitioning match parent's required distribution") {
+    withSQLConf(SQLConf.UNION_REQUIRED_DISTRIBUTION_PUSHDOWN.key -> "true") {
+      val output1 = Seq(AttributeReference(name = "id", dataType = IntegerType)(),
+        AttributeReference(name = "name", dataType = StringType)())
+      val outputPartition1 = HashPartitioning(Seq(output1.head), 100)
+      val child1 = DummySparkPlan(output = output1, outputPartitioning = outputPartition1)
+
+      val output2 = Seq(AttributeReference(name = "id", dataType = IntegerType)(),
+        AttributeReference(name = "name", dataType = StringType)())
+      val outputPartition2 = HashPartitioning(Seq(output2.head), 100)
+      val child2 = DummySparkPlan(output = output2, outputPartitioning = outputPartition2)
+
+      val unionExec = UnionExec(Seq(child1, child2))
+      val inputPlan = DummySparkPlan(
+        children = Seq(unionExec),
+        requiredChildDistribution = Seq(ClusteredDistribution(Seq(output1.head),
+          requireAllClusterKeys = true, Option(100))),
+        requiredChildOrdering = Seq.fill(Seq(unionExec).size)(Nil))
+
+      val outputPlan1 = UnionDistributionPushdown.apply(inputPlan)
+      val outputPlan2 = EnsureRequirements.apply(outputPlan1)
+      assert(outputPlan2.children.size == 1)
+      assert(outputPlan2.children.head.isInstanceOf[UnionZipExec])
+
+      val unionZipExec = outputPlan2.children.head.asInstanceOf[UnionZipExec]
+      assert(unionZipExec.children.size == 2)
+      assert(unionZipExec.children.count(_.isInstanceOf[DummySparkPlan]) == 2)
+    }
+  }
+
 }
 
 // Used for unit-testing EnsureRequirements
@@ -1380,10 +1412,9 @@ private case class DummySparkPlan(
     override val outputOrdering: Seq[SortOrder] = Nil,
     override val outputPartitioning: Partitioning = UnknownPartitioning(0),
     override val requiredChildDistribution: Seq[Distribution] = Nil,
-    override val requiredChildOrdering: Seq[Seq[SortOrder]] = Nil
-  ) extends SparkPlan {
+    override val requiredChildOrdering: Seq[Seq[SortOrder]] = Nil,
+    override val output: Seq[Attribute] = Seq.empty) extends SparkPlan {
   override protected def doExecute(): RDD[InternalRow] = throw new UnsupportedOperationException
-  override def output: Seq[Attribute] = Seq.empty
   override protected def withNewChildrenInternal(newChildren: IndexedSeq[SparkPlan]): SparkPlan =
     copy(children = newChildren)
 }
