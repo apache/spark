@@ -22,7 +22,6 @@ import java.io.IOException;
 import java.io.Serializable;
 import java.util.*;
 
-import org.apache.spark.network.util.JavaUtils;
 import scala.Tuple2;
 
 import com.google.common.collect.Iterables;

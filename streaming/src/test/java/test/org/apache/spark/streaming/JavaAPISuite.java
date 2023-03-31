@@ -22,7 +22,6 @@ import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-import org.apache.spark.network.util.JavaUtils;
 import org.apache.spark.streaming.Duration;
 import org.apache.spark.streaming.JavaCheckpointTestUtils;
 import org.apache.spark.streaming.JavaTestUtils;
