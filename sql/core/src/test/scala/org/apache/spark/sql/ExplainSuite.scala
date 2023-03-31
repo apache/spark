@@ -349,38 +349,38 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
     val df2 = Seq((2, 3), (1, 1)).toDF("k", "v2")
     val testDf = df1.join(df2, "k").groupBy("k").agg(count("v1"), sum("v1"), avg("v2"))
 
-//    val simpleExplainOutput = getNormalizedExplain(testDf, SimpleMode)
-//    assert(simpleExplainOutput.startsWith("== Physical Plan =="))
-//    Seq("== Parsed Logical Plan ==",
-//        "== Analyzed Logical Plan ==",
-//        "== Optimized Logical Plan ==").foreach { planType =>
-//      assert(!simpleExplainOutput.contains(planType))
-//    }
-//    checkKeywordsExistsInExplain(
-//      testDf,
-//      ExtendedMode,
-//      "== Parsed Logical Plan ==" ::
-//        "== Analyzed Logical Plan ==" ::
-//        "== Optimized Logical Plan ==" ::
-//        "== Physical Plan ==" ::
-//        Nil: _*)
-//    checkKeywordsExistsInExplain(
-//      testDf,
-//      CostMode,
-//      "Statistics(sizeInBytes=" ::
-//        Nil: _*)
-//    checkKeywordsExistsInExplain(
-//      testDf,
-//      CodegenMode,
-//      "WholeStageCodegen subtrees" ::
-//        "Generated code:" ::
-//        Nil: _*)
-//    checkKeywordsExistsInExplain(
-//      testDf,
-//      FormattedMode,
-//      "* LocalTableScan (1)" ::
-//        "(1) LocalTableScan [codegen id :" ::
-//        Nil: _*)
+    val simpleExplainOutput = getNormalizedExplain(testDf, SimpleMode)
+    assert(simpleExplainOutput.startsWith("== Physical Plan =="))
+    Seq("== Parsed Logical Plan ==",
+        "== Analyzed Logical Plan ==",
+        "== Optimized Logical Plan ==").foreach { planType =>
+      assert(!simpleExplainOutput.contains(planType))
+    }
+    checkKeywordsExistsInExplain(
+      testDf,
+      ExtendedMode,
+      "== Parsed Logical Plan ==" ::
+        "== Analyzed Logical Plan ==" ::
+        "== Optimized Logical Plan ==" ::
+        "== Physical Plan ==" ::
+        Nil: _*)
+    checkKeywordsExistsInExplain(
+      testDf,
+      CostMode,
+      "Statistics(sizeInBytes=" ::
+        Nil: _*)
+    checkKeywordsExistsInExplain(
+      testDf,
+      CodegenMode,
+      "WholeStageCodegen subtrees" ::
+        "Generated code:" ::
+        Nil: _*)
+    checkKeywordsExistsInExplain(
+      testDf,
+      FormattedMode,
+      "* LocalTableScan (1)" ::
+        "(1) LocalTableScan [codegen id :" ::
+        Nil: _*)
     checkKeywordsExistsInExplain(
       testDf,
       ValidationMode,
