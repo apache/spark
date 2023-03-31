@@ -626,16 +626,18 @@ class QueryExecutionErrorsSuite
   }
 
   test("BINARY_ARITHMETIC_CAUSE_OVERFLOW: byte plus byte result overflow") {
-    checkError(
-      exception = intercept[SparkArithmeticException] {
+    withSQLConf("spark.sql.ansi.enabled" -> "true") {
+      checkError(
+        exception = intercept[SparkArithmeticException] {
           sql(s"select CAST('127' AS TINYINT) + CAST('5' AS TINYINT)").collect()
-      },
-      errorClass = "BINARY_ARITHMETIC_CAUSE_OVERFLOW",
-      parameters = Map(
-        "value1" -> "127",
-        "symbol" -> "+",
-        "value2" -> "5"),
-      sqlState = "22003")
+        },
+        errorClass = "BINARY_ARITHMETIC_CAUSE_OVERFLOW",
+        parameters = Map(
+          "value1" -> "127S",
+          "symbol" -> "+",
+          "value2" -> "5S"),
+        sqlState = "22003")
+  }
   }
 
   test("UNSUPPORTED_DATATYPE: invalid StructType raw format") {
