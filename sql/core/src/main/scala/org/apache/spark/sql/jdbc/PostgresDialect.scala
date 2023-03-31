@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.analysis.{IndexAlreadyExistsException, NonEmptyNamespaceException, NoSuchIndexException}
 import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.connector.expressions.NamedReference
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcUtils}
 import org.apache.spark.sql.execution.datasources.v2.TableSampleInfo
 import org.apache.spark.sql.types._
@@ -246,5 +247,12 @@ private object PostgresDialect extends JdbcDialect with SQLConfHelper {
     // method name
     "TABLESAMPLE BERNOULLI" +
       s" (${(sample.upperBound - sample.lowerBound) * 100}) REPEATABLE (${sample.seed})"
+  }
+
+  override def renameTable(oldTable: Identifier, newTable: Identifier): String = {
+    if (!oldTable.namespace().sameElements(newTable.namespace())) {
+      throw QueryCompilationErrors.cannotRenameTableAcrossSchemaError()
+    }
+    s"ALTER TABLE ${getFullyQualifiedQuotedTableName(oldTable)} RENAME TO ${newTable.name()}"
   }
 }
