@@ -633,7 +633,8 @@ public interface TableChange {
 
     @Override
     public String toString() {
-      StringJoiner sj = new StringJoiner(".", getClass().getSimpleName() + "(", ", " + newComment + ")");
+      StringJoiner sj =
+          new StringJoiner(".", getClass().getSimpleName() + "(", ", " + newComment + ")");
       for (String s : fieldNames) {
         sj.add(package$.MODULE$.quoteIfNeeded(s));
       }
