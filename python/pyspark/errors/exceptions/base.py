@@ -196,3 +196,9 @@ class PySparkAttributeError(PySparkException, AttributeError):
     """
     Wrapper class for AttributeError to support error classes.
     """
+
+
+class PySparkRuntimeError(PySparkException, RuntimeError):
+    """
+    Wrapper class for RuntimeError to support error classes.
+    """

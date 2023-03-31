@@ -27,6 +27,8 @@ import traceback
 from types import TracebackType
 from typing import Any, Callable, Iterator, List, Optional, TextIO, Tuple
 
+from pyspark.errors import PySparkRuntimeError
+
 from py4j.clientserver import ClientServer
 
 __all__: List[str] = []
@@ -80,8 +82,11 @@ def fail_on_stopiteration(f: Callable) -> Callable:
         try:
             return f(*args, **kwargs)
         except StopIteration as exc:
-            raise RuntimeError(
-                "Caught StopIteration thrown from user's code; failing the task", exc
+            raise PySparkRuntimeError(
+                error_class="STOP_ITERATION_OCCURRED",
+                message_parameters={
+                    "exc": str(exc),
+                },
             )
 
     return wrapper

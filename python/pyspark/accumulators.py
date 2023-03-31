@@ -23,6 +23,7 @@ import threading
 from typing import Callable, Dict, Generic, Tuple, Type, TYPE_CHECKING, TypeVar, Union
 
 from pyspark.serializers import read_int, CPickleSerializer
+from pyspark.errors import PySparkRuntimeError
 
 if TYPE_CHECKING:
     from pyspark._typing import SupportsIAdd  # noqa: F401
@@ -140,14 +141,24 @@ class Accumulator(Generic[T]):
     def value(self) -> T:
         """Get the accumulator's value; only usable in driver program"""
         if self._deserialized:
-            raise RuntimeError("Accumulator.value cannot be accessed inside tasks")
+            raise PySparkRuntimeError(
+                error_class="VALUE_NOT_ACCESSIBLE",
+                message_parameters={
+                    "value": "Accumulator.value",
+                },
+            )
         return self._value
 
     @value.setter
     def value(self, value: T) -> None:
         """Sets the accumulator's value; only usable in driver program"""
         if self._deserialized:
-            raise RuntimeError("Accumulator.value cannot be accessed inside tasks")
+            raise PySparkRuntimeError(
+                error_class="VALUE_NOT_ACCESSIBLE",
+                message_parameters={
+                    "value": "Accumulator.value",
+                },
+            )
         self._value = value
 
     def add(self, term: T) -> None:

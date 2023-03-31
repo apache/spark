@@ -72,7 +72,7 @@ class ErrorClassesReader:
               "message" : [
                 "Problem <A> because of <B>."
               ],
-              "subClass" : {
+              "sub_class" : {
                 "SUB_ERROR_CLASS" : {
                   "message" : [
                     "Do <C> to fix the problem."
@@ -104,7 +104,7 @@ class ErrorClassesReader:
         else:
             # Generate message template for sub error class if exists.
             sub_error_class = error_classes[1]
-            main_error_class_subclass_info_map = main_error_class_info_map["subClass"]
+            main_error_class_subclass_info_map = main_error_class_info_map["sub_class"]
             if sub_error_class in main_error_class_subclass_info_map:
                 sub_error_class_info_map = main_error_class_subclass_info_map[sub_error_class]
             else:
