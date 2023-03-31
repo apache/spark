@@ -10113,6 +10113,120 @@ def unwrap_udt(col: "ColumnOrName") -> Column:
     return _invoke_function("unwrap_udt", _to_java_column(col))
 
 
+@try_remote_functions
+def hllsketch_estimate(col: "ColumnOrName", lgConfigK: Optional[int] = None, tgtHllType: Optional[str] = None) -> Column:
+    """
+    Aggregate function: returns the estimated number of unique values in column `col`,
+    using a Datasketches HllSketch instance.
+
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+    lgConfigK : int, optional
+        The log-base-2 of K, where K is the number of buckets or slots for the HllSketch
+    tgtHllType : string, optional
+        The target type of the HllSketch to be used (HLL_4, HLL_6, HLL_8)
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        The estimated number of unique values as a bigint column.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([1,2,2,3], "INT")
+    >>> df = df.agg(hllsketch_estimate("value").alias("distinct_cnt"))
+    >>> df.show()
+    +------------+
+    |distinct_cnt|
+    +------------+
+    |           3|
+    +------------+
+    """
+    if lgConfigK is not None and tgtHllType is not None:
+        return _invoke_function("hllsketch_estimate", _to_java_column(col), lgConfigK, tgtHllType)
+    else:
+        return _invoke_function("hllsketch_estimate", _to_java_column(col))
+
+
+@try_remote_functions
+def hllsketch_binary(col: "ColumnOrName", lgConfigK: Optional[int] = None, tgtHllType: Optional[str] = None) -> Column:
+    """
+    Aggregate function: returns the compact binary representation of a Datasketches HllSketch,
+    updated with the values in column `col`.
+
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+    lgConfigK : int, optional
+        The log-base-2 of K, where K is the number of buckets or slots for the HllSketch
+    tgtHllType : string, optional
+        The target type of the HllSketch to be used (HLL_4, HLL_6, HLL_8)
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        The compact binary representation of the Datasketches HllSketch as a binary column.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([1,2,2,3], "INT")
+    >>> df = df.agg(hllsketch_binary("value").alias("sketch"))
+    >>> df = df.agg(hllsketch_union_estimate("sketch").alias("distinct_cnt"))
+    >>> df.drop("sketch").show()
+    +------------+
+    |distinct_cnt|
+    +------------+
+    |           3|
+    +------------+
+    """
+    if lgConfigK is not None and tgtHllType is not None:
+        return _invoke_function("hllsketch_binary", _to_java_column(col), lgConfigK, tgtHllType)
+    else:
+        return _invoke_function("hllsketch_binary", _to_java_column(col))
+
+
+@try_remote_functions
+def hllsketch_union_estimate(col: "ColumnOrName", lgMaxK: Optional[int] = None) -> Column:
+    """
+    Aggregate function: returns the estimated number of unique items in a group, derived by merging the binary
+    representations of Datasketches HllSketch objects in column `col` via a Datasketches Union instance.
+
+    .. versionadded:: 3.5.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or str
+    lgMaxK : int, optional
+        The largest maximum size for lgConfigK for the union operation.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        The estimated number of unique values as a bigint column.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([1,2,2,3], "INT")
+    >>> df = df.agg(hllsketch_binary("value").alias("sketch"))
+    >>> df = df.agg(hllsketch_union_estimate("sketch").alias("distinct_cnt"))
+    >>> df.drop("sketch").show()
+    +------------+
+    |distinct_cnt|
+    +------------+
+    |           3|
+    +------------+
+    """
+    if lgConfigK is not None and tgtHllType is not None:
+        return _invoke_function("hllsketch_union_estimate", _to_java_column(col), lgMaxK)
+    else:
+        return _invoke_function("hllsketch_union_estimate", _to_java_column(col))
+
+
 # ---------------------------- User Defined Function ----------------------------------
 
 

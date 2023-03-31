@@ -1545,6 +1545,59 @@ class DataFrameAggregateSuite extends QueryTest
     )
     checkAnswer(res, Row(Array(1), Array(1)))
   }
+
+  test("SPARK-16484: hllsketch_estimate positive tests") {
+    val df1 = Seq(
+      (1, "a"), (1, "a"), (1, "a"),
+      (1, "b"),
+      (1, "c"), (1, "c"),
+      (1, "d")
+    ).toDF("id", "value")
+
+    val df2 = Seq(
+      (1, "a"),
+      (1, "c"),
+      (1, "d"), (1, "d"), (1, "d"),
+      (1, "e"), (1, "e"),
+      (1, "f")
+    ).toDF("id", "value")
+
+    val res1 = df1.groupBy(col("id"))
+      .agg(
+        count("value").as("count"),
+        hllsketch_estimate("value").as("distinct_count")
+      )
+
+    checkAnswer(res1, Row(1, 7, 4))
+
+    // Showing modified config implementation also works
+    val res2 = df1.groupBy(col("id"))
+      .agg(
+        count("value").as("count"),
+        hllsketch_estimate(Column("value"), 20, "HLL_4").as("distinct_count")
+      )
+
+    checkAnswer(res2, Row(1, 7, 4))
+
+    val df3 = df1.groupBy(col("id"))
+      .agg(
+        count("value").as("count"),
+        hllsketch_binary("value").as("hll_sketch")
+      )
+
+    val df4 = df2.groupBy(col("id"))
+      .agg(
+        count("value").as("count"),
+        hllsketch_binary("value").as("hll_sketch")
+      )
+
+    val res3 = df3.union(df4).groupBy(col("id")).agg(
+      sum("count").as("count"),
+      hllsketch_union_estimate("hll_sketch").as("distinct_count")
+    )
+
+    checkAnswer(res3, Row(1, 15, 6))
+  }
 }
 
 case class B(c: Option[Double])

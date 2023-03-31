@@ -308,29 +308,6 @@ object functions {
   }
 
   /**
-   * Aggregate function: returns the approximate number of distinct items in a group,
-   * using a Datasketches HllSketch instance with default configuration.
-   *
-   * @group agg_funcs
-   * @since 3.2.1
-   */
-  def hllsketch_eval(e: Column): Column = withAggregateFunction {
-    DatasketchesHllSketch(e.expr)
-  }
-
-
-  /**
-   * Aggregate function: returns the approximate number of distinct items in a group,
-   * using a Datasketches HllSketch instance with default configuration.
-   *
-   * @group agg_funcs
-   * @since 3.2.1
-   */
-  def hllsketch_eval(columnName: String): Column = {
-    hllsketch_eval(Column(columnName))
-  }
-
-  /**
    * Aggregate function: returns the average of the values in a group.
    *
    * @group agg_funcs
@@ -618,6 +595,110 @@ object functions {
    */
   def grouping_id(colName: String, colNames: String*): Column = {
     grouping_id((Seq(colName) ++ colNames).map(n => Column(n)) : _*)
+  }
+
+  /**
+   * Aggregate function: returns the estimated number of unique items in a group,
+   * using a Datasketches HllSketch instance configured with lgConfigK and tgtHllType args.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def hllsketch_estimate(e: Column, lgConfigK: Int, tgtHllType: String): Column =
+    withAggregateFunction {
+    HllSketchEstimate(e.expr, lgConfigK, tgtHllType)
+  }
+
+  /**
+   * Aggregate function: returns the estimated number of unique items in a group,
+   * using a Datasketches HllSketch instance with default configuration.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def hllsketch_estimate(e: Column): Column = withAggregateFunction {
+    HllSketchEstimate(e.expr)
+  }
+
+  /**
+   * Aggregate function: returns the estimated number of unique items in a group,
+   * using a Datasketches HllSketch instance with default configuration.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def hllsketch_estimate(columnName: String): Column = {
+    hllsketch_estimate(Column(columnName))
+  }
+
+  /**
+   * Aggregate function: returns the compact binary representation of the Datasketches
+   * HllSketch configured with lgConfigK and tgtHllType args.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def hllsketch_binary(e: Column, lgConfigK: Int, tgtHllType: String): Column =
+    withAggregateFunction {
+    HllSketchBinary(e.expr, lgConfigK, tgtHllType)
+  }
+
+  /**
+   * Aggregate function: returns the compact binary representation of the Datasketches
+   * HllSketch configured with default values.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def hllsketch_binary(e: Column): Column = withAggregateFunction {
+    HllSketchBinary(e.expr)
+  }
+
+  /**
+   * Aggregate function: returns the compact binary representation of the Datasketches
+   * HllSketch configured with default values.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def hllsketch_binary(columnName: String): Column = {
+    hllsketch_binary(Column(columnName))
+  }
+
+  /**
+   * Aggregate function: returns the estimated number of unique items in a group, derived
+   * by merging the binary representations of Datasketches HllSketch objects via a Datasketches
+   * Union instance configured with lgMaxK arg.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def hllsketch_union_estimate(e: Column, lgMaxK: Int): Column = withAggregateFunction {
+    HllSketchUnionEstimate(e.expr, lgMaxK)
+  }
+
+  /**
+   * Aggregate function: returns the estimated number of unique items in a group, derived
+   * by merging the binary representations of Datasketches HllSketch objects via a Datasketches
+   * Union instance configured with default values.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def hllsketch_union_estimate(e: Column): Column = withAggregateFunction {
+    HllSketchUnionEstimate(e.expr)
+  }
+
+  /**
+   * Aggregate function: returns the estimated number of distinct items in a group, derived
+   * by merging the binary representations of Datasketches HllSketch objects via a Datasketches
+   * Union instance configured with default values.
+   *
+   * @group agg_funcs
+   * @since 3.5.0
+   */
+  def hllsketch_union_estimate(columnName: String): Column = {
+    hllsketch_union_estimate(Column(columnName))
   }
 
   /**

@@ -241,6 +241,9 @@ Aggregate Functions
     first
     grouping
     grouping_id
+    hllsketch_estimate
+    hllsketch_binary
+    hllsketch_union_estimate
     kurtosis
     last
     max

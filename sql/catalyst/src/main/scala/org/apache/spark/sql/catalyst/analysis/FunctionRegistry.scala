@@ -506,6 +506,9 @@ object FunctionRegistry {
     expression[RegrSlope]("regr_slope"),
     expression[RegrIntercept]("regr_intercept"),
     expression[Mode]("mode"),
+    expression[HllSketchEstimate]("hllsketch_estimate"),
+    expression[HllSketchBinary]("hllsketch_binary"),
+    expression[HllSketchUnionEstimate]("hllsketch_union_estimate"),
 
     // string functions
     expression[Ascii]("ascii"),
