@@ -3975,7 +3975,7 @@ class Dataset[T] private[sql](
    *   df.debugCodegen()
    * }}}
    *
-   * @since 3.4.0
+   * @since 3.5.0
    */
   @DeveloperApi
   def debugCodegen(): Unit = {
