@@ -637,7 +637,7 @@ class QueryExecutionErrorsSuite
           "symbol" -> "+",
           "value2" -> "5S"),
         sqlState = "22003")
-  }
+    }
   }
 
   test("UNSUPPORTED_DATATYPE: invalid StructType raw format") {
