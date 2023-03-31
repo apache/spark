@@ -64,26 +64,6 @@ ERROR_CLASSES_JSON = """
       "Broadcast can only be unpersisted in driver."
     ]
   },
-  "CAN_NOT_DESTROY_BROADCAST": {
-    "message": [
-      "Broadcast can only be destroyed in driver."
-    ]
-  },
-  "COLUMN_IN_LIST": {
-    "message": [
-      "`<func_name>` does not allow a Column in a list."
-    ]
-  },
-  "COLUMN_IN_LIST": {
-    "message": [
-      "`<func_name>` does not allow a Column in a list."
-    ]
-  },
-  "COLUMN_IN_LIST": {
-    "message": [
-      "`<func_name>` does not allow a Column in a list."
-    ]
-  },
   "COLUMN_IN_LIST": {
     "message": [
       "`<func_name>` does not allow a Column in a list."
@@ -237,14 +217,14 @@ ERROR_CLASSES_JSON = """
       "Argument `<arg_name>` should be a float, int, list or str, got <arg_type>."
     ]
   },
-  "NOT_IN_BARRIER_STAGE" : {
-    "message" : [
-      "It is not in a barrier stage."
-    ]
-  },
   "NOT_INT" : {
     "message" : [
       "Argument `<arg_name>` should be an int, got <arg_type>."
+    ]
+  },
+  "NOT_IN_BARRIER_STAGE" : {
+    "message" : [
+      "It is not in a barrier stage."
     ]
   },
   "NOT_ITERABLE" : {
@@ -339,7 +319,7 @@ ERROR_CLASSES_JSON = """
   },
   "STOP_ITERATION_OCCURRED_FROM_SCALAR_ITER_PANDAS_UDF" : {
     "message" : [
-      pandas iterator UDF should exhaust the input iterator."
+      "pandas iterator UDF should exhaust the input iterator."
     ]
   },
   "UNEXPECTED_RESPONSE_FROM_SERVER" : {
