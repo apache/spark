@@ -219,7 +219,9 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
         def unapply(attributeReference: AttributeReference): Option[AttributeReference] = {
           attributeReference match {
             case attr @ FileSourceMetadataAttribute(
-                AttributeReference("_metadata", StructType(_), _, _)) =>
+                MetadataAttributeWithLogicalName(
+                  AttributeReference(_, StructType(_), _, _),
+                  FileFormat.METADATA_NAME)) =>
               Some(attr)
             case _ => None
           }

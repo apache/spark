@@ -64,13 +64,6 @@ def _test() -> None:
     from pyspark.testing.utils import search_jar
 
     avro_jar = search_jar("connector/avro", "spark-avro", "spark-avro")
-
-    print()
-    print(avro_jar)
-    print(avro_jar)
-    print(avro_jar)
-    print()
-
     if avro_jar is None:
         print(
             "Skipping all Avro Python tests as the optional Avro project was "

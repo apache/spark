@@ -100,7 +100,7 @@ object DataSourceV2Implicits {
   implicit class MetadataColumnsHelper(metadata: Array[MetadataColumn]) {
     def asStruct: StructType = {
       val fields = metadata.map { metaCol =>
-        val fieldMeta = new MetadataBuilder().putBoolean(METADATA_COL_ATTR_KEY, true).build()
+        val fieldMeta = new MetadataBuilder().putString(METADATA_COL_ATTR_KEY, metaCol.name).build()
         val field = StructField(metaCol.name, metaCol.dataType, metaCol.isNullable, fieldMeta)
         Option(metaCol.comment).map(field.withComment).getOrElse(field)
       }

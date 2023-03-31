@@ -1137,6 +1137,18 @@ class DataFrameSuite extends QueryTest
     checkAnswer(approxSummaryDF, approxSummaryResult)
   }
 
+  test("SPARK-41391: Correct the output column name of groupBy.agg(count_distinct)") {
+    withTempView("person") {
+      person.createOrReplaceTempView("person")
+      val df1 = person.groupBy("id").agg(count_distinct(col("name")))
+      val df2 = spark.sql("SELECT id, COUNT(DISTINCT name) FROM person GROUP BY id")
+      assert(df1.columns === df2.columns)
+      val df3 = person.groupBy("id").agg(count_distinct(col("*")))
+      val df4 = spark.sql("SELECT id, COUNT(DISTINCT *) FROM person GROUP BY id")
+      assert(df3.columns === df4.columns)
+    }
+  }
+
   test("summary advanced") {
     val stats = Array("count", "50.01%", "max", "mean", "min", "25%")
     val orderMatters = person2.summary(stats: _*)

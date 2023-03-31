@@ -43,6 +43,34 @@ abstract class LogicalPlan
    */
   def metadataOutput: Seq[Attribute] = children.flatMap(_.metadataOutput)
 
+  /**
+   * Searches for a metadata attribute by its logical name.
+   *
+   * The search works in spite of conflicts with column names in the data schema.
+   */
+  def getMetadataAttributeByNameOpt(name: String): Option[AttributeReference] = {
+    // NOTE: An already-referenced column might appear in `output` instead of `metadataOutput`.
+    (metadataOutput ++ output).collectFirst {
+      case MetadataAttributeWithLogicalName(attr, logicalName)
+          if conf.resolver(name, logicalName) => attr
+    }
+  }
+
+  /**
+   * Returns the metadata attribute having the specified logical name.
+   *
+   * Throws [[AnalysisException]] if no such metadata attribute exists.
+   */
+  def getMetadataAttributeByName(name: String): AttributeReference = {
+    getMetadataAttributeByNameOpt(name).getOrElse {
+      val availableMetadataColumns = (metadataOutput ++ output).collect {
+        case MetadataAttributeWithLogicalName(_, logicalName) => logicalName
+      }
+      throw QueryCompilationErrors.unresolvedAttributeError(
+        "UNRESOLVED_COLUMN", name, availableMetadataColumns.distinct, origin)
+    }
+  }
+
   /** Returns true if this subtree has data from a streaming data source. */
   def isStreaming: Boolean = _isStreaming
   private[this] lazy val _isStreaming = children.exists(_.isStreaming)
@@ -332,7 +360,8 @@ object LogicalPlanIntegrity {
  */
 trait ExposesMetadataColumns extends LogicalPlan {
   protected def metadataOutputWithOutConflicts(
-      metadataOutput: Seq[AttributeReference]): Seq[AttributeReference] = {
+      metadataOutput: Seq[AttributeReference],
+      renameOnConflict: Boolean = true): Seq[AttributeReference] = {
     // If `metadataColFromOutput` is not empty that means `AddMetadataColumns` merged
     // metadata output into output. We should still return an available metadata output
     // so that the rule `ResolveReferences` can resolve metadata column correctly.
@@ -341,13 +370,18 @@ trait ExposesMetadataColumns extends LogicalPlan {
       val resolve = conf.resolver
       val outputNames = outputSet.map(_.name)
 
-      def isOutputColumn(col: AttributeReference): Boolean = {
-        outputNames.exists(name => resolve(col.name, name))
+      def isOutputColumn(colName: String): Boolean = outputNames.exists(resolve(colName, _))
+
+      @scala.annotation.tailrec
+      def makeUnique(name: String): String =
+        if (isOutputColumn(name)) makeUnique(s"_$name") else name
+
+      // If allowed to, resolve any name conflicts between metadata and output columns by renaming
+      // the conflicting metadata columns; otherwise, suppress them.
+      metadataOutput.collect {
+        case attr if !isOutputColumn(attr.name) => attr
+        case attr if renameOnConflict => attr.withName(makeUnique(attr.name))
       }
-      // filter out the metadata struct column if it has the name conflicting with output columns.
-      // if the file has a column "_metadata",
-      // then the data column should be returned not the metadata struct column
-      metadataOutput.filterNot(isOutputColumn)
     } else {
       metadataColFromOutput.asInstanceOf[Seq[AttributeReference]]
     }

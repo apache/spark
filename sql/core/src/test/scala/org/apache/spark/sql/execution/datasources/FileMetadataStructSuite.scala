@@ -244,6 +244,107 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
       parameters = Map("fieldName" -> "`file_name`", "fields" -> "`id`, `university`"))
   }
 
+  metadataColumnsTest("SPARK-42683: df metadataColumn - schema conflict",
+    schemaWithNameConflicts) { (df, f0, f1) =>
+    // the user data has the schema: name, age, _metadata.id, _metadata.university
+
+    // select user data + metadata
+    checkAnswer(
+      df.select("name", "age", "_METADATA", "_metadata")
+        .withColumn("file_name", df.metadataColumn("_metadata").getField("file_name")),
+      Seq(
+        Row("jack", 24, Row(12345L, "uom"), Row(12345L, "uom"), f0(METADATA_FILE_NAME)),
+        Row("lily", 31, Row(54321L, "ucb"), Row(54321L, "ucb"), f1(METADATA_FILE_NAME))
+      )
+    )
+  }
+
+  metadataColumnsTest("SPARK-42683: df metadataColumn - no schema conflict",
+    schema) { (df, f0, f1) =>
+
+    // select user data + metadata
+    checkAnswer(
+      df.select("name", "age")
+        .withColumn("file_name", df.metadataColumn("_metadata").getField("file_name")),
+      Seq(
+        Row("jack", 24, f0(METADATA_FILE_NAME)),
+        Row("lily", 31, f1(METADATA_FILE_NAME))
+      )
+    )
+  }
+
+  metadataColumnsTest("SPARK-42683: df metadataColumn - manually renamed",
+    schema) { (baseDf, f0, f1) =>
+
+    // select renamed metadata column
+    var df = baseDf.select(col("_metadata").as("renamed_metadata"))
+    checkAnswer(
+      df.select(df.metadataColumn("_metadata").getField("file_name")),
+      Seq(
+        Row(f0(METADATA_FILE_NAME)),
+        Row(f1(METADATA_FILE_NAME))
+      )
+    )
+
+    df = baseDf.withColumnRenamed("_metadata", "renamed_metadata")
+    checkAnswer(
+      df.select(df.metadataColumn("_metadata").getField("file_name")),
+      Seq(
+        Row(f0(METADATA_FILE_NAME)),
+        Row(f1(METADATA_FILE_NAME))
+      )
+    )
+  }
+
+  metadataColumnsTest("SPARK-42683: df metadataColumn - column not found",
+    schema) { (df, f0, f1) =>
+
+    // Not a column at all
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.metadataColumn("foo")
+      },
+      errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+      parameters = Map("objectName" -> "`foo`", "proposal" -> "`_metadata`"))
+
+    // Name exists, but does not reference a metadata column
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.metadataColumn("name")
+      },
+      errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+      parameters = Map("objectName" -> "`name`", "proposal" -> "`_metadata`"))
+  }
+
+  metadataColumnsTest("SPARK-42683: metadata name conflict resolved by leading underscores - one",
+    schemaWithNameConflicts) { (df, f0, f1) =>
+    // the user data has the schema: name, age, _metadata.id, _metadata.university
+
+    checkAnswer(
+      df.select("name", "age", "_metadata", "__metadata.file_name"),
+      Seq(
+        Row("jack", 24, Row(12345L, "uom"), f0(METADATA_FILE_NAME)),
+        Row("lily", 31, Row(54321L, "ucb"), f1(METADATA_FILE_NAME))
+      )
+    )
+  }
+
+  metadataColumnsTest("SPARK-42683: metadata name conflict resolved by leading underscores - many",
+    new StructType()
+      .add(schema("name").copy(name = "_metadata"))
+      .add(schema("age").copy(name = "__metadata"))
+      .add(schema("info").copy(name = "___metadata"))) { (df, f0, f1) =>
+    // the user data has the schema: _metadata, __metadata, ___metadata.id, ___metadata.university
+
+    checkAnswer(
+      df.select("_metadata", "__metadata", "___metadata", "____metadata.file_name"),
+      Seq(
+        Row("jack", 24, Row(12345L, "uom"), f0(METADATA_FILE_NAME)),
+        Row("lily", 31, Row(54321L, "ucb"), f1(METADATA_FILE_NAME))
+      )
+    )
+  }
+
   metadataColumnsTest("select only metadata", schema) { (df, f0, f1) =>
     checkAnswer(
       df.select(METADATA_FILE_NAME, METADATA_FILE_PATH,
