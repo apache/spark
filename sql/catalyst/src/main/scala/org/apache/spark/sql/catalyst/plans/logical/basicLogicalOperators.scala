@@ -178,6 +178,10 @@ case class Filter(condition: Expression, child: LogicalPlan)
 
   override protected def withNewChildInternal(newChild: LogicalPlan): Filter =
     copy(child = newChild)
+
+  def getMaxConditionalSize: Int = {
+    getConditionalSize(condition)
+  }
 }
 
 abstract class SetOperation(left: LogicalPlan, right: LogicalPlan) extends BinaryNode {
