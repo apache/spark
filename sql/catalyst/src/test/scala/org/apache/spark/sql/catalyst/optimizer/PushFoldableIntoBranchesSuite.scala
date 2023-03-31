@@ -355,4 +355,18 @@ class PushFoldableIntoBranchesSuite extends PlanTest with ExpressionEvalHelper {
       EqualTo(CaseWhen(Seq(('a > 10, Literal(0))), Literal(1)), Literal(1)),
       Not('a > 10 <=> TrueLiteral))
   }
+
+  test("IsNull when CaseWhen's elseValue was None should be true") {
+    assertEquivalent(
+      IsNull(CaseWhen(Seq((EqualTo('a, Literal(10)), Literal("A")),
+        (EqualTo('a, Literal(20)), Literal("AA"))), None)),
+      CaseWhen(Seq((EqualTo('a, Literal(10)), FalseLiteral),
+        (EqualTo('a, Literal(20)), FalseLiteral)), Some(TrueLiteral)))
+
+    assertEquivalent(
+      IsNull(CaseWhen(Seq((EqualTo('a, Literal(10)), Literal("A")),
+        (EqualTo('a, Literal(20)), Literal("AA"))), Some(Literal(null, StringType)))),
+      CaseWhen(Seq((EqualTo('a, Literal(10)), FalseLiteral),
+        (EqualTo('a, Literal(20)), FalseLiteral)), Some(TrueLiteral)))
+  }
 }

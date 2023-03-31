@@ -288,6 +288,22 @@ trait PredicateHelper extends AliasHelper with Logging {
     }
   }
 
+  protected def getConditionalSize(expr: Expression): Int = expr match {
+    case And(left, right) =>
+      getConditionalSize(left).max(getConditionalSize(right))
+    case Or(left, right) =>
+      getConditionalSize(left).max(getConditionalSize(right))
+    case In(value, _) =>
+      getConditionalSize(value)
+    case EqualTo(left, right) =>
+      getConditionalSize(left).max(getConditionalSize(right))
+    case Coalesce(ch) =>
+      ch.map(getConditionalSize).sum
+    case CaseWhen(b, e) =>
+      b.map(_._1).map(getConditionalSize).sum + e.map(getConditionalSize).getOrElse(0)
+    case _ => 1
+  }
+
   /**
    * Returns whether an expression is likely to be selective
    */
