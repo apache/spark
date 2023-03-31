@@ -112,7 +112,7 @@ message SQL {
   // SQL literal expressions. For example, map keys: "rank", "name", "birthdate";
   // map values: "1", "'Steven'", "DATE'2023-03-21'". The fragments of string values
   // belonged to SQL comments are skipped while parsing.
-  map<string, string> args = 2;
+  map<string, Expression.Literal> args = 2;
 }
 
 // Relation that reads from a file / table or other data source. Does not have additional

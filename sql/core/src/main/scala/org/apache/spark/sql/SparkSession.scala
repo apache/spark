@@ -45,6 +45,7 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.command.ExternalCommandExecutor
 import org.apache.spark.sql.execution.datasources.{DataSource, LogicalRelation}
+import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.internal._
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
 import org.apache.spark.sql.sources.BaseRelation
@@ -620,13 +621,12 @@ class SparkSession private(
    * @since 3.4.0
    */
   @Experimental
-  def sql(sqlText: String, args: Map[String, String]): DataFrame = withActive {
+  def sql(sqlText: String, args: Map[String, Any]): DataFrame = withActive {
     val tracker = new QueryPlanningTracker
     val plan = tracker.measurePhase(QueryPlanningTracker.PARSING) {
-      val parser = sessionState.sqlParser
-      val parsedPlan = parser.parsePlan(sqlText)
+      val parsedPlan = sessionState.sqlParser.parsePlan(sqlText)
       if (args.nonEmpty) {
-        ParameterizedQuery(parsedPlan, args.mapValues(parser.parseExpression).toMap)
+        ParameterizedQuery(parsedPlan, args.mapValues(lit(_).expr).toMap)
       } else {
         parsedPlan
       }
@@ -648,7 +648,7 @@ class SparkSession private(
    * @since 3.4.0
    */
   @Experimental
-  def sql(sqlText: String, args: java.util.Map[String, String]): DataFrame = {
+  def sql(sqlText: String, args: java.util.Map[String, Any]): DataFrame = {
     sql(sqlText, args.asScala.toMap)
   }
 
@@ -658,7 +658,7 @@ class SparkSession private(
    *
    * @since 2.0.0
    */
-  def sql(sqlText: String): DataFrame = sql(sqlText, Map.empty[String, String])
+  def sql(sqlText: String): DataFrame = sql(sqlText, Map.empty[String, Any])
 
   /**
    * Execute an arbitrary string command inside an external execution engine rather than Spark.
