@@ -157,6 +157,12 @@ private[spark] class SparkSubmit extends Logging {
 
     def doRunMain(): Unit = {
       if (args.proxyUser != null) {
+        // Teachmint
+        logInfo("Proxy User : " + args.proxyUser)
+        args.sparkProperties.put("spark.hadoop.javax.jdo.option.ConnectionUserName", args.proxyUser)
+        args.sparkProperties.put("spark.hadoop.javax.jdo.option.ConnectionPassword",
+          Utils.getMetastorePassword(args.proxyUser))
+        // - - - - - - - - - - -
         val proxyUser = UserGroupInformation.createProxyUser(args.proxyUser,
           UserGroupInformation.getCurrentUser())
         try {

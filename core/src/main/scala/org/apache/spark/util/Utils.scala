@@ -40,7 +40,7 @@ import scala.collection.mutable.ArrayBuffer
 import scala.io.Source
 import scala.reflect.ClassTag
 import scala.util.{Failure, Success, Try}
-import scala.util.control.{ControlThrowable, NonFatal}
+import scala.util.control.{Breaks, ControlThrowable, NonFatal}
 import scala.util.matching.Regex
 
 import _root_.io.netty.channel.unix.Errors.NativeIoException
@@ -2251,7 +2251,30 @@ private[spark] object Utils extends Logging {
       .map(_.getAbsolutePath)
       .orNull
   }
-
+  // Teachmint
+  /** Return the Metastore Credentials corresponding to the username */
+  def getMetastorePassword(username: String): String = {
+    var metaStoreConf = sys.env
+      .get("SPARK_CONF_DIR")
+      .orElse(sys.env.get("SPARK_HOME").map { t => s"$t${File.separator}conf" })
+      .map { t => new File(s"$t${File.separator}metastore-credentials.conf") }
+      .filter(_.isFile)
+      .map(_.getAbsolutePath)
+      .orNull
+    log.info("MetaStore Credentials at : " + metaStoreConf)
+    var credentialFile = scala.io.Source.fromFile(metaStoreConf)
+    var credentials = credentialFile.getLines()
+    var password = "default"
+    Breaks.breakable(for (credential <- credentials) {
+      var cred = credential.split(" ")
+      if (cred(0) == username) {
+        password = cred(1)
+        Breaks.break()
+      }
+    })
+    credentialFile.close()
+    return password
+  } // - - - - - - - - - - -
   /**
    * Return a nice string representation of the exception. It will call "printStackTrace" to
    * recursively generate the stack trace including the exception and its causes.
