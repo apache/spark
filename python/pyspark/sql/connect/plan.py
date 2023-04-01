@@ -962,7 +962,7 @@ class SQL(LogicalPlan):
 
         if self._args is not None and len(self._args) > 0:
             for k, v in self._args.items():
-                plan.sql.args[k] = LiteralExpression._from_value(v).to_plan(session)
+                plan.sql.args[k].CopyFrom(LiteralExpression._from_value(v).to_plan(session).literal)
 
         return plan
 
@@ -971,7 +971,7 @@ class SQL(LogicalPlan):
         cmd.sql_command.sql = self._query
         if self._args is not None and len(self._args) > 0:
             for k, v in self._args.items():
-                cmd.sql_command.args[k] = LiteralExpression._from_value(v).to_plan(session)
+                cmd.sql_command.args[k].CopyFrom(LiteralExpression._from_value(v).to_plan(session).literal)
         return cmd
 
 
