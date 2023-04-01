@@ -17,6 +17,10 @@
 
 package org.apache.spark.sql
 
+import java.time.{Instant, LocalDate, LocalDateTime, ZoneId}
+
+import org.apache.spark.sql.functions.lit
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
 class ParametersSuite extends QueryTest with SharedSparkSession {
@@ -155,18 +159,42 @@ class ParametersSuite extends QueryTest with SharedSparkSession {
         stop = 10))
   }
 
-  ignore("non-literal argument of `sql()`") {
-    Seq("col1 + 1", "CAST('100' AS INT)", "map('a', 1, 'b', 2)", "array(1)").foreach { arg =>
-      checkError(
-        exception = intercept[AnalysisException] {
-          spark.sql("SELECT :param1 FROM VALUES (1) AS t(col1)", Map("param1" -> arg))
-        },
-        errorClass = "INVALID_SQL_ARG",
-        parameters = Map("name" -> "param1"),
-        context = ExpectedContext(
-          fragment = arg,
-          start = 0,
-          stop = arg.length - 1))
+  test("literal argument of `sql()`") {
+    val sqlText =
+      """SELECT s FROM VALUES ('Jeff /*__*/ Green'), ('E\'Twaun Moore'), ('Vander Blue') AS t(s)
+        |WHERE s = :player_name""".stripMargin
+    checkAnswer(
+      spark.sql(sqlText, args = Map("player_name" -> lit("E'Twaun Moore"))),
+      Row("E'Twaun Moore") :: Nil)
+    checkAnswer(
+      spark.sql(sqlText, args = Map("player_name" -> lit("Vander Blue--comment"))),
+      Nil)
+    checkAnswer(
+      spark.sql(sqlText, args = Map("player_name" -> lit("Jeff /*__*/ Green"))),
+      Row("Jeff /*__*/ Green") :: Nil)
+
+    withSQLConf(SQLConf.DATETIME_JAVA8API_ENABLED.key -> "true") {
+      checkAnswer(
+        spark.sql(
+          sqlText = """
+                      |SELECT d
+                      |FROM VALUES (DATE'1970-01-01'), (DATE'2023-12-31') AS t(d)
+                      |WHERE d < :currDate
+                      |""".stripMargin,
+          args = Map("currDate" -> lit(LocalDate.of(2023, 4, 1)))),
+        Row(LocalDate.of(1970, 1, 1)) :: Nil)
+      checkAnswer(
+        spark.sql(
+          sqlText = """
+                      |SELECT d
+                      |FROM VALUES (TIMESTAMP_LTZ'1970-01-01 01:02:03 Europe/Amsterdam'),
+                      |            (TIMESTAMP_LTZ'2023-12-31 04:05:06 America/Los_Angeles') AS t(d)
+                      |WHERE d < :currDate
+                      |""".stripMargin,
+          args = Map("currDate" -> lit(Instant.parse("2023-04-01T00:00:00Z")))),
+        Row(LocalDateTime.of(1970, 1, 1, 1, 2, 3)
+          .atZone(ZoneId.of("Europe/Amsterdam"))
+          .toInstant) :: Nil)
     }
   }
 }
