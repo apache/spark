@@ -208,7 +208,7 @@ object FileFormatWriter extends Logging {
       requiredOrdering: Seq[Expression],
       partitionColumns: Seq[Attribute],
       sortColumns: Seq[Attribute],
-      orderingMatched: Boolean): Set[String] = {
+      orderingMatched: Boolean): Array[ExecutedWriteSummary] = {
     val projectList = V1WritesUtils.convertEmptyToNull(plan.output, partitionColumns)
     val empty2NullPlan = if (projectList.nonEmpty) ProjectExec(projectList, plan) else plan
 
@@ -266,7 +266,7 @@ object FileFormatWriter extends Logging {
   private def writeAndCommit(
       job: Job,
       description: WriteJobDescription,
-      committer: FileCommitProtocol)(f: => Array[WriteTaskResult]): Set[String] = {
+      committer: FileCommitProtocol)(f: => Array[WriteTaskResult]): Array[ExecutedWriteSummary] = {
     // This call shouldn't be put into the `try` block below because it only initializes and
     // prepares the job, any exception thrown from here shouldn't cause abortJob() to be called.
     committer.setupJob(job)
@@ -298,7 +298,7 @@ object FileFormatWriter extends Logging {
       session: SparkSession,
       planForWrites: SparkPlan,
       writeFilesSpec: WriteFilesSpec,
-      job: Job): Set[String] = {
+      job: Job): Array[ExecutedWriteSummary] = {
     val committer = writeFilesSpec.committer
     val description = writeFilesSpec.description
 
