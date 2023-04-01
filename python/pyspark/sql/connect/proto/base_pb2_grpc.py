@@ -22,7 +22,8 @@ from pyspark.sql.connect.proto import base_pb2 as spark_dot_connect_dot_base__pb
 
 
 class SparkConnectServiceStub(object):
-    """Main interface for the SparkConnect service."""
+    """Main interface for the SparkConnect service.
+    """
 
     def __init__(self, channel):
         """Constructor.
@@ -53,7 +54,8 @@ class SparkConnectServiceStub(object):
 
 
 class SparkConnectServiceServicer(object):
-    """Main interface for the SparkConnect service."""
+    """Main interface for the SparkConnect service.
+    """
 
     def ExecutePlan(self, request, context):
         """Executes a request that contains the query and returns a stream of [[Response]].
@@ -65,13 +67,15 @@ class SparkConnectServiceServicer(object):
         raise NotImplementedError("Method not implemented!")
 
     def AnalyzePlan(self, request, context):
-        """Analyzes a query and returns a [[AnalyzeResponse]] containing metadata about the query."""
+        """Analyzes a query and returns a [[AnalyzeResponse]] containing metadata about the query.
+        """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details("Method not implemented!")
         raise NotImplementedError("Method not implemented!")
 
     def Config(self, request, context):
-        """Update or fetch the configurations and returns a [[ConfigResponse]] containing the result."""
+        """Update or fetch the configurations and returns a [[ConfigResponse]] containing the result.
+        """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details("Method not implemented!")
         raise NotImplementedError("Method not implemented!")
@@ -116,7 +120,8 @@ def add_SparkConnectServiceServicer_to_server(servicer, server):
 
 # This class is part of an EXPERIMENTAL API.
 class SparkConnectService(object):
-    """Main interface for the SparkConnect service."""
+    """Main interface for the SparkConnect service.
+    """
 
     @staticmethod
     def ExecutePlan(
