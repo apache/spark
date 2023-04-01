@@ -2918,11 +2918,10 @@ class Dataset[T] private[sql] (
   }
 
   /**
-   * For debugging purposes, prints to stdout all the generated code found in this [[Dataset]] plan
-   * (i.e., the output of each WholeStageCodegen subtree).
+   * For debugging purposes, prints to stdout all the generated code found in this [[Dataset]]
+   * plan (i.e., the output of each WholeStageCodegen subtree).
    *
    * {{{
-   *   val df = spark.range(10)
    *   df.debugCodegen()
    * }}}
    *
