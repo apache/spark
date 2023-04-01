@@ -48,7 +48,7 @@ else:
     import typing_extensions
 
 DESCRIPTOR: google.protobuf.descriptor.FileDescriptor
-
+@typing_extensions.final
 class Catalog(google.protobuf.message.Message):
     """Catalog messages are marked as unstable."""
 
@@ -312,18 +312,15 @@ class Catalog(google.protobuf.message.Message):
     ] | None: ...
 
 global___Catalog = Catalog
-
+@typing_extensions.final
 class CurrentDatabase(google.protobuf.message.Message):
     """See `spark.catalog.currentDatabase`"""
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
-
-    def __init__(
-        self,
-    ) -> None: ...
+    def __init__(self,) -> None: ...
 
 global___CurrentDatabase = CurrentDatabase
-
+@typing_extensions.final
 class SetCurrentDatabase(google.protobuf.message.Message):
     """See `spark.catalog.setCurrentDatabase`"""
 
@@ -332,26 +329,19 @@ class SetCurrentDatabase(google.protobuf.message.Message):
     DB_NAME_FIELD_NUMBER: builtins.int
     db_name: builtins.str
     """(Required)"""
-    def __init__(
-        self,
-        *,
-        db_name: builtins.str = ...,
-    ) -> None: ...
+    def __init__(self, *, db_name: builtins.str = ...,) -> None: ...
     def ClearField(self, field_name: typing_extensions.Literal["db_name", b"db_name"]) -> None: ...
 
 global___SetCurrentDatabase = SetCurrentDatabase
-
+@typing_extensions.final
 class ListDatabases(google.protobuf.message.Message):
     """See `spark.catalog.listDatabases`"""
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
-
-    def __init__(
-        self,
-    ) -> None: ...
+    def __init__(self,) -> None: ...
 
 global___ListDatabases = ListDatabases
-
+@typing_extensions.final
 class ListTables(google.protobuf.message.Message):
     """See `spark.catalog.listTables`"""
 
@@ -360,11 +350,7 @@ class ListTables(google.protobuf.message.Message):
     DB_NAME_FIELD_NUMBER: builtins.int
     db_name: builtins.str
     """(Optional)"""
-    def __init__(
-        self,
-        *,
-        db_name: builtins.str | None = ...,
-    ) -> None: ...
+    def __init__(self, *, db_name: builtins.str | None = ...,) -> None: ...
     def HasField(
         self, field_name: typing_extensions.Literal["_db_name", b"_db_name", "db_name", b"db_name"]
     ) -> builtins.bool: ...
@@ -376,7 +362,7 @@ class ListTables(google.protobuf.message.Message):
     ) -> typing_extensions.Literal["db_name"] | None: ...
 
 global___ListTables = ListTables
-
+@typing_extensions.final
 class ListFunctions(google.protobuf.message.Message):
     """See `spark.catalog.listFunctions`"""
 
@@ -385,11 +371,7 @@ class ListFunctions(google.protobuf.message.Message):
     DB_NAME_FIELD_NUMBER: builtins.int
     db_name: builtins.str
     """(Optional)"""
-    def __init__(
-        self,
-        *,
-        db_name: builtins.str | None = ...,
-    ) -> None: ...
+    def __init__(self, *, db_name: builtins.str | None = ...,) -> None: ...
     def HasField(
         self, field_name: typing_extensions.Literal["_db_name", b"_db_name", "db_name", b"db_name"]
     ) -> builtins.bool: ...
@@ -401,7 +383,7 @@ class ListFunctions(google.protobuf.message.Message):
     ) -> typing_extensions.Literal["db_name"] | None: ...
 
 global___ListFunctions = ListFunctions
-
+@typing_extensions.final
 class ListColumns(google.protobuf.message.Message):
     """See `spark.catalog.listColumns`"""
 
@@ -414,10 +396,7 @@ class ListColumns(google.protobuf.message.Message):
     db_name: builtins.str
     """(Optional)"""
     def __init__(
-        self,
-        *,
-        table_name: builtins.str = ...,
-        db_name: builtins.str | None = ...,
+        self, *, table_name: builtins.str = ..., db_name: builtins.str | None = ...,
     ) -> None: ...
     def HasField(
         self, field_name: typing_extensions.Literal["_db_name", b"_db_name", "db_name", b"db_name"]
@@ -433,7 +412,7 @@ class ListColumns(google.protobuf.message.Message):
     ) -> typing_extensions.Literal["db_name"] | None: ...
 
 global___ListColumns = ListColumns
-
+@typing_extensions.final
 class GetDatabase(google.protobuf.message.Message):
     """See `spark.catalog.getDatabase`"""
 
@@ -442,15 +421,11 @@ class GetDatabase(google.protobuf.message.Message):
     DB_NAME_FIELD_NUMBER: builtins.int
     db_name: builtins.str
     """(Required)"""
-    def __init__(
-        self,
-        *,
-        db_name: builtins.str = ...,
-    ) -> None: ...
+    def __init__(self, *, db_name: builtins.str = ...,) -> None: ...
     def ClearField(self, field_name: typing_extensions.Literal["db_name", b"db_name"]) -> None: ...
 
 global___GetDatabase = GetDatabase
-
+@typing_extensions.final
 class GetTable(google.protobuf.message.Message):
     """See `spark.catalog.getTable`"""
 
@@ -463,10 +438,7 @@ class GetTable(google.protobuf.message.Message):
     db_name: builtins.str
     """(Optional)"""
     def __init__(
-        self,
-        *,
-        table_name: builtins.str = ...,
-        db_name: builtins.str | None = ...,
+        self, *, table_name: builtins.str = ..., db_name: builtins.str | None = ...,
     ) -> None: ...
     def HasField(
         self, field_name: typing_extensions.Literal["_db_name", b"_db_name", "db_name", b"db_name"]
@@ -482,7 +454,7 @@ class GetTable(google.protobuf.message.Message):
     ) -> typing_extensions.Literal["db_name"] | None: ...
 
 global___GetTable = GetTable
-
+@typing_extensions.final
 class GetFunction(google.protobuf.message.Message):
     """See `spark.catalog.getFunction`"""
 
@@ -495,10 +467,7 @@ class GetFunction(google.protobuf.message.Message):
     db_name: builtins.str
     """(Optional)"""
     def __init__(
-        self,
-        *,
-        function_name: builtins.str = ...,
-        db_name: builtins.str | None = ...,
+        self, *, function_name: builtins.str = ..., db_name: builtins.str | None = ...,
     ) -> None: ...
     def HasField(
         self, field_name: typing_extensions.Literal["_db_name", b"_db_name", "db_name", b"db_name"]
@@ -514,7 +483,7 @@ class GetFunction(google.protobuf.message.Message):
     ) -> typing_extensions.Literal["db_name"] | None: ...
 
 global___GetFunction = GetFunction
-
+@typing_extensions.final
 class DatabaseExists(google.protobuf.message.Message):
     """See `spark.catalog.databaseExists`"""
 
@@ -523,15 +492,11 @@ class DatabaseExists(google.protobuf.message.Message):
     DB_NAME_FIELD_NUMBER: builtins.int
     db_name: builtins.str
     """(Required)"""
-    def __init__(
-        self,
-        *,
-        db_name: builtins.str = ...,
-    ) -> None: ...
+    def __init__(self, *, db_name: builtins.str = ...,) -> None: ...
     def ClearField(self, field_name: typing_extensions.Literal["db_name", b"db_name"]) -> None: ...
 
 global___DatabaseExists = DatabaseExists
-
+@typing_extensions.final
 class TableExists(google.protobuf.message.Message):
     """See `spark.catalog.tableExists`"""
 
@@ -544,10 +509,7 @@ class TableExists(google.protobuf.message.Message):
     db_name: builtins.str
     """(Optional)"""
     def __init__(
-        self,
-        *,
-        table_name: builtins.str = ...,
-        db_name: builtins.str | None = ...,
+        self, *, table_name: builtins.str = ..., db_name: builtins.str | None = ...,
     ) -> None: ...
     def HasField(
         self, field_name: typing_extensions.Literal["_db_name", b"_db_name", "db_name", b"db_name"]
@@ -563,7 +525,7 @@ class TableExists(google.protobuf.message.Message):
     ) -> typing_extensions.Literal["db_name"] | None: ...
 
 global___TableExists = TableExists
-
+@typing_extensions.final
 class FunctionExists(google.protobuf.message.Message):
     """See `spark.catalog.functionExists`"""
 
@@ -576,10 +538,7 @@ class FunctionExists(google.protobuf.message.Message):
     db_name: builtins.str
     """(Optional)"""
     def __init__(
-        self,
-        *,
-        function_name: builtins.str = ...,
-        db_name: builtins.str | None = ...,
+        self, *, function_name: builtins.str = ..., db_name: builtins.str | None = ...,
     ) -> None: ...
     def HasField(
         self, field_name: typing_extensions.Literal["_db_name", b"_db_name", "db_name", b"db_name"]
@@ -595,12 +554,12 @@ class FunctionExists(google.protobuf.message.Message):
     ) -> typing_extensions.Literal["db_name"] | None: ...
 
 global___FunctionExists = FunctionExists
-
+@typing_extensions.final
 class CreateExternalTable(google.protobuf.message.Message):
     """See `spark.catalog.createExternalTable`"""
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
-
+    @typing_extensions.final
     class OptionsEntry(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -608,16 +567,10 @@ class CreateExternalTable(google.protobuf.message.Message):
         VALUE_FIELD_NUMBER: builtins.int
         key: builtins.str
         value: builtins.str
-        def __init__(
-            self,
-            *,
-            key: builtins.str = ...,
-            value: builtins.str = ...,
-        ) -> None: ...
+        def __init__(self, *, key: builtins.str = ..., value: builtins.str = ...,) -> None: ...
         def ClearField(
             self, field_name: typing_extensions.Literal["key", b"key", "value", b"value"]
         ) -> None: ...
-
     TABLE_NAME_FIELD_NUMBER: builtins.int
     PATH_FIELD_NUMBER: builtins.int
     SOURCE_FIELD_NUMBER: builtins.int
@@ -698,12 +651,12 @@ class CreateExternalTable(google.protobuf.message.Message):
     ) -> typing_extensions.Literal["source"] | None: ...
 
 global___CreateExternalTable = CreateExternalTable
-
+@typing_extensions.final
 class CreateTable(google.protobuf.message.Message):
     """See `spark.catalog.createTable`"""
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
-
+    @typing_extensions.final
     class OptionsEntry(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -711,16 +664,10 @@ class CreateTable(google.protobuf.message.Message):
         VALUE_FIELD_NUMBER: builtins.int
         key: builtins.str
         value: builtins.str
-        def __init__(
-            self,
-            *,
-            key: builtins.str = ...,
-            value: builtins.str = ...,
-        ) -> None: ...
+        def __init__(self, *, key: builtins.str = ..., value: builtins.str = ...,) -> None: ...
         def ClearField(
             self, field_name: typing_extensions.Literal["key", b"key", "value", b"value"]
         ) -> None: ...
-
     TABLE_NAME_FIELD_NUMBER: builtins.int
     PATH_FIELD_NUMBER: builtins.int
     SOURCE_FIELD_NUMBER: builtins.int
@@ -817,7 +764,7 @@ class CreateTable(google.protobuf.message.Message):
     ) -> typing_extensions.Literal["source"] | None: ...
 
 global___CreateTable = CreateTable
-
+@typing_extensions.final
 class DropTempView(google.protobuf.message.Message):
     """See `spark.catalog.dropTempView`"""
 
@@ -826,17 +773,13 @@ class DropTempView(google.protobuf.message.Message):
     VIEW_NAME_FIELD_NUMBER: builtins.int
     view_name: builtins.str
     """(Required)"""
-    def __init__(
-        self,
-        *,
-        view_name: builtins.str = ...,
-    ) -> None: ...
+    def __init__(self, *, view_name: builtins.str = ...,) -> None: ...
     def ClearField(
         self, field_name: typing_extensions.Literal["view_name", b"view_name"]
     ) -> None: ...
 
 global___DropTempView = DropTempView
-
+@typing_extensions.final
 class DropGlobalTempView(google.protobuf.message.Message):
     """See `spark.catalog.dropGlobalTempView`"""
 
@@ -845,17 +788,13 @@ class DropGlobalTempView(google.protobuf.message.Message):
     VIEW_NAME_FIELD_NUMBER: builtins.int
     view_name: builtins.str
     """(Required)"""
-    def __init__(
-        self,
-        *,
-        view_name: builtins.str = ...,
-    ) -> None: ...
+    def __init__(self, *, view_name: builtins.str = ...,) -> None: ...
     def ClearField(
         self, field_name: typing_extensions.Literal["view_name", b"view_name"]
     ) -> None: ...
 
 global___DropGlobalTempView = DropGlobalTempView
-
+@typing_extensions.final
 class RecoverPartitions(google.protobuf.message.Message):
     """See `spark.catalog.recoverPartitions`"""
 
@@ -864,17 +803,13 @@ class RecoverPartitions(google.protobuf.message.Message):
     TABLE_NAME_FIELD_NUMBER: builtins.int
     table_name: builtins.str
     """(Required)"""
-    def __init__(
-        self,
-        *,
-        table_name: builtins.str = ...,
-    ) -> None: ...
+    def __init__(self, *, table_name: builtins.str = ...,) -> None: ...
     def ClearField(
         self, field_name: typing_extensions.Literal["table_name", b"table_name"]
     ) -> None: ...
 
 global___RecoverPartitions = RecoverPartitions
-
+@typing_extensions.final
 class IsCached(google.protobuf.message.Message):
     """See `spark.catalog.isCached`"""
 
@@ -883,17 +818,13 @@ class IsCached(google.protobuf.message.Message):
     TABLE_NAME_FIELD_NUMBER: builtins.int
     table_name: builtins.str
     """(Required)"""
-    def __init__(
-        self,
-        *,
-        table_name: builtins.str = ...,
-    ) -> None: ...
+    def __init__(self, *, table_name: builtins.str = ...,) -> None: ...
     def ClearField(
         self, field_name: typing_extensions.Literal["table_name", b"table_name"]
     ) -> None: ...
 
 global___IsCached = IsCached
-
+@typing_extensions.final
 class CacheTable(google.protobuf.message.Message):
     """See `spark.catalog.cacheTable`"""
 
@@ -902,17 +833,13 @@ class CacheTable(google.protobuf.message.Message):
     TABLE_NAME_FIELD_NUMBER: builtins.int
     table_name: builtins.str
     """(Required)"""
-    def __init__(
-        self,
-        *,
-        table_name: builtins.str = ...,
-    ) -> None: ...
+    def __init__(self, *, table_name: builtins.str = ...,) -> None: ...
     def ClearField(
         self, field_name: typing_extensions.Literal["table_name", b"table_name"]
     ) -> None: ...
 
 global___CacheTable = CacheTable
-
+@typing_extensions.final
 class UncacheTable(google.protobuf.message.Message):
     """See `spark.catalog.uncacheTable`"""
 
@@ -921,28 +848,21 @@ class UncacheTable(google.protobuf.message.Message):
     TABLE_NAME_FIELD_NUMBER: builtins.int
     table_name: builtins.str
     """(Required)"""
-    def __init__(
-        self,
-        *,
-        table_name: builtins.str = ...,
-    ) -> None: ...
+    def __init__(self, *, table_name: builtins.str = ...,) -> None: ...
     def ClearField(
         self, field_name: typing_extensions.Literal["table_name", b"table_name"]
     ) -> None: ...
 
 global___UncacheTable = UncacheTable
-
+@typing_extensions.final
 class ClearCache(google.protobuf.message.Message):
     """See `spark.catalog.clearCache`"""
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
-
-    def __init__(
-        self,
-    ) -> None: ...
+    def __init__(self,) -> None: ...
 
 global___ClearCache = ClearCache
-
+@typing_extensions.final
 class RefreshTable(google.protobuf.message.Message):
     """See `spark.catalog.refreshTable`"""
 
@@ -951,17 +871,13 @@ class RefreshTable(google.protobuf.message.Message):
     TABLE_NAME_FIELD_NUMBER: builtins.int
     table_name: builtins.str
     """(Required)"""
-    def __init__(
-        self,
-        *,
-        table_name: builtins.str = ...,
-    ) -> None: ...
+    def __init__(self, *, table_name: builtins.str = ...,) -> None: ...
     def ClearField(
         self, field_name: typing_extensions.Literal["table_name", b"table_name"]
     ) -> None: ...
 
 global___RefreshTable = RefreshTable
-
+@typing_extensions.final
 class RefreshByPath(google.protobuf.message.Message):
     """See `spark.catalog.refreshByPath`"""
 
@@ -970,26 +886,19 @@ class RefreshByPath(google.protobuf.message.Message):
     PATH_FIELD_NUMBER: builtins.int
     path: builtins.str
     """(Required)"""
-    def __init__(
-        self,
-        *,
-        path: builtins.str = ...,
-    ) -> None: ...
+    def __init__(self, *, path: builtins.str = ...,) -> None: ...
     def ClearField(self, field_name: typing_extensions.Literal["path", b"path"]) -> None: ...
 
 global___RefreshByPath = RefreshByPath
-
+@typing_extensions.final
 class CurrentCatalog(google.protobuf.message.Message):
     """See `spark.catalog.currentCatalog`"""
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
-
-    def __init__(
-        self,
-    ) -> None: ...
+    def __init__(self,) -> None: ...
 
 global___CurrentCatalog = CurrentCatalog
-
+@typing_extensions.final
 class SetCurrentCatalog(google.protobuf.message.Message):
     """See `spark.catalog.setCurrentCatalog`"""
 
@@ -998,24 +907,17 @@ class SetCurrentCatalog(google.protobuf.message.Message):
     CATALOG_NAME_FIELD_NUMBER: builtins.int
     catalog_name: builtins.str
     """(Required)"""
-    def __init__(
-        self,
-        *,
-        catalog_name: builtins.str = ...,
-    ) -> None: ...
+    def __init__(self, *, catalog_name: builtins.str = ...,) -> None: ...
     def ClearField(
         self, field_name: typing_extensions.Literal["catalog_name", b"catalog_name"]
     ) -> None: ...
 
 global___SetCurrentCatalog = SetCurrentCatalog
-
+@typing_extensions.final
 class ListCatalogs(google.protobuf.message.Message):
     """See `spark.catalog.listCatalogs`"""
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
-
-    def __init__(
-        self,
-    ) -> None: ...
+    def __init__(self,) -> None: ...
 
 global___ListCatalogs = ListCatalogs
