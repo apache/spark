@@ -341,7 +341,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
 
   def noDefaultForDataTypeError(dataType: DataType): SparkRuntimeException = {
     new SparkRuntimeException(
-      errorClass = "_LEGACY_ERROR_TEMP_2004",
+      errorClass = "NO_DEFAULT_FOR_DATA_TYPE",
       messageParameters = Map("dataType" -> dataType.toString()))
   }
 

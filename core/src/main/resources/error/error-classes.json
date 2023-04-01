@@ -1190,6 +1190,11 @@
     },
     "sqlState" : "42000"
   },
+  "NO_DEFAULT_FOR_DATA_TYPE" : {
+    "message" : [
+      "no default for type <dataType>."
+    ]
+  },
   "NO_HANDLER_FOR_UDAF" : {
     "message" : [
       "No handler for UDAF '<functionName>'. Use sparkSession.udf.register(...) instead."
@@ -3693,11 +3698,6 @@
   "_LEGACY_ERROR_TEMP_2003" : {
     "message" : [
       "Unsuccessful try to zip maps with <size> unique keys due to exceeding the array size limit <maxRoundedArrayLength>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2004" : {
-    "message" : [
-      "no default for type <dataType>."
     ]
   },
   "_LEGACY_ERROR_TEMP_2005" : {

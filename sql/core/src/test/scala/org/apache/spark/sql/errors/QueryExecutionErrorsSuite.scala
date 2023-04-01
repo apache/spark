@@ -22,6 +22,8 @@ import java.net.{URI, URL}
 import java.sql.{Connection, Driver, DriverManager, PreparedStatement, ResultSet, ResultSetMetaData}
 import java.util.{Locale, Properties, ServiceConfigurationError}
 
+import scala.collection.JavaConverters._
+
 import org.apache.hadoop.fs.{LocalFileSystem, Path}
 import org.apache.hadoop.fs.permission.FsPermission
 import org.mockito.Mockito.{mock, spy, when}
@@ -46,7 +48,7 @@ import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy.EXCEPTION
 import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects}
 import org.apache.spark.sql.streaming.StreamingQueryException
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{DataType, DecimalType, LongType, MetadataBuilder, StructType}
+import org.apache.spark.sql.types.{DataType, DecimalType, LongType, MetadataBuilder, StructField, StructType}
 import org.apache.spark.util.Utils
 
 class QueryExecutionErrorsSuite
@@ -822,6 +824,28 @@ class QueryExecutionErrorsSuite
           "any enclosing class nor any supertype")),
       sqlState = "XX000")
   }
+
+  test("NO_DEFAULT_FOR_DATA_TYPE: no default for CharType") {
+    val schema1 = StructType(StructField("a", LongType) :: StructField("b", FakeDataType) :: Nil)
+    val rowSeq1: List[Row] = List(Row(1L, 'x'), Row(2L, 'y'))
+    val df1 = spark.createDataFrame(rowSeq1.asJava, schema1)
+
+    val schema2 = StructType(StructField("a", LongType) :: StructField("c", FakeDataType) :: Nil)
+    val rowSeq2: List[Row] = List(Row(1L, "v"), Row(2L, "w"), Row(3L, "x"))
+    val df2 = spark.createDataFrame(rowSeq2.asJava, schema2)
+
+    val e = intercept[SparkRuntimeException] {
+      df1.joinAsOf(
+        df2, df1.col("a"), df2.col("a"), usingColumns = Seq.empty,
+        joinType = "inner", tolerance = df1.col("b"), allowExactMatches = true,
+        direction = "backward")
+    }
+    checkError(
+      exception = e,
+      errorClass = "NO_DEFAULT_FOR_DATA_TYPE",
+      parameters = Map("dataType" -> FakeDataType.toString)
+    )
+  }
 }
 
 class FakeFileSystemSetPermission extends LocalFileSystem {
@@ -834,3 +858,11 @@ class FakeFileSystemSetPermission extends LocalFileSystem {
 class FakeFileSystemNeverExists extends DebugFilesystem {
   override def exists(f: Path): Boolean = false
 }
+
+class FakeDataType extends DataType {
+  override def defaultSize: Int = 0
+
+  override private[spark] def asNullable: DataType = this
+}
+
+case object FakeDataType extends FakeDataType

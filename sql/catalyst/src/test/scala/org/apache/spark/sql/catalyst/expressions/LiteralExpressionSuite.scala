@@ -24,7 +24,7 @@ import java.util.TimeZone
 
 import scala.reflect.runtime.universe.TypeTag
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkFunSuite, SparkRuntimeException}
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, ScalaReflection}
 import org.apache.spark.sql.catalyst.encoders.ExamplePointUDT
@@ -88,6 +88,17 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Literal.default(StructType(StructField("a", StringType) :: Nil)), Row(""))
     // ExamplePointUDT.sqlType is ArrayType(DoubleType, false).
     checkEvaluation(Literal.default(new ExamplePointUDT), Array())
+
+    // DateType without default value`
+    List(CharType(1), VarcharType(1)).foreach(errType => {
+      checkError(
+        exception = intercept[SparkRuntimeException] {
+          Literal.default(errType)
+        },
+        errorClass = "NO_DEFAULT_FOR_DATA_TYPE",
+        parameters = Map("dataType" -> errType.toString)
+      )
+    })
   }
 
   test("boolean literals") {
