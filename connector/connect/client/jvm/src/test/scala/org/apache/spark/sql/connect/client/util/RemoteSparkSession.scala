@@ -62,10 +62,11 @@ object SparkConnectServerUtils {
       "connector/connect/server",
       "spark-connect-assembly",
       "spark-connect").getCanonicalPath
-    var driverClassPath = connectJar
-    if (IntegrationTestUtils.isCatalystTestJarAvailable) {
-      driverClassPath += ":" +
+    val driverClassPath = if (IntegrationTestUtils.isCatalystTestJarAvailable) {
+      connectJar + ":" +
         findJar("sql/catalyst", "spark-catalyst", "spark-catalyst", test = true).getCanonicalPath
+    } else {
+      connectJar
     }
     val catalogImplementation = if (IntegrationTestUtils.isSparkHiveJarAvailable) {
       "hive"
@@ -87,7 +88,7 @@ object SparkConnectServerUtils {
         "--conf",
         s"spark.connect.grpc.binding.port=$port",
         "--conf",
-        "spark.sql.catalog.testcat=org.apache.spark.sql.connect.catalog.InMemoryTableCatalog",
+        "spark.sql.catalog.testcat=org.apache.spark.sql.connector.catalog.InMemoryTableCatalog",
         "--conf",
         s"spark.sql.catalogImplementation=$catalogImplementation",
         "--class",

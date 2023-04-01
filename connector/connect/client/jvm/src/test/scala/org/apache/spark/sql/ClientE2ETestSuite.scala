@@ -223,9 +223,6 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper {
   test("writeTo with create") {
     assume(IntegrationTestUtils.isCatalystTestJarAvailable)
     withTable("testcat.myTableV2") {
-      spark.conf.set(
-        "spark.sql.catalog.testcat",
-        "org.apache.spark.sql.connector.catalog.InMemoryTableCatalog")
 
       val rows = Seq(Row(1L, "a"), Row(2L, "b"), Row(3L, "c"))
 
@@ -241,10 +238,6 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper {
   test("writeTo with create and using") {
     assume(IntegrationTestUtils.isCatalystTestJarAvailable)
     withTable("testcat.myTableV2") {
-      spark.conf.set(
-        "spark.sql.catalog.testcat",
-        "org.apache.spark.sql.connector.catalog.InMemoryTableCatalog")
-
       val rows = Seq(Row(1L, "a"), Row(2L, "b"), Row(3L, "c"))
 
       val schema = StructType(Array(StructField("id", LongType), StructField("data", StringType)))
@@ -260,16 +253,12 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper {
       assert(outputRows.length == 3)
       assert(sqlOutputRows(0).schema == schema)
       assert(sqlOutputRows(1).getString(1) == "b")
-
     }
   }
 
   test("writeTo with create and append") {
     assume(IntegrationTestUtils.isCatalystTestJarAvailable)
     withTable("testcat.myTableV2") {
-      spark.conf.set(
-        "spark.sql.catalog.testcat",
-        "org.apache.spark.sql.connector.catalog.InMemoryTableCatalog")
 
       val rows = Seq(Row(1L, "a"), Row(2L, "b"), Row(3L, "c"))
 
@@ -282,16 +271,12 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper {
       spark.createDataFrame(rows.asJava, schema).writeTo("testcat.myTableV2").append()
       val outputRows = spark.table("testcat.myTableV2").collect()
       assert(outputRows.length == 3)
-
     }
   }
 
   test("WriteTo with overwrite") {
     assume(IntegrationTestUtils.isCatalystTestJarAvailable)
     withTable("testcat.myTableV2") {
-      spark.conf.set(
-        "spark.sql.catalog.testcat",
-        "org.apache.spark.sql.connector.catalog.InMemoryTableCatalog")
 
       val rows1 = (1L to 3L).map { i =>
         Row(i, "" + (i - 1 + 'a'))
@@ -324,9 +309,6 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper {
   test("WriteTo with overwritePartitions") {
     assume(IntegrationTestUtils.isCatalystTestJarAvailable)
     withTable("testcat.myTableV2") {
-      spark.conf.set(
-        "spark.sql.catalog.testcat",
-        "org.apache.spark.sql.connector.catalog.InMemoryTableCatalog")
 
       val rows = (4L to 7L).map { i =>
         Row(i, "" + (i - 1 + 'a'))
