@@ -627,7 +627,9 @@ class ExplainSuiteAE extends ExplainSuiteHelper with EnableAdaptiveExecutionSuit
 
   test("SPARK-35884: Explain should only display one plan before AQE takes effect") {
     val df = (0 to 10).toDF("id").where($"id" > 5)
-    val modes = Seq(SimpleMode, ExtendedMode, CostMode, FormattedMode, ValidationMode)
+    // `ValidationMode` only a logical plan of parsing and analysis phase is expected to be
+    // printed to the console, so not tested in this case.
+    val modes = Seq(SimpleMode, ExtendedMode, CostMode, FormattedMode)
     modes.foreach { mode =>
       checkKeywordsExistsInExplain(df, mode, "AdaptiveSparkPlan")
       checkKeywordsNotExistsInExplain(df, mode, "Initial Plan", "Current Plan")

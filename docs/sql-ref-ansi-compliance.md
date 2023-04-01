@@ -637,6 +637,7 @@ Below is a list of all the keywords in Spark SQL.
 |USE|non-reserved|non-reserved|non-reserved|
 |USER|reserved|non-reserved|reserved|
 |USING|reserved|strict-non-reserved|reserved|
+|VALIDATION|non-reserved|non-reserved|non-reserved|
 |VALUES|non-reserved|non-reserved|reserved|
 |VERSION|non-reserved|non-reserved|non-reserved|
 |VIEW|non-reserved|non-reserved|non-reserved|
