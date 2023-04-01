@@ -59,11 +59,13 @@ class AvroRowReaderSuite
 
       val df = spark.read.format("avro").load(dir.getCanonicalPath)
       val fileScan = df.queryExecution.executedPlan collectFirst {
-        case BatchScanExec(_, f: AvroScan, _, _, _, _) => f
+        case BatchScanExec(_, f: AvroScan, _, _, _, _, _, _, _) => f
       }
       val filePath = fileScan.get.fileIndex.inputFiles(0)
       val fileSize = new File(new URI(filePath)).length
+      // scalastyle:off pathfromuri
       val in = new FsInput(new Path(new URI(filePath)), new Configuration())
+      // scalastyle:on pathfromuri
       val reader = DataFileReader.openReader(in, new GenericDatumReader[GenericRecord]())
 
       val it = new Iterator[InternalRow] with AvroUtils.RowReader {

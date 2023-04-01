@@ -17,8 +17,9 @@
 
 syntax = 'proto3';
 
+import "google/protobuf/any.proto";
+import "spark/connect/expressions.proto";
 import "spark/connect/relations.proto";
-import "spark/connect/types.proto";
 
 package spark.connect;
 
@@ -29,49 +30,34 @@ option java_package = "org.apache.spark.connect.proto";
 // produce a relational result.
 message Command {
   oneof command_type {
-    CreateScalarFunction create_function = 1;
+    CommonInlineUserDefinedFunction register_function = 1;
     WriteOperation write_operation = 2;
     CreateDataFrameViewCommand create_dataframe_view = 3;
+    WriteOperationV2 write_operation_v2 = 4;
+    SqlCommand sql_command = 5;
+
+    // This field is used to mark extensions to the protocol. When plugins generate arbitrary
+    // Commands they can add them here. During the planning the correct resolution is done.
+    google.protobuf.Any extension = 999;
+
   }
 }
 
-// Simple message that is used to create a scalar function based on the provided function body.
+// A SQL Command is used to trigger the eager evaluation of SQL commands in Spark.
 //
-// This message is used to register for example a Python UDF in the session catalog by providing
-// the serialized method body.
-//
-// TODO(SPARK-40532) It is required to add the interpreter / language version to the command
-//   parameters.
-message CreateScalarFunction {
-  // (Required) Fully qualified name of the function including the catalog / schema names.
-  repeated string parts = 1;
+// When the SQL provide as part of the message is a command it will be immediately evaluated
+// and the result will be collected and returned as part of a LocalRelation. If the result is
+// not a command, the operation will simply return a SQL Relation. This allows the client to be
+// almost oblivious to the server-side behavior.
+message SqlCommand {
+  // (Required) SQL Query.
+  string sql = 1;
 
-  // (Required) the function language.
-  FunctionLanguage language = 2;
-
-  // (Required) if this is a temporary function.
-  bool temporary = 3;
-
-  // (Optional) A list of argument types. Can be empty when the function does not take an argument.
-  repeated DataType argument_types = 4;
-
-  // (Required) the return type of the function.
-  DataType return_type = 5;
-
-  // How the function body is defined:
-  oneof function_definition {
-    // As a raw string serialized:
-    bytes serialized_function = 6;
-    // As a code literal
-    string literal_string = 7;
-  }
-
-  enum FunctionLanguage {
-    FUNCTION_LANGUAGE_UNSPECIFIED = 0;
-    FUNCTION_LANGUAGE_SQL = 1;
-    FUNCTION_LANGUAGE_PYTHON = 2;
-    FUNCTION_LANGUAGE_SCALA = 3;
-  }
+  // (Optional) A map of parameter names to string values that are parsed as
+  // SQL literal expressions. For example, map keys: "rank", "name", "birthdate";
+  // map values: "1", "'Steven'", "DATE'2023-03-21'". The fragments of string values
+  // belonged to SQL comments are skipped while parsing.
+  map<string, string> args = 2;
 }
 
 // A command that can create DataFrame global temp view or local temp view.
@@ -97,13 +83,17 @@ message WriteOperation {
   // (Required) The output of the `input` relation will be persisted according to the options.
   Relation input = 1;
 
-  // (Required) Format value according to the Spark documentation. Examples are: text, parquet, delta.
-  string source = 2;
+  // (Optional) Format value according to the Spark documentation. Examples are: text, parquet, delta.
+  optional string source = 2;
 
-  // The destination of the write operation must be either a path or a table.
+  // (Optional)
+  //
+  // The destination of the write operation can be either a path or a table.
+  // If the destination is neither a path nor a table, such as jdbc and noop,
+  // the `save_type` should not be set.
   oneof save_type {
     string path = 3;
-    string table_name = 4;
+    SaveTable table = 4;
   }
 
   // (Required) the save mode.
@@ -122,6 +112,19 @@ message WriteOperation {
   // (Optional) A list of configuration options.
   map<string, string> options = 9;
 
+  message SaveTable {
+    // (Required) The table name.
+    string table_name = 1;
+    // (Required) The method to be called to write to the table.
+    TableSaveMethod save_method = 2;
+
+    enum TableSaveMethod {
+      TABLE_SAVE_METHOD_UNSPECIFIED = 0;
+      TABLE_SAVE_METHOD_SAVE_AS_TABLE = 1;
+      TABLE_SAVE_METHOD_INSERT_INTO = 2;
+    }
+  }
+
   message BucketBy {
     repeated string bucket_column_names = 1;
     int32 num_buckets = 2;
@@ -134,4 +137,43 @@ message WriteOperation {
     SAVE_MODE_ERROR_IF_EXISTS = 3;
     SAVE_MODE_IGNORE = 4;
   }
+}
+
+// As writes are not directly handled during analysis and planning, they are modeled as commands.
+message WriteOperationV2 {
+  // (Required) The output of the `input` relation will be persisted according to the options.
+  Relation input = 1;
+
+  // (Required) The destination of the write operation must be either a path or a table.
+  string table_name = 2;
+
+  // (Optional) A provider for the underlying output data source. Spark's default catalog supports
+  // "parquet", "json", etc.
+  optional string provider = 3;
+
+  // (Optional) List of columns for partitioning for output table created by `create`,
+  // `createOrReplace`, or `replace`
+  repeated Expression partitioning_columns = 4;
+
+  // (Optional) A list of configuration options.
+  map<string, string> options = 5;
+
+  // (Optional) A list of table properties.
+  map<string, string> table_properties = 6;
+
+  // (Required) Write mode.
+  Mode mode = 7;
+
+  enum Mode {
+    MODE_UNSPECIFIED = 0;
+    MODE_CREATE = 1;
+    MODE_OVERWRITE = 2;
+    MODE_OVERWRITE_PARTITIONS = 3;
+    MODE_APPEND = 4;
+    MODE_REPLACE = 5;
+    MODE_CREATE_OR_REPLACE = 6;
+  }
+
+  // (Optional) A condition for overwrite saving mode
+  Expression overwrite_condition = 8;
 }

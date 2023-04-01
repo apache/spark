@@ -32,8 +32,10 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.{ArrayData, MapData}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.Platform
@@ -270,12 +272,9 @@ abstract class HashExpression[E] extends Expression {
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (children.length < 1) {
-      DataTypeMismatch(
-        errorSubClass = "WRONG_NUM_ARGS",
-        messageParameters = Map(
-          "functionName" ->  toSQLId(prettyName),
-          "expectedNum" -> "> 0",
-          "actualNum" -> children.length.toString))
+      throw QueryCompilationErrors.wrongNumArgsError(
+        toSQLId(prettyName), Seq("> 0"), children.length
+      )
     } else if (children.exists(child => hasMapType(child.dataType)) &&
         !SQLConf.get.getConf(SQLConf.LEGACY_ALLOW_HASH_ON_MAPTYPE)) {
       DataTypeMismatch(
@@ -310,7 +309,7 @@ abstract class HashExpression[E] extends Expression {
     }
 
     val hashResultType = CodeGenerator.javaType(dataType)
-    val typedSeed = if (dataType.sameType(LongType)) s"${seed}L" else s"$seed"
+    val typedSeed = if (DataTypeUtils.sameType(dataType, LongType)) s"${seed}L" else s"$seed"
     val codes = ctx.splitExpressionsWithCurrentInputs(
       expressions = childrenHash,
       funcName = "computeHash",

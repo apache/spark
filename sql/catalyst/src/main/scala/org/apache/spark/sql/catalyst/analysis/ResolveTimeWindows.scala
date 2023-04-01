@@ -18,10 +18,10 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, Cast, CreateNamedStruct, Expression, GetStructField, IsNotNull, Literal, PreciseTimestampConversion, SessionWindow, Subtract, TimeWindow, WindowTime}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, CaseWhen, Cast, CreateNamedStruct, Expression, GetStructField, IsNotNull, LessThan, Literal, PreciseTimestampConversion, SessionWindow, Subtract, TimeWindow, WindowTime}
 import org.apache.spark.sql.catalyst.plans.logical.{Expand, Filter, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.trees.TreePattern.TIME_WINDOW
+import org.apache.spark.sql.catalyst.trees.TreePattern.{SESSION_WINDOW, TIME_WINDOW, WINDOW_TIME}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.{CalendarIntervalType, DataType, LongType, Metadata, MetadataBuilder, StructType}
 import org.apache.spark.unsafe.types.CalendarInterval
@@ -49,7 +49,8 @@ object TimeWindowing extends Rule[LogicalPlan] {
    * The windows are calculated as below:
    * maxNumOverlapping <- ceil(windowDuration / slideDuration)
    * for (i <- 0 until maxNumOverlapping)
-   *   lastStart <- timestamp - (timestamp - startTime + slideDuration) % slideDuration
+   *   remainder <- (timestamp - startTime) % slideDuration
+   *   lastStart <- timestamp - ((remainder < 0) ? remainder + slideDuration : remainder)
    *   windowStart <- lastStart - i * slideDuration
    *   windowEnd <- windowStart + windowDuration
    *   return windowStart, windowEnd
@@ -103,8 +104,9 @@ object TimeWindowing extends Rule[LogicalPlan] {
 
         def getWindow(i: Int, dataType: DataType): Expression = {
           val timestamp = PreciseTimestampConversion(window.timeColumn, dataType, LongType)
-          val lastStart = timestamp - (timestamp - window.startTime
-            + window.slideDuration) % window.slideDuration
+          val remainder = (timestamp - window.startTime) % window.slideDuration
+          val lastStart = timestamp - CaseWhen(Seq((LessThan(remainder, 0),
+            remainder + window.slideDuration)), Some(remainder))
           val windowStart = lastStart - i * window.slideDuration
           val windowEnd = windowStart + window.windowDuration
 
@@ -187,7 +189,8 @@ object SessionWindowing extends Rule[LogicalPlan] {
    * This also adds a marker to the session column so that downstream can easily find the column
    * on session window.
    */
-  def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
+  def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
+    _.containsPattern(SESSION_WINDOW), ruleId) {
     case p: LogicalPlan if p.children.size == 1 =>
       val child = p.children.head
       val sessionExpressions =
@@ -286,7 +289,8 @@ object SessionWindowing extends Rule[LogicalPlan] {
  * The correct representative event time of a window is ``window.end - 1``.
  * */
 object ResolveWindowTime extends Rule[LogicalPlan] {
-  override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
+  override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
+    _.containsPattern(WINDOW_TIME), ruleId) {
     case p: LogicalPlan if p.children.size == 1 =>
       val child = p.children.head
       val windowTimeExpressions =
@@ -307,7 +311,7 @@ object ResolveWindowTime extends Rule[LogicalPlan] {
             !metadata.contains(SessionWindow.marker)) {
             // FIXME: error framework?
             throw new AnalysisException(
-              "The input is not a correct window column: $windowTime", plan = Some(p))
+              s"The input is not a correct window column: $windowTime", plan = Some(p))
           }
 
           val newMetadata = new MetadataBuilder()

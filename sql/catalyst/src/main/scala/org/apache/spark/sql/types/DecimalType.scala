@@ -25,7 +25,7 @@ import scala.reflect.runtime.universe.typeTag
 import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.catalyst.expressions.{Expression, Literal}
 import org.apache.spark.sql.catalyst.types.{PhysicalDataType, PhysicalDecimalType}
-import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -51,8 +51,8 @@ case class DecimalType(precision: Int, scale: Int) extends FractionalType {
   }
 
   if (precision > DecimalType.MAX_PRECISION) {
-    throw QueryCompilationErrors.decimalOnlySupportPrecisionUptoError(
-      DecimalType.simpleString, DecimalType.MAX_PRECISION)
+    throw QueryExecutionErrors.decimalPrecisionExceedsMaxPrecisionError(
+      precision, DecimalType.MAX_PRECISION)
   }
 
   // default constructor for Java
@@ -111,7 +111,8 @@ case class DecimalType(precision: Int, scale: Int) extends FractionalType {
    */
   override def defaultSize: Int = if (precision <= Decimal.MAX_LONG_DIGITS) 8 else 16
 
-  override def physicalDataType: PhysicalDataType = PhysicalDecimalType(precision, scale)
+  private[sql] override def physicalDataType: PhysicalDataType =
+    PhysicalDecimalType(precision, scale)
 
   override def simpleString: String = s"decimal($precision,$scale)"
 

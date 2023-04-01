@@ -23,7 +23,7 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connector.expressions.{FieldReference, SortOrder}
 import org.apache.spark.sql.connector.expressions.aggregate.Aggregation
 import org.apache.spark.sql.connector.expressions.filter.Predicate
-import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownAggregates, SupportsPushDownLimit, SupportsPushDownOffset, SupportsPushDownRequiredColumns, SupportsPushDownTableSample, SupportsPushDownTopN, SupportsPushDownV2Filters}
+import org.apache.spark.sql.connector.read.{ScanBuilder, SupportsPushDownAggregates, SupportsPushDownLimit, SupportsPushDownOffset, SupportsPushDownRequiredColumns, SupportsPushDownTableSample, SupportsPushDownTopN, SupportsPushDownV2Filters}
 import org.apache.spark.sql.execution.datasources.PartitioningUtils
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JDBCRDD, JDBCRelation}
 import org.apache.spark.sql.execution.datasources.v2.TableSampleInfo
@@ -44,6 +44,8 @@ case class JDBCScanBuilder(
     with SupportsPushDownTopN
     with Logging {
 
+  private val dialect = JdbcDialects.get(jdbcOptions.url)
+
   private val isCaseSensitive = session.sessionState.conf.caseSensitiveAnalysis
 
   private var pushedPredicate = Array.empty[Predicate]
@@ -60,7 +62,6 @@ case class JDBCScanBuilder(
 
   override def pushPredicates(predicates: Array[Predicate]): Array[Predicate] = {
     if (jdbcOptions.pushDownPredicate) {
-      val dialect = JdbcDialects.get(jdbcOptions.url)
       val (pushed, unSupported) = predicates.partition(dialect.compileExpression(_).isDefined)
       this.pushedPredicate = pushed
       unSupported
@@ -88,7 +89,6 @@ case class JDBCScanBuilder(
   override def pushAggregation(aggregation: Aggregation): Boolean = {
     if (!jdbcOptions.pushDownAggregate) return false
 
-    val dialect = JdbcDialects.get(jdbcOptions.url)
     val compiledAggs = aggregation.aggregateExpressions.flatMap(dialect.compileAggregate)
     if (compiledAggs.length != aggregation.aggregateExpressions.length) return false
 
@@ -126,8 +126,7 @@ case class JDBCScanBuilder(
       upperBound: Double,
       withReplacement: Boolean,
       seed: Long): Boolean = {
-    if (jdbcOptions.pushDownTableSample &&
-      JdbcDialects.get(jdbcOptions.url).supportsTableSample) {
+    if (jdbcOptions.pushDownTableSample && dialect.supportsTableSample) {
       this.tableSample = Some(TableSampleInfo(lowerBound, upperBound, withReplacement, seed))
       return true
     }
@@ -135,7 +134,7 @@ case class JDBCScanBuilder(
   }
 
   override def pushLimit(limit: Int): Boolean = {
-    if (jdbcOptions.pushDownLimit) {
+    if (jdbcOptions.pushDownLimit && dialect.supportsLimit) {
       pushedLimit = limit
       return true
     }
@@ -143,7 +142,7 @@ case class JDBCScanBuilder(
   }
 
   override def pushOffset(offset: Int): Boolean = {
-    if (jdbcOptions.pushDownOffset && !isPartiallyPushed) {
+    if (jdbcOptions.pushDownOffset && !isPartiallyPushed && dialect.supportsOffset) {
       // Spark pushes down LIMIT first, then OFFSET. In SQL statements, OFFSET is applied before
       // LIMIT. Here we need to adjust the LIMIT value to match SQL statements.
       if (pushedLimit > 0) {
@@ -157,11 +156,7 @@ case class JDBCScanBuilder(
 
   override def pushTopN(orders: Array[SortOrder], limit: Int): Boolean = {
     if (jdbcOptions.pushDownLimit) {
-      val dialect = JdbcDialects.get(jdbcOptions.url)
-      val compiledOrders = orders.flatMap { order =>
-        dialect.compileExpression(order.expression())
-          .map(sortKey => s"$sortKey ${order.direction()} ${order.nullOrdering()}")
-      }
+      val compiledOrders = orders.flatMap(dialect.compileExpression(_))
       if (orders.length != compiledOrders.length) return false
       pushedLimit = limit
       sortOrders = compiledOrders
@@ -184,7 +179,7 @@ case class JDBCScanBuilder(
     finalSchema = StructType(fields)
   }
 
-  override def build(): Scan = {
+  override def build(): JDBCScan = {
     val resolver = session.sessionState.conf.resolver
     val timeZoneId = session.sessionState.conf.sessionLocalTimeZone
     val parts = JDBCRelation.columnPartition(schema, resolver, timeZoneId, jdbcOptions)

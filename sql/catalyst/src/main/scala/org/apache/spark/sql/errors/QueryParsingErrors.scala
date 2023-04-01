@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.errors
 
+import java.util.Locale
+
 import org.antlr.v4.runtime.ParserRuleContext
 
 import org.apache.spark.sql.catalyst.parser.ParseException
@@ -78,7 +80,7 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
   }
 
   def combinationQueryResultClausesUnsupportedError(ctx: QueryOrganizationContext): Throwable = {
-    new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0011", ctx)
+    new ParseException(errorClass = "UNSUPPORTED_FEATURE.COMBINATION_QUERY_RESULT_CLAUSES", ctx)
   }
 
   def distributeByUnsupportedError(ctx: QueryOrganizationContext): Throwable = {
@@ -111,13 +113,6 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
     new ParseException("LATERAL cannot be used together with UNPIVOT in FROM clause", ctx)
   }
 
-  def lateralJoinWithNaturalJoinUnsupportedError(ctx: ParserRuleContext): Throwable = {
-    new ParseException(
-      errorClass = "UNSUPPORTED_FEATURE.LATERAL_NATURAL_JOIN",
-      messageParameters = Map.empty,
-      ctx)
-  }
-
   def lateralJoinWithUsingJoinUnsupportedError(ctx: ParserRuleContext): Throwable = {
     new ParseException(
       errorClass = "UNSUPPORTED_FEATURE.LATERAL_JOIN_USING",
@@ -136,7 +131,8 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
     new ParseException(
       errorClass = "INVALID_SQL_SYNTAX",
       messageParameters = Map(
-        "inputString" -> s"${toSQLStmt("LATERAL")} can only be used with subquery."),
+        "inputString" ->
+          s"${toSQLStmt("LATERAL")} can only be used with subquery and table-valued functions."),
       ctx)
   }
 
@@ -164,10 +160,13 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
       ctx)
   }
 
-  def naturalCrossJoinUnsupportedError(ctx: ParserRuleContext): Throwable = {
+  def incompatibleJoinTypesError(
+      joinType1: String, joinType2: String, ctx: ParserRuleContext): Throwable = {
     new ParseException(
-      errorClass = "UNSUPPORTED_FEATURE.NATURAL_CROSS_JOIN",
-      messageParameters = Map.empty,
+      errorClass = "INCOMPATIBLE_JOIN_TYPES",
+      messageParameters = Map(
+        "joinType1" -> joinType1.toUpperCase(Locale.ROOT),
+        "joinType2" -> joinType2.toUpperCase(Locale.ROOT)),
       ctx = ctx)
   }
 
@@ -231,15 +230,6 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
       ctx)
   }
 
-  def parsingValueTypeError(
-      e: IllegalArgumentException, valueType: String, ctx: TypeConstructorContext): Throwable = {
-    val message = Option(e.getMessage).getOrElse(s"Exception parsing $valueType")
-    new ParseException(
-      errorClass = "_LEGACY_ERROR_TEMP_0022",
-      messageParameters = Map("msg" -> message),
-      ctx)
-  }
-
   def invalidNumericLiteralRangeError(rawStrippedQualifier: String, minValue: BigDecimal,
       maxValue: BigDecimal, typeName: String, ctx: NumberContext): Throwable = {
     new ParseException(
@@ -254,10 +244,6 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
 
   def moreThanOneFromToUnitInIntervalLiteralError(ctx: ParserRuleContext): Throwable = {
     new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0024", ctx)
-  }
-
-  def invalidIntervalLiteralError(ctx: IntervalContext): Throwable = {
-    new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0025", ctx)
   }
 
   def invalidIntervalFormError(value: String, ctx: MultiUnitsIntervalContext): Throwable = {
@@ -298,6 +284,27 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
       errorClass = "DATATYPE_MISSING_SIZE",
       messageParameters = Map("type" -> toSQLType(dataType)),
       ctx)
+  }
+
+  def nestedTypeMissingElementTypeError(
+      dataType: String, ctx: PrimitiveDataTypeContext): Throwable = {
+    dataType match {
+      case "ARRAY" =>
+        new ParseException(
+          errorClass = "INCOMPLETE_TYPE_DEFINITION.ARRAY",
+          messageParameters = Map("elementType" -> "<INT>"),
+          ctx)
+      case "STRUCT" =>
+        new ParseException(
+          errorClass = "INCOMPLETE_TYPE_DEFINITION.STRUCT",
+          messageParameters = Map.empty,
+          ctx)
+      case "MAP" =>
+        new ParseException(
+          errorClass = "INCOMPLETE_TYPE_DEFINITION.MAP",
+          messageParameters = Map.empty,
+          ctx)
+    }
   }
 
   def partitionTransformNotExpectedError(
@@ -467,7 +474,7 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
   }
 
   def unexpectedFormatForSetConfigurationError(ctx: ParserRuleContext): Throwable = {
-    new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0042", ctx)
+    new ParseException(errorClass = "INVALID_SET_SYNTAX", ctx)
   }
 
   def invalidPropertyKeyForSetQuotedConfigurationError(
@@ -635,15 +642,31 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
     new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0059", ctx)
   }
 
-  def duplicateCreateTableColumnOption(
+  def duplicateTableColumnDescriptor(
       ctx: ParserRuleContext,
       columnName: String,
-      optionName: String): Throwable = {
+      optionName: String,
+      isCreate: Boolean = true,
+      alterType: String = "ADD"): Throwable = {
+    val errorClass =
+      if (isCreate) {
+        "CREATE_TABLE_COLUMN_DESCRIPTOR_DUPLICATE"
+      } else {
+        "ALTER_TABLE_COLUMN_DESCRIPTOR_DUPLICATE"
+      }
+    val alterTypeMap: Map[String, String] =
+      if (isCreate) {
+        Map.empty
+      } else {
+        Map("type" -> alterType)
+      }
     new ParseException(
-      errorClass = "CREATE_TABLE_COLUMN_OPTION_DUPLICATE",
-      messageParameters = Map(
-        "columnName" -> columnName,
-        "optionName" -> optionName),
-      ctx)
+      errorClass = errorClass,
+      messageParameters = alterTypeMap ++ Map(
+          "columnName" -> columnName,
+          "optionName" -> optionName
+        ),
+      ctx
+    )
   }
 }

@@ -314,6 +314,42 @@ class DataFrameTimeWindowingSuite extends QueryTest with SharedSparkSession {
           Row("1970-01-01 00:00:05", "1970-01-01 00:00:15", 2))
       )
     }
+
+    val df3 = Seq(
+      ("1969-12-31 00:00:02", 1),
+      ("1969-12-31 00:00:12", 2)).toDF("time", "value")
+    val df4 = Seq(
+      (LocalDateTime.parse("1969-12-31T00:00:02"), 1),
+      (LocalDateTime.parse("1969-12-31T00:00:12"), 2)).toDF("time", "value")
+
+    Seq(df3, df4).foreach { df =>
+      checkAnswer(
+        df.select(window($"time", "10 seconds", "10 seconds", "5 seconds"), $"value")
+          .orderBy($"window.start".asc)
+          .select($"window.start".cast(StringType), $"window.end".cast(StringType), $"value"),
+        Seq(
+          Row("1969-12-30 23:59:55", "1969-12-31 00:00:05", 1),
+          Row("1969-12-31 00:00:05", "1969-12-31 00:00:15", 2))
+      )
+    }
+
+    val df5 = Seq(
+      ("1968-12-31 00:00:02", 1),
+      ("1968-12-31 00:00:12", 2)).toDF("time", "value")
+    val df6 = Seq(
+      (LocalDateTime.parse("1968-12-31T00:00:02"), 1),
+      (LocalDateTime.parse("1968-12-31T00:00:12"), 2)).toDF("time", "value")
+
+    Seq(df5, df6).foreach { df =>
+      checkAnswer(
+        df.select(window($"time", "10 seconds", "10 seconds", "5 seconds"), $"value")
+          .orderBy($"window.start".asc)
+          .select($"window.start".cast(StringType), $"window.end".cast(StringType), $"value"),
+        Seq(
+          Row("1968-12-30 23:59:55", "1968-12-31 00:00:05", 1),
+          Row("1968-12-31 00:00:05", "1968-12-31 00:00:15", 2))
+      )
+    }
   }
 
   test("multiple time windows in a single operator throws nice exception") {
@@ -650,5 +686,32 @@ class DataFrameTimeWindowingSuite extends QueryTest with SharedSparkSession {
         Row("2016-03-27 19:39:20", "2016-03-27 19:39:30", "2016-03-27 19:39:29.999999", 1)
       )
     )
+  }
+
+  test("window_time in SQL") {
+    withTempView("tmpView") {
+      val df = Seq(
+        ("2016-03-27 19:38:19", 1), ("2016-03-27 19:39:25", 2)
+      ).toDF("time", "value")
+      df.createOrReplaceTempView("tmpView")
+      checkAnswer(
+        spark.sql(
+          s"""
+             |select
+             |  CAST(window.start AS string), CAST(window.end AS string),
+             |  CAST(window_time(window) AS string), counts
+             |from
+             |(
+             |  select window, count(*) AS counts from tmpView
+             |  group by window(time, "10 seconds")
+             |  order by window.start
+             |)
+             |""".stripMargin),
+        Seq(
+          Row("2016-03-27 19:38:10", "2016-03-27 19:38:20", "2016-03-27 19:38:19.999999", 1),
+          Row("2016-03-27 19:39:20", "2016-03-27 19:39:30", "2016-03-27 19:39:29.999999", 1)
+        )
+      )
+    }
   }
 }

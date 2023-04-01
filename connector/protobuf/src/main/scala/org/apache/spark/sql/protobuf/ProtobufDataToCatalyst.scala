@@ -39,7 +39,7 @@ private[protobuf] case class ProtobufDataToCatalyst(
   override def inputTypes: Seq[AbstractDataType] = Seq(BinaryType)
 
   override lazy val dataType: DataType = {
-    val dt = SchemaConverters.toSqlType(messageDescriptor).dataType
+    val dt = SchemaConverters.toSqlType(messageDescriptor, protobufOptions).dataType
     parseMode match {
       // With PermissiveMode, the output Catalyst row might contain columns of null values for
       // corrupt records, even if some of the columns are not nullable in the user-provided schema.

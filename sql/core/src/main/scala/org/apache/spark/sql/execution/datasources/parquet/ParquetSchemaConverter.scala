@@ -48,31 +48,35 @@ import org.apache.spark.sql.types._
  *        [[TimestampType]] fields.
  * @param caseSensitive Whether use case sensitive analysis when comparing Spark catalyst read
  *                      schema with Parquet schema.
- * @param timestampNTZEnabled Whether TimestampNTZType type is enabled.
+ * @param inferTimestampNTZ Whether TimestampNTZType type is enabled.
+ * @param nanosAsLong Whether timestamps with nanos are converted to long.
  */
 class ParquetToSparkSchemaConverter(
     assumeBinaryIsString: Boolean = SQLConf.PARQUET_BINARY_AS_STRING.defaultValue.get,
     assumeInt96IsTimestamp: Boolean = SQLConf.PARQUET_INT96_AS_TIMESTAMP.defaultValue.get,
     caseSensitive: Boolean = SQLConf.CASE_SENSITIVE.defaultValue.get,
-    timestampNTZEnabled: Boolean = SQLConf.PARQUET_TIMESTAMP_NTZ_ENABLED.defaultValue.get) {
+    inferTimestampNTZ: Boolean = SQLConf.PARQUET_INFER_TIMESTAMP_NTZ_ENABLED.defaultValue.get,
+    nanosAsLong: Boolean = SQLConf.LEGACY_PARQUET_NANOS_AS_LONG.defaultValue.get) {
 
   def this(conf: SQLConf) = this(
     assumeBinaryIsString = conf.isParquetBinaryAsString,
     assumeInt96IsTimestamp = conf.isParquetINT96AsTimestamp,
     caseSensitive = conf.caseSensitiveAnalysis,
-    timestampNTZEnabled = conf.parquetTimestampNTZEnabled)
+    inferTimestampNTZ = conf.parquetInferTimestampNTZEnabled,
+    nanosAsLong = conf.legacyParquetNanosAsLong)
 
   def this(conf: Configuration) = this(
     assumeBinaryIsString = conf.get(SQLConf.PARQUET_BINARY_AS_STRING.key).toBoolean,
     assumeInt96IsTimestamp = conf.get(SQLConf.PARQUET_INT96_AS_TIMESTAMP.key).toBoolean,
     caseSensitive = conf.get(SQLConf.CASE_SENSITIVE.key).toBoolean,
-    timestampNTZEnabled = conf.get(SQLConf.PARQUET_TIMESTAMP_NTZ_ENABLED.key).toBoolean)
+    inferTimestampNTZ = conf.get(SQLConf.PARQUET_INFER_TIMESTAMP_NTZ_ENABLED.key).toBoolean,
+    nanosAsLong = conf.get(SQLConf.LEGACY_PARQUET_NANOS_AS_LONG.key).toBoolean)
 
   /**
    * Returns true if TIMESTAMP_NTZ type is enabled in this ParquetToSparkSchemaConverter.
    */
   def isTimestampNTZEnabled(): Boolean = {
-    timestampNTZEnabled
+    inferTimestampNTZ
   }
 
   /**
@@ -266,11 +270,16 @@ class ParquetToSparkSchemaConverter(
             }
           case timestamp: TimestampLogicalTypeAnnotation
             if timestamp.getUnit == TimeUnit.MICROS || timestamp.getUnit == TimeUnit.MILLIS =>
-            if (timestamp.isAdjustedToUTC || !timestampNTZEnabled) {
+            if (timestamp.isAdjustedToUTC || !inferTimestampNTZ) {
               TimestampType
             } else {
               TimestampNTZType
             }
+          // SPARK-40819: NANOS are not supported as a Timestamp, convert to LongType without
+          // timezone awareness to address behaviour regression introduced by SPARK-34661
+          case timestamp: TimestampLogicalTypeAnnotation
+            if timestamp.getUnit == TimeUnit.NANOS && nanosAsLong =>
+            LongType
           case _ => illegalType()
         }
 
@@ -460,27 +469,23 @@ class ParquetToSparkSchemaConverter(
  * @param outputTimestampType which parquet timestamp type to use when writing.
  * @param useFieldId whether we should include write field id to Parquet schema. Set this to false
  *        via `spark.sql.parquet.fieldId.write.enabled = false` to disable writing field ids.
- * @param timestampNTZEnabled whether TIMESTAMP_NTZ type support is enabled.
  */
 class SparkToParquetSchemaConverter(
     writeLegacyParquetFormat: Boolean = SQLConf.PARQUET_WRITE_LEGACY_FORMAT.defaultValue.get,
     outputTimestampType: SQLConf.ParquetOutputTimestampType.Value =
       SQLConf.ParquetOutputTimestampType.INT96,
-    useFieldId: Boolean = SQLConf.PARQUET_FIELD_ID_WRITE_ENABLED.defaultValue.get,
-    timestampNTZEnabled: Boolean = SQLConf.PARQUET_TIMESTAMP_NTZ_ENABLED.defaultValue.get) {
+    useFieldId: Boolean = SQLConf.PARQUET_FIELD_ID_WRITE_ENABLED.defaultValue.get) {
 
   def this(conf: SQLConf) = this(
     writeLegacyParquetFormat = conf.writeLegacyParquetFormat,
     outputTimestampType = conf.parquetOutputTimestampType,
-    useFieldId = conf.parquetFieldIdWriteEnabled,
-    timestampNTZEnabled = conf.parquetTimestampNTZEnabled)
+    useFieldId = conf.parquetFieldIdWriteEnabled)
 
   def this(conf: Configuration) = this(
     writeLegacyParquetFormat = conf.get(SQLConf.PARQUET_WRITE_LEGACY_FORMAT.key).toBoolean,
     outputTimestampType = SQLConf.ParquetOutputTimestampType.withName(
       conf.get(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key)),
-    useFieldId = conf.get(SQLConf.PARQUET_FIELD_ID_WRITE_ENABLED.key).toBoolean,
-    timestampNTZEnabled = conf.get(SQLConf.PARQUET_TIMESTAMP_NTZ_ENABLED.key).toBoolean)
+    useFieldId = conf.get(SQLConf.PARQUET_FIELD_ID_WRITE_ENABLED.key).toBoolean)
 
   /**
    * Converts a Spark SQL [[StructType]] to a Parquet [[MessageType]].
@@ -568,7 +573,7 @@ class SparkToParquetSchemaConverter(
               .as(LogicalTypeAnnotation.timestampType(true, TimeUnit.MILLIS)).named(field.name)
         }
 
-      case TimestampNTZType if timestampNTZEnabled =>
+      case TimestampNTZType =>
         Types.primitive(INT64, repetition)
           .as(LogicalTypeAnnotation.timestampType(false, TimeUnit.MICROS)).named(field.name)
       case BinaryType =>

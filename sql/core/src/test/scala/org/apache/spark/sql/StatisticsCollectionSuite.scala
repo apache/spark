@@ -63,22 +63,26 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
   }
 
   test("analyzing views is not supported") {
-    def assertAnalyzeUnsupported(analyzeCommand: String): Unit = {
-      val err = intercept[AnalysisException] {
-        sql(analyzeCommand)
-      }
-      assert(err.message.contains("ANALYZE TABLE is not supported"))
-    }
-
     val tableName = "tbl"
     withTable(tableName) {
       spark.range(10).write.saveAsTable(tableName)
       val viewName = "view"
       withView(viewName) {
         sql(s"CREATE VIEW $viewName AS SELECT * FROM $tableName")
-
-        assertAnalyzeUnsupported(s"ANALYZE TABLE $viewName COMPUTE STATISTICS")
-        assertAnalyzeUnsupported(s"ANALYZE TABLE $viewName COMPUTE STATISTICS FOR COLUMNS id")
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql(s"ANALYZE TABLE $viewName COMPUTE STATISTICS")
+          },
+          errorClass = "UNSUPPORTED_FEATURE.ANALYZE_VIEW",
+          parameters = Map.empty
+        )
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql(s"ANALYZE TABLE $viewName COMPUTE STATISTICS FOR COLUMNS id")
+          },
+          errorClass = "UNSUPPORTED_FEATURE.ANALYZE_VIEW",
+          parameters = Map.empty
+        )
       }
     }
   }
@@ -564,6 +568,30 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
           expectedMinTimestamp = "2022-01-01 08:00:01.123456 +0800",
           expectedMaxTimestamp = "2022-01-03 08:00:02.987654 +0800")
       }
+    }
+  }
+
+  test("SPARK-42777: describe column stats (min, max) for timestamp_ntz column") {
+    val table = "insert_desc_same_time_zone"
+    val tsCol = "timestamp_ntz_typed_col"
+    withTable(table) {
+      val minTimestamp = "make_timestamp_ntz(2022, 1, 1, 0, 0, 1.123456)"
+      val maxTimestamp = "make_timestamp_ntz(2022, 1, 3, 0, 0, 2.987654)"
+      sql(s"CREATE TABLE $table ($tsCol timestamp_ntz) USING parquet")
+      sql(s"INSERT INTO $table VALUES $minTimestamp, $maxTimestamp")
+      sql(s"ANALYZE TABLE $table COMPUTE STATISTICS FOR ALL COLUMNS")
+
+      checkDescTimestampColStats(
+        tableName = table,
+        timestampColumn = tsCol,
+        expectedMinTimestamp = "2022-01-01 00:00:01.123456",
+        expectedMaxTimestamp = "2022-01-03 00:00:02.987654")
+
+      // Converting TimestampNTZ catalog stats to plan stats
+      val columnStat = getCatalogTable(table)
+        .stats.get.colStats(tsCol).toPlanStat(tsCol, TimestampNTZType)
+      assert(columnStat.min.contains(1640995201123456L))
+      assert(columnStat.max.contains(1641168002987654L))
     }
   }
 

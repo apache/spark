@@ -19,7 +19,7 @@ package org.apache.spark.util
 
 import java.io._
 import java.lang.{Byte => JByte}
-import java.lang.management.{LockInfo, ManagementFactory, MonitorInfo, ThreadInfo}
+import java.lang.management.{LockInfo, ManagementFactory, MonitorInfo, PlatformManagedObject, ThreadInfo}
 import java.lang.reflect.InvocationTargetException
 import java.math.{MathContext, RoundingMode}
 import java.net._
@@ -589,7 +589,7 @@ private[spark] object Utils extends Logging {
     if (lowerSrc.endsWith(".jar")) {
       RunJar.unJar(source, dest, RunJar.MATCH_ANY)
     } else if (lowerSrc.endsWith(".zip")) {
-      // TODO(SPARK-37677): should keep file permissions. Java implementation doesn't.
+      // After issue HADOOP-18145, unzip could keep file permissions.
       FileUtil.unZip(source, dest)
     } else if (lowerSrc.endsWith(".tar.gz") || lowerSrc.endsWith(".tgz")) {
       FileUtil.unTar(source, dest)
@@ -1110,6 +1110,24 @@ private[spark] object Utils extends Logging {
   }
 
   /**
+   * Normalize IPv6 IPs and no-op on all other hosts.
+   */
+  private[spark] def normalizeIpIfNeeded(host: String): String = {
+    // Is this a v6 address. We ask users to add [] around v6 addresses as strs but
+    // there not always there. If it's just 0-9 and : and [] we treat it as a v6 address.
+    // This means some invalid addresses are treated as v6 addresses, but since they are
+    // not valid hostnames it doesn't matter.
+    // See https://www.rfc-editor.org/rfc/rfc1123#page-13 for context around valid hostnames.
+    val addressRe = """^\[{0,1}([0-9:]+?:[0-9]*)\]{0,1}$""".r
+    host match {
+      case addressRe(unbracketed) =>
+        addBracketsIfNeeded(InetAddresses.toAddrString(InetAddresses.forString(unbracketed)))
+      case _ =>
+        host
+    }
+  }
+
+  /**
    * Checks if the host contains only valid hostname/ip without port
    * NOTE: Incase of IPV6 ip it should be enclosed inside []
    */
@@ -1287,41 +1305,30 @@ private[spark] object Utils extends Logging {
     (JavaUtils.byteStringAsBytes(str) / 1024 / 1024).toInt
   }
 
+  private[this] val siByteSizes =
+    Array(1L << 60, 1L << 50, 1L << 40, 1L << 30, 1L << 20, 1L << 10, 1)
+  private[this] val siByteSuffixes =
+    Array("EiB", "PiB", "TiB", "GiB", "MiB", "KiB", "B")
   /**
    * Convert a quantity in bytes to a human-readable string such as "4.0 MiB".
    */
-  def bytesToString(size: Long): String = bytesToString(BigInt(size))
+  def bytesToString(size: Long): String = {
+    var i = 0
+    while (i < siByteSizes.length - 1 && size < 2 * siByteSizes(i)) i += 1
+    "%.1f %s".formatLocal(Locale.US, size.toDouble / siByteSizes(i), siByteSuffixes(i))
+  }
 
   def bytesToString(size: BigInt): String = {
     val EiB = 1L << 60
-    val PiB = 1L << 50
-    val TiB = 1L << 40
-    val GiB = 1L << 30
-    val MiB = 1L << 20
-    val KiB = 1L << 10
-
-    if (size >= BigInt(1L << 11) * EiB) {
+    if (size.isValidLong) {
+      // Common case, most sizes fit in 64 bits and all ops on BigInt are order(s) of magnitude
+      // slower than Long/Double.
+      bytesToString(size.toLong)
+    } else if (size < BigInt(2L << 10) * EiB) {
+      "%.1f EiB".formatLocal(Locale.US, BigDecimal(size) / EiB)
+    } else {
       // The number is too large, show it in scientific notation.
       BigDecimal(size, new MathContext(3, RoundingMode.HALF_UP)).toString() + " B"
-    } else {
-      val (value, unit) = {
-        if (size >= 2 * EiB) {
-          (BigDecimal(size) / EiB, "EiB")
-        } else if (size >= 2 * PiB) {
-          (BigDecimal(size) / PiB, "PiB")
-        } else if (size >= 2 * TiB) {
-          (BigDecimal(size) / TiB, "TiB")
-        } else if (size >= 2 * GiB) {
-          (BigDecimal(size) / GiB, "GiB")
-        } else if (size >= 2 * MiB) {
-          (BigDecimal(size) / MiB, "MiB")
-        } else if (size >= 2 * KiB) {
-          (BigDecimal(size) / KiB, "KiB")
-        } else {
-          (BigDecimal(size), "B")
-        }
-      }
-      "%.1f %s".formatLocal(Locale.US, value, unit)
     }
   }
 
@@ -2808,7 +2815,8 @@ private[spark] object Utils extends Logging {
    * Redact the sensitive values in the given map. If a map key matches the redaction pattern then
    * its value is replaced with a dummy text.
    */
-  def redact(conf: SparkConf, kvs: Seq[(String, String)]): Seq[(String, String)] = {
+  def redact(conf: SparkConf,
+      kvs: scala.collection.Seq[(String, String)]): scala.collection.Seq[(String, String)] = {
     val redactionPattern = conf.get(SECRET_REDACTION_PATTERN)
     redact(redactionPattern, kvs)
   }
@@ -2817,7 +2825,8 @@ private[spark] object Utils extends Logging {
    * Redact the sensitive values in the given map. If a map key matches the redaction pattern then
    * its value is replaced with a dummy text.
    */
-  def redact[K, V](regex: Option[Regex], kvs: Seq[(K, V)]): Seq[(K, V)] = {
+  def redact[K, V](regex: Option[Regex],
+      kvs: scala.collection.Seq[(K, V)]): scala.collection.Seq[(K, V)] = {
     regex match {
       case None => kvs
       case Some(r) => redact(r, kvs)
@@ -2839,7 +2848,8 @@ private[spark] object Utils extends Logging {
     }
   }
 
-  private def redact[K, V](redactionPattern: Regex, kvs: Seq[(K, V)]): Seq[(K, V)] = {
+  private def redact[K, V](redactionPattern: Regex,
+      kvs: scala.collection.Seq[(K, V)]): scala.collection.Seq[(K, V)] = {
     // If the sensitive information regex matches with either the key or the value, redact the value
     // While the original intent was to only redact the value if the key matched with the regex,
     // we've found that especially in verbose mode, the value of the property may contain sensitive
@@ -2865,7 +2875,7 @@ private[spark] object Utils extends Logging {
           .getOrElse((key, value))
       case (key, value) =>
         (key, value)
-    }.asInstanceOf[Seq[(K, V)]]
+    }.asInstanceOf[scala.collection.Seq[(K, V)]]
   }
 
   /**
@@ -2874,7 +2884,7 @@ private[spark] object Utils extends Logging {
    * redacted. So theoretically, the property itself could be configured to redact its own value
    * when printing.
    */
-  def redact(kvs: Map[String, String]): Seq[(String, String)] = {
+  def redact(kvs: Map[String, String]): scala.collection.Seq[(String, String)] = {
     val redactionPattern = kvs.getOrElse(
       SECRET_REDACTION_PATTERN.key,
       SECRET_REDACTION_PATTERN.defaultValueString
@@ -3256,6 +3266,24 @@ private[spark] object Utils extends Logging {
         math.max((sortedSize(len / 2) + sortedSize(len / 2 - 1)) / 2, 1)
       case _ => math.max(sortedSize(len / 2), 1)
     }
+  }
+
+  /**
+   * Return whether we are using G1GC or not
+   */
+  lazy val isG1GC: Boolean = {
+    Try {
+      val clazz = Utils.classForName("com.sun.management.HotSpotDiagnosticMXBean")
+        .asInstanceOf[Class[_ <: PlatformManagedObject]]
+      val vmOptionClazz = Utils.classForName("com.sun.management.VMOption")
+      val hotSpotDiagnosticMXBean = ManagementFactory.getPlatformMXBean(clazz)
+      val vmOptionMethod = clazz.getMethod("getVMOption", classOf[String])
+      val valueMethod = vmOptionClazz.getMethod("getValue")
+
+      val useG1GCObject = vmOptionMethod.invoke(hotSpotDiagnosticMXBean, "UseG1GC")
+      val useG1GC = valueMethod.invoke(useG1GCObject).asInstanceOf[String]
+      "true".equals(useG1GC)
+    }.getOrElse(false)
   }
 }
 

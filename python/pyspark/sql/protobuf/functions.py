@@ -20,9 +20,12 @@ A collections of builtin protobuf functions
 """
 
 
-from typing import Dict, Optional, TYPE_CHECKING
-from pyspark import SparkContext
+from typing import Dict, Optional, TYPE_CHECKING, cast
+
+from py4j.java_gateway import JVMView
+
 from pyspark.sql.column import Column, _to_java_column
+from pyspark.sql.utils import get_active_spark_context
 from pyspark.util import _print_missing_jar
 
 if TYPE_CHECKING:
@@ -37,13 +40,15 @@ def from_protobuf(
 ) -> Column:
     """
     Converts a binary column of Protobuf format into its corresponding catalyst value.
-    The specified schema must match the read data, otherwise the behavior is undefined:
-    it may fail or return arbitrary result. The jar containing Java class should be shaded.
-    Specifically, ``com.google.protobuf.*`` should be shaded to
-    ``org.sparkproject.spark-protobuf.protobuf.*``.
+    The Protobuf definition is provided in one of these two ways:
 
-    To deserialize the data with a compatible and evolved schema, the expected
-    Protobuf schema can be set via the option protobuf descriptor.
+       - Protobuf descriptor file: E.g. a descriptor file created with
+          `protoc --include_imports --descriptor_set_out=abc.desc abc.proto`
+       - Jar containing Protobuf Java class: The jar containing Java class should be shaded.
+         Specifically, `com.google.protobuf.*` should be shaded to
+         `org.sparkproject.spark_protobuf.protobuf.*`.
+         https://github.com/rangadi/shaded-protobuf-classes is useful to create shaded jar from
+         Protobuf files. The jar file can be added with spark-submit option --jars.
 
     .. versionadded:: 3.4.0
 
@@ -52,12 +57,11 @@ def from_protobuf(
     data : :class:`~pyspark.sql.Column` or str
         the binary column.
     messageName: str, optional
-        the protobuf message name to look for in descriptor file. Or
-        The Protobuf class name. E.g. ``org.spark.examples.protobuf.ExampleEvent``,
-        without descFilePath parameter.
-        Using the spark-submit option --jars, add a messageClassName specific jar.
-    descFilePath : str
-        the protobuf descriptor in Message GeneratedMessageV3 format.
+        the protobuf message name to look for in descriptor file, or
+        The Protobuf class name when descFilePath parameter is not set.
+        E.g. `com.example.protos.ExampleEvent`.
+    descFilePath : str, optional
+        The protobuf descriptor file.
     options : dict, optional
         options to control how the protobuf record is parsed.
 
@@ -104,7 +108,7 @@ def from_protobuf(
     >>> data = [([(1668035962, 2020)])]
     >>> ddl_schema = "value struct<seconds: LONG, nanos: INT>"
     >>> df = spark.createDataFrame(data, ddl_schema)
-    >>> message_class_name = "org.sparkproject.spark-protobuf.protobuf.Timestamp"
+    >>> message_class_name = "org.sparkproject.spark_protobuf.protobuf.Timestamp"
     >>> to_proto_df = df.select(to_protobuf(df.value, message_class_name).alias("value"))
     >>> from_proto_df = to_proto_df.select(
     ...     from_protobuf(to_proto_df.value, message_class_name).alias("value"))
@@ -116,16 +120,15 @@ def from_protobuf(
     +------------------+
     """
 
-    sc = SparkContext._active_spark_context
-    assert sc is not None and sc._jvm is not None
+    sc = get_active_spark_context()
     try:
         if descFilePath is not None:
-            jc = sc._jvm.org.apache.spark.sql.protobuf.functions.from_protobuf(
+            jc = cast(JVMView, sc._jvm).org.apache.spark.sql.protobuf.functions.from_protobuf(
                 _to_java_column(data), messageName, descFilePath, options or {}
             )
         else:
-            jc = sc._jvm.org.apache.spark.sql.protobuf.functions.from_protobuf(
-                _to_java_column(data), messageName
+            jc = cast(JVMView, sc._jvm).org.apache.spark.sql.protobuf.functions.from_protobuf(
+                _to_java_column(data), messageName, options or {}
             )
     except TypeError as e:
         if str(e) == "'JavaPackage' object is not callable":
@@ -135,13 +138,22 @@ def from_protobuf(
 
 
 def to_protobuf(
-    data: "ColumnOrName", messageName: str, descFilePath: Optional[str] = None
+    data: "ColumnOrName",
+    messageName: str,
+    descFilePath: Optional[str] = None,
+    options: Optional[Dict[str, str]] = None,
 ) -> Column:
     """
-    Converts a column into binary of protobuf format. The specified Protobuf class must match the
-    data, otherwise the behavior is undefined: it may fail or return arbitrary result. The jar
-    containing Java class should be shaded. Specifically, ``com.google.protobuf.*`` should be
-    shaded to ``org.sparkproject.spark-protobuf.protobuf.*``.
+    Converts a column into binary of protobuf format. The Protobuf definition is provided in one
+    of these two ways:
+
+       - Protobuf descriptor file: E.g. a descriptor file created with
+          `protoc --include_imports --descriptor_set_out=abc.desc abc.proto`
+       - Jar containing Protobuf Java class: The jar containing Java class should be shaded.
+         Specifically, `com.google.protobuf.*` should be shaded to
+         `org.sparkproject.spark_protobuf.protobuf.*`.
+         https://github.com/rangadi/shaded-protobuf-classes is useful to create shaded jar from
+         Protobuf files. The jar file can be added with spark-submit option --jars.
 
     .. versionadded:: 3.4.0
 
@@ -150,16 +162,16 @@ def to_protobuf(
     data : :class:`~pyspark.sql.Column` or str
         the data column.
     messageName: str, optional
-        the protobuf message name to look for in descriptor file. Or
-        The Protobuf class name. E.g. ``org.spark.examples.protobuf.ExampleEvent``,
-        without descFilePath parameter.
-        Using the spark-submit option --jars, add a messageClassName specific jar.
-    descFilePath : str
-        the protobuf descriptor in Message GeneratedMessageV3 format.
+        the protobuf message name to look for in descriptor file, or
+        The Protobuf class name when descFilePath parameter is not set.
+        E.g. `com.example.protos.ExampleEvent`.
+    descFilePath : str, optional
+        the Protobuf descriptor file.
+    options : dict, optional
 
     Notes
     -----
-    Protobuf functionality is provided as an pluggable external module
+    Protobuf functionality is provided as a pluggable external module
 
     Examples
     --------
@@ -192,7 +204,7 @@ def to_protobuf(
     >>> data = [([(1668035962, 2020)])]
     >>> ddl_schema = "value struct<seconds: LONG, nanos: INT>"
     >>> df = spark.createDataFrame(data, ddl_schema)
-    >>> message_class_name = "org.sparkproject.spark-protobuf.protobuf.Timestamp"
+    >>> message_class_name = "org.sparkproject.spark_protobuf.protobuf.Timestamp"
     >>> proto_df = df.select(to_protobuf(df.value, message_class_name).alias("suite"))
     >>> proto_df.show(truncate=False)
     +----------------------------+
@@ -202,16 +214,15 @@ def to_protobuf(
     +----------------------------+
     """
 
-    sc = SparkContext._active_spark_context
-    assert sc is not None and sc._jvm is not None
+    sc = get_active_spark_context()
     try:
         if descFilePath is not None:
-            jc = sc._jvm.org.apache.spark.sql.protobuf.functions.to_protobuf(
-                _to_java_column(data), messageName, descFilePath
+            jc = cast(JVMView, sc._jvm).org.apache.spark.sql.protobuf.functions.to_protobuf(
+                _to_java_column(data), messageName, descFilePath, options or {}
             )
         else:
-            jc = sc._jvm.org.apache.spark.sql.protobuf.functions.to_protobuf(
-                _to_java_column(data), messageName
+            jc = cast(JVMView, sc._jvm).org.apache.spark.sql.protobuf.functions.to_protobuf(
+                _to_java_column(data), messageName, options or {}
             )
 
     except TypeError as e:

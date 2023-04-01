@@ -3580,12 +3580,13 @@ INSERT INTO num_exp_power_10_ln VALUES (7,1716699575118597095.423308199106402476
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.parser.ParseException
+org.apache.spark.SparkArithmeticException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1229",
+  "errorClass" : "DECIMAL_PRECISION_EXCEEDS_MAX_PRECISION",
+  "sqlState" : "22003",
   "messageParameters" : {
-    "decimalType" : "decimal",
-    "precision" : "38"
+    "maxPrecision" : "38",
+    "precision" : "39"
   }
 }
 
@@ -4713,6 +4714,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INVALID_FORMAT.THOUSANDS_SEPS_MUST_BEFORE_DEC",
+  "sqlState" : "42601",
   "messageParameters" : {
     "format" : "'99G999G999D999G999'"
   },
@@ -4774,6 +4776,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INVALID_FORMAT.CONT_THOUSANDS_SEPS",
+  "sqlState" : "42601",
   "messageParameters" : {
     "format" : "'999G'"
   },

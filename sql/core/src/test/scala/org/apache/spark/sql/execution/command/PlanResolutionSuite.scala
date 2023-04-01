@@ -32,18 +32,19 @@ import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, 
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Cast, EqualTo, EvalMode, Expression, InSubquery, IntegerLiteral, ListQuery, Literal, StringLiteral}
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
-import org.apache.spark.sql.catalyst.plans.logical.{AlterColumn, AnalysisOnlyCommand, AppendData, Assignment, CreateTable, CreateTableAsSelect, DeleteAction, DeleteFromTable, DescribeRelation, DropTable, InsertAction, InsertIntoStatement, LocalRelation, LogicalPlan, MergeIntoTable, OneRowRelation, Project, SetTableLocation, SetTableProperties, ShowTableProperties, SubqueryAlias, UnsetTableProperties, UpdateAction, UpdateTable}
+import org.apache.spark.sql.catalyst.plans.logical.{AlterColumn, AnalysisOnlyCommand, AppendData, Assignment, CreateTable, CreateTableAsSelect, DeleteAction, DeleteFromTable, DescribeRelation, DropTable, InsertAction, InsertIntoStatement, LocalRelation, LogicalPlan, MergeIntoTable, OneRowRelation, OverwriteByExpression, OverwritePartitionsDynamic, Project, SetTableLocation, SetTableProperties, ShowTableProperties, SubqueryAlias, UnsetTableProperties, UpdateAction, UpdateTable}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns
 import org.apache.spark.sql.connector.FakeV2Provider
-import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogNotFoundException, Identifier, SupportsDelete, Table, TableCapability, TableCatalog, V1Table}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogNotFoundException, Column, ColumnDefaultValue, Identifier, SupportsDelete, Table, TableCapability, TableCatalog, V1Table}
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
-import org.apache.spark.sql.connector.expressions.Transform
+import org.apache.spark.sql.connector.expressions.{LiteralValue, Transform}
 import org.apache.spark.sql.execution.datasources.{CreateTable => CreateTableV1}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
+import org.apache.spark.sql.internal.SQLConf.{PARTITION_OVERWRITE_MODE, PartitionOverwriteMode}
 import org.apache.spark.sql.sources.SimpleScanSource
-import org.apache.spark.sql.types.{BooleanType, CharType, DoubleType, IntegerType, LongType, MetadataBuilder, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{BooleanType, CharType, DoubleType, IntegerType, LongType, StringType, StructField, StructType, VarcharType}
+import org.apache.spark.unsafe.types.UTF8String
 
 class PlanResolutionSuite extends AnalysisTest {
   import CatalystSqlParser._
@@ -53,21 +54,24 @@ class PlanResolutionSuite extends AnalysisTest {
 
   private val table: Table = {
     val t = mock(classOf[SupportsDelete])
-    when(t.schema()).thenReturn(new StructType().add("i", "int").add("s", "string"))
+    when(t.columns()).thenReturn(
+      Array(Column.create("i", IntegerType), Column.create("s", StringType)))
     when(t.partitioning()).thenReturn(Array.empty[Transform])
     t
   }
 
   private val table1: Table = {
     val t = mock(classOf[Table])
-    when(t.schema()).thenReturn(new StructType().add("s", "string").add("i", "int"))
+    when(t.columns()).thenReturn(
+      Array(Column.create("s", StringType), Column.create("i", IntegerType)))
     when(t.partitioning()).thenReturn(Array.empty[Transform])
     t
   }
 
   private val table2: Table = {
     val t = mock(classOf[Table])
-    when(t.schema()).thenReturn(new StructType().add("i", "int").add("x", "string"))
+    when(t.columns()).thenReturn(
+      Array(Column.create("i", IntegerType), Column.create("x", StringType)))
     when(t.partitioning()).thenReturn(Array.empty[Transform])
     t
   }
@@ -75,53 +79,46 @@ class PlanResolutionSuite extends AnalysisTest {
   private val tableWithAcceptAnySchemaCapability: Table = {
     val t = mock(classOf[Table])
     when(t.name()).thenReturn("v2TableWithAcceptAnySchemaCapability")
-    when(t.schema()).thenReturn(new StructType().add("i", "int"))
+    when(t.columns()).thenReturn(Array(Column.create("i", IntegerType)))
     when(t.capabilities()).thenReturn(Collections.singleton(TableCapability.ACCEPT_ANY_SCHEMA))
     t
   }
 
   private val charVarcharTable: Table = {
     val t = mock(classOf[Table])
-    when(t.schema()).thenReturn(new StructType().add("c1", "char(5)").add("c2", "varchar(5)"))
+    when(t.columns()).thenReturn(
+      Array(Column.create("c1", CharType(5)), Column.create("c2", VarcharType(5))))
     when(t.partitioning()).thenReturn(Array.empty[Transform])
     t
   }
 
   private val defaultValues: Table = {
     val t = mock(classOf[Table])
-    when(t.schema()).thenReturn(
-      new StructType()
-        .add("i", BooleanType, true,
-          new MetadataBuilder()
-            .putString(ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY, "true")
-            .putString(ResolveDefaultColumns.EXISTS_DEFAULT_COLUMN_METADATA_KEY, "true").build())
-        .add("s", IntegerType, true,
-          new MetadataBuilder()
-            .putString(ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY, "42")
-            .putString(ResolveDefaultColumns.EXISTS_DEFAULT_COLUMN_METADATA_KEY, "42").build()))
+    val default1 = new ColumnDefaultValue("true", LiteralValue(true, BooleanType))
+    val default2 = new ColumnDefaultValue("42", LiteralValue(42, IntegerType))
+    when(t.columns()).thenReturn(Array(
+      Column.create("i", BooleanType, true, null, default1, null),
+      Column.create("s", IntegerType, true, null, default2, null)))
     when(t.partitioning()).thenReturn(Array.empty[Transform])
     t
   }
 
   private val defaultValues2: Table = {
     val t = mock(classOf[Table])
-    when(t.schema()).thenReturn(
-      new StructType()
-        .add("i", StringType)
-        .add("e", StringType, true,
-          new MetadataBuilder()
-            .putString(ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY, "'abc'")
-            .putString(ResolveDefaultColumns.EXISTS_DEFAULT_COLUMN_METADATA_KEY, "'abc'").build()))
+    val default = new ColumnDefaultValue(
+      "'abc'", LiteralValue(UTF8String.fromString("abc"), StringType))
+    when(t.columns()).thenReturn(Array(
+      Column.create("i", StringType),
+      Column.create("e", StringType, true, null, default, null)))
     when(t.partitioning()).thenReturn(Array.empty[Transform])
     t
   }
 
   private val tableWithColumnNamedDefault: Table = {
     val t = mock(classOf[Table])
-    when(t.schema()).thenReturn(
-      new StructType()
-        .add("s", StringType)
-        .add("default", StringType))
+    when(t.columns()).thenReturn(Array(
+      Column.create("s", StringType),
+      Column.create("default", StringType)))
     when(t.partitioning()).thenReturn(Array.empty[Transform])
     t
   }
@@ -146,7 +143,7 @@ class PlanResolutionSuite extends AnalysisTest {
   private val testCat: TableCatalog = {
     val newCatalog = mock(classOf[TableCatalog])
     when(newCatalog.loadTable(any())).thenAnswer((invocation: InvocationOnMock) => {
-      invocation.getArgument[Identifier](0).name match {
+      invocation.getArguments()(0).asInstanceOf[Identifier].name match {
         case "tab" => table
         case "tab1" => table1
         case "tab2" => table2
@@ -164,7 +161,7 @@ class PlanResolutionSuite extends AnalysisTest {
   private val v2SessionCatalog: TableCatalog = {
     val newCatalog = mock(classOf[TableCatalog])
     when(newCatalog.loadTable(any())).thenAnswer((invocation: InvocationOnMock) => {
-      val ident = invocation.getArgument[Identifier](0)
+      val ident = invocation.getArguments()(0).asInstanceOf[Identifier]
       ident.name match {
         case "v1Table" | "v1Table1" => createV1TableMock(ident)
         case "v1HiveTable" => createV1TableMock(ident, provider = "hive")
@@ -188,7 +185,7 @@ class PlanResolutionSuite extends AnalysisTest {
   private val catalogManagerWithDefault = {
     val manager = mock(classOf[CatalogManager])
     when(manager.catalog(any())).thenAnswer((invocation: InvocationOnMock) => {
-      invocation.getArgument[String](0) match {
+      invocation.getArguments()(0).asInstanceOf[String] match {
         case "testcat" =>
           testCat
         case CatalogManager.SESSION_CATALOG_NAME =>
@@ -206,7 +203,7 @@ class PlanResolutionSuite extends AnalysisTest {
   private val catalogManagerWithoutDefault = {
     val manager = mock(classOf[CatalogManager])
     when(manager.catalog(any())).thenAnswer((invocation: InvocationOnMock) => {
-      invocation.getArgument[String](0) match {
+      invocation.getArguments()(0).asInstanceOf[String] match {
         case "testcat" =>
           testCat
         case name =>
@@ -1234,6 +1231,33 @@ class PlanResolutionSuite extends AnalysisTest {
         _, _) =>
 
       case _ => fail("Expect UpdateTable, but got:\n" + parsed1.treeString)
+    }
+  }
+
+  test("InsertIntoStatement byName") {
+    val tblName = "testcat.tab1"
+    val insertSql = s"INSERT INTO $tblName(i, s) VALUES (3, 'a')"
+    val insertParsed = parseAndResolve(insertSql)
+    val overwriteSql = s"INSERT OVERWRITE $tblName(i, s) VALUES (3, 'a')"
+    val overwriteParsed = parseAndResolve(overwriteSql)
+    insertParsed match {
+      case AppendData(_: DataSourceV2Relation, _, _, isByName, _, _) =>
+        assert(isByName)
+      case _ => fail("Expected AppendData, but got:\n" + insertParsed.treeString)
+    }
+    overwriteParsed match {
+      case OverwriteByExpression(_: DataSourceV2Relation, _, _, _, isByName, _, _) =>
+        assert(isByName)
+      case _ => fail("Expected OverwriteByExpression, but got:\n" + overwriteParsed.treeString)
+    }
+    withSQLConf(PARTITION_OVERWRITE_MODE.key -> PartitionOverwriteMode.DYNAMIC.toString) {
+      val dynamicOverwriteParsed = parseAndResolve(overwriteSql)
+      dynamicOverwriteParsed match {
+        case OverwritePartitionsDynamic(_: DataSourceV2Relation, _, _, isByName, _) =>
+          assert(isByName)
+        case _ =>
+          fail("Expected OverwriteByExpression, but got:\n" + dynamicOverwriteParsed.treeString)
+      }
     }
   }
 

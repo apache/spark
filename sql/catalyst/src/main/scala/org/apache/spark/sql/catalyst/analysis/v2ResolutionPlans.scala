@@ -119,9 +119,10 @@ case class UnresolvedFieldPosition(position: ColumnPosition) extends FieldPositi
 
 /**
  * Holds the name of a function that has yet to be looked up. It will be resolved to
- * [[ResolvedPersistentFunc]] or [[ResolvedNonPersistentFunc]] during analysis.
+ * [[ResolvedPersistentFunc]] or [[ResolvedNonPersistentFunc]] during analysis of function-related
+ * commands such as `DESCRIBE FUNCTION name`.
  */
-case class UnresolvedFunc(
+case class UnresolvedFunctionName(
     multipartIdentifier: Seq[String],
     commandName: String,
     requirePersistent: Boolean,
@@ -180,7 +181,7 @@ object ResolvedTable {
       catalog: TableCatalog,
       identifier: Identifier,
       table: Table): ResolvedTable = {
-    val schema = CharVarcharUtils.replaceCharVarcharWithStringInSchema(table.schema)
+    val schema = CharVarcharUtils.replaceCharVarcharWithStringInSchema(table.columns.asSchema)
     ResolvedTable(catalog, identifier, table, schema.toAttributes)
   }
 }

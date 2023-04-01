@@ -24,7 +24,7 @@ import java.util.Locale
 import org.apache.hadoop.fs.{Path, RawLocalFileSystem}
 import org.apache.hadoop.fs.permission.{AclEntry, AclStatus}
 
-import org.apache.spark.{SparkException, SparkFiles, SparkRuntimeException}
+import org.apache.spark.{SparkClassNotFoundException, SparkException, SparkFiles, SparkRuntimeException}
 import org.apache.spark.internal.config
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, QualifiedTableName, TableIdentifier}
@@ -984,8 +984,16 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
     val e = intercept[AnalysisException] {
       sql("DROP VIEW dbx.tab1")
     }
-    assert(e.getMessage.contains(
-      "Cannot drop a view with DROP TABLE. Please use DROP VIEW instead"))
+    checkError(
+      exception = e,
+      errorClass = "WRONG_COMMAND_FOR_OBJECT_TYPE",
+      parameters = Map(
+        "alternative" -> "DROP TABLE",
+        "operation" -> "DROP VIEW",
+        "foundType" -> "EXTERNAL",
+        "requiredType" -> "VIEW",
+        "objectName" -> "spark_catalog.dbx.tab1")
+    )
   }
 
   protected def testSetProperties(isDatasourceTable: Boolean): Unit = {
@@ -1166,8 +1174,11 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
       withTable("tab1", "tab2") {
         (("a", "b") :: Nil).toDF().write.json(tempDir.getCanonicalPath)
 
-        val e = intercept[AnalysisException] { sql("CREATE TABLE tab1 USING json") }.getMessage
-        assert(e.contains("Unable to infer schema for JSON. It must be specified manually"))
+        checkError(
+          exception = intercept[AnalysisException] { sql("CREATE TABLE tab1 USING json") },
+          errorClass = "UNABLE_TO_INFER_SCHEMA",
+          parameters = Map("format" -> "JSON")
+        )
 
         sql(s"CREATE TABLE tab2 using json location '${tempDir.toURI}'")
         checkAnswer(spark.table("tab2"), Row("a", "b"))
@@ -2040,10 +2051,14 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
       val table2 = catalog.getTableMetadata(TableIdentifier("t2"))
       assert(table2.provider == Some("hive"))
 
-      val e1 = intercept[ClassNotFoundException] {
+      val e1 = intercept[SparkClassNotFoundException] {
         sql("CREATE TABLE t3 LIKE s USING unknown")
-      }.getMessage
-      assert(e1.contains("Failed to find data source"))
+      }
+      checkError(
+        exception = e1,
+        errorClass = "DATA_SOURCE_NOT_FOUND",
+        parameters = Map("provider" -> "unknown")
+      )
 
       withGlobalTempView("src") {
         val globalTempDB = spark.sharedState.globalTempViewManager.database
@@ -2079,10 +2094,18 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
     }.getMessage
     assert(msg.contains(
       "md5 is a built-in/temporary function. 'REFRESH FUNCTION' expects a persistent function"))
-    val msg2 = intercept[AnalysisException] {
-      sql("REFRESH FUNCTION default.md5")
-    }.getMessage
-    assert(msg2.contains(s"Undefined function: default.md5"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("REFRESH FUNCTION default.md5")
+      },
+      errorClass = "UNRESOLVED_ROUTINE",
+      parameters = Map(
+        "routineName" -> "`default`.`md5`",
+        "searchPath" -> "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"),
+      context = ExpectedContext(
+        fragment = "REFRESH FUNCTION default.md5",
+        start = 0,
+        stop = 27))
 
     withUserDefinedFunction("func1" -> true) {
       sql("CREATE TEMPORARY FUNCTION func1 AS 'test.org.apache.spark.sql.MyDoubleAvg'")
@@ -2105,12 +2128,18 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
       assert(!spark.sessionState.catalog.isRegisteredFunction(func))
       sql("REFRESH FUNCTION func1")
       assert(spark.sessionState.catalog.isRegisteredFunction(func))
-      val msg = intercept[AnalysisException] {
-        sql("REFRESH FUNCTION func2")
-      }.getMessage
-      assert(msg.contains(s"Undefined function: func2. This function is neither a " +
-        "built-in/temporary function, nor a persistent function that is qualified as " +
-        "spark_catalog.default.func2"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("REFRESH FUNCTION func2")
+        },
+        errorClass = "UNRESOLVED_ROUTINE",
+        parameters = Map(
+          "routineName" -> "`func2`",
+          "searchPath" -> "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"),
+        context = ExpectedContext(
+          fragment = "REFRESH FUNCTION func2",
+          start = 0,
+          stop = 21))
       assert(spark.sessionState.catalog.isRegisteredFunction(func))
 
       spark.sessionState.catalog.externalCatalog.dropFunction("default", "func1")
@@ -2151,6 +2180,17 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
       sql("REFRESH FUNCTION default.rand")
       assert(spark.sessionState.catalog.isRegisteredFunction(rand))
     }
+  }
+
+  test("SPARK-41290: No generated columns with V1") {
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql(s"create table t(a int, b int generated always as (a + 1)) using parquet")
+      },
+      errorClass = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
+      parameters = Map("tableName" -> "`spark_catalog`.`default`.`t`",
+        "operation" -> "generated columns")
+    )
   }
 }
 

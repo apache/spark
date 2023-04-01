@@ -168,7 +168,7 @@ private[spark] class AppStatusListener(
   override def onEnvironmentUpdate(event: SparkListenerEnvironmentUpdate): Unit = {
     val details = event.environmentDetails
 
-    val jvmInfo = Map(details("JVM Information"): _*)
+    val jvmInfo = details("JVM Information").toMap
     val runtime = new v1.RuntimeInfo(
       jvmInfo.get("Java Version").orNull,
       jvmInfo.get("Java Home").orNull,
@@ -319,16 +319,6 @@ private[spark] class AppStatusListener(
   private def addExcludedStageTo(exec: LiveExecutor, stageId: Int, now: Long): Unit = {
     exec.excludedInStages += stageId
     liveUpdate(exec, now)
-  }
-
-  private def setStageBlackListStatus(stage: LiveStage, now: Long, executorIds: String*): Unit = {
-    executorIds.foreach { executorId =>
-      val executorStageSummary = stage.executorSummary(executorId)
-      executorStageSummary.isExcluded = true
-      maybeUpdate(executorStageSummary, now)
-    }
-    stage.excludedExecutors ++= executorIds
-    maybeUpdate(stage, now)
   }
 
   private def setStageExcludedStatus(stage: LiveStage, now: Long, executorIds: String*): Unit = {
@@ -507,7 +497,6 @@ private[spark] class AppStatusListener(
             stage.status = v1.StageStatus.SKIPPED
             job.skippedStages += stage.info.stageId
             job.skippedTasks += stage.info.numTasks
-            job.activeStages -= 1
 
             pools.get(stage.schedulingPool).foreach { pool =>
               pool.stageIds = pool.stageIds - stage.info.stageId

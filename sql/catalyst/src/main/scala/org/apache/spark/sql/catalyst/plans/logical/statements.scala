@@ -20,6 +20,9 @@ package org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.analysis.{FieldName, FieldPosition}
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.trees.{LeafLike, UnaryLike}
+import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns
+import org.apache.spark.sql.connector.catalog.ColumnDefaultValue
+import org.apache.spark.sql.connector.expressions.LiteralValue
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types.DataType
 
@@ -135,6 +138,16 @@ case class QualifiedColType(
   def name: Seq[String] = path.map(_.name).getOrElse(Nil) :+ colName
 
   def resolved: Boolean = path.forall(_.resolved) && position.forall(_.resolved)
+
+  def getV2Default: ColumnDefaultValue = {
+    default.map { sql =>
+      val e = ResolveDefaultColumns.analyze(colName, dataType, sql, "ALTER TABLE")
+      assert(e.resolved && e.foldable,
+        "The existence default value must be a simple SQL string that is resolved and foldable, " +
+          "but got: " + sql)
+      new ColumnDefaultValue(sql, LiteralValue(e.eval(), dataType))
+    }.orNull
+  }
 }
 
 /**

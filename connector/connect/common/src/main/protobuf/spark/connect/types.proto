@@ -61,6 +61,12 @@ message DataType {
     Array array = 20;
     Struct struct = 21;
     Map map = 22;
+
+    // UserDefinedType
+    UDT udt = 23;
+
+    // UnparsedDataType
+    Unparsed unparsed = 24;
   }
 
   message Boolean {
@@ -152,7 +158,7 @@ message DataType {
     string name = 1;
     DataType data_type = 2;
     bool nullable = 3;
-    map<string, string> metadata = 4;
+    optional string metadata = 4;
   }
 
   message Struct {
@@ -171,5 +177,18 @@ message DataType {
     DataType value_type = 2;
     bool value_contains_null = 3;
     uint32 type_variation_reference = 4;
+  }
+
+  message UDT {
+    string type = 1;
+    optional string jvm_class = 2;
+    optional string python_class = 3;
+    optional string serialized_python_class = 4;
+    DataType sql_type = 5;
+  }
+
+  message Unparsed {
+    // (Required) The unparsed data type string
+    string data_type_string = 1;
   }
 }

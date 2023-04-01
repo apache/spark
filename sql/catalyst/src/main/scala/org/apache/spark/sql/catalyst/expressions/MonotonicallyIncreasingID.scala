@@ -48,7 +48,7 @@ import org.apache.spark.sql.types.{DataType, LongType}
   """,
   since = "1.4.0",
   group = "misc_funcs")
-case class MonotonicallyIncreasingID() extends LeafExpression with Stateful {
+case class MonotonicallyIncreasingID() extends LeafExpression with Nondeterministic {
 
   /**
    * Record ID within each partition. By being transient, count's value is reset to 0 every time
@@ -58,9 +58,15 @@ case class MonotonicallyIncreasingID() extends LeafExpression with Stateful {
 
   @transient private[this] var partitionMask: Long = _
 
+  override def stateful: Boolean = true
+
   override protected def initializeInternal(partitionIndex: Int): Unit = {
     count = 0L
     partitionMask = partitionIndex.toLong << 33
+  }
+
+  override def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Expression = {
+    MonotonicallyIncreasingID()
   }
 
   override def nullable: Boolean = false
@@ -88,6 +94,4 @@ case class MonotonicallyIncreasingID() extends LeafExpression with Stateful {
   override def nodeName: String = "monotonically_increasing_id"
 
   override def sql: String = s"$prettyName()"
-
-  override def freshCopy(): MonotonicallyIncreasingID = MonotonicallyIncreasingID()
 }

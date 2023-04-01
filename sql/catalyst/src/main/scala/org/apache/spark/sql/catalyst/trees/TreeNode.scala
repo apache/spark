@@ -619,6 +619,130 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
   }
 
   /**
+   * Returns alternative copies of this node where `rule` has been recursively applied to it and all
+   * of its children (pre-order).
+   *
+   * @param rule a function used to generate alternatives for a node
+   * @return     the stream of alternatives
+   */
+  def multiTransformDown(
+      rule: PartialFunction[BaseType, Seq[BaseType]]): Stream[BaseType] = {
+    multiTransformDownWithPruning(AlwaysProcess.fn, UnknownRuleId)(rule)
+  }
+
+  /**
+   * Returns alternative copies of this node where `rule` has been recursively applied to it and all
+   * of its children (pre-order).
+   *
+   * As it is very easy to generate enormous number of alternatives when the input tree is huge or
+   * when the rule returns many alternatives for many nodes, this function returns the alternatives
+   * as a lazy `Stream` to be able to limit the number of alternatives generated at the caller side
+   * as needed.
+   *
+   * The purpose of this function to access the returned alternatives by the rule only if they are
+   * needed so the rule can return a `Stream` whose elements are also lazily calculated.
+   * E.g. `multiTransform*` calls can be nested with the help of
+   * `MultiTransform.generateCartesianProduct()`.
+   *
+   * The rule should not apply or can return a one element `Seq` of original node to indicate that
+   * the original node without any transformation is a valid alternative.
+   *
+   * The rule can return `Seq.empty` to indicate that the original node should be pruned. In this
+   * case `multiTransform()` returns an empty `Stream`.
+   *
+   * Please consider the following examples of `input.multiTransformDown(rule)`:
+   *
+   * We have an input expression:
+   *    `Add(a, b)`
+   *
+   * 1.
+   * We have a simple rule:
+   *   `a` => `Seq(1, 2)`
+   *   `b` => `Seq(10, 20)`
+   *   `Add(a, b)` => `Seq(11, 12, 21, 22)`
+   *
+   * The output is:
+   *   `Stream(11, 12, 21, 22)`
+   *
+   * 2.
+   * In the previous example if we want to generate alternatives of `a` and `b` too then we need to
+   * explicitly add the original `Add(a, b)` expression to the rule:
+   *   `a` => `Seq(1, 2)`
+   *   `b` => `Seq(10, 20)`
+   *   `Add(a, b)` => `Seq(11, 12, 21, 22, Add(a, b))`
+   *
+   * The output is:
+   *   `Stream(11, 12, 21, 22, Add(1, 10), Add(2, 10), Add(1, 20), Add(2, 20))`
+   *
+   * @param rule   a function used to generate alternatives for a node
+   * @param cond   a Lambda expression to prune tree traversals. If `cond.apply` returns false
+   *               on a TreeNode T, skips processing T and its subtree; otherwise, processes
+   *               T and its subtree recursively.
+   * @param ruleId is a unique Id for `rule` to prune unnecessary tree traversals. When it is
+   *               UnknownRuleId, no pruning happens. Otherwise, if `rule` (with id `ruleId`)
+   *               has been marked as in effective on a TreeNode T, skips processing T and its
+   *               subtree. Do not pass it if the rule is not purely functional and reads a
+   *               varying initial state for different invocations.
+   * @return       the stream of alternatives
+   */
+  def multiTransformDownWithPruning(
+      cond: TreePatternBits => Boolean,
+      ruleId: RuleId = UnknownRuleId
+    )(rule: PartialFunction[BaseType, Seq[BaseType]]): Stream[BaseType] = {
+    if (!cond.apply(this) || isRuleIneffective(ruleId)) {
+      return Stream(this)
+    }
+
+    // We could return `Seq(this)` if the `rule` doesn't apply and handle both
+    // - the doesn't apply
+    // - and the rule returns a one element `Seq(originalNode)`
+    // cases together. The returned `Seq` can be a `Stream` and unfortunately it doesn't seem like
+    // there is a way to match on a one element stream without eagerly computing the tail's head.
+    // This contradicts with the purpose of only taking the necessary elements from the
+    // alternatives. I.e. the "multiTransformDown is lazy" test case in `TreeNodeSuite` would fail.
+    // Please note that this behaviour has a downside as well that we can only mark the rule on the
+    // original node ineffective if the rule didn't match.
+    var ruleApplied = true
+    val afterRules = CurrentOrigin.withOrigin(origin) {
+      rule.applyOrElse(this, (_: BaseType) => {
+        ruleApplied = false
+        Seq.empty
+      })
+    }
+
+    val afterRulesStream = if (afterRules.isEmpty) {
+      if (ruleApplied) {
+        // If the rule returned with empty alternatives then prune
+        Stream.empty
+      } else {
+        // If the rule was not applied then keep the original node
+        this.markRuleAsIneffective(ruleId)
+        Stream(this)
+      }
+    } else {
+      // If the rule was applied then use the returned alternatives
+      afterRules.toStream.map { afterRule =>
+        if (this fastEquals afterRule) {
+          this
+        } else {
+          afterRule.copyTagsFrom(this)
+          afterRule
+        }
+      }
+    }
+
+    afterRulesStream.flatMap { afterRule =>
+      if (afterRule.containsChild.nonEmpty) {
+        MultiTransform.generateCartesianProduct(
+            afterRule.children.map(c => () => c.multiTransformDownWithPruning(cond, ruleId)(rule)))
+          .map(afterRule.withNewChildren)
+      } else {
+        Stream(afterRule)
+      }
+    }
+  }
+
+  /**
    * Returns a copy of this node where `f` has been applied to all the nodes in `children`.
    */
   def mapChildren(f: BaseType => BaseType): BaseType = {
@@ -662,7 +786,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
     }
 
     // Skip no-arg constructors that are just there for kryo.
-    val ctors = allCtors.filter(allowEmptyArgs || _.getParameterTypes.size != 0)
+    val ctors = allCtors.filter(allowEmptyArgs || _.getParameterCount != 0)
     if (ctors.isEmpty) {
       throw QueryExecutionErrors.constructorNotFoundError(nodeName)
     }
@@ -672,7 +796,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
       newArgs ++ otherCopyArgs
     }
     val defaultCtor = ctors.find { ctor =>
-      if (ctor.getParameterTypes.length != allArgs.length) {
+      if (ctor.getParameterCount != allArgs.length) {
         false
       } else if (allArgs.contains(null)) {
         // if there is a `null`, we can't figure out the class, therefore we should just fallback
@@ -682,7 +806,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
         val argsArray: Array[Class[_]] = allArgs.map(_.getClass)
         ClassUtils.isAssignable(argsArray, ctor.getParameterTypes, true /* autoboxing */)
       }
-    }.getOrElse(ctors.maxBy(_.getParameterTypes.length)) // fall back to older heuristic
+    }.getOrElse(ctors.maxBy(_.getParameterCount)) // fall back to older heuristic
 
     try {
       CurrentOrigin.withOrigin(origin) {
@@ -761,7 +885,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
   private lazy val allChildren: Set[TreeNode[_]] = (children ++ innerChildren).toSet[TreeNode[_]]
 
   private def redactMapString[K, V](map: Map[K, V], maxFields: Int): List[String] = {
-    // For security reason, redact the map value if the key is in centain patterns
+    // For security reason, redact the map value if the key is in certain patterns
     val redactedMap = SQLConf.get.redactOptions(map.toMap)
     // construct the redacted map as strings of the format "key=value"
     val keyValuePairs = redactedMap.toSeq.map { item =>
@@ -1113,7 +1237,8 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
 trait LeafLike[T <: TreeNode[T]] { self: TreeNode[T] =>
   override final def children: Seq[T] = Nil
   override final def mapChildren(f: T => T): T = this.asInstanceOf[T]
-  override final def withNewChildrenInternal(newChildren: IndexedSeq[T]): T = this.asInstanceOf[T]
+  // Stateful expressions should override this method to return a new instance.
+  override def withNewChildrenInternal(newChildren: IndexedSeq[T]): T = this.asInstanceOf[T]
 }
 
 trait UnaryLike[T <: TreeNode[T]] { self: TreeNode[T] =>
@@ -1238,4 +1363,22 @@ trait QuaternaryLike[T <: TreeNode[T]] { self: TreeNode[T] =>
   }
 
   protected def withNewChildrenInternal(newFirst: T, newSecond: T, newThird: T, newFourth: T): T
+}
+
+object MultiTransform {
+
+  /**
+   * Returns the stream of `Seq` elements by generating the cartesian product of sequences.
+   *
+   * @param elementSeqs a list of sequences to build the cartesian product from
+   * @return            the stream of generated `Seq` elements
+   */
+  def generateCartesianProduct[T](elementSeqs: Seq[() => Seq[T]]): Stream[Seq[T]] = {
+    elementSeqs.foldRight(Stream(Seq.empty[T]))((elements, elementTails) =>
+      for {
+        elementTail <- elementTails
+        element <- elements()
+      } yield element +: elementTail
+    )
+  }
 }

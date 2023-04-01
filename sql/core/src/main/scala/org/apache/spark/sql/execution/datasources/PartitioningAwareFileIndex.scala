@@ -23,6 +23,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.paths.SparkPath
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.{expressions, InternalRow}
 import org.apache.spark.sql.catalyst.expressions._
@@ -72,31 +73,41 @@ abstract class PartitioningAwareFileIndex(
       isDataPath(f.getPath) && f.getLen > 0
     }
 
-    // retrieve the file metadata filters and reduce to a final filter expression
+    // retrieve the file constant metadata filters and reduce to a final filter expression that can
+    // be applied to files.
     val fileMetadataFilterOpt = dataFilters.filter { f =>
       f.references.nonEmpty && f.references.forall {
-        case FileSourceMetadataAttribute(_) => true
+        case FileSourceConstantMetadataAttribute(metadataAttr) =>
+          // we only know block start and length after splitting files, so skip it here
+          metadataAttr.name != FileFormat.FILE_BLOCK_START &&
+            metadataAttr.name != FileFormat.FILE_BLOCK_LENGTH
         case _ => false
       }
     }.reduceOption(expressions.And)
 
-    // - create a bound references for filters: put the metadata struct at 0 position for each file
-    // - retrieve the final metadata struct (could be pruned) from filters
+    // - Retrieve all required metadata attributes and put them into a sequence
+    // - Bind all file constant metadata attribute references to their respective index
+    val requiredMetadataColumnNames: mutable.Buffer[String] = mutable.Buffer.empty
     val boundedFilterMetadataStructOpt = fileMetadataFilterOpt.map { fileMetadataFilter =>
-      val metadataStruct = fileMetadataFilter.references.head.dataType
-      val boundedFilter = Predicate.createInterpreted(fileMetadataFilter.transform {
-        case _: AttributeReference => BoundReference(0, metadataStruct, nullable = true)
+      Predicate.createInterpreted(fileMetadataFilter.transform {
+        case attr: AttributeReference =>
+          val existingMetadataColumnIndex = requiredMetadataColumnNames.indexOf(attr.name)
+          val metadataColumnIndex = if (existingMetadataColumnIndex >= 0) {
+            existingMetadataColumnIndex
+          } else {
+            requiredMetadataColumnNames += attr.name
+            requiredMetadataColumnNames.length - 1
+          }
+          BoundReference(metadataColumnIndex, attr.dataType, nullable = true)
       })
-      (boundedFilter, metadataStruct)
     }
 
     def matchFileMetadataPredicate(f: FileStatus): Boolean = {
       // use option.forall, so if there is no filter no metadata struct, return true
-      boundedFilterMetadataStructOpt.forall { case (boundedFilter, metadataStruct) =>
-        val row = InternalRow.fromSeq(Seq(
-          createMetadataInternalRow(metadataStruct.asInstanceOf[StructType].names,
+      boundedFilterMetadataStructOpt.forall { boundedFilter =>
+        val row =
+          createMetadataInternalRow(requiredMetadataColumnNames.toSeq,
             f.getPath, f.getLen, f.getModificationTime)
-        ))
         boundedFilter.eval(row)
       }
     }
@@ -130,7 +141,7 @@ abstract class PartitioningAwareFileIndex(
 
   /** Returns the list of files that will be read when scanning this relation. */
   override def inputFiles: Array[String] =
-    allFiles().map(_.getPath.toUri.toString).toArray
+    allFiles().map(fs => SparkPath.fromFileStatus(fs).urlEncoded).toArray
 
   override def sizeInBytes: Long = allFiles().map(_.getLen).sum
 

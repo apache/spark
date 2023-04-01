@@ -141,9 +141,18 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
   }
 
   test("undefined function") {
-    assert(intercept[AnalysisException](
-      sql("SELECT testcat.non_exist('abc')").collect()
-    ).getMessage.contains("Undefined function"))
+    checkError(
+      exception = intercept[AnalysisException](
+        sql("SELECT testcat.non_exist('abc')").collect()
+      ),
+      errorClass = "UNRESOLVED_ROUTINE",
+      parameters = Map(
+        "routineName" -> "`testcat`.`non_exist`",
+        "searchPath" -> "[`system`.`builtin`, `system`.`session`, `testcat`.`default`]"),
+      context = ExpectedContext(
+        fragment = "testcat.non_exist('abc')",
+        start = 7,
+        stop = 30))
   }
 
   test("non-function catalog") {

@@ -91,7 +91,8 @@ private[sql] class ProtobufDeserializer(
         val element = iterator.next()
         if (element == null) {
           if (!containsNull) {
-            throw QueryCompilationErrors.nullableArrayOrMapElementError(protoElementPath)
+            throw QueryCompilationErrors.notNullConstraintViolationArrayElementError(
+              protoElementPath)
           } else {
             elementUpdater.setNullAt(i)
           }
@@ -129,7 +130,7 @@ private[sql] class ProtobufDeserializer(
             keyWriter(keyUpdater, i, field.getField(keyField))
             if (field.getField(valueField) == null) {
               if (!valueContainsNull) {
-                throw QueryCompilationErrors.nullableArrayOrMapElementError(protoPath)
+                throw QueryCompilationErrors.notNullConstraintViolationMapValueError(protoPath)
               } else {
                 valueUpdater.setNullAt(i)
               }
@@ -171,7 +172,7 @@ private[sql] class ProtobufDeserializer(
         (updater, ordinal, value) => updater.setShort(ordinal, value.asInstanceOf[Short])
 
       case  (
-        BOOLEAN | INT | FLOAT | DOUBLE | LONG | STRING | ENUM | BYTE_STRING,
+        MESSAGE | BOOLEAN | INT | FLOAT | DOUBLE | LONG | STRING | ENUM | BYTE_STRING,
         ArrayType(dataType: DataType, containsNull)) if protoType.isRepeated =>
         newArrayWriter(protoType, protoPath, catalystPath, dataType, containsNull)
 
@@ -234,9 +235,6 @@ private[sql] class ProtobufDeserializer(
           val row = new SpecificInternalRow(st)
           writeRecord(new RowUpdater(row), value.asInstanceOf[DynamicMessage])
           updater.set(ordinal, row)
-
-      case (MESSAGE, ArrayType(st: StructType, containsNull)) =>
-        newArrayWriter(protoType, protoPath, catalystPath, st, containsNull)
 
       case (ENUM, StringType) =>
         (updater, ordinal, value) => updater.set(ordinal, UTF8String.fromString(value.toString))

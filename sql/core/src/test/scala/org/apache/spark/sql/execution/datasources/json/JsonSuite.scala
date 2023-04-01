@@ -25,15 +25,17 @@ import java.time.{Duration, Instant, LocalDate, LocalDateTime, Period, ZoneId}
 import java.util.Locale
 
 import com.fasterxml.jackson.core.JsonFactory
+import org.apache.commons.lang3.exception.ExceptionUtils
 import org.apache.hadoop.fs.{Path, PathFilter}
 import org.apache.hadoop.io.SequenceFile.CompressionType
 import org.apache.hadoop.io.compress.GzipCodec
 
-import org.apache.spark.{SparkConf, SparkException, SparkUpgradeException, TestUtils}
+import org.apache.spark.{SparkConf, SparkException, SparkRuntimeException, SparkUpgradeException, TestUtils}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{functions => F, _}
 import org.apache.spark.sql.catalyst.json._
 import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, DateTimeUtils}
+import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLType
 import org.apache.spark.sql.execution.ExternalRDD
 import org.apache.spark.sql.execution.datasources.{CommonFileDataSourceSuite, DataSource, InMemoryFileIndex, NoopCache}
 import org.apache.spark.sql.execution.datasources.v2.json.JsonScanBuilder
@@ -1071,9 +1073,14 @@ abstract class JsonSuite
         .schema("a string")
         .json(corruptRecords)
         .collect()
-    }.getMessage
-    assert(exceptionTwo.contains(
-      "Malformed records are detected in record parsing. Parse Mode: FAILFAST."))
+    }.getCause
+    checkError(
+      exception = exceptionTwo.asInstanceOf[SparkException],
+      errorClass = "MALFORMED_RECORD_IN_PARSING",
+      parameters = Map(
+        "badRecord" -> "[null]",
+        "failFastMode" -> "FAILFAST")
+    )
   }
 
   test("Corrupt records: DROPMALFORMED mode") {
@@ -1987,9 +1994,14 @@ abstract class JsonSuite
           .schema(schema)
           .json(path)
           .collect()
-      }
-      assert(exceptionTwo.getMessage.contains("Malformed records are detected in record " +
-        "parsing. Parse Mode: FAILFAST."))
+      }.getCause
+      checkError(
+        exception = exceptionTwo.asInstanceOf[SparkException],
+        errorClass = "MALFORMED_RECORD_IN_PARSING",
+        parameters = Map(
+          "badRecord" -> "[null]",
+          "failFastMode" -> "FAILFAST")
+      )
     }
   }
 
@@ -2607,11 +2619,12 @@ abstract class JsonSuite
   private def failedOnEmptyString(dataType: DataType): Unit = {
     val df = spark.read.schema(s"a ${dataType.catalogString}")
       .option("mode", "FAILFAST").json(Seq("""{"a":""}""").toDS)
-    val errMessage = intercept[SparkException] {
-      df.collect()
-    }.getMessage
-    assert(errMessage.contains(
-      s"Failed to parse an empty string for data type ${dataType.catalogString}"))
+    val e = intercept[SparkException] {df.collect()}
+    checkError(
+      exception = e.getCause.getCause.getCause.asInstanceOf[SparkRuntimeException],
+      errorClass = "EMPTY_JSON_FIELD_VALUE",
+      parameters = Map("dataType" -> toSQLType(dataType))
+    )
   }
 
   private def emptyString(dataType: DataType, expected: Any): Unit = {
@@ -2834,7 +2847,7 @@ abstract class JsonSuite
         SQLConf.TimestampTypes.TIMESTAMP_NTZ.toString,
         SQLConf.TimestampTypes.TIMESTAMP_LTZ.toString)
 
-      for (timestampType <- timestampTypes) {
+      timestampTypes.foreach { timestampType =>
         withSQLConf(SQLConf.TIMESTAMP_TYPE.key -> timestampType) {
           val res = spark.read.option("inferTimestamp", "true").json(path.getAbsolutePath)
 
@@ -3192,10 +3205,17 @@ abstract class JsonSuite
   }
 
   test("SPARK-36379: proceed parsing with root nulls in permissive mode") {
-    assert(intercept[SparkException] {
+    val exception = intercept[SparkException] {
       spark.read.option("mode", "failfast")
         .schema("a string").json(Seq("""[{"a": "str"}, null]""").toDS).collect()
-    }.getMessage.contains("Malformed records are detected"))
+    }
+    assert(exception.getMessage.contains("Malformed records are detected"))
+
+    checkError(
+      exception = ExceptionUtils.getRootCause(exception).asInstanceOf[SparkRuntimeException],
+      errorClass = "INVALID_JSON_ROOT_FIELD",
+      parameters = Map.empty
+    )
 
     // Permissive modes should proceed parsing malformed records (null).
     // Here, since an array fails to parse in the middle, we will return one row.

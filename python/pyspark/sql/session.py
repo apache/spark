@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-
+import os
 import sys
 import warnings
 from collections.abc import Sized
@@ -60,7 +60,8 @@ from pyspark.sql.types import (
     _parse_datatype_string,
     _from_numpy_type,
 )
-from pyspark.sql.utils import install_exception_handler, is_timestamp_ntz_preferred, to_str
+from pyspark.errors.exceptions.captured import install_exception_handler
+from pyspark.sql.utils import is_timestamp_ntz_preferred, to_str
 
 if TYPE_CHECKING:
     from pyspark.sql._typing import AtomicValue, RowLike, OptionalPrimitiveType
@@ -156,9 +157,12 @@ class classproperty(property):
 class SparkSession(SparkConversionMixin):
     """The entry point to programming Spark with the Dataset and DataFrame API.
 
-    A SparkSession can be used create :class:`DataFrame`, register :class:`DataFrame` as
+    A SparkSession can be used to create :class:`DataFrame`, register :class:`DataFrame` as
     tables, execute SQL over tables, cache tables, and read parquet files.
     To create a :class:`SparkSession`, use the following builder pattern:
+
+    .. versionchanged:: 3.4.0
+        Supports Spark Connect.
 
     .. autoattribute:: builder
        :annotation:
@@ -175,10 +179,15 @@ class SparkSession(SparkConversionMixin):
     ...         .getOrCreate()
     ... )
 
-    Create a Spark session from a Spark context.
+    Create a Spark session with Spark Connect.
 
-    >>> sc = spark.sparkContext
-    >>> spark = SparkSession(sc)
+    >>> spark = (
+    ...     SparkSession.builder
+    ...         .remote("sc://localhost")
+    ...         .appName("Word Count")
+    ...         .config("spark.some.config.option", "some-value")
+    ...         .getOrCreate()
+    ... )  # doctest: +SKIP
     """
 
     class Builder:
@@ -213,6 +222,9 @@ class SparkSession(SparkConversionMixin):
             both :class:`SparkConf` and :class:`SparkSession`'s own configuration.
 
             .. versionadded:: 2.0.0
+
+            .. versionchanged:: 3.4.0
+                Supports Spark Connect.
 
             Parameters
             ----------
@@ -250,15 +262,46 @@ class SparkSession(SparkConversionMixin):
             ...     map={"spark.some.config.number": 123, "spark.some.config.float": 0.123})
             <pyspark.sql.session.SparkSession.Builder...
             """
+
+            def check_startup_urls(k: str, v: str) -> None:
+                if k == "spark.master":
+                    if "spark.remote" in self._options or "SPARK_REMOTE" in os.environ:
+                        raise RuntimeError(
+                            "Spark master cannot be configured with Spark Connect server; "
+                            "however, found URL for Spark Connect [%s]"
+                            % self._options.get("spark.remote", os.environ.get("SPARK_REMOTE"))
+                        )
+                elif k == "spark.remote":
+                    if "spark.master" in self._options or "MASTER" in os.environ:
+                        raise RuntimeError(
+                            "Spark Connect server cannot be configured with Spark master; "
+                            "however, found URL for Spark master [%s]"
+                            % self._options.get("spark.master", os.environ.get("MASTER"))
+                        )
+
+                    if ("SPARK_REMOTE" in os.environ and os.environ["SPARK_REMOTE"] != v) and (
+                        "SPARK_LOCAL_REMOTE" in os.environ and not v.startswith("local")
+                    ):
+                        raise RuntimeError(
+                            "Only one Spark Connect client URL can be set; however, got a "
+                            "different URL [%s] from the existing [%s]"
+                            % (os.environ["SPARK_REMOTE"], v)
+                        )
+
             with self._lock:
                 if conf is not None:
                     for (k, v) in conf.getAll():
+                        check_startup_urls(k, v)
                         self._options[k] = v
                 elif map is not None:
                     for k, v in map.items():  # type: ignore[assignment]
-                        self._options[k] = to_str(v)
+                        v = to_str(v)  # type: ignore[assignment]
+                        check_startup_urls(k, v)
+                        self._options[k] = v
                 else:
-                    self._options[cast(str, key)] = to_str(value)
+                    value = to_str(value)
+                    check_startup_urls(key, value)  # type: ignore[arg-type]
+                    self._options[cast(str, key)] = value
                 return self
 
         def master(self, master: str) -> "SparkSession.Builder":
@@ -284,12 +327,37 @@ class SparkSession(SparkConversionMixin):
             """
             return self.config("spark.master", master)
 
+        def remote(self, url: str) -> "SparkSession.Builder":
+            """Sets the Spark remote URL to connect to, such as "sc://host:port" to run
+            it via Spark Connect server.
+
+            .. versionadded:: 3.4.0
+
+            Parameters
+            ----------
+            url : str
+                URL to Spark Connect server
+
+            Returns
+            -------
+            :class:`SparkSession.Builder`
+
+            Examples
+            --------
+            >>> SparkSession.builder.remote("sc://localhost")  # doctest: +SKIP
+            <pyspark.sql.session.SparkSession.Builder...
+            """
+            return self.config("spark.remote", url)
+
         def appName(self, name: str) -> "SparkSession.Builder":
             """Sets a name for the application, which will be shown in the Spark web UI.
 
             If no application name is set, a randomly generated name will be used.
 
             .. versionadded:: 2.0.0
+
+            .. versionchanged:: 3.4.0
+                Supports Spark Connect.
 
             Parameters
             ----------
@@ -330,6 +398,8 @@ class SparkSession(SparkConversionMixin):
 
             .. versionadded:: 2.0.0
 
+            .. versionchanged:: 3.4.0
+                Supports Spark Connect.
 
             Returns
             -------
@@ -361,9 +431,40 @@ class SparkSession(SparkConversionMixin):
             >>> s1.conf.get("k2") == s2.conf.get("k2") == "v2"
             True
             """
+            from pyspark.context import SparkContext
+            from pyspark.conf import SparkConf
+
+            opts = dict(self._options)
+
             with self._lock:
-                from pyspark.context import SparkContext
-                from pyspark.conf import SparkConf
+                if "SPARK_REMOTE" in os.environ or "spark.remote" in opts:
+                    with SparkContext._lock:
+                        from pyspark.sql.connect.session import SparkSession as RemoteSparkSession
+
+                        if (
+                            SparkContext._active_spark_context is None
+                            and SparkSession._instantiatedSession is None
+                        ):
+                            url = opts.get("spark.remote", os.environ.get("SPARK_REMOTE"))
+
+                            if url.startswith("local"):
+                                os.environ["SPARK_LOCAL_REMOTE"] = "1"
+                                RemoteSparkSession._start_connect_server(url, opts)
+                                url = "sc://localhost"
+
+                            os.environ["SPARK_REMOTE"] = url
+                            opts["spark.remote"] = url
+                            return RemoteSparkSession.builder.config(map=opts).getOrCreate()
+                        elif "SPARK_LOCAL_REMOTE" in os.environ:
+                            url = "sc://localhost"
+                            os.environ["SPARK_REMOTE"] = url
+                            opts["spark.remote"] = url
+                            return RemoteSparkSession.builder.config(map=opts).getOrCreate()
+                        else:
+                            raise RuntimeError(
+                                "Cannot start a remote Spark session because there "
+                                "is a regular Spark session already running."
+                            )
 
                 session = SparkSession._instantiatedSession
                 if session is None or session._sc._jsc is None:
@@ -590,6 +691,9 @@ class SparkSession(SparkConversionMixin):
 
         .. versionadded:: 2.0.0
 
+        .. versionchanged:: 3.4.0
+            Supports Spark Connect.
+
         Returns
         -------
         :class:`Catalog`
@@ -597,7 +701,7 @@ class SparkSession(SparkConversionMixin):
         Examples
         --------
         >>> spark.catalog
-        <pyspark.sql.catalog.Catalog object ...>
+        <...Catalog object ...>
 
         Create a temp view, show the list, and drop it.
 
@@ -618,15 +722,15 @@ class SparkSession(SparkConversionMixin):
 
         .. versionadded:: 2.0.0
 
+        .. versionchanged:: 3.4.0
+            Supports Spark Connect.
+
         Returns
         -------
         :class:`UDFRegistration`
 
         Examples
         --------
-        >>> spark.udf
-        <pyspark.sql.udf.UDFRegistration object ...>
-
         Register a Python UDF, and use it in SQL.
 
         >>> strlen = spark.udf.register("strlen", lambda x: len(x))
@@ -654,6 +758,9 @@ class SparkSession(SparkConversionMixin):
         step value ``step``.
 
         .. versionadded:: 2.0.0
+
+        .. versionchanged:: 3.4.0
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -999,6 +1106,9 @@ class SparkSession(SparkConversionMixin):
 
         .. versionadded:: 2.0.0
 
+        .. versionchanged:: 3.4.0
+            Supports Spark Connect.
+
         Parameters
         ----------
         data : :class:`RDD` or iterable
@@ -1211,17 +1321,28 @@ class SparkSession(SparkConversionMixin):
         df._schema = struct
         return df
 
-    def sql(self, sqlQuery: str, **kwargs: Any) -> DataFrame:
+    def sql(self, sqlQuery: str, args: Optional[Dict[str, str]] = None, **kwargs: Any) -> DataFrame:
         """Returns a :class:`DataFrame` representing the result of the given query.
         When ``kwargs`` is specified, this method formats the given string by using the Python
-        standard formatter.
+        standard formatter. The method binds named parameters to SQL literals from `args`.
 
         .. versionadded:: 2.0.0
+
+        .. versionchanged:: 3.4.0
+            Supports Spark Connect and parameterized SQL.
 
         Parameters
         ----------
         sqlQuery : str
             SQL query string.
+        args : dict
+            A dictionary of parameter names to string values that are parsed as SQL literal
+            expressions. For example, dict keys: "rank", "name", "birthdate"; dict values:
+            "1", "'Steven'", "DATE'2023-03-21'". The fragments of string values belonged to
+            SQL comments are skipped while parsing.
+
+            .. versionadded:: 3.4.0
+
         kwargs : dict
             Other variables that the user wants to set that can be referenced in the query
 
@@ -1295,13 +1416,22 @@ class SparkSession(SparkConversionMixin):
         |  2|  4|
         |  3|  6|
         +---+---+
+
+        And substitude named parameters with the `:` prefix by SQL literals.
+
+        >>> spark.sql("SELECT * FROM {df} WHERE {df[B]} > :minB", {"minB" : "5"}, df=mydf).show()
+        +---+---+
+        |  A|  B|
+        +---+---+
+        |  3|  6|
+        +---+---+
         """
 
         formatter = SQLStringFormatter(self)
         if len(kwargs) > 0:
             sqlQuery = formatter.format(sqlQuery, **kwargs)
         try:
-            return DataFrame(self._jsparkSession.sql(sqlQuery), self)
+            return DataFrame(self._jsparkSession.sql(sqlQuery, args or {}), self)
         finally:
             if len(kwargs) > 0:
                 formatter.clear()
@@ -1310,6 +1440,9 @@ class SparkSession(SparkConversionMixin):
         """Returns the specified table as a :class:`DataFrame`.
 
         .. versionadded:: 2.0.0
+
+        .. versionchanged:: 3.4.0
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -1344,6 +1477,9 @@ class SparkSession(SparkConversionMixin):
 
         .. versionadded:: 2.0.0
 
+        .. versionchanged:: 3.4.0
+            Supports Spark Connect.
+
         Returns
         -------
         :class:`DataFrameReader`
@@ -1351,7 +1487,7 @@ class SparkSession(SparkConversionMixin):
         Examples
         --------
         >>> spark.read
-        <pyspark.sql.readwriter.DataFrameReader object ...>
+        <...DataFrameReader object ...>
 
         Write a DataFrame into a JSON file and read it back.
 
@@ -1444,6 +1580,9 @@ class SparkSession(SparkConversionMixin):
         Stop the underlying :class:`SparkContext`.
 
         .. versionadded:: 2.0.0
+
+        .. versionchanged:: 3.4.0
+            Supports Spark Connect.
 
         Examples
         --------

@@ -14,13 +14,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-
+from pyspark.errors import AnalysisException
 from pyspark.sql.types import StructType, StructField, IntegerType
-from pyspark.sql.utils import AnalysisException
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 
-class CatalogTests(ReusedSQLTestCase):
+class CatalogTestsMixin:
     def test_current_database(self):
         spark = self.spark
         with self.database("some_db"):
@@ -206,7 +205,14 @@ class CatalogTests(ReusedSQLTestCase):
             self.assertEqual(functions, functionsDefault)
 
             with self.function("func1", "some_db.func2"):
-                spark.udf.register("temp_func", lambda x: str(x))
+                try:
+                    spark.udf
+                    support_udf = True
+                except Exception:
+                    support_udf = False
+
+                if support_udf:
+                    spark.udf.register("temp_func", lambda x: str(x))
                 spark.sql("CREATE FUNCTION func1 AS 'org.apache.spark.data.bricks'")
                 spark.sql("CREATE FUNCTION some_db.func2 AS 'org.apache.spark.data.bricks'")
                 newFunctions = dict((f.name, f) for f in spark.catalog.listFunctions())
@@ -215,10 +221,12 @@ class CatalogTests(ReusedSQLTestCase):
                 )
                 self.assertTrue(set(functions).issubset(set(newFunctions)))
                 self.assertTrue(set(functions).issubset(set(newFunctionsSomeDb)))
-                self.assertTrue("temp_func" in newFunctions)
+                if support_udf:
+                    self.assertTrue("temp_func" in newFunctions)
                 self.assertTrue("func1" in newFunctions)
                 self.assertTrue("func2" not in newFunctions)
-                self.assertTrue("temp_func" in newFunctionsSomeDb)
+                if support_udf:
+                    self.assertTrue("temp_func" in newFunctionsSomeDb)
                 self.assertTrue("func1" not in newFunctionsSomeDb)
                 self.assertTrue("func2" in newFunctionsSomeDb)
                 self.assertRaisesRegex(
@@ -391,6 +399,10 @@ class CatalogTests(ReusedSQLTestCase):
 
                 spark.catalog.refreshTable("spark_catalog.default.my_tab")
                 self.assertEqual(spark.table("my_tab").count(), 0)
+
+
+class CatalogTests(ReusedSQLTestCase):
+    pass
 
 
 if __name__ == "__main__":

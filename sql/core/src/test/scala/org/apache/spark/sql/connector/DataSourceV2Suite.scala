@@ -24,7 +24,7 @@ import test.org.apache.spark.sql.connector._
 
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.connector.catalog.{SupportsRead, Table, TableCapability, TableProvider}
+import org.apache.spark.sql.connector.catalog.{PartitionInternalRow, SupportsRead, Table, TableCapability, TableProvider}
 import org.apache.spark.sql.connector.catalog.TableCapability._
 import org.apache.spark.sql.connector.expressions.{Expression, FieldReference, Literal, NamedReference, NullOrdering, SortDirection, SortOrder, Transform}
 import org.apache.spark.sql.connector.expressions.filter.Predicate
@@ -1037,7 +1037,7 @@ class OrderAndPartitionAwareDataSource extends PartitionAwareDataSource {
 case class SpecificInputPartition(
     i: Array[Int],
     j: Array[Int]) extends InputPartition with HasPartitionKey {
-  override def partitionKey(): InternalRow = InternalRow.fromSeq(Seq(i(0)))
+  override def partitionKey(): InternalRow = PartitionInternalRow(Seq(i(0)).toArray)
 }
 
 object SpecificReaderFactory extends PartitionReaderFactory {

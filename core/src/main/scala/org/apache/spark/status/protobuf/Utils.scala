@@ -17,10 +17,30 @@
 
 package org.apache.spark.status.protobuf
 
-object Utils {
+import java.util.{Map => JMap}
+
+private[protobuf] object Utils {
   def getOptional[T](condition: Boolean, result: () => T): Option[T] = if (condition) {
     Some(result())
   } else {
     None
+  }
+
+  def setStringField(input: String, f: String => Any): Unit = {
+    if (input != null) {
+      f(input)
+    }
+  }
+
+  def getStringField(condition: Boolean, result: () => String): String = if (condition) {
+    result()
+  } else {
+    null
+  }
+
+  def setJMapField[K, V](input: JMap[K, V], putAllFunc: JMap[K, V] => Any): Unit = {
+    if (input != null && !input.isEmpty) {
+      putAllFunc(input)
+    }
   }
 }

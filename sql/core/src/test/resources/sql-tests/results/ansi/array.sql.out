@@ -130,6 +130,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "inputSql" : "\"1\"",
     "inputType" : "\"STRING\"",
@@ -155,6 +156,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "inputSql" : "\"CAST(NULL AS BOOLEAN)\"",
     "inputType" : "\"BOOLEAN\"",
@@ -199,6 +201,7 @@ struct<>
 org.apache.spark.SparkArrayIndexOutOfBoundsException
 {
   "errorClass" : "INVALID_ARRAY_INDEX_IN_ELEMENT_AT",
+  "sqlState" : "22003",
   "messageParameters" : {
     "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "arraySize" : "3",
@@ -222,6 +225,7 @@ struct<>
 org.apache.spark.SparkArrayIndexOutOfBoundsException
 {
   "errorClass" : "INVALID_ARRAY_INDEX_IN_ELEMENT_AT",
+  "sqlState" : "22003",
   "messageParameters" : {
     "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "arraySize" : "3",
@@ -245,6 +249,7 @@ struct<>
 org.apache.spark.SparkRuntimeException
 {
   "errorClass" : "ELEMENT_AT_BY_INDEX_ZERO",
+  "sqlState" : "22003",
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
@@ -263,6 +268,7 @@ struct<>
 org.apache.spark.SparkArrayIndexOutOfBoundsException
 {
   "errorClass" : "INVALID_ARRAY_INDEX",
+  "sqlState" : "22003",
   "messageParameters" : {
     "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "arraySize" : "2",
@@ -286,6 +292,7 @@ struct<>
 org.apache.spark.SparkArrayIndexOutOfBoundsException
 {
   "errorClass" : "INVALID_ARRAY_INDEX",
+  "sqlState" : "22003",
   "messageParameters" : {
     "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "arraySize" : "2",
@@ -309,6 +316,7 @@ struct<>
 org.apache.spark.SparkArrayIndexOutOfBoundsException
 {
   "errorClass" : "INVALID_ARRAY_INDEX",
+  "sqlState" : "22003",
   "messageParameters" : {
     "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "arraySize" : "2",
@@ -364,6 +372,7 @@ struct<>
 org.apache.spark.SparkArrayIndexOutOfBoundsException
 {
   "errorClass" : "INVALID_ARRAY_INDEX",
+  "sqlState" : "22003",
   "messageParameters" : {
     "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "arraySize" : "3",
@@ -387,6 +396,7 @@ struct<>
 org.apache.spark.SparkArrayIndexOutOfBoundsException
 {
   "errorClass" : "INVALID_ARRAY_INDEX",
+  "sqlState" : "22003",
   "messageParameters" : {
     "ansiConfig" : "\"spark.sql.ansi.enabled\"",
     "arraySize" : "3",
@@ -442,6 +452,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
   "messageParameters" : {
     "inputSql" : "\"map(a, 1, b, 2)\"",
     "inputType" : "\"MAP<STRING, INT>\"",
@@ -457,6 +468,54 @@ org.apache.spark.sql.AnalysisException
     "fragment" : "array_size(map('a', 1, 'b', 2))"
   } ]
 }
+
+
+-- !query
+select size(arrays_zip(array(1, 2, 3), array(4), array(7, 8, 9, 10)))
+-- !query schema
+struct<size(arrays_zip(array(1, 2, 3), array(4), array(7, 8, 9, 10))):int>
+-- !query output
+4
+
+
+-- !query
+select size(arrays_zip(array(), array(1, 2, 3), array(4), array(7, 8, 9, 10)))
+-- !query schema
+struct<size(arrays_zip(array(), array(1, 2, 3), array(4), array(7, 8, 9, 10))):int>
+-- !query output
+4
+
+
+-- !query
+select size(arrays_zip(array(1, 2, 3), array(4), null, array(7, 8, 9, 10)))
+-- !query schema
+struct<size(arrays_zip(array(1, 2, 3), array(4), NULL, array(7, 8, 9, 10))):int>
+-- !query output
+NULL
+
+
+-- !query
+select isnotnull(arrays_zip(array(), array(4), array(7, 8, 9, 10)))
+-- !query schema
+struct<(arrays_zip(array(), array(4), array(7, 8, 9, 10)) IS NOT NULL):boolean>
+-- !query output
+true
+
+
+-- !query
+select isnotnull(arrays_zip(array(1, 2, 3), array(4), array(7, 8, 9, 10)))
+-- !query schema
+struct<(arrays_zip(array(1, 2, 3), array(4), array(7, 8, 9, 10)) IS NOT NULL):boolean>
+-- !query output
+true
+
+
+-- !query
+select isnotnull(arrays_zip(array(1, 2, 3), NULL, array(4), array(7, 8, 9, 10)))
+-- !query schema
+struct<(arrays_zip(array(1, 2, 3), NULL, array(4), array(7, 8, 9, 10)) IS NOT NULL):boolean>
+-- !query output
+false
 
 
 -- !query
@@ -489,3 +548,311 @@ select get(array(1, 2, 3), -1)
 struct<get(array(1, 2, 3), -1):int>
 -- !query output
 NULL
+
+
+-- !query
+select array_insert(array(1, 2, 3), 3, 4)
+-- !query schema
+struct<array_insert(array(1, 2, 3), 3, 4):array<int>>
+-- !query output
+[1,2,4,3]
+
+
+-- !query
+select array_insert(array(2, 3, 4), 0, 1)
+-- !query schema
+struct<array_insert(array(2, 3, 4), 0, 1):array<int>>
+-- !query output
+[1,2,3,4]
+
+
+-- !query
+select array_insert(array(2, 3, 4), 1, 1)
+-- !query schema
+struct<array_insert(array(2, 3, 4), 1, 1):array<int>>
+-- !query output
+[1,2,3,4]
+
+
+-- !query
+select array_insert(array(1, 3, 4), -2, 2)
+-- !query schema
+struct<array_insert(array(1, 3, 4), -2, 2):array<int>>
+-- !query output
+[1,2,3,4]
+
+
+-- !query
+select array_insert(array(1, 2, 3), 3, "4")
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.ARRAY_FUNCTION_DIFF_TYPES",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "dataType" : "\"ARRAY\"",
+    "functionName" : "`array_insert`",
+    "leftType" : "\"ARRAY<INT>\"",
+    "rightType" : "\"STRING\"",
+    "sqlExpr" : "\"array_insert(array(1, 2, 3), 3, 4)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 43,
+    "fragment" : "array_insert(array(1, 2, 3), 3, \"4\")"
+  } ]
+}
+
+
+-- !query
+select array_insert(cast(NULL as ARRAY<INT>), 1, 1)
+-- !query schema
+struct<array_insert(NULL, 1, 1):array<int>>
+-- !query output
+NULL
+
+
+-- !query
+select array_insert(array(1, 2, 3, NULL), cast(NULL as INT), 4)
+-- !query schema
+struct<array_insert(array(1, 2, 3, NULL), CAST(NULL AS INT), 4):array<int>>
+-- !query output
+NULL
+
+
+-- !query
+select array_insert(array(1, 2, 3, NULL), 4, cast(NULL as INT))
+-- !query schema
+struct<array_insert(array(1, 2, 3, NULL), 4, CAST(NULL AS INT)):array<int>>
+-- !query output
+[1,2,3,null,null]
+
+
+-- !query
+select array_insert(array(2, 3, NULL, 4), 5, 5)
+-- !query schema
+struct<array_insert(array(2, 3, NULL, 4), 5, 5):array<int>>
+-- !query output
+[2,3,null,4,5]
+
+
+-- !query
+select array_insert(array(2, 3, NULL, 4), -5, 1)
+-- !query schema
+struct<array_insert(array(2, 3, NULL, 4), -5, 1):array<int>>
+-- !query output
+[1,null,2,3,null,4]
+
+
+-- !query
+select array_compact(id) from values (1) as t(id)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"id\"",
+    "inputType" : "\"INT\"",
+    "paramIndex" : "1",
+    "requiredType" : "\"ARRAY\"",
+    "sqlExpr" : "\"array_compact(id)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 24,
+    "fragment" : "array_compact(id)"
+  } ]
+}
+
+
+-- !query
+select array_compact(array("1", null, "2", null))
+-- !query schema
+struct<array_compact(array(1, NULL, 2, NULL)):array<string>>
+-- !query output
+["1","2"]
+
+
+-- !query
+select array_compact(array("a", "b", "c"))
+-- !query schema
+struct<array_compact(array(a, b, c)):array<string>>
+-- !query output
+["a","b","c"]
+
+
+-- !query
+select array_compact(array(1D, null, 2D, null))
+-- !query schema
+struct<array_compact(array(1.0, NULL, 2.0, NULL)):array<double>>
+-- !query output
+[1.0,2.0]
+
+
+-- !query
+select array_compact(array(array(1, 2, 3, null), null, array(4, null, 6)))
+-- !query schema
+struct<array_compact(array(array(1, 2, 3, NULL), NULL, array(4, NULL, 6))):array<array<int>>>
+-- !query output
+[[1,2,3,null],[4,null,6]]
+
+
+-- !query
+select array_compact(array(null))
+-- !query schema
+struct<array_compact(array(NULL)):array<void>>
+-- !query output
+[]
+
+
+-- !query
+select array_append(array(1, 2, 3), 4)
+-- !query schema
+struct<array_append(array(1, 2, 3), 4):array<int>>
+-- !query output
+[1,2,3,4]
+
+
+-- !query
+select array_append(array('a', 'b', 'c'), 'd')
+-- !query schema
+struct<array_append(array(a, b, c), d):array<string>>
+-- !query output
+["a","b","c","d"]
+
+
+-- !query
+select array_append(array(1, 2, 3, NULL), NULL)
+-- !query schema
+struct<array_append(array(1, 2, 3, NULL), NULL):array<int>>
+-- !query output
+[1,2,3,null,null]
+
+
+-- !query
+select array_append(array('a', 'b', 'c', NULL), NULL)
+-- !query schema
+struct<array_append(array(a, b, c, NULL), NULL):array<string>>
+-- !query output
+["a","b","c",null,null]
+
+
+-- !query
+select array_append(CAST(null AS ARRAY<String>), 'a')
+-- !query schema
+struct<array_append(NULL, a):array<string>>
+-- !query output
+NULL
+
+
+-- !query
+select array_append(CAST(null AS ARRAY<String>), CAST(null as String))
+-- !query schema
+struct<array_append(NULL, CAST(NULL AS STRING)):array<string>>
+-- !query output
+NULL
+
+
+-- !query
+select array_append(array(), 1)
+-- !query schema
+struct<array_append(array(), 1):array<int>>
+-- !query output
+[1]
+
+
+-- !query
+select array_append(CAST(array() AS ARRAY<String>), CAST(NULL AS String))
+-- !query schema
+struct<array_append(array(), CAST(NULL AS STRING)):array<string>>
+-- !query output
+[null]
+
+
+-- !query
+select array_append(array(CAST(NULL AS String)), CAST(NULL AS String))
+-- !query schema
+struct<array_append(array(CAST(NULL AS STRING)), CAST(NULL AS STRING)):array<string>>
+-- !query output
+[null,null]
+
+
+-- !query
+select array_prepend(array(1, 2, 3), 4)
+-- !query schema
+struct<array_prepend(array(1, 2, 3), 4):array<int>>
+-- !query output
+[4,1,2,3]
+
+
+-- !query
+select array_prepend(array('a', 'b', 'c'), 'd')
+-- !query schema
+struct<array_prepend(array(a, b, c), d):array<string>>
+-- !query output
+["d","a","b","c"]
+
+
+-- !query
+select array_prepend(array(1, 2, 3, NULL), NULL)
+-- !query schema
+struct<array_prepend(array(1, 2, 3, NULL), NULL):array<int>>
+-- !query output
+[null,1,2,3,null]
+
+
+-- !query
+select array_prepend(array('a', 'b', 'c', NULL), NULL)
+-- !query schema
+struct<array_prepend(array(a, b, c, NULL), NULL):array<string>>
+-- !query output
+[null,"a","b","c",null]
+
+
+-- !query
+select array_prepend(CAST(null AS ARRAY<String>), 'a')
+-- !query schema
+struct<array_prepend(NULL, a):array<string>>
+-- !query output
+NULL
+
+
+-- !query
+select array_prepend(CAST(null AS ARRAY<String>), CAST(null as String))
+-- !query schema
+struct<array_prepend(NULL, CAST(NULL AS STRING)):array<string>>
+-- !query output
+NULL
+
+
+-- !query
+select array_prepend(array(), 1)
+-- !query schema
+struct<array_prepend(array(), 1):array<int>>
+-- !query output
+[1]
+
+
+-- !query
+select array_prepend(CAST(array() AS ARRAY<String>), CAST(NULL AS String))
+-- !query schema
+struct<array_prepend(array(), CAST(NULL AS STRING)):array<string>>
+-- !query output
+[null]
+
+
+-- !query
+select array_prepend(array(CAST(NULL AS String)), CAST(NULL AS String))
+-- !query schema
+struct<array_prepend(array(CAST(NULL AS STRING)), CAST(NULL AS STRING)):array<string>>
+-- !query output
+[null,null]

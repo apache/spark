@@ -38,7 +38,7 @@ import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoDir, InsertIntoStatement, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
-import org.apache.spark.sql.catalyst.util.{ResolveDefaultColumns, V2ExpressionBuilder}
+import org.apache.spark.sql.catalyst.util.{GeneratedColumn, ResolveDefaultColumns, V2ExpressionBuilder}
 import org.apache.spark.sql.connector.catalog.SupportsRead
 import org.apache.spark.sql.connector.catalog.TableCapability._
 import org.apache.spark.sql.connector.expressions.{Expression => V2Expression, NullOrdering, SortDirection, SortOrder => V2SortOrder, SortValue}
@@ -61,7 +61,7 @@ import org.apache.spark.unsafe.types.UTF8String
  * Note that, this rule must be run after `PreprocessTableCreation` and
  * `PreprocessTableInsertion`.
  */
-case class DataSourceAnalysis(analyzer: Analyzer) extends Rule[LogicalPlan] {
+object DataSourceAnalysis extends Rule[LogicalPlan] {
 
   def resolver: Resolver = conf.resolver
 
@@ -133,9 +133,17 @@ case class DataSourceAnalysis(analyzer: Analyzer) extends Rule[LogicalPlan] {
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     case CreateTable(tableDesc, mode, None) if DDLUtils.isDatasourceTable(tableDesc) =>
+      ResolveDefaultColumns.validateTableProviderForDefaultValue(
+        tableDesc.schema, tableDesc.provider, "CREATE TABLE", false)
       val newSchema: StructType =
         ResolveDefaultColumns.constantFoldCurrentDefaultsToExistDefaults(
-          tableDesc.schema, tableDesc.provider, "CREATE TABLE", false)
+          tableDesc.schema, "CREATE TABLE")
+
+      if (GeneratedColumn.hasGeneratedColumns(newSchema)) {
+        throw QueryCompilationErrors.unsupportedTableOperationError(
+          tableDesc.identifier, "generated columns")
+      }
+
       val newTableDesc = tableDesc.copy(schema = newSchema)
       CreateDataSourceTableCommand(newTableDesc, ignoreIfExists = mode == SaveMode.Ignore)
 

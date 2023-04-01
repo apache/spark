@@ -697,6 +697,8 @@ private[spark] class MapOutputTrackerMaster(
     pool
   }
 
+  private val availableProcessors = Runtime.getRuntime.availableProcessors()
+
   // Make sure that we aren't going to exceed the max RPC message size by making sure
   // we use broadcast to send large map output statuses.
   if (minSizeForBroadcast > maxRpcMessageSize) {
@@ -966,7 +968,7 @@ private[spark] class MapOutputTrackerMaster(
       val parallelAggThreshold = conf.get(
         SHUFFLE_MAP_OUTPUT_PARALLEL_AGGREGATION_THRESHOLD)
       val parallelism = math.min(
-        Runtime.getRuntime.availableProcessors(),
+        availableProcessors,
         statuses.length.toLong * totalSizes.length / parallelAggThreshold + 1).toInt
       if (parallelism <= 1) {
         statuses.filter(_ != null).foreach { s =>
@@ -1112,6 +1114,8 @@ private[spark] class MapOutputTrackerMaster(
       startMapIndex: Int,
       endMapIndex: Int): Seq[String] =
   {
+    if (!shuffleLocalityEnabled) return Nil
+
     val shuffleStatus = shuffleStatuses.get(dep.shuffleId).orNull
     if (shuffleStatus != null) {
       shuffleStatus.withMapStatuses { statuses =>
@@ -1125,6 +1129,17 @@ private[spark] class MapOutputTrackerMaster(
       }
     } else {
       Nil
+    }
+  }
+
+  /**
+   * Get map output location by (shuffleId, mapId)
+   */
+  def getMapOutputLocation(shuffleId: Int, mapId: Long): Option[BlockManagerId] = {
+    shuffleStatuses.get(shuffleId).flatMap { shuffleStatus =>
+      shuffleStatus.withMapStatuses { mapStatues =>
+        mapStatues.filter(_ != null).find(_.mapId == mapId).map(_.location)
+      }
     }
   }
 
@@ -1196,7 +1211,7 @@ private[spark] class MapOutputTrackerMaster(
 
   // This method is only called in local-mode.
   override def getShufflePushMergerLocations(shuffleId: Int): Seq[BlockManagerId] = {
-    shuffleStatuses(shuffleId).getShufflePushMergerLocations
+    shuffleStatuses.get(shuffleId).map(_.getShufflePushMergerLocations).getOrElse(Seq.empty)
   }
 
   override def stop(): Unit = {

@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.parser
 
 import org.apache.spark.SparkThrowable
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, RelationTimeTravel, UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction, UnresolvedGenerator, UnresolvedInlineTable, UnresolvedRelation, UnresolvedStar, UnresolvedSubqueryColumnAliases, UnresolvedTableValuedFunction}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, Parameter, RelationTimeTravel, UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction, UnresolvedGenerator, UnresolvedInlineTable, UnresolvedRelation, UnresolvedStar, UnresolvedSubqueryColumnAliases, UnresolvedTableValuedFunction, UnresolvedTVFAliases}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{PercentileCont, PercentileDisc}
 import org.apache.spark.sql.catalyst.plans._
@@ -376,7 +376,7 @@ class PlanParserSuite extends AnalysisTest {
     val sql1 = s"$baseSql order by a sort by a"
     checkError(
       exception = parseException(sql1),
-      errorClass = "_LEGACY_ERROR_TEMP_0011",
+      errorClass = "UNSUPPORTED_FEATURE.COMBINATION_QUERY_RESULT_CLAUSES",
       parameters = Map.empty,
       context = ExpectedContext(
         fragment = "order by a sort by a",
@@ -386,7 +386,7 @@ class PlanParserSuite extends AnalysisTest {
     val sql2 = s"$baseSql cluster by a distribute by a"
     checkError(
       exception = parseException(sql2),
-      errorClass = "_LEGACY_ERROR_TEMP_0011",
+      errorClass = "UNSUPPORTED_FEATURE.COMBINATION_QUERY_RESULT_CLAUSES",
       parameters = Map.empty,
       context = ExpectedContext(
         fragment = "cluster by a distribute by a",
@@ -396,7 +396,7 @@ class PlanParserSuite extends AnalysisTest {
     val sql3 = s"$baseSql order by a cluster by a"
     checkError(
       exception = parseException(sql3),
-      errorClass = "_LEGACY_ERROR_TEMP_0011",
+      errorClass = "UNSUPPORTED_FEATURE.COMBINATION_QUERY_RESULT_CLAUSES",
       parameters = Map.empty,
       context = ExpectedContext(
         fragment = "order by a cluster by a",
@@ -406,7 +406,7 @@ class PlanParserSuite extends AnalysisTest {
     val sql4 = s"$baseSql order by a distribute by a"
     checkError(
       exception = parseException(sql4),
-      errorClass = "_LEGACY_ERROR_TEMP_0011",
+      errorClass = "UNSUPPORTED_FEATURE.COMBINATION_QUERY_RESULT_CLAUSES",
       parameters = Map.empty,
       context = ExpectedContext(
         fragment = "order by a distribute by a",
@@ -642,8 +642,9 @@ class PlanParserSuite extends AnalysisTest {
     val sql1 = "select * from a natural cross join b"
     checkError(
       exception = parseException(sql1),
-      errorClass = "UNSUPPORTED_FEATURE.NATURAL_CROSS_JOIN",
-      parameters = Map.empty,
+      errorClass = "INCOMPATIBLE_JOIN_TYPES",
+      parameters = Map("joinType1" -> "NATURAL", "joinType2" -> "CROSS"),
+      sqlState = "42613",
       context = ExpectedContext(
         fragment = "natural cross join b",
         start = 16,
@@ -848,7 +849,7 @@ class PlanParserSuite extends AnalysisTest {
   test("table valued function") {
     assertEqual(
       "select * from range(2)",
-      UnresolvedTableValuedFunction("range", Literal(2) :: Nil, Seq.empty).select(star()))
+      UnresolvedTableValuedFunction("range", Literal(2) :: Nil).select(star()))
 
     // SPARK-34627
     val sql1 = "select * from default.range(2)"
@@ -881,12 +882,14 @@ class PlanParserSuite extends AnalysisTest {
   test("SPARK-20311 range(N) as alias") {
     assertEqual(
       "SELECT * FROM range(10) AS t",
-      SubqueryAlias("t", UnresolvedTableValuedFunction("range", Literal(10) :: Nil, Seq.empty))
+      SubqueryAlias("t", UnresolvedTableValuedFunction("range", Literal(10) :: Nil))
         .select(star()))
     assertEqual(
       "SELECT * FROM range(7) AS t(a)",
-      SubqueryAlias("t", UnresolvedTableValuedFunction("range", Literal(7) :: Nil, "a" :: Nil))
-        .select(star()))
+      SubqueryAlias("t",
+        UnresolvedTVFAliases("range",
+          UnresolvedTableValuedFunction("range", Literal(7) :: Nil), "a" :: Nil)
+      ).select(star()))
   }
 
   test("SPARK-20841 Support table column aliases in FROM clause") {
@@ -1593,5 +1596,14 @@ class PlanParserSuite extends AnalysisTest {
       exception = parseException(s"SELECT :"),
       errorClass = "PARSE_SYNTAX_ERROR",
       parameters = Map("error" -> "end of input", "hint" -> ""))
+  }
+
+  test("SPARK-42553: NonReserved keyword 'interval' can be column name") {
+    comparePlans(
+      parsePlan("SELECT interval FROM VALUES ('abc') AS tbl(interval);"),
+      UnresolvedInlineTable(
+        Seq("interval"),
+        Seq(Literal("abc")) :: Nil).as("tbl").select($"interval")
+    )
   }
 }

@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.objects.Invoke
 import org.apache.spark.sql.catalyst.plans.{Inner, JoinType}
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -129,7 +130,7 @@ package object dsl {
       UnresolvedExtractValue(expr, Literal(fieldName))
 
     def cast(to: DataType): Expression = {
-      if (expr.resolved && expr.dataType.sameType(to)) {
+      if (expr.resolved && DataTypeUtils.sameType(expr.dataType, to)) {
         expr
       } else {
         val cast = Cast(expr, to)
@@ -425,7 +426,9 @@ package object dsl {
           leftGroup: Seq[Attribute],
           rightGroup: Seq[Attribute],
           leftAttr: Seq[Attribute],
-          rightAttr: Seq[Attribute]
+          rightAttr: Seq[Attribute],
+          leftOrder: Seq[SortOrder] = Nil,
+          rightOrder: Seq[SortOrder] = Nil
         ): LogicalPlan = {
         CoGroup.apply[Key, Left, Right, Result](
           func,
@@ -433,6 +436,8 @@ package object dsl {
           rightGroup,
           leftAttr,
           rightAttr,
+          leftOrder,
+          rightOrder,
           logicalPlan,
           otherPlan)
       }
@@ -462,6 +467,13 @@ package object dsl {
           partitionSpec: Seq[Expression],
           orderSpec: Seq[SortOrder]): LogicalPlan =
         Window(windowExpressions, partitionSpec, orderSpec, logicalPlan)
+
+      def windowGroupLimit(
+          partitionSpec: Seq[Expression],
+          orderSpec: Seq[SortOrder],
+          rankLikeFunction: Expression,
+          limit: Int): LogicalPlan =
+        WindowGroupLimit(partitionSpec, orderSpec, rankLikeFunction, limit, logicalPlan)
 
       // TODO: Remove at Spark 4.0.0
       @deprecated("Use subquery(alias: String)", "3.4.0")

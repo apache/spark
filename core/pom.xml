@@ -21,7 +21,7 @@
   <parent>
     <groupId>org.apache.spark</groupId>
     <artifactId>spark-parent_2.12</artifactId>
-    <version>3.4.0-SNAPSHOT</version>
+    <version>3.5.0-SNAPSHOT</version>
     <relativePath>../pom.xml</relativePath>
   </parent>
 
@@ -180,6 +180,10 @@
     <dependency>
       <groupId>commons-codec</groupId>
       <artifactId>commons-codec</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.commons</groupId>
+      <artifactId>commons-compress</artifactId>
     </dependency>
     <dependency>
       <groupId>org.apache.commons</groupId>
@@ -689,7 +693,7 @@
             </relocation>
             <relocation>
               <pattern>com.google.protobuf</pattern>
-              <shadedPattern>${spark.shade.packageName}.spark-core.protobuf</shadedPattern>
+              <shadedPattern>${spark.shade.packageName}.spark_core.protobuf</shadedPattern>
               <includes>
                 <include>com.google.protobuf.**</include>
               </includes>

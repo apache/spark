@@ -1,22 +1,22 @@
-OpenJDK 64-Bit Server VM 11.0.14+9-LTS on Linux 5.13.0-1021-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+OpenJDK 64-Bit Server VM 11.0.18+10 on Linux 5.15.0-1031-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 make_date():                              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-prepare make_date()                                4626           4642          25         21.6          46.3       1.0X
-make_date(2019, 9, 16)                             3992           4011          18         25.0          39.9       1.2X
-make_date(*, *, *)                                 5900           5939          40         16.9          59.0       0.8X
+prepare make_date()                                3168           3271         157         31.6          31.7       1.0X
+make_date(2019, 9, 16)                             2784           2860          97         35.9          27.8       1.1X
+make_date(*, *, *)                                 5861           5883          19         17.1          58.6       0.5X
 
-OpenJDK 64-Bit Server VM 11.0.14+9-LTS on Linux 5.13.0-1021-azure
-Intel(R) Xeon(R) CPU E5-2673 v3 @ 2.40GHz
+OpenJDK 64-Bit Server VM 11.0.18+10 on Linux 5.15.0-1031-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 make_timestamp():                            Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ---------------------------------------------------------------------------------------------------------------------------
-prepare make_timestamp()                              3614           3648          31          0.3        3613.6       1.0X
-make_timestamp(2019, 1, 2, 3, 4, 50.123456)             62             62           1         16.2          61.7      58.6X
-make_timestamp(2019, 1, 2, 3, 4, 60.000000)             61             65           4         16.4          61.0      59.2X
-make_timestamp(2019, 12, 31, 23, 59, 60.00)             64            102          37         15.7          63.7      56.7X
-make_timestamp(*, *, *, 3, 4, 50.123456)               320            330          17          3.1         319.9      11.3X
-make_timestamp(*, *, *, *, *, 0)                       291            301          14          3.4         291.3      12.4X
-make_timestamp(*, *, *, *, *, 60.0)                    315            327          17          3.2         315.2      11.5X
-make_timestamp(2019, 1, 2, *, *, *)                   3807           3831          21          0.3        3806.6       0.9X
-make_timestamp(*, *, *, *, *, *)                      3806           3856          44          0.3        3806.1       0.9X
+prepare make_timestamp()                               473            486          12          2.1         473.3       1.0X
+make_timestamp(2019, 1, 2, 3, 4, 50.123456)             51             52           1         19.7          50.7       9.3X
+make_timestamp(2019, 1, 2, 3, 4, 60.000000)             48             55          12         21.0          47.7       9.9X
+make_timestamp(2019, 12, 31, 23, 59, 60.00)             49             50           1         20.5          48.8       9.7X
+make_timestamp(*, *, *, 3, 4, 50.123456)               216            224           8          4.6         216.1       2.2X
+make_timestamp(*, *, *, *, *, 0)                       168            181          12          6.0         167.8       2.8X
+make_timestamp(*, *, *, *, *, 60.0)                    222            229          13          4.5         222.2       2.1X
+make_timestamp(2019, 1, 2, *, *, *)                    642            651          13          1.6         641.8       0.7X
+make_timestamp(*, *, *, *, *, *)                       669            678           9          1.5         669.2       0.7X
 

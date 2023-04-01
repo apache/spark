@@ -774,7 +774,7 @@ case class Cast(
         }
       })
     case BooleanType =>
-      buildCast[Boolean](_, b => if (b) 1L else 0)
+      buildCast[Boolean](_, b => if (b) 1L else 0L)
     case LongType =>
       buildCast[Long](_, l => longToTimestamp(l))
     case IntegerType =>
@@ -2509,21 +2509,43 @@ case class UpCast(child: Expression, target: AbstractDataType, walkedTypePath: S
  * Casting a numeric value as another numeric type in store assignment. It can capture the
  * arithmetic errors and show proper error messages to users.
  */
-case class CheckOverflowInTableInsert(child: Cast, columnName: String) extends UnaryExpression {
-  override protected def withNewChildInternal(newChild: Expression): Expression =
-    copy(child = newChild.asInstanceOf[Cast])
+case class CheckOverflowInTableInsert(child: Expression, columnName: String)
+    extends UnaryExpression {
+
+  override protected def withNewChildInternal(newChild: Expression): Expression = {
+    copy(child = newChild)
+  }
+
+  private def getCast: Option[Cast] = child match {
+    case c: Cast =>
+      Some(c)
+    case ExpressionProxy(c: Cast, _, _) =>
+      Some(c)
+    case _ => None
+  }
 
   override def eval(input: InternalRow): Any = try {
     child.eval(input)
   } catch {
     case e: SparkArithmeticException =>
-      throw QueryExecutionErrors.castingCauseOverflowErrorInTableInsert(
-        child.child.dataType,
-        child.dataType,
-        columnName)
+      getCast match {
+        case Some(cast) =>
+          throw QueryExecutionErrors.castingCauseOverflowErrorInTableInsert(
+            cast.child.dataType,
+            cast.dataType,
+            columnName)
+        case None => throw e
+      }
   }
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    getCast match {
+      case Some(child) => doGenCodeWithBetterErrorMsg(ctx, ev, child)
+      case None => child.genCode(ctx)
+    }
+  }
+
+  def doGenCodeWithBetterErrorMsg(ctx: CodegenContext, ev: ExprCode, child: Cast): ExprCode = {
     val childGen = child.genCode(ctx)
     val exceptionClass = classOf[SparkArithmeticException].getCanonicalName
     val fromDt =

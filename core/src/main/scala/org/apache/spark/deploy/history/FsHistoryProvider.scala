@@ -1214,7 +1214,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     // the existing data.
     dm.openStore(appId, attempt.info.attemptId).foreach { path =>
       try {
-        return KVUtils.open(path, metadata, conf)
+        return KVUtils.open(path, metadata, conf, live = false)
       } catch {
         case e: Exception =>
           logInfo(s"Failed to open existing store for $appId/${attempt.info.attemptId}.", e)
@@ -1280,14 +1280,14 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     try {
       logInfo(s"Leasing disk manager space for app $appId / ${attempt.info.attemptId}...")
       lease = dm.lease(reader.totalSize, reader.compressionCodec.isDefined)
-      val diskStore = KVUtils.open(lease.tmpPath, metadata, conf)
+      val diskStore = KVUtils.open(lease.tmpPath, metadata, conf, live = false)
       hybridStore.setDiskStore(diskStore)
       hybridStore.switchToDiskStore(new HybridStore.SwitchToDiskStoreListener {
         override def onSwitchToDiskStoreSuccess: Unit = {
           logInfo(s"Completely switched to diskStore for app $appId / ${attempt.info.attemptId}.")
           diskStore.close()
           val newStorePath = lease.commit(appId, attempt.info.attemptId)
-          hybridStore.setDiskStore(KVUtils.open(newStorePath, metadata, conf))
+          hybridStore.setDiskStore(KVUtils.open(newStorePath, metadata, conf, live = false))
           memoryManager.release(appId, attempt.info.attemptId)
         }
         override def onSwitchToDiskStoreFail(e: Exception): Unit = {
@@ -1323,7 +1323,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       logInfo(s"Leasing disk manager space for app $appId / ${attempt.info.attemptId}...")
       val lease = dm.lease(reader.totalSize, isCompressed)
       try {
-        Utils.tryWithResource(KVUtils.open(lease.tmpPath, metadata, conf)) { store =>
+        Utils.tryWithResource(KVUtils.open(lease.tmpPath, metadata, conf, live = false)) { store =>
           rebuildAppStore(store, reader, attempt.info.lastUpdated.getTime())
         }
         newStorePath = lease.commit(appId, attempt.info.attemptId)
@@ -1341,7 +1341,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       }
     }
 
-    KVUtils.open(newStorePath, metadata, conf)
+    KVUtils.open(newStorePath, metadata, conf, live = false)
   }
 
   private def createInMemoryStore(attempt: AttemptInfoWrapper): KVStore = {

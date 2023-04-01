@@ -806,8 +806,7 @@ private[hive] trait HiveInspectors {
   def wrap(
       row: Seq[Any],
       wrappers: Array[(Any) => Any],
-      cache: Array[AnyRef],
-      dataTypes: Array[DataType]): Array[AnyRef] = {
+      cache: Array[AnyRef]): Array[AnyRef] = {
     var i = 0
     val length = wrappers.length
     while (i < length) {

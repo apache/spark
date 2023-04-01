@@ -59,7 +59,10 @@ class GroupedData(PandasGroupedOpsMixin):
     A set of methods for aggregations on a :class:`DataFrame`,
     created by :func:`DataFrame.groupBy`.
 
-    .. versionadded:: 1.3
+    .. versionadded:: 1.3.0
+
+    .. versionchanged:: 3.4.0
+        Supports Spark Connect.
     """
 
     def __init__(self, jgd: JavaObject, df: DataFrame):
@@ -97,6 +100,9 @@ class GroupedData(PandasGroupedOpsMixin):
         Alternatively, ``exprs`` can also be a list of aggregate :class:`Column` expressions.
 
         .. versionadded:: 1.3.0
+
+        .. versionchanged:: 3.4.0
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -175,6 +181,9 @@ class GroupedData(PandasGroupedOpsMixin):
 
         .. versionadded:: 1.3.0
 
+        .. versionchanged:: 3.4.0
+            Supports Spark Connect.
+
         Examples
         --------
         >>> df = spark.createDataFrame(
@@ -208,6 +217,9 @@ class GroupedData(PandasGroupedOpsMixin):
 
         .. versionadded:: 1.3.0
 
+        .. versionchanged:: 3.4.0
+            Supports Spark Connect.
+
         Parameters
         ----------
         cols : str
@@ -221,6 +233,9 @@ class GroupedData(PandasGroupedOpsMixin):
         :func:`mean` is an alias for :func:`avg`.
 
         .. versionadded:: 1.3.0
+
+        .. versionchanged:: 3.4.0
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -268,6 +283,9 @@ class GroupedData(PandasGroupedOpsMixin):
 
         .. versionadded:: 1.3.0
 
+        .. versionchanged:: 3.4.0
+            Supports Spark Connect.
+
         Examples
         --------
         >>> df = spark.createDataFrame([
@@ -308,6 +326,9 @@ class GroupedData(PandasGroupedOpsMixin):
         """Computes the min value for each numeric column for each group.
 
         .. versionadded:: 1.3.0
+
+        .. versionchanged:: 3.4.0
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -355,6 +376,9 @@ class GroupedData(PandasGroupedOpsMixin):
 
         .. versionadded:: 1.3.0
 
+        .. versionchanged:: 3.4.0
+            Supports Spark Connect.
+
         Parameters
         ----------
         cols : str
@@ -395,6 +419,7 @@ class GroupedData(PandasGroupedOpsMixin):
         +--------+-----------+
         """
 
+    # TODO(SPARK-41746): SparkSession.createDataFrame does not support nested datatypes
     def pivot(self, pivot_col: str, values: Optional[List["LiteralType"]] = None) -> "GroupedData":
         """
         Pivots a column of the current :class:`DataFrame` and perform the specified aggregation.
@@ -404,6 +429,9 @@ class GroupedData(PandasGroupedOpsMixin):
         because Spark needs to first compute the list of distinct values internally.
 
         .. versionadded:: 1.6.0
+
+        .. versionchanged:: 3.4.0
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -438,8 +466,8 @@ class GroupedData(PandasGroupedOpsMixin):
         ...     Row(training="expert", sales=Row(course="dotNET", year=2012, earnings=5000)),
         ...     Row(training="junior", sales=Row(course="dotNET", year=2013, earnings=48000)),
         ...     Row(training="expert", sales=Row(course="Java", year=2013, earnings=30000)),
-        ... ])
-        >>> df2.show()
+        ... ])  # doctest: +SKIP
+        >>> df2.show()  # doctest: +SKIP
         +--------+--------------------+
         |training|               sales|
         +--------+--------------------+
@@ -470,6 +498,7 @@ class GroupedData(PandasGroupedOpsMixin):
         |2013|30000| 48000|
         +----+-----+------+
         >>> df2.groupBy("sales.year").pivot("sales.course").sum("sales.earnings").show()
+        ... # doctest: +SKIP
         +----+-----+------+
         |year| Java|dotNET|
         +----+-----+------+

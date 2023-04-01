@@ -645,6 +645,8 @@ class Index(IndexOpsMixin):
         .. note:: This method should only be used if the resulting NumPy ndarray is expected
             to be small, as all the data is loaded into the driver's memory.
 
+        .. deprecated:: 3.4.0
+
         Returns
         -------
         numpy.ndarray
@@ -660,7 +662,11 @@ class Index(IndexOpsMixin):
         >>> ps.Index(['a', 'b', 'c']).asi8 is None
         True
         """
-        warnings.warn("We recommend using `{}.to_numpy()` instead.".format(type(self).__name__))
+        warnings.warn(
+            "Index.asi8 is deprecated and will be removed in a future version. "
+            "We recommend using `{}.to_numpy()` instead.".format(type(self).__name__),
+            FutureWarning,
+        )
         if isinstance(self.spark.data_type, IntegralType):
             return self.to_numpy()
         elif isinstance(self.spark.data_type, (TimestampType, TimestampNTZType)):
@@ -1128,6 +1134,8 @@ class Index(IndexOpsMixin):
         """
         Whether the index type is compatible with the provided type.
 
+        .. deprecated:: 3.4.0
+
         Examples
         --------
         >>> psidx = ps.Index([1, 2, 3])
@@ -1140,6 +1148,10 @@ class Index(IndexOpsMixin):
         >>> psidx.is_type_compatible('floating')
         True
         """
+        warnings.warn(
+            "Index.is_type_compatible is deprecated and will be removed in a " "future version",
+            FutureWarning,
+        )
         return kind == self.inferred_type
 
     def dropna(self, how: str = "any") -> "Index":
@@ -2185,6 +2197,8 @@ class Index(IndexOpsMixin):
         remember that since pandas-on-Spark does not support multiple data types in an index,
         so it returns True if any type of data is datetime.
 
+        .. deprecated:: 3.4.0
+
         Examples
         --------
         >>> from datetime import datetime
@@ -2210,6 +2224,11 @@ class Index(IndexOpsMixin):
         >>> idx.is_all_dates
         False
         """
+        warnings.warn(
+            "Index.is_all_dates is deprecated, will be removed in a future version.  "
+            "check index.inferred_type instead",
+            FutureWarning,
+        )
         return isinstance(self.spark.data_type, (TimestampType, TimestampNTZType))
 
     def repeat(self, repeats: int) -> "Index":

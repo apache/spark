@@ -149,6 +149,8 @@ object JdbcUtils extends Logging with SQLConfHelper {
       case BooleanType => Option(JdbcType("BIT(1)", java.sql.Types.BIT))
       case StringType => Option(JdbcType("TEXT", java.sql.Types.CLOB))
       case BinaryType => Option(JdbcType("BLOB", java.sql.Types.BLOB))
+      case CharType(n) => Option(JdbcType(s"CHAR($n)", java.sql.Types.CHAR))
+      case VarcharType(n) => Option(JdbcType(s"VARCHAR($n)", java.sql.Types.VARCHAR))
       case TimestampType => Option(JdbcType("TIMESTAMP", java.sql.Types.TIMESTAMP))
       // This is a common case of timestamp without time zone. Most of the databases either only
       // support TIMESTAMP type or use TIMESTAMP as an alias for TIMESTAMP WITHOUT TIME ZONE.
@@ -251,7 +253,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
       try {
         statement.setQueryTimeout(options.queryTimeout)
         Some(getSchema(statement.executeQuery(), dialect,
-          isTimestampNTZ = options.inferTimestampNTZType))
+          isTimestampNTZ = options.preferTimestampNTZ))
       } catch {
         case _: SQLException => None
       } finally {
@@ -899,24 +901,24 @@ object JdbcUtils extends Logging with SQLConfHelper {
       schema: StructType,
       caseSensitive: Boolean,
       options: JdbcOptionsInWrite): Unit = {
+    val statement = conn.createStatement
     val dialect = JdbcDialects.get(options.url)
     val strSchema = schemaString(
       schema, caseSensitive, options.url, options.createTableColumnTypes)
-    val createTableOptions = options.createTableOptions
-    // Create the table if the table does not exist.
-    // To allow certain options to append when create a new table, which can be
-    // table_options or partition_options.
-    // E.g., "CREATE TABLE t (name string) ENGINE=InnoDB DEFAULT CHARSET=utf8"
-    val sql = s"CREATE TABLE $tableName ($strSchema) $createTableOptions"
-    executeStatement(conn, options, sql)
-    if (options.tableComment.nonEmpty) {
-      try {
-        executeStatement(
-          conn, options, dialect.getTableCommentQuery(tableName, options.tableComment))
-      } catch {
-        case e: Exception =>
-          logWarning("Cannot create JDBC table comment. The table comment will be ignored.")
+    try {
+      statement.setQueryTimeout(options.queryTimeout)
+      dialect.createTable(statement, tableName, strSchema, options)
+      if (options.tableComment.nonEmpty) {
+        try {
+          val tableCommentQuery = dialect.getTableCommentQuery(tableName, options.tableComment)
+          statement.executeUpdate(tableCommentQuery)
+        } catch {
+          case e: Exception =>
+            logWarning("Cannot create JDBC table comment. The table comment will be ignored.")
+        }
       }
+    } finally {
+      statement.close()
     }
   }
 
@@ -925,8 +927,8 @@ object JdbcUtils extends Logging with SQLConfHelper {
    */
   def renameTable(
       conn: Connection,
-      oldTable: String,
-      newTable: String,
+      oldTable: Identifier,
+      newTable: Identifier,
       options: JDBCOptions): Unit = {
     val dialect = JdbcDialects.get(options.url)
     executeStatement(conn, options, dialect.renameTable(oldTable, newTable))
@@ -947,7 +949,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
         metaData.getDatabaseMajorVersion)(0))
     } else {
       if (!metaData.supportsTransactions) {
-        throw QueryExecutionErrors.transactionUnsupportedByJdbcServerError()
+        throw QueryExecutionErrors.multiActionAlterError(tableName)
       } else {
         conn.setAutoCommit(false)
         val statement = conn.createStatement

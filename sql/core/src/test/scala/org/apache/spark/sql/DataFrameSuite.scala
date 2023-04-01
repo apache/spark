@@ -29,7 +29,7 @@ import scala.util.Random
 
 import org.scalatest.matchers.should.Matchers._
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkException, SparkIllegalArgumentException}
 import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobEnd}
 import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
@@ -752,10 +752,13 @@ class DataFrameSuite extends QueryTest
     val df2 = df1.withMetadata("x", metadata)
     assert(df2.schema(0).metadata === metadata)
 
-    val err = intercept[AnalysisException] {
-      df1.withMetadata("x1", metadata)
-    }
-    assert(err.getMessage.contains("Cannot resolve column name"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        df1.withMetadata("x1", metadata)
+      },
+      errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+      parameters = Map("objectName" -> "`x1`", "proposal" -> "`x`")
+    )
   }
 
   test("replace column using withColumn") {
@@ -1134,6 +1137,18 @@ class DataFrameSuite extends QueryTest
     checkAnswer(approxSummaryDF, approxSummaryResult)
   }
 
+  test("SPARK-41391: Correct the output column name of groupBy.agg(count_distinct)") {
+    withTempView("person") {
+      person.createOrReplaceTempView("person")
+      val df1 = person.groupBy("id").agg(count_distinct(col("name")))
+      val df2 = spark.sql("SELECT id, COUNT(DISTINCT name) FROM person GROUP BY id")
+      assert(df1.columns === df2.columns)
+      val df3 = person.groupBy("id").agg(count_distinct(col("*")))
+      val df4 = spark.sql("SELECT id, COUNT(DISTINCT *) FROM person GROUP BY id")
+      assert(df3.columns === df4.columns)
+    }
+  }
+
   test("summary advanced") {
     val stats = Array("count", "50.01%", "max", "mean", "min", "25%")
     val orderMatters = person2.summary(stats: _*)
@@ -1142,15 +1157,21 @@ class DataFrameSuite extends QueryTest
     val onlyPercentiles = person2.summary("0.1%", "99.9%")
     assert(onlyPercentiles.count() === 2)
 
-    val fooE = intercept[IllegalArgumentException] {
-      person2.summary("foo")
-    }
-    assert(fooE.getMessage === "foo is not a recognised statistic")
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        person2.summary("foo")
+      },
+      errorClass = "_LEGACY_ERROR_TEMP_2114",
+      parameters = Map("stats" -> "foo")
+    )
 
-    val parseE = intercept[IllegalArgumentException] {
-      person2.summary("foo%")
-    }
-    assert(parseE.getMessage === "Unable to parse foo% as a percentile")
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        person2.summary("foo%")
+      },
+      errorClass = "_LEGACY_ERROR_TEMP_2113",
+      parameters = Map("stats" -> "foo%")
+    )
   }
 
   test("apply on query results (SPARK-5462)") {
@@ -2121,12 +2142,25 @@ class DataFrameSuite extends QueryTest
 
     withSQLConf(SQLConf.CBO_ENABLED.key -> "true") {
       val df = Dataset.ofRows(spark, statsPlan)
+        // add some map-like operations which optimizer will optimize away, and make a divergence
+        // for output between logical plan and optimized plan
+        // logical plan
+        // Project [cb#6 AS cbool#12, cby#7 AS cbyte#13, ci#8 AS cint#14]
+        // +- Project [cbool#0 AS cb#6, cbyte#1 AS cby#7, cint#2 AS ci#8]
+        //    +- OutputListAwareStatsTestPlan [cbool#0, cbyte#1, cint#2], 2, 16
+        // optimized plan
+        // OutputListAwareStatsTestPlan [cbool#0, cbyte#1, cint#2], 2, 16
+        .selectExpr("cbool AS cb", "cbyte AS cby", "cint AS ci")
+        .selectExpr("cb AS cbool", "cby AS cbyte", "ci AS cint")
 
       // We can't leverage LogicalRDD.fromDataset here, since it triggers physical planning and
       // there is no matching physical node for OutputListAwareStatsTestPlan.
+      val optimizedPlan = df.queryExecution.optimizedPlan
+      val rewrite = LogicalRDD.buildOutputAssocForRewrite(optimizedPlan.output,
+        df.logicalPlan.output)
       val logicalRDD = LogicalRDD(
         df.logicalPlan.output, spark.sparkContext.emptyRDD[InternalRow], isStreaming = true)(
-        spark, Some(df.queryExecution.optimizedPlan.stats), None)
+        spark, Some(LogicalRDD.rewriteStatistics(optimizedPlan.stats, rewrite.get)), None)
 
       val stats = logicalRDD.computeStats()
       val expectedStats = Statistics(sizeInBytes = expectedSize, rowCount = Some(2),
@@ -2164,12 +2198,24 @@ class DataFrameSuite extends QueryTest
     val statsPlan = OutputListAwareConstraintsTestPlan(outputList = outputList)
 
     val df = Dataset.ofRows(spark, statsPlan)
+      // add some map-like operations which optimizer will optimize away, and make a divergence
+      // for output between logical plan and optimized plan
+      // logical plan
+      // Project [cb#6 AS cbool#12, cby#7 AS cbyte#13, ci#8 AS cint#14]
+      // +- Project [cbool#0 AS cb#6, cbyte#1 AS cby#7, cint#2 AS ci#8]
+      //    +- OutputListAwareConstraintsTestPlan [cbool#0, cbyte#1, cint#2]
+      // optimized plan
+      // OutputListAwareConstraintsTestPlan [cbool#0, cbyte#1, cint#2]
+      .selectExpr("cbool AS cb", "cbyte AS cby", "cint AS ci")
+      .selectExpr("cb AS cbool", "cby AS cbyte", "ci AS cint")
 
     // We can't leverage LogicalRDD.fromDataset here, since it triggers physical planning and
     // there is no matching physical node for OutputListAwareConstraintsTestPlan.
+    val optimizedPlan = df.queryExecution.optimizedPlan
+    val rewrite = LogicalRDD.buildOutputAssocForRewrite(optimizedPlan.output, df.logicalPlan.output)
     val logicalRDD = LogicalRDD(
       df.logicalPlan.output, spark.sparkContext.emptyRDD[InternalRow], isStreaming = true)(
-      spark, None, Some(df.queryExecution.optimizedPlan.constraints))
+      spark, None, Some(LogicalRDD.rewriteConstraints(optimizedPlan.constraints, rewrite.get)))
 
     val constraints = logicalRDD.constraints
     val expectedConstraints = buildExpectedConstraints(logicalRDD.output)
@@ -3282,9 +3328,9 @@ class DataFrameSuite extends QueryTest
   }
 
   test("SPARK-36338: DataFrame.withSequenceColumn should append unique sequence IDs") {
-    val ids = spark.range(10).repartition(5)
-      .withSequenceColumn("default_index").collect().map(_.getLong(0))
-    assert(ids.toSet === Range(0, 10).toSet)
+    val ids = spark.range(10).repartition(5).withSequenceColumn("default_index")
+    assert(ids.collect().map(_.getLong(0)).toSet === Range(0, 10).toSet)
+    assert(ids.take(5).map(_.getLong(0)).toSet === Range(0, 5).toSet)
   }
 
   test("SPARK-35320: Reading JSON with key type different to String in a map should fail") {
@@ -3541,6 +3587,22 @@ class DataFrameSuite extends QueryTest
         case s: SortExec => s
       }.isEmpty)
     }
+  }
+
+  test("SPARK-41049: stateful expression should be copied correctly") {
+    val df = spark.sparkContext.parallelize(1 to 5).toDF("x")
+    val v1 = (rand() * 10000).cast(IntegerType)
+    val v2 = to_csv(struct(v1.as("a"))) // to_csv is CodegenFallback
+    df.select(v1, v1, v2, v2).collect.foreach { row =>
+      assert(row.getInt(0) == row.getInt(1))
+      assert(row.getInt(0).toString == row.getString(2))
+      assert(row.getInt(0).toString == row.getString(3))
+    }
+  }
+
+  test("SPARK-41219: IntegralDivide use decimal(1, 0) to represent 0") {
+    val df = Seq("0.5944910").toDF("a")
+    checkAnswer(df.selectExpr("cast(a as decimal(7,7)) div 100"), Row(0))
   }
 }
 

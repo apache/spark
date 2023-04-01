@@ -23,16 +23,16 @@ Spark SQL provides `spark.read().csv("file_name")` to read a file or directory o
 
 <div class="codetabs">
 
+<div data-lang="python"  markdown="1">
+{% include_example csv_dataset python/sql/datasource.py %}
+</div>
+
 <div data-lang="scala"  markdown="1">
 {% include_example csv_dataset scala/org/apache/spark/examples/sql/SQLDataSourceExample.scala %}
 </div>
 
 <div data-lang="java"  markdown="1">
 {% include_example csv_dataset java/org/apache/spark/examples/sql/JavaSQLDataSourceExample.java %}
-</div>
-
-<div data-lang="python"  markdown="1">
-{% include_example csv_dataset python/sql/datasource.py %}
 </div>
 
 </div>
@@ -52,8 +52,8 @@ Data source options of CSV can be set via:
 * `OPTIONS` clause at [CREATE TABLE USING DATA_SOURCE](sql-ref-syntax-ddl-create-table-datasource.html)
 
 
-<table class="table">
-  <tr><th><b>Property Name</b></th><th><b>Default</b></th><th><b>Meaning</b></th><th><b>Scope</b></th></tr>
+<table class="table table-striped">
+  <thead><tr><th><b>Property Name</b></th><th><b>Default</b></th><th><b>Meaning</b></th><th><b>Scope</b></th></tr></thead>
   <tr>
     <td><code>sep</code></td>
     <td>,</td>
@@ -109,7 +109,7 @@ Data source options of CSV can be set via:
     <td>read</td>
   </tr>
   <tr>
-    <td><code>prefersDate</code></td>
+    <td><code>preferDate</code></td>
     <td>true</td>
     <td>During schema inference (<code>inferSchema</code>), attempts to infer string columns that contain dates as <code>Date</code> if the values satisfy the <code>dateFormat</code> option or default date format. For columns that contain a mixture of dates and timestamps, try inferring them as <code>TimestampType</code> if timestamp format not specified, otherwise infer them as <code>StringType</code>.</td>
     <td>read</td>

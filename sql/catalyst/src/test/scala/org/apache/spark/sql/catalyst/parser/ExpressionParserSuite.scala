@@ -522,7 +522,7 @@ class ExpressionParserSuite extends AnalysisTest {
       checkError(
         exception = parseException("timestamP_LTZ '2016-33-11 20:54:00.000'"),
         errorClass = "INVALID_TYPED_LITERAL",
-        sqlState = "42000",
+        sqlState = "42604",
         parameters = Map(
           "valueType" -> "\"TIMESTAMP_LTZ\"",
           "value" -> "'2016-33-11 20:54:00.000'"
@@ -538,7 +538,7 @@ class ExpressionParserSuite extends AnalysisTest {
       checkError(
         exception = parseException("tImEstAmp_Ntz '2016-33-11 20:54:00.000'"),
         errorClass = "INVALID_TYPED_LITERAL",
-        sqlState = "42000",
+        sqlState = "42604",
         parameters = Map(
           "valueType" -> "\"TIMESTAMP_NTZ\"",
           "value" -> "'2016-33-11 20:54:00.000'"
@@ -554,7 +554,7 @@ class ExpressionParserSuite extends AnalysisTest {
     checkError(
       exception = parseException("DAtE 'mar 11 2016'"),
       errorClass = "INVALID_TYPED_LITERAL",
-      sqlState = "42000",
+      sqlState = "42604",
       parameters = Map("valueType" -> "\"DATE\"", "value" -> "'mar 11 2016'"),
       context = ExpectedContext(
         fragment = "DAtE 'mar 11 2016'",
@@ -567,7 +567,7 @@ class ExpressionParserSuite extends AnalysisTest {
     checkError(
       exception = parseException("timestamP '2016-33-11 20:54:00.000'"),
       errorClass = "INVALID_TYPED_LITERAL",
-      sqlState = "42000",
+      sqlState = "42604",
       parameters = Map("valueType" -> "\"TIMESTAMP\"", "value" -> "'2016-33-11 20:54:00.000'"),
       context = ExpectedContext(
         fragment = "timestamP '2016-33-11 20:54:00.000'",
@@ -582,7 +582,7 @@ class ExpressionParserSuite extends AnalysisTest {
       checkError(
         exception = parseException("timestamP '2016-33-11 20:54:00.000'"),
         errorClass = "INVALID_TYPED_LITERAL",
-        sqlState = "42000",
+        sqlState = "42604",
         parameters = Map("valueType" -> "\"TIMESTAMP\"", "value" -> "'2016-33-11 20:54:00.000'"),
         context = ExpectedContext(
           fragment = "timestamP '2016-33-11 20:54:00.000'",
@@ -669,8 +669,12 @@ class ExpressionParserSuite extends AnalysisTest {
     assertEqual("x'A10C'", Literal(Array(0xa1, 0x0c).map(_.toByte)))
     checkError(
       exception = parseException("x'A1OC'"),
-      errorClass = "_LEGACY_ERROR_TEMP_0022",
-      parameters = Map("msg" -> "contains illegal character for hexBinary: A1OC"),
+      errorClass = "INVALID_TYPED_LITERAL",
+      sqlState = "42604",
+      parameters = Map(
+        "valueType" -> "\"X\"",
+        "value" -> "'A1OC'"
+      ),
       context = ExpectedContext(
         fragment = "x'A1OC'",
         start = 0,
@@ -803,7 +807,8 @@ class ExpressionParserSuite extends AnalysisTest {
     checkError(
       exception = parseException("1.20E-38BD"),
       errorClass = "_LEGACY_ERROR_TEMP_0061",
-      parameters = Map("msg" -> "decimal can only support precision up to 38."),
+      parameters = Map("msg" ->
+        "[DECIMAL_PRECISION_EXCEEDS_MAX_PRECISION] Decimal precision 40 exceeds max precision 38."),
       context = ExpectedContext(
         fragment = "1.20E-38BD",
         start = 0,
@@ -964,16 +969,6 @@ class ExpressionParserSuite extends AnalysisTest {
         assertEqual(s"${sign}interval $intervalValue", expectedLiteral)
       }
     }
-
-    // Empty interval statement
-    checkError(
-      exception = parseException("interval"),
-      errorClass = "_LEGACY_ERROR_TEMP_0025",
-      parameters = Map.empty,
-      context = ExpectedContext(
-        fragment = "interval",
-        start = 0,
-        stop = 7))
 
     // Single Intervals.
     val forms = Seq("", "s")

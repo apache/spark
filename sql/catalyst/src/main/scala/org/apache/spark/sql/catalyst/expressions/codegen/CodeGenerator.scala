@@ -39,7 +39,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.types._
-import org.apache.spark.sql.catalyst.util.{ArrayData, MapData, SQLOrderingUtil}
+import org.apache.spark.sql.catalyst.util.{ArrayData, MapData, SQLOrderingUtil, UnsafeRowUtils}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.NANOS_PER_MILLIS
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
@@ -1271,8 +1271,11 @@ class CodegenContext extends Logging {
   def generateExpressions(
       expressions: Seq[Expression],
       doSubexpressionElimination: Boolean = false): Seq[ExprCode] = {
-    if (doSubexpressionElimination) subexpressionElimination(expressions)
-    expressions.map(e => e.genCode(this))
+    // We need to make sure that we do not reuse stateful expressions. This is needed for codegen
+    // as well because some expressions may implement `CodegenFallback`.
+    val cleanedExpressions = expressions.map(_.freshCopyIfContainsStatefulExpression())
+    if (doSubexpressionElimination) subexpressionElimination(cleanedExpressions)
+    cleanedExpressions.map(e => e.genCode(this))
   }
 
   /**
@@ -1726,8 +1729,7 @@ object CodeGenerator extends Logging {
     if (nullable) {
       // Can't call setNullAt on DecimalType/CalendarIntervalType, because we need to keep the
       // offset
-      if (!isVectorized && (dataType.isInstanceOf[DecimalType] ||
-        dataType.isInstanceOf[CalendarIntervalType])) {
+      if (!isVectorized && UnsafeRowUtils.avoidSetNullAt(dataType)) {
         s"""
            |if (!${ev.isNull}) {
            |  ${setColumn(row, dataType, ordinal, ev.value)};

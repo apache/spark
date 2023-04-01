@@ -498,7 +498,10 @@ private[spark] class ApplicationMaster(
     // that when the driver sends an initial executor request (e.g. after an AM restart),
     // the allocator is ready to service requests.
     rpcEnv.setupEndpoint("YarnAM", new AMEndpoint(rpcEnv, driverRef))
-
+    if (_sparkConf.get(SHUFFLE_SERVICE_ENABLED)) {
+      logInfo("Initializing service data for shuffle service using name '" +
+        s"${_sparkConf.get(SHUFFLE_SERVICE_NAME)}'")
+    }
     allocator.allocateResources()
     val ms = MetricsSystem.createMetricsSystem(MetricsSystemInstances.APPLICATION_MASTER, sparkConf)
     val prefix = _sparkConf.get(YARN_METRICS_NAMESPACE).getOrElse(appId)
@@ -891,7 +894,6 @@ object ApplicationMaster extends Logging {
   private val EXIT_MAX_EXECUTOR_FAILURES = 11
   private val EXIT_REPORTER_FAILURE = 12
   private val EXIT_SC_NOT_INITED = 13
-  private val EXIT_SECURITY = 14
   private val EXIT_EXCEPTION_USER_CLASS = 15
   private val EXIT_EARLY = 16
   private val EXIT_DISCONNECTED = 17

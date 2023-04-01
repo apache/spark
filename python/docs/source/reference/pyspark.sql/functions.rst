@@ -155,12 +155,16 @@ Collection Functions
     concat
     array_position
     element_at
+    array_append
     array_sort
+    array_insert
     array_remove
+    array_prepend
     array_distinct
     array_intersect
     array_union
     array_except
+    array_compact
     transform
     exists
     forall

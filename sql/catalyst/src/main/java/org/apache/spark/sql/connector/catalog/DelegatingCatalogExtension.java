@@ -18,6 +18,7 @@
 package org.apache.spark.sql.connector.catalog;
 
 import java.util.Map;
+import java.util.Set;
 
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.catalyst.analysis.*;
@@ -51,6 +52,11 @@ public abstract class DelegatingCatalogExtension implements CatalogExtension {
 
   @Override
   public final void initialize(String name, CaseInsensitiveStringMap options) {}
+
+  @Override
+  public Set<TableCatalogCapability> capabilities() {
+    return asTableCatalog().capabilities();
+  }
 
   @Override
   public String[] defaultNamespace() {
@@ -94,6 +100,15 @@ public abstract class DelegatingCatalogExtension implements CatalogExtension {
       Transform[] partitions,
       Map<String, String> properties) throws TableAlreadyExistsException, NoSuchNamespaceException {
     return asTableCatalog().createTable(ident, schema, partitions, properties);
+  }
+
+  @Override
+  public Table createTable(
+      Identifier ident,
+      Column[] columns,
+      Transform[] partitions,
+      Map<String, String> properties) throws TableAlreadyExistsException, NoSuchNamespaceException {
+    return asTableCatalog().createTable(ident, columns, partitions, properties);
   }
 
   @Override

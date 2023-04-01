@@ -321,6 +321,9 @@ class DecommissionWorkerSuite
     }
 
     override def onTaskEnd(taskEnd: SparkListenerTaskEnd): Unit = {
+      // Task resubmit is a signal to DAGScheduler not a real task end event. Ignore it here
+      // to avoid over count.
+      if (taskEnd.reason == Resubmitted) return
       val taskSignature = getSignature(taskEnd.taskInfo, taskEnd.stageId, taskEnd.stageAttemptId)
       logInfo(s"Task End $taskSignature")
       tasksFinished.add(taskSignature)

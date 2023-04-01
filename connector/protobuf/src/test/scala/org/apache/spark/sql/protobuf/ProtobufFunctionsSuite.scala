@@ -19,18 +19,17 @@ package org.apache.spark.sql.protobuf
 import java.sql.Timestamp
 import java.time.Duration
 
-import scala.collection.JavaConverters._
+ import scala.collection.JavaConverters._
 
 import com.google.protobuf.{ByteString, DynamicMessage}
 
-import org.apache.spark.sql.{Column, QueryTest, Row}
-import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.{AnalysisException, Column, DataFrame, QueryTest, Row}
 import org.apache.spark.sql.functions.{lit, struct}
-import org.apache.spark.sql.protobuf.protos.SimpleMessageProtos.SimpleMessageRepeated
+import org.apache.spark.sql.protobuf.protos.SimpleMessageProtos._
 import org.apache.spark.sql.protobuf.protos.SimpleMessageProtos.SimpleMessageRepeated.NestedEnum
 import org.apache.spark.sql.protobuf.utils.ProtobufUtils
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{DayTimeIntervalType, IntegerType, StringType, StructField, StructType, TimestampType}
+import org.apache.spark.sql.types._
 
 class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with ProtobufTestBase
   with Serializable {
@@ -39,6 +38,8 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
 
   val testFileDesc = testFile("functions_suite.desc", "protobuf/functions_suite.desc")
   private val javaClassNamePrefix = "org.apache.spark.sql.protobuf.protos.SimpleMessageProtos$"
+
+  private def emptyBinaryDF = Seq(Array[Byte]()).toDF("binary")
 
   /**
    * Runs the given closure twice. Once with descriptor file and second time with Java class name.
@@ -55,10 +56,15 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
 
   // A wrapper to invoke the right variable of from_protobuf() depending on arguments.
   private def from_protobuf_wrapper(
-    col: Column, messageName: String, descFilePathOpt: Option[String]): Column = {
+    col: Column,
+    messageName: String,
+    descFilePathOpt: Option[String],
+    options: Map[String, String] = Map.empty): Column = {
     descFilePathOpt match {
-      case Some(descFilePath) => functions.from_protobuf(col, messageName, descFilePath)
-      case None => functions.from_protobuf(col, messageName)
+      case Some(descFilePath) => functions.from_protobuf(
+        col, messageName, descFilePath, options.asJava
+      )
+      case None => functions.from_protobuf(col, messageName, options.asJava)
     }
   }
 
@@ -70,7 +76,6 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
       case None => functions.to_protobuf(col, messageName)
     }
   }
-
 
   test("roundtrip in to_protobuf and from_protobuf - struct") {
     val df = spark
@@ -351,7 +356,7 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
     }
   }
 
-  test("roundtrip in from_protobuf and to_protobuf - Multiple Message") {
+  test("round trip in from_protobuf and to_protobuf - Multiple Message") {
     val messageMultiDesc = ProtobufUtils.buildDescriptor(testFileDesc, "MultipleExample")
     val messageIncludeDesc = ProtobufUtils.buildDescriptor(testFileDesc, "IncludedExample")
     val messageOtherDesc = ProtobufUtils.buildDescriptor(testFileDesc, "OtherExample")
@@ -384,77 +389,48 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
           from_protobuf_wrapper($"value_to", name, descFilePathOpt).as("value_to_from"))
         checkAnswer(fromProtoDF.select($"value_from.*"), toFromProtoDF.select($"value_to_from.*"))
     }
-  }
 
-  test("Handle recursive fields in Protobuf schema, A->B->A") {
-    val schemaA = ProtobufUtils.buildDescriptor(testFileDesc, "recursiveA")
-    val schemaB = ProtobufUtils.buildDescriptor(testFileDesc, "recursiveB")
-
-    val messageBForA = DynamicMessage
-      .newBuilder(schemaB)
-      .setField(schemaB.findFieldByName("keyB"), "key")
-      .build()
-
-    val messageA = DynamicMessage
-      .newBuilder(schemaA)
-      .setField(schemaA.findFieldByName("keyA"), "key")
-      .setField(schemaA.findFieldByName("messageB"), messageBForA)
-      .build()
-
-    val messageB = DynamicMessage
-      .newBuilder(schemaB)
-      .setField(schemaB.findFieldByName("keyB"), "key")
-      .setField(schemaB.findFieldByName("messageA"), messageA)
-      .build()
-
-    val df = Seq(messageB.toByteArray).toDF("messageB")
-
-    checkWithFileAndClassName("recursiveB") {
+    // Simple recursion
+    checkWithFileAndClassName("recursiveB") { // B -> A -> B
       case (name, descFilePathOpt) =>
         val e = intercept[AnalysisException] {
-          df.select(
-            from_protobuf_wrapper($"messageB", name, descFilePathOpt).as("messageFromProto"))
+          emptyBinaryDF.select(
+            from_protobuf_wrapper($"binary", name, descFilePathOpt).as("messageFromProto"))
             .show()
         }
         assert(e.getMessage.contains(
-          "Found recursive reference in Protobuf schema, which can not be processed by Spark:"
+          "Found recursive reference in Protobuf schema, which can not be processed by Spark"
         ))
     }
   }
 
-  test("Handle recursive fields in Protobuf schema, C->D->Array(C)") {
-    val schemaC = ProtobufUtils.buildDescriptor(testFileDesc, "recursiveC")
-    val schemaD = ProtobufUtils.buildDescriptor(testFileDesc, "recursiveD")
-
-    val messageDForC = DynamicMessage
-      .newBuilder(schemaD)
-      .setField(schemaD.findFieldByName("keyD"), "key")
-      .build()
-
-    val messageC = DynamicMessage
-      .newBuilder(schemaC)
-      .setField(schemaC.findFieldByName("keyC"), "key")
-      .setField(schemaC.findFieldByName("messageD"), messageDForC)
-      .build()
-
-    val messageD = DynamicMessage
-      .newBuilder(schemaD)
-      .setField(schemaD.findFieldByName("keyD"), "key")
-      .addRepeatedField(schemaD.findFieldByName("messageC"), messageC)
-      .build()
-
-    val df = Seq(messageD.toByteArray).toDF("messageD")
-
+  test("Recursive fields in Protobuf should result in an error, C->D->Array(C)") {
     checkWithFileAndClassName("recursiveD") {
       case (name, descFilePathOpt) =>
         val e = intercept[AnalysisException] {
-          df.select(
-            from_protobuf_wrapper($"messageD", name, descFilePathOpt).as("messageFromProto"))
+          emptyBinaryDF.select(
+            from_protobuf_wrapper($"binary", name, descFilePathOpt).as("messageFromProto"))
             .show()
         }
         assert(e.getMessage.contains(
-          "Found recursive reference in Protobuf schema, which can not be processed by Spark:"
+          "Found recursive reference in Protobuf schema, which can not be processed by Spark"
         ))
+    }
+  }
+
+  test("Setting depth to 0 or -1 should trigger error on recursive fields (B -> A -> B)") {
+    for (depth <- Seq("0", "-1")) {
+      val e = intercept[AnalysisException] {
+        emptyBinaryDF.select(
+          functions.from_protobuf(
+            $"binary", "recursiveB", testFileDesc,
+            Map("recursive.fields.max.depth" -> depth).asJava
+          ).as("messageFromProto")
+        ).show()
+      }
+      assert(e.getMessage.contains(
+        "Found recursive reference in Protobuf schema, which can not be processed by Spark"
+      ))
     }
   }
 
@@ -692,5 +668,452 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
       exception = e,
       errorClass = "CANNOT_CONSTRUCT_PROTOBUF_DESCRIPTOR",
       parameters = Map("descFilePath" -> testFileDescriptor))
+  }
+
+  test("Verify OneOf field between from_protobuf -> to_protobuf and struct -> from_protobuf") {
+    val descriptor = ProtobufUtils.buildDescriptor(testFileDesc, "OneOfEvent")
+    val oneOfEvent = OneOfEvent.newBuilder()
+      .setKey("key")
+      .setCol1(123)
+      .setCol3(109202L)
+      .setCol2("col2value")
+      .addCol4("col4value").build()
+
+    val df = Seq(oneOfEvent.toByteArray).toDF("value")
+
+    checkWithFileAndClassName("OneOfEvent") {
+      case (name, descFilePathOpt) =>
+        val fromProtoDf = df.select(
+          from_protobuf_wrapper($"value", name, descFilePathOpt) as 'sample)
+        val toDf = fromProtoDf.select(
+          to_protobuf_wrapper($"sample", name, descFilePathOpt) as 'toProto)
+        val toFromDf = toDf.select(
+          from_protobuf_wrapper($"toProto", name, descFilePathOpt) as 'fromToProto)
+        checkAnswer(fromProtoDf, toFromDf)
+        val actualFieldNames = fromProtoDf.select("sample.*").schema.fields.toSeq.map(f => f.name)
+        descriptor.getFields.asScala.map(f => {
+          assert(actualFieldNames.contains(f.getName))
+        })
+
+        val eventFromSpark = OneOfEvent.parseFrom(
+          toDf.select("toProto").take(1).toSeq(0).getAs[Array[Byte]](0))
+        // OneOf field: the last set value(by order) will overwrite all previous ones.
+        assert(eventFromSpark.getCol2.equals("col2value"))
+        assert(eventFromSpark.getCol3 == 0)
+        val expectedFields = descriptor.getFields.asScala.map(f => f.getName)
+        eventFromSpark.getDescriptorForType.getFields.asScala.map(f => {
+          assert(expectedFields.contains(f.getName))
+        })
+
+        val schema = DataType.fromJson(
+          """
+            | {
+            |   "type":"struct",
+            |   "fields":[
+            |     {"name":"sample","nullable":true,"type":{
+            |       "type":"struct",
+            |       "fields":[
+            |         {"name":"key","type":"string","nullable":true},
+            |         {"name":"col_1","type":"integer","nullable":true},
+            |         {"name":"col_2","type":"string","nullable":true},
+            |         {"name":"col_3","type":"long","nullable":true},
+            |         {"name":"col_4","nullable":true,"type":{
+            |           "type":"array","elementType":"string","containsNull":false}}
+            |       ]}
+            |     }
+            |   ]
+            | }
+            |""".stripMargin).asInstanceOf[StructType]
+        assert(fromProtoDf.schema == schema)
+
+        val data = Seq(
+          Row(Row("key", 123, "col2value", 109202L, Seq("col4value"))),
+          Row(Row("key2", null, null, null, null)) // Leave the rest null, including "col_4" array.
+        )
+        val dataDf = spark.createDataFrame(spark.sparkContext.parallelize(data), schema)
+        val dataDfToProto = dataDf.select(
+          to_protobuf_wrapper($"sample", name, descFilePathOpt) as 'toProto)
+
+        val toProtoResults = dataDfToProto.select("toProto").collect()
+        val eventFromSparkSchema = OneOfEvent.parseFrom(toProtoResults(0).getAs[Array[Byte]](0))
+        assert(eventFromSparkSchema.getCol2.isEmpty)
+        assert(eventFromSparkSchema.getCol3 == 109202L)
+        eventFromSparkSchema.getDescriptorForType.getFields.asScala.map(f => {
+          assert(expectedFields.contains(f.getName))
+        })
+        val secondEventFromSpark = OneOfEvent.parseFrom(toProtoResults(1).getAs[Array[Byte]](0))
+        assert(secondEventFromSpark.getKey == "key2")
+    }
+  }
+
+  test("Fail for recursion field with complex schema without recursive.fields.max.depth") {
+    checkWithFileAndClassName("EventWithRecursion") {
+      case (name, descFilePathOpt) =>
+        val e = intercept[AnalysisException] {
+          emptyBinaryDF.select(
+            from_protobuf_wrapper($"binary", name, descFilePathOpt).as("messageFromProto"))
+            .show()
+        }
+        assert(e.getMessage.contains(
+          "Found recursive reference in Protobuf schema, which can not be processed by Spark"
+        ))
+    }
+  }
+
+  test("Verify recursion field with complex schema with recursive.fields.max.depth") {
+    val descriptor = ProtobufUtils.buildDescriptor(testFileDesc, "Employee")
+
+    val manager = Employee.newBuilder().setFirstName("firstName").setLastName("lastName").build()
+    val em2 = EM2.newBuilder().setTeamsize(100).setEm2Manager(manager).build()
+    val em = EM.newBuilder().setTeamsize(100).setEmManager(manager).build()
+    val ic = IC.newBuilder().addSkills("java").setIcManager(manager).build()
+    val employee = Employee.newBuilder().setFirstName("firstName")
+      .setLastName("lastName").setEm2(em2).setEm(em).setIc(ic).build()
+
+    val df = Seq(employee.toByteArray).toDF("protoEvent")
+    val options = new java.util.HashMap[String, String]()
+    options.put("recursive.fields.max.depth", "2")
+
+    val fromProtoDf = df.select(
+      functions.from_protobuf($"protoEvent", "Employee", testFileDesc, options) as 'sample)
+
+    val toDf = fromProtoDf.select(
+      functions.to_protobuf($"sample", "Employee", testFileDesc) as 'toProto)
+    val toFromDf = toDf.select(
+      functions.from_protobuf($"toProto",
+        "Employee",
+        testFileDesc,
+        options) as 'fromToProto)
+
+    checkAnswer(fromProtoDf, toFromDf)
+
+    val actualFieldNames = fromProtoDf.select("sample.*").schema.fields.toSeq.map(f => f.name)
+    descriptor.getFields.asScala.map(f => {
+      assert(actualFieldNames.contains(f.getName))
+    })
+
+    val eventFromSpark = Employee.parseFrom(
+      toDf.select("toProto").take(1).toSeq(0).getAs[Array[Byte]](0))
+
+    assert(eventFromSpark.getIc.getIcManager.getFirstName.equals("firstName"))
+    assert(eventFromSpark.getIc.getIcManager.getLastName.equals("lastName"))
+    assert(eventFromSpark.getEm2.getEm2Manager.getFirstName.isEmpty)
+  }
+
+  test("Verify OneOf field with recursive fields between from_protobuf -> to_protobuf." +
+    "and struct -> from_protobuf") {
+    val descriptor = ProtobufUtils.buildDescriptor(testFileDesc, "OneOfEventWithRecursion")
+
+    val nestedTwo = OneOfEventWithRecursion.newBuilder()
+      .setKey("keyNested2").setValue("valueNested2").build()
+    val nestedOne = EventRecursiveA.newBuilder()
+      .setKey("keyNested1")
+      .setRecursiveOneOffInA(nestedTwo).build()
+    val oneOfRecursionEvent = OneOfEventWithRecursion.newBuilder()
+      .setKey("keyNested0")
+      .setValue("valueNested0")
+      .setRecursiveA(nestedOne).build()
+    val recursiveA = EventRecursiveA.newBuilder().setKey("recursiveAKey")
+      .setRecursiveOneOffInA(oneOfRecursionEvent).build()
+    val recursiveB = EventRecursiveB.newBuilder()
+      .setKey("recursiveBKey")
+      .setValue("recursiveBvalue").build()
+    val oneOfEventWithRecursion = OneOfEventWithRecursion.newBuilder()
+      .setKey("key")
+      .setValue("value")
+      .setRecursiveB(recursiveB)
+      .setRecursiveA(recursiveA).build()
+
+    val df = Seq(oneOfEventWithRecursion.toByteArray).toDF("value")
+
+    val options = new java.util.HashMap[String, String]()
+    options.put("recursive.fields.max.depth", "2") // Recursive fields appear twice.
+
+    val fromProtoDf = df.select(
+      functions.from_protobuf($"value",
+        "OneOfEventWithRecursion",
+        testFileDesc, options) as 'sample)
+    val toDf = fromProtoDf.select(
+      functions.to_protobuf($"sample", "OneOfEventWithRecursion", testFileDesc) as 'toProto)
+    val toFromDf = toDf.select(
+      functions.from_protobuf($"toProto",
+        "OneOfEventWithRecursion",
+        testFileDesc,
+        options) as 'fromToProto)
+
+    checkAnswer(fromProtoDf, toFromDf)
+
+    val actualFieldNames = fromProtoDf.select("sample.*").schema.fields.toSeq.map(f => f.name)
+    descriptor.getFields.asScala.map(f => {
+      assert(actualFieldNames.contains(f.getName))
+    })
+
+    val eventFromSpark = OneOfEventWithRecursion.parseFrom(
+      toDf.select("toProto").take(1).toSeq(0).getAs[Array[Byte]](0))
+
+    var recursiveField = eventFromSpark.getRecursiveA.getRecursiveOneOffInA
+    assert(recursiveField.getKey.equals("keyNested0"))
+    assert(recursiveField.getValue.equals("valueNested0"))
+    assert(recursiveField.getRecursiveA.getKey.equals("keyNested1"))
+    assert(recursiveField.getRecursiveA.getRecursiveOneOffInA.getKey.isEmpty())
+
+    val expectedFields = descriptor.getFields.asScala.map(f => f.getName)
+    eventFromSpark.getDescriptorForType.getFields.asScala.map(f => {
+      assert(expectedFields.contains(f.getName))
+    })
+
+    val schemaDDL =
+      """
+        | -- OneOfEvenWithRecursion with max depth 2.
+        | sample STRUCT< -- 1st level for OneOffWithRecursion
+        |     key string,
+        |     recursiveA STRUCT< -- 1st level for RecursiveA
+        |         recursiveOneOffInA STRUCT< -- 2st level for OneOffWithRecursion
+        |             key string,
+        |             recursiveA STRUCT< -- 2st level for RecursiveA
+        |                 key string
+        |                 -- Removed recursiveOneOffInA: 3rd level for OneOffWithRecursion
+        |             >,
+        |             recursiveB STRUCT<
+        |                 key string,
+        |                 value string
+        |                 -- Removed recursiveOneOffInB: 3rd level for OneOffWithRecursion
+        |             >,
+        |             value string
+        |         >,
+        |         key string
+        |     >,
+        |     recursiveB STRUCT< -- 1st level for RecursiveB
+        |         key string,
+        |         value string,
+        |         recursiveOneOffInB STRUCT< -- 2st level for OneOffWithRecursion
+        |             key string,
+        |             recursiveA STRUCT< -- 1st level for RecursiveA
+        |                 key string
+        |                 -- Removed recursiveOneOffInA: 3rd level for OneOffWithRecursion
+        |             >,
+        |             recursiveB STRUCT<
+        |                 key string,
+        |                 value string
+        |                 -- Removed recursiveOneOffInB: 3rd level for OneOffWithRecursion
+        |             >,
+        |             value string
+        |         >
+        |     >,
+        |     value string
+        | >
+        |""".stripMargin
+    val schema = structFromDDL(schemaDDL)
+    assert(fromProtoDf.schema == schema)
+    val data = Seq(
+      Row(
+        Row("key1",
+          Row(
+            Row("keyNested0", null, null, "valueNested0"),
+            "recursiveAKey"),
+          null,
+          "value1")
+      )
+    )
+    val dataDf = spark.createDataFrame(spark.sparkContext.parallelize(data), schema)
+    val dataDfToProto = dataDf.select(
+      functions.to_protobuf($"sample", "OneOfEventWithRecursion", testFileDesc) as 'toProto)
+
+    val eventFromSparkSchema = OneOfEventWithRecursion.parseFrom(
+      dataDfToProto.select("toProto").take(1).toSeq(0).getAs[Array[Byte]](0))
+    recursiveField = eventFromSparkSchema.getRecursiveA.getRecursiveOneOffInA
+    assert(recursiveField.getKey.equals("keyNested0"))
+    assert(recursiveField.getValue.equals("valueNested0"))
+    assert(recursiveField.getRecursiveA.getKey.isEmpty())
+    eventFromSparkSchema.getDescriptorForType.getFields.asScala.map(f => {
+      assert(expectedFields.contains(f.getName))
+    })
+  }
+
+  test("Verify recursive.fields.max.depth Levels 1,2, and 3 with Simple Schema") {
+    val eventPerson3 = EventPerson.newBuilder().setName("person3").build()
+    val eventPerson2 = EventPerson.newBuilder().setName("person2").setBff(eventPerson3).build()
+    val eventPerson1 = EventPerson.newBuilder().setName("person1").setBff(eventPerson2).build()
+    val eventPerson0 = EventPerson.newBuilder().setName("person0").setBff(eventPerson1).build()
+    val df = Seq(eventPerson0.toByteArray).toDF("value")
+
+    val optionsZero = new java.util.HashMap[String, String]()
+    optionsZero.put("recursive.fields.max.depth", "1")
+    val schemaOne = structFromDDL(
+      "sample STRUCT<name: STRING>" // 'bff' field is dropped to due to limit of 1.
+    )
+    val expectedDfOne = spark.createDataFrame(
+      spark.sparkContext.parallelize(Seq(Row(Row("person0", null)))), schemaOne)
+    testFromProtobufWithOptions(df, expectedDfOne, optionsZero, "EventPerson")
+
+    val optionsTwo = new java.util.HashMap[String, String]()
+    optionsTwo.put("recursive.fields.max.depth", "2")
+    val schemaTwo = structFromDDL(
+      """
+        | sample STRUCT<
+        |     name: STRING,
+        |     bff: STRUCT<name: STRING> -- Recursion is terminated here.
+        | >
+        |""".stripMargin)
+    val expectedDfTwo = spark.createDataFrame(
+      spark.sparkContext.parallelize(Seq(Row(Row("person0", Row("person1", null))))), schemaTwo)
+    testFromProtobufWithOptions(df, expectedDfTwo, optionsTwo, "EventPerson")
+
+    val optionsThree = new java.util.HashMap[String, String]()
+    optionsThree.put("recursive.fields.max.depth", "3")
+    val schemaThree = structFromDDL(
+      """
+        | sample STRUCT<
+        |     name: STRING,
+        |     bff: STRUCT<
+        |         name: STRING,
+        |         bff: STRUCT<name: STRING>
+        |     >
+        | >
+        |""".stripMargin)
+    val expectedDfThree = spark.createDataFrame(spark.sparkContext.parallelize(
+      Seq(Row(Row("person0", Row("person1", Row("person2", null)))))), schemaThree)
+    testFromProtobufWithOptions(df, expectedDfThree, optionsThree, "EventPerson")
+
+    // Test recursive level 1 with EventPersonWrapper. In this case the top level struct
+    // 'EventPersonWrapper' itself does not recurse unlike 'EventPerson'.
+    // "bff" appears twice: Once allowed recursion and second time as terminated "null" type.
+    val wrapperSchemaOne = structFromDDL(
+      """
+        | sample STRUCT<
+        |     person: STRUCT< -- 1st level
+        |         name: STRING,
+        |         bff: STRUCT<name: STRING> -- 2nd level. Inner 3rd level Person is dropped.
+        |     >
+        | >
+        |""".stripMargin).asInstanceOf[StructType]
+    val expectedWrapperDfTwo = spark.createDataFrame(
+      spark.sparkContext.parallelize(Seq(Row(Row(Row("person0", Row("person1", null)))))),
+      wrapperSchemaOne)
+    testFromProtobufWithOptions(
+      Seq(EventPersonWrapper.newBuilder().setPerson(eventPerson0).build().toByteArray).toDF(),
+      expectedWrapperDfTwo,
+      optionsTwo,
+      "EventPersonWrapper"
+    )
+  }
+
+  test("Verify exceptions are correctly propagated with errors") {
+    // This triggers an query compilation error and ensures that original exception is
+    // also included in in the exception.
+
+    val invalidDescPath = "/non/existent/path.desc"
+
+    val ex = intercept[AnalysisException] {
+      Seq(Array[Byte]())
+        .toDF()
+        .select(
+          functions.from_protobuf($"value", "SomeMessage", invalidDescPath)
+        ).collect()
+    }
+    checkError(
+      ex,
+      errorClass = "PROTOBUF_DESCRIPTOR_FILE_NOT_FOUND",
+      parameters = Map("filePath" -> "/non/existent/path.desc")
+    )
+    assert(ex.getCause != null)
+    assert(ex.getCause.getMessage.matches(".*No such file.*"), ex.getCause.getMessage())
+  }
+
+  test("Recursive fields in arrays and maps") {
+    // Verifies schema for recursive proto in an array field & map field.
+    val options = Map("recursive.fields.max.depth" -> "3")
+
+    checkWithFileAndClassName("PersonWithRecursiveArray") {
+      case (name, descFilePathOpt) =>
+        val expectedSchema = StructType(
+          // DDL: "proto STRUCT<name: string, friends: array<
+          //    struct<name: string, friends: array<struct<name: string>>>>>"
+          // Can not use DataType.fromDDL(), it does not support "containsNull: false" for arrays.
+          StructField("proto",
+            StructType( // 1st level
+              StructField("name", StringType) :: StructField("friends", // 2nd level
+                ArrayType(
+                  StructType(StructField("name", StringType) :: StructField("friends", // 3rd level
+                    ArrayType(
+                      StructType(StructField("name", StringType) :: Nil), // 4th, array dropped
+                      containsNull = false)
+                  ):: Nil),
+                  containsNull = false)
+              ) :: Nil
+            )
+          ) :: Nil
+        )
+
+        val df = emptyBinaryDF.select(
+          from_protobuf_wrapper($"binary", name, descFilePathOpt, options).as("proto")
+        )
+        assert(df.schema == expectedSchema)
+    }
+
+    checkWithFileAndClassName("PersonWithRecursiveMap") {
+      case (name, descFilePathOpt) =>
+        val expectedSchema = StructType(
+          // DDL: "proto STRUCT<name: string, groups: map<
+          //    struct<name: string, group: map<struct<name: string>>>>>"
+          StructField("proto",
+            StructType( // 1st level
+              StructField("name", StringType) :: StructField("groups", // 2nd level
+                MapType(
+                  StringType,
+                  StructType(StructField("name", StringType) :: StructField("groups", // 3rd level
+                    MapType(
+                      StringType,
+                      StructType(StructField("name", StringType) :: Nil), // 4th, array dropped
+                      valueContainsNull = false)
+                  ):: Nil),
+                  valueContainsNull = false)
+              ) :: Nil
+            )
+          ) :: Nil
+        )
+
+        val df = emptyBinaryDF.select(
+          from_protobuf_wrapper($"binary", name, descFilePathOpt, options).as("proto")
+        )
+        assert(df.schema == expectedSchema)
+    }
+  }
+
+  test("Corner case: empty recursive proto fields should be dropped") {
+    // This verifies that a empty proto like 'message A { A a = 1}' are completely dropped
+    // irrespective of max depth setting.
+
+    val options = Map("recursive.fields.max.depth" -> "4")
+
+    // EmptyRecursiveProto at the top level. It will be an empty struct.
+    checkWithFileAndClassName("EmptyRecursiveProto") {
+      case (name, descFilePathOpt) =>
+          val df = emptyBinaryDF.select(
+            from_protobuf_wrapper($"binary", name, descFilePathOpt, options).as("empty_proto")
+          )
+        assert(df.schema == structFromDDL("empty_proto struct<>"))
+    }
+
+    // EmptyRecursiveProto at inner level.
+    checkWithFileAndClassName("EmptyRecursiveProtoWrapper") {
+      case (name, descFilePathOpt) =>
+        val df = emptyBinaryDF.select(
+          from_protobuf_wrapper($"binary", name, descFilePathOpt, options).as("wrapper")
+        )
+        // 'empty_recursive' field is dropped from the schema. Only "name" is present.
+        assert(df.schema == structFromDDL("wrapper struct<name: string>"))
+    }
+  }
+
+  def testFromProtobufWithOptions(
+    df: DataFrame,
+    expectedDf: DataFrame,
+    options: java.util.HashMap[String, String],
+    messageName: String): Unit = {
+    val fromProtoDf = df.select(
+      functions.from_protobuf($"value", messageName, testFileDesc, options) as 'sample)
+    assert(expectedDf.schema === fromProtoDf.schema)
+    checkAnswer(fromProtoDf, expectedDf)
   }
 }

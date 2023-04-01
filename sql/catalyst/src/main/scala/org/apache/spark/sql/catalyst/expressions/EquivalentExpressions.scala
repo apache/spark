@@ -23,6 +23,7 @@ import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.expressions.objects.LambdaVariable
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.Utils
 
 /**
@@ -30,7 +31,9 @@ import org.apache.spark.util.Utils
  * to this class and they subsequently query for expression equality. Expression trees are
  * considered equal if for the same input(s), the same result is produced.
  */
-class EquivalentExpressions {
+class EquivalentExpressions(
+    skipForShortcutEnable: Boolean = SQLConf.get.subexpressionEliminationSkipForShotcutExpr) {
+
   // For each expression, the set of equivalent expressions.
   private val equivalenceMap = mutable.HashMap.empty[ExpressionEquals, ExpressionStats]
 
@@ -40,7 +43,11 @@ class EquivalentExpressions {
    * Returns true if there was already a matching expression.
    */
   def addExpr(expr: Expression): Boolean = {
-    updateExprInMap(expr, equivalenceMap)
+    if (supportedExpression(expr)) {
+      updateExprInMap(expr, equivalenceMap)
+    } else {
+      false
+    }
   }
 
   /**
@@ -125,13 +132,27 @@ class EquivalentExpressions {
     }
   }
 
+  private def skipForShortcut(expr: Expression): Expression = {
+    if (skipForShortcutEnable) {
+      // The subexpression may not need to eval even if it appears more than once.
+      // e.g., `if(or(a, and(b, b)))`, the expression `b` would be skipped if `a` is true.
+      expr match {
+        case and: And => and.left
+        case or: Or => or.left
+        case other => other
+      }
+    } else {
+      expr
+    }
+  }
+
   // There are some special expressions that we should not recurse into all of its children.
   //   1. CodegenFallback: it's children will not be used to generate code (call eval() instead)
   //   2. ConditionalExpression: use its children that will always be evaluated.
   private def childrenToRecurse(expr: Expression): Seq[Expression] = expr match {
     case _: CodegenFallback => Nil
-    case c: ConditionalExpression => c.alwaysEvaluatedInputs
-    case other => other.children
+    case c: ConditionalExpression => c.alwaysEvaluatedInputs.map(skipForShortcut)
+    case other => skipForShortcut(other).children
   }
 
   // For some special expressions we cannot just recurse into all of its children, but we can
@@ -144,10 +165,9 @@ class EquivalentExpressions {
 
   private def supportedExpression(e: Expression) = {
     !e.exists {
-      // `LambdaVariable` is usually used as a loop variable and `NamedLambdaVariable` is used in
-      // higher-order functions, which can't be evaluated ahead of the execution.
+      // `LambdaVariable` is usually used as a loop variable, which can't be evaluated ahead of the
+      // loop. So we can't evaluate sub-expressions containing `LambdaVariable` at the beginning.
       case _: LambdaVariable => true
-      case _: NamedLambdaVariable => true
 
       // `PlanExpression` wraps query plan. To compare query plans of `PlanExpression` on executor,
       // can cause error like NPE.

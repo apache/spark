@@ -2,121 +2,121 @@
 Char Varchar Write Side Perf w/o Tailing Spaces
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 1.8.0_322-b06 on Linux 5.13.0-1021-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 1.8.0_362-b09 on Linux 5.15.0-1031-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 Write with length 5:                      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-write string with length 5                        13881          14230         365          2.9         347.0       1.0X
-write char with length 5                          15409          15421          19          2.6         385.2       0.9X
-write varchar with length 5                       11938          11986          49          3.4         298.4       1.2X
+write string with length 5                        10692          10800         169          3.7         267.3       1.0X
+write char with length 5                          14821          14876          50          2.7         370.5       0.7X
+write varchar with length 5                       11343          11354          17          3.5         283.6       0.9X
 
-OpenJDK 64-Bit Server VM 1.8.0_322-b06 on Linux 5.13.0-1021-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 1.8.0_362-b09 on Linux 5.15.0-1031-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 Write with length 10:                     Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-write string with length 10                        5842           5857          15          3.4         292.1       1.0X
-write char with length 10                          9047           9059          15          2.2         452.3       0.6X
-write varchar with length 10                       5995           5998           2          3.3         299.7       1.0X
+write string with length 10                        5514           5525          11          3.6         275.7       1.0X
+write char with length 10                          8698           8705           9          2.3         434.9       0.6X
+write varchar with length 10                       5696           5732          49          3.5         284.8       1.0X
 
-OpenJDK 64-Bit Server VM 1.8.0_322-b06 on Linux 5.13.0-1021-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 1.8.0_362-b09 on Linux 5.15.0-1031-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 Write with length 20:                     Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-write string with length 20                        2985           2988           4          3.4         298.5       1.0X
-write char with length 20                          5939           5951          13          1.7         593.9       0.5X
-write varchar with length 20                       3086           3092           8          3.2         308.6       1.0X
+write string with length 20                        2777           2801          34          3.6         277.7       1.0X
+write char with length 20                          5584           5598          18          1.8         558.4       0.5X
+write varchar with length 20                       2875           2882           7          3.5         287.5       1.0X
 
-OpenJDK 64-Bit Server VM 1.8.0_322-b06 on Linux 5.13.0-1021-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 1.8.0_362-b09 on Linux 5.15.0-1031-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 Write with length 40:                     Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-write string with length 40                        1572           1586          13          3.2         314.3       1.0X
-write char with length 40                          4322           4327           4          1.2         864.4       0.4X
-write varchar with length 40                       1636           1654          27          3.1         327.3       1.0X
+write string with length 40                        1463           1467           4          3.4         292.6       1.0X
+write char with length 40                          4068           4069           2          1.2         813.5       0.4X
+write varchar with length 40                       1493           1495           3          3.3         298.5       1.0X
 
-OpenJDK 64-Bit Server VM 1.8.0_322-b06 on Linux 5.13.0-1021-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 1.8.0_362-b09 on Linux 5.15.0-1031-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 Write with length 60:                     Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-write string with length 60                        1076           1082           5          3.1         322.8       1.0X
-write char with length 60                          3783           3788           6          0.9        1134.8       0.3X
-write varchar with length 60                       1106           1125          21          3.0         331.8       1.0X
+write string with length 60                        1000           1008           7          3.3         300.1       1.0X
+write char with length 60                          3452           3457           6          1.0        1035.7       0.3X
+write varchar with length 60                       1030           1047          16          3.2         309.1       1.0X
 
-OpenJDK 64-Bit Server VM 1.8.0_322-b06 on Linux 5.13.0-1021-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 1.8.0_362-b09 on Linux 5.15.0-1031-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 Write with length 80:                     Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-write string with length 80                         848            859          12          2.9         339.1       1.0X
-write char with length 80                          3588           3604          18          0.7        1435.4       0.2X
-write varchar with length 80                        854            869          14          2.9         341.5       1.0X
+write string with length 80                         763            776          14          3.3         305.4       1.0X
+write char with length 80                          3164           3172           7          0.8        1265.5       0.2X
+write varchar with length 80                        793            810          17          3.2         317.4       1.0X
 
-OpenJDK 64-Bit Server VM 1.8.0_322-b06 on Linux 5.13.0-1021-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 1.8.0_362-b09 on Linux 5.15.0-1031-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 Write with length 100:                    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-write string with length 100                        671            694          20          3.0         335.6       1.0X
-write char with length 100                         3372           3381          16          0.6        1685.8       0.2X
-write varchar with length 100                       686            708          20          2.9         343.0       1.0X
+write string with length 100                        646            649           4          3.1         323.1       1.0X
+write char with length 100                         2996           3003          13          0.7        1497.8       0.2X
+write varchar with length 100                       653            657           4          3.1         326.6       1.0X
 
 
 ================================================================================================
 Char Varchar Write Side Perf w/ Tailing Spaces
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 1.8.0_322-b06 on Linux 5.13.0-1021-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 1.8.0_362-b09 on Linux 5.15.0-1031-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 Write with length 5:                      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-write string with length 5                        21167          21180          11          1.9         529.2       1.0X
-write char with length 5                          21417          21434          17          1.9         535.4       1.0X
-write varchar with length 5                       21487          21503          15          1.9         537.2       1.0X
+write string with length 5                        20462          20492          29          2.0         511.5       1.0X
+write char with length 5                          20501          20516          13          2.0         512.5       1.0X
+write varchar with length 5                       20491          20495           4          2.0         512.3       1.0X
 
-OpenJDK 64-Bit Server VM 1.8.0_322-b06 on Linux 5.13.0-1021-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 1.8.0_362-b09 on Linux 5.15.0-1031-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 Write with length 10:                     Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-write string with length 10                       11260          11271           9          1.8         563.0       1.0X
-write char with length 10                         12967          12984          16          1.5         648.4       0.9X
-write varchar with length 10                      12972          12976           5          1.5         648.6       0.9X
+write string with length 10                       10362          10373          11          1.9         518.1       1.0X
+write char with length 10                         12198          12204           5          1.6         609.9       0.8X
+write varchar with length 10                      12245          12249           5          1.6         612.2       0.8X
 
-OpenJDK 64-Bit Server VM 1.8.0_322-b06 on Linux 5.13.0-1021-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 1.8.0_362-b09 on Linux 5.15.0-1031-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 Write with length 20:                     Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-write string with length 20                        7592           7597           6          1.3         759.2       1.0X
-write char with length 20                          9354           9363          10          1.1         935.4       0.8X
-write varchar with length 20                       9310           9312           3          1.1         931.0       0.8X
+write string with length 20                        6992           7006          21          1.4         699.2       1.0X
+write char with length 20                          8727           8730           4          1.1         872.7       0.8X
+write varchar with length 20                       8837           8843           6          1.1         883.7       0.8X
 
-OpenJDK 64-Bit Server VM 1.8.0_322-b06 on Linux 5.13.0-1021-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 1.8.0_362-b09 on Linux 5.15.0-1031-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 Write with length 40:                     Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-write string with length 40                        5655           5657           1          0.9        1131.1       1.0X
-write char with length 40                          7374           7379           6          0.7        1474.9       0.8X
-write varchar with length 40                       7417           7421           4          0.7        1483.3       0.8X
+write string with length 40                        5053           5061           9          1.0        1010.7       1.0X
+write char with length 40                          6992           6997           4          0.7        1398.4       0.7X
+write varchar with length 40                       7034           7041           6          0.7        1406.9       0.7X
 
-OpenJDK 64-Bit Server VM 1.8.0_322-b06 on Linux 5.13.0-1021-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 1.8.0_362-b09 on Linux 5.15.0-1031-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 Write with length 60:                     Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-write string with length 60                        4892           4899           8          0.7        1467.6       1.0X
-write char with length 60                          6730           6741          10          0.5        2018.9       0.7X
-write varchar with length 60                       6735           6739           4          0.5        2020.6       0.7X
+write string with length 60                        4355           4362          10          0.8        1306.4       1.0X
+write char with length 60                          6367           6374           7          0.5        1910.2       0.7X
+write varchar with length 60                       6398           6402           3          0.5        1919.5       0.7X
 
-OpenJDK 64-Bit Server VM 1.8.0_322-b06 on Linux 5.13.0-1021-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 1.8.0_362-b09 on Linux 5.15.0-1031-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 Write with length 80:                     Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-write string with length 80                        4693           4694           2          0.5        1877.0       1.0X
-write char with length 80                          6508           6509           2          0.4        2603.1       0.7X
-write varchar with length 80                       6521           6523           2          0.4        2608.4       0.7X
+write string with length 80                        4032           4038           6          0.6        1612.6       1.0X
+write char with length 80                          6066           6072           6          0.4        2426.4       0.7X
+write varchar with length 80                       6082           6086           4          0.4        2433.0       0.7X
 
-OpenJDK 64-Bit Server VM 1.8.0_322-b06 on Linux 5.13.0-1021-azure
-Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+OpenJDK 64-Bit Server VM 1.8.0_362-b09 on Linux 5.15.0-1031-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 Write with length 100:                    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-write string with length 100                       4413           4422          13          0.5        2206.4       1.0X
-write char with length 100                         6283           6287           5          0.3        3141.6       0.7X
-write varchar with length 100                      6271           6274           4          0.3        3135.3       0.7X
+write string with length 100                       3845           3846           1          0.5        1922.6       1.0X
+write char with length 100                         5891           5897           6          0.3        2945.6       0.7X
+write varchar with length 100                      5979           5988           8          0.3        2989.3       0.6X
 
 

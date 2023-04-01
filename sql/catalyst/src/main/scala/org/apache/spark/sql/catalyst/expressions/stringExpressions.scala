@@ -82,13 +82,8 @@ case class ConcatWs(children: Seq[Expression])
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (children.isEmpty) {
-      DataTypeMismatch(
-        errorSubClass = "WRONG_NUM_ARGS",
-        messageParameters = Map(
-          "functionName" -> toSQLId(prettyName),
-          "expectedNum" -> "> 0",
-          "actualNum" -> children.length.toString
-        )
+      throw QueryCompilationErrors.wrongNumArgsError(
+        toSQLId(prettyName), Seq("> 0"), children.length
       )
     } else {
       super.checkInputDataTypes()
@@ -288,13 +283,8 @@ case class Elt(
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (children.size < 2) {
-      DataTypeMismatch(
-        errorSubClass = "WRONG_NUM_ARGS",
-        messageParameters = Map(
-          "functionName" -> toSQLId(prettyName),
-          "expectedNum" -> "> 1",
-          "actualNum" -> children.length.toString
-        )
+      throw QueryCompilationErrors.wrongNumArgsError(
+        toSQLId(prettyName), Seq("> 1"), children.length
       )
     } else {
       val (indexType, inputTypes) = (indexExpr.dataType, inputExprs.map(_.dataType))
@@ -520,7 +510,7 @@ trait StringBinaryPredicateExpressionBuilderBase extends ExpressionBuilder {
         createStringPredicate(expressions(0), expressions(1))
       }
     } else {
-      throw QueryCompilationErrors.invalidFunctionArgumentNumberError(Seq(2), funcName, numArgs)
+      throw QueryCompilationErrors.wrongNumArgsError(funcName, Seq(2), numArgs)
     }
   }
 
@@ -1518,7 +1508,7 @@ trait PadExpressionBuilderBase extends ExpressionBuilder {
         createStringPad(expressions(0), expressions(1), expressions(2))
       }
     } else {
-      throw QueryCompilationErrors.invalidFunctionArgumentNumberError(Seq(2, 3), funcName, numArgs)
+      throw QueryCompilationErrors.wrongNumArgsError(funcName, Seq(2, 3), numArgs)
     }
   }
 
@@ -1689,13 +1679,8 @@ case class FormatString(children: Expression*) extends Expression with ImplicitC
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (children.isEmpty) {
-      DataTypeMismatch(
-        errorSubClass = "WRONG_NUM_ARGS",
-        messageParameters = Map(
-          "functionName" -> toSQLId(prettyName),
-          "expectedNum" -> "> 0",
-          "actualNum" -> children.length.toString
-        )
+      throw QueryCompilationErrors.wrongNumArgsError(
+          toSQLId(prettyName), Seq("> 0"), children.length
       )
     } else {
       super.checkInputDataTypes()
@@ -2451,7 +2436,7 @@ object Decode {
   def createExpr(params: Seq[Expression]): Expression = {
     params.length match {
       case 0 | 1 =>
-        throw QueryCompilationErrors.invalidFunctionArgumentsError("decode", "2", params.length)
+        throw QueryCompilationErrors.wrongNumArgsError("decode", "2", params.length)
       case 2 => StringDecode(params.head, params.last)
       case _ =>
         val input = params.head
@@ -2462,7 +2447,7 @@ object Decode {
         while (itr.hasNext) {
           val search = itr.next
           if (itr.hasNext) {
-            val condition = EqualTo(input, search)
+            val condition = EqualNullSafe(input, search)
             branches += ((condition, itr.next))
           } else {
             default = search
@@ -2493,6 +2478,8 @@ object Decode {
        Non domestic
       > SELECT _FUNC_(6, 1, 'Southlake', 2, 'San Francisco', 3, 'New Jersey', 4, 'Seattle');
        NULL
+      > SELECT _FUNC_(null, 6, 'Spark', NULL, 'SQL', 4, 'rocks');
+       SQL
   """,
   since = "3.2.0",
   group = "string_funcs")
@@ -3036,4 +3023,68 @@ case class SplitPart (
     copy(str = newChildren.apply(0), delimiter = newChildren.apply(1),
       partNum = newChildren.apply(2))
   }
+}
+
+/**
+ * A internal function that converts the empty string to null for partition values.
+ * This function should be only used in V1Writes.
+ */
+case class Empty2Null(child: Expression) extends UnaryExpression with String2StringExpression {
+  override def convert(v: UTF8String): UTF8String = if (v.numBytes() == 0) null else v
+
+  override def nullable: Boolean = true
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    nullSafeCodeGen(ctx, ev, c => {
+      s"""if ($c.numBytes() == 0) {
+         |  ${ev.isNull} = true;
+         |  ${ev.value} = null;
+         |} else {
+         |  ${ev.value} = $c;
+         |}""".stripMargin
+    })
+  }
+
+  override protected def withNewChildInternal(newChild: Expression): Empty2Null =
+    copy(child = newChild)
+}
+
+/**
+ * Function to check if a given number string is a valid Luhn number. Returns true, if the number
+ * string is a valid Luhn number, false otherwise.
+ */
+@ExpressionDescription(
+  usage = """
+    _FUNC_(str ) - Checks that a string of digits is valid according to the Luhn algorithm.
+    This checksum function is widely applied on credit card numbers and government identification
+    numbers to distinguish valid numbers from mistyped, incorrect numbers.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_('8112189876');
+       true
+      > SELECT _FUNC_('79927398713');
+       true
+      > SELECT _FUNC_('79927398714');
+       false
+  """,
+  since = "3.5.0",
+  group = "string_funcs")
+case class Luhncheck(input: Expression) extends RuntimeReplaceable with ImplicitCastInputTypes {
+
+  override lazy val replacement: Expression = StaticInvoke(
+    classOf[ExpressionImplUtils],
+    BooleanType,
+    "isLuhnNumber",
+    Seq(input),
+    inputTypes)
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(StringType)
+
+  override def prettyName: String = "luhn_check"
+
+  override def children: Seq[Expression] = Seq(input)
+
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[Expression]): Expression = copy(newChildren(0))
 }

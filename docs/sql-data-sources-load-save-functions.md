@@ -9,9 +9,9 @@ license: |
   The ASF licenses this file to You under the Apache License, Version 2.0
   (the "License"); you may not use this file except in compliance with
   the License.  You may obtain a copy of the License at
- 
+
      http://www.apache.org/licenses/LICENSE-2.0
- 
+
   Unless required by applicable law or agreed to in writing, software
   distributed under the License is distributed on an "AS IS" BASIS,
   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -28,6 +28,11 @@ In the simplest form, the default data source (`parquet` unless otherwise config
 
 
 <div class="codetabs">
+
+<div data-lang="python"  markdown="1">
+{% include_example generic_load_save_functions python/sql/datasource.py %}
+</div>
+
 <div data-lang="scala"  markdown="1">
 {% include_example generic_load_save_functions scala/org/apache/spark/examples/sql/SQLDataSourceExample.scala %}
 </div>
@@ -36,16 +41,10 @@ In the simplest form, the default data source (`parquet` unless otherwise config
 {% include_example generic_load_save_functions java/org/apache/spark/examples/sql/JavaSQLDataSourceExample.java %}
 </div>
 
-<div data-lang="python"  markdown="1">
-
-{% include_example generic_load_save_functions python/sql/datasource.py %}
-</div>
-
 <div data-lang="r"  markdown="1">
-
 {% include_example generic_load_save_functions r/RSparkSQLExample.R %}
-
 </div>
+
 </div>
 
 ### Manually Specifying Options
@@ -64,6 +63,11 @@ as well. For other formats, refer to the API documentation of the particular for
 To load a JSON file you can use:
 
 <div class="codetabs">
+
+<div data-lang="python"  markdown="1">
+{% include_example manual_load_options python/sql/datasource.py %}
+</div>
+
 <div data-lang="scala"  markdown="1">
 {% include_example manual_load_options scala/org/apache/spark/examples/sql/SQLDataSourceExample.scala %}
 </div>
@@ -72,18 +76,20 @@ To load a JSON file you can use:
 {% include_example manual_load_options java/org/apache/spark/examples/sql/JavaSQLDataSourceExample.java %}
 </div>
 
-<div data-lang="python"  markdown="1">
-{% include_example manual_load_options python/sql/datasource.py %}
-</div>
-
 <div data-lang="r"  markdown="1">
 {% include_example manual_load_options r/RSparkSQLExample.R %}
 </div>
+
 </div>
 
 To load a CSV file you can use:
 
 <div class="codetabs">
+
+<div data-lang="python"  markdown="1">
+{% include_example manual_load_options_csv python/sql/datasource.py %}
+</div>
+
 <div data-lang="scala"  markdown="1">
 {% include_example manual_load_options_csv scala/org/apache/spark/examples/sql/SQLDataSourceExample.scala %}
 </div>
@@ -92,14 +98,10 @@ To load a CSV file you can use:
 {% include_example manual_load_options_csv java/org/apache/spark/examples/sql/JavaSQLDataSourceExample.java %}
 </div>
 
-<div data-lang="python"  markdown="1">
-{% include_example manual_load_options_csv python/sql/datasource.py %}
-</div>
-
 <div data-lang="r"  markdown="1">
 {% include_example manual_load_options_csv r/RSparkSQLExample.R %}
-
 </div>
+
 </div>
 
 The extra options are also used during write operation.
@@ -113,6 +115,10 @@ ORC data source:
 
 <div class="codetabs">
 
+<div data-lang="python"  markdown="1">
+{% include_example manual_save_options_orc python/sql/datasource.py %}
+</div>
+
 <div data-lang="scala"  markdown="1">
 {% include_example manual_save_options_orc scala/org/apache/spark/examples/sql/SQLDataSourceExample.scala %}
 </div>
@@ -121,16 +127,11 @@ ORC data source:
 {% include_example manual_save_options_orc java/org/apache/spark/examples/sql/JavaSQLDataSourceExample.java %}
 </div>
 
-<div data-lang="python"  markdown="1">
-{% include_example manual_save_options_orc python/sql/datasource.py %}
-</div>
-
 <div data-lang="r"  markdown="1">
 {% include_example manual_save_options_orc r/RSparkSQLExample.R %}
 </div>
 
 <div data-lang="SQL"  markdown="1">
-
 {% highlight sql %}
 CREATE TABLE users_with_options (
   name STRING,
@@ -143,7 +144,6 @@ OPTIONS (
   orc.column.encoding.direct 'name'
 )
 {% endhighlight %}
-
 </div>
 
 </div>
@@ -151,6 +151,10 @@ OPTIONS (
 Parquet data source:
 
 <div class="codetabs">
+
+<div data-lang="python"  markdown="1">
+{% include_example manual_save_options_parquet python/sql/datasource.py %}
+</div>
 
 <div data-lang="scala"  markdown="1">
 {% include_example manual_save_options_parquet scala/org/apache/spark/examples/sql/SQLDataSourceExample.scala %}
@@ -160,16 +164,11 @@ Parquet data source:
 {% include_example manual_save_options_parquet java/org/apache/spark/examples/sql/JavaSQLDataSourceExample.java %}
 </div>
 
-<div data-lang="python"  markdown="1">
-{% include_example manual_save_options_parquet python/sql/datasource.py %}
-</div>
-
 <div data-lang="r"  markdown="1">
 {% include_example manual_save_options_parquet r/RSparkSQLExample.R %}
 </div>
 
 <div data-lang="SQL"  markdown="1">
-
 {% highlight sql %}
 CREATE TABLE users_with_options (
   name STRING,
@@ -183,7 +182,6 @@ OPTIONS (
   parquet.page.write-checksum.enabled true
 )
 {% endhighlight %}
-
 </div>
 
 </div>
@@ -194,6 +192,11 @@ Instead of using read API to load a file into DataFrame and query it, you can al
 file directly with SQL.
 
 <div class="codetabs">
+
+<div data-lang="python"  markdown="1">
+{% include_example direct_sql python/sql/datasource.py %}
+</div>
+
 <div data-lang="scala"  markdown="1">
 {% include_example direct_sql scala/org/apache/spark/examples/sql/SQLDataSourceExample.scala %}
 </div>
@@ -202,14 +205,10 @@ file directly with SQL.
 {% include_example direct_sql java/org/apache/spark/examples/sql/JavaSQLDataSourceExample.java %}
 </div>
 
-<div data-lang="python"  markdown="1">
-{% include_example direct_sql python/sql/datasource.py %}
-</div>
-
 <div data-lang="r"  markdown="1">
 {% include_example direct_sql r/RSparkSQLExample.R %}
-
 </div>
+
 </div>
 
 ### Save Modes
@@ -219,8 +218,8 @@ present. It is important to realize that these save modes do not utilize any loc
 atomic. Additionally, when performing an `Overwrite`, the data will be deleted before writing out the
 new data.
 
-<table class="table">
-<tr><th>Scala/Java</th><th>Any Language</th><th>Meaning</th></tr>
+<table class="table table-striped">
+<thead><tr><th>Scala/Java</th><th>Any Language</th><th>Meaning</th></tr></thead>
 <tr>
   <td><code>SaveMode.ErrorIfExists</code> (default)</td>
   <td><code>"error" or "errorifexists"</code> (default)</td>
@@ -287,6 +286,10 @@ Bucketing and sorting are applicable only to persistent tables:
 
 <div class="codetabs">
 
+<div data-lang="python"  markdown="1">
+{% include_example write_sorting_and_bucketing python/sql/datasource.py %}
+</div>
+
 <div data-lang="scala"  markdown="1">
 {% include_example write_sorting_and_bucketing scala/org/apache/spark/examples/sql/SQLDataSourceExample.scala %}
 </div>
@@ -295,12 +298,7 @@ Bucketing and sorting are applicable only to persistent tables:
 {% include_example write_sorting_and_bucketing java/org/apache/spark/examples/sql/JavaSQLDataSourceExample.java %}
 </div>
 
-<div data-lang="python"  markdown="1">
-{% include_example write_sorting_and_bucketing python/sql/datasource.py %}
-</div>
-
 <div data-lang="SQL"  markdown="1">
-
 {% highlight sql %}
 
 CREATE TABLE users_bucketed_by_name(
@@ -311,8 +309,8 @@ CREATE TABLE users_bucketed_by_name(
 CLUSTERED BY(name) INTO 42 BUCKETS;
 
 {% endhighlight %}
-
 </div>
+
 
 </div>
 
@@ -320,6 +318,10 @@ while partitioning can be used with both `save` and `saveAsTable` when using the
 
 
 <div class="codetabs">
+
+<div data-lang="python"  markdown="1">
+{% include_example write_partitioning python/sql/datasource.py %}
+</div>
 
 <div data-lang="scala"  markdown="1">
 {% include_example write_partitioning scala/org/apache/spark/examples/sql/SQLDataSourceExample.scala %}
@@ -329,12 +331,7 @@ while partitioning can be used with both `save` and `saveAsTable` when using the
 {% include_example write_partitioning java/org/apache/spark/examples/sql/JavaSQLDataSourceExample.java %}
 </div>
 
-<div data-lang="python"  markdown="1">
-{% include_example write_partitioning python/sql/datasource.py %}
-</div>
-
 <div data-lang="SQL"  markdown="1">
-
 {% highlight sql %}
 
 CREATE TABLE users_by_favorite_color(
@@ -344,7 +341,6 @@ CREATE TABLE users_by_favorite_color(
 ) USING csv PARTITIONED BY(favorite_color);
 
 {% endhighlight %}
-
 </div>
 
 </div>
@@ -352,6 +348,10 @@ CREATE TABLE users_by_favorite_color(
 It is possible to use both partitioning and bucketing for a single table:
 
 <div class="codetabs">
+
+<div data-lang="python"  markdown="1">
+{% include_example write_partition_and_bucket python/sql/datasource.py %}
+</div>
 
 <div data-lang="scala"  markdown="1">
 {% include_example write_partition_and_bucket scala/org/apache/spark/examples/sql/SQLDataSourceExample.scala %}
@@ -361,12 +361,7 @@ It is possible to use both partitioning and bucketing for a single table:
 {% include_example write_partition_and_bucket java/org/apache/spark/examples/sql/JavaSQLDataSourceExample.java %}
 </div>
 
-<div data-lang="python"  markdown="1">
-{% include_example write_partition_and_bucket python/sql/datasource.py %}
-</div>
-
 <div data-lang="SQL"  markdown="1">
-
 {% highlight sql %}
 
 CREATE TABLE users_bucketed_and_partitioned(
@@ -378,7 +373,6 @@ PARTITIONED BY (favorite_color)
 CLUSTERED BY(name) SORTED BY (favorite_numbers) INTO 42 BUCKETS;
 
 {% endhighlight %}
-
 </div>
 
 </div>

@@ -665,4 +665,22 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
       assert(toYearMonthIntervalString(months, ANSI_STYLE, MONTH, MONTH) === month)
     }
   }
+
+  test("SPARK-38324: The second range is not [0, 59] in the day time ANSI interval") {
+    import org.apache.spark.sql.types.DayTimeIntervalType._
+    Seq(
+      ("10 12:40:60", 60, DAY, SECOND),
+      ("10 12:40:60.999999999", 60, DAY, SECOND),
+      ("10 12:40:99.999999999", 99, DAY, SECOND),
+      ("12:40:60", 60, HOUR, SECOND),
+      ("12:40:60.999999999", 60, HOUR, SECOND),
+      ("12:40:99.999999999", 99, HOUR, SECOND),
+      ("40:60", 60, MINUTE, SECOND),
+      ("40:60.999999999", 60, MINUTE, SECOND),
+      ("40:99.999999999", 99, MINUTE, SECOND)
+    ).foreach { case(input, second, from, to) =>
+      failFuncWithInvalidInput(
+        input, s"second $second outside range [0, 59]", s => fromDayTimeString(s, from, to))
+    }
+  }
 }

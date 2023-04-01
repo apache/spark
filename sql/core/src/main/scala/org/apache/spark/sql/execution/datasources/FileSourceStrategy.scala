@@ -19,6 +19,8 @@ package org.apache.spark.sql.execution.datasources
 
 import java.util.Locale
 
+import scala.collection.mutable
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
@@ -27,8 +29,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.ScanOperation
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.{FileSourceScanExec, SparkPlan}
-import org.apache.spark.sql.execution.datasources.FileFormat.METADATA_NAME
-import org.apache.spark.sql.types.{DoubleType, FloatType, LongType, StructType}
+import org.apache.spark.sql.types.{DoubleType, FloatType, StructType}
 import org.apache.spark.util.collection.BitSet
 
 /**
@@ -208,38 +209,82 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
       val requiredExpressions: Seq[NamedExpression] = filterAttributes.toSeq ++ projects
       val requiredAttributes = AttributeSet(requiredExpressions)
 
-      val metadataStructOpt = l.output.collectFirst {
-        case FileSourceMetadataAttribute(attr) => attr
-      }
-
-      val metadataColumns = metadataStructOpt.map { metadataStruct =>
-        metadataStruct.dataType.asInstanceOf[StructType].fields.map { field =>
-          FileSourceMetadataAttribute(field.name, field.dataType)
-        }.toSeq
-      }.getOrElse(Seq.empty)
-
-      val fileConstantMetadataColumns: Seq[Attribute] =
-        metadataColumns.filter(_.name != FileFormat.ROW_INDEX)
-
       val readDataColumns = dataColumns
         .filter(requiredAttributes.contains)
         .filterNot(partitionColumns.contains)
 
-      val fileFormatReaderGeneratedMetadataColumns: Seq[Attribute] =
-        metadataColumns.map(_.name).flatMap {
-          case FileFormat.ROW_INDEX =>
-            if ((readDataColumns ++ partitionColumns).map(_.name.toLowerCase(Locale.ROOT))
-                .contains(FileFormat.ROW_INDEX_TEMPORARY_COLUMN_NAME)) {
-              throw new AnalysisException(FileFormat.ROW_INDEX_TEMPORARY_COLUMN_NAME +
-                " is a reserved column name that cannot be read in combination with " +
-                s"${FileFormat.METADATA_NAME}.${FileFormat.ROW_INDEX} column.")
-            }
-            Some(AttributeReference(FileFormat.ROW_INDEX_TEMPORARY_COLUMN_NAME, LongType)())
-          case _ => None
-        }
+      // Metadata attributes are part of a column of type struct up to this point. Here we extract
+      // this column from the schema and specify a matcher for that.
+      object MetadataStructColumn {
+        def unapply(attributeReference: AttributeReference): Option[AttributeReference] = {
+          attributeReference match {
+            case attr @ FileSourceMetadataAttribute(
+                MetadataAttributeWithLogicalName(
+                  AttributeReference(_, schema: StructType, _, _),
+                  FileFormat.METADATA_NAME)) =>
+              // The column returned by [[FileFormat.createFileMetadataCol]] is sanitized and lacks
+              // the internal metadata we rely on here. Map back to the real fields by field name,
+              // and restore their missing metadata.
+              val availableMetadataFields = FileFormat.metadataSchemaFields(fsRelation.fileFormat)
+                .map(field => field.name.toLowerCase(Locale.ROOT) -> field)
+                .toMap
 
-      val outputDataSchema = (readDataColumns ++ fileFormatReaderGeneratedMetadataColumns)
-        .toStructType
+              val adjustedFields = schema.fields.map { field =>
+                val metadata = availableMetadataFields(field.name.toLowerCase(Locale.ROOT)).metadata
+                field.copy(metadata = metadata)
+              }
+              Some(attr.withDataType(StructType(adjustedFields)))
+            case _ => None
+          }
+        }
+      }
+
+      val metadataStructOpt = l.output.collectFirst {
+        case MetadataStructColumn(attr) => attr
+      }
+
+      // We divide metadata columns into two categories: constant and generated.
+      // For constant metadata columns, we create these attributes as non-nullable
+      //  when passing to readers, since the values are always available.
+      // For generated metadata columns, they are set as nullable when passed to readers,
+      //  as the values will be null when trying to read the missing column from the file.
+      //  They are then replaced by the actual values later in the process.
+      // We then restore the specified nullability in the metadata projection node below.
+      // Also remember the attribute for each column name, so we can easily map back to it.
+      val constantMetadataColumns = mutable.Buffer.empty[Attribute]
+      val generatedMetadataColumns = mutable.Buffer.empty[Attribute]
+      val metadataColumnsByName = mutable.Map.empty[String, Attribute]
+
+      metadataStructOpt.foreach { metadataStruct =>
+        val schemaColumns = (readDataColumns ++ partitionColumns)
+          .map(_.name.toLowerCase(Locale.ROOT))
+          .toSet
+
+        metadataStruct.dataType.asInstanceOf[StructType].fields.foreach {
+          case FileSourceGeneratedMetadataStructField(field, internalName) =>
+            if (schemaColumns.contains(internalName)) {
+              throw new AnalysisException(internalName +
+                s"${internalName} is a reserved column name that cannot be read in combination " +
+                s"with ${FileFormat.METADATA_NAME}.${field.name} column.")
+            }
+
+            // NOTE: Readers require the internal column to be nullable because it's not part of the
+            // file's public schema. The projection below will restore the correct nullability for
+            // the column while constructing the final metadata struct.
+            val attr = field.copy(internalName, nullable = true).toAttribute
+            metadataColumnsByName.put(field.name, attr)
+            generatedMetadataColumns += attr
+
+          case FileSourceConstantMetadataStructField(field) =>
+            val attr = field.toAttribute
+            metadataColumnsByName.put(field.name, attr)
+            constantMetadataColumns += attr
+
+          case field => throw new AnalysisException(s"Unrecognized file metadata field: $field")
+        }
+      }
+
+      val outputDataSchema = (readDataColumns ++ generatedMetadataColumns).toStructType
 
       // The output rows will be produced during file scan operation in three steps:
       //  (1) File format reader populates a `Row` with `readDataColumns` and
@@ -249,8 +294,29 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
       // By placing `fileFormatReaderGeneratedMetadataColumns` before `partitionColumns` and
       // `fileConstantMetadataColumns` in the `outputAttributes` we make these row operations
       // simpler and more efficient.
-      val outputAttributes = readDataColumns ++ fileFormatReaderGeneratedMetadataColumns ++
-        partitionColumns ++ fileConstantMetadataColumns
+      val outputAttributes = readDataColumns ++ generatedMetadataColumns ++
+        partitionColumns ++ constantMetadataColumns
+
+      // Rebind metadata attribute references in filters after the metadata attribute struct has
+      // been flattened. Only data filters can contain metadata references. After the rebinding
+      // all references will be bound to output attributes which are either
+      // [[FileSourceConstantMetadataAttribute]] or [[FileSourceGeneratedMetadataAttribute]] after
+      // the flattening from the metadata struct.
+      def rebindFileSourceMetadataAttributesInFilters(filters: Seq[Expression]): Seq[Expression] =
+        filters.map { filter =>
+          filter.transform {
+            // Replace references to the _metadata column. This will affect references to the column
+            // itself but also where fields from the metadata struct are used.
+            case MetadataStructColumn(AttributeReference(_, fields: StructType, _, _)) =>
+              val reboundFields = fields.map(field => metadataColumnsByName(field.name))
+              CreateStruct(reboundFields)
+          }.transform {
+            // Replace references to struct fields with the field values. This is to avoid creating
+            // temporaries to improve performance.
+            case GetStructField(createNamedStruct: CreateNamedStruct, ordinal, _) =>
+              createNamedStruct.valExprs(ordinal)
+          }
+        }
 
       val scan =
         FileSourceScanExec(
@@ -260,30 +326,22 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
           partitionKeyFilters.toSeq,
           bucketSet,
           None,
-          dataFilters,
+          rebindFileSourceMetadataAttributesInFilters(dataFilters),
           table.map(_.identifier))
 
       // extra Project node: wrap flat metadata columns to a metadata struct
       val withMetadataProjections = metadataStructOpt.map { metadataStruct =>
-        val structColumns = metadataColumns.map { col => col.name match {
-            case FileFormat.FILE_PATH | FileFormat.FILE_NAME | FileFormat.FILE_SIZE |
-                 FileFormat.FILE_MODIFICATION_TIME =>
-              col
-            case FileFormat.ROW_INDEX =>
-              fileFormatReaderGeneratedMetadataColumns
-                .find(_.name == FileFormat.ROW_INDEX_TEMPORARY_COLUMN_NAME)
-                // Change the `_tmp_metadata_row_index` to `row_index`,
-                // and also change the nullability to not nullable,
-                // which is consistent with the nullability of `row_index` field
-                .get.withName(FileFormat.ROW_INDEX).withNullability(false)
-          }
+        val structColumns = metadataStruct.dataType.asInstanceOf[StructType].fields.map { field =>
+          // Construct the metadata struct the query expects to see, using the columns we previously
+          // created. Be sure to restore the proper name and nullability for each metadata field.
+          metadataColumnsByName(field.name).withName(field.name).withNullability(field.nullable)
         }
         // SPARK-41151: metadata column is not nullable for file sources.
         // Here, we *explicitly* enforce the not null to `CreateStruct(structColumns)`
         // to avoid any risk of inconsistent schema nullability
         val metadataAlias =
           Alias(KnownNotNull(CreateStruct(structColumns)),
-            METADATA_NAME)(exprId = metadataStruct.exprId)
+            FileFormat.METADATA_NAME)(exprId = metadataStruct.exprId)
         execution.ProjectExec(
           readDataColumns ++ partitionColumns :+ metadataAlias, scan)
       }.getOrElse(scan)

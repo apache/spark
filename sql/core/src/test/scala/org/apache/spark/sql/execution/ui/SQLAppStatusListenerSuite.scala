@@ -56,12 +56,12 @@ import org.apache.spark.sql.internal.StaticSQLConf.UI_RETAINED_EXECUTIONS
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
-import org.apache.spark.status.ElementTrackingStore
-import org.apache.spark.util.{AccumulatorMetadata, JsonProtocol, LongAccumulator, SerializableConfiguration}
+import org.apache.spark.status.{AppStatusStore, ElementTrackingStore}
+import org.apache.spark.util.{AccumulatorMetadata, JsonProtocol, LongAccumulator, SerializableConfiguration, Utils}
 import org.apache.spark.util.kvstore.InMemoryStore
 
 
-class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
+abstract class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
   with BeforeAndAfter {
 
   import testImplicits._
@@ -70,7 +70,7 @@ class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
     super.sparkConf.set(LIVE_ENTITY_UPDATE_PERIOD, 0L).set(ASYNC_TRACKING_ENABLED, false)
   }
 
-  private var kvstore: ElementTrackingStore = _
+  protected var kvstore: ElementTrackingStore = _
 
   after {
     if (kvstore != null) {
@@ -155,12 +155,7 @@ class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
     assert(actualFailed.sorted === failed)
   }
 
-  private def createStatusStore(): SQLAppStatusStore = {
-    val conf = sparkContext.conf
-    kvstore = new ElementTrackingStore(new InMemoryStore, conf)
-    val listener = new SQLAppStatusListener(conf, kvstore, live = true)
-    new SQLAppStatusStore(kvstore, Some(listener))
-  }
+  protected def createStatusStore(): SQLAppStatusStore
 
   test("basic") {
     def checkAnswer(actual: Map[Long, String], expected: Map[Long, Long]): Unit = {
@@ -196,6 +191,7 @@ class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
 
     listener.onOtherEvent(SparkListenerSQLExecutionStart(
       executionId,
+      Some(executionId),
       "test",
       "test",
       df.queryExecution.toString,
@@ -348,7 +344,7 @@ class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
       val listener = new SparkListener {
         override def onOtherEvent(event: SparkListenerEvent): Unit = {
           event match {
-            case SparkListenerSQLExecutionStart(_, _, _, planDescription, _, _, _) =>
+            case SparkListenerSQLExecutionStart(_, _, _, _, planDescription, _, _, _) =>
               assert(expected.forall(planDescription.contains))
               checkDone = true
             case _ => // ignore other events
@@ -386,6 +382,7 @@ class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
     val df = createTestDataFrame
     listener.onOtherEvent(SparkListenerSQLExecutionStart(
       executionId,
+      Some(executionId),
       "test",
       "test",
       df.queryExecution.toString,
@@ -416,6 +413,7 @@ class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
     val df = createTestDataFrame
     listener.onOtherEvent(SparkListenerSQLExecutionStart(
       executionId,
+      Some(executionId),
       "test",
       "test",
       df.queryExecution.toString,
@@ -457,6 +455,7 @@ class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
     val df = createTestDataFrame
     listener.onOtherEvent(SparkListenerSQLExecutionStart(
       executionId,
+      Some(executionId),
       "test",
       "test",
       df.queryExecution.toString,
@@ -487,6 +486,7 @@ class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
     val df = createTestDataFrame
     listener.onOtherEvent(SparkListenerSQLExecutionStart(
       executionId,
+      Some(executionId),
       "test",
       "test",
       df.queryExecution.toString,
@@ -518,6 +518,7 @@ class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
     val df = createTestDataFrame
     listener.onOtherEvent(SparkListenerSQLExecutionStart(
       executionId,
+      Some(executionId),
       "test",
       "test",
       df.queryExecution.toString,
@@ -658,6 +659,7 @@ class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
     time += 1
     listener.onOtherEvent(SparkListenerSQLExecutionStart(
       1,
+      Some(1),
       "test",
       "test",
       df.queryExecution.toString,
@@ -667,6 +669,7 @@ class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
     time += 1
     listener.onOtherEvent(SparkListenerSQLExecutionStart(
       2,
+      Some(2),
       "test",
       "test",
       df.queryExecution.toString,
@@ -684,6 +687,7 @@ class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
     time += 1
     listener.onOtherEvent(SparkListenerSQLExecutionStart(
       3,
+      Some(3),
       "test",
       "test",
       df.queryExecution.toString,
@@ -720,6 +724,7 @@ class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
 
     listener.onOtherEvent(SparkListenerSQLExecutionStart(
       executionId,
+      Some(executionId),
       "test",
       "test",
       df.queryExecution.toString,
@@ -1005,8 +1010,51 @@ class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
     spark.sparkContext.listenerBus.waitUntilEmpty(10000)
     assert(received)
   }
+
+  test("SPARK-42100: onJobStart handle event with unregistered executionId shouldn't throw NPE") {
+    val statusStore = createStatusStore()
+    val listener = statusStore.listener.get
+
+    val executionId = 5
+    // Using protobuf serialization will throw npe before SPARK-42100
+    listener.onJobStart(SparkListenerJobStart(
+      jobId = 0,
+      time = System.currentTimeMillis(),
+      stageInfos = Nil,
+      createProperties(executionId)))
+
+    assertJobs(statusStore.execution(executionId), running = Seq(0))
+  }
 }
 
+class SQLAppStatusListenerWithInMemoryStoreSuite extends SQLAppStatusListenerSuite {
+  override protected def createStatusStore(): SQLAppStatusStore = {
+    val conf = sparkContext.conf
+    kvstore = new ElementTrackingStore(new InMemoryStore, conf)
+    val listener = new SQLAppStatusListener(conf, kvstore, live = true)
+    new SQLAppStatusStore(kvstore, Some(listener))
+  }
+}
+
+class SQLAppStatusListenerWithRocksDBBackendSuite extends SQLAppStatusListenerSuite {
+  private val storePath = Utils.createTempDir()
+
+  override protected def createStatusStore(): SQLAppStatusStore = {
+    val conf = sparkContext.conf
+    conf.set(LIVE_UI_LOCAL_STORE_DIR, storePath.getCanonicalPath)
+    val appStatusStore = AppStatusStore.createLiveStore(conf)
+    kvstore = appStatusStore.store.asInstanceOf[ElementTrackingStore]
+    val listener = new SQLAppStatusListener(conf, kvstore, live = true)
+    new SQLAppStatusStore(kvstore, Some(listener))
+  }
+
+  protected override def afterAll(): Unit = {
+    if (storePath.exists()) {
+      Utils.deleteRecursively(storePath)
+    }
+    super.afterAll()
+  }
+}
 
 /**
  * A dummy [[org.apache.spark.sql.execution.SparkPlan]] that updates a [[SQLMetrics]]
