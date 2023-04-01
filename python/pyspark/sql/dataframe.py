@@ -529,14 +529,10 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         --------
         >>> import tempfile
         >>> df = spark.readStream.format("rate").load()
-        >>> type(df.writeStream)
-        <class 'pyspark.sql.streaming.readwriter.DataStreamWriter'>
-
         >>> with tempfile.TemporaryDirectory() as d:
         ...     # Create a table with Rate source.
-        ...     df.writeStream.toTable(
+        ...     streaming_query = df.writeStream.toTable(
         ...         "my_table", checkpointLocation=d) # doctest: +ELLIPSIS
-        <pyspark.sql.streaming.query.StreamingQuery object at 0x...>
         """
         return DataStreamWriter(self)
 
