@@ -827,6 +827,10 @@ class SparkConnectClient(object):
                 req.explain.explain_mode = (
                     pb2.AnalyzePlanRequest.Explain.ExplainMode.EXPLAIN_MODE_CODEGEN
                 )
+            elif explain_mode == "validation":
+                req.explain.explain_mode = (
+                    pb2.AnalyzePlanRequest.Explain.ExplainMode.EXPLAIN_MODE_VALIDATION
+                )
             else:  # formatted
                 req.explain.explain_mode = (
                     pb2.AnalyzePlanRequest.Explain.ExplainMode.EXPLAIN_MODE_FORMATTED
