@@ -48,7 +48,6 @@ else:
 
 DESCRIPTOR: google.protobuf.descriptor.FileDescriptor
 
-@typing_extensions.final
 class DataType(google.protobuf.message.Message):
     """This message describes the logical [[DataType]] of something. It does not carry the value
     itself but only describes it.
@@ -56,7 +55,6 @@ class DataType(google.protobuf.message.Message):
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-    @typing_extensions.final
     class Boolean(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -74,7 +72,6 @@ class DataType(google.protobuf.message.Message):
             ],
         ) -> None: ...
 
-    @typing_extensions.final
     class Byte(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -92,7 +89,6 @@ class DataType(google.protobuf.message.Message):
             ],
         ) -> None: ...
 
-    @typing_extensions.final
     class Short(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -110,7 +106,6 @@ class DataType(google.protobuf.message.Message):
             ],
         ) -> None: ...
 
-    @typing_extensions.final
     class Integer(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -128,7 +123,6 @@ class DataType(google.protobuf.message.Message):
             ],
         ) -> None: ...
 
-    @typing_extensions.final
     class Long(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -146,7 +140,6 @@ class DataType(google.protobuf.message.Message):
             ],
         ) -> None: ...
 
-    @typing_extensions.final
     class Float(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -164,7 +157,6 @@ class DataType(google.protobuf.message.Message):
             ],
         ) -> None: ...
 
-    @typing_extensions.final
     class Double(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -182,7 +174,6 @@ class DataType(google.protobuf.message.Message):
             ],
         ) -> None: ...
 
-    @typing_extensions.final
     class String(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -200,7 +191,6 @@ class DataType(google.protobuf.message.Message):
             ],
         ) -> None: ...
 
-    @typing_extensions.final
     class Binary(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -218,7 +208,6 @@ class DataType(google.protobuf.message.Message):
             ],
         ) -> None: ...
 
-    @typing_extensions.final
     class NULL(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -236,7 +225,6 @@ class DataType(google.protobuf.message.Message):
             ],
         ) -> None: ...
 
-    @typing_extensions.final
     class Timestamp(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -254,7 +242,6 @@ class DataType(google.protobuf.message.Message):
             ],
         ) -> None: ...
 
-    @typing_extensions.final
     class Date(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -272,7 +259,6 @@ class DataType(google.protobuf.message.Message):
             ],
         ) -> None: ...
 
-    @typing_extensions.final
     class TimestampNTZ(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -290,7 +276,6 @@ class DataType(google.protobuf.message.Message):
             ],
         ) -> None: ...
 
-    @typing_extensions.final
     class CalendarInterval(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -308,7 +293,6 @@ class DataType(google.protobuf.message.Message):
             ],
         ) -> None: ...
 
-    @typing_extensions.final
     class YearMonthInterval(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -362,7 +346,6 @@ class DataType(google.protobuf.message.Message):
             self, oneof_group: typing_extensions.Literal["_start_field", b"_start_field"]
         ) -> typing_extensions.Literal["start_field"] | None: ...
 
-    @typing_extensions.final
     class DayTimeInterval(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -416,7 +399,6 @@ class DataType(google.protobuf.message.Message):
             self, oneof_group: typing_extensions.Literal["_start_field", b"_start_field"]
         ) -> typing_extensions.Literal["start_field"] | None: ...
 
-    @typing_extensions.final
     class Char(google.protobuf.message.Message):
         """Start compound types."""
 
@@ -439,7 +421,6 @@ class DataType(google.protobuf.message.Message):
             ],
         ) -> None: ...
 
-    @typing_extensions.final
     class VarChar(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -460,7 +441,6 @@ class DataType(google.protobuf.message.Message):
             ],
         ) -> None: ...
 
-    @typing_extensions.final
     class Decimal(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -514,7 +494,6 @@ class DataType(google.protobuf.message.Message):
             self, oneof_group: typing_extensions.Literal["_scale", b"_scale"]
         ) -> typing_extensions.Literal["scale"] | None: ...
 
-    @typing_extensions.final
     class StructField(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -560,7 +539,6 @@ class DataType(google.protobuf.message.Message):
             self, oneof_group: typing_extensions.Literal["_metadata", b"_metadata"]
         ) -> typing_extensions.Literal["metadata"] | None: ...
 
-    @typing_extensions.final
     class Struct(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -586,7 +564,6 @@ class DataType(google.protobuf.message.Message):
             ],
         ) -> None: ...
 
-    @typing_extensions.final
     class Array(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -619,7 +596,6 @@ class DataType(google.protobuf.message.Message):
             ],
         ) -> None: ...
 
-    @typing_extensions.final
     class Map(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -661,7 +637,6 @@ class DataType(google.protobuf.message.Message):
             ],
         ) -> None: ...
 
-    @typing_extensions.final
     class UDT(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -741,7 +716,6 @@ class DataType(google.protobuf.message.Message):
             ],
         ) -> typing_extensions.Literal["serialized_python_class"] | None: ...
 
-    @typing_extensions.final
     class Unparsed(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
