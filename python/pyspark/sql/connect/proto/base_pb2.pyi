@@ -140,6 +140,7 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
     """Request to perform plan analyze, optionally to explain the plan."""
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
     @typing_extensions.final
     class Schema(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
@@ -312,6 +313,7 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
     @typing_extensions.final
     class SparkVersion(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
         def __init__(
             self,
         ) -> None: ...
@@ -479,6 +481,7 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
         def ClearField(
             self, field_name: typing_extensions.Literal["relation", b"relation"]
         ) -> None: ...
+
     SESSION_ID_FIELD_NUMBER: builtins.int
     USER_CONTEXT_FIELD_NUMBER: builtins.int
     CLIENT_TYPE_FIELD_NUMBER: builtins.int
@@ -668,6 +671,7 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
     """
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
     @typing_extensions.final
     class Schema(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
@@ -831,6 +835,7 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
     @typing_extensions.final
     class Persist(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
         def __init__(
             self,
         ) -> None: ...
@@ -838,6 +843,7 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
     @typing_extensions.final
     class Unpersist(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
         def __init__(
             self,
         ) -> None: ...
@@ -861,6 +867,7 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
         def ClearField(
             self, field_name: typing_extensions.Literal["storage_level", b"storage_level"]
         ) -> None: ...
+
     SESSION_ID_FIELD_NUMBER: builtins.int
     SCHEMA_FIELD_NUMBER: builtins.int
     EXPLAIN_FIELD_NUMBER: builtins.int
@@ -1089,6 +1096,7 @@ class ExecutePlanResponse(google.protobuf.message.Message):
     """
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
     @typing_extensions.final
     class SqlCommandResult(google.protobuf.message.Message):
         """A SQL command returns an opaque Relation that can be directly used as input for the next
@@ -1135,9 +1143,11 @@ class ExecutePlanResponse(google.protobuf.message.Message):
     @typing_extensions.final
     class Metrics(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
         @typing_extensions.final
         class MetricObject(google.protobuf.message.Message):
             DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
             @typing_extensions.final
             class ExecutionMetricsEntry(google.protobuf.message.Message):
                 DESCRIPTOR: google.protobuf.descriptor.Descriptor
@@ -1159,6 +1169,7 @@ class ExecutePlanResponse(google.protobuf.message.Message):
                 def ClearField(
                     self, field_name: typing_extensions.Literal["key", b"key", "value", b"value"]
                 ) -> None: ...
+
             NAME_FIELD_NUMBER: builtins.int
             PLAN_ID_FIELD_NUMBER: builtins.int
             PARENT_FIELD_NUMBER: builtins.int
@@ -1220,6 +1231,7 @@ class ExecutePlanResponse(google.protobuf.message.Message):
                     "metric_type", b"metric_type", "name", b"name", "value", b"value"
                 ],
             ) -> None: ...
+
         METRICS_FIELD_NUMBER: builtins.int
         @property
         def metrics(
@@ -1262,6 +1274,7 @@ class ExecutePlanResponse(google.protobuf.message.Message):
         def ClearField(
             self, field_name: typing_extensions.Literal["name", b"name", "values", b"values"]
         ) -> None: ...
+
     SESSION_ID_FIELD_NUMBER: builtins.int
     ARROW_BATCH_FIELD_NUMBER: builtins.int
     SQL_COMMAND_RESULT_FIELD_NUMBER: builtins.int
@@ -1387,6 +1400,7 @@ class ConfigRequest(google.protobuf.message.Message):
     """Request to update or fetch the configurations."""
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
     @typing_extensions.final
     class Operation(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
@@ -1594,6 +1608,7 @@ class ConfigRequest(google.protobuf.message.Message):
             keys: collections.abc.Iterable[builtins.str] | None = ...,
         ) -> None: ...
         def ClearField(self, field_name: typing_extensions.Literal["keys", b"keys"]) -> None: ...
+
     SESSION_ID_FIELD_NUMBER: builtins.int
     USER_CONTEXT_FIELD_NUMBER: builtins.int
     OPERATION_FIELD_NUMBER: builtins.int
@@ -1706,6 +1721,7 @@ class AddArtifactsRequest(google.protobuf.message.Message):
     """Request to transfer client-local artifacts."""
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
     @typing_extensions.final
     class ArtifactChunk(google.protobuf.message.Message):
         """A chunk of an Artifact."""
@@ -1835,6 +1851,7 @@ class AddArtifactsRequest(google.protobuf.message.Message):
                 b"total_bytes",
             ],
         ) -> None: ...
+
     SESSION_ID_FIELD_NUMBER: builtins.int
     USER_CONTEXT_FIELD_NUMBER: builtins.int
     CLIENT_TYPE_FIELD_NUMBER: builtins.int
@@ -1937,6 +1954,7 @@ class AddArtifactsResponse(google.protobuf.message.Message):
     """
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
     @typing_extensions.final
     class ArtifactSummary(google.protobuf.message.Message):
         """Metadata of an artifact."""
@@ -1963,6 +1981,7 @@ class AddArtifactsResponse(google.protobuf.message.Message):
                 "is_crc_successful", b"is_crc_successful", "name", b"name"
             ],
         ) -> None: ...
+
     ARTIFACTS_FIELD_NUMBER: builtins.int
     @property
     def artifacts(

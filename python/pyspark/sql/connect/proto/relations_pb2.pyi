@@ -512,6 +512,7 @@ class Unknown(google.protobuf.message.Message):
     """Used for testing purposes only."""
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
     def __init__(
         self,
     ) -> None: ...
@@ -556,6 +557,7 @@ class SQL(google.protobuf.message.Message):
     """Relation that uses a SQL query to generate the output."""
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
     @typing_extensions.final
     class ArgsEntry(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
@@ -573,6 +575,7 @@ class SQL(google.protobuf.message.Message):
         def ClearField(
             self, field_name: typing_extensions.Literal["key", b"key", "value", b"value"]
         ) -> None: ...
+
     QUERY_FIELD_NUMBER: builtins.int
     ARGS_FIELD_NUMBER: builtins.int
     query: builtins.str
@@ -603,9 +606,11 @@ class Read(google.protobuf.message.Message):
     """
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
     @typing_extensions.final
     class NamedTable(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
         @typing_extensions.final
         class OptionsEntry(google.protobuf.message.Message):
             DESCRIPTOR: google.protobuf.descriptor.Descriptor
@@ -623,6 +628,7 @@ class Read(google.protobuf.message.Message):
             def ClearField(
                 self, field_name: typing_extensions.Literal["key", b"key", "value", b"value"]
             ) -> None: ...
+
         UNPARSED_IDENTIFIER_FIELD_NUMBER: builtins.int
         OPTIONS_FIELD_NUMBER: builtins.int
         unparsed_identifier: builtins.str
@@ -648,6 +654,7 @@ class Read(google.protobuf.message.Message):
     @typing_extensions.final
     class DataSource(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
         @typing_extensions.final
         class OptionsEntry(google.protobuf.message.Message):
             DESCRIPTOR: google.protobuf.descriptor.Descriptor
@@ -665,6 +672,7 @@ class Read(google.protobuf.message.Message):
             def ClearField(
                 self, field_name: typing_extensions.Literal["key", b"key", "value", b"value"]
             ) -> None: ...
+
         FORMAT_FIELD_NUMBER: builtins.int
         SCHEMA_FIELD_NUMBER: builtins.int
         OPTIONS_FIELD_NUMBER: builtins.int
@@ -750,6 +758,7 @@ class Read(google.protobuf.message.Message):
         def WhichOneof(
             self, oneof_group: typing_extensions.Literal["_schema", b"_schema"]
         ) -> typing_extensions.Literal["schema"] | None: ...
+
     NAMED_TABLE_FIELD_NUMBER: builtins.int
     DATA_SOURCE_FIELD_NUMBER: builtins.int
     @property
@@ -1193,6 +1202,7 @@ class Aggregate(google.protobuf.message.Message):
     GROUP_TYPE_ROLLUP: Aggregate.GroupType.ValueType  # 2
     GROUP_TYPE_CUBE: Aggregate.GroupType.ValueType  # 3
     GROUP_TYPE_PIVOT: Aggregate.GroupType.ValueType  # 4
+
     @typing_extensions.final
     class Pivot(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
@@ -1228,6 +1238,7 @@ class Aggregate(google.protobuf.message.Message):
         def ClearField(
             self, field_name: typing_extensions.Literal["col", b"col", "values", b"values"]
         ) -> None: ...
+
     INPUT_FIELD_NUMBER: builtins.int
     GROUP_TYPE_FIELD_NUMBER: builtins.int
     GROUPING_EXPRESSIONS_FIELD_NUMBER: builtins.int
@@ -2134,6 +2145,7 @@ class StatSampleBy(google.protobuf.message.Message):
     """
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
     @typing_extensions.final
     class Fraction(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
@@ -2158,6 +2170,7 @@ class StatSampleBy(google.protobuf.message.Message):
             self,
             field_name: typing_extensions.Literal["fraction", b"fraction", "stratum", b"stratum"],
         ) -> None: ...
+
     INPUT_FIELD_NUMBER: builtins.int
     COL_FIELD_NUMBER: builtins.int
     FRACTIONS_FIELD_NUMBER: builtins.int
@@ -2351,6 +2364,7 @@ class NAReplace(google.protobuf.message.Message):
     """
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
     @typing_extensions.final
     class Replacement(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
@@ -2387,6 +2401,7 @@ class NAReplace(google.protobuf.message.Message):
                 "new_value", b"new_value", "old_value", b"old_value"
             ],
         ) -> None: ...
+
     INPUT_FIELD_NUMBER: builtins.int
     COLS_FIELD_NUMBER: builtins.int
     REPLACEMENTS_FIELD_NUMBER: builtins.int
@@ -2468,6 +2483,7 @@ class WithColumnsRenamed(google.protobuf.message.Message):
     """Rename columns on the input relation by a map with name to name mapping."""
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
     @typing_extensions.final
     class RenameColumnsMapEntry(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
@@ -2485,6 +2501,7 @@ class WithColumnsRenamed(google.protobuf.message.Message):
         def ClearField(
             self, field_name: typing_extensions.Literal["key", b"key", "value", b"value"]
         ) -> None: ...
+
     INPUT_FIELD_NUMBER: builtins.int
     RENAME_COLUMNS_MAP_FIELD_NUMBER: builtins.int
     @property
@@ -2615,6 +2632,7 @@ class Unpivot(google.protobuf.message.Message):
     """Unpivot a DataFrame from wide format to long format, optionally leaving identifier columns set."""
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
     @typing_extensions.final
     class Values(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
@@ -2635,6 +2653,7 @@ class Unpivot(google.protobuf.message.Message):
         def ClearField(
             self, field_name: typing_extensions.Literal["values", b"values"]
         ) -> None: ...
+
     INPUT_FIELD_NUMBER: builtins.int
     IDS_FIELD_NUMBER: builtins.int
     VALUES_FIELD_NUMBER: builtins.int
@@ -3017,6 +3036,7 @@ class Parse(google.protobuf.message.Message):
     PARSE_FORMAT_UNSPECIFIED: Parse.ParseFormat.ValueType  # 0
     PARSE_FORMAT_CSV: Parse.ParseFormat.ValueType  # 1
     PARSE_FORMAT_JSON: Parse.ParseFormat.ValueType  # 2
+
     @typing_extensions.final
     class OptionsEntry(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
@@ -3034,6 +3054,7 @@ class Parse(google.protobuf.message.Message):
         def ClearField(
             self, field_name: typing_extensions.Literal["key", b"key", "value", b"value"]
         ) -> None: ...
+
     INPUT_FIELD_NUMBER: builtins.int
     FORMAT_FIELD_NUMBER: builtins.int
     SCHEMA_FIELD_NUMBER: builtins.int

@@ -156,6 +156,7 @@ class SqlCommand(google.protobuf.message.Message):
     """
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
     @typing_extensions.final
     class ArgsEntry(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
@@ -173,6 +174,7 @@ class SqlCommand(google.protobuf.message.Message):
         def ClearField(
             self, field_name: typing_extensions.Literal["key", b"key", "value", b"value"]
         ) -> None: ...
+
     SQL_FIELD_NUMBER: builtins.int
     ARGS_FIELD_NUMBER: builtins.int
     sql: builtins.str
@@ -268,6 +270,7 @@ class WriteOperation(google.protobuf.message.Message):
     SAVE_MODE_OVERWRITE: WriteOperation.SaveMode.ValueType  # 2
     SAVE_MODE_ERROR_IF_EXISTS: WriteOperation.SaveMode.ValueType  # 3
     SAVE_MODE_IGNORE: WriteOperation.SaveMode.ValueType  # 4
+
     @typing_extensions.final
     class OptionsEntry(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
@@ -352,6 +355,7 @@ class WriteOperation(google.protobuf.message.Message):
                 "bucket_column_names", b"bucket_column_names", "num_buckets", b"num_buckets"
             ],
         ) -> None: ...
+
     INPUT_FIELD_NUMBER: builtins.int
     SOURCE_FIELD_NUMBER: builtins.int
     PATH_FIELD_NUMBER: builtins.int
@@ -492,6 +496,7 @@ class WriteOperationV2(google.protobuf.message.Message):
     MODE_APPEND: WriteOperationV2.Mode.ValueType  # 4
     MODE_REPLACE: WriteOperationV2.Mode.ValueType  # 5
     MODE_CREATE_OR_REPLACE: WriteOperationV2.Mode.ValueType  # 6
+
     @typing_extensions.final
     class OptionsEntry(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
@@ -527,6 +532,7 @@ class WriteOperationV2(google.protobuf.message.Message):
         def ClearField(
             self, field_name: typing_extensions.Literal["key", b"key", "value", b"value"]
         ) -> None: ...
+
     INPUT_FIELD_NUMBER: builtins.int
     TABLE_NAME_FIELD_NUMBER: builtins.int
     PROVIDER_FIELD_NUMBER: builtins.int

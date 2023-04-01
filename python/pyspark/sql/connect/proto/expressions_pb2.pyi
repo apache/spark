@@ -58,11 +58,13 @@ class Expression(google.protobuf.message.Message):
     """
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
     @typing_extensions.final
     class Window(google.protobuf.message.Message):
         """Expression for the OVER clause or WINDOW clause."""
 
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
         @typing_extensions.final
         class WindowFrame(google.protobuf.message.Message):
             """The window frame"""
@@ -96,6 +98,7 @@ class Expression(google.protobuf.message.Message):
             """RangeFrame treats rows in a partition as groups of peers.
             All rows having the same 'ORDER BY' ordering are considered as peers.
             """
+
             @typing_extensions.final
             class FrameBoundary(google.protobuf.message.Message):
                 DESCRIPTOR: google.protobuf.descriptor.Descriptor
@@ -149,6 +152,7 @@ class Expression(google.protobuf.message.Message):
                 def WhichOneof(
                     self, oneof_group: typing_extensions.Literal["boundary", b"boundary"]
                 ) -> typing_extensions.Literal["current_row", "unbounded", "value"] | None: ...
+
             FRAME_TYPE_FIELD_NUMBER: builtins.int
             LOWER_FIELD_NUMBER: builtins.int
             UPPER_FIELD_NUMBER: builtins.int
@@ -176,6 +180,7 @@ class Expression(google.protobuf.message.Message):
                     "frame_type", b"frame_type", "lower", b"lower", "upper", b"upper"
                 ],
             ) -> None: ...
+
         WINDOW_FUNCTION_FIELD_NUMBER: builtins.int
         PARTITION_SPEC_FIELD_NUMBER: builtins.int
         ORDER_SPEC_FIELD_NUMBER: builtins.int
@@ -360,6 +365,7 @@ class Expression(google.protobuf.message.Message):
     @typing_extensions.final
     class Literal(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
         @typing_extensions.final
         class Decimal(google.protobuf.message.Message):
             DESCRIPTOR: google.protobuf.descriptor.Descriptor
@@ -472,6 +478,7 @@ class Expression(google.protobuf.message.Message):
                     "element_type", b"element_type", "elements", b"elements"
                 ],
             ) -> None: ...
+
         NULL_FIELD_NUMBER: builtins.int
         BINARY_FIELD_NUMBER: builtins.int
         BOOLEAN_FIELD_NUMBER: builtins.int
@@ -1000,6 +1007,7 @@ class Expression(google.protobuf.message.Message):
         def ClearField(
             self, field_name: typing_extensions.Literal["name_parts", b"name_parts"]
         ) -> None: ...
+
     LITERAL_FIELD_NUMBER: builtins.int
     UNRESOLVED_ATTRIBUTE_FIELD_NUMBER: builtins.int
     UNRESOLVED_FUNCTION_FIELD_NUMBER: builtins.int

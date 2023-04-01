@@ -55,6 +55,7 @@ class DataType(google.protobuf.message.Message):
     """
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
     @typing_extensions.final
     class Boolean(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
@@ -755,6 +756,7 @@ class DataType(google.protobuf.message.Message):
         def ClearField(
             self, field_name: typing_extensions.Literal["data_type_string", b"data_type_string"]
         ) -> None: ...
+
     NULL_FIELD_NUMBER: builtins.int
     BINARY_FIELD_NUMBER: builtins.int
     BOOLEAN_FIELD_NUMBER: builtins.int
