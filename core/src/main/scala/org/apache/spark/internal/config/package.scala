@@ -1942,6 +1942,14 @@ package object config {
       .checkValue(v => v >= 0, "The threshold should be non-negative.")
       .createWithDefault(1L * 1024 * 1024)
 
+  private[spark] val SMALL_BROADCAST_SERIALIZATION_WORKER_NUM =
+    ConfigBuilder("spark.smallBroadcast.serialization.workerNum")
+      .internal()
+      .doc("Small broadcast serialization worker num")
+      .version("3.5.0")
+      .intConf
+      .createWithDefault(2)
+
   private[spark] val SMALL_BROADCAST_EXECUTOR_CACHE_SIZE =
     ConfigBuilder("spark.smallBroadcast.executor.cacheSize")
       .internal()

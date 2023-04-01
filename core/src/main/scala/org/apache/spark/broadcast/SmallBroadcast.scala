@@ -120,7 +120,10 @@ private[spark] class SmallBroadcastTrackerMaster(conf: SparkConf)
   extends SmallBroadcastTracker(conf) {
 
   private val serializationWorker = ExecutionContext.fromExecutorService(
-    ThreadUtils.newDaemonSingleThreadExecutor("small-broadcast-tracker-master-worker"))
+    ThreadUtils.newDaemonFixedThreadPool(
+      conf.get(config.SMALL_BROADCAST_SERIALIZATION_WORKER_NUM),
+      "small-broadcast-tracker-master-worker")
+  )
 
   /**
    * When registering data, serialization will be run in worker thread asynchronously,
