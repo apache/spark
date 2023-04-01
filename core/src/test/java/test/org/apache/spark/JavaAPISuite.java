@@ -93,7 +93,7 @@ public class JavaAPISuite implements Serializable {
   @Before
   public void setUp() throws IOException {
     sc = new JavaSparkContext("local", "JavaAPISuite");
-    tempDir = Utils.createTempDir(System.getProperty("java.io.tmpdir"), "spark");
+    tempDir = Utils.createTempDir();
     tempDir.deleteOnExit();
   }
 

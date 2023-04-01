@@ -324,6 +324,13 @@ private[spark] object Utils extends Logging {
   }
 
   /**
+   * Create a temporary directory inside the `java.io.tmpdir` prefixed with `spark`.
+   * The directory will be automatically deleted when the VM shuts down.
+   */
+  def createTempDir(): File =
+    createTempDir(System.getProperty("java.io.tmpdir"), "spark")
+
+  /**
    * Create a temporary directory inside the given parent directory. The directory will be
    * automatically deleted when the VM shuts down.
    */

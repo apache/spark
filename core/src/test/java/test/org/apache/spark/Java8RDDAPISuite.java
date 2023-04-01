@@ -245,7 +245,7 @@ public class Java8RDDAPISuite implements Serializable {
 
   @Test
   public void sequenceFile() throws IOException {
-    File tempDir = Utils.createTempDir(System.getProperty("java.io.tmpdir"), "spark");
+    File tempDir = Utils.createTempDir();
     tempDir.deleteOnExit();
     String outputDir = new File(tempDir, "output").getAbsolutePath();
     List<Tuple2<Integer, String>> pairs = Arrays.asList(
