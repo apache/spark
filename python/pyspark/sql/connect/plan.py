@@ -35,7 +35,6 @@ from pyspark.sql.connect.expressions import (
     ColumnReference,
     LiteralExpression,
 )
-from pyspark.sql.connect.functions import lit
 from pyspark.sql.connect.types import pyspark_types_to_proto_types
 
 if TYPE_CHECKING:
