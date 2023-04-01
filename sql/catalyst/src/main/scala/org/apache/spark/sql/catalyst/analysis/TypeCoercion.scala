@@ -1107,10 +1107,12 @@ object TypeCoercion extends TypeCoercionBase {
       case e if !e.childrenResolved => e
 
       case a @ BinaryArithmetic(left @ StringType(), right)
-        if right.dataType != CalendarIntervalType =>
+        if right.dataType != CalendarIntervalType &&
+          !right.dataType.isInstanceOf[AnsiIntervalType] =>
         a.makeCopy(Array(Cast(left, DoubleType), right))
       case a @ BinaryArithmetic(left, right @ StringType())
-        if left.dataType != CalendarIntervalType =>
+        if left.dataType != CalendarIntervalType &&
+          !left.dataType.isInstanceOf[AnsiIntervalType] =>
         a.makeCopy(Array(left, Cast(right, DoubleType)))
 
       // For equality between string and timestamp we cast the string to a timestamp
