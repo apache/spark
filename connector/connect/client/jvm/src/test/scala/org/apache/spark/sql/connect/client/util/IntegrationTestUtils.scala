@@ -57,15 +57,6 @@ object IntegrationTestUtils {
     Files.exists(Paths.get(filePath))
   }
 
-  private[sql] lazy val isCatalystTestJarAvailable: Boolean = {
-    try {
-      findJar("sql/catalyst", "spark-catalyst", "spark-catalyst", test = true)
-      true
-    } catch {
-      case _: AssertionError => false
-    }
-  }
-
   /**
    * Find a jar in the Spark project artifacts. It requires a build first (e.g. build/sbt package,
    * build/mvn clean install -DskipTests) so that this method can find the jar in the target

@@ -221,7 +221,6 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper {
   }
 
   test("writeTo with create") {
-    assume(IntegrationTestUtils.isCatalystTestJarAvailable)
     withTable("testcat.myTableV2") {
 
       val rows = Seq(Row(1L, "a"), Row(2L, "b"), Row(3L, "c"))
@@ -236,7 +235,6 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper {
   }
 
   test("writeTo with create and using") {
-    assume(IntegrationTestUtils.isCatalystTestJarAvailable)
     withTable("testcat.myTableV2") {
       val rows = Seq(Row(1L, "a"), Row(2L, "b"), Row(3L, "c"))
 
@@ -257,7 +255,6 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper {
   }
 
   test("writeTo with create and append") {
-    assume(IntegrationTestUtils.isCatalystTestJarAvailable)
     withTable("testcat.myTableV2") {
 
       val rows = Seq(Row(1L, "a"), Row(2L, "b"), Row(3L, "c"))
@@ -275,7 +272,6 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper {
   }
 
   test("WriteTo with overwrite") {
-    assume(IntegrationTestUtils.isCatalystTestJarAvailable)
     withTable("testcat.myTableV2") {
 
       val rows1 = (1L to 3L).map { i =>
@@ -307,7 +303,6 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper {
   }
 
   test("WriteTo with overwritePartitions") {
-    assume(IntegrationTestUtils.isCatalystTestJarAvailable)
     withTable("testcat.myTableV2") {
 
       val rows = (4L to 7L).map { i =>
