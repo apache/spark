@@ -101,6 +101,12 @@
     ],
     "sqlState" : "22018"
   },
+  "CANNOT_PARSE_JSON_ARRAYS_AS_STRUCTS" : {
+    "message" : [
+      "Parsing JSON arrays as structs is forbidden."
+    ],
+    "sqlState" : "2203G"
+  },
   "CANNOT_PARSE_JSON_FIELD" : {
     "message" : [
       "Cannot parse the field name <fieldName> and the value <fieldValue> of the JSON token type <jsonType> to target Spark data type <dataType>."
@@ -4261,11 +4267,6 @@
   "_LEGACY_ERROR_TEMP_2131" : {
     "message" : [
       "Exception when registering StreamingQueryListener."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2132" : {
-    "message" : [
-      "Parsing JSON arrays as structs is forbidden."
     ]
   },
   "_LEGACY_ERROR_TEMP_2133" : {

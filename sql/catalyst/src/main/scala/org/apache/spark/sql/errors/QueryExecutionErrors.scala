@@ -1404,8 +1404,8 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
 
   def cannotParseJsonArraysAsStructsError(): SparkRuntimeException = {
     new SparkRuntimeException(
-      errorClass = "_LEGACY_ERROR_TEMP_2132",
-      messageParameters = Map.empty)
+      errorClass = "CANNOT_PARSE_JSON_ARRAYS_AS_STRUCTS",
+      messageParameters = Map.empty[String, String])
   }
 
   def cannotParseStringAsDataTypeError(parser: JsonParser, token: JsonToken, dataType: DataType)
