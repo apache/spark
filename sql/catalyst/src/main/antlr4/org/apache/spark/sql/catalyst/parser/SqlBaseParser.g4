@@ -1408,6 +1408,7 @@ ansiNonReserved
     | UNSET
     | UPDATE
     | USE
+    | VALIDATION
     | VALUES
     | VERSION
     | VIEW
@@ -1721,6 +1722,7 @@ nonReserved
     | UPDATE
     | USE
     | USER
+    | VALIDATION
     | VALUES
     | VERSION
     | VIEW

@@ -51,6 +51,7 @@ else:
     import typing_extensions
 
 DESCRIPTOR: google.protobuf.descriptor.FileDescriptor
+
 @typing_extensions.final
 class Command(google.protobuf.message.Message):
     """A [[Command]] is an operation that is executed by the server that does not directly consume or
@@ -143,6 +144,7 @@ class Command(google.protobuf.message.Message):
     ] | None: ...
 
 global___Command = Command
+
 @typing_extensions.final
 class SqlCommand(google.protobuf.message.Message):
     """A SQL Command is used to trigger the eager evaluation of SQL commands in Spark.
@@ -162,7 +164,12 @@ class SqlCommand(google.protobuf.message.Message):
         VALUE_FIELD_NUMBER: builtins.int
         key: builtins.str
         value: builtins.str
-        def __init__(self, *, key: builtins.str = ..., value: builtins.str = ...,) -> None: ...
+        def __init__(
+            self,
+            *,
+            key: builtins.str = ...,
+            value: builtins.str = ...,
+        ) -> None: ...
         def ClearField(
             self, field_name: typing_extensions.Literal["key", b"key", "value", b"value"]
         ) -> None: ...
@@ -188,6 +195,7 @@ class SqlCommand(google.protobuf.message.Message):
     ) -> None: ...
 
 global___SqlCommand = SqlCommand
+
 @typing_extensions.final
 class CreateDataFrameViewCommand(google.protobuf.message.Message):
     """A command that can create DataFrame global temp view or local temp view."""
@@ -230,14 +238,17 @@ class CreateDataFrameViewCommand(google.protobuf.message.Message):
     ) -> None: ...
 
 global___CreateDataFrameViewCommand = CreateDataFrameViewCommand
+
 @typing_extensions.final
 class WriteOperation(google.protobuf.message.Message):
     """As writes are not directly handled during analysis and planning, they are modeled as commands."""
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
     class _SaveMode:
         ValueType = typing.NewType("ValueType", builtins.int)
         V: typing_extensions.TypeAlias = ValueType
+
     class _SaveModeEnumTypeWrapper(
         google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[
             WriteOperation._SaveMode.ValueType
@@ -250,6 +261,7 @@ class WriteOperation(google.protobuf.message.Message):
         SAVE_MODE_OVERWRITE: WriteOperation._SaveMode.ValueType  # 2
         SAVE_MODE_ERROR_IF_EXISTS: WriteOperation._SaveMode.ValueType  # 3
         SAVE_MODE_IGNORE: WriteOperation._SaveMode.ValueType  # 4
+
     class SaveMode(_SaveMode, metaclass=_SaveModeEnumTypeWrapper): ...
     SAVE_MODE_UNSPECIFIED: WriteOperation.SaveMode.ValueType  # 0
     SAVE_MODE_APPEND: WriteOperation.SaveMode.ValueType  # 1
@@ -264,16 +276,24 @@ class WriteOperation(google.protobuf.message.Message):
         VALUE_FIELD_NUMBER: builtins.int
         key: builtins.str
         value: builtins.str
-        def __init__(self, *, key: builtins.str = ..., value: builtins.str = ...,) -> None: ...
+        def __init__(
+            self,
+            *,
+            key: builtins.str = ...,
+            value: builtins.str = ...,
+        ) -> None: ...
         def ClearField(
             self, field_name: typing_extensions.Literal["key", b"key", "value", b"value"]
         ) -> None: ...
+
     @typing_extensions.final
     class SaveTable(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
         class _TableSaveMethod:
             ValueType = typing.NewType("ValueType", builtins.int)
             V: typing_extensions.TypeAlias = ValueType
+
         class _TableSaveMethodEnumTypeWrapper(
             google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[
                 WriteOperation.SaveTable._TableSaveMethod.ValueType
@@ -284,6 +304,7 @@ class WriteOperation(google.protobuf.message.Message):
             TABLE_SAVE_METHOD_UNSPECIFIED: WriteOperation.SaveTable._TableSaveMethod.ValueType  # 0
             TABLE_SAVE_METHOD_SAVE_AS_TABLE: WriteOperation.SaveTable._TableSaveMethod.ValueType  # 1
             TABLE_SAVE_METHOD_INSERT_INTO: WriteOperation.SaveTable._TableSaveMethod.ValueType  # 2
+
         class TableSaveMethod(_TableSaveMethod, metaclass=_TableSaveMethodEnumTypeWrapper): ...
         TABLE_SAVE_METHOD_UNSPECIFIED: WriteOperation.SaveTable.TableSaveMethod.ValueType  # 0
         TABLE_SAVE_METHOD_SAVE_AS_TABLE: WriteOperation.SaveTable.TableSaveMethod.ValueType  # 1
@@ -307,6 +328,7 @@ class WriteOperation(google.protobuf.message.Message):
                 "save_method", b"save_method", "table_name", b"table_name"
             ],
         ) -> None: ...
+
     @typing_extensions.final
     class BucketBy(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
@@ -436,14 +458,17 @@ class WriteOperation(google.protobuf.message.Message):
     ) -> typing_extensions.Literal["path", "table"] | None: ...
 
 global___WriteOperation = WriteOperation
+
 @typing_extensions.final
 class WriteOperationV2(google.protobuf.message.Message):
     """As writes are not directly handled during analysis and planning, they are modeled as commands."""
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
     class _Mode:
         ValueType = typing.NewType("ValueType", builtins.int)
         V: typing_extensions.TypeAlias = ValueType
+
     class _ModeEnumTypeWrapper(
         google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[
             WriteOperationV2._Mode.ValueType
@@ -458,6 +483,7 @@ class WriteOperationV2(google.protobuf.message.Message):
         MODE_APPEND: WriteOperationV2._Mode.ValueType  # 4
         MODE_REPLACE: WriteOperationV2._Mode.ValueType  # 5
         MODE_CREATE_OR_REPLACE: WriteOperationV2._Mode.ValueType  # 6
+
     class Mode(_Mode, metaclass=_ModeEnumTypeWrapper): ...
     MODE_UNSPECIFIED: WriteOperationV2.Mode.ValueType  # 0
     MODE_CREATE: WriteOperationV2.Mode.ValueType  # 1
@@ -474,10 +500,16 @@ class WriteOperationV2(google.protobuf.message.Message):
         VALUE_FIELD_NUMBER: builtins.int
         key: builtins.str
         value: builtins.str
-        def __init__(self, *, key: builtins.str = ..., value: builtins.str = ...,) -> None: ...
+        def __init__(
+            self,
+            *,
+            key: builtins.str = ...,
+            value: builtins.str = ...,
+        ) -> None: ...
         def ClearField(
             self, field_name: typing_extensions.Literal["key", b"key", "value", b"value"]
         ) -> None: ...
+
     @typing_extensions.final
     class TablePropertiesEntry(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
@@ -486,7 +518,12 @@ class WriteOperationV2(google.protobuf.message.Message):
         VALUE_FIELD_NUMBER: builtins.int
         key: builtins.str
         value: builtins.str
-        def __init__(self, *, key: builtins.str = ..., value: builtins.str = ...,) -> None: ...
+        def __init__(
+            self,
+            *,
+            key: builtins.str = ...,
+            value: builtins.str = ...,
+        ) -> None: ...
         def ClearField(
             self, field_name: typing_extensions.Literal["key", b"key", "value", b"value"]
         ) -> None: ...

@@ -46,6 +46,7 @@ else:
     import typing_extensions
 
 DESCRIPTOR: google.protobuf.descriptor.FileDescriptor
+
 @typing_extensions.final
 class ExamplePluginRelation(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
@@ -70,6 +71,7 @@ class ExamplePluginRelation(google.protobuf.message.Message):
     ) -> None: ...
 
 global___ExamplePluginRelation = ExamplePluginRelation
+
 @typing_extensions.final
 class ExamplePluginExpression(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
@@ -94,13 +96,18 @@ class ExamplePluginExpression(google.protobuf.message.Message):
     ) -> None: ...
 
 global___ExamplePluginExpression = ExamplePluginExpression
+
 @typing_extensions.final
 class ExamplePluginCommand(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
     CUSTOM_FIELD_FIELD_NUMBER: builtins.int
     custom_field: builtins.str
-    def __init__(self, *, custom_field: builtins.str = ...,) -> None: ...
+    def __init__(
+        self,
+        *,
+        custom_field: builtins.str = ...,
+    ) -> None: ...
     def ClearField(
         self, field_name: typing_extensions.Literal["custom_field", b"custom_field"]
     ) -> None: ...

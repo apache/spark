@@ -52,6 +52,7 @@ else:
     import typing_extensions
 
 DESCRIPTOR: google.protobuf.descriptor.FileDescriptor
+
 @typing_extensions.final
 class Relation(google.protobuf.message.Message):
     """The main [[Relation]] type. Fundamentally, a relation is a typed container
@@ -505,14 +506,18 @@ class Relation(google.protobuf.message.Message):
     ] | None: ...
 
 global___Relation = Relation
+
 @typing_extensions.final
 class Unknown(google.protobuf.message.Message):
     """Used for testing purposes only."""
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
-    def __init__(self,) -> None: ...
+    def __init__(
+        self,
+    ) -> None: ...
 
 global___Unknown = Unknown
+
 @typing_extensions.final
 class RelationCommon(google.protobuf.message.Message):
     """Common metadata of all relations."""
@@ -526,7 +531,10 @@ class RelationCommon(google.protobuf.message.Message):
     plan_id: builtins.int
     """(Optional) A per-client globally unique id for a given connect plan."""
     def __init__(
-        self, *, source_info: builtins.str = ..., plan_id: builtins.int | None = ...,
+        self,
+        *,
+        source_info: builtins.str = ...,
+        plan_id: builtins.int | None = ...,
     ) -> None: ...
     def HasField(
         self, field_name: typing_extensions.Literal["_plan_id", b"_plan_id", "plan_id", b"plan_id"]
@@ -542,6 +550,7 @@ class RelationCommon(google.protobuf.message.Message):
     ) -> typing_extensions.Literal["plan_id"] | None: ...
 
 global___RelationCommon = RelationCommon
+
 @typing_extensions.final
 class SQL(google.protobuf.message.Message):
     """Relation that uses a SQL query to generate the output."""
@@ -555,7 +564,12 @@ class SQL(google.protobuf.message.Message):
         VALUE_FIELD_NUMBER: builtins.int
         key: builtins.str
         value: builtins.str
-        def __init__(self, *, key: builtins.str = ..., value: builtins.str = ...,) -> None: ...
+        def __init__(
+            self,
+            *,
+            key: builtins.str = ...,
+            value: builtins.str = ...,
+        ) -> None: ...
         def ClearField(
             self, field_name: typing_extensions.Literal["key", b"key", "value", b"value"]
         ) -> None: ...
@@ -581,6 +595,7 @@ class SQL(google.protobuf.message.Message):
     ) -> None: ...
 
 global___SQL = SQL
+
 @typing_extensions.final
 class Read(google.protobuf.message.Message):
     """Relation that reads from a file / table or other data source. Does not have additional
@@ -599,7 +614,12 @@ class Read(google.protobuf.message.Message):
             VALUE_FIELD_NUMBER: builtins.int
             key: builtins.str
             value: builtins.str
-            def __init__(self, *, key: builtins.str = ..., value: builtins.str = ...,) -> None: ...
+            def __init__(
+                self,
+                *,
+                key: builtins.str = ...,
+                value: builtins.str = ...,
+            ) -> None: ...
             def ClearField(
                 self, field_name: typing_extensions.Literal["key", b"key", "value", b"value"]
             ) -> None: ...
@@ -624,6 +644,7 @@ class Read(google.protobuf.message.Message):
                 "options", b"options", "unparsed_identifier", b"unparsed_identifier"
             ],
         ) -> None: ...
+
     @typing_extensions.final
     class DataSource(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
@@ -635,7 +656,12 @@ class Read(google.protobuf.message.Message):
             VALUE_FIELD_NUMBER: builtins.int
             key: builtins.str
             value: builtins.str
-            def __init__(self, *, key: builtins.str = ..., value: builtins.str = ...,) -> None: ...
+            def __init__(
+                self,
+                *,
+                key: builtins.str = ...,
+                value: builtins.str = ...,
+            ) -> None: ...
             def ClearField(
                 self, field_name: typing_extensions.Literal["key", b"key", "value", b"value"]
             ) -> None: ...
@@ -753,6 +779,7 @@ class Read(google.protobuf.message.Message):
     ) -> typing_extensions.Literal["named_table", "data_source"] | None: ...
 
 global___Read = Read
+
 @typing_extensions.final
 class Project(google.protobuf.message.Message):
     """Projection of a bag of expressions for a given input relation.
@@ -794,6 +821,7 @@ class Project(google.protobuf.message.Message):
     ) -> None: ...
 
 global___Project = Project
+
 @typing_extensions.final
 class Filter(google.protobuf.message.Message):
     """Relation that applies a boolean expression `condition` on each row of `input` to produce
@@ -824,6 +852,7 @@ class Filter(google.protobuf.message.Message):
     ) -> None: ...
 
 global___Filter = Filter
+
 @typing_extensions.final
 class Join(google.protobuf.message.Message):
     """Relation of type [[Join]].
@@ -832,9 +861,11 @@ class Join(google.protobuf.message.Message):
     """
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
     class _JoinType:
         ValueType = typing.NewType("ValueType", builtins.int)
         V: typing_extensions.TypeAlias = ValueType
+
     class _JoinTypeEnumTypeWrapper(
         google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[Join._JoinType.ValueType],
         builtins.type,
@@ -848,6 +879,7 @@ class Join(google.protobuf.message.Message):
         JOIN_TYPE_LEFT_ANTI: Join._JoinType.ValueType  # 5
         JOIN_TYPE_LEFT_SEMI: Join._JoinType.ValueType  # 6
         JOIN_TYPE_CROSS: Join._JoinType.ValueType  # 7
+
     class JoinType(_JoinType, metaclass=_JoinTypeEnumTypeWrapper): ...
     JOIN_TYPE_UNSPECIFIED: Join.JoinType.ValueType  # 0
     JOIN_TYPE_INNER: Join.JoinType.ValueType  # 1
@@ -919,14 +951,17 @@ class Join(google.protobuf.message.Message):
     ) -> None: ...
 
 global___Join = Join
+
 @typing_extensions.final
 class SetOperation(google.protobuf.message.Message):
     """Relation of type [[SetOperation]]"""
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
     class _SetOpType:
         ValueType = typing.NewType("ValueType", builtins.int)
         V: typing_extensions.TypeAlias = ValueType
+
     class _SetOpTypeEnumTypeWrapper(
         google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[
             SetOperation._SetOpType.ValueType
@@ -938,6 +973,7 @@ class SetOperation(google.protobuf.message.Message):
         SET_OP_TYPE_INTERSECT: SetOperation._SetOpType.ValueType  # 1
         SET_OP_TYPE_UNION: SetOperation._SetOpType.ValueType  # 2
         SET_OP_TYPE_EXCEPT: SetOperation._SetOpType.ValueType  # 3
+
     class SetOpType(_SetOpType, metaclass=_SetOpTypeEnumTypeWrapper): ...
     SET_OP_TYPE_UNSPECIFIED: SetOperation.SetOpType.ValueType  # 0
     SET_OP_TYPE_INTERSECT: SetOperation.SetOpType.ValueType  # 1
@@ -1043,6 +1079,7 @@ class SetOperation(google.protobuf.message.Message):
     ) -> typing_extensions.Literal["is_all"] | None: ...
 
 global___SetOperation = SetOperation
+
 @typing_extensions.final
 class Limit(google.protobuf.message.Message):
     """Relation of type [[Limit]] that is used to `limit` rows from the input relation."""
@@ -1057,7 +1094,10 @@ class Limit(google.protobuf.message.Message):
     limit: builtins.int
     """(Required) the limit."""
     def __init__(
-        self, *, input: global___Relation | None = ..., limit: builtins.int = ...,
+        self,
+        *,
+        input: global___Relation | None = ...,
+        limit: builtins.int = ...,
     ) -> None: ...
     def HasField(
         self, field_name: typing_extensions.Literal["input", b"input"]
@@ -1067,6 +1107,7 @@ class Limit(google.protobuf.message.Message):
     ) -> None: ...
 
 global___Limit = Limit
+
 @typing_extensions.final
 class Offset(google.protobuf.message.Message):
     """Relation of type [[Offset]] that is used to read rows staring from the `offset` on
@@ -1083,7 +1124,10 @@ class Offset(google.protobuf.message.Message):
     offset: builtins.int
     """(Required) the limit."""
     def __init__(
-        self, *, input: global___Relation | None = ..., offset: builtins.int = ...,
+        self,
+        *,
+        input: global___Relation | None = ...,
+        offset: builtins.int = ...,
     ) -> None: ...
     def HasField(
         self, field_name: typing_extensions.Literal["input", b"input"]
@@ -1093,6 +1137,7 @@ class Offset(google.protobuf.message.Message):
     ) -> None: ...
 
 global___Offset = Offset
+
 @typing_extensions.final
 class Tail(google.protobuf.message.Message):
     """Relation of type [[Tail]] that is used to fetch `limit` rows from the last of the input relation."""
@@ -1107,7 +1152,10 @@ class Tail(google.protobuf.message.Message):
     limit: builtins.int
     """(Required) the limit."""
     def __init__(
-        self, *, input: global___Relation | None = ..., limit: builtins.int = ...,
+        self,
+        *,
+        input: global___Relation | None = ...,
+        limit: builtins.int = ...,
     ) -> None: ...
     def HasField(
         self, field_name: typing_extensions.Literal["input", b"input"]
@@ -1117,14 +1165,17 @@ class Tail(google.protobuf.message.Message):
     ) -> None: ...
 
 global___Tail = Tail
+
 @typing_extensions.final
 class Aggregate(google.protobuf.message.Message):
     """Relation of type [[Aggregate]]."""
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
     class _GroupType:
         ValueType = typing.NewType("ValueType", builtins.int)
         V: typing_extensions.TypeAlias = ValueType
+
     class _GroupTypeEnumTypeWrapper(
         google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[Aggregate._GroupType.ValueType],
         builtins.type,
@@ -1135,6 +1186,7 @@ class Aggregate(google.protobuf.message.Message):
         GROUP_TYPE_ROLLUP: Aggregate._GroupType.ValueType  # 2
         GROUP_TYPE_CUBE: Aggregate._GroupType.ValueType  # 3
         GROUP_TYPE_PIVOT: Aggregate._GroupType.ValueType  # 4
+
     class GroupType(_GroupType, metaclass=_GroupTypeEnumTypeWrapper): ...
     GROUP_TYPE_UNSPECIFIED: Aggregate.GroupType.ValueType  # 0
     GROUP_TYPE_GROUPBY: Aggregate.GroupType.ValueType  # 1
@@ -1238,6 +1290,7 @@ class Aggregate(google.protobuf.message.Message):
     ) -> None: ...
 
 global___Aggregate = Aggregate
+
 @typing_extensions.final
 class Sort(google.protobuf.message.Message):
     """Relation of type [[Sort]]."""
@@ -1293,6 +1346,7 @@ class Sort(google.protobuf.message.Message):
     ) -> typing_extensions.Literal["is_global"] | None: ...
 
 global___Sort = Sort
+
 @typing_extensions.final
 class Drop(google.protobuf.message.Message):
     """Drop specified columns."""
@@ -1336,6 +1390,7 @@ class Drop(google.protobuf.message.Message):
     ) -> None: ...
 
 global___Drop = Drop
+
 @typing_extensions.final
 class Deduplicate(google.protobuf.message.Message):
     """Relation of type [[Deduplicate]] which have duplicate rows removed, could consider either only
@@ -1400,6 +1455,7 @@ class Deduplicate(google.protobuf.message.Message):
     ) -> typing_extensions.Literal["all_columns_as_keys"] | None: ...
 
 global___Deduplicate = Deduplicate
+
 @typing_extensions.final
 class LocalRelation(google.protobuf.message.Message):
     """A relation that does not need to be qualified by name."""
@@ -1420,7 +1476,10 @@ class LocalRelation(google.protobuf.message.Message):
     If the 'data' is not provided, then this schema will be required.
     """
     def __init__(
-        self, *, data: builtins.bytes | None = ..., schema: builtins.str | None = ...,
+        self,
+        *,
+        data: builtins.bytes | None = ...,
+        schema: builtins.str | None = ...,
     ) -> None: ...
     def HasField(
         self,
@@ -1444,6 +1503,7 @@ class LocalRelation(google.protobuf.message.Message):
     ) -> typing_extensions.Literal["schema"] | None: ...
 
 global___LocalRelation = LocalRelation
+
 @typing_extensions.final
 class Sample(google.protobuf.message.Message):
     """Relation of type [[Sample]] that samples a fraction of the dataset."""
@@ -1528,6 +1588,7 @@ class Sample(google.protobuf.message.Message):
     ) -> typing_extensions.Literal["with_replacement"] | None: ...
 
 global___Sample = Sample
+
 @typing_extensions.final
 class Range(google.protobuf.message.Message):
     """Relation of type [[Range]] that generates a sequence of integers."""
@@ -1596,6 +1657,7 @@ class Range(google.protobuf.message.Message):
     ) -> typing_extensions.Literal["start"] | None: ...
 
 global___Range = Range
+
 @typing_extensions.final
 class SubqueryAlias(google.protobuf.message.Message):
     """Relation alias."""
@@ -1633,6 +1695,7 @@ class SubqueryAlias(google.protobuf.message.Message):
     ) -> None: ...
 
 global___SubqueryAlias = SubqueryAlias
+
 @typing_extensions.final
 class Repartition(google.protobuf.message.Message):
     """Relation repartition."""
@@ -1680,6 +1743,7 @@ class Repartition(google.protobuf.message.Message):
     ) -> typing_extensions.Literal["shuffle"] | None: ...
 
 global___Repartition = Repartition
+
 @typing_extensions.final
 class ShowString(google.protobuf.message.Message):
     """Compose the string representing rows for output.
@@ -1729,6 +1793,7 @@ class ShowString(google.protobuf.message.Message):
     ) -> None: ...
 
 global___ShowString = ShowString
+
 @typing_extensions.final
 class StatSummary(google.protobuf.message.Message):
     """Computes specified statistics for numeric and string columns.
@@ -1776,6 +1841,7 @@ class StatSummary(google.protobuf.message.Message):
     ) -> None: ...
 
 global___StatSummary = StatSummary
+
 @typing_extensions.final
 class StatDescribe(google.protobuf.message.Message):
     """Computes basic statistics for numeric and string columns, including count, mean, stddev, min,
@@ -1809,6 +1875,7 @@ class StatDescribe(google.protobuf.message.Message):
     ) -> None: ...
 
 global___StatDescribe = StatDescribe
+
 @typing_extensions.final
 class StatCrosstab(google.protobuf.message.Message):
     """Computes a pair-wise frequency table of the given columns. Also known as a contingency table.
@@ -1850,6 +1917,7 @@ class StatCrosstab(google.protobuf.message.Message):
     ) -> None: ...
 
 global___StatCrosstab = StatCrosstab
+
 @typing_extensions.final
 class StatCov(google.protobuf.message.Message):
     """Calculate the sample covariance of two numerical columns of a DataFrame.
@@ -1884,6 +1952,7 @@ class StatCov(google.protobuf.message.Message):
     ) -> None: ...
 
 global___StatCov = StatCov
+
 @typing_extensions.final
 class StatCorr(google.protobuf.message.Message):
     """Calculates the correlation of two columns of a DataFrame. Currently only supports the Pearson
@@ -1943,6 +2012,7 @@ class StatCorr(google.protobuf.message.Message):
     ) -> typing_extensions.Literal["method"] | None: ...
 
 global___StatCorr = StatCorr
+
 @typing_extensions.final
 class StatApproxQuantile(google.protobuf.message.Message):
     """Calculates the approximate quantiles of numerical columns of a DataFrame.
@@ -2005,6 +2075,7 @@ class StatApproxQuantile(google.protobuf.message.Message):
     ) -> None: ...
 
 global___StatApproxQuantile = StatApproxQuantile
+
 @typing_extensions.final
 class StatFreqItems(google.protobuf.message.Message):
     """Finding frequent items for columns, possibly with false positives.
@@ -2053,6 +2124,7 @@ class StatFreqItems(google.protobuf.message.Message):
     ) -> typing_extensions.Literal["support"] | None: ...
 
 global___StatFreqItems = StatFreqItems
+
 @typing_extensions.final
 class StatSampleBy(google.protobuf.message.Message):
     """Returns a stratified sample without replacement based on the fraction
@@ -2142,6 +2214,7 @@ class StatSampleBy(google.protobuf.message.Message):
     ) -> typing_extensions.Literal["seed"] | None: ...
 
 global___StatSampleBy = StatSampleBy
+
 @typing_extensions.final
 class NAFill(google.protobuf.message.Message):
     """Replaces null values.
@@ -2200,6 +2273,7 @@ class NAFill(google.protobuf.message.Message):
     ) -> None: ...
 
 global___NAFill = NAFill
+
 @typing_extensions.final
 class NADrop(google.protobuf.message.Message):
     """Drop rows containing null values.
@@ -2268,6 +2342,7 @@ class NADrop(google.protobuf.message.Message):
     ) -> typing_extensions.Literal["min_non_nulls"] | None: ...
 
 global___NADrop = NADrop
+
 @typing_extensions.final
 class NAReplace(google.protobuf.message.Message):
     """Replaces old values with the corresponding values.
@@ -2351,6 +2426,7 @@ class NAReplace(google.protobuf.message.Message):
     ) -> None: ...
 
 global___NAReplace = NAReplace
+
 @typing_extensions.final
 class ToDF(google.protobuf.message.Message):
     """Rename columns on the input relation by the same length of names."""
@@ -2386,6 +2462,7 @@ class ToDF(google.protobuf.message.Message):
     ) -> None: ...
 
 global___ToDF = ToDF
+
 @typing_extensions.final
 class WithColumnsRenamed(google.protobuf.message.Message):
     """Rename columns on the input relation by a map with name to name mapping."""
@@ -2399,7 +2476,12 @@ class WithColumnsRenamed(google.protobuf.message.Message):
         VALUE_FIELD_NUMBER: builtins.int
         key: builtins.str
         value: builtins.str
-        def __init__(self, *, key: builtins.str = ..., value: builtins.str = ...,) -> None: ...
+        def __init__(
+            self,
+            *,
+            key: builtins.str = ...,
+            value: builtins.str = ...,
+        ) -> None: ...
         def ClearField(
             self, field_name: typing_extensions.Literal["key", b"key", "value", b"value"]
         ) -> None: ...
@@ -2436,6 +2518,7 @@ class WithColumnsRenamed(google.protobuf.message.Message):
     ) -> None: ...
 
 global___WithColumnsRenamed = WithColumnsRenamed
+
 @typing_extensions.final
 class WithColumns(google.protobuf.message.Message):
     """Adding columns or replacing the existing columns that have the same names."""
@@ -2480,6 +2563,7 @@ class WithColumns(google.protobuf.message.Message):
     ) -> None: ...
 
 global___WithColumns = WithColumns
+
 @typing_extensions.final
 class Hint(google.protobuf.message.Message):
     """Specify a hint over a relation. Hint should have a name and optional parameters."""
@@ -2525,6 +2609,7 @@ class Hint(google.protobuf.message.Message):
     ) -> None: ...
 
 global___Hint = Hint
+
 @typing_extensions.final
 class Unpivot(google.protobuf.message.Message):
     """Unpivot a DataFrame from wide format to long format, optionally leaving identifier columns set."""
@@ -2610,6 +2695,7 @@ class Unpivot(google.protobuf.message.Message):
     ) -> typing_extensions.Literal["values"] | None: ...
 
 global___Unpivot = Unpivot
+
 @typing_extensions.final
 class ToSchema(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
@@ -2639,6 +2725,7 @@ class ToSchema(google.protobuf.message.Message):
     ) -> None: ...
 
 global___ToSchema = ToSchema
+
 @typing_extensions.final
 class RepartitionByExpression(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
@@ -2697,6 +2784,7 @@ class RepartitionByExpression(google.protobuf.message.Message):
     ) -> typing_extensions.Literal["num_partitions"] | None: ...
 
 global___RepartitionByExpression = RepartitionByExpression
+
 @typing_extensions.final
 class MapPartitions(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
@@ -2751,6 +2839,7 @@ class MapPartitions(google.protobuf.message.Message):
     ) -> typing_extensions.Literal["is_barrier"] | None: ...
 
 global___MapPartitions = MapPartitions
+
 @typing_extensions.final
 class GroupMap(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
@@ -2793,6 +2882,7 @@ class GroupMap(google.protobuf.message.Message):
     ) -> None: ...
 
 global___GroupMap = GroupMap
+
 @typing_extensions.final
 class CoGroupMap(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
@@ -2864,6 +2954,7 @@ class CoGroupMap(google.protobuf.message.Message):
     ) -> None: ...
 
 global___CoGroupMap = CoGroupMap
+
 @typing_extensions.final
 class CollectMetrics(google.protobuf.message.Message):
     """Collect arbitrary (named) metrics from a dataset."""
@@ -2904,12 +2995,15 @@ class CollectMetrics(google.protobuf.message.Message):
     ) -> None: ...
 
 global___CollectMetrics = CollectMetrics
+
 @typing_extensions.final
 class Parse(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
     class _ParseFormat:
         ValueType = typing.NewType("ValueType", builtins.int)
         V: typing_extensions.TypeAlias = ValueType
+
     class _ParseFormatEnumTypeWrapper(
         google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[Parse._ParseFormat.ValueType],
         builtins.type,
@@ -2918,6 +3012,7 @@ class Parse(google.protobuf.message.Message):
         PARSE_FORMAT_UNSPECIFIED: Parse._ParseFormat.ValueType  # 0
         PARSE_FORMAT_CSV: Parse._ParseFormat.ValueType  # 1
         PARSE_FORMAT_JSON: Parse._ParseFormat.ValueType  # 2
+
     class ParseFormat(_ParseFormat, metaclass=_ParseFormatEnumTypeWrapper): ...
     PARSE_FORMAT_UNSPECIFIED: Parse.ParseFormat.ValueType  # 0
     PARSE_FORMAT_CSV: Parse.ParseFormat.ValueType  # 1
@@ -2930,7 +3025,12 @@ class Parse(google.protobuf.message.Message):
         VALUE_FIELD_NUMBER: builtins.int
         key: builtins.str
         value: builtins.str
-        def __init__(self, *, key: builtins.str = ..., value: builtins.str = ...,) -> None: ...
+        def __init__(
+            self,
+            *,
+            key: builtins.str = ...,
+            value: builtins.str = ...,
+        ) -> None: ...
         def ClearField(
             self, field_name: typing_extensions.Literal["key", b"key", "value", b"value"]
         ) -> None: ...

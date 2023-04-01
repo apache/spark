@@ -804,8 +804,14 @@ class SparkConnectClient(object):
         elif method == "explain":
             req.explain.plan.CopyFrom(cast(pb2.Plan, kwargs.get("plan")))
             explain_mode = kwargs.get("explain_mode")
-            if explain_mode not in ["simple", "extended", "codegen", "cost", "formatted",
-                                    "validation"]:
+            if explain_mode not in [
+                "simple",
+                "extended",
+                "codegen",
+                "cost",
+                "formatted",
+                "validation",
+            ]:
                 raise ValueError(
                     f"""
                     Unknown explain mode: {explain_mode}. Accepted "
