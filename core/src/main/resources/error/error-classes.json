@@ -1192,7 +1192,7 @@
   },
   "NO_DEFAULT_FOR_DATA_TYPE" : {
     "message" : [
-      "no default for type <dataType>."
+      "No default value for type: <dataType>."
     ]
   },
   "NO_HANDLER_FOR_UDAF" : {
