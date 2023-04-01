@@ -147,7 +147,6 @@ object CheckConnectJvmClientCompatibility {
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.curId"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.observe"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.queryExecution"),
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.debugCodegen"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.encoder"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.sqlContext"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.joinWith"),

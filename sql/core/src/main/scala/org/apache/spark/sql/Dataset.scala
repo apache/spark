@@ -3979,7 +3979,7 @@ class Dataset[T] private[sql](
    */
   @DeveloperApi
   def debugCodegen(): Unit = {
-    queryExecution.debug.codegen()
+    explain(CodegenMode.name)
   }
 
   ////////////////////////////////////////////////////////////////////////////

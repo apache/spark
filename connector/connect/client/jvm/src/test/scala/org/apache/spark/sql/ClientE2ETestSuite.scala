@@ -355,6 +355,12 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper {
     testCapturedStdOut(df.explain("formatted"), "Range", "Arguments: ")
   }
 
+  test("Dataset debugCodegen") {
+    val df = spark.range(10)
+    val debugCodegenFragments = Seq("WholeStageCodegen subtrees.")
+    testCapturedStdOut(df.debugCodegen(), debugCodegenFragments: _*)
+  }
+
   test("Dataset result collection") {
     def checkResult(rows: TraversableOnce[java.lang.Long], expectedValues: Long*): Unit = {
       rows.toIterator.zipAll(expectedValues.iterator, null, null).foreach {

@@ -2917,6 +2917,22 @@ class Dataset[T] private[sql] (
     sparkSession.semanticHash(this.plan)
   }
 
+  /**
+   * For debugging purposes, prints to stdout all the generated code found in this [[Dataset]] plan
+   * (i.e., the output of each WholeStageCodegen subtree).
+   *
+   * {{{
+   *   val df = spark.range(10)
+   *   df.debugCodegen()
+   * }}}
+   *
+   * @since 3.5.0
+   */
+  @DeveloperApi
+  def debugCodegen(): Unit = {
+    explain(proto.AnalyzePlanRequest.Explain.ExplainMode.EXPLAIN_MODE_CODEGEN)
+  }
+
   def toJSON: Dataset[String] = {
     select(to_json(struct(col("*")))).as(StringEncoder)
   }

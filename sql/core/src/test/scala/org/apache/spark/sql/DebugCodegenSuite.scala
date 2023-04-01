@@ -28,7 +28,6 @@ class DebugCodegenSuite extends QueryTest with SharedSparkSession {
 
   test("Dataset debugCodegen") {
     val df = spark.range(10)
-
     val debugCodegenFragments = Seq("WholeStageCodegen subtrees.")
     testCapturedStdOut(df.debugCodegen(), debugCodegenFragments: _*)
   }
