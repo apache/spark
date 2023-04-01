@@ -1433,7 +1433,7 @@ class SparkSession(SparkConversionMixin):
         if len(kwargs) > 0:
             sqlQuery = formatter.format(sqlQuery, **kwargs)
         try:
-            litArgs = {k : _to_java_column(lit(v)) for k, v in (args or {}).items()}
+            litArgs = {k: _to_java_column(lit(v)) for k, v in (args or {}).items()}
             return DataFrame(self._jsparkSession.sql(sqlQuery, litArgs), self)
         finally:
             if len(kwargs) > 0:
