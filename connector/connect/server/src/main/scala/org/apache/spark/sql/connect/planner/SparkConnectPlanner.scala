@@ -1724,8 +1724,9 @@ class SparkConnectPlanner(val session: SparkSession) {
         handleSqlCommand(command.getSqlCommand, sessionId, responseObserver)
       case proto.Command.CommandTypeCase.WRITE_STREAM_OPERATION_START =>
         handleWriteStreamOperationStart(
-          command.getWriteStreamOperationStart, sessionId, responseObserver
-        )
+          command.getWriteStreamOperationStart,
+          sessionId,
+          responseObserver)
       case proto.Command.CommandTypeCase.STREAMING_QUERY_COMMAND =>
         handleStreamingQueryCommand(command.getStreamingQueryCommand, sessionId, responseObserver)
       case _ => throw new UnsupportedOperationException(s"$command not supported.")
@@ -2093,8 +2094,7 @@ class SparkConnectPlanner(val session: SparkSession) {
       case Some(query) =>
         throw new IllegalArgumentException(
           s"Run id mismatch for query id $queryId. Run id in the request ${command.getRunId} " +
-          s"does not match one on the server ${query.runId}. The query might have restarted."
-        )
+            s"does not match one on the server ${query.runId}. The query might have restarted.")
       case None =>
         throw new IllegalArgumentException(s"Streaming query $queryId is not found")
       // TODO(SPARK-42962): Handle this better. May be cache stopped queries for a few minutes.
@@ -2132,7 +2132,8 @@ class SparkConnectPlanner(val session: SparkSession) {
         val result = query match {
           case q: StreamingQueryWrapper =>
             q.streamingQuery.explainInternal(command.getExplain.getExtended)
-          case _ => throw new IllegalStateException(s"Unexpected type for streaming query: $query")
+          case _ =>
+            throw new IllegalStateException(s"Unexpected type for streaming query: $query")
         }
         val explain = StreamingQueryCommandResult.ExplainResult
           .newBuilder()
