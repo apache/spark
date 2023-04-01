@@ -376,7 +376,7 @@ class TorchDistributorLocalUnitTests(TorchDistributorLocalUnitTestsMixin, unitte
 
         conf = conf.set("spark.driver.resource.gpu.amount", "3")
         conf = conf.set(
-            "spark.worker.resource.gpu.discoveryScript", self.gpu_discovery_script_file.name
+            "spark.driver.resource.gpu.discoveryScript", self.gpu_discovery_script_file.name
         )
 
         self.sc = SparkContext("local-cluster[2,2,1024]", class_name, conf=conf)

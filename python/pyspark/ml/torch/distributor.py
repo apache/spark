@@ -222,7 +222,7 @@ class Distributor:
             Thrown when the user requires ssl encryption or when the user initializes
             the Distributor parent class.
         """
-        if not "ssl_conf":
+        if not hasattr(self, "ssl_conf"):
             raise RuntimeError(
                 "Distributor doesn't have this functionality. Use TorchDistributor instead."
             )
@@ -587,7 +587,7 @@ class TorchDistributor(Distributor):
         )
         self._check_encryption()
         self.logger.info(
-            f"Started distributed training with {self.num_processes} executor proceses"
+            f"Started distributed training with {self.num_processes} executor processes"
         )
         try:
             row = (
@@ -599,7 +599,7 @@ class TorchDistributor(Distributor):
         finally:
             log_streaming_server.shutdown()
         self.logger.info(
-            f"Finished distributed training with {self.num_processes} executor proceses"
+            f"Finished distributed training with {self.num_processes} executor processes"
         )
         return result
 
