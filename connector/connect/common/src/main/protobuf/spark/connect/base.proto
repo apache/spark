@@ -125,7 +125,7 @@ message AnalyzePlanRequest {
       EXPLAIN_MODE_FORMATTED = 5;
 
       // Generates parsed logical plan, analyzed logical plan.
-      EXPLAIN_MODE_EXPLAIN_MODE_VALIDATION = 6;
+      EXPLAIN_MODE_VALIDATION = 6;
     }
   }
 
