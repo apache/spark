@@ -738,7 +738,6 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper {
       bean.setValue(v)
       bean
     }
-
     val beans = java.util.Arrays.asList(bean("x"), bean("s"), bean("d"))
     checkSameResult(
       beans.asScala.map(b => Row(b.value)),
@@ -870,9 +869,7 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper {
 }
 
 private[sql] case class MyType(id: Long, a: Double, b: Double)
-
 private[sql] case class KV(key: String, value: Int)
-
 private[sql] class SimpleBean {
   @scala.beans.BeanProperty
   var value: String = _
