@@ -1338,10 +1338,13 @@ class SparkSession(SparkConversionMixin):
         sqlQuery : str
             SQL query string.
         args : dict
-            A dictionary of parameter names to string values that are parsed as SQL literal
-            expressions. For example, dict keys: "rank", "name", "birthdate"; dict values:
-            "1", "'Steven'", "DATE'2023-03-21'". The fragments of string values belonged to
-            SQL comments are skipped while parsing.
+            A dictionary of parameter names to Python objects that can be converted to
+            SQL literal expressions. See
+            <a href="https://spark.apache.org/docs/latest/sql-ref-datatypes.html">
+            Supported Data Types</a> for supported value types in Python.
+            For example, dictionary keys: "rank", "name", "birthdate";
+            dictionary values: 1, "Steven", datetime.date(2023, 4, 2).
+            Map value can be a `Column` of literal expression, in that case it is taken as is.
 
             .. versionadded:: 3.4.0
 
