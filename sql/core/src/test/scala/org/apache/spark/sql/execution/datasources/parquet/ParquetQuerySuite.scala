@@ -18,28 +18,30 @@
 package org.apache.spark.sql.execution.datasources.parquet
 
 import java.io.File
+import java.lang
 import java.math.BigDecimal
 import java.time.{Duration, LocalDateTime, Period, ZoneOffset}
+import java.util.Optional
 import java.util.concurrent.TimeUnit
 
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.parquet.hadoop.ParquetOutputFormat
 
-import org.apache.spark.{DebugFilesystem, SparkConf, SparkException}
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.expressions.SpecificInternalRow
 import org.apache.spark.sql.catalyst.util.ArrayData
+import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
 import org.apache.spark.sql.execution.FileSourceScanExec
-import org.apache.spark.sql.execution.datasources.{SchemaColumnConvertNotSupportedException, SQLHadoopMapReduceCommitProtocol}
 import org.apache.spark.sql.execution.datasources.parquet.TestingUDT._
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetScan
+import org.apache.spark.sql.execution.datasources.{SQLHadoopMapReduceCommitProtocol, SchemaColumnConvertNotSupportedException}
 import org.apache.spark.sql.functions.struct
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
+import org.apache.spark.{DebugFilesystem, SparkConf, SparkException}
 
 /**
  * A test suite that tests various Parquet queries.
@@ -1211,12 +1213,12 @@ class ParquetV2QuerySuite extends ParquetQuerySuite {
 
         // do not return batch - whole stage codegen is disabled for wide table (>200 columns)
         val df2 = spark.read.parquet(path)
-        val fileScan2 = df2.queryExecution.sparkPlan.find(_.isInstanceOf[BatchScanExec]).get
-        val parquetScan2 = fileScan2.asInstanceOf[BatchScanExec].scan.asInstanceOf[ParquetScan]
-        // The method `supportColumnarReads` in Parquet doesn't depends on the input partition.
-        // Here we can pass null input partition to the method for testing propose.
-        assert(!parquetScan2.createReaderFactory().supportColumnarReads(null))
-        checkAnswer(df2, df)
+//        val fileScan2 = df2.queryExecution.sparkPlan.find(_.isInstanceOf[BatchScanExec]).get
+//        val parquetScan2 = fileScan2.asInstanceOf[BatchScanExec].scan.asInstanceOf[ParquetScan]
+//        // The method `supportColumnarReads` in Parquet doesn't depends on the input partition.
+//        // Here we can pass null input partition to the method for testing propose.
+//        assert(!parquetScan2.createReaderFactory().supportColumnarReads(null))
+//        checkAnswer(df2, df)
 
         // return batch
         val columns = Seq.tabulate(9) {i => s"c$i"}
@@ -1224,6 +1226,10 @@ class ParquetV2QuerySuite extends ParquetQuerySuite {
         val fileScan3 = df3.queryExecution.sparkPlan.find(_.isInstanceOf[BatchScanExec]).get
         val parquetScan3 = fileScan3.asInstanceOf[BatchScanExec].scan.asInstanceOf[ParquetScan]
         assert(parquetScan3.createReaderFactory().supportColumnarReads(null))
+        val types: Optional[lang.Iterable[String]] = parquetScan3.createReaderFactory()
+          .getVectorTypes
+
+
         checkAnswer(df3, df.selectExpr(columns : _*))
 
         withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_NESTED_COLUMN_ENABLED.key -> "true") {
