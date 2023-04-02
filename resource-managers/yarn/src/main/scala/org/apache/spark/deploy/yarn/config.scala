@@ -225,6 +225,15 @@ package object config extends Logging {
     .timeConf(TimeUnit.MILLISECONDS)
     .createWithDefaultString("1s")
 
+  private[spark] val REPORT_LOG_FREQUENCY = {
+    ConfigBuilder("spark.yarn.report.logging.frequency")
+      .doc("Number of application reports processed until the next application status is logged." +
+        "This property is dependent on the spark.yarn.report.interval")
+      .version("3.5.0")
+      .intConf
+      .createWithDefault(30)
+  }
+
   private[spark] val CLIENT_LAUNCH_MONITOR_INTERVAL =
     ConfigBuilder("spark.yarn.clientLaunchMonitorInterval")
       .doc("Interval between requests for status the client mode AM when starting the app.")
