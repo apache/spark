@@ -18,7 +18,6 @@
 package test.org.apache.spark.sql.connector;
 
 import java.io.IOException;
-import java.util.Optional;
 
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.connector.TestingV2Source;
