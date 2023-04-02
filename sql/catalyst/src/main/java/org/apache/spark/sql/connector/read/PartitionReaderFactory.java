@@ -18,6 +18,7 @@
 package org.apache.spark.sql.connector.read;
 
 import java.io.Serializable;
+import java.util.Optional;
 
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.catalyst.InternalRow;
@@ -65,4 +66,12 @@ public interface PartitionReaderFactory extends Serializable {
   default boolean supportColumnarReads(InputPartition partition) {
     return false;
   }
+
+  /**
+   * Returns exact java types of the columns that are output in columnar processing mode.
+   */
+  default Optional<Iterable<String>> getVectorTypes() {
+    return Optional.empty();
+  }
+
 }

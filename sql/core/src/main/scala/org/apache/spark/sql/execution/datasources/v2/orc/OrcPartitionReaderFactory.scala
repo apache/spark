@@ -16,6 +16,10 @@
  */
 package org.apache.spark.sql.execution.datasources.v2.orc
 
+import java.util.Optional
+
+import scala.collection.JavaConverters._
+
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce.{JobID, TaskAttemptID, TaskID, TaskType}
@@ -33,6 +37,7 @@ import org.apache.spark.sql.execution.WholeStageCodegenExec
 import org.apache.spark.sql.execution.datasources.{AggregatePushDownUtils, PartitionedFile}
 import org.apache.spark.sql.execution.datasources.orc.{OrcColumnarBatchReader, OrcDeserializer, OrcFilters, OrcOptions, OrcUtils}
 import org.apache.spark.sql.execution.datasources.v2._
+import org.apache.spark.sql.execution.vectorized.{ConstantColumnVector, OffHeapColumnVector, OnHeapColumnVector}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types.StructType
@@ -77,6 +82,18 @@ case class OrcPartitionReaderFactory(
         OrcInputFormat.setSearchArgument(conf, f, fileSchema.fieldNames)
       }
     }
+  }
+
+  override def getVectorTypes: Optional[java.lang.Iterable[String]] = {
+
+    val data: Iterable[String] = Iterable.fill(readDataSchema.fields.length)(
+      if (!sqlConf.offHeapColumnVectorEnabled) {
+        classOf[OnHeapColumnVector].getName
+      } else {
+        classOf[OffHeapColumnVector].getName
+      }
+    ) ++ Seq.fill(partitionSchema.fields.length)(classOf[ConstantColumnVector].getName)
+    Optional.of(data.asJava)
   }
 
   override def buildReader(file: PartitionedFile): PartitionReader[InternalRow] = {
