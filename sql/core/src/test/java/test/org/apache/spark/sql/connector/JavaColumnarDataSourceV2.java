@@ -69,10 +69,6 @@ public class JavaColumnarDataSourceV2 implements TestingV2Source {
     public boolean supportColumnarReads(InputPartition partition) {
       return true;
     }
-    @Override
-    public Optional<Iterable<String>> getVectorTypes() {
-      return Optional.empty();
-    }
 
     @Override
     public PartitionReader<InternalRow> createReader(InputPartition partition) {
