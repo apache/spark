@@ -56,6 +56,12 @@ case object CostMode extends ExplainMode { val name = "cost" }
  */
 case object FormattedMode extends ExplainMode { val name = "formatted" }
 
+/**
+ * Validation mode means that when printing explain for a DataFrame, only a logical plan of parsing
+ * and analysis phase is expected to be printed to the console.
+ */
+case object ValidationMode extends ExplainMode { val name = "validation" }
+
 object ExplainMode {
   /**
    * Returns the explain mode from the given string.
@@ -66,7 +72,8 @@ object ExplainMode {
     case CodegenMode.name => CodegenMode
     case CostMode.name => CostMode
     case FormattedMode.name => FormattedMode
+    case ValidationMode.name => ValidationMode
     case _ => throw new IllegalArgumentException(s"Unknown explain mode: $mode. Accepted " +
-      "explain modes are 'simple', 'extended', 'codegen', 'cost', 'formatted'.")
+      "explain modes are 'simple', 'extended', 'codegen', 'cost', 'formatted', 'validation'.")
   }
 }

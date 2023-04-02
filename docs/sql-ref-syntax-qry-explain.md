@@ -27,7 +27,7 @@ By default, this clause provides information about a physical plan only.
 ### Syntax
 
 ```sql
-EXPLAIN [ EXTENDED | CODEGEN | COST | FORMATTED ] statement
+EXPLAIN [ EXTENDED | CODEGEN | COST | FORMATTED | VALIDATION] statement
 ```
 
 ### Parameters
@@ -50,6 +50,10 @@ EXPLAIN [ EXTENDED | CODEGEN | COST | FORMATTED ] statement
 * **FORMATTED**
 
     Generates two sections: a physical plan outline and node details.
+
+* **VALIDATION**
+
+    Generates parsed logical plan, analyzed logical plan.
 
 * **statement**
 
@@ -122,6 +126,24 @@ EXPLAIN FORMATTED select k, sum(v) from values (1, 2), (1, 3) t(k, v) group by k
         
  (4) HashAggregate [codegen id : 2]
  Input: [k#19, sum#24L]
+|
++----------------------------------------------------+
+
+-- Using Validation
+EXPLAIN VALIDATION select k, sum(v) from values (1, 2), (1, 3) t(k, v) group by k;
++----------------------------------------------------+
+|                                                plan|
++----------------------------------------------------+
+| == Parsed Logical Plan ==
+ 'Aggregate ['k], ['k, unresolvedalias('sum('v), None)]
+ +- 'SubqueryAlias `t`
+    +- 'UnresolvedInlineTable [k, v], [List(1, 2), List(1, 3)]
+   
+ == Analyzed Logical Plan ==
+ k: int, sum(v): bigint
+ Aggregate [k#47], [k#47, sum(cast(v#48 as bigint)) AS sum(v)#50L]
+ +- SubqueryAlias `t`
+    +- LocalRelation [k#47, v#48]
 |
 +----------------------------------------------------+
 ```

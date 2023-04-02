@@ -212,7 +212,7 @@ class SparkSqlAstBuilder extends AstBuilder {
    * Create an [[ExplainCommand]] logical plan.
    * The syntax of using this command in SQL is:
    * {{{
-   *   EXPLAIN (EXTENDED | CODEGEN | COST | FORMATTED) SELECT * FROM ...
+   *   EXPLAIN (EXTENDED | CODEGEN | COST | FORMATTED | VALIDATION) SELECT * FROM ...
    * }}}
    */
   override def visitExplain(ctx: ExplainContext): LogicalPlan = withOrigin(ctx) {
