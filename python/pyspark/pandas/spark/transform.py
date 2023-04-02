@@ -57,5 +57,4 @@ def fill_null_data(data_frame,fill_null_sc='Missing',nc_impute_type='mode'):
                 print("Couldn't replace the null values for ",col_name)
         else:
             pass
-
     return data
