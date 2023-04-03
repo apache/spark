@@ -19,8 +19,9 @@ package org.apache.spark.sql.jdbc.v2
 
 import java.sql.Connection
 
-import org.apache.spark.{SparkConf, SparkThrowable}
+import org.apache.spark.SparkConf
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
 import org.apache.spark.sql.jdbc.DatabaseOnDocker
 import org.apache.spark.sql.types._
@@ -98,8 +99,7 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCT
       sql(s"CREATE TABLE $t1(c int)")
       sql(s"CREATE TABLE $t2(c int)")
       checkError(
-        exception = intercept[AnalysisException](sql(s"ALTER TABLE $t1 RENAME TO $t2"))
-          .getCause.asInstanceOf[SparkThrowable],
+        exception = intercept[TableAlreadyExistsException](sql(s"ALTER TABLE $t1 RENAME TO $t2")),
         errorClass = "TABLE_OR_VIEW_ALREADY_EXISTS",
         parameters = Map("relationName" -> "t2")
       )
