@@ -3125,14 +3125,13 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
 
 
 class SparkConnectSessionTests(SparkConnectSQLTestCase):
-
     def setUp(self) -> None:
         self.connect = (
             PySparkSession.builder.config(conf=self.conf())
-                .appName(self.__class__.__name__)
-                .remote("local[4]")
-                .getOrCreate()
-            )
+            .appName(self.__class__.__name__)
+            .remote("local[4]")
+            .getOrCreate()
+        )
 
     def _check_no_active_session_error(self, e: PySparkException):
         self.check_error(exception=e, error_class="NO_ACTIVE_SESSION", message_parameters=dict())
@@ -3171,28 +3170,34 @@ class SparkConnectSessionTests(SparkConnectSQLTestCase):
         with self.assertRaises(AnalysisException) as e:
             self.connect.sql("select x").collect()
         self.assertTrue("JVM stacktrace" in e.exception.message)
-        self.assertTrue("at org.apache.spark.sql.catalyst.analysis.CheckAnalysis" in e.exception.message)
+        self.assertTrue(
+            "at org.apache.spark.sql.catalyst.analysis.CheckAnalysis" in e.exception.message
+        )
 
         self.connect.conf.set("spark.sql.pyspark.jvmStacktrace.enabled", "false")
         with self.assertRaises(AnalysisException) as e:
             self.connect.sql("select x").collect()
 
         self.assertFalse("JVM stacktrace" in e.exception.message)
-        self.assertFalse("org.apache.spark.sql.catalyst.analysis.CheckAnalysis" in e.exception.message)
+        self.assertFalse(
+            "at org.apache.spark.sql.catalyst.analysis.CheckAnalysis" in e.exception.message
+        )
 
         # Create a new session with a different stack trace size.
         self.connect.stop()
         connect = (
             PySparkSession.builder.config(conf=self.conf())
-                .config("spark.connect.jvmStacktrace.size", 128)
-                .remote("local[4]")
-                .getOrCreate()
-            )
+            .config("spark.connect.jvmStacktrace.size", 128)
+            .remote("local[4]")
+            .getOrCreate()
+        )
         connect.conf.set("spark.sql.pyspark.jvmStacktrace.enabled", "true")
         with self.assertRaises(AnalysisException) as e:
             connect.sql("select x").collect()
         self.assertTrue("JVM stacktrace" in e.exception.message)
-        self.assertFalse("org.apache.spark.sql.catalyst.analysis.CheckAnalysis" in e.exception.message)
+        self.assertFalse(
+            "at org.apache.spark.sql.catalyst.analysis.CheckAnalysis" in e.exception.message
+        )
 
 
 @unittest.skipIf(not should_test_connect, connect_requirement_message)

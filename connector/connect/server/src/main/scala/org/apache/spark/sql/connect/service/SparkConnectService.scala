@@ -43,7 +43,8 @@ import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.{AddArtifactsRequest, AddArtifactsResponse}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.connect.config.Connect.{CONNECT_GRPC_BINDING_PORT, CONNECT_GRPC_MAX_INBOUND_MESSAGE_SIZE}
+import org.apache.spark.sql.connect.config.Connect.{CONNECT_GRPC_BINDING_PORT, CONNECT_GRPC_MAX_INBOUND_MESSAGE_SIZE, CONNECT_JVM_STACK_TRACE_SIZE}
+import org.apache.spark.sql.internal.SQLConf.PYSPARK_JVM_STACKTRACE_ENABLED
 
 /**
  * The SparkConnectService implementation.
@@ -74,20 +75,17 @@ class SparkConnectService(debug: Boolean)
     classes.toSeq
   }
 
-  private def buildStatusFromThrowable(
-      st: Throwable,
-      stackTraceEnabled: Boolean = false): RPCStatus = {
+  private def buildStatusFromThrowable(st: Throwable, stackTraceEnabled: Boolean): RPCStatus = {
     val errorInfo = ErrorInfo
       .newBuilder()
       .setReason(st.getClass.getName)
       .setDomain("org.apache.spark")
       .putMetadata("classes", compact(render(allClasses(st.getClass).map(_.getName))))
 
-    val withStackTrace = if (stackTraceEnabled) {
-      import org.apache.spark.sql.connect.config.Connect.CONNECT_JVM_STACK_TRACE_SIZE
-      val stackTrace = ExceptionUtils.getStackTrace(st)
+    lazy val stackTrace = Option(ExceptionUtils.getStackTrace(st))
+    val withStackTrace = if (stackTraceEnabled && stackTrace.nonEmpty) {
       val size = SparkEnv.get.conf.get(CONNECT_JVM_STACK_TRACE_SIZE).toInt
-      errorInfo.putMetadata("stackTrace", StringUtils.abbreviate(stackTrace, size))
+      errorInfo.putMetadata("stackTrace", StringUtils.abbreviate(stackTrace.get, size))
     } else {
       errorInfo
     }
@@ -127,12 +125,12 @@ class SparkConnectService(debug: Boolean)
       SparkConnectService
         .getOrCreateIsolatedSession(userId, sessionId)
         .session
-    val stackTraceEnabled = try {
-      import org.apache.spark.sql.internal.SQLConf.PYSPARK_JVM_STACKTRACE_ENABLED
-      session.conf.get(PYSPARK_JVM_STACKTRACE_ENABLED.key).toBoolean
-    } catch {
-      case NonFatal(_) => true
-    }
+    val stackTraceEnabled =
+      try {
+        session.conf.get(PYSPARK_JVM_STACKTRACE_ENABLED.key).toBoolean
+      } catch {
+        case NonFatal(_) => true
+      }
 
     {
       case se: SparkException if isPythonExecutionException(se) =>
@@ -144,8 +142,7 @@ class SparkConnectService(debug: Boolean)
       case e: Throwable if e.isInstanceOf[SparkThrowable] || NonFatal.apply(e) =>
         logError(s"Error during: $opType", e)
         observer.onError(
-          StatusProto.toStatusRuntimeException(
-            buildStatusFromThrowable(e, stackTraceEnabled)))
+          StatusProto.toStatusRuntimeException(buildStatusFromThrowable(e, stackTraceEnabled)))
 
       case e: Throwable =>
         logError(s"Error during: $opType", e)
