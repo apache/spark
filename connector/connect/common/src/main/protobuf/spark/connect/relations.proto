@@ -840,6 +840,9 @@ message GroupMap {
 
   // (Required) Input user-defined function.
   CommonInlineUserDefinedFunction func = 3;
+
+  // (Optional) Expressions for sorting. Only used by Scala Sorted Group Map API.
+  repeated Expression sorting_expressions = 4;
 }
 
 message CoGroupMap {

@@ -51,6 +51,10 @@ private[sql] object UdfUtils {
   def flatMapFuncToScalaFunc[T, U](f: FlatMapFunction[T, U]): T => TraversableOnce[U] = x =>
     f.call(x).asScala
 
+  def flatMapGroupsFuncToScalaFunc[K, V, U](
+      f: FlatMapGroupsFunction[K, V, U]): (K, Iterator[V]) => TraversableOnce[U] = (key, data) =>
+    f.call(key, data.asJava).asScala
+
   def mapPartitionsFuncToScalaFunc[T, U](
       f: MapPartitionsFunction[T, U]): Iterator[T] => Iterator[U] = x => f.call(x.asJava).asScala
 
@@ -58,4 +62,15 @@ private[sql] object UdfUtils {
 
   def foreachPartitionFuncToScalaFunc[T](f: ForeachPartitionFunction[T]): Iterator[T] => Unit =
     x => f.call(x.asJava)
+
+  def mapValuesAdaptor[K, V, U, IV](
+      f: (K, Iterator[V]) => TraversableOnce[U],
+      valueMapFunc: IV => V): (K, Iterator[IV]) => TraversableOnce[U] = {
+    (k: K, itr: Iterator[IV]) =>
+      {
+        f(k, itr.map(v => valueMapFunc(v)))
+      }
+  }
+
+  def identical[T](): T => T = t => t
 }
