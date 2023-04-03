@@ -120,6 +120,12 @@ object CheckConnectJvmClientCompatibility {
       clientJar: File,
       sqlJar: File): List[Problem] = {
     val includedRules = Seq(
+      IncludeByName("org.apache.spark.sql.catalog.Catalog.*"),
+      IncludeByName("org.apache.spark.sql.catalog.CatalogMetadata.*"),
+      IncludeByName("org.apache.spark.sql.catalog.Column.*"),
+      IncludeByName("org.apache.spark.sql.catalog.Database.*"),
+      IncludeByName("org.apache.spark.sql.catalog.Function.*"),
+      IncludeByName("org.apache.spark.sql.catalog.Table.*"),
       IncludeByName("org.apache.spark.sql.Column.*"),
       IncludeByName("org.apache.spark.sql.ColumnName.*"),
       IncludeByName("org.apache.spark.sql.DataFrame.*"),
@@ -165,6 +171,7 @@ object CheckConnectJvmClientCompatibility {
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.encoder"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.sqlContext"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.joinWith"),
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.metadataColumn"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.selectUntyped"), // protected
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.reduce"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.groupByKey"),
@@ -210,7 +217,6 @@ object CheckConnectJvmClientCompatibility {
       ProblemFilters.exclude[Problem](
         "org.apache.spark.sql.SparkSession.baseRelationToDataFrame"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.createDataset"),
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.catalog"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.executeCommand"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.readStream"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.this"),

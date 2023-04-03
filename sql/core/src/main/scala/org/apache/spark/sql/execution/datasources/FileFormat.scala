@@ -198,6 +198,9 @@ object FileFormat {
   // until they can be placed in the _metadata struct.
   val ROW_INDEX_TEMPORARY_COLUMN_NAME = s"_tmp_metadata_$ROW_INDEX"
 
+  val ROW_INDEX_FIELD = FileSourceGeneratedMetadataStructField(
+    ROW_INDEX, ROW_INDEX_TEMPORARY_COLUMN_NAME, LongType, nullable = false)
+
   val METADATA_NAME = "_metadata"
 
   /**
@@ -211,25 +214,34 @@ object FileFormat {
   /**
    * Schema of metadata struct that can be produced by every file format,
    * metadata fields for every file format must be *not* nullable.
-   * */
-  val BASE_METADATA_STRUCT: StructType = new StructType()
-    .add(StructField(FileFormat.FILE_PATH, StringType, nullable = false))
-    .add(StructField(FileFormat.FILE_NAME, StringType, nullable = false))
-    .add(StructField(FileFormat.FILE_SIZE, LongType, nullable = false))
-    .add(StructField(FileFormat.FILE_BLOCK_START, LongType, nullable = false))
-    .add(StructField(FileFormat.FILE_BLOCK_LENGTH, LongType, nullable = false))
-    .add(StructField(FileFormat.FILE_MODIFICATION_TIME, TimestampType, nullable = false))
+   */
+  val BASE_METADATA_FIELDS: Seq[StructField] = Seq(
+    FileSourceConstantMetadataStructField(FILE_PATH, StringType, nullable = false),
+    FileSourceConstantMetadataStructField(FILE_NAME, StringType, nullable = false),
+    FileSourceConstantMetadataStructField(FILE_SIZE, LongType, nullable = false),
+    FileSourceConstantMetadataStructField(FILE_BLOCK_START, LongType, nullable = false),
+    FileSourceConstantMetadataStructField(FILE_BLOCK_LENGTH, LongType, nullable = false),
+    FileSourceConstantMetadataStructField(FILE_MODIFICATION_TIME, TimestampType, nullable = false))
 
   /**
-   * Create a file metadata struct column containing fields supported by the given file format.
+   * Supported metadata fields of the given [[FileFormat]].
+   */
+  def metadataSchemaFields(fileFormat: FileFormat): Seq[StructField] = fileFormat match {
+    case _: ParquetFileFormat =>
+      BASE_METADATA_FIELDS :+ ROW_INDEX_FIELD
+    case _ =>
+      BASE_METADATA_FIELDS
+  }
+
+  /**
+   * Create a file metadata struct column containing fields supported by the given [[FileFormat]].
    */
   def createFileMetadataCol(fileFormat: FileFormat): AttributeReference = {
-    val struct = if (fileFormat.isInstanceOf[ParquetFileFormat]) {
-      BASE_METADATA_STRUCT.add(StructField(FileFormat.ROW_INDEX, LongType, nullable = false))
-    } else {
-      BASE_METADATA_STRUCT
-    }
-    FileSourceMetadataAttribute(FileFormat.METADATA_NAME, struct)
+    // Strip out the fields' metadata to avoid exposing it to the user. [[FileSourceStrategy]]
+    // avoids confusion by mapping back to [[metadataSchemaFields]].
+    val fields = metadataSchemaFields(fileFormat)
+      .map(FileSourceMetadataAttribute.cleanupFileSourceMetadataInformation)
+    FileSourceMetadataAttribute(FileFormat.METADATA_NAME, StructType(fields))
   }
 
   // create an internal row given required metadata fields and file information
