@@ -50,7 +50,7 @@ from pyspark.sql.utils import is_remote
 
 # For running doctests and reference resolution in PyCharm.
 from pyspark import pandas as ps
-from pyspark.pandas._typing import Label, SparkColumn, SparkDataFrame
+from pyspark.pandas._typing import Label, GenericColumn, GenericDataFrame
 
 if TYPE_CHECKING:
     # This is required in old Python 3.5 to prevent circular reference.
@@ -543,7 +543,7 @@ class InternalFrame:
 
     def __init__(
         self,
-        spark_frame: SparkDataFrame,
+        spark_frame: GenericDataFrame,
         index_spark_columns: Optional[List[Column]],
         index_names: Optional[List[Optional[Label]]] = None,
         index_fields: Optional[List[InternalField]] = None,
@@ -677,7 +677,7 @@ class InternalFrame:
                 NATURAL_ORDER_COLUMN_NAME, F.monotonically_increasing_id()  # type: ignore[arg-type]
             )
 
-        self._sdf: SparkDataFrame = spark_frame
+        self._sdf: GenericDataFrame = spark_frame
 
         # index_spark_columns
         assert all(
@@ -888,8 +888,8 @@ class InternalFrame:
 
     @staticmethod
     def attach_default_index(
-        sdf: SparkDataFrame, default_index_type: Optional[str] = None
-    ) -> SparkDataFrame:
+        sdf: GenericDataFrame, default_index_type: Optional[str] = None
+    ) -> GenericDataFrame:
         """
         This method attaches a default index to Spark DataFrame. Spark does not have the index
         notion so corresponding column should be generated.
@@ -934,7 +934,7 @@ class InternalFrame:
             )
 
     @staticmethod
-    def attach_sequence_column(sdf: SparkDataFrame, column_name: str) -> SparkDataFrame:
+    def attach_sequence_column(sdf: GenericDataFrame, column_name: str) -> GenericDataFrame:
         scols = [scol_for(sdf, column) for column in sdf.columns]
         sequential_index = (
             F.row_number().over(Window.orderBy(F.monotonically_increasing_id())).cast("long") - 1
@@ -942,7 +942,7 @@ class InternalFrame:
         return sdf.select(sequential_index.alias(column_name), *scols)  # type: ignore[arg-type]
 
     @staticmethod
-    def attach_distributed_column(sdf: SparkDataFrame, column_name: str) -> SparkDataFrame:
+    def attach_distributed_column(sdf: GenericDataFrame, column_name: str) -> GenericDataFrame:
         scols = [scol_for(sdf, column) for column in sdf.columns]
         jvm = sdf.sparkSession._jvm
         tag = jvm.org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FUNC_ALIAS()
@@ -953,7 +953,9 @@ class InternalFrame:
         )
 
     @staticmethod
-    def attach_distributed_sequence_column(sdf: SparkDataFrame, column_name: str) -> SparkDataFrame:
+    def attach_distributed_sequence_column(
+        sdf: GenericDataFrame, column_name: str
+    ) -> GenericDataFrame:
         """
         This method attaches a Spark column that has a sequence in a distributed manner.
         This is equivalent to the column assigned when default index type 'distributed-sequence'.
@@ -1294,7 +1296,7 @@ class InternalFrame:
 
     def with_new_columns(
         self,
-        scols_or_pssers: Sequence[Union[SparkColumn, "Series"]],
+        scols_or_pssers: Sequence[Union[GenericColumn, "Series"]],
         *,
         column_labels: Optional[List[Label]] = None,
         data_fields: Optional[List[InternalField]] = None,
@@ -1336,10 +1338,10 @@ class InternalFrame:
                 len(column_labels),
             )
 
-        data_spark_columns: List[SparkColumn] = []
+        data_spark_columns: List[GenericColumn] = []
         for scol_or_psser in scols_or_pssers:
             if isinstance(scol_or_psser, Series):
-                scol: SparkColumn = scol_or_psser.spark.column
+                scol: GenericColumn = scol_or_psser.spark.column
             else:
                 scol = scol_or_psser
             data_spark_columns.append(scol)

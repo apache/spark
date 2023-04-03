@@ -73,7 +73,7 @@ from pyspark.sql.types import (
 from pyspark.sql.window import Window
 
 from pyspark import pandas as ps  # For running doctests and reference resolution in PyCharm.
-from pyspark.pandas._typing import Axis, Dtype, Label, Name, Scalar, T, SparkColumn
+from pyspark.pandas._typing import Axis, Dtype, Label, Name, Scalar, T, GenericColumn
 from pyspark.pandas.accessors import PandasOnSparkSeriesMethods
 from pyspark.pandas.categorical import CategoricalAccessor
 from pyspark.pandas.config import get_option
@@ -453,7 +453,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         object.__setattr__(psdf, "_psseries", {self._column_label: self})
 
     def _with_new_scol(
-        self, scol: SparkColumn, *, field: Optional[InternalField] = None
+        self, scol: GenericColumn, *, field: Optional[InternalField] = None
     ) -> "Series":
         """
         Copy pandas-on-Spark Series with the new Spark Column.

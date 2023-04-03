@@ -57,7 +57,7 @@ from pyspark.sql.types import (
 )
 
 from pyspark import pandas as ps  # For running doctests and reference resolution in PyCharm.
-from pyspark.pandas._typing import Dtype, Label, Name, Scalar, SparkDataFrame, SparkColumn
+from pyspark.pandas._typing import Dtype, Label, Name, Scalar, GenericDataFrame, GenericColumn
 from pyspark.pandas.config import get_option, option_context
 from pyspark.pandas.base import IndexOpsMixin
 from pyspark.pandas.frame import DataFrame
@@ -248,7 +248,7 @@ class Index(IndexOpsMixin):
         return self._psdf._internal.index_names[0]
 
     def _with_new_scol(
-        self, scol: SparkColumn, *, field: Optional[InternalField] = None
+        self, scol: GenericColumn, *, field: Optional[InternalField] = None
     ) -> "Index":
         """
         Copy pandas-on-Spark Index with the new Spark Column.
@@ -1637,7 +1637,7 @@ class Index(IndexOpsMixin):
                     ('a', 'x', 1)],
                    ), Int64Index([1, 2, 0], dtype='int64'))
         """
-        sdf: SparkDataFrame = self._internal.spark_frame
+        sdf: GenericDataFrame = self._internal.spark_frame
         if return_indexer:
             sequence_col = verify_temp_column_name(sdf, "__distributed_sequence_column__")
             sdf = InternalFrame.attach_distributed_sequence_column(sdf, column_name=sequence_col)
@@ -1970,7 +1970,7 @@ class Index(IndexOpsMixin):
         >>> psidx.argmax()
         4
         """
-        sdf: SparkDataFrame = self._internal.spark_frame.select(self.spark.column)
+        sdf: GenericDataFrame = self._internal.spark_frame.select(self.spark.column)
         sequence_col = verify_temp_column_name(sdf, "__distributed_sequence_column__")
         sdf = InternalFrame.attach_distributed_sequence_column(sdf, column_name=sequence_col)
         # spark_frame here looks like below
@@ -2020,7 +2020,7 @@ class Index(IndexOpsMixin):
         >>> psidx.argmin()
         7
         """
-        sdf: SparkDataFrame = self._internal.spark_frame.select(self.spark.column)
+        sdf: GenericDataFrame = self._internal.spark_frame.select(self.spark.column)
         sequence_col = verify_temp_column_name(sdf, "__distributed_sequence_column__")
         sdf = InternalFrame.attach_distributed_sequence_column(sdf, column_name=sequence_col)
 

@@ -22,7 +22,7 @@ import pandas as pd
 from pandas.api.types import CategoricalDtype
 
 from pyspark.pandas.base import column_op, IndexOpsMixin
-from pyspark.pandas._typing import Dtype, IndexOpsLike, SeriesOrIndex, SparkColumn
+from pyspark.pandas._typing import Dtype, IndexOpsLike, SeriesOrIndex, GenericColumn
 from pyspark.pandas.data_type_ops.base import (
     DataTypeOps,
     is_valid_operand_for_numeric_arithmetic,
@@ -241,7 +241,7 @@ class BooleanOps(DataTypeOps):
             return right.__and__(left)
         else:
 
-            def and_func(left: SparkColumn, right: Any) -> SparkColumn:
+            def and_func(left: GenericColumn, right: Any) -> GenericColumn:
                 if not isinstance(right, (Column, SparkConnectColumn)):
                     if pd.isna(right):
                         right = F.lit(None)
@@ -258,7 +258,7 @@ class BooleanOps(DataTypeOps):
             return right ^ left
         elif _is_valid_for_logical_operator(right):
 
-            def xor_func(left: SparkColumn, right: Any) -> SparkColumn:
+            def xor_func(left: GenericColumn, right: Any) -> GenericColumn:
                 if not isinstance(right, (Column, SparkConnectColumn)):
                     if pd.isna(right):
                         right = F.lit(None)
@@ -277,7 +277,7 @@ class BooleanOps(DataTypeOps):
             return right.__or__(left)
         else:
 
-            def or_func(left: SparkColumn, right: Any) -> SparkColumn:
+            def or_func(left: GenericColumn, right: Any) -> GenericColumn:
                 if not isinstance(right, (Column, SparkConnectColumn)) and pd.isna(right):
                     return F.lit(False)
                 else:
@@ -324,19 +324,19 @@ class BooleanOps(DataTypeOps):
 
     def lt(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         _sanitize_list_like(right)
-        return column_op(cast(Callable[..., SparkColumn], Column.__lt__))(left, right)
+        return column_op(cast(Callable[..., GenericColumn], Column.__lt__))(left, right)
 
     def le(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         _sanitize_list_like(right)
-        return column_op(cast(Callable[..., SparkColumn], Column.__le__))(left, right)
+        return column_op(cast(Callable[..., GenericColumn], Column.__le__))(left, right)
 
     def ge(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         _sanitize_list_like(right)
-        return column_op(cast(Callable[..., SparkColumn], Column.__ge__))(left, right)
+        return column_op(cast(Callable[..., GenericColumn], Column.__ge__))(left, right)
 
     def gt(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         _sanitize_list_like(right)
-        return column_op(cast(Callable[..., SparkColumn], Column.__gt__))(left, right)
+        return column_op(cast(Callable[..., GenericColumn], Column.__gt__))(left, right)
 
     def invert(self, operand: IndexOpsLike) -> IndexOpsLike:
         return operand._with_new_scol(~operand.spark.column, field=operand._internal.data_fields[0])
@@ -355,7 +355,7 @@ class BooleanExtensionOps(BooleanOps):
     def __and__(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         _sanitize_list_like(right)
 
-        def and_func(left: SparkColumn, right: Any) -> SparkColumn:
+        def and_func(left: GenericColumn, right: Any) -> GenericColumn:
             if not isinstance(right, (Column, SparkConnectColumn)):
                 if pd.isna(right):
                     right = F.lit(None)
@@ -368,7 +368,7 @@ class BooleanExtensionOps(BooleanOps):
     def __or__(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         _sanitize_list_like(right)
 
-        def or_func(left: SparkColumn, right: Any) -> SparkColumn:
+        def or_func(left: GenericColumn, right: Any) -> GenericColumn:
             if not isinstance(right, (Column, SparkConnectColumn)):
                 if pd.isna(right):
                     right = F.lit(None)
@@ -383,7 +383,7 @@ class BooleanExtensionOps(BooleanOps):
 
         if _is_boolean_type(right):
 
-            def xor_func(left: SparkColumn, right: Any) -> SparkColumn:
+            def xor_func(left: GenericColumn, right: Any) -> GenericColumn:
                 if not isinstance(right, (Column, SparkConnectColumn)):
                     if pd.isna(right):
                         right = F.lit(None)

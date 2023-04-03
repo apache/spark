@@ -31,7 +31,7 @@ from pyspark.sql import functions as F, Column, Window
 from pyspark.sql.types import LongType, BooleanType, NumericType
 
 from pyspark import pandas as ps  # For running doctests and reference resolution in PyCharm.
-from pyspark.pandas._typing import Axis, Dtype, IndexOpsLike, Label, SeriesOrIndex, SparkColumn
+from pyspark.pandas._typing import Axis, Dtype, IndexOpsLike, Label, SeriesOrIndex, GenericColumn
 from pyspark.pandas.config import get_option, option_context
 from pyspark.pandas.internal import (
     InternalField,
@@ -67,7 +67,7 @@ def should_alignment_for_column_op(self: SeriesOrIndex, other: SeriesOrIndex) ->
 
 
 def align_diff_index_ops(
-    func: Callable[..., SparkColumn], this_index_ops: SeriesOrIndex, *args: Any
+    func: Callable[..., GenericColumn], this_index_ops: SeriesOrIndex, *args: Any
 ) -> SeriesOrIndex:
     """
     Align the `IndexOpsMixin` objects and apply the function.
@@ -178,7 +178,7 @@ def align_diff_index_ops(
                 ).rename(that_series.name)
 
 
-def booleanize_null(scol: SparkColumn, f: Callable[..., SparkColumn]) -> SparkColumn:
+def booleanize_null(scol: GenericColumn, f: Callable[..., GenericColumn]) -> GenericColumn:
     """
     Booleanize Null in Spark Column
     """
@@ -195,7 +195,7 @@ def booleanize_null(scol: SparkColumn, f: Callable[..., SparkColumn]) -> SparkCo
     return scol
 
 
-def column_op(f: Callable[..., SparkColumn]) -> Callable[..., SeriesOrIndex]:
+def column_op(f: Callable[..., GenericColumn]) -> Callable[..., SeriesOrIndex]:
     """
     A decorator that wraps APIs taking/returning Spark Column so that pandas-on-Spark Series can be
     supported too. If this decorator is used for the `f` function that takes Spark Column and
@@ -252,7 +252,7 @@ def column_op(f: Callable[..., SparkColumn]) -> Callable[..., SeriesOrIndex]:
     return wrapper
 
 
-def numpy_column_op(f: Callable[..., SparkColumn]) -> Callable[..., SeriesOrIndex]:
+def numpy_column_op(f: Callable[..., GenericColumn]) -> Callable[..., SeriesOrIndex]:
     @wraps(f)
     def wrapper(self: SeriesOrIndex, *args: Any) -> SeriesOrIndex:
         # PySpark does not support NumPy type out of the box. For now, we convert NumPy types
@@ -287,7 +287,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
 
     @abstractmethod
     def _with_new_scol(
-        self: IndexOpsLike, scol: SparkColumn, *, field: Optional[InternalField] = None
+        self: IndexOpsLike, scol: GenericColumn, *, field: Optional[InternalField] = None
     ) -> IndexOpsLike:
         pass
 

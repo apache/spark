@@ -26,7 +26,7 @@ from pyspark.sql.types import DataType
 
 # For running doctests and reference resolution in PyCharm.
 from pyspark import pandas as ps
-from pyspark.pandas._typing import Label, Name, Scalar, SparkColumn
+from pyspark.pandas._typing import Label, Name, Scalar, GenericColumn
 from pyspark.pandas.exceptions import PandasNotImplementedError
 from pyspark.pandas.frame import DataFrame
 from pyspark.pandas.indexes.base import Index
@@ -136,7 +136,7 @@ class MultiIndex(Index):
         raise TypeError("TypeError: cannot perform __abs__ with this index type: MultiIndex")
 
     def _with_new_scol(
-        self, scol: SparkColumn, *, field: Optional[InternalField] = None
+        self, scol: GenericColumn, *, field: Optional[InternalField] = None
     ) -> "MultiIndex":
         raise NotImplementedError("Not supported for type MultiIndex")
 

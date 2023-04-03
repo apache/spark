@@ -93,7 +93,7 @@ from pyspark.pandas._typing import (
     Name,
     Scalar,
     T,
-    SparkColumn,
+    GenericColumn,
 )
 from pyspark.pandas.accessors import PandasOnSparkFrameMethods
 from pyspark.pandas.config import option_context, get_option
@@ -743,7 +743,7 @@ class DataFrame(Frame, Generic[T]):
 
     def _reduce_for_stat_function(
         self,
-        sfun: Callable[["Series"], SparkColumn],
+        sfun: Callable[["Series"], GenericColumn],
         name: str,
         axis: Optional[Axis] = None,
         numeric_only: bool = True,
@@ -775,7 +775,7 @@ class DataFrame(Frame, Generic[T]):
             min_count = kwargs.get("min_count", 0)
 
             exprs = [
-                cast(SparkColumn, F.lit(None).cast(StringType()).alias(SPARK_DEFAULT_INDEX_NAME))
+                cast(GenericColumn, F.lit(None).cast(StringType()).alias(SPARK_DEFAULT_INDEX_NAME))
             ]
             new_column_labels = []
             for label in self._internal.column_labels:
@@ -788,7 +788,7 @@ class DataFrame(Frame, Generic[T]):
 
                 if keep_column:
                     if not skipna and get_option("compute.eager_check") and psser.hasnans:
-                        scol: SparkColumn = F.first(F.lit(np.nan))
+                        scol: GenericColumn = F.first(F.lit(np.nan))
                     else:
                         scol = sfun(psser)
 
@@ -877,7 +877,7 @@ class DataFrame(Frame, Generic[T]):
 
     def _apply_series_op(
         self,
-        op: Callable[["Series"], Union["Series", SparkColumn]],
+        op: Callable[["Series"], Union["Series", GenericColumn]],
         should_resolve: bool = False,
     ) -> "DataFrame":
         applied = []
@@ -1515,7 +1515,7 @@ class DataFrame(Frame, Generic[T]):
             for label in internal.column_labels
             if isinstance(internal.spark_type_for(label), (NumericType, BooleanType))
         ]
-        numeric_scols: List[SparkColumn] = [
+        numeric_scols: List[GenericColumn] = [
             internal.spark_column_for(label).cast("double") for label in numeric_labels
         ]
         numeric_col_names: List[str] = [name_like_string(label) for label in numeric_labels]
@@ -1533,7 +1533,7 @@ class DataFrame(Frame, Generic[T]):
         # |  4|  1|null|
         # +---+---+----+
 
-        pair_scols: List[SparkColumn] = []
+        pair_scols: List[GenericColumn] = []
         for i in range(0, num_scols):
             for j in range(i, num_scols):
                 pair_scols.append(
@@ -1787,7 +1787,7 @@ class DataFrame(Frame, Generic[T]):
 
         intersect_numeric_column_labels: List[Label] = []
         diff_numeric_column_labels: List[Label] = []
-        pair_scols: List[SparkColumn] = []
+        pair_scols: List[GenericColumn] = []
         if right_is_series:
             intersect_numeric_column_labels = this_numeric_column_labels
             that_scol = that._internal.spark_column_for(that_numeric_column_labels[0]).cast(
@@ -4871,7 +4871,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         else:
             raise TypeError("decimals must be an integer, a dict-like or a Series")
 
-        def op(psser: ps.Series) -> Union[ps.Series, SparkColumn]:
+        def op(psser: ps.Series) -> Union[ps.Series, GenericColumn]:
             label = psser._column_label
             if label in decimals_dict:
                 return F.round(psser.spark.column, decimals_dict[label])
@@ -5563,7 +5563,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         ]
 
         internal = self._internal.with_new_columns(
-            cast(Sequence[Union[SparkColumn, "Series"]], scols),
+            cast(Sequence[Union[GenericColumn, "Series"]], scols),
             column_labels=column_labels,
             data_fields=data_fields,
         )
@@ -7459,7 +7459,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                     )
             return DataFrame(internal)
 
-    def _prepare_sort_by_scols(self, by: Union[Name, List[Name]]) -> List[SparkColumn]:
+    def _prepare_sort_by_scols(self, by: Union[Name, List[Name]]) -> List[GenericColumn]:
         if is_name_like_value(by):
             by = [by]
         else:
@@ -7472,12 +7472,12 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                     "The column %s is not unique. For a multi-index, the label must be a tuple "
                     "with elements corresponding to each level." % name_like_string(colname)
                 )
-            new_by.append(cast(SparkColumn, ser.spark.column))
+            new_by.append(cast(GenericColumn, ser.spark.column))
         return new_by
 
     def _sort(
         self,
-        by: Sequence[SparkColumn],
+        by: Sequence[GenericColumn],
         ascending: Union[bool, List[bool]],
         na_position: str,
         keep: str = "first",
@@ -7495,10 +7495,10 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         # Mapper: Get a spark colum
         # n function for (ascending, na_position) combination
         mapper = {
-            (True, "first"): cast(SparkColumn, Column).asc_nulls_first,
-            (True, "last"): cast(SparkColumn, Column).asc_nulls_last,
-            (False, "first"): cast(SparkColumn, Column).desc_nulls_first,
-            (False, "last"): cast(SparkColumn, Column).desc_nulls_last,
+            (True, "first"): cast(GenericColumn, Column).asc_nulls_first,
+            (True, "last"): cast(GenericColumn, Column).asc_nulls_last,
+            (False, "first"): cast(GenericColumn, Column).desc_nulls_first,
+            (False, "last"): cast(GenericColumn, Column).desc_nulls_last,
         }
         by = [
             mapper[(asc, na_position)](scol)  # type: ignore[call-arg]
@@ -8537,10 +8537,10 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         data_columns = []
         column_labels = []
 
-        def left_scol_for(label: Label) -> SparkColumn:
+        def left_scol_for(label: Label) -> GenericColumn:
             return scol_for(left_table, left_internal.spark_column_name_for(label))
 
-        def right_scol_for(label: Label) -> SparkColumn:
+        def right_scol_for(label: Label) -> GenericColumn:
             return scol_for(right_table, right_internal.spark_column_name_for(label))
 
         for label in left_internal.column_labels:
@@ -10222,7 +10222,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                     "shape (1,{}) doesn't match the shape (1,{})".format(len(col), level)
                 )
         fill_value = np.nan if fill_value is None else fill_value
-        scols_or_pssers: List[Union[SparkColumn, "Series"]] = []
+        scols_or_pssers: List[Union[GenericColumn, "Series"]] = []
         labels = []
         for label in label_columns:
             if label in self._internal.column_labels:
@@ -10651,7 +10651,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 ).with_filter(F.lit(False))
             )
 
-        column_labels: Dict[Label, Dict[Any, SparkColumn]] = defaultdict(dict)
+        column_labels: Dict[Label, Dict[Any, GenericColumn]] = defaultdict(dict)
         index_values = set()
         should_returns_series = False
         for label in self._internal.column_labels:
@@ -10957,7 +10957,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         if len(column_labels) == 0:
             return ps.Series([], dtype=bool)
 
-        applied: List[SparkColumn] = []
+        applied: List[GenericColumn] = []
         for label in column_labels:
             scol = self._internal.spark_column_for(label)
 
@@ -11040,7 +11040,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         if len(column_labels) == 0:
             return ps.Series([], dtype=bool)
 
-        applied: List[SparkColumn] = []
+        applied: List[GenericColumn] = []
         for label in column_labels:
             scol = self._internal.spark_column_for(label)
             any_col = F.max(F.coalesce(scol.cast("boolean"), F.lit(False)))
@@ -11063,7 +11063,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         return bool_column_labels
 
     def _result_aggregated(
-        self, column_labels: List[Label], scols: Sequence[SparkColumn]
+        self, column_labels: List[Label], scols: Sequence[GenericColumn]
     ) -> "Series":
         """
         Given aggregated Spark columns and respective column labels from the original
@@ -11891,7 +11891,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         """
         window = Window.orderBy(NATURAL_ORDER_COLUMN_NAME).rowsBetween(-periods, -periods)
 
-        def op(psser: ps.Series) -> SparkColumn:
+        def op(psser: ps.Series) -> GenericColumn:
             prev_row = F.lag(psser.spark.column, periods).over(window)
             return ((psser.spark.column - prev_row) / prev_row).alias(
                 psser._internal.data_spark_column_names[0]
@@ -12251,7 +12251,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             if v < 0.0 or v > 1.0:
                 raise ValueError("percentiles should all be in the interval [0, 1].")
 
-        def quantile(psser: "Series") -> SparkColumn:
+        def quantile(psser: "Series") -> GenericColumn:
             spark_type = psser.spark.data_type
             spark_column = psser.spark.column
             if isinstance(spark_type, (BooleanType, NumericType)):
@@ -12273,7 +12273,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             # |[[0.25, 2, 6], [0.5, 3, 7], [0.75, 4, 8]]|
             # +-----------------------------------------+
 
-            percentile_cols: List[SparkColumn] = []
+            percentile_cols: List[GenericColumn] = []
             percentile_col_names: List[str] = []
             column_labels: List[Label] = []
             for label, column in zip(
@@ -12303,7 +12303,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             # |[2, 3, 4]|[6, 7, 8]|
             # +---------+---------+
 
-            cols_dict: Dict[str, List[SparkColumn]] = {}
+            cols_dict: Dict[str, List[GenericColumn]] = {}
             for column in percentile_col_names:
                 cols_dict[column] = list()
                 for i in range(len(qq)):
@@ -12760,7 +12760,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         if axis == 0:
 
-            def get_spark_column(psdf: DataFrame, label: Label) -> SparkColumn:
+            def get_spark_column(psdf: DataFrame, label: Label) -> GenericColumn:
                 scol = psdf._internal.spark_column_for(label)
                 col_type = psdf._internal.spark_type_for(label)
 
@@ -12897,7 +12897,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         if numeric_only is None and axis == 0:
             numeric_only = True
 
-        mode_scols: List[SparkColumn] = []
+        mode_scols: List[GenericColumn] = []
         mode_col_names: List[str] = []
         mode_labels: List[Label] = []
         for label, col_name in zip(
@@ -13644,7 +13644,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         return create_tuple_for_frame_type(params)
 
 
-def _reduce_spark_multi(sdf: SparkDataFrame, aggs: List[SparkColumn]) -> Any:
+def _reduce_spark_multi(sdf: SparkDataFrame, aggs: List[GenericColumn]) -> Any:
     """
     Performs a reduction on a spark DataFrame, the functions being known SQL aggregate functions.
     """

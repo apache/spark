@@ -69,7 +69,7 @@ from pyspark.sql.types import (
 )
 
 from pyspark import pandas as ps
-from pyspark.pandas._typing import Axis, Dtype, Label, Name, SparkDataFrame
+from pyspark.pandas._typing import Axis, Dtype, Label, Name, GenericDataFrame
 from pyspark.pandas.base import IndexOpsMixin
 from pyspark.pandas.utils import (
     align_diff_frames,
@@ -3722,7 +3722,7 @@ def read_orc(
 
 
 def _get_index_map(
-    sdf: SparkDataFrame, index_col: Optional[Union[str, List[str]]] = None
+    sdf: GenericDataFrame, index_col: Optional[Union[str, List[str]]] = None
 ) -> Tuple[Optional[List[Column]], Optional[List[Label]]]:
     index_spark_columns: Optional[List[Column]]
     index_names: Optional[List[Label]]

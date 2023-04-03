@@ -40,12 +40,13 @@ import warnings
 from pyspark.sql import functions as F, Column, DataFrame as SparkDataFrame, SparkSession
 from pyspark.sql.types import DoubleType
 from pyspark.sql.utils import is_remote
+from pyspark.errors import PySparkTypeError
 import pandas as pd
 from pandas.api.types import is_list_like  # type: ignore[attr-defined]
 
 # For running doctests and reference resolution in PyCharm.
 from pyspark import pandas as ps  # noqa: F401
-from pyspark.pandas._typing import Axis, Label, Name, DataFrameOrSeries, SparkColumn
+from pyspark.pandas._typing import Axis, Label, Name, DataFrameOrSeries, GenericColumn
 from pyspark.pandas.typedef.typehints import as_spark_type
 
 # For Supporting Spark Connect
@@ -474,8 +475,9 @@ def default_session() -> SparkSession:
     if not is_remote():
         spark = SparkSession.getActiveSession()
     else:
-        # TODO: Implement `getActiveSession` for SparkConnect.
-        spark = None
+        from pyspark.sql.connect.session import _active_spark_session
+
+        spark = _active_spark_session  # type: ignore[assignment]
     if spark is None:
         spark = SparkSession.builder.appName("pandas-on-Spark").getOrCreate()
 
@@ -943,16 +945,21 @@ def spark_column_equals(left: Column, right: Column) -> bool:
         return left._jc.equals(right._jc)
     elif isinstance(left, SparkConnectColumn):
         return repr(left) == repr(right)
+    else:
+        raise PySparkTypeError(
+            error_class="NOT_COLUMN",
+            message_parameters={"arg_name": "left", "arg_type": type(left).__name__},
+        )
 
 
 def compare_null_first(
     left: Column,
     right: Column,
     comp: Callable[
-        [SparkColumn, SparkColumn],
-        SparkColumn,
+        [GenericColumn, GenericColumn],
+        GenericColumn,
     ],
-) -> SparkColumn:
+) -> GenericColumn:
     return (left.isNotNull() & right.isNotNull() & comp(left, right)) | (
         left.isNull() & right.isNotNull()
     )
@@ -962,10 +969,10 @@ def compare_null_last(
     left: Column,
     right: Column,
     comp: Callable[
-        [SparkColumn, SparkColumn],
-        SparkColumn,
+        [GenericColumn, GenericColumn],
+        GenericColumn,
     ],
-) -> SparkColumn:
+) -> GenericColumn:
     return (left.isNotNull() & right.isNotNull() & comp(left, right)) | (
         left.isNotNull() & right.isNull()
     )
@@ -975,10 +982,10 @@ def compare_disallow_null(
     left: Column,
     right: Column,
     comp: Callable[
-        [SparkColumn, SparkColumn],
-        SparkColumn,
+        [GenericColumn, GenericColumn],
+        GenericColumn,
     ],
-) -> SparkColumn:
+) -> GenericColumn:
     return left.isNotNull() & right.isNotNull() & comp(left, right)
 
 
@@ -986,10 +993,10 @@ def compare_allow_null(
     left: Column,
     right: Column,
     comp: Callable[
-        [SparkColumn, SparkColumn],
-        SparkColumn,
+        [GenericColumn, GenericColumn],
+        GenericColumn,
     ],
-) -> SparkColumn:
+) -> GenericColumn:
     return left.isNull() | right.isNull() | comp(left, right)
 
 
