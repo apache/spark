@@ -9,7 +9,7 @@ def strc_to_numc(data_frame,col_name):
         return data_frame[col_name]
         #create a option to take the input whether to replace the values or not. If yes, call fill_null_data or fill_null_str or fill_null_num functions
     else:
-        #print(col_name,' executed')
+        print(col_name,' executed')
         keys=np.unique(data_frame[col_name].sort_values().to_numpy())
         values=range(len(keys))
         label_encode=dict(zip(keys,values))
@@ -21,7 +21,11 @@ def strd_to_numd(data_frame):
     data=data_frame.copy()
     for col_name in data.columns:
         if data[col_name].dtype=='O':
-            data[col_name]=strc_to_numc(data,col_name)
+            try:
+                data[col_name]=data[col_name].astype(str)
+                data[col_name]=strc_to_numc(data,col_name)
+            except:
+                print('Cannot covert the string to numeric for ',col_name)
     return data
 
 #replacing the null values
@@ -43,7 +47,7 @@ def fill_null_num(data_frame,col_name,impute_type='mode'):
     else:
         print('Impute type is not valid')
 
-
+#add an option to replace the null values of string type column with the label repeated more.
 def fill_null_data(data_frame,fill_null_sc='Missing',nc_impute_type='mode'):
     data=data_frame.copy()
     for col_name in data.columns:
