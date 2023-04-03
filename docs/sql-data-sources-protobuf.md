@@ -50,14 +50,14 @@ Spark SQL schema is generated based on the protobuf descriptor file or protobuf 
 ```python
 from pyspark.sql.protobuf.functions import from_protobuf, to_protobuf
 
-# `from_protobuf` and `to_protobuf` provides two schema choices. First, via the protobuf descriptor
-# file, and then via the protobuf message class name.
+# `from_protobuf` and `to_protobuf` provides two schema choices. Via Protobuf descriptor file,
+# or via shaded Java class.
 # give input .proto protobuf schema
 # syntax  = "proto3"
 # message AppEvent {
-#    string name = 1;
-#    int64 id = 2;
-#    string context = 3;
+#  string name = 1;
+#  int64 id = 2;
+#  string context = 3;
 # }
 
 df = spark\
@@ -108,8 +108,8 @@ query = output\
 ```scala
 import org.apache.spark.sql.protobuf.functions._
 
-// `from_protobuf` and `to_protobuf` provides two schema choices. First, via the protobuf descriptor
-// file, and then via the protobuf message class name.
+// `from_protobuf` and `to_protobuf` provides two schema choices. Via Protobuf descriptor file,
+// or via shaded Java class.
 // give input .proto protobuf schema
 // syntax  = "proto3"
 // message AppEvent {
@@ -172,14 +172,14 @@ val query = output
 import static org.apache.spark.sql.functions.col;
 import static org.apache.spark.sql.protobuf.functions.*;
 
-// `from_protobuf` and `to_protobuf` provides two schema choices. First, via the protobuf descriptor
-// file, and then via the protobuf message class name.
+// `from_protobuf` and `to_protobuf` provides two schema choices. Via Protobuf descriptor file,
+// or via shaded Java class.
 // give input .proto protobuf schema
 // syntax  = "proto3"
 // message AppEvent {
-//    string name = 1;
-//    int64 id = 2;
-//    string context = 3;
+//  string name = 1;
+//  int64 id = 2;
+//  string context = 3;
 // }
 
 Dataset<Row> df = spark
