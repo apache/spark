@@ -40,7 +40,7 @@ from pyspark.sql.column import Column
 from pyspark.sql.types import BooleanType, StringType
 
 # For Supporting Spark Connect
-from pyspark.sql.connect.column import Column as SparkConnectColumn
+from pyspark.sql.connect.column import Column as ConnectColumn
 
 
 class BooleanOps(DataTypeOps):
@@ -242,7 +242,7 @@ class BooleanOps(DataTypeOps):
         else:
 
             def and_func(left: GenericColumn, right: Any) -> GenericColumn:
-                if not isinstance(right, (Column, SparkConnectColumn)):
+                if not isinstance(right, (Column, ConnectColumn)):
                     if pd.isna(right):
                         right = F.lit(None)
                     else:
@@ -259,7 +259,7 @@ class BooleanOps(DataTypeOps):
         elif _is_valid_for_logical_operator(right):
 
             def xor_func(left: GenericColumn, right: Any) -> GenericColumn:
-                if not isinstance(right, (Column, SparkConnectColumn)):
+                if not isinstance(right, (Column, ConnectColumn)):
                     if pd.isna(right):
                         right = F.lit(None)
                     else:
@@ -278,7 +278,7 @@ class BooleanOps(DataTypeOps):
         else:
 
             def or_func(left: GenericColumn, right: Any) -> GenericColumn:
-                if not isinstance(right, (Column, SparkConnectColumn)) and pd.isna(right):
+                if not isinstance(right, (Column, ConnectColumn)) and pd.isna(right):
                     return F.lit(False)
                 else:
                     scol = left | F.lit(right)
@@ -356,7 +356,7 @@ class BooleanExtensionOps(BooleanOps):
         _sanitize_list_like(right)
 
         def and_func(left: GenericColumn, right: Any) -> GenericColumn:
-            if not isinstance(right, (Column, SparkConnectColumn)):
+            if not isinstance(right, (Column, ConnectColumn)):
                 if pd.isna(right):
                     right = F.lit(None)
                 else:
@@ -369,7 +369,7 @@ class BooleanExtensionOps(BooleanOps):
         _sanitize_list_like(right)
 
         def or_func(left: GenericColumn, right: Any) -> GenericColumn:
-            if not isinstance(right, (Column, SparkConnectColumn)):
+            if not isinstance(right, (Column, ConnectColumn)):
                 if pd.isna(right):
                     right = F.lit(None)
                 else:
@@ -384,7 +384,7 @@ class BooleanExtensionOps(BooleanOps):
         if _is_boolean_type(right):
 
             def xor_func(left: GenericColumn, right: Any) -> GenericColumn:
-                if not isinstance(right, (Column, SparkConnectColumn)):
+                if not isinstance(right, (Column, ConnectColumn)):
                     if pd.isna(right):
                         right = F.lit(None)
                     else:

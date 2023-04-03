@@ -150,8 +150,8 @@ from pyspark.pandas.typedef.typehints import (
 from pyspark.pandas.plot import PandasOnSparkPlotAccessor
 
 # For supporting Spark Connect
-from pyspark.sql.connect.dataframe import DataFrame as SparkConnectDataFrame
-from pyspark.sql.connect.column import Column as SparkConnectColumn
+from pyspark.sql.connect.dataframe import DataFrame as ConnectDataFrame
+from pyspark.sql.connect.column import Column as ConnectColumn
 from pyspark.sql.utils import is_remote
 
 if TYPE_CHECKING:
@@ -537,7 +537,7 @@ class DataFrame(Frame, Generic[T]):
             assert not copy
             if index is None:
                 internal = data
-        elif isinstance(data, (SparkDataFrame, SparkConnectDataFrame)):
+        elif isinstance(data, (SparkDataFrame, ConnectDataFrame)):
             assert columns is None
             assert dtype is None
             assert not copy
@@ -5504,7 +5504,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         for k, v in kwargs.items():
             is_invalid_assignee = (
                 not (
-                    isinstance(v, (IndexOpsMixin, (SparkConnectColumn, PySparkColumn)))
+                    isinstance(v, (IndexOpsMixin, (ConnectColumn, PySparkColumn)))
                     or callable(v)
                     or is_scalar(v)
                 )
@@ -5516,7 +5516,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             if callable(v):
                 kwargs[k] = v(self)
 
-        Column = SparkConnectColumn if is_remote() else PySparkColumn
+        Column = ConnectColumn if is_remote() else PySparkColumn
         pairs = {
             (k if is_name_like_tuple(k) else (k,)): (
                 (v.spark.column, v._internal.data_fields[0])
@@ -7491,7 +7491,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         if na_position not in ("first", "last"):
             raise ValueError("invalid na_position: '{}'".format(na_position))
 
-        Column = SparkConnectColumn if is_remote() else PySparkColumn
+        Column = ConnectColumn if is_remote() else PySparkColumn
         # Mapper: Get a spark colum
         # n function for (ascending, na_position) combination
         mapper = {
@@ -13648,7 +13648,7 @@ def _reduce_spark_multi(sdf: SparkDataFrame, aggs: List[GenericColumn]) -> Any:
     """
     Performs a reduction on a spark DataFrame, the functions being known SQL aggregate functions.
     """
-    assert isinstance(sdf, (SparkDataFrame, SparkConnectDataFrame))
+    assert isinstance(sdf, (SparkDataFrame, ConnectDataFrame))
     sdf0 = sdf.agg(*aggs)  # type: ignore[arg-type]
     lst = sdf0.limit(2).toPandas()
     assert len(lst) == 1, (sdf, lst)

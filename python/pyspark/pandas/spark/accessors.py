@@ -30,8 +30,8 @@ from pyspark.pandas._typing import IndexOpsLike
 from pyspark.pandas.internal import InternalField
 
 # For Supporting Spark Connect
-from pyspark.sql.connect.dataframe import DataFrame as SparkConnectDataFrame
-from pyspark.sql.connect.column import Column as SparkConnectColumn
+from pyspark.sql.connect.dataframe import DataFrame as ConnectDataFrame
+from pyspark.sql.connect.column import Column as ConnectColumn
 
 if TYPE_CHECKING:
     from pyspark.sql._typing import OptionalPrimitiveType
@@ -68,9 +68,7 @@ class SparkIndexOpsMethods(Generic[IndexOpsLike], metaclass=ABCMeta):
         """
         return self._data._internal.spark_column_for(self._data._column_label)
 
-    def transform(
-        self, func: Callable[[Column], Union[Column, SparkConnectColumn]]
-    ) -> IndexOpsLike:
+    def transform(self, func: Callable[[Column], Union[Column, ConnectColumn]]) -> IndexOpsLike:
         """
         Applies a function that takes and returns a Spark column. It allows natively
         applying a Spark function and column APIs with the Spark column internally used
@@ -122,7 +120,7 @@ class SparkIndexOpsMethods(Generic[IndexOpsLike], metaclass=ABCMeta):
         if isinstance(self._data, MultiIndex):
             raise NotImplementedError("MultiIndex does not support spark.transform yet.")
         output = func(self._data.spark.column)
-        if not isinstance(output, (Column, SparkConnectColumn)):
+        if not isinstance(output, (Column, ConnectColumn)):
             raise ValueError(
                 "The output of the function [%s] should be of a "
                 "pyspark.sql.Column; however, got [%s]." % (func, type(output))
@@ -144,7 +142,7 @@ class SparkIndexOpsMethods(Generic[IndexOpsLike], metaclass=ABCMeta):
 
 
 class SparkSeriesMethods(SparkIndexOpsMethods["ps.Series"]):
-    def apply(self, func: Callable[[Column], Union[Column, SparkConnectColumn]]) -> "ps.Series":
+    def apply(self, func: Callable[[Column], Union[Column, ConnectColumn]]) -> "ps.Series":
         """
         Applies a function that takes and returns a Spark column. It allows to natively
         apply a Spark function and column APIs with the Spark column internally used
@@ -199,7 +197,7 @@ class SparkSeriesMethods(SparkIndexOpsMethods["ps.Series"]):
         from pyspark.pandas.internal import HIDDEN_COLUMNS
 
         output = func(self._data.spark.column)
-        if not isinstance(output, (Column, SparkConnectColumn)):
+        if not isinstance(output, (Column, ConnectColumn)):
             raise ValueError(
                 "The output of the function [%s] should be of a "
                 "pyspark.sql.Column; however, got [%s]." % (func, type(output))
@@ -889,7 +887,7 @@ class SparkFrameMethods:
 
     def apply(
         self,
-        func: Callable[[SparkDataFrame], Union[SparkDataFrame, SparkConnectDataFrame]],
+        func: Callable[[SparkDataFrame], Union[SparkDataFrame, ConnectDataFrame]],
         index_col: Optional[Union[str, List[str]]] = None,
     ) -> "ps.DataFrame":
         """
@@ -946,7 +944,7 @@ class SparkFrameMethods:
         2  3      1
         """
         output = func(self.frame(index_col))
-        if not isinstance(output, (SparkDataFrame, SparkConnectDataFrame)):
+        if not isinstance(output, (SparkDataFrame, ConnectDataFrame)):
             raise ValueError(
                 "The output of the function [%s] should be of a "
                 "pyspark.sql.DataFrame; however, got [%s]." % (func, type(output))

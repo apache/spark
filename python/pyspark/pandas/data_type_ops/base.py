@@ -54,7 +54,7 @@ from pyspark.pandas.typedef.typehints import (
 )
 
 # For supporting Spark Connect
-from pyspark.sql.connect.column import Column as SparkConnectColumn
+from pyspark.sql.connect.column import Column as ConnectColumn
 from pyspark.sql.utils import is_remote
 
 if extension_dtypes_available:
@@ -474,7 +474,7 @@ class DataTypeOps(object, metaclass=ABCMeta):
         else:
             from pyspark.pandas.base import column_op
 
-            Column = SparkConnectColumn if is_remote() else PySparkColumn
+            Column = ConnectColumn if is_remote() else PySparkColumn
             return column_op(cast(Callable[..., GenericColumn], Column.__eq__))(left, right)
 
     def ne(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
@@ -482,7 +482,7 @@ class DataTypeOps(object, metaclass=ABCMeta):
 
         _sanitize_list_like(right)
 
-        Column = SparkConnectColumn if is_remote() else PySparkColumn
+        Column = ConnectColumn if is_remote() else PySparkColumn
         return column_op(cast(Callable[..., GenericColumn], Column.__ne__))(left, right)
 
     def invert(self, operand: IndexOpsLike) -> IndexOpsLike:

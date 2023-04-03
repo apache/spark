@@ -52,7 +52,7 @@ from pyspark.pandas.utils import (
 )
 
 # For Supporting Spark Connect
-from pyspark.sql.connect.column import Column as SparkConnectColumn
+from pyspark.sql.connect.column import Column as ConnectColumn
 
 if TYPE_CHECKING:
     from pyspark.pandas.frame import DataFrame
@@ -265,7 +265,7 @@ class LocIndexerLike(IndexerLike, metaclass=ABCMeta):
             return None, None, None
         elif isinstance(rows_sel, Series):
             return self._select_rows_by_series(rows_sel)
-        elif isinstance(rows_sel, (Column, SparkConnectColumn)):
+        elif isinstance(rows_sel, (Column, ConnectColumn)):
             return self._select_rows_by_spark_column(rows_sel)
         elif isinstance(rows_sel, slice):
             if rows_sel == slice(None):
@@ -314,7 +314,7 @@ class LocIndexerLike(IndexerLike, metaclass=ABCMeta):
             return column_labels, data_spark_columns, data_fields, False, None
         elif isinstance(cols_sel, Series):
             return self._select_cols_by_series(cols_sel, missing_keys)
-        elif isinstance(cols_sel, (Column, SparkConnectColumn)):
+        elif isinstance(cols_sel, (Column, ConnectColumn)):
             return self._select_cols_by_spark_column(
                 cols_sel, missing_keys
             )  # type: ignore[return-value]
@@ -642,7 +642,7 @@ class LocIndexerLike(IndexerLike, metaclass=ABCMeta):
                     self._internal.spark_frame[cast(iLocIndexer, self)._sequence_col] < F.lit(limit)
                 )
 
-            if isinstance(value, (Series, Column, SparkConnectColumn)):
+            if isinstance(value, (Series, Column, ConnectColumn)):
                 if remaining_index is not None and remaining_index == 0:
                     raise ValueError(
                         "No axis named {} for object type {}".format(key, type(value).__name__)
@@ -727,7 +727,7 @@ class LocIndexerLike(IndexerLike, metaclass=ABCMeta):
                     self._internal.spark_frame[cast(iLocIndexer, self)._sequence_col] < F.lit(limit)
                 )
 
-            if isinstance(value, (Series, Column, SparkConnectColumn)):
+            if isinstance(value, (Series, Column, ConnectColumn)):
                 if remaining_index is not None and remaining_index == 0:
                     raise ValueError("Incompatible indexer with Series")
                 if len(data_spark_columns) > 1:
@@ -1308,7 +1308,7 @@ class LocIndexer(LocIndexerLike):
             column_labels = [key._column_label for key in cols_sel]
             data_spark_columns = [key.spark.column for key in cols_sel]
             data_fields = [key._internal.data_fields[0] for key in cols_sel]
-        elif all(isinstance(key, (Column, SparkConnectColumn)) for key in cols_sel):
+        elif all(isinstance(key, (Column, ConnectColumn)) for key in cols_sel):
             column_labels = [
                 (self._internal.spark_frame.select(col).columns[0],) for col in cols_sel
             ]
@@ -1807,7 +1807,7 @@ class iLocIndexer(LocIndexerLike):
             )
 
     def __setitem__(self, key: Any, value: Any) -> None:
-        if not isinstance(value, (Column, SparkConnectColumn)) and is_list_like(value):
+        if not isinstance(value, (Column, ConnectColumn)) and is_list_like(value):
             iloc_item = self[key]
             if not is_list_like(key) or not is_list_like(iloc_item):
                 raise ValueError("setting an array element with a sequence.")

@@ -52,7 +52,7 @@ from pyspark.sql.types import (
 )
 
 # For Supporting Spark Connect
-from pyspark.sql.connect.column import Column as SparkConnectColumn
+from pyspark.sql.connect.column import Column as ConnectColumn
 from pyspark.sql.utils import is_remote
 
 
@@ -82,7 +82,7 @@ class NumericOps(DataTypeOps):
             raise TypeError("Addition can not be applied to given types.")
 
         right = transform_boolean_operand_to_numeric(right, spark_type=left.spark.data_type)
-        Column: Type[GenericColumn] = SparkConnectColumn if is_remote() else PySparkColumn
+        Column: Type[GenericColumn] = ConnectColumn if is_remote() else PySparkColumn
         return column_op(Column.__add__)(left, right)
 
     def sub(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
@@ -91,7 +91,7 @@ class NumericOps(DataTypeOps):
             raise TypeError("Subtraction can not be applied to given types.")
 
         right = transform_boolean_operand_to_numeric(right, spark_type=left.spark.data_type)
-        Column: Type[GenericColumn] = SparkConnectColumn if is_remote() else PySparkColumn
+        Column: Type[GenericColumn] = ConnectColumn if is_remote() else PySparkColumn
         return column_op(Column.__sub__)(left, right)
 
     def mod(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
@@ -110,7 +110,7 @@ class NumericOps(DataTypeOps):
         if not is_valid_operand_for_numeric_arithmetic(right):
             raise TypeError("Exponentiation can not be applied to given types.")
 
-        Column = SparkConnectColumn if is_remote() else PySparkColumn
+        Column = ConnectColumn if is_remote() else PySparkColumn
 
         def pow_func(left: GenericColumn, right: Any) -> GenericColumn:
             return (
@@ -127,7 +127,7 @@ class NumericOps(DataTypeOps):
         if not isinstance(right, numbers.Number):
             raise TypeError("Addition can not be applied to given types.")
         right = transform_boolean_operand_to_numeric(right)
-        Column: Type[GenericColumn] = SparkConnectColumn if is_remote() else PySparkColumn
+        Column: Type[GenericColumn] = ConnectColumn if is_remote() else PySparkColumn
         return column_op(Column.__radd__)(left, right)
 
     def rsub(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
@@ -135,7 +135,7 @@ class NumericOps(DataTypeOps):
         if not isinstance(right, numbers.Number):
             raise TypeError("Subtraction can not be applied to given types.")
         right = transform_boolean_operand_to_numeric(right)
-        Column: Type[GenericColumn] = SparkConnectColumn if is_remote() else PySparkColumn
+        Column: Type[GenericColumn] = ConnectColumn if is_remote() else PySparkColumn
         return column_op(Column.__rsub__)(left, right)
 
     def rmul(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
@@ -143,7 +143,7 @@ class NumericOps(DataTypeOps):
         if not isinstance(right, numbers.Number):
             raise TypeError("Multiplication can not be applied to given types.")
         right = transform_boolean_operand_to_numeric(right)
-        Column: Type[GenericColumn] = SparkConnectColumn if is_remote() else PySparkColumn
+        Column: Type[GenericColumn] = ConnectColumn if is_remote() else PySparkColumn
         return column_op(Column.__rmul__)(left, right)
 
     def rpow(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
@@ -151,7 +151,7 @@ class NumericOps(DataTypeOps):
         if not isinstance(right, numbers.Number):
             raise TypeError("Exponentiation can not be applied to given types.")
 
-        Column = SparkConnectColumn if is_remote() else PySparkColumn
+        Column = ConnectColumn if is_remote() else PySparkColumn
 
         def rpow_func(left: GenericColumn, right: Any) -> GenericColumn:
             return F.when(F.lit(right == 1), right).otherwise(
@@ -182,22 +182,22 @@ class NumericOps(DataTypeOps):
 
     def lt(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         _sanitize_list_like(right)
-        Column: Type[GenericColumn] = SparkConnectColumn if is_remote() else PySparkColumn
+        Column: Type[GenericColumn] = ConnectColumn if is_remote() else PySparkColumn
         return column_op(Column.__lt__)(left, right)
 
     def le(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         _sanitize_list_like(right)
-        Column: Type[GenericColumn] = SparkConnectColumn if is_remote() else PySparkColumn
+        Column: Type[GenericColumn] = ConnectColumn if is_remote() else PySparkColumn
         return column_op(Column.__le__)(left, right)
 
     def ge(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         _sanitize_list_like(right)
-        Column: Type[GenericColumn] = SparkConnectColumn if is_remote() else PySparkColumn
+        Column: Type[GenericColumn] = ConnectColumn if is_remote() else PySparkColumn
         return column_op(Column.__ge__)(left, right)
 
     def gt(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         _sanitize_list_like(right)
-        Column: Type[GenericColumn] = SparkConnectColumn if is_remote() else PySparkColumn
+        Column: Type[GenericColumn] = ConnectColumn if is_remote() else PySparkColumn
         return column_op(Column.__gt__)(left, right)
 
 
@@ -215,7 +215,7 @@ class IntegralOps(NumericOps):
         elif _is_valid_for_logical_operator(right):
             right_is_boolean = _is_boolean_type(right)
 
-            Column = SparkConnectColumn if is_remote() else PySparkColumn
+            Column = ConnectColumn if is_remote() else PySparkColumn
 
             def xor_func(left: GenericColumn, right: Any) -> GenericColumn:
                 if not isinstance(right, Column):
@@ -246,7 +246,7 @@ class IntegralOps(NumericOps):
             raise TypeError("Multiplication can not be applied to given types.")
 
         right = transform_boolean_operand_to_numeric(right, spark_type=left.spark.data_type)
-        Column: Type[GenericColumn] = SparkConnectColumn if is_remote() else PySparkColumn
+        Column: Type[GenericColumn] = ConnectColumn if is_remote() else PySparkColumn
         return column_op(Column.__mul__)(left, right)
 
     def truediv(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
@@ -334,7 +334,7 @@ class FractionalOps(NumericOps):
             raise TypeError("Multiplication can not be applied to given types.")
 
         right = transform_boolean_operand_to_numeric(right, spark_type=left.spark.data_type)
-        Column: Type[GenericColumn] = SparkConnectColumn if is_remote() else PySparkColumn
+        Column: Type[GenericColumn] = ConnectColumn if is_remote() else PySparkColumn
         return column_op(cast(Callable[..., GenericColumn], Column.__mul__))(left, right)
 
     def truediv(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
@@ -494,7 +494,7 @@ class DecimalOps(FractionalOps):
         if not isinstance(right, numbers.Number):
             raise TypeError("Exponentiation can not be applied to given types.")
 
-        Column = SparkConnectColumn if is_remote() else PySparkColumn
+        Column = ConnectColumn if is_remote() else PySparkColumn
 
         def rpow_func(left: GenericColumn, right: Any) -> GenericColumn:
             return (

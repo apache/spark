@@ -37,7 +37,7 @@ from typing import (
 )
 import warnings
 
-from pyspark.sql import functions as F, Column, DataFrame as SparkDataFrame, SparkSession
+from pyspark.sql import functions as F, Column, DataFrame as LegacyDataFrame, SparkSession
 from pyspark.sql.types import DoubleType
 from pyspark.sql.utils import is_remote
 from pyspark.errors import PySparkTypeError
@@ -46,12 +46,19 @@ from pandas.api.types import is_list_like  # type: ignore[attr-defined]
 
 # For running doctests and reference resolution in PyCharm.
 from pyspark import pandas as ps  # noqa: F401
-from pyspark.pandas._typing import Axis, Label, Name, DataFrameOrSeries, GenericColumn
+from pyspark.pandas._typing import (
+    Axis,
+    Label,
+    Name,
+    DataFrameOrSeries,
+    GenericColumn,
+    GenericDataFrame,
+)
 from pyspark.pandas.typedef.typehints import as_spark_type
 
 # For Supporting Spark Connect
-from pyspark.sql.connect.dataframe import DataFrame as SparkConnectDataFrame
-from pyspark.sql.connect.column import Column as SparkConnectColumn
+from pyspark.sql.connect.dataframe import DataFrame as ConnectDataFrame
+from pyspark.sql.connect.column import Column as ConnectColumn
 
 if TYPE_CHECKING:
     from pyspark.pandas.indexes.base import Index
@@ -397,7 +404,7 @@ def align_diff_frames(
     that_columns_to_apply: List[Label] = []
     this_columns_to_apply: List[Label] = []
     additional_that_columns: List[Label] = []
-    columns_to_keep: List[Union[Series, Column, SparkConnectColumn]] = []
+    columns_to_keep: List[Union[Series, Column, ConnectColumn]] = []
     column_labels_to_keep: List[Label] = []
 
     for combined_label in combined_column_labels:
@@ -428,7 +435,7 @@ def align_diff_frames(
 
     # Should extract columns to apply and do it in a batch in case
     # it adds new columns for example.
-    columns_applied: List[Union[Series, Column, SparkConnectColumn]]
+    columns_applied: List[Union[Series, Column, ConnectColumn]]
     column_labels_applied: List[Label]
     if len(this_columns_to_apply) > 0 or len(that_columns_to_apply) > 0:
         psser_set, column_labels_set = zip(
@@ -606,7 +613,7 @@ def lazy_property(fn: Callable[[Any], Any]) -> property:
     return wrapped_lazy_property.deleter(deleter)
 
 
-def scol_for(sdf: Union[SparkDataFrame, SparkConnectDataFrame], column_name: str) -> Column:
+def scol_for(sdf: GenericDataFrame, column_name: str) -> Column:
     """Return Spark Column for the given column name."""
     return sdf["`{}`".format(column_name)]  # type: ignore[return-value]
 
@@ -803,9 +810,7 @@ def validate_mode(mode: str) -> str:
 
 
 @overload
-def verify_temp_column_name(
-    df: Union[SparkDataFrame, SparkConnectDataFrame], column_name_or_label: str
-) -> str:
+def verify_temp_column_name(df: GenericDataFrame, column_name_or_label: str) -> str:
     ...
 
 
@@ -815,7 +820,7 @@ def verify_temp_column_name(df: "DataFrame", column_name_or_label: Name) -> Labe
 
 
 def verify_temp_column_name(
-    df: Union["DataFrame", SparkDataFrame, SparkConnectDataFrame],
+    df: Union["DataFrame", LegacyDataFrame, ConnectDataFrame],
     column_name_or_label: Union[str, Name],
 ) -> Union[str, Label]:
     """
@@ -914,7 +919,7 @@ def verify_temp_column_name(
         )
         column_name = column_name_or_label
 
-    assert isinstance(df, (SparkDataFrame, SparkConnectDataFrame)), type(df)
+    assert isinstance(df, (LegacyDataFrame, ConnectDataFrame)), type(df)
     assert (
         column_name not in df.columns
     ), "The given column name `{}` already exists in the Spark DataFrame: {}".format(
@@ -943,7 +948,7 @@ def spark_column_equals(left: Column, right: Column) -> bool:
     """
     if isinstance(left, Column):
         return left._jc.equals(right._jc)
-    elif isinstance(left, SparkConnectColumn):
+    elif isinstance(left, ConnectColumn):
         return repr(left) == repr(right)
     else:
         raise PySparkTypeError(
