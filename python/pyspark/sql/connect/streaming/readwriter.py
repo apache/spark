@@ -246,7 +246,7 @@ class DataStreamReader(OptionUtils):
 
     csv.__doc__ = PySparkDataStreamReader.csv.__doc__
 
-    # def table() TODO
+    # def table() TODO. Use Read(table_name) relation.
 
 
 DataStreamReader.__doc__ = PySparkDataStreamReader.__doc__
