@@ -18,11 +18,11 @@ package org.apache.spark.sql
 
 import java.io.{ByteArrayOutputStream, PrintStream}
 import java.nio.file.Files
+import java.util.Properties
 
 import scala.collection.JavaConverters._
 
 import io.grpc.StatusRuntimeException
-import java.util.Properties
 import org.apache.commons.io.FileUtils
 import org.apache.commons.io.output.TeeOutputStream
 import org.apache.commons.lang3.{JavaVersion, SystemUtils}
@@ -33,8 +33,11 @@ import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.StringEncoder
 import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.connect.client.util.{IntegrationTestUtils, RemoteSparkSession}
+import org.apache.spark.sql.connect.common.StorageLevelProtoConverter
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.protobuf.{functions => pbFn}
 import org.apache.spark.sql.types._
+import org.apache.spark.storage.StorageLevel
 
 class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper {
 
@@ -865,6 +868,41 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper {
       spark.read.schema("123").csv(spark.createDataset(Seq.empty[String])(StringEncoder))
     }.getMessage
     assert(message.contains("PARSE_SYNTAX_ERROR"))
+  }
+
+  test("protobuf functions") {
+    assert(IntegrationTestUtils.isSparkProtobufJarAvailable)
+    val descPath = {
+      getWorkspaceFilePath(
+        "connector",
+        "connect",
+        "common",
+        "src",
+        "test",
+        "resources",
+        "protobuf-tests",
+        "common.desc").toAbsolutePath
+    }
+    val session = spark
+    import session.implicits._
+    val storageLevel = StorageLevelProtoConverter.toConnectProtoType(StorageLevel.MEMORY_AND_DISK)
+    val messageClassName = "StorageLevel"
+    val df = Seq(storageLevel.toByteArray).toDF("level")
+    val options = new java.util.HashMap[String, String]()
+    options.put("recursive.fields.max.depth", "2")
+    val df0 = df
+      .select(
+        pbFn
+          .from_protobuf(col("level"), messageClassName, descPath.toFile.getPath, options)
+          .as("col0"))
+
+    val binaryDF = df0.select(
+      pbFn
+        .to_protobuf(col("col0"), messageClassName, descPath.toFile.getPath, options)
+        .as("col1"))
+    val df1 = binaryDF.select(
+      pbFn.from_protobuf(col("col1"), messageClassName, descPath.toFile.getPath).as("col2"))
+    assert(df0.collect() sameElements df1.collect())
   }
 }
 

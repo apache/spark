@@ -30,6 +30,7 @@ import io.grpc.inprocess.InProcessChannelBuilder
 import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach}
 
 import org.apache.spark.connect.proto
+import org.apache.spark.connect.proto.StorageLevel
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{functions => fn}
 import org.apache.spark.sql.avro.{functions => avroFn}
@@ -39,6 +40,7 @@ import org.apache.spark.sql.connect.client.SparkConnectClient
 import org.apache.spark.sql.connect.client.util.ConnectFunSuite
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions.lit
+import org.apache.spark.sql.protobuf.{functions => pbFn}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
 
@@ -2189,5 +2191,30 @@ class PlanGenerationTestSuite
 
   test("to_avro without schema") {
     simple.select(avroFn.to_avro(fn.col("id")))
+  }
+
+  /* Protobuf functions */
+  test("from_protobuf messageClassName") {
+    binary.select(pbFn.from_protobuf(fn.col("bytes"), classOf[StorageLevel].getName))
+  }
+
+  test("from_protobuf messageClassName options") {
+    binary.select(
+      pbFn.from_protobuf(
+        fn.col("bytes"),
+        classOf[StorageLevel].getName,
+        Map("recursive.fields.max.depth" -> "2").asJava))
+  }
+
+  test("to_protobuf messageClassName") {
+    binary.select(pbFn.to_protobuf(fn.col("bytes"), classOf[StorageLevel].getName))
+  }
+
+  test("to_protobuf messageClassName options") {
+    binary.select(
+      pbFn.to_protobuf(
+        fn.col("bytes"),
+        classOf[StorageLevel].getName,
+        Map("recursive.fields.max.depth" -> "2").asJava))
   }
 }

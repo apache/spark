@@ -62,8 +62,13 @@ object SparkConnectServerUtils {
       "connector/connect/server",
       "spark-connect-assembly",
       "spark-connect").getCanonicalPath
-    val driverClassPath = connectJar + ":" +
+    val catalystJar =
       findJar("sql/catalyst", "spark-catalyst", "spark-catalyst", test = true).getCanonicalPath
+    val protobufJar = IntegrationTestUtils.protobufJarPath
+    val driverClassPath = protobufJar match {
+      case Some(jar) => connectJar + ":" + catalystJar + ":" + jar.getCanonicalPath
+      case _ => connectJar + ":" + catalystJar
+    }
     val catalogImplementation = if (IntegrationTestUtils.isSparkHiveJarAvailable) {
       "hive"
     } else {
