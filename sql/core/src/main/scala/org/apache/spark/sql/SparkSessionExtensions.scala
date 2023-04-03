@@ -181,7 +181,7 @@ class SparkSessionExtensions {
    * Inject a rule that can override the query stage optimizer phase of adaptive query
    * execution.
    */
-  def injectQueryStageOptimizerRule(builder: QueryStagePrepRuleBuilder): Unit = {
+  def injectQueryStageOptimizerRule(builder: QueryStageOptimizerRuleBuilder): Unit = {
     queryStageOptimizerRuleBuilders += builder
   }
 

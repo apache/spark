@@ -1186,7 +1186,7 @@ object RequireAtLeaseTwoPartitions extends Rule[SparkPlan] {
         case read: AQEShuffleReadExec => read.child
       }
     } else {
-     plan
+      plan
     }
   }
 }
