@@ -1036,7 +1036,7 @@ class DataFrameTestsMixin:
             self.assertEqual(df.storageLevel, StorageLevel.NONE)
 
             df.cache()
-            self.assertEqual(df.storageLevel, StorageLevel.MEMORY_AND_DISK)
+            self.assertEqual(df.storageLevel, StorageLevel.MEMORY_AND_DISK_DESER)
 
             df.unpersist()
             self.assertEqual(df.storageLevel, StorageLevel.NONE)
