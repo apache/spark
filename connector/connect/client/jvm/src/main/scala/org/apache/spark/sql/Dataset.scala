@@ -2599,9 +2599,9 @@ class Dataset[T] private[sql] (
    * @since 3.5.0
    */
   def foreachPartition(f: Iterator[T] => Unit): Unit = {
-    // Delegate to mapPartition followed by a count to drop any result.
-    mapPartitions(UdfUtils.foreachPartitionFuncToMapPartitionsAdaptor(f))(PrimitiveBooleanEncoder)
-      .collectAsList()
+    // Delegate to mapPartition with empty result.
+    mapPartitions(UdfUtils.foreachPartitionFuncToMapPartitionsAdaptor(f))(RowEncoder(Seq.empty))
+      .collect()
   }
 
   /**
