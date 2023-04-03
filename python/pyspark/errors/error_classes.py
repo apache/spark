@@ -29,11 +29,6 @@ ERROR_CLASSES_JSON = """
       "`<func_name>` does not allow a Column in a list."
     ]
   },
-  "INVALID_ITEM_FOR_CONTAINER": {
-    "message": [
-      "All items in `<arg_name>` should be in <allowed_types>, got <item_type>."
-    ]
-  },
   "DISALLOWED_TYPE_FOR_CONTAINER" : {
     "message" : [
       "Argument `<arg_name>`(type: <arg_type>) should only contain a type in [<allowed_types>], got <return_type>"
@@ -42,6 +37,11 @@ ERROR_CLASSES_JSON = """
   "HIGHER_ORDER_FUNCTION_SHOULD_RETURN_COLUMN" : {
     "message" : [
       "Function `<func_name>` should return Column, got <return_type>."
+    ]
+  },
+  "INVALID_ITEM_FOR_CONTAINER": {
+    "message": [
+      "All items in `<arg_name>` should be in <allowed_types>, got <item_type>."
     ]
   },
   "JVM_ATTRIBUTE_NOT_SUPPORTED" : {
