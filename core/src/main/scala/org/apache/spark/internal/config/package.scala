@@ -1061,6 +1061,11 @@ package object config {
     .version("2.1.0")
     .fallbackConf(DRIVER_HOST_ADDRESS)
 
+  private[spark] val EXECUTOR_BIND_ADDRESS = ConfigBuilder("spark.executor.bindAddress")
+    .doc("Address where to bind network listen sockets on the executor.")
+    .stringConf
+    .createOptional
+
   private[spark] val BLOCK_MANAGER_PORT = ConfigBuilder("spark.blockManager.port")
     .doc("Port to use for the block manager when a more specific setting is not provided.")
     .version("1.1.0")

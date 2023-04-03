@@ -171,6 +171,34 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
     }
   }
 
+  test("test invalid bind address") {
+    val baseConf = KubernetesTestConf.createDriverConf()
+    baseConf.sparkConf.set(DRIVER_BIND_ADDRESS, "host")
+    baseConf.sparkConf.set(DRIVER_CONTAINER_IMAGE.key, "test")
+
+    val error = intercept[IllegalArgumentException] {
+      val step = new BasicDriverFeatureStep(baseConf)
+      val driver = step.configurePod(SparkPod.initialPod())
+    }.getMessage()
+    assert(error.contains(s"${DRIVER_BIND_ADDRESS.key} is not supported in Kubernetes mode," +
+      s" as the bind address can either be $ALL_IPS" +
+      s" or the pod's IP address."))
+  }
+
+  test("test binding to all IPs") {
+    val baseConf = KubernetesTestConf.createDriverConf()
+    baseConf.sparkConf.set(DRIVER_BIND_ADDRESS, ALL_IPS)
+    baseConf.sparkConf.set(DRIVER_CONTAINER_IMAGE.key, "test")
+    val step = new BasicDriverFeatureStep(baseConf)
+    val driver = step.configurePod(SparkPod.initialPod())
+    assert(driver.container.getEnv.asScala
+      .filter(env => env.getName == ENV_DRIVER_BIND_ADDRESS).size == 1)
+    driver.container.getEnv.forEach(env =>
+      if (env.getName() == ENV_DRIVER_BIND_ADDRESS ) {
+        assert(env.getValue == ALL_IPS)
+      } )
+  }
+
   test("Check appropriate entrypoint rerouting for various bindings") {
     val javaSparkConf = new SparkConf()
       .set(DRIVER_MEMORY.key, "4g")

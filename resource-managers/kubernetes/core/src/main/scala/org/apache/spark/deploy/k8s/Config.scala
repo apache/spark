@@ -416,6 +416,35 @@ private[spark] object Config extends Logging {
       .stringConf
       .createOptional
 
+  val KUBERNETES_PRE_START_SCRIPT =
+    ConfigBuilder("spark.kubernetes.pre.start.script")
+      .internal()
+      .doc("Path to a script which would be run before driver or " +
+        "executor process is started in the containers. It is useful in cases" +
+        "where driver/executor pods have sidecars that need to be up before driver" +
+        "or executor jvm can be started")
+      .version("3.1.1")
+      .stringConf
+      .createOptional
+
+  val KUBERNETES_POST_STOP_SCRIPT =
+    ConfigBuilder("spark.kubernetes.post.stop.script")
+      .internal()
+      .doc("Path to a script which would be run after driver or " +
+        "executor process is completed. It is useful in cases" +
+        "where driver/executor pods have sidecars that need to be " +
+        "terminated once driver/executor jvm is completed")
+      .version("3.1.1")
+      .stringConf
+      .createOptional
+
+  val KUBERNETES_EXECUTORS_SVC =
+    ConfigBuilder("spark.kubernetes.executor.service")
+      .doc("If set to true then each executor pod will have an associated service entry")
+      .version("3.1.1")
+      .booleanConf
+      .createWithDefault(false)
+
   val KUBERNETES_EXECUTOR_DECOMMISSION_LABEL_VALUE =
     ConfigBuilder("spark.kubernetes.executor.decommissionLabelValue")
       .doc("Label value to apply to a pod which is being decommissioned." +
@@ -754,6 +783,8 @@ private[spark] object Config extends Logging {
   val KUBERNETES_DRIVER_ANNOTATION_PREFIX = "spark.kubernetes.driver.annotation."
   val KUBERNETES_DRIVER_SERVICE_LABEL_PREFIX = "spark.kubernetes.driver.service.label."
   val KUBERNETES_DRIVER_SERVICE_ANNOTATION_PREFIX = "spark.kubernetes.driver.service.annotation."
+  val KUBERNETES_EXECUTOR_SERVICE_ANNOTATION_PREFIX =
+    "spark.kubernetes.executor.service.annotation."
   val KUBERNETES_DRIVER_SECRETS_PREFIX = "spark.kubernetes.driver.secrets."
   val KUBERNETES_DRIVER_SECRET_KEY_REF_PREFIX = "spark.kubernetes.driver.secretKeyRef."
   val KUBERNETES_DRIVER_VOLUMES_PREFIX = "spark.kubernetes.driver.volumes."

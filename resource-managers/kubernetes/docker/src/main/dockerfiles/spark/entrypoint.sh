@@ -95,6 +95,7 @@ case "$1" in
       -Xmx$SPARK_EXECUTOR_MEMORY
       -cp "$SPARK_CLASSPATH:$SPARK_DIST_CLASSPATH"
       org.apache.spark.scheduler.cluster.k8s.KubernetesExecutorBackend
+      --bind-address $SPARK_EXECUTOR_BIND_ADDRESS
       --driver-url $SPARK_DRIVER_URL
       --executor-id $SPARK_EXECUTOR_ID
       --cores $SPARK_EXECUTOR_CORES
@@ -111,5 +112,15 @@ case "$1" in
     ;;
 esac
 
+CMD_STRING="${CMD[@]}"
+
+if ! [ -z "${SPARK_PRE_START_SCRIPT}" ]; then
+  CMD_STRING="$SPARK_PRE_START_SCRIPT && $CMD_STRING";
+fi
+
+if ! [ -z "${SPARK_POST_STOP_SCRIPT}" ]; then
+  CMD_STRING="$CMD_STRING ; $SPARK_POST_STOP_SCRIPT";
+fi
+
 # Execute the container CMD under tini for better hygiene
-exec /usr/bin/tini -s -- "${CMD[@]}"
+exec /usr/bin/tini -sg -- /bin/bash -c "$CMD_STRING"

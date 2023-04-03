@@ -149,9 +149,9 @@ class DriverServiceFeatureStepSuite extends SparkFunSuite {
       new DriverServiceFeatureStep(KubernetesTestConf.createDriverConf(sparkConf = sparkConf))
     }
     assert(e1.getMessage ===
-      s"requirement failed: ${DriverServiceFeatureStep.DRIVER_BIND_ADDRESS_KEY} is" +
-      " not supported in Kubernetes mode, as the driver's bind address is managed" +
-      " and set to the driver pod's IP address.")
+      s"requirement failed: ${DriverServiceFeatureStep.DRIVER_BIND_ADDRESS_KEY} is " +
+      s"not supported in Kubernetes mode, as the bind address can either be $ALL_IPS" +
+      s" or the pod's IP address.")
 
     sparkConf.remove(DRIVER_BIND_ADDRESS)
     sparkConf.set(DRIVER_HOST_ADDRESS, "host")

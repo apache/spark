@@ -17,6 +17,7 @@
 package org.apache.spark.scheduler.cluster.k8s
 
 import io.fabric8.kubernetes.client.KubernetesClient
+import org.mockito.Mockito.mock
 
 import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.deploy.k8s._
@@ -60,6 +61,28 @@ class KubernetesExecutorBuilderSuite extends PodBuilderSuite {
     val secMgr = new SecurityManager(sparkConf)
     val defaultProfile = ResourceProfile.getOrCreateDefaultProfile(sparkConf)
     new KubernetesExecutorBuilder().buildFromFeatures(conf, secMgr, client, defaultProfile).pod
+  }
+
+  test("Verify service resource is not created with property default") {
+    val conf = KubernetesTestConf.createExecutorConf()
+    verifyExecutorSvcCreation(conf, 0)
+  }
+
+  private def verifyExecutorSvcCreation(conf: KubernetesExecutorConf, numOfSvc: Int) = {
+    conf.sparkConf.set(Config.CONTAINER_IMAGE.key, "test-image")
+    val secMgr = new SecurityManager(conf.sparkConf)
+    val defaultProfile = ResourceProfile.getOrCreateDefaultProfile(conf.sparkConf)
+    val client = mock(classOf[KubernetesClient])
+    val execSpec = new KubernetesExecutorBuilder().
+      buildFromFeatures(conf, secMgr, client, defaultProfile)
+    assert(execSpec.executorKubernetesResources.filter(
+      resource => resource.getKind == "Service").size == numOfSvc)
+  }
+
+  test("Verify service resource is created with property enabled") {
+    val conf = KubernetesTestConf.createExecutorConf()
+    conf.sparkConf.set(Config.KUBERNETES_EXECUTORS_SVC.key, "true")
+    verifyExecutorSvcCreation(conf, 1)
   }
 }
 

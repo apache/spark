@@ -120,6 +120,33 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
     assert(error.contains("You must specify an amount for gpu"))
   }
 
+  test("test invalid bind address") {
+    baseConf.set(EXECUTOR_BIND_ADDRESS, "host")
+    val error = intercept[IllegalArgumentException] {
+      initDefaultProfile(baseConf)
+      val step = new BasicExecutorFeatureStep(newExecutorConf(), new SecurityManager(baseConf),
+        defaultProfile)
+      val executor = step.configurePod(SparkPod.initialPod())
+    }.getMessage()
+    assert(error.contains(s"${EXECUTOR_BIND_ADDRESS.key} is not supported in Kubernetes mode," +
+      s" as the bind address can either be $ALL_IPS" +
+      s" or the pod's IP address."))
+  }
+
+  test("test binding to all IPs") {
+    baseConf.set(EXECUTOR_BIND_ADDRESS, ALL_IPS)
+    initDefaultProfile(baseConf)
+    val step = new BasicExecutorFeatureStep(newExecutorConf(), new SecurityManager(baseConf),
+      defaultProfile)
+    val executor = step.configurePod(SparkPod.initialPod())
+    assert(executor.container.getEnv.asScala
+      .filter(env => env.getName == ENV_EXECUTOR_BIND_ADDRESS).size == 1)
+    executor.container.getEnv.forEach(env =>
+      if (env.getName() == ENV_EXECUTOR_BIND_ADDRESS ) {
+        assert(env.getValue == ALL_IPS)
+      } )
+  }
+
   test("basic executor pod with resources") {
     val fpgaResourceID = new ResourceID(SPARK_EXECUTOR_PREFIX, FPGA)
     val gpuExecutorResourceID = new ResourceID(SPARK_EXECUTOR_PREFIX, GPU)
@@ -547,6 +574,9 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
       ENV_RESOURCE_PROFILE_ID -> "0",
       // These are populated by K8s on scheduling
       ENV_EXECUTOR_POD_IP -> null,
+      ENV_EXECUTOR_BIND_ADDRESS -> null,
+      ENV_PRE_START_SCRIPT -> "",
+      ENV_POST_STOP_SCRIPT -> "",
       ENV_EXECUTOR_POD_NAME -> null)
 
     val extraJavaOptsStart = additionalEnvVars.keys.count(_.startsWith(ENV_JAVA_OPT_PREFIX))

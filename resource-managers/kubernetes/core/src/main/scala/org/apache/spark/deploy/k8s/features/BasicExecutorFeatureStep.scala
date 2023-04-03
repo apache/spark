@@ -24,6 +24,7 @@ import org.apache.spark.{SecurityManager, SparkConf, SparkException}
 import org.apache.spark.deploy.k8s._
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
+import org.apache.spark.deploy.k8s.KubernetesUtils._
 import org.apache.spark.deploy.k8s.submit.KubernetesClientUtils
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
@@ -100,6 +101,7 @@ private[spark] class BasicExecutorFeatureStep(
   }
 
   override def configurePod(pod: SparkPod): SparkPod = {
+    verifyBindAddress(kubernetesConf, EXECUTOR_BIND_ADDRESS.key)
     val name = s"$executorPodNamePrefix-exec-${kubernetesConf.executorId}"
     val configMapName = KubernetesClientUtils.configMapNameExecutor
     val confFilesMap = KubernetesClientUtils
@@ -241,6 +243,11 @@ private[spark] class BasicExecutorFeatureStep(
           .endLifecycle()
           .build()
       }
+    val containerWithBindAddress = getContainerWithBindAddressEnv(
+      kubernetesConf, EXECUTOR_BIND_ADDRESS.key, ENV_EXECUTOR_BIND_ADDRESS, containerWithLifecycle)
+
+    val containerWithPrePostScripts =
+      getContainerWithPrePostScriptsEnv(kubernetesConf, containerWithBindAddress)
     val ownerReference = kubernetesConf.driverPod.map { pod =>
       new OwnerReferenceBuilder()
         .withController(true)
@@ -288,6 +295,6 @@ private[spark] class BasicExecutorFeatureStep(
     kubernetesConf.schedulerName
       .foreach(executorPod.getSpec.setSchedulerName)
 
-    SparkPod(executorPod, containerWithLifecycle)
+    SparkPod(executorPod, containerWithPrePostScripts)
   }
 }

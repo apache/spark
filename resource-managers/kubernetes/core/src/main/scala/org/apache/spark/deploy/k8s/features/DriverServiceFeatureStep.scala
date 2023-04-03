@@ -23,6 +23,7 @@ import io.fabric8.kubernetes.api.model.{HasMetadata, ServiceBuilder}
 import org.apache.spark.deploy.k8s.{KubernetesDriverConf, KubernetesUtils, SparkPod}
 import org.apache.spark.deploy.k8s.Config.{KUBERNETES_DNS_LABEL_NAME_MAX_LENGTH, KUBERNETES_DRIVER_SERVICE_IP_FAMILIES, KUBERNETES_DRIVER_SERVICE_IP_FAMILY_POLICY}
 import org.apache.spark.deploy.k8s.Constants._
+import org.apache.spark.deploy.k8s.KubernetesUtils._
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.util.{Clock, SystemClock}
 
@@ -32,9 +33,7 @@ private[spark] class DriverServiceFeatureStep(
   extends KubernetesFeatureConfigStep with Logging {
   import DriverServiceFeatureStep._
 
-  require(kubernetesConf.getOption(DRIVER_BIND_ADDRESS_KEY).isEmpty,
-    s"$DRIVER_BIND_ADDRESS_KEY is not supported in Kubernetes mode, as the driver's bind " +
-      "address is managed and set to the driver pod's IP address.")
+  verifyBindAddress(kubernetesConf, DRIVER_BIND_ADDRESS_KEY)
   require(kubernetesConf.getOption(DRIVER_HOST_KEY).isEmpty,
     s"$DRIVER_HOST_KEY is not supported in Kubernetes mode, as the driver's hostname will be " +
       "managed via a Kubernetes service.")

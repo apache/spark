@@ -190,6 +190,11 @@ private[spark] class KubernetesExecutorConf(
     KubernetesUtils.parsePrefixedKeyValuePairs(sparkConf, KUBERNETES_EXECUTOR_ANNOTATION_PREFIX)
   }
 
+  def serviceAnnotations: Map[String, String] = {
+    KubernetesUtils.parsePrefixedKeyValuePairs(sparkConf,
+      KUBERNETES_EXECUTOR_SERVICE_ANNOTATION_PREFIX)
+  }
+
   override def secretNamesToMountPaths: Map[String, String] = {
     KubernetesUtils.parsePrefixedKeyValuePairs(sparkConf, KUBERNETES_EXECUTOR_SECRETS_PREFIX)
   }

@@ -65,8 +65,9 @@ private[spark] class KubernetesExecutorBuilder {
         }
       }
 
-    val features = Seq(
-      new BasicExecutorFeatureStep(conf, secMgr, resourceProfile),
+    val features =
+      Seq(new BasicExecutorFeatureStep(conf, secMgr, resourceProfile)
+      ) ++ serviceFeatureStep(conf) ++ Seq (
       new ExecutorKubernetesCredentialsFeatureStep(conf),
       new MountSecretsFeatureStep(conf),
       new EnvSecretsFeatureStep(conf),
@@ -88,4 +89,9 @@ private[spark] class KubernetesExecutorBuilder {
     }
   }
 
+  private def serviceFeatureStep(conf: KubernetesExecutorConf) = {
+    if (conf.get(Config.KUBERNETES_EXECUTORS_SVC)) {
+      Seq(new ExecutorServiceFeatureStep(conf))
+    } else Seq()
+  }
 }

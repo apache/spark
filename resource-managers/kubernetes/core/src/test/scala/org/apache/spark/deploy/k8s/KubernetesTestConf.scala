@@ -74,17 +74,22 @@ object KubernetesTestConf {
   def createExecutorConf(
       sparkConf: SparkConf = DEFAULT_CONF,
       driverPod: Option[Pod] = None,
+      resourceNamePrefix: Option[String] = None,
       labels: Map[String, String] = Map.empty,
       environment: Map[String, String] = Map.empty,
       annotations: Map[String, String] = Map.empty,
+      serviceAnnotations: Map[String, String] = Map.empty,
       secretEnvNamesToKeyRefs: Map[String, String] = Map.empty,
       secretNamesToMountPaths: Map[String, String] = Map.empty,
       volumes: Seq[KubernetesVolumeSpec] = Seq.empty): KubernetesExecutorConf = {
     val conf = sparkConf.clone()
-
+    resourceNamePrefix.foreach { prefix =>
+      conf.set(KUBERNETES_EXECUTOR_POD_NAME_PREFIX, prefix)
+    }
     setPrefixedConfigs(conf, KUBERNETES_EXECUTOR_LABEL_PREFIX, labels)
     setPrefixedConfigs(conf, "spark.executorEnv.", environment)
     setPrefixedConfigs(conf, KUBERNETES_EXECUTOR_ANNOTATION_PREFIX, annotations)
+    setPrefixedConfigs(conf, KUBERNETES_EXECUTOR_SERVICE_ANNOTATION_PREFIX, serviceAnnotations)
     setPrefixedConfigs(conf, KUBERNETES_EXECUTOR_SECRETS_PREFIX, secretNamesToMountPaths)
     setPrefixedConfigs(conf, KUBERNETES_EXECUTOR_SECRET_KEY_REF_PREFIX, secretEnvNamesToKeyRefs)
     setVolumeSpecs(conf, KUBERNETES_EXECUTOR_VOLUMES_PREFIX, volumes)

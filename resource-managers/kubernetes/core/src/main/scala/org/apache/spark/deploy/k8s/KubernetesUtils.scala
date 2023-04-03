@@ -23,7 +23,7 @@ import java.util.{Collections, UUID}
 
 import scala.collection.JavaConverters._
 
-import io.fabric8.kubernetes.api.model.{Container, ContainerBuilder, ContainerStateRunning, ContainerStateTerminated, ContainerStateWaiting, ContainerStatus, EnvVar, EnvVarBuilder, EnvVarSourceBuilder, HasMetadata, OwnerReferenceBuilder, Pod, PodBuilder, Quantity}
+import io.fabric8.kubernetes.api.model._
 import io.fabric8.kubernetes.client.KubernetesClient
 import org.apache.commons.codec.binary.Hex
 import org.apache.hadoop.fs.{FileSystem, Path}
@@ -31,7 +31,8 @@ import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.annotation.{DeveloperApi, Since, Unstable}
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.deploy.k8s.Config.KUBERNETES_FILE_UPLOAD_PATH
+import org.apache.spark.deploy.k8s.Config.{KUBERNETES_FILE_UPLOAD_PATH, KUBERNETES_POST_STOP_SCRIPT, KUBERNETES_PRE_START_SCRIPT}
+import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.internal.Logging
 import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.resource.ResourceUtils
@@ -64,6 +65,49 @@ object KubernetesUtils extends Logging {
       sparkConf: SparkConf,
       prefix: String): Map[String, String] = {
     sparkConf.getAllWithPrefix(prefix).toMap
+  }
+
+
+  def verifyBindAddress (conf: KubernetesConf, key: String): Unit = {
+    conf.getOption(key) match {
+      case Some(x) => require(x.isEmpty || x.equals(ALL_IPS),
+        s"$key is not supported in Kubernetes mode," +
+          s" as the bind address can either be $ALL_IPS" +
+          s" or the pod's IP address.")
+      case _ => None
+    }
+  }
+
+  def getContainerWithBindAddressEnv(conf: KubernetesConf, confKey: String,
+                                     envVarName: String, container: Container) : Container = {
+    val builder = new ContainerBuilder(container)
+    if (conf.get(confKey, "").isEmpty) {
+      builder.addNewEnv()
+        .withName(envVarName)
+        .withValueFrom(new EnvVarSourceBuilder()
+          .withNewFieldRef("v1", "status.podIP")
+          .build())
+        .endEnv()
+    } else {
+      builder.addNewEnv().withName(envVarName)
+        .withValue(conf.get(confKey, ALL_IPS))
+        .endEnv()
+    }
+    builder.build()
+  }
+
+  def getContainerWithPrePostScriptsEnv(conf: KubernetesConf,
+                                        container: Container) : Container = {
+    new ContainerBuilder(container)
+      .addNewEnv()
+      .withName(ENV_PRE_START_SCRIPT)
+      .withValue(conf.get(KUBERNETES_PRE_START_SCRIPT.key, ""))
+      .endEnv()
+      .addNewEnv()
+      .withName(ENV_POST_STOP_SCRIPT)
+      .withValue(conf.get(KUBERNETES_POST_STOP_SCRIPT.key, ""))
+      .endEnv()
+      .build()
   }
 
   @Since("3.0.0")

@@ -27,6 +27,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.deploy.k8s._
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
+import org.apache.spark.deploy.k8s.KubernetesUtils._
 import org.apache.spark.deploy.k8s.submit._
 import org.apache.spark.internal.config._
 import org.apache.spark.resource.ResourceProfile
@@ -83,6 +84,7 @@ private[spark] class BasicDriverFeatureStep(conf: KubernetesDriverConf)
   private val driverMemoryWithOverheadMiB = driverMemoryMiB + memoryOverheadMiB
 
   override def configurePod(pod: SparkPod): SparkPod = {
+    verifyBindAddress(conf, DRIVER_BIND_ADDRESS.key)
     val driverCustomEnvs = KubernetesUtils.buildEnvVars(
       Seq(ENV_APPLICATION_ID -> conf.appId) ++ conf.environment)
     val driverCpuQuantity = new Quantity(driverCoresRequest)
@@ -124,12 +126,6 @@ private[spark] class BasicDriverFeatureStep(conf: KubernetesDriverConf)
         .withValue(Utils.getCurrentUserName())
         .endEnv()
       .addAllToEnv(driverCustomEnvs.asJava)
-      .addNewEnv()
-        .withName(ENV_DRIVER_BIND_ADDRESS)
-        .withValueFrom(new EnvVarSourceBuilder()
-          .withNewFieldRef("v1", "status.podIP")
-          .build())
-        .endEnv()
       .editOrNewResources()
         .addToRequests("cpu", driverCpuQuantity)
         .addToLimits(maybeCpuLimitQuantity.toMap.asJava)
@@ -138,6 +134,12 @@ private[spark] class BasicDriverFeatureStep(conf: KubernetesDriverConf)
         .addToLimits(driverResourceQuantities.asJava)
         .endResources()
       .build()
+
+    val containerWithBindAddress = getContainerWithBindAddressEnv(conf,
+      DRIVER_BIND_ADDRESS.key, ENV_DRIVER_BIND_ADDRESS, driverContainer)
+
+    val containerWithPrePostScriptsEnv =
+      getContainerWithPrePostScriptsEnv(conf, containerWithBindAddress)
 
     val driverPod = new PodBuilder(pod.pod)
       .editOrNewMetadata()
@@ -157,7 +159,7 @@ private[spark] class BasicDriverFeatureStep(conf: KubernetesDriverConf)
     conf.schedulerName
       .foreach(driverPod.getSpec.setSchedulerName)
 
-    SparkPod(driverPod, driverContainer)
+    SparkPod(driverPod, containerWithPrePostScriptsEnv)
   }
 
   override def getAdditionalPodSystemProperties(): Map[String, String] = {
