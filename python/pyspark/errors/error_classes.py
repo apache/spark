@@ -290,7 +290,7 @@ ERROR_CLASSES_JSON = """
   },
   "RESULT_COLUMNS_MISMATCH_FOR_PANDAS_UDF" : {
     "message" : [
-      "Column names of the returned pandas.DataFrame do not match specified schema. <missing><extra>."
+      "Column names of the returned pandas.DataFrame do not match specified schema.<missing><extra>."
     ]
   },
   "RESULT_LENGTH_MISMATCH_FOR_PANDAS_UDF" : {
