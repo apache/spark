@@ -290,14 +290,12 @@ ERROR_CLASSES_JSON = """
   },
   "RESULT_COLUMNS_MISMATCH_FOR_PANDAS_UDF" : {
     "message" : [
-      "Column names of the returned pandas.DataFrame do not match specified schema.",
-      "<missing><extra>."
+      "Column names of the returned pandas.DataFrame do not match specified schema. <missing><extra>."
     ]
   },
   "RESULT_LENGTH_MISMATCH_FOR_PANDAS_UDF" : {
     "message" : [
-      "Number of columns of the returned pandas.DataFrame doesn't match specified schema.",
-      "Expected: <expected> Actual: <actual>"
+      "Number of columns of the returned pandas.DataFrame doesn't match specified schema. Expected: <expected> Actual: <actual>"
     ]
   },
   "RESULT_LENGTH_MISMATCH_FOR_SCALAR_ITER_PANDAS_UDF" : {
