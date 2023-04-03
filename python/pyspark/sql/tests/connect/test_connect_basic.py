@@ -2902,38 +2902,79 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         self.assertEqual(cdf4.collect(), sdf4.collect())
 
     def test_array_has_nullable(self):
-        schema_array_false = StructType().add("arr", ArrayType(IntegerType(), False))
-        cdf1 = self.connect.createDataFrame([Row([1, 2]), Row([3])], schema=schema_array_false)
-        sdf1 = self.spark.createDataFrame([Row([1, 2]), Row([3])], schema=schema_array_false)
-        self.assertEqual(cdf1.schema, sdf1.schema)
-        self.assertEqual(cdf1.collect(), sdf1.collect())
-
-        schema_array_true = StructType().add("arr", ArrayType(IntegerType(), True))
-        cdf2 = self.connect.createDataFrame([Row([1, None]), Row([3])], schema=schema_array_true)
-        sdf2 = self.spark.createDataFrame([Row([1, None]), Row([3])], schema=schema_array_true)
-        self.assertEqual(cdf2.schema, sdf2.schema)
-        self.assertEqual(cdf2.collect(), sdf2.collect())
+        for schema, data in [
+            (
+                StructType().add("arr", ArrayType(IntegerType(), False), True),
+                [Row([1, 2]), Row([3]), Row(None)],
+            ),
+            (
+                StructType().add("arr", ArrayType(IntegerType(), True), True),
+                [Row([1, None]), Row([3]), Row(None)],
+            ),
+            (
+                StructType().add("arr", ArrayType(IntegerType(), False), False),
+                [Row([1, 2]), Row([3])],
+            ),
+            (
+                StructType().add("arr", ArrayType(IntegerType(), True), False),
+                [Row([1, None]), Row([3])],
+            ),
+        ]:
+            with self.subTest(schema=schema):
+                cdf = self.connect.createDataFrame(data, schema=schema)
+                sdf = self.spark.createDataFrame(data, schema=schema)
+                self.assertEqual(cdf.schema, sdf.schema)
+                self.assertEqual(cdf.collect(), sdf.collect())
 
     def test_map_has_nullable(self):
-        schema_map_false = StructType().add("map", MapType(StringType(), IntegerType(), False))
-        cdf1 = self.connect.createDataFrame(
-            [Row({"a": 1, "b": 2}), Row({"a": 3})], schema=schema_map_false
-        )
-        sdf1 = self.spark.createDataFrame(
-            [Row({"a": 1, "b": 2}), Row({"a": 3})], schema=schema_map_false
-        )
-        self.assertEqual(cdf1.schema, sdf1.schema)
-        self.assertEqual(cdf1.collect(), sdf1.collect())
+        for schema, data in [
+            (
+                StructType().add("map", MapType(StringType(), IntegerType(), False), True),
+                [Row({"a": 1, "b": 2}), Row({"a": 3}), Row(None)],
+            ),
+            (
+                StructType().add("map", MapType(StringType(), IntegerType(), True), True),
+                [Row({"a": 1, "b": None}), Row({"a": 3}), Row(None)],
+            ),
+            (
+                StructType().add("map", MapType(StringType(), IntegerType(), False), False),
+                [Row({"a": 1, "b": 2}), Row({"a": 3})],
+            ),
+            (
+                StructType().add("map", MapType(StringType(), IntegerType(), True), False),
+                [Row({"a": 1, "b": None}), Row({"a": 3})],
+            ),
+        ]:
+            with self.subTest(schema=schema):
+                cdf = self.connect.createDataFrame(data, schema=schema)
+                sdf = self.spark.createDataFrame(data, schema=schema)
+                self.assertEqual(cdf.schema, sdf.schema)
+                self.assertEqual(cdf.collect(), sdf.collect())
 
-        schema_map_true = StructType().add("map", MapType(StringType(), IntegerType(), True))
-        cdf2 = self.connect.createDataFrame(
-            [Row({"a": 1, "b": None}), Row({"a": 3})], schema=schema_map_true
-        )
-        sdf2 = self.spark.createDataFrame(
-            [Row({"a": 1, "b": None}), Row({"a": 3})], schema=schema_map_true
-        )
-        self.assertEqual(cdf2.schema, sdf2.schema)
-        self.assertEqual(cdf2.collect(), sdf2.collect())
+    def test_struct_has_nullable(self):
+        for schema, data in [
+            (
+                StructType().add("struct", StructType().add("i", IntegerType(), False), True),
+                [Row(Row(1)), Row(Row(2)), Row(None)],
+            ),
+            (
+                StructType().add("struct", StructType().add("i", IntegerType(), True), True),
+                [Row(Row(1)), Row(Row(2)), Row(Row(None)), Row(None)],
+            ),
+            (
+                StructType().add("struct", StructType().add("i", IntegerType(), False), False),
+                [Row(Row(1)), Row(Row(2))],
+            ),
+            (
+                StructType().add("struct", StructType().add("i", IntegerType(), True), False),
+                [Row(Row(1)), Row(Row(2)), Row(Row(None))],
+            ),
+        ]:
+            with self.subTest(schema=schema):
+                cdf = self.connect.createDataFrame(data, schema=schema)
+                sdf = self.spark.createDataFrame(data, schema=schema)
+                self.assertEqual(cdf.schema, sdf.schema)
+                self.assertEqual(cdf.collect(), sdf.collect())
 
     def test_large_client_data(self):
         # SPARK-42816 support more than 4MB message size.
