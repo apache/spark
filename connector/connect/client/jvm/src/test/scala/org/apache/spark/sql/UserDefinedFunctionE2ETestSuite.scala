@@ -25,7 +25,7 @@ import scala.collection.JavaConverters._
 import org.apache.spark.api.java.function._
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{PrimitiveIntEncoder, PrimitiveLongEncoder}
 import org.apache.spark.sql.connect.client.util.RemoteSparkSession
-import org.apache.spark.sql.functions.udf
+import org.apache.spark.sql.functions.{col, udf}
 
 /**
  * All tests in this class requires client UDF artifacts synced with the server. TODO: It means
@@ -63,6 +63,15 @@ class UserDefinedFunctionE2ETestSuite extends RemoteSparkSession {
     assert(rows == Arrays.asList[Long](0, 0, 1, 1, 2, 2, 3, 3, 4, 4))
   }
 
+  test("filter with args") {
+    // This should go via `def filter(condition: Column)` rather than
+    // `def filter(func: T => Boolean)`
+    def func(i: Long): Boolean = i < 5
+    val under5 = udf(func _)
+    val longs = spark.range(10).filter(under5(col("id") * 2)).collectAsList()
+    assert(longs == Arrays.asList[Long](0, 1, 2))
+  }
+
   test("Dataset typed map - java") {
     val rows = spark
       .range(10)
@@ -76,9 +85,11 @@ class UserDefinedFunctionE2ETestSuite extends RemoteSparkSession {
   }
 
   test("Dataset typed flat map") {
+    val session: SparkSession = spark
+    import session.implicits._
     val rows = spark
       .range(5)
-      .flatMap(n => Iterator(42, 42))(PrimitiveIntEncoder)
+      .flatMap(n => Iterator(42, 42))
       .collectAsList()
     assert(rows.size() == 10)
     rows.forEach(x => assert(x == 42))
@@ -98,9 +109,11 @@ class UserDefinedFunctionE2ETestSuite extends RemoteSparkSession {
   }
 
   test("Dataset typed map partition") {
+    val session: SparkSession = spark
+    import session.implicits._
     val df = spark.range(0, 100, 1, 50).repartition(4)
     val result =
-      df.mapPartitions(iter => Iterator.single(iter.length))(PrimitiveIntEncoder).collect()
+      df.mapPartitions(iter => Iterator.single(iter.length)).collect()
     assert(result.sorted.toSeq === Seq(23, 25, 25, 27))
   }
 

@@ -528,7 +528,7 @@ class SparkConnectPlanner(val session: SparkSession) {
         udf.getPayload.toByteArray,
         SparkConnectArtifactManager.classLoaderWithArtifacts)
     assert(udfPacket.inputEncoders.size == 1)
-    implicit val iEnc = ExpressionEncoder(udfPacket.inputEncoders.head)
+    val iEnc = ExpressionEncoder(udfPacket.inputEncoders.head)
     val rEnc = ExpressionEncoder(udfPacket.outputEncoder)
 
     val deserializer = UnresolvedDeserializer(iEnc.deserializer)
@@ -537,9 +537,7 @@ class SparkConnectPlanner(val session: SparkSession) {
       udfPacket.function.asInstanceOf[Iterator[Any] => Iterator[Any]],
       generateObjAttr(rEnc),
       deserialized)
-    val serialized = SerializeFromObject(rEnc.namedExpressions, mapped)
-
-    new Dataset(session, serialized, rEnc).logicalPlan
+    SerializeFromObject(rEnc.namedExpressions, mapped)
   }
 
   private def transformGroupMap(rel: proto.GroupMap): LogicalPlan = {
@@ -888,12 +886,18 @@ class SparkConnectPlanner(val session: SparkSession) {
     val cond = rel.getCondition
     cond.getExprTypeCase match {
       case proto.Expression.ExprTypeCase.COMMON_INLINE_USER_DEFINED_FUNCTION
-          if cond.getCommonInlineUserDefinedFunction.getFunctionCase ==
-            proto.CommonInlineUserDefinedFunction.FunctionCase.SCALAR_SCALA_UDF =>
+          if isTypedFilter(cond.getCommonInlineUserDefinedFunction) =>
         transformTypedFilter(cond.getCommonInlineUserDefinedFunction, baseRel)
       case _ =>
         logical.Filter(condition = transformExpression(cond), child = baseRel)
     }
+  }
+
+  private def isTypedFilter(udf: proto.CommonInlineUserDefinedFunction): Boolean = {
+    // It is a scala udf && the udf argument is absent, but the one input data type is set.
+    // This means the udf is a typed filter to filter on all inputs
+    udf.getFunctionCase == proto.CommonInlineUserDefinedFunction.FunctionCase.SCALAR_SCALA_UDF &&
+    udf.getArgumentsCount == 0 && udf.getScalarScalaUdf.getInputTypesCount == 1
   }
 
   private def transformTypedFilter(
@@ -905,8 +909,8 @@ class SparkConnectPlanner(val session: SparkSession) {
         udf.getPayload.toByteArray,
         SparkConnectArtifactManager.classLoaderWithArtifacts)
     assert(udfPacket.inputEncoders.size == 1)
-    implicit val iEnc = ExpressionEncoder(udfPacket.inputEncoders.head)
-    TypedFilter(udfPacket.function, child)
+    val iEnc = ExpressionEncoder(udfPacket.inputEncoders.head)
+    TypedFilter(udfPacket.function, child)(iEnc)
   }
 
   private def transformProject(rel: proto.Project): LogicalPlan = {
@@ -1084,7 +1088,7 @@ class SparkConnectPlanner(val session: SparkSession) {
         SparkConnectArtifactManager.classLoaderWithArtifacts)
     ScalaUDF(
       function = udfPacket.function,
-      dataType = udfPacket.outputEncoder.dataType,
+      dataType = transformDataType(udf.getOutputType),
       children = fun.getArgumentsList.asScala.map(transformExpression).toSeq,
       inputEncoders = udfPacket.inputEncoders.map(e => Option(ExpressionEncoder(e))),
       outputEncoder = Option(ExpressionEncoder(udfPacket.outputEncoder)),
