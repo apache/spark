@@ -561,7 +561,21 @@ class TorchDistributor(Distributor):
                     pass
 
             if context.partitionId() == 0:
-                yield pd.DataFrame(data={"output": [cloudpickle.dumps(output)]})
+                output_bytes = cloudpickle.dumps(output)
+                output_size = len(output_bytes)
+
+                # In Spark Connect, DataFrame.collect stacks rows to size
+                # 'spark.connect.grpc.arrow.maxBatchSize' (default 4MiB),
+                # here use 4KiB for each chunk, which mean each arrow batch
+                # may contain about 1000 chunks.
+                chunks = []
+                chunk_size = 4096
+                index = 0
+                while index < output_size:
+                    chunks.append(output_bytes[index : index + chunk_size])
+                    index += chunk_size
+
+                yield pd.DataFrame(data={"chunk": chunks})
 
         return wrapped_train_fn
 
@@ -589,12 +603,16 @@ class TorchDistributor(Distributor):
             f"Started distributed training with {self.num_processes} executor processes"
         )
         try:
-            row = (
+            rows = (
                 self.spark.range(start=0, end=self.num_tasks, step=1, numPartitions=self.num_tasks)
-                .mapInPandas(func=spark_task_function, schema="output binary", barrier=True)
-                .collect()[0]
+                .mapInPandas(func=spark_task_function, schema="chunk binary", barrier=True)
+                .collect()
             )
-            result = cloudpickle.loads(row.output)
+            output_bytes = b""
+            for row in rows:
+                output_bytes += row.chunk
+            result = cloudpickle.loads(output_bytes)
+            del output_bytes
         finally:
             log_streaming_server.shutdown()
         self.logger.info(
