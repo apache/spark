@@ -49,14 +49,6 @@ class TorchDistributorBaselineUnitTestsOnConnect(
     def tearDown(self) -> None:
         self.spark.stop()
 
-    @unittest.skip("Can not dynamically set ssl conf via spark.sparkContext._conf.")
-    def test_encryption_passes(self):
-        super().test_encryption_passes()
-
-    @unittest.skip("Can not dynamically set ssl conf via spark.sparkContext._conf.")
-    def test_encryption_fails(self):
-        super().test_encryption_fails()
-
     def test_get_num_tasks_fails(self) -> None:
         inputs = [1, 5, 4]
 
@@ -160,10 +152,6 @@ class TorchDistributorDistributedUnitTestsOnConnect(
         shutil.rmtree(self.mnist_dir_path)
         os.unlink(self.gpu_discovery_script_file.name)
         self.spark.stop()
-
-    @unittest.skip("Can not dynamically set gpu conf via spark.sparkContext._conf.")
-    def test_get_num_tasks_distributed(self):
-        super().test_get_num_tasks_distributed()
 
 
 @unittest.skipIf(not have_torch, "torch is required")

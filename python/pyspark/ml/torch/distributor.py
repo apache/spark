@@ -45,9 +45,9 @@ def _get_active_session() -> SparkSession:
     if not is_remote():
         spark = SparkSession.getActiveSession()
     else:
-        from pyspark.sql.connect.session import _active_spark_session
+        import pyspark.sql.connect.session
 
-        spark = _active_spark_session  # type: ignore[assignment]
+        spark = pyspark.sql.connect.session._active_spark_session  # type: ignore[assignment]
 
     if spark is None:
         raise RuntimeError("An active SparkSession is required for the distributor.")
@@ -57,8 +57,6 @@ def _get_active_session() -> SparkSession:
 def _get_conf(spark: SparkSession, key: str, default_value: str) -> str:
     """Get the conf "key" from the given spark session,
     or return the default value if the conf is not set.
-    If this session is a remote connect session, the SparkConf
-    code path always fail, and fallback to the RuntimeConf.
 
     Parameters
     ----------
@@ -74,12 +72,7 @@ def _get_conf(spark: SparkSession, key: str, default_value: str) -> str:
     str
         Returns the string value that corresponds to the conf
     """
-    from pyspark.sql.utils import is_remote
-
-    if not is_remote():
-        value = spark.sparkContext.getConf().get(key, default_value)
-    else:
-        value = spark.conf.get(key, default_value)  # type: ignore[assignment]
+    value = spark.conf.get(key, default_value)
     assert value is not None
     return value
 

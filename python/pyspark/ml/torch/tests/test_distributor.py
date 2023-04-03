@@ -166,8 +166,8 @@ class TorchDistributorBaselineUnitTestsMixin:
         ]
         for ssl_conf_key, ssl_conf_value, pytorch_conf_key, pytorch_conf_value in inputs:
             with self.subTest():
-                self.spark.sparkContext._conf.set(ssl_conf_key, ssl_conf_value)
-                self.spark.sparkContext._conf.set(pytorch_conf_key, pytorch_conf_value)
+                self.spark.conf.set(ssl_conf_key, ssl_conf_value)
+                self.spark.conf.set(pytorch_conf_key, pytorch_conf_value)
                 distributor = TorchDistributor(1, True, False)
                 distributor._check_encryption()
 
@@ -177,8 +177,8 @@ class TorchDistributorBaselineUnitTestsMixin:
         for ssl_conf_key, ssl_conf_value, pytorch_conf_key, pytorch_conf_value in inputs:
             with self.subTest():
                 with self.assertRaisesRegex(Exception, "encryption"):
-                    self.spark.sparkContext._conf.set(ssl_conf_key, ssl_conf_value)
-                    self.spark.sparkContext._conf.set(pytorch_conf_key, pytorch_conf_value)
+                    self.spark.conf.set(ssl_conf_key, ssl_conf_value)
+                    self.spark.conf.set(pytorch_conf_key, pytorch_conf_value)
                     distributor = TorchDistributor(1, True, False)
                     distributor._check_encryption()
 
@@ -412,13 +412,11 @@ class TorchDistributorDistributedUnitTestsMixin:
 
         for spark_conf_value, num_processes, expected_output in inputs:
             with self.subTest():
-                self.spark.sparkContext._conf.set(
-                    "spark.task.resource.gpu.amount", str(spark_conf_value)
-                )
+                self.spark.conf.set("spark.task.resource.gpu.amount", str(spark_conf_value))
                 distributor = TorchDistributor(num_processes, False, True)
                 self.assertEqual(distributor._get_num_tasks(), expected_output)
 
-        self.spark.sparkContext._conf.set("spark.task.resource.gpu.amount", "1")
+        self.spark.conf.set("spark.task.resource.gpu.amount", "1")
 
     def test_distributed_file_with_pytorch(self) -> None:
         test_file_path = "python/test_support/test_pytorch_training_file.py"
