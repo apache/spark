@@ -290,7 +290,33 @@ object AnsiTypeCoercion extends TypeCoercionBase {
     }
   }
 
-  // Please see the comments in `TypeCoercion.ResolveBinaryArithmetic`.
+  /**
+   * For [[Add]]:
+   * 1. if both side are interval, stays the same;
+   * 2. else if one side is date and the other is interval,
+   * turns it to [[DateAddInterval]];
+   * 3. else if one side is interval, turns it to [[TimeAdd]];
+   * 4. else if one side is date, turns it to [[DateAdd]] ;
+   * 5. else stays the same.
+   *
+   * For [[Subtract]]:
+   * 1. if both side are interval, stays the same;
+   * 2. else if the left side is date and the right side is interval,
+   * turns it to [[DateAddInterval(l, -r)]];
+   * 3. else if the right side is an interval, turns it to [[TimeAdd(l, -r)]];
+   * 4. else if one side is timestamp, turns it to [[SubtractTimestamps]];
+   * 5. else if the right side is date, turns it to [[DateDiff]]/[[SubtractDates]];
+   * 6. else if the left side is date, turns it to [[DateSub]];
+   * 7. else turns it to stays the same.
+   *
+   * For [[Multiply]]:
+   * 1. If one side is interval, turns it to [[MultiplyInterval]];
+   * 2. otherwise, stays the same.
+   *
+   * For [[Divide]]:
+   * 1. If the left side is interval, turns it to [[DivideInterval]];
+   * 2. otherwise, stays the same.
+   */
   object ResolveBinaryArithmetic extends TypeCoercionRule {
     override val transform: PartialFunction[Expression, Expression] = {
       case a @ Add(l, r, mode) if a.childrenResolved => (l.dataType, r.dataType) match {
@@ -312,11 +338,13 @@ object AnsiTypeCoercion extends TypeCoercionBase {
           a.copy(right = Cast(a.right, a.left.dataType))
         case (DateType, CalendarIntervalType) =>
           DateAddInterval(l, r, ansiEnabled = mode == EvalMode.ANSI)
-        case (_: DatetimeType, CalendarIntervalType | _: DayTimeIntervalType) =>
+        case (_: DatetimeType | _: AnsiIntervalType,
+            CalendarIntervalType | _: DayTimeIntervalType) =>
           Cast(TimeAdd(l, r), l.dataType)
         case (CalendarIntervalType, DateType) =>
           DateAddInterval(r, l, ansiEnabled = mode == EvalMode.ANSI)
-        case (CalendarIntervalType | _: DayTimeIntervalType, _: DatetimeType) =>
+        case (CalendarIntervalType | _: DayTimeIntervalType,
+            _: DatetimeType | _: AnsiIntervalType) =>
           Cast(TimeAdd(r, l), r.dataType)
         case (DateType, dt) if dt != StringType => DateAdd(l, r)
         case (dt, DateType) if dt != StringType => DateAdd(r, l)
@@ -340,7 +368,8 @@ object AnsiTypeCoercion extends TypeCoercionBase {
         case (DateType, CalendarIntervalType) =>
           DatetimeSub(l, r, DateAddInterval(l,
             UnaryMinus(r, mode == EvalMode.ANSI), ansiEnabled = mode == EvalMode.ANSI))
-        case (_: DatetimeType, CalendarIntervalType | _: DayTimeIntervalType) =>
+        case (_: DatetimeType | _: AnsiIntervalType,
+            CalendarIntervalType | _: DayTimeIntervalType) =>
           Cast(DatetimeSub(l, r, TimeAdd(l, UnaryMinus(r, mode == EvalMode.ANSI))), l.dataType)
         case _ if AnyTimestampType.unapply(l) || AnyTimestampType.unapply(r) =>
           SubtractTimestamps(l, r)

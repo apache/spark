@@ -2099,12 +2099,14 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
-    "left" : "\"INTERVAL YEAR TO MONTH\"",
-    "right" : "\"INTERVAL DAY\"",
-    "sqlExpr" : "\"(INTERVAL '2-2' YEAR TO MONTH + INTERVAL '3' DAY)\""
+    "inputSql" : "\"INTERVAL '2-2' YEAR TO MONTH\"",
+    "inputType" : "\"INTERVAL YEAR TO MONTH\"",
+    "paramIndex" : "1",
+    "requiredType" : "\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\"",
+    "sqlExpr" : "\"INTERVAL '2-2' YEAR TO MONTH + INTERVAL '3' DAY\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2123,12 +2125,14 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
-    "left" : "\"INTERVAL DAY\"",
-    "right" : "\"INTERVAL YEAR TO MONTH\"",
-    "sqlExpr" : "\"(INTERVAL '3' DAY + INTERVAL '2-2' YEAR TO MONTH)\""
+    "inputSql" : "\"INTERVAL '2-2' YEAR TO MONTH\"",
+    "inputType" : "\"INTERVAL YEAR TO MONTH\"",
+    "paramIndex" : "1",
+    "requiredType" : "\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\"",
+    "sqlExpr" : "\"INTERVAL '2-2' YEAR TO MONTH + INTERVAL '3' DAY\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2147,12 +2151,14 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
-    "left" : "\"INTERVAL YEAR TO MONTH\"",
-    "right" : "\"INTERVAL DAY\"",
-    "sqlExpr" : "\"(INTERVAL '2-2' YEAR TO MONTH - INTERVAL '3' DAY)\""
+    "inputSql" : "\"INTERVAL '2-2' YEAR TO MONTH\"",
+    "inputType" : "\"INTERVAL YEAR TO MONTH\"",
+    "paramIndex" : "1",
+    "requiredType" : "\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\"",
+    "sqlExpr" : "\"INTERVAL '2-2' YEAR TO MONTH + (- INTERVAL '3' DAY)\""
   },
   "queryContext" : [ {
     "objectType" : "",
