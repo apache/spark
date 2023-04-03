@@ -619,7 +619,8 @@ class SparkSession private(
    *             Supported Data Types</a> for supported value types in Scala/Java.
    *             For example, map keys: "rank", "name", "birthdate";
    *             map values: 1, "Steven", LocalDate.of(2023, 4, 2).
-   *             Map value can be a `Column` of literal expression, in that case it is taken as is.
+   *             Map value can be also a `Column` of literal expression, in that case
+   *             it is taken as is.
    *
    * @since 3.4.0
    */
@@ -649,7 +650,8 @@ class SparkSession private(
    *             Supported Data Types</a> for supported value types in Scala/Java.
    *             For example, map keys: "rank", "name", "birthdate";
    *             map values: 1, "Steven", LocalDate.of(2023, 4, 2).
-   *             Map value can be a `Column` of literal expression, in that case it is taken as is.
+   *             Map value can be also a `Column` of literal expression, in that case
+   *             it is taken as is.
    *
    * @since 3.4.0
    */
