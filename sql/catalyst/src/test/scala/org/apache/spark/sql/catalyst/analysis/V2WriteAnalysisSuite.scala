@@ -21,7 +21,8 @@ import java.util.Locale
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference, Cast, LessThanOrEqual, Literal}
+import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference, Cast, CreateNamedStruct, GetStructField, If, IsNull, LessThanOrEqual, Literal}
+import org.apache.spark.sql.catalyst.expressions.objects.AssertNotNull
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.internal.SQLConf
@@ -187,7 +188,6 @@ abstract class V2StrictWriteAnalysisSuiteBase extends V2WriteAnalysisSuiteBase {
     assertAnalysisError(parsedPlan, Seq(
       "Cannot write incompatible data to table", "'table-name'",
       "Cannot safely cast", "'x'", "double to float",
-      "Cannot write nullable values to non-null column", "'x'",
       "Cannot find data for output column", "'y'"))
   }
 
@@ -207,19 +207,19 @@ abstract class V2StrictWriteAnalysisSuiteBase extends V2WriteAnalysisSuiteBase {
   test("byPosition: multiple field errors are reported") {
     val xRequiredTable = TestRelation(StructType(Seq(
       StructField("x", FloatType, nullable = false),
-      StructField("y", DoubleType))).toAttributes)
+      StructField("y", FloatType))).toAttributes)
 
     val query = TestRelation(StructType(Seq(
       StructField("x", DoubleType),
-      StructField("b", FloatType))).toAttributes)
+      StructField("b", DoubleType))).toAttributes)
 
     val parsedPlan = byPosition(xRequiredTable, query)
 
     assertNotResolved(parsedPlan)
     assertAnalysisError(parsedPlan, Seq(
       "Cannot write incompatible data to table", "'table-name'",
-      "Cannot write nullable values to non-null column", "'x'",
-      "Cannot safely cast", "'x'", "double to float"))
+      "Cannot safely cast", "'x'", "double to float",
+      "Cannot safely cast", "'y'", "double to float"))
   }
 }
 
@@ -380,9 +380,10 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
   test("byName: fail nullable data written to required columns") {
     val parsedPlan = byName(requiredTable, table)
     assertNotResolved(parsedPlan)
-    assertAnalysisError(parsedPlan, Seq(
-      "Cannot write incompatible data to table", "'table-name'",
-      "Cannot write nullable values to non-null column", "'x'", "'y'"))
+
+    val analyzed = parsedPlan.analyze
+    assertNullCheckExists(analyzed, Seq("x"))
+    assertNullCheckExists(analyzed, Seq("y"))
   }
 
   test("byName: allow required data written to nullable columns") {
@@ -502,9 +503,10 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
   test("byPosition: fail nullable data written to required columns") {
     val parsedPlan = byPosition(requiredTable, table)
     assertNotResolved(parsedPlan)
-    assertAnalysisError(parsedPlan, Seq(
-      "Cannot write incompatible data to table", "'table-name'",
-      "Cannot write nullable values to non-null column", "'x'", "'y'"))
+
+    val analyzed = parsedPlan.analyze
+    assertNullCheckExists(analyzed, Seq("x"))
+    assertNullCheckExists(analyzed, Seq("y"))
   }
 
   test("byPosition: allow required data written to nullable columns") {
@@ -623,11 +625,22 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
       val parsedPlan = byPosition(tableWithStructCol, query)
       assertNotResolved(parsedPlan)
 
+      val queryCol = query.output.head
+      val expectedColType = tableWithStructCol.schema("col").dataType
+
       val expectedQuery = Project(Seq(Alias(
-        Cast(
-          query.output.head,
-          new StructType().add("a", IntegerType).add("b", IntegerType),
-          Some(conf.sessionLocalTimeZone)),
+        If(
+          IsNull(queryCol),
+          Literal(null, expectedColType),
+          CreateNamedStruct(Seq(
+            Literal("a"), Cast(
+              GetStructField(queryCol, 0, name = Some("x")),
+              IntegerType,
+              Some(conf.sessionLocalTimeZone)),
+            Literal("b"), Cast(
+              GetStructField(queryCol, 1, name = Some("y")),
+              IntegerType,
+              Some(conf.sessionLocalTimeZone))))),
         "col")()),
         query)
       checkAnalysis(parsedPlan, byPosition(tableWithStructCol, expectedQuery))
@@ -858,6 +871,238 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
       expectedErrMsg))
   }
 
+  test("SPARK-42855: NOT NULL checks for nested structs, arrays, maps (byName)") {
+    checkNotNullStructArrayMap(byNameResolution = true)
+  }
+
+  test("SPARK-42855: NOT NULL checks for nested structs, arrays, maps (byPosition)") {
+    checkNotNullStructArrayMap(byNameResolution = false)
+  }
+
+  private def checkNotNullStructArrayMap(byNameResolution: Boolean): Unit = {
+    val structType = new StructType().add("x", "int").add("y", "int")
+    val table = TestRelation(Seq(
+      $"a".int,
+      $"b".struct(
+        $"s".struct(structType).notNull,
+        $"arr".array(structType).notNull,
+        Symbol("m").map(structType, structType).notNull)))
+    val query = TestRelation(Seq(
+      $"a".int,
+      $"b".struct(
+        $"s".struct(structType),
+        $"arr".array(structType),
+        Symbol("m").map(structType, structType))))
+
+    val parsedPlan = if (byNameResolution) byName(table, query) else byPosition(table, query)
+    val analyzedPlan = parsedPlan.analyze
+
+    assertNoNullCheck(analyzedPlan, Seq("b"))
+    assertNullCheckExists(analyzedPlan, Seq("b", "s"))
+    assertNullCheckExists(analyzedPlan, Seq("b", "arr"))
+    assertNullCheckExists(analyzedPlan, Seq("b", "m"))
+  }
+
+  test("SPARK-42855: NOT NULL checks for nested struct fields (required input) (byName)") {
+    checkNestedStructWithNotNullFields(byNameResolution = true)
+  }
+
+  test("SPARK-42855: NOT NULL checks for nested struct fields (required input) (byPosition)") {
+    checkNestedStructWithNotNullFields(byNameResolution = false)
+  }
+
+  private def checkNestedStructWithNotNullFields(byNameResolution: Boolean): Unit = {
+    val table = TestRelation(Seq(
+      $"a".int,
+      $"b".struct($"n1".int, $"n2".struct($"dn1".int.notNull, $"dn2".int.notNull))))
+    val query = TestRelation(Seq(
+      $"a".int,
+      $"b".struct($"n1".int, $"n2".struct($"dn1".int.notNull, $"dn2".int).notNull).notNull))
+
+    val parsedPlan = if (byNameResolution) byName(table, query) else byPosition(table, query)
+    val analyzedPlan = parsedPlan.analyze
+
+    assertNullCheckExists(analyzedPlan, Seq("b", "n2", "dn2"))
+    // the entire 'b.n2.dn1' path in the query is required, no need for checks
+    assertNoNullCheck(analyzedPlan, Seq("b", "n2", "dn1"))
+  }
+
+  test("SPARK-42855: NOT NULL checks for nested struct fields (byName)") {
+    checkNullableNestedStructWithNotNullFields(byNameResolution = true)
+  }
+
+  test("SPARK-42855: NOT NULL checks for nested struct fields (byPosition)") {
+    checkNullableNestedStructWithNotNullFields(byNameResolution = false)
+  }
+
+  private def checkNullableNestedStructWithNotNullFields(byNameResolution: Boolean): Unit = {
+    val table = TestRelation(Seq(
+      $"a".int,
+      $"b".struct($"n1".int, $"n2".struct($"dn1".int.notNull, $"dn2".int.notNull))))
+    val query = TestRelation(Seq(
+      $"a".int,
+      $"b".struct($"n1".int, $"n2".struct($"dn1".int.notNull, $"dn2".int))))
+
+    val parsedPlan = if (byNameResolution) byName(table, query) else byPosition(table, query)
+    val analyzedPlan = parsedPlan.analyze
+
+    assertNoNullCheck(analyzedPlan, Seq("b", "n2"))
+    // the 'b.n2.dn1' path in the query is nullable as 'b' and 'b.n2' are nullable
+    // that's why there is AssertNotNull for 'b.n2.dn1' as the query is being transformed
+    assertNullCheckExists(analyzedPlan, Seq("b", "n2", "dn1"))
+    assertNullCheckExists(analyzedPlan, Seq("b", "n2", "dn2"))
+  }
+
+  test("SPARK-42855: NOT NULL checks for nullable array with required element (byName)") {
+    checkNullableArrayWithNotNullElement(byNameResolution = true)
+  }
+
+  test("SPARK-42855: NOT NULL checks for nullable array with required element (byPosition)") {
+    checkNullableArrayWithNotNullElement(byNameResolution = false)
+  }
+
+  private def checkNullableArrayWithNotNullElement(byNameResolution: Boolean): Unit = {
+    val structType = new StructType().add("x", "int").add("y", "int")
+    val table = TestRelation(Seq(
+      $"a".int,
+      $"b".struct(
+        $"i".int,
+        $"arr".array(ArrayType(structType, containsNull = false)))))
+    val query = TestRelation(Seq(
+      $"a".int,
+      $"b".struct(
+        $"i".int,
+        $"arr".array(ArrayType(structType, containsNull = true)))))
+
+    val parsedPlan = if (byNameResolution) byName(table, query) else byPosition(table, query)
+    val analyzedPlan = parsedPlan.analyze
+
+    assertNoNullCheck(analyzedPlan, Seq("b", "arr"))
+    assertNullCheckExists(analyzedPlan, Seq("b", "arr", "element"))
+  }
+
+  test("SPARK-42855: NOT NULL checks for fields inside nullable array (byName)") {
+    checkNotNullFieldsInsideNullableArray(byNameResolution = true)
+  }
+
+  test("SPARK-42855: NOT NULL checks for fields inside nullable array (byPosition)") {
+    checkNotNullFieldsInsideNullableArray(byNameResolution = false)
+  }
+
+  private def checkNotNullFieldsInsideNullableArray(byNameResolution: Boolean): Unit = {
+    val tableStructType = new StructType().add("x", "int", nullable = false).add("y", "int")
+    val table = TestRelation(Seq(
+      $"a".int,
+      $"b".struct(
+        $"i".int,
+        $"arr".array(ArrayType(tableStructType, containsNull = true)))))
+    val queryStructType = new StructType().add("x", "int").add("y", "int")
+    val query = TestRelation(Seq(
+      $"a".int,
+      $"b".struct(
+        $"i".int,
+        $"arr".array(ArrayType(queryStructType, containsNull = true)))))
+
+    val parsedPlan = if (byNameResolution) byName(table, query) else byPosition(table, query)
+    val analyzedPlan = parsedPlan.analyze
+
+    assertNoNullCheck(analyzedPlan, Seq("b", "arr"))
+    assertNoNullCheck(analyzedPlan, Seq("b", "arr", "element"))
+    assertNullCheckExists(analyzedPlan, Seq("b", "arr", "element", "x"))
+    assertNoNullCheck(analyzedPlan, Seq("b", "arr", "element", "y"))
+  }
+
+  test("SPARK-42855: NOT NULL checks for nullable map with required values (byName)") {
+    checkNullableMapWithNotNullValues(byNameResolution = true)
+  }
+
+  test("SPARK-42855: NOT NULL checks for nullable map with required values (byPosition)") {
+    checkNullableMapWithNotNullValues(byNameResolution = false)
+  }
+
+  private def checkNullableMapWithNotNullValues(byNameResolution: Boolean): Unit = {
+    val structType = new StructType().add("x", "int").add("y", "int")
+    val table = TestRelation(Seq(
+      $"a".int,
+      $"b".struct(
+        $"i".int,
+        Symbol("m").map(MapType(structType, structType, valueContainsNull = false)))))
+    val query = TestRelation(Seq(
+      $"a".int,
+      $"b".struct(
+        $"i".int,
+        Symbol("m").map(MapType(structType, structType, valueContainsNull = true)))))
+
+    val parsedPlan = if (byNameResolution) byName(table, query) else byPosition(table, query)
+    val analyzedPlan = parsedPlan.analyze
+
+    assertNoNullCheck(analyzedPlan, Seq("b", "m"))
+    assertNullCheckExists(analyzedPlan, Seq("b", "m", "value"))
+  }
+
+  test("SPARK-42855: NOT NULL checks for fields inside nullable maps (byName)") {
+    checkNotNullFieldsInsideNullableMap(byNameResolution = true)
+  }
+
+  test("SPARK-42855: NOT NULL checks for fields inside nullable maps (byPosition)") {
+    checkNotNullFieldsInsideNullableMap(byNameResolution = false)
+  }
+
+  private def checkNotNullFieldsInsideNullableMap(byNameResolution: Boolean): Unit = {
+    val tableStructType = new StructType().add("x", "int", nullable = false).add("y", "int")
+    val table = TestRelation(Seq(
+      $"a".int,
+      $"b".struct(
+        $"i".int,
+        Symbol("m").map(MapType(tableStructType, tableStructType, valueContainsNull = true)))))
+    val queryStructType = new StructType().add("x", "int", nullable = true).add("y", "int")
+    val query = TestRelation(Seq(
+      $"a".int,
+      $"b".struct(
+        $"i".int,
+        Symbol("m").map(MapType(queryStructType, queryStructType, valueContainsNull = true)))))
+
+    val parsedPlan = if (byNameResolution) byName(table, query) else byPosition(table, query)
+    val analyzedPlan = parsedPlan.analyze
+
+    assertNoNullCheck(analyzedPlan, Seq("b", "m"))
+
+    assertNoNullCheck(analyzedPlan, Seq("b", "m", "key"))
+    assertNullCheckExists(analyzedPlan, Seq("b", "m", "key", "x"))
+    assertNoNullCheck(analyzedPlan, Seq("b", "m", "key", "y"))
+
+    assertNoNullCheck(analyzedPlan, Seq("b", "m", "value"))
+    assertNullCheckExists(analyzedPlan, Seq("b", "m", "value", "x"))
+    assertNoNullCheck(analyzedPlan, Seq("b", "m", "value", "y"))
+  }
+
+  test("SPARK-42855: no null checks when nullability is compatible (byName)") {
+    checkCompatibleWritesWithNestedStructs(byNameResolution = true)
+  }
+
+  test("SPARK-42855: no null checks when nullability is compatible (byPosition)") {
+    checkCompatibleWritesWithNestedStructs(byNameResolution = false)
+  }
+
+  private def checkCompatibleWritesWithNestedStructs(byNameResolution: Boolean): Unit = {
+    val structType = new StructType().add("x", "int", nullable = false).add("y", "int")
+    val table = TestRelation(Seq(
+      $"a".int,
+      $"b".struct(structType),
+      $"arr".array(structType),
+      Symbol("m").map(structType, structType)))
+    val query = TestRelation(Seq(
+      $"a".int,
+      $"b".struct(structType),
+      $"arr".array(structType),
+      Symbol("m").map(structType, structType)))
+
+    val parsedPlan = if (byNameResolution) byName(table, query) else byPosition(table, query)
+
+    assertResolved(parsedPlan)
+    checkAnalysis(parsedPlan, parsedPlan)
+  }
+
   def assertNotResolved(logicalPlan: LogicalPlan): Unit = {
     assert(!logicalPlan.resolved, s"Plan should not be resolved: $logicalPlan")
   }
@@ -979,9 +1224,29 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
       $"a".int))
 
     val parsedPlan = byName(table, query)
+    val analyzedPlan = parsedPlan.analyze
 
-    assertAnalysisError(parsedPlan, Seq(
-      "Cannot write incompatible data to table", "'table-name'",
-      "Cannot write nullable values to non-null column 'b.x'"))
+    assertNullCheckExists(analyzedPlan, Seq("b", "x"))
+  }
+
+  protected def assertNullCheckExists(plan: LogicalPlan, colPath: Seq[String]): Unit = {
+    val asserts = findAsserts(plan, colPath)
+    assert(asserts.nonEmpty, s"Must have NOT NULL checks for col $colPath")
+  }
+
+  protected def assertNoNullCheck(plan: LogicalPlan, colPath: Seq[String]): Unit = {
+    val asserts = findAsserts(plan, colPath)
+    assert(asserts.isEmpty, s"Must have no NOT NULL checks for col $colPath")
+  }
+
+  private def findAsserts(plan: LogicalPlan, colPath: Seq[String]): Seq[AssertNotNull] = {
+    val query = plan match {
+      case command: V2WriteCommand => command.query
+      case other => fail(s"Expected V2WriteCommand: $other")
+    }
+
+    query.expressions.flatMap(e => e.collect {
+      case assert: AssertNotNull if assert.walkedTypePath == colPath => assert
+    })
   }
 }
