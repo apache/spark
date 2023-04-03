@@ -28,7 +28,7 @@ import scala.collection.mutable.ArrayBuffer
 import scala.util.Try
 import scala.util.control.NonFatal
 
-import org.apache.spark.TaskContext
+import org.apache.spark.{SparkThrowable, TaskContext}
 import org.apache.spark.executor.InputMetrics
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{DataFrame, Row}
@@ -927,8 +927,8 @@ object JdbcUtils extends Logging with SQLConfHelper {
    */
   def renameTable(
       conn: Connection,
-      oldTable: String,
-      newTable: String,
+      oldTable: Identifier,
+      newTable: Identifier,
       options: JDBCOptions): Unit = {
     val dialect = JdbcDialects.get(options.url)
     executeStatement(conn, options, dialect.renameTable(oldTable, newTable))
@@ -1173,6 +1173,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
     try {
       f
     } catch {
+      case e: SparkThrowable with Throwable => throw e
       case e: Throwable => throw dialect.classifyException(message, e)
     }
   }
