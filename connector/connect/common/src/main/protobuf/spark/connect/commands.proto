@@ -213,10 +213,10 @@ message WriteStreamOperationStart {
 
 message WriteStreamOperationStartResult {
 
-  // (Required)
+  // (Required) query id of the streaming query.
   string query_id = 1;
 
-  // (Required)
+  // (Required) run id of the streaming query.
   string run_id = 2;
 
   // An optional query name.
