@@ -374,7 +374,7 @@ class TorchDistributorLocalUnitTestsMixin:
         output = TorchDistributor(num_processes=2, local_mode=True, use_gpu=False).run(
             train_fn, 0.001
         )
-        self.assertEqual(output, "success")
+        self.assertEqual(output, "success" * (1 << 20))
 
 
 @unittest.skipIf(not have_torch, "torch is required")
