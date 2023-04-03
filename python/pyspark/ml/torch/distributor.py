@@ -127,6 +127,7 @@ def get_gpus_owned(context: Union[SparkSession, BarrierTaskContext]) -> List[str
     CUDA_VISIBLE_DEVICES = "CUDA_VISIBLE_DEVICES"
     pattern = re.compile("^[1-9][0-9]*|0$")
     if isinstance(context, SparkSession):
+        # TODO(SPARK-42994): Support sc.resources in Spark Connect
         addresses = context.sparkContext.resources["gpu"].addresses
     else:
         addresses = context.resources()["gpu"].addresses
@@ -194,6 +195,7 @@ class Distributor:
                 return math.ceil(self.num_processes / task_gpu_amount)
             else:
                 key = "spark.driver.resource.gpu.amount"
+                # TODO(SPARK-42994): Support sc.resources in Spark Connect
                 if "gpu" not in self.spark.sparkContext.resources:
                     raise RuntimeError("GPUs were unable to be found on the driver.")
                 num_available_gpus = int(_get_conf(self.spark, key, "0"))
@@ -269,6 +271,10 @@ class TorchDistributor(Distributor):
     A class to support distributed training on PyTorch and PyTorch Lightning using PySpark.
 
     .. versionadded:: 3.4.0
+
+    .. versionchanged:: 3.5.0
+        Supports Spark Connect. Note local model with GPU is not supported yet, will be fixed
+        in SPARK-42994.
 
     Parameters
     ----------
