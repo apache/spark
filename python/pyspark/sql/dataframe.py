@@ -1858,7 +1858,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             or is_withReplacement_omitted_kwargs
             or is_withReplacement_omitted_args
         ):
-            argtypes = [str(type(arg)) for arg in [withReplacement, fraction, seed]]
+            argtypes = [type(arg).__name__ for arg in [withReplacement, fraction, seed]]
             raise PySparkTypeError(
                 error_class="NOT_BOOL_OR_FLOAT_OR_INT",
                 message_parameters={
