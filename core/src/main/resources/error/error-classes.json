@@ -542,6 +542,12 @@
     ],
     "sqlState" : "22003"
   },
+  "ARRAY_INSERT_BY_INDEX_ZERO" : {
+    "message" : [
+      "The index 0 is invalid. An index shall be either < 0 or > 0 (the first element has index 1)."
+    ],
+    "sqlState" : "22003"
+  },
   "EMPTY_JSON_FIELD_VALUE" : {
     "message" : [
       "Failed to parse an empty string for data type <dataType>."

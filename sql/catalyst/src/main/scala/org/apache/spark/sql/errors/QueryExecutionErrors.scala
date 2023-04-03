@@ -1614,6 +1614,15 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       summary = getSummary(context))
   }
 
+  def arrayInsertByIndexZeroError(context: SQLQueryContext): RuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "ARRAY_INSERT_BY_INDEX_ZERO",
+      cause = null,
+      messageParameters = Map.empty,
+      context = getQueryContext(context),
+      summary = getSummary(context))
+  }
+
   def concatArraysWithElementsExceedLimitError(numberOfElements: Long): SparkRuntimeException = {
     new SparkRuntimeException(
       errorClass = "_LEGACY_ERROR_TEMP_2159",
