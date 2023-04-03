@@ -18,6 +18,9 @@
 package test.org.apache.spark.sql.connector;
 
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Optional;
 
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.connector.TestingV2Source;
@@ -67,6 +70,14 @@ public class JavaColumnarDataSourceV2 implements TestingV2Source {
     @Override
     public boolean supportColumnarReads(InputPartition partition) {
       return true;
+    }
+
+    @Override
+    public Optional<Iterable<String>> getVectorTypes() {
+      List<String> vectorTypes = new ArrayList<>();
+      vectorTypes.add(OnHeapColumnVector.class.getName());
+      vectorTypes.add(OnHeapColumnVector.class.getName());
+      return Optional.of(vectorTypes);
     }
 
     @Override

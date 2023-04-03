@@ -18,7 +18,9 @@
 package org.apache.spark.sql.connector
 
 import java.io.File
-import java.util.OptionalLong
+import java.util.{Optional, OptionalLong}
+
+import scala.collection.JavaConverters._
 
 import test.org.apache.spark.sql.connector._
 
@@ -891,6 +893,7 @@ class ColumnarDataSourceV2 extends TestingV2Source {
     override def createReaderFactory(): PartitionReaderFactory = {
       ColumnarReaderFactory
     }
+
   }
 
   override def getTable(options: CaseInsensitiveStringMap): Table = new SimpleBatchTable {
@@ -904,6 +907,13 @@ object ColumnarReaderFactory extends PartitionReaderFactory {
   private final val BATCH_SIZE = 20
 
   override def supportColumnarReads(partition: InputPartition): Boolean = true
+
+  override def getVectorTypes: Optional[java.lang.Iterable[String]] = {
+    val data: Iterable[String] = Iterable.fill(2)(
+        classOf[OnHeapColumnVector].getName
+    )
+    Optional.of(data.asJava)
+  }
 
   override def createReader(partition: InputPartition): PartitionReader[InternalRow] = {
     throw new UnsupportedOperationException
