@@ -564,7 +564,7 @@ class SparkFrameMethods:
     ) -> "CachedDataFrame":
         """
         Yields and caches the current DataFrame with a specific StorageLevel.
-        If a StogeLevel is not given, the `MEMORY_AND_DISK` level is used by default like PySpark.
+        If a StorageLevel is not given, the `MEMORY_AND_DISK` level is used by default like PySpark.
 
         The pandas-on-Spark DataFrame is yielded as a protected resource and its corresponding
         data is cached which gets uncached after execution goes off the context.

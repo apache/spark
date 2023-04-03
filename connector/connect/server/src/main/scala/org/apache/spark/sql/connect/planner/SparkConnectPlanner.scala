@@ -43,7 +43,7 @@ import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical.{CollectMetrics, CommandResult, Deduplicate, Except, Intersect, LocalRelation, LogicalPlan, Project, Sample, Sort, SubqueryAlias, Union, Unpivot, UnresolvedHint}
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CharVarcharUtils}
 import org.apache.spark.sql.connect.artifact.SparkConnectArtifactManager
-import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, InvalidPlanInput, LiteralValueProtoConverter, UdfPacket}
+import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, InvalidPlanInput, LiteralValueProtoConverter, StorageLevelProtoConverter, UdfPacket}
 import org.apache.spark.sql.connect.config.Connect.CONNECT_GRPC_ARROW_MAX_BATCH_SIZE
 import org.apache.spark.sql.connect.plugin.SparkConnectPluginRegistry
 import org.apache.spark.sql.connect.service.SparkConnectStreamHandler
@@ -2189,7 +2189,13 @@ class SparkConnectPlanner(val session: SparkSession) {
   }
 
   private def transformCacheTable(getCacheTable: proto.CacheTable): LogicalPlan = {
-    session.catalog.cacheTable(getCacheTable.getTableName)
+    if (getCacheTable.hasStorageLevel) {
+      session.catalog.cacheTable(
+        getCacheTable.getTableName,
+        StorageLevelProtoConverter.toStorageLevel(getCacheTable.getStorageLevel))
+    } else {
+      session.catalog.cacheTable(getCacheTable.getTableName)
+    }
     emptyLocalRelation
   }
 
