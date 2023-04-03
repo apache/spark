@@ -507,6 +507,15 @@ Configuration of Parquet can be done using the `setConf` method on `SparkSession
   <td>3.3.0</td>
 </tr>
 <tr>
+  <td><code>spark.sql.parquet.vector512.read.enabled</code></td>
+  <td>false</td>
+  <td>
+    If true and CPU contains avx512vbmi & avx512_vbmi2 instruction set, speed up parquet read with using Java Vector API.
+    For Intel CPU, Ice Lake or newer contains the required instruction set.
+  </td>
+  <td>3.5.0</td>
+</tr>
+<tr>
   <td><code>spark.sql.hive.convertMetastoreParquet</code></td>
   <td>true</td>
   <td>
