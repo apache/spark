@@ -536,6 +536,79 @@ public class JavaDatasetSuite implements Serializable {
   }
 
   @Test
+  public void testDropDuplicates() {
+    List<Tuple2<String, Integer>> data = Arrays.asList(
+        new Tuple2<>("a", 1), new Tuple2<>("a", 2),
+        new Tuple2<>("b", 1), new Tuple2<>("a", 1)
+    );
+    Dataset<Tuple2<String, Integer>> ds = spark.createDataset(data,
+        Encoders.tuple(Encoders.STRING(), Encoders.INT()));
+
+    Assert.assertEquals(
+        Arrays.asList(tuple2("a", 1), tuple2("a", 2), tuple2("b", 1)),
+        ds.dropDuplicates().collectAsList()
+    );
+    Assert.assertEquals(
+        Arrays.asList(tuple2("a", 1), tuple2("a", 2), tuple2("b", 1)),
+        ds.dropDuplicatesWithinWatermark().collectAsList()
+    );
+
+    Assert.assertEquals(
+        Arrays.asList(tuple2("a", 1), tuple2("b", 1)),
+        ds.dropDuplicates("_1").collectAsList()
+    );
+    Assert.assertEquals(
+        Arrays.asList(tuple2("a", 1), tuple2("b", 1)),
+        ds.dropDuplicatesWithinWatermark("_1").collectAsList()
+    );
+
+    Assert.assertEquals(
+        Arrays.asList(tuple2("a", 1), tuple2("b", 1)),
+        ds.dropDuplicates(new String[] { "_1" }).collectAsList()
+    );
+    Assert.assertEquals(
+        Arrays.asList(tuple2("a", 1), tuple2("b", 1)),
+        ds.dropDuplicatesWithinWatermark(new String[] { "_1" }).collectAsList()
+    );
+
+    Assert.assertEquals(
+        Arrays.asList(tuple2("a", 1), tuple2("a", 2)),
+        ds.dropDuplicates("_2").collectAsList()
+    );
+    Assert.assertEquals(
+        Arrays.asList(tuple2("a", 1), tuple2("a", 2)),
+        ds.dropDuplicatesWithinWatermark("_2").collectAsList()
+    );
+
+    Assert.assertEquals(
+        Arrays.asList(tuple2("a", 1), tuple2("a", 2)),
+        ds.dropDuplicates(new String[] { "_2" }).collectAsList()
+    );
+    Assert.assertEquals(
+        Arrays.asList(tuple2("a", 1), tuple2("a", 2)),
+        ds.dropDuplicatesWithinWatermark(new String[] { "_2" }).collectAsList()
+    );
+
+    Assert.assertEquals(
+        Arrays.asList(tuple2("a", 1), tuple2("a", 2), tuple2("b", 1)),
+        ds.dropDuplicates("_1", "_2").collectAsList()
+    );
+    Assert.assertEquals(
+        Arrays.asList(tuple2("a", 1), tuple2("a", 2), tuple2("b", 1)),
+        ds.dropDuplicatesWithinWatermark("_1", "_2").collectAsList()
+    );
+
+    Assert.assertEquals(
+        Arrays.asList(tuple2("a", 1), tuple2("a", 2), tuple2("b", 1)),
+        ds.dropDuplicates(new String[] { "_1", "_2" }).collectAsList()
+    );
+    Assert.assertEquals(
+        Arrays.asList(tuple2("a", 1), tuple2("a", 2), tuple2("b", 1)),
+        ds.dropDuplicatesWithinWatermark(new String[] { "_1", "_2" }).collectAsList()
+    );
+  }
+
+  @Test
   public void testTupleEncoder() {
     Encoder<Tuple2<Integer, String>> encoder2 = Encoders.tuple(Encoders.INT(), Encoders.STRING());
     List<Tuple2<Integer, String>> data2 = Arrays.asList(tuple2(1, "a"), tuple2(2, "b"));
