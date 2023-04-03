@@ -271,7 +271,7 @@ case class ResolveDefaultColumns(catalog: SessionCatalog) extends Rule[LogicalPl
   /**
    * Updates an inline table to generate missing default column values.
    */
-  private def addMissingDefaultValuesForInsertFromInlineTable(
+  def addMissingDefaultValuesForInsertFromInlineTable(
       node: LogicalPlan,
       insertTableSchemaWithoutPartitionColumns: StructType,
       numUserSpecifiedColumns: Int): LogicalPlan = {
@@ -296,7 +296,12 @@ case class ResolveDefaultColumns(catalog: SessionCatalog) extends Rule[LogicalPl
           local.output.map(_.name) ++ newNames,
           local.data.map { row =>
             val colTypes = StructType(local.output.map(col => StructField(col.name, col.dataType)))
-            row.toSeq(colTypes).map(Literal(_)) ++ newDefaultExpressions
+            val values: Seq[Any] = row.toSeq(colTypes)
+            val dataTypes: Seq[DataType] = colTypes.map(_.dataType)
+            val literals: Seq[Literal] = values.zip(dataTypes).map {
+              case (value, dataType) => Literal(value, dataType)
+            }
+            literals ++ newDefaultExpressions
           })
       case _ => node
     }
