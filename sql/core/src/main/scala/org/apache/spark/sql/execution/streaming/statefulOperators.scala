@@ -1033,7 +1033,7 @@ case class StreamingDeduplicateWithinWatermarkExec(
   extends BaseStreamingDeduplicateExec {
 
   protected val schemaForValueRow: StructType = StructType(
-    Array(StructField("expiresAt", LongType, nullable = false)))
+    Array(StructField("expiresAtMicros", LongType, nullable = false)))
 
   protected val extraOptionOnStateStore: Map[String, String] = Map.empty
 
