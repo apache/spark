@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.plans.logical.statsEstimation
 
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap}
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, Statistics, Union}
+import org.apache.spark.sql.catalyst.types.{PhysicalDoubleType, PhysicalFloatType}
 import org.apache.spark.sql.types._
 
 /**
@@ -39,9 +40,9 @@ object UnionEstimation {
     case LongType => (a: Any, b: Any) =>
       LongType.ordering.lt(a.asInstanceOf[Long], b.asInstanceOf[Long])
     case FloatType => (a: Any, b: Any) =>
-      FloatType.ordering.lt(a.asInstanceOf[Float], b.asInstanceOf[Float])
+      PhysicalFloatType.ordering.lt(a.asInstanceOf[Float], b.asInstanceOf[Float])
     case DoubleType => (a: Any, b: Any) =>
-      DoubleType.ordering.lt(a.asInstanceOf[Double], b.asInstanceOf[Double])
+      PhysicalDoubleType.ordering.lt(a.asInstanceOf[Double], b.asInstanceOf[Double])
     case _: DecimalType => (a: Any, b: Any) =>
       dt.asInstanceOf[DecimalType].ordering.lt(a.asInstanceOf[Decimal], b.asInstanceOf[Decimal])
     case DateType => (a: Any, b: Any) =>
@@ -53,7 +54,7 @@ object UnionEstimation {
     case TimestampNTZType => (a: Any, b: Any) =>
       TimestampNTZType.ordering.lt(a.asInstanceOf[TimestampNTZType.InternalType],
         b.asInstanceOf[TimestampNTZType.InternalType])
-    case i: AnsiIntervalType => (a: Any, b: Any) =>
+     case i: AnsiIntervalType => (a: Any, b: Any) =>
       i.ordering.lt(a.asInstanceOf[i.InternalType], b.asInstanceOf[i.InternalType])
     case _ =>
       throw new IllegalStateException(s"Unsupported data type: ${dt.catalogString}")
