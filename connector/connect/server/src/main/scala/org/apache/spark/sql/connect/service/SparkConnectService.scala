@@ -84,8 +84,10 @@ class SparkConnectService(debug: Boolean)
       .putMetadata("classes", compact(render(allClasses(st.getClass).map(_.getName))))
 
     val withStackTrace = if (stackTraceEnabled) {
+      import org.apache.spark.sql.connect.config.Connect.CONNECT_JVM_STACK_TRACE_SIZE
       val stackTrace = ExceptionUtils.getStackTrace(st)
-      errorInfo.putMetadata("stackTrace", StringUtils.abbreviate(stackTrace, 4096))
+      val size = SparkEnv.get.conf.get(CONNECT_JVM_STACK_TRACE_SIZE).toInt
+      errorInfo.putMetadata("stackTrace", StringUtils.abbreviate(stackTrace, size))
     } else {
       errorInfo
     }
@@ -126,8 +128,8 @@ class SparkConnectService(debug: Boolean)
         .getOrCreateIsolatedSession(userId, sessionId)
         .session
     val stackTraceEnabled = try {
-      session.conf.get(
-        org.apache.spark.sql.internal.SQLConf.PYSPARK_JVM_STACKTRACE_ENABLED.key).toBoolean
+      import org.apache.spark.sql.internal.SQLConf.PYSPARK_JVM_STACKTRACE_ENABLED
+      session.conf.get(PYSPARK_JVM_STACKTRACE_ENABLED.key).toBoolean
     } catch {
       case NonFatal(_) => true
     }
