@@ -1138,9 +1138,9 @@ private[spark] class Client(
    * @return A pair of the yarn application state and the final application state.
    */
   def monitorApplication(
-     returnOnRunning: Boolean = false,
-     logApplicationReport: Boolean = true,
-     interval: Long = sparkConf.get(REPORT_INTERVAL)): YarnAppReport = {
+      returnOnRunning: Boolean = false,
+      logApplicationReport: Boolean = true,
+      interval: Long = sparkConf.get(REPORT_INTERVAL)): YarnAppReport = {
     var lastState: YarnApplicationState = null
     val reportsTillNextLog: Int = sparkConf.get(REPORT_LOG_FREQUENCY)
     var reportsSinceLastLog: Int = 0
@@ -1202,8 +1202,8 @@ private[spark] class Client(
       }
 
       if (state == YarnApplicationState.FINISHED ||
-         state == YarnApplicationState.FAILED ||
-         state == YarnApplicationState.KILLED) {
+          state == YarnApplicationState.FAILED ||
+          state == YarnApplicationState.KILLED) {
         cleanupStagingDir()
         return createAppReport(report)
       }
@@ -1212,7 +1212,7 @@ private[spark] class Client(
         return createAppReport(report)
       }
       if (state == YarnApplicationState.ACCEPTED && isClientUnmanagedAMEnabled &&
-         appMaster == null && report.getAMRMToken != null) {
+          appMaster == null && report.getAMRMToken != null) {
         appMaster = startApplicationMasterService(report)
       }
       lastState = state
