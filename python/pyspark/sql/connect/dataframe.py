@@ -569,7 +569,8 @@ class DataFrame:
             raise PySparkTypeError(
                 error_class="NOT_BOOL_OR_FLOAT_OR_INT",
                 message_parameters={
-                    "arg_name": "withReplacement (optional), fraction (required) and seed (optional)",
+                    "arg_name": "withReplacement (optional), "
+                    + "fraction (required) and seed (optional)",
                     "arg_type": ", ".join(argtypes),
                 },
             )
@@ -763,8 +764,12 @@ class DataFrame:
         for p in parameters:
             if not isinstance(p, allowed_types):
                 raise PySparkTypeError(
-                    error_class="NOT_FLOAT_OR_INT_OR_LIST_OR_STR",
-                    message_parameters={"arg_name": "all parameters", "arg_type": type(p).__name__},
+                    error_class="INVALID_ITEM_FOR_CONTAINER",
+                    message_parameters={
+                        "arg_name": "parameters",
+                        "allowed_types": ", ".join([t.__name__ for t in allowed_types]),
+                        "item_type": type(p).__name__,
+                    },
                 )
 
         return DataFrame.withPlan(
