@@ -550,6 +550,20 @@ class SparkSubmitSuite
     Files.delete(Paths.get("TestUDTF.jar"))
   }
 
+  test("SPARK-43014: Do not overwrite `spark.app.submitTime` in k8s cluster mode driver") {
+    val submitTime = 1234567.toString
+    val clArgs = Seq(
+      "--deploy-mode", "client",
+      "--master", "k8s://host:port",
+      "--class", "org.SomeClass",
+      "--conf", "spark.app.submitTime=" + submitTime,
+      "--conf", "spark.kubernetes.submitInDriver=true",
+      "/home/thejar.jar")
+    val appArgs = new SparkSubmitArguments(clArgs)
+    val (_, _, conf, _) = submit.prepareSubmitEnvironment(appArgs)
+    conf.get("spark.app.submitTime") should be (submitTime)
+  }
+
   /**
    * Helper function for testing main class resolution on remote JAR files.
    *
