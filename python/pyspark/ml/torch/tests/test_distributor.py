@@ -273,14 +273,35 @@ class TorchDistributorBaselineUnitTestsMixin:
 class TorchDistributorBaselineUnitTests(TorchDistributorBaselineUnitTestsMixin, unittest.TestCase):
     def setUp(self) -> None:
         conf = SparkConf()
-        self.sc = SparkContext("local[4]", conf=conf)
-        self.spark = SparkSession(self.sc)
+        sc = SparkContext("local[4]", conf=conf)
+        self.spark = SparkSession(sc)
 
     def tearDown(self) -> None:
         self.spark.stop()
 
 
 class TorchDistributorLocalUnitTestsMixin:
+    def _get_spark_conf(self) -> SparkConf:
+        self.gpu_discovery_script_file = tempfile.NamedTemporaryFile(delete=False)
+        self.gpu_discovery_script_file.write(
+            b'echo {\\"name\\": \\"gpu\\", \\"addresses\\": [\\"0\\",\\"1\\",\\"2\\"]}'
+        )
+        self.gpu_discovery_script_file.close()
+        # create temporary directory for Worker resources coordination
+        self.tempdir = tempfile.NamedTemporaryFile(delete=False)
+        os.unlink(self.tempdir.name)
+        os.chmod(
+            self.gpu_discovery_script_file.name,
+            stat.S_IRWXU | stat.S_IXGRP | stat.S_IRGRP | stat.S_IROTH | stat.S_IXOTH,
+        )
+
+        conf = SparkConf().set("spark.test.home", SPARK_HOME)
+        conf = conf.set("spark.driver.resource.gpu.amount", "3")
+        conf = conf.set(
+            "spark.driver.resource.gpu.discoveryScript", self.gpu_discovery_script_file.name
+        )
+        return conf
+
     def setup_env_vars(self, input_map: Dict[str, str]) -> None:
         for key, value in input_map.items():
             os.environ[key] = value
@@ -360,27 +381,9 @@ class TorchDistributorLocalUnitTestsMixin:
 class TorchDistributorLocalUnitTests(TorchDistributorLocalUnitTestsMixin, unittest.TestCase):
     def setUp(self) -> None:
         class_name = self.__class__.__name__
-        self.gpu_discovery_script_file = tempfile.NamedTemporaryFile(delete=False)
-        self.gpu_discovery_script_file.write(
-            b'echo {\\"name\\": \\"gpu\\", \\"addresses\\": [\\"0\\",\\"1\\",\\"2\\"]}'
-        )
-        self.gpu_discovery_script_file.close()
-        # create temporary directory for Worker resources coordination
-        self.tempdir = tempfile.NamedTemporaryFile(delete=False)
-        os.unlink(self.tempdir.name)
-        os.chmod(
-            self.gpu_discovery_script_file.name,
-            stat.S_IRWXU | stat.S_IXGRP | stat.S_IRGRP | stat.S_IROTH | stat.S_IXOTH,
-        )
-        conf = SparkConf().set("spark.test.home", SPARK_HOME)
-
-        conf = conf.set("spark.driver.resource.gpu.amount", "3")
-        conf = conf.set(
-            "spark.driver.resource.gpu.discoveryScript", self.gpu_discovery_script_file.name
-        )
-
-        self.sc = SparkContext("local-cluster[2,2,1024]", class_name, conf=conf)
-        self.spark = SparkSession(self.sc)
+        conf = self._get_spark_conf()
+        sc = SparkContext("local-cluster[2,2,1024]", class_name, conf=conf)
+        self.spark = SparkSession(sc)
         self.mnist_dir_path = tempfile.mkdtemp()
 
     def tearDown(self) -> None:
@@ -390,6 +393,30 @@ class TorchDistributorLocalUnitTests(TorchDistributorLocalUnitTestsMixin, unitte
 
 
 class TorchDistributorDistributedUnitTestsMixin:
+    def _get_spark_conf(self) -> SparkConf:
+        self.gpu_discovery_script_file = tempfile.NamedTemporaryFile(delete=False)
+        self.gpu_discovery_script_file.write(
+            b'echo {\\"name\\": \\"gpu\\", \\"addresses\\": [\\"0\\",\\"1\\",\\"2\\"]}'
+        )
+        self.gpu_discovery_script_file.close()
+        # create temporary directory for Worker resources coordination
+        tempdir = tempfile.NamedTemporaryFile(delete=False)
+        os.unlink(tempdir.name)
+        os.chmod(
+            self.gpu_discovery_script_file.name,
+            stat.S_IRWXU | stat.S_IXGRP | stat.S_IRGRP | stat.S_IROTH | stat.S_IXOTH,
+        )
+
+        conf = SparkConf().set("spark.test.home", SPARK_HOME)
+        conf = conf.set(
+            "spark.worker.resource.gpu.discoveryScript", self.gpu_discovery_script_file.name
+        )
+        conf = conf.set("spark.worker.resource.gpu.amount", "3")
+        conf = conf.set("spark.task.cpus", "2")
+        conf = conf.set("spark.task.resource.gpu.amount", "1")
+        conf = conf.set("spark.executor.resource.gpu.amount", "1")
+        return conf
+
     def test_dist_training_succeeds(self) -> None:
         CUDA_VISIBLE_DEVICES = "CUDA_VISIBLE_DEVICES"
         inputs = [
@@ -439,30 +466,9 @@ class TorchDistributorDistributedUnitTests(
 ):
     def setUp(self) -> None:
         class_name = self.__class__.__name__
-        self.gpu_discovery_script_file = tempfile.NamedTemporaryFile(delete=False)
-        self.gpu_discovery_script_file.write(
-            b'echo {\\"name\\": \\"gpu\\", \\"addresses\\": [\\"0\\",\\"1\\",\\"2\\"]}'
-        )
-        self.gpu_discovery_script_file.close()
-        # create temporary directory for Worker resources coordination
-        self.tempdir = tempfile.NamedTemporaryFile(delete=False)
-        os.unlink(self.tempdir.name)
-        os.chmod(
-            self.gpu_discovery_script_file.name,
-            stat.S_IRWXU | stat.S_IXGRP | stat.S_IRGRP | stat.S_IROTH | stat.S_IXOTH,
-        )
-        conf = SparkConf().set("spark.test.home", SPARK_HOME)
-
-        conf = conf.set(
-            "spark.worker.resource.gpu.discoveryScript", self.gpu_discovery_script_file.name
-        )
-        conf = conf.set("spark.worker.resource.gpu.amount", "3")
-        conf = conf.set("spark.task.cpus", "2")
-        conf = conf.set("spark.task.resource.gpu.amount", "1")
-        conf = conf.set("spark.executor.resource.gpu.amount", "1")
-
-        self.sc = SparkContext("local-cluster[2,2,1024]", class_name, conf=conf)
-        self.spark = SparkSession(self.sc)
+        conf = self._get_spark_conf()
+        sc = SparkContext("local-cluster[2,2,1024]", class_name, conf=conf)
+        self.spark = SparkSession(sc)
         self.mnist_dir_path = tempfile.mkdtemp()
 
     def tearDown(self) -> None:

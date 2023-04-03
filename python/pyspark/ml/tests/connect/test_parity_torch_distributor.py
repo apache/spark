@@ -17,7 +17,6 @@
 
 import os
 import shutil
-import stat
 import tempfile
 import unittest
 
@@ -28,7 +27,6 @@ except ImportError:
     have_torch = False
 
 from pyspark.sql import SparkSession
-from pyspark.testing.utils import SPARK_HOME
 from pyspark.ml.torch.distributor import TorchDistributor
 
 from pyspark.ml.torch.tests.test_distributor import (
@@ -68,30 +66,12 @@ class TorchDistributorLocalUnitTestsOnConnect(
 ):
     def setUp(self) -> None:
         class_name = self.__class__.__name__
-        self.gpu_discovery_script_file = tempfile.NamedTemporaryFile(delete=False)
-        self.gpu_discovery_script_file.write(
-            b'echo {\\"name\\": \\"gpu\\", \\"addresses\\": [\\"0\\",\\"1\\",\\"2\\"]}'
-        )
-        self.gpu_discovery_script_file.close()
-        # create temporary directory for Worker resources coordination
-        self.tempdir = tempfile.NamedTemporaryFile(delete=False)
-        os.unlink(self.tempdir.name)
-        os.chmod(
-            self.gpu_discovery_script_file.name,
-            stat.S_IRWXU | stat.S_IXGRP | stat.S_IRGRP | stat.S_IROTH | stat.S_IXOTH,
-        )
-
-        self.spark = (
-            SparkSession.builder.appName(class_name)
-            .config("spark.test.home", SPARK_HOME)
-            .config("spark.driver.resource.gpu.amount", "3")
-            .config(
-                "spark.driver.resource.gpu.discoveryScript", self.gpu_discovery_script_file.name
-            )
-            .remote("local-cluster[2,2,1024]")
-            .getOrCreate()
-        )
-
+        conf = self._get_spark_conf()
+        builder = SparkSession.builder.appName(class_name)
+        for k, v in conf.getAll():
+            if k not in ["spark.master", "spark.remote", "spark.app.name"]:
+                builder = builder.config(k, v)
+        self.spark = builder.remote("local-cluster[2,2,1024]").getOrCreate()
         self.mnist_dir_path = tempfile.mkdtemp()
 
     def tearDown(self) -> None:
@@ -121,31 +101,12 @@ class TorchDistributorDistributedUnitTestsOnConnect(
 ):
     def setUp(self) -> None:
         class_name = self.__class__.__name__
-        self.gpu_discovery_script_file = tempfile.NamedTemporaryFile(delete=False)
-        self.gpu_discovery_script_file.write(
-            b'echo {\\"name\\": \\"gpu\\", \\"addresses\\": [\\"0\\",\\"1\\",\\"2\\"]}'
-        )
-        self.gpu_discovery_script_file.close()
-        # create temporary directory for Worker resources coordination
-        self.tempdir = tempfile.NamedTemporaryFile(delete=False)
-        os.unlink(self.tempdir.name)
-        os.chmod(
-            self.gpu_discovery_script_file.name,
-            stat.S_IRWXU | stat.S_IXGRP | stat.S_IRGRP | stat.S_IROTH | stat.S_IXOTH,
-        )
-        self.spark = (
-            SparkSession.builder.appName(class_name)
-            .config("spark.test.home", SPARK_HOME)
-            .config(
-                "spark.worker.resource.gpu.discoveryScript", self.gpu_discovery_script_file.name
-            )
-            .config("spark.worker.resource.gpu.amount", "3")
-            .config("spark.task.cpus", "2")
-            .config("spark.task.resource.gpu.amount", "1")
-            .config("spark.executor.resource.gpu.amount", "1")
-            .remote("local-cluster[2,2,1024]")
-            .getOrCreate()
-        )
+        conf = self._get_spark_conf()
+        builder = SparkSession.builder.appName(class_name)
+        for k, v in conf.getAll():
+            if k not in ["spark.master", "spark.remote", "spark.app.name"]:
+                builder = builder.config(k, v)
+        self.spark = builder.remote("local-cluster[2,2,1024]").getOrCreate()
         self.mnist_dir_path = tempfile.mkdtemp()
 
     def tearDown(self) -> None:
