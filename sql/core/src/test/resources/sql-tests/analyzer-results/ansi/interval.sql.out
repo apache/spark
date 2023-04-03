@@ -1596,15 +1596,45 @@ org.apache.spark.sql.AnalysisException
 -- !query
 select '4 11:11' - interval '4 22:12' day to minute
 -- !query analysis
-Project [cast(4 11:11 - INTERVAL '4 22:12' DAY TO MINUTE as string) AS 4 11:11 - INTERVAL '4 22:12' DAY TO MINUTE#x]
-+- OneRowRelation
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "left" : "\"STRING\"",
+    "right" : "\"INTERVAL DAY TO MINUTE\"",
+    "sqlExpr" : "\"(4 11:11 - INTERVAL '4 22:12' DAY TO MINUTE)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 51,
+    "fragment" : "'4 11:11' - interval '4 22:12' day to minute"
+  } ]
+}
 
 
 -- !query
 select '4 12:12:12' + interval '4 22:12' day to minute
 -- !query analysis
-Project [cast(cast(4 12:12:12 as timestamp) + INTERVAL '4 22:12' DAY TO MINUTE as string) AS 4 12:12:12 + INTERVAL '4 22:12' DAY TO MINUTE#x]
-+- OneRowRelation
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "left" : "\"STRING\"",
+    "right" : "\"INTERVAL DAY TO MINUTE\"",
+    "sqlExpr" : "\"(4 12:12:12 + INTERVAL '4 22:12' DAY TO MINUTE)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 54,
+    "fragment" : "'4 12:12:12' + interval '4 22:12' day to minute"
+  } ]
+}
 
 
 -- !query
@@ -1662,23 +1692,45 @@ org.apache.spark.sql.AnalysisException
 -- !query
 select str - interval '4 22:12' day to minute from interval_view
 -- !query analysis
-Project [cast(str#x - INTERVAL '4 22:12' DAY TO MINUTE as string) AS str - INTERVAL '4 22:12' DAY TO MINUTE#x]
-+- SubqueryAlias interval_view
-   +- View (`interval_view`, [str#x])
-      +- Project [cast(str#x as string) AS str#x]
-         +- Project [1 AS str#x]
-            +- OneRowRelation
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "left" : "\"STRING\"",
+    "right" : "\"INTERVAL DAY TO MINUTE\"",
+    "sqlExpr" : "\"(str - INTERVAL '4 22:12' DAY TO MINUTE)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 45,
+    "fragment" : "str - interval '4 22:12' day to minute"
+  } ]
+}
 
 
 -- !query
 select str + interval '4 22:12' day to minute from interval_view
 -- !query analysis
-Project [cast(cast(str#x as timestamp) + INTERVAL '4 22:12' DAY TO MINUTE as string) AS str + INTERVAL '4 22:12' DAY TO MINUTE#x]
-+- SubqueryAlias interval_view
-   +- View (`interval_view`, [str#x])
-      +- Project [cast(str#x as string) AS str#x]
-         +- Project [1 AS str#x]
-            +- OneRowRelation
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "left" : "\"STRING\"",
+    "right" : "\"INTERVAL DAY TO MINUTE\"",
+    "sqlExpr" : "\"(str + INTERVAL '4 22:12' DAY TO MINUTE)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 45,
+    "fragment" : "str + interval '4 22:12' day to minute"
+  } ]
+}
 
 
 -- !query
@@ -1780,14 +1832,12 @@ select 1 - interval '2' second
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
-    "inputSql" : "\"1\"",
-    "inputType" : "\"INT\"",
-    "paramIndex" : "1",
-    "requiredType" : "\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\"",
-    "sqlExpr" : "\"1 + (- INTERVAL '02' SECOND)\""
+    "left" : "\"INT\"",
+    "right" : "\"INTERVAL SECOND\"",
+    "sqlExpr" : "\"(1 - INTERVAL '02' SECOND)\""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1826,14 +1876,12 @@ select interval '2' second + 1
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
   "sqlState" : "42K09",
   "messageParameters" : {
-    "inputSql" : "\"1\"",
-    "inputType" : "\"INT\"",
-    "paramIndex" : "1",
-    "requiredType" : "\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\"",
-    "sqlExpr" : "\"1 + INTERVAL '02' SECOND\""
+    "left" : "\"INTERVAL SECOND\"",
+    "right" : "\"INT\"",
+    "sqlExpr" : "\"(INTERVAL '02' SECOND + 1)\""
   },
   "queryContext" : [ {
     "objectType" : "",
