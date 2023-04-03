@@ -289,7 +289,7 @@ Duplicate map key `<key>` was found, please check the input data. If you want to
 
 Found duplicate keys `<keyColumn>`.
 
-### ELEMENT_AT_BY_INDEX_ZERO
+### INVALID_INDEX_OF_ZERO
 
 [SQLSTATE: 22003](sql-error-conditions-sqlstates.html#class-22-data-exception)
 

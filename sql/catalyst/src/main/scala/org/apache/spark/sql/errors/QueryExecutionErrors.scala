@@ -1605,18 +1605,9 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
         "prettyName" -> prettyName))
   }
 
-  def elementAtByIndexZeroError(context: SQLQueryContext): RuntimeException = {
+  def invalidIndexOfZeroError(context: SQLQueryContext): RuntimeException = {
     new SparkRuntimeException(
-      errorClass = "ELEMENT_AT_BY_INDEX_ZERO",
-      cause = null,
-      messageParameters = Map.empty,
-      context = getQueryContext(context),
-      summary = getSummary(context))
-  }
-
-  def arrayInsertByIndexZeroError(context: SQLQueryContext): RuntimeException = {
-    new SparkRuntimeException(
-      errorClass = "ARRAY_INSERT_BY_INDEX_ZERO",
+      errorClass = "INVALID_INDEX_OF_ZERO",
       cause = null,
       messageParameters = Map.empty,
       context = getQueryContext(context),

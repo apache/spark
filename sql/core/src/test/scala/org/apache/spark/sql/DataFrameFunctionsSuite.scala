@@ -3198,7 +3198,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     assert(e1.getCause.isInstanceOf[SparkRuntimeException])
     checkError(
       exception = e1.getCause.asInstanceOf[SparkRuntimeException],
-      errorClass = "ARRAY_INSERT_BY_INDEX_ZERO",
+      errorClass = "INVALID_INDEX_OF_ZERO",
       parameters = Map.empty,
       context = ExpectedContext(
         fragment = "array_insert(a, b, c)",

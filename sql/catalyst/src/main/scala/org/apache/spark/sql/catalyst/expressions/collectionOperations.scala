@@ -2489,7 +2489,7 @@ case class ElementAt(
           }
         } else {
           val idx = if (index == 0) {
-            throw QueryExecutionErrors.elementAtByIndexZeroError(getContextOrNull())
+            throw QueryExecutionErrors.invalidIndexOfZeroError(getContextOrNull())
           } else if (index > 0) {
             index - 1
           } else {
@@ -2544,7 +2544,7 @@ case class ElementAt(
              |  $indexOutOfBoundBranch
              |} else {
              |  if ($index == 0) {
-             |    throw QueryExecutionErrors.elementAtByIndexZeroError($errorContext);
+             |    throw QueryExecutionErrors.invalidIndexOfZeroError($errorContext);
              |  } else if ($index > 0) {
              |    $index--;
              |  } else {
@@ -4822,7 +4822,7 @@ case class ArrayInsert(srcArrayExpr: Expression, posExpr: Expression, itemExpr: 
   override def nullSafeEval(arr: Any, pos: Any, item: Any): Any = {
     var posInt = pos.asInstanceOf[Int]
     if (posInt == 0) {
-      throw QueryExecutionErrors.arrayInsertByIndexZeroError(getContextOrNull())
+      throw QueryExecutionErrors.invalidIndexOfZeroError(getContextOrNull())
     }
     val baseArr = arr.asInstanceOf[ArrayData]
     val arrayElementType = dataType.asInstanceOf[ArrayType].elementType
@@ -4907,7 +4907,7 @@ case class ArrayInsert(srcArrayExpr: Expression, posExpr: Expression, itemExpr: 
          |boolean $insertedItemIsNull = ${itemExpr.isNull};
          |
          |if ($pos == 0) {
-         |  throw QueryExecutionErrors.arrayInsertByIndexZeroError($errorContext);
+         |  throw QueryExecutionErrors.invalidIndexOfZeroError($errorContext);
          |}
          |
          |if ($pos < 0 && (java.lang.Math.abs($pos) > $arr.numElements())) {
