@@ -927,8 +927,8 @@ object JdbcUtils extends Logging with SQLConfHelper {
    */
   def renameTable(
       conn: Connection,
-      oldTable: String,
-      newTable: String,
+      oldTable: Identifier,
+      newTable: Identifier,
       options: JDBCOptions): Unit = {
     val dialect = JdbcDialects.get(options.url)
     executeStatement(conn, options, dialect.renameTable(oldTable, newTable))

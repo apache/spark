@@ -29,11 +29,13 @@ import org.apache.arrow.memory.RootAllocator
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.connect.proto
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.catalog.Catalog
 import org.apache.spark.sql.catalyst.{JavaTypeInference, ScalaReflection}
 import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, RowEncoder}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{BoxedLongEncoder, UnboundRowEncoder}
 import org.apache.spark.sql.connect.client.{SparkConnectClient, SparkResult}
 import org.apache.spark.sql.connect.client.util.{Cleaner, ConvertToArrow}
+import org.apache.spark.sql.internal.CatalogImpl
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -279,6 +281,14 @@ class SparkSession private[sql] (
   def read: DataFrameReader = new DataFrameReader(this)
 
   /**
+   * Interface through which the user may create, drop, alter or query underlying databases,
+   * tables, functions etc.
+   *
+   * @since 3.5.0
+   */
+  lazy val catalog: Catalog = new CatalogImpl(this)
+
+  /**
    * Returns the specified table/view as a `DataFrame`. If it's a table, it must support batch
    * reading and the returned DataFrame is the batch scan query plan of this table. If it's a
    * view, the returned DataFrame is simply the query plan of the view, which can either be a
@@ -426,6 +436,14 @@ class SparkSession private[sql] (
     val result = new SparkResult(value, allocator, encoder)
     cleaner.register(result)
     result
+  }
+
+  private[sql] def execute(f: proto.Relation.Builder => Unit): Unit = {
+    val builder = proto.Relation.newBuilder()
+    f(builder)
+    builder.getCommonBuilder.setPlanId(planIdGenerator.getAndIncrement())
+    val plan = proto.Plan.newBuilder().setRoot(builder).build()
+    client.execute(plan).asScala.foreach(_ => ())
   }
 
   private[sql] def execute(command: proto.Command): Unit = {

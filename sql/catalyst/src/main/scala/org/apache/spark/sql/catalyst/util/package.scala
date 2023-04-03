@@ -198,7 +198,7 @@ package object util extends Logging {
      */
     val QUALIFIED_ACCESS_ONLY = "__qualified_access_only"
 
-    def isMetadataCol: Boolean = attr.metadata.contains(METADATA_COL_ATTR_KEY)
+    def isMetadataCol: Boolean = MetadataAttribute.isValid(attr.metadata)
 
     def qualifiedAccessOnly: Boolean = attr.isMetadataCol &&
       attr.metadata.contains(QUALIFIED_ACCESS_ONLY) &&
