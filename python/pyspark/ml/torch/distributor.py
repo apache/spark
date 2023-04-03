@@ -266,7 +266,7 @@ class TorchDistributor(Distributor):
     .. versionadded:: 3.4.0
 
     .. versionchanged:: 3.5.0
-        Supports Spark Connect. Note local model with GPU is not supported yet, will be fixed
+        Supports Spark Connect. Note that local mode with GPU is not supported yet, will be fixed
         in SPARK-42994.
 
     Parameters
