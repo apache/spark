@@ -36,10 +36,11 @@ import org.apache.spark.unsafe.types.UTF8String
 private[sql] class ProtobufDeserializer(
     rootDescriptor: Descriptor,
     rootCatalystType: DataType,
-    filters: StructFilters) {
+    filters: StructFilters,
+    materializeDefaults: Boolean = false) {
 
   def this(rootDescriptor: Descriptor, rootCatalystType: DataType) = {
-    this(rootDescriptor, rootCatalystType, new NoopFilters)
+    this(rootDescriptor, rootCatalystType, new NoopFilters, false)
   }
 
   private val converter: Any => Option[InternalRow] =
@@ -289,6 +290,10 @@ private[sql] class ProtobufDeserializer(
       while (i < validFieldIndexes.length && !skipRow) {
         val field = validFieldIndexes(i)
         val value = if (field.isRepeated || field.hasDefaultValue || record.hasField(field)) {
+          record.getField(field)
+        } else if (this.materializeDefaults) {
+          // `getField` will return the default value of the field
+          // if it is empty or not present.
           record.getField(field)
         } else null
         fieldWriters(i)(fieldUpdater, value)

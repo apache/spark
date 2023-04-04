@@ -32,9 +32,12 @@ private[sql] class ProtobufOptions(
     extends FileSourceOptions(parameters)
     with Logging {
 
+  import ProtobufOptions._
+
   def this(parameters: Map[String, String], conf: Configuration) = {
     this(CaseInsensitiveMap(parameters), conf)
   }
+
 
   val parseMode: ParseMode =
     parameters.get("mode").map(ParseMode.fromString).getOrElse(FailFastMode)
@@ -46,9 +49,33 @@ private[sql] class ProtobufOptions(
   // record has more depth than the allowed value for recursive fields, it will be truncated
   // and corresponding fields are ignored (dropped).
   val recursiveFieldMaxDepth: Int = parameters.getOrElse("recursive.fields.max.depth", "-1").toInt
+
+  // Whether or not to explicitly materialize the default values in the resulting struct.
+  // For example, if we have a proto like
+  // syntax = "proto3";
+  // message Example {
+  //   string s = 1;
+  //   int64 i = 2;
+  // }
+  //
+  // And have the following proto created in proto
+  // Example(s="", i=0)
+  //
+  // The resulting dataframe from parsing would be
+  // {"s": null, "i": null}
+  //
+  // Since the default values are nulled out.
+  // If you would like them to be filled in instead:
+  // {"s": "", "i": 0}
+  //
+  // you can achieve that by enabling this flag.
+  // Note: I am not sure what this does with proto2, as i have not tried.
+  val materializeDefaults: Boolean =
+    parameters.getOrElse(materializeDefaultsOption, "false").toBoolean
 }
 
 private[sql] object ProtobufOptions {
+  val materializeDefaultsOption = "materializeDefaults"
   def apply(parameters: Map[String, String]): ProtobufOptions = {
     val hadoopConf = SparkSession.getActiveSession
       .map(_.sessionState.newHadoopConf())

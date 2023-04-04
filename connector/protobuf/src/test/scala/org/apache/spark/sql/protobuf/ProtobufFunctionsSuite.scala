@@ -19,7 +19,7 @@ package org.apache.spark.sql.protobuf
 import java.sql.Timestamp
 import java.time.Duration
 
- import scala.collection.JavaConverters._
+import scala.collection.JavaConverters._
 
 import com.google.protobuf.{ByteString, DynamicMessage}
 
@@ -27,7 +27,7 @@ import org.apache.spark.sql.{AnalysisException, Column, DataFrame, QueryTest, Ro
 import org.apache.spark.sql.functions.{lit, struct}
 import org.apache.spark.sql.protobuf.protos.SimpleMessageProtos._
 import org.apache.spark.sql.protobuf.protos.SimpleMessageProtos.SimpleMessageRepeated.NestedEnum
-import org.apache.spark.sql.protobuf.utils.ProtobufUtils
+import org.apache.spark.sql.protobuf.utils.{ProtobufOptions, ProtobufUtils}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
@@ -105,6 +105,96 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
         val actualDf = protoStructDF.select(
           from_protobuf_wrapper($"proto", name, descFilePathOpt).as("proto.*"))
         checkAnswer(actualDf, df)
+    }
+  }
+
+  test("Default values should become null when parsed into their final struct") {
+    val explicitZero = SimpleMessageJavaTypes.newBuilder()
+      .setId(0)
+      .setStringValue("")
+      .setInt32Value(0)
+      .setInt64Value(0)
+      .setDoubleValue(0)
+      .setFloatValue(0)
+      .setBoolValue(false)
+      .setBytesValue(ByteString.empty())
+      .build()
+      .toByteArray
+    val explicitZeroInput = spark.range(1).select(lit(explicitZero).as("raw_proto"))
+
+    val defaultZero = SimpleMessageJavaTypes.newBuilder().build().toByteArray
+    val defaultZeroInput = spark.range(1).select(lit(defaultZero).as("raw_proto"))
+
+    val expected = spark.range(1).select(
+      struct(
+        lit(null).as("id"),
+        lit(null).as("string_value"),
+        lit(null).as("int32_value"),
+        lit(null).as("int64_value"),
+        lit(null).as("double_value"),
+        lit(null).as("float_value"),
+        lit(null).as("bool_value"),
+        lit(null).as("bytes_value")
+      ).as("proto")
+    )
+
+    checkWithFileAndClassName("SimpleMessageJavaTypes") { case (name, descFilePathOpt) =>
+      checkAnswer(explicitZeroInput.select(
+        from_protobuf_wrapper($"raw_proto", name, descFilePathOpt).as("proto")),
+        expected)
+      checkAnswer(defaultZeroInput.select(
+        from_protobuf_wrapper($"raw_proto", name, descFilePathOpt).as("proto")),
+        expected)
+    }
+  }
+
+  test("Default values should be populated when the correct configuration is set") {
+    val explicitZero = SimpleMessageJavaTypes.newBuilder()
+      .setId(0)
+      .setStringValue("")
+      .setInt32Value(0)
+      .setInt64Value(0)
+      .setDoubleValue(0)
+      .setFloatValue(0)
+      .setBoolValue(false)
+      .setBytesValue(ByteString.empty())
+      .build()
+      .toByteArray
+    val explicitZeroInput = spark.range(1).select(lit(explicitZero).as("raw_proto"))
+
+    val defaultZero = SimpleMessageJavaTypes.newBuilder().build().toByteArray
+    val defaultZeroInput = spark.range(1).select(lit(defaultZero).as("raw_proto"))
+
+    val expected = spark.range(1).select(
+      struct(
+        lit(0).as("id"),
+        lit("").as("string_value"),
+        lit(0).as("int32_value"),
+        lit(0).as("int64_value"),
+        lit(0).as("double_value"),
+        lit(0).as("float_value"),
+        lit(false).as("bool_value"),
+        lit(Array.emptyByteArray).as("bytes_value")
+      ).as("proto")
+    )
+
+    checkWithFileAndClassName("SimpleMessageJavaTypes") { case (name, descFilePathOpt) =>
+      checkAnswer(
+        explicitZeroInput.select(
+          from_protobuf_wrapper(
+            $"raw_proto",
+            name,
+            descFilePathOpt,
+            Map(ProtobufOptions.materializeDefaultsOption -> "true")).as("proto")),
+        expected)
+      checkAnswer(
+        defaultZeroInput.select(
+          from_protobuf_wrapper(
+            $"raw_proto",
+            name,
+            descFilePathOpt,
+            Map(ProtobufOptions.materializeDefaultsOption -> "true")).as("proto")),
+        expected)
     }
   }
 
