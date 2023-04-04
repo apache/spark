@@ -787,9 +787,9 @@ class WriteStreamOperationStartResult(google.protobuf.message.Message):
     RUN_ID_FIELD_NUMBER: builtins.int
     NAME_FIELD_NUMBER: builtins.int
     query_id: builtins.str
-    """(Required)"""
+    """(Required) query id of the streaming query."""
     run_id: builtins.str
-    """(Required)"""
+    """(Required) run id of the streaming query."""
     name: builtins.str
     """An optional query name."""
     def __init__(
