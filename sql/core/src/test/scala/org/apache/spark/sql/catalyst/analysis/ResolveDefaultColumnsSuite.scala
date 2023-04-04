@@ -56,10 +56,9 @@ class ResolveDefaultColumnsSuite extends QueryTest with SharedSparkSession {
   test("SPARK-43018: INSERT timestamp values into a table with column DEFAULTs") {
     withTable("t") {
       sql("create table t(id int, ts timestamp) using parquet")
-      sql("insert into t (ts) values (timestamp'2023-01-01')")
-      val rows = sql("select id, ts from t").collect()
-      assert(rows.size == 1)
-      assert(rows.head.toString == "[42,2023-01-01 00:00:00.0]")
+      sql("insert into t (ts) values (timestamp'2020-12-31')")
+      checkAnswer(spark.table("t"),
+        sql("select null, timestamp'2020-12-31'").collect().head)
     }
   }
 }
