@@ -314,7 +314,8 @@ abstract class BaseSessionStateBuilder(
   protected def adaptiveRulesHolder: AdaptiveRulesHolder = {
     new AdaptiveRulesHolder(
       extensions.buildQueryStagePrepRules(session),
-      extensions.buildRuntimeOptimizerRules(session))
+      extensions.buildRuntimeOptimizerRules(session),
+      extensions.buildQueryStageOptimizerRules(session))
   }
 
   protected def planNormalizationRules: Seq[Rule[LogicalPlan]] = {
