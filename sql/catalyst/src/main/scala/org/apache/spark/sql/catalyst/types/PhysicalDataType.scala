@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.types
 import scala.reflect.runtime.universe.TypeTag
 import scala.reflect.runtime.universe.typeTag
 import scala.util.control.NonFatal
+
 import org.apache.spark.sql.catalyst.util.SQLOrderingUtil
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types.{AtomicType, BinaryType, BooleanType, ByteType, DataType, DateType, DayTimeIntervalType, Decimal, DecimalType, DoubleType, FloatType, IntegerType, LongType, NullType, NumericType, ShortType, StringType, StructField, TimestampNTZType, TimestampType}
