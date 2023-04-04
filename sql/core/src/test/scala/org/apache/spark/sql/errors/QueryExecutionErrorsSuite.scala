@@ -625,13 +625,13 @@ class QueryExecutionErrorsSuite
     }
   }
 
-  test("BINARY_ARITHMETIC_CAUSE_OVERFLOW: byte plus byte result overflow") {
-    withSQLConf("spark.sql.ansi.enabled" -> "true") {
+  test("BINARY_ARITHMETIC_OVERFLOW: byte plus byte result overflow") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
       checkError(
         exception = intercept[SparkArithmeticException] {
-          sql(s"select CAST('127' AS TINYINT) + CAST('5' AS TINYINT)").collect()
+          sql(s"select 127Y + 5Y").collect()
         },
-        errorClass = "BINARY_ARITHMETIC_CAUSE_OVERFLOW",
+        errorClass = "BINARY_ARITHMETIC_OVERFLOW",
         parameters = Map(
           "value1" -> "127S",
           "symbol" -> "+",

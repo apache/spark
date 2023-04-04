@@ -35,7 +35,7 @@
     ],
     "sqlState" : "22003"
   },
-  "BINARY_ARITHMETIC_CAUSE_OVERFLOW" : {
+  "BINARY_ARITHMETIC_OVERFLOW" : {
     "message" : [
       "<value1> <symbol> <value2> caused overflow."
     ],
