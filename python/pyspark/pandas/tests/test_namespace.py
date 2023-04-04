@@ -221,6 +221,19 @@ class NamespaceTestsMixin:
             pd.date_range(start="1/1/2018", periods=5, freq=pd.offsets.MonthEnd(3)),
         )
 
+<<<<<<< HEAD
+=======
+        self.assert_eq(
+            ps.date_range(start="2017-01-01", end="2017-01-04", inclusive="left"),
+            pd.date_range(start="2017-01-01", end="2017-01-04", inclusive="left"),
+        )
+
+        self.assert_eq(
+            ps.date_range(start="2017-01-01", end="2017-01-04", inclusive="right"),
+            pd.date_range(start="2017-01-01", end="2017-01-04", inclusive="right"),
+        )
+
+>>>>>>> d32f1bc88e (Add inclusive parameter for pd.date_range)
         self.assertRaises(
             AssertionError, lambda: ps.date_range(start="1/1/2018", periods=5, tz="Asia/Tokyo")
         )
