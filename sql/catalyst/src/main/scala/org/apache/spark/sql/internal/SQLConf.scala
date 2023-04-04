@@ -4358,6 +4358,14 @@ object SQLConf {
       .checkValue(_ >= 0, "The threshold of cached local relations must not be negative")
       .createWithDefault(64 * 1024 * 1024)
 
+  val COMBINE_UNIONED_SUBQUERYS_ENABLED =
+    buildConf("spark.sql.optimizer.combineUnionedSubquery.enabled")
+      .doc("When true, we attempt to eliminate union by combine subquery " +
+        "to reduce the scan times and avoid shuffle.")
+      .version("3.5.0")
+      .booleanConf
+      .createWithDefault(false)
+
   /**
    * Holds information about keys that have been deprecated.
    *
@@ -5206,6 +5214,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
     getConf(SQLConf.ALLOW_TEMP_VIEW_CREATION_WITH_MULTIPLE_NAME_PARTS)
 
   def usePartitionEvaluator: Boolean = getConf(SQLConf.USE_PARTITION_EVALUATOR)
+
+  def combineUnionedAggregatesEnabled: Boolean =
+    getConf(SQLConf.COMBINE_UNIONED_SUBQUERYS_ENABLED)
 
   /** ********************** SQLConf functionality methods ************ */
 

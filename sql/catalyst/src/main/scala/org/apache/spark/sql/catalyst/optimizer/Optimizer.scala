@@ -92,6 +92,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
         EliminateOffsets,
         EliminateLimits,
         CombineUnions,
+        CombineUnionedSubquery,
         // Constant folding and strength reduction
         OptimizeRepartition,
         TransposeWindow,
@@ -160,7 +161,8 @@ abstract class Optimizer(catalogManager: CatalogManager)
     Batch("Union", fixedPoint,
       RemoveNoopOperators,
       CombineUnions,
-      RemoveNoopUnion) ::
+      RemoveNoopUnion,
+      CombineUnionedSubquery) ::
     // Run this once earlier. This might simplify the plan and reduce cost of optimizer.
     // For example, a query such as Filter(LocalRelation) would go through all the heavy
     // optimizer rules that are triggered when there is a filter
