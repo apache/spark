@@ -286,15 +286,6 @@ case class ResolveDefaultColumns(catalog: SessionCatalog) extends Rule[LogicalPl
           names = newNames,
           rows = table.rows.map { row => row ++ newDefaultExpressions })
       case local: LocalRelation =>
-        // Note that we have consumed a LocalRelation but return an UnresolvedInlineTable, because
-        // addMissingDefaultValuesForInsertFromProject must replace unresolved DEFAULT references.
-        UnresolvedInlineTable(
-          newNames,
-          local.data.map { row =>
-            val colTypes = StructType(local.output.map(col => StructField(col.name, col.dataType)))
-            row.toSeq(colTypes).map(Literal(_)) ++ newDefaultExpressions
-          })
-        /*
         val newDefaultExpressionsRow = new GenericInternalRow(
           schema.fields.drop(local.output.size).map {
             case f if f.metadata.contains(CURRENT_DEFAULT_COLUMN_METADATA_KEY) =>
@@ -309,7 +300,6 @@ case class ResolveDefaultColumns(catalog: SessionCatalog) extends Rule[LogicalPl
           data = local.data.map { row =>
             new JoinedRow(row, newDefaultExpressionsRow)
           })
-         */
       case _ => node
     }
   }
