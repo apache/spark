@@ -10221,7 +10221,7 @@ def hllsketch_union_estimate(col: "ColumnOrName", lgMaxK: Optional[int] = None) 
     |           3|
     +------------+
     """
-    if lgConfigK is not None and tgtHllType is not None:
+    if lgMaxK is not None:
         return _invoke_function("hllsketch_union_estimate", _to_java_column(col), lgMaxK)
     else:
         return _invoke_function("hllsketch_union_estimate", _to_java_column(col))

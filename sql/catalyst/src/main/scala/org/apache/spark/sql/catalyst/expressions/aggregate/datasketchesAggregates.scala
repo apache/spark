@@ -25,7 +25,7 @@ import org.apache.datasketches.memory.WritableMemory
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionDescription}
 import org.apache.spark.sql.catalyst.trees.UnaryLike
-import org.apache.spark.sql.types.{BinaryType, DataType, DoubleType, IntegerType, LongType, StringType}
+import org.apache.spark.sql.types.{BinaryType, DataType, IntegerType, LongType, StringType}
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
@@ -71,11 +71,13 @@ sealed trait HllSketchAggregate
     val v = child.eval(input)
     if (v != null) {
       child.dataType match {
-        // Update implemented for all types supported by HllSketch
+        // Update implemented for a subset of types supported by HllSketch
         // Spark SQL doesn't have equivalent types for ByteBuffer or char[] so leave those out
+        // Leaving out support for Array types, as unique counting these aren't a common use case
+        // Leaving out support for floating point types (IE DoubleType) due to imprecision
+        // TODO: implement support for decimal/datetime/interval types
         case IntegerType => sketch.update(v.asInstanceOf[Int])
         case LongType => sketch.update(v.asInstanceOf[Long])
-        case DoubleType => sketch.update(v.asInstanceOf[Double])
         case StringType => sketch.update(v.asInstanceOf[UTF8String].toString)
         case dataType => throw new UnsupportedOperationException(
           s"A HllSketch instance cannot be updates with a Spark ${dataType.toString} type")
