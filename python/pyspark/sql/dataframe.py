@@ -4366,6 +4366,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         ):
             raise PySparkValueError(
                 error_class="MIXED_TYPE_REPLACEMENT",
+                message_parameters={},
             )
 
         if subset is None:
