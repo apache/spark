@@ -6402,6 +6402,23 @@ object functions {
   }
 
   /**
+   * Returns the column if the predicate holds true, null otherwise.
+   * {{{
+   *   df.select(filter_value(col("s"), x => x % 2 === 0))
+   * }}}
+   *
+   * @param column
+   *   the input column
+   * @param f
+   *   col => predicate, the Boolean predicate to filter the input column
+   *
+   * @group normal_funcs
+   * @since 3.5.0
+   */
+  def filter_value(column: Column, f: Column => Column): Column =
+    Column.fn("filter_value", column, createLambda(f))
+
+  /**
    * Returns an array of elements after applying a transformation to each element in the input
    * array.
    * {{{
