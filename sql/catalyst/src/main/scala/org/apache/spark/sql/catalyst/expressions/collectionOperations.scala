@@ -2342,7 +2342,7 @@ case class ElementAt(
           }
         } else {
           val idx = if (index == 0) {
-            throw QueryExecutionErrors.elementAtByIndexZeroError(getContextOrNull())
+            throw QueryExecutionErrors.invalidIndexOfZeroError(getContextOrNull())
           } else if (index > 0) {
             index - 1
           } else {
@@ -2397,7 +2397,7 @@ case class ElementAt(
              |  $indexOutOfBoundBranch
              |} else {
              |  if ($index == 0) {
-             |    throw QueryExecutionErrors.elementAtByIndexZeroError($errorContext);
+             |    throw QueryExecutionErrors.invalidIndexOfZeroError($errorContext);
              |  } else if ($index > 0) {
              |    $index--;
              |  } else {
@@ -4620,7 +4620,7 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryL
   since = "3.4.0")
 case class ArrayInsert(srcArrayExpr: Expression, posExpr: Expression, itemExpr: Expression)
   extends TernaryExpression with ImplicitCastInputTypes with ComplexTypeMergingExpression
-    with QueryErrorsBase {
+    with QueryErrorsBase with SupportQueryContext {
 
   override def inputTypes: Seq[AbstractDataType] = {
     (srcArrayExpr.dataType, posExpr.dataType, itemExpr.dataType) match {
@@ -4673,8 +4673,11 @@ case class ArrayInsert(srcArrayExpr: Expression, posExpr: Expression, itemExpr: 
   }
 
   override def nullSafeEval(arr: Any, pos: Any, item: Any): Any = {
-    val baseArr = arr.asInstanceOf[ArrayData]
     var posInt = pos.asInstanceOf[Int]
+    if (posInt == 0) {
+      throw QueryExecutionErrors.invalidIndexOfZeroError(getContextOrNull())
+    }
+    val baseArr = arr.asInstanceOf[ArrayData]
     val arrayElementType = dataType.asInstanceOf[ArrayType].elementType
 
     val newPosExtendsArrayLeft = (posInt < 0) && (-posInt > baseArr.numElements())
@@ -4748,12 +4751,17 @@ case class ArrayInsert(srcArrayExpr: Expression, posExpr: Expression, itemExpr: 
         values, elementType, resLength, s"$prettyName failed.")
       val assignment = CodeGenerator.createArrayAssignment(values, elementType, arr,
         adjustedAllocIdx, i, first.dataType.asInstanceOf[ArrayType].containsNull)
+      val errorContext = getContextOrNullCode(ctx)
 
       s"""
          |int $itemInsertionIndex = 0;
          |int $resLength = 0;
          |int $adjustedAllocIdx = 0;
          |boolean $insertedItemIsNull = ${itemExpr.isNull};
+         |
+         |if ($pos == 0) {
+         |  throw QueryExecutionErrors.invalidIndexOfZeroError($errorContext);
+         |}
          |
          |if ($pos < 0 && (java.lang.Math.abs($pos) > $arr.numElements())) {
          |
@@ -4855,6 +4863,8 @@ case class ArrayInsert(srcArrayExpr: Expression, posExpr: Expression, itemExpr: 
   override protected def withNewChildrenInternal(
       newSrcArrayExpr: Expression, newPosExpr: Expression, newItemExpr: Expression): ArrayInsert =
     copy(srcArrayExpr = newSrcArrayExpr, posExpr = newPosExpr, itemExpr = newItemExpr)
+
+  override def initQueryContext(): Option[SQLQueryContext] = Some(origin.context)
 }
 
 @ExpressionDescription(
