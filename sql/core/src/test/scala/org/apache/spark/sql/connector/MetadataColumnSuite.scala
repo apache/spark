@@ -19,7 +19,7 @@ package org.apache.spark.sql.connector
 
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
-import org.apache.spark.sql.functions.struct
+import org.apache.spark.sql.functions.{col, struct}
 
 class MetadataColumnSuite extends DatasourceV2SQLBase {
   import testImplicits._
@@ -247,6 +247,82 @@ class MetadataColumnSuite extends DatasourceV2SQLBase {
         // columns.
         assert(scan.output.map(_.name) == Seq("id", "data"))
       }
+    }
+  }
+
+  test("SPARK-42683: Project a metadata column by its logical name - table schema conflict") {
+    withTable(tbl) {
+      sql(s"CREATE TABLE $tbl (index bigint, data string) PARTITIONED BY (bucket(4, index), index)")
+      sql(s"INSERT INTO $tbl VALUES (1, 'a'), (2, 'b'), (3, 'c')")
+
+      val df = sql(s"select * from $tbl")
+      checkAnswer(
+        df.select(df.metadataColumn("index")),
+        Seq(Row(0), Row(0), Row(0)))
+    }
+  }
+
+  test("SPARK-42683: Project a metadata column by its logical name - no conflict") {
+    withTable(tbl) {
+      prepareTable()
+
+      val df = sql(s"select * from $tbl")
+      checkAnswer(
+        df.select(df.metadataColumn("index")),
+        Seq(Row(0), Row(0), Row(0)))
+    }
+  }
+
+  test("SPARK-42683: Project a metadata column by its logical name - manually renamed") {
+    withTable(tbl) {
+      prepareTable()
+      val baseDf = sql(s"select index from $tbl")
+
+      // If the user renames a metadata column
+      var df = baseDf.select(col("index").as("renamed"))
+      checkAnswer(
+        df.select(df.metadataColumn("index")),
+        Seq(Row(0), Row(0), Row(0)))
+
+      df = baseDf.withColumnRenamed("index", "renamed")
+      checkAnswer(
+        df.select(df.metadataColumn("index")),
+        Seq(Row(0), Row(0), Row(0)))
+    }
+  }
+  test("SPARK-42683: Project a metadata column by its logical name - column not found") {
+    withTable(tbl) {
+      prepareTable()
+      val df = sql(s"select index from $tbl")
+
+      // Not a column at all
+      checkError(
+        exception = intercept[AnalysisException] {
+          df.metadataColumn("foo")
+        },
+        errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+        parameters = Map("objectName" -> "`foo`", "proposal" -> "`index`, `_partition`"),
+        queryContext = Array(ExpectedContext("select index from testcat.t", 0, 26)))
+
+      // Name exists, but does not reference a metadata column
+      checkError(
+        exception = intercept[AnalysisException] {
+          df.metadataColumn("data")
+        },
+        errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+        parameters = Map("objectName" -> "`data`", "proposal" -> "`index`, `_partition`"),
+        queryContext = Array(ExpectedContext("select index from testcat.t", 0, 26)))
+    }
+  }
+
+  test("SPARK-42683: Project a metadata column by its logical name - project conflict") {
+    withTable(tbl) {
+      prepareTable()
+
+      val df = sql(s"select * from $tbl").select(col("data").as("index"))
+      checkAnswer(
+        df.withColumn("real_index", df.metadataColumn("index")),
+        Seq(Row("a", 0), Row("b", 0), Row("c", 0)))
     }
   }
 }

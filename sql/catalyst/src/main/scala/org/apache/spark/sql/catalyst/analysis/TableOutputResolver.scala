@@ -191,8 +191,9 @@ object TableOutputResolver {
         tableName, colPath.quoted
       )
     } else {
-      val param = NamedLambdaVariable("x", inputType.elementType, inputType.containsNull)
-      val fakeAttr = AttributeReference("x", expectedType.elementType, expectedType.containsNull)()
+      val param = NamedLambdaVariable("element", inputType.elementType, inputType.containsNull)
+      val fakeAttr =
+        AttributeReference("element", expectedType.elementType, expectedType.containsNull)()
       val res = reorderColumnsByName(tableName, Seq(param), Seq(fakeAttr), conf, addError, colPath)
       if (res.length == 1) {
         val func = LambdaFunction(res.head, Seq(param))
@@ -217,16 +218,17 @@ object TableOutputResolver {
         tableName, colPath.quoted
       )
     } else {
-      val keyParam = NamedLambdaVariable("k", inputType.keyType, nullable = false)
-      val fakeKeyAttr = AttributeReference("k", expectedType.keyType, nullable = false)()
+      val keyParam = NamedLambdaVariable("key", inputType.keyType, nullable = false)
+      val fakeKeyAttr = AttributeReference("key", expectedType.keyType, nullable = false)()
       val resKey = reorderColumnsByName(
-        tableName, Seq(keyParam), Seq(fakeKeyAttr), conf, addError, colPath :+ "key")
+        tableName, Seq(keyParam), Seq(fakeKeyAttr), conf, addError, colPath)
 
-      val valueParam = NamedLambdaVariable("v", inputType.valueType, inputType.valueContainsNull)
+      val valueParam =
+        NamedLambdaVariable("value", inputType.valueType, inputType.valueContainsNull)
       val fakeValueAttr =
-        AttributeReference("v", expectedType.valueType, expectedType.valueContainsNull)()
+        AttributeReference("value", expectedType.valueType, expectedType.valueContainsNull)()
       val resValue = reorderColumnsByName(
-        tableName, Seq(valueParam), Seq(fakeValueAttr), conf, addError, colPath :+ "value")
+        tableName, Seq(valueParam), Seq(fakeValueAttr), conf, addError, colPath)
 
       if (resKey.length == 1 && resValue.length == 1) {
         val keyFunc = LambdaFunction(resKey.head, Seq(keyParam))

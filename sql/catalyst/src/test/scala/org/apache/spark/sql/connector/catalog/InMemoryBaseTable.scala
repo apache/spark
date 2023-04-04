@@ -25,10 +25,9 @@ import java.util.OptionalLong
 import scala.collection.mutable
 
 import com.google.common.base.Objects
-import org.scalatest.Assertions._
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, JoinedRow}
+import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, JoinedRow, MetadataStructFieldWithLogicalName}
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, DateTimeUtils}
 import org.apache.spark.sql.connector.distributions.{Distribution, Distributions}
 import org.apache.spark.sql.connector.expressions._
@@ -74,7 +73,11 @@ abstract class InMemoryBaseTable(
 
   // purposely exposes a metadata column that conflicts with a data column in some tests
   override val metadataColumns: Array[MetadataColumn] = Array(IndexColumn, PartitionKeyColumn)
-  private val metadataColumnNames = metadataColumns.map(_.name).toSet -- schema.map(_.name)
+  private val metadataColumnNames = metadataColumns.map(_.name).toSet
+
+  // Metadata column renaming is supported -- see [[InMemoryScanBuilder.pruneColumns]] and
+  // [[BatchScanBaseClass.createReaderFactory]] for implementation details.
+  override val canRenameConflictingMetadataColumns: Boolean = true
 
   private val allowUnsupportedTransforms =
     properties.getOrDefault("allow-unsupported-transforms", "false").toBoolean
@@ -297,8 +300,14 @@ abstract class InMemoryBaseTable(
       InMemoryBatchScan(data.map(_.asInstanceOf[InputPartition]), schema, tableSchema)
 
     override def pruneColumns(requiredSchema: StructType): Unit = {
-      val schemaNames = metadataColumnNames ++ tableSchema.map(_.name)
-      schema = StructType(requiredSchema.filter(f => schemaNames.contains(f.name)))
+      // The required schema could contain conflict-renamed metadata columns, so we need to match
+      // them by their logical (original) names, not their current names.
+      val schemaNames = tableSchema.map(_.name).toSet
+      val prunedFields = requiredSchema.filter {
+        case MetadataStructFieldWithLogicalName(f, name) => metadataColumnNames.contains(name)
+        case f => schemaNames.contains(f.name)
+      }
+      schema = StructType(prunedFields)
     }
 
     private var _pushedFilters: Array[Filter] = Array.empty
@@ -392,9 +401,14 @@ abstract class InMemoryBaseTable(
     override def planInputPartitions(): Array[InputPartition] = data.toArray
 
     override def createReaderFactory(): PartitionReaderFactory = {
-      val metadataColumns = readSchema.map(_.name).filter(metadataColumnNames.contains)
-      val nonMetadataColumns = readSchema.filterNot(f => metadataColumns.contains(f.name))
-      new BufferedRowsReaderFactory(metadataColumns, nonMetadataColumns, tableSchema)
+      val metadataColumns = new mutable.ArrayBuffer[String]()
+      val nonMetadataColumns = readSchema.filter {
+        case MetadataStructFieldWithLogicalName(_, name) =>
+          metadataColumns += name
+          false
+        case _ => true
+      }
+      new BufferedRowsReaderFactory(metadataColumns.toSeq, nonMetadataColumns, tableSchema)
     }
   }
 
@@ -434,7 +448,9 @@ abstract class InMemoryBaseTable(
     protected var streamingWriter: StreamingWrite = StreamingAppend
 
     override def overwriteDynamicPartitions(): WriteBuilder = {
-      assert(writer == Append)
+      if (writer != Append) {
+        throw new IllegalArgumentException(s"Unsupported writer type: $writer")
+      }
       writer = DynamicOverwrite
       streamingWriter = new StreamingNotSupportedOperation("overwriteDynamicPartitions")
       this
