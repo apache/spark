@@ -567,14 +567,16 @@ class ArrowTestsMixin:
         )
         arrs = self.create_np_arrs
 
-        for arr, dtypes in zip(arrs, expected_dtypes):
-            with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": arrow_enabled}):
+        with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": arrow_enabled}):
+            for arr, dtypes in zip(arrs, expected_dtypes):
                 df = self.spark.createDataFrame(arr)
-            self.assertEqual(df.dtypes, dtypes)
-            np.array_equal(np.array(df.collect()), arr)
+                self.assertEqual(df.dtypes, dtypes)
+                np.array_equal(np.array(df.collect()), arr)
 
-        with self.assertRaisesRegex(ValueError, "NumPy array input should be of 1 or 2 dimensions"):
-            self.spark.createDataFrame(np.array(0))
+            with self.assertRaisesRegex(
+                ValueError, "NumPy array input should be of 1 or 2 dimensions"
+            ):
+                self.spark.createDataFrame(np.array(0))
 
     def test_createDataFrame_with_array_type(self):
         for arrow_enabled in [True, False]:
