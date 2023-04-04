@@ -41,7 +41,6 @@ __all__ = ["DataStreamReader", "DataStreamWriter"]
 
 
 class DataStreamReader(OptionUtils):
-
     def __init__(self, client: "SparkSession") -> None:
         self._format: Optional[str] = None
         self._schema = ""
@@ -107,7 +106,7 @@ class DataStreamReader(OptionUtils):
             schema=self._schema,
             options=self._options,
             paths=[path] if path else None,
-            is_streaming=True
+            is_streaming=True,
         )
 
         return self._df(plan)
@@ -253,7 +252,6 @@ DataStreamReader.__doc__ = PySparkDataStreamReader.__doc__
 
 
 class DataStreamWriter:
-
     def __init__(self, plan: "LogicalPlan", session: "SparkSession") -> None:
         self._session = session
         self._write_stream = WriteStreamOperation(plan)
@@ -276,14 +274,14 @@ class DataStreamWriter:
         return self
 
     option.__doc__ = PySparkDataStreamWriter.option.__doc__
-    
+
     def options(self, **options: "OptionalPrimitiveType") -> "DataStreamWriter":
         for k in options:
-            self.option(k, options[k])        
+            self.option(k, options[k])
         return self
 
     options.__doc__ = PySparkDataStreamWriter.options.__doc__
-    
+
     @overload
     def partitionBy(self, *cols: str) -> "DataStreamWriter":
         ...
@@ -405,12 +403,14 @@ class DataStreamWriter:
         cmd = self._write_stream.command(self._session.client)
         (_, properties) = self._session.client.execute_command(cmd)
 
-        start_result = cast(pb2.WriteStreamOperationStartResult, properties["write_stream_operation_start_result"])
+        start_result = cast(
+            pb2.WriteStreamOperationStartResult, properties["write_stream_operation_start_result"]
+        )
         return StreamingQuery(
             session=self._session,
             queryId=start_result.query_id,
             runId=start_result.run_id,
-            name=start_result.name
+            name=start_result.name,
         )
 
     def start(
@@ -464,8 +464,7 @@ def _test() -> None:
 
     globs = pyspark.sql.streaming.readwriter.__dict__.copy()
     globs["spark"] = (
-        SparkSession.builder
-        .appName("sql.connect.streaming.readwriter tests")
+        SparkSession.builder.appName("sql.connect.streaming.readwriter tests")
         .remote("local[4]")
         .getOrCreate()
     )

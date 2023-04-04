@@ -479,7 +479,8 @@ class WithColumns(LogicalPlan):
 
 class WithWatermark(LogicalPlan):
     """Logical plan object for a WithWatermark operation."""
-    def __init__(self, child: Optional["LogicalPlan"], event_time: str,  delay_threshold: str):
+
+    def __init__(self, child: Optional["LogicalPlan"], event_time: str, delay_threshold: str):
         super().__init__(child)
         self._event_time = event_time
         self._delay_threshold = delay_threshold

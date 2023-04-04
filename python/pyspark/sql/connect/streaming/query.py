@@ -34,8 +34,9 @@ if TYPE_CHECKING:
 
 
 class StreamingQuery:
-
-    def __init__(self, session: "SparkSession", queryId: str, runId: str, name: Optional[str] = None) -> None:
+    def __init__(
+        self, session: "SparkSession", queryId: str, runId: str, name: Optional[str] = None
+    ) -> None:
         self._session = session
         self._query_id = queryId
         self._run_id = runId
@@ -76,7 +77,7 @@ class StreamingQuery:
         return {
             "message": proto.status_message,
             "isDataAvailable": proto.is_data_available,
-            "isTriggerActive": proto.is_trigger_active
+            "isTriggerActive": proto.is_trigger_active,
         }
 
     status.__doc__ = PySparkStreamingQuery.status.__doc__
@@ -126,13 +127,17 @@ class StreamingQuery:
 
     exception.__doc__ = PySparkStreamingQuery.exception.__doc__
 
-    def _fetch_status(self, recent_progress_limit=0) -> pb2.StreamingQueryCommandResult.StatusResult:
+    def _fetch_status(
+        self, recent_progress_limit=0
+    ) -> pb2.StreamingQueryCommandResult.StatusResult:
         cmd = pb2.StreamingQueryCommand()
         cmd.status.recent_progress_limit = recent_progress_limit
 
         return self._execute_streaming_query_cmd(cmd).status
 
-    def _execute_streaming_query_cmd(self, cmd: pb2.StreamingQueryCommand) -> pb2.StreamingQueryCommandResult:
+    def _execute_streaming_query_cmd(
+        self, cmd: pb2.StreamingQueryCommand
+    ) -> pb2.StreamingQueryCommandResult:
         cmd.query_id = self._query_id
         cmd.run_id = self._run_id
         exec_cmd = pb2.Command()
