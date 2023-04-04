@@ -1414,6 +1414,11 @@
       "sortBy must be used together with bucketBy."
     ]
   },
+  "SQL_CONF_NOT_FOUND" : {
+    "message" : [
+      "The SQL config \"<key>\" cannot be found. Please verify that the config exists."
+    ]
+  },
   "STAR_GROUP_BY_POS" : {
     "message" : [
       "Star (*) is not allowed in a select list when GROUP BY an ordinal position is used."

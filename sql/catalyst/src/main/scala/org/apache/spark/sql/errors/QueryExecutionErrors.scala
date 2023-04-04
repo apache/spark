@@ -2134,8 +2134,10 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       cause = null)
   }
 
-  def noSuchElementExceptionError(key: String): Throwable = {
-    new NoSuchElementException(key)
+  def sqlConfigNotFoundError(key: String): SparkRuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "SQL_CONF_NOT_FOUND",
+      messageParameters = Map("key" -> key))
   }
 
   def cannotMutateReadOnlySQLConfError(): SparkUnsupportedOperationException = {
