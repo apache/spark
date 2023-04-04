@@ -352,6 +352,7 @@ class Column:
     def __contains__(self, item: Any) -> None:
         raise PySparkValueError(
             error_class="CANNOT_APPLY_IN_FOR_COLUMN",
+            message_parameters={},
         )
 
     # bitwise operators
@@ -664,6 +665,7 @@ class Column:
         if item.startswith("__"):
             raise PySparkAttributeError(
                 error_class="CANNOT_ACCESS_TO_DUNDER",
+                message_parameters={},
             )
         return self[item]
 
@@ -702,6 +704,7 @@ class Column:
             if k.step is not None:
                 raise PySparkValueError(
                     error_class="SLICE_WITH_STEP",
+                    message_parameters={},
                 )
             return self.substr(k.start, k.stop)
         else:
@@ -1386,6 +1389,7 @@ class Column:
     def __nonzero__(self) -> None:
         raise PySparkValueError(
             error_class="CANNOT_CONVERT_COLUMN_INTO_BOOL",
+            message_parameters={},
         )
 
     __bool__ = __nonzero__
