@@ -23,7 +23,7 @@ import scala.util.control.NonFatal
 
 import org.apache.spark.sql.catalyst.util.SQLOrderingUtil
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.types.{AtomicType, BinaryType, BooleanType, ByteType, DataType, Decimal, DecimalType, DoubleType, FloatType, IntegerType, LongType, NullType, NumericType, ShortType, StringType, StructField}
+import org.apache.spark.sql.types.{AtomicType, BinaryType, BooleanType, ByteType, DataType, DayTimeIntervalType, Decimal, DecimalType, DoubleType, FloatType, IntegerType, LongType, NullType, NumericType, ShortType, StringType, StructField, TimestampNTZType, TimestampType}
 import org.apache.spark.unsafe.types.{ByteArray, UTF8String}
 
 sealed abstract class PhysicalDataType
@@ -81,6 +81,11 @@ object PhysicalAtomicType extends PhysicalAtomicType {
     case DoubleType => PhysicalDoubleType
     case DecimalType.Fixed(p, s) => PhysicalDecimalType(p, s)
     case BooleanType => PhysicalBooleanType
+    case BinaryType => PhysicalBinaryType
+    case TimestampType => PhysicalLongType
+    case TimestampNTZType => PhysicalLongType
+    case DayTimeIntervalType(_, _) => PhysicalLongType
+    case _: DataType => PhysicalIntegerType
     case _ => throw QueryExecutionErrors.unsupportedOperationExceptionError()
   }
 
@@ -159,7 +164,7 @@ case object PhysicalByteType extends PhysicalByteType with PhysicalPrimitiveType
 class PhysicalCalendarIntervalType() extends PhysicalDataType
 case object PhysicalCalendarIntervalType extends PhysicalCalendarIntervalType
 
-case class PhysicalDecimalType(precision: Int, scale: Int) extends PhysicalAtomicType {
+case class PhysicalDecimalType(precision: Int, scale: Int) extends PhysicalNumericType {
   private[sql] type InternalType = Decimal
   @transient private[sql] lazy val tag = typeTag[InternalType]
   private[sql] val ordering = Decimal.DecimalIsFractional
@@ -171,7 +176,7 @@ case object PhysicalDecimalType {
   }
 }
 
-class PhysicalDoubleType() extends PhysicalAtomicType {
+class PhysicalDoubleType() extends PhysicalNumericType {
   // The companion object and this class is separated so the companion object also subclasses
   // this type. Otherwise, the companion object would be of type "DoubleType$" in byte code.
   // Defined with a private constructor so the companion object is the only possible instantiation.
@@ -182,7 +187,7 @@ class PhysicalDoubleType() extends PhysicalAtomicType {
 }
 case object PhysicalDoubleType extends PhysicalDoubleType with PhysicalPrimitiveType
 
-class PhysicalFloatType() extends PhysicalAtomicType {
+class PhysicalFloatType() extends PhysicalNumericType {
   // The companion object and this class is separated so the companion object also subclasses
   // this type. Otherwise, the companion object would be of type "FloatType$" in byte code.
   // Defined with a private constructor so the companion object is the only possible instantiation.
@@ -237,7 +242,6 @@ class PhysicalStringType() extends PhysicalAtomicType {
 case object PhysicalStringType extends PhysicalStringType
 
 case class PhysicalStructType(fields: Array[StructField]) extends PhysicalDataType
-
 
 object UninitializedPhysicalType extends PhysicalDataType
 object UninitializedPhysicalIntegralType extends PhysicalIntegralType {
