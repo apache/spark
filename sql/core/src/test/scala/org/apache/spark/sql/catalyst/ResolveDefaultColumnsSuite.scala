@@ -15,8 +15,9 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
+package org.apache.spark.sql.catalyst
 
+import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.catalyst.analysis.{ResolveDefaultColumns, ResolveInlineTables, UnresolvedAttribute, UnresolvedInlineTable}
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
@@ -25,7 +26,6 @@ import org.apache.spark.sql.types.{StructField, StructType, TimestampType}
 
 class ResolveDefaultColumnsSuite extends QueryTest with SharedSparkSession {
   val rule = ResolveDefaultColumns(catalog = null)
-  def lit(v: Any): Literal = Literal(v)
 
   test("Assign correct types when adding DEFAULTs for inserting from a VALUES list") {
     // This is the internal storage for the timestamp 2020-12-31 00:00:00.0.
