@@ -608,8 +608,10 @@ class TorchDistributor(Distributor):
                 .mapInPandas(func=spark_task_function, schema="chunk binary", barrier=True)
                 .collect()
             )
-            output_bytes = b"".join([row.chunk for row in rows])
-            result = cloudpickle.loads(output_bytes)
+            output_bytes = bytearray()
+            for row in rows:
+                output_bytes += row.chunk
+            result = cloudpickle.loads(bytes(output_bytes))
             del rows, output_bytes
         finally:
             log_streaming_server.shutdown()
