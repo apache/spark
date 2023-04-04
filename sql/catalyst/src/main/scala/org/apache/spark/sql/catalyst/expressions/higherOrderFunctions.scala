@@ -102,12 +102,8 @@ case class NamedLambdaVariable(
     s"lambda $name#${exprId.id}: ${dataType.simpleString(maxFields)}"
   }
 
-  // We need to include the Expr ID in the Codegen variable name since several tests bypass
-  // `UnresolvedNamedLambdaVariable.freshVarName`
-  lazy val variableName = s"${name}_${exprId.id}"
-
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    ctx.getLambdaVar(variableName)
+    ctx.getLambdaVar(exprId.id)
   }
 }
 
@@ -282,7 +278,7 @@ trait HigherOrderFunction extends Expression with ExpectsInputTypes {
   protected def assignArrayElement(ctx: CodegenContext, arrayName: String, elementCode: ExprCode,
       elementVar: NamedLambdaVariable, index: String): String = {
     val elementType = elementVar.dataType
-    val elementAtomic = ctx.addReferenceObj(elementVar.variableName, elementVar.value)
+    val elementAtomic = ctx.addReferenceObj(elementVar.name, elementVar.value)
     val extractElement = CodeGenerator.getValue(arrayName, elementType, index)
     val atomicAssign = assignAtomic(elementAtomic, elementCode.value,
       elementCode.isNull, elementVar.nullable)
@@ -303,7 +299,7 @@ trait HigherOrderFunction extends Expression with ExpectsInputTypes {
 
   protected def assignIndex(ctx: CodegenContext, indexCode: ExprCode,
       indexVar: NamedLambdaVariable, index: String): String = {
-    val indexAtomic = ctx.addReferenceObj(indexVar.variableName, indexVar.value)
+    val indexAtomic = ctx.addReferenceObj(indexVar.name, indexVar.value)
     s"""
       ${indexCode.value} = $index;
       ${assignAtomic(indexAtomic, indexCode.value)}
@@ -448,9 +444,9 @@ case class ArrayTransform(
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    ctx.withLambdaVars(Seq(elementVar) ++ indexVar, { lambdaExprs =>
-      val elementCode = lambdaExprs.head
-      val indexCode = lambdaExprs.tail.headOption
+    ctx.withLambdaVars(Seq(elementVar) ++ indexVar, varCodes => {
+      val elementCode = varCodes.head
+      val indexCode = varCodes.tail.headOption
 
       nullSafeCodeGen(ctx, ev, arg => {
         val numElements = ctx.freshName("numElements")
@@ -759,9 +755,9 @@ case class ArrayFilter(
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    ctx.withLambdaVars(Seq(elementVar) ++ indexVar, { lambdaExprs =>
-      val elementCode = lambdaExprs.head
-      val indexCode = lambdaExprs.tail.headOption
+    ctx.withLambdaVars(Seq(elementVar) ++ indexVar, varCodes => {
+      val elementCode = varCodes.head
+      val indexCode = varCodes.tail.headOption
 
       nullSafeCodeGen(ctx, ev, arg => {
         val numElements = ctx.freshName("numElements")
@@ -780,7 +776,7 @@ case class ArrayFilter(
 
         val functionCode = function.genCode(ctx)
 
-        val elementAtomic = ctx.addReferenceObj(elementVar.variableName, elementVar.value)
+        val elementAtomic = ctx.addReferenceObj(elementVar.name, elementVar.value)
         val elementAssignment = assignArrayElement(ctx, arg, elementCode, elementVar, i)
         val indexAssignment = indexCode.map(c => assignIndex(ctx, c, indexVar.get, i))
         val varAssignments = (Seq(elementAssignment) ++ indexAssignment).mkString("\n")
@@ -1209,7 +1205,7 @@ case class ArrayAggregate(
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    ctx.withLambdaVars(Seq(elementVar, accForMergeVar, accForFinishVar), { varCodes =>
+    ctx.withLambdaVars(Seq(elementVar, accForMergeVar, accForFinishVar), varCodes => {
       val Seq(elementCode, accForMergeCode, accForFinishCode) = varCodes
 
       nullSafeCodeGen(ctx, ev, arg => {
@@ -1221,9 +1217,9 @@ case class ArrayAggregate(
         val finishCode = finish.genCode(ctx)
 
         val elementAssignment = assignArrayElement(ctx, arg, elementCode, elementVar, i)
-        val mergeAtomic = ctx.addReferenceObj(accForMergeVar.variableName,
+        val mergeAtomic = ctx.addReferenceObj(accForMergeVar.name,
           accForMergeVar.value)
-        val finishAtomic = ctx.addReferenceObj(accForFinishVar.variableName,
+        val finishAtomic = ctx.addReferenceObj(accForFinishVar.name,
           accForFinishVar.value)
 
         val mergeJavaType = CodeGenerator.javaType(accForMergeVar.dataType)
