@@ -37,7 +37,7 @@ if TYPE_CHECKING:
     from pyspark.sql.connect._typing import ColumnOrName, OptionalPrimitiveType
     from pyspark.sql.connect.session import SparkSession
 
-__all__ = ["DataFrameReader", "DataFrameWriter", "OptionUtils", "to_str"]
+__all__ = ["DataFrameReader", "DataFrameWriter"]
 
 PathOrPaths = Union[str, List[str]]
 TupleOrListOfString = Union[List[str], Tuple[str, ...]]

@@ -32,6 +32,7 @@ import org.apache.spark.connect.proto.ExecutePlanResponse.SqlCommandResult
 import org.apache.spark.connect.proto.Parse.ParseFormat
 import org.apache.spark.connect.proto.StreamingQueryCommand
 import org.apache.spark.connect.proto.StreamingQueryCommandResult
+import org.apache.spark.connect.proto.StreamingQueryInstanceId
 import org.apache.spark.connect.proto.WriteStreamOperationStart
 import org.apache.spark.connect.proto.WriteStreamOperationStart.TriggerCase
 import org.apache.spark.connect.proto.WriteStreamOperationStartResult
@@ -2039,7 +2040,7 @@ class SparkConnectPlanner(val session: SparkSession) {
         writer.trigger(Trigger.ProcessingTime(writeOp.getProcessingTimeInterval))
       case TriggerCase.AVAILABLE_NOW =>
         writer.trigger(Trigger.AvailableNow())
-      case TriggerCase.ONE_TIME =>
+      case TriggerCase.ONCE =>
         writer.trigger(Trigger.Once())
       case TriggerCase.CONTINUOUS_CHECKPOINT_INTERVAL =>
         writer.trigger(Trigger.Continuous(writeOp.getContinuousCheckpointInterval))
@@ -2062,8 +2063,11 @@ class SparkConnectPlanner(val session: SparkSession) {
 
     val result = WriteStreamOperationStartResult
       .newBuilder()
-      .setQueryId(query.id.toString)
-      .setRunId(query.runId.toString)
+      .setQueryId(
+        StreamingQueryInstanceId.newBuilder()
+          .setId(query.id.toString)
+          .setRunId(query.runId.toString)
+          .build())
       .setName(Option(query.name).getOrElse(""))
       .build()
 
@@ -2080,33 +2084,27 @@ class SparkConnectPlanner(val session: SparkSession) {
       sessionId: String,
       responseObserver: StreamObserver[ExecutePlanResponse]): Unit = {
 
-    val queryId = command.getQueryId
+    val id = command.getQueryId.getId
+    val runId = command.getQueryId.getRunId
 
     val respBuilder = StreamingQueryCommandResult
       .newBuilder()
       .setQueryId(command.getQueryId)
 
-    val query = Option(session.streams.get(queryId)) match {
-      case Some(query) if query.runId.toString == command.getRunId =>
+    val query = Option(session.streams.get(id)) match {
+      case Some(query) if query.runId.toString == runId =>
         query
       case Some(query) =>
         throw new IllegalArgumentException(
-          s"Run id mismatch for query id $queryId. Run id in the request ${command.getRunId} " +
-            s"does not match one on the server ${query.runId}. The query might have restarted.")
+          s"Run id mismatch for query id $id. Run id in the request $runId " +
+          s"does not match one on the server ${query.runId}. The query might have restarted.")
       case None =>
-        throw new IllegalArgumentException(s"Streaming query $queryId is not found")
+        throw new IllegalArgumentException(s"Streaming query $id is not found")
       // TODO(SPARK-42962): Handle this better. May be cache stopped queries for a few minutes.
     }
 
-    command.getCommandTypeCase match {
-      case StreamingQueryCommand.CommandTypeCase.STATUS =>
-        val recentProgress: Seq[String] = command.getStatus.getRecentProgressLimit match {
-          case 0 => Seq.empty
-          case limit if limit < 0 =>
-            query.recentProgress.map(_.json) // All the cached progresses.
-          case limit => query.recentProgress.takeRight(limit).map(_.json) // Most recent
-        }
-
+    command.getCommandCase match {
+      case StreamingQueryCommand.CommandCase.STATUS =>
         val queryStatus = query.status
 
         val statusResult = StreamingQueryCommandResult.StatusResult
@@ -2115,20 +2113,33 @@ class SparkConnectPlanner(val session: SparkSession) {
           .setIsDataAvailable(queryStatus.isDataAvailable)
           .setIsTriggerActive(queryStatus.isTriggerActive)
           .setIsActive(query.isActive)
-          .addAllRecentProgressJson(recentProgress.asJava)
           .build()
 
         respBuilder.setStatus(statusResult)
 
-      case StreamingQueryCommand.CommandTypeCase.STOP =>
+      case StreamingQueryCommand.CommandCase.LAST_PROGRESS |
+           StreamingQueryCommand.CommandCase.RECENT_PROGRESS =>
+        val progressReports = if (command.getLastProgress) {
+          Option(query.lastProgress).toSeq
+        } else {
+          query.recentProgress.toSeq
+        }
+        respBuilder.setRecentProgress(
+          StreamingQueryCommandResult.RecentProgressResult
+            .newBuilder()
+            .addAllRecentProgressJson(progressReports.map(_.json).asJava)
+            .build()
+        )
+
+      case StreamingQueryCommand.CommandCase.STOP =>
         query.stop()
 
-      case StreamingQueryCommand.CommandTypeCase.PROCESS_ALL_AVAILABLE =>
-        // This might a long time, and we might have to stream periodic messages to keep RPC alive.
+      case StreamingQueryCommand.CommandCase.PROCESS_ALL_AVAILABLE =>
+        // This might take a long time, Spark-connect client keeps this connection alive.
         // TODO(SPARK-42962): Improve this as part of session management.
         query.processAllAvailable()
 
-      case StreamingQueryCommand.CommandTypeCase.EXPLAIN =>
+      case StreamingQueryCommand.CommandCase.EXPLAIN =>
         val result = query match {
           case q: StreamingQueryWrapper =>
             q.streamingQuery.explainInternal(command.getExplain.getExtended)
@@ -2141,7 +2152,7 @@ class SparkConnectPlanner(val session: SparkSession) {
           .build()
         respBuilder.setExplain(explain)
 
-      case StreamingQueryCommand.CommandTypeCase.COMMANDTYPE_NOT_SET =>
+      case StreamingQueryCommand.CommandCase.COMMAND_NOT_SET =>
         throw new IllegalArgumentException("Missing command in StreamingQueryCommand")
     }
 

@@ -197,7 +197,7 @@ message WriteStreamOperationStart {
   oneof trigger {
     string processing_time_interval = 5;
     bool available_now = 6;
-    bool one_time = 7;
+    bool once = 7;
     string continuous_checkpoint_interval = 8;
   }
 
@@ -213,45 +213,55 @@ message WriteStreamOperationStart {
 
 message WriteStreamOperationStartResult {
 
-  // (Required) query id of the streaming query.
-  string query_id = 1;
-
-  // (Required) run id of the streaming query.
-  string run_id = 2;
+  // (Required) Query instance. See `StreamingQueryInstanceId`.
+  StreamingQueryInstanceId query_id = 1;
 
   // An optional query name.
-  string name = 3;
+  string name = 2;
 
   // TODO: How do we indicate errors?
-  // TODO: Consider adding StreamingQueryStatusResult here.
+  // TODO: Consider adding status, last progress etc here.
+}
+
+// A tuple that uniquely identifies an instance of streaming query run. It consists of `id` that
+// persists across the streaming runs and `run_id` that changes between each run of the
+// streaming query that resumes from the checkpoint.
+message StreamingQueryInstanceId {
+
+  // (Required) The unique id of this query that persists across restarts from checkpoint data.
+  // That is, this id is generated when a query is started for the first time, and
+  // will be the same every time it is restarted from checkpoint data.
+  string id = 1;
+
+  // (Required) The unique id of this run of the query. That is, every start/restart of a query
+  // will generate a unique run_id. Therefore, every time a query is restarted from
+  // checkpoint, it will have the same `id` but different `run_id`s.
+  string run_id = 2;
 }
 
 // Commands for a streaming query.
 message StreamingQueryCommand {
 
-  // (Required) query id of the streaming query.
-  string query_id = 1;
-  // (Required) run id of the streaming query.
-  string run_id = 2;
+  // (Required) Query instance. See `StreamingQueryInstanceId`.
+  StreamingQueryInstanceId query_id = 1;
 
-  // A running query is identified by both run_id and query_id.
+  oneof command {
+    // See documentation for the corresponding API method in StreamingQuery.
 
-  oneof command_type {
-    // Status of the query. Used to support multiple status related API like lastProgress().
-    StatusCommand status = 3;
-    // Stops the query.
-    bool stop = 4;
-    // Waits till all the available data is processed. See processAllAvailable() API doc.
-    bool process_all_available = 5;
-    // Returns logical and physical plans.
-    ExplainCommand explain = 6;
+    // status() API.
+    bool status = 2;
+    // lastProgress() API.
+    bool last_progress = 3;
+    // recentProgress() API.
+    bool recent_progress = 4;
+    // stop() API. Stops the query.
+    bool stop = 5;
+    // processAllAvailable() API. Waits till all the available data is processed
+    bool process_all_available = 6;
+    // explain() API. Returns logical and physical plans.
+    ExplainCommand explain = 7;
 
     // TODO(SPARK-42960) Add more commands: await_termination(), exception() etc.
-  }
-
-  message StatusCommand {
-    // A limit on how many progress reports to return.
-    int32 recent_progress_limit = 1;
   }
 
   message ExplainCommand {
@@ -264,28 +274,26 @@ message StreamingQueryCommand {
 
 // Response for commands on a streaming query.
 message StreamingQueryCommandResult {
-  // (Required)
-  string query_id = 1;
+  // (Required) Query instance id. See `StreamingQueryInstanceId`.
+  StreamingQueryInstanceId query_id = 1;
 
   oneof result_type {
     StatusResult status = 2;
-    ExplainResult explain = 3;
+    RecentProgressResult recent_progress = 3;
+    ExplainResult explain = 4;
   }
 
   message StatusResult {
-    // This status includes all the available to status, including progress messages.
-
-    // Fields from Scala 'StreamingQueryStatus' struct
+    // See documentation for these Scala 'StreamingQueryStatus' struct
     string status_message = 1;
     bool is_data_available = 2;
     bool is_trigger_active = 3;
-
     bool is_active = 4;
+  }
 
+  message RecentProgressResult {
     // Progress reports as an array of json strings.
     repeated string recent_progress_json = 5;
-
-    // TODO: Add exception and other fields.
   }
 
   message ExplainResult {

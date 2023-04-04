@@ -345,7 +345,7 @@ class DataStreamWriter:
         elif once is not None:
             if once is not True:
                 raise ValueError("Value for once must be True. Got: %s" % once)
-            self._write_proto.one_time = True
+            self._write_proto.once = True
 
         elif continuous is not None:
             if type(continuous) != str or len(continuous.strip()) == 0:
@@ -408,8 +408,8 @@ class DataStreamWriter:
         )
         return StreamingQuery(
             session=self._session,
-            queryId=start_result.query_id,
-            runId=start_result.run_id,
+            queryId=start_result.query_id.id,
+            runId=start_result.query_id.run_id,
             name=start_result.name,
         )
 
@@ -455,30 +455,10 @@ class DataStreamWriter:
 
 
 def _test() -> None:
-    import doctest
-    import os
-    from pyspark.sql import SparkSession
-    import pyspark.sql.streaming.readwriter
-
-    os.chdir(os.environ["SPARK_HOME"])
-
-    globs = pyspark.sql.streaming.readwriter.__dict__.copy()
-    globs["spark"] = (
-        SparkSession.builder.appName("sql.connect.streaming.readwriter tests")
-        .remote("local[4]")
-        .getOrCreate()
-    )
-
-    (failure_count, test_count) = doctest.testmod(
-        pyspark.sql.connect.streaming.readwriter,
-        globs=globs,
-        optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE | doctest.REPORT_NDIFF,
-    )
-    globs["spark"].stop()
-
-    if failure_count:
-        sys.exit(-1)
+    # TODO(SPARK-43031): port _test() from legacy query.py.
+    pass
 
 
 if __name__ == "__main__":
+    # TODO(SPARK-43031): Add this file dev/sparktestsupport/modules.py to enable testing in CI.
     _test()
