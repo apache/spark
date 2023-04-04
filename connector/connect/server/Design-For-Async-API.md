@@ -10,6 +10,7 @@ thereby improving the performance and flexibility of Spark Connect.
 JVM Client:
 
 ```scala
+
 // sync
 spark.read.schema(schema).csv(ds)
 // async
@@ -40,6 +41,10 @@ Python is the same
 
 For the JVM client, the implementation class of the Scala Future object can be obtained by calling the method of the
 Async series.
+
+For the Python client, the implementation class of the Python Future object can be obtained by calling the method of the
+Async series.
+
 The progress and results of asynchronous calls can be queried through this class.
 
 ### protobuf definition
@@ -163,11 +168,44 @@ the `onNext` method of `StreamObserver` will be called. Asynchronous implementat
 It is to store the data passed in by `Queue` call put into the cache and wait for the client to get it.
 
 ```scala
-trait ResponseQueue(sessionId: String, request_id: String) {
+
+trait ResponseQueue {
 
   def put(response: ExecutePlanResponse): Unit
 
   def done(): Unit
+
+}
+
+class asyncResponseQueue(sessionId: String, request_id: String) extends ResponseQueue {
+
+  private val cacheQueue: Queue[ExecutePlanResponse]
+
+  override def put(response: ExecutePlanResponse): Unit = {
+    cacheQueue.put(response)
+  }
+
+  override def done(): Unit = {
+    cacheQueue.put(null)
+  }
+
+  def getResponse: ExecutePlanResponse = {
+    cacheQueue.take()
+  }
+
+}
+
+class syncResponseQueue(sessionId: String, request_id: String) extends ResponseQueue {
+
+  private val streamObserver: StreamObserver[ExecutePlanResponse]
+
+  override def put(response: ExecutePlanResponse): Unit = {
+    streamObserver.onNext(response)
+  }
+
+  override def done(): Unit = {
+    streamObserver.onCompleted()
+  }
 
 }
 
@@ -180,4 +218,6 @@ when the client will come to fetch the data.
 So we need an object to cache all the data,
 At the same time, it supports TTL to clean up the data that has not been acquired by the client over time
 to ensure the normal operation of the server
+
+We can support cache data in memory, but can support cache into file in the future.
 
