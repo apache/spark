@@ -278,22 +278,18 @@ case class ResolveDefaultColumns(catalog: SessionCatalog) extends Rule[LogicalPl
     val schema = insertTableSchemaWithoutPartitionColumns
     val newDefaultExpressions: Seq[Expression] =
       getDefaultExpressionsForInsert(schema, numUserSpecifiedColumns)
-    val newNames: Seq[String] = if (numUserSpecifiedColumns > 0) {
-      schema.fields.drop(numUserSpecifiedColumns).map(_.name)
-    } else {
-      schema.fields.map(_.name)
-    }
+    val newNames: Seq[String] = schema.fields.map(_.name)
     node match {
       case _ if newDefaultExpressions.isEmpty => node
       case table: UnresolvedInlineTable =>
         table.copy(
-          names = table.names ++ newNames,
+          names = newNames,
           rows = table.rows.map { row => row ++ newDefaultExpressions })
       case local: LocalRelation =>
         // Note that we have consumed a LocalRelation but return an UnresolvedInlineTable, because
         // addMissingDefaultValuesForInsertFromProject must replace unresolved DEFAULT references.
         UnresolvedInlineTable(
-          local.output.map(_.name) ++ newNames,
+          newNames,
           local.data.map { row =>
             val colTypes = StructType(local.output.map(col => StructField(col.name, col.dataType)))
             val values: Seq[Any] = row.toSeq(colTypes)
