@@ -130,8 +130,8 @@ message Command {
 }
 
 // ** NEW **
+// Just a command for get request status
 message QueryRequestStatus {
-  ExecuteRequestInfo request_info = 1;
 }
 
 
