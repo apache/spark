@@ -2079,7 +2079,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   def incompatibleDataToTableCannotFindDataError(
       tableName: String, colPath: String): Throwable = {
     new AnalysisException(
-      errorClass = "INCOMPATIBLE_DATA_TO_TABLE.CANNOT_FIND_DATA",
+      errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA",
       messageParameters = Map(
         "tableName" -> toSQLId(tableName),
         "colPath" -> toSQLId(colPath)
@@ -2090,7 +2090,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   def incompatibleDataToTableAmbiguousColumnNameError(
       tableName: String, colPath: String): Throwable = {
     new AnalysisException(
-      errorClass = "INCOMPATIBLE_DATA_TO_TABLE.AMBIGUOUS_COLUMN_NAME",
+      errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.AMBIGUOUS_COLUMN_NAME",
       messageParameters = Map(
         "tableName" -> toSQLId(tableName),
         "colPath" -> toSQLId(colPath)
@@ -2101,7 +2101,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   def incompatibleDataToTableExtraStructFieldsError(
       tableName: String, colPath: String, extraCols: String): Throwable = {
     new AnalysisException(
-      errorClass = "INCOMPATIBLE_DATA_TO_TABLE.EXTRA_STRUCT_FIELDS",
+      errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.EXTRA_STRUCT_FIELDS",
       messageParameters = Map(
         "tableName" -> toSQLId(tableName),
         "colPath" -> toSQLId(colPath),
@@ -2113,7 +2113,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   def incompatibleDataToTableNullableColumnError(
       tableName: String, colPath: String): Throwable = {
     new AnalysisException(
-      errorClass = "INCOMPATIBLE_DATA_TO_TABLE.NULLABLE_COLUMN",
+      errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.NULLABLE_COLUMN",
       messageParameters = Map(
         "tableName" -> toSQLId(tableName),
         "colPath" -> toSQLId(colPath)
@@ -2124,7 +2124,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   def incompatibleDataToTableNullableArrayElementsError(
       tableName: String, colPath: String): Throwable = {
     new AnalysisException(
-      errorClass = "INCOMPATIBLE_DATA_TO_TABLE.NULLABLE_ARRAY_ELEMENTS",
+      errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.NULLABLE_ARRAY_ELEMENTS",
       messageParameters = Map(
         "tableName" -> toSQLId(tableName),
         "colPath" -> toSQLId(colPath)
@@ -2135,7 +2135,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   def incompatibleDataToTableNullableMapValuesError(
       tableName: String, colPath: String): Throwable = {
     new AnalysisException(
-      errorClass = "INCOMPATIBLE_DATA_TO_TABLE.NULLABLE_MAP_VALUES",
+      errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.NULLABLE_MAP_VALUES",
       messageParameters = Map(
         "tableName" -> toSQLId(tableName),
         "colPath" -> toSQLId(colPath)
@@ -2146,7 +2146,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   def incompatibleDataToTableCannotSafelyCastError(
       tableName: String, colPath: String, from: String, to: String): Throwable = {
     new AnalysisException(
-      errorClass = "INCOMPATIBLE_DATA_TO_TABLE.CANNOT_SAFELY_CAST",
+      errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
       messageParameters = Map(
         "tableName" -> toSQLId(tableName),
         "colPath" -> toSQLId(colPath),
@@ -2159,7 +2159,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   def incompatibleDataToTableStructMissingFieldsError(
       tableName: String, colPath: String, missingFields: String): Throwable = {
     new AnalysisException(
-      errorClass = "INCOMPATIBLE_DATA_TO_TABLE.STRUCT_MISSING_FIELDS",
+      errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.STRUCT_MISSING_FIELDS",
       messageParameters = Map(
         "tableName" -> toSQLId(tableName),
         "colPath" -> toSQLId(colPath),
@@ -2175,7 +2175,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
      expected: String,
      found: String): Throwable = {
     new AnalysisException(
-      errorClass = "INCOMPATIBLE_DATA_TO_TABLE.UNEXPECTED_COLUMN_NAME",
+      errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.UNEXPECTED_COLUMN_NAME",
       messageParameters = Map(
         "tableName" -> toSQLId(tableName),
         "colPath" -> toSQLId(colPath),

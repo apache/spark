@@ -651,9 +651,9 @@
       "Detected an incompatible DataSourceRegister. Please remove the incompatible library from classpath or upgrade it. Error: <message>"
     ]
   },
-  "INCOMPATIBLE_DATA_TO_TABLE" : {
+  "INCOMPATIBLE_DATA_FOR_TABLE" : {
     "message" : [
-      "Cannot write incompatible data to table <tableName>:"
+      "Cannot write incompatible data for table <tableName>:"
     ],
     "subClass" : {
       "AMBIGUOUS_COLUMN_NAME" : {
@@ -701,7 +701,8 @@
           "Struct <colPath> <order>-th field name does not match (may be out of order): expected <expected>, found <found>."
         ]
       }
-    }
+    },
+    "sqlState" : "KD000"
   },
   "INCOMPATIBLE_JOIN_TYPES" : {
     "message" : [

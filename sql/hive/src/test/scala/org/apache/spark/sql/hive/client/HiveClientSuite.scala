@@ -943,7 +943,7 @@ class HiveClientSuite(version: String, allVersions: Seq[String])
           if (version == "0.12" || version == "0.13") {
             checkError(
               exception = intercept[AnalysisException](versionSpark.sql(insertStmt)),
-              errorClass = "INCOMPATIBLE_DATA_TO_TABLE.CANNOT_SAFELY_CAST",
+              errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
               parameters = Map(
                 "tableName" -> "`spark_catalog`.`default`.`tab1`",
                 "colPath" -> "`f0`",
@@ -960,7 +960,7 @@ class HiveClientSuite(version: String, allVersions: Seq[String])
           if (version == "0.12" || version == "0.13") {
             checkError(
               exception = intercept[AnalysisException](versionSpark.sql(insertStmt)),
-              errorClass = "INCOMPATIBLE_DATA_TO_TABLE.CANNOT_SAFELY_CAST",
+              errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
               parameters = Map(
                 "tableName" -> "`spark_catalog`.`default`.`tab1`",
                 "colPath" -> "`f0`",

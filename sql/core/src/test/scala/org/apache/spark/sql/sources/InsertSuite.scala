@@ -633,7 +633,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
           exception = intercept[AnalysisException] {
             sql("insert into t select 1L, 2")
           },
-          errorClass = "INCOMPATIBLE_DATA_TO_TABLE.CANNOT_SAFELY_CAST",
+          errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
           parameters = Map(
             "tableName" -> "`spark_catalog`.`default`.`t`",
             "colPath" -> "`i`",
@@ -645,7 +645,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
           exception = intercept[AnalysisException] {
             sql("insert into t select 1, 2.0")
           },
-          errorClass = "INCOMPATIBLE_DATA_TO_TABLE.CANNOT_SAFELY_CAST",
+          errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
           parameters = Map(
             "tableName" -> "`spark_catalog`.`default`.`t`",
             "colPath" -> "`d`",
@@ -684,7 +684,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
           exception = intercept[AnalysisException] {
             sql("insert into t values('a', 'b')")
           },
-          errorClass = "INCOMPATIBLE_DATA_TO_TABLE.CANNOT_SAFELY_CAST",
+          errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
           parameters = Map(
             "tableName" -> "`spark_catalog`.`default`.`t`",
             "colPath" -> "`i`",
@@ -695,7 +695,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
           exception = intercept[AnalysisException] {
             sql("insert into t values(now(), now())")
           },
-          errorClass = "INCOMPATIBLE_DATA_TO_TABLE.CANNOT_SAFELY_CAST",
+          errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
           parameters = Map(
             "tableName" -> "`spark_catalog`.`default`.`t`",
             "colPath" -> "`i`",
@@ -706,7 +706,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
           exception = intercept[AnalysisException] {
             sql("insert into t values(true, false)")
           },
-          errorClass = "INCOMPATIBLE_DATA_TO_TABLE.CANNOT_SAFELY_CAST",
+          errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
           parameters = Map(
             "tableName" -> "`spark_catalog`.`default`.`t`",
             "colPath" -> "`i`",
@@ -812,7 +812,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
           exception = intercept[AnalysisException] {
             sql("INSERT INTO t VALUES (TIMESTAMP('2010-09-02 14:10:10'), 1)")
           },
-          errorClass = "INCOMPATIBLE_DATA_TO_TABLE.CANNOT_SAFELY_CAST",
+          errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
           parameters = Map(
             "tableName" -> "`spark_catalog`.`default`.`t`",
             "colPath" -> "`i`",
@@ -827,7 +827,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
           exception = intercept[AnalysisException] {
             sql("INSERT INTO t VALUES (date('2010-09-02'), 1)")
           },
-          errorClass = "INCOMPATIBLE_DATA_TO_TABLE.CANNOT_SAFELY_CAST",
+          errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
           parameters = Map(
             "tableName" -> "`spark_catalog`.`default`.`t`",
             "colPath" -> "`i`",
@@ -842,7 +842,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
           exception = intercept[AnalysisException] {
             sql("INSERT INTO t VALUES (TIMESTAMP('2010-09-02 14:10:10'), true)")
           },
-            errorClass = "INCOMPATIBLE_DATA_TO_TABLE.CANNOT_SAFELY_CAST",
+            errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
             parameters = Map(
         "tableName" -> "`spark_catalog`.`default`.`t`",
         "colPath" -> "`b`",
@@ -857,7 +857,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
           exception = intercept[AnalysisException] {
             sql("INSERT INTO t VALUES (date('2010-09-02'), true)")
           },
-            errorClass = "INCOMPATIBLE_DATA_TO_TABLE.CANNOT_SAFELY_CAST",
+            errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
             parameters = Map(
         "tableName" -> "`spark_catalog`.`default`.`t`",
         "colPath" -> "`b`",
@@ -915,7 +915,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         exception = intercept[AnalysisException] {
           sql("INSERT INTO TABLE test_table SELECT 2, null")
         },
-        errorClass = "INCOMPATIBLE_DATA_TO_TABLE.NULLABLE_COLUMN",
+        errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.NULLABLE_COLUMN",
         parameters = Map(
           "tableName" -> "`spark_catalog`.`default`.`test_table`",
           "colPath" -> "`s`"

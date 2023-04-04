@@ -40,7 +40,7 @@ class StrictDataTypeWriteCompatibilitySuite extends DataTypeWriteCompatibilityBa
         DataType.canWrite("", widerPoint2, point2, true,
           analysis.caseSensitiveResolution, "t", storeAssignmentPolicy, errMsg => errs += errMsg)
       ),
-      errorClass = "INCOMPATIBLE_DATA_TO_TABLE.CANNOT_SAFELY_CAST",
+      errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
       parameters = Map(
         "tableName" -> "``",
         "colPath" -> "`t`.`x`",
@@ -59,7 +59,7 @@ class StrictDataTypeWriteCompatibilitySuite extends DataTypeWriteCompatibilityBa
         DataType.canWrite("", arrayOfLong, arrayOfInt, true,
           analysis.caseSensitiveResolution, "arr", storeAssignmentPolicy, errMsg => errs += errMsg)
       ),
-      errorClass = "INCOMPATIBLE_DATA_TO_TABLE.CANNOT_SAFELY_CAST",
+      errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
       parameters = Map(
         "tableName" -> "``",
         "colPath" -> "`arr`.`element`",
@@ -78,7 +78,7 @@ class StrictDataTypeWriteCompatibilitySuite extends DataTypeWriteCompatibilityBa
         DataType.canWrite("", mapOfLong, mapOfInt, true,
           analysis.caseSensitiveResolution, "m", storeAssignmentPolicy, errMsg => errs += errMsg)
       ),
-      errorClass = "INCOMPATIBLE_DATA_TO_TABLE.CANNOT_SAFELY_CAST",
+      errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
       parameters = Map(
         "tableName" -> "``",
         "colPath" -> "`m`.`value`",
@@ -97,7 +97,7 @@ class StrictDataTypeWriteCompatibilitySuite extends DataTypeWriteCompatibilityBa
         DataType.canWrite("", mapKeyLong, mapKeyInt, true,
           analysis.caseSensitiveResolution, "m", storeAssignmentPolicy, errMsg => errs += errMsg)
       ),
-      errorClass = "INCOMPATIBLE_DATA_TO_TABLE.CANNOT_SAFELY_CAST",
+      errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
       parameters = Map(
         "tableName" -> "``",
         "colPath" -> "`m`.`key`",
@@ -115,7 +115,7 @@ class StrictDataTypeWriteCompatibilitySuite extends DataTypeWriteCompatibilityBa
             analysis.caseSensitiveResolution, "nulls", storeAssignmentPolicy,
             errMsg => errs += errMsg)
         ),
-        errorClass = "INCOMPATIBLE_DATA_TO_TABLE.CANNOT_SAFELY_CAST",
+        errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
         parameters = Map(
           "tableName" -> "``",
           "colPath" -> "`nulls`",
@@ -142,7 +142,7 @@ class ANSIDataTypeWriteCompatibilitySuite extends DataTypeWriteCompatibilityBase
         DataType.canWrite("", mapOfString, mapOfInt, true,
           analysis.caseSensitiveResolution, "m", storeAssignmentPolicy, errMsg => errs += errMsg)
       ),
-      errorClass = "INCOMPATIBLE_DATA_TO_TABLE.CANNOT_SAFELY_CAST",
+      errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
       parameters = Map(
         "tableName" -> "``",
         "colPath" -> "`m`.`value`",
@@ -162,7 +162,7 @@ class ANSIDataTypeWriteCompatibilitySuite extends DataTypeWriteCompatibilityBase
         DataType.canWrite("", stringPoint2, point2, true,
           analysis.caseSensitiveResolution, "t", storeAssignmentPolicy, errMsg => errs += errMsg)
       ),
-      errorClass = "INCOMPATIBLE_DATA_TO_TABLE.CANNOT_SAFELY_CAST",
+      errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
       parameters = Map(
         "tableName" -> "``",
         "colPath" -> "`t`.`x`",
@@ -181,7 +181,7 @@ class ANSIDataTypeWriteCompatibilitySuite extends DataTypeWriteCompatibilityBase
         DataType.canWrite("", arrayOfString, arrayOfInt, true,
           analysis.caseSensitiveResolution, "arr", storeAssignmentPolicy, errMsg => errs += errMsg)
       ),
-      errorClass = "INCOMPATIBLE_DATA_TO_TABLE.CANNOT_SAFELY_CAST",
+      errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
       parameters = Map(
         "tableName" -> "``",
         "colPath" -> "`arr`.`element`",
@@ -200,7 +200,7 @@ class ANSIDataTypeWriteCompatibilitySuite extends DataTypeWriteCompatibilityBase
         DataType.canWrite("", mapKeyString, mapKeyInt, true,
           analysis.caseSensitiveResolution, "arr", storeAssignmentPolicy, errMsg => errs += errMsg)
       ),
-      errorClass = "INCOMPATIBLE_DATA_TO_TABLE.CANNOT_SAFELY_CAST",
+      errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
       parameters = Map(
         "tableName" -> "``",
         "colPath" -> "`arr`.`key`",
@@ -217,7 +217,7 @@ class ANSIDataTypeWriteCompatibilitySuite extends DataTypeWriteCompatibilityBase
           analysis.caseSensitiveResolution, "longToTimestamp", storeAssignmentPolicy,
           errMsg => errs += errMsg)
       ),
-      errorClass = "INCOMPATIBLE_DATA_TO_TABLE.CANNOT_SAFELY_CAST",
+      errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
       parameters = Map(
         "tableName" -> "``",
         "colPath" -> "`longToTimestamp`",
@@ -230,7 +230,7 @@ class ANSIDataTypeWriteCompatibilitySuite extends DataTypeWriteCompatibilityBase
           analysis.caseSensitiveResolution, "timestampToLong", storeAssignmentPolicy,
           errMsg => errs += errMsg)
       ),
-      errorClass = "INCOMPATIBLE_DATA_TO_TABLE.CANNOT_SAFELY_CAST",
+      errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
       parameters = Map(
         "tableName" -> "``",
         "colPath" -> "`timestampToLong`",
@@ -305,7 +305,7 @@ abstract class DataTypeWriteCompatibilityBaseSuite extends SparkFunSuite {
               DataType.canWrite("", w, r, true, analysis.caseSensitiveResolution, "t",
                 storeAssignmentPolicy, errMsg => errs += errMsg)
             ),
-            errorClass = "INCOMPATIBLE_DATA_TO_TABLE.CANNOT_SAFELY_CAST",
+            errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
             parameters = Map(
               "tableName" -> "``",
               "colPath" -> "`t`",
@@ -327,7 +327,7 @@ abstract class DataTypeWriteCompatibilityBaseSuite extends SparkFunSuite {
         DataType.canWrite("", missingRequiredField, point2, true,
           analysis.caseSensitiveResolution, "t", storeAssignmentPolicy, errMsg => errs += errMsg)
       ),
-      errorClass = "INCOMPATIBLE_DATA_TO_TABLE.STRUCT_MISSING_FIELDS",
+      errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.STRUCT_MISSING_FIELDS",
       parameters = Map("tableName" -> "``", "colPath" -> "`t`", "missingFields" -> "'y'")
     )
   }
@@ -340,7 +340,7 @@ abstract class DataTypeWriteCompatibilityBaseSuite extends SparkFunSuite {
         DataType.canWrite("", missingRequiredField, point2, true,
           analysis.caseSensitiveResolution, "t", storeAssignmentPolicy, errMsg => errs += errMsg)
       ),
-      errorClass = "INCOMPATIBLE_DATA_TO_TABLE.UNEXPECTED_COLUMN_NAME",
+      errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.UNEXPECTED_COLUMN_NAME",
       parameters = Map(
         "expected" -> "`x`",
         "found" -> "`y`",
@@ -368,7 +368,7 @@ abstract class DataTypeWriteCompatibilityBaseSuite extends SparkFunSuite {
         DataType.canWrite("", missingMiddleField, expectedStruct, true,
           analysis.caseSensitiveResolution, "t", storeAssignmentPolicy, errMsg => errs += errMsg)
       ),
-      errorClass = "INCOMPATIBLE_DATA_TO_TABLE.UNEXPECTED_COLUMN_NAME",
+      errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.UNEXPECTED_COLUMN_NAME",
       parameters = Map(
         "expected" -> "`y`",
         "found" -> "`z`",
@@ -405,7 +405,7 @@ abstract class DataTypeWriteCompatibilityBaseSuite extends SparkFunSuite {
         DataType.canWrite("", requiredFieldIsOptional, point2, true,
           analysis.caseSensitiveResolution, "t", storeAssignmentPolicy, errMsg => errs += errMsg)
       ),
-      errorClass = "INCOMPATIBLE_DATA_TO_TABLE.NULLABLE_COLUMN",
+      errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.NULLABLE_COLUMN",
       parameters = Map("tableName" -> "``", "colPath" -> "`t`.`x`")
     )
   }
@@ -417,7 +417,7 @@ abstract class DataTypeWriteCompatibilityBaseSuite extends SparkFunSuite {
         DataType.canWrite("", point3, point2, true,
           analysis.caseSensitiveResolution, "t", storeAssignmentPolicy, errMsg => errs += errMsg)
       ),
-      errorClass = "INCOMPATIBLE_DATA_TO_TABLE.EXTRA_STRUCT_FIELDS",
+      errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.EXTRA_STRUCT_FIELDS",
       parameters = Map("tableName" -> "``", "colPath" -> "`t`", "extraCols" -> "'z'")
     )
   }
@@ -458,7 +458,7 @@ abstract class DataTypeWriteCompatibilityBaseSuite extends SparkFunSuite {
         DataType.canWrite("", arrayOfOptional, arrayOfRequired, true,
           analysis.caseSensitiveResolution, "arr", storeAssignmentPolicy, errMsg => errs += errMsg)
       ),
-      errorClass = "INCOMPATIBLE_DATA_TO_TABLE.NULLABLE_ARRAY_ELEMENTS",
+      errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.NULLABLE_ARRAY_ELEMENTS",
       parameters = Map("tableName" -> "``", "colPath" -> "`arr`")
     )
   }
@@ -488,7 +488,7 @@ abstract class DataTypeWriteCompatibilityBaseSuite extends SparkFunSuite {
         DataType.canWrite("", mapOfOptional, mapOfRequired, true,
           analysis.caseSensitiveResolution, "m", storeAssignmentPolicy, errMsg => errs += errMsg)
       ),
-      errorClass = "INCOMPATIBLE_DATA_TO_TABLE.NULLABLE_MAP_VALUES",
+      errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.NULLABLE_MAP_VALUES",
       parameters = Map("tableName" -> "``", "colPath" -> "`m`")
     )
   }
@@ -540,7 +540,7 @@ abstract class DataTypeWriteCompatibilityBaseSuite extends SparkFunSuite {
         DataType.canWrite("", writeType, readType, true,
           analysis.caseSensitiveResolution, "t", storeAssignmentPolicy, errMsg => errs += errMsg)
       ),
-      errorClass = "INCOMPATIBLE_DATA_TO_TABLE.CANNOT_SAFELY_CAST",
+      errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
       parameters = Map(
         "tableName" -> "``",
         "colPath" -> "`t`.`a`.`element`",

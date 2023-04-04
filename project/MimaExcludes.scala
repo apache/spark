@@ -173,7 +173,7 @@ object MimaExcludes {
     ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.status.api.v1.sql.Node.this"),
     ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.status.api.v1.sql.Node.apply"),
 
-    // [SPARK-42309][SQL] Introduce INCOMPATIBLE_DATA_TO_TABLE and sub classes.
+    // [SPARK-42309][SQL] Introduce INCOMPATIBLE_DATA_FOR_TABLE and sub classes.
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.types.DataType.canWrite")
   )
 

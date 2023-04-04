@@ -1,7 +1,7 @@
 ---
 layout: global
-title: INCOMPATIBLE_DATA_TO_TABLE error class
-displayTitle: INCOMPATIBLE_DATA_TO_TABLE error class
+title: INCOMPATIBLE_DATA_FOR_TABLE error class
+displayTitle: INCOMPATIBLE_DATA_FOR_TABLE error class
 license: |
   Licensed to the Apache Software Foundation (ASF) under one or more
   contributor license agreements.  See the NOTICE file distributed with
@@ -21,7 +21,7 @@ license: |
 
 SQLSTATE: none assigned
 
-Cannot write incompatible data to table `<tableName>`:
+Cannot write incompatible data for table `<tableName>`:
 
 This error class has the following derived error classes:
 

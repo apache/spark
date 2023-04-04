@@ -385,7 +385,7 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
           exception = intercept[AnalysisException] {
             Seq((1L, 2.0)).toDF("i", "d").write.mode("append").saveAsTable("t")
           },
-          errorClass = "INCOMPATIBLE_DATA_TO_TABLE.CANNOT_SAFELY_CAST",
+          errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
           parameters = Map(
             "tableName" -> "`spark_catalog`.`default`.`t`",
             "colPath" -> "`i`",
@@ -413,7 +413,7 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
           exception = intercept[AnalysisException] {
             Seq(("a", "b")).toDF("i", "d").write.mode("append").saveAsTable("t")
           },
-          errorClass = "INCOMPATIBLE_DATA_TO_TABLE.CANNOT_SAFELY_CAST",
+          errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
           parameters = Map(
             "tableName" -> "`spark_catalog`.`default`.`t`",
             "colPath" -> "`i`",
@@ -425,7 +425,7 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
           exception = intercept[AnalysisException] {
             Seq((true, false)).toDF("i", "d").write.mode("append").saveAsTable("t")
           },
-          errorClass = "INCOMPATIBLE_DATA_TO_TABLE.CANNOT_SAFELY_CAST",
+          errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
           parameters = Map(
             "tableName" -> "`spark_catalog`.`default`.`t`",
             "colPath" -> "`i`",
