@@ -25,7 +25,6 @@ import java.util.OptionalLong
 import scala.collection.mutable
 
 import com.google.common.base.Objects
-import org.scalatest.Assertions._
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, JoinedRow, MetadataStructFieldWithLogicalName}
@@ -449,7 +448,9 @@ abstract class InMemoryBaseTable(
     protected var streamingWriter: StreamingWrite = StreamingAppend
 
     override def overwriteDynamicPartitions(): WriteBuilder = {
-      assert(writer == Append)
+      if (writer != Append) {
+        throw new IllegalArgumentException(s"Unsupported writer type: $writer")
+      }
       writer = DynamicOverwrite
       streamingWriter = new StreamingNotSupportedOperation("overwriteDynamicPartitions")
       this

@@ -634,6 +634,230 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
     }
   }
 
+  test("SPARK-42997: extra fields in nested struct (byName)") {
+    checkExtraFieldsInNestedStruct(byNameResolution = true)
+  }
+
+  test("SPARK-42997: extra fields in nested struct (byPosition)") {
+    checkExtraFieldsInNestedStruct(byNameResolution = false)
+  }
+
+  private def checkExtraFieldsInNestedStruct(byNameResolution: Boolean): Unit = {
+    val table = TestRelation(Seq(
+      $"a".int,
+      $"b".struct($"n1".int, $"n2".struct($"dn1".int, $"dn2".int))))
+    val query = TestRelation(Seq(
+      $"a".int,
+      $"b".struct($"n1".int, $"n2".struct($"dn1".int, $"dn2".int, $"dn3".int))))
+
+    val parsedPlan = if (byNameResolution) byName(table, query) else byPosition(table, query)
+
+    assertNotResolved(parsedPlan)
+    assertAnalysisError(parsedPlan, Seq(
+      "Cannot write incompatible data to table", "'table-name'",
+      "Cannot write extra fields to struct 'b.n2': 'dn3'"))
+  }
+
+  test("SPARK-42997: extra fields in struct inside array (byName)") {
+    checkExtraFieldsInStructInsideArray(byNameResolution = true)
+  }
+
+  test("SPARK-42997: extra fields in struct inside array (byPosition)") {
+    checkExtraFieldsInStructInsideArray(byNameResolution = false)
+  }
+
+  private def checkExtraFieldsInStructInsideArray(byNameResolution: Boolean): Unit = {
+    val table = TestRelation(Seq(
+      $"a".int,
+      $"arr".array(new StructType().add("x", "int").add("y", "int"))))
+    val query = TestRelation(Seq(
+      $"a".int,
+      $"arr".array(new StructType().add("x", "int").add("y", "int").add("z", "int"))))
+
+    val parsedPlan = if (byNameResolution) byName(table, query) else byPosition(table, query)
+
+    assertNotResolved(parsedPlan)
+    assertAnalysisError(parsedPlan, Seq(
+      "Cannot write incompatible data to table", "'table-name'",
+      "Cannot write extra fields to struct 'arr.element': 'z'"))
+  }
+
+  test("SPARK-42997: extra fields in struct inside map key (byName)") {
+    checkExtraFieldsInStructInsideMapKey(byNameResolution = true)
+  }
+
+  test("SPARK-42997: extra fields in struct inside map key (byPosition)") {
+    checkExtraFieldsInStructInsideMapKey(byNameResolution = false)
+  }
+
+  private def checkExtraFieldsInStructInsideMapKey(byNameResolution: Boolean): Unit = {
+    val table = TestRelation(Seq(
+      $"a".int,
+      Symbol("m").map(
+        new StructType().add("x", "int").add("y", "int"),
+        new StructType().add("x", "int").add("y", "int"))))
+    val query = TestRelation(Seq(
+      $"a".int,
+      Symbol("m").map(
+        new StructType().add("x", "int").add("y", "int").add("z", "int"),
+        new StructType().add("x", "int").add("y", "int"))))
+
+    val parsedPlan = if (byNameResolution) byName(table, query) else byPosition(table, query)
+
+    assertNotResolved(parsedPlan)
+    assertAnalysisError(parsedPlan, Seq(
+      "Cannot write incompatible data to table", "'table-name'",
+      "Cannot write extra fields to struct 'm.key': 'z'"))
+  }
+
+  test("SPARK-42997: extra fields in struct inside map value (byName)") {
+    checkExtraFieldsInStructInsideMapValue(byNameResolution = true)
+  }
+
+  test("SPARK-42997: extra fields in struct inside map value (byPosition)") {
+    checkExtraFieldsInStructInsideMapValue(byNameResolution = false)
+  }
+
+  private def checkExtraFieldsInStructInsideMapValue(byNameResolution: Boolean): Unit = {
+    val table = TestRelation(Seq(
+      $"a".int,
+      Symbol("m").map(
+        new StructType().add("x", "int").add("y", "int"),
+        new StructType().add("x", "int").add("y", "int"))))
+    val query = TestRelation(Seq(
+      $"a".int,
+      Symbol("m").map(
+        new StructType().add("x", "int").add("y", "int"),
+        new StructType().add("x", "int").add("y", "int").add("z", "int"))))
+
+    val parsedPlan = if (byNameResolution) byName(table, query) else byPosition(table, query)
+
+    assertNotResolved(parsedPlan)
+    assertAnalysisError(parsedPlan, Seq(
+      "Cannot write incompatible data to table", "'table-name'",
+      "Cannot write extra fields to struct 'm.value': 'z'"))
+  }
+
+  test("SPARK-42997: missing fields in nested struct (byName)") {
+    checkMissingFieldsInNestedStruct(byNameResolution = true)
+  }
+
+  test("SPARK-42997: missing fields in nested struct (byPosition)") {
+    checkMissingFieldsInNestedStruct(byNameResolution = false)
+  }
+
+  private def checkMissingFieldsInNestedStruct(byNameResolution: Boolean): Unit = {
+    val table = TestRelation(Seq(
+      $"a".int,
+      $"b".struct($"n1".int, $"n2".struct($"dn1".int, $"dn2".int, $"dn3".int))))
+    val query = TestRelation(Seq(
+      $"a".int,
+      $"b".struct($"n1".int, $"n2".struct($"dn1".int, $"dn2".int))))
+
+    val (parsedPlan, expectedErrMsg) = if (byNameResolution) {
+      byName(table, query) -> "Cannot find data for output column 'b.n2.dn3'"
+    } else {
+      byPosition(table, query) -> "Struct 'b.n2' missing fields: 'dn3'"
+    }
+
+    assertNotResolved(parsedPlan)
+    assertAnalysisError(parsedPlan, Seq(
+      "Cannot write incompatible data to table", "'table-name'",
+      expectedErrMsg))
+  }
+
+  test("SPARK-42997: missing fields in struct inside array (byName)") {
+    checkMissingFieldsInStructInsideArray(byNameResolution = true)
+  }
+
+  test("SPARK-42997: missing fields in struct inside array (byPosition)") {
+    checkMissingFieldsInStructInsideArray(byNameResolution = false)
+  }
+
+  private def checkMissingFieldsInStructInsideArray(byNameResolution: Boolean): Unit = {
+    val table = TestRelation(Seq(
+      $"a".int,
+      $"arr".array(new StructType().add("x", "int").add("y", "int"))))
+    val query = TestRelation(Seq(
+      $"a".int,
+      $"arr".array(new StructType().add("x", "int"))))
+
+    val (parsedPlan, expectedErrMsg) = if (byNameResolution) {
+      byName(table, query) -> "Cannot find data for output column 'arr.element.y'"
+    } else {
+      byPosition(table, query) -> "Struct 'arr.element' missing fields: 'y'"
+    }
+
+    assertNotResolved(parsedPlan)
+    assertAnalysisError(parsedPlan, Seq(
+      "Cannot write incompatible data to table", "'table-name'",
+      expectedErrMsg))
+  }
+
+  test("SPARK-42997: missing fields in struct inside map key (byName)") {
+    checkMissingFieldsInStructInsideMapKey(byNameResolution = true)
+  }
+
+  test("SPARK-42997: missing fields in struct inside map key (byPosition)") {
+    checkMissingFieldsInStructInsideMapKey(byNameResolution = false)
+  }
+
+  private def checkMissingFieldsInStructInsideMapKey(byNameResolution: Boolean): Unit = {
+    val table = TestRelation(Seq(
+      $"a".int,
+      Symbol("m").map(
+        new StructType().add("x", "int").add("y", "int"),
+        new StructType().add("x", "int").add("y", "int"))))
+    val query = TestRelation(Seq(
+      $"a".int,
+      Symbol("m").map(
+        new StructType().add("x", "int"),
+        new StructType().add("x", "int").add("y", "int"))))
+
+    val (parsedPlan, expectedErrMsg) = if (byNameResolution) {
+      byName(table, query) -> "Cannot find data for output column 'm.key.y'"
+    } else {
+      byPosition(table, query) -> "Struct 'm.key' missing fields: 'y'"
+    }
+
+    assertNotResolved(parsedPlan)
+    assertAnalysisError(parsedPlan, Seq(
+      "Cannot write incompatible data to table", "'table-name'",
+      expectedErrMsg))
+  }
+
+  test("SPARK-42997: missing fields in struct inside map value (byName)") {
+    checkMissingFieldsInStructInsideMapValue(byNameResolution = true)
+  }
+
+  test("SPARK-42997: missing fields in struct inside map value (byPosition)") {
+    checkMissingFieldsInStructInsideMapValue(byNameResolution = false)
+  }
+
+  private def checkMissingFieldsInStructInsideMapValue(byNameResolution: Boolean): Unit = {
+    val table = TestRelation(Seq(
+      $"a".int,
+      Symbol("m").map(
+        new StructType().add("x", "int").add("y", "int"),
+        new StructType().add("x", "int").add("y", "int"))))
+    val query = TestRelation(Seq(
+      $"a".int,
+      Symbol("m").map(
+        new StructType().add("x", "int").add("y", "int"),
+        new StructType().add("x", "int"))))
+
+    val (parsedPlan, expectedErrMsg) = if (byNameResolution) {
+      byName(table, query) -> "Cannot find data for output column 'm.value.y'"
+    } else {
+      byPosition(table, query) -> "Struct 'm.value' missing fields: 'y'"
+    }
+
+    assertNotResolved(parsedPlan)
+    assertAnalysisError(parsedPlan, Seq(
+      "Cannot write incompatible data to table", "'table-name'",
+      expectedErrMsg))
+  }
+
   def assertNotResolved(logicalPlan: LogicalPlan): Unit = {
     assert(!logicalPlan.resolved, s"Plan should not be resolved: $logicalPlan")
   }
