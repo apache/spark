@@ -727,9 +727,14 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
     val parsedPlan = if (byNameResolution) byName(table, query) else byPosition(table, query)
 
     assertNotResolved(parsedPlan)
-    assertAnalysisError(parsedPlan, Seq(
-      "Cannot write incompatible data to table", "'table-name'",
-      "Cannot write extra fields to struct 'b.n2': 'dn3'"))
+    assertAnalysisErrorClass(
+      parsedPlan,
+      expectedErrorClass = "INCOMPATIBLE_DATA_FOR_TABLE.EXTRA_STRUCT_FIELDS",
+      expectedMessageParameters = Map(
+        "tableName" -> "`table-name`",
+        "colPath" -> "`b`.`n2`",
+        "extraCols" -> "'dn3'")
+    )
   }
 
   test("SPARK-42997: extra fields in struct inside array (byName)") {
@@ -751,9 +756,14 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
     val parsedPlan = if (byNameResolution) byName(table, query) else byPosition(table, query)
 
     assertNotResolved(parsedPlan)
-    assertAnalysisError(parsedPlan, Seq(
-      "Cannot write incompatible data to table", "'table-name'",
-      "Cannot write extra fields to struct 'arr.element': 'z'"))
+    assertAnalysisErrorClass(
+      parsedPlan,
+      expectedErrorClass = "INCOMPATIBLE_DATA_FOR_TABLE.EXTRA_STRUCT_FIELDS",
+      expectedMessageParameters = Map(
+        "tableName" -> "`table-name`",
+        "colPath" -> "`arr`.`element`",
+        "extraCols" -> "'z'")
+    )
   }
 
   test("SPARK-42997: extra fields in struct inside map key (byName)") {
@@ -779,9 +789,14 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
     val parsedPlan = if (byNameResolution) byName(table, query) else byPosition(table, query)
 
     assertNotResolved(parsedPlan)
-    assertAnalysisError(parsedPlan, Seq(
-      "Cannot write incompatible data to table", "'table-name'",
-      "Cannot write extra fields to struct 'm.key': 'z'"))
+    assertAnalysisErrorClass(
+      parsedPlan,
+      expectedErrorClass = "INCOMPATIBLE_DATA_FOR_TABLE.EXTRA_STRUCT_FIELDS",
+      expectedMessageParameters = Map(
+        "tableName" -> "`table-name`",
+        "colPath" -> "`m`.`key`",
+        "extraCols" -> "'z'")
+    )
   }
 
   test("SPARK-42997: extra fields in struct inside map value (byName)") {
@@ -807,9 +822,14 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
     val parsedPlan = if (byNameResolution) byName(table, query) else byPosition(table, query)
 
     assertNotResolved(parsedPlan)
-    assertAnalysisError(parsedPlan, Seq(
-      "Cannot write incompatible data to table", "'table-name'",
-      "Cannot write extra fields to struct 'm.value': 'z'"))
+    assertAnalysisErrorClass(
+      parsedPlan,
+      expectedErrorClass = "INCOMPATIBLE_DATA_FOR_TABLE.EXTRA_STRUCT_FIELDS",
+      expectedMessageParameters = Map(
+        "tableName" -> "`table-name`",
+        "colPath" -> "`m`.`value`",
+        "extraCols" -> "'z'")
+    )
   }
 
   test("SPARK-42997: missing fields in nested struct (byName)") {
@@ -835,9 +855,24 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
     }
 
     assertNotResolved(parsedPlan)
-    assertAnalysisError(parsedPlan, Seq(
-      "Cannot write incompatible data to table", "'table-name'",
-      expectedErrMsg))
+    if (byNameResolution) {
+      assertAnalysisErrorClass(
+        parsedPlan,
+        expectedErrorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA",
+        expectedMessageParameters = Map(
+          "tableName" -> "`table-name`",
+          "colPath" -> "`b`.`n2`.`dn3`")
+      )
+    } else {
+      assertAnalysisErrorClass(
+        parsedPlan,
+        expectedErrorClass = "INCOMPATIBLE_DATA_FOR_TABLE.STRUCT_MISSING_FIELDS",
+        expectedMessageParameters = Map(
+          "tableName" -> "`table-name`",
+          "colPath" -> "`b`.`n2`",
+          "missingFields" -> "'dn3'")
+      )
+    }
   }
 
   test("SPARK-42997: missing fields in struct inside array (byName)") {
@@ -863,9 +898,24 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
     }
 
     assertNotResolved(parsedPlan)
-    assertAnalysisError(parsedPlan, Seq(
-      "Cannot write incompatible data to table", "'table-name'",
-      expectedErrMsg))
+    if (byNameResolution) {
+      assertAnalysisErrorClass(
+        parsedPlan,
+        expectedErrorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA",
+        expectedMessageParameters = Map(
+          "tableName" -> "`table-name`",
+          "colPath" -> "`arr`.`element`.`y`")
+      )
+    } else {
+      assertAnalysisErrorClass(
+        parsedPlan,
+        expectedErrorClass = "INCOMPATIBLE_DATA_FOR_TABLE.STRUCT_MISSING_FIELDS",
+        expectedMessageParameters = Map(
+          "tableName" -> "`table-name`",
+          "colPath" -> "`arr`.`element`",
+          "missingFields" -> "'y'")
+      )
+    }
   }
 
   test("SPARK-42997: missing fields in struct inside map key (byName)") {
@@ -895,9 +945,24 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
     }
 
     assertNotResolved(parsedPlan)
-    assertAnalysisError(parsedPlan, Seq(
-      "Cannot write incompatible data to table", "'table-name'",
-      expectedErrMsg))
+    if (byNameResolution) {
+      assertAnalysisErrorClass(
+        parsedPlan,
+        expectedErrorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA",
+        expectedMessageParameters = Map(
+          "tableName" -> "`table-name`",
+          "colPath" -> "`m`.`key`.`y`")
+      )
+    } else {
+      assertAnalysisErrorClass(
+        parsedPlan,
+        expectedErrorClass = "INCOMPATIBLE_DATA_FOR_TABLE.STRUCT_MISSING_FIELDS",
+        expectedMessageParameters = Map(
+          "tableName" -> "`table-name`",
+          "colPath" -> "`m`.`key`",
+          "missingFields" -> "'y'")
+      )
+    }
   }
 
   test("SPARK-42997: missing fields in struct inside map value (byName)") {
@@ -927,9 +992,24 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
     }
 
     assertNotResolved(parsedPlan)
-    assertAnalysisError(parsedPlan, Seq(
-      "Cannot write incompatible data to table", "'table-name'",
-      expectedErrMsg))
+    if (byNameResolution) {
+      assertAnalysisErrorClass(
+        parsedPlan,
+        expectedErrorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA",
+        expectedMessageParameters = Map(
+          "tableName" -> "`table-name`",
+          "colPath" -> "`m`.`value`.`y`")
+      )
+    } else {
+      assertAnalysisErrorClass(
+        parsedPlan,
+        expectedErrorClass = "INCOMPATIBLE_DATA_FOR_TABLE.STRUCT_MISSING_FIELDS",
+        expectedMessageParameters = Map(
+          "tableName" -> "`table-name`",
+          "colPath" -> "`m`.`value`",
+          "missingFields" -> "'y'")
+      )
+    }
   }
 
   def assertNotResolved(logicalPlan: LogicalPlan): Unit = {
