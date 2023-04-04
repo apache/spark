@@ -276,7 +276,7 @@ case class ResolveDefaultColumns(catalog: SessionCatalog) extends Rule[LogicalPl
       insertTableSchemaWithoutPartitionColumns: StructType,
       numUserSpecifiedColumns: Int): LogicalPlan = {
     val schema = insertTableSchemaWithoutPartitionColumns
-    val newDefaultExpressions: Seq[Expression] =
+    val newDefaultExpressions: Seq[UnresolvedAttribute] =
       getDefaultExpressionsForInsert(schema, numUserSpecifiedColumns)
     val newNames: Seq[String] = schema.fields.map(_.name)
     node match {
@@ -292,13 +292,24 @@ case class ResolveDefaultColumns(catalog: SessionCatalog) extends Rule[LogicalPl
           newNames,
           local.data.map { row =>
             val colTypes = StructType(local.output.map(col => StructField(col.name, col.dataType)))
-            val values: Seq[Any] = row.toSeq(colTypes)
-            val dataTypes: Seq[DataType] = colTypes.map(_.dataType)
-            val literals: Seq[Literal] = values.zip(dataTypes).map {
-              case (value, dataType) => Literal(value, dataType)
-            }
-            literals ++ newDefaultExpressions
+            row.toSeq(colTypes).map(Literal(_)) ++ newDefaultExpressions
           })
+        /*
+        val newDefaultExpressionsRow = new GenericInternalRow(
+          schema.fields.drop(local.output.size).map {
+            case f if f.metadata.contains(CURRENT_DEFAULT_COLUMN_METADATA_KEY) =>
+              analyze(f, "INSERT") match {
+                case lit: Literal => lit.value
+                case _ => null
+              }
+            case _ => null
+          })
+        LocalRelation(
+          output = schema.toAttributes,
+          data = local.data.map { row =>
+            new JoinedRow(row, newDefaultExpressionsRow)
+          })
+         */
       case _ => node
     }
   }
@@ -325,7 +336,7 @@ case class ResolveDefaultColumns(catalog: SessionCatalog) extends Rule[LogicalPl
    */
   private def getDefaultExpressionsForInsert(
       schema: StructType,
-      numUserSpecifiedColumns: Int): Seq[Expression] = {
+      numUserSpecifiedColumns: Int): Seq[UnresolvedAttribute] = {
     val remainingFields: Seq[StructField] = if (numUserSpecifiedColumns > 0) {
       schema.fields.drop(numUserSpecifiedColumns)
     } else {
