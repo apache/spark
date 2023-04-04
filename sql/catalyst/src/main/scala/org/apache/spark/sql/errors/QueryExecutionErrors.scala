@@ -369,7 +369,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
 
   def invalidUrlError(url: UTF8String, e: URISyntaxException): SparkIllegalArgumentException = {
     new SparkIllegalArgumentException(
-      errorClass = "INVALID_URL_STRING",
+      errorClass = "INVALID_URL",
       messageParameters = Map(
         "url" -> url.toString,
         "ansiConfig" -> toSQLConf(SQLConf.ANSI_ENABLED.key)),

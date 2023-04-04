@@ -1068,9 +1068,9 @@
     ],
     "sqlState" : "42604"
   },
-  "INVALID_URL_STRING" : {
+  "INVALID_URL" : {
     "message" : [
-      "Find an invalid url string <url>. If necessary set <ansiConfig> to false to bypass this error."
+      "The url is invalid: <url>. If necessary set <ansiConfig> to \"false\" to bypass this error."
     ]
   },
   "INVALID_WHERE_CONDITION" : {
