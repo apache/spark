@@ -215,16 +215,22 @@ private object PostgresDialect extends JdbcDialect with SQLConfHelper {
       case sqlException: SQLException =>
         sqlException.getSQLState match {
           // https://www.postgresql.org/docs/14/errcodes-appendix.html
-          case "42P07" if sqlException.getMessage != null =>
-            // The message is: Failed to create index indexName in tableName
+          case "42P07" =>
+            // Message patterns defined at caller sides of spark
             val indexRegex = "(?s)Failed to create index (.*) in (.*)".r
-            val tableRegex = """(?:.*)relation "(.*)" already exists""".r
-            sqlException.getMessage match {
+            val renameRegex = "(?s)Failed table renaming from (.*) to (.*)".r
+            // Message pattern defined by postgres specification
+            val pgRegex = """(?:.*)relation "(.*)" already exists""".r
+
+            message match {
               case indexRegex(index, table) =>
                 throw new IndexAlreadyExistsException(
                   indexName = index, tableName = table, cause = Some(e))
-              case tableRegex(table) =>
-                throw QueryCompilationErrors.tableAlreadyExistsError(table)
+              case renameRegex(_, newTable) =>
+                throw QueryCompilationErrors.tableAlreadyExistsError(newTable)
+              case _ if pgRegex.findFirstMatchIn(sqlException.getMessage).nonEmpty =>
+                val tableName = pgRegex.findFirstMatchIn(sqlException.getMessage).get.group(1)
+                throw QueryCompilationErrors.tableAlreadyExistsError(tableName)
               case _ => super.classifyException(message, e)
             }
           case "42704" =>
