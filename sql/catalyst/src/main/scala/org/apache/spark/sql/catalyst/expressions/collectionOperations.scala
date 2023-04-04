@@ -1459,9 +1459,8 @@ case class ArrayPrepend(left: Expression, right: Expression) extends RuntimeRepl
   override def prettyName: String = "array_prepend"
 
   override protected def withNewChildrenInternal(
-      newLeft: Expression, newRight: Expression): ArrayPrepend = {
+      newLeft: Expression, newRight: Expression): ArrayPrepend =
     copy(left = newLeft, right = newRight)
-  }
 }
 
 /**
