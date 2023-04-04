@@ -985,6 +985,115 @@ class DataFrameSetOperationsSuite extends QueryTest
     }
   }
 
+  test("SPARK-43025: Eliminate Union if filters have the same child plan") {
+    Seq(false, true).foreach { enabled =>
+      withSQLConf(SQLConf.COMBINE_UNIONED_SUBQUERYS_ENABLED.key -> enabled.toString) {
+        val union1 =
+          testData2.where($"a" > 2).union(
+            testData2.where($"a" < 2))
+        checkAnswer(union1, Seq(Row(1, 1), Row(1, 2), Row(3, 1), Row(3, 2)))
+
+        val union2 =
+          testData2.where($"a" > 2).select($"b").union(
+            testData2.where($"a" < 2).select($"b"))
+        checkAnswer(union2, Seq(Row(1), Row(1), Row(2), Row(2)))
+
+        val union3 =
+          testData2.where($"a" > 2).select($"b" + 1).union(
+            testData2.where($"a" < 2).select($"b" + 1))
+        checkAnswer(union3, Seq(Row(2), Row(2), Row(3), Row(3)))
+
+        val union4 =
+          testData2.where($"a" > 2).select(($"b" + 1).as("b1")).union(
+            testData2.where($"a" < 2).select(($"b" + 1).as("b1")))
+        checkAnswer(union4, Seq(Row(2), Row(2), Row(3), Row(3)))
+
+        val union5 =
+          testData2.select($"a").where($"a" > 2).union(
+            testData2.select($"a").where($"a" < 2))
+        checkAnswer(union5, Seq(Row(1), Row(1), Row(3), Row(3)))
+
+        val union6 =
+          testData2.select($"a", ($"b" + 1).as("b1")).where($"a" > 2).union(
+            testData2.select($"a", ($"b" + 1).as("b1")).where($"a" < 2))
+        checkAnswer(union6, Seq(Row(1, 2), Row(1, 3), Row(3, 2), Row(3, 3)))
+
+        val union7 =
+          testData2.where($"a" > 2).union(
+            testData2.where($"a" < 2)).union(testData2.where($"a" < 3))
+        checkAnswer(union7,
+          Seq(
+            Row(1, 1),
+            Row(1, 1),
+            Row(1, 2),
+            Row(1, 2),
+            Row(2, 1),
+            Row(2, 2),
+            Row(3, 1),
+            Row(3, 2)))
+
+        val union8 =
+          testData2.where($"a" > 2).union(
+            testData2.where($"a" < 2)).union(testData2.select($"a", $"b"))
+        checkAnswer(union8,
+          Seq(
+            Row(1, 1),
+            Row(1, 1),
+            Row(1, 2),
+            Row(1, 2),
+            Row(2, 1),
+            Row(2, 2),
+            Row(3, 1),
+            Row(3, 1),
+            Row(3, 2),
+            Row(3, 2)))
+
+        val union9 = Union(Seq(
+          testData2.where($"a" > 2).logicalPlan,
+          testData2.where($"a" < 2).logicalPlan,
+          testData2.where($"a" < 3).logicalPlan))
+        checkAnswer(union9,
+          Seq(
+            Row(1, 1),
+            Row(1, 1),
+            Row(1, 2),
+            Row(1, 2),
+            Row(2, 1),
+            Row(2, 2),
+            Row(3, 1),
+            Row(3, 2)))
+
+        val union10 = Union(Seq(
+          testData2.where($"a" < 3).logicalPlan,
+          testData2.where($"a" < 2).logicalPlan,
+          testData2.where($"a" > 4).logicalPlan))
+        checkAnswer(union10,
+          Seq(
+            Row(1, 1),
+            Row(1, 1),
+            Row(1, 2),
+            Row(1, 2),
+            Row(2, 1),
+            Row(2, 2)))
+
+        val union11 = Union(Seq(
+          testData2.where($"a" < 3).logicalPlan,
+          testData2.where($"a" < 2).logicalPlan,
+          testData2.where($"a" > 2).logicalPlan))
+        checkAnswer(union11,
+          Seq(
+            Row(1, 1),
+            Row(1, 1),
+            Row(1, 2),
+            Row(1, 2),
+            Row(2, 1),
+            Row(2, 2),
+            Row(3, 1),
+            Row(3, 2)))
+      }
+    }
+  }
+
   test("SPARK-34548: Remove unnecessary children from Union") {
     Seq(RemoveNoopUnion.ruleName, "").map { ruleName =>
       withSQLConf(SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> ruleName) {

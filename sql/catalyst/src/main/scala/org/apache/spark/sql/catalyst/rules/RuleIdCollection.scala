@@ -114,6 +114,7 @@ object RuleIdCollection {
       "org.apache.spark.sql.catalyst.optimizer.CombineFilters" ::
       "org.apache.spark.sql.catalyst.optimizer.CombineTypedFilters" ::
       "org.apache.spark.sql.catalyst.optimizer.CombineUnions" ::
+      "org.apache.spark.sql.catalyst.optimizer.CombineUnionedSubquery" ::
       "org.apache.spark.sql.catalyst.optimizer.ConstantFolding" ::
       "org.apache.spark.sql.catalyst.optimizer.ConstantPropagation" ::
       "org.apache.spark.sql.catalyst.optimizer.ConvertToLocalRelation" ::
