@@ -1523,27 +1523,27 @@ class DatasetSuite extends QueryTest
     val ds2 = Seq(("a", 1), ("a", 2), ("b", 1), ("a", 1)).toDS()
     // The dataset joined has two columns of the same name "_2".
     val joined = ds1.join(ds2, "_1").select(ds1("_2").as[Int], ds2("_2").as[Int])
-    verifyDropDuplicates(joined, Seq(), (1, 2), (1, 1), (2, 1), (2, 2))
+    verifyDropDuplicates(joined, Seq(), (1, 1), (1, 2), (2, 1), (2, 2))
   }
 
-  private def verifyDropDuplicates[T](
+  private def verifyDropDuplicates[T : Ordering](
       ds: Dataset[T],
       cols: Seq[String],
       expectedAnswer: T*): Unit = {
     if (cols.isEmpty) {
-      checkDataset(ds.dropDuplicates(), expectedAnswer: _*)
-      checkDataset(ds.dropDuplicatesWithinWatermark(), expectedAnswer: _*)
+      checkDatasetUnorderly(ds.dropDuplicates(), expectedAnswer: _*)
+      checkDatasetUnorderly(ds.dropDuplicatesWithinWatermark(), expectedAnswer: _*)
     } else {
-      checkDataset(ds.dropDuplicates(cols), expectedAnswer: _*)
-      checkDataset(ds.dropDuplicatesWithinWatermark(cols), expectedAnswer: _*)
+      checkDatasetUnorderly(ds.dropDuplicates(cols), expectedAnswer: _*)
+      checkDatasetUnorderly(ds.dropDuplicatesWithinWatermark(cols), expectedAnswer: _*)
 
       if (cols.length > 1) {
-        checkDataset(ds.dropDuplicates(cols.head, cols.tail: _*), expectedAnswer: _*)
-        checkDataset(ds.dropDuplicatesWithinWatermark(cols.head, cols.tail: _*),
+        checkDatasetUnorderly(ds.dropDuplicates(cols.head, cols.tail: _*), expectedAnswer: _*)
+        checkDatasetUnorderly(ds.dropDuplicatesWithinWatermark(cols.head, cols.tail: _*),
           expectedAnswer: _*)
       } else {
-        checkDataset(ds.dropDuplicates(cols.head), expectedAnswer: _*)
-        checkDataset(ds.dropDuplicatesWithinWatermark(cols.head), expectedAnswer: _*)
+        checkDatasetUnorderly(ds.dropDuplicates(cols.head), expectedAnswer: _*)
+        checkDatasetUnorderly(ds.dropDuplicatesWithinWatermark(cols.head), expectedAnswer: _*)
       }
     }
   }

@@ -1720,20 +1720,24 @@ class DataFrameSuite extends QueryTest
         df: DataFrame,
         cols: Seq[String],
         expectedAnswer: Row*): Unit = {
+      def verifyWithSorted(dfToVerify: DataFrame, expectedAnswer: Row*): Unit = {
+        checkDataset(dfToVerify.sort("key", "value1", "value2"), expectedAnswer: _*)
+      }
+
       if (cols.isEmpty) {
-        checkDataset(df.dropDuplicates(), expectedAnswer: _*)
-        checkDataset(df.dropDuplicatesWithinWatermark(), expectedAnswer: _*)
+        verifyWithSorted(df.dropDuplicates(), expectedAnswer: _*)
+        verifyWithSorted(df.dropDuplicatesWithinWatermark(), expectedAnswer: _*)
       } else {
-        checkDataset(df.dropDuplicates(cols), expectedAnswer: _*)
-        checkDataset(df.dropDuplicatesWithinWatermark(cols), expectedAnswer: _*)
+        verifyWithSorted(df.dropDuplicates(cols), expectedAnswer: _*)
+        verifyWithSorted(df.dropDuplicatesWithinWatermark(cols), expectedAnswer: _*)
 
         if (cols.length > 1) {
-          checkDataset(df.dropDuplicates(cols.head, cols.tail: _*), expectedAnswer: _*)
-          checkDataset(df.dropDuplicatesWithinWatermark(cols.head, cols.tail: _*),
+          verifyWithSorted(df.dropDuplicates(cols.head, cols.tail: _*), expectedAnswer: _*)
+          verifyWithSorted(df.dropDuplicatesWithinWatermark(cols.head, cols.tail: _*),
             expectedAnswer: _*)
         } else {
-          checkDataset(df.dropDuplicates(cols.head), expectedAnswer: _*)
-          checkDataset(df.dropDuplicatesWithinWatermark(cols.head), expectedAnswer: _*)
+          verifyWithSorted(df.dropDuplicates(cols.head), expectedAnswer: _*)
+          verifyWithSorted(df.dropDuplicatesWithinWatermark(cols.head), expectedAnswer: _*)
         }
       }
     }
@@ -1746,20 +1750,22 @@ class DataFrameSuite extends QueryTest
       (1, 2, 2) :: (1, 2, 1) :: Nil).toDF("key", "value1", "value2")
 
     verify(testData, Seq(),
-      Row(2, 1, 2), Row(1, 1, 1), Row(1, 2, 1),
-      Row(2, 2, 2), Row(2, 1, 1), Row(2, 2, 1),
-      Row(1, 1, 2), Row(1, 2, 2))
+      Row(1, 1, 1), Row(1, 1, 2),
+      Row(1, 2, 1), Row(1, 2, 2),
+      Row(2, 1, 1), Row(2, 1, 2),
+      Row(2, 2, 1), Row(2, 2, 2)
+    )
 
-    verify(testData, Seq("key", "value1"), Row(2, 1, 2), Row(1, 2, 1), Row(1, 1, 1), Row(2, 2, 2))
+    verify(testData, Seq("key", "value1"), Row(1, 1, 1), Row(1, 2, 1), Row(2, 1, 2), Row(2, 2, 2))
 
     verify(testData, Seq("value1", "value2"),
-      Row(2, 1, 2), Row(1, 2, 1), Row(1, 1, 1), Row(2, 2, 2))
+      Row(1, 1, 1), Row(1, 2, 1), Row(2, 1, 2), Row(2, 2, 2))
 
-    verify(testData, Seq("key"), Row(2, 1, 2), Row(1, 1, 1))
+    verify(testData, Seq("key"), Row(1, 1, 1), Row(2, 1, 2))
 
-    verify(testData, Seq("value1"), Row(2, 1, 2), Row(1, 2, 1))
+    verify(testData, Seq("value1"), Row(1, 2, 1), Row(2, 1, 2))
 
-    verify(testData, Seq("value2"), Row(2, 1, 2), Row(1, 1, 1))
+    verify(testData, Seq("value2"), Row(1, 1, 1), Row(2, 1, 2))
   }
 
   test("SPARK-8621: support empty string column name") {
