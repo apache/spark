@@ -130,9 +130,7 @@ class StreamingQuery:
 
     exception.__doc__ = PySparkStreamingQuery.exception.__doc__
 
-    def _fetch_status(
-        self, recent_progress_limit=0
-    ) -> pb2.StreamingQueryCommandResult.StatusResult:
+    def _fetch_status(self) -> pb2.StreamingQueryCommandResult.StatusResult:
         cmd = pb2.StreamingQueryCommand()
         cmd.status = True
         return self._execute_streaming_query_cmd(cmd).status
