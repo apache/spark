@@ -21,10 +21,8 @@ import java.nio.charset.StandardCharsets
 import java.time.{Duration, Instant, LocalDate, LocalDateTime, Period, ZoneOffset}
 import java.time.temporal.ChronoUnit
 import java.util.TimeZone
-
 import scala.reflect.runtime.universe.TypeTag
-
-import org.apache.spark.{SparkFunSuite, SparkRuntimeException}
+import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, ScalaReflection}
 import org.apache.spark.sql.catalyst.encoders.ExamplePointUDT
@@ -92,11 +90,11 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     // DateType without default value`
     List(CharType(1), VarcharType(1)).foreach(errType => {
       checkError(
-        exception = intercept[SparkRuntimeException] {
+        exception = intercept[SparkException] {
           Literal.default(errType)
         },
-        errorClass = "NO_DEFAULT_FOR_DATA_TYPE",
-        parameters = Map("dataType" -> errType.toString)
+        errorClass = "INTERNAL_ERROR",
+        parameters = Map("message" -> s"[NO_DEFAULT_FOR_DATA_TYPE] No default value for type: ${errType.toString}.")
       )
     })
   }
