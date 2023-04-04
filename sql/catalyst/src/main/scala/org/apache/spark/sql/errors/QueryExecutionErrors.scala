@@ -439,13 +439,13 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
         s"failed to match ${toSQLId(funcName)} at `addNewFunction`.")
   }
 
-  def lambdaVariableAlreadyDefinedError(name: String): Throwable = {
-    new IllegalArgumentException(s"Lambda variable $name cannot be redefined")
+  def lambdaVariableAlreadyDefinedError(id: Long): Throwable = {
+    new IllegalArgumentException(s"Lambda variable $id cannot be redefined")
   }
 
-  def lambdaVariableNotDefinedError(name: String): Throwable = {
+  def lambdaVariableNotDefinedError(id: Long): Throwable = {
     new IllegalArgumentException(
-      s"Lambda variable $name is not defined in the current codegen scope")
+      s"Lambda variable $id is not defined in the current codegen scope")
   }
 
   def cannotGenerateCodeForIncomparableTypeError(
