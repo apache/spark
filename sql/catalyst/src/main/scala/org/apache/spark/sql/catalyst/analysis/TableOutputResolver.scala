@@ -179,8 +179,9 @@ object TableOutputResolver {
       addError(s"Cannot write nullable elements to array of non-nulls: '${colPath.quoted}'")
       None
     } else {
-      val param = NamedLambdaVariable("x", inputType.elementType, inputType.containsNull)
-      val fakeAttr = AttributeReference("x", expectedType.elementType, expectedType.containsNull)()
+      val param = NamedLambdaVariable("element", inputType.elementType, inputType.containsNull)
+      val fakeAttr =
+        AttributeReference("element", expectedType.elementType, expectedType.containsNull)()
       val res = reorderColumnsByName(Seq(param), Seq(fakeAttr), conf, addError, colPath)
       if (res.length == 1) {
         val func = LambdaFunction(res.head, Seq(param))
@@ -203,16 +204,17 @@ object TableOutputResolver {
       addError(s"Cannot write nullable values to map of non-nulls: '${colPath.quoted}'")
       None
     } else {
-      val keyParam = NamedLambdaVariable("k", inputType.keyType, nullable = false)
-      val fakeKeyAttr = AttributeReference("k", expectedType.keyType, nullable = false)()
+      val keyParam = NamedLambdaVariable("key", inputType.keyType, nullable = false)
+      val fakeKeyAttr = AttributeReference("key", expectedType.keyType, nullable = false)()
       val resKey = reorderColumnsByName(
-        Seq(keyParam), Seq(fakeKeyAttr), conf, addError, colPath :+ "key")
+        Seq(keyParam), Seq(fakeKeyAttr), conf, addError, colPath)
 
-      val valueParam = NamedLambdaVariable("v", inputType.valueType, inputType.valueContainsNull)
+      val valueParam =
+        NamedLambdaVariable("value", inputType.valueType, inputType.valueContainsNull)
       val fakeValueAttr =
-        AttributeReference("v", expectedType.valueType, expectedType.valueContainsNull)()
+        AttributeReference("value", expectedType.valueType, expectedType.valueContainsNull)()
       val resValue = reorderColumnsByName(
-        Seq(valueParam), Seq(fakeValueAttr), conf, addError, colPath :+ "value")
+        Seq(valueParam), Seq(fakeValueAttr), conf, addError, colPath)
 
       if (resKey.length == 1 && resValue.length == 1) {
         val keyFunc = LambdaFunction(resKey.head, Seq(keyParam))

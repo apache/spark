@@ -719,12 +719,10 @@ class QueryExecutionErrorsSuite
         JdbcDialects.unregisterDialect(existedH2Dialect)
         JdbcDialects.registerDialect(testH2DialectUnsupportedJdbcTransaction)
 
-        val e = intercept[AnalysisException] {
-          sql("alter TABLE h2.test.people SET TBLPROPERTIES (xx='xx', yy='yy')")
-        }
-
         checkError(
-          exception = e.getCause.asInstanceOf[SparkSQLFeatureNotSupportedException],
+          exception = intercept[SparkSQLFeatureNotSupportedException] {
+            sql("alter TABLE h2.test.people SET TBLPROPERTIES (xx='xx', yy='yy')")
+          },
           errorClass = "UNSUPPORTED_FEATURE.MULTI_ACTION_ALTER",
           parameters = Map("tableName" -> "\"test\".\"people\""))
 

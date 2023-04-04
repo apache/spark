@@ -16,8 +16,8 @@
  */
 package org.apache.spark.sql.execution.datasources.v2.jdbc
 
-import org.apache.spark.{SparkConf, SparkThrowable}
-import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
+import org.apache.spark.{SparkConf, SparkUnsupportedOperationException}
+import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.MetadataBuilder
 import org.apache.spark.util.Utils
@@ -43,8 +43,8 @@ class DerbyTableCatalogSuite extends QueryTest with SharedSparkSession {
     withTable(n1t1, n1t2) {
       sql(s"CREATE TABLE $n1t1(c1 int)")
       checkError(
-        exception = intercept[AnalysisException](
-          sql(s"ALTER TABLE $n1t1 RENAME TO $n2t2")).getCause.asInstanceOf[SparkThrowable],
+        exception = intercept[SparkUnsupportedOperationException](
+          sql(s"ALTER TABLE $n1t1 RENAME TO $n2t2")),
         errorClass = "CANNOT_RENAME_ACROSS_SCHEMA",
         parameters = Map("type" -> "table"))
       sql(s"ALTER TABLE $n1t1 RENAME TO $n1t2")

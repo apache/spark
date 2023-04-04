@@ -159,9 +159,9 @@ You can access them by doing
 |**StringType**|String|StringType|
 |**BinaryType**|Array[Byte]|BinaryType|
 |**BooleanType**|Boolean|BooleanType|
-|**TimestampType**|java.sql.Timestamp|TimestampType|
+|**TimestampType**|java.time.Instant or java.sql.Timestamp|TimestampType|
 |**TimestampNTZType**|java.time.LocalDateTime|TimestampNTZType|
-|**DateType**|java.sql.Date|DateType|
+|**DateType**|java.time.LocalDate or java.sql.Date|DateType|
 |**YearMonthIntervalType**|java.time.Period|YearMonthIntervalType|
 |**DayTimeIntervalType**|java.time.Duration|DayTimeIntervalType|
 |**ArrayType**|scala.collection.Seq|ArrayType(*elementType*, [*containsNull]*)<br/>**Note:** The default value of *containsNull* is true.|
@@ -190,9 +190,9 @@ please use factory methods provided in
 |**StringType**|String|DataTypes.StringType|
 |**BinaryType**|byte[]|DataTypes.BinaryType|
 |**BooleanType**|boolean or Boolean|DataTypes.BooleanType|
-|**TimestampType**|java.sql.Timestamp|DataTypes.TimestampType|
+|**TimestampType**|java.time.Instant or java.sql.Timestamp|DataTypes.TimestampType|
 |**TimestampNTZType**|java.time.LocalDateTime|DataTypes.TimestampNTZType|
-|**DateType**|java.sql.Date|DataTypes.DateType|
+|**DateType**|java.time.LocalDate or java.sql.Date|DataTypes.DateType|
 |**YearMonthIntervalType**|java.time.Period|DataTypes.YearMonthIntervalType|
 |**DayTimeIntervalType**|java.time.Duration|DataTypes.DayTimeIntervalType|
 |**ArrayType**|java.util.List|DataTypes.createArrayType(*elementType*)<br/>**Note:** The value of *containsNull* will be true.<br/>DataTypes.createArrayType(*elementType*, *containsNull*).|

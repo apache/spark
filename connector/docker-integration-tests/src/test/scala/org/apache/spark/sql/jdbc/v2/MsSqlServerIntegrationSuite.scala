@@ -17,11 +17,11 @@
 
 package org.apache.spark.sql.jdbc.v2
 
-import java.sql.{Connection, SQLFeatureNotSupportedException}
+import java.sql.Connection
 
 import org.scalatest.time.SpanSugar._
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{SparkConf, SparkSQLFeatureNotSupportedException}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
 import org.apache.spark.sql.jdbc.DatabaseOnDocker
@@ -110,10 +110,10 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JD
   override def testUpdateColumnNullability(tbl: String): Unit = {
     sql(s"CREATE TABLE $tbl (ID STRING NOT NULL)")
     // Update nullability is unsupported for mssql db.
-    val msg = intercept[AnalysisException] {
-      sql(s"ALTER TABLE $tbl ALTER COLUMN ID DROP NOT NULL")
-    }.getCause.asInstanceOf[SQLFeatureNotSupportedException].getMessage
-
-    assert(msg.contains("UpdateColumnNullability is not supported"))
+    checkError(
+      exception = intercept[SparkSQLFeatureNotSupportedException] {
+        sql(s"ALTER TABLE $tbl ALTER COLUMN ID DROP NOT NULL")
+      },
+      errorClass = "_LEGACY_ERROR_TEMP_2271")
   }
 }

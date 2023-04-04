@@ -220,41 +220,109 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper {
     }
   }
 
-  test("writeTo with create and using") {
-    // TODO (SPARK-42519): Add more test after we can set configs. See more WriteTo test cases
-    //  in SparkConnectProtoSuite.
-    //  e.g. spark.conf.set("spark.sql.catalog.testcat", classOf[InMemoryTableCatalog].getName)
-    withTable("myTableV2") {
-      spark.range(3).writeTo("myTableV2").using("parquet").create()
-      val result = spark.sql("select * from myTableV2").sort("id").collect()
-      assert(result.length == 3)
-      assert(result(0).getLong(0) == 0)
-      assert(result(1).getLong(0) == 1)
-      assert(result(2).getLong(0) == 2)
-    }
-  }
-
-  // TODO (SPARK-42519): Revisit this test after we can set configs.
-  //  e.g. spark.conf.set("spark.sql.catalog.testcat", classOf[InMemoryTableCatalog].getName)
-  test("writeTo with create and append") {
-    withTable("myTableV2") {
-      spark.range(3).writeTo("myTableV2").using("parquet").create()
-      withTable("myTableV2") {
-        assertThrows[StatusRuntimeException] {
-          // Failed to append as Cannot write into v1 table: `spark_catalog`.`default`.`mytablev2`.
-          spark.range(3).writeTo("myTableV2").append()
-        }
-      }
-    }
-  }
-
-  // TODO (SPARK-42519): Revisit this test after we can set configs.
-  //  e.g. spark.conf.set("spark.sql.catalog.testcat", classOf[InMemoryTableCatalog].getName)
   test("writeTo with create") {
-    assume(IntegrationTestUtils.isSparkHiveJarAvailable)
-    withTable("myTableV2") {
-      // Failed to create as Hive support is required.
-      spark.range(3).writeTo("myTableV2").create()
+    withTable("testcat.myTableV2") {
+
+      val rows = Seq(Row(1L, "a"), Row(2L, "b"), Row(3L, "c"))
+
+      val schema = StructType(Array(StructField("id", LongType), StructField("data", StringType)))
+
+      spark.createDataFrame(rows.asJava, schema).writeTo("testcat.myTableV2").create()
+
+      val outputRows = spark.table("testcat.myTableV2").collect()
+      assert(outputRows.length == 3)
+    }
+  }
+
+  test("writeTo with create and using") {
+    withTable("testcat.myTableV2") {
+      val rows = Seq(Row(1L, "a"), Row(2L, "b"), Row(3L, "c"))
+
+      val schema = StructType(Array(StructField("id", LongType), StructField("data", StringType)))
+
+      spark.createDataFrame(rows.asJava, schema).writeTo("testcat.myTableV2").create()
+      val outputRows = spark.table("testcat.myTableV2").collect()
+      assert(outputRows.length == 3)
+
+      val columns = spark.table("testcat.myTableV2").columns
+      assert(columns.length == 2)
+
+      val sqlOutputRows = spark.sql("select * from testcat.myTableV2").collect()
+      assert(outputRows.length == 3)
+      assert(sqlOutputRows(0).schema == schema)
+      assert(sqlOutputRows(1).getString(1) == "b")
+    }
+  }
+
+  test("writeTo with create and append") {
+    withTable("testcat.myTableV2") {
+
+      val rows = Seq(Row(1L, "a"), Row(2L, "b"), Row(3L, "c"))
+
+      val schema = StructType(Array(StructField("id", LongType), StructField("data", StringType)))
+
+      spark.sql("CREATE TABLE testcat.myTableV2 (id bigint, data string) USING foo")
+
+      assert(spark.table("testcat.myTableV2").collect().isEmpty)
+
+      spark.createDataFrame(rows.asJava, schema).writeTo("testcat.myTableV2").append()
+      val outputRows = spark.table("testcat.myTableV2").collect()
+      assert(outputRows.length == 3)
+    }
+  }
+
+  test("WriteTo with overwrite") {
+    withTable("testcat.myTableV2") {
+
+      val rows1 = (1L to 3L).map { i =>
+        Row(i, "" + (i - 1 + 'a'))
+      }
+      val rows2 = (4L to 7L).map { i =>
+        Row(i, "" + (i - 1 + 'a'))
+      }
+
+      val schema = StructType(Array(StructField("id", LongType), StructField("data", StringType)))
+
+      spark.sql(
+        "CREATE TABLE testcat.myTableV2 (id bigint, data string) USING foo PARTITIONED BY (id)")
+
+      assert(spark.table("testcat.myTableV2").collect().isEmpty)
+
+      spark.createDataFrame(rows1.asJava, schema).writeTo("testcat.myTableV2").append()
+      val outputRows = spark.table("testcat.myTableV2").collect()
+      assert(outputRows.length == 3)
+
+      spark
+        .createDataFrame(rows2.asJava, schema)
+        .writeTo("testcat.myTableV2")
+        .overwrite(functions.expr("true"))
+      val outputRows2 = spark.table("testcat.myTableV2").collect()
+      assert(outputRows2.length == 4)
+
+    }
+  }
+
+  test("WriteTo with overwritePartitions") {
+    withTable("testcat.myTableV2") {
+
+      val rows = (4L to 7L).map { i =>
+        Row(i, "" + (i - 1 + 'a'))
+      }
+
+      val schema = StructType(Array(StructField("id", LongType), StructField("data", StringType)))
+
+      spark.sql(
+        "CREATE TABLE testcat.myTableV2 (id bigint, data string) USING foo PARTITIONED BY (id)")
+
+      assert(spark.table("testcat.myTableV2").collect().isEmpty)
+
+      spark
+        .createDataFrame(rows.asJava, schema)
+        .writeTo("testcat.myTableV2")
+        .overwritePartitions()
+      val outputRows = spark.table("testcat.myTableV2").collect()
+      assert(outputRows.length == 4)
+
     }
   }
 
@@ -605,10 +673,6 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper {
     }
   }
 
-  test("version") {
-    assert(spark.version == SPARK_VERSION)
-  }
-
   test("time") {
     val timeFragments = Seq("Time taken: ", " ms")
     testCapturedStdOut(spark.time(spark.sql("select 1").collect()), timeFragments: _*)
@@ -634,7 +698,8 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper {
   }
 
   test("SparkVersion") {
-    assert(!spark.version.isEmpty)
+    assert(spark.version.nonEmpty)
+    assert(spark.version == SPARK_VERSION)
   }
 
   private def checkSameResult[E](expected: scala.collection.Seq[E], dataset: Dataset[E]): Unit = {
