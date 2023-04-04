@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReferences
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateOrdering
-import org.apache.spark.sql.catalyst.types.PhysicalAtomicType
+import org.apache.spark.sql.catalyst.types.OrderedPhysicalDataType
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types._
 
@@ -59,9 +59,9 @@ class InterpretedOrdering(ordering: Seq[SortOrder]) extends BaseOrdering {
       } else {
         val comparison = order.dataType match {
           case dt: AtomicType if order.direction == Ascending =>
-            PhysicalAtomicType(dt).ordering.asInstanceOf[Ordering[Any]].compare(left, right)
+            OrderedPhysicalDataType(dt).ordering.asInstanceOf[Ordering[Any]].compare(left, right)
           case dt: AtomicType if order.direction == Descending =>
-            PhysicalAtomicType(dt).ordering.asInstanceOf[Ordering[Any]].compare(left, right)
+            OrderedPhysicalDataType(dt).ordering.asInstanceOf[Ordering[Any]].compare(left, right)
           case a: ArrayType if order.direction == Ascending =>
             a.interpretedOrdering.asInstanceOf[Ordering[Any]].compare(left, right)
           case a: ArrayType if order.direction == Descending =>

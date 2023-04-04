@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.trees.{BinaryLike, SQLQueryContext, UnaryLike}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{ARRAYS_ZIP, CONCAT, TreePattern}
-import org.apache.spark.sql.catalyst.types.{DataTypeUtils, PhysicalAtomicType, PhysicalIntegralType}
+import org.apache.spark.sql.catalyst.types.{DataTypeUtils, OrderedPhysicalDataType, PhysicalIntegralType}
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
@@ -900,7 +900,7 @@ trait ArraySortLike extends ExpectsInputTypes {
   @transient private lazy val lt: Comparator[Any] = {
     val ordering = arrayExpression.dataType match {
       case _ @ ArrayType(n: AtomicType, _) =>
-        PhysicalAtomicType(n).ordering.asInstanceOf[Ordering[Any]]
+        OrderedPhysicalDataType(n).ordering.asInstanceOf[Ordering[Any]]
       case _ @ ArrayType(a: ArrayType, _) => a.interpretedOrdering.asInstanceOf[Ordering[Any]]
       case _ @ ArrayType(s: StructType, _) => s.interpretedOrdering.asInstanceOf[Ordering[Any]]
     }
@@ -921,7 +921,7 @@ trait ArraySortLike extends ExpectsInputTypes {
   @transient private lazy val gt: Comparator[Any] = {
     val ordering = arrayExpression.dataType match {
       case _ @ ArrayType(n: AtomicType, _) =>
-        PhysicalAtomicType(n).ordering.asInstanceOf[Ordering[Any]]
+        OrderedPhysicalDataType(n).ordering.asInstanceOf[Ordering[Any]]
       case _ @ ArrayType(a: ArrayType, _) => a.interpretedOrdering.asInstanceOf[Ordering[Any]]
       case _ @ ArrayType(s: StructType, _) => s.interpretedOrdering.asInstanceOf[Ordering[Any]]
     }

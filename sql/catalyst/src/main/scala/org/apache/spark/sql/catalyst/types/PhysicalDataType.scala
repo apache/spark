@@ -23,7 +23,7 @@ import scala.util.control.NonFatal
 
 import org.apache.spark.sql.catalyst.util.SQLOrderingUtil
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.types.{AtomicType, BinaryType, BooleanType, ByteType, DataType, DateType, DayTimeIntervalType, Decimal, DecimalType, DoubleType, FloatType, IntegerType, LongType, NullType, NumericType, ShortType, StringType, StructField, TimestampNTZType, TimestampType, YearMonthIntervalType}
+import org.apache.spark.sql.types.{BinaryType, BooleanType, ByteType, DataType, DateType, DayTimeIntervalType, Decimal, DecimalType, DoubleType, FloatType, IntegerType, LongType, NullType, NumericType, ShortType, StringType, StructField, TimestampNTZType, TimestampType, YearMonthIntervalType}
 import org.apache.spark.unsafe.types.{ByteArray, UTF8String}
 
 sealed abstract class PhysicalDataType
@@ -74,16 +74,6 @@ object OrderedPhysicalDataType {
 
 sealed abstract class PhysicalAtomicType extends OrderedPhysicalDataType {
   private[sql] val tag: TypeTag[InternalType]
-}
-
-object PhysicalAtomicType extends PhysicalAtomicType {
-  def apply(dt: AtomicType): PhysicalAtomicType = {
-    PhysicalDataType(dt).asInstanceOf[PhysicalAtomicType]
-  }
-
-  override private[sql] val tag = null
-  override private[sql] def ordering = null
-  override private[sql] type InternalType = Null
 }
 
 sealed abstract class PhysicalNumericType extends PhysicalAtomicType {

@@ -20,7 +20,7 @@ package org.apache.spark.sql.types
 import org.json4s.JsonDSL._
 
 import org.apache.spark.annotation.Stable
-import org.apache.spark.sql.catalyst.types.{PhysicalArrayType, PhysicalAtomicType, PhysicalDataType}
+import org.apache.spark.sql.catalyst.types.{OrderedPhysicalDataType, PhysicalArrayType, PhysicalDataType}
 import org.apache.spark.sql.catalyst.util.ArrayData
 import org.apache.spark.sql.catalyst.util.StringUtils.StringConcat
 
@@ -108,7 +108,7 @@ case class ArrayType(elementType: DataType, containsNull: Boolean) extends DataT
   @transient
   private[sql] lazy val interpretedOrdering: Ordering[ArrayData] = new Ordering[ArrayData] {
     private[this] val elementOrdering: Ordering[Any] = elementType match {
-      case dt: AtomicType => PhysicalAtomicType(dt).ordering.asInstanceOf[Ordering[Any]]
+      case dt: AtomicType => OrderedPhysicalDataType(dt).ordering.asInstanceOf[Ordering[Any]]
       case a : ArrayType => a.interpretedOrdering.asInstanceOf[Ordering[Any]]
       case s: StructType => s.interpretedOrdering.asInstanceOf[Ordering[Any]]
       case other =>
