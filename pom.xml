@@ -3583,6 +3583,16 @@
     </profile>
 
     <profile>
+      <id>jdk11</id>
+      <activation>
+        <jdk>11</jdk>
+      </activation>
+      <properties>
+        <java.version>11</java.version>
+      </properties>
+    </profile>
+    
+    <profile>
       <id>scala-2.12</id>
       <properties>
         <!--
