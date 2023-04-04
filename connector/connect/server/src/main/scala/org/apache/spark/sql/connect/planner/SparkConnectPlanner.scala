@@ -847,8 +847,6 @@ class SparkConnectPlanner(val session: SparkSession) {
           reader.schema(parseSchema(streamSource.getSchema))
         }
         val streamDF = streamSource.getPathsCount match {
-          case 0 if streamSource.getStreamingTableName.nonEmpty =>
-            reader.table(streamSource.getStreamingTableName)
           case 0 => reader.load()
           case 1 => reader.load(streamSource.getPaths(0))
           case _ =>
@@ -2126,6 +2124,8 @@ class SparkConnectPlanner(val session: SparkSession) {
         query.stop()
 
       case StreamingQueryCommand.CommandTypeCase.PROCESS_ALL_AVAILABLE =>
+        // This might a long time, and we might have to stream periodic messages to keep RPC alive.
+        // TODO(SPARK-42962): Improve this as part of session management.
         query.processAllAvailable()
 
       case StreamingQueryCommand.CommandTypeCase.EXPLAIN =>

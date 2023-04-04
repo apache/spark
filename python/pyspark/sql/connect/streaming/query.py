@@ -83,7 +83,8 @@ class StreamingQuery:
 
     @property
     def recentProgress(self) -> List[Dict[str, Any]]:
-        progress = list(self._fetch_status(recent_progress_limit=-1).recent_progress_json)
+        progress = list(self._fetch_status(recent_progress_limit=10000).recent_progress_json)
+        # Server only keeps 100, so 10000 limit is high enough.
         return [json.loads(p) for p in progress]
 
     recentProgress.__doc__ = PySparkStreamingQuery.recentProgress.__doc__
@@ -118,12 +119,12 @@ class StreamingQuery:
         result = self._execute_streaming_query_cmd(cmd).explain.result
         print(result)
 
-    processAllAvailable.__doc__ = PySparkStreamingQuery.processAllAvailable.__doc__
+    explain.__doc__ = PySparkStreamingQuery.explain.__doc__
 
     def exception(self) -> Optional[StreamingQueryException]:
         raise NotImplementedError()
 
-    processAllAvailable.__doc__ = PySparkStreamingQuery.processAllAvailable.__doc__
+    exception.__doc__ = PySparkStreamingQuery.exception.__doc__
 
     def _fetch_status(self, recent_progress_limit=0) -> pb2.StreamingQueryCommandResult.StatusResult:
         cmd = pb2.StreamingQueryCommand()
