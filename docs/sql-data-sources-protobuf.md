@@ -282,6 +282,10 @@ In addition to the these types, `spark-protobuf` also introduces support for Pro
     <td>OneOf</td>
     <td>Struct</td>
   </tr>
+  <tr>
+    <td>Any</td>
+    <td>StructType</td>
+  </tr>
 </table>
 
 It also supports reading the following Protobuf types [Timestamp](https://developers.google.com/protocol-buffers/docs/reference/google.protobuf#timestamp) and [Duration](https://developers.google.com/protocol-buffers/docs/reference/google.protobuf#duration)
