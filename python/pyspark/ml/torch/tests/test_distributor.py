@@ -117,7 +117,7 @@ def create_training_function(mnist_dir_path: str) -> Callable:
                 optimizer.step()
             print(f"epoch {epoch} finished.")
 
-        return "success" * (1 << 20)
+        return "success" * 4096
 
     return train_fn
 
@@ -374,7 +374,7 @@ class TorchDistributorLocalUnitTestsMixin:
         output = TorchDistributor(num_processes=2, local_mode=True, use_gpu=False).run(
             train_fn, 0.001
         )
-        self.assertEqual(output, "success" * (1 << 20))
+        self.assertEqual(output, "success" * 4096)
 
 
 @unittest.skipIf(not have_torch, "torch is required")
@@ -457,7 +457,7 @@ class TorchDistributorDistributedUnitTestsMixin:
         output = TorchDistributor(num_processes=2, local_mode=False, use_gpu=False).run(
             train_fn, 0.001
         )
-        self.assertEqual(output, "success" * (1 << 20))
+        self.assertEqual(output, "success" * 4096)
 
 
 @unittest.skipIf(not have_torch, "torch is required")
