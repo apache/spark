@@ -61,7 +61,7 @@ class InterpretedOrdering(ordering: Seq[SortOrder]) extends BaseOrdering {
           case dt: AtomicType if order.direction == Ascending =>
             OrderedPhysicalDataType(dt).ordering.asInstanceOf[Ordering[Any]].compare(left, right)
           case dt: AtomicType if order.direction == Descending =>
-            OrderedPhysicalDataType(dt).ordering.asInstanceOf[Ordering[Any]].compare(left, right)
+            - OrderedPhysicalDataType(dt).ordering.asInstanceOf[Ordering[Any]].compare(left, right)
           case a: ArrayType if order.direction == Ascending =>
             a.interpretedOrdering.asInstanceOf[Ordering[Any]].compare(left, right)
           case a: ArrayType if order.direction == Descending =>
