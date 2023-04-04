@@ -31,15 +31,21 @@ sealed abstract class PhysicalDataType
 object PhysicalDataType {
   def apply(dt: DataType): PhysicalDataType = dt match {
     case NullType => PhysicalNullType
-    case BooleanType => PhysicalBooleanType
     case ByteType => PhysicalByteType
     case ShortType => PhysicalShortType
     case IntegerType => PhysicalIntegerType
     case LongType => PhysicalLongType
+    case StringType => PhysicalStringType
     case FloatType => PhysicalFloatType
     case DoubleType => PhysicalDoubleType
     case DecimalType.Fixed(p, s) => PhysicalDecimalType(p, s)
+    case BooleanType => PhysicalBooleanType
     case BinaryType => PhysicalBinaryType
+    case TimestampType => PhysicalLongType
+    case TimestampNTZType => PhysicalLongType
+    case DayTimeIntervalType(_, _) => PhysicalLongType
+    case YearMonthIntervalType(_, _) => PhysicalIntegerType
+    case DateType => PhysicalIntegerType
     case _ => UninitializedPhysicalType
   }
 }
@@ -71,23 +77,8 @@ sealed abstract class PhysicalAtomicType extends OrderedPhysicalDataType {
 }
 
 object PhysicalAtomicType extends PhysicalAtomicType {
-  def apply(dt: AtomicType): PhysicalAtomicType = dt match {
-    case ByteType => PhysicalByteType
-    case ShortType => PhysicalShortType
-    case IntegerType => PhysicalIntegerType
-    case LongType => PhysicalLongType
-    case StringType => PhysicalStringType
-    case FloatType => PhysicalFloatType
-    case DoubleType => PhysicalDoubleType
-    case DecimalType.Fixed(p, s) => PhysicalDecimalType(p, s)
-    case BooleanType => PhysicalBooleanType
-    case BinaryType => PhysicalBinaryType
-    case TimestampType => PhysicalLongType
-    case TimestampNTZType => PhysicalLongType
-    case DayTimeIntervalType(_, _) => PhysicalLongType
-    case YearMonthIntervalType(_, _) => PhysicalIntegerType
-    case DateType => PhysicalIntegerType
-    case _ => throw QueryExecutionErrors.unsupportedOperationExceptionError()
+  def apply(dt: AtomicType): PhysicalAtomicType = {
+    PhysicalDataType(dt).asInstanceOf[PhysicalAtomicType]
   }
 
   override private[sql] val tag = null
@@ -112,12 +103,8 @@ sealed abstract class PhysicalIntegralType extends PhysicalNumericType {
 }
 
 object PhysicalIntegralType extends PhysicalIntegralType {
-  def apply(dt: DataType): PhysicalIntegralType = dt match {
-    case IntegerType => PhysicalIntegerType
-    case ByteType => PhysicalByteType
-    case ShortType => PhysicalShortType
-    case LongType => PhysicalLongType
-    case _ => UninitializedPhysicalIntegralType
+  def apply(dt: DataType): PhysicalIntegralType = {
+    PhysicalDataType(dt).asInstanceOf[PhysicalIntegralType]
   }
 
   def ordering(dt: DataType): Ordering[Any] = {

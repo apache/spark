@@ -124,7 +124,6 @@ protected[sql] object AnyDataType extends AbstractDataType with Serializable {
 protected[sql] abstract class AtomicType extends DataType {
   private[sql] type InternalType
   private[sql] val tag: TypeTag[InternalType]
-  private[sql] val ordering: Ordering[InternalType]
 }
 
 object AtomicType {
