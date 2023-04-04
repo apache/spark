@@ -218,7 +218,7 @@ private object PostgresDialect extends JdbcDialect with SQLConfHelper {
           case "42P07" if sqlException.getMessage != null =>
             // The message is: Failed to create index indexName in tableName
             val indexRegex = "(?s)Failed to create index (.*) in (.*)".r
-            val tableRegex = """(?s)relation "(.*)" already exists""".r
+            val tableRegex = """(?:.*)relation "(.*)" already exists""".r
             sqlException.getMessage match {
               case indexRegex(index, table) =>
                 throw new IndexAlreadyExistsException(

@@ -99,7 +99,7 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCT
       sql(s"CREATE TABLE $t1(c int)")
       sql(s"CREATE TABLE $t2(c int)")
       checkError(
-        exception = intercept[TableAlreadyExistsException](sql(s"ALTER TABLE $t1 RENAME TO $t2")),
+        exception = intercept[TableAlreadyExistsException](sql(s"ALTER TABLE $t1 RENAME TO t2")),
         errorClass = "TABLE_OR_VIEW_ALREADY_EXISTS",
         parameters = Map("relationName" -> "t2")
       )
