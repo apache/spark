@@ -1,36 +1,62 @@
-import pandas as pd
+import pyspark.pandas as pd
 import numpy as np
-import warnings
-warnings.filterwarnings('ignore')
-#converting the string data column to numeric data column
-def strc_to_numc(data_frame,col_name):
-    if data_frame[col_name].isnull().sum()>0:
+
+def strc_to_numc(data,col_name):
+    col_data=data[col_name].copy()
+    label_encode={None}
+    if col_data.isnull().sum()>0:
         print(col_name,' has null values. ','Please replace the null values.')
-        return data_frame[col_name]
-        #create a option to take the input whether to replace the values or not. If yes, call fill_null_data or fill_null_str or fill_null_num functions
+        replace_or_not=input('Do you want to the system to replace the null values and then encode the values[Y/n]?: ')
+        if replace_or_not.lower()=='y':
+            new_str=input('Enter the new value or press ENTER to assign the default value(missing): ')
+            if len(new_str)==0:
+                new_str='Missing'
+            print('Replace the values')
+            col_data=fill_null_str(data,col_name,replace_str_with=new_str)
+            #encoding
+            keys=np.unique(col_data.sort_values().to_numpy())
+            values=range(len(keys))
+            label_encode=dict(zip(keys,values))
+            encoded_values=col_data.map(label_encode)
+            return encoded_values,label_encode
+        elif replace_or_not.lower()=='n':
+            print('Do not replace the values')
+            return col_data,label_encode
+        else:
+            print('else statement in strc_to_numc. Not executing the code')
     else:
+        #encoding
         print(col_name,' executed')
-        keys=np.unique(data_frame[col_name].sort_values().to_numpy())
+        keys=np.unique(col_data.sort_values().to_numpy())
         values=range(len(keys))
         label_encode=dict(zip(keys,values))
-        encoded_values=data_frame[col_name].map(label_encode)
-        return encoded_values
+        encoded_values=col_data.map(label_encode)
+        return encoded_values,label_encode
+
 
 #converting all the string columns in the dataframe to numeric columns
 def strd_to_numd(data_frame):
+    dictionary_values={}
     data=data_frame.copy()
     for col_name in data.columns:
         if data[col_name].dtype=='O':
             try:
-                data[col_name]=data[col_name].astype(str)
-                data[col_name]=strc_to_numc(data,col_name)
+                converted_values=strc_to_numc(data,col_name)
+                data[col_name]=converted_values[0]
+                dictionary_values[col_name]=converted_values[1]#encoded values
             except:
-                print('Cannot covert the string to numeric for ',col_name)
-    return data
+                data[col_name]=data[col_name].astype(str)
+                converted_values=strc_to_numc(data,col_name)
+                data[col_name]=converted_values[0]
+                dictionary_values[col_name]=converted_values[1]#encoded values
+        else:
+            pass
+    return data,dictionary_values
 
 #replacing the null values
 def fill_null_str(data_frame,col_name,replace_str_with='Missing'):
-    replaced_col=data_frame[col_name].fillna(replace_str_with)
+    col_data=data_frame[col_name].copy()
+    replaced_col=col_data.fillna(replace_str_with)
     return replaced_col
 
 def fill_null_num(data_frame,col_name,impute_type='mode'):
