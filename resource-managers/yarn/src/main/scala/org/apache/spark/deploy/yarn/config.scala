@@ -227,7 +227,10 @@ package object config extends Logging {
 
   private[spark] val REPORT_LOG_FREQUENCY = {
     ConfigBuilder("spark.yarn.report.logging.frequency")
-      .doc("Number of application reports processed until the next application status is logged." +
+      .doc("Maximum number of application reports processed " +
+        "until the next application status is logged. " +
+        "If there is a change of state, the application status will be logged " +
+        "regardless of the number of application reports processed. " +
         "This property is dependent on the spark.yarn.report.interval")
       .version("3.5.0")
       .intConf

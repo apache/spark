@@ -1146,7 +1146,6 @@ private[spark] class Client(
     var reportsSinceLastLog: Int = 0
     while (true) {
       Thread.sleep(interval)
-      reportsSinceLastLog += 1
       val report: ApplicationReport =
         try {
           getApplicationReport
@@ -1163,9 +1162,9 @@ private[spark] class Client(
               Some(msg))
         }
       val state = report.getYarnApplicationState
-
+      reportsSinceLastLog += 1
       if (logApplicationReport) {
-        if (reportsSinceLastLog == reportsTillNextLog || lastState != state) {
+        if (reportsSinceLastLog >= reportsTillNextLog || lastState != state) {
           logInfo(s"Application report for $appId (state: $state)")
           reportsSinceLastLog = 0
         }
