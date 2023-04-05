@@ -38,7 +38,7 @@ private[sql] object SimpleSparkConnectService {
   private val stopCommand = "q"
 
   def main(args: Array[String]): Unit = {
-    val conf = new SparkConf()
+    val conf = new SparkConf().set("connect.test", "true")
     val sparkSession = SparkSession.builder().config(conf).getOrCreate()
     val sparkContext = sparkSession.sparkContext // init spark context
     SparkConnectService.start()
