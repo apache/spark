@@ -594,7 +594,7 @@ class GroupedApplyInPandasTestsMixin:
                 self.check_error(
                     exception=pe.exception,
                     error_class="RESULT_COLUMNS_MISMATCH_FOR_PANDAS_UDF",
-                    message_parameters={"missing": " Missing: id.", "extra": "Unexpected: iid."},
+                    message_parameters={"missing": " Missing: id.", "extra": " Unexpected: iid."},
                 )
                 with self.assertRaisesRegex(Exception, "[D|d]ecimal.*got.*date"):
                     grouped_df.apply(invalid_positional_types).collect()
