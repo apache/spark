@@ -32,17 +32,6 @@ import org.apache.spark.sql.functions.{col, udf}
  * these tests only works with SBT for now.
  */
 class UserDefinedFunctionE2ETestSuite extends RemoteSparkSession {
-  test("simple udf") {
-    def dummyUdf(x: Int): Int = x + 5
-    val myUdf = udf(dummyUdf _)
-    val df = spark.range(5).select(myUdf(Column("id")))
-    val result = df.collect()
-    assert(result.length == 5)
-    result.zipWithIndex.foreach { case (v, idx) =>
-      assert(v.getInt(0) == idx + 5)
-    }
-  }
-
   test("Dataset typed filter") {
     val rows = spark.range(10).filter(n => n % 2 == 0).collectAsList()
     assert(rows == Arrays.asList[Long](0, 2, 4, 6, 8))
@@ -63,13 +52,22 @@ class UserDefinedFunctionE2ETestSuite extends RemoteSparkSession {
     assert(rows == Arrays.asList[Long](0, 0, 1, 1, 2, 2, 3, 3, 4, 4))
   }
 
-  test("filter with args") {
+  test("filter with condition") {
     // This should go via `def filter(condition: Column)` rather than
     // `def filter(func: T => Boolean)`
     def func(i: Long): Boolean = i < 5
     val under5 = udf(func _)
     val longs = spark.range(10).filter(under5(col("id") * 2)).collectAsList()
     assert(longs == Arrays.asList[Long](0, 1, 2))
+  }
+
+  test("filter with col(*)") {
+    // This should go via `def filter(condition: Column)` but it is executed as
+    // `def filter(func: T => Boolean)`. This is fine as the result is the same.
+    def func(i: Long): Boolean = i < 5
+    val under5 = udf(func _)
+    val longs = spark.range(10).filter(under5(col("*"))).collectAsList()
+    assert(longs == Arrays.asList[Long](0, 1, 2, 3, 4))
   }
 
   test("Dataset typed map - java") {

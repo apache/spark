@@ -894,10 +894,11 @@ class SparkConnectPlanner(val session: SparkSession) {
   }
 
   private def isTypedFilter(udf: proto.CommonInlineUserDefinedFunction): Boolean = {
-    // It is a scala udf && the udf argument is absent, but the one input data type is set.
+    // It is a scala udf && the udf argument is an unresolved start.
     // This means the udf is a typed filter to filter on all inputs
     udf.getFunctionCase == proto.CommonInlineUserDefinedFunction.FunctionCase.SCALAR_SCALA_UDF &&
-    udf.getArgumentsCount == 0 && udf.getScalarScalaUdf.getInputTypesCount == 1
+    udf.getArgumentsCount == 1 &&
+    udf.getArguments(0).getExprTypeCase == proto.Expression.ExprTypeCase.UNRESOLVED_STAR
   }
 
   private def transformTypedFilter(

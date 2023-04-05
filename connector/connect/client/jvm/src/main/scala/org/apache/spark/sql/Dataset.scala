@@ -2481,14 +2481,11 @@ class Dataset[T] private[sql] (
     val udf = ScalarUserDefinedFunction(
       function = func,
       inputEncoders = encoder :: Nil,
-      outputEncoder = PrimitiveBooleanEncoder,
-      name = None,
-      nullable = false,
-      deterministic = true)
+      outputEncoder = PrimitiveBooleanEncoder)
     sparkSession.newDataset[T](encoder) { builder =>
       builder.getFilterBuilder
         .setInput(plan.getRoot)
-        .setCondition(udf.apply().expr)
+        .setCondition(udf.apply(col("*")).expr)
     }
   }
 
