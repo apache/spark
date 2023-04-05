@@ -893,7 +893,6 @@ class ColumnarDataSourceV2 extends TestingV2Source {
     override def createReaderFactory(): PartitionReaderFactory = {
       ColumnarReaderFactory
     }
-
   }
 
   override def getTable(options: CaseInsensitiveStringMap): Table = new SimpleBatchTable {
@@ -909,8 +908,8 @@ object ColumnarReaderFactory extends PartitionReaderFactory {
   override def supportColumnarReads(partition: InputPartition): Boolean = true
 
   override def getVectorTypes: Optional[java.lang.Iterable[String]] = {
-    val vectorTypes = Iterable.fill(2)(classOf[OnHeapColumnVector].getName)
-    Optional.of(vectorTypes.asJava)
+    val vectorTypes = Iterable.fill(2)(classOf[OnHeapColumnVector])
+    Optional.of(vectorTypes.map(_.getName).asJava)
   }
 
   override def createReader(partition: InputPartition): PartitionReader[InternalRow] = {
