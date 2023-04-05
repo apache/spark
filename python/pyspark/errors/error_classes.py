@@ -199,11 +199,6 @@ ERROR_CLASSES_JSON = """
       "The type of array scalar '<dtype>' is not supported."
     ]
   },
-  "UNSUPPORTED_NUMPY_ARRAY_SCALAR" : {
-    "message" : [
-      "The type of array scalar '<dtype>' is not supported."
-    ]
-  },
   "UNSUPPORTED_PARAM_TYPE_FOR_HIGHER_ORDER_FUNCTION" : {
     "message" : [
       "Function `<func_name>` should use only POSITIONAL or POSITIONAL OR KEYWORD arguments."
