@@ -41,8 +41,10 @@ from py4j.java_gateway import JavaObject
 
 from pyspark import SparkConf, SparkContext
 from pyspark.rdd import RDD
+from pyspark.sql.column import _to_java_column
 from pyspark.sql.conf import RuntimeConfig
 from pyspark.sql.dataframe import DataFrame
+from pyspark.sql.functions import lit
 from pyspark.sql.pandas.conversion import SparkConversionMixin
 from pyspark.sql.readwriter import DataFrameReader
 from pyspark.sql.sql_formatter import SQLStringFormatter
@@ -1321,7 +1323,7 @@ class SparkSession(SparkConversionMixin):
         df._schema = struct
         return df
 
-    def sql(self, sqlQuery: str, args: Optional[Dict[str, str]] = None, **kwargs: Any) -> DataFrame:
+    def sql(self, sqlQuery: str, args: Optional[Dict[str, Any]] = None, **kwargs: Any) -> DataFrame:
         """Returns a :class:`DataFrame` representing the result of the given query.
         When ``kwargs`` is specified, this method formats the given string by using the Python
         standard formatter. The method binds named parameters to SQL literals from `args`.
@@ -1336,10 +1338,13 @@ class SparkSession(SparkConversionMixin):
         sqlQuery : str
             SQL query string.
         args : dict
-            A dictionary of parameter names to string values that are parsed as SQL literal
-            expressions. For example, dict keys: "rank", "name", "birthdate"; dict values:
-            "1", "'Steven'", "DATE'2023-03-21'". The fragments of string values belonged to
-            SQL comments are skipped while parsing.
+            A dictionary of parameter names to Python objects that can be converted to
+            SQL literal expressions. See
+            <a href="https://spark.apache.org/docs/latest/sql-ref-datatypes.html">
+            Supported Data Types</a> for supported value types in Python.
+            For example, dictionary keys: "rank", "name", "birthdate";
+            dictionary values: 1, "Steven", datetime.date(2023, 4, 2).
+            Map value can be also a `Column` of literal expression, in that case it is taken as is.
 
             .. versionadded:: 3.4.0
 
@@ -1419,7 +1424,7 @@ class SparkSession(SparkConversionMixin):
 
         And substitude named parameters with the `:` prefix by SQL literals.
 
-        >>> spark.sql("SELECT * FROM {df} WHERE {df[B]} > :minB", {"minB" : "5"}, df=mydf).show()
+        >>> spark.sql("SELECT * FROM {df} WHERE {df[B]} > :minB", {"minB" : 5}, df=mydf).show()
         +---+---+
         |  A|  B|
         +---+---+
@@ -1431,7 +1436,8 @@ class SparkSession(SparkConversionMixin):
         if len(kwargs) > 0:
             sqlQuery = formatter.format(sqlQuery, **kwargs)
         try:
-            return DataFrame(self._jsparkSession.sql(sqlQuery, args or {}), self)
+            litArgs = {k: _to_java_column(lit(v)) for k, v in (args or {}).items()}
+            return DataFrame(self._jsparkSession.sql(sqlQuery, litArgs), self)
         finally:
             if len(kwargs) > 0:
                 formatter.clear()
