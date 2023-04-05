@@ -287,6 +287,9 @@ case class ResolveDefaultColumns(catalog: SessionCatalog) extends Rule[LogicalPl
           rows = table.rows.map { row => row ++ newDefaultExpressions })
       case local: LocalRelation =>
         val newDefaultExpressionsRow = new GenericInternalRow(
+          // Note that this code path only runs when there is a user-specified column list of fewer
+          // column than the target table; otherwise, the above 'newDefaultExpressions' is empty and
+          // we match the first case in this list instead.
           schema.fields.drop(local.output.size).map {
             case f if f.metadata.contains(CURRENT_DEFAULT_COLUMN_METADATA_KEY) =>
               analyze(f, "INSERT") match {
@@ -377,8 +380,8 @@ case class ResolveDefaultColumns(catalog: SessionCatalog) extends Rule[LogicalPl
         replaceExplicitDefaultValuesForInlineTable(defaultExpressions, table)
       case project: Project =>
         replaceExplicitDefaultValuesForProject(defaultExpressions, project)
-      case _: LocalRelation =>
-        None
+      case local: LocalRelation =>
+        Some(local)
     }
   }
 

@@ -19,38 +19,49 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.catalyst.expressions.Literal
-import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
+import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{StructField, StructType, TimestampType}
+import org.apache.spark.sql.types.{LongType, StructField, StructType, TimestampType}
 
 class ResolveDefaultColumnsSuite extends QueryTest with SharedSparkSession {
   val rule = ResolveDefaultColumns(catalog = null)
+  // This is the internal storage for the timestamp 2020-12-31 00:00:00.0.
+  val literal = Literal(1609401600000000L, TimestampType)
+  val table = UnresolvedInlineTable(
+    names = Seq("attr1"),
+    rows = Seq(Seq(literal)))
+  val localRelation = ResolveInlineTables(table).asInstanceOf[LocalRelation]
 
-  test("SPARK-43018: Assign correct types for DEFAULTs with INSERT from a VALUES list") {
-    // This is the internal storage for the timestamp 2020-12-31 00:00:00.0.
-    val literal = Literal(1609401600000000L, TimestampType)
-    val table = UnresolvedInlineTable(
-      names = Seq("attr1"),
-      rows = Seq(Seq(literal)))
-    val node = ResolveInlineTables(table).asInstanceOf[LocalRelation]
+  def asLocalRelation(result: LogicalPlan): LocalRelation = result match {
+    case r: LocalRelation => r
+    case _ => fail(s"invalid result operator type: $result")
+  }
 
-    assert(node.output.map(_.dataType) == Seq(TimestampType))
-    assert(node.data.size == 1)
-
+  test("SPARK-43018: Add DEFAULTs for INSERT from VALUES list with user-defined columns") {
+    // Call the 'addMissingDefaultValuesForInsertFromInlineTable' method with one user-specified
+    // column. We add a default value of NULL to the row as a result.
     val insertTableSchemaWithoutPartitionColumns = StructType(Seq(
       StructField("c1", TimestampType),
       StructField("c2", TimestampType)))
     val result = rule.addMissingDefaultValuesForInsertFromInlineTable(
-      node, insertTableSchemaWithoutPartitionColumns, numUserSpecifiedColumns = 1)
-    val relation: LocalRelation = result match {
-      case r: LocalRelation => r
-      case _ => fail(s"invalid result operator type: $result")
-    }
+      localRelation, insertTableSchemaWithoutPartitionColumns, numUserSpecifiedColumns = 1)
+    val relation = asLocalRelation(result)
     assert(relation.output.map(_.name) == Seq("c1", "c2"))
     val data: Seq[Seq[Any]] = relation.data.map { row =>
       row.toSeq(StructType(relation.output.map(col => StructField(col.name, col.dataType))))
     }
     assert(data == Seq(Seq(literal.value, null)))
+  }
+
+  test("SPARK-43018: Add no DEFAULTs for INSERT from VALUES list with no user-defined columns") {
+    // Call the 'addMissingDefaultValuesForInsertFromInlineTable' method with zero user-specified
+    // columns. The table is unchanged because there are no default columns to add in this case.
+    val insertTableSchemaWithoutPartitionColumns = StructType(Seq(
+      StructField("c1", TimestampType),
+      StructField("c2", TimestampType)))
+    val result = rule.addMissingDefaultValuesForInsertFromInlineTable(
+      localRelation, insertTableSchemaWithoutPartitionColumns, numUserSpecifiedColumns = 0)
+    assert(asLocalRelation(result) == localRelation)
   }
 
   test("SPARK-43018: INSERT timestamp values into a table with column DEFAULTs") {
