@@ -91,12 +91,13 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     // DateType without default value`
     List(CharType(1), VarcharType(1)).foreach(errType => {
+      val message = s"[NO_DEFAULT_FOR_DATA_TYPE] No default value for type: ${errType.toString}."
       checkError(
         exception = intercept[SparkException] {
           Literal.default(errType)
         },
         errorClass = "INTERNAL_ERROR",
-        parameters = Map("message" -> s"[NO_DEFAULT_FOR_DATA_TYPE] No default value for type: ${errType.toString}.")
+        parameters = Map("message" -> message)
       )
     })
   }
