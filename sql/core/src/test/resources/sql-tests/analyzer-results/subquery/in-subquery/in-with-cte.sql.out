@@ -198,23 +198,20 @@ WithCTE
          :        :  :     :  +- Filter (cast(t1b#x as int) > 0)
          :        :  :     :     +- SubqueryAlias cte1
          :        :  :     :        +- CTERelationRef xxxx, true, [t1a#x, t1b#x]
-         :        :  :     +- Project [t1b#x AS t1b#x]
-         :        :  :        +- Project [t1b#x]
-         :        :  :           +- Filter (cast(t1b#x as int) > 5)
-         :        :  :              +- SubqueryAlias cte1
-         :        :  :                 +- CTERelationRef xxxx, true, [t1a#x, t1b#x]
-         :        :  +- Project [t1b#x AS t1b#x]
-         :        :     +- Intersect false
-         :        :        :- Project [t1b#x]
-         :        :        :  +- SubqueryAlias cte1
-         :        :        :     +- CTERelationRef xxxx, true, [t1a#x, t1b#x]
-         :        :        +- Project [t1b#x]
-         :        :           +- SubqueryAlias cte1
-         :        :              +- CTERelationRef xxxx, true, [t1a#x, t1b#x]
-         :        +- Project [t1b#x AS t1b#x]
-         :           +- Project [t1b#x]
-         :              +- SubqueryAlias cte1
-         :                 +- CTERelationRef xxxx, true, [t1a#x, t1b#x]
+         :        :  :     +- Project [t1b#x]
+         :        :  :        +- Filter (cast(t1b#x as int) > 5)
+         :        :  :           +- SubqueryAlias cte1
+         :        :  :              +- CTERelationRef xxxx, true, [t1a#x, t1b#x]
+         :        :  +- Intersect false
+         :        :     :- Project [t1b#x]
+         :        :     :  +- SubqueryAlias cte1
+         :        :     :     +- CTERelationRef xxxx, true, [t1a#x, t1b#x]
+         :        :     +- Project [t1b#x]
+         :        :        +- SubqueryAlias cte1
+         :        :           +- CTERelationRef xxxx, true, [t1a#x, t1b#x]
+         :        +- Project [t1b#x]
+         :           +- SubqueryAlias cte1
+         :              +- CTERelationRef xxxx, true, [t1a#x, t1b#x]
          +- SubqueryAlias t1
             +- View (`t1`, [t1a#x,t1b#x,t1c#x,t1d#xL,t1e#x,t1f#x,t1g#x,t1h#x,t1i#x])
                +- Project [cast(t1a#x as string) AS t1a#x, cast(t1b#x as smallint) AS t1b#x, cast(t1c#x as int) AS t1c#x, cast(t1d#xL as bigint) AS t1d#xL, cast(t1e#x as float) AS t1e#x, cast(t1f#x as double) AS t1f#x, cast(t1g#x as double) AS t1g#x, cast(t1h#x as timestamp) AS t1h#x, cast(t1i#x as date) AS t1i#x]
