@@ -23,7 +23,7 @@ import scala.util.control.NonFatal
 
 import org.apache.spark.sql.catalyst.util.SQLOrderingUtil
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.types.{ArrayType, AtomicType, BinaryType, BooleanType, ByteType, DataType, DateType, DayTimeIntervalType, Decimal, DecimalType, DoubleType, FloatType, IntegerType, IntegralType, LongType, MapType, NullType, NumericType, ShortType, StringType, StructField, StructType, TimestampNTZType, TimestampType, YearMonthIntervalType}
+import org.apache.spark.sql.types.{ArrayType, BinaryType, BooleanType, ByteType, DataType, DateType, DayTimeIntervalType, Decimal, DecimalType, DoubleType, FloatType, IntegerType, IntegralType, LongType, MapType, NullType, NumericType, ShortType, StringType, StructField, StructType, TimestampNTZType, TimestampType, YearMonthIntervalType}
 import org.apache.spark.unsafe.types.{ByteArray, UTF8String}
 
 sealed abstract class PhysicalDataType
@@ -65,10 +65,10 @@ sealed abstract class OrderedPhysicalDataType extends TypedPhysicalDataType {
 }
 
 object OrderedPhysicalDataType {
-  def apply(dt: AtomicType): OrderedPhysicalDataType =
+  def apply(dt: DataType): OrderedPhysicalDataType =
     PhysicalDataType(dt).asInstanceOf[OrderedPhysicalDataType]
 
-  def ordering(dt: AtomicType): Ordering[Any] = {
+  def ordering(dt: DataType): Ordering[Any] = {
     try apply(dt).ordering.asInstanceOf[Ordering[Any]] catch {
       case NonFatal(_) =>
         throw QueryExecutionErrors.unsupportedTypeError(dt)
