@@ -22,9 +22,16 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.SparkPlan
 
 /**
- * A holder to warp the SQL extension rules of adaptive query execution
+ * A holder to warp the SQL extension rules of adaptive query execution.
+ *
+ * @param queryStagePrepRules applied before creation of query stages
+ * @param runtimeOptimizerRules applied to tune logical plan based on the runtime statistics of
+ *                              query stage
+ * @param queryStageOptimizerRules applied to a new query stage before its execution. It makes sure
+ *                                 all children query stages are materialized
  */
 class AdaptiveRulesHolder(
     val queryStagePrepRules: Seq[Rule[SparkPlan]],
-    val runtimeOptimizerRules: Seq[Rule[LogicalPlan]]) {
+    val runtimeOptimizerRules: Seq[Rule[LogicalPlan]],
+    val queryStageOptimizerRules: Seq[Rule[SparkPlan]]) {
 }

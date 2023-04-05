@@ -625,6 +625,21 @@ class QueryExecutionErrorsSuite
     }
   }
 
+  test("BINARY_ARITHMETIC_OVERFLOW: byte plus byte result overflow") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      checkError(
+        exception = intercept[SparkArithmeticException] {
+          sql(s"select 127Y + 5Y").collect()
+        },
+        errorClass = "BINARY_ARITHMETIC_OVERFLOW",
+        parameters = Map(
+          "value1" -> "127S",
+          "symbol" -> "+",
+          "value2" -> "5S"),
+        sqlState = "22003")
+    }
+  }
+
   test("UNSUPPORTED_DATATYPE: invalid StructType raw format") {
     checkError(
       exception = intercept[SparkIllegalArgumentException] {
@@ -719,12 +734,10 @@ class QueryExecutionErrorsSuite
         JdbcDialects.unregisterDialect(existedH2Dialect)
         JdbcDialects.registerDialect(testH2DialectUnsupportedJdbcTransaction)
 
-        val e = intercept[AnalysisException] {
-          sql("alter TABLE h2.test.people SET TBLPROPERTIES (xx='xx', yy='yy')")
-        }
-
         checkError(
-          exception = e.getCause.asInstanceOf[SparkSQLFeatureNotSupportedException],
+          exception = intercept[SparkSQLFeatureNotSupportedException] {
+            sql("alter TABLE h2.test.people SET TBLPROPERTIES (xx='xx', yy='yy')")
+          },
           errorClass = "UNSUPPORTED_FEATURE.MULTI_ACTION_ALTER",
           parameters = Map("tableName" -> "\"test\".\"people\""))
 

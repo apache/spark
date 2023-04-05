@@ -78,6 +78,9 @@ class Catalog:
     """User-facing catalog API, accessible through `SparkSession.catalog`.
 
     This is a thin wrapper around its Scala implementation org.apache.spark.sql.catalog.Catalog.
+
+    .. versionchanged:: 3.4.0
+        Supports Spark Connect.
     """
 
     def __init__(self, sparkSession: SparkSession) -> None:
@@ -91,9 +94,6 @@ class Catalog:
 
         .. versionadded:: 3.4.0
 
-        .. versionchanged:: 3.4.0
-            Supports Spark Connect.
-
         Examples
         --------
         >>> spark.catalog.currentCatalog()
@@ -105,9 +105,6 @@ class Catalog:
         """Sets the current default catalog in this session.
 
         .. versionadded:: 3.4.0
-
-        .. versionchanged:: 3.4.0
-            Supports Spark Connect.
 
         Parameters
         ----------
@@ -124,9 +121,6 @@ class Catalog:
         """Returns a list of catalogs in this session.
 
         .. versionadded:: 3.4.0
-
-        .. versionchanged:: 3.4.0
-            Supports Spark Connect.
 
         Returns
         -------
@@ -146,9 +140,6 @@ class Catalog:
 
         .. versionadded:: 2.0.0
 
-        .. versionchanged:: 3.4.0
-            Supports Spark Connect.
-
         Returns
         -------
         str
@@ -167,9 +158,6 @@ class Catalog:
 
         .. versionadded:: 2.0.0
 
-        .. versionchanged:: 3.4.0
-            Supports Spark Connect.
-
         Examples
         --------
         >>> spark.catalog.setCurrentDatabase("default")
@@ -181,9 +169,6 @@ class Catalog:
         Returns a list of databases available across all sessions.
 
         .. versionadded:: 2.0.0
-
-        .. versionchanged:: 3.4.0
-            Supports Spark Connect.
 
         Returns
         -------
@@ -214,9 +199,6 @@ class Catalog:
         This throws an :class:`AnalysisException` when the database cannot be found.
 
         .. versionadded:: 3.4.0
-
-        .. versionchanged:: 3.4.0
-            Supports Spark Connect.
 
         Parameters
         ----------
@@ -250,9 +232,6 @@ class Catalog:
         """Check if the database with the specified name exists.
 
         .. versionadded:: 3.3.0
-
-        .. versionchanged:: 3.4.0
-            Supports Spark Connect.
 
         Parameters
         ----------
@@ -289,9 +268,6 @@ class Catalog:
         """Returns a list of tables/views in the specified database.
 
         .. versionadded:: 2.0.0
-
-        .. versionchanged:: 3.4.0
-            Supports Spark Connect.
 
         Parameters
         ----------
@@ -352,9 +328,6 @@ class Catalog:
 
         .. versionadded:: 3.4.0
 
-        .. versionchanged:: 3.4.0
-            Supports Spark Connect.
-
         Parameters
         ----------
         tableName : str
@@ -411,9 +384,6 @@ class Catalog:
 
         .. versionadded:: 3.4.0
 
-        .. versionchanged:: 3.4.0
-            Supports Spark Connect.
-
         Parameters
         ----------
         dbName : str
@@ -465,9 +435,6 @@ class Catalog:
 
         .. versionadded:: 3.3.0
 
-        .. versionchanged:: 3.4.0
-            Supports Spark Connect.
-
         Parameters
         ----------
         functionName : str
@@ -516,9 +483,6 @@ class Catalog:
         function. This throws an :class:`AnalysisException` when the function cannot be found.
 
         .. versionadded:: 3.4.0
-
-        .. versionchanged:: 3.4.0
-            Supports Spark Connect.
 
         Parameters
         ----------
@@ -570,9 +534,6 @@ class Catalog:
         """Returns a list of columns for the given table/view in the specified database.
 
         .. versionadded:: 2.0.0
-
-        .. versionchanged:: 3.4.0
-            Supports Spark Connect.
 
         Parameters
         ----------
@@ -636,9 +597,6 @@ class Catalog:
         This can either be a temporary view or a table/view.
 
         .. versionadded:: 3.3.0
-
-        .. versionchanged:: 3.4.0
-            Supports Spark Connect.
 
         Parameters
         ----------
@@ -738,9 +696,6 @@ class Catalog:
 
         .. versionadded:: 2.0.0
 
-        .. versionchanged:: 3.4.0
-            Supports Spark Connect.
-
         Returns
         -------
         :class:`DataFrame`
@@ -763,9 +718,6 @@ class Catalog:
         """Creates a table based on the dataset in a data source.
 
         .. versionadded:: 2.2.0
-
-        .. versionchanged:: 3.4.0
-            Supports Spark Connect.
 
         Parameters
         ----------
@@ -837,9 +789,6 @@ class Catalog:
 
         .. versionadded:: 2.0.0
 
-        .. versionchanged:: 3.4.0
-            Supports Spark Connect.
-
         Parameters
         ----------
         viewName : str
@@ -876,9 +825,6 @@ class Catalog:
         """Drops the global temporary view with the given view name in the catalog.
 
         .. versionadded:: 2.1.0
-
-        .. versionchanged:: 3.4.0
-            Supports Spark Connect.
 
         Parameters
         ----------
@@ -935,9 +881,6 @@ class Catalog:
 
         .. versionadded:: 2.0.0
 
-        .. versionchanged:: 3.4.0
-            Supports Spark Connect.
-
         Parameters
         ----------
         tableName : str
@@ -979,9 +922,6 @@ class Catalog:
 
         .. versionadded:: 2.0.0
 
-        .. versionchanged:: 3.4.0
-            Supports Spark Connect.
-
         Parameters
         ----------
         tableName : str
@@ -1015,9 +955,6 @@ class Catalog:
         """Removes the specified table from the in-memory cache.
 
         .. versionadded:: 2.0.0
-
-        .. versionchanged:: 3.4.0
-            Supports Spark Connect.
 
         Parameters
         ----------
@@ -1057,9 +994,6 @@ class Catalog:
 
         .. versionadded:: 2.0.0
 
-        .. versionchanged:: 3.4.0
-            Supports Spark Connect.
-
         Examples
         --------
         >>> _ = spark.sql("DROP TABLE IF EXISTS tbl1")
@@ -1075,9 +1009,6 @@ class Catalog:
         """Invalidates and refreshes all the cached data and metadata of the given table.
 
         .. versionadded:: 2.0.0
-
-        .. versionchanged:: 3.4.0
-            Supports Spark Connect.
 
         Parameters
         ----------
@@ -1128,9 +1059,6 @@ class Catalog:
 
         .. versionadded:: 2.1.1
 
-        .. versionchanged:: 3.4.0
-            Supports Spark Connect.
-
         Parameters
         ----------
         tableName : str
@@ -1174,9 +1102,6 @@ class Catalog:
         DataFrame that contains the given data source path.
 
         .. versionadded:: 2.2.0
-
-        .. versionchanged:: 3.4.0
-            Supports Spark Connect.
 
         Parameters
         ----------

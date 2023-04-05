@@ -243,7 +243,9 @@ public class YarnShuffleService extends AuxiliaryService {
     boolean stopOnFailure = _conf.getBoolean(STOP_ON_FAILURE_KEY, DEFAULT_STOP_ON_FAILURE);
 
     if (_recoveryPath == null && _conf.getBoolean(INTEGRATION_TESTING, false)) {
-      _recoveryPath = new Path(JavaUtils.createTempDir().toURI());
+      File tempDir = JavaUtils.createDirectory(System.getProperty("java.io.tmpdir"), "spark");
+      tempDir.deleteOnExit();
+      _recoveryPath = new Path(tempDir.toURI());
     }
 
     if (_recoveryPath != null) {

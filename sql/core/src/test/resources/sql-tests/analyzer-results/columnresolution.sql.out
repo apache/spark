@@ -337,7 +337,7 @@ CreateDataSourceTableCommand `spark_catalog`.`mydb1`.`t5`, false
 INSERT INTO t5 VALUES(1, (2, 3))
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/mydb1.db/t5, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/mydb1.db/t5], Append, `spark_catalog`.`mydb1`.`t5`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/mydb1.db/t5), [i1, t5]
-+- Project [cast(col1#x as int) AS i1#x, cast(col2#x as struct<i1:int,i2:int>) AS t5#x]
++- Project [cast(col1#x as int) AS i1#x, named_struct(i1, cast(col2#x.col1 as int), i2, cast(col2#x.col2 as int)) AS t5#x]
    +- LocalRelation [col1#x, col2#x]
 
 
