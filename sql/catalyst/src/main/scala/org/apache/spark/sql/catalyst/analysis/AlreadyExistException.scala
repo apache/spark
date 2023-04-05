@@ -61,6 +61,11 @@ class TableAlreadyExistsException(errorClass: String, messageParameters: Map[Str
     this(errorClass = "TABLE_OR_VIEW_ALREADY_EXISTS",
       messageParameters = Map("relationName" -> quoteNameParts(table)))
   }
+
+  def this(tableIdent: Identifier) = {
+    this(errorClass = "TABLE_OR_VIEW_ALREADY_EXISTS",
+      messageParameters = Map("relationName" -> tableIdent.quoted))
+  }
 }
 
 class TempTableAlreadyExistsException(errorClass: String, messageParameters: Map[String, String],
