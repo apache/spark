@@ -16,7 +16,6 @@
 #
 import unittest
 
-import pandas as pd
 from pyspark import pandas as ps
 from pyspark.pandas.tests.test_categorical import CategoricalTestsMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
@@ -26,17 +25,6 @@ from pyspark.testing.pandasutils import PandasOnSparkTestUtils, TestUtils
 class CategoricalParityTests(
     CategoricalTestsMixin, PandasOnSparkTestUtils, TestUtils, ReusedConnectTestCase
 ):
-    @property
-    def pdf(self):
-        return pd.DataFrame(
-            {
-                "a": pd.Categorical([1, 2, 3, 1, 2, 3]),
-                "b": pd.Categorical(
-                    ["b", "a", "c", "c", "b", "a"], categories=["c", "b", "d", "a"]
-                ),
-            },
-        )
-
     @property
     def psdf(self):
         return ps.from_pandas(self.pdf)

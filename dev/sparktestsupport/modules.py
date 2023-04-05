@@ -732,7 +732,7 @@ pyspark_pandas_slow = Module(
 
 pyspark_connect = Module(
     name="pyspark-connect",
-    dependencies=[pyspark_core, pyspark_sql, pyspark_ml, connect],
+    dependencies=[pyspark_sql, pyspark_ml, connect],
     source_file_regexes=[
         "python/pyspark/sql/connect",
         "python/pyspark/ml/connect",

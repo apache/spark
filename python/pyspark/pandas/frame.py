@@ -66,7 +66,7 @@ from pandas.core.dtypes.common import infer_dtype_from_object
 from pandas.core.accessor import CachedAccessor
 from pandas.core.dtypes.inference import is_sequence
 from pyspark import StorageLevel
-from pyspark.sql import Column as PySparkColumn, DataFrame as SparkDataFrame, functions as F
+from pyspark.sql import Column as LegacyColumn, DataFrame as SparkDataFrame, functions as F
 from pyspark.sql.functions import pandas_udf
 from pyspark.sql.types import (
     ArrayType,
@@ -5504,7 +5504,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         for k, v in kwargs.items():
             is_invalid_assignee = (
                 not (
-                    isinstance(v, (IndexOpsMixin, (ConnectColumn, PySparkColumn)))
+                    isinstance(v, (IndexOpsMixin, (ConnectColumn, LegacyColumn)))
                     or callable(v)
                     or is_scalar(v)
                 )
@@ -5516,13 +5516,12 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             if callable(v):
                 kwargs[k] = v(self)
 
-        Column = ConnectColumn if is_remote() else PySparkColumn
         pairs = {
             (k if is_name_like_tuple(k) else (k,)): (
                 (v.spark.column, v._internal.data_fields[0])
                 if isinstance(v, IndexOpsMixin) and not isinstance(v, MultiIndex)
                 else (v, None)
-                if isinstance(v, Column)
+                if isinstance(v, (LegacyColumn, ConnectColumn))
                 else (F.lit(v), None)
             )
             for k, v in kwargs.items()
@@ -5536,7 +5535,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                     scol, field = pairs[label[: len(label) - i]]
 
                     name = self._internal.spark_column_name_for(label)
-                    scol = scol.alias(name)  # type: ignore[attr-defined]
+                    scol = scol.alias(name)
                     if field is not None:
                         field = field.copy(name=name)
                     break
@@ -5550,7 +5549,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         for label, (scol, field) in pairs.items():
             if label not in set(i[: len(label)] for i in self._internal.column_labels):
                 name = name_like_string(label)
-                scols.append(scol.alias(name))  # type: ignore[attr-defined]
+                scols.append(scol.alias(name))
                 if field is not None:
                     field = field.copy(name=name)
                 data_fields.append(field)
@@ -7491,7 +7490,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         if na_position not in ("first", "last"):
             raise ValueError("invalid na_position: '{}'".format(na_position))
 
-        Column = ConnectColumn if is_remote() else PySparkColumn
+        Column = ConnectColumn if is_remote() else LegacyColumn
         # Mapper: Get a spark colum
         # n function for (ascending, na_position) combination
         mapper = {

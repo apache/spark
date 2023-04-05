@@ -16,7 +16,6 @@
 #
 import unittest
 
-import pandas as pd
 from pyspark import pandas as ps
 from pyspark.pandas.tests.indexes.test_base import IndexesTestsMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
@@ -26,13 +25,6 @@ from pyspark.testing.pandasutils import PandasOnSparkTestUtils, TestUtils
 class IndexesParityTests(
     IndexesTestsMixin, PandasOnSparkTestUtils, TestUtils, ReusedConnectTestCase
 ):
-    @property
-    def pdf(self):
-        return pd.DataFrame(
-            {"a": [1, 2, 3, 4, 5, 6, 7, 8, 9], "b": [4, 5, 6, 3, 2, 1, 0, 0, 0]},
-            index=[0, 1, 3, 5, 6, 8, 9, 9, 9],
-        )
-
     @property
     def psdf(self):
         return ps.from_pandas(self.pdf)
