@@ -107,7 +107,7 @@ class TorchDistributorDistributedUnitTestsOnConnect(
             if k not in ["spark.master", "spark.remote", "spark.app.name"]:
                 builder = builder.config(k, v)
 
-        builder = builder.config("spark.driver.memory", "2048M")
+        builder = builder.config("spark.driver.memory", "3G")
         self.spark = builder.remote("local-cluster[2,2,1024]").getOrCreate()
         self.mnist_dir_path = tempfile.mkdtemp()
 
