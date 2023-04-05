@@ -16,7 +16,6 @@
 #
 
 import json
-import sys
 from typing import TYPE_CHECKING, Any, cast, Dict, List, Optional
 
 from pyspark.errors import StreamingQueryException

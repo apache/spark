@@ -951,7 +951,8 @@ class SparkConnectClient(object):
                             yield {"sql_command_result": b.sql_command_result.relation}
                         if b.HasField("write_stream_operation_start_result"):
                             yield {
-                                "write_stream_operation_start_result": b.write_stream_operation_start_result
+                                "write_stream_operation_start_result":
+                                    b.write_stream_operation_start_result
                             }
                         if b.HasField("streaming_query_command_result"):
                             yield {

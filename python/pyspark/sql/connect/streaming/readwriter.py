@@ -19,7 +19,6 @@ from pyspark.sql.connect.utils import check_dependencies
 
 check_dependencies(__name__)
 
-import sys
 from typing import cast, overload, Callable, Dict, List, Optional, TYPE_CHECKING, Union
 
 from pyspark.sql.connect.plan import DataSource, LogicalPlan, WriteStreamOperation
@@ -34,7 +33,7 @@ from pyspark.sql.types import Row, StructType
 
 if TYPE_CHECKING:
     from pyspark.sql.connect.session import SparkSession
-    from pyspark.sql.connect._typing import OptionalPrimitiveType
+    from pyspark.sql.connect._typing import SupportsProcess, OptionalPrimitiveType
     from pyspark.sql.connect.dataframe import DataFrame
 
 __all__ = ["DataStreamReader", "DataStreamWriter"]
