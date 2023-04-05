@@ -23,7 +23,7 @@ import scala.util.control.NonFatal
 
 import org.apache.spark.sql.catalyst.util.SQLOrderingUtil
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.types.{BinaryType, BooleanType, ByteType, DataType, DateType, DayTimeIntervalType, Decimal, DecimalType, DoubleType, FloatType, IntegerType, LongType, NullType, NumericType, ShortType, StringType, StructField, TimestampNTZType, TimestampType, YearMonthIntervalType}
+import org.apache.spark.sql.types.{BinaryType, BooleanType, ByteType, DataType, DateType, DayTimeIntervalType, Decimal, DecimalType, DoubleType, FloatType, IntegerType, IntegralType, LongType, NullType, NumericType, ShortType, StringType, StructField, TimestampNTZType, TimestampType, YearMonthIntervalType}
 import org.apache.spark.unsafe.types.{ByteArray, UTF8String}
 
 sealed abstract class PhysicalDataType
@@ -76,8 +76,7 @@ sealed abstract class PhysicalAtomicType extends OrderedPhysicalDataType {
   private[sql] val tag: TypeTag[InternalType]
 }
 
-sealed abstract class PhysicalNumericType extends PhysicalAtomicType {
-}
+sealed abstract class PhysicalNumericType extends PhysicalAtomicType
 
 object PhysicalNumericType extends PhysicalNumericType {
   def apply(nt: NumericType): PhysicalNumericType = {
@@ -89,19 +88,11 @@ object PhysicalNumericType extends PhysicalNumericType {
   override private[sql] type InternalType = Null
 }
 
-sealed abstract class PhysicalIntegralType extends PhysicalNumericType {
-}
+sealed abstract class PhysicalIntegralType extends PhysicalNumericType
 
 object PhysicalIntegralType extends PhysicalIntegralType {
-  def apply(dt: DataType): PhysicalIntegralType = {
+  def apply(dt: IntegralType): PhysicalIntegralType = {
     PhysicalDataType(dt).asInstanceOf[PhysicalIntegralType]
-  }
-
-  def ordering(dt: DataType): Ordering[Any] = {
-    try apply(dt).ordering.asInstanceOf[Ordering[Any]] catch {
-      case NonFatal(_) =>
-        throw QueryExecutionErrors.unsupportedTypeError(dt)
-    }
   }
 
   override private[sql] val tag = null
