@@ -3963,6 +3963,71 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             jdf = self._jdf.dropDuplicates(self._jseq(subset))
         return DataFrame(jdf, self.sparkSession)
 
+    def dropDuplicatesWithinWatermark(self, subset: Optional[List[str]] = None) -> "DataFrame":
+        """Return a new :class:`DataFrame` with duplicate rows removed,
+        optionally only considering certain columns, within watermark.
+
+       For a static batch :class:`DataFrame`, it just drops duplicate rows. For a streaming
+       :class:`DataFrame`, this will keep all data across triggers as intermediate state to drop
+       duplicated rows. The state will be kept to guarantee the semantic, "Events are deduplicated
+       as long as the time distance of earliest and latest events are smaller than the delay
+       threshold of watermark." The watermark for the input :class:`DataFrame` must be set via
+       :func:`withWatermark`. Users are encouraged to set the delay threshold of watermark longer
+       than max timestamp differences among duplicated events. In addition, too late data older
+       than watermark will be dropped.
+
+        .. versionadded:: 3.5.0
+
+        Parameters
+        ----------
+        subset : List of column names, optional
+            List of columns to use for duplicate comparison (default All columns).
+
+        Returns
+        -------
+        :class:`DataFrame`
+            DataFrame without duplicates.
+
+        Examples
+        --------
+        >>> from pyspark.sql import Row
+        >>> df = spark.createDataFrame([
+        ...     Row(name='Alice', age=5, height=80),
+        ...     Row(name='Alice', age=5, height=80),
+        ...     Row(name='Alice', age=10, height=80)
+        ... ])
+
+        Deduplicate the same rows.
+
+        >>> df.dropDuplicatesWithinWatermark().show()
+        +-----+---+------+
+        | name|age|height|
+        +-----+---+------+
+        |Alice|  5|    80|
+        |Alice| 10|    80|
+        +-----+---+------+
+
+        Deduplicate values on 'name' and 'height' columns.
+
+        >>> df.dropDuplicatesWithinWatermark(['name', 'height']).show()
+        +-----+---+------+
+        | name|age|height|
+        +-----+---+------+
+        |Alice|  5|    80|
+        +-----+---+------+
+        """
+        if subset is not None and (not isinstance(subset, Iterable) or isinstance(subset, str)):
+            raise PySparkTypeError(
+                error_class="NOT_LIST_OR_TUPLE",
+                message_parameters={"arg_name": "subset", "arg_type": type(subset).__name__},
+            )
+
+        if subset is None:
+            jdf = self._jdf.dropDuplicatesWithinWatermark()
+        else:
+            jdf = self._jdf.dropDuplicatesWithinWatermark(self._jseq(subset))
+        return DataFrame(jdf, self.sparkSession)
+
     def dropna(
         self,
         how: str = "any",

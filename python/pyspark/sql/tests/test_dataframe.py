@@ -132,16 +132,27 @@ class DataFrameTestsMixin:
 
         # shouldn't drop a non-null row
         self.assertEqual(df.dropDuplicates().count(), 2)
+        self.assertEqual(df.dropDuplicatesWithinWatermark().count(), 2)
 
         self.assertEqual(df.dropDuplicates(["name"]).count(), 1)
+        self.assertEqual(df.dropDuplicatesWithinWatermark(["name"]).count(), 1)
 
         self.assertEqual(df.dropDuplicates(["name", "age"]).count(), 2)
+        self.assertEqual(df.dropDuplicatesWithinWatermark(["name", "age"]).count(), 2)
 
         with self.assertRaises(PySparkTypeError) as pe:
             df.dropDuplicates("name")
 
+        with self.assertRaises(PySparkTypeError) as pe2:
+            df.dropDuplicatesWithinWatermark("name")
+
         self.check_error(
             exception=pe.exception,
+            error_class="NOT_LIST_OR_TUPLE",
+            message_parameters={"arg_name": "subset", "arg_type": "str"},
+        )
+        self.check_error(
+            exception=pe2.exception,
             error_class="NOT_LIST_OR_TUPLE",
             message_parameters={"arg_name": "subset", "arg_type": "str"},
         )
