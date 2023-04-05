@@ -498,6 +498,6 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
     checkError(
       exception = intercept[SparkRuntimeException](spark.conf.get("some.conf")),
       errorClass = "SQL_CONF_NOT_FOUND",
-      parameters = Map("key" -> "some.conf"))
+      parameters = Map("sqlConf" -> "\"some.conf\""))
   }
 }

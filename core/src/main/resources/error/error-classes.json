@@ -1416,7 +1416,7 @@
   },
   "SQL_CONF_NOT_FOUND" : {
     "message" : [
-      "The SQL config \"<key>\" cannot be found. Please verify that the config exists."
+      "The SQL config <sqlConf> cannot be found. Please verify that the config exists."
     ]
   },
   "STAR_GROUP_BY_POS" : {
