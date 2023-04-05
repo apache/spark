@@ -90,7 +90,7 @@ case object PhysicalByteType extends PhysicalByteType with PhysicalPrimitiveType
 
 class PhysicalCalendarIntervalType() extends PhysicalDataType {
   override private[sql] def ordering =
-    throw QueryExecutionErrors.unsupportedOperationExceptionError()
+    throw QueryExecutionErrors.orderedOperationUnsupportedByDataTypeError("PhysicalCalendarIntervalType")
   override private[sql] type InternalType = Any
   @transient private[sql] lazy val tag = typeTag[InternalType]
 }
@@ -153,14 +153,14 @@ case object PhysicalLongType extends PhysicalLongType with PhysicalPrimitiveType
 case class PhysicalMapType(keyType: DataType, valueType: DataType, valueContainsNull: Boolean)
     extends PhysicalDataType {
   override private[sql] def ordering =
-    throw QueryExecutionErrors.unsupportedOperationExceptionError()
+    throw QueryExecutionErrors.orderedOperationUnsupportedByDataTypeError("PhysicalMapType")
   override private[sql] type InternalType = Any
   @transient private[sql] lazy val tag = typeTag[InternalType]
 }
 
 class PhysicalNullType() extends PhysicalDataType {
   override private[sql] def ordering =
-    throw QueryExecutionErrors.unsupportedOperationExceptionError()
+    throw QueryExecutionErrors.orderedOperationUnsupportedByDataTypeError("PhysicalNullType")
   override private[sql] type InternalType = Any
   @transient private[sql] lazy val tag = typeTag[InternalType]
 }
@@ -245,7 +245,7 @@ case class PhysicalStructType(fields: Array[StructField]) extends PhysicalDataTy
 
 object UninitializedPhysicalType extends PhysicalDataType {
   override private[sql] def ordering =
-    throw QueryExecutionErrors.unsupportedOperationExceptionError()
+    throw QueryExecutionErrors.orderedOperationUnsupportedByDataTypeError("UninitializedPhysicalType")
   override private[sql] type InternalType = Any
   @transient private[sql] lazy val tag = typeTag[InternalType]
 }

@@ -350,6 +350,13 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       messageParameters = Map("dataType" -> dataType.toString()))
   }
 
+  def orderedOperationUnsupportedByDataTypeError(
+      dataType: String): SparkIllegalArgumentException = {
+    new SparkIllegalArgumentException(
+      errorClass = "_LEGACY_ERROR_TEMP_2005",
+      messageParameters = Map("dataType" -> dataType))
+  }
+
   def regexGroupIndexLessThanZeroError(): SparkIllegalArgumentException = {
     new SparkIllegalArgumentException(
       errorClass = "_LEGACY_ERROR_TEMP_2006",
