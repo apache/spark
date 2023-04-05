@@ -1,5 +1,6 @@
 import pyspark.pandas as pd
 import numpy as np
+
 def strc_to_numc(data,col_name):
     col_data=data[col_name].copy()
     label_encode={None}
