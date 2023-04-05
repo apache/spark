@@ -382,7 +382,7 @@ class SparkSession:
 
     createDataFrame.__doc__ = PySparkSession.createDataFrame.__doc__
 
-    def sql(self, sqlQuery: str, args: Optional[Dict[str, str]] = None) -> "DataFrame":
+    def sql(self, sqlQuery: str, args: Optional[Dict[str, Any]] = None) -> "DataFrame":
         cmd = SQL(sqlQuery, args)
         data, properties = self.client.execute_command(cmd.command(self._client))
         if "sql_command_result" in properties:
