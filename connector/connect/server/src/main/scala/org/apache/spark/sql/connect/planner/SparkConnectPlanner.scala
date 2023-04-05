@@ -2066,7 +2066,8 @@ class SparkConnectPlanner(val session: SparkSession) {
     val result = WriteStreamOperationStartResult
       .newBuilder()
       .setQueryId(
-        StreamingQueryInstanceId.newBuilder()
+        StreamingQueryInstanceId
+          .newBuilder()
           .setId(query.id.toString)
           .setRunId(query.runId.toString)
           .build())
@@ -2099,7 +2100,7 @@ class SparkConnectPlanner(val session: SparkSession) {
       case Some(query) =>
         throw new IllegalArgumentException(
           s"Run id mismatch for query id $id. Run id in the request $runId " +
-          s"does not match one on the server ${query.runId}. The query might have restarted.")
+            s"does not match one on the server ${query.runId}. The query might have restarted.")
       case None =>
         throw new IllegalArgumentException(s"Streaming query $id is not found")
       // TODO(SPARK-42962): Handle this better. May be cache stopped queries for a few minutes.
@@ -2120,7 +2121,7 @@ class SparkConnectPlanner(val session: SparkSession) {
         respBuilder.setStatus(statusResult)
 
       case StreamingQueryCommand.CommandCase.LAST_PROGRESS |
-           StreamingQueryCommand.CommandCase.RECENT_PROGRESS =>
+          StreamingQueryCommand.CommandCase.RECENT_PROGRESS =>
         val progressReports = if (command.getLastProgress) {
           Option(query.lastProgress).toSeq
         } else {
@@ -2130,8 +2131,7 @@ class SparkConnectPlanner(val session: SparkSession) {
           StreamingQueryCommandResult.RecentProgressResult
             .newBuilder()
             .addAllRecentProgressJson(progressReports.map(_.json).asJava)
-            .build()
-        )
+            .build())
 
       case StreamingQueryCommand.CommandCase.STOP =>
         query.stop()
