@@ -654,11 +654,11 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
   def binaryArithmeticCauseOverflowError(
       eval1: Short, symbol: String, eval2: Short): SparkArithmeticException = {
     new SparkArithmeticException(
-      errorClass = "_LEGACY_ERROR_TEMP_2044",
+      errorClass = "BINARY_ARITHMETIC_OVERFLOW",
       messageParameters = Map(
-        "sqlValue1" -> toSQLValue(eval1, ShortType),
+        "value1" -> toSQLValue(eval1, ShortType),
         "symbol" -> symbol,
-        "sqlValue2" -> toSQLValue(eval2, ShortType)),
+        "value2" -> toSQLValue(eval2, ShortType)),
       context = Array.empty,
       summary = "")
   }

@@ -911,16 +911,10 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       spark.sessionState.catalog.createTable(newTable, false)
 
       sql("INSERT INTO TABLE test_table SELECT 1, 'a'")
-      checkError(
-        exception = intercept[AnalysisException] {
-          sql("INSERT INTO TABLE test_table SELECT 2, null")
-        },
-        errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.NULLABLE_COLUMN",
-        parameters = Map(
-          "tableName" -> "`spark_catalog`.`default`.`test_table`",
-          "colPath" -> "`s`"
-        )
-      )
+      val msg = intercept[SparkException] {
+        sql("INSERT INTO TABLE test_table SELECT 2, null")
+      }.getCause.getMessage
+      assert(msg.contains("Null value appeared in non-nullable field"))
     }
   }
 
