@@ -54,7 +54,8 @@ case class DataSourceV2Relation(
 
   override lazy val metadataOutput: Seq[AttributeReference] = table match {
     case hasMeta: SupportsMetadataColumns =>
-      metadataOutputWithOutConflicts(hasMeta.metadataColumns.toAttributes)
+      metadataOutputWithOutConflicts(
+        hasMeta.metadataColumns.toAttributes, hasMeta.canRenameConflictingMetadataColumns)
     case _ =>
       Nil
   }

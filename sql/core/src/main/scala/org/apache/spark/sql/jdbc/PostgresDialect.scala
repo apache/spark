@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.analysis.{IndexAlreadyExistsException, NonEmptyNamespaceException, NoSuchIndexException}
 import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.connector.expressions.NamedReference
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcUtils}
 import org.apache.spark.sql.execution.datasources.v2.TableSampleInfo
 import org.apache.spark.sql.types._
@@ -215,12 +216,23 @@ private object PostgresDialect extends JdbcDialect with SQLConfHelper {
         sqlException.getSQLState match {
           // https://www.postgresql.org/docs/14/errcodes-appendix.html
           case "42P07" =>
-            // The message is: Failed to create index indexName in tableName
-            val regex = "(?s)Failed to create index (.*) in (.*)".r
-            val indexName = regex.findFirstMatchIn(message).get.group(1)
-            val tableName = regex.findFirstMatchIn(message).get.group(2)
-            throw new IndexAlreadyExistsException(
-              indexName = indexName, tableName = tableName, cause = Some(e))
+            // Message patterns defined at caller sides of spark
+            val indexRegex = "(?s)Failed to create index (.*) in (.*)".r
+            val renameRegex = "(?s)Failed table renaming from (.*) to (.*)".r
+            // Message pattern defined by postgres specification
+            val pgRegex = """(?:.*)relation "(.*)" already exists""".r
+
+            message match {
+              case indexRegex(index, table) =>
+                throw new IndexAlreadyExistsException(
+                  indexName = index, tableName = table, cause = Some(e))
+              case renameRegex(_, newTable) =>
+                throw QueryCompilationErrors.tableAlreadyExistsError(newTable)
+              case _ if pgRegex.findFirstMatchIn(sqlException.getMessage).nonEmpty =>
+                val tableName = pgRegex.findFirstMatchIn(sqlException.getMessage).get.group(1)
+                throw QueryCompilationErrors.tableAlreadyExistsError(tableName)
+              case _ => super.classifyException(message, e)
+            }
           case "42704" =>
             // The message is: Failed to drop index indexName in tableName
             val regex = "(?s)Failed to drop index (.*) in (.*)".r
@@ -246,5 +258,12 @@ private object PostgresDialect extends JdbcDialect with SQLConfHelper {
     // method name
     "TABLESAMPLE BERNOULLI" +
       s" (${(sample.upperBound - sample.lowerBound) * 100}) REPEATABLE (${sample.seed})"
+  }
+
+  override def renameTable(oldTable: Identifier, newTable: Identifier): String = {
+    if (!oldTable.namespace().sameElements(newTable.namespace())) {
+      throw QueryCompilationErrors.cannotRenameTableAcrossSchemaError()
+    }
+    s"ALTER TABLE ${getFullyQualifiedQuotedTableName(oldTable)} RENAME TO ${newTable.name()}"
   }
 }

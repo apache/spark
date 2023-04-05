@@ -19,6 +19,7 @@ syntax = 'proto3';
 
 package spark.connect;
 
+import "spark/connect/common.proto";
 import "spark/connect/types.proto";
 
 option java_multiple_files = true;
@@ -192,6 +193,9 @@ message IsCached {
 message CacheTable {
   // (Required)
   string table_name = 1;
+
+  // (Optional)
+  optional StorageLevel storage_level = 2;
 }
 
 // See `spark.catalog.uncacheTable`

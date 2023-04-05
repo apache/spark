@@ -129,6 +129,12 @@
     ],
     "sqlState" : "429BB"
   },
+  "CANNOT_RENAME_ACROSS_SCHEMA" : {
+    "message" : [
+      "Renaming a <type> across schemas is not allowed."
+    ],
+    "sqlState" : "0AKD0"
+  },
   "CANNOT_RESTORE_PERMISSIONS_FOR_PATH" : {
     "message" : [
       "Failed to set permissions on created path <path> back to <permission>."
@@ -530,12 +536,6 @@
     ],
     "sqlState" : "23505"
   },
-  "ELEMENT_AT_BY_INDEX_ZERO" : {
-    "message" : [
-      "The index 0 is invalid. An index shall be either < 0 or > 0 (the first element has index 1)."
-    ],
-    "sqlState" : "22003"
-  },
   "EMPTY_JSON_FIELD_VALUE" : {
     "message" : [
       "Failed to parse an empty string for data type <dataType>."
@@ -908,6 +908,12 @@
       "The identifier <ident> is invalid. Please, consider quoting it with back-quotes as `<ident>`."
     ],
     "sqlState" : "42602"
+  },
+  "INVALID_INDEX_OF_ZERO" : {
+    "message" : [
+      "The index 0 is invalid. An index shall be either < 0 or > 0 (the first element has index 1)."
+    ],
+    "sqlState" : "22003"
   },
   "INVALID_JSON_ROOT_FIELD" : {
     "message" : [

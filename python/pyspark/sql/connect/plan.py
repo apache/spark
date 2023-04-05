@@ -965,13 +965,12 @@ class SubqueryAlias(LogicalPlan):
 
 
 class SQL(LogicalPlan):
-    def __init__(self, query: str, args: Optional[Dict[str, str]] = None) -> None:
+    def __init__(self, query: str, args: Optional[Dict[str, Any]] = None) -> None:
         super().__init__(None)
 
         if args is not None:
             for k, v in args.items():
                 assert isinstance(k, str)
-                assert isinstance(v, str)
 
         self._query = query
         self._args = args
@@ -982,7 +981,7 @@ class SQL(LogicalPlan):
 
         if self._args is not None and len(self._args) > 0:
             for k, v in self._args.items():
-                plan.sql.args[k] = v
+                plan.sql.args[k].CopyFrom(LiteralExpression._from_value(v).to_plan(session).literal)
 
         return plan
 
@@ -991,7 +990,9 @@ class SQL(LogicalPlan):
         cmd.sql_command.sql = self._query
         if self._args is not None and len(self._args) > 0:
             for k, v in self._args.items():
-                cmd.sql_command.args[k] = v
+                cmd.sql_command.args[k].CopyFrom(
+                    LiteralExpression._from_value(v).to_plan(session).literal
+                )
         return cmd
 
 

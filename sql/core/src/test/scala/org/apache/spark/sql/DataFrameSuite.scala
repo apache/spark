@@ -1137,6 +1137,18 @@ class DataFrameSuite extends QueryTest
     checkAnswer(approxSummaryDF, approxSummaryResult)
   }
 
+  test("SPARK-41391: Correct the output column name of groupBy.agg(count_distinct)") {
+    withTempView("person") {
+      person.createOrReplaceTempView("person")
+      val df1 = person.groupBy("id").agg(count_distinct(col("name")))
+      val df2 = spark.sql("SELECT id, COUNT(DISTINCT name) FROM person GROUP BY id")
+      assert(df1.columns === df2.columns)
+      val df3 = person.groupBy("id").agg(count_distinct(col("*")))
+      val df4 = spark.sql("SELECT id, COUNT(DISTINCT *) FROM person GROUP BY id")
+      assert(df3.columns === df4.columns)
+    }
+  }
+
   test("summary advanced") {
     val stats = Array("count", "50.01%", "max", "mean", "min", "25%")
     val orderMatters = person2.summary(stats: _*)
@@ -2754,6 +2766,15 @@ class DataFrameSuite extends QueryTest
     val swappedDf = df.select($"key".as("map"), $"map".as("key"))
 
     checkAnswer(swappedDf.filter($"key"($"map") > "a"), Row(2, Map(2 -> "b")))
+  }
+
+  test("SPARK-42655 Fix ambiguous column reference error") {
+    val df1 = sparkContext.parallelize(List((1, 2, 3, 4, 5))).toDF("id", "col2", "col3",
+      "col4", "col5")
+    val op_cols_mixed_case = List("id", "col2", "col3", "col4", "col5", "ID")
+    val df2 = df1.select(op_cols_mixed_case.head, op_cols_mixed_case.tail: _*)
+    // should not throw any error.
+    checkAnswer(df2.select("id"), Row(1))
   }
 
   test("SPARK-26057: attribute deduplication on already analyzed plans") {
