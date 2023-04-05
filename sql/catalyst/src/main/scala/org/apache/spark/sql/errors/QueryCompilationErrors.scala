@@ -2105,7 +2105,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       messageParameters = Map(
         "tableName" -> toSQLId(tableName),
         "colPath" -> toSQLId(colPath),
-        "extraCols" -> extraCols
+        "extraCols" -> toSQLId(extraCols)
       )
     )
   }
@@ -2163,7 +2163,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       messageParameters = Map(
         "tableName" -> toSQLId(tableName),
         "colPath" -> toSQLId(colPath),
-        "missingFields" -> missingFields
+        "missingFields" -> toSQLId(missingFields)
       )
     )
   }

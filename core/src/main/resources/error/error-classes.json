@@ -694,7 +694,7 @@
       },
       "NULLABLE_MAP_VALUES" : {
         "message" : [
-          "Cannot write nullable elements to array of non-nulls: <colPath>."
+          "Cannot write nullable values to map of non-nulls: <colPath>."
         ]
       },
       "STRUCT_MISSING_FIELDS" : {
