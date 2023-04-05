@@ -512,10 +512,6 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
     f(this) || fields.exists(field => field.dataType.existsRecursively(f))
   }
 
-//  @transient
-//  private[sql] lazy val interpretedOrdering =
-//    InterpretedOrdering.forSchema(this.fields.map(_.dataType))
-
   /**
    * These define and cache existence default values for the struct fields for efficiency purposes.
    */

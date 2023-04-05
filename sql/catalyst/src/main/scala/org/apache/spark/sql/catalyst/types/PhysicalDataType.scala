@@ -62,47 +62,6 @@ object PhysicalDataType {
 
 trait PhysicalPrimitiveType
 
-
-// object OrderedPhysicalDataType {
-//  def apply(dt: DataType): OrderedPhysicalDataType =
-//    PhysicalDataType(dt).asInstanceOf[OrderedPhysicalDataType]
-//
-//  def ordering(dt: DataType): Ordering[Any] = {
-//    try apply(dt).ordering.asInstanceOf[Ordering[Any]] catch {
-//      case NonFatal(_) =>
-//        throw QueryExecutionErrors.unsupportedTypeError(dt)
-//    }
-//  }
-// }
-
-// sealed abstract class PhysicalAtomicType extends OrderedPhysicalDataType {
-//  private[sql] val tag: TypeTag[InternalType]
-// }
-
-// sealed abstract class PhysicalNumericType extends PhysicalAtomicType
-
-// object PhysicalNumericType extends PhysicalNumericType {
-//  def apply(nt: NumericType): PhysicalNumericType = {
-//    PhysicalDataType(nt).asInstanceOf[PhysicalNumericType]
-//  }
-//
-//  override private[sql] val tag = null
-//  override private[sql] def ordering = null
-//  override private[sql] type InternalType = Null
-// }
-
-// sealed abstract class PhysicalIntegralType extends PhysicalNumericType
-//
-// object PhysicalIntegralType extends PhysicalIntegralType {
-//  def apply(dt: IntegralType): PhysicalIntegralType = {
-//    PhysicalDataType(dt).asInstanceOf[PhysicalIntegralType]
-//  }
-//
-//  override private[sql] val tag = null
-//  override private[sql] def ordering = null
-//  override private[sql] type InternalType = Null
-// }
-
 class PhysicalBinaryType() extends PhysicalDataType {
   private[sql] val ordering =
     (x: Array[Byte], y: Array[Byte]) => ByteArray.compareBinary(x, y)
@@ -290,8 +249,3 @@ object UninitializedPhysicalType extends PhysicalDataType {
   override private[sql] type InternalType = Any
   @transient private[sql] lazy val tag = typeTag[InternalType]
 }
-// object UninitializedPhysicalIntegralType extends PhysicalDataType {
-//  override private[sql] val tag = null
-//  override private[sql] def ordering = null
-//  override private[sql] type InternalType = Null
-// }
