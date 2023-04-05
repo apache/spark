@@ -285,7 +285,10 @@ case class ResolveDefaultColumns(catalog: SessionCatalog) extends Rule[LogicalPl
         table.copy(
           names = newNames,
           rows = table.rows.map { row => row ++ newDefaultExpressions })
-      case local: LocalRelation =>
+      case local: LocalRelation
+        if (numUserSpecifiedColumns > 0 && node.output.size <= numUserSpecifiedColumns) ||
+          (numUserSpecifiedColumns == 0 &&
+            node.output.size <= insertTableSchemaWithoutPartitionColumns.size) =>
         val newDefaultExpressionsRow = new GenericInternalRow(
           schema.fields.drop(local.output.size).map {
             case f if f.metadata.contains(CURRENT_DEFAULT_COLUMN_METADATA_KEY) =>
@@ -372,8 +375,8 @@ case class ResolveDefaultColumns(catalog: SessionCatalog) extends Rule[LogicalPl
         replaceExplicitDefaultValuesForInlineTable(defaultExpressions, table)
       case project: Project =>
         replaceExplicitDefaultValuesForProject(defaultExpressions, project)
-      case local: LocalRelation =>
-        Some(local)
+      case _: LocalRelation =>
+        None
     }
   }
 
