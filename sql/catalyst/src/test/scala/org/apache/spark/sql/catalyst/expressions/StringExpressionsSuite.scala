@@ -26,7 +26,6 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch,
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
-import org.apache.spark.sql.errors.QueryExecutionErrors.toSQLConf
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -1834,18 +1833,6 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("SPARK-33468: ParseUrl in ANSI mode should fail if input string is not a valid url") {
     val url = "https://a.b.c/index.php?params1=a|b&params2=x"
-    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
-      checkError(
-        exception = intercept[SparkIllegalArgumentException]{
-          evaluateWithoutCodegen(
-          ParseUrl(Seq(url, "HOST")))
-        },
-        errorClass = "INVALID_URL",
-        parameters = Map(
-                "url" -> url,
-                "ansiConfig" -> toSQLConf(SQLConf.ANSI_ENABLED.key)
-        ))
-    }
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
       checkEvaluation(
         ParseUrl(Seq(url, "HOST")), null)

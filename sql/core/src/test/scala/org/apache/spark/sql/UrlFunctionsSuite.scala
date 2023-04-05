@@ -74,7 +74,7 @@ class UrlFunctionsSuite extends QueryTest with SharedSparkSession {
       val url = "inva lid://user:pass@host/file;param?query;p2"
       checkError(
         exception = intercept[SparkException] {
-               sql(s"SELECT parse_url('$url', 'HOST')").collect()
+          sql(s"SELECT parse_url('$url', 'HOST')").collect()
         }.getCause.asInstanceOf[SparkThrowable],
         errorClass = "INVALID_URL",
         parameters = Map(
