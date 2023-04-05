@@ -146,6 +146,12 @@ case class HllSketchEstimate(
     mutableAggBufferOffset: Int = 0,
     inputAggBufferOffset: Int = 0) extends HllSketchAggregate {
 
+  // This constructor seems to be only necessary for the ExpressionSchemaSuite to pass
+
+  def this(child: Expression) = {
+    this(child, HllSketch.DEFAULT_LG_K, HllSketch.DEFAULT_HLL_TYPE.toString, 0, 0)
+  }
+
   // These copy constructors are repeated in every case class
 
   override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): HllSketchEstimate =
@@ -190,6 +196,12 @@ case class HllSketchEstimate(
     _FUNC_(expr[, lgConfigK, tgtHllType]) - Returns the HllSketch's compact binary representation.
       `lgConfigK` the log-base-2 of K, where K is the number of buckets or slots for the HllSketch.
       `tgtHllType` the target type of the HllSketch to be used (HLL_4, HLL_6, HLL_8). """,
+  examples = """
+    Examples:
+      > SELECT hllsketch_binary_estimate(_FUNC_(col1))
+      FROM VALUES (1), (1), (2), (2), (3) tab(col1);
+       3
+  """,
   group = "agg_funcs",
   since = "3.5.0")
 case class HllSketchBinary(
@@ -198,6 +210,12 @@ case class HllSketchBinary(
     tgtHllType: String = HllSketch.DEFAULT_HLL_TYPE.toString,
     mutableAggBufferOffset: Int = 0,
     inputAggBufferOffset: Int = 0) extends HllSketchAggregate {
+
+  // This constructor seems to be only necessary for the ExpressionSchemaSuite to pass
+
+  def this(child: Expression) = {
+    this(child, HllSketch.DEFAULT_LG_K, HllSketch.DEFAULT_HLL_TYPE.toString, 0, 0)
+  }
 
   // These copy constructors are repeated in every case class
 
@@ -241,6 +259,12 @@ case class HllSketchBinary(
   usage = """
     _FUNC_(expr[, lgMaxK]) - Returns the estimated number of unique values.
       `lgMaxK` The largest maximum size for lgConfigK for the union operation.""",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(hllsketch_binary(col1))
+      FROM VALUES (1), (1), (2), (2), (3) tab(col1);
+       3
+  """,
   group = "agg_funcs",
   since = "3.5.0")
 case class HllSketchUnionEstimate(
@@ -252,6 +276,12 @@ case class HllSketchUnionEstimate(
   // way to convert between HllSketch and Union instances (even though Union
   // is just a wrapper around HllSketch).
   extends TypedImperativeAggregate[Union] with UnaryLike[Expression] {
+
+  // This constructor seems to be only necessary for the ExpressionSchemaSuite to pass
+
+  def this(child: Expression) = {
+    this(child, HllSketch.DEFAULT_LG_K, 0, 0)
+  }
 
   // These copy constructors are repeated in every case class
 
