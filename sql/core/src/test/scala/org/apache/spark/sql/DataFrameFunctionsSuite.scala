@@ -3191,17 +3191,27 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       Seq(Row(Seq[Double](3.0, 3.0, 2.0, 5.0, 1.0, 2.0)))
     )
     checkAnswer(df4.selectExpr("array_insert(a, b, c)"), Seq(Row(Seq(true, false, false))))
-    checkAnswer(df5.selectExpr("array_insert(a, b, c)"), Seq(Row(Seq("d", "a", "b", "c"))))
+
+    val e1 = intercept[SparkException] {
+      df5.selectExpr("array_insert(a, b, c)").show()
+    }
+    assert(e1.getCause.isInstanceOf[SparkRuntimeException])
+    checkError(
+      exception = e1.getCause.asInstanceOf[SparkRuntimeException],
+      errorClass = "INVALID_INDEX_OF_ZERO",
+      parameters = Map.empty,
+      context = ExpectedContext(
+        fragment = "array_insert(a, b, c)",
+        start = 0,
+        stop = 20)
+    )
+
     checkAnswer(df5.select(
       array_insert(col("a"), lit(1), col("c"))),
       Seq(Row(Seq("d", "a", "b", "c")))
     )
     // null checks
     checkAnswer(df6.selectExpr("array_insert(a, b, c)"), Seq(Row(Seq("a", null, "b", "c", "d"))))
-    checkAnswer(df5.select(
-      array_insert(col("a"), col("b"), lit(null).cast("string"))),
-      Seq(Row(Seq(null, "a", "b", "c")))
-    )
     checkAnswer(df6.select(
       array_insert(col("a"), col("b"), lit(null).cast("string"))),
       Seq(Row(Seq("a", null, "b", "c", null)))

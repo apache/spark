@@ -161,13 +161,17 @@ class SqlCommand(google.protobuf.message.Message):
         KEY_FIELD_NUMBER: builtins.int
         VALUE_FIELD_NUMBER: builtins.int
         key: builtins.str
-        value: builtins.str
+        @property
+        def value(self) -> pyspark.sql.connect.proto.expressions_pb2.Expression.Literal: ...
         def __init__(
             self,
             *,
             key: builtins.str = ...,
-            value: builtins.str = ...,
+            value: pyspark.sql.connect.proto.expressions_pb2.Expression.Literal | None = ...,
         ) -> None: ...
+        def HasField(
+            self, field_name: typing_extensions.Literal["value", b"value"]
+        ) -> builtins.bool: ...
         def ClearField(
             self, field_name: typing_extensions.Literal["key", b"key", "value", b"value"]
         ) -> None: ...
@@ -177,17 +181,20 @@ class SqlCommand(google.protobuf.message.Message):
     sql: builtins.str
     """(Required) SQL Query."""
     @property
-    def args(self) -> google.protobuf.internal.containers.ScalarMap[builtins.str, builtins.str]:
-        """(Optional) A map of parameter names to string values that are parsed as
-        SQL literal expressions. For example, map keys: "rank", "name", "birthdate";
-        map values: "1", "'Steven'", "DATE'2023-03-21'". The fragments of string values
-        belonged to SQL comments are skipped while parsing.
-        """
+    def args(
+        self,
+    ) -> google.protobuf.internal.containers.MessageMap[
+        builtins.str, pyspark.sql.connect.proto.expressions_pb2.Expression.Literal
+    ]:
+        """(Optional) A map of parameter names to literal expressions."""
     def __init__(
         self,
         *,
         sql: builtins.str = ...,
-        args: collections.abc.Mapping[builtins.str, builtins.str] | None = ...,
+        args: collections.abc.Mapping[
+            builtins.str, pyspark.sql.connect.proto.expressions_pb2.Expression.Literal
+        ]
+        | None = ...,
     ) -> None: ...
     def ClearField(
         self, field_name: typing_extensions.Literal["args", b"args", "sql", b"sql"]

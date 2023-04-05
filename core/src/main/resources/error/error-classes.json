@@ -35,6 +35,12 @@
     ],
     "sqlState" : "22003"
   },
+  "BINARY_ARITHMETIC_OVERFLOW" : {
+    "message" : [
+      "<value1> <symbol> <value2> caused overflow."
+    ],
+    "sqlState" : "22003"
+  },
   "CANNOT_CAST_DATATYPE" : {
     "message" : [
       "Cannot cast <sourceType> to <targetType>."
@@ -536,12 +542,6 @@
     ],
     "sqlState" : "23505"
   },
-  "ELEMENT_AT_BY_INDEX_ZERO" : {
-    "message" : [
-      "The index 0 is invalid. An index shall be either < 0 or > 0 (the first element has index 1)."
-    ],
-    "sqlState" : "22003"
-  },
   "EMPTY_JSON_FIELD_VALUE" : {
     "message" : [
       "Failed to parse an empty string for data type <dataType>."
@@ -914,6 +914,12 @@
       "The identifier <ident> is invalid. Please, consider quoting it with back-quotes as `<ident>`."
     ],
     "sqlState" : "42602"
+  },
+  "INVALID_INDEX_OF_ZERO" : {
+    "message" : [
+      "The index 0 is invalid. An index shall be either < 0 or > 0 (the first element has index 1)."
+    ],
+    "sqlState" : "22003"
   },
   "INVALID_JSON_ROOT_FIELD" : {
     "message" : [
@@ -3878,11 +3884,6 @@
   "_LEGACY_ERROR_TEMP_2043" : {
     "message" : [
       "- <sqlValue> caused overflow."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2044" : {
-    "message" : [
-      "<sqlValue1> <symbol> <sqlValue2> caused overflow."
     ]
   },
   "_LEGACY_ERROR_TEMP_2045" : {

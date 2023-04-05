@@ -270,7 +270,7 @@ _options: List[Option] = [
         default=1000,
         types=int,
         check_func=(
-            lambda v: v is v >= 0,
+            lambda v: v >= 0,
             "'plotting.max_rows' should be greater than or equal to 0.",
         ),
     ),
