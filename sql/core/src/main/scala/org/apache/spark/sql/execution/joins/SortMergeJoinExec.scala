@@ -1040,13 +1040,17 @@ case class SortMergeJoinExec(
     // they may be used in the following function.
     val conditionAttrs = condition.map(_.references).getOrElse(AttributeSet.empty)
     val evaluateLeftVars =
-    leftResultVars.zip(left.output)
-      .filter(p => conditionAttrs.contains(p._2))
-      .map(_._1.code)
-      .fold(EmptyBlock)(_ + _)
+      leftResultVars.zip(left.output)
+        .filter(p => conditionAttrs.contains(p._2))
+        .map(_._1.code)
+        .fold(EmptyBlock)(_ + _)
     // Generate condition check code without evaluating the left variable again.
-    val (_, conditionCheck, _) = getJoinCondition(
+    val (_, conditionCheckWithoutLeftVars, _) = getJoinCondition(
       ctx, leftResultVars.map(_.copy(code = EmptyBlock)), left, right, Some(rightOutputRow))
+    val conditionCheck =
+      s"""$evaluateLeftVars
+         |$conditionCheckWithoutLeftVars
+         |""".stripMargin
 
     // Generate code for result output in separate function, as we need to output result from
     // multiple places in join code.
@@ -1185,7 +1189,6 @@ case class SortMergeJoinExec(
          |
          |for ($leftIndex = 0; $leftIndex < $leftBuffer.size(); $leftIndex++) {
          |  $leftOutputRow = (InternalRow) $leftBuffer.get($leftIndex);
-         |  $evaluateLeftVars
          |  for ($rightIndex = 0; $rightIndex < $rightBuffer.size(); $rightIndex++) {
          |    $rightOutputRow = (InternalRow) $rightBuffer.get($rightIndex);
          |    $conditionCheck {

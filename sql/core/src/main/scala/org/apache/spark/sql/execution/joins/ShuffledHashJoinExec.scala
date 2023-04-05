@@ -365,9 +365,21 @@ case class ShuffledHashJoinExec(
        """.stripMargin
     val streamedKeyAnyNull = s"${streamedKeyExprCode.value}.anyNull()"
 
+    // Evaluate the variables from the stream side and used in the condition but do not clear the
+    // code as they may be used in the following function.
+    val conditionAttrs = condition.map(_.references).getOrElse(AttributeSet.empty)
+    val evaluateStreamVars =
+      streamedVars.zip(streamedPlan.output)
+        .filter(p => conditionAttrs.contains(p._2))
+        .map(_._1.code)
+        .fold(EmptyBlock)(_ + _)
     // Generate code for join condition
-    val (_, conditionCheck, _) =
-      getJoinCondition(ctx, streamedVars, streamedPlan, buildPlan, Some(buildRow))
+    val (_, conditionCheckWithoutStreamVars, _) = getJoinCondition(
+      ctx, streamedVars.map(_.copy(code = EmptyBlock)), streamedPlan, buildPlan, Some(buildRow))
+    val conditionCheck =
+      s"""$evaluateStreamVars
+         |$conditionCheckWithoutStreamVars
+         |""".stripMargin
 
     // Generate code for result output in separate function, as we need to output result from
     // multiple places in join code.
