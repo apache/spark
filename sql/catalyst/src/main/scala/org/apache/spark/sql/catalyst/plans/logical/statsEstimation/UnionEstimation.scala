@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.plans.logical.statsEstimation
 
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap}
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, Statistics, Union}
-import org.apache.spark.sql.catalyst.types.OrderedPhysicalDataType
+import org.apache.spark.sql.catalyst.types.PhysicalDataType
 import org.apache.spark.sql.types._
 
 /**
@@ -31,7 +31,7 @@ object UnionEstimation {
   import EstimationUtils._
 
   private def createStatComparator(dt: DataType): (Any, Any) => Boolean = {
-    OrderedPhysicalDataType.ordering(dt).lt _
+    PhysicalDataType.ordering(dt).lt _
   }
 
   private def isTypeSupported(dt: DataType): Boolean = dt match {

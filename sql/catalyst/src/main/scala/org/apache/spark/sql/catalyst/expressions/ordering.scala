@@ -20,8 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReferences
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateOrdering
-import org.apache.spark.sql.catalyst.types.OrderedPhysicalDataType
-import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.catalyst.types.PhysicalDataType
 import org.apache.spark.sql.types._
 
 
@@ -58,20 +57,10 @@ class InterpretedOrdering(ordering: Seq[SortOrder]) extends BaseOrdering {
         return if (order.nullOrdering == NullsFirst) 1 else -1
       } else {
         val comparison = order.dataType match {
-          case dt: AtomicType if order.direction == Ascending =>
-            OrderedPhysicalDataType(dt).ordering.asInstanceOf[Ordering[Any]].compare(left, right)
-          case dt: AtomicType if order.direction == Descending =>
-            - OrderedPhysicalDataType(dt).ordering.asInstanceOf[Ordering[Any]].compare(left, right)
-          case a: ArrayType if order.direction == Ascending =>
-            a.interpretedOrdering.asInstanceOf[Ordering[Any]].compare(left, right)
-          case a: ArrayType if order.direction == Descending =>
-            - a.interpretedOrdering.asInstanceOf[Ordering[Any]].compare(left, right)
-          case s: StructType if order.direction == Ascending =>
-            s.interpretedOrdering.asInstanceOf[Ordering[Any]].compare(left, right)
-          case s: StructType if order.direction == Descending =>
-            - s.interpretedOrdering.asInstanceOf[Ordering[Any]].compare(left, right)
-          case other =>
-            throw QueryExecutionErrors.orderedOperationUnsupportedByDataTypeError(other)
+          case dt if order.direction == Ascending =>
+            PhysicalDataType.ordering(dt).compare(left, right)
+          case dt if order.direction == Descending =>
+            - PhysicalDataType.ordering(dt).compare(left, right)
         }
         if (comparison != 0) {
           return comparison

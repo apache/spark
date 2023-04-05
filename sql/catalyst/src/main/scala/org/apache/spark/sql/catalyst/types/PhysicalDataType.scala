@@ -19,14 +19,18 @@ package org.apache.spark.sql.catalyst.types
 
 import scala.reflect.runtime.universe.TypeTag
 import scala.reflect.runtime.universe.typeTag
-import scala.util.control.NonFatal
 
-import org.apache.spark.sql.catalyst.util.SQLOrderingUtil
+import org.apache.spark.sql.catalyst.expressions.{Ascending, BoundReference, InterpretedOrdering, SortOrder}
+import org.apache.spark.sql.catalyst.util.{ArrayData, SQLOrderingUtil}
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.types.{ArrayType, BinaryType, BooleanType, ByteType, DataType, DateType, DayTimeIntervalType, Decimal, DecimalType, DoubleType, FloatType, IntegerType, IntegralType, LongType, MapType, NullType, NumericType, ShortType, StringType, StructField, StructType, TimestampNTZType, TimestampType, YearMonthIntervalType}
+import org.apache.spark.sql.types.{ArrayType, BinaryType, BooleanType, ByteType, DataType, DateType, DayTimeIntervalType, Decimal, DecimalType, DoubleType, FloatType, IntegerType, LongType, MapType, NullType, ShortType, StringType, StructField, StructType, TimestampNTZType, TimestampType, YearMonthIntervalType}
 import org.apache.spark.unsafe.types.{ByteArray, UTF8String}
 
-sealed abstract class PhysicalDataType
+sealed abstract class PhysicalDataType {
+  private[sql] type InternalType
+  private[sql] def ordering: Ordering[InternalType]
+  private[sql] val tag: TypeTag[InternalType]
+}
 
 object PhysicalDataType {
   def apply(dt: DataType): PhysicalDataType = dt match {
@@ -52,95 +56,91 @@ object PhysicalDataType {
       PhysicalMapType(keyType, valueType, valueContainsNull)
     case _ => UninitializedPhysicalType
   }
+
+  def ordering(dt: DataType): Ordering[Any] = apply(dt).ordering.asInstanceOf[Ordering[Any]]
 }
 
 trait PhysicalPrimitiveType
 
-sealed abstract class TypedPhysicalDataType extends PhysicalDataType {
-  private[sql] type InternalType
-}
 
-sealed abstract class OrderedPhysicalDataType extends TypedPhysicalDataType {
-  private[sql] def ordering: Ordering[InternalType]
-}
+// object OrderedPhysicalDataType {
+//  def apply(dt: DataType): OrderedPhysicalDataType =
+//    PhysicalDataType(dt).asInstanceOf[OrderedPhysicalDataType]
+//
+//  def ordering(dt: DataType): Ordering[Any] = {
+//    try apply(dt).ordering.asInstanceOf[Ordering[Any]] catch {
+//      case NonFatal(_) =>
+//        throw QueryExecutionErrors.unsupportedTypeError(dt)
+//    }
+//  }
+// }
 
-object OrderedPhysicalDataType {
-  def apply(dt: DataType): OrderedPhysicalDataType =
-    PhysicalDataType(dt).asInstanceOf[OrderedPhysicalDataType]
+// sealed abstract class PhysicalAtomicType extends OrderedPhysicalDataType {
+//  private[sql] val tag: TypeTag[InternalType]
+// }
 
-  def ordering(dt: DataType): Ordering[Any] = {
-    try apply(dt).ordering.asInstanceOf[Ordering[Any]] catch {
-      case NonFatal(_) =>
-        throw QueryExecutionErrors.unsupportedTypeError(dt)
-    }
-  }
-}
+// sealed abstract class PhysicalNumericType extends PhysicalAtomicType
 
-sealed abstract class PhysicalAtomicType extends OrderedPhysicalDataType {
-  private[sql] val tag: TypeTag[InternalType]
-}
+// object PhysicalNumericType extends PhysicalNumericType {
+//  def apply(nt: NumericType): PhysicalNumericType = {
+//    PhysicalDataType(nt).asInstanceOf[PhysicalNumericType]
+//  }
+//
+//  override private[sql] val tag = null
+//  override private[sql] def ordering = null
+//  override private[sql] type InternalType = Null
+// }
 
-sealed abstract class PhysicalNumericType extends PhysicalAtomicType
+// sealed abstract class PhysicalIntegralType extends PhysicalNumericType
+//
+// object PhysicalIntegralType extends PhysicalIntegralType {
+//  def apply(dt: IntegralType): PhysicalIntegralType = {
+//    PhysicalDataType(dt).asInstanceOf[PhysicalIntegralType]
+//  }
+//
+//  override private[sql] val tag = null
+//  override private[sql] def ordering = null
+//  override private[sql] type InternalType = Null
+// }
 
-object PhysicalNumericType extends PhysicalNumericType {
-  def apply(nt: NumericType): PhysicalNumericType = {
-    PhysicalDataType(nt).asInstanceOf[PhysicalNumericType]
-  }
-
-  override private[sql] val tag = null
-  override private[sql] def ordering = null
-  override private[sql] type InternalType = Null
-}
-
-sealed abstract class PhysicalIntegralType extends PhysicalNumericType
-
-object PhysicalIntegralType extends PhysicalIntegralType {
-  def apply(dt: IntegralType): PhysicalIntegralType = {
-    PhysicalDataType(dt).asInstanceOf[PhysicalIntegralType]
-  }
-
-  override private[sql] val tag = null
-  override private[sql] def ordering = null
-  override private[sql] type InternalType = Null
-}
-
-case class PhysicalArrayType(elementType: DataType, containsNull: Boolean) extends PhysicalDataType
-
-class PhysicalBinaryType() extends PhysicalAtomicType {
-
-  @transient private[sql] lazy val tag = typeTag[InternalType]
-
+class PhysicalBinaryType() extends PhysicalDataType {
   private[sql] val ordering =
     (x: Array[Byte], y: Array[Byte]) => ByteArray.compareBinary(x, y)
 
   private[sql] type InternalType = Array[Byte]
+  @transient private[sql] lazy val tag = typeTag[InternalType]
 }
 case object PhysicalBinaryType extends PhysicalBinaryType
 
-class PhysicalBooleanType extends PhysicalAtomicType {
+class PhysicalBooleanType extends PhysicalDataType {
   // The companion object and this class is separated so the companion object also subclasses
   // this type. Otherwise, the companion object would be of type "BooleanType$" in byte code.
   // Defined with a private constructor so the companion object is the only possible instantiation.
   private[sql] type InternalType = Boolean
-  @transient private[sql] lazy val tag = typeTag[InternalType]
   private[sql] val ordering = implicitly[Ordering[InternalType]]
+  @transient private[sql] lazy val tag = typeTag[InternalType]
 }
 case object PhysicalBooleanType extends PhysicalBooleanType with PhysicalPrimitiveType
 
-class PhysicalByteType() extends PhysicalIntegralType {
+class PhysicalByteType() extends PhysicalDataType {
   private[sql] type InternalType = Byte
-  @transient private[sql] lazy val tag = typeTag[InternalType]
   private[sql] val ordering = implicitly[Ordering[InternalType]]
+  @transient private[sql] lazy val tag = typeTag[InternalType]
 }
 case object PhysicalByteType extends PhysicalByteType with PhysicalPrimitiveType
 
-class PhysicalCalendarIntervalType() extends PhysicalDataType
+class PhysicalCalendarIntervalType() extends PhysicalDataType {
+  override private[sql] def ordering =
+    throw QueryExecutionErrors.unsupportedOperationExceptionError()
+  override private[sql] type InternalType = Any
+  @transient private[sql] lazy val tag = typeTag[InternalType]
+}
 case object PhysicalCalendarIntervalType extends PhysicalCalendarIntervalType
 
-case class PhysicalDecimalType(precision: Int, scale: Int) extends PhysicalNumericType {
+case class PhysicalDecimalType(precision: Int, scale: Int) extends PhysicalDataType {
   private[sql] type InternalType = Decimal
-  @transient private[sql] lazy val tag = typeTag[InternalType]
   private[sql] val ordering = Decimal.DecimalIsFractional
+  @transient private[sql] lazy val tag = typeTag[InternalType]
 }
 
 case object PhysicalDecimalType {
@@ -149,76 +149,149 @@ case object PhysicalDecimalType {
   }
 }
 
-class PhysicalDoubleType() extends PhysicalNumericType {
+class PhysicalDoubleType() extends PhysicalDataType {
   // The companion object and this class is separated so the companion object also subclasses
   // this type. Otherwise, the companion object would be of type "DoubleType$" in byte code.
   // Defined with a private constructor so the companion object is the only possible instantiation.
   private[sql] type InternalType = Double
-  @transient private[sql] lazy val tag = typeTag[InternalType]
   private[sql] val ordering =
     (x: Double, y: Double) => SQLOrderingUtil.compareDoubles(x, y)
+  @transient private[sql] lazy val tag = typeTag[InternalType]
 }
 case object PhysicalDoubleType extends PhysicalDoubleType with PhysicalPrimitiveType
 
-class PhysicalFloatType() extends PhysicalNumericType {
+class PhysicalFloatType() extends PhysicalDataType {
   // The companion object and this class is separated so the companion object also subclasses
   // this type. Otherwise, the companion object would be of type "FloatType$" in byte code.
   // Defined with a private constructor so the companion object is the only possible instantiation.
   private[sql] type InternalType = Float
-  @transient private[sql] lazy val tag = typeTag[InternalType]
   private[sql] val ordering =
     (x: Float, y: Float) => SQLOrderingUtil.compareFloats(x, y)
+  @transient private[sql] lazy val tag = typeTag[InternalType]
 }
 case object PhysicalFloatType extends PhysicalFloatType with PhysicalPrimitiveType
 
-class PhysicalIntegerType() extends PhysicalIntegralType {
+class PhysicalIntegerType() extends PhysicalDataType {
   // The companion object and this class is separated so the companion object also subclasses
   // this type. Otherwise, the companion object would be of type "IntegerType$" in byte code.
   // Defined with a private constructor so the companion object is the only possible instantiation.
   private[sql] type InternalType = Int
-  @transient private[sql] lazy val tag = typeTag[InternalType]
   private[sql] val ordering = implicitly[Ordering[InternalType]]
+  @transient private[sql] lazy val tag = typeTag[InternalType]
 }
 case object PhysicalIntegerType extends PhysicalIntegerType with PhysicalPrimitiveType
 
-class PhysicalLongType() extends PhysicalIntegralType {
+class PhysicalLongType() extends PhysicalDataType {
   // The companion object and this class is separated so the companion object also subclasses
   // this type. Otherwise, the companion object would be of type "LongType$" in byte code.
   // Defined with a private constructor so the companion object is the only possible instantiation.
   private[sql] type InternalType = Long
-  @transient private[sql] lazy val tag = typeTag[InternalType]
   private[sql] val ordering = implicitly[Ordering[InternalType]]
+  @transient private[sql] lazy val tag = typeTag[InternalType]
 }
 case object PhysicalLongType extends PhysicalLongType with PhysicalPrimitiveType
 
 case class PhysicalMapType(keyType: DataType, valueType: DataType, valueContainsNull: Boolean)
-    extends PhysicalDataType
+    extends PhysicalDataType {
+  override private[sql] def ordering =
+    throw QueryExecutionErrors.unsupportedOperationExceptionError()
+  override private[sql] type InternalType = Any
+  @transient private[sql] lazy val tag = typeTag[InternalType]
+}
 
-class PhysicalNullType() extends PhysicalDataType
+class PhysicalNullType() extends PhysicalDataType {
+  override private[sql] def ordering =
+    throw QueryExecutionErrors.unsupportedOperationExceptionError()
+  override private[sql] type InternalType = Any
+  @transient private[sql] lazy val tag = typeTag[InternalType]
+}
 case object PhysicalNullType extends PhysicalNullType with PhysicalPrimitiveType
 
-class PhysicalShortType() extends PhysicalIntegralType {
+class PhysicalShortType() extends PhysicalDataType {
   private[sql] type InternalType = Short
-  @transient private[sql] lazy val tag = typeTag[InternalType]
   private[sql] val ordering = implicitly[Ordering[InternalType]]
+  @transient private[sql] lazy val tag = typeTag[InternalType]
 }
 case object PhysicalShortType extends PhysicalShortType with PhysicalPrimitiveType
 
-class PhysicalStringType() extends PhysicalAtomicType {
+class PhysicalStringType() extends PhysicalDataType {
   // The companion object and this class is separated so the companion object also subclasses
   // this type. Otherwise, the companion object would be of type "StringType$" in byte code.
   // Defined with a private constructor so the companion object is the only possible instantiation.
   private[sql] type InternalType = UTF8String
-  @transient private[sql] lazy val tag = typeTag[InternalType]
   private[sql] val ordering = implicitly[Ordering[InternalType]]
+  @transient private[sql] lazy val tag = typeTag[InternalType]
 }
 case object PhysicalStringType extends PhysicalStringType
 
-case class PhysicalStructType(fields: Array[StructField]) extends PhysicalDataType
+case class PhysicalArrayType(
+    elementType: DataType, containsNull: Boolean) extends PhysicalDataType {
+  override private[sql] type InternalType = ArrayData
+  override private[sql] def ordering = interpretedOrdering
+  @transient private[sql] lazy val tag = typeTag[InternalType]
 
-object UninitializedPhysicalType extends PhysicalDataType
-object UninitializedPhysicalIntegralType extends PhysicalIntegralType {
-  override private[sql] val tag = null
-  override private[sql] def ordering = null
-  override private[sql] type InternalType = Null
+  @transient
+  private[sql] lazy val interpretedOrdering: Ordering[ArrayData] = new Ordering[ArrayData] {
+    private[this] val elementOrdering: Ordering[Any] =
+      PhysicalDataType(elementType).ordering.asInstanceOf[Ordering[Any]]
+
+    def compare(x: ArrayData, y: ArrayData): Int = {
+      val leftArray = x
+      val rightArray = y
+      val minLength = scala.math.min(leftArray.numElements(), rightArray.numElements())
+      var i = 0
+      while (i < minLength) {
+        val isNullLeft = leftArray.isNullAt(i)
+        val isNullRight = rightArray.isNullAt(i)
+        if (isNullLeft && isNullRight) {
+          // Do nothing.
+        } else if (isNullLeft) {
+          return -1
+        } else if (isNullRight) {
+          return 1
+        } else {
+          val comp =
+            elementOrdering.compare(
+              leftArray.get(i, elementType),
+              rightArray.get(i, elementType))
+          if (comp != 0) {
+            return comp
+          }
+        }
+        i += 1
+      }
+      if (leftArray.numElements() < rightArray.numElements()) {
+        -1
+      } else if (leftArray.numElements() > rightArray.numElements()) {
+        1
+      } else {
+        0
+      }
+    }
+  }
 }
+
+case class PhysicalStructType(fields: Array[StructField]) extends PhysicalDataType {
+  override private[sql] type InternalType = Any
+  override private[sql] def ordering =
+    forSchema(this.fields.map(_.dataType)).asInstanceOf[Ordering[InternalType]]
+  @transient private[sql] lazy val tag = typeTag[InternalType]
+
+  private[sql] def forSchema(dataTypes: Seq[DataType]): InterpretedOrdering = {
+    new InterpretedOrdering(dataTypes.zipWithIndex.map {
+      case (dt, index) => SortOrder(BoundReference(index, dt, nullable = true), Ascending)
+    })
+  }
+}
+
+object UninitializedPhysicalType extends PhysicalDataType {
+  override private[sql] def ordering =
+    throw QueryExecutionErrors.unsupportedOperationExceptionError()
+  override private[sql] type InternalType = Any
+  @transient private[sql] lazy val tag = typeTag[InternalType]
+}
+// object UninitializedPhysicalIntegralType extends PhysicalDataType {
+//  override private[sql] val tag = null
+//  override private[sql] def ordering = null
+//  override private[sql] type InternalType = Null
+// }
