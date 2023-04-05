@@ -612,9 +612,7 @@ class TorchDistributor(Distributor):
             output_bytes = b""
             for row in rows:
                 output_bytes += row.chunk
-            del rows
             result = cloudpickle.loads(output_bytes)
-            del output_bytes
         finally:
             log_streaming_server.shutdown()
         self.logger.info(
