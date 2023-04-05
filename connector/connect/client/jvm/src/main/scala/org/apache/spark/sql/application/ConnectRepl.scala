@@ -96,6 +96,7 @@ object ConnectRepl {
       outputStream = outputStream,
       errorStream = errorStream)
     if (semaphore.nonEmpty) {
+      // Used for testing.
       main.run(sparkBind, new Bind[Semaphore]("semaphore", semaphore.get))
     } else {
       main.run(sparkBind)

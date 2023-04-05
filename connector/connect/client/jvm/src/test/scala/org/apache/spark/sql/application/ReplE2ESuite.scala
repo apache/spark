@@ -19,8 +19,6 @@ package org.apache.spark.sql.application
 import java.io.{PipedInputStream, PipedOutputStream}
 import java.util.concurrent.{Executors, Semaphore, TimeUnit}
 
-// import scala.concurrent.duration._
-
 import org.apache.commons.io.output.ByteArrayOutputStream
 
 import org.apache.spark.sql.connect.client.util.RemoteSparkSession
@@ -46,6 +44,7 @@ class ReplE2ESuite extends RemoteSparkSession {
     super.beforeAll()
     ammoniteOut = new ByteArrayOutputStream()
     testSuiteOut = new PipedOutputStream()
+    // Connect the `testSuiteOut` and `ammoniteIn` pipes
     ammoniteIn = new PipedInputStream(testSuiteOut)
     errorStream = new ByteArrayOutputStream()
 
@@ -75,6 +74,8 @@ class ReplE2ESuite extends RemoteSparkSession {
 
   def runCommandsInShell(input: String): String = {
     require(input.nonEmpty)
+    // Pad the input with a semaphore release so that we know when the execution of the provided
+    // input is complete.
     val paddedInput = input + '\n' + "semaphore.release()\n"
     testSuiteOut.write(paddedInput.getBytes)
     testSuiteOut.flush()

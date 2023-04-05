@@ -31,6 +31,10 @@ trait ClassFinder {
   def findClasses(): Iterator[Artifact]
 }
 
+/**
+ * A generic [[ClassFinder]] implementation that traverses a specific REPL output directory.
+ * @param _rootDir
+ */
 class REPLClassDirMonitor(_rootDir: String) extends ClassFinder {
   private val rootDir = Paths.get(_rootDir)
   require(rootDir.isAbsolute)
@@ -39,6 +43,7 @@ class REPLClassDirMonitor(_rootDir: String) extends ClassFinder {
   override def findClasses(): Iterator[Artifact] = {
     Files
       .walk(rootDir)
+      // Ignore symbolic links
       .filter(path => Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS) && isClass(path))
       .map[Artifact](path => toArtifact(path))
       .iterator()
@@ -46,12 +51,17 @@ class REPLClassDirMonitor(_rootDir: String) extends ClassFinder {
   }
 
   private def toArtifact(path: Path): Artifact = {
+    // Persist the relative path of the classfile
     Artifact.newClassArtifact(rootDir.relativize(path), new LocalFile(path))
   }
 
   private def isClass(path: Path): Boolean = path.toString.endsWith(".class")
 }
 
+/**
+ * A special [[ClassFinder]] for the Ammonite REPL to handle in-memory class files.
+ * @param session
+ */
 class AmmoniteClassFinder(session: Session) extends ClassFinder {
 
   override def findClasses(): Iterator[Artifact] = {
