@@ -328,21 +328,25 @@ object JdbcUtils extends Logging with SQLConfHelper {
   /**
    * Convert a [[ResultSet]] into an iterator of Catalyst Rows.
    */
-  def resultSetToRows(resultSet: ResultSet, schema: StructType): Iterator[Row] = {
+  def resultSetToRows(
+      resultSet: ResultSet,
+      schema: StructType,
+      dialect: Option[JdbcDialect] = None): Iterator[Row] = {
     val inputMetrics =
       Option(TaskContext.get()).map(_.taskMetrics().inputMetrics).getOrElse(new InputMetrics)
     val fromRow = RowEncoder(schema).resolveAndBind().createDeserializer()
-    val internalRows = resultSetToSparkInternalRows(resultSet, schema, inputMetrics)
+    val internalRows = resultSetToSparkInternalRows(resultSet, dialect, schema, inputMetrics)
     internalRows.map(fromRow)
   }
 
   private[spark] def resultSetToSparkInternalRows(
       resultSet: ResultSet,
+      dialect: Option[JdbcDialect],
       schema: StructType,
       inputMetrics: InputMetrics): Iterator[InternalRow] = {
     new NextIterator[InternalRow] {
       private[this] val rs = resultSet
-      private[this] val getters: Array[JDBCValueGetter] = makeGetters(schema)
+      private[this] val getters: Array[JDBCValueGetter] = makeGetters(dialect, schema)
       private[this] val mutableRow = new SpecificInternalRow(schema.fields.map(x => x.dataType))
 
       override protected def close(): Unit = {
@@ -380,10 +384,15 @@ object JdbcUtils extends Logging with SQLConfHelper {
    * Creates `JDBCValueGetter`s according to [[StructType]], which can set
    * each value from `ResultSet` to each field of [[InternalRow]] correctly.
    */
-  private def makeGetters(schema: StructType): Array[JDBCValueGetter] =
-    schema.fields.map(sf => makeGetter(sf.dataType, sf.metadata))
+  private def makeGetters(
+      dialect: Option[JdbcDialect],
+      schema: StructType): Array[JDBCValueGetter] =
+    schema.fields.map(sf => makeGetter(sf.dataType, dialect, sf.metadata))
 
-  private def makeGetter(dt: DataType, metadata: Metadata): JDBCValueGetter = dt match {
+  private def makeGetter(
+      dt: DataType,
+      dialect: Option[JdbcDialect],
+      metadata: Metadata): JDBCValueGetter = dt match {
     case BooleanType =>
       (rs: ResultSet, row: InternalRow, pos: Int) =>
         row.setBoolean(pos, rs.getBoolean(pos + 1))
@@ -488,7 +497,9 @@ object JdbcUtils extends Logging with SQLConfHelper {
       (rs: ResultSet, row: InternalRow, pos: Int) =>
         val t = rs.getTimestamp(pos + 1)
         if (t != null) {
-          row.setLong(pos, DateTimeUtils.fromJavaTimestampNoRebase(t))
+          row.setLong(pos,
+            dialect.map(_.convertJavaTimestampToTimestampNTZ(t)).getOrElse(
+              DateTimeUtils.fromJavaTimestampNoRebase(t)))
         } else {
           row.update(pos, null)
         }
@@ -606,8 +617,8 @@ object JdbcUtils extends Logging with SQLConfHelper {
 
     case TimestampNTZType =>
       (stmt: PreparedStatement, row: Row, pos: Int) =>
-        val micros = localDateTimeToMicros(row.getAs[java.time.LocalDateTime](pos))
-        stmt.setTimestamp(pos + 1, toJavaTimestampNoRebase(micros))
+        stmt.setTimestamp(pos + 1,
+          dialect.convertTimestampNTZToJavaTimestamp(row.getAs[java.time.LocalDateTime](pos)))
 
     case DateType =>
       if (conf.datetimeJava8ApiEnabled) {

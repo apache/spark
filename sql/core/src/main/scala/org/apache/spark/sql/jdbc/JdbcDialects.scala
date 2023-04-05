@@ -18,7 +18,7 @@
 package org.apache.spark.sql.jdbc
 
 import java.sql.{Connection, Date, Driver, Statement, Timestamp}
-import java.time.{Instant, LocalDate}
+import java.time.{Instant, LocalDate, LocalDateTime}
 import java.util
 
 import scala.collection.mutable.ArrayBuilder
@@ -31,6 +31,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.catalyst.util.{DateFormatter, DateTimeUtils, TimestampFormatter}
+import org.apache.spark.sql.catalyst.util.DateTimeUtils.{localDateTimeToMicros, toJavaTimestampNoRebase}
 import org.apache.spark.sql.connector.catalog.{Identifier, TableChange}
 import org.apache.spark.sql.connector.catalog.TableChange._
 import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
@@ -103,6 +104,23 @@ abstract class JdbcDialect extends Serializable with Logging {
    * @return The new JdbcType if there is an override for this DataType
    */
   def getJDBCType(dt: DataType): Option[JdbcType] = None
+
+  /**
+   * Convert java.sql.Timestamp to a Long value (internal representation of a TimestampNTZType)
+   * holding the microseconds since the epoch of 1970-01-01 00:00:00Z for this timestamp.
+   */
+  def convertJavaTimestampToTimestampNTZ(t: Timestamp): Long = {
+    DateTimeUtils.fromJavaTimestampNoRebase(t)
+  }
+
+  /**
+   * Converts a LocalDateTime representing a TimestampNTZ type to an
+   * instance of `java.sql.Timestamp`.
+   */
+  def convertTimestampNTZToJavaTimestamp(ldt: LocalDateTime): Timestamp = {
+    val micros = localDateTimeToMicros(ldt)
+    toJavaTimestampNoRebase(micros)
+  }
 
   /**
    * Returns a factory for creating connections to the given JDBC URL.
