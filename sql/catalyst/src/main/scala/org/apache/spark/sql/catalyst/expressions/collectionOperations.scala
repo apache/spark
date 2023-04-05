@@ -898,8 +898,10 @@ trait ArraySortLike extends ExpectsInputTypes {
   protected def nullOrder: NullOrder
 
   @transient private lazy val lt: Comparator[Any] = {
-    val ordering = PhysicalDataType.ordering(arrayExpression.dataType)
-
+    val ordering = arrayExpression.dataType match {
+      case _ @ ArrayType(n, _) =>
+        PhysicalDataType(n).ordering.asInstanceOf[Ordering[Any]]
+    }
     (o1: Any, o2: Any) => {
       if (o1 == null && o2 == null) {
         0
@@ -914,7 +916,10 @@ trait ArraySortLike extends ExpectsInputTypes {
   }
 
   @transient private lazy val gt: Comparator[Any] = {
-    val ordering = PhysicalDataType.ordering(arrayExpression.dataType)
+    val ordering = arrayExpression.dataType match {
+      case _ @ ArrayType(n, _) =>
+        PhysicalDataType(n).ordering.asInstanceOf[Ordering[Any]]
+    }
 
     (o1: Any, o2: Any) => {
       if (o1 == null && o2 == null) {
