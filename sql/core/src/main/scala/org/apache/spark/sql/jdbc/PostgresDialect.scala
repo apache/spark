@@ -104,7 +104,7 @@ private object PostgresDialect extends JdbcDialect with SQLConfHelper {
     DateTimeUtils.localDateTimeToMicros(t.toLocalDateTime)
   }
 
-  override  def convertTimestampNTZToJavaTimestamp(ldt: LocalDateTime): Timestamp = {
+  override def convertTimestampNTZToJavaTimestamp(ldt: LocalDateTime): Timestamp = {
     Timestamp.valueOf(ldt)
   }
 

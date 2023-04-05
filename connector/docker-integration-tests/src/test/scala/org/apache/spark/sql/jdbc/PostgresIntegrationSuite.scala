@@ -19,8 +19,8 @@ package org.apache.spark.sql.jdbc
 
 import java.math.{BigDecimal => JBigDecimal}
 import java.sql.{Connection, Date, Timestamp}
-import java.time.LocalDateTime
 import java.text.SimpleDateFormat
+import java.time.LocalDateTime
 import java.util.Properties
 
 import org.apache.spark.sql.Column

@@ -43,7 +43,7 @@ import org.apache.spark.sql.connector.catalog.{Identifier, TableChange}
 import org.apache.spark.sql.connector.catalog.index.{SupportsIndex, TableIndex}
 import org.apache.spark.sql.connector.expressions.NamedReference
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
-import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects, JdbcType}
+import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects, JdbcType, NoopDialect}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.SchemaUtils
 import org.apache.spark.unsafe.types.UTF8String
@@ -330,8 +330,14 @@ object JdbcUtils extends Logging with SQLConfHelper {
    */
   def resultSetToRows(
       resultSet: ResultSet,
+      schema: StructType): Iterator[Row] = {
+    resultSetToRows(resultSet, schema, NoopDialect)
+  }
+
+  def resultSetToRows(
+      resultSet: ResultSet,
       schema: StructType,
-      dialect: Option[JdbcDialect] = None): Iterator[Row] = {
+      dialect: JdbcDialect): Iterator[Row] = {
     val inputMetrics =
       Option(TaskContext.get()).map(_.taskMetrics().inputMetrics).getOrElse(new InputMetrics)
     val fromRow = RowEncoder(schema).resolveAndBind().createDeserializer()
@@ -341,7 +347,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
 
   private[spark] def resultSetToSparkInternalRows(
       resultSet: ResultSet,
-      dialect: Option[JdbcDialect],
+      dialect: JdbcDialect,
       schema: StructType,
       inputMetrics: InputMetrics): Iterator[InternalRow] = {
     new NextIterator[InternalRow] {
@@ -385,13 +391,13 @@ object JdbcUtils extends Logging with SQLConfHelper {
    * each value from `ResultSet` to each field of [[InternalRow]] correctly.
    */
   private def makeGetters(
-      dialect: Option[JdbcDialect],
+      dialect: JdbcDialect,
       schema: StructType): Array[JDBCValueGetter] =
     schema.fields.map(sf => makeGetter(sf.dataType, dialect, sf.metadata))
 
   private def makeGetter(
       dt: DataType,
-      dialect: Option[JdbcDialect],
+      dialect: JdbcDialect,
       metadata: Metadata): JDBCValueGetter = dt match {
     case BooleanType =>
       (rs: ResultSet, row: InternalRow, pos: Int) =>
@@ -497,9 +503,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
       (rs: ResultSet, row: InternalRow, pos: Int) =>
         val t = rs.getTimestamp(pos + 1)
         if (t != null) {
-          row.setLong(pos,
-            dialect.map(_.convertJavaTimestampToTimestampNTZ(t)).getOrElse(
-              DateTimeUtils.fromJavaTimestampNoRebase(t)))
+          row.setLong(pos, dialect.convertJavaTimestampToTimestampNTZ(t))
         } else {
           row.update(pos, null)
         }

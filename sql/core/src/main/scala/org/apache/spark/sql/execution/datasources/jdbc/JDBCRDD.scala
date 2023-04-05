@@ -274,7 +274,7 @@ private[jdbc] class JDBCRDD(
     stmt.setQueryTimeout(options.queryTimeout)
     rs = stmt.executeQuery()
     val rowsIterator =
-      JdbcUtils.resultSetToSparkInternalRows(rs, Some(dialect), schema, inputMetrics)
+      JdbcUtils.resultSetToSparkInternalRows(rs, dialect, schema, inputMetrics)
 
     CompletionIterator[InternalRow, Iterator[InternalRow]](
       new InterruptibleIterator(context, rowsIterator), close())
