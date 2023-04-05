@@ -34,7 +34,7 @@ import io.grpc.protobuf.services.ProtoReflectionService
 import io.grpc.stub.StreamObserver
 import org.apache.commons.lang3.StringUtils
 import org.json4s.JsonDSL._
-import org.json4s.jackson.JsonMethods.{compact, render}
+import org.json4s.jackson.JsonMethods.{compact, mapper, render}
 
 import org.apache.spark.{SparkEnv, SparkException, SparkThrowable}
 import org.apache.spark.api.python.PythonException
@@ -74,17 +74,31 @@ class SparkConnectService(debug: Boolean)
   }
 
   private def buildStatusFromThrowable(st: Throwable): RPCStatus = {
+    val (errorClass, messageParameters, sqlState) = st match {
+      case e: SparkThrowable =>
+        (Option(e.getErrorClass), Option(e.getMessageParameters), Option(e.getSqlState))
+      case _ =>
+        (None, None, None)
+    }
+
+    val errorInfo =
+      ErrorInfo
+        .newBuilder()
+        .setReason(st.getClass.getName)
+        .setDomain("org.apache.spark")
+        .putMetadata("classes", compact(render(allClasses(st.getClass).map(_.getName))))
+
+    errorClass.map(errorInfo.putMetadata("errorClass", _))
+    messageParameters.map(p =>
+      errorInfo.putMetadata("messageParameters", mapper.writeValueAsString(p)))
+    sqlState.map(errorInfo.putMetadata("sqlState", _))
+
     RPCStatus
       .newBuilder()
       .setCode(RPCCode.INTERNAL_VALUE)
       .addDetails(
         ProtoAny.pack(
-          ErrorInfo
-            .newBuilder()
-            .setReason(st.getClass.getName)
-            .setDomain("org.apache.spark")
-            .putMetadata("classes", compact(render(allClasses(st.getClass).map(_.getName))))
-            .build()))
+          errorInfo.build()))
       .setMessage(StringUtils.abbreviate(st.getMessage, 2048))
       .build()
   }

@@ -55,6 +55,7 @@ from pyspark.testing.connectutils import (
 from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 from pyspark.errors.exceptions.connect import (
     AnalysisException,
+    ArithmeticException,
     ParseException,
     SparkConnectException,
 )
@@ -229,8 +230,29 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
     def test_error_handling(self):
         # SPARK-41533 Proper error handling for Spark Connect
         df = self.connect.range(10).select("id2")
-        with self.assertRaises(AnalysisException):
+        with self.assertRaises(AnalysisException) as e:
             df.collect()
+        self.check_error(
+            exception=e.exception,
+            error_class="UNRESOLVED_COLUMN.WITH_SUGGESTION",
+            message_parameters=dict(objectName="`id2`", proposal="`id`")
+        )
+
+    def test_error_classes(self):
+        with self.assertRaises(ParseException) as e:
+            self.connect.sql("select ;")
+        self.assertEqual(e.exception.getErrorClass(), "PARSE_SYNTAX_ERROR")
+
+        self.connect.conf.set("spark.sql.ansi.enabled", True)
+        with self.assertRaises(ArithmeticException) as e:
+            self.connect.sql("select 1/0").collect()
+        self.assertEqual(e.exception.getErrorClass(), "DIVIDE_BY_ZERO")
+        self.connect.conf.set("spark.sql.ansi.enabled", False)
+
+        with self.assertRaises(SparkConnectException) as e:
+            df = self.connect.createDataFrame({'x': 1, 'y': 2})
+            df.write.mode("overwrite").format("noformat").saveAsTable("t")
+        self.assertEqual(e.exception.getErrorClass(), "DATA_SOURCE_NOT_FOUND")
 
     def test_simple_read(self):
         df = self.connect.read.table(self.tbl_name)

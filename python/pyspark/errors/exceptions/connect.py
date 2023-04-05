@@ -46,40 +46,56 @@ class SparkConnectException(PySparkException):
 
 def convert_exception(info: "ErrorInfo", message: str) -> SparkConnectException:
     classes = []
+    error_class = None
+    message_parameters = None
+    # TODO: add sqlState in PySparkException.
+    sql_state = None
     if "classes" in info.metadata:
         classes = json.loads(info.metadata["classes"])
+    if "errorClass" in info.metadata:
+        error_class = info.metadata["errorClass"] or None
+    if "messageParameters" in info.metadata:
+        message_parameters = json.loads(info.metadata["messageParameters"])
+    if "sqlState" in info.metadata:
+        sql_state = info.metadata["sqlState"]
+
+    params = dict(
+        message=message,
+        error_class=error_class,
+        message_parameters=message_parameters
+    )
 
     if "org.apache.spark.sql.catalyst.parser.ParseException" in classes:
-        return ParseException(message)
+        return ParseException(**params)
     # Order matters. ParseException inherits AnalysisException.
     elif "org.apache.spark.sql.AnalysisException" in classes:
-        return AnalysisException(message)
+        return AnalysisException(**params)
     elif "org.apache.spark.sql.streaming.StreamingQueryException" in classes:
-        return StreamingQueryException(message)
+        return StreamingQueryException(**params)
     elif "org.apache.spark.sql.execution.QueryExecutionException" in classes:
-        return QueryExecutionException(message)
+        return QueryExecutionException(**params)
     # Order matters. NumberFormatException inherits IllegalArgumentException.
     elif "java.lang.NumberFormatException" in classes:
-        return NumberFormatException(message)
+        return NumberFormatException(**params)
     elif "java.lang.IllegalArgumentException" in classes:
-        return IllegalArgumentException(message)
+        return IllegalArgumentException(**params)
     elif "java.lang.ArithmeticException" in classes:
-        return ArithmeticException(message)
+        return ArithmeticException(**params)
     elif "java.lang.ArrayIndexOutOfBoundsException" in classes:
-        return ArrayIndexOutOfBoundsException(message)
+        return ArrayIndexOutOfBoundsException(**params)
     elif "java.time.DateTimeException" in classes:
-        return DateTimeException(message)
+        return DateTimeException(**params)
     elif "org.apache.spark.SparkRuntimeException" in classes:
-        return SparkRuntimeException(message)
+        return SparkRuntimeException(**params)
     elif "org.apache.spark.SparkUpgradeException" in classes:
-        return SparkUpgradeException(message)
+        return SparkUpgradeException(**params)
     elif "org.apache.spark.api.python.PythonException" in classes:
         return PythonException(
             "\n  An exception was thrown from the Python worker. "
             "Please see the stack trace below.\n%s" % message
         )
     else:
-        return SparkConnectGrpcException(message, reason=info.reason)
+        return SparkConnectGrpcException(**params, reason=info.reason)
 
 
 class SparkConnectGrpcException(SparkConnectException):

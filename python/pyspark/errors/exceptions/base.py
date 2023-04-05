@@ -31,14 +31,12 @@ class PySparkException(Exception):
         error_class: Optional[str] = None,
         message_parameters: Optional[Dict[str, str]] = None,
     ):
-        # `message` vs `error_class` & `message_parameters` are mutually exclusive.
-        assert (message is not None and (error_class is None and message_parameters is None)) or (
-            message is None and (error_class is not None and message_parameters is not None)
-        )
-
-        self.error_reader = ErrorClassesReader()
-
         if message is None:
+            assert (
+                error_class is not None and message_parameters is not None,
+                "Error class and message parameters must be defined to render the error."
+            )
+            self.error_reader = ErrorClassesReader()
             self.message = self.error_reader.get_error_message(
                 cast(str, error_class), cast(Dict[str, str], message_parameters)
             )
