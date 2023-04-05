@@ -277,7 +277,7 @@ case class ResolveDefaultColumns(catalog: SessionCatalog) extends Rule[LogicalPl
       numUserSpecifiedColumns: Int): LogicalPlan = {
     val schema = insertTableSchemaWithoutPartitionColumns
     val newDefaultExpressions: Seq[UnresolvedAttribute] =
-      getDefaultExpressionsForInsert(schema, numUserSpecifiedColumns)
+      getNewDefaultExpressionsForInsert(schema, numUserSpecifiedColumns, node.output.size)
     val newNames: Seq[String] = schema.fields.map(_.name)
     node match {
       case _ if newDefaultExpressions.isEmpty => node
@@ -285,10 +285,7 @@ case class ResolveDefaultColumns(catalog: SessionCatalog) extends Rule[LogicalPl
         table.copy(
           names = newNames,
           rows = table.rows.map { row => row ++ newDefaultExpressions })
-      case local: LocalRelation
-        if (numUserSpecifiedColumns > 0 && node.output.size <= numUserSpecifiedColumns) ||
-          (numUserSpecifiedColumns == 0 &&
-            node.output.size <= insertTableSchemaWithoutPartitionColumns.size) =>
+      case local: LocalRelation =>
         val newDefaultExpressionsRow = new GenericInternalRow(
           schema.fields.drop(local.output.size).map {
             case f if f.metadata.contains(CURRENT_DEFAULT_COLUMN_METADATA_KEY) =>
@@ -316,7 +313,7 @@ case class ResolveDefaultColumns(catalog: SessionCatalog) extends Rule[LogicalPl
       numUserSpecifiedColumns: Int): Project = {
     val schema = insertTableSchemaWithoutPartitionColumns
     val newDefaultExpressions: Seq[Expression] =
-      getDefaultExpressionsForInsert(schema, numUserSpecifiedColumns)
+      getNewDefaultExpressionsForInsert(schema, numUserSpecifiedColumns, project.projectList.size)
     val newAliases: Seq[NamedExpression] =
       newDefaultExpressions.zip(schema.fields).map {
         case (expr, field) => Alias(expr, field.name)()
@@ -327,15 +324,20 @@ case class ResolveDefaultColumns(catalog: SessionCatalog) extends Rule[LogicalPl
   /**
    * This is a helper for the addMissingDefaultValuesForInsertFromInlineTable methods above.
    */
-  private def getDefaultExpressionsForInsert(
-      schema: StructType,
-      numUserSpecifiedColumns: Int): Seq[UnresolvedAttribute] = {
+  private def getNewDefaultExpressionsForInsert(
+      insertTableSchemaWithoutPartitionColumns: StructType,
+      numUserSpecifiedColumns: Int,
+      numProvidedValues: Int): Seq[UnresolvedAttribute] = {
     val remainingFields: Seq[StructField] = if (numUserSpecifiedColumns > 0) {
-      schema.fields.drop(numUserSpecifiedColumns)
+      insertTableSchemaWithoutPartitionColumns.fields.drop(numUserSpecifiedColumns)
     } else {
       Seq.empty
     }
     val numDefaultExpressionsToAdd = getStructFieldsForDefaultExpressions(remainingFields).size
+      // Limit the number of new DEFAULT expressions to the difference of the number of columns in
+      // the target table and the number of provided values in the source relation. This clamps the
+      // total final number of provided values to the number of columns in the target table.
+      .min(insertTableSchemaWithoutPartitionColumns.size - numProvidedValues)
     Seq.fill(numDefaultExpressionsToAdd)(UnresolvedAttribute(CURRENT_DEFAULT_COLUMN_NAME))
   }
 
