@@ -16,10 +16,6 @@
  */
 package org.apache.spark.sql.execution.datasources.v2.orc
 
-import java.util.Optional
-
-import scala.collection.JavaConverters._
-
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce.{JobID, TaskAttemptID, TaskID, TaskType}
@@ -35,12 +31,11 @@ import org.apache.spark.sql.connector.expressions.aggregate.Aggregation
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader}
 import org.apache.spark.sql.execution.WholeStageCodegenExec
 import org.apache.spark.sql.execution.datasources.{AggregatePushDownUtils, PartitionedFile}
-import org.apache.spark.sql.execution.datasources.orc.{OrcArrayColumnVector, OrcAtomicColumnVector, OrcColumnarBatchReader, OrcColumnVector, OrcDeserializer, OrcFilters, OrcMapColumnVector, OrcOptions, OrcStructColumnVector, OrcUtils}
+import org.apache.spark.sql.execution.datasources.orc._
 import org.apache.spark.sql.execution.datasources.v2._
-import org.apache.spark.sql.execution.vectorized.ConstantColumnVector
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.Filter
-import org.apache.spark.sql.types.{ArrayType, AtomicType, MapType, StructType}
+import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.vectorized.ColumnarBatch
 import org.apache.spark.util.{SerializableConfiguration, Utils}
 
@@ -82,18 +77,6 @@ case class OrcPartitionReaderFactory(
         OrcInputFormat.setSearchArgument(conf, f, fileSchema.fieldNames)
       }
     }
-  }
-
-  override def getVectorTypes: Optional[java.lang.Iterable[String]] = {
-
-    val vectorTypes: Iterable[String] = readDataSchema.fields.map(_.dataType match {
-      case _: AtomicType => classOf[OrcAtomicColumnVector].getName
-      case _: StructType => classOf[OrcStructColumnVector].getName
-      case _: ArrayType => classOf[OrcArrayColumnVector].getName
-      case _: MapType => classOf[OrcMapColumnVector].getName
-      case _ => classOf[OrcColumnVector].getName
-    }) ++ Seq.fill(partitionSchema.fields.length)(classOf[ConstantColumnVector].getName)
-    Optional.of(vectorTypes.asJava)
   }
 
   override def buildReader(file: PartitionedFile): PartitionReader[InternalRow] = {

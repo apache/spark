@@ -90,13 +90,14 @@ class ParquetFileFormat
       requiredSchema: StructType,
       partitionSchema: StructType,
       sqlConf: SQLConf): Option[Seq[String]] = {
-    Option(Seq.fill(requiredSchema.fields.length)(
+    val vectorTypes = Seq.fill(requiredSchema.fields.length)(
       if (!sqlConf.offHeapColumnVectorEnabled) {
-        classOf[OnHeapColumnVector].getName
+        classOf[OnHeapColumnVector]
       } else {
-        classOf[OffHeapColumnVector].getName
+        classOf[OffHeapColumnVector]
       }
-    ) ++ Seq.fill(partitionSchema.fields.length)(classOf[ConstantColumnVector].getName))
+    ) ++ Seq.fill(partitionSchema.fields.length)(classOf[ConstantColumnVector])
+    Option(vectorTypes.map(_.getName))
   }
 
   override def isSplitable(

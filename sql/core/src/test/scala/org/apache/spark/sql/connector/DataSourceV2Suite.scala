@@ -909,10 +909,8 @@ object ColumnarReaderFactory extends PartitionReaderFactory {
   override def supportColumnarReads(partition: InputPartition): Boolean = true
 
   override def getVectorTypes: Optional[java.lang.Iterable[String]] = {
-    val data: Iterable[String] = Iterable.fill(2)(
-        classOf[OnHeapColumnVector].getName
-    )
-    Optional.of(data.asJava)
+    val vectorTypes = Iterable.fill(2)(classOf[OnHeapColumnVector].getName)
+    Optional.of(vectorTypes.asJava)
   }
 
   override def createReader(partition: InputPartition): PartitionReader[InternalRow] = {

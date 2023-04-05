@@ -37,7 +37,7 @@ import org.apache.spark.sql.vectorized.ColumnarBatch;
 public interface PartitionReaderFactory extends Serializable {
 
   /**
-   * Returns a row-based partition reader to read data from the given {@link InputPartition}.
+   * @return a row-based partition reader to read data from the given {@link InputPartition}.
    * <p>
    * Implementations probably need to cast the input partition to the concrete
    * {@link InputPartition} class defined for the data source.
@@ -45,7 +45,7 @@ public interface PartitionReaderFactory extends Serializable {
   PartitionReader<InternalRow> createReader(InputPartition partition);
 
   /**
-   * Returns a columnar partition reader to read data from the given {@link InputPartition}.
+   * @return a columnar partition reader to read data from the given {@link InputPartition}.
    * <p>
    * Implementations probably need to cast the input partition to the concrete
    * {@link InputPartition} class defined for the data source.
@@ -55,7 +55,7 @@ public interface PartitionReaderFactory extends Serializable {
   }
 
   /**
-   * Returns true if the given {@link InputPartition} should be read by Spark in a columnar way.
+   * @return true if the given {@link InputPartition} should be read by Spark in a columnar way.
    * This means, implementations must also implement {@link #createColumnarReader(InputPartition)}
    * for the input partitions that this method returns true.
    * <p>
@@ -68,7 +68,7 @@ public interface PartitionReaderFactory extends Serializable {
   }
 
   /**
-   * Returns exact java types of the columns that are output in columnar processing mode.
+   * @return exact java types of the columns that are output in columnar processing mode.
    */
   default Optional<Iterable<String>> getVectorTypes() {
     return Optional.empty();

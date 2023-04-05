@@ -113,14 +113,14 @@ case class ParquetPartitionReaderFactory(
   }
 
   override def getVectorTypes: Optional[java.lang.Iterable[String]] = {
-    val data: Iterable[String] = Iterable.fill(readDataSchema.fields.length)(
+    val vectorTypes = Iterable.fill(readDataSchema.fields.length)(
       if (!enableOffHeapColumnVector) {
         classOf[OnHeapColumnVector].getName
       } else {
         classOf[OffHeapColumnVector].getName
       }
     ) ++ Seq.fill(partitionSchema.fields.length)(classOf[ConstantColumnVector].getName)
-    Optional.of(data.asJava)
+    Optional.of(vectorTypes.asJava)
   }
 
   override def buildReader(file: PartitionedFile): PartitionReader[InternalRow] = {

@@ -19,6 +19,7 @@ package test.org.apache.spark.sql.connector;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 
@@ -74,10 +75,7 @@ public class JavaColumnarDataSourceV2 implements TestingV2Source {
 
     @Override
     public Optional<Iterable<String>> getVectorTypes() {
-      List<String> vectorTypes = new ArrayList<>();
-      vectorTypes.add(OnHeapColumnVector.class.getName());
-      vectorTypes.add(OnHeapColumnVector.class.getName());
-      return Optional.of(vectorTypes);
+      return Optional.of(Collections.nCopies(2, OnHeapColumnVector.class.getName()));
     }
 
     @Override
