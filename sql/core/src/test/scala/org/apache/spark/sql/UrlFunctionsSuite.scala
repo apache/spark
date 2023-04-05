@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.SparkIllegalArgumentException
+import org.apache.spark.{SparkException, SparkThrowable}
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLConf
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -72,9 +72,10 @@ class UrlFunctionsSuite extends QueryTest with SharedSparkSession {
 
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
       val url = "inva lid://user:pass@host/file;param?query;p2"
-      checkError(exception = intercept[SparkIllegalArgumentException] {
-                sql(s"SELECT parse_url('$url', 'HOST')")
-      },
+      checkError(
+        exception = intercept[SparkException] {
+               sql(s"SELECT parse_url('$url', 'HOST')").collect()
+        }.getCause.asInstanceOf[SparkThrowable],
         errorClass = "INVALID_URL",
         parameters = Map(
           "url" -> url,
