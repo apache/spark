@@ -17,17 +17,7 @@
 # limitations under the License.
 #
 
-# Use the spark connect JVM client to connect to a spark connect server.
-#
-# Start a local server:
-# A local spark-connect server with default settings can be started using the following command:
-#  `connector/connect/bin/spark-connect`
-# The client should be able to connect to this server directly with the default client settings.
-#
-# Connect to a remote server:
-# To connect to a remote server, use env var `SPARK_REMOTE` to configure the client connection
-# string. e.g.
-#  `export SPARK_REMOTE="sc://<URL>:<port>/;token=<auth token>;<param1>=<value1>"`
+# Get the full classpath for the Spark Connect scala client.
 
 # Go to the Spark project root directory
 FWDIR="$(cd "`dirname "$0"`"/../../..; pwd)"
@@ -39,14 +29,7 @@ SCALA_BINARY_VER=`grep "scala.binary.version" "${SPARK_HOME}/pom.xml" | head -n1
 SCALA_VER=`grep "scala.version" "${SPARK_HOME}/pom.xml" | grep ${SCALA_BINARY_VER} | head -n1 | awk -F '[<>]' '{print $3}'`
 SCALA_ARG="-Pscala-${SCALA_BINARY_VER}"
 
-BUILD="${BUILD:-1}"
-if [ "$BUILD" -eq "1" ]; then
-  # Build the jars needed for spark connect JVM client
-  build/sbt "${SCALA_ARG}" "sql/package;connect-client-jvm/assembly"
-fi
+CONNECT_CLASSPATH="$(build/sbt "${SCALA_ARG}" -DcopyDependencies=false "export connect-client-jvm/fullClasspath" | grep jar | tail -n1)"
+SQL_CLASSPATH="$(build/sbt "${SCALA_ARG}" -DcopyDependencies=false "export sql/fullClasspath" | grep jar | tail -n1)"
 
-if [ -z "$SCCLASSPATH" ]; then
-  SCCLASSPATH=$(connector/connect/bin/spark-connect-scala-client-classpath)
-fi
-
-exec java -cp "$SCCLASSPATH" org.apache.spark.sql.application.ConnectRepl "$@"
+echo "$CONNECT_CLASSPATH:$CLASSPATH"
