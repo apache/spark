@@ -589,9 +589,9 @@ class GroupedApplyInPandasTestsMixin:
         with self.sql_conf({"spark.sql.execution.pandas.convertToArrowArraySafely": False}):
             with QuietTest(self.sc):
                 with self.assertRaisesRegex(
-                        PythonException,
-                        "Column names of the returned pandas.DataFrame do not match "
-                        "specified schema. Missing: id. Unexpected: iid.\n",
+                    PythonException,
+                    "Column names of the returned pandas.DataFrame do not match "
+                    "specified schema. Missing: id. Unexpected: iid.\n",
                 ):
                     grouped_df.apply(column_name_typo).collect()
                 with self.assertRaisesRegex(Exception, "[D|d]ecimal.*got.*date"):
