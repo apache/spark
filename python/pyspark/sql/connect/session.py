@@ -52,6 +52,7 @@ from pyspark.sql.connect.conf import RuntimeConf
 from pyspark.sql.connect.dataframe import DataFrame
 from pyspark.sql.connect.plan import SQL, Range, LocalRelation, CachedRelation
 from pyspark.sql.connect.readwriter import DataFrameReader
+from pyspark.sql.connect.streaming import DataStreamReader
 from pyspark.sql.pandas.serializers import ArrowStreamPandasSerializer
 from pyspark.sql.pandas.types import to_arrow_schema, to_arrow_type, _get_local_timezone
 from pyspark.sql.session import classproperty, SparkSession as PySparkSession
@@ -167,6 +168,10 @@ class SparkSession:
 
     read.__doc__ = PySparkSession.read.__doc__
 
+    @property
+    def readStream(self) -> "DataStreamReader":
+        return DataStreamReader(self)
+
     def _inferSchemaFromList(
         self, data: Iterable[Any], names: Optional[List[str]] = None
     ) -> StructType:
@@ -227,7 +232,9 @@ class SparkSession:
             _cols = [x.encode("utf-8") if not isinstance(x, str) else x for x in schema]
             _num_cols = len(_cols)
 
-        if isinstance(data, Sized) and len(data) == 0:
+        if isinstance(data, np.ndarray) and data.ndim not in [1, 2]:
+            raise ValueError("NumPy array input should be of 1 or 2 dimensions.")
+        elif isinstance(data, Sized) and len(data) == 0:
             if _schema is not None:
                 return DataFrame.withPlan(LocalRelation(table=None, schema=_schema.json()), self)
             elif _schema_str is not None:
@@ -284,9 +291,6 @@ class SparkSession:
                 _table = _table.rename_columns(schema.names).cast(arrow_schema)
 
         elif isinstance(data, np.ndarray):
-            if data.ndim not in [1, 2]:
-                raise ValueError("NumPy array input should be of 1 or 2 dimensions.")
-
             if _cols is None:
                 if data.ndim == 1 or data.shape[1] == 1:
                     _cols = ["value"]
@@ -391,7 +395,7 @@ class SparkSession:
 
     createDataFrame.__doc__ = PySparkSession.createDataFrame.__doc__
 
-    def sql(self, sqlQuery: str, args: Optional[Dict[str, str]] = None) -> "DataFrame":
+    def sql(self, sqlQuery: str, args: Optional[Dict[str, Any]] = None) -> "DataFrame":
         cmd = SQL(sqlQuery, args)
         data, properties = self.client.execute_command(cmd.command(self._client))
         if "sql_command_result" in properties:
@@ -488,10 +492,6 @@ class SparkSession:
     @property
     def streams(self) -> Any:
         raise NotImplementedError("streams() is not implemented.")
-
-    @property
-    def readStream(self) -> Any:
-        raise NotImplementedError("readStream() is not implemented.")
 
     @property
     def _jsc(self) -> None:

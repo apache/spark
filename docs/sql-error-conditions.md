@@ -289,12 +289,6 @@ Duplicate map key `<key>` was found, please check the input data. If you want to
 
 Found duplicate keys `<keyColumn>`.
 
-### ELEMENT_AT_BY_INDEX_ZERO
-
-[SQLSTATE: 22003](sql-error-conditions-sqlstates.html#class-22-data-exception)
-
-The index 0 is invalid. An index shall be either < 0 or > 0 (the first element has index 1).
-
 ### EMPTY_JSON_FIELD_VALUE
 
 [SQLSTATE: 42604](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
@@ -572,6 +566,12 @@ The fraction of sec must be zero. Valid range is [0, 60]. If necessary set `<ans
 [SQLSTATE: 42602](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
 The identifier `<ident>` is invalid. Please, consider quoting it with back-quotes as ``<ident>``.
+
+### INVALID_INDEX_OF_ZERO
+
+[SQLSTATE: 22003](sql-error-conditions-sqlstates.html#class-22-data-exception)
+
+The index 0 is invalid. An index shall be either < 0 or > 0 (the first element has index 1).
 
 ### INVALID_JSON_ROOT_FIELD
 

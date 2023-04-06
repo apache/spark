@@ -48,6 +48,7 @@ from pyspark.errors import (
     AnalysisException,
     IllegalArgumentException,
     PySparkTypeError,
+    PySparkValueError,
 )
 from pyspark.testing.sqlutils import (
     ReusedSQLTestCase,
@@ -902,14 +903,26 @@ class DataFrameTestsMixin:
             Observation("")
 
         # dataframe.observe requires at least one expr
-        with self.assertRaisesRegex(ValueError, "'exprs' should not be empty"):
+        with self.assertRaises(PySparkValueError) as pe:
             df.observe(Observation())
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="CANNOT_BE_EMPTY",
+            message_parameters={"item": "exprs"},
+        )
 
         # dataframe.observe requires non-None Columns
         for args in [(None,), ("id",), (lit(1), None), (lit(1), "id")]:
             with self.subTest(args=args):
-                with self.assertRaisesRegex(ValueError, "all 'exprs' should be Column"):
+                with self.assertRaises(PySparkTypeError) as pe:
                     df.observe(Observation(), *args)
+
+                self.check_error(
+                    exception=pe.exception,
+                    error_class="NOT_LIST_OF_COLUMN",
+                    message_parameters={"arg_name": "exprs"},
+                )
 
     def test_observe_str(self):
         # SPARK-38760: tests the DataFrame.observe(str, *Column) method
@@ -947,8 +960,16 @@ class DataFrameTestsMixin:
         self.assertGreaterEqual(row.sum, 0)
 
     def test_sample(self):
-        self.assertRaisesRegex(
-            TypeError, "should be a bool, float and number", lambda: self.spark.range(1).sample()
+        with self.assertRaises(PySparkTypeError) as pe:
+            self.spark.range(1).sample()
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_BOOL_OR_FLOAT_OR_INT",
+            message_parameters={
+                "arg_name": "withReplacement (optional), fraction (required) and seed (optional)",
+                "arg_type": "NoneType, NoneType, NoneType",
+            },
         )
 
         self.assertRaises(TypeError, lambda: self.spark.range(1).sample("a"))
