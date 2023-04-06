@@ -16,12 +16,12 @@
  */
 package org.apache.spark.sql
 
-import java.util.{Collections, Locale}
+import org.apache.spark.SparkException
 
+import java.util.{Collections, Locale}
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.util.control.NonFatal
-
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
@@ -560,7 +560,7 @@ class Dataset[T] private[sql] (
   def stat: DataFrameStatFunctions = new DataFrameStatFunctions(sparkSession, plan.getRoot)
 
   private def buildJoin(right: Dataset[_])(f: proto.Join.Builder => Unit): DataFrame = {
-    withDataset(right)
+    checkSameSparkSession(right)
     sparkSession.newDataFrame { builder =>
       val joinBuilder = builder.getJoinBuilder
       joinBuilder.setLeft(plan.getRoot).setRight(right.plan.getRoot)
@@ -1616,7 +1616,7 @@ class Dataset[T] private[sql] (
 
   private def buildSetOp(right: Dataset[T], setOpType: proto.SetOperation.SetOpType)(
       f: proto.SetOperation.Builder => Unit): Dataset[T] = {
-    withDataset(right)
+    checkSameSparkSession(right)
     sparkSession.newDataset(encoder) { builder =>
       f(
         builder.getSetOpBuilder
@@ -1626,10 +1626,10 @@ class Dataset[T] private[sql] (
     }
   }
 
-  private def withDataset(other: Dataset[_]): Unit = {
-    assert(
-      this.sparkSession.sessionId == other.sparkSession.sessionId,
-      "Both Datasets must belong to the same SparkSession")
+  private def checkSameSparkSession(other: Dataset[_]): Unit = {
+    if (this.sparkSession.sessionId != other.sparkSession.sessionId) {
+      throw new SparkException("Both Datasets must belong to the same SparkSession")
+    }
   }
 
   /**
