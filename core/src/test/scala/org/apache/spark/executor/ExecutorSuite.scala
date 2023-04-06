@@ -45,7 +45,6 @@ import org.apache.spark._
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.config._
-import org.apache.spark.internal.config.Network
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.memory.{SparkOutOfMemoryError, TestMemoryManager}
 import org.apache.spark.metrics.MetricsSystem
@@ -277,15 +276,16 @@ class ExecutorSuite extends SparkFunSuite
     conf.set(EXECUTOR_HEARTBEAT_INTERVAL.key, "1ms")
     sc = new SparkContext(conf)
 
-    val accums = (1 to 10).map(i => sc.longAccumulator(s"mapperRunAccumulator${i}"))
+    val accums = (1 to 10).map(i => sc.longAccumulator(s"mapperRunAccumulator$i"))
     val input = sc.parallelize(1 to 10, 10)
-    val baseRdd = input.map(i => (i, i))
-    var testRdd = baseRdd
+    var testRdd = input.map(i => (i, i))
     (0 to 10).foreach( i =>
-        testRdd = testRdd.map(x => {accums.map(_.add(1)); (x._1 * i, x._2)}).reduceByKey(_ + _)
+        testRdd = testRdd
+          .map(x => { accums.foreach(_.add(1)); (x._1 * i, x._2) })
+          .reduceByKey(_ + _)
     )
 
-    val logAppender = new LogAppender(s"heartbeat thread shuold not die")
+    val logAppender = new LogAppender(s"heartbeat thread should not die")
     withLogAppender(logAppender, level = Some(Level.ERROR)) {
       val _ = testRdd.count()
     }
