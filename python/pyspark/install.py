@@ -63,11 +63,8 @@ def checked_versions(spark_version, hadoop_version, hive_version):
     if re.match("^[0-9]+\\.[0-9]+\\.[0-9]+$", spark_version):
         spark_version = "spark-%s" % spark_version
     if not spark_version.startswith("spark-"):
-        raise PySparkRuntimeError(
-            error_class="INVALID_VERSION_FORMAT",
-            message_parameters={
-                "version": spark_version,
-            },
+        raise RuntimeError(
+            "Spark version should start with 'spark-' prefix; however, " "got %s" % spark_version
         )
 
     if hadoop_version == "without":
@@ -76,24 +73,18 @@ def checked_versions(spark_version, hadoop_version, hive_version):
         hadoop_version = "hadoop%s" % hadoop_version
 
     if hadoop_version not in SUPPORTED_HADOOP_VERSIONS:
-        raise PySparkRuntimeError(
-            error_class="UNSUPPORTED_SPARK_DISTRIBUTION",
-            message_parameters={
-                "hive_version": hive_version,
-                "supported_hadoop_versions": ", ".join(SUPPORTED_HADOOP_VERSIONS),
-            },
+        raise RuntimeError(
+            "Spark distribution of %s is not supported. Hadoop version should be "
+            "one of [%s]" % (hadoop_version, ", ".join(SUPPORTED_HADOOP_VERSIONS))
         )
 
     if re.match("^[0-9]+\\.[0-9]+$", hive_version):
         hive_version = "hive%s" % hive_version
 
     if hive_version not in SUPPORTED_HIVE_VERSIONS:
-        raise PySparkRuntimeError(
-            error_class="UNSUPPORTED_SPARK_DISTRIBUTION",
-            message_parameters={
-                "hive_version": hive_version,
-                "supported_hadoop_versions": ", ".join(SUPPORTED_HADOOP_VERSIONS),
-            },
+        raise RuntimeError(
+            "Spark distribution of %s is not supported. Hive version should be "
+            "one of [%s]" % (hive_version, ", ".join(SUPPORTED_HADOOP_VERSIONS))
         )
 
     return spark_version, convert_old_hadoop_version(spark_version, hadoop_version), hive_version

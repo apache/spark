@@ -132,11 +132,6 @@ ERROR_CLASSES_JSON = """
       "All items in `<arg_name>` should be in <allowed_types>, got <item_type>."
     ]
   },
-  "INVALID_VERSION_FORMAT" : {
-    "message" : [
-      "Spark version should start with 'spark-' prefix; however, got <version>"
-    ]
-  },
   "INVALID_WINDOW_BOUND_TYPE" : {
     "message" : [
       "Invalid window bound type: <window_bound_type>."
@@ -431,11 +426,6 @@ ERROR_CLASSES_JSON = """
   "UNSUPPORTED_PARAM_TYPE_FOR_HIGHER_ORDER_FUNCTION" : {
     "message" : [
       "Function `<func_name>` should use only POSITIONAL or POSITIONAL OR KEYWORD arguments."
-    ]
-  },
-  "UNSUPPORTED_SPARK_DISTRIBUTION" : {
-    "message" : [
-      "Spark distribution of <hive_version> is not supported. Hive version should be one of [<supported_hadoop_versions>]"
     ]
   },
   "VALUE_NOT_ACCESSIBLE": {
