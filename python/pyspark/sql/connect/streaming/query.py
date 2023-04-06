@@ -54,7 +54,7 @@ class StreamingQuery:
     runId.__doc__ = PySparkStreamingQuery.runId.__doc__
 
     @property
-    def name(self) -> str:
+    def name(self) -> Optional[str]:
         return self._name
 
     name.__doc__ = PySparkStreamingQuery.name.__doc__

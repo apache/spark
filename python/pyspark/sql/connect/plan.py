@@ -486,6 +486,7 @@ class WithWatermark(LogicalPlan):
         self._delay_threshold = delay_threshold
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
+        assert self._child is not None
         plan = self._create_proto_relation()
         plan.with_watermark.input.CopyFrom(self._child.plan(session))
         plan.with_watermark.event_time = self._event_time

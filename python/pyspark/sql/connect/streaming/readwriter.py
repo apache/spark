@@ -33,8 +33,9 @@ from pyspark.sql.types import Row, StructType
 
 if TYPE_CHECKING:
     from pyspark.sql.connect.session import SparkSession
-    from pyspark.sql.connect._typing import SupportsProcess, OptionalPrimitiveType
+    from pyspark.sql.connect._typing import OptionalPrimitiveType
     from pyspark.sql.connect.dataframe import DataFrame
+    from pyspark.sql._typing import SupportsProcess
 
 __all__ = ["DataStreamReader", "DataStreamWriter"]
 
@@ -269,7 +270,7 @@ class DataStreamWriter:
     format.__doc__ = PySparkDataStreamWriter.format.__doc__
 
     def option(self, key: str, value: "OptionalPrimitiveType") -> "DataStreamWriter":
-        self._write_proto.options[key] = to_str(value)
+        self._write_proto.options[key] = cast(str, to_str(value))
         return self
 
     option.__doc__ = PySparkDataStreamWriter.option.__doc__
@@ -292,7 +293,10 @@ class DataStreamWriter:
     def partitionBy(self, *cols: str) -> "DataStreamWriter":  # type: ignore[misc]
         if len(cols) == 1 and isinstance(cols[0], (list, tuple)):
             cols = cols[0]
-        self._write_proto.partitioning_cols = cast(List[str], cols)
+        # Clear any existing columns (if any).
+        while len(self._write_proto.partitioning_column_names) > 0:
+            self._write_proto.partitioning_column_names.pop()
+        self._write_proto.partitioning_column_names.extend(cast(List[str], cols))
         return self
 
     partitionBy.__doc__ = PySparkDataStreamWriter.partitionBy.__doc__
@@ -423,6 +427,7 @@ class DataStreamWriter:
     ) -> StreamingQuery:
         return self._start_internal(
             path=path,
+            tableName=None,
             format=format,
             outputMode=outputMode,
             partitionBy=partitionBy,
@@ -442,6 +447,7 @@ class DataStreamWriter:
         **options: "OptionalPrimitiveType",
     ) -> StreamingQuery:
         return self._start_internal(
+            path=None,
             tableName=tableName,
             format=format,
             outputMode=outputMode,
