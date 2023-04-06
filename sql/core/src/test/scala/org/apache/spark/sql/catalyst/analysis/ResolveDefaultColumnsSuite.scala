@@ -43,8 +43,9 @@ class ResolveDefaultColumnsSuite extends QueryTest with SharedSparkSession {
     val insertTableSchemaWithoutPartitionColumns = StructType(Seq(
       StructField("c1", TimestampType),
       StructField("c2", TimestampType)))
-    val result = rule.addMissingDefaultValuesForInsertFromInlineTable(
-      localRelation, insertTableSchemaWithoutPartitionColumns, numUserSpecifiedColumns = 1)
+    val (result: LogicalPlan, _: Boolean) =
+      rule.addMissingDefaultValuesForInsertFromInlineTable(
+        localRelation, insertTableSchemaWithoutPartitionColumns, numUserSpecifiedColumns = 1)
     val relation = asLocalRelation(result)
     assert(relation.output.map(_.name) == Seq("c1", "c2"))
     val data: Seq[Seq[Any]] = relation.data.map { row =>
@@ -59,8 +60,9 @@ class ResolveDefaultColumnsSuite extends QueryTest with SharedSparkSession {
     val insertTableSchemaWithoutPartitionColumns = StructType(Seq(
       StructField("c1", TimestampType),
       StructField("c2", TimestampType)))
-    val result = rule.addMissingDefaultValuesForInsertFromInlineTable(
-      localRelation, insertTableSchemaWithoutPartitionColumns, numUserSpecifiedColumns = 0)
+    val (result: LogicalPlan, _: Boolean) =
+      rule.addMissingDefaultValuesForInsertFromInlineTable(
+        localRelation, insertTableSchemaWithoutPartitionColumns, numUserSpecifiedColumns = 0)
     assert(asLocalRelation(result) == localRelation)
   }
 

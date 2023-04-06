@@ -107,10 +107,10 @@ case class ResolveDefaultColumns(catalog: SessionCatalog) extends Rule[LogicalPl
     insertTableSchemaWithoutPartitionColumns.map { schema: StructType =>
       val regenerated: InsertIntoStatement =
         regenerateUserSpecifiedCols(i, schema)
-      val expanded: LogicalPlan =
+      val (expanded: LogicalPlan, addedDefaults: Boolean) =
         addMissingDefaultValuesForInsertFromInlineTable(node, schema, i.userSpecifiedCols.size)
       val replaced: Option[LogicalPlan] =
-        replaceExplicitDefaultValuesForInputOfInsertInto(schema, expanded)
+        replaceExplicitDefaultValuesForInputOfInsertInto(schema, expanded, addedDefaults)
       replaced.map { r: LogicalPlan =>
         node = r
         for (child <- children.reverse) {
@@ -131,10 +131,10 @@ case class ResolveDefaultColumns(catalog: SessionCatalog) extends Rule[LogicalPl
     insertTableSchemaWithoutPartitionColumns.map { schema =>
       val regenerated: InsertIntoStatement = regenerateUserSpecifiedCols(i, schema)
       val project: Project = i.query.asInstanceOf[Project]
-      val expanded: Project =
+      val (expanded: Project, addedDefaults: Boolean) =
         addMissingDefaultValuesForInsertFromProject(project, schema, i.userSpecifiedCols.size)
       val replaced: Option[LogicalPlan] =
-        replaceExplicitDefaultValuesForInputOfInsertInto(schema, expanded)
+        replaceExplicitDefaultValuesForInputOfInsertInto(schema, expanded, addedDefaults)
       replaced.map { r =>
         regenerated.copy(query = r)
       }.getOrElse(i)
@@ -270,17 +270,19 @@ case class ResolveDefaultColumns(catalog: SessionCatalog) extends Rule[LogicalPl
 
   /**
    * Updates an inline table to generate missing default column values.
+   * Returns the resulting plan plus a boolean indicating whether such values were added.
    */
   def addMissingDefaultValuesForInsertFromInlineTable(
       node: LogicalPlan,
       insertTableSchemaWithoutPartitionColumns: StructType,
-      numUserSpecifiedColumns: Int): LogicalPlan = {
+      numUserSpecifiedColumns: Int): (LogicalPlan, Boolean) = {
     val schema = insertTableSchemaWithoutPartitionColumns
     val newDefaultExpressions: Seq[UnresolvedAttribute] =
       getNewDefaultExpressionsForInsert(schema, numUserSpecifiedColumns, node.output.size)
     val newNames: Seq[String] = schema.fields.map(_.name)
-    node match {
-      case _ if newDefaultExpressions.isEmpty => node
+    val resultPlan: LogicalPlan = node match {
+      case _ if newDefaultExpressions.isEmpty =>
+        node
       case table: UnresolvedInlineTable =>
         table.copy(
           names = newNames,
@@ -303,17 +305,20 @@ case class ResolveDefaultColumns(catalog: SessionCatalog) extends Rule[LogicalPl
           data = local.data.map { row =>
             new JoinedRow(row, newDefaultExpressionsRow)
           })
-      case _ => node
+      case _ =>
+        node
     }
+    (resultPlan, newDefaultExpressions.nonEmpty)
   }
 
   /**
    * Adds a new expressions to a projection to generate missing default column values.
+   * Returns the logical plan plus a boolean indicating if such defaults were added.
    */
   private def addMissingDefaultValuesForInsertFromProject(
       project: Project,
       insertTableSchemaWithoutPartitionColumns: StructType,
-      numUserSpecifiedColumns: Int): Project = {
+      numUserSpecifiedColumns: Int): (Project, Boolean) = {
     val schema = insertTableSchemaWithoutPartitionColumns
     val newDefaultExpressions: Seq[Expression] =
       getNewDefaultExpressionsForInsert(schema, numUserSpecifiedColumns, project.projectList.size)
@@ -321,7 +326,8 @@ case class ResolveDefaultColumns(catalog: SessionCatalog) extends Rule[LogicalPl
       newDefaultExpressions.zip(schema.fields).map {
         case (expr, field) => Alias(expr, field.name)()
       }
-    project.copy(projectList = project.projectList ++ newAliases)
+    (project.copy(projectList = project.projectList ++ newAliases),
+      newDefaultExpressions.nonEmpty)
   }
 
   /**
@@ -361,7 +367,8 @@ case class ResolveDefaultColumns(catalog: SessionCatalog) extends Rule[LogicalPl
    */
   private def replaceExplicitDefaultValuesForInputOfInsertInto(
       insertTableSchemaWithoutPartitionColumns: StructType,
-      input: LogicalPlan): Option[LogicalPlan] = {
+      input: LogicalPlan,
+      addedDefaults: Boolean): Option[LogicalPlan] = {
     val schema = insertTableSchemaWithoutPartitionColumns
     val defaultExpressions: Seq[Expression] = schema.fields.map {
       case f if f.metadata.contains(CURRENT_DEFAULT_COLUMN_METADATA_KEY) => analyze(f, "INSERT")
@@ -381,7 +388,11 @@ case class ResolveDefaultColumns(catalog: SessionCatalog) extends Rule[LogicalPl
       case project: Project =>
         replaceExplicitDefaultValuesForProject(defaultExpressions, project)
       case local: LocalRelation =>
-        Some(local)
+        if (addedDefaults) {
+          Some(local)
+        } else {
+          None
+        }
     }
   }
 
