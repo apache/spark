@@ -32,7 +32,9 @@ import org.apache.spark.SPARK_VERSION
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.StringEncoder
 import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
 import org.apache.spark.sql.catalyst.parser.ParseException
+import org.apache.spark.sql.connect.client.SparkConnectClient
 import org.apache.spark.sql.connect.client.util.{IntegrationTestUtils, RemoteSparkSession}
+import org.apache.spark.sql.connect.client.util.SparkConnectServerUtils.port
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 
@@ -196,6 +198,34 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper {
       assert(result(3).getLong(0) == 1)
       assert(result(4).getLong(0) == 2)
     }
+  }
+
+  test("different spark session join/union") {
+    val df = spark.range(10).limit(3)
+
+    val spark2 = SparkSession
+      .builder()
+      .client(
+        SparkConnectClient
+          .builder()
+          .port(port)
+          .build())
+      .build()
+
+    val df2 = spark2.range(10).limit(3)
+
+    assertThrows[AssertionError] {
+      df.union(df2).collect()
+    }
+
+    assertThrows[AssertionError] {
+      df.unionByName(df2).collect()
+    }
+
+    assertThrows[AssertionError] {
+      df.join(df2).collect()
+    }
+
   }
 
   test("write without table or path") {

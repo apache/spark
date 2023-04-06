@@ -18,6 +18,7 @@ package org.apache.spark.sql
 
 import java.io.Closeable
 import java.net.URI
+import java.util.UUID
 import java.util.concurrent.TimeUnit._
 import java.util.concurrent.atomic.AtomicLong
 
@@ -68,6 +69,9 @@ class SparkSession private[sql] (
     with Logging {
 
   private[this] val allocator = new RootAllocator()
+
+  // Generate a unique session ID for this session.
+  lazy val sessionId: String = UUID.randomUUID.toString
 
   lazy val version: String = {
     client.analyze(proto.AnalyzePlanRequest.AnalyzeCase.SPARK_VERSION).getSparkVersion.getVersion
