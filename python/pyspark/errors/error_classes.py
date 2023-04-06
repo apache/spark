@@ -350,9 +350,7 @@ ERROR_CLASSES_JSON = """
   },
   "RESULT_LENGTH_MISMATCH_FOR_SCALAR_ITER_PANDAS_UDF" : {
     "message" : [
-      "The length of output in Scalar iterator pandas UDF should be ",
-      "the same with the input's; however, the length of output was <output_length> and the ",
-      "length of input was <input_length>."
+      "The length of output in Scalar iterator pandas UDF should be the same with the input's; however, the length of output was <output_length> and the length of input was <input_length>."
     ]
   },
   "SCHEMA_MISMATCH_FOR_PANDAS_UDF" : {

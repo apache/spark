@@ -358,6 +358,7 @@ class BarrierTaskContext(TaskContext):
         if not isinstance(cls._taskContext, BarrierTaskContext):
             raise PySparkRuntimeError(
                 error_class="NOT_IN_BARRIER_STAGE",
+                message_parameters={},
             )
         return cls._taskContext
 

@@ -183,6 +183,7 @@ class SparkContext:
         if "SPARK_REMOTE" in os.environ and "SPARK_LOCAL_REMOTE" not in os.environ:
             raise PySparkRuntimeError(
                 error_class="CONTEXT_UNAVAILABLE_FOR_REMOTE_CLIENT",
+                message_parameters={},
             )
 
         if conf is None or conf.get("spark.executor.allowSparkContext", "false").lower() != "true":
@@ -269,10 +270,12 @@ class SparkContext:
         if not self._conf.contains("spark.master"):
             raise PySparkRuntimeError(
                 error_class="MASTER_URL_NOT_SET",
+                message_parameters={},
             )
         if not self._conf.contains("spark.app.name"):
             raise PySparkRuntimeError(
                 error_class="APPLICATION_NAME_NOT_SET",
+                message_parameters={},
             )
 
         # Read back our properties from the conf in case we loaded some of them from
@@ -466,6 +469,7 @@ class SparkContext:
         # This method is called when attempting to pickle SparkContext, which is always an error:
         raise PySparkRuntimeError(
             error_class="CONTEXT_ONLY_VALID_ON_DRIVER",
+            message_parameters={},
         )
 
     def __enter__(self) -> "SparkContext":
@@ -2336,6 +2340,7 @@ class SparkContext:
         else:
             raise PySparkRuntimeError(
                 error_class="INCORRECT_CONF_FOR_PROFILE",
+                message_parameters={},
             )
 
     def dump_profiles(self, path: str) -> None:
@@ -2352,6 +2357,7 @@ class SparkContext:
         else:
             raise PySparkRuntimeError(
                 error_class="INCORRECT_CONF_FOR_PROFILE",
+                message_parameters={},
             )
 
     def getConf(self) -> SparkConf:
@@ -2390,6 +2396,7 @@ class SparkContext:
         if TaskContext.get() is not None:
             raise PySparkRuntimeError(
                 error_class="CONTEXT_ONLY_VALID_ON_DRIVER",
+                message_parameters={},
             )
 
 

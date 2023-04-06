@@ -301,6 +301,7 @@ class Broadcast(Generic[T]):
         if self._jbroadcast is None:
             raise PySparkRuntimeError(
                 error_class="CANNOT_UNPERSIST_BROADCAST",
+                message_parameters={},
             )
         self._jbroadcast.unpersist(blocking)
 
@@ -330,6 +331,7 @@ class Broadcast(Generic[T]):
         if self._jbroadcast is None:
             raise PySparkRuntimeError(
                 error_class="CANNOT_DESTROY_BROADCAST",
+                message_parameters={},
             )
         self._jbroadcast.destroy(blocking)
         os.unlink(self._path)
@@ -338,6 +340,7 @@ class Broadcast(Generic[T]):
         if self._jbroadcast is None:
             raise PySparkRuntimeError(
                 error_class="CANNOT_REDUCE_BROADCAST",
+                message_parameters={},
             )
         assert self._pickle_registry is not None
         self._pickle_registry.add(self)

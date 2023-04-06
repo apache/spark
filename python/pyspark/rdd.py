@@ -170,6 +170,7 @@ def portable_hash(x: Hashable) -> int:
     if "PYTHONHASHSEED" not in os.environ:
         raise PySparkRuntimeError(
             error_class="PYTHON_HASH_SEED_NOT_SET",
+            message_parameters={},
         )
 
     if x is None:
@@ -373,6 +374,7 @@ class RDD(Generic[T_co]):
         # This method is called when attempting to pickle an RDD, which is always an error:
         raise PySparkRuntimeError(
             error_class="RDD_TRANSFORM_ONLY_VALID_ON_DRIVER",
+            message_parameters={},
         )
 
     @property

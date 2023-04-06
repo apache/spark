@@ -416,6 +416,7 @@ class MemoryProfiler(Profiler):
         else:
             raise PySparkRuntimeError(
                 error_class="MISSING_LIBRARY_FOR_PROFILER",
+                message_parameters={},
             )
 
     def stats(self) -> CodeMapDict:

@@ -119,7 +119,7 @@ def wrap_scalar_pandas_udf(f, return_type):
     def verify_result_length(result, length):
         if len(result) != length:
             raise PySparkRuntimeError(
-                error_class="RESULT_LENGTH_MISMATCH_FOR_PANDAS_UDF",
+                error_class="SCHEMA_MISMATCH_FOR_PANDAS_UDF",
                 message_parameters={
                     "expected": str(length),
                     "actual": str(len(result)),
@@ -572,6 +572,7 @@ def read_udfs(pickleSer, infile, eval_type):
                 else:
                     raise PySparkRuntimeError(
                         error_class="STOP_ITERATION_OCCURRED_FROM_SCALAR_ITER_PANDAS_UDF",
+                        message_parameters={},
                     )
 
                 if num_output_rows != num_input_rows:

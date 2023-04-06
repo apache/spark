@@ -106,6 +106,7 @@ def launch_gateway(conf=None, popen_kwargs=None):
             if not os.path.isfile(conn_info_file):
                 raise PySparkRuntimeError(
                     error_class="JAVA_GATEWAY_EXITED",
+                    message_parameters={},
                 )
 
             with open(conn_info_file, "rb") as info:
@@ -177,6 +178,7 @@ def _do_server_auth(conn, auth_secret):
         conn.close()
         raise PySparkRuntimeError(
             error_class="UNEXPECTED_RESPONSE_FROM_SERVER",
+            message_parameters={},
         )
 
 
