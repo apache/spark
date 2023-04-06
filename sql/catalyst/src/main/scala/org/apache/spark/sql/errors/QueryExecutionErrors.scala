@@ -2134,8 +2134,8 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       cause = null)
   }
 
-  def sqlConfigNotFoundError(key: String): SparkRuntimeException = {
-    new SparkRuntimeException(
+  def sqlConfigNotFoundError(key: String): SparkNoSuchElementException = {
+    new SparkNoSuchElementException(
       errorClass = "SQL_CONF_NOT_FOUND",
       messageParameters = Map("sqlConf" -> toSQLConf(key)))
   }
