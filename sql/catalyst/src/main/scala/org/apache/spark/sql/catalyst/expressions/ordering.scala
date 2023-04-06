@@ -47,7 +47,6 @@ class InterpretedOrdering(ordering: Seq[SortOrder]) extends BaseOrdering {
     val size = ordering.size
     while (i < size) {
       val order = ordering(i)
-      val orderingFunc = orderingFuncs(i)
       val left = order.child.eval(a)
       val right = order.child.eval(b)
 
@@ -58,6 +57,7 @@ class InterpretedOrdering(ordering: Seq[SortOrder]) extends BaseOrdering {
       } else if (right == null) {
         return if (order.nullOrdering == NullsFirst) 1 else -1
       } else {
+        val orderingFunc = orderingFuncs(i)
         val comparison = order.dataType match {
           case _ if order.direction == Ascending =>
             orderingFunc.compare(left, right)
