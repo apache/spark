@@ -1418,7 +1418,7 @@ case class ArrayContains(left: Expression, right: Expression)
 case class ArrayPrepend(left: Expression, right: Expression) extends RuntimeReplaceable
   with ImplicitCastInputTypes with BinaryLike[Expression] with QueryErrorsBase {
 
-  override lazy val replacement: Expression = ArrayInsert(left, Literal(0), right)
+  override lazy val replacement: Expression = ArrayInsert(left, Literal(1), right)
 
   override def inputTypes: Seq[AbstractDataType] = {
     (left.dataType, right.dataType) match {
