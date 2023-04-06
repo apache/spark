@@ -947,8 +947,16 @@ class DataFrameTestsMixin:
         self.assertGreaterEqual(row.sum, 0)
 
     def test_sample(self):
-        self.assertRaisesRegex(
-            TypeError, "should be a bool, float and number", lambda: self.spark.range(1).sample()
+        with self.assertRaises(PySparkTypeError) as pe:
+            self.spark.range(1).sample()
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_BOOL_OR_FLOAT_OR_INT",
+            message_parameters={
+                "arg_name": "withReplacement (optional), fraction (required) and seed (optional)",
+                "arg_type": "NoneType, NoneType, NoneType",
+            },
         )
 
         self.assertRaises(TypeError, lambda: self.spark.range(1).sample("a"))
@@ -1036,7 +1044,7 @@ class DataFrameTestsMixin:
             self.assertEqual(df.storageLevel, StorageLevel.NONE)
 
             df.cache()
-            self.assertEqual(df.storageLevel, StorageLevel.MEMORY_AND_DISK)
+            self.assertEqual(df.storageLevel, StorageLevel.MEMORY_AND_DISK_DESER)
 
             df.unpersist()
             self.assertEqual(df.storageLevel, StorageLevel.NONE)

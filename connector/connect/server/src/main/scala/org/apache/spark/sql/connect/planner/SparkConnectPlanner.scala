@@ -214,11 +214,11 @@ class SparkConnectPlanner(val session: SparkSession) {
   }
 
   private def transformSql(sql: proto.SQL): LogicalPlan = {
-    val args = sql.getArgsMap.asScala.toMap
+    val args = sql.getArgsMap
     val parser = session.sessionState.sqlParser
     val parsedPlan = parser.parsePlan(sql.getQuery)
-    if (args.nonEmpty) {
-      ParameterizedQuery(parsedPlan, args.mapValues(parser.parseExpression).toMap)
+    if (!args.isEmpty) {
+      ParameterizedQuery(parsedPlan, args.asScala.mapValues(transformLiteral).toMap)
     } else {
       parsedPlan
     }
@@ -1690,7 +1690,9 @@ class SparkConnectPlanner(val session: SparkSession) {
       sessionId: String,
       responseObserver: StreamObserver[ExecutePlanResponse]): Unit = {
     // Eagerly execute commands of the provided SQL string.
-    val df = session.sql(getSqlCommand.getSql, getSqlCommand.getArgsMap)
+    val df = session.sql(
+      getSqlCommand.getSql,
+      getSqlCommand.getArgsMap.asScala.mapValues(transformLiteral).toMap)
     // Check if commands have been executed.
     val isCommand = df.queryExecution.commandExecuted.isInstanceOf[CommandResult]
     val rows = df.logicalPlan match {

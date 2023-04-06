@@ -249,6 +249,11 @@ case class CachedRDDBuilder(
 
   private def isCachedRDDLoaded: Boolean = {
     _cachedColumnBuffersAreLoaded || {
+      // We must make sure the statistics of `sizeInBytes` and `rowCount` are accurate if
+      // `isCachedRDDLoaded` return true. Otherwise, AQE would do a wrong optimization,
+      // e.g., convert a non-empty plan to empty local relation if `rowCount` is 0.
+      // Because the statistics is based on accumulator, here we use an extra accumulator to
+      // track if all partitions are materialized.
       val rddLoaded = _cachedColumnBuffers.partitions.length == materializedPartitions.value
       if (rddLoaded) {
         _cachedColumnBuffersAreLoaded = rddLoaded

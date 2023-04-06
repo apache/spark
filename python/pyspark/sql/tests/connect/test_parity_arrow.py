@@ -42,8 +42,6 @@ class ArrowParityTests(ArrowTestsMixin, ReusedConnectTestCase):
     def test_createDataFrame_with_map_type(self):
         self.check_createDataFrame_with_map_type(True)
 
-    # TODO(SPARK-42983): len() of unsized object
-    @unittest.skip("Fails in Spark Connect, should enable.")
     def test_createDataFrame_with_ndarray(self):
         self.check_createDataFrame_with_ndarray(True)
 
