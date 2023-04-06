@@ -1169,7 +1169,6 @@ private[spark] class Client(
           reportsSinceLastLog = 0
         }
 
-
         // If DEBUG is enabled, log report details every iteration
         // Otherwise, log them every time the application changes state
         if (log.isDebugEnabled) {
