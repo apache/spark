@@ -3991,30 +3991,19 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
          Examples
          --------
          >>> from pyspark.sql import Row
-         >>> df = spark.createDataFrame([
-         ...     Row(name='Alice', age=5, height=80),
-         ...     Row(name='Alice', age=5, height=80),
-         ...     Row(name='Alice', age=10, height=80)
-         ... ])
+         >>> from pyspark.sql.functions import timestamp_seconds
+         >>> df = spark.readStream.format("rate").load().selectExpr(
+         ...     "value % 5 AS value", "timestamp")
+         >>> df.select("value", df.timestamp.alias("time")).withWatermark("time", '10 minutes')
+         DataFrame[value: bigint, time: timestamp]
 
          Deduplicate the same rows.
 
-         >>> df.dropDuplicatesWithinWatermark().show()
-         +-----+---+------+
-         | name|age|height|
-         +-----+---+------+
-         |Alice|  5|    80|
-         |Alice| 10|    80|
-         +-----+---+------+
+         >>> df.dropDuplicatesWithinWatermark() # doctest: +SKIP
 
-         Deduplicate values on 'name' and 'height' columns.
+         Deduplicate values on 'value' columns.
 
-         >>> df.dropDuplicatesWithinWatermark(['name', 'height']).show()
-         +-----+---+------+
-         | name|age|height|
-         +-----+---+------+
-         |Alice|  5|    80|
-         +-----+---+------+
+         >>> df.dropDuplicatesWithinWatermark(['value'])  # doctest: +SKIP
         """
         if subset is not None and (not isinstance(subset, Iterable) or isinstance(subset, str)):
             raise PySparkTypeError(
