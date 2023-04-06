@@ -628,7 +628,7 @@ class InternalFrame:
         >>> internal.column_label_names
         [('column_labels_a',), ('column_labels_b',)]
         """
-        assert isinstance(spark_frame, (PySparkDataFrame, ConnectDataFrame))
+        assert isinstance(spark_frame, GenericDataFrame.__args__)  # type: ignore[attr-defined]
         assert not spark_frame.isStreaming, "pandas-on-Spark does not support Structured Streaming."
 
         if not index_spark_columns:
@@ -638,7 +638,7 @@ class InternalFrame:
                         scol.alias(name_like_string(label))
                         for scol, label in zip(data_spark_columns, column_labels)
                     ]
-                spark_frame = spark_frame.select(data_spark_columns)  # type: ignore[arg-type]
+                spark_frame = spark_frame.select(data_spark_columns)
 
             assert not any(SPARK_INDEX_NAME_PATTERN.match(name) for name in spark_frame.columns), (
                 "Index columns should not appear in columns of the Spark DataFrame. Avoid "
@@ -1100,7 +1100,7 @@ class InternalFrame:
         return self._data_fields
 
     @lazy_property
-    def to_internal_spark_frame(self) -> PySparkDataFrame:
+    def to_internal_spark_frame(self) -> GenericDataFrame:
         """
         Return as Spark DataFrame. This contains index columns as well
         and should be only used for internal purposes.
@@ -1242,7 +1242,7 @@ class InternalFrame:
 
     def with_new_sdf(
         self,
-        spark_frame: PySparkDataFrame,
+        spark_frame: GenericDataFrame,
         *,
         index_fields: Optional[List[InternalField]] = None,
         data_columns: Optional[List[str]] = None,
@@ -1447,7 +1447,7 @@ class InternalFrame:
     def copy(
         self,
         *,
-        spark_frame: Union[PySparkDataFrame, _NoValueType] = _NoValue,
+        spark_frame: Union[GenericDataFrame, _NoValueType] = _NoValue,
         index_spark_columns: Union[List[Column], _NoValueType] = _NoValue,
         index_names: Union[Optional[List[Optional[Label]]], _NoValueType] = _NoValue,
         index_fields: Union[Optional[List[InternalField]], _NoValueType] = _NoValue,

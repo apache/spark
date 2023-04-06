@@ -242,7 +242,7 @@ class BooleanOps(DataTypeOps):
         else:
 
             def and_func(left: GenericColumn, right: Any) -> GenericColumn:
-                if not isinstance(right, (Column, ConnectColumn)):
+                if not isinstance(right, GenericColumn.__args__):  # type: ignore[attr-defined]
                     if pd.isna(right):
                         right = F.lit(None)
                     else:

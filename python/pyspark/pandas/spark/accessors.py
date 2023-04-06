@@ -26,7 +26,7 @@ from pyspark import StorageLevel
 from pyspark.sql import Column, DataFrame as SparkDataFrame
 from pyspark.sql.types import DataType, StructType
 
-from pyspark.pandas._typing import IndexOpsLike
+from pyspark.pandas._typing import IndexOpsLike, GenericColumn
 from pyspark.pandas.internal import InternalField
 
 # For Supporting Spark Connect
@@ -68,7 +68,7 @@ class SparkIndexOpsMethods(Generic[IndexOpsLike], metaclass=ABCMeta):
         """
         return self._data._internal.spark_column_for(self._data._column_label)
 
-    def transform(self, func: Callable[[Column], Union[Column, ConnectColumn]]) -> IndexOpsLike:
+    def transform(self, func: Callable[[Column], GenericColumn]) -> IndexOpsLike:
         """
         Applies a function that takes and returns a Spark column. It allows natively
         applying a Spark function and column APIs with the Spark column internally used
