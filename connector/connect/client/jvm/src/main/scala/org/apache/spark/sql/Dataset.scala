@@ -2538,7 +2538,7 @@ class Dataset[T] private[sql] (
     sparkSession.newDataset(outputEncoder) { builder =>
       builder.getMapPartitionsBuilder
         .setInput(plan.getRoot)
-        .setFunc(udf.apply().expr.getCommonInlineUserDefinedFunction)
+        .setFunc(udf.apply(col("*")).expr.getCommonInlineUserDefinedFunction)
     }
   }
 
