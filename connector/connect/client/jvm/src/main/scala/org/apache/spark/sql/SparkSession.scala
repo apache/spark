@@ -18,7 +18,6 @@ package org.apache.spark.sql
 
 import java.io.Closeable
 import java.net.URI
-import java.util.UUID
 import java.util.concurrent.TimeUnit._
 import java.util.concurrent.atomic.AtomicLong
 
