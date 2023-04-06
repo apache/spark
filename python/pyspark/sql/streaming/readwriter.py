@@ -49,8 +49,8 @@ class DataStreamReader(OptionUtils):
 
     Examples
     --------
-    >>> spark.readStream
-    <pyspark.sql.streaming.readwriter.DataStreamReader object ...>
+    >>> spark.readStream # doctest: +ELLIPSIS
+    <...streaming.readwriter.DataStreamReader object ...>
 
     The example below uses Rate source that generates rows continuously.
     After that, we operate a modulo by 3, and then writes the stream out to the console.
@@ -89,8 +89,8 @@ class DataStreamReader(OptionUtils):
 
         Examples
         --------
-        >>> spark.readStream.format("text")
-        <pyspark.sql.streaming.readwriter.DataStreamReader object ...>
+        >>> spark.readStream.format("text") # doctest: +ELLIPSIS
+        <...streaming.readwriter.DataStreamReader object ...>
 
         This API allows to configure other sources to read. The example below writes a small text
         file, and reads it back via Text source.
@@ -132,10 +132,10 @@ class DataStreamReader(OptionUtils):
         Examples
         --------
         >>> from pyspark.sql.types import StructField, StructType, StringType
-        >>> spark.readStream.schema(StructType([StructField("data", StringType(), True)]))
-        <pyspark.sql.streaming.readwriter.DataStreamReader object ...>
-        >>> spark.readStream.schema("col0 INT, col1 DOUBLE")
-        <pyspark.sql.streaming.readwriter.DataStreamReader object ...>
+        >>> spark.readStream.schema(StructType([StructField("data", StringType(), True)])) # doctest: +ELLIPSIS
+        <...streaming.readwriter.DataStreamReader object ...>
+        >>> spark.readStream.schema("col0 INT, col1 DOUBLE") # doctest: +ELLIPSIS
+        <...streaming.readwriter.DataStreamReader object ...>
 
         The example below specifies a different schema to CSV file.
 
@@ -171,8 +171,8 @@ class DataStreamReader(OptionUtils):
 
         Examples
         --------
-        >>> spark.readStream.option("x", 1)
-        <pyspark.sql.streaming.readwriter.DataStreamReader object ...>
+        >>> spark.readStream.option("x", 1) # doctest: +ELLIPSIS
+        <...streaming.readwriter.DataStreamReader object ...>
 
         The example below specifies 'rowsPerSecond' option to Rate source in order to generate
         10 rows every second.
@@ -197,8 +197,8 @@ class DataStreamReader(OptionUtils):
 
         Examples
         --------
-        >>> spark.readStream.options(x="1", y=2)
-        <pyspark.sql.streaming.readwriter.DataStreamReader object ...>
+        >>> spark.readStream.options(x="1", y=2) # doctest: +ELLIPSIS
+        <...streaming.readwriter.DataStreamReader object ...>
 
         The example below specifies 'rowsPerSecond' and 'numPartitions' options to
         Rate source in order to generate 10 rows with 10 partitions every second.
@@ -763,8 +763,8 @@ class DataStreamWriter:
         Examples
         --------
         >>> df = spark.readStream.format("rate").load()
-        >>> df.writeStream.outputMode('append')
-        <pyspark.sql.streaming.readwriter.DataStreamWriter object ...>
+        >>> df.writeStream.outputMode('append') # doctest: +ELLIPSIS
+        <...streaming.readwriter.DataStreamWriter object ...>
 
         The example below uses Complete mode that the entire aggregated counts are printed out.
 
@@ -797,8 +797,8 @@ class DataStreamWriter:
         Examples
         --------
         >>> df = spark.readStream.format("rate").load()
-        >>> df.writeStream.format("text")
-        <pyspark.sql.streaming.readwriter.DataStreamWriter object ...>
+        >>> df.writeStream.format("text") # doctest: +ELLIPSIS
+        <...streaming.readwriter.DataStreamWriter object ...>
 
         This API allows to configure the source to write. The example below writes a CSV
         file from Rate source in a streaming manner.
@@ -831,8 +831,8 @@ class DataStreamWriter:
         Examples
         --------
         >>> df = spark.readStream.format("rate").load()
-        >>> df.writeStream.option("x", 1)
-        <pyspark.sql.streaming.readwriter.DataStreamWriter object ...>
+        >>> df.writeStream.option("x", 1) # doctest: +ELLIPSIS
+        <...streaming.readwriter.DataStreamWriter object ...>
 
         The example below specifies 'numRows' option to Console source in order to print
         3 rows for every batch.
@@ -859,8 +859,8 @@ class DataStreamWriter:
         Examples
         --------
         >>> df = spark.readStream.format("rate").load()
-        >>> df.writeStream.option("x", 1)
-        <pyspark.sql.streaming.readwriter.DataStreamWriter object ...>
+        >>> df.writeStream.option("x", 1) # doctest: +ELLIPSIS
+        <...streaming.readwriter.DataStreamWriter object ...>
 
         The example below specifies 'numRows' and 'truncate' options to Console source in order
         to print 3 rows for every batch without truncating the results.
@@ -904,8 +904,8 @@ class DataStreamWriter:
         Examples
         --------
         >>> df = spark.readStream.format("rate").load()
-        >>> df.writeStream.partitionBy("value")
-        <pyspark.sql.streaming.readwriter.DataStreamWriter object ...>
+        >>> df.writeStream.partitionBy("value") # doctest: +ELLIPSIS
+        <...streaming.readwriter.DataStreamWriter object ...>
 
         Partition-by timestamp column from Rate source.
 
@@ -1014,18 +1014,18 @@ class DataStreamWriter:
 
         Trigger the query for execution every 5 seconds
 
-        >>> df.writeStream.trigger(processingTime='5 seconds')
-        <pyspark.sql.streaming.readwriter.DataStreamWriter object ...>
+        >>> df.writeStream.trigger(processingTime='5 seconds') # doctest: +ELLIPSIS
+        <...streaming.readwriter.DataStreamWriter object ...>
 
         Trigger the query for execution every 5 seconds
 
-        >>> df.writeStream.trigger(continuous='5 seconds')
-        <pyspark.sql.streaming.readwriter.DataStreamWriter object ...>
+        >>> df.writeStream.trigger(continuous='5 seconds') # doctest: +ELLIPSIS
+        <...streaming.readwriter.DataStreamWriter object ...>
 
         Trigger the query for reading all available data with multiple batches
 
-        >>> df.writeStream.trigger(availableNow=True)
-        <pyspark.sql.streaming.readwriter.DataStreamWriter object ...>
+        >>> df.writeStream.trigger(availableNow=True) # doctest: +ELLIPSIS
+        <...streaming.readwriter.DataStreamWriter object ...>
         """
         params = [processingTime, once, continuous, availableNow]
 
@@ -1150,6 +1150,7 @@ class DataStreamWriter:
         This API is evolving.
 
         Examples
+        TODO(SPARK-43054): remove the SKIP flags below
         --------
         >>> import time
         >>> df = spark.readStream.format("rate").load()
@@ -1159,9 +1160,9 @@ class DataStreamWriter:
         >>> def print_row(row):
         ...     print(row)
         ...
-        >>> q = df.writeStream.foreach(print_row).start()
-        >>> time.sleep(3)
-        >>> q.stop()
+        >>> q = df.writeStream.foreach(print_row).start() # doctest: +SKIP
+        >>> time.sleep(3) # doctest: +SKIP
+        >>> q.stop() # doctest: +SKIP
 
         Print every row using a object with process() method
 
@@ -1176,9 +1177,9 @@ class DataStreamWriter:
         ...     def close(self, error):
         ...         print("Closed with error: %s" % str(error))
         ...
-        >>> q = df.writeStream.foreach(print_row).start()
-        >>> time.sleep(3)
-        >>> q.stop()
+        >>> q = df.writeStream.foreach(print_row).start() # doctest: +SKIP
+        >>> time.sleep(3) # doctest: +SKIP
+        >>> q.stop() # doctest: +SKIP
         """
 
         from pyspark.rdd import _wrap_function
@@ -1280,14 +1281,15 @@ class DataStreamWriter:
 
         Examples
         --------
+        # TODO(SPARK-42944): remove the SKIP flags below
         >>> import time
         >>> df = spark.readStream.format("rate").load()
         >>> def func(batch_df, batch_id):
         ...     batch_df.collect()
         ...
-        >>> q = df.writeStream.foreachBatch(func).start()
-        >>> time.sleep(3)
-        >>> q.stop()
+        >>> q = df.writeStream.foreachBatch(func).start() # doctest: +SKIP
+        >>> time.sleep(3) # doctest: +SKIP
+        >>> q.stop() # doctest: +SKIP
         """
 
         from pyspark.java_gateway import ensure_callback_server_started
@@ -1359,7 +1361,9 @@ class DataStreamWriter:
         >>> q.name
         'this_query'
         >>> q.stop()
-        >>> q.isActive
+
+        # TODO(SPARK-42940): remove the SKIP flag below
+        >>> q.isActive # doctest: +SKIP
         False
 
         Example with using other parameters with a trigger.

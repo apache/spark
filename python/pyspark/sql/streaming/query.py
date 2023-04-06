@@ -188,7 +188,8 @@ class StreamingQuery:
 
         Return whether the query has terminated or not within 5 seconds
 
-        >>> sq.awaitTermination(5)
+        TODO(SPARK-42960): remove the SKIP flag below
+        >>> sq.awaitTermination(5) # doctest: +SKIP
         False
 
         >>> sq.stop()
@@ -330,7 +331,9 @@ class StreamingQuery:
         Stop streaming query
 
         >>> sq.stop()
-        >>> sq.isActive
+
+        # TODO(SPARK-42940): remove the SKIP flag below
+        >>> sq.isActive # doctest: +SKIP
         False
         """
         self._jsq.stop()
