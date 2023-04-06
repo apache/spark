@@ -37,6 +37,7 @@ class BaseOrdering extends Ordering[InternalRow] {
  * An interpreted row ordering comparator.
  */
 class InterpretedOrdering(ordering: Seq[SortOrder]) extends BaseOrdering {
+  private lazy val orderingFuncs = ordering.map(order => PhysicalDataType.ordering(order.dataType))
 
   def this(ordering: Seq[SortOrder], inputSchema: Seq[Attribute]) =
     this(bindReferences(ordering, inputSchema))
@@ -46,6 +47,7 @@ class InterpretedOrdering(ordering: Seq[SortOrder]) extends BaseOrdering {
     val size = ordering.size
     while (i < size) {
       val order = ordering(i)
+      val orderingFunc = orderingFuncs(i)
       val left = order.child.eval(a)
       val right = order.child.eval(b)
 
@@ -57,10 +59,10 @@ class InterpretedOrdering(ordering: Seq[SortOrder]) extends BaseOrdering {
         return if (order.nullOrdering == NullsFirst) 1 else -1
       } else {
         val comparison = order.dataType match {
-          case dt if order.direction == Ascending =>
-            PhysicalDataType.ordering(dt).compare(left, right)
-          case dt if order.direction == Descending =>
-            - PhysicalDataType.ordering(dt).compare(left, right)
+          case _ if order.direction == Ascending =>
+            orderingFunc.compare(left, right)
+          case _ if order.direction == Descending =>
+            - orderingFunc.compare(left, right)
         }
         if (comparison != 0) {
           return comparison
