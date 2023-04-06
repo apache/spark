@@ -35,7 +35,7 @@ from py4j.java_gateway import JavaObject, JVMView
 
 from pyspark import copy_func
 from pyspark.context import SparkContext
-from pyspark.errors import PySparkTypeError
+from pyspark.errors import PySparkAttributeError, PySparkTypeError, PySparkValueError
 from pyspark.sql.types import DataType
 from pyspark.sql.utils import get_active_spark_context
 
@@ -62,11 +62,9 @@ def _to_java_column(col: "ColumnOrName") -> JavaObject:
     elif isinstance(col, str):
         jcol = _create_column_from_name(col)
     else:
-        raise TypeError(
-            "Invalid argument, not a string or column: "
-            "{0} of type {1}. "
-            "For column literals, use 'lit', 'array', 'struct' or 'create_map' "
-            "function.".format(col, type(col))
+        raise PySparkTypeError(
+            error_class="NOT_COLUMN_OR_STR",
+            message_parameters={"arg_name": "col", "arg_type": type(col).__name__},
         )
     return jcol
 
@@ -352,9 +350,9 @@ class Column:
 
     # container operators
     def __contains__(self, item: Any) -> None:
-        raise ValueError(
-            "Cannot apply 'in' operator against a column: please use 'contains' "
-            "in a string column or 'array_contains' function for an array column."
+        raise PySparkValueError(
+            error_class="CANNOT_APPLY_IN_FOR_COLUMN",
+            message_parameters={},
         )
 
     # bitwise operators
@@ -665,7 +663,10 @@ class Column:
         +------+
         """
         if item.startswith("__"):
-            raise AttributeError(item)
+            raise PySparkAttributeError(
+                error_class="CANNOT_ACCESS_TO_DUNDER",
+                message_parameters={},
+            )
         return self[item]
 
     def __getitem__(self, k: Any) -> "Column":
@@ -701,13 +702,18 @@ class Column:
         """
         if isinstance(k, slice):
             if k.step is not None:
-                raise ValueError("slice with step is not supported.")
+                raise PySparkValueError(
+                    error_class="SLICE_WITH_STEP",
+                    message_parameters={},
+                )
             return self.substr(k.start, k.stop)
         else:
             return _bin_op("apply")(self, k)
 
     def __iter__(self) -> None:
-        raise TypeError("Column is not iterable")
+        raise PySparkTypeError(
+            error_class="NOT_ITERABLE", message_parameters={"objectName": "Column"}
+        )
 
     # string methods
     _contains_doc = """
@@ -920,7 +926,10 @@ class Column:
         elif isinstance(startPos, Column):
             jc = self._jc.substr(startPos._jc, cast("Column", length)._jc)
         else:
-            raise TypeError("Unexpected type: %s" % type(startPos))
+            raise PySparkTypeError(
+                error_class="NOT_COLUMN_OR_INT",
+                message_parameters={"arg_name": "startPos", "arg_type": type(startPos).__name__},
+            )
         return Column(jc)
 
     def isin(self, *cols: Any) -> "Column":
@@ -1149,7 +1158,10 @@ class Column:
                 return Column(getattr(self._jc, "as")(alias[0]))
         else:
             if metadata:
-                raise ValueError("metadata can only be provided for a single column")
+                raise PySparkValueError(
+                    error_class="ONLY_ALLOWED_FOR_SINGLE_COLUMN",
+                    message_parameters={"arg_name": "metadata"},
+                )
             return Column(getattr(self._jc, "as")(_to_seq(sc, list(alias))))
 
     name = copy_func(alias, sinceversion=2.0, doc=":func:`name` is an alias for :func:`alias`.")
@@ -1193,7 +1205,10 @@ class Column:
             jdt = spark._jsparkSession.parseDataType(dataType.json())
             jc = self._jc.cast(jdt)
         else:
-            raise TypeError("unexpected type: %s" % type(dataType))
+            raise PySparkTypeError(
+                error_class="NOT_DATATYPE_OR_STR",
+                message_parameters={"arg_name": "dataType", "arg_type": type(dataType).__name__},
+            )
         return Column(jc)
 
     astype = copy_func(cast, sinceversion=1.4, doc=":func:`astype` is an alias for :func:`cast`.")
@@ -1278,7 +1293,10 @@ class Column:
         pyspark.sql.functions.when
         """
         if not isinstance(condition, Column):
-            raise TypeError("condition should be a Column")
+            raise PySparkTypeError(
+                error_class="NOT_COLUMN",
+                message_parameters={"arg_name": "condition", "arg_type": type(condition).__name__},
+            )
         v = value._jc if isinstance(value, Column) else value
         jc = self._jc.when(condition._jc, v)
         return Column(jc)
@@ -1361,14 +1379,17 @@ class Column:
         from pyspark.sql.window import WindowSpec
 
         if not isinstance(window, WindowSpec):
-            raise TypeError("window should be WindowSpec")
+            raise PySparkTypeError(
+                error_class="NOT_WINDOWSPEC",
+                message_parameters={"arg_name": "window", "arg_type": type(window).__name__},
+            )
         jc = self._jc.over(window._jspec)
         return Column(jc)
 
     def __nonzero__(self) -> None:
-        raise ValueError(
-            "Cannot convert column into bool: please use '&' for 'and', '|' for 'or', "
-            "'~' for 'not' when building DataFrame boolean expressions."
+        raise PySparkValueError(
+            error_class="CANNOT_CONVERT_COLUMN_INTO_BOOL",
+            message_parameters={},
         )
 
     __bool__ = __nonzero__

@@ -24,9 +24,24 @@ ERROR_CLASSES_JSON = """
       "Argument `<arg_name>` is required when <condition>."
     ]
   },
+  "CANNOT_ACCESS_TO_DUNDER": {
+    "message": [
+      "Dunder(double underscore) attribute is for internal use only."
+    ]
+  },
+  "CANNOT_APPLY_IN_FOR_COLUMN": {
+    "message": [
+      "Cannot apply 'in' operator against a column: please use 'contains' in a string column or 'array_contains' function for an array column."
+    ]
+  },
   "CANNOT_BE_EMPTY": {
     "message": [
       "At least one <item> must be specified."
+    ]
+  },
+  "CANNOT_CONVERT_COLUMN_INTO_BOOL": {
+    "message": [
+      "Cannot convert column into bool: please use '&' for 'and', '|' for 'or', '~' for 'not' when building DataFrame boolean expressions."
     ]
   },
   "CANNOT_PARSE_DATATYPE": {
@@ -242,6 +257,16 @@ ERROR_CLASSES_JSON = """
   "NO_ACTIVE_SESSION" : {
     "message" : [
       "No active Spark session found. Please create a new Spark session before running the code."
+    ]
+  },
+  "ONLY_ALLOWED_FOR_SINGLE_COLUMN" : {
+    "message" : [
+      "Argument `<arg_name>` can only be provided for a single column."
+    ]
+  },
+  "SLICE_WITH_STEP" : {
+    "message" : [
+      "Slice with step is not supported."
     ]
   },
   "UNSUPPORTED_NUMPY_ARRAY_SCALAR" : {
