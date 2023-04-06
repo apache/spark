@@ -524,7 +524,7 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
       expectedMessageParameters = Map(
         "tableName" -> "`table-name`",
         "colPath" -> "`b`",
-        "extraCols" -> "'z'"
+        "extraCols" -> "`z`"
       )
     )
   }
@@ -743,7 +743,7 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
       expectedMessageParameters = Map(
         "tableName" -> "`table-name`",
         "colPath" -> "`b`.`n2`",
-        "extraCols" -> "'dn3'")
+        "extraCols" -> "`dn3`")
     )
   }
 
@@ -772,7 +772,7 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
       expectedMessageParameters = Map(
         "tableName" -> "`table-name`",
         "colPath" -> "`arr`.`element`",
-        "extraCols" -> "'z'")
+        "extraCols" -> "`z`")
     )
   }
 
@@ -805,7 +805,7 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
       expectedMessageParameters = Map(
         "tableName" -> "`table-name`",
         "colPath" -> "`m`.`key`",
-        "extraCols" -> "'z'")
+        "extraCols" -> "`z`")
     )
   }
 
@@ -838,7 +838,7 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
       expectedMessageParameters = Map(
         "tableName" -> "`table-name`",
         "colPath" -> "`m`.`value`",
-        "extraCols" -> "'z'")
+        "extraCols" -> "`z`")
     )
   }
 
@@ -880,7 +880,7 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
         expectedMessageParameters = Map(
           "tableName" -> "`table-name`",
           "colPath" -> "`b`.`n2`",
-          "missingFields" -> "'dn3'")
+          "missingFields" -> "`dn3`")
       )
     }
   }
@@ -923,7 +923,7 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
         expectedMessageParameters = Map(
           "tableName" -> "`table-name`",
           "colPath" -> "`arr`.`element`",
-          "missingFields" -> "'y'")
+          "missingFields" -> "`y`")
       )
     }
   }
@@ -970,7 +970,7 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
         expectedMessageParameters = Map(
           "tableName" -> "`table-name`",
           "colPath" -> "`m`.`key`",
-          "missingFields" -> "'y'")
+          "missingFields" -> "`y`")
       )
     }
   }
@@ -1017,7 +1017,7 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
         expectedMessageParameters = Map(
           "tableName" -> "`table-name`",
           "colPath" -> "`m`.`value`",
-          "missingFields" -> "'y'")
+          "missingFields" -> "`y`")
       )
     }
   }

@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.expressions.objects.AssertNotNull
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
+import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
@@ -117,7 +118,7 @@ object TableOutputResolver {
     if (reordered.length == expectedCols.length) {
       if (matchedCols.size < inputCols.length) {
         val extraCols = inputCols.filterNot(col => matchedCols.contains(col.name))
-          .map(col => s"'${col.name}'").mkString(", ")
+          .map(col => s"${toSQLId(col.name)}").mkString(", ")
         throw QueryCompilationErrors.incompatibleDataToTableExtraStructFieldsError(
           tableName, colPath.quoted, extraCols
         )
@@ -139,16 +140,18 @@ object TableOutputResolver {
 
     if (inputCols.size > expectedCols.size) {
       val extraColsStr = inputCols.takeRight(inputCols.size - expectedCols.size)
-        .map(col => s"'${col.name}'")
+        .map(col => s"${toSQLId(col.name)}")
         .mkString(", ")
-      addError(s"Cannot write extra fields to struct '${colPath.quoted}': $extraColsStr")
-      return Nil
+      throw QueryCompilationErrors.incompatibleDataToTableExtraStructFieldsError(
+        tableName, colPath.quoted, extraColsStr
+      )
     } else if (inputCols.size < expectedCols.size) {
       val missingColsStr = expectedCols.takeRight(expectedCols.size - inputCols.size)
-        .map(col => s"'${col.name}'")
+        .map(col => s"${toSQLId(col.name)}")
         .mkString(", ")
-      addError(s"Struct '${colPath.quoted}' missing fields: $missingColsStr")
-      return Nil
+      throw QueryCompilationErrors.incompatibleDataToTableStructMissingFieldsError(
+        tableName, colPath.quoted, missingColsStr
+      )
     }
 
     inputCols.zip(expectedCols).flatMap { case (inputCol, expectedCol) =>

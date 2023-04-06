@@ -35,6 +35,7 @@ import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.catalyst.util.DataTypeJsonUtils.{DataTypeJsonDeserializer, DataTypeJsonSerializer}
 import org.apache.spark.sql.catalyst.util.StringUtils.StringConcat
+import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy
 import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy.{ANSI, STRICT}
@@ -507,7 +508,7 @@ object DataType {
 
         } else if (writeFields.size > readFields.size) {
           val extraFieldsStr = writeFields.takeRight(writeFields.size - readFields.size)
-            .map(f => s"'${f.name}'").mkString(", ")
+            .map(f => s"${toSQLId(f.name)}").mkString(", ")
           throw QueryCompilationErrors.incompatibleDataToTableExtraStructFieldsError(
             tableName, context, extraFieldsStr
           )
