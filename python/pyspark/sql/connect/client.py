@@ -678,11 +678,12 @@ class SparkConnectClient(object):
         req.plan.CopyFrom(plan)
         table, schema, metrics, observed_metrics, _ = self._execute_and_fetch(req)
         assert table is not None
-        pdf = table.rename_columns([f"col_{i}" for i in range(len(table.column_names))]).to_pandas()
-        pdf.columns = table.column_names
 
         schema = schema or types.from_arrow_schema(table.schema)
         assert schema is not None and isinstance(schema, StructType)
+
+        pdf = table.to_pandas()
+        pdf.columns = schema.fieldNames()
 
         for field, pa_field in zip(schema, table.schema):
             if isinstance(field.dataType, TimestampType):

@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, ExpressionEncode
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.UnboundRowEncoder
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder.Deserializer
 import org.apache.spark.sql.connect.client.util.{AutoCloseables, Cleanable}
+import org.apache.spark.sql.connect.common.DataTypeProtoConverter
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.ArrowUtils
 import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch, ColumnVector}
@@ -60,13 +61,19 @@ private[sql] class SparkResult[T](
   private def processResponses(stopOnFirstNonEmptyResponse: Boolean): Boolean = {
     while (responses.hasNext) {
       val response = responses.next()
+      if (response.hasSchema) {
+        structType =
+          DataTypeProtoConverter.toCatalystType(response.getSchema).asInstanceOf[StructType]
+      }
       if (response.hasArrowBatch) {
         val ipcStreamBytes = response.getArrowBatch.getData
         val reader = new ArrowStreamReader(ipcStreamBytes.newInput(), allocator)
         try {
           val root = reader.getVectorSchemaRoot
           if (batches.isEmpty) {
-            structType = ArrowUtils.fromArrowSchema(root.getSchema)
+            if (structType == null) {
+              structType = ArrowUtils.fromArrowSchema(root.getSchema)
+            }
             // TODO: create encoders that directly operate on arrow vectors.
             boundEncoder = createEncoder(structType).resolveAndBind(structType.toAttributes)
           }
