@@ -65,6 +65,7 @@ message Relation {
     Parse parse = 30;
     GroupMap group_map = 31;
     CoGroupMap co_group_map = 32;
+    WithWatermark with_watermark = 33;
 
     // NA functions
     NAFill fill_na = 90;
@@ -108,11 +109,8 @@ message SQL {
   // (Required) The SQL query.
   string query = 1;
 
-  // (Optional) A map of parameter names to string values that are parsed as
-  // SQL literal expressions. For example, map keys: "rank", "name", "birthdate";
-  // map values: "1", "'Steven'", "DATE'2023-03-21'". The fragments of string values
-  // belonged to SQL comments are skipped while parsing.
-  map<string, string> args = 2;
+  // (Optional) A map of parameter names to literal expressions.
+  map<string, Expression.Literal> args = 2;
 }
 
 // Relation that reads from a file / table or other data source. Does not have additional
@@ -122,6 +120,9 @@ message Read {
     NamedTable named_table = 1;
     DataSource data_source = 2;
   }
+
+  // (Optional) Indicates if this is a streaming read.
+  bool is_streaming = 3;
 
   message NamedTable {
     // (Required) Unparsed identifier for the table.
@@ -727,6 +728,18 @@ message WithColumns {
   //
   // An exception is thrown when duplicated names are present in the mapping.
   repeated Expression.Alias aliases = 2;
+}
+
+message WithWatermark {
+
+  // (Required) The input relation
+  Relation input = 1;
+
+  // (Required) Name of the column containing event time.
+  string event_time = 2;
+
+  // (Required)
+  string delay_threshold = 3;
 }
 
 // Specify a hint over a relation. Hint should have a name and optional parameters.

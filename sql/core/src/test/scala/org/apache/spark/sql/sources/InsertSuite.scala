@@ -855,10 +855,10 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       spark.sessionState.catalog.createTable(newTable, false)
 
       sql("INSERT INTO TABLE test_table SELECT 1, 'a'")
-      val msg = intercept[AnalysisException] {
+      val msg = intercept[SparkException] {
         sql("INSERT INTO TABLE test_table SELECT 2, null")
-      }.getMessage
-      assert(msg.contains("Cannot write nullable values to non-null column 's'"))
+      }.getCause.getMessage
+      assert(msg.contains("Null value appeared in non-nullable field"))
     }
   }
 
