@@ -24,6 +24,21 @@ ERROR_CLASSES_JSON = """
       "Argument `<arg_name>` is required when <condition>."
     ]
   },
+  "CANNOT_ACCESS_TO_DUNDER": {
+    "message": [
+      "Dunder(double underscore) attribute is for internal use only."
+    ]
+  },
+  "CANNOT_APPLY_IN_FOR_COLUMN": {
+    "message": [
+      "Cannot apply 'in' operator against a column: please use 'contains' in a string column or 'array_contains' function for an array column."
+    ]
+  },
+  "CANNOT_CONVERT_COLUMN_INTO_BOOL": {
+    "message": [
+      "Cannot convert column into bool: please use '&' for 'and', '|' for 'or', '~' for 'not' when building DataFrame boolean expressions."
+    ]
+  },
   "COLUMN_IN_LIST": {
     "message": [
       "`<func_name>` does not allow a Column in a list."
@@ -37,6 +52,11 @@ ERROR_CLASSES_JSON = """
   "HIGHER_ORDER_FUNCTION_SHOULD_RETURN_COLUMN" : {
     "message" : [
       "Function `<func_name>` should return Column, got <return_type>."
+    ]
+  },
+  "INVALID_ITEM_FOR_CONTAINER": {
+    "message": [
+      "All items in `<arg_name>` should be in <allowed_types>, got <item_type>."
     ]
   },
   "JVM_ATTRIBUTE_NOT_SUPPORTED" : {
@@ -57,6 +77,21 @@ ERROR_CLASSES_JSON = """
   "NOT_BOOL_OR_DICT_OR_FLOAT_OR_INT_OR_STR" : {
     "message" : [
       "Argument `<arg_name>` should be a bool, dict, float, int or str, got <arg_type>."
+    ]
+  },
+  "NOT_BOOL_OR_FLOAT_OR_INT" : {
+    "message" : [
+      "Argument `<arg_name>` should be a bool, float or str, got <arg_type>."
+    ]
+  },
+  "NOT_BOOL_OR_FLOAT_OR_INT_OR_LIST_OR_NONE_OR_STR_OR_TUPLE" : {
+    "message" : [
+      "Argument `<arg_name>` should be a bool, float, int, list, None, str or tuple, got <arg_type>."
+    ]
+  },
+  "NOT_BOOL_OR_FLOAT_OR_INT_OR_STR" : {
+    "message" : [
+      "Argument `<arg_name>` should be a bool, float, int or str, got <arg_type>."
     ]
   },
   "NOT_BOOL_OR_LIST" : {
@@ -87,6 +122,11 @@ ERROR_CLASSES_JSON = """
   "NOT_COLUMN_OR_INT" : {
     "message" : [
       "Argument `<arg_name>` should be a Column or int, got <arg_type>."
+    ]
+  },
+  "NOT_COLUMN_OR_INT_OR_LIST_OR_STR_OR_TUPLE" : {
+    "message" : [
+      "Argument `<arg_name>` should be a Column, int, list, str or tuple, got <arg_type>."
     ]
   },
   "NOT_COLUMN_OR_INT_OR_STR" : {
@@ -139,6 +179,11 @@ ERROR_CLASSES_JSON = """
       "<objectName> is not iterable."
     ]
   },
+  "NOT_LIST_OF_STR" : {
+    "message" : [
+      "Argument `<arg_name>` should be a list[str], got <arg_type>."
+    ]
+  },
   "NOT_LIST_OR_STR_OR_TUPLE" : {
     "message" : [
       "Argument `<arg_name>` should be a list, str or tuple, got <arg_type>."
@@ -167,6 +212,16 @@ ERROR_CLASSES_JSON = """
   "NO_ACTIVE_SESSION" : {
     "message" : [
       "No active Spark session found. Please create a new Spark session before running the code."
+    ]
+  },
+  "ONLY_ALLOWED_FOR_SINGLE_COLUMN" : {
+    "message" : [
+      "Argument `<arg_name>` can only be provided for a single column."
+    ]
+  },
+  "SLICE_WITH_STEP" : {
+    "message" : [
+      "Slice with step is not supported."
     ]
   },
   "UNSUPPORTED_NUMPY_ARRAY_SCALAR" : {

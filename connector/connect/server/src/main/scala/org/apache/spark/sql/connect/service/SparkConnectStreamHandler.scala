@@ -21,6 +21,7 @@ import scala.collection.JavaConverters._
 
 import com.google.protobuf.ByteString
 import io.grpc.stub.StreamObserver
+import org.apache.commons.lang3.StringUtils
 
 import org.apache.spark.SparkEnv
 import org.apache.spark.connect.proto
@@ -49,6 +50,16 @@ class SparkConnectStreamHandler(responseObserver: StreamObserver[ExecutePlanResp
         .getOrCreateIsolatedSession(v.getUserContext.getUserId, v.getSessionId)
         .session
     session.withActive {
+
+      // Add debug information to the query execution so that the jobs are traceable.
+      val debugString = v.toString
+      session.sparkContext.setLocalProperty(
+        "callSite.short",
+        s"Spark Connect - ${StringUtils.abbreviate(debugString, 128)}")
+      session.sparkContext.setLocalProperty(
+        "callSite.long",
+        StringUtils.abbreviate(debugString, 2048))
+
       v.getPlan.getOpTypeCase match {
         case proto.Plan.OpTypeCase.COMMAND => handleCommand(session, v)
         case proto.Plan.OpTypeCase.ROOT => handlePlan(session, v)

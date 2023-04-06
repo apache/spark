@@ -530,13 +530,13 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         >>> import tempfile
         >>> df = spark.readStream.format("rate").load()
         >>> type(df.writeStream)
-        <class 'pyspark.sql.streaming.readwriter.DataStreamWriter'>
+        <class '...streaming.readwriter.DataStreamWriter'>
 
         >>> with tempfile.TemporaryDirectory() as d:
         ...     # Create a table with Rate source.
         ...     df.writeStream.toTable(
         ...         "my_table", checkpointLocation=d) # doctest: +ELLIPSIS
-        <pyspark.sql.streaming.query.StreamingQuery object at 0x...>
+        <...streaming.query.StreamingQuery object at 0x...>
         """
         return DataStreamWriter(self)
 
@@ -1858,13 +1858,14 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             or is_withReplacement_omitted_kwargs
             or is_withReplacement_omitted_args
         ):
-            argtypes = [
-                str(type(arg)) for arg in [withReplacement, fraction, seed] if arg is not None
-            ]
+            argtypes = [type(arg).__name__ for arg in [withReplacement, fraction, seed]]
             raise PySparkTypeError(
-                "withReplacement (optional), fraction (required) and seed (optional)"
-                " should be a bool, float and number; however, "
-                "got [%s]." % ", ".join(argtypes)
+                error_class="NOT_BOOL_OR_FLOAT_OR_INT",
+                message_parameters={
+                    "arg_name": "withReplacement (optional), "
+                    + "fraction (required) and seed (optional)",
+                    "arg_type": ", ".join(argtypes),
+                },
             )
 
         if is_withReplacement_omitted_args:

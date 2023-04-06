@@ -260,6 +260,7 @@ class DataSource(LogicalPlan):
         options: Optional[Mapping[str, str]] = None,
         paths: Optional[List[str]] = None,
         predicates: Optional[List[str]] = None,
+        is_streaming: Optional[bool] = None,
     ) -> None:
         super().__init__(None)
 
@@ -284,6 +285,7 @@ class DataSource(LogicalPlan):
         self._options = options
         self._paths = paths
         self._predicates = predicates
+        self._is_streaming = is_streaming
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
         plan = self._create_proto_relation()
@@ -298,6 +300,8 @@ class DataSource(LogicalPlan):
             plan.read.data_source.paths.extend(self._paths)
         if self._predicates is not None and len(self._predicates) > 0:
             plan.read.data_source.predicates.extend(self._predicates)
+        if self._is_streaming is not None:
+            plan.read.is_streaming = self._is_streaming
         return plan
 
 
@@ -470,6 +474,23 @@ class WithColumns(LogicalPlan):
                 alias.metadata = self._metadata[i]
             plan.with_columns.aliases.append(alias)
 
+        return plan
+
+
+class WithWatermark(LogicalPlan):
+    """Logical plan object for a WithWatermark operation."""
+
+    def __init__(self, child: Optional["LogicalPlan"], event_time: str, delay_threshold: str):
+        super().__init__(child)
+        self._event_time = event_time
+        self._delay_threshold = delay_threshold
+
+    def plan(self, session: "SparkConnectClient") -> proto.Relation:
+        assert self._child is not None
+        plan = self._create_proto_relation()
+        plan.with_watermark.input.CopyFrom(self._child.plan(session))
+        plan.with_watermark.event_time = self._event_time
+        plan.with_watermark.delay_threshold = self._delay_threshold
         return plan
 
 
@@ -945,13 +966,12 @@ class SubqueryAlias(LogicalPlan):
 
 
 class SQL(LogicalPlan):
-    def __init__(self, query: str, args: Optional[Dict[str, str]] = None) -> None:
+    def __init__(self, query: str, args: Optional[Dict[str, Any]] = None) -> None:
         super().__init__(None)
 
         if args is not None:
             for k, v in args.items():
                 assert isinstance(k, str)
-                assert isinstance(v, str)
 
         self._query = query
         self._args = args
@@ -962,7 +982,7 @@ class SQL(LogicalPlan):
 
         if self._args is not None and len(self._args) > 0:
             for k, v in self._args.items():
-                plan.sql.args[k] = v
+                plan.sql.args[k].CopyFrom(LiteralExpression._from_value(v).to_plan(session).literal)
 
         return plan
 
@@ -971,7 +991,9 @@ class SQL(LogicalPlan):
         cmd.sql_command.sql = self._query
         if self._args is not None and len(self._args) > 0:
             for k, v in self._args.items():
-                cmd.sql_command.args[k] = v
+                cmd.sql_command.args[k].CopyFrom(
+                    LiteralExpression._from_value(v).to_plan(session).literal
+                )
         return cmd
 
 
@@ -1558,6 +1580,19 @@ class WriteOperationV2(LogicalPlan):
             else:
                 raise ValueError(f"Unknown Mode value for DataFrame: {self.mode}")
         return plan
+
+
+class WriteStreamOperation(LogicalPlan):
+    def __init__(self, child: "LogicalPlan") -> None:
+        super(WriteStreamOperation, self).__init__(child)
+        self.write_op = proto.WriteStreamOperationStart()
+
+    def command(self, session: "SparkConnectClient") -> proto.Command:
+        assert self._child is not None
+        self.write_op.input.CopyFrom(self._child.plan(session))
+        cmd = proto.Command()
+        cmd.write_stream_operation_start.CopyFrom(self.write_op)
+        return cmd
 
 
 # Catalog API (internal-only)
