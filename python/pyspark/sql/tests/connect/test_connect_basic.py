@@ -208,23 +208,41 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         )
 
         # check error
-        with self.assertRaisesRegex(
-            TypeError,
-            "unexpected item type",
-        ):
+        with self.assertRaises(PySparkTypeError) as pe:
             cdf[1.5]
 
-        with self.assertRaisesRegex(
-            TypeError,
-            "unexpected item type",
-        ):
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_COLUMN_OR_INT_OR_LIST_OR_STR_OR_TUPLE",
+            message_parameters={
+                "arg_name": "item",
+                "arg_type": "float",
+            },
+        )
+
+        with self.assertRaises(PySparkTypeError) as pe:
             cdf[None]
 
-        with self.assertRaisesRegex(
-            TypeError,
-            "unexpected item type",
-        ):
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_COLUMN_OR_INT_OR_LIST_OR_STR_OR_TUPLE",
+            message_parameters={
+                "arg_name": "item",
+                "arg_type": "NoneType",
+            },
+        )
+
+        with self.assertRaises(PySparkTypeError) as pe:
             cdf[cdf]
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_COLUMN_OR_INT_OR_LIST_OR_STR_OR_TUPLE",
+            message_parameters={
+                "arg_name": "item",
+                "arg_type": "DataFrame",
+            },
+        )
 
     def test_error_handling(self):
         # SPARK-41533 Proper error handling for Spark Connect
@@ -1177,8 +1195,8 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         self.assertEqual(1, len(pdf.index))
 
     def test_sql_with_args(self):
-        df = self.connect.sql("SELECT * FROM range(10) WHERE id > :minId", args={"minId": "7"})
-        df2 = self.spark.sql("SELECT * FROM range(10) WHERE id > :minId", args={"minId": "7"})
+        df = self.connect.sql("SELECT * FROM range(10) WHERE id > :minId", args={"minId": 7})
+        df2 = self.spark.sql("SELECT * FROM range(10) WHERE id > :minId", args={"minId": 7})
         self.assert_eq(df.toPandas(), df2.toPandas())
 
     def test_head(self):
@@ -1775,13 +1793,23 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             ["itworks1", "itworks2", "itworks3"],
         ).show()
 
-        with self.assertRaisesRegex(TypeError, "all parameters should be in"):
+        with self.assertRaises(PySparkTypeError) as pe:
             cdf.hint(
                 "my awesome hint",
                 1.2345,
                 "what",
                 {"itworks1": "itworks2"},
             ).show()
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="INVALID_ITEM_FOR_CONTAINER",
+            message_parameters={
+                "arg_name": "parameters",
+                "allowed_types": "str, list, float, int",
+                "item_type": "dict",
+            },
+        )
 
     def test_empty_dataset(self):
         # SPARK-41005: Test arrow based collection with empty dataset.
@@ -1848,10 +1876,29 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             self.spark.read.table(self.tbl_name2).stat.corr("col1", "col3", "pearson"),
         )
 
-        with self.assertRaisesRegex(TypeError, "col1 should be a string."):
+        with self.assertRaises(PySparkTypeError) as pe:
             self.connect.read.table(self.tbl_name2).stat.corr(1, "col3", "pearson")
-        with self.assertRaisesRegex(TypeError, "col2 should be a string."):
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_STR",
+            message_parameters={
+                "arg_name": "col1",
+                "arg_type": "int",
+            },
+        )
+
+        with self.assertRaises(PySparkTypeError) as pe:
             self.connect.read.table(self.tbl_name).stat.corr("col1", 1, "pearson")
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_STR",
+            message_parameters={
+                "arg_name": "col2",
+                "arg_type": "int",
+            },
+        )
         with self.assertRaises(ValueError) as context:
             self.connect.read.table(self.tbl_name2).stat.corr("col1", "col3", "spearman"),
             self.assertTrue(
@@ -1875,26 +1922,48 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         self.assertEqual(len(result), 1)
         self.assertEqual(len(result[0]), 3)
 
-        with self.assertRaisesRegex(
-            TypeError, "col should be a string, list or tuple, but got <class 'int'>"
-        ):
+        with self.assertRaises(PySparkTypeError) as pe:
             self.connect.read.table(self.tbl_name2).stat.approxQuantile(1, [0.1, 0.5, 0.9], 0.1)
-        with self.assertRaisesRegex(TypeError, "columns should be strings, but got <class 'int'>"):
-            self.connect.read.table(self.tbl_name2).stat.approxQuantile([1], [0.1, 0.5, 0.9], 0.1)
-        with self.assertRaisesRegex(TypeError, "probabilities should be a list or tuple"):
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_LIST_OR_STR_OR_TUPLE",
+            message_parameters={
+                "arg_name": "col",
+                "arg_type": "int",
+            },
+        )
+
+        with self.assertRaises(PySparkTypeError) as pe:
             self.connect.read.table(self.tbl_name2).stat.approxQuantile(["col1", "col3"], 0.1, 0.1)
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_LIST_OR_TUPLE",
+            message_parameters={
+                "arg_name": "probabilities",
+                "arg_type": "float",
+            },
+        )
         with self.assertRaisesRegex(
             ValueError, "probabilities should be numerical \\(float, int\\) in \\[0,1\\]"
         ):
             self.connect.read.table(self.tbl_name2).stat.approxQuantile(
                 ["col1", "col3"], [-0.1], 0.1
             )
-        with self.assertRaisesRegex(
-            TypeError, "relativeError should be numerical \\(float, int\\)"
-        ):
+        with self.assertRaises(PySparkTypeError) as pe:
             self.connect.read.table(self.tbl_name2).stat.approxQuantile(
                 ["col1", "col3"], [0.1, 0.5, 0.9], "str"
             )
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_FLOAT_OR_INT",
+            message_parameters={
+                "arg_name": "relativeError",
+                "arg_type": "str",
+            },
+        )
         with self.assertRaisesRegex(ValueError, "relativeError should be >= 0."):
             self.connect.read.table(self.tbl_name2).stat.approxQuantile(
                 ["col1", "col3"], [0.1, 0.5, 0.9], -0.1
@@ -1914,10 +1983,17 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             self.spark.read.table(self.tbl_name2).stat.freqItems(["col1", "col3"], 0.4).toPandas(),
         )
 
-        with self.assertRaisesRegex(
-            TypeError, "cols must be a list or tuple of column names as strings"
-        ):
+        with self.assertRaises(PySparkTypeError) as pe:
             self.connect.read.table(self.tbl_name2).stat.freqItems("col1")
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_LIST_OR_TUPLE",
+            message_parameters={
+                "arg_name": "cols",
+                "arg_type": "str",
+            },
+        )
 
     def test_stat_sample_by(self):
         # SPARK-41069: Test stat.sample_by
@@ -2591,11 +2667,17 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         cdf2 = cdf.withMetadata(columnName="name", metadata={"names": ["Alice", "Bob"]})
         self.assertEqual(cdf2.schema["name"].metadata, {"names": ["Alice", "Bob"]})
 
-        with self.assertRaisesRegex(
-            TypeError,
-            "metadata should be a dict",
-        ):
+        with self.assertRaises(PySparkTypeError) as pe:
             cdf.withMetadata(columnName="name", metadata=["magic"])
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_DICT",
+            message_parameters={
+                "arg_name": "metadata",
+                "arg_type": "list",
+            },
+        )
 
     def test_collect_nested_type(self):
         query = """
@@ -2835,7 +2917,6 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         df = self.connect.read.table(self.tbl_name)
         for f in (
             "rdd",
-            "withWatermark",
             "foreach",
             "foreachPartition",
             "checkpoint",
@@ -2865,7 +2946,6 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             "newSession",
             "sparkContext",
             "streams",
-            "readStream",
         ):
             with self.assertRaises(NotImplementedError):
                 getattr(self.connect, f)()
