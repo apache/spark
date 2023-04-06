@@ -2163,7 +2163,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       messageParameters = Map(
         "tableName" -> toSQLId(tableName),
         "colPath" -> toSQLId(colPath),
-        "missingFields" -> toSQLId(missingFields)
+        "missingFields" -> missingFields
       )
     )
   }

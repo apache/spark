@@ -500,7 +500,7 @@ object DataType {
 
         if (readFields.size > writeFields.size) {
           val missingFieldsStr = readFields.takeRight(readFields.size - writeFields.size)
-            .map(f => s"'${f.name}'").mkString(", ")
+            .map(f => s"${toSQLId(f.name)}").mkString(", ")
           if (missingFieldsStr.nonEmpty) {
             throw QueryCompilationErrors.incompatibleDataToTableStructMissingFieldsError(
               tableName, context, missingFieldsStr)

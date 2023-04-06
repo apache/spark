@@ -328,7 +328,7 @@ abstract class DataTypeWriteCompatibilityBaseSuite extends SparkFunSuite {
           analysis.caseSensitiveResolution, "t", storeAssignmentPolicy, errMsg => errs += errMsg)
       ),
       errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.STRUCT_MISSING_FIELDS",
-      parameters = Map("tableName" -> "``", "colPath" -> "`t`", "missingFields" -> "'y'")
+      parameters = Map("tableName" -> "``", "colPath" -> "`t`", "missingFields" -> "`y`")
     )
   }
 
@@ -418,7 +418,7 @@ abstract class DataTypeWriteCompatibilityBaseSuite extends SparkFunSuite {
           analysis.caseSensitiveResolution, "t", storeAssignmentPolicy, errMsg => errs += errMsg)
       ),
       errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.EXTRA_STRUCT_FIELDS",
-      parameters = Map("tableName" -> "``", "colPath" -> "`t`", "extraCols" -> "'z'")
+      parameters = Map("tableName" -> "``", "colPath" -> "`t`", "extraCols" -> "`z`")
     )
   }
 
