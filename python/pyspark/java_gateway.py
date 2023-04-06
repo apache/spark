@@ -216,7 +216,7 @@ def local_connect_and_auth(port, auth_secret):
             sock.close()
             sock = None
     raise PySparkRuntimeError(
-        error_class="CAN_NOT_OPEN_SOCKET",
+        error_class="CANNOT_OPEN_SOCKET",
         message_parameters={
             "errors": str(errors),
         },

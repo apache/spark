@@ -44,22 +44,37 @@ ERROR_CLASSES_JSON = """
       "`<func_name>` was called before SparkSession was initialized."
     ]
   },
-  "CAN_NOT_DESTROY_BROADCAST": {
+  "CANNOT_ACCESS_TO_DUNDER": {
+    "message": [
+      "Dunder(double underscore) attribute is for internal use only."
+    ]
+  },
+  "CANNOT_APPLY_IN_FOR_COLUMN": {
+    "message": [
+      "Cannot apply 'in' operator against a column: please use 'contains' in a string column or 'array_contains' function for an array column."
+    ]
+  },
+  "CANNOT_CONVERT_COLUMN_INTO_BOOL": {
+    "message": [
+      "Cannot convert column into bool: please use '&' for 'and', '|' for 'or', '~' for 'not' when building DataFrame boolean expressions."
+    ]
+  },
+  "CANNOT_DESTROY_BROADCAST": {
     "message": [
       "Broadcast can only be destroyed in driver."
     ]
   },
-  "CAN_NOT_OPEN_SOCKET": {
+  "CANNOT_OPEN_SOCKET": {
     "message": [
       "Can not open socket: <errors>."
     ]
   },
-  "CAN_NOT_REDUCE_BROADCAST": {
+  "CANNOT_REDUCE_BROADCAST": {
     "message": [
       "Broadcast can only be serialized in driver."
     ]
   },
-  "CAN_NOT_UNPERSIST_BROADCAST": {
+  "CANNOT_UNPERSIST_BROADCAST": {
     "message": [
       "Broadcast can only be unpersisted in driver."
     ]
@@ -292,6 +307,11 @@ ERROR_CLASSES_JSON = """
       "No active Spark session found. Please create a new Spark session before running the code."
     ]
   },
+  "ONLY_ALLOWED_FOR_SINGLE_COLUMN" : {
+    "message" : [
+      "Argument `<arg_name>` can only be provided for a single column."
+    ]
+  },
   "PIPE_FUNCTION_EXITED" : {
     "message" : [
       "Pipe function `<func_name>` exited with error code <error_code>."
@@ -338,6 +358,11 @@ ERROR_CLASSES_JSON = """
   "SCHEMA_MISMATCH_FOR_PANDAS_UDF" : {
     "message" : [
       "Result vector from pandas_udf was not the required length: expected <expected>, got <actual>."
+    ]
+  },
+  "SLICE_WITH_STEP" : {
+    "message" : [
+      "Slice with step is not supported."
     ]
   },
   "STOP_ITERATION_OCCURRED" : {
