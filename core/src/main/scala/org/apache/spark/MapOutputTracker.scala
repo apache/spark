@@ -42,6 +42,7 @@ import org.apache.spark.scheduler.{MapStatus, MergeStatus, ShuffleOutputStatus}
 import org.apache.spark.shuffle.MetadataFetchFailedException
 import org.apache.spark.storage.{BlockId, BlockManagerId, ShuffleBlockId, ShuffleMergedBlockId}
 import org.apache.spark.util._
+import org.apache.spark.util.collection.OpenHashMap
 import org.apache.spark.util.io.{ChunkedByteBuffer, ChunkedByteBufferOutputStream}
 
 /**
@@ -148,6 +149,12 @@ private class ShuffleStatus(
   private[this] var shufflePushMergerLocations: Seq[BlockManagerId] = Seq.empty
 
   /**
+   * Mapping from a mapId to the mapIndex, this is required to reduce the searching overhead within
+   * the function updateMapOutput(mapId, bmAddress).
+   */
+  private[this] val mapIdToMapIndex = new OpenHashMap[Long, Int]()
+
+  /**
    * Register a map output. If there is already a registered location for the map output then it
    * will be replaced by the new location.
    */
@@ -157,6 +164,7 @@ private class ShuffleStatus(
       invalidateSerializedMapOutputStatusCache()
     }
     mapStatuses(mapIndex) = status
+    mapIdToMapIndex(status.mapId) = mapIndex
   }
 
   /**
@@ -164,15 +172,21 @@ private class ShuffleStatus(
    */
   def updateMapOutput(mapId: Long, bmAddress: BlockManagerId): Unit = withWriteLock {
     try {
-      val mapStatusOpt = mapStatuses.find(x => x != null && x.mapId == mapId)
+      // OpenHashMap would return 0 if the key doesn't exist.
+      val mapIndex = if (mapIdToMapIndex.contains(mapId)) {
+        Some(mapIdToMapIndex(mapId))
+      } else {
+        None
+      }
+      val mapStatusOpt = mapIndex.map(mapStatuses(_))
       mapStatusOpt match {
         case Some(mapStatus) =>
           logInfo(s"Updating map output for ${mapId} to ${bmAddress}")
           mapStatus.updateLocation(bmAddress)
           invalidateSerializedMapOutputStatusCache()
         case None =>
-          val index = mapStatusesDeleted.indexWhere(x => x != null && x.mapId == mapId)
-          if (index >= 0 && mapStatuses(index) == null) {
+          if (mapIndex.nonEmpty && mapStatuses(mapIndex.get) == null) {
+            val index = mapIndex.get
             val mapStatus = mapStatusesDeleted(index)
             mapStatus.updateLocation(bmAddress)
             mapStatuses(index) = mapStatus
