@@ -29,6 +29,9 @@ import org.apache.spark.sql.catalyst.trees.TreePattern._
  * are duplicated if:
  *  1. they are the same class.
  *  2. they have the same output attribute IDs.
+ *
+ * The first condition is necessary because the CTE relation definition node and reference node have
+ * the same output attribute IDs but they are not duplicated.
  */
 case class RelationWrapper(cls: Class[_], outputAttrIds: Seq[Long])
 
