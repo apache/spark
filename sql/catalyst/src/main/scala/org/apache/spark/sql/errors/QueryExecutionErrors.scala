@@ -340,10 +340,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
   }
 
   def noDefaultForDataTypeError(dataType: DataType): SparkException = {
-    val errorMessage = SparkThrowableHelper.getMessage(
-      errorClass = "NO_DEFAULT_FOR_DATA_TYPE",
-      messageParameters = Map("dataType" -> dataType.toString()))
-    SparkException.internalError(errorMessage)
+    SparkException.internalError(s"No default value for type: ${toSQLType(dataType)}.")
   }
 
   def orderedOperationUnsupportedByDataTypeError(

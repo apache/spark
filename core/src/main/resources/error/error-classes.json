@@ -1190,11 +1190,6 @@
     },
     "sqlState" : "42000"
   },
-  "NO_DEFAULT_FOR_DATA_TYPE" : {
-    "message" : [
-      "No default value for type: <dataType>."
-    ]
-  },
   "NO_HANDLER_FOR_UDAF" : {
     "message" : [
       "No handler for UDAF '<functionName>'. Use sparkSession.udf.register(...) instead."
