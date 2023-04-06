@@ -30,7 +30,7 @@ import org.apache.spark._
 import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.analysis.{Parameter, UnresolvedGenerator}
-import org.apache.spark.sql.catalyst.expressions.{Grouping, Literal}
+import org.apache.spark.sql.catalyst.expressions.{Grouping, Literal, RowNumber}
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 import org.apache.spark.sql.catalyst.expressions.objects.InitializeJavaBean
 import org.apache.spark.sql.catalyst.util.BadRecordException
@@ -856,6 +856,17 @@ class QueryExecutionErrorsSuite
       parameters = Map(
         "message" -> ("""A method named "nonexistent" is not declared in """ +
           "any enclosing class nor any supertype")),
+      sqlState = "XX000")
+  }
+
+  test("INTERNAL_ERROR: Aggregate Window Functions do not support merging") {
+    val e = intercept[SparkException] {
+      RowNumber().mergeExpressions
+    }
+    checkError(
+      exception = e,
+      errorClass = "INTERNAL_ERROR",
+      parameters = Map("message" -> "Aggregate Window Functions do not support merging."),
       sqlState = "XX000")
   }
 }
