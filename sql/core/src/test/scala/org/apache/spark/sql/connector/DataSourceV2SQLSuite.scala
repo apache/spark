@@ -1100,9 +1100,15 @@ class DataSourceV2SQLSuiteV1Filter
         exception = intercept[AnalysisException] {
           sql(s"INSERT INTO $t1(data, data) VALUES(5)")
         },
-        errorClass = "COLUMN_ALREADY_EXISTS",
-        parameters = Map("columnName" -> "`data`")
-      )
+        errorClass = "_LEGACY_ERROR_TEMP_2305",
+        parameters = Map(
+          "numCols" -> "3",
+          "rowSize" -> "2",
+          "ri" -> "0"),
+        context = ExpectedContext(
+          fragment = s"INSERT INTO $t1(data, data)",
+          start = 0,
+          stop = 26))
     }
   }
 
@@ -1123,14 +1129,20 @@ class DataSourceV2SQLSuiteV1Filter
       assert(intercept[AnalysisException] {
         sql(s"INSERT OVERWRITE $t1 VALUES(4)")
       }.getMessage.contains("not enough data columns"))
-    // Duplicate columns
+      // Duplicate columns
       checkError(
         exception = intercept[AnalysisException] {
           sql(s"INSERT OVERWRITE $t1(data, data) VALUES(5)")
         },
-        errorClass = "COLUMN_ALREADY_EXISTS",
-        parameters = Map("columnName" -> "`data`")
-      )
+        errorClass = "_LEGACY_ERROR_TEMP_2305",
+        parameters = Map(
+          "numCols" -> "3",
+          "rowSize" -> "2",
+          "ri" -> "0"),
+        context = ExpectedContext(
+          fragment = s"INSERT OVERWRITE $t1(data, data)",
+          start = 0,
+          stop = 31))
     }
   }
 
@@ -1152,14 +1164,20 @@ class DataSourceV2SQLSuiteV1Filter
       assert(intercept[AnalysisException] {
         sql(s"INSERT OVERWRITE $t1 VALUES('a', 4)")
       }.getMessage.contains("not enough data columns"))
-    // Duplicate columns
+      // Duplicate columns
       checkError(
         exception = intercept[AnalysisException] {
           sql(s"INSERT OVERWRITE $t1(data, data) VALUES(5)")
         },
-        errorClass = "COLUMN_ALREADY_EXISTS",
-        parameters = Map("columnName" -> "`data`")
-      )
+        errorClass = "_LEGACY_ERROR_TEMP_2305",
+        parameters = Map(
+          "numCols" -> "4",
+          "rowSize" -> "3",
+          "ri" -> "0"),
+        context = ExpectedContext(
+          fragment = s"INSERT OVERWRITE $t1(data, data)",
+          start = 0,
+          stop = 31))
     }
   }
 
