@@ -119,4 +119,13 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTes
   }
 
   override def caseConvert(tableName: String): String = tableName.toUpperCase(Locale.ROOT)
+
+  test("SPARK-43049: Use CLOB instead of VARCHAR(255) for StringType for Oracle JDBC") {
+    val tableName = catalogName + ".t1"
+    withTable(tableName) {
+      sql(s"CREATE TABLE $tableName(c1 string)")
+      sql(s"INSERT INTO $tableName SELECT rpad('hi', 256, 'spark')")
+      assert(sql(s"SELECT char_length(c1) from $tableName").head().get(0) === 256)
+    }
+  }
 }

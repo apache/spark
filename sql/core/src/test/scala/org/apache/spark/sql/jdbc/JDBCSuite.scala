@@ -1267,7 +1267,7 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
   test("SPARK 12941: The data type mapping for StringType to Oracle") {
     val oracleDialect = JdbcDialects.get("jdbc:oracle://127.0.0.1/db")
     assert(oracleDialect.getJDBCType(StringType).
-      map(_.databaseTypeDefinition).get == "VARCHAR2(255)")
+      map(_.databaseTypeDefinition).get == "CLOB")
   }
 
   test("SPARK-16625: General data types to be mapped to Oracle") {
@@ -1285,7 +1285,7 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
     assert(getJdbcType(oracleDialect, DoubleType) == "NUMBER(19, 4)")
     assert(getJdbcType(oracleDialect, ByteType) == "NUMBER(3)")
     assert(getJdbcType(oracleDialect, ShortType) == "NUMBER(5)")
-    assert(getJdbcType(oracleDialect, StringType) == "VARCHAR2(255)")
+    assert(getJdbcType(oracleDialect, StringType) == "CLOB")
     assert(getJdbcType(oracleDialect, BinaryType) == "BLOB")
     assert(getJdbcType(oracleDialect, DateType) == "DATE")
     assert(getJdbcType(oracleDialect, TimestampType) == "TIMESTAMP")
