@@ -51,7 +51,7 @@ from pyspark.sql.types import (
     NullType,
     TimestampType,
 )
-from pyspark.errors import PythonException, PySparkRuntimeError
+from pyspark.errors import PythonException
 from pyspark.testing.sqlutils import (
     ReusedSQLTestCase,
     have_pandas,
@@ -588,14 +588,12 @@ class GroupedApplyInPandasTestsMixin:
 
         with self.sql_conf({"spark.sql.execution.pandas.convertToArrowArraySafely": False}):
             with QuietTest(self.sc):
-                with self.assertRaises(PySparkRuntimeError) as pe:
+                with self.assertRaisesRegex(
+                        PythonException,
+                        "Column names of the returned pandas.DataFrame do not match "
+                        "specified schema. Missing: id. Unexpected: iid.\n",
+                ):
                     grouped_df.apply(column_name_typo).collect()
-
-                self.check_error(
-                    exception=pe.exception,
-                    error_class="RESULT_COLUMNS_MISMATCH_FOR_PANDAS_UDF",
-                    message_parameters={"missing": " Missing: id.", "extra": " Unexpected: iid."},
-                )
                 with self.assertRaisesRegex(Exception, "[D|d]ecimal.*got.*date"):
                     grouped_df.apply(invalid_positional_types).collect()
 
