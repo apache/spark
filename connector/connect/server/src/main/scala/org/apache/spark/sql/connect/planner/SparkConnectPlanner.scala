@@ -590,17 +590,15 @@ class SparkConnectPlanner(val session: SparkSession) {
     val cols =
       rel.getGroupingExpressionsList.asScala.toSeq.map(expr => Column(transformExpression(expr)))
 
-    val outputSchema = transformDataType(rel.getOutputSchema)
-    assert(outputSchema.isInstanceOf[StructType])
+    val outputSchema = parseSchema(rel.getOutputSchema)
 
-    val stateSchema = transformDataType(rel.getStateSchema)
-    assert(stateSchema.isInstanceOf[StructType])
+    val stateSchema = parseSchema(rel.getStateSchema)
 
     Dataset
       .ofRows(session, transformRelation(rel.getInput))
       .groupBy(cols: _*)
-      .applyInPandasWithState(pythonUdf, outputSchema.asInstanceOf[StructType],
-        stateSchema.asInstanceOf[StructType], rel.getOutputMode, rel.getTimeoutConf)
+      .applyInPandasWithState(pythonUdf, outputSchema, stateSchema, rel.getOutputMode,
+        rel.getTimeoutConf)
       .logicalPlan
   }
 

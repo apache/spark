@@ -37,6 +37,7 @@ from pyspark.sql.group import GroupedData as PySparkGroupedData
 from pyspark.sql.pandas.group_ops import PandasCogroupedOps as PySparkPandasCogroupedOps
 from pyspark.sql.types import DataType
 from pyspark.sql.types import NumericType
+from pyspark.sql.types import StructType
 
 import pyspark.sql.connect.plan as plan
 from pyspark.sql.connect.column import Column
@@ -491,38 +492,39 @@ class GroupedData:
 
     applyInPandas.__doc__ = PySparkGroupedData.applyInPandas.__doc__
 
-    def applyInPandasWithState(self, func: "PandasGroupedMapFunction",
-                               output_schema: Union["StructType", str],
-                               state_schema: Union["StructType", str],
-                               output_mode: str,
-                               timeout_conf: str) -> "DataFrame":
+    def applyInPandasWithState(
+            self,
+            func: "PandasGroupedMapFunctionWithState",
+            outputStructType: Union[StructType, str],
+            stateStructType: Union[StructType, str],
+            outputMode: str,
+            timeoutConf: str
+    ) -> "DataFrame":
         from pyspark.sql.connect.udf import UserDefinedFunction
         from pyspark.sql.connect.dataframe import DataFrame
-        from pyspark.sql.connect.types import UnparsedDataType
 
         udf_obj = UserDefinedFunction(
             func,
-            returnType=output_schema,
+            returnType=outputStructType,
             evalType=PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE,
         )
 
-        output_type: DataType = (
-            UnparsedDataType(output_schema) if isinstance(output_schema, str) else output_schema
-        )
+        # TODO: raise type error
+        output_schema: str = outputStructType.json() if isinstance(outputStructType, StructType)\
+            else outputStructType
 
-        state_type: DataType = (
-            UnparsedDataType(state_schema) if isinstance(state_schema, str) else state_schema
-        )
+        state_schema: str = stateStructType.json() if isinstance(stateStructType, StructType) \
+            else stateStructType
 
         return DataFrame.withPlan(
             plan.ApplyInPandasWithState(
                 child=self._df._plan,
                 grouping_cols=self._grouping_cols,
                 function=udf_obj,
-                output_schema=output_type,
-                state_schema=state_type,
-                output_mode=output_mode,
-                timeout_conf=timeout_conf,
+                output_schema=output_schema,
+                state_schema=state_schema,
+                output_mode=outputMode,
+                timeout_conf=timeoutConf,
                 cols=self._df.columns,
             ),
             session=self._df._session,

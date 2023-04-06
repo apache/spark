@@ -2052,8 +2052,8 @@ class ApplyInPandasWithState(LogicalPlan):
             child: Optional["LogicalPlan"],
             grouping_cols: Sequence[Column],
             function: "UserDefinedFunction",
-            output_schema: DataType,
-            state_schema: DataType,
+            output_schema: str,
+            state_schema: str,
             output_mode: str,
             timeout_conf: str,
             cols: List[str],
@@ -2076,10 +2076,8 @@ class ApplyInPandasWithState(LogicalPlan):
             [c.to_plan(session) for c in self._grouping_cols]
         )
         plan.apply_in_pandas_with_state.func.CopyFrom(self._func.to_plan_udf(session))
-        plan.apply_in_pandas_with_state.output_schema \
-            .CopyFrom(pyspark_types_to_proto_types(self._output_schema))
-        plan.apply_in_pandas_with_state.state_schema \
-            .CopyFrom(pyspark_types_to_proto_types(self._state_schema))
+        plan.apply_in_pandas_with_state.output_schema = self._output_schema
+        plan.apply_in_pandas_with_state.state_schema = self._state_schema
         plan.apply_in_pandas_with_state.output_mode = self._output_mode
         plan.apply_in_pandas_with_state.timeout_conf = self._timeout_conf
         return plan

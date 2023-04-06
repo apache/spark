@@ -848,9 +848,9 @@ message ApplyInPandasWithState {
 
   CommonInlineUserDefinedFunction func = 3;
 
-  DataType output_schema = 4;
+  string output_schema = 4;
 
-  DataType state_schema = 5;
+  string state_schema = 5;
 
   string output_mode = 6;
 

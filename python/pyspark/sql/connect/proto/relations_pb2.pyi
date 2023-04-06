@@ -3064,10 +3064,8 @@ class ApplyInPandasWithState(google.protobuf.message.Message):
     ]: ...
     @property
     def func(self) -> pyspark.sql.connect.proto.expressions_pb2.CommonInlineUserDefinedFunction: ...
-    @property
-    def output_schema(self) -> pyspark.sql.connect.proto.types_pb2.DataType: ...
-    @property
-    def state_schema(self) -> pyspark.sql.connect.proto.types_pb2.DataType: ...
+    output_schema: builtins.str
+    state_schema: builtins.str
     output_mode: builtins.str
     timeout_conf: builtins.str
     def __init__(
@@ -3080,23 +3078,13 @@ class ApplyInPandasWithState(google.protobuf.message.Message):
         | None = ...,
         func: pyspark.sql.connect.proto.expressions_pb2.CommonInlineUserDefinedFunction
         | None = ...,
-        output_schema: pyspark.sql.connect.proto.types_pb2.DataType | None = ...,
-        state_schema: pyspark.sql.connect.proto.types_pb2.DataType | None = ...,
+        output_schema: builtins.str = ...,
+        state_schema: builtins.str = ...,
         output_mode: builtins.str = ...,
         timeout_conf: builtins.str = ...,
     ) -> None: ...
     def HasField(
-        self,
-        field_name: typing_extensions.Literal[
-            "func",
-            b"func",
-            "input",
-            b"input",
-            "output_schema",
-            b"output_schema",
-            "state_schema",
-            b"state_schema",
-        ],
+        self, field_name: typing_extensions.Literal["func", b"func", "input", b"input"]
     ) -> builtins.bool: ...
     def ClearField(
         self,
