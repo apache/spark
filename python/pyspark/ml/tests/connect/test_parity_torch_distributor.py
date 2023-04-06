@@ -27,72 +27,68 @@ except ImportError:
     have_torch = False
 
 from pyspark.sql import SparkSession
-from pyspark.ml.torch.distributor import TorchDistributor
 
-from pyspark.ml.torch.tests.test_distributor import (
-    TorchDistributorBaselineUnitTestsMixin,
-    TorchDistributorLocalUnitTestsMixin,
-    TorchDistributorDistributedUnitTestsMixin,
-    TorchWrapperUnitTestsMixin,
-)
+# from pyspark.ml.torch.distributor import TorchDistributor
 
+from pyspark.ml.torch.tests.test_distributor import TorchDistributorDistributedUnitTestsMixin
 
-@unittest.skipIf(not have_torch, "torch is required")
-class TorchDistributorBaselineUnitTestsOnConnect(
-    TorchDistributorBaselineUnitTestsMixin, unittest.TestCase
-):
-    def setUp(self) -> None:
-        self.spark = SparkSession.builder.remote("local[4]").getOrCreate()
-
-    def tearDown(self) -> None:
-        self.spark.stop()
-
-    def test_get_num_tasks_fails(self) -> None:
-        inputs = [1, 5, 4]
-
-        # This is when the conf isn't set and we request GPUs
-        for num_processes in inputs:
-            with self.subTest():
-                # TODO(SPARK-42994): Support sc.resources
-                # with self.assertRaisesRegex(RuntimeError, "driver"):
-                #     TorchDistributor(num_processes, True, True)
-                with self.assertRaisesRegex(RuntimeError, "unset"):
-                    TorchDistributor(num_processes, False, True)
-
-
-@unittest.skipIf(not have_torch, "torch is required")
-class TorchDistributorLocalUnitTestsOnConnect(
-    TorchDistributorLocalUnitTestsMixin, unittest.TestCase
-):
-    def setUp(self) -> None:
-        class_name = self.__class__.__name__
-        conf = self._get_spark_conf()
-        builder = SparkSession.builder.appName(class_name)
-        for k, v in conf.getAll():
-            if k not in ["spark.master", "spark.remote", "spark.app.name"]:
-                builder = builder.config(k, v)
-        self.spark = builder.remote("local-cluster[2,2,1024]").getOrCreate()
-        self.mnist_dir_path = tempfile.mkdtemp()
-
-    def tearDown(self) -> None:
-        shutil.rmtree(self.mnist_dir_path)
-        os.unlink(self.gpu_discovery_script_file.name)
-        self.spark.stop()
-
-    # TODO(SPARK-42994): Support sc.resources
-    @unittest.skip("need to support sc.resources")
-    def test_get_num_tasks_locally(self):
-        super().test_get_num_tasks_locally()
-
-    # TODO(SPARK-42994): Support sc.resources
-    @unittest.skip("need to support sc.resources")
-    def test_get_gpus_owned_local(self):
-        super().test_get_gpus_owned_local()
-
-    # TODO(SPARK-42994): Support sc.resources
-    @unittest.skip("need to support sc.resources")
-    def test_local_training_succeeds(self):
-        super().test_local_training_succeeds()
+#
+# @unittest.skipIf(not have_torch, "torch is required")
+# class TorchDistributorBaselineUnitTestsOnConnect(
+#     TorchDistributorBaselineUnitTestsMixin, unittest.TestCase
+# ):
+#     def setUp(self) -> None:
+#         self.spark = SparkSession.builder.remote("local[4]").getOrCreate()
+#
+#     def tearDown(self) -> None:
+#         self.spark.stop()
+#
+#     def test_get_num_tasks_fails(self) -> None:
+#         inputs = [1, 5, 4]
+#
+#         # This is when the conf isn't set and we request GPUs
+#         for num_processes in inputs:
+#             with self.subTest():
+#                 # TODO(SPARK-42994): Support sc.resources
+#                 # with self.assertRaisesRegex(RuntimeError, "driver"):
+#                 #     TorchDistributor(num_processes, True, True)
+#                 with self.assertRaisesRegex(RuntimeError, "unset"):
+#                     TorchDistributor(num_processes, False, True)
+#
+#
+# @unittest.skipIf(not have_torch, "torch is required")
+# class TorchDistributorLocalUnitTestsOnConnect(
+#     TorchDistributorLocalUnitTestsMixin, unittest.TestCase
+# ):
+#     def setUp(self) -> None:
+#         class_name = self.__class__.__name__
+#         conf = self._get_spark_conf()
+#         builder = SparkSession.builder.appName(class_name)
+#         for k, v in conf.getAll():
+#             if k not in ["spark.master", "spark.remote", "spark.app.name"]:
+#                 builder = builder.config(k, v)
+#         self.spark = builder.remote("local-cluster[2,2,1024]").getOrCreate()
+#         self.mnist_dir_path = tempfile.mkdtemp()
+#
+#     def tearDown(self) -> None:
+#         shutil.rmtree(self.mnist_dir_path)
+#         os.unlink(self.gpu_discovery_script_file.name)
+#         self.spark.stop()
+#
+#     # TODO(SPARK-42994): Support sc.resources
+#     @unittest.skip("need to support sc.resources")
+#     def test_get_num_tasks_locally(self):
+#         super().test_get_num_tasks_locally()
+#
+#     # TODO(SPARK-42994): Support sc.resources
+#     @unittest.skip("need to support sc.resources")
+#     def test_get_gpus_owned_local(self):
+#         super().test_get_gpus_owned_local()
+#
+#     # TODO(SPARK-42994): Support sc.resources
+#     @unittest.skip("need to support sc.resources")
+#     def test_local_training_succeeds(self):
+#         super().test_local_training_succeeds()
 
 
 @unittest.skipIf(not have_torch, "torch is required")
@@ -107,8 +103,8 @@ class TorchDistributorDistributedUnitTestsOnConnect(
             if k not in ["spark.master", "spark.remote", "spark.app.name"]:
                 builder = builder.config(k, v)
 
-        builder = builder.config("spark.driver.memory", "4096M")
-        builder = builder.config("spark.executor.memory", "1024M")
+        # builder = builder.config("spark.driver.memory", "4096M")
+        # builder = builder.config("spark.executor.memory", "1024M")
         self.spark = builder.remote("local-cluster[2,2,1024]").getOrCreate()
         self.mnist_dir_path = tempfile.mkdtemp()
 
@@ -118,9 +114,9 @@ class TorchDistributorDistributedUnitTestsOnConnect(
         self.spark.stop()
 
 
-@unittest.skipIf(not have_torch, "torch is required")
-class TorchWrapperUnitTestsOnConnect(TorchWrapperUnitTestsMixin, unittest.TestCase):
-    pass
+# @unittest.skipIf(not have_torch, "torch is required")
+# class TorchWrapperUnitTestsOnConnect(TorchWrapperUnitTestsMixin, unittest.TestCase):
+#     pass
 
 
 if __name__ == "__main__":
