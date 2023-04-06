@@ -71,7 +71,7 @@ class PhysicalBinaryType() extends PhysicalDataType {
 }
 case object PhysicalBinaryType extends PhysicalBinaryType
 
-class PhysicalBooleanType extends PhysicalDataType {
+class PhysicalBooleanType extends PhysicalDataType with PhysicalPrimitiveType {
   // The companion object and this class is separated so the companion object also subclasses
   // this type. Otherwise, the companion object would be of type "BooleanType$" in byte code.
   // Defined with a private constructor so the companion object is the only possible instantiation.
@@ -79,14 +79,14 @@ class PhysicalBooleanType extends PhysicalDataType {
   private[sql] val ordering = implicitly[Ordering[InternalType]]
   @transient private[sql] lazy val tag = typeTag[InternalType]
 }
-case object PhysicalBooleanType extends PhysicalBooleanType with PhysicalPrimitiveType
+case object PhysicalBooleanType extends PhysicalBooleanType
 
-class PhysicalByteType() extends PhysicalDataType {
+class PhysicalByteType() extends PhysicalDataType with PhysicalPrimitiveType {
   private[sql] type InternalType = Byte
   private[sql] val ordering = implicitly[Ordering[InternalType]]
   @transient private[sql] lazy val tag = typeTag[InternalType]
 }
-case object PhysicalByteType extends PhysicalByteType with PhysicalPrimitiveType
+case object PhysicalByteType extends PhysicalByteType
 
 class PhysicalCalendarIntervalType() extends PhysicalDataType {
   override private[sql] def ordering =
@@ -109,7 +109,7 @@ case object PhysicalDecimalType {
   }
 }
 
-class PhysicalDoubleType() extends PhysicalDataType {
+class PhysicalDoubleType() extends PhysicalDataType with PhysicalPrimitiveType {
   // The companion object and this class is separated so the companion object also subclasses
   // this type. Otherwise, the companion object would be of type "DoubleType$" in byte code.
   // Defined with a private constructor so the companion object is the only possible instantiation.
@@ -118,9 +118,9 @@ class PhysicalDoubleType() extends PhysicalDataType {
     (x: Double, y: Double) => SQLOrderingUtil.compareDoubles(x, y)
   @transient private[sql] lazy val tag = typeTag[InternalType]
 }
-case object PhysicalDoubleType extends PhysicalDoubleType with PhysicalPrimitiveType
+case object PhysicalDoubleType extends PhysicalDoubleType
 
-class PhysicalFloatType() extends PhysicalDataType {
+class PhysicalFloatType() extends PhysicalDataType with PhysicalPrimitiveType {
   // The companion object and this class is separated so the companion object also subclasses
   // this type. Otherwise, the companion object would be of type "FloatType$" in byte code.
   // Defined with a private constructor so the companion object is the only possible instantiation.
@@ -129,9 +129,9 @@ class PhysicalFloatType() extends PhysicalDataType {
     (x: Float, y: Float) => SQLOrderingUtil.compareFloats(x, y)
   @transient private[sql] lazy val tag = typeTag[InternalType]
 }
-case object PhysicalFloatType extends PhysicalFloatType with PhysicalPrimitiveType
+case object PhysicalFloatType extends PhysicalFloatType
 
-class PhysicalIntegerType() extends PhysicalDataType {
+class PhysicalIntegerType() extends PhysicalDataType with PhysicalPrimitiveType {
   // The companion object and this class is separated so the companion object also subclasses
   // this type. Otherwise, the companion object would be of type "IntegerType$" in byte code.
   // Defined with a private constructor so the companion object is the only possible instantiation.
@@ -139,9 +139,9 @@ class PhysicalIntegerType() extends PhysicalDataType {
   private[sql] val ordering = implicitly[Ordering[InternalType]]
   @transient private[sql] lazy val tag = typeTag[InternalType]
 }
-case object PhysicalIntegerType extends PhysicalIntegerType with PhysicalPrimitiveType
+case object PhysicalIntegerType extends PhysicalIntegerType
 
-class PhysicalLongType() extends PhysicalDataType {
+class PhysicalLongType() extends PhysicalDataType with PhysicalPrimitiveType {
   // The companion object and this class is separated so the companion object also subclasses
   // this type. Otherwise, the companion object would be of type "LongType$" in byte code.
   // Defined with a private constructor so the companion object is the only possible instantiation.
@@ -149,7 +149,7 @@ class PhysicalLongType() extends PhysicalDataType {
   private[sql] val ordering = implicitly[Ordering[InternalType]]
   @transient private[sql] lazy val tag = typeTag[InternalType]
 }
-case object PhysicalLongType extends PhysicalLongType with PhysicalPrimitiveType
+case object PhysicalLongType extends PhysicalLongType
 
 case class PhysicalMapType(keyType: DataType, valueType: DataType, valueContainsNull: Boolean)
     extends PhysicalDataType {
@@ -159,20 +159,20 @@ case class PhysicalMapType(keyType: DataType, valueType: DataType, valueContains
   @transient private[sql] lazy val tag = typeTag[InternalType]
 }
 
-class PhysicalNullType() extends PhysicalDataType {
+class PhysicalNullType() extends PhysicalDataType with PhysicalPrimitiveType {
   override private[sql] def ordering =
     throw QueryExecutionErrors.orderedOperationUnsupportedByDataTypeError("PhysicalNullType")
   override private[sql] type InternalType = Any
   @transient private[sql] lazy val tag = typeTag[InternalType]
 }
-case object PhysicalNullType extends PhysicalNullType with PhysicalPrimitiveType
+case object PhysicalNullType extends PhysicalNullType
 
-class PhysicalShortType() extends PhysicalDataType {
+class PhysicalShortType() extends PhysicalDataType with PhysicalPrimitiveType {
   private[sql] type InternalType = Short
   private[sql] val ordering = implicitly[Ordering[InternalType]]
   @transient private[sql] lazy val tag = typeTag[InternalType]
 }
-case object PhysicalShortType extends PhysicalShortType with PhysicalPrimitiveType
+case object PhysicalShortType extends PhysicalShortType
 
 class PhysicalStringType() extends PhysicalDataType {
   // The companion object and this class is separated so the companion object also subclasses
