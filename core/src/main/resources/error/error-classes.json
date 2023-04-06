@@ -1068,6 +1068,11 @@
     ],
     "sqlState" : "42604"
   },
+  "INVALID_URL" : {
+    "message" : [
+      "The url is invalid: <url>. If necessary set <ansiConfig> to \"false\" to bypass this error."
+    ]
+  },
   "INVALID_WHERE_CONDITION" : {
     "message" : [
       "The WHERE condition <condition> contains invalid expressions: <expressionList>.",
@@ -3719,11 +3724,6 @@
   "_LEGACY_ERROR_TEMP_2007" : {
     "message" : [
       "Regex group count is <groupCount>, but the specified group index is <groupIndex>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2008" : {
-    "message" : [
-      "Find an invalid url string <url>. If necessary set <ansiConfig> to false to bypass this error."
     ]
   },
   "_LEGACY_ERROR_TEMP_2010" : {
