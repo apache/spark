@@ -43,6 +43,7 @@ import org.apache.hive.service.cli.RowSet;
 import org.apache.hive.service.cli.RowSetFactory;
 import org.apache.hive.service.cli.TableSchema;
 import org.apache.hive.service.cli.session.HiveSession;
+import org.apache.spark.sql.hive.HiveUtils;
 
 /**
  * Executes a HiveCommand
@@ -78,13 +79,15 @@ public class HiveCommandOperation extends ExecuteStatementOperation {
       LOG.error("Error in creating temp output file ", e);
       try {
         sessionState.in = null;
-        sessionState.out = new PrintStream(System.out, true, UTF_8.name());
-        sessionState.err = new PrintStream(System.err, true, UTF_8.name());
+        HiveUtils.shimSessionState(sessionState, "out", new PrintStream(System.out, true, UTF_8.name()));
+        HiveUtils.shimSessionState(sessionState, "err", new PrintStream(System.err, true, UTF_8.name()));
       } catch (UnsupportedEncodingException ee) {
         LOG.error("Error creating PrintStream", e);
         ee.printStackTrace();
         sessionState.out = null;
         sessionState.err = null;
+      } catch (Exception e1) {
+        LOG.error("Something's wrong when shim session state ", e1);
       }
     }
   }
