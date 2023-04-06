@@ -3071,8 +3071,8 @@ case class Sequence(
   @transient private lazy val impl: InternalSequence = dataType.elementType match {
     case iType: IntegralType =>
       type T = iType.InternalType
-      val ct = ClassTag[T](PhysicalDataType(iType).tag.mirror.runtimeClass(
-        PhysicalDataType(iType).tag.tpe))
+      val physicalDataType = PhysicalDataType(iType)
+      val ct = ClassTag[T](physicalDataType.tag.mirror.runtimeClass(physicalDataType.tag.tpe))
       new IntegralSequenceImpl(iType)(ct, iType.integral)
 
     case TimestampType | TimestampNTZType =>
