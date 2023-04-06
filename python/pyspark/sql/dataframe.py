@@ -44,7 +44,7 @@ from py4j.java_gateway import JavaObject, JVMView
 from pyspark import copy_func, _NoValue
 from pyspark._globals import _NoValueType
 from pyspark.context import SparkContext
-from pyspark.errors import PySparkTypeError
+from pyspark.errors import PySparkTypeError, PySparkValueError
 from pyspark.rdd import (
     RDD,
     _load_from_socket,
@@ -530,13 +530,13 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         >>> import tempfile
         >>> df = spark.readStream.format("rate").load()
         >>> type(df.writeStream)
-        <class 'pyspark.sql.streaming.readwriter.DataStreamWriter'>
+        <class '...streaming.readwriter.DataStreamWriter'>
 
         >>> with tempfile.TemporaryDirectory() as d:
         ...     # Create a table with Rate source.
         ...     df.writeStream.toTable(
         ...         "my_table", checkpointLocation=d) # doctest: +ELLIPSIS
-        <pyspark.sql.streaming.query.StreamingQuery object at 0x...>
+        <...streaming.query.StreamingQuery object at 0x...>
         """
         return DataStreamWriter(self)
 
@@ -570,7 +570,10 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
                     StructType, _parse_datatype_json_string(self._jdf.schema().json())
                 )
             except Exception as e:
-                raise ValueError("Unable to parse datatype from schema. %s" % e) from e
+                raise PySparkValueError(
+                    error_class="CANNOT_PARSE_DATATYPE",
+                    message_parameters={"error": str(e)},
+                )
         return self._schema
 
     def printSchema(self) -> None:
@@ -662,7 +665,10 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         """
 
         if extended is not None and mode is not None:
-            raise ValueError("extended and mode should not be set together.")
+            raise PySparkValueError(
+                error_class="CANNOT_SET_TOGETHER",
+                message_parameters={"arg_list": "extended and mode"},
+            )
 
         # For the no argument case: df.explain()
         is_no_argument = extended is None and mode is None
@@ -1732,7 +1738,10 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         """
         if isinstance(numPartitions, int):
             if len(cols) == 0:
-                raise ValueError("At least one partition-by expression must be specified.")
+                raise PySparkValueError(
+                    error_class="CANNOT_BE_EMPTY",
+                    message_parameters={"item": "partition-by expression"},
+                )
             else:
                 return DataFrame(
                     self._jdf.repartitionByRange(numPartitions, self._jcols(*cols)),
@@ -1992,7 +2001,10 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         """
         for w in weights:
             if w < 0.0:
-                raise ValueError("Weights must be positive. Found weight value: %s" % w)
+                raise PySparkValueError(
+                    error_class="VALUE_NOT_POSITIVE",
+                    message_parameters={"arg_name": "weights", "arg_value": str(w)},
+                )
         seed = seed if seed is not None else random.randint(0, sys.maxsize)
         df_array = self._jdf.randomSplit(
             _to_list(self.sparkSession._sc, cast(List["ColumnOrName"], weights)), int(seed)
@@ -2622,7 +2634,10 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
     ) -> JavaObject:
         """Return a JVM Seq of Columns that describes the sort order"""
         if not cols:
-            raise ValueError("should sort by at least one column")
+            raise PySparkValueError(
+                error_class="CANNOT_BE_EMPTY",
+                message_parameters={"item": "column"},
+            )
         if len(cols) == 1 and isinstance(cols[0], list):
             cols = cols[0]
         jcols = [_to_java_column(cast("ColumnOrName", c)) for c in cols]
@@ -3599,9 +3614,15 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         from pyspark.sql import Observation
 
         if len(exprs) == 0:
-            raise ValueError("'exprs' should not be empty")
+            raise PySparkValueError(
+                error_class="CANNOT_BE_EMPTY",
+                message_parameters={"item": "exprs"},
+            )
         if not all(isinstance(c, Column) for c in exprs):
-            raise ValueError("all 'exprs' should be Column")
+            raise PySparkTypeError(
+                error_class="NOT_LIST_OF_COLUMN",
+                message_parameters={"arg_name": "exprs"},
+            )
 
         if isinstance(observation, Observation):
             return observation._on(self, *exprs)
@@ -3613,7 +3634,13 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
                 self.sparkSession,
             )
         else:
-            raise ValueError("'observation' should be either `Observation` or `str`.")
+            raise PySparkTypeError(
+                error_class="NOT_LIST_OF_COLUMN",
+                message_parameters={
+                    "arg_name": "observation",
+                    "arg_type": type(observation).__name__,
+                },
+            )
 
     def union(self, other: "DataFrame") -> "DataFrame":
         """Return a new :class:`DataFrame` containing union of rows in this and another
@@ -3985,7 +4012,10 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         +---+------+-----+
         """
         if how is not None and how not in ["any", "all"]:
-            raise ValueError("how ('" + how + "') should be 'any' or 'all'")
+            raise PySparkValueError(
+                error_class="VALUE_NOT_ANY_OR_ALL",
+                message_parameters={"arg_name": "how", "arg_type": how},
+            )
 
         if subset is None:
             subset = self.columns
@@ -4297,9 +4327,14 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         if isinstance(to_replace, (list, tuple)) and isinstance(value, (list, tuple)):
             if len(to_replace) != len(value):
-                raise ValueError(
-                    "to_replace and value lists should be of the same length. "
-                    "Got {0} and {1}".format(len(to_replace), len(value))
+                raise PySparkValueError(
+                    error_class="LENGTH_SHOULD_BE_THE_SAME",
+                    message_parameters={
+                        "arg1": "to_replace",
+                        "arg2": "value",
+                        "arg1_length": str(len(to_replace)),
+                        "arg2_length": str(len(value)),
+                    },
                 )
 
         if not (subset is None or isinstance(subset, (list, tuple, str))):
@@ -4330,7 +4365,10 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             and all_of_type(x for x in rep_dict.values() if x is not None)
             for all_of_type in [all_of_bool, all_of_str, all_of_numeric]
         ):
-            raise ValueError("Mixed type replacements are not supported")
+            raise PySparkValueError(
+                error_class="MIXED_TYPE_REPLACEMENT",
+                message_parameters={},
+            )
 
         if subset is None:
             return DataFrame(self._jdf.na().replace("*", rep_dict), self.sparkSession)
@@ -4459,7 +4497,13 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             probabilities = list(probabilities)
         for p in probabilities:
             if not isinstance(p, (float, int)) or p < 0 or p > 1:
-                raise ValueError("probabilities should be numerical (float, int) in [0,1].")
+                raise PySparkTypeError(
+                    error_class="NOT_LIST_OF_FLOAT_OR_INT",
+                    message_parameters={
+                        "arg_name": "probabilities",
+                        "arg_type": type(p).__name__,
+                    },
+                )
         probabilities = _to_list(self._sc, cast(List["ColumnOrName"], probabilities))
 
         if not isinstance(relativeError, (float, int)):
@@ -4471,7 +4515,13 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
                 },
             )
         if relativeError < 0:
-            raise ValueError("relativeError should be >= 0.")
+            raise PySparkTypeError(
+                error_class="NEGATIVE_VALUE",
+                message_parameters={
+                    "arg_name": "relativeError",
+                    "arg_value": str(relativeError),
+                },
+            )
         relativeError = float(relativeError)
 
         jaq = self._jdf.stat().approxQuantile(col, probabilities, relativeError)
@@ -4526,9 +4576,9 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         if not method:
             method = "pearson"
         if not method == "pearson":
-            raise ValueError(
-                "Currently only the calculation of the Pearson Correlation "
-                + "coefficient is supported."
+            raise PySparkTypeError(
+                error_class="VALUE_NOT_PEARSON",
+                message_parameters={"arg_name": "method", "arg_value": method},
             )
         return self._jdf.stat().corr(col1, col2, method)
 

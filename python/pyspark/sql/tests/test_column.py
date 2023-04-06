@@ -46,8 +46,13 @@ class ColumnTestsMixin:
         self.assertTrue("Column" in _to_java_column("a").getClass().toString())
         self.assertTrue("Column" in _to_java_column(self.spark.range(1).id).getClass().toString())
 
-        self.assertRaisesRegex(
-            TypeError, "Invalid argument, not a string or column", lambda: _to_java_column(1)
+        with self.assertRaises(PySparkTypeError) as pe:
+            _to_java_column(1)
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_COLUMN_OR_STR",
+            message_parameters={"arg_name": "col", "arg_type": "int"},
         )
 
         class A:
@@ -56,8 +61,13 @@ class ColumnTestsMixin:
         self.assertRaises(TypeError, lambda: _to_java_column(A()))
         self.assertRaises(TypeError, lambda: _to_java_column([]))
 
-        self.assertRaisesRegex(
-            TypeError, "Invalid argument, not a string or column", lambda: udf(lambda x: x)(None)
+        with self.assertRaises(PySparkTypeError) as pe:
+            udf(lambda x: x)(None)
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_COLUMN_OR_STR",
+            message_parameters={"arg_name": "col", "arg_type": "NoneType"},
         )
         self.assertRaises(TypeError, lambda: to_json(1))
 

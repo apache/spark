@@ -59,6 +59,7 @@ from pyspark.storagelevel import StorageLevel
 import pyspark.sql.connect.plan as plan
 from pyspark.sql.connect.group import GroupedData
 from pyspark.sql.connect.readwriter import DataFrameWriter, DataFrameWriterV2
+from pyspark.sql.connect.streaming.readwriter import DataStreamWriter
 from pyspark.sql.connect.column import Column
 from pyspark.sql.connect.expressions import UnresolvedRegex
 from pyspark.sql.connect.functions import (
@@ -745,6 +746,33 @@ class DataFrame:
     unpivot.__doc__ = PySparkDataFrame.unpivot.__doc__
 
     melt = unpivot
+
+    def withWatermark(self, eventTime: str, delayThreshold: str) -> "DataFrame":
+        # TODO: reuse error handling code in sql.DataFrame.withWatermark()
+        if not eventTime or type(eventTime) is not str:
+            raise PySparkTypeError(
+                error_class="NOT_STR",
+                message_parameters={"arg_name": "eventTime", "arg_type": type(eventTime).__name__},
+            )
+        if not delayThreshold or type(delayThreshold) is not str:
+            raise PySparkTypeError(
+                error_class="NOT_STR",
+                message_parameters={
+                    "arg_name": "delayThreshold",
+                    "arg_type": type(delayThreshold).__name__,
+                },
+            )
+
+        return DataFrame.withPlan(
+            plan.WithWatermark(
+                self._plan,
+                event_time=eventTime,
+                delay_threshold=delayThreshold,
+            ),
+            session=self._session,
+        )
+
+    withWatermark.__doc__ = PySparkDataFrame.withWatermark.__doc__
 
     def hint(
         self, name: str, *parameters: Union["PrimitiveType", List["PrimitiveType"]]
@@ -1673,9 +1701,6 @@ class DataFrame:
     def is_cached(self) -> bool:
         return self.storageLevel != StorageLevel.NONE
 
-    def withWatermark(self, *args: Any, **kwargs: Any) -> None:
-        raise NotImplementedError("withWatermark() is not implemented.")
-
     def foreach(self, *args: Any, **kwargs: Any) -> None:
         raise NotImplementedError("foreach() is not implemented.")
 
@@ -1768,8 +1793,12 @@ class DataFrame:
 
     mapInArrow.__doc__ = PySparkDataFrame.mapInArrow.__doc__
 
-    def writeStream(self, *args: Any, **kwargs: Any) -> None:
-        raise NotImplementedError("writeStream() is not implemented.")
+    @property
+    def writeStream(self) -> DataStreamWriter:
+        assert self._plan is not None
+        return DataStreamWriter(plan=self._plan, session=self._session)
+
+    writeStream.__doc__ = PySparkDataFrame.writeStream.__doc__
 
     def toJSON(self, *args: Any, **kwargs: Any) -> None:
         raise NotImplementedError("toJSON() is not implemented.")
