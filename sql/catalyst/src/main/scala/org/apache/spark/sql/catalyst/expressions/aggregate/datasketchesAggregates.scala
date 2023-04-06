@@ -23,9 +23,12 @@ import org.apache.datasketches.hll.{HllSketch, TgtHllType, Union}
 import org.apache.datasketches.memory.WritableMemory
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionDescription}
-import org.apache.spark.sql.catalyst.trees.UnaryLike
-import org.apache.spark.sql.types.{BinaryType, DataType, IntegerType, LongType, StringType}
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
+import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionDescription, Literal}
+import org.apache.spark.sql.catalyst.trees.{BinaryLike, TernaryLike}
+import org.apache.spark.sql.catalyst.util.TypeUtils.{toSQLExpr, toSQLId, toSQLType, toSQLValue}
+import org.apache.spark.sql.types.{BinaryType, DataType, IntegerType, LongType, NullType, StringType}
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
@@ -37,13 +40,69 @@ import org.apache.spark.unsafe.types.UTF8String
  * functions which utilize instances of HllSketch to count uniques.
  */
 sealed trait HllSketchAggregate
-  extends TypedImperativeAggregate[HllSketch] with UnaryLike[Expression] {
+  extends TypedImperativeAggregate[HllSketch] with TernaryLike[Expression] {
 
-  // These are used as params when instantiating the HllSketch object
-  // and are set by the case classes' args that extend this trait
+  // Hllsketch config - mark as lazy so that they're not evaluated during tree transformation.
 
-  def lgConfigK: Int
-  def tgtHllType: String
+  lazy val lgConfigK: Int = second.eval().asInstanceOf[Int]
+  lazy val tgtHllType: TgtHllType =
+    TgtHllType.valueOf(third.eval().asInstanceOf[UTF8String].toString.toUpperCase(Locale.ROOT))
+
+  // Type checking
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    (first.dataType, second.dataType, third.dataType) match {
+      case (_, NullType, _) | (_, _, NullType) =>
+        DataTypeMismatch(
+          errorSubClass = "UNEXPECTED_NULL",
+          messageParameters = Map(
+            "exprName" -> "lgConfigK or tgtHllType"
+          )
+        )
+      case (_, IntegerType, StringType) =>
+        if (!second.foldable) {
+          DataTypeMismatch(
+            errorSubClass = "NON_FOLDABLE_INPUT",
+            messageParameters = Map(
+              "inputName" -> "lgConfigK",
+              "inputType" -> toSQLType(second.dataType),
+              "inputExpr" -> toSQLExpr(second)
+            )
+          )
+        } else if (lgConfigK <= 0L) {
+          DataTypeMismatch(
+            errorSubClass = "VALUE_OUT_OF_RANGE",
+            messageParameters = Map(
+              "exprName" -> "lgConfigK",
+              "valueRange" -> s"[0, positive]",
+              "currentValue" -> toSQLValue(lgConfigK, IntegerType)
+            )
+          )
+        } else if (!third.foldable) {
+          DataTypeMismatch(
+            errorSubClass = "NON_FOLDABLE_INPUT",
+            messageParameters = Map(
+              "inputName" -> "numBitsExpression",
+              "inputType" -> toSQLType(third.dataType),
+              "inputExpr" -> toSQLExpr(third)
+            )
+          )
+        } else {
+          TypeCheckSuccess
+        }
+      case _ =>
+        DataTypeMismatch(
+          errorSubClass = "HLLSKETCH_WRONG_TYPE",
+          messageParameters = Map(
+            "functionName" -> toSQLId(prettyName),
+            "expectedSecond" -> toSQLType(IntegerType),
+            "expectedThird" -> toSQLType(StringType),
+            "actual" -> Seq(first.dataType, second.dataType, third.dataType)
+              .map(toSQLType).mkString(", ")
+          )
+        )
+    }
+  }
 
   // From here on, these are the shared default implementations for TypedImperativeAggregate
 
@@ -56,7 +115,7 @@ sealed trait HllSketchAggregate
    * @return an HllSketch instance
    */
   override def createAggregationBuffer(): HllSketch = {
-    new HllSketch(lgConfigK, TgtHllType.valueOf(tgtHllType.toUpperCase(Locale.ROOT)))
+    new HllSketch(lgConfigK, tgtHllType)
   }
 
   /**
@@ -68,9 +127,9 @@ sealed trait HllSketchAggregate
    * @param input  an input row
    */
   override def update(sketch: HllSketch, input: InternalRow): HllSketch = {
-    val v = child.eval(input)
+    val v = first.eval(input)
     if (v != null) {
-      child.dataType match {
+      first.dataType match {
         // Update implemented for a subset of types supported by HllSketch
         // Spark SQL doesn't have equivalent types for ByteBuffer or char[] so leave those out
         // Leaving out support for Array types, as unique counting these aren't a common use case
@@ -93,17 +152,10 @@ sealed trait HllSketchAggregate
    * @param input an input HllSketch instance
    */
   override def merge(sketch: HllSketch, input: HllSketch): HllSketch = {
-    // minor optimization: HllSketches configured as HLL_8 can be converted directly to Unions
-    if (sketch.getTgtHllType == TgtHllType.HLL_8) {
-      val union = Union.writableWrap(WritableMemory.writableWrap(sketch.toUpdatableByteArray))
-      union.update(input)
-      union.getResult
-    } else {
       val union = new Union(sketch.getLgConfigK)
       union.update(sketch)
       union.update(input)
       union.getResult(sketch.getTgtHllType)
-    }
   }
 
   /** Convert the underlying HllSketch into an updateable byte array  */
@@ -141,15 +193,31 @@ sealed trait HllSketchAggregate
   since = "3.5.0")
 case class HllSketchEstimate(
     child: Expression,
-    lgConfigK: Int = HllSketch.DEFAULT_LG_K,
-    tgtHllType: String = HllSketch.DEFAULT_HLL_TYPE.toString,
+    lgConfigKExpression: Expression,
+    tgtHllTypeExpression: Expression,
     mutableAggBufferOffset: Int = 0,
     inputAggBufferOffset: Int = 0) extends HllSketchAggregate {
 
-  // This constructor seems to be only necessary for the ExpressionSchemaSuite to pass
+  // all the constructors, case class's apply doesn't work for sql
 
   def this(child: Expression) = {
-    this(child, HllSketch.DEFAULT_LG_K, HllSketch.DEFAULT_HLL_TYPE.toString, 0, 0)
+    this(child, Literal(HllSketch.DEFAULT_LG_K), Literal(HllSketch.DEFAULT_HLL_TYPE.toString), 0, 0)
+  }
+
+  def this(child: Expression, lgConfigK: Expression) = {
+    this(child, lgConfigK, Literal(HllSketch.DEFAULT_HLL_TYPE), 0, 0)
+  }
+
+  def this(child: Expression, lgConfigK: Int) = {
+    this(child, Literal(lgConfigK), Literal(HllSketch.DEFAULT_HLL_TYPE), 0, 0)
+  }
+
+  def this(child: Expression, lgConfigK: Expression, tgtHllType: Expression) = {
+    this(child, lgConfigK, tgtHllType, 0, 0)
+  }
+
+  def this(child: Expression, lgConfigK: Int, tgtHllType: String) = {
+    this(child, Literal(lgConfigK), Literal(tgtHllType), 0, 0)
   }
 
   // These copy constructors are repeated in every case class
@@ -160,8 +228,16 @@ case class HllSketchEstimate(
   override def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): HllSketchEstimate =
     copy(inputAggBufferOffset = newInputAggBufferOffset)
 
-  override protected def withNewChildInternal(newChild: Expression): HllSketchEstimate =
-    copy(child = newChild)
+  override protected def withNewChildrenInternal(newFirst: Expression,
+                                              newSecond: Expression,
+                                              newThird: Expression): HllSketchEstimate =
+    copy(child = newFirst, lgConfigKExpression = newSecond, tgtHllTypeExpression = newThird)
+
+  // overrides for TernaryLike
+
+  override def first: Expression = child
+  override def second: Expression = lgConfigKExpression
+  override def third: Expression = tgtHllTypeExpression
 
   // Implementations specific to HllSketchEstimate
 
@@ -206,15 +282,31 @@ case class HllSketchEstimate(
   since = "3.5.0")
 case class HllSketchBinary(
     child: Expression,
-    lgConfigK: Int = HllSketch.DEFAULT_LG_K,
-    tgtHllType: String = HllSketch.DEFAULT_HLL_TYPE.toString,
+    lgConfigKExpression: Expression,
+    tgtHllTypeExpression: Expression,
     mutableAggBufferOffset: Int = 0,
     inputAggBufferOffset: Int = 0) extends HllSketchAggregate {
 
-  // This constructor seems to be only necessary for the ExpressionSchemaSuite to pass
+  // all the constructors, case class's apply doesn't work for sql
 
   def this(child: Expression) = {
-    this(child, HllSketch.DEFAULT_LG_K, HllSketch.DEFAULT_HLL_TYPE.toString, 0, 0)
+    this(child, Literal(HllSketch.DEFAULT_LG_K), Literal(HllSketch.DEFAULT_HLL_TYPE.toString), 0, 0)
+  }
+
+  def this(child: Expression, lgConfigK: Expression) = {
+    this(child, lgConfigK, Literal(HllSketch.DEFAULT_HLL_TYPE), 0, 0)
+  }
+
+  def this(child: Expression, lgConfigK: Int) = {
+    this(child, Literal(lgConfigK), Literal(HllSketch.DEFAULT_HLL_TYPE), 0, 0)
+  }
+
+  def this(child: Expression, lgConfigK: Expression, tgtHllType: Expression) = {
+    this(child, lgConfigK, tgtHllType, 0, 0)
+  }
+
+  def this(child: Expression, lgConfigK: Int, tgtHllType: String) = {
+    this(child, Literal(lgConfigK), Literal(tgtHllType), 0, 0)
   }
 
   // These copy constructors are repeated in every case class
@@ -225,8 +317,16 @@ case class HllSketchBinary(
   override def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): HllSketchBinary =
     copy(inputAggBufferOffset = newInputAggBufferOffset)
 
-  override protected def withNewChildInternal(newChild: Expression): HllSketchBinary =
-    copy(child = newChild)
+  override protected def withNewChildrenInternal(newFirst: Expression,
+                                              newSecond: Expression,
+                                              newThird: Expression): HllSketchBinary =
+    copy(child = newFirst, lgConfigKExpression = newSecond, tgtHllTypeExpression = newThird)
+
+  // overrides for TernaryLike
+
+  override def first: Expression = child
+  override def second: Expression = lgConfigKExpression
+  override def third: Expression = tgtHllTypeExpression
 
   // Implementations specific to HllSketchBinary
 
@@ -269,18 +369,27 @@ case class HllSketchBinary(
   since = "3.5.0")
 case class HllSketchUnionEstimate(
     child: Expression,
-    lgMaxK: Int = HllSketch.DEFAULT_LG_K,
+    lgMaxKExpression: Expression,
     mutableAggBufferOffset: Int = 0,
     inputAggBufferOffset: Int = 0)
-  // Unfortunately, we can't extend HllSketchAggregate as there's no quick
-  // way to convert between HllSketch and Union instances (even though Union
-  // is just a wrapper around HllSketch).
-  extends TypedImperativeAggregate[Union] with UnaryLike[Expression] {
+  extends TypedImperativeAggregate[Union] with BinaryLike[Expression] {
 
-  // This constructor seems to be only necessary for the ExpressionSchemaSuite to pass
+  // Union config - mark as lazy so that they're not evaluated during tree transformation.
+
+  lazy val lgMaxK: Int = lgMaxKExpression.eval().asInstanceOf[Int]
+
+  // all the constructors
 
   def this(child: Expression) = {
-    this(child, HllSketch.DEFAULT_LG_K, 0, 0)
+    this(child, Literal(HllSketch.DEFAULT_LG_K), 0, 0)
+  }
+
+  def this(child: Expression, lgMaxK: Expression) = {
+    this(child, lgMaxK, 0, 0)
+  }
+
+  def this(child: Expression, lgMaxK: Int) = {
+    this(child, Literal(lgMaxK), 0, 0)
   }
 
   // These copy constructors are repeated in every case class
@@ -291,8 +400,59 @@ case class HllSketchUnionEstimate(
   override def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): HllSketchUnionEstimate =
     copy(inputAggBufferOffset = newInputAggBufferOffset)
 
-  override protected def withNewChildInternal(newChild: Expression): HllSketchUnionEstimate =
-    copy(child = newChild)
+  override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression):
+  HllSketchUnionEstimate = copy(child = newLeft, lgMaxKExpression = newRight)
+
+  // overrides for BinaryLike
+
+  override def left: Expression = child
+  override def right: Expression = lgMaxKExpression
+
+  // Type checking
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    (left.dataType, right.dataType) match {
+      case (_, NullType) =>
+        DataTypeMismatch(
+          errorSubClass = "UNEXPECTED_NULL",
+          messageParameters = Map(
+            "exprName" -> "lgMaxK"
+          )
+        )
+      case (BinaryType, IntegerType) =>
+        if (!right.foldable) {
+          DataTypeMismatch(
+            errorSubClass = "NON_FOLDABLE_INPUT",
+            messageParameters = Map(
+              "inputName" -> "lgMaxK",
+              "inputType" -> toSQLType(right.dataType),
+              "inputExpr" -> toSQLExpr(right)
+            )
+          )
+        } else if (lgMaxK <= 0L) {
+          DataTypeMismatch(
+            errorSubClass = "VALUE_OUT_OF_RANGE",
+            messageParameters = Map(
+              "exprName" -> "lgMaxK",
+              "valueRange" -> s"[0, positive]",
+              "currentValue" -> toSQLValue(lgMaxK, IntegerType)
+            )
+          )
+        } else {
+          TypeCheckSuccess
+        }
+      case _ =>
+        DataTypeMismatch(
+          errorSubClass = "HLLSKETCH_WRONG_TYPE",
+          messageParameters = Map(
+            "functionName" -> toSQLId(prettyName),
+            "expectedRight" -> toSQLType(IntegerType),
+            "actual" -> Seq(left.dataType, right.dataType)
+              .map(toSQLType).mkString(", ")
+          )
+        )
+    }
+  }
 
   // Implementations specific to HllSketchUnionEstimate
 

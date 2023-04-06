@@ -1553,6 +1553,7 @@ class DataFrameAggregateSuite extends QueryTest
       (1, "c"), (1, "c"),
       (1, "d")
     ).toDF("id", "value")
+    df1.createOrReplaceTempView("df1")
 
     val df2 = Seq(
       (1, "a"),
@@ -1561,42 +1562,72 @@ class DataFrameAggregateSuite extends QueryTest
       (1, "e"), (1, "e"),
       (1, "f")
     ).toDF("id", "value")
+    df2.createOrReplaceTempView("df2")
 
-    val res1 = df1.groupBy(col("id"))
+    // first test hllsketch_estimate via dataframe + sql, with and without configs
+    val res1 = df1.groupBy("id")
       .agg(
         count("value").as("count"),
-        hllsketch_estimate("value").as("distinct_count")
+        hllsketch_estimate("value").as("distinct_count_1"),
+        hllsketch_estimate("value", 20, "HLL_8").as("distinct_count_2")
       )
+    checkAnswer(res1, Row(1, 7, 4, 4))
 
-    checkAnswer(res1, Row(1, 7, 4))
+    val res2 = spark.sql(
+      """select
+        | id,
+        | count(value) as count,
+        | hllsketch_estimate(value) as distinct_count_1,
+        | hllsketch_estimate(value, 20, 'HLL_8') as distinct_count_2
+        |from df1
+        |group by 1
+        |""".stripMargin)
+    checkAnswer(res2, Row(1, 7, 4, 4))
 
-    // Showing modified config implementation also works
-    val res2 = df1.groupBy(col("id"))
+    // next test hllsketch_binary via dataframe + sql, with and without configs
+    val df3 = df1.groupBy("id")
       .agg(
         count("value").as("count"),
-        hllsketch_estimate(Column("value"), 20, "HLL_4").as("distinct_count")
+        hllsketch_binary("value").as("hllsketch_1"),
+        hllsketch_binary("value", 20, "HLL_8").as("hllsketch_2"),
+        hllsketch_binary("value").as("hllsketch_3"),
       )
+    df3.createOrReplaceTempView("df3")
 
-    checkAnswer(res2, Row(1, 7, 4))
+    // now test hllsketch_union_estimate via dataframe + sql, with and without configs,
+    // unioning together sketches with default, non-default and different configurations
+    val df4 = spark.sql(
+      """select
+        | id,
+        | count(value),
+        | hllsketch_binary(value) as hllsketch_1,
+        | hllsketch_binary(value, 20, 'HLL_8') as hllsketch_2,
+        | hllsketch_binary(value, 20, 'HLL_8') as hllsketch_3
+        |from df2
+        |group by 1
+        |""".stripMargin)
+    df4.createOrReplaceTempView("df4")
 
-    val df3 = df1.groupBy(col("id"))
+    val res3 = df3.union(df4).groupBy("id")
       .agg(
-        count("value").as("count"),
-        hllsketch_binary("value").as("hll_sketch")
+        sum("count").as("count"),
+        hllsketch_union_estimate("hllsketch_1", 20).as("distinct_count_1"),
+        hllsketch_union_estimate("hllsketch_2").as("distinct_count_2"),
+        hllsketch_union_estimate("hllsketch_3").as("distinct_count_3")
       )
+    checkAnswer(res3, Row(1, 15, 6, 6, 6))
 
-    val df4 = df2.groupBy(col("id"))
-      .agg(
-        count("value").as("count"),
-        hllsketch_binary("value").as("hll_sketch")
-      )
-
-    val res3 = df3.union(df4).groupBy(col("id")).agg(
-      sum("count").as("count"),
-      hllsketch_union_estimate("hll_sketch").as("distinct_count")
-    )
-
-    checkAnswer(res3, Row(1, 15, 6))
+    val res4 = spark.sql(
+      """select
+        | id,
+        | sum(count) as count,
+        | hllsketch_union_estimate(hllsketch_1, 20) as distinct_count_1,
+        | hllsketch_union_estimate(hllsketch_2) as distinct_count_2,
+        | hllsketch_union_estimate(hllsketch_3) as distinct_count_3
+        |from (select * from df3 union all select * from df4)
+        |group by 1
+        |""".stripMargin)
+    checkAnswer(res3, Row(1, 15, 6, 6, 6))
   }
 }
 

@@ -36,7 +36,7 @@ class DatasketchesHllSketchSuite extends SparkFunSuite {
 
     // create a map of agg function instances
     val aggFunctionMap = Seq.tabulate(numSketches)(index => {
-      val sketch = HllSketchEstimate(BoundReference(0, dataType, nullable = true))
+      val sketch = new HllSketchEstimate(BoundReference(0, dataType, nullable = true))
       index -> (sketch, sketch.createAggregationBuffer())
     }).toMap
 
