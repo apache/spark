@@ -61,10 +61,6 @@ class ReplE2ESuite extends RemoteSparkSession {
     }
 
     executorService.submit(task)
-
-    // Run simple query to test REPL
-    val output = runCommandsInShell("spark.sql(\"select 1\").collect()")
-    assertContains("res0: Array[org.apache.spark.sql.Row] = Array([1])", output)
   }
 
   override def afterAll(): Unit = {
@@ -96,6 +92,15 @@ class ReplE2ESuite extends RemoteSparkSession {
   def assertContains(message: String, output: String): Unit = {
     val isContain = output.contains(message)
     assert(isContain, "Ammonite output did not contain '" + message + "':\n" + output)
+  }
+
+  test("Simple query") {
+    // Run simple query to test REPL
+    val input = """
+        |spark.sql("select 1").collect()
+      """.stripMargin
+    val output = runCommandsInShell(input)
+    assertContains("Array[org.apache.spark.sql.Row] = Array([1])", output)
   }
 
   test("UDF containing 'def'") {
