@@ -51,7 +51,7 @@ private[sql] class SparkConnectClient(
   // Generate a unique session ID for this client. This UUID must be unique to allow
   // concurrent Spark sessions of the same user. If the channel is closed, creating
   // a new client will create a new session ID.
-  private[client] val sessionId: String = UUID.randomUUID.toString
+  private[sql] val sessionId: String = UUID.randomUUID.toString
 
   /**
    * Dispatch the [[proto.AnalyzePlanRequest]] to the Spark Connect server.
