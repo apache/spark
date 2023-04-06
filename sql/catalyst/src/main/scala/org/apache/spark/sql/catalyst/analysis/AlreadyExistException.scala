@@ -72,10 +72,10 @@ class TableAlreadyExistsException private(
     errorClass = errorClass,
     messageParameters = messageParameters) {
 
-  def this(errorClass: String, messageParameters: Map[String, String]) = {
+  def this(errorClass: String, messageParameters: Map[String, String], cause: Option[Throwable]) = {
     this(
       SparkThrowableHelper.getMessage(errorClass, messageParameters),
-      cause = None,
+      cause,
       Some(errorClass),
       messageParameters)
   }
@@ -83,23 +83,27 @@ class TableAlreadyExistsException private(
   def this(db: String, table: String) = {
     this(errorClass = "TABLE_OR_VIEW_ALREADY_EXISTS",
       messageParameters = Map("relationName" ->
-        (quoteIdentifier(db) + "." + quoteIdentifier(table))))
+        (quoteIdentifier(db) + "." + quoteIdentifier(table))),
+      cause = None)
   }
 
   def this(table: String) = {
     this(errorClass = "TABLE_OR_VIEW_ALREADY_EXISTS",
       messageParameters = Map("relationName" ->
-        quoteNameParts(UnresolvedAttribute.parseAttributeName(table))))
+        quoteNameParts(UnresolvedAttribute.parseAttributeName(table))),
+      cause = None)
   }
 
   def this(table: Seq[String]) = {
     this(errorClass = "TABLE_OR_VIEW_ALREADY_EXISTS",
-      messageParameters = Map("relationName" -> quoteNameParts(table)))
+      messageParameters = Map("relationName" -> quoteNameParts(table)),
+      cause = None)
   }
 
   def this(tableIdent: Identifier) = {
     this(errorClass = "TABLE_OR_VIEW_ALREADY_EXISTS",
-      messageParameters = Map("relationName" -> tableIdent.quoted))
+      messageParameters = Map("relationName" -> tableIdent.quoted),
+      cause = None)
   }
 
   def this(message: String, cause: Option[Throwable] = None) = {
