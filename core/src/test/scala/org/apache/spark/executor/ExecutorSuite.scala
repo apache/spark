@@ -280,17 +280,15 @@ class ExecutorSuite extends SparkFunSuite
     val input = sc.parallelize(1 to 10, 10)
     var testRdd = input.map(i => (i, i))
     (0 to 10).foreach( i =>
-        testRdd = testRdd
-          .map(x => { accums.foreach(_.add(1)); (x._1 * i, x._2) })
-          .reduceByKey(_ + _)
+      testRdd = testRdd.map(x => { accums.foreach(_.add(1)); (x._1 * i, x._2) }).reduceByKey(_ + _)
     )
 
-    val logAppender = new LogAppender(s"heartbeat thread should not die")
+    val logAppender = new LogAppender("heartbeat thread should not die")
     withLogAppender(logAppender, level = Some(Level.ERROR)) {
       val _ = testRdd.count()
     }
     val logs = logAppender.loggingEvents.map(_.getMessage.getFormattedMessage)
-        .filter(_.contains("Uncaught exception in thread executor-heartbeater"))
+      .filter(_.contains("Uncaught exception in thread executor-heartbeater"))
     assert(logs.isEmpty)
   }
 
