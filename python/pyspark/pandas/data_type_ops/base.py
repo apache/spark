@@ -24,7 +24,7 @@ import numpy as np
 import pandas as pd
 from pandas.api.types import CategoricalDtype
 
-from pyspark.sql import functions as F, Column as LegacyColumn
+from pyspark.sql import functions as F, Column as PySparkColumn
 from pyspark.sql.types import (
     ArrayType,
     BinaryType,
@@ -474,7 +474,7 @@ class DataTypeOps(object, metaclass=ABCMeta):
         else:
             from pyspark.pandas.base import column_op
 
-            Column = ConnectColumn if is_remote() else LegacyColumn
+            Column = ConnectColumn if is_remote() else PySparkColumn
             return column_op(cast(Callable[..., GenericColumn], Column.__eq__))(left, right)
 
     def ne(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
@@ -482,7 +482,7 @@ class DataTypeOps(object, metaclass=ABCMeta):
 
         _sanitize_list_like(right)
 
-        Column = ConnectColumn if is_remote() else LegacyColumn
+        Column = ConnectColumn if is_remote() else PySparkColumn
         return column_op(cast(Callable[..., GenericColumn], Column.__ne__))(left, right)
 
     def invert(self, operand: IndexOpsLike) -> IndexOpsLike:

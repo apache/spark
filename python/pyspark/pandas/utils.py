@@ -37,7 +37,7 @@ from typing import (
 )
 import warnings
 
-from pyspark.sql import functions as F, Column, DataFrame as LegacyDataFrame, SparkSession
+from pyspark.sql import functions as F, Column, DataFrame as PySparkDataFrame, SparkSession
 from pyspark.sql.types import DoubleType
 from pyspark.sql.utils import is_remote
 from pyspark.errors import PySparkTypeError
@@ -820,7 +820,7 @@ def verify_temp_column_name(df: "DataFrame", column_name_or_label: Name) -> Labe
 
 
 def verify_temp_column_name(
-    df: Union["DataFrame", LegacyDataFrame, ConnectDataFrame],
+    df: Union["DataFrame", PySparkDataFrame, ConnectDataFrame],
     column_name_or_label: Union[str, Name],
 ) -> Union[str, Label]:
     """
@@ -919,7 +919,7 @@ def verify_temp_column_name(
         )
         column_name = column_name_or_label
 
-    assert isinstance(df, (LegacyDataFrame, ConnectDataFrame)), type(df)
+    assert isinstance(df, (PySparkDataFrame, ConnectDataFrame)), type(df)
     assert (
         column_name not in df.columns
     ), "The given column name `{}` already exists in the Spark DataFrame: {}".format(

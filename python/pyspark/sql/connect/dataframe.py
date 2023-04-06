@@ -1653,6 +1653,8 @@ class DataFrame:
         )
         return PandasOnSparkDataFrame(internal)
 
+    pandas_api.__doc__ = PySparkDataFrame.pandas_api.__doc__
+
     def registerTempTable(self, name: str) -> None:
         warnings.warn("Deprecated in 2.0, use createOrReplaceTempView instead.", FutureWarning)
         self.createOrReplaceTempView(name)

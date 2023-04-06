@@ -21,9 +21,9 @@ from typing import Any, Tuple, TypeVar, Union, TYPE_CHECKING
 import numpy as np
 from pandas.api.extensions import ExtensionDtype
 
-from pyspark.sql.column import Column as LegacyColumn
+from pyspark.sql.column import Column as PySparkColumn
 from pyspark.sql.connect.column import Column as ConnectColumn
-from pyspark.sql.dataframe import DataFrame as LegacyDataFrame
+from pyspark.sql.dataframe import DataFrame as PySparkDataFrame
 from pyspark.sql.connect.dataframe import DataFrame as ConnectDataFrame
 
 
@@ -57,5 +57,5 @@ DataFrameOrSeries = Union["DataFrame", "Series"]
 SeriesOrIndex = Union["Series", "Index"]
 
 # For Spark Connect compatibility.
-GenericColumn = Union[LegacyColumn, ConnectColumn]
-GenericDataFrame = Union[LegacyDataFrame, ConnectDataFrame]
+GenericColumn = Union[PySparkColumn, ConnectColumn]
+GenericDataFrame = Union[PySparkDataFrame, ConnectDataFrame]

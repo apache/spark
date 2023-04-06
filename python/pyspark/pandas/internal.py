@@ -28,7 +28,7 @@ from pyspark._globals import _NoValue, _NoValueType
 from pyspark.sql import (
     functions as F,
     Column,
-    DataFrame as LegacyDataFrame,
+    DataFrame as PySparkDataFrame,
     Window,
     SparkSession as PySparkSession,
 )
@@ -628,7 +628,7 @@ class InternalFrame:
         >>> internal.column_label_names
         [('column_labels_a',), ('column_labels_b',)]
         """
-        assert isinstance(spark_frame, (LegacyDataFrame, ConnectDataFrame))
+        assert isinstance(spark_frame, (PySparkDataFrame, ConnectDataFrame))
         assert not spark_frame.isStreaming, "pandas-on-Spark does not support Structured Streaming."
 
         if not index_spark_columns:
@@ -974,7 +974,7 @@ class InternalFrame:
                     ConnectColumn(DistributedSequenceID()).alias(column_name), "*"
                 )
             else:
-                return LegacyDataFrame(
+                return PySparkDataFrame(
                     sdf._jdf.toDF().withSequenceColumn(column_name),  # type: ignore[operator]
                     cast(PySparkSession, sdf.sparkSession),
                 )
@@ -1025,7 +1025,7 @@ class InternalFrame:
             raise KeyError(name_like_string(label))
 
     @property
-    def spark_frame(self) -> LegacyDataFrame:
+    def spark_frame(self) -> PySparkDataFrame:
         """Return the managed Spark DataFrame."""
         return self._sdf  # type: ignore[return-value]
 
@@ -1100,7 +1100,7 @@ class InternalFrame:
         return self._data_fields
 
     @lazy_property
-    def to_internal_spark_frame(self) -> LegacyDataFrame:
+    def to_internal_spark_frame(self) -> PySparkDataFrame:
         """
         Return as Spark DataFrame. This contains index columns as well
         and should be only used for internal purposes.
@@ -1242,7 +1242,7 @@ class InternalFrame:
 
     def with_new_sdf(
         self,
-        spark_frame: LegacyDataFrame,
+        spark_frame: PySparkDataFrame,
         *,
         index_fields: Optional[List[InternalField]] = None,
         data_columns: Optional[List[str]] = None,
@@ -1447,7 +1447,7 @@ class InternalFrame:
     def copy(
         self,
         *,
-        spark_frame: Union[LegacyDataFrame, _NoValueType] = _NoValue,
+        spark_frame: Union[PySparkDataFrame, _NoValueType] = _NoValue,
         index_spark_columns: Union[List[Column], _NoValueType] = _NoValue,
         index_names: Union[Optional[List[Optional[Label]]], _NoValueType] = _NoValue,
         index_fields: Union[Optional[List[InternalField]], _NoValueType] = _NoValue,
@@ -1491,7 +1491,7 @@ class InternalFrame:
         if column_label_names is _NoValue:
             column_label_names = self.column_label_names
         return InternalFrame(
-            spark_frame=cast(LegacyDataFrame, spark_frame),
+            spark_frame=cast(PySparkDataFrame, spark_frame),
             index_spark_columns=cast(List[Column], index_spark_columns),
             index_names=cast(Optional[List[Optional[Label]]], index_names),
             index_fields=cast(Optional[List[InternalField]], index_fields),
