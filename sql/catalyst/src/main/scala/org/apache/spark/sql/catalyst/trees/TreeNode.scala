@@ -885,7 +885,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Tre
   private lazy val allChildren: Set[TreeNode[_]] = (children ++ innerChildren).toSet[TreeNode[_]]
 
   private def redactMapString[K, V](map: Map[K, V], maxFields: Int): List[String] = {
-    // For security reason, redact the map value if the key is in centain patterns
+    // For security reason, redact the map value if the key is in certain patterns
     val redactedMap = SQLConf.get.redactOptions(map.toMap)
     // construct the redacted map as strings of the format "key=value"
     val keyValuePairs = redactedMap.toSeq.map { item =>

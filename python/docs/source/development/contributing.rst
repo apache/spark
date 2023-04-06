@@ -120,7 +120,7 @@ Prerequisite
 
 PySpark development requires to build Spark that needs a proper JDK installed, etc. See `Building Spark <https://spark.apache.org/docs/latest/building-spark.html>`_ for more details.
 
-Note that if you intend to contribute to Spark Connect in Python, ``buf`` version ``1.15.1`` is required, see `Buf Installation <https://docs.buf.build/installation>`_ for more details.
+Note that if you intend to contribute to Spark Connect in Python, ``buf`` version ``1.16.0`` is required, see `Buf Installation <https://docs.buf.build/installation>`_ for more details.
 
 Conda
 ~~~~~

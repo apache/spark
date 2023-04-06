@@ -26,7 +26,7 @@ import java.util.List;
  * Columns statistics interface wrapping ORC {@link ColumnStatistics}s.
  *
  * Because ORC {@link ColumnStatistics}s are stored as an flatten array in ORC file footer,
- * this class is used to covert ORC {@link ColumnStatistics}s from array to nested tree structure,
+ * this class is used to convert ORC {@link ColumnStatistics}s from array to nested tree structure,
  * according to data types. The flatten array stores all data types (including nested types) in
  * tree pre-ordering. This is used for aggregate push down in ORC.
  *

@@ -50,7 +50,7 @@ object DataTypeTestUtils {
   val numericTypes: Set[NumericType] = integralType ++ fractionalTypes
 
   // TODO: remove this once we find out how to handle decimal properly in property check
-  val numericTypeWithoutDecimal: Set[DataType] = integralType ++ Set(DoubleType, FloatType)
+  val numericTypeWithoutDecimal: Set[NumericType] = integralType ++ Set(DoubleType, FloatType)
 
   val dayTimeIntervalTypes: Seq[DayTimeIntervalType] = Seq(
     DayTimeIntervalType(DAY),
@@ -69,6 +69,19 @@ object DataTypeTestUtils {
     YearMonthIntervalType(YEAR),
     YearMonthIntervalType(MONTH))
 
+  val unsafeRowMutableFieldTypes: Seq[DataType] = Seq(
+    NullType,
+    BooleanType,
+    ShortType,
+    IntegerType,
+    LongType,
+    FloatType,
+    DoubleType,
+    DateType,
+    TimestampType,
+    TimestampNTZType
+  )
+
   /**
    * Instances of all [[NumericType]]s and [[CalendarIntervalType]]
    */
@@ -78,7 +91,7 @@ object DataTypeTestUtils {
   /**
    * All the types that support ordering
    */
-  val ordered: Set[DataType] = numericTypeWithoutDecimal ++ Set(
+  val ordered: Set[AtomicType] = numericTypeWithoutDecimal ++ Set(
     BooleanType,
     TimestampType,
     TimestampNTZType,
@@ -89,12 +102,12 @@ object DataTypeTestUtils {
   /**
    * All the types that we can use in a property check
    */
-  val propertyCheckSupported: Set[DataType] = ordered
+  val propertyCheckSupported: Set[AtomicType] = ordered
 
   /**
    * Instances of all [[AtomicType]]s.
    */
-  val atomicTypes: Set[DataType] = numericTypes ++ Set(
+  val atomicTypes: Set[AtomicType] = numericTypes ++ Set(
     BinaryType,
     BooleanType,
     DateType,

@@ -45,7 +45,7 @@ class ByteType private() extends IntegralType {
    */
   override def defaultSize: Int = 1
 
-  override def physicalDataType: PhysicalDataType = PhysicalByteType
+  private[sql] override def physicalDataType: PhysicalDataType = PhysicalByteType
 
   override def simpleString: String = "tinyint"
 

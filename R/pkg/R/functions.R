@@ -259,7 +259,7 @@ NULL
 #' @param finish an unary \code{function} \code{(Column) -> Column} used to
 #'          apply final transformation on the accumulated data in \code{array_aggregate}.
 #' @param comparator an optional binary (\code{(Column, Column) -> Column}) \code{function}
-#'          which is used to compare the elemnts of the array.
+#'          which is used to compare the elements of the array.
 #'          The comparator will take two
 #'          arguments representing two elements of the array. It returns a negative integer,
 #'          0, or a positive integer as the first element is less than, equal to,

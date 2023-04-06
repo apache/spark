@@ -16,6 +16,14 @@
  */
 package org.apache.spark.sql
 
+import java.io.File
+import java.util.UUID
+
+import org.scalatest.Assertions.fail
+
+import org.apache.spark.sql.catalyst.catalog.SessionCatalog.DEFAULT_DATABASE
+import org.apache.spark.util.Utils
+
 trait SQLHelper {
 
   def spark: SparkSession
@@ -48,5 +56,41 @@ trait SQLHelper {
         case (key, None) => spark.conf.unset(key)
       }
     }
+  }
+
+  /**
+   * Creates a temporary database and switches current database to it before executing `f`. This
+   * database is dropped after `f` returns.
+   *
+   * Note that this method doesn't switch current database before executing `f`.
+   */
+  protected def withTempDatabase(f: String => Unit): Unit = {
+    val dbName = s"db_${UUID.randomUUID().toString.replace('-', '_')}"
+
+    try {
+      spark.sql(s"CREATE DATABASE $dbName")
+    } catch {
+      case cause: Throwable =>
+        fail("Failed to create temporary database", cause)
+    }
+
+    try f(dbName)
+    finally {
+      if (spark.catalog.currentDatabase == dbName) {
+        spark.sql(s"USE $DEFAULT_DATABASE")
+      }
+      spark.sql(s"DROP DATABASE $dbName CASCADE")
+    }
+  }
+
+  /**
+   * Generates a temporary path without creating the actual file/directory, then pass it to `f`.
+   * If a file/directory is created there by `f`, it will be delete after `f` returns.
+   */
+  protected def withTempPath(f: File => Unit): Unit = {
+    val path = Utils.createTempDir()
+    path.delete()
+    try f(path)
+    finally Utils.deleteRecursively(path)
   }
 }

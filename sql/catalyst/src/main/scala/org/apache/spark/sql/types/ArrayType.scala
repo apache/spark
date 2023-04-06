@@ -91,7 +91,7 @@ case class ArrayType(elementType: DataType, containsNull: Boolean) extends DataT
    */
   override def defaultSize: Int = 1 * elementType.defaultSize
 
-  override def physicalDataType: PhysicalDataType =
+  private[sql] override def physicalDataType: PhysicalDataType =
     PhysicalArrayType(elementType, containsNull)
 
   override def simpleString: String = s"array<${elementType.simpleString}>"

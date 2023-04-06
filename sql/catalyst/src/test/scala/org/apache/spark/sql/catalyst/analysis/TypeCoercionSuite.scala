@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.ReferenceAllColumns
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.{Rule, RuleExecutor}
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
@@ -53,7 +54,7 @@ abstract class TypeCoercionSuiteBase extends AnalysisTest {
 
     // Check null value
     val castNull = implicitCast(createNull(from), to)
-    assert(DataType.equalsIgnoreCaseAndNullability(
+    assert(DataTypeUtils.equalsIgnoreCaseAndNullability(
       castNull.map(_.dataType).orNull, expected),
       s"Failed to cast $from to $to")
   }

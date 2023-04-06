@@ -19,6 +19,7 @@ package org.apache.spark
 
 import java.io._
 import java.net.URI
+import java.nio.file.Files
 import java.util.{Arrays, Locale, Properties, ServiceLoader, UUID}
 import java.util.concurrent.{ConcurrentHashMap, ConcurrentMap}
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger, AtomicReference}
@@ -41,7 +42,7 @@ import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat, Job => NewHad
 import org.apache.hadoop.mapreduce.lib.input.{FileInputFormat => NewFileInputFormat}
 import org.apache.logging.log4j.Level
 
-import org.apache.spark.annotation.{DeveloperApi, Experimental}
+import org.apache.spark.annotation.{DeveloperApi, Experimental, Private}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.deploy.{LocalSparkCluster, SparkHadoopUtil}
 import org.apache.spark.executor.{Executor, ExecutorMetrics, ExecutorMetricsSource}
@@ -386,6 +387,13 @@ class SparkContext(config: SparkConf) extends Logging {
     Utils.setLogLevel(Level.toLevel(upperCased))
   }
 
+  /**
+   * :: Private ::
+   * Returns the directory that stores artifacts transferred through Spark Connect.
+   */
+  @Private
+  private[spark] lazy val sparkConnectArtifactDirectory: File = Utils.createTempDir("artifacts")
+
   try {
     _conf = config.clone()
     _conf.validateSettings()
@@ -465,7 +473,18 @@ class SparkContext(config: SparkConf) extends Logging {
     SparkEnv.set(_env)
 
     // If running the REPL, register the repl's output dir with the file server.
-    _conf.getOption("spark.repl.class.outputDir").foreach { path =>
+    _conf.getOption("spark.repl.class.outputDir").orElse {
+      if (_conf.get(PLUGINS).contains("org.apache.spark.sql.connect.SparkConnectPlugin")) {
+        // For Spark Connect, we piggyback on the existing REPL integration to load class
+        // files on the executors.
+        // This is a temporary intermediate step due to unavailable classloader isolation.
+        val classDirectory = sparkConnectArtifactDirectory.toPath.resolve("classes")
+        Files.createDirectories(classDirectory)
+        Some(classDirectory.toString)
+      } else {
+        None
+      }
+    }.foreach { path =>
       val replUri = _env.rpcEnv.fileServer.addDirectory("/classes", new File(path))
       _conf.set("spark.repl.class.uri", replUri)
     }

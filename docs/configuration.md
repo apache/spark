@@ -3172,6 +3172,14 @@ They are typically set via the config file and command-lineoptions with `--conf/
   <td>3.4.0</td>
 </tr>
 <tr>
+  <td><code>spark.connect.grpc.maxInboundMessageSize</code></td>
+  <td>
+    134217728
+  </td>
+  <td>Sets the maximum inbound message size for the gRPC requests. Requests with a larger payload will fail.</td>
+  <td>3.4.0</td>
+</tr>
+<tr>
   <td><code>spark.connect.extensions.relation.classes</code></td>
   <td>
     (none)

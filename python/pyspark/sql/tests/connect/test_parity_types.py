@@ -84,8 +84,8 @@ class TypesParityTests(TypesTestsMixin, ReusedConnectTestCase):
         super().test_infer_schema_upcast_int_to_string()
 
     @unittest.skip("Spark Connect does not support RDD but the tests depend on them.")
-    def test_udf_with_udt(self):
-        super().test_udf_with_udt()
+    def test_rdd_with_udt(self):
+        super().test_rdd_with_udt()
 
     @unittest.skip("Requires JVM access.")
     def test_udt(self):

@@ -140,7 +140,7 @@ case class AdaptiveSparkPlanExec(
     // `OptimizeShuffleWithLocalRead` needs to make use of 'AQEShuffleReadExec.partitionSpecs'
     // added by `CoalesceShufflePartitions`, and must be executed after it.
     OptimizeShuffleWithLocalRead
-  )
+  ) ++ context.session.sessionState.adaptiveRulesHolder.queryStageOptimizerRules
 
   // This rule is stateful as it maintains the codegen stage ID. We can't create a fresh one every
   // time and need to keep it in a variable.
@@ -537,12 +537,13 @@ case class AdaptiveSparkPlanExec(
       }
 
     case i: InMemoryTableScanExec =>
+      // There is no reuse for `InMemoryTableScanExec`, which is different from `Exchange`. If we
+      // hit it the first time, we should always create a new query stage.
       val newStage = newQueryStage(i)
-      val isMaterialized = newStage.isMaterialized
       CreateStageResult(
         newPlan = newStage,
-        allChildStagesMaterialized = isMaterialized,
-        newStages = if (isMaterialized) Seq.empty else Seq(newStage))
+        allChildStagesMaterialized = false,
+        newStages = Seq(newStage))
 
     case q: QueryStageExec =>
       CreateStageResult(newPlan = q,
@@ -561,34 +562,30 @@ case class AdaptiveSparkPlanExec(
   }
 
   private def newQueryStage(plan: SparkPlan): QueryStageExec = {
-    val optimizedPlan = plan match {
-      case e: Exchange =>
-        e.withNewChildren(Seq(optimizeQueryStage(e.child, isFinalStage = false)))
-      case _ => plan
-    }
-    val newPlan = applyPhysicalRules(
-      optimizedPlan,
-      postStageCreationRules(outputsColumnar = plan.supportsColumnar),
-      Some((planChangeLogger, "AQE Post Stage Creation")))
     val queryStage = plan match {
-      case s: ShuffleExchangeLike =>
-        if (!newPlan.isInstanceOf[ShuffleExchangeLike]) {
-          throw SparkException.internalError(
-            "Custom columnar rules cannot transform shuffle node to something else.")
+      case e: Exchange =>
+        val optimized = e.withNewChildren(Seq(optimizeQueryStage(e.child, isFinalStage = false)))
+        val newPlan = applyPhysicalRules(
+          optimized,
+          postStageCreationRules(outputsColumnar = plan.supportsColumnar),
+          Some((planChangeLogger, "AQE Post Stage Creation")))
+        if (e.isInstanceOf[ShuffleExchangeLike]) {
+          if (!newPlan.isInstanceOf[ShuffleExchangeLike]) {
+            throw SparkException.internalError(
+              "Custom columnar rules cannot transform shuffle node to something else.")
+          }
+          ShuffleQueryStageExec(currentStageId, newPlan, e.canonicalized)
+        } else {
+          assert(e.isInstanceOf[BroadcastExchangeLike])
+          if (!newPlan.isInstanceOf[BroadcastExchangeLike]) {
+            throw SparkException.internalError(
+              "Custom columnar rules cannot transform broadcast node to something else.")
+          }
+          BroadcastQueryStageExec(currentStageId, newPlan, e.canonicalized)
         }
-        ShuffleQueryStageExec(currentStageId, newPlan, s.canonicalized)
-      case b: BroadcastExchangeLike =>
-        if (!newPlan.isInstanceOf[BroadcastExchangeLike]) {
-          throw SparkException.internalError(
-            "Custom columnar rules cannot transform broadcast node to something else.")
-        }
-        BroadcastQueryStageExec(currentStageId, newPlan, b.canonicalized)
       case i: InMemoryTableScanExec =>
-        if (!newPlan.isInstanceOf[InMemoryTableScanExec]) {
-          throw SparkException.internalError("Custom columnar rules cannot transform " +
-            "`InMemoryTableScanExec` node to something else.")
-        }
-        TableCacheQueryStageExec(currentStageId, newPlan.asInstanceOf[InMemoryTableScanExec])
+        // No need to optimize `InMemoryTableScanExec` as it's a leaf node.
+        TableCacheQueryStageExec(currentStageId, i)
     }
     currentStageId += 1
     setLogicalLinkForNewQueryStage(queryStage, plan)

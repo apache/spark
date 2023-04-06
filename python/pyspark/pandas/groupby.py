@@ -2282,7 +2282,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
             # the index in some cases.
             # When Spark output type is specified, without executing it, we don't know
             # if we should restore the index or not. For instance, see the example in
-            # https://github.com/pyspark.pandas/issues/628.
+            # https://github.com/databricks/koalas/issues/628.
             pdf, _, _, _, _ = InternalFrame.prepare_pandas_frame(
                 pdf, retain_index=retain_index, prefer_timestamp_ntz=prefer_timestamp_ntz
             )

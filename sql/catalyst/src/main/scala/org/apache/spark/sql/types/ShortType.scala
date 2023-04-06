@@ -45,7 +45,7 @@ class ShortType private() extends IntegralType {
    */
   override def defaultSize: Int = 2
 
-  override def physicalDataType: PhysicalDataType = PhysicalShortType
+  private[sql] override def physicalDataType: PhysicalDataType = PhysicalShortType
 
   override def simpleString: String = "smallint"
 

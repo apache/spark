@@ -38,7 +38,7 @@ class CalendarIntervalType private() extends DataType {
 
   override def defaultSize: Int = 16
 
-  override def physicalDataType: PhysicalDataType = PhysicalCalendarIntervalType
+  private[sql] override def physicalDataType: PhysicalDataType = PhysicalCalendarIntervalType
 
   override def typeName: String = "interval"
 

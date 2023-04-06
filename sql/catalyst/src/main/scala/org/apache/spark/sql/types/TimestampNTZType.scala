@@ -48,7 +48,7 @@ class TimestampNTZType private() extends DatetimeType {
    */
   override def defaultSize: Int = 8
 
-  override def physicalDataType: PhysicalDataType = PhysicalLongType
+  private[sql] override def physicalDataType: PhysicalDataType = PhysicalLongType
 
   override def typeName: String = "timestamp_ntz"
 
