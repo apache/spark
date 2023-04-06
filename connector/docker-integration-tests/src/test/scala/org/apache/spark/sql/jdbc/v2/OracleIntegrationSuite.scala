@@ -115,7 +115,7 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTes
       sql(s"ALTER TABLE $tbl ALTER COLUMN id TYPE INTEGER")
     }.getMessage
     assert(msg1.contains(
-      s"Cannot update $catalogName.alt_table field ID: long cannot be cast to int"))
+      s"Cannot update $catalogName.alt_table field ID: decimal(19,0) cannot be cast to int"))
   }
 
   override def caseConvert(tableName: String): String = tableName.toUpperCase(Locale.ROOT)
