@@ -41,7 +41,7 @@ class DataFrameParityTests(DataFrameTestsMixin, ReusedConnectTestCase):
     def test_observe_str(self):
         super().test_observe_str()
 
-    # TODO(SPARK-XXXXX): Support Structured Streaming
+    # TODO(SPARK-43046): Implement DataFrame.dropDuplicatesWithinWatermark
     @unittest.skip("Fails in Spark Connect, should enable.")
     def test_drop_duplicates_within_watermark(self):
         super().test_drop_duplicates_within_watermark()

@@ -2156,7 +2156,7 @@ streamingDf = spark.readStream. ...
 
 # deduplicate using guid column with watermark based on eventTime column
 streamingDf \
-  .withWatermark("eventTime", "10 seconds") \
+  .withWatermark("eventTime", "10 hours") \
   .dropDuplicatesWithinWatermark("guid")
 {% endhighlight %}
 
@@ -2169,7 +2169,7 @@ val streamingDf = spark.readStream. ...  // columns: guid, eventTime, ...
 
 // deduplicate using guid column with watermark based on eventTime column
 streamingDf
-  .withWatermark("eventTime", "10 seconds")
+  .withWatermark("eventTime", "10 hours")
   .dropDuplicatesWithinWatermark("guid")
 {% endhighlight %}
 
@@ -2182,7 +2182,7 @@ Dataset<Row> streamingDf = spark.readStream(). ...;  // columns: guid, eventTime
 
 // deduplicate using guid column with watermark based on eventTime column
 streamingDf
-  .withWatermark("eventTime", "10 seconds")
+  .withWatermark("eventTime", "10 hours")
   .dropDuplicatesWithinWatermark("guid");
 {% endhighlight %}
 
