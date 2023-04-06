@@ -66,6 +66,7 @@ message Relation {
     GroupMap group_map = 31;
     CoGroupMap co_group_map = 32;
     WithWatermark with_watermark = 33;
+    ApplyInPandasWithState apply_in_pandas_with_state = 34;
 
     // NA functions
     NAFill fill_na = 90;
@@ -838,6 +839,22 @@ message CoGroupMap {
 
   // (Required) Input user-defined function.
   CommonInlineUserDefinedFunction func = 5;
+}
+
+message ApplyInPandasWithState {
+  Relation input = 1;
+
+  repeated Expression grouping_expressions = 2;
+
+  CommonInlineUserDefinedFunction func = 3;
+
+  DataType output_schema = 4;
+
+  DataType state_schema = 5;
+
+  string output_mode = 6;
+
+  string timeout_conf = 7;
 }
 
 // Collect arbitrary (named) metrics from a dataset.

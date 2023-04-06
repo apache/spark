@@ -53,6 +53,7 @@ else:
 
 DESCRIPTOR: google.protobuf.descriptor.FileDescriptor
 
+@typing_extensions.final
 class Relation(google.protobuf.message.Message):
     """The main [[Relation]] type. Fundamentally, a relation is a typed container
     that has exactly one explicit relation type set.
@@ -95,6 +96,7 @@ class Relation(google.protobuf.message.Message):
     GROUP_MAP_FIELD_NUMBER: builtins.int
     CO_GROUP_MAP_FIELD_NUMBER: builtins.int
     WITH_WATERMARK_FIELD_NUMBER: builtins.int
+    APPLY_IN_PANDAS_WITH_STATE_FIELD_NUMBER: builtins.int
     FILL_NA_FIELD_NUMBER: builtins.int
     DROP_NA_FIELD_NUMBER: builtins.int
     REPLACE_FIELD_NUMBER: builtins.int
@@ -176,6 +178,8 @@ class Relation(google.protobuf.message.Message):
     @property
     def with_watermark(self) -> global___WithWatermark: ...
     @property
+    def apply_in_pandas_with_state(self) -> global___ApplyInPandasWithState: ...
+    @property
     def fill_na(self) -> global___NAFill:
         """NA functions"""
     @property
@@ -245,6 +249,7 @@ class Relation(google.protobuf.message.Message):
         group_map: global___GroupMap | None = ...,
         co_group_map: global___CoGroupMap | None = ...,
         with_watermark: global___WithWatermark | None = ...,
+        apply_in_pandas_with_state: global___ApplyInPandasWithState | None = ...,
         fill_na: global___NAFill | None = ...,
         drop_na: global___NADrop | None = ...,
         replace: global___NAReplace | None = ...,
@@ -265,6 +270,8 @@ class Relation(google.protobuf.message.Message):
         field_name: typing_extensions.Literal[
             "aggregate",
             b"aggregate",
+            "apply_in_pandas_with_state",
+            b"apply_in_pandas_with_state",
             "approx_quantile",
             b"approx_quantile",
             "catalog",
@@ -366,6 +373,8 @@ class Relation(google.protobuf.message.Message):
         field_name: typing_extensions.Literal[
             "aggregate",
             b"aggregate",
+            "apply_in_pandas_with_state",
+            b"apply_in_pandas_with_state",
             "approx_quantile",
             b"approx_quantile",
             "catalog",
@@ -497,6 +506,7 @@ class Relation(google.protobuf.message.Message):
         "group_map",
         "co_group_map",
         "with_watermark",
+        "apply_in_pandas_with_state",
         "fill_na",
         "drop_na",
         "replace",
@@ -515,6 +525,7 @@ class Relation(google.protobuf.message.Message):
 
 global___Relation = Relation
 
+@typing_extensions.final
 class Unknown(google.protobuf.message.Message):
     """Used for testing purposes only."""
 
@@ -526,6 +537,7 @@ class Unknown(google.protobuf.message.Message):
 
 global___Unknown = Unknown
 
+@typing_extensions.final
 class RelationCommon(google.protobuf.message.Message):
     """Common metadata of all relations."""
 
@@ -558,11 +570,13 @@ class RelationCommon(google.protobuf.message.Message):
 
 global___RelationCommon = RelationCommon
 
+@typing_extensions.final
 class SQL(google.protobuf.message.Message):
     """Relation that uses a SQL query to generate the output."""
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
+    @typing_extensions.final
     class ArgsEntry(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -610,6 +624,7 @@ class SQL(google.protobuf.message.Message):
 
 global___SQL = SQL
 
+@typing_extensions.final
 class Read(google.protobuf.message.Message):
     """Relation that reads from a file / table or other data source. Does not have additional
     inputs.
@@ -617,9 +632,11 @@ class Read(google.protobuf.message.Message):
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
+    @typing_extensions.final
     class NamedTable(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
+        @typing_extensions.final
         class OptionsEntry(google.protobuf.message.Message):
             DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -659,9 +676,11 @@ class Read(google.protobuf.message.Message):
             ],
         ) -> None: ...
 
+    @typing_extensions.final
     class DataSource(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
+        @typing_extensions.final
         class OptionsEntry(google.protobuf.message.Message):
             DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -806,6 +825,7 @@ class Read(google.protobuf.message.Message):
 
 global___Read = Read
 
+@typing_extensions.final
 class Project(google.protobuf.message.Message):
     """Projection of a bag of expressions for a given input relation.
 
@@ -847,6 +867,7 @@ class Project(google.protobuf.message.Message):
 
 global___Project = Project
 
+@typing_extensions.final
 class Filter(google.protobuf.message.Message):
     """Relation that applies a boolean expression `condition` on each row of `input` to produce
     the output result.
@@ -877,6 +898,7 @@ class Filter(google.protobuf.message.Message):
 
 global___Filter = Filter
 
+@typing_extensions.final
 class Join(google.protobuf.message.Message):
     """Relation of type [[Join]].
 
@@ -975,6 +997,7 @@ class Join(google.protobuf.message.Message):
 
 global___Join = Join
 
+@typing_extensions.final
 class SetOperation(google.protobuf.message.Message):
     """Relation of type [[SetOperation]]"""
 
@@ -1102,6 +1125,7 @@ class SetOperation(google.protobuf.message.Message):
 
 global___SetOperation = SetOperation
 
+@typing_extensions.final
 class Limit(google.protobuf.message.Message):
     """Relation of type [[Limit]] that is used to `limit` rows from the input relation."""
 
@@ -1129,6 +1153,7 @@ class Limit(google.protobuf.message.Message):
 
 global___Limit = Limit
 
+@typing_extensions.final
 class Offset(google.protobuf.message.Message):
     """Relation of type [[Offset]] that is used to read rows staring from the `offset` on
     the input relation.
@@ -1158,6 +1183,7 @@ class Offset(google.protobuf.message.Message):
 
 global___Offset = Offset
 
+@typing_extensions.final
 class Tail(google.protobuf.message.Message):
     """Relation of type [[Tail]] that is used to fetch `limit` rows from the last of the input relation."""
 
@@ -1185,6 +1211,7 @@ class Tail(google.protobuf.message.Message):
 
 global___Tail = Tail
 
+@typing_extensions.final
 class Aggregate(google.protobuf.message.Message):
     """Relation of type [[Aggregate]]."""
 
@@ -1212,6 +1239,7 @@ class Aggregate(google.protobuf.message.Message):
     GROUP_TYPE_CUBE: Aggregate.GroupType.ValueType  # 3
     GROUP_TYPE_PIVOT: Aggregate.GroupType.ValueType  # 4
 
+    @typing_extensions.final
     class Pivot(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -1310,6 +1338,7 @@ class Aggregate(google.protobuf.message.Message):
 
 global___Aggregate = Aggregate
 
+@typing_extensions.final
 class Sort(google.protobuf.message.Message):
     """Relation of type [[Sort]]."""
 
@@ -1365,6 +1394,7 @@ class Sort(google.protobuf.message.Message):
 
 global___Sort = Sort
 
+@typing_extensions.final
 class Drop(google.protobuf.message.Message):
     """Drop specified columns."""
 
@@ -1408,6 +1438,7 @@ class Drop(google.protobuf.message.Message):
 
 global___Drop = Drop
 
+@typing_extensions.final
 class Deduplicate(google.protobuf.message.Message):
     """Relation of type [[Deduplicate]] which have duplicate rows removed, could consider either only
     the subset of columns or all the columns.
@@ -1472,6 +1503,7 @@ class Deduplicate(google.protobuf.message.Message):
 
 global___Deduplicate = Deduplicate
 
+@typing_extensions.final
 class LocalRelation(google.protobuf.message.Message):
     """A relation that does not need to be qualified by name."""
 
@@ -1519,6 +1551,7 @@ class LocalRelation(google.protobuf.message.Message):
 
 global___LocalRelation = LocalRelation
 
+@typing_extensions.final
 class Sample(google.protobuf.message.Message):
     """Relation of type [[Sample]] that samples a fraction of the dataset."""
 
@@ -1603,6 +1636,7 @@ class Sample(google.protobuf.message.Message):
 
 global___Sample = Sample
 
+@typing_extensions.final
 class Range(google.protobuf.message.Message):
     """Relation of type [[Range]] that generates a sequence of integers."""
 
@@ -1671,6 +1705,7 @@ class Range(google.protobuf.message.Message):
 
 global___Range = Range
 
+@typing_extensions.final
 class SubqueryAlias(google.protobuf.message.Message):
     """Relation alias."""
 
@@ -1708,6 +1743,7 @@ class SubqueryAlias(google.protobuf.message.Message):
 
 global___SubqueryAlias = SubqueryAlias
 
+@typing_extensions.final
 class Repartition(google.protobuf.message.Message):
     """Relation repartition."""
 
@@ -1755,6 +1791,7 @@ class Repartition(google.protobuf.message.Message):
 
 global___Repartition = Repartition
 
+@typing_extensions.final
 class ShowString(google.protobuf.message.Message):
     """Compose the string representing rows for output.
     It will invoke 'Dataset.showString' to compute the results.
@@ -1804,6 +1841,7 @@ class ShowString(google.protobuf.message.Message):
 
 global___ShowString = ShowString
 
+@typing_extensions.final
 class StatSummary(google.protobuf.message.Message):
     """Computes specified statistics for numeric and string columns.
     It will invoke 'Dataset.summary' (same as 'StatFunctions.summary')
@@ -1851,6 +1889,7 @@ class StatSummary(google.protobuf.message.Message):
 
 global___StatSummary = StatSummary
 
+@typing_extensions.final
 class StatDescribe(google.protobuf.message.Message):
     """Computes basic statistics for numeric and string columns, including count, mean, stddev, min,
     and max. If no columns are given, this function computes statistics for all numerical or
@@ -1884,6 +1923,7 @@ class StatDescribe(google.protobuf.message.Message):
 
 global___StatDescribe = StatDescribe
 
+@typing_extensions.final
 class StatCrosstab(google.protobuf.message.Message):
     """Computes a pair-wise frequency table of the given columns. Also known as a contingency table.
     It will invoke 'Dataset.stat.crosstab' (same as 'StatFunctions.crossTabulate')
@@ -1925,6 +1965,7 @@ class StatCrosstab(google.protobuf.message.Message):
 
 global___StatCrosstab = StatCrosstab
 
+@typing_extensions.final
 class StatCov(google.protobuf.message.Message):
     """Calculate the sample covariance of two numerical columns of a DataFrame.
     It will invoke 'Dataset.stat.cov' (same as 'StatFunctions.calculateCov') to compute the results.
@@ -1959,6 +2000,7 @@ class StatCov(google.protobuf.message.Message):
 
 global___StatCov = StatCov
 
+@typing_extensions.final
 class StatCorr(google.protobuf.message.Message):
     """Calculates the correlation of two columns of a DataFrame. Currently only supports the Pearson
     Correlation Coefficient. It will invoke 'Dataset.stat.corr' (same as
@@ -2018,6 +2060,7 @@ class StatCorr(google.protobuf.message.Message):
 
 global___StatCorr = StatCorr
 
+@typing_extensions.final
 class StatApproxQuantile(google.protobuf.message.Message):
     """Calculates the approximate quantiles of numerical columns of a DataFrame.
     It will invoke 'Dataset.stat.approxQuantile' (same as 'StatFunctions.approxQuantile')
@@ -2080,6 +2123,7 @@ class StatApproxQuantile(google.protobuf.message.Message):
 
 global___StatApproxQuantile = StatApproxQuantile
 
+@typing_extensions.final
 class StatFreqItems(google.protobuf.message.Message):
     """Finding frequent items for columns, possibly with false positives.
     It will invoke 'Dataset.stat.freqItems' (same as 'StatFunctions.freqItems')
@@ -2128,6 +2172,7 @@ class StatFreqItems(google.protobuf.message.Message):
 
 global___StatFreqItems = StatFreqItems
 
+@typing_extensions.final
 class StatSampleBy(google.protobuf.message.Message):
     """Returns a stratified sample without replacement based on the fraction
     given on each stratum.
@@ -2137,6 +2182,7 @@ class StatSampleBy(google.protobuf.message.Message):
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
+    @typing_extensions.final
     class Fraction(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -2218,6 +2264,7 @@ class StatSampleBy(google.protobuf.message.Message):
 
 global___StatSampleBy = StatSampleBy
 
+@typing_extensions.final
 class NAFill(google.protobuf.message.Message):
     """Replaces null values.
     It will invoke 'Dataset.na.fill' (same as 'DataFrameNaFunctions.fill') to compute the results.
@@ -2276,6 +2323,7 @@ class NAFill(google.protobuf.message.Message):
 
 global___NAFill = NAFill
 
+@typing_extensions.final
 class NADrop(google.protobuf.message.Message):
     """Drop rows containing null values.
     It will invoke 'Dataset.na.drop' (same as 'DataFrameNaFunctions.drop') to compute the results.
@@ -2344,6 +2392,7 @@ class NADrop(google.protobuf.message.Message):
 
 global___NADrop = NADrop
 
+@typing_extensions.final
 class NAReplace(google.protobuf.message.Message):
     """Replaces old values with the corresponding values.
     It will invoke 'Dataset.na.replace' (same as 'DataFrameNaFunctions.replace')
@@ -2352,6 +2401,7 @@ class NAReplace(google.protobuf.message.Message):
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
+    @typing_extensions.final
     class Replacement(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -2428,6 +2478,7 @@ class NAReplace(google.protobuf.message.Message):
 
 global___NAReplace = NAReplace
 
+@typing_extensions.final
 class ToDF(google.protobuf.message.Message):
     """Rename columns on the input relation by the same length of names."""
 
@@ -2463,11 +2514,13 @@ class ToDF(google.protobuf.message.Message):
 
 global___ToDF = ToDF
 
+@typing_extensions.final
 class WithColumnsRenamed(google.protobuf.message.Message):
     """Rename columns on the input relation by a map with name to name mapping."""
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
+    @typing_extensions.final
     class RenameColumnsMapEntry(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -2519,6 +2572,7 @@ class WithColumnsRenamed(google.protobuf.message.Message):
 
 global___WithColumnsRenamed = WithColumnsRenamed
 
+@typing_extensions.final
 class WithColumns(google.protobuf.message.Message):
     """Adding columns or replacing the existing columns that have the same names."""
 
@@ -2563,6 +2617,7 @@ class WithColumns(google.protobuf.message.Message):
 
 global___WithColumns = WithColumns
 
+@typing_extensions.final
 class WithWatermark(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -2595,6 +2650,7 @@ class WithWatermark(google.protobuf.message.Message):
 
 global___WithWatermark = WithWatermark
 
+@typing_extensions.final
 class Hint(google.protobuf.message.Message):
     """Specify a hint over a relation. Hint should have a name and optional parameters."""
 
@@ -2640,11 +2696,13 @@ class Hint(google.protobuf.message.Message):
 
 global___Hint = Hint
 
+@typing_extensions.final
 class Unpivot(google.protobuf.message.Message):
     """Unpivot a DataFrame from wide format to long format, optionally leaving identifier columns set."""
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
+    @typing_extensions.final
     class Values(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -2726,6 +2784,7 @@ class Unpivot(google.protobuf.message.Message):
 
 global___Unpivot = Unpivot
 
+@typing_extensions.final
 class ToSchema(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -2755,6 +2814,7 @@ class ToSchema(google.protobuf.message.Message):
 
 global___ToSchema = ToSchema
 
+@typing_extensions.final
 class RepartitionByExpression(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -2813,6 +2873,7 @@ class RepartitionByExpression(google.protobuf.message.Message):
 
 global___RepartitionByExpression = RepartitionByExpression
 
+@typing_extensions.final
 class MapPartitions(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -2867,6 +2928,7 @@ class MapPartitions(google.protobuf.message.Message):
 
 global___MapPartitions = MapPartitions
 
+@typing_extensions.final
 class GroupMap(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -2909,6 +2971,7 @@ class GroupMap(google.protobuf.message.Message):
 
 global___GroupMap = GroupMap
 
+@typing_extensions.final
 class CoGroupMap(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -2980,6 +3043,84 @@ class CoGroupMap(google.protobuf.message.Message):
 
 global___CoGroupMap = CoGroupMap
 
+@typing_extensions.final
+class ApplyInPandasWithState(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    INPUT_FIELD_NUMBER: builtins.int
+    GROUPING_EXPRESSIONS_FIELD_NUMBER: builtins.int
+    FUNC_FIELD_NUMBER: builtins.int
+    OUTPUT_SCHEMA_FIELD_NUMBER: builtins.int
+    STATE_SCHEMA_FIELD_NUMBER: builtins.int
+    OUTPUT_MODE_FIELD_NUMBER: builtins.int
+    TIMEOUT_CONF_FIELD_NUMBER: builtins.int
+    @property
+    def input(self) -> global___Relation: ...
+    @property
+    def grouping_expressions(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+        pyspark.sql.connect.proto.expressions_pb2.Expression
+    ]: ...
+    @property
+    def func(self) -> pyspark.sql.connect.proto.expressions_pb2.CommonInlineUserDefinedFunction: ...
+    @property
+    def output_schema(self) -> pyspark.sql.connect.proto.types_pb2.DataType: ...
+    @property
+    def state_schema(self) -> pyspark.sql.connect.proto.types_pb2.DataType: ...
+    output_mode: builtins.str
+    timeout_conf: builtins.str
+    def __init__(
+        self,
+        *,
+        input: global___Relation | None = ...,
+        grouping_expressions: collections.abc.Iterable[
+            pyspark.sql.connect.proto.expressions_pb2.Expression
+        ]
+        | None = ...,
+        func: pyspark.sql.connect.proto.expressions_pb2.CommonInlineUserDefinedFunction
+        | None = ...,
+        output_schema: pyspark.sql.connect.proto.types_pb2.DataType | None = ...,
+        state_schema: pyspark.sql.connect.proto.types_pb2.DataType | None = ...,
+        output_mode: builtins.str = ...,
+        timeout_conf: builtins.str = ...,
+    ) -> None: ...
+    def HasField(
+        self,
+        field_name: typing_extensions.Literal[
+            "func",
+            b"func",
+            "input",
+            b"input",
+            "output_schema",
+            b"output_schema",
+            "state_schema",
+            b"state_schema",
+        ],
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "func",
+            b"func",
+            "grouping_expressions",
+            b"grouping_expressions",
+            "input",
+            b"input",
+            "output_mode",
+            b"output_mode",
+            "output_schema",
+            b"output_schema",
+            "state_schema",
+            b"state_schema",
+            "timeout_conf",
+            b"timeout_conf",
+        ],
+    ) -> None: ...
+
+global___ApplyInPandasWithState = ApplyInPandasWithState
+
+@typing_extensions.final
 class CollectMetrics(google.protobuf.message.Message):
     """Collect arbitrary (named) metrics from a dataset."""
 
@@ -3020,6 +3161,7 @@ class CollectMetrics(google.protobuf.message.Message):
 
 global___CollectMetrics = CollectMetrics
 
+@typing_extensions.final
 class Parse(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -3041,6 +3183,7 @@ class Parse(google.protobuf.message.Message):
     PARSE_FORMAT_CSV: Parse.ParseFormat.ValueType  # 1
     PARSE_FORMAT_JSON: Parse.ParseFormat.ValueType  # 2
 
+    @typing_extensions.final
     class OptionsEntry(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
