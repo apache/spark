@@ -573,14 +573,4 @@ private[spark] object HiveUtils extends Logging {
       table.copy(schema = StructType((dataCols ++ partCols).toSeq))
     }
   }
-
-  def shimSessionState(state: SessionState, //
-                       field: String, stream: java.io.OutputStream): Unit = {
-    val fieldObj = state.getClass.getField(field)
-    val fieldValue = fieldObj.getType
-      // eg. PrintStream -> SessionStream (CDP 7.1 specified)
-      .getConstructor(classOf[java.io.OutputStream])
-      .newInstance(stream)
-    fieldObj.set(state, fieldValue)
-  }
 }

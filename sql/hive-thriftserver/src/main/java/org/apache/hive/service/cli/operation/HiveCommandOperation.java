@@ -43,7 +43,6 @@ import org.apache.hive.service.cli.RowSet;
 import org.apache.hive.service.cli.RowSetFactory;
 import org.apache.hive.service.cli.TableSchema;
 import org.apache.hive.service.cli.session.HiveSession;
-import org.apache.spark.sql.hive.HiveUtils;
 
 /**
  * Executes a HiveCommand
@@ -79,8 +78,8 @@ public class HiveCommandOperation extends ExecuteStatementOperation {
       LOG.error("Error in creating temp output file ", e);
       try {
         sessionState.in = null;
-        HiveUtils.shimSessionState(sessionState, "out", new PrintStream(System.out, true, UTF_8.name()));
-        HiveUtils.shimSessionState(sessionState, "err", new PrintStream(System.err, true, UTF_8.name()));
+        shimSessionState(sessionState, "out", new PrintStream(System.out, true, UTF_8.name()));
+        shimSessionState(sessionState, "err", new PrintStream(System.err, true, UTF_8.name()));
       } catch (UnsupportedEncodingException ee) {
         LOG.error("Error creating PrintStream", e);
         ee.printStackTrace();
@@ -90,6 +89,16 @@ public class HiveCommandOperation extends ExecuteStatementOperation {
         LOG.error("Something's wrong when shim session state ", e1);
       }
     }
+  }
+
+  private void shimSessionState(SessionState state, //
+                                String field, java.io.OutputStream stream) throws Exception {
+    java.lang.reflect.Field fieldObj = state.getClass().getField(field);
+    Object fieldValue = fieldObj.getType()
+            // eg. PrintStream -> SessionStream (CDP 7.1 specified)
+            .getConstructor(java.io.OutputStream.class)
+            .newInstance(stream);
+    fieldObj.set(state, fieldValue);
   }
 
 
