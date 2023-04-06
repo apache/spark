@@ -275,8 +275,6 @@ class ExecutorSuite extends SparkFunSuite
   test("SPARK-39696: Using accumulators should not cause heartbeat to fail") {
     val conf = new SparkConf().setMaster("local").setAppName("executor suite test")
     conf.set(EXECUTOR_HEARTBEAT_INTERVAL.key, "1ms")
-    conf.set(STORAGE_BLOCKMANAGER_HEARTBEAT_TIMEOUT.key, "500ms")
-    conf.set(Network.NETWORK_TIMEOUT_INTERVAL.key, "400ms")
     sc = new SparkContext(conf)
 
     val accums = (1 to 10).map(i => sc.longAccumulator(s"mapperRunAccumulator${i}"))
