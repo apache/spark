@@ -108,7 +108,10 @@ abstract class JdbcDialect extends Serializable with Logging {
   /**
    * Convert java.sql.Timestamp to a Long value (internal representation of a TimestampNTZType)
    * holding the microseconds since the epoch of 1970-01-01 00:00:00Z for this timestamp.
+   * @param Java Timestamp returned from JDBC driver getTimestamp method.
+   * @return A long value holding the microseconds from epoch to this time instant.
    */
+  @Since("3.5.0")
   def convertJavaTimestampToTimestampNTZ(t: Timestamp): Long = {
     DateTimeUtils.fromJavaTimestampNoRebase(t)
   }
@@ -116,7 +119,10 @@ abstract class JdbcDialect extends Serializable with Logging {
   /**
    * Converts a LocalDateTime representing a TimestampNTZ type to an
    * instance of `java.sql.Timestamp`.
+   * @param LocalDateTime representing a TimestampNTZType.
+   * @return A Java Timestamp representing this LocalDateTime.
    */
+  @Since("3.5.0")
   def convertTimestampNTZToJavaTimestamp(ldt: LocalDateTime): Timestamp = {
     val micros = localDateTimeToMicros(ldt)
     toJavaTimestampNoRebase(micros)
