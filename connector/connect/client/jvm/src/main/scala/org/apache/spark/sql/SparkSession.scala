@@ -70,7 +70,7 @@ class SparkSession private[sql] (
   private[this] val allocator = new RootAllocator()
 
   // a unique session ID for this session from client.
-  private[sql] lazy val sessionId: String = client.sessionId
+  private[sql] def sessionId: String = client.sessionId
 
   lazy val version: String = {
     client.analyze(proto.AnalyzePlanRequest.AnalyzeCase.SPARK_VERSION).getSparkVersion.getVersion

@@ -16,12 +16,13 @@
  */
 package org.apache.spark.sql
 
-import org.apache.spark.SparkException
-
 import java.util.{Collections, Locale}
+
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.util.control.NonFatal
+
+import org.apache.spark.SparkException
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder

@@ -18,14 +18,16 @@ package org.apache.spark.sql
 
 import java.io.{ByteArrayOutputStream, PrintStream}
 import java.nio.file.Files
-import scala.collection.JavaConverters._
-import io.grpc.StatusRuntimeException
 
+import scala.collection.JavaConverters._
+
+import io.grpc.StatusRuntimeException
 import java.util.Properties
 import org.apache.commons.io.FileUtils
 import org.apache.commons.io.output.TeeOutputStream
 import org.apache.commons.lang3.{JavaVersion, SystemUtils}
 import org.scalactic.TolerantNumerics
+
 import org.apache.spark.{SPARK_VERSION, SparkException}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.StringEncoder
 import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
