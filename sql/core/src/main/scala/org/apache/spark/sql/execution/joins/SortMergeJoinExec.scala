@@ -1013,14 +1013,17 @@ case class SortMergeJoinExec(
     val rightResultVars = genOneSideJoinVars(
       ctx, rightOutputRow, right, setDefaultValue = true)
     val resultVars = leftResultVars ++ rightResultVars
+    // The streamedVars may be evaluated again in the following consumeFullOuterJoinRow method,
+    // so generate the condition checking code with their copies.
     val copiedLeftResultVars = leftResultVars.map(v => v.copy())
     val (leftBefore, _) = splitVarsByCondition(left.output, copiedLeftResultVars)
     val (_, conditionCheckWithoutLeftVars, _) =
       getJoinCondition(ctx, copiedLeftResultVars, left, right, Some(rightOutputRow))
     val conditionCheck =
-      s"""$leftBefore
+      s"""
+         |$leftBefore
          |$conditionCheckWithoutLeftVars
-         |""".stripMargin
+       """.stripMargin
 
     // Generate code for result output in separate function, as we need to output result from
     // multiple places in join code.
