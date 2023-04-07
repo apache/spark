@@ -20,7 +20,6 @@ import tarfile
 import traceback
 import urllib.request
 from shutil import rmtree
-from pyspark.errors import PySparkRuntimeError
 
 # NOTE that we shouldn't import pyspark here because this is used in
 # setup.py, and assume there's no PySpark imported.
