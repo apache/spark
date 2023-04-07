@@ -632,29 +632,6 @@ case class SortMergeJoinExec(
     }.unzip
   }
 
-  /**
-   * Splits variables based on whether it's used by condition or not, returns the code to create
-   * these variables before the condition and after the condition.
-   *
-   * Only a few columns are used by condition, then we can skip the accessing of those columns
-   * that are not used by condition also filtered out by condition.
-   */
-  private def splitVarsByCondition(
-      attributes: Seq[Attribute],
-      variables: Seq[ExprCode]): (String, String) = {
-    if (condition.isDefined) {
-      val condRefs = condition.get.references
-      val (used, notUsed) = attributes.zip(variables).partition{ case (a, ev) =>
-        condRefs.contains(a)
-      }
-      val beforeCond = evaluateVariables(used.map(_._2))
-      val afterCond = evaluateVariables(notUsed.map(_._2))
-      (beforeCond, afterCond)
-    } else {
-      (evaluateVariables(variables), "")
-    }
-  }
-
   override def needCopyResult: Boolean = true
 
   /**
@@ -1036,19 +1013,11 @@ case class SortMergeJoinExec(
     val rightResultVars = genOneSideJoinVars(
       ctx, rightOutputRow, right, setDefaultValue = true)
     val resultVars = leftResultVars ++ rightResultVars
-    // Evaluate the variables on the left and used in the condition but do not clear the code as
-    // they may be used in the following function.
-    val conditionAttrs = condition.map(_.references).getOrElse(AttributeSet.empty)
-    val evaluateLeftVars =
-      leftResultVars.zip(left.output)
-        .filter(p => conditionAttrs.contains(p._2))
-        .map(_._1.code)
-        .fold(EmptyBlock)(_ + _)
-    // Generate condition check code without evaluating the left variable again.
+    val (leftBefore, _) = splitVarsByCondition(left.output, leftResultVars.map(v => v.copy()))
     val (_, conditionCheckWithoutLeftVars, _) = getJoinCondition(
       ctx, leftResultVars.map(_.copy(code = EmptyBlock)), left, right, Some(rightOutputRow))
     val conditionCheck =
-      s"""$evaluateLeftVars
+      s"""$leftBefore
          |$conditionCheckWithoutLeftVars
          |""".stripMargin
 

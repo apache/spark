@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.joins
 
-import org.apache.spark.sql.catalyst.expressions.{BindReferences, BoundReference}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, BindReferences, BoundReference}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.execution.{CodegenSupport, SparkPlan}
@@ -93,6 +93,29 @@ trait JoinCodegenSupport extends CodegenSupport with BaseJoinExec {
       } else {
         ev
       }
+    }
+  }
+
+  /**
+   * Splits variables based on whether it's used by condition or not, returns the code to create
+   * these variables before the condition and after the condition.
+   *
+   * Only a few columns are used by condition, then we can skip the accessing of those columns
+   * that are not used by condition also filtered out by condition.
+   */
+  protected def splitVarsByCondition(
+      attributes: Seq[Attribute],
+      variables: Seq[ExprCode]): (String, String) = {
+    if (condition.isDefined) {
+      val condRefs = condition.get.references
+      val (used, notUsed) = attributes.zip(variables).partition{ case (a, ev) =>
+        condRefs.contains(a)
+      }
+      val beforeCond = evaluateVariables(used.map(_._2))
+      val afterCond = evaluateVariables(notUsed.map(_._2))
+      (beforeCond, afterCond)
+    } else {
+      (evaluateVariables(variables), "")
     }
   }
 }
