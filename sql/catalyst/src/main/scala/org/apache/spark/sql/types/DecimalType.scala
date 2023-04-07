@@ -61,6 +61,7 @@ case class DecimalType(precision: Int, scale: Int) extends FractionalType {
 
   private[sql] type InternalType = Decimal
   @transient private[sql] lazy val tag = typeTag[InternalType]
+
   private[sql] val asIntegral = Decimal.DecimalAsIfIntegral
 
   override def typeName: String = s"decimal($precision,$scale)"
