@@ -201,7 +201,7 @@ public abstract class BloomFilter {
    * @param n expected insertions (must be positive)
    * @param p false positive rate (must be 0 < p < 1)
    */
-  private static long optimalNumOfBits(long n, double p) {
+  static long optimalNumOfBits(long n, double p) {
     return (long) (-n * Math.log(p) / (Math.log(2) * Math.log(2)));
   }
 

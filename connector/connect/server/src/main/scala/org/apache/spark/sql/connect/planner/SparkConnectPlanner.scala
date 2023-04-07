@@ -59,6 +59,7 @@ import org.apache.spark.sql.internal.CatalogImpl
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.Utils
+import org.apache.spark.util.sketch.BloomFilterHelper
 
 final case class InvalidCommandInput(
     private val message: String = "",
@@ -1187,7 +1188,7 @@ class SparkConnectPlanner(val session: SparkSession) {
             }
             // Calculate numBits through expectedNumItems and fpp,
             // refer to `BloomFilter.optimalNumOfBits(long, double)`.
-            val numBits = (-expectedNumItems * Math.log(fpp) / (Math.log(2) * Math.log(2))).toLong
+            val numBits = BloomFilterHelper.optimalNumOfBits(expectedNumItems, fpp)
             if (numBits <= 0L) {
               throw InvalidPlanInput("Number of bits must be positive")
             }
