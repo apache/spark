@@ -79,7 +79,7 @@ case class BloomFilterAggregate(
             "exprName" -> "estimatedNumItems or numBits"
           )
         )
-      case (LongType | StringType, LongType, LongType) =>
+      case (LongType | IntegerType | ShortType | ByteType | StringType, LongType, LongType) =>
         if (!estimatedNumItemsExpression.foldable) {
           DataTypeMismatch(
             errorSubClass = "NON_FOLDABLE_INPUT",
@@ -154,6 +154,9 @@ case class BloomFilterAggregate(
   // Mark as lazy so that `updater` is not evaluated during tree transformation.
   private lazy val updater: BloomFilterUpdater = first.dataType match {
     case LongType => LongUpdater
+    case IntegerType => IntUpdater
+    case ShortType => ShortUpdater
+    case ByteType => ByteUpdater
     case StringType => BinaryUpdater
   }
 
@@ -239,6 +242,21 @@ private trait BloomFilterUpdater {
 private object LongUpdater extends BloomFilterUpdater with Serializable {
   override def update(bf: BloomFilter, v: Any): Boolean =
     bf.putLong(v.asInstanceOf[Long])
+}
+
+private object IntUpdater extends BloomFilterUpdater with Serializable {
+  override def update(bf: BloomFilter, v: Any): Boolean =
+    bf.putLong(v.asInstanceOf[Int])
+}
+
+private object ShortUpdater extends BloomFilterUpdater with Serializable {
+  override def update(bf: BloomFilter, v: Any): Boolean =
+    bf.putLong(v.asInstanceOf[Short])
+}
+
+private object ByteUpdater extends BloomFilterUpdater with Serializable {
+  override def update(bf: BloomFilter, v: Any): Boolean =
+    bf.putLong(v.asInstanceOf[Byte])
 }
 
 private object BinaryUpdater extends BloomFilterUpdater with Serializable {

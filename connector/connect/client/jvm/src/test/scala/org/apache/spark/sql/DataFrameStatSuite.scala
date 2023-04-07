@@ -226,6 +226,16 @@ class DataFrameStatSuite extends RemoteSparkSession {
     assert(data.forall(filter2.mightContain))
   }
 
+  test("Bloom filter -- Wrong dataType Column") {
+    val session = spark
+    import session.implicits._
+    val data = Range(0, 1000).map(_.toDouble)
+    val message = intercept[StatusRuntimeException] {
+      data.toDF("id").stat.bloomFilter("id", 1000, 0.03)
+    }.getMessage
+    assert(message.contains("DATATYPE_MISMATCH.BLOOM_FILTER_WRONG_TYPE"))
+  }
+
   test("Bloom filter test invalid inputs") {
     val df = spark.range(1000).toDF("id")
     val message1 = intercept[StatusRuntimeException] {

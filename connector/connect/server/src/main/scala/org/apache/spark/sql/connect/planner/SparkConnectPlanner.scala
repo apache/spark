@@ -1155,27 +1155,11 @@ class SparkConnectPlanner(val session: SparkSession) {
         }
         Some(Lead(children.head, children(1), children(2), ignoreNulls))
 
-      case "bloom_filter_agg" if fun.getArgumentsCount == 5 =>
-        // [col, catalogString: String, expectedNumItems: Long, numBits: Long, fpp: Double]
+      case "bloom_filter_agg" if fun.getArgumentsCount == 4 =>
+        // [col, expectedNumItems: Long, numBits: Long, fpp: Double]
         val children = fun.getArgumentsList.asScala.toSeq.map(transformExpression)
-        val dt = {
-          val ddl = children(1) match {
-            case StringLiteral(s) => s
-            case other =>
-              throw InvalidPlanInput(s"col dataType should be a literal string, but got $other")
-          }
-          DataType.fromDDL(ddl)
-        }
-        val col = dt match {
-          case IntegerType | ShortType | ByteType => Cast(children.head, LongType)
-          case LongType | StringType => children.head
-          case other =>
-            throw InvalidPlanInput(
-              s"Bloom filter only supports integral types, " +
-                s"and does not support type $other.")
-        }
 
-        val fpp = children(4) match {
+        val fpp = children(3) match {
           case DoubleLiteral(d) => d
           case _ =>
             throw InvalidPlanInput("False positive must be double literal.")
@@ -1184,7 +1168,7 @@ class SparkConnectPlanner(val session: SparkSession) {
         if (fpp.isNaN) {
           // Use expectedNumItems and numBits when `fpp.isNaN` if true.
           // Check expectedNumItems > 0L
-          val expectedNumItemsExpr = children(2)
+          val expectedNumItemsExpr = children(1)
           val expectedNumItems = expectedNumItemsExpr match {
             case Literal(l: Long, LongType) => l
             case _ =>
@@ -1194,7 +1178,7 @@ class SparkConnectPlanner(val session: SparkSession) {
             throw InvalidPlanInput("Expected insertions must be positive.")
           }
           // Check numBits > 0L
-          val numBitsExpr = children(3)
+          val numBitsExpr = children(2)
           val numBits = numBitsExpr match {
             case Literal(l: Long, LongType) => l
             case _ =>
@@ -1205,7 +1189,7 @@ class SparkConnectPlanner(val session: SparkSession) {
           }
           // Create BloomFilterAggregate with expectedNumItemsExpr and numBitsExpr.
           Some(
-            new BloomFilterAggregate(col, expectedNumItemsExpr, numBitsExpr)
+            new BloomFilterAggregate(children.head, expectedNumItemsExpr, numBitsExpr)
               .toAggregateExpression())
 
         } else {
@@ -1214,7 +1198,7 @@ class SparkConnectPlanner(val session: SparkSession) {
 
           // Use expectedNumItems and fpp when `fpp.isNaN` if false.
           // Check expectedNumItems > 0L
-          val expectedNumItemsExpr = children(2)
+          val expectedNumItemsExpr = children(1)
           val expectedNumItems = expectedNumItemsExpr match {
             case Literal(l: Long, LongType) => l
             case _ =>
@@ -1236,7 +1220,10 @@ class SparkConnectPlanner(val session: SparkSession) {
           }
           // Create BloomFilterAggregate with expectedNumItemsExpr and new numBits.
           Some(
-            new BloomFilterAggregate(col, expectedNumItemsExpr, Literal(numBits, LongType))
+            new BloomFilterAggregate(
+              children.head,
+              expectedNumItemsExpr,
+              Literal(numBits, LongType))
               .toAggregateExpression())
         }
 
