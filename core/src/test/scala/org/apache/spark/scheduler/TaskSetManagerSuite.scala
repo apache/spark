@@ -200,7 +200,7 @@ class TaskSetManagerSuite
   with PrivateMethodTester
   with Eventually
   with Logging {
-  import TaskLocality._
+  import TaskLocality.{ANY, PROCESS_LOCAL, NO_PREF, NODE_LOCAL, RACK_LOCAL}
 
   private val conf = new SparkConf
 
