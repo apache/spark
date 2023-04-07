@@ -339,10 +339,8 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
         "type" ->  toSQLType(dataType)))
   }
 
-  def noDefaultForDataTypeError(dataType: DataType): SparkRuntimeException = {
-    new SparkRuntimeException(
-      errorClass = "_LEGACY_ERROR_TEMP_2004",
-      messageParameters = Map("dataType" -> dataType.toString()))
+  def noDefaultForDataTypeError(dataType: DataType): SparkException = {
+    SparkException.internalError(s"No default value for type: ${toSQLType(dataType)}.")
   }
 
   def orderedOperationUnsupportedByDataTypeError(
@@ -350,6 +348,13 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
     new SparkIllegalArgumentException(
       errorClass = "_LEGACY_ERROR_TEMP_2005",
       messageParameters = Map("dataType" -> dataType.toString()))
+  }
+
+  def orderedOperationUnsupportedByDataTypeError(
+      dataType: String): SparkIllegalArgumentException = {
+    new SparkIllegalArgumentException(
+      errorClass = "_LEGACY_ERROR_TEMP_2005",
+      messageParameters = Map("dataType" -> dataType))
   }
 
   def regexGroupIndexLessThanZeroError(): SparkIllegalArgumentException = {

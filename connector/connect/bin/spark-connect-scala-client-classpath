@@ -17,9 +17,7 @@
 # limitations under the License.
 #
 
-# Start the spark-connect with server logs printed in the standard output. The script rebuild the
-# server dependencies and start the server at the default port. This can be used to debug client
-# during client development.
+# Get the full classpath for the Spark Connect scala client.
 
 # Go to the Spark project root directory
 FWDIR="$(cd "`dirname "$0"`"/../../..; pwd)"
@@ -28,15 +26,10 @@ export SPARK_HOME=$FWDIR
 
 # Determine the Scala version used in Spark
 SCALA_BINARY_VER=`grep "scala.binary.version" "${SPARK_HOME}/pom.xml" | head -n1 | awk -F '[<>]' '{print $3}'`
+SCALA_VER=`grep "scala.version" "${SPARK_HOME}/pom.xml" | grep ${SCALA_BINARY_VER} | head -n1 | awk -F '[<>]' '{print $3}'`
 SCALA_ARG="-Pscala-${SCALA_BINARY_VER}"
 
-BUILD="${BUILD:-1}"
-if [ "$BUILD" -eq "1" ]; then
-  # Build the jars needed for spark submit and spark connect
-  build/sbt "${SCALA_ARG}" -Phive -Pconnect package || exit 1
-fi
+CONNECT_CLASSPATH="$(build/sbt "${SCALA_ARG}" -DcopyDependencies=false "export connect-client-jvm/fullClasspath" | grep jar | tail -n1)"
+SQL_CLASSPATH="$(build/sbt "${SCALA_ARG}" -DcopyDependencies=false "export sql/fullClasspath" | grep jar | tail -n1)"
 
-# This jar is already in the classpath, but the submit commands wants a jar as the input.
-CONNECT_JAR=`ls "${SPARK_HOME}"/assembly/target/scala-"${SCALA_BINARY_VER}"/jars/spark-connect_*.jar | paste -sd ',' -`
-
-exec "${SPARK_HOME}"/bin/spark-submit "$@" --class org.apache.spark.sql.connect.SimpleSparkConnectService "$CONNECT_JAR"
+echo "$CONNECT_CLASSPATH:$CLASSPATH"

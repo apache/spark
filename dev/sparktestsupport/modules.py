@@ -777,6 +777,7 @@ pyspark_connect = Module(
         "pyspark.ml.connect.functions",
         # ml unittests
         "pyspark.ml.tests.connect.test_connect_function",
+        "pyspark.ml.tests.connect.test_parity_torch_distributor",
     ],
     excluded_python_implementations=[
         "PyPy"  # Skip these tests under PyPy since they require numpy, pandas, and pyarrow and
