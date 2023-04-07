@@ -498,6 +498,7 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
     val conf = new SparkConf()
       .setMaster("local-cluster[0, 3, 1024]")
       .setAppName("test")
+      .set(SCHEDULER_MAX_RETAINED_UNKNOWN_EXECUTORS.key, "1")
 
     sc = new SparkContext(conf)
     val backend = sc.schedulerBackend.asInstanceOf[CoarseGrainedSchedulerBackend]
