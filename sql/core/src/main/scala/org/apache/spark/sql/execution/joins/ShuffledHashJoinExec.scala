@@ -364,10 +364,11 @@ case class ShuffledHashJoinExec(
          |${streamedKeyExprCode.code}
        """.stripMargin
     val streamedKeyAnyNull = s"${streamedKeyExprCode.value}.anyNull()"
-    val (streamedBefore, _) = splitVarsByCondition(streamedOutput, streamedVars.map(v => v.copy()))
+    val copiedStreamedVars = streamedVars.map(v => v.copy())
+    val (streamedBefore, _) = splitVarsByCondition(streamedOutput, copiedStreamedVars)
     // Generate code for join condition
-    val (_, conditionCheckWithoutStreamVars, _) = getJoinCondition(
-      ctx, streamedVars.map(_.copy(code = EmptyBlock)), streamedPlan, buildPlan, Some(buildRow))
+    val (_, conditionCheckWithoutStreamVars, _) =
+      getJoinCondition(ctx, copiedStreamedVars, streamedPlan, buildPlan, Some(buildRow))
     val conditionCheck =
       s"""$streamedBefore
          |$conditionCheckWithoutStreamVars

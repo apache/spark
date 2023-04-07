@@ -1013,9 +1013,10 @@ case class SortMergeJoinExec(
     val rightResultVars = genOneSideJoinVars(
       ctx, rightOutputRow, right, setDefaultValue = true)
     val resultVars = leftResultVars ++ rightResultVars
-    val (leftBefore, _) = splitVarsByCondition(left.output, leftResultVars.map(v => v.copy()))
-    val (_, conditionCheckWithoutLeftVars, _) = getJoinCondition(
-      ctx, leftResultVars.map(_.copy(code = EmptyBlock)), left, right, Some(rightOutputRow))
+    val copiedLeftResultVars = leftResultVars.map(v => v.copy())
+    val (leftBefore, _) = splitVarsByCondition(left.output, copiedLeftResultVars)
+    val (_, conditionCheckWithoutLeftVars, _) =
+      getJoinCondition(ctx, copiedLeftResultVars, left, right, Some(rightOutputRow))
     val conditionCheck =
       s"""$leftBefore
          |$conditionCheckWithoutLeftVars
