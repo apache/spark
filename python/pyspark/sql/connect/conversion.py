@@ -48,6 +48,7 @@ from pyspark.sql.connect.types import to_arrow_schema
 from typing import (
     Any,
     Callable,
+    Dict,
     Sequence,
     List,
 )
@@ -337,17 +338,17 @@ class ArrowTableToRowsConversion:
             if len(set(field_names)) == len(field_names):
                 dedup_field_names = field_names
             else:
-                gen_new_name = {}
+                gen_new_name: Dict[str, Callable[[], str]] = {}
                 for name, group in itertools.groupby(dataType.names):
                     if len(list(group)) > 1:
 
-                        def _gen(_name):
+                        def _gen(_name: str) -> Callable[[], str]:
                             _i = itertools.count()
                             return lambda: f"{_name}_{next(_i)}"
 
                     else:
 
-                        def _gen(_name):
+                        def _gen(_name: str) -> Callable[[], str]:
                             return lambda: _name
 
                     gen_new_name[name] = _gen(name)
