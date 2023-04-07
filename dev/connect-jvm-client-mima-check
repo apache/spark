@@ -35,17 +35,17 @@ fi
 rm -f .connect-mima-check-result
 
 echo "Build required modules..."
-build/sbt "assembly/package;connect-client-jvm/Test/package"
+build/sbt "sql/package;connect-client-jvm/assembly;connect-client-jvm/Test/package;avro/package"
 
-ASSEMBLY_CLASSPATH="$(build/sbt -DcopyDependencies=false "export assembly/fullClasspath" | grep jar | tail -n1)"
 CONNECT_TEST_CLASSPATH="$(build/sbt -DcopyDependencies=false "export connect-client-jvm/Test/fullClasspath" | grep jar | tail -n1)"
+SQL_CLASSPATH="$(build/sbt -DcopyDependencies=false "export sql/fullClasspath" | grep jar | tail -n1)"
 
 echo "Do connect-client-jvm module mima check ..."
 
 $JAVA_CMD \
   -Xmx2g \
   -XX:+IgnoreUnrecognizedVMOptions --add-opens=java.base/java.util.jar=ALL-UNNAMED \
-  -cp "$CONNECT_TEST_CLASSPATH:$ASSEMBLY_CLASSPATH" \
+  -cp "$CONNECT_TEST_CLASSPATH:$SQL_CLASSPATH" \
   org.apache.spark.sql.connect.client.CheckConnectJvmClientCompatibility
 
 echo "finish connect-client-jvm module mima check ..."
