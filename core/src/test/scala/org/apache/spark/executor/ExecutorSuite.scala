@@ -30,6 +30,7 @@ import scala.collection.mutable.{ArrayBuffer, Map}
 import scala.concurrent.duration._
 
 import com.google.common.cache.{CacheBuilder, CacheLoader}
+import org.apache.logging.log4j._
 import org.mockito.ArgumentCaptor
 import org.mockito.ArgumentMatchers.{any, eq => meq}
 import org.mockito.Mockito.{inOrder, verify, when}
@@ -268,6 +269,27 @@ class ExecutorSuite extends SparkFunSuite
 
   test("Heartbeat should not drop zero accumulator updates when the conf is disabled") {
     heartbeatZeroAccumulatorUpdateTest(false)
+  }
+
+  test("SPARK-39696: Using accumulators should not cause heartbeat to fail") {
+    val conf = new SparkConf().setMaster("local").setAppName("executor suite test")
+    conf.set(EXECUTOR_HEARTBEAT_INTERVAL.key, "1ms")
+    sc = new SparkContext(conf)
+
+    val accums = (1 to 10).map(i => sc.longAccumulator(s"mapperRunAccumulator$i"))
+    val input = sc.parallelize(1 to 10, 10)
+    var testRdd = input.map(i => (i, i))
+    (0 to 10).foreach( i =>
+      testRdd = testRdd.map(x => { accums.foreach(_.add(1)); (x._1 * i, x._2) }).reduceByKey(_ + _)
+    )
+
+    val logAppender = new LogAppender("heartbeat thread should not die")
+    withLogAppender(logAppender, level = Some(Level.ERROR)) {
+      val _ = testRdd.count()
+    }
+    val logs = logAppender.loggingEvents.map(_.getMessage.getFormattedMessage)
+      .filter(_.contains("Uncaught exception in thread executor-heartbeater"))
+    assert(logs.isEmpty)
   }
 
   private def withMockHeartbeatReceiverRef(executor: Executor)
