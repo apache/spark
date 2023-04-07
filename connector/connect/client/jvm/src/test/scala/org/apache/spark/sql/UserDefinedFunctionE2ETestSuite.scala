@@ -19,9 +19,11 @@ package org.apache.spark.sql
 import java.lang.{Long => JLong}
 import java.util.{Iterator => JIterator}
 import java.util.Arrays
+import java.util.concurrent.atomic.AtomicLong
 
 import scala.collection.JavaConverters._
 
+import org.apache.spark.TaskContext
 import org.apache.spark.api.java.function._
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{PrimitiveIntEncoder, PrimitiveLongEncoder}
 import org.apache.spark.sql.connect.client.util.RemoteSparkSession
@@ -127,5 +129,73 @@ class UserDefinedFunctionE2ETestSuite extends RemoteSparkSession {
         PrimitiveIntEncoder)
       .collect()
     assert(result.sorted.toSeq === Seq(23, 25, 25, 27))
+  }
+
+  test("Dataset foreach") {
+    val func: JLong => Unit = _ => {
+      throw new RuntimeException("Hello foreach")
+    }
+    val exception = intercept[Exception] {
+      spark.range(2).foreach(func)
+    }
+    assert(exception.getMessage.contains("Hello foreach"))
+  }
+
+  test("Dataset foreach - java") {
+    val exception = intercept[Exception] {
+      spark
+        .range(2)
+        .foreach(new ForeachFunction[JLong] {
+          override def call(t: JLong): Unit = {
+            throw new RuntimeException("Hello foreach")
+          }
+        })
+    }
+    assert(exception.getMessage.contains("Hello foreach"))
+  }
+
+  test("Dataset foreachPartition") {
+    val sum = new AtomicLong()
+    val func: Iterator[JLong] => Unit = f => {
+      f.foreach(v => sum.addAndGet(v))
+      TaskContext
+        .get()
+        .addTaskCompletionListener(_ =>
+          // The value should be 45
+          assert(sum.get() == -1))
+    }
+    val exception = intercept[Exception] {
+      spark.range(10).repartition(1).foreachPartition(func)
+    }
+    assert(exception.getMessage.contains("45 did not equal -1"))
+  }
+
+  test("Dataset foreachPartition - java") {
+    val sum = new AtomicLong()
+    val exception = intercept[Exception] {
+      spark
+        .range(10)
+        .repartition(1)
+        .foreachPartition(new ForeachPartitionFunction[JLong] {
+          override def call(t: JIterator[JLong]): Unit = {
+            t.asScala.foreach(v => sum.addAndGet(v))
+            TaskContext
+              .get()
+              .addTaskCompletionListener(_ =>
+                // The value should be 45
+                assert(sum.get() == -1))
+          }
+        })
+    }
+    assert(exception.getMessage.contains("45 did not equal -1"))
+  }
+
+  test("Dataset foreach: change not visible to client") {
+    val sum = new AtomicLong()
+    val func: Iterator[JLong] => Unit = f => {
+      f.foreach(v => sum.addAndGet(v))
+    }
+    spark.range(10).repartition(1).foreachPartition(func)
+    assert(sum.get() == 0) // The value is not 45
   }
 }

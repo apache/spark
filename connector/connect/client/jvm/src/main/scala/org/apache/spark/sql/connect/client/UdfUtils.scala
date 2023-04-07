@@ -19,6 +19,7 @@ package org.apache.spark.sql.connect.client
 import scala.collection.JavaConverters._
 
 import org.apache.spark.api.java.function._
+import org.apache.spark.sql.Row
 
 /**
  * Util functions to help convert input functions between typed filter, map, flatMap,
@@ -29,6 +30,16 @@ import org.apache.spark.api.java.function._
 private[sql] object UdfUtils {
 
   def mapFuncToMapPartitionsAdaptor[T, U](f: T => U): Iterator[T] => Iterator[U] = _.map(f(_))
+
+  def foreachFuncToForeachPartitionsAdaptor[T](f: T => Unit): Iterator[T] => Unit =
+    _.foreach(f(_))
+
+  def foreachPartitionFuncToMapPartitionsAdaptor[T](
+      f: Iterator[T] => Unit): Iterator[T] => Iterator[Row] = x => {
+    f(x)
+    // The return constructs a minimal return iterator for mapPartitions
+    Iterator.empty
+  }
 
   def flatMapFuncToMapPartitionsAdaptor[T, U](
       f: T => TraversableOnce[U]): Iterator[T] => Iterator[U] = _.flatMap(f)
@@ -43,4 +54,8 @@ private[sql] object UdfUtils {
   def mapPartitionsFuncToScalaFunc[T, U](
       f: MapPartitionsFunction[T, U]): Iterator[T] => Iterator[U] = x => f.call(x.asJava).asScala
 
+  def foreachFuncToScalaFunc[T](f: ForeachFunction[T]): T => Unit = f.call
+
+  def foreachPartitionFuncToScalaFunc[T](f: ForeachPartitionFunction[T]): Iterator[T] => Unit =
+    x => f.call(x.asJava)
 }
