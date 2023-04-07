@@ -1014,7 +1014,8 @@ case class SortMergeJoinExec(
       ctx, rightOutputRow, right, setDefaultValue = true)
     val resultVars = leftResultVars ++ rightResultVars
     // The streamedVars may be evaluated again in the following consumeFullOuterJoinRow method,
-    // so generate the condition checking code with their copies.
+    // so generate the condition checking code with their copies, to avoid side effects
+    // (ExprCode is mutable).
     val copiedLeftResultVars = leftResultVars.map(v => v.copy())
     val (leftBefore, _) = splitVarsByCondition(left.output, copiedLeftResultVars)
     val (_, conditionCheckWithoutLeftVars, _) =
