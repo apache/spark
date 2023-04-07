@@ -777,6 +777,7 @@ pyspark_connect = Module(
         "pyspark.ml.connect.functions",
         # ml unittests
         "pyspark.ml.tests.connect.test_connect_function",
+        "pyspark.ml.tests.connect.test_parity_torch_distributor",
         # pandas-on-Spark unittests
         "pyspark.pandas.tests.connect.data_type_ops.test_parity_base",
         "pyspark.pandas.tests.connect.data_type_ops.test_parity_binary_ops",
