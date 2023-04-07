@@ -1564,6 +1564,13 @@ class DataFrameAggregateSuite extends QueryTest
     ).toDF("id", "value")
     df2.createOrReplaceTempView("df2")
 
+    // empty column test
+    val res0 = df1.withColumn("empty_col", lit(null)).groupBy("id")
+      .agg(
+        hllsketch_estimate("empty_col").as("distinct_count")
+      )
+    checkAnswer(res0, Row(1, 0))
+
     // first test hllsketch_estimate via dataframe + sql, with and without configs
     val res1 = df1.groupBy("id")
       .agg(
@@ -1573,7 +1580,7 @@ class DataFrameAggregateSuite extends QueryTest
       )
     checkAnswer(res1, Row(1, 7, 4, 4))
 
-    val res2 = spark.sql(
+    val res2 = sql(
       """select
         | id,
         | count(value) as count,
@@ -1596,7 +1603,7 @@ class DataFrameAggregateSuite extends QueryTest
 
     // now test hllsketch_union_estimate via dataframe + sql, with and without configs,
     // unioning together sketches with default, non-default and different configurations
-    val df4 = spark.sql(
+    val df4 = sql(
       """select
         | id,
         | count(value),
@@ -1617,7 +1624,7 @@ class DataFrameAggregateSuite extends QueryTest
       )
     checkAnswer(res3, Row(1, 15, 6, 6, 6))
 
-    val res4 = spark.sql(
+    val res4 = sql(
       """select
         | id,
         | sum(count) as count,
@@ -1628,6 +1635,67 @@ class DataFrameAggregateSuite extends QueryTest
         |group by 1
         |""".stripMargin)
     checkAnswer(res4, Row(1, 15, 6, 6, 6))
+  }
+
+  test("SPARK-16484: hllsketch_estimate negative tests") {
+
+    val df1 = Seq(
+      (1, "a"), (1, "a"), (1, "a"),
+      (1, "b"),
+      (1, "c"), (1, "c"),
+      (1, "d")
+    ).toDF("id", "value")
+
+    // validate that the functions error out when lgConfigK < 0
+    val error0 = intercept[AnalysisException] {
+      val res = df1.groupBy("id")
+        .agg(
+          hllsketch_estimate("value", -1, "HLL_4").as("hllsketch")
+        )
+      checkAnswer(res, Nil)
+    }
+    assert(error0.toString contains "DATATYPE_MISMATCH")
+
+    val error1 = intercept[AnalysisException] {
+      val res = df1.groupBy("id")
+        .agg(
+          hllsketch_binary("value", -1, "HLL_4").as("hllsketch")
+        )
+      checkAnswer(res, Nil)
+    }
+    assert(error1.toString contains "DATATYPE_MISMATCH")
+
+    val error2 = intercept[AnalysisException] {
+      val res = df1.groupBy("id")
+        .agg(
+          hllsketch_binary("value").as("hllsketch")
+        )
+        .agg(
+          hllsketch_union_estimate("hllsketch", -1)
+        )
+      checkAnswer(res, Nil)
+    }
+    assert(error2.toString contains "DATATYPE_MISMATCH")
+
+    // validate that the functions error out with unsupported tgtHllType
+    val error3 = intercept[SparkException] {
+      val res = df1.groupBy("id")
+        .agg(
+          hllsketch_estimate("value", 12, "HLL_5").as("hllsketch")
+        )
+      checkAnswer(res, Nil)
+    }
+    assert(error3.toString contains "IllegalArgumentException")
+
+    val error4 = intercept[SparkException] {
+      val res = df1.groupBy("id")
+        .agg(
+          hllsketch_binary("value", 12, "HLL_5").as("hllsketch")
+        )
+      checkAnswer(res, Nil)
+    }
+    assert(error4.toString contains "IllegalArgumentException")
+
   }
 }
 

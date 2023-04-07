@@ -80,4 +80,12 @@ class DatasketchesHllSketchSuite extends SparkFunSuite {
     assert(stringEstimate == stringRange.size ||
       stringEstimateRange.contains(stringRange.size.toLong))
   }
+
+  test("Test lgMaxK results in downsampling sketches with larger lgConfigK") {
+    // TODO
+  }
+
+  test("Test sparse and dense sketches can be merged") {
+    // TODO
+  }
 }
