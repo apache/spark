@@ -62,16 +62,17 @@ private[sql] class SparkResult[T](
     while (responses.hasNext) {
       val response = responses.next()
       if (response.hasSchema) {
+        // The original schema should arrive before ArrowBatches.
         structType =
           DataTypeProtoConverter.toCatalystType(response.getSchema).asInstanceOf[StructType]
-      }
-      if (response.hasArrowBatch) {
+      } else if (response.hasArrowBatch) {
         val ipcStreamBytes = response.getArrowBatch.getData
         val reader = new ArrowStreamReader(ipcStreamBytes.newInput(), allocator)
         try {
           val root = reader.getVectorSchemaRoot
           if (batches.isEmpty) {
             if (structType == null) {
+              // If the schema is not available yet, fallback to the schema from Arrow.
               structType = ArrowUtils.fromArrowSchema(root.getSchema)
             }
             // TODO: create encoders that directly operate on arrow vectors.
