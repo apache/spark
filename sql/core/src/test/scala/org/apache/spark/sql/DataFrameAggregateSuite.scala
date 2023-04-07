@@ -1590,7 +1590,7 @@ class DataFrameAggregateSuite extends QueryTest
         count("value").as("count"),
         hllsketch_binary("value").as("hllsketch_1"),
         hllsketch_binary("value", 20, "HLL_8").as("hllsketch_2"),
-        hllsketch_binary("value").as("hllsketch_3"),
+        hllsketch_binary("value").as("hllsketch_3")
       )
     df3.createOrReplaceTempView("df3")
 
@@ -1627,7 +1627,7 @@ class DataFrameAggregateSuite extends QueryTest
         |from (select * from df3 union all select * from df4)
         |group by 1
         |""".stripMargin)
-    checkAnswer(res3, Row(1, 15, 6, 6, 6))
+    checkAnswer(res4, Row(1, 15, 6, 6, 6))
   }
 }
 
