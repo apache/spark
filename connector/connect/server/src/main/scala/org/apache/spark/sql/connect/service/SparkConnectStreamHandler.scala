@@ -123,23 +123,26 @@ object SparkConnectStreamHandler {
         val newNames = if (st.names.toSet.size == st.names.length) {
           st.names
         } else {
-          val nawName = st.names.groupBy(identity).map {
+          val genNawName = st.names.groupBy(identity).map {
             case (name, names) if names.length > 1 =>
               val i = new AtomicInteger()
               name -> { () => s"${name}_${i.getAndIncrement()}" }
             case (name, _) => name -> { () => name }
           }
-          st.names.map(nawName(_)())
+          st.names.map(genNawName(_)())
         }
-        val newFields = fields.zip(newNames).map {
-          case (StructField(_, dataType, nullable, metadata), name) =>
+        val newFields =
+          fields.zip(newNames).map { case (StructField(_, dataType, nullable, metadata), name) =>
             StructField(name, deduplicateFieldNames(dataType), nullable, metadata)
-        }
+          }
         StructType(newFields)
       case ArrayType(elementType, containsNull) =>
         ArrayType(deduplicateFieldNames(elementType), containsNull)
       case MapType(keyType, valueType, valueContainsNull) =>
-        MapType(deduplicateFieldNames(keyType), deduplicateFieldNames(valueType), valueContainsNull)
+        MapType(
+          deduplicateFieldNames(keyType),
+          deduplicateFieldNames(valueType),
+          valueContainsNull)
       case _ => dt
     }
 
