@@ -21,13 +21,11 @@ import java.io.NotSerializableException
 import java.nio.ByteBuffer
 import java.util.concurrent.{ConcurrentHashMap, ConcurrentLinkedQueue, TimeUnit}
 
-import scala.collection.immutable.Map
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
 import scala.math.max
 import scala.util.control.NonFatal
 
 import org.apache.spark._
-import org.apache.spark.InternalAccumulator
 import org.apache.spark.InternalAccumulator.{input, shuffleRead}
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.errors.SparkCoreErrors
@@ -927,6 +925,13 @@ private[spark] class TaskSetManager(
           sched.dagScheduler.taskEnded(tasks(index), reason, null, accumUpdates, metricPeaks, info)
           abort("Task %s in stage %s (TID %d) can not write to output file: %s".format(
             info.id, taskSet.id, tid, ef.description))
+          return
+        }
+        if (ef.className == classOf[SparkUserException].getName) {
+          // if the exception has an error class which means a user error, not retry
+          logError(s"$task has a user exception: ${ef.description}; not retrying")
+          sched.dagScheduler.taskEnded(tasks(index), reason, null, accumUpdates, metricPeaks, info)
+          abort(s"$task has a user exception: ${ef.description}")
           return
         }
         val key = ef.description
