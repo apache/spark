@@ -24,6 +24,7 @@ from pyspark.sql.column import _to_seq, _to_java_column, Column
 from pyspark.sql.types import StructType
 from pyspark.sql import utils
 from pyspark.sql.utils import to_str
+from pyspark.errors import PySparkTypeError
 
 if TYPE_CHECKING:
     from pyspark.sql._typing import OptionalPrimitiveType, ColumnOrName
@@ -153,7 +154,13 @@ class DataFrameReader(OptionUtils):
         elif isinstance(schema, str):
             self._jreader = self._jreader.schema(schema)
         else:
-            raise TypeError("schema should be StructType or string")
+            raise PySparkTypeError(
+                error_class="NOT_STR_OR_STRUCT",
+                message_parameters={
+                    "arg_name": "schema",
+                    "arg_type": type(schema).__name__,
+                },
+            )
         return self
 
     def option(self, key: str, value: "OptionalPrimitiveType") -> "DataFrameReader":
@@ -432,7 +439,13 @@ class DataFrameReader(OptionUtils):
             jrdd = keyed._jrdd.map(self._spark._jvm.BytesToString())
             return self._df(self._jreader.json(jrdd))
         else:
-            raise TypeError("path can be only string, list or RDD")
+            raise PySparkTypeError(
+                error_class="NOT_STR_OR_LIST_OF_RDD",
+                message_parameters={
+                    "arg_name": "path",
+                    "arg_type": type(path).__name__,
+                },
+            )
 
     def table(self, tableName: str) -> "DataFrame":
         """Returns the specified table as a :class:`DataFrame`.
@@ -747,7 +760,13 @@ class DataFrameReader(OptionUtils):
             )
             return self._df(self._jreader.csv(jdataset))
         else:
-            raise TypeError("path can be only string, list or RDD")
+            raise PySparkTypeError(
+                error_class="NOT_STR_OR_LIST_OF_RDD",
+                message_parameters={
+                    "arg_name": "path",
+                    "arg_type": type(path).__name__,
+                },
+            )
 
     def orc(
         self,
@@ -1252,7 +1271,13 @@ class DataFrameWriter(OptionUtils):
         >>> _ = spark.sql("DROP TABLE bucketed_table")
         """
         if not isinstance(numBuckets, int):
-            raise TypeError("numBuckets should be an int, got {0}.".format(type(numBuckets)))
+            raise PySparkTypeError(
+                error_class="NOT_INT",
+                message_parameters={
+                    "arg_name": "numBuckets",
+                    "arg_type": type(numBuckets).__name__,
+                },
+            )
 
         if isinstance(col, (list, tuple)):
             if cols:
@@ -1260,8 +1285,23 @@ class DataFrameWriter(OptionUtils):
 
             col, cols = col[0], col[1:]  # type: ignore[assignment]
 
-        if not all(isinstance(c, str) for c in cols) or not (isinstance(col, str)):
-            raise TypeError("all names should be `str`")
+        for c in cols:
+            if not isinstance(c, str):
+                raise PySparkTypeError(
+                    error_class="NOT_LIST_OF_STR",
+                    message_parameters={
+                        "arg_name": "cols",
+                        "arg_type": type(c).__name__,
+                    },
+                )
+        if not isinstance(col, str):
+            raise PySparkTypeError(
+                error_class="NOT_LIST_OF_STR",
+                message_parameters={
+                    "arg_name": "col",
+                    "arg_type": type(col).__name__,
+                },
+            )
 
         self._jwrite = self._jwrite.bucketBy(
             numBuckets, col, _to_seq(self._spark._sc, cast(Iterable["ColumnOrName"], cols))
@@ -1322,8 +1362,23 @@ class DataFrameWriter(OptionUtils):
 
             col, cols = col[0], col[1:]  # type: ignore[assignment]
 
-        if not all(isinstance(c, str) for c in cols) or not (isinstance(col, str)):
-            raise TypeError("all names should be `str`")
+        for c in cols:
+            if not isinstance(c, str):
+                raise PySparkTypeError(
+                    error_class="NOT_LIST_OF_STR",
+                    message_parameters={
+                        "arg_name": "cols",
+                        "arg_type": type(c).__name__,
+                    },
+                )
+        if not isinstance(col, str):
+            raise PySparkTypeError(
+                error_class="NOT_LIST_OF_STR",
+                message_parameters={
+                    "arg_name": "col",
+                    "arg_type": type(col).__name__,
+                },
+            )
 
         self._jwrite = self._jwrite.sortBy(
             col, _to_seq(self._spark._sc, cast(Iterable["ColumnOrName"], cols))

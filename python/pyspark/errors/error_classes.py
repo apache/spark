@@ -249,6 +249,16 @@ ERROR_CLASSES_JSON = """
       "Argument `<arg_name>` should be a str, got <arg_type>."
     ]
   },
+  "NOT_STR_OR_LIST_OF_RDD" : {
+    "message" : [
+      "Argument `<arg_name>` should be a str or list[RDD], got <arg_type>."
+    ]
+  },
+  "NOT_STR_OR_STRUCT" : {
+    "message" : [
+      "Argument `<arg_name>` should be a str or structType, got <arg_type>."
+    ]
+  },
   "NOT_WINDOWSPEC" : {
     "message" : [
       "Argument `<arg_name>` should be a WindowSpec, got <arg_type>."
