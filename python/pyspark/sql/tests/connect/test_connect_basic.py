@@ -1783,6 +1783,21 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             "ShuffledHashJoin" in cdf1.join(cdf2.hint("SHUFFLE_HASH"), "name")._explain_string()
         )
 
+    def test_different_spark_session_join_or_union(self):
+        df = self.connect.range(10).limit(3)
+
+        spark2 = RemoteSparkSession(connectionString='sc://localhost')
+        df2 = spark2.range(10).limit(3)
+
+        with self.assertRaises(PySparkException):
+            df.union(df2).collect()
+
+        with self.assertRaises(PySparkException):
+            df.unionByName(df2).collect()
+
+        with self.assertRaises(PySparkException):
+            df.join(df2).collect()
+
     def test_extended_hint_types(self):
         cdf = self.connect.range(100).toDF("id")
 
