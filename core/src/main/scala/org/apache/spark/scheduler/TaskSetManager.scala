@@ -929,6 +929,13 @@ private[spark] class TaskSetManager(
             info.id, taskSet.id, tid, ef.description))
           return
         }
+        if (ef.className == classOf[SparkUserException].getName) {
+          // if the exception has an error class which means a user error, not retry
+          logError(s"$task has a user exception: ${ef.description}; not retrying")
+          sched.dagScheduler.taskEnded(tasks(index), reason, null, accumUpdates, metricPeaks, info)
+          abort(s"$task has a user exception: ${ef.description}")
+          return
+        }
         val key = ef.description
         val now = clock.getTimeMillis()
         val (printFull, dupCount) = {
@@ -1247,7 +1254,7 @@ private[spark] class TaskSetManager(
    *
    */
   private def computeValidLocalityLevels(): Array[TaskLocality.TaskLocality] = {
-    import TaskLocality.{PROCESS_LOCAL, NODE_LOCAL, NO_PREF, RACK_LOCAL, ANY}
+    import TaskLocality.{ANY, NO_PREF, NODE_LOCAL, PROCESS_LOCAL, RACK_LOCAL}
     val levels = new ArrayBuffer[TaskLocality.TaskLocality]
     if (!pendingTasks.forExecutor.isEmpty &&
         pendingTasks.forExecutor.keySet.exists(sched.isExecutorAlive(_))) {
