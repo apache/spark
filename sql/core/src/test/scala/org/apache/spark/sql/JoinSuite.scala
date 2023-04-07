@@ -429,7 +429,6 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
           Row(null, null, 5, "E") ::
           Row(null, null, 6, "F") :: Nil)
 
-      print("About to do full join with right.N =!= 3\n")
       checkAnswer(
         left.join(right, ($"left.N" === $"right.N") && ($"right.N" =!= 3), "full"),
         Row(1, "A", null, null) ::
@@ -439,7 +438,6 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
           Row(4, "D", 4, "D") ::
           Row(null, null, 5, "E") ::
           Row(null, null, 6, "F") :: Nil)
-      print("Done doing full join with right.N =!= 3\n")
 
       // Make sure we are UnknownPartitioning as the outputPartitioning for the outer join
       // operator.
@@ -1458,7 +1456,7 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
     }
   }
 
-  test("Full outer join with duplicate references in condition") {
+  test("Full outer join with duplicate stream-side references in condition") {
     withTempView("v1", "v2") {
       sql("""create or replace temp view v1 as
             |select * from values
@@ -1491,7 +1489,7 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
     }
   }
 
-  test("Left outer join with duplicate references in condition") {
+  test("Left outer join with duplicate stream-side references in condition") {
     withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
       withTempView("v1", "v2") {
         sql(
