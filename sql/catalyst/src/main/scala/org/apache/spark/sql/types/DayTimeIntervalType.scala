@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.types
 
-import scala.math.Ordering
 import scala.reflect.runtime.universe.typeTag
 
 import org.apache.spark.annotation.Unstable
@@ -52,8 +51,6 @@ case class DayTimeIntervalType(startField: Byte, endField: Byte) extends AnsiInt
   private[sql] type InternalType = Long
 
   @transient private[sql] lazy val tag = typeTag[InternalType]
-
-  private[sql] val ordering = implicitly[Ordering[InternalType]]
 
   /**
    * The day-time interval type has constant precision. A value of the type always occupies 8 bytes.

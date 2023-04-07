@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.types
 
-import scala.math.{Integral, Numeric, Ordering}
+import scala.math.{Integral, Numeric}
 import scala.reflect.runtime.universe.typeTag
 
 import org.apache.spark.annotation.Stable
@@ -37,7 +37,6 @@ class LongType private() extends IntegralType {
   @transient private[sql] lazy val tag = typeTag[InternalType]
   private[sql] val numeric = implicitly[Numeric[Long]]
   private[sql] val integral = implicitly[Integral[Long]]
-  private[sql] val ordering = implicitly[Ordering[InternalType]]
   override private[sql] val exactNumeric = LongExactNumeric
 
   /**

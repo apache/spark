@@ -86,7 +86,7 @@ object SparkConnectServerUtils {
         "--conf",
         "spark.sql.catalog.testcat=org.apache.spark.sql.connector.catalog.InMemoryTableCatalog",
         "--conf",
-        s"spark.sql.catalogImplementation=$catalogImplementation",
+        s"spark.sql.catalogImplementation=$catalogImplementation") ++ debugConfig ++ Seq(
         "--class",
         "org.apache.spark.sql.connect.SimpleSparkConnectService",
         connectJar),
