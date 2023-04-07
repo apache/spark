@@ -21,7 +21,7 @@ import scala.reflect.ClassTag
 
 import org.apache.spark.{Partition, TaskContext, TaskEvaluatorFactory}
 
-class MapPartitionsWithEvaluatorRDD[T : ClassTag, U : ClassTag](
+private[spark] class MapPartitionsWithEvaluatorRDD[T : ClassTag, U : ClassTag](
     var prev: RDD[T],
     taskEvaluatorFactory: TaskEvaluatorFactory[T, U])
   extends RDD[U](prev) {

@@ -21,7 +21,7 @@ import scala.reflect.ClassTag
 
 import org.apache.spark.{Partition, TaskContext, TaskEvaluatorFactory}
 
-class ZippedPartitionsWithEvaluatorRDD[T : ClassTag, U : ClassTag](
+private[spark] class ZippedPartitionsWithEvaluatorRDD[T : ClassTag, U : ClassTag](
     var rdd1: RDD[T],
     var rdd2: RDD[T],
     taskEvaluatorFactory: TaskEvaluatorFactory[T, U])
