@@ -144,16 +144,7 @@ object AtomicType {
  * @since 1.3.0
  */
 @Stable
-abstract class NumericType extends AtomicType {
-  // Unfortunately we can't get this implicitly as that breaks Spark Serialization. In order for
-  // implicitly[Numeric[JvmType]] to be valid, we have to change JvmType from a type variable to a
-  // type parameter and add a numeric annotation (i.e., [JvmType : Numeric]). This gets
-  // desugared by the compiler into an argument to the objects constructor. This means there is no
-  // longer a no argument constructor and thus the JVM cannot serialize the object anymore.
-  private[sql] val numeric: Numeric[InternalType]
-
-  private[sql] def exactNumeric: Numeric[InternalType] = numeric
-}
+abstract class NumericType extends AtomicType
 
 
 private[spark] object NumericType extends AbstractDataType {

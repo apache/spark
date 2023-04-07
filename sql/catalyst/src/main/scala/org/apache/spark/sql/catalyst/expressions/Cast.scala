@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.trees.{SQLQueryContext, TreeNodeTag}
 import org.apache.spark.sql.catalyst.trees.TreePattern._
+import org.apache.spark.sql.catalyst.types.PhysicalNumericType
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
@@ -915,9 +916,9 @@ case class Cast(
     case TimestampType =>
       buildCast[Long](_, t => timestampToLong(t))
     case x: NumericType if ansiEnabled =>
-      b => x.exactNumeric.asInstanceOf[Numeric[Any]].toLong(b)
+      b => PhysicalNumericType.exactNumeric(x).toLong(b)
     case x: NumericType =>
-      b => x.numeric.asInstanceOf[Numeric[Any]].toLong(b)
+      b => PhysicalNumericType.numeric(x).toLong(b)
     case x: DayTimeIntervalType =>
       buildCast[Long](_, i => dayTimeIntervalToLong(i, x.startField, x.endField))
     case x: YearMonthIntervalType =>
@@ -947,9 +948,9 @@ case class Cast(
     case TimestampType =>
       buildCast[Long](_, t => timestampToLong(t).toInt)
     case x: NumericType if ansiEnabled =>
-      b => x.exactNumeric.asInstanceOf[Numeric[Any]].toInt(b)
+      b => PhysicalNumericType.exactNumeric(x).toInt(b)
     case x: NumericType =>
-      b => x.numeric.asInstanceOf[Numeric[Any]].toInt(b)
+      b => PhysicalNumericType.numeric(x).toInt(b)
     case x: DayTimeIntervalType =>
       buildCast[Long](_, i => dayTimeIntervalToInt(i, x.startField, x.endField))
     case x: YearMonthIntervalType =>
@@ -985,7 +986,7 @@ case class Cast(
     case x: NumericType if ansiEnabled =>
       b =>
         val intValue = try {
-          x.exactNumeric.asInstanceOf[Numeric[Any]].toInt(b)
+          PhysicalNumericType.exactNumeric(x).toInt(b)
         } catch {
           case _: ArithmeticException =>
             throw QueryExecutionErrors.castingCauseOverflowError(b, from, ShortType)
@@ -996,7 +997,7 @@ case class Cast(
           throw QueryExecutionErrors.castingCauseOverflowError(b, from, ShortType)
         }
     case x: NumericType =>
-      b => x.numeric.asInstanceOf[Numeric[Any]].toInt(b).toShort
+      b => PhysicalNumericType.numeric(x).toInt(b).toShort
     case x: DayTimeIntervalType =>
       buildCast[Long](_, i => dayTimeIntervalToShort(i, x.startField, x.endField))
     case x: YearMonthIntervalType =>
@@ -1032,7 +1033,7 @@ case class Cast(
     case x: NumericType if ansiEnabled =>
       b =>
         val intValue = try {
-          x.exactNumeric.asInstanceOf[Numeric[Any]].toInt(b)
+          PhysicalNumericType.exactNumeric(x).toInt(b)
         } catch {
           case _: ArithmeticException =>
             throw QueryExecutionErrors.castingCauseOverflowError(b, from, ByteType)
@@ -1043,7 +1044,7 @@ case class Cast(
           throw QueryExecutionErrors.castingCauseOverflowError(b, from, ByteType)
         }
     case x: NumericType =>
-      b => x.numeric.asInstanceOf[Numeric[Any]].toInt(b).toByte
+      b => PhysicalNumericType.numeric(x).toInt(b).toByte
     case x: DayTimeIntervalType =>
       buildCast[Long](_, i => dayTimeIntervalToByte(i, x.startField, x.endField))
     case x: YearMonthIntervalType =>
@@ -1155,7 +1156,7 @@ case class Cast(
     case TimestampType =>
       buildCast[Long](_, t => timestampToDouble(t))
     case x: NumericType =>
-      b => x.numeric.asInstanceOf[Numeric[Any]].toDouble(b)
+      b => PhysicalNumericType.numeric(x).toDouble(b)
   }
 
   // FloatConverter
@@ -1181,7 +1182,7 @@ case class Cast(
     case TimestampType =>
       buildCast[Long](_, t => timestampToDouble(t).toFloat)
     case x: NumericType =>
-      b => x.numeric.asInstanceOf[Numeric[Any]].toFloat(b)
+      b => PhysicalNumericType.numeric(x).toFloat(b)
   }
 
   private[this] def castArray(fromType: DataType, toType: DataType): Any => Any = {

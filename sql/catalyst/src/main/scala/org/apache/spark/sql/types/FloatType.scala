@@ -40,8 +40,6 @@ class FloatType private() extends FractionalType {
   private[sql] val fractional = implicitly[Fractional[Float]]
   private[sql] val asIntegral = FloatType.FloatAsIfIntegral
 
-  override private[sql] def exactNumeric = FloatExactNumeric
-
   /**
    * The default size of a value of the FloatType is 4 bytes.
    */

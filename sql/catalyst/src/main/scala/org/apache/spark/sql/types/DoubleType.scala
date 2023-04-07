@@ -40,8 +40,6 @@ class DoubleType private() extends FractionalType {
   private[sql] val fractional = implicitly[Fractional[Double]]
   private[sql] val asIntegral = DoubleType.DoubleAsIfIntegral
 
-  override private[sql] def exactNumeric = DoubleExactNumeric
-
   /**
    * The default size of a value of the DoubleType is 8 bytes.
    */

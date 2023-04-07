@@ -23,7 +23,7 @@ import scala.reflect.runtime.universe.typeTag
 import org.apache.spark.sql.catalyst.expressions.{Ascending, BoundReference, InterpretedOrdering, SortOrder}
 import org.apache.spark.sql.catalyst.util.{ArrayData, SQLOrderingUtil}
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.types.{ArrayType, BinaryType, BooleanType, ByteType, DataType, DateType, DayTimeIntervalType, Decimal, DecimalType, DoubleType, FloatType, IntegerType, LongType, MapType, NullType, ShortType, StringType, StructField, StructType, TimestampNTZType, TimestampType, YearMonthIntervalType}
+import org.apache.spark.sql.types.{ArrayType, BinaryType, BooleanType, ByteExactNumeric, ByteType, DataType, DateType, DayTimeIntervalType, Decimal, DecimalExactNumeric, DecimalType, DoubleExactNumeric, DoubleType, FloatExactNumeric, FloatType, IntegerExactNumeric, IntegerType, LongExactNumeric, LongType, MapType, NullType, NumericType, ShortExactNumeric, ShortType, StringType, StructField, StructType, TimestampNTZType, TimestampType, YearMonthIntervalType}
 import org.apache.spark.unsafe.types.{ByteArray, UTF8String}
 
 sealed abstract class PhysicalDataType {
@@ -62,6 +62,31 @@ object PhysicalDataType {
 
 trait PhysicalPrimitiveType
 
+sealed abstract class PhysicalNumericType extends PhysicalDataType {
+  // Unfortunately we can't get this implicitly as that breaks Spark Serialization. In order for
+  // implicitly[Numeric[JvmType]] to be valid, we have to change JvmType from a type variable to a
+  // type parameter and add a numeric annotation (i.e., [JvmType : Numeric]). This gets
+  // desugared by the compiler into an argument to the objects constructor. This means there is no
+  // longer a no argument constructor and thus the JVM cannot serialize the object anymore.
+  private[sql] val numeric: Numeric[InternalType]
+
+  private[sql] def exactNumeric: Numeric[InternalType] = numeric
+}
+
+object PhysicalNumericType {
+  def apply(dt: NumericType): PhysicalNumericType = {
+    PhysicalDataType(dt).asInstanceOf[PhysicalNumericType]
+  }
+
+  def numeric(dt: NumericType): Numeric[Any] = {
+    apply(dt).numeric.asInstanceOf[Numeric[Any]]
+  }
+
+  def exactNumeric(dt: NumericType): Numeric[Any] = {
+    apply(dt).exactNumeric.asInstanceOf[Numeric[Any]]
+  }
+}
+
 class PhysicalBinaryType() extends PhysicalDataType {
   private[sql] val ordering =
     (x: Array[Byte], y: Array[Byte]) => ByteArray.compareBinary(x, y)
@@ -81,10 +106,12 @@ class PhysicalBooleanType extends PhysicalDataType with PhysicalPrimitiveType {
 }
 case object PhysicalBooleanType extends PhysicalBooleanType
 
-class PhysicalByteType() extends PhysicalDataType with PhysicalPrimitiveType {
+class PhysicalByteType() extends PhysicalNumericType with PhysicalPrimitiveType {
   private[sql] type InternalType = Byte
   private[sql] val ordering = implicitly[Ordering[InternalType]]
   @transient private[sql] lazy val tag = typeTag[InternalType]
+  private[sql] val numeric = implicitly[Numeric[Byte]]
+  override private[sql] val exactNumeric = ByteExactNumeric
 }
 case object PhysicalByteType extends PhysicalByteType
 
@@ -97,10 +124,12 @@ class PhysicalCalendarIntervalType() extends PhysicalDataType {
 }
 case object PhysicalCalendarIntervalType extends PhysicalCalendarIntervalType
 
-case class PhysicalDecimalType(precision: Int, scale: Int) extends PhysicalDataType {
+case class PhysicalDecimalType(precision: Int, scale: Int) extends PhysicalNumericType {
   private[sql] type InternalType = Decimal
   private[sql] val ordering = Decimal.DecimalIsFractional
   @transient private[sql] lazy val tag = typeTag[InternalType]
+  private[sql] val numeric = Decimal.DecimalIsFractional
+  override private[sql] def exactNumeric = DecimalExactNumeric
 }
 
 case object PhysicalDecimalType {
@@ -109,7 +138,7 @@ case object PhysicalDecimalType {
   }
 }
 
-class PhysicalDoubleType() extends PhysicalDataType with PhysicalPrimitiveType {
+class PhysicalDoubleType() extends PhysicalNumericType with PhysicalPrimitiveType {
   // The companion object and this class is separated so the companion object also subclasses
   // this type. Otherwise, the companion object would be of type "DoubleType$" in byte code.
   // Defined with a private constructor so the companion object is the only possible instantiation.
@@ -117,10 +146,12 @@ class PhysicalDoubleType() extends PhysicalDataType with PhysicalPrimitiveType {
   private[sql] val ordering =
     (x: Double, y: Double) => SQLOrderingUtil.compareDoubles(x, y)
   @transient private[sql] lazy val tag = typeTag[InternalType]
+  private[sql] val numeric = implicitly[Numeric[Double]]
+  override private[sql] def exactNumeric = DoubleExactNumeric
 }
 case object PhysicalDoubleType extends PhysicalDoubleType
 
-class PhysicalFloatType() extends PhysicalDataType with PhysicalPrimitiveType {
+class PhysicalFloatType() extends PhysicalNumericType with PhysicalPrimitiveType {
   // The companion object and this class is separated so the companion object also subclasses
   // this type. Otherwise, the companion object would be of type "FloatType$" in byte code.
   // Defined with a private constructor so the companion object is the only possible instantiation.
@@ -128,26 +159,32 @@ class PhysicalFloatType() extends PhysicalDataType with PhysicalPrimitiveType {
   private[sql] val ordering =
     (x: Float, y: Float) => SQLOrderingUtil.compareFloats(x, y)
   @transient private[sql] lazy val tag = typeTag[InternalType]
+  private[sql] val numeric = implicitly[Numeric[Float]]
+  override private[sql] def exactNumeric = FloatExactNumeric
 }
 case object PhysicalFloatType extends PhysicalFloatType
 
-class PhysicalIntegerType() extends PhysicalDataType with PhysicalPrimitiveType {
+class PhysicalIntegerType() extends PhysicalNumericType with PhysicalPrimitiveType {
   // The companion object and this class is separated so the companion object also subclasses
   // this type. Otherwise, the companion object would be of type "IntegerType$" in byte code.
   // Defined with a private constructor so the companion object is the only possible instantiation.
   private[sql] type InternalType = Int
   private[sql] val ordering = implicitly[Ordering[InternalType]]
   @transient private[sql] lazy val tag = typeTag[InternalType]
+  private[sql] val numeric = implicitly[Numeric[Int]]
+  override private[sql] val exactNumeric = IntegerExactNumeric
 }
 case object PhysicalIntegerType extends PhysicalIntegerType
 
-class PhysicalLongType() extends PhysicalDataType with PhysicalPrimitiveType {
+class PhysicalLongType() extends PhysicalNumericType with PhysicalPrimitiveType {
   // The companion object and this class is separated so the companion object also subclasses
   // this type. Otherwise, the companion object would be of type "LongType$" in byte code.
   // Defined with a private constructor so the companion object is the only possible instantiation.
   private[sql] type InternalType = Long
   private[sql] val ordering = implicitly[Ordering[InternalType]]
   @transient private[sql] lazy val tag = typeTag[InternalType]
+  private[sql] val numeric = implicitly[Numeric[Long]]
+  override private[sql] val exactNumeric = LongExactNumeric
 }
 case object PhysicalLongType extends PhysicalLongType
 
@@ -168,10 +205,12 @@ class PhysicalNullType() extends PhysicalDataType with PhysicalPrimitiveType {
 }
 case object PhysicalNullType extends PhysicalNullType
 
-class PhysicalShortType() extends PhysicalDataType with PhysicalPrimitiveType {
+class PhysicalShortType() extends PhysicalNumericType with PhysicalPrimitiveType {
   private[sql] type InternalType = Short
   private[sql] val ordering = implicitly[Ordering[InternalType]]
   @transient private[sql] lazy val tag = typeTag[InternalType]
+  private[sql] val numeric = implicitly[Numeric[Short]]
+  override private[sql] val exactNumeric = ShortExactNumeric
 }
 case object PhysicalShortType extends PhysicalShortType
 
