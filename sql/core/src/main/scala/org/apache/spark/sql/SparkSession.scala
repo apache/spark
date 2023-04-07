@@ -757,7 +757,9 @@ class SparkSession private(
    *
    * @since 2.0.0
    */
-  def stop(): Unit = stop(0)
+  def stop(): Unit = {
+    sparkContext.stop()
+  }
 
   /**
    * Stop the underlying `SparkContext` with exit code that will passed to scheduler backend.
