@@ -1181,8 +1181,8 @@ class SparkConnectPlanner(val session: SparkSession) {
             }
             numberBitsOrFpp
           case DoubleLiteral(fpp) =>
-            // Check fpp in  (0.0, 1.0).
-            if (fpp <= 0d || fpp >= 1d) {
+            // Check fpp not NaN and in  (0.0, 1.0).
+            if (fpp.isNaN || fpp <= 0d || fpp >= 1d) {
               throw InvalidPlanInput("False positive probability must be within range (0.0, 1.0)")
             }
             // Calculate numBits through expectedNumItems and fpp,
