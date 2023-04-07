@@ -99,7 +99,7 @@ class JDBCTableCatalog extends TableCatalog
     checkNamespace(oldIdent.namespace())
     JdbcUtils.withConnection(options) { conn =>
       JdbcUtils.classifyException(s"Failed table renaming from $oldIdent to $newIdent", dialect) {
-        JdbcUtils.renameTable(conn, getTableName(oldIdent), getTableName(newIdent), options)
+        JdbcUtils.renameTable(conn, oldIdent, newIdent, options)
       }
     }
   }

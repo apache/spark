@@ -7,6 +7,8 @@
     <head>
         <meta charset="utf-8">
         <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
         <title>{{ page.title }} - Spark {{site.SPARK_VERSION_SHORT}} Documentation</title>
         {% if page.description %}
           <meta name="description" content="{{page.description | replace: 'SPARK_VERSION_SHORT', site.SPARK_VERSION_SHORT}}">
@@ -17,16 +19,13 @@
           <link rel="canonical" href="{{page.redirect}}" />
         {% endif %}
 
-        <link rel="stylesheet" href="css/bootstrap.min.css">
-        <style>
-            body {
-                padding-top: 60px;
-                padding-bottom: 40px;
-            }
-        </style>
-        <meta name="viewport" content="width=device-width">
-        <link rel="stylesheet" href="css/main.css">
 
+        <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css" rel="stylesheet"
+        integrity="sha384-EVSTQN3/azprG1Anm3QDgpJLIm9Nao0Yz1ztcQTwFspd3yD65VohhpuuCOmLASjC" crossorigin="anonymous">
+        <link rel="preconnect" href="https://fonts.googleapis.com">
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,400;0,500;0,700;1,400;1,500;1,700&Courier+Prime:wght@400;700&display=swap" rel="stylesheet">
+        <link href="css/custom.css" rel="stylesheet">
         <script src="js/vendor/modernizr-2.6.1-respond-1.1.0.min.js"></script>
 
         <link rel="stylesheet" href="css/pygments-default.css">
@@ -34,96 +33,118 @@
         <link rel="stylesheet" href="css/docsearch.css">
 
     </head>
-    <body>
+    <body class="global">
         <!--[if lt IE 7]>
             <p class="chromeframe">You are using an outdated browser. <a href="https://browsehappy.com/">Upgrade your browser today</a> or <a href="http://www.google.com/chromeframe/?redirect=true">install Google Chrome Frame</a> to better experience this site.</p>
         <![endif]-->
 
         <!-- This code is taken from http://twitter.github.com/bootstrap/examples/hero.html -->
 
-        <nav class="navbar fixed-top navbar-expand-md navbar-light bg-light" id="topbar">
-            <div class="container">
-                <div class="navbar-header">
-                    <div class="navbar-brand"><a href="index.html">
-                        <img src="img/spark-logo-hd.png" style="height:50px;"/></a><span class="version">{{site.SPARK_VERSION_SHORT}}</span>
-                    </div>
-                </div>
-                <button class="navbar-toggler" type="button" data-toggle="collapse"
-                        data-target="#navbarCollapse" aria-controls="navbarCollapse"
-                        aria-expanded="false" aria-label="Toggle navigation">
-                    <span class="navbar-toggler-icon"></span>
-                </button>
-                <div class="collapse navbar-collapse" id="navbarCollapse">
-                    <ul class="navbar-nav">
-                        <!--TODO(andyk): Add class="active" attribute to li some how.-->
-                        <li class="nav-item"><a href="index.html" class="nav-link">Overview</a></li>
+        <nav class="navbar navbar-expand-lg navbar-dark p-0 px-4 fixed-top" style="background: #1d6890;" id="topbar">
+            <div class="navbar-brand"><a href="index.html">
+                <img src="img/spark-logo-rev.svg" width="141" height="72"/></a><span class="version">{{site.SPARK_VERSION_SHORT}}</span>
+            </div>
+            <button class="navbar-toggler" type="button" data-toggle="collapse"
+                    data-target="#navbarCollapse" aria-controls="navbarCollapse"
+                    aria-expanded="false" aria-label="Toggle navigation">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarCollapse">
+                <ul class="navbar-nav me-auto">
+                    <li class="nav-item"><a href="index.html" class="nav-link">Overview</a></li>
 
-                        <li class="nav-item dropdown">
-                            <a href="#" class="nav-link dropdown-toggle" id="navbarQuickStart" role="button" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">Programming Guides</a>
-                            <div class="dropdown-menu" aria-labelledby="navbarQuickStart">
-                                <a class="dropdown-item" href="quick-start.html">Quick Start</a>
-                                <a class="dropdown-item" href="rdd-programming-guide.html">RDDs, Accumulators, Broadcasts Vars</a>
-                                <a class="dropdown-item" href="sql-programming-guide.html">SQL, DataFrames, and Datasets</a>
-                                <a class="dropdown-item" href="structured-streaming-programming-guide.html">Structured Streaming</a>
-                                <a class="dropdown-item" href="streaming-programming-guide.html">Spark Streaming (DStreams)</a>
-                                <a class="dropdown-item" href="ml-guide.html">MLlib (Machine Learning)</a>
-                                <a class="dropdown-item" href="graphx-programming-guide.html">GraphX (Graph Processing)</a>
-                                <a class="dropdown-item" href="sparkr.html">SparkR (R on Spark)</a>
-                                <a class="dropdown-item" href="api/python/getting_started/index.html">PySpark (Python on Spark)</a>
-                            </div>
-                        </li>
+                    <li class="nav-item dropdown">
+                        <a href="#" class="nav-link dropdown-toggle" id="navbarQuickStart" role="button" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">Programming Guides</a>
+                        <div class="dropdown-menu" aria-labelledby="navbarQuickStart">
+                            <a class="dropdown-item" href="quick-start.html">Quick Start</a>
+                            <a class="dropdown-item" href="rdd-programming-guide.html">RDDs, Accumulators, Broadcasts Vars</a>
+                            <a class="dropdown-item" href="sql-programming-guide.html">SQL, DataFrames, and Datasets</a>
+                            <a class="dropdown-item" href="structured-streaming-programming-guide.html">Structured Streaming</a>
+                            <a class="dropdown-item" href="streaming-programming-guide.html">Spark Streaming (DStreams)</a>
+                            <a class="dropdown-item" href="ml-guide.html">MLlib (Machine Learning)</a>
+                            <a class="dropdown-item" href="graphx-programming-guide.html">GraphX (Graph Processing)</a>
+                            <a class="dropdown-item" href="sparkr.html">SparkR (R on Spark)</a>
+                            <a class="dropdown-item" href="api/python/getting_started/index.html">PySpark (Python on Spark)</a>
+                        </div>
+                    </li>
 
-                        <li class="nav-item dropdown">
-                            <a href="#" class="nav-link dropdown-toggle" id="navbarAPIDocs" role="button" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">API Docs</a>
-                            <div class="dropdown-menu" aria-labelledby="navbarAPIDocs">
-                                <a class="dropdown-item" href="api/scala/org/apache/spark/index.html">Scala</a>
-                                <a class="dropdown-item" href="api/java/index.html">Java</a>
-                                <a class="dropdown-item" href="api/python/index.html">Python</a>
-                                <a class="dropdown-item" href="api/R/index.html">R</a>
-                                <a class="dropdown-item" href="api/sql/index.html">SQL, Built-in Functions</a>
-                            </div>
-                        </li>
+                    <li class="nav-item dropdown">
+                        <a href="#" class="nav-link dropdown-toggle" id="navbarAPIDocs" role="button" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">API Docs</a>
+                        <div class="dropdown-menu" aria-labelledby="navbarAPIDocs">
+                            <a class="dropdown-item" href="api/scala/org/apache/spark/index.html">Scala</a>
+                            <a class="dropdown-item" href="api/java/index.html">Java</a>
+                            <a class="dropdown-item" href="api/python/index.html">Python</a>
+                            <a class="dropdown-item" href="api/R/index.html">R</a>
+                            <a class="dropdown-item" href="api/sql/index.html">SQL, Built-in Functions</a>
+                        </div>
+                    </li>
 
-                        <li class="nav-item dropdown">
-                            <a href="#" class="nav-link dropdown-toggle" id="navbarDeploying" role="button" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">Deploying</a>
-                            <div class="dropdown-menu" aria-labelledby="navbarDeploying">
-                                <a class="dropdown-item" href="cluster-overview.html">Overview</a>
-                                <a class="dropdown-item" href="submitting-applications.html">Submitting Applications</a>
-                                <div class="dropdown-divider"></div>
-                                <a class="dropdown-item" href="spark-standalone.html">Spark Standalone</a>
-                                <a class="dropdown-item" href="running-on-mesos.html">Mesos</a>
-                                <a class="dropdown-item" href="running-on-yarn.html">YARN</a>
-                                <a class="dropdown-item" href="running-on-kubernetes.html">Kubernetes</a>
-                            </div>
-                        </li>
+                    <li class="nav-item dropdown">
+                        <a href="#" class="nav-link dropdown-toggle" id="navbarDeploying" role="button" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">Deploying</a>
+                        <div class="dropdown-menu" aria-labelledby="navbarDeploying">
+                            <a class="dropdown-item" href="cluster-overview.html">Overview</a>
+                            <a class="dropdown-item" href="submitting-applications.html">Submitting Applications</a>
+                            <div class="dropdown-divider"></div>
+                            <a class="dropdown-item" href="spark-standalone.html">Spark Standalone</a>
+                            <a class="dropdown-item" href="running-on-mesos.html">Mesos</a>
+                            <a class="dropdown-item" href="running-on-yarn.html">YARN</a>
+                            <a class="dropdown-item" href="running-on-kubernetes.html">Kubernetes</a>
+                        </div>
+                    </li>
 
-                        <li class="nav-item dropdown">
-                            <a href="#" class="nav-link dropdown-toggle" id="navbarMore" role="button" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">More</a>
-                            <div class="dropdown-menu" aria-labelledby="navbarMore">
-                                <a class="dropdown-item" href="configuration.html">Configuration</a>
-                                <a class="dropdown-item" href="monitoring.html">Monitoring</a>
-                                <a class="dropdown-item" href="tuning.html">Tuning Guide</a>
-                                <a class="dropdown-item" href="job-scheduling.html">Job Scheduling</a>
-                                <a class="dropdown-item" href="security.html">Security</a>
-                                <a class="dropdown-item" href="hardware-provisioning.html">Hardware Provisioning</a>
-                                <a class="dropdown-item" href="migration-guide.html">Migration Guide</a>
-                                <div class="dropdown-divider"></div>
-                                <a class="dropdown-item" href="building-spark.html">Building Spark</a>
-                                <a class="dropdown-item" href="https://spark.apache.org/contributing.html">Contributing to Spark</a>
-                                <a class="dropdown-item" href="https://spark.apache.org/third-party-projects.html">Third Party Projects</a>
-                            </div>
-                        </li>
+                    <li class="nav-item dropdown">
+                        <a href="#" class="nav-link dropdown-toggle" id="navbarMore" role="button" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">More</a>
+                        <div class="dropdown-menu" aria-labelledby="navbarMore">
+                            <a class="dropdown-item" href="configuration.html">Configuration</a>
+                            <a class="dropdown-item" href="monitoring.html">Monitoring</a>
+                            <a class="dropdown-item" href="tuning.html">Tuning Guide</a>
+                            <a class="dropdown-item" href="job-scheduling.html">Job Scheduling</a>
+                            <a class="dropdown-item" href="security.html">Security</a>
+                            <a class="dropdown-item" href="hardware-provisioning.html">Hardware Provisioning</a>
+                            <a class="dropdown-item" href="migration-guide.html">Migration Guide</a>
+                            <div class="dropdown-divider"></div>
+                            <a class="dropdown-item" href="building-spark.html">Building Spark</a>
+                            <a class="dropdown-item" href="https://spark.apache.org/contributing.html">Contributing to Spark</a>
+                            <a class="dropdown-item" href="https://spark.apache.org/third-party-projects.html">Third Party Projects</a>
+                        </div>
+                    </li>
 
-                        <li class="nav-item">
-                            <input type="text" id="docsearch-input" placeholder="Search the docs…">
-                        </li>
-                    </ul>
-                    <!--<span class="navbar-text navbar-right"><span class="version-text">v{{site.SPARK_VERSION_SHORT}}</span></span>-->
-                </div>
+                    <li class="nav-item">
+                        <input type="text" id="docsearch-input" placeholder="Search the docs…">
+                    </li>
+                </ul>
+                <!--<span class="navbar-text navbar-right"><span class="version-text">v{{site.SPARK_VERSION_SHORT}}</span></span>-->
             </div>
         </nav>
 
-        <div class="container-wrapper">
+        {% if page.url == "/" %}
+            <section class="hero-banner position-relative">
+            <div class="bg">
+            </div>
+            <div class="container position-relative">
+                <div class="row">
+                  <h1 style="max-width: 680px;">Apache Spark - A Unified engine for large-scale data analytics</h1>
+                </div>
+                <div class="row mt-5">
+                  <div class="col-12 col-lg-6 no-gutters">
+                    Apache Spark is a unified analytics engine for large-scale data processing.
+                    It provides high-level APIs in Java, Scala, Python and R,
+                    and an optimized engine that supports general execution graphs.
+                    It also supports a rich set of higher-level tools including
+                    <a href="sql-programming-guide.html">Spark SQL</a> for SQL and structured data processing,
+                    <a href="api/python/getting_started/quickstart_ps.html">pandas API on Spark</a> for pandas workloads,
+                    <a href="ml-guide.html">MLlib</a> for machine learning,
+                    <a href="graphx-programming-guide.html">GraphX</a> for graph processing,
+                     and <a href="structured-streaming-programming-guide.html">Structured Streaming</a>
+                     for incremental computation and stream processing.
+                  </div>
+                </div>
+            </div>
+          </section>
+
+        {% endif %}
+
+        <div class="container">
 
             {% if page.url contains "/ml" or page.url contains "/sql" or page.url contains "migration-guide.html" %}
                 {% if page.url contains "migration-guide.html" %}
@@ -147,23 +168,27 @@
                 </div>
             {% else %}
                 <div class="content mr-3" id="content">
-                    {% if page.displayTitle %}
-                        <h1 class="title">{{ page.displayTitle }}</h1>
-                    {% else %}
-                        <h1 class="title">{{ page.title }}</h1>
+                    {% if page.url != "/" %}
+                        {% if page.displayTitle %}
+                            <h1 class="title">{{ page.displayTitle }}</h1>
+                        {% else %}
+                            <h1 class="title">{{ page.title }}</h1>
+                        {% endif %}
                     {% endif %}
-
                     {{ content }}
-
                 </div>
             {% endif %}
              <!-- /container -->
         </div>
 
-        <script src="js/vendor/jquery-3.5.1.min.js"></script>
-        <script src="js/vendor/bootstrap.bundle.min.js"></script>
+        <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/js/bootstrap.bundle.min.js"
+        integrity="sha384-MrcW6ZMFYlzcLA8Nl+NtUVF0sA7MsXsP1UyJoMp4YLEuNSfAP+JcXn/tWtIaxVXM"
+        crossorigin="anonymous"></script>
+        <script src="https://code.jquery.com/jquery.js"></script>
+
         <script src="js/vendor/anchor.min.js"></script>
         <script src="js/main.js"></script>
+
         <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/docsearch.js@2/dist/cdn/docsearch.min.js"></script>
         <script type="text/javascript">
             // DocSearch is entirely free and automated. DocSearch is built in two parts:

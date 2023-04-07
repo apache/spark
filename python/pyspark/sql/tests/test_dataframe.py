@@ -43,10 +43,12 @@ from pyspark.sql.types import (
     FloatType,
     DayTimeIntervalType,
 )
+from pyspark.storagelevel import StorageLevel
 from pyspark.errors import (
     AnalysisException,
     IllegalArgumentException,
     PySparkTypeError,
+    PySparkValueError,
 )
 from pyspark.testing.sqlutils import (
     ReusedSQLTestCase,
@@ -901,14 +903,26 @@ class DataFrameTestsMixin:
             Observation("")
 
         # dataframe.observe requires at least one expr
-        with self.assertRaisesRegex(ValueError, "'exprs' should not be empty"):
+        with self.assertRaises(PySparkValueError) as pe:
             df.observe(Observation())
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="CANNOT_BE_EMPTY",
+            message_parameters={"item": "exprs"},
+        )
 
         # dataframe.observe requires non-None Columns
         for args in [(None,), ("id",), (lit(1), None), (lit(1), "id")]:
             with self.subTest(args=args):
-                with self.assertRaisesRegex(ValueError, "all 'exprs' should be Column"):
+                with self.assertRaises(PySparkTypeError) as pe:
                     df.observe(Observation(), *args)
+
+                self.check_error(
+                    exception=pe.exception,
+                    error_class="NOT_LIST_OF_COLUMN",
+                    message_parameters={"arg_name": "exprs"},
+                )
 
     def test_observe_str(self):
         # SPARK-38760: tests the DataFrame.observe(str, *Column) method
@@ -946,8 +960,16 @@ class DataFrameTestsMixin:
         self.assertGreaterEqual(row.sum, 0)
 
     def test_sample(self):
-        self.assertRaisesRegex(
-            TypeError, "should be a bool, float and number", lambda: self.spark.range(1).sample()
+        with self.assertRaises(PySparkTypeError) as pe:
+            self.spark.range(1).sample()
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_BOOL_OR_FLOAT_OR_INT",
+            message_parameters={
+                "arg_name": "withReplacement (optional), fraction (required) and seed (optional)",
+                "arg_type": "NoneType, NoneType, NoneType",
+            },
         )
 
         self.assertRaises(TypeError, lambda: self.spark.range(1).sample("a"))
@@ -1029,7 +1051,30 @@ class DataFrameTestsMixin:
             # works with crossJoin
             self.assertEqual(1, df1.crossJoin(df2).count())
 
-    def test_cache(self):
+    def test_cache_dataframe(self):
+        df = self.spark.createDataFrame([(2, 2), (3, 3)])
+        try:
+            self.assertEqual(df.storageLevel, StorageLevel.NONE)
+
+            df.cache()
+            self.assertEqual(df.storageLevel, StorageLevel.MEMORY_AND_DISK_DESER)
+
+            df.unpersist()
+            self.assertEqual(df.storageLevel, StorageLevel.NONE)
+
+            df.persist()
+            self.assertEqual(df.storageLevel, StorageLevel.MEMORY_AND_DISK_DESER)
+
+            df.unpersist(blocking=True)
+            self.assertEqual(df.storageLevel, StorageLevel.NONE)
+
+            df.persist(StorageLevel.DISK_ONLY)
+            self.assertEqual(df.storageLevel, StorageLevel.DISK_ONLY)
+        finally:
+            df.unpersist()
+            self.assertEqual(df.storageLevel, StorageLevel.NONE)
+
+    def test_cache_table(self):
         spark = self.spark
         with self.tempView("tab1", "tab2"):
             spark.createDataFrame([(2, 2), (3, 3)]).createOrReplaceTempView("tab1")
@@ -1186,6 +1231,12 @@ class DataFrameTestsMixin:
 
     @unittest.skipIf(not have_pandas, pandas_requirement_message)  # type: ignore
     def test_to_pandas_from_empty_dataframe(self):
+        is_arrow_enabled = [True, False]
+        for value in is_arrow_enabled:
+            with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": value}):
+                self.check_to_pandas_from_empty_dataframe()
+
+    def check_to_pandas_from_empty_dataframe(self):
         # SPARK-29188 test that toPandas() on an empty dataframe has the correct dtypes
         # SPARK-30537 test that toPandas() on an empty dataframe has the correct dtypes
         # when arrow is enabled
@@ -1204,15 +1255,18 @@ class DataFrameTestsMixin:
             CAST('2019-01-01' AS TIMESTAMP_NTZ) AS timestamp_ntz,
             INTERVAL '1563:04' MINUTE TO SECOND AS day_time_interval
             """
-        is_arrow_enabled = [True, False]
-        for value in is_arrow_enabled:
-            with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": value}):
-                dtypes_when_nonempty_df = self.spark.sql(sql).toPandas().dtypes
-                dtypes_when_empty_df = self.spark.sql(sql).filter("False").toPandas().dtypes
-                self.assertTrue(np.all(dtypes_when_empty_df == dtypes_when_nonempty_df))
+        dtypes_when_nonempty_df = self.spark.sql(sql).toPandas().dtypes
+        dtypes_when_empty_df = self.spark.sql(sql).filter("False").toPandas().dtypes
+        self.assertTrue(np.all(dtypes_when_empty_df == dtypes_when_nonempty_df))
 
     @unittest.skipIf(not have_pandas, pandas_requirement_message)  # type: ignore
     def test_to_pandas_from_null_dataframe(self):
+        is_arrow_enabled = [True, False]
+        for value in is_arrow_enabled:
+            with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": value}):
+                self.check_to_pandas_from_null_dataframe()
+
+    def check_to_pandas_from_null_dataframe(self):
         # SPARK-29188 test that toPandas() on a dataframe with only nulls has correct dtypes
         # SPARK-30537 test that toPandas() on a dataframe with only nulls has correct dtypes
         # using arrow
@@ -1231,25 +1285,28 @@ class DataFrameTestsMixin:
             CAST(NULL AS TIMESTAMP_NTZ) AS timestamp_ntz,
             INTERVAL '1563:04' MINUTE TO SECOND AS day_time_interval
             """
-        is_arrow_enabled = [True, False]
-        for value in is_arrow_enabled:
-            with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": value}):
-                pdf = self.spark.sql(sql).toPandas()
-                types = pdf.dtypes
-                self.assertEqual(types[0], np.float64)
-                self.assertEqual(types[1], np.float64)
-                self.assertEqual(types[2], np.float64)
-                self.assertEqual(types[3], np.float64)
-                self.assertEqual(types[4], np.float32)
-                self.assertEqual(types[5], np.float64)
-                self.assertEqual(types[6], object)
-                self.assertEqual(types[7], object)
-                self.assertTrue(np.can_cast(np.datetime64, types[8]))
-                self.assertTrue(np.can_cast(np.datetime64, types[9]))
-                self.assertTrue(np.can_cast(np.timedelta64, types[10]))
+        pdf = self.spark.sql(sql).toPandas()
+        types = pdf.dtypes
+        self.assertEqual(types[0], np.float64)
+        self.assertEqual(types[1], np.float64)
+        self.assertEqual(types[2], np.float64)
+        self.assertEqual(types[3], np.float64)
+        self.assertEqual(types[4], np.float32)
+        self.assertEqual(types[5], np.float64)
+        self.assertEqual(types[6], object)
+        self.assertEqual(types[7], object)
+        self.assertTrue(np.can_cast(np.datetime64, types[8]))
+        self.assertTrue(np.can_cast(np.datetime64, types[9]))
+        self.assertTrue(np.can_cast(np.timedelta64, types[10]))
 
     @unittest.skipIf(not have_pandas, pandas_requirement_message)  # type: ignore
     def test_to_pandas_from_mixed_dataframe(self):
+        is_arrow_enabled = [True, False]
+        for value in is_arrow_enabled:
+            with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": value}):
+                self.check_to_pandas_from_mixed_dataframe()
+
+    def check_to_pandas_from_mixed_dataframe(self):
         # SPARK-29188 test that toPandas() on a dataframe with some nulls has correct dtypes
         # SPARK-30537 test that toPandas() on a dataframe with some nulls has correct dtypes
         # using arrow
@@ -1270,12 +1327,9 @@ class DataFrameTestsMixin:
         FROM VALUES (1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1),
                     (NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL)
         """
-        is_arrow_enabled = [True, False]
-        for value in is_arrow_enabled:
-            with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": value}):
-                pdf_with_some_nulls = self.spark.sql(sql).toPandas()
-                pdf_with_only_nulls = self.spark.sql(sql).filter("tinyint is null").toPandas()
-                self.assertTrue(np.all(pdf_with_only_nulls.dtypes == pdf_with_some_nulls.dtypes))
+        pdf_with_some_nulls = self.spark.sql(sql).toPandas()
+        pdf_with_only_nulls = self.spark.sql(sql).filter("tinyint is null").toPandas()
+        self.assertTrue(np.all(pdf_with_only_nulls.dtypes == pdf_with_some_nulls.dtypes))
 
     @unittest.skipIf(
         not have_pandas or not have_pyarrow or pyarrow_version_less_than_minimum("2.0.0"),
@@ -1475,20 +1529,23 @@ class DataFrameTestsMixin:
         self.assertEqual(expected, list(it))
 
     def test_to_local_iterator_not_fully_consumed(self):
+        with QuietTest(self.sc):
+            self.check_to_local_iterator_not_fully_consumed()
+
+    def check_to_local_iterator_not_fully_consumed(self):
         # SPARK-23961: toLocalIterator throws exception when not fully consumed
         # Create a DataFrame large enough so that write to socket will eventually block
         df = self.spark.range(1 << 20, numPartitions=2)
         it = df.toLocalIterator()
         self.assertEqual(df.take(1)[0], next(it))
-        with QuietTest(self.sc):
-            it = None  # remove iterator from scope, socket is closed when cleaned up
-            # Make sure normal df operations still work
-            result = []
-            for i, row in enumerate(df.toLocalIterator()):
-                result.append(row)
-                if i == 7:
-                    break
-            self.assertEqual(df.take(8), result)
+        it = None  # remove iterator from scope, socket is closed when cleaned up
+        # Make sure normal df operations still work
+        result = []
+        for i, row in enumerate(df.toLocalIterator()):
+            result.append(row)
+            if i == 7:
+                break
+        self.assertEqual(df.take(8), result)
 
     def test_same_semantics_error(self):
         with QuietTest(self.sc):

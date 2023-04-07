@@ -43,7 +43,7 @@ class StringType private() extends AtomicType {
    */
   override def defaultSize: Int = 20
 
-  override def physicalDataType: PhysicalDataType = PhysicalStringType
+  private[sql] override def physicalDataType: PhysicalDataType = PhysicalStringType
 
   private[spark] override def asNullable: StringType = this
 }

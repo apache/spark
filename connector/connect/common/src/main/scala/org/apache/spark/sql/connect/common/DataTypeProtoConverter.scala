@@ -335,6 +335,7 @@ object DataTypeProtoConverter {
               .setType("udt")
               .setPythonClass(pyudt.pyUDT)
               .setSqlType(toConnectProtoType(pyudt.sqlType))
+              .setSerializedPythonClass(pyudt.serializedPyClass)
               .build())
           .build()
 

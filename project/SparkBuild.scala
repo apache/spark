@@ -854,6 +854,7 @@ object SparkConnectClient {
 
     buildTestDeps := {
       (LocalProject("assembly") / Compile / Keys.`package`).value
+      (LocalProject("catalyst") / Test / Keys.`package`).value
     },
 
     // SPARK-42538: Make sure the `${SPARK_HOME}/assembly/target/scala-$SPARK_SCALA_VERSION/jars` is available for testing.
@@ -1082,7 +1083,7 @@ object DependencyOverrides {
   lazy val guavaVersion = sys.props.get("guava.version").getOrElse("14.0.1")
   lazy val settings = Seq(
     dependencyOverrides += "com.google.guava" % "guava" % guavaVersion,
-    dependencyOverrides += "xerces" % "xercesImpl" % "2.12.0",
+    dependencyOverrides += "xerces" % "xercesImpl" % "2.12.2",
     dependencyOverrides += "jline" % "jline" % "2.14.6",
     dependencyOverrides += "org.apache.avro" % "avro" % "1.11.1")
 }

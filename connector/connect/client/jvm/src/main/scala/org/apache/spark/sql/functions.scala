@@ -23,8 +23,8 @@ import scala.reflect.runtime.universe.{typeTag, TypeTag}
 
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.PrimitiveLongEncoder
+import org.apache.spark.sql.connect.common.LiteralValueProtoConverter._
 import org.apache.spark.sql.expressions.{ScalarUserDefinedFunction, UserDefinedFunction}
-import org.apache.spark.sql.expressions.LiteralProtoConverter._
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.sql.types.DataType.parseTypeWithFallback
 
@@ -4004,6 +4004,16 @@ object functions {
   def array_compact(column: Column): Column = Column.fn("array_compact", column)
 
   /**
+   * Returns an array containing value as well as all elements from array. The new element is
+   * positioned at the beginning of the array.
+   *
+   * @group collection_funcs
+   * @since 3.5.0
+   */
+  def array_prepend(column: Column, element: Any): Column =
+    Column.fn("array_prepend", column, lit(element))
+
+  /**
    * Removes duplicate values from the array.
    * @group collection_funcs
    * @since 3.4.0
@@ -4637,7 +4647,7 @@ object functions {
    * Invoke a function with an options map as its last argument. If there are no options, its
    * column is dropped.
    */
-  private def fnWithOptions(
+  private[sql] def fnWithOptions(
       name: String,
       options: Iterator[(String, String)],
       arguments: Column*): Column = {

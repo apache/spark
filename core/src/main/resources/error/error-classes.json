@@ -1,4 +1,10 @@
 {
+  "ALTER_TABLE_COLUMN_DESCRIPTOR_DUPLICATE" : {
+    "message" : [
+      "ALTER TABLE <type> column <columnName> specifies descriptor \"<optionName>\" more than once, which is invalid."
+    ],
+    "sqlState" : "42710"
+  },
   "AMBIGUOUS_COLUMN_OR_FIELD" : {
     "message" : [
       "Column or field <name> is ambiguous and has <n> matches."
@@ -26,6 +32,12 @@
   "ARITHMETIC_OVERFLOW" : {
     "message" : [
       "<message>.<alternative> If necessary set <config> to \"false\" to bypass this error."
+    ],
+    "sqlState" : "22003"
+  },
+  "BINARY_ARITHMETIC_OVERFLOW" : {
+    "message" : [
+      "<value1> <symbol> <value2> caused overflow."
     ],
     "sqlState" : "22003"
   },
@@ -123,6 +135,12 @@
     ],
     "sqlState" : "429BB"
   },
+  "CANNOT_RENAME_ACROSS_SCHEMA" : {
+    "message" : [
+      "Renaming a <type> across schemas is not allowed."
+    ],
+    "sqlState" : "0AKD0"
+  },
   "CANNOT_RESTORE_PERMISSIONS_FOR_PATH" : {
     "message" : [
       "Failed to set permissions on created path <path> back to <permission>."
@@ -207,9 +225,9 @@
     ],
     "sqlState" : "22018"
   },
-  "CREATE_TABLE_COLUMN_OPTION_DUPLICATE" : {
+  "CREATE_TABLE_COLUMN_DESCRIPTOR_DUPLICATE" : {
     "message" : [
-      "CREATE TABLE column <columnName> specifies option \"<optionName>\" more than once, which is invalid."
+      "CREATE TABLE column <columnName> specifies descriptor \"<optionName>\" more than once, which is invalid."
     ],
     "sqlState" : "42710"
   },
@@ -523,12 +541,6 @@
       "Found duplicate keys <keyColumn>."
     ],
     "sqlState" : "23505"
-  },
-  "ELEMENT_AT_BY_INDEX_ZERO" : {
-    "message" : [
-      "The index 0 is invalid. An index shall be either < 0 or > 0 (the first element has index 1)."
-    ],
-    "sqlState" : "22003"
   },
   "EMPTY_JSON_FIELD_VALUE" : {
     "message" : [
@@ -903,6 +915,12 @@
     ],
     "sqlState" : "42602"
   },
+  "INVALID_INDEX_OF_ZERO" : {
+    "message" : [
+      "The index 0 is invalid. An index shall be either < 0 or > 0 (the first element has index 1)."
+    ],
+    "sqlState" : "22003"
+  },
   "INVALID_JSON_ROOT_FIELD" : {
     "message" : [
       "Cannot convert JSON root field to target Spark type."
@@ -1050,12 +1068,39 @@
     ],
     "sqlState" : "42604"
   },
+  "INVALID_URL" : {
+    "message" : [
+      "The url is invalid: <url>. If necessary set <ansiConfig> to \"false\" to bypass this error."
+    ]
+  },
   "INVALID_WHERE_CONDITION" : {
     "message" : [
       "The WHERE condition <condition> contains invalid expressions: <expressionList>.",
       "Rewrite the query to avoid window functions, aggregate functions, and generator functions in the WHERE clause."
     ],
     "sqlState" : "42903"
+  },
+  "INVALID_WRITE_DISTRIBUTION" : {
+    "message" : [
+      "The requested write distribution is invalid."
+    ],
+    "subClass" : {
+      "PARTITION_NUM_AND_SIZE" : {
+        "message" : [
+          "The partition number and advisory partition size can't be specified at the same time."
+        ]
+      },
+      "PARTITION_NUM_WITH_UNSPECIFIED_DISTRIBUTION" : {
+        "message" : [
+          "The number of partitions can't be specified with unspecified distribution."
+        ]
+      },
+      "PARTITION_SIZE_WITH_UNSPECIFIED_DISTRIBUTION" : {
+        "message" : [
+          "The advisory partition size can't be specified with unspecified distribution."
+        ]
+      }
+    }
   },
   "LOCATION_ALREADY_EXISTS" : {
     "message" : [
@@ -1722,6 +1767,11 @@
       "PANDAS_UDAF_IN_PIVOT" : {
         "message" : [
           "Pandas user defined aggregate function in the PIVOT clause."
+        ]
+      },
+      "PARAMETER_MARKER_IN_UNEXPECTED_STATEMENT" : {
+        "message" : [
+          "Parameter markers in unexpected statement: <statement>. Parameter markers must only be used in a query, or DML statement."
         ]
       },
       "PIVOT_AFTER_GROUP_BY" : {
@@ -2920,11 +2970,6 @@
       "Unsupported data type <dataType>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1178" : {
-    "message" : [
-      "The number of partitions can't be specified with unspecified distribution. Invalid writer requirements detected."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1181" : {
     "message" : [
       "Stream-stream join without equality predicate is not supported."
@@ -3661,11 +3706,6 @@
       "Unsuccessful try to zip maps with <size> unique keys due to exceeding the array size limit <maxRoundedArrayLength>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2004" : {
-    "message" : [
-      "no default for type <dataType>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2005" : {
     "message" : [
       "Type <dataType> does not support ordered operations."
@@ -3679,11 +3719,6 @@
   "_LEGACY_ERROR_TEMP_2007" : {
     "message" : [
       "Regex group count is <groupCount>, but the specified group index is <groupIndex>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2008" : {
-    "message" : [
-      "Find an invalid url string <url>. If necessary set <ansiConfig> to false to bypass this error."
     ]
   },
   "_LEGACY_ERROR_TEMP_2010" : {
@@ -3844,11 +3879,6 @@
   "_LEGACY_ERROR_TEMP_2043" : {
     "message" : [
       "- <sqlValue> caused overflow."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2044" : {
-    "message" : [
-      "<sqlValue1> <symbol> <sqlValue2> caused overflow."
     ]
   },
   "_LEGACY_ERROR_TEMP_2045" : {

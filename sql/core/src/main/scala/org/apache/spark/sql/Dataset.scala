@@ -1477,6 +1477,18 @@ class Dataset[T] private[sql](
       }
   }
 
+  /**
+   * Selects a metadata column based on its logical column name, and returns it as a [[Column]].
+   *
+   * A metadata column can be accessed this way even if the underlying data source defines a data
+   * column with a conflicting name.
+   *
+   * @group untypedrel
+   * @since 3.5.0
+   */
+  def metadataColumn(colName: String): Column =
+    Column(queryExecution.analyzed.getMetadataAttributeByName(colName))
+
   // Attach the dataset id and column position to the column reference, so that we can detect
   // ambiguous self-join correctly. See the rule `DetectAmbiguousSelfJoin`.
   // This must be called before we return a `Column` that contains `AttributeReference`.
@@ -3283,13 +3295,14 @@ class Dataset[T] private[sql](
    * This function uses Apache Arrow as serialization format between Java executors and Python
    * workers.
    */
-  private[sql] def mapInPandas(func: PythonUDF): DataFrame = {
+  private[sql] def mapInPandas(func: PythonUDF, isBarrier: Boolean = false): DataFrame = {
     Dataset.ofRows(
       sparkSession,
       MapInPandas(
         func,
         func.dataType.asInstanceOf[StructType].toAttributes,
-        logicalPlan))
+        logicalPlan,
+        isBarrier))
   }
 
   /**
@@ -3297,13 +3310,14 @@ class Dataset[T] private[sql](
    * defines a transformation: `iter(pyarrow.RecordBatch)` -> `iter(pyarrow.RecordBatch)`.
    * Each partition is each iterator consisting of `pyarrow.RecordBatch`s as batches.
    */
-  private[sql] def pythonMapInArrow(func: PythonUDF): DataFrame = {
+  private[sql] def pythonMapInArrow(func: PythonUDF, isBarrier: Boolean = false): DataFrame = {
     Dataset.ofRows(
       sparkSession,
       PythonMapInArrow(
         func,
         func.dataType.asInstanceOf[StructType].toAttributes,
-        logicalPlan))
+        logicalPlan,
+        isBarrier))
   }
 
   /**
@@ -3973,11 +3987,7 @@ class Dataset[T] private[sql](
    * This is for 'distributed-sequence' default index in pandas API on Spark.
    */
   private[sql] def withSequenceColumn(name: String) = {
-    Dataset.ofRows(
-      sparkSession,
-      AttachDistributedSequence(
-        AttributeReference(name, LongType, nullable = false)(),
-        logicalPlan))
+    select(Column(DistributedSequenceID()).alias(name), col("*"))
   }
 
   /**

@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.optimizer.ConstantFolding
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.TreePattern.PLAN_EXPRESSION
-import org.apache.spark.sql.connector.catalog.{CatalogManager, FunctionCatalog, Identifier}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, FunctionCatalog, Identifier, TableCatalog, TableCatalogCapability}
 import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
@@ -90,39 +90,15 @@ object ResolveDefaultColumns {
    * EXISTS_DEFAULT metadata for such columns where the value is not present in storage.
    *
    * @param tableSchema   represents the names and types of the columns of the statement to process.
-   * @param tableProvider provider of the target table to store default values for, if any.
    * @param statementType name of the statement being processed, such as INSERT; useful for errors.
-   * @param addNewColumnToExistingTable true if the statement being processed adds a new column to
-   *                                    a table that already exists.
    * @return a copy of `tableSchema` with field metadata updated with the constant-folded values.
    */
   def constantFoldCurrentDefaultsToExistDefaults(
       tableSchema: StructType,
-      tableProvider: Option[String],
-      statementType: String,
-      addNewColumnToExistingTable: Boolean): StructType = {
+      statementType: String): StructType = {
     if (SQLConf.get.enableDefaultColumns) {
-      val keywords: Array[String] =
-        SQLConf.get.getConf(SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS)
-          .toLowerCase().split(",").map(_.trim)
-      val allowedTableProviders: Array[String] =
-        keywords.map(_.stripSuffix("*"))
-      val addColumnExistingTableBannedProviders: Array[String] =
-        keywords.filter(_.endsWith("*")).map(_.stripSuffix("*"))
-      val givenTableProvider: String = tableProvider.getOrElse("").toLowerCase()
       val newFields: Seq[StructField] = tableSchema.fields.map { field =>
         if (field.metadata.contains(CURRENT_DEFAULT_COLUMN_METADATA_KEY)) {
-          // Make sure that the target table has a provider that supports default column values.
-          if (!allowedTableProviders.contains(givenTableProvider)) {
-            throw QueryCompilationErrors
-              .defaultReferencesNotAllowedInDataSource(statementType, givenTableProvider)
-          }
-          if (addNewColumnToExistingTable &&
-            givenTableProvider.nonEmpty &&
-            addColumnExistingTableBannedProviders.contains(givenTableProvider)) {
-            throw QueryCompilationErrors
-              .addNewDefaultColumnToExistingTableNotAllowed(statementType, givenTableProvider)
-          }
           val analyzed: Expression = analyze(field, statementType)
           val newMetadata: Metadata = new MetadataBuilder().withMetadata(field.metadata)
             .putString(EXISTS_DEFAULT_COLUMN_METADATA_KEY, analyzed.sql).build()
@@ -134,6 +110,47 @@ object ResolveDefaultColumns {
       StructType(newFields)
     } else {
       tableSchema
+    }
+  }
+
+  // Fails if the given catalog does not support column default value.
+  def validateCatalogForDefaultValue(
+      schema: StructType,
+      catalog: TableCatalog,
+      ident: Identifier): Unit = {
+    if (SQLConf.get.enableDefaultColumns &&
+      schema.exists(_.metadata.contains(CURRENT_DEFAULT_COLUMN_METADATA_KEY)) &&
+      !catalog.capabilities().contains(TableCatalogCapability.SUPPORT_COLUMN_DEFAULT_VALUE)) {
+      throw QueryCompilationErrors.unsupportedTableOperationError(
+        catalog, ident, "column default value")
+    }
+  }
+
+  // Fails if the given table provider of the session catalog does not support column default value.
+  def validateTableProviderForDefaultValue(
+      schema: StructType,
+      tableProvider: Option[String],
+      statementType: String,
+      addNewColumnToExistingTable: Boolean): Unit = {
+    if (SQLConf.get.enableDefaultColumns &&
+      schema.exists(_.metadata.contains(CURRENT_DEFAULT_COLUMN_METADATA_KEY))) {
+      val keywords: Array[String] = SQLConf.get.getConf(SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS)
+        .toLowerCase().split(",").map(_.trim)
+      val allowedTableProviders: Array[String] = keywords.map(_.stripSuffix("*"))
+      val addColumnExistingTableBannedProviders: Array[String] =
+        keywords.filter(_.endsWith("*")).map(_.stripSuffix("*"))
+      val givenTableProvider: String = tableProvider.getOrElse("").toLowerCase()
+      // Make sure that the target table has a provider that supports default column values.
+      if (!allowedTableProviders.contains(givenTableProvider)) {
+        throw QueryCompilationErrors.defaultReferencesNotAllowedInDataSource(
+          statementType, givenTableProvider)
+      }
+      if (addNewColumnToExistingTable &&
+        givenTableProvider.nonEmpty &&
+        addColumnExistingTableBannedProviders.contains(givenTableProvider)) {
+        throw QueryCompilationErrors.addNewDefaultColumnToExistingTableNotAllowed(
+          statementType, givenTableProvider)
+      }
     }
   }
 

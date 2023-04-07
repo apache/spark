@@ -73,7 +73,7 @@ if have_pyarrow:
     not have_pandas or not have_pyarrow,
     cast(str, pandas_requirement_message or pyarrow_requirement_message),
 )
-class GroupedApplyInPandasTests(ReusedSQLTestCase):
+class GroupedApplyInPandasTestsMixin:
     @property
     def data(self):
         return (
@@ -289,17 +289,17 @@ class GroupedApplyInPandasTests(ReusedSQLTestCase):
         return pd.DataFrame([key + (pdf.v.mean(),)])
 
     def test_apply_in_pandas_returning_column_names(self):
-        self._test_apply_in_pandas(GroupedApplyInPandasTests.stats_with_column_names)
+        self._test_apply_in_pandas(GroupedApplyInPandasTestsMixin.stats_with_column_names)
 
     def test_apply_in_pandas_returning_no_column_names(self):
-        self._test_apply_in_pandas(GroupedApplyInPandasTests.stats_with_no_column_names)
+        self._test_apply_in_pandas(GroupedApplyInPandasTestsMixin.stats_with_no_column_names)
 
     def test_apply_in_pandas_returning_column_names_sometimes(self):
         def stats(key, pdf):
             if key[0] % 2:
-                return GroupedApplyInPandasTests.stats_with_column_names(key, pdf)
+                return GroupedApplyInPandasTestsMixin.stats_with_column_names(key, pdf)
             else:
-                return GroupedApplyInPandasTests.stats_with_no_column_names(key, pdf)
+                return GroupedApplyInPandasTestsMixin.stats_with_no_column_names(key, pdf)
 
         self._test_apply_in_pandas(stats)
 
@@ -782,7 +782,7 @@ class GroupedApplyInPandasTests(ReusedSQLTestCase):
 
         def stats(key, pdf):
             if key[0] % 2 == 0:
-                return GroupedApplyInPandasTests.stats_with_no_column_names(key, pdf)
+                return GroupedApplyInPandasTestsMixin.stats_with_no_column_names(key, pdf)
             return empty_df
 
         result = (
@@ -803,6 +803,10 @@ class GroupedApplyInPandasTests(ReusedSQLTestCase):
         with QuietTest(self.sc):
             with self.assertRaisesRegex(PythonException, error):
                 self._test_apply_in_pandas_returning_empty_dataframe(empty_df)
+
+
+class GroupedApplyInPandasTests(GroupedApplyInPandasTestsMixin, ReusedSQLTestCase):
+    pass
 
 
 if __name__ == "__main__":

@@ -40,6 +40,7 @@ from pyspark.sql.types import (
     StructType,
     _parse_datatype_string,
 )
+from pyspark.sql.utils import get_active_spark_context
 from pyspark.sql.pandas.types import to_arrow_type
 from pyspark.sql.pandas.utils import require_minimum_pandas_version, require_minimum_pyarrow_version
 
@@ -339,8 +340,7 @@ class UserDefinedFunction:
         return judf
 
     def __call__(self, *cols: "ColumnOrName") -> Column:
-        sc = SparkContext._active_spark_context
-        assert sc is not None
+        sc = get_active_spark_context()
         profiler: Optional[Profiler] = None
         memory_profiler: Optional[Profiler] = None
         if sc.profiler_collector:
@@ -478,7 +478,7 @@ class UDFRegistration:
         .. versionadded:: 1.3.1
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Parameters
         ----------
@@ -622,6 +622,9 @@ class UDFRegistration:
 
         .. versionadded:: 2.3.0
 
+        .. versionchanged:: 3.4.0
+            Supports Spark Connect.
+
         Parameters
         ----------
         name : str
@@ -665,6 +668,9 @@ class UDFRegistration:
         """Register a Java user-defined aggregate function as a SQL function.
 
         .. versionadded:: 2.3.0
+
+        .. versionchanged:: 3.4.0
+            Supports Spark Connect.
 
         name : str
             name of the user-defined aggregate function

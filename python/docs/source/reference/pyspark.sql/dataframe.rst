@@ -25,6 +25,8 @@ DataFrame
 .. autosummary::
     :toctree: api/
 
+    DataFrame.__getattr__
+    DataFrame.__getitem__
     DataFrame.agg
     DataFrame.alias
     DataFrame.approxQuantile

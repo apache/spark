@@ -201,20 +201,19 @@ private[hive] object SparkSQLCLIDriver extends Logging {
       case e: UnsupportedEncodingException => exit(ERROR_PATH_NOT_FOUND)
     }
 
-    if (sessionState.database != null) {
-      SparkSQLEnv.sqlContext.sessionState.catalog.setCurrentDatabase(
-        s"${sessionState.database}")
-    }
-
-    // Execute -i init files (always in silent mode)
-    cli.processInitFiles(sessionState)
-
     // We don't propagate hive.metastore.warehouse.dir, because it might has been adjusted in
     // [[SharedState.loadHiveConfFile]] based on the user specified or default values of
     // spark.sql.warehouse.dir and hive.metastore.warehouse.dir.
     for ((k, v) <- newHiveConf if k != "hive.metastore.warehouse.dir") {
       SparkSQLEnv.sqlContext.setConf(k, v)
     }
+
+    if (sessionState.database != null) {
+      SparkSQLEnv.sqlContext.sql(s"USE ${sessionState.database}")
+    }
+
+    // Execute -i init files (always in silent mode)
+    cli.processInitFiles(sessionState)
 
     cli.printMasterAndAppId
 

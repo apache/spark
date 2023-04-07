@@ -239,6 +239,16 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
   }
 
   /**
+   * A variant of [[transformAllExpressions]] which considers plan nodes inside subqueries as well.
+   */
+  def transformAllExpressionsWithSubqueries(
+    rule: PartialFunction[Expression, Expression]): this.type = {
+    transformWithSubqueries {
+      case q => q.transformExpressions(rule).asInstanceOf[PlanType]
+    }.asInstanceOf[this.type]
+  }
+
+  /**
    * Returns the result of running [[transformExpressionsWithPruning]] on this node
    * and all its children. Note that this method skips expressions inside subqueries.
    */

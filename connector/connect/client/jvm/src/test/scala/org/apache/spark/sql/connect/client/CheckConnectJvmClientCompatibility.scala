@@ -105,6 +105,12 @@ object CheckConnectJvmClientCompatibility {
     val mima = new MiMaLib(Seq(clientJar, sqlJar))
     val allProblems = mima.collectProblems(sqlJar, clientJar, List.empty)
     val includedRules = Seq(
+      IncludeByName("org.apache.spark.sql.catalog.Catalog.*"),
+      IncludeByName("org.apache.spark.sql.catalog.CatalogMetadata.*"),
+      IncludeByName("org.apache.spark.sql.catalog.Column.*"),
+      IncludeByName("org.apache.spark.sql.catalog.Database.*"),
+      IncludeByName("org.apache.spark.sql.catalog.Function.*"),
+      IncludeByName("org.apache.spark.sql.catalog.Table.*"),
       IncludeByName("org.apache.spark.sql.Column.*"),
       IncludeByName("org.apache.spark.sql.ColumnName.*"),
       IncludeByName("org.apache.spark.sql.DataFrame.*"),
@@ -130,10 +136,7 @@ object CheckConnectJvmClientCompatibility {
       ProblemFilters.exclude[Problem]("org.apache.spark.connect.proto.*"),
 
       // DataFrame Reader & Writer
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.DataFrameReader.json"),
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.DataFrameReader.csv"),
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.DataFrameReader.jdbc"),
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.DataFrameWriter.jdbc"),
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.DataFrameReader.json"), // deprecated
 
       // DataFrameNaFunctions
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.DataFrameNaFunctions.this"),
@@ -153,18 +156,11 @@ object CheckConnectJvmClientCompatibility {
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.encoder"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.sqlContext"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.joinWith"),
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.select"),
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.selectUntyped"),
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.metadataColumn"),
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.selectUntyped"), // protected
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.reduce"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.groupByKey"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.explode"), // deprecated
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.filter"),
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.map"),
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.mapPartitions"),
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.flatMap"),
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.foreach"),
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.foreachPartition"),
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.storageLevel"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.rdd"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.toJavaRDD"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.javaRDD"),
@@ -177,7 +173,6 @@ object CheckConnectJvmClientCompatibility {
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.functions.callUDF"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.functions.unwrap_udt"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.functions.udaf"),
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.functions.broadcast"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.functions.typedlit"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.functions.typedLit"),
 
@@ -201,7 +196,6 @@ object CheckConnectJvmClientCompatibility {
       ProblemFilters.exclude[Problem](
         "org.apache.spark.sql.SparkSession.baseRelationToDataFrame"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.createDataset"),
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.catalog"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.executeCommand"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.readStream"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.this"),

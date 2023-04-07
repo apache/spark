@@ -192,8 +192,8 @@ message Expression {
     }
 
     message Array {
-      DataType elementType = 1;
-      repeated Literal element = 2;
+      DataType element_type = 1;
+      repeated Literal elements = 2;
     }
   }
 
@@ -312,7 +312,7 @@ message Expression {
 message CommonInlineUserDefinedFunction {
   // (Required) Name of the user-defined function.
   string function_name = 1;
-  // (Required) Indicate if the user-defined function is deterministic.
+  // (Optional) Indicate if the user-defined function is deterministic.
   bool deterministic = 2;
   // (Optional) Function arguments. Empty arguments are allowed.
   repeated Expression arguments = 3;
@@ -320,12 +320,13 @@ message CommonInlineUserDefinedFunction {
   oneof function {
     PythonUDF python_udf = 4;
     ScalarScalaUDF scalar_scala_udf = 5;
+    JavaUDF java_udf = 6;
   }
 }
 
 message PythonUDF {
   // (Required) Output type of the Python UDF
-  string output_type = 1;
+  DataType output_type = 1;
   // (Required) EvalType of the Python UDF
   int32 eval_type = 2;
   // (Required) The encoded commands of the Python UDF
@@ -345,3 +346,13 @@ message ScalarScalaUDF {
   bool nullable = 4;
 }
 
+message JavaUDF {
+  // (Required) Fully qualified name of Java class
+  string class_name = 1;
+
+  // (Optional) Output type of the Java UDF
+  optional DataType output_type = 2;
+
+  // (Required) Indicate if the Java user-defined function is an aggregate function
+  bool aggregate = 3;
+}

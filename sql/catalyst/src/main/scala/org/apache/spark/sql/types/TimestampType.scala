@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.types
 
-import scala.math.Ordering
 import scala.reflect.runtime.universe.typeTag
 
 import org.apache.spark.annotation.Stable
@@ -42,14 +41,12 @@ class TimestampType private() extends DatetimeType {
 
   @transient private[sql] lazy val tag = typeTag[InternalType]
 
-  private[sql] val ordering = implicitly[Ordering[InternalType]]
-
   /**
    * The default size of a value of the TimestampType is 8 bytes.
    */
   override def defaultSize: Int = 8
 
-  override def physicalDataType: PhysicalDataType = PhysicalLongType
+  private[sql] override def physicalDataType: PhysicalDataType = PhysicalLongType
 
   private[spark] override def asNullable: TimestampType = this
 }

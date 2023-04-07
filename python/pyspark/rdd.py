@@ -1725,7 +1725,7 @@ class RDD(Generic[T_co]):
         Parameters
         ----------
         f : function
-            a function applyed to each element
+            a function applied to each element
 
         See Also
         --------

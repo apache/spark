@@ -22,6 +22,7 @@ import com.fasterxml.jackson.core.JsonParseException
 import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.sql.catalyst.analysis.{caseInsensitiveResolution, caseSensitiveResolution}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.StringUtils.StringConcat
 import org.apache.spark.sql.types.DataTypeTestUtils.{dayTimeIntervalTypes, yearMonthIntervalTypes}
 
@@ -191,6 +192,12 @@ class DataTypeSuite extends SparkFunSuite {
     assert(DataType.fromJson("\"null\"") == NullType)
   }
 
+  test("SPARK-42723: Parse timestamp_ltz as TimestampType") {
+    assert(DataType.fromJson("\"timestamp_ltz\"") == TimestampType)
+    val expectedStructType = StructType(Seq(StructField("ts", TimestampType)))
+    assert(DataType.fromDDL("ts timestamp_ltz") == expectedStructType)
+  }
+
   def checkDataTypeFromJson(dataType: DataType): Unit = {
     test(s"from Json - $dataType") {
       assert(DataType.fromJson(dataType.json) === dataType)
@@ -201,7 +208,7 @@ class DataTypeSuite extends SparkFunSuite {
     test(s"from DDL - $dataType") {
       val parsed = StructType.fromDDL(s"a ${dataType.sql}")
       val expected = new StructType().add("a", dataType)
-      assert(parsed.sameType(expected))
+      assert(DataTypeUtils.sameType(parsed, expected))
     }
   }
 
@@ -240,6 +247,9 @@ class DataTypeSuite extends SparkFunSuite {
 
   checkDataTypeFromJson(TimestampType)
   checkDataTypeFromDDL(TimestampType)
+
+  checkDataTypeFromJson(TimestampNTZType)
+  checkDataTypeFromDDL(TimestampNTZType)
 
   checkDataTypeFromJson(StringType)
   checkDataTypeFromDDL(StringType)

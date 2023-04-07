@@ -15,5 +15,4 @@
 # limitations under the License.
 #
 
-"""Currently Spark Connect is very experimental and the APIs to interact with
-Spark through this API are can be changed at any time without warning."""
+"""Spark Connect client"""

@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -154,12 +155,12 @@ abstract class TypeCoercionBase {
       true
     } else {
       val head = types.head
-      types.tail.forall(_.sameType(head))
+      types.tail.forall(e => DataTypeUtils.sameType(e, head))
     }
   }
 
   protected def castIfNotSameType(expr: Expression, dt: DataType): Expression = {
-    if (!expr.dataType.sameType(dt)) {
+    if (!DataTypeUtils.sameType(expr.dataType, dt)) {
       Cast(expr, dt)
     } else {
       expr
@@ -622,7 +623,8 @@ abstract class TypeCoercionBase {
     override val transform: PartialFunction[Expression, Expression] = {
       // Lambda function isn't resolved when the rule is executed.
       case m @ MapZipWith(left, right, function) if m.arguments.forall(a => a.resolved &&
-          MapType.acceptsType(a.dataType)) && !m.leftKeyType.sameType(m.rightKeyType) =>
+          MapType.acceptsType(a.dataType)) &&
+        !DataTypeUtils.sameType(m.leftKeyType, m.rightKeyType) =>
         findWiderTypeForTwo(m.leftKeyType, m.rightKeyType) match {
           case Some(finalKeyType) if !Cast.forceNullable(m.leftKeyType, finalKeyType) &&
               !Cast.forceNullable(m.rightKeyType, finalKeyType) =>

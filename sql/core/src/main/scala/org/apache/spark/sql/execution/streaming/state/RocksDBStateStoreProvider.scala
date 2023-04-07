@@ -142,7 +142,8 @@ private[sql] class RocksDBStateStoreProvider
         CUSTOM_METRIC_STALL_TIME -> nativeOpsLatencyMillis("writerStallDuration"),
         CUSTOM_METRIC_TOTAL_COMPACT_TIME -> sumNativeOpsLatencyMillis("compaction"),
         CUSTOM_METRIC_COMPACT_READ_BYTES -> nativeOpsMetrics("totalBytesReadByCompaction"),
-        CUSTOM_METRIC_COMPACT_WRITTEN_BYTES -> nativeOpsMetrics("totalBytesWrittenByCompaction")
+        CUSTOM_METRIC_COMPACT_WRITTEN_BYTES -> nativeOpsMetrics("totalBytesWrittenByCompaction"),
+        CUSTOM_METRIC_FLUSH_WRITTEN_BYTES -> nativeOpsMetrics("totalBytesWrittenByFlush")
       ) ++ rocksDBMetrics.zipFileBytesUncompressed.map(bytes =>
         Map(CUSTOM_METRIC_ZIP_FILE_BYTES_UNCOMPRESSED -> bytes)).getOrElse(Map())
 
@@ -296,6 +297,10 @@ object RocksDBStateStoreProvider {
   val CUSTOM_METRIC_COMPACT_WRITTEN_BYTES = StateStoreCustomSizeMetric(
     "rocksdbTotalBytesWrittenByCompaction",
     "RocksDB: compaction - total bytes written by the compaction process")
+  val CUSTOM_METRIC_FLUSH_WRITTEN_BYTES = StateStoreCustomSizeMetric(
+    "rocksdbTotalBytesWrittenByFlush",
+    "RocksDB: flush - total bytes written by flush"
+  )
 
   // Total SST file size
   val CUSTOM_METRIC_SST_FILE_SIZE = StateStoreCustomSizeMetric(
@@ -310,6 +315,6 @@ object RocksDBStateStoreProvider {
     CUSTOM_METRIC_BLOCK_CACHE_MISS, CUSTOM_METRIC_BLOCK_CACHE_HITS, CUSTOM_METRIC_BYTES_READ,
     CUSTOM_METRIC_BYTES_WRITTEN, CUSTOM_METRIC_ITERATOR_BYTES_READ, CUSTOM_METRIC_STALL_TIME,
     CUSTOM_METRIC_TOTAL_COMPACT_TIME, CUSTOM_METRIC_COMPACT_READ_BYTES,
-    CUSTOM_METRIC_COMPACT_WRITTEN_BYTES
+    CUSTOM_METRIC_COMPACT_WRITTEN_BYTES, CUSTOM_METRIC_FLUSH_WRITTEN_BYTES
   )
 }

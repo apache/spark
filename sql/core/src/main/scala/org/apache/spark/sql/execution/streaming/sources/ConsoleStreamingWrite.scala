@@ -41,6 +41,8 @@ class ConsoleWrite(schema: StructType, options: CaseInsensitiveStringMap)
   def createStreamingWriterFactory(info: PhysicalWriteInfo): StreamingDataWriterFactory =
     PackedRowWriterFactory
 
+  override def useCommitCoordinator(): Boolean = false
+
   override def commit(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {
     // We have to print a "Batch" label for the epoch for compatibility with the pre-data source V2
     // behavior.

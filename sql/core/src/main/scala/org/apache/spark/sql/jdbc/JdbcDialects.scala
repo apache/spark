@@ -398,8 +398,22 @@ abstract class JdbcDialect extends Serializable with Logging {
    * @param newTable New name of the table.
    * @return The SQL statement to use for renaming the table.
    */
+  @deprecated("Please override renameTable method with identifiers", "3.5.0")
   def renameTable(oldTable: String, newTable: String): String = {
     s"ALTER TABLE $oldTable RENAME TO $newTable"
+  }
+
+  /**
+   * Rename an existing table.
+   *
+   * @param oldTable The existing table.
+   * @param newTable New name of the table.
+   * @return The SQL statement to use for renaming the table.
+   */
+  @Since("3.5.0")
+  def renameTable(oldTable: Identifier, newTable: Identifier): String = {
+    s"ALTER TABLE ${getFullyQualifiedQuotedTableName(oldTable)} RENAME TO " +
+      s"${getFullyQualifiedQuotedTableName(newTable)}"
   }
 
   /**
@@ -583,17 +597,29 @@ abstract class JdbcDialect extends Serializable with Logging {
    * {@link OracleDialect.OracleSQLQueryBuilder} and
    * {@link MsSqlServerDialect.MsSqlServerSQLQueryBuilder}.
    */
-  def supportsLimit: Boolean = true
+  def supportsLimit: Boolean = false
 
   /**
    * Returns ture if dialect supports OFFSET clause.
+   *
+   * Note: Some build-in dialect supports OFFSET clause with some trick, please see:
+   * {@link OracleDialect.OracleSQLQueryBuilder} and
+   * {@link MySQLDialect.MySQLSQLQueryBuilder}.
    */
-  def supportsOffset: Boolean = true
+  def supportsOffset: Boolean = false
 
   def supportsTableSample: Boolean = false
 
   def getTableSample(sample: TableSampleInfo): String =
     throw new UnsupportedOperationException("TableSample is not supported by this data source")
+
+  /**
+   * Return the DB-specific quoted and fully qualified table name
+   */
+  @Since("3.5.0")
+  def getFullyQualifiedQuotedTableName(ident: Identifier): String = {
+    (ident.namespace() :+ ident.name()).map(quoteIdentifier).mkString(".")
+  }
 }
 
 /**

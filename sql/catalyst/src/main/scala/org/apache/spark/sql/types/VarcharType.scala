@@ -28,7 +28,7 @@ case class VarcharType(length: Int) extends AtomicType {
   require(length >= 0, "The length of varchar type cannot be negative.")
 
   private[sql] type InternalType = UTF8String
-  override def physicalDataType: PhysicalDataType = PhysicalStringType
+  private[sql] override def physicalDataType: PhysicalDataType = PhysicalStringType
   @transient private[sql] lazy val tag = typeTag[InternalType]
   private[sql] val ordering = implicitly[Ordering[InternalType]]
 

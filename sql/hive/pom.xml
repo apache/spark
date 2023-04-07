@@ -204,7 +204,6 @@
           <plugin>
             <groupId>org.codehaus.mojo</groupId>
             <artifactId>build-helper-maven-plugin</artifactId>
-            <version>3.0.0</version>
             <executions>
               <execution>
                 <id>add-scala-test-sources</id>

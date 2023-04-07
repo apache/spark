@@ -432,4 +432,38 @@ case class AesDecrypt(
     copy(newChildren(0), newChildren(1), newChildren(2), newChildren(3))
   }
 }
+
+@ExpressionDescription(
+  usage = "_FUNC_(expr, key[, mode[, padding]]) - This is a special version of `aes_decrypt` that performs the same operation, but returns a NULL value instead of raising an error if the decryption cannot be performed.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(unhex('6E7CA17BBB468D3084B5744BCA729FB7B2B7BCB8E4472847D02670489D95FA97DBBA7D3210'), '0000111122223333', 'GCM');
+       Spark SQL
+      > SELECT _FUNC_(unhex('----------468D3084B5744BCA729FB7B2B7BCB8E4472847D02670489D95FA97DBBA7D3210'), '0000111122223333', 'GCM');
+       NULL
+  """,
+  since = "3.5.0",
+  group = "misc_funcs")
+// scalastyle:on line.size.limit
+case class TryAesDecrypt(
+    input: Expression,
+    key: Expression,
+    mode: Expression,
+    padding: Expression,
+    replacement: Expression) extends RuntimeReplaceable with InheritAnalysisRules {
+
+  def this(input: Expression, key: Expression, mode: Expression, padding: Expression) =
+    this(input, key, mode, padding, TryEval(AesDecrypt(input, key, mode, padding)))
+  def this(input: Expression, key: Expression, mode: Expression) =
+    this(input, key, mode, Literal("DEFAULT"))
+  def this(input: Expression, key: Expression) =
+    this(input, key, Literal("GCM"))
+
+  override def prettyName: String = "try_aes_decrypt"
+
+  override def parameters: Seq[Expression] = Seq(input, key, mode, padding)
+
+  override protected def withNewChildInternal(newChild: Expression): Expression =
+    this.copy(replacement = newChild)
+}
 // scalastyle:on line.size.limit

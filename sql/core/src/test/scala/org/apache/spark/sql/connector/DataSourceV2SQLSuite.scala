@@ -1100,9 +1100,15 @@ class DataSourceV2SQLSuiteV1Filter
         exception = intercept[AnalysisException] {
           sql(s"INSERT INTO $t1(data, data) VALUES(5)")
         },
-        errorClass = "COLUMN_ALREADY_EXISTS",
-        parameters = Map("columnName" -> "`data`")
-      )
+        errorClass = "_LEGACY_ERROR_TEMP_2305",
+        parameters = Map(
+          "numCols" -> "3",
+          "rowSize" -> "2",
+          "ri" -> "0"),
+        context = ExpectedContext(
+          fragment = s"INSERT INTO $t1(data, data)",
+          start = 0,
+          stop = 26))
     }
   }
 
@@ -1123,14 +1129,20 @@ class DataSourceV2SQLSuiteV1Filter
       assert(intercept[AnalysisException] {
         sql(s"INSERT OVERWRITE $t1 VALUES(4)")
       }.getMessage.contains("not enough data columns"))
-    // Duplicate columns
+      // Duplicate columns
       checkError(
         exception = intercept[AnalysisException] {
           sql(s"INSERT OVERWRITE $t1(data, data) VALUES(5)")
         },
-        errorClass = "COLUMN_ALREADY_EXISTS",
-        parameters = Map("columnName" -> "`data`")
-      )
+        errorClass = "_LEGACY_ERROR_TEMP_2305",
+        parameters = Map(
+          "numCols" -> "3",
+          "rowSize" -> "2",
+          "ri" -> "0"),
+        context = ExpectedContext(
+          fragment = s"INSERT OVERWRITE $t1(data, data)",
+          start = 0,
+          stop = 31))
     }
   }
 
@@ -1152,14 +1164,20 @@ class DataSourceV2SQLSuiteV1Filter
       assert(intercept[AnalysisException] {
         sql(s"INSERT OVERWRITE $t1 VALUES('a', 4)")
       }.getMessage.contains("not enough data columns"))
-    // Duplicate columns
+      // Duplicate columns
       checkError(
         exception = intercept[AnalysisException] {
           sql(s"INSERT OVERWRITE $t1(data, data) VALUES(5)")
         },
-        errorClass = "COLUMN_ALREADY_EXISTS",
-        parameters = Map("columnName" -> "`data`")
-      )
+        errorClass = "_LEGACY_ERROR_TEMP_2305",
+        parameters = Map(
+          "numCols" -> "4",
+          "rowSize" -> "3",
+          "ri" -> "0"),
+        context = ExpectedContext(
+          fragment = s"INSERT OVERWRITE $t1(data, data)",
+          start = 0,
+          stop = 31))
     }
   }
 
@@ -1422,6 +1440,38 @@ class DataSourceV2SQLSuiteV1Filter
     }
   }
 
+  test("SPARK-42684: Column default value only allowed with TableCatalogs that " +
+    "SUPPORT_COLUMN_DEFAULT_VALUE") {
+    val tblName = "my_tab"
+    val tableDefinition =
+      s"$tblName(c1 INT, c2 INT DEFAULT 0)"
+    for (statement <- Seq("CREATE TABLE", "REPLACE TABLE")) {
+      // InMemoryTableCatalog.capabilities() contains SUPPORT_COLUMN_DEFAULT_VALUE
+      withTable(s"testcat.$tblName") {
+        if (statement == "REPLACE TABLE") {
+          sql(s"CREATE TABLE testcat.$tblName(a INT) USING foo")
+        }
+        // Can create table with a generated column
+        sql(s"$statement testcat.$tableDefinition")
+        assert(catalog("testcat").asTableCatalog.tableExists(Identifier.of(Array(), tblName)))
+      }
+      // BasicInMemoryTableCatalog.capabilities() = {}
+      withSQLConf("spark.sql.catalog.dummy" -> classOf[BasicInMemoryTableCatalog].getName) {
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql("USE dummy")
+            sql(s"$statement dummy.$tableDefinition")
+          },
+          errorClass = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
+          parameters = Map(
+            "tableName" -> "`dummy`.`my_tab`",
+            "operation" -> "column default value"
+          )
+        )
+      }
+    }
+  }
+
   test("SPARK-41290: Generated columns only allowed with TableCatalogs that " +
     "SUPPORTS_CREATE_TABLE_WITH_GENERATED_COLUMNS") {
     val tblName = "my_tab"
@@ -1446,7 +1496,7 @@ class DataSourceV2SQLSuiteV1Filter
           },
           errorClass = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
           parameters = Map(
-            "tableName" -> "`my_tab`",
+            "tableName" -> "`dummy`.`my_tab`",
             "operation" -> "generated columns"
           )
         )

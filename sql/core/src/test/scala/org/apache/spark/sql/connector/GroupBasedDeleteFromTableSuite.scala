@@ -19,6 +19,7 @@ package org.apache.spark.sql.connector
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions.DynamicPruningExpression
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.execution.InSubqueryExec
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.internal.SQLConf
@@ -141,14 +142,15 @@ class GroupBasedDeleteFromTableSuite extends DeleteFromTableSuiteBase {
     val primaryScan = collect(executedPlan) {
       case s: BatchScanExec => s
     }.head
-    assert(primaryScan.schema.sameType(StructType.fromDDL(primaryScanSchema)))
+    assert(DataTypeUtils.sameType(primaryScan.schema, StructType.fromDDL(primaryScanSchema)))
 
     primaryScan.runtimeFilters match {
       case Seq(DynamicPruningExpression(child: InSubqueryExec)) =>
         val groupFilterScan = collect(child.plan) {
           case s: BatchScanExec => s
         }.head
-        assert(groupFilterScan.schema.sameType(StructType.fromDDL(groupFilterScanSchema)))
+        assert(DataTypeUtils.sameType(groupFilterScan.schema,
+          StructType.fromDDL(groupFilterScanSchema)))
 
       case _ =>
         fail("could not find group filter scan")

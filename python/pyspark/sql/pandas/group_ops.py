@@ -48,6 +48,9 @@ class PandasGroupedOpsMixin:
 
         .. versionadded:: 2.3.0
 
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
+
         Parameters
         ----------
         udf : :func:`pyspark.sql.functions.pandas_udf`
@@ -127,6 +130,9 @@ class PandasGroupedOpsMixin:
         The length of the returned `pandas.DataFrame` can be arbitrary.
 
         .. versionadded:: 3.0.0
+
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
 
         Parameters
         ----------
@@ -347,6 +353,9 @@ class PandasGroupedOpsMixin:
 
         .. versionadded:: 3.0.0
 
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
+
         See :class:`PandasCogroupedOps` for the operations that can be run.
         """
         from pyspark.sql import GroupedData
@@ -362,6 +371,9 @@ class PandasCogroupedOps:
     created by :func:`GroupedData.cogroup`.
 
     .. versionadded:: 3.0.0
+
+    .. versionchanged:: 3.4.0
+        Support Spark Connect.
 
     Notes
     -----
@@ -393,6 +405,9 @@ class PandasCogroupedOps:
         The length of the returned `pandas.DataFrame` can be arbitrary.
 
         .. versionadded:: 3.0.0
+
+        .. versionchanged:: 3.4.0
+            Support Spark Connect.
 
         Parameters
         ----------

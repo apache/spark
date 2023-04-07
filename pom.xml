@@ -116,10 +116,10 @@
     <maven.version>3.8.7</maven.version>
     <exec-maven-plugin.version>1.6.0</exec-maven-plugin.version>
     <sbt.project.name>spark</sbt.project.name>
-    <slf4j.version>2.0.6</slf4j.version>
-    <log4j.version>2.19.0</log4j.version>
+    <slf4j.version>2.0.7</slf4j.version>
+    <log4j.version>2.20.0</log4j.version>
     <!-- make sure to update IsolatedClientLoader whenever this version is changed -->
-    <hadoop.version>3.3.4</hadoop.version>
+    <hadoop.version>3.3.5</hadoop.version>
     <!-- Protobuf version for building with Hadoop/Yarn dependencies -->
     <protobuf.hadoopDependency.version>2.5.0</protobuf.hadoopDependency.version>
     <!-- Actual Protobuf version in Spark modules like Spark Connect, protobuf connector, etc. -->
@@ -141,7 +141,7 @@
     <!-- After 10.15.1.3, the minimum required version is JDK9 -->
     <derby.version>10.14.2.0</derby.version>
     <parquet.version>1.12.3</parquet.version>
-    <orc.version>1.8.2</orc.version>
+    <orc.version>1.8.3</orc.version>
     <orc.classifier>shaded-protobuf</orc.classifier>
     <jetty.version>9.4.51.v20230217</jetty.version>
     <jakartaservlet.version>4.0.3</jakartaservlet.version>
@@ -160,7 +160,7 @@
     <aws.java.sdk.version>1.11.655</aws.java.sdk.version>
     <!-- the producer is used in tests -->
     <aws.kinesis.producer.version>0.12.8</aws.kinesis.producer.version>
-    <gcs-connector.version>hadoop3-2.2.7</gcs-connector.version>
+    <gcs-connector.version>hadoop3-2.2.11</gcs-connector.version>
     <!--  org.apache.httpcomponents/httpclient-->
     <commons.httpclient.version>4.5.14</commons.httpclient.version>
     <commons.httpcore.version>4.4.16</commons.httpcore.version>
@@ -221,9 +221,11 @@
     ./python/pyspark/sql/pandas/utils.py, and ./python/setup.py too.
     -->
     <arrow.version>11.0.0</arrow.version>
+    <ammonite.version>2.5.8</ammonite.version>
+
     <!-- org.fusesource.leveldbjni will be used except on arm64 platform. -->
     <leveldbjni.group>org.fusesource.leveldbjni</leveldbjni.group>
-    <kubernetes-client.version>6.4.1</kubernetes-client.version>
+    <kubernetes-client.version>6.5.1</kubernetes-client.version>
 
     <test.java.home>${java.home}</test.java.home>
 
@@ -686,7 +688,7 @@
       <dependency>
         <groupId>org.rocksdb</groupId>
         <artifactId>rocksdbjni</artifactId>
-        <version>7.9.2</version>
+        <version>8.0.0</version>
       </dependency>
       <dependency>
         <groupId>${leveldbjni.group}</groupId>
@@ -1075,11 +1077,6 @@
         </exclusions>
       </dependency>
       <dependency>
-        <groupId>com.chuusai</groupId>
-        <artifactId>shapeless_${scala.binary.version}</artifactId>
-        <version>2.3.9</version>
-      </dependency>
-      <dependency>
         <groupId>org.json4s</groupId>
         <artifactId>json4s-jackson_${scala.binary.version}</artifactId>
         <version>3.7.0-M11</version>
@@ -1206,7 +1203,7 @@
       <dependency>
         <groupId>com.mysql</groupId>
         <artifactId>mysql-connector-j</artifactId>
-        <version>8.0.31</version>
+        <version>8.0.32</version>
         <scope>test</scope>
       </dependency>
       <dependency>
@@ -1430,6 +1427,10 @@
         <scope>test</scope>
       </dependency>
       <!-- Managed up to match Hadoop in HADOOP-16530 -->
+      <!--
+        When upgrading `xercesImpl` version, also need to change
+        the version definition in `SparkBuild#DependencyOverrides`.
+      -->
       <dependency>
         <groupId>xerces</groupId>
         <artifactId>xercesImpl</artifactId>
@@ -2772,7 +2773,7 @@
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-enforcer-plugin</artifactId>
-          <version>3.0.0-M2</version>
+          <version>3.2.1</version>
           <executions>
             <execution>
               <id>enforce-versions</id>
@@ -2815,7 +2816,7 @@
         <plugin>
           <groupId>org.codehaus.mojo</groupId>
           <artifactId>build-helper-maven-plugin</artifactId>
-          <version>3.2.0</version>
+          <version>3.3.0</version>
           <executions>
             <execution>
               <id>module-timestamp-property</id>
@@ -2917,7 +2918,7 @@
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-compiler-plugin</artifactId>
-          <version>3.10.1</version>
+          <version>3.11.0</version>
           <configuration>
             <source>${java.version}</source>
             <target>${java.version}</target>
@@ -2934,7 +2935,7 @@
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-surefire-plugin</artifactId>
-          <version>3.0.0-M8</version>
+          <version>3.0.0</version>
           <!-- Note config is repeated in scalatest config -->
           <configuration>
             <includes>
@@ -2957,7 +2958,7 @@
               <JAVA_HOME>${test.java.home}</JAVA_HOME>
               <SPARK_BEELINE_OPTS>-DmyKey=yourValue</SPARK_BEELINE_OPTS>
             </environmentVariables>
-            <systemProperties>
+            <systemPropertyVariables>
               <log4j.configurationFile>file:src/test/resources/log4j2.properties</log4j.configurationFile>
               <derby.system.durability>test</derby.system.durability>
               <java.awt.headless>true</java.awt.headless>
@@ -2972,7 +2973,7 @@
               <spark.hadoop.hadoop.security.key.provider.path>test:///</spark.hadoop.hadoop.security.key.provider.path>
               <!-- Needed by sql/hive tests. -->
               <test.src.tables>src</test.src.tables>
-            </systemProperties>
+            </systemPropertyVariables>
             <failIfNoTests>false</failIfNoTests>
             <failIfNoSpecifiedTests>false</failIfNoSpecifiedTests>
             <excludedGroups>${test.exclude.tags}</excludedGroups>
@@ -3025,6 +3026,8 @@
               <spark.test.docker.removePulledImage>${spark.test.docker.removePulledImage}</spark.test.docker.removePulledImage>
               <!-- Needed by sql/hive tests. -->
               <test.src.tables>__not_used__</test.src.tables>
+              <!--SPARK-42934: Need by `OrcEncryptionSuite` -->
+              <spark.hadoop.hadoop.security.key.provider.path>test:///</spark.hadoop.hadoop.security.key.provider.path>
             </systemProperties>
             <tagsToExclude>${test.exclude.tags},${test.default.exclude.tags}</tagsToExclude>
             <tagsToInclude>${test.include.tags}</tagsToInclude>
@@ -3095,7 +3098,7 @@
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-javadoc-plugin</artifactId>
-          <version>3.4.1</version>
+          <version>3.5.0</version>
           <configuration>
             <additionalJOptions>
               <additionalJOption>-Xdoclint:all</additionalJOption>
@@ -3173,7 +3176,7 @@
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-deploy-plugin</artifactId>
-          <version>3.0.0</version>
+          <version>3.1.0</version>
         </plugin>
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
@@ -3514,7 +3517,7 @@
         <hadoop-client-api.artifact>hadoop-client</hadoop-client-api.artifact>
         <hadoop-client-runtime.artifact>hadoop-yarn-api</hadoop-client-runtime.artifact>
         <hadoop-client-minicluster.artifact>hadoop-client</hadoop-client-minicluster.artifact>
-        <gcs-connector.version>hadoop2-2.2.7</gcs-connector.version>
+        <gcs-connector.version>hadoop2-2.2.11</gcs-connector.version>
         <!-- SPARK-36547: Please don't upgrade the version below, otherwise there will be an error on building Hadoop 2.7 package -->
         <scala-maven-plugin.version>4.3.0</scala-maven-plugin.version>
       </properties>

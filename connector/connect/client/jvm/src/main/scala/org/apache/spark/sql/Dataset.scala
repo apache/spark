@@ -23,12 +23,15 @@ import scala.collection.mutable
 import scala.util.control.NonFatal
 
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.api.java.function._
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
-import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{PrimitiveLongEncoder, StringEncoder, UnboundRowEncoder}
+import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders._
 import org.apache.spark.sql.catalyst.expressions.RowOrdering
-import org.apache.spark.sql.connect.client.SparkResult
-import org.apache.spark.sql.connect.common.DataTypeProtoConverter
+import org.apache.spark.sql.connect.client.{SparkResult, UdfUtils}
+import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, StorageLevelProtoConverter}
+import org.apache.spark.sql.expressions.ScalarUserDefinedFunction
+import org.apache.spark.sql.functions.{struct, to_json}
 import org.apache.spark.sql.types.{Metadata, StructType}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.Utils
@@ -1019,11 +1022,8 @@ class Dataset[T] private[sql] (
    * @since 3.4.0
    */
   @scala.annotation.varargs
-  def select(cols: Column*): DataFrame = sparkSession.newDataFrame { builder =>
-    builder.getProjectBuilder
-      .setInput(plan.getRoot)
-      .addAllExpressions(cols.map(_.expr).asJava)
-  }
+  def select(cols: Column*): DataFrame =
+    selectUntyped(UnboundRowEncoder, cols).asInstanceOf[DataFrame]
 
   /**
    * Selects a set of columns. This is a variant of `select` that can only select existing columns
@@ -1082,6 +1082,76 @@ class Dataset[T] private[sql] (
         .addExpressions(expr)
     }
   }
+
+  /**
+   * Internal helper function for building typed selects that return tuples. For simplicity and
+   * code reuse, we do this without the help of the type system and then use helper functions that
+   * cast appropriately for the user facing interface.
+   */
+  private def selectUntyped(columns: TypedColumn[_, _]*): Dataset[_] = {
+    val encoder = ProductEncoder.tuple(columns.map(_.encoder))
+    selectUntyped(encoder, columns)
+  }
+
+  /**
+   * Internal helper function for all select methods. The only difference between the select
+   * methods and typed select methods is the encoder used to build the return dataset.
+   */
+  private def selectUntyped(encoder: AgnosticEncoder[_], cols: Seq[Column]): Dataset[_] = {
+    sparkSession.newDataset(encoder) { builder =>
+      builder.getProjectBuilder
+        .setInput(plan.getRoot)
+        .addAllExpressions(cols.map(_.expr).asJava)
+    }
+  }
+
+  /**
+   * Returns a new Dataset by computing the given [[Column]] expressions for each element.
+   *
+   * @group typedrel
+   * @since 3.4.0
+   */
+  def select[U1, U2](c1: TypedColumn[T, U1], c2: TypedColumn[T, U2]): Dataset[(U1, U2)] =
+    selectUntyped(c1, c2).asInstanceOf[Dataset[(U1, U2)]]
+
+  /**
+   * Returns a new Dataset by computing the given [[Column]] expressions for each element.
+   *
+   * @group typedrel
+   * @since 3.4.0
+   */
+  def select[U1, U2, U3](
+      c1: TypedColumn[T, U1],
+      c2: TypedColumn[T, U2],
+      c3: TypedColumn[T, U3]): Dataset[(U1, U2, U3)] =
+    selectUntyped(c1, c2, c3).asInstanceOf[Dataset[(U1, U2, U3)]]
+
+  /**
+   * Returns a new Dataset by computing the given [[Column]] expressions for each element.
+   *
+   * @group typedrel
+   * @since 3.4.0
+   */
+  def select[U1, U2, U3, U4](
+      c1: TypedColumn[T, U1],
+      c2: TypedColumn[T, U2],
+      c3: TypedColumn[T, U3],
+      c4: TypedColumn[T, U4]): Dataset[(U1, U2, U3, U4)] =
+    selectUntyped(c1, c2, c3, c4).asInstanceOf[Dataset[(U1, U2, U3, U4)]]
+
+  /**
+   * Returns a new Dataset by computing the given [[Column]] expressions for each element.
+   *
+   * @group typedrel
+   * @since 3.4.0
+   */
+  def select[U1, U2, U3, U4, U5](
+      c1: TypedColumn[T, U1],
+      c2: TypedColumn[T, U2],
+      c3: TypedColumn[T, U3],
+      c4: TypedColumn[T, U4],
+      c5: TypedColumn[T, U5]): Dataset[(U1, U2, U3, U4, U5)] =
+    selectUntyped(c1, c2, c3, c4, c5).asInstanceOf[Dataset[(U1, U2, U3, U4, U5)]]
 
   /**
    * Filters rows using the given condition.
@@ -2401,6 +2471,150 @@ class Dataset[T] private[sql] (
   def transform[U](t: Dataset[T] => Dataset[U]): Dataset[U] = t(this)
 
   /**
+   * (Scala-specific) Returns a new Dataset that only contains elements where `func` returns
+   * `true`.
+   *
+   * @group typedrel
+   * @since 3.5.0
+   */
+  def filter(func: T => Boolean): Dataset[T] = {
+    val udf = ScalarUserDefinedFunction(
+      function = func,
+      inputEncoders = encoder :: Nil,
+      outputEncoder = PrimitiveBooleanEncoder)
+    sparkSession.newDataset[T](encoder) { builder =>
+      builder.getFilterBuilder
+        .setInput(plan.getRoot)
+        .setCondition(udf.apply(col("*")).expr)
+    }
+  }
+
+  /**
+   * (Java-specific) Returns a new Dataset that only contains elements where `func` returns
+   * `true`.
+   *
+   * @group typedrel
+   * @since 3.5.0
+   */
+  def filter(f: FilterFunction[T]): Dataset[T] = {
+    filter(UdfUtils.filterFuncToScalaFunc(f))
+  }
+
+  /**
+   * (Scala-specific) Returns a new Dataset that contains the result of applying `func` to each
+   * element.
+   *
+   * @group typedrel
+   * @since 3.5.0
+   */
+  def map[U: Encoder](f: T => U): Dataset[U] = {
+    mapPartitions(UdfUtils.mapFuncToMapPartitionsAdaptor(f))
+  }
+
+  /**
+   * (Java-specific) Returns a new Dataset that contains the result of applying `func` to each
+   * element.
+   *
+   * @group typedrel
+   * @since 3.5.0
+   */
+  def map[U](f: MapFunction[T, U], encoder: Encoder[U]): Dataset[U] = {
+    map(UdfUtils.mapFunctionToScalaFunc(f))(encoder)
+  }
+
+  /**
+   * (Scala-specific) Returns a new Dataset that contains the result of applying `func` to each
+   * partition.
+   *
+   * @group typedrel
+   * @since 3.5.0
+   */
+  def mapPartitions[U: Encoder](func: Iterator[T] => Iterator[U]): Dataset[U] = {
+    val outputEncoder = encoderFor[U]
+    val udf = ScalarUserDefinedFunction(
+      function = func,
+      inputEncoders = encoder :: Nil,
+      outputEncoder = outputEncoder)
+    sparkSession.newDataset(outputEncoder) { builder =>
+      builder.getMapPartitionsBuilder
+        .setInput(plan.getRoot)
+        .setFunc(udf.apply(col("*")).expr.getCommonInlineUserDefinedFunction)
+    }
+  }
+
+  /**
+   * (Java-specific) Returns a new Dataset that contains the result of applying `f` to each
+   * partition.
+   *
+   * @group typedrel
+   * @since 3.5.0
+   */
+  def mapPartitions[U](f: MapPartitionsFunction[T, U], encoder: Encoder[U]): Dataset[U] = {
+    mapPartitions(UdfUtils.mapPartitionsFuncToScalaFunc(f))(encoder)
+  }
+
+  /**
+   * (Scala-specific) Returns a new Dataset by first applying a function to all elements of this
+   * Dataset, and then flattening the results.
+   *
+   * @group typedrel
+   * @since 3.5.0
+   */
+  def flatMap[U: Encoder](func: T => TraversableOnce[U]): Dataset[U] =
+    mapPartitions(UdfUtils.flatMapFuncToMapPartitionsAdaptor(func))
+
+  /**
+   * (Java-specific) Returns a new Dataset by first applying a function to all elements of this
+   * Dataset, and then flattening the results.
+   *
+   * @group typedrel
+   * @since 3.5.0
+   */
+  def flatMap[U](f: FlatMapFunction[T, U], encoder: Encoder[U]): Dataset[U] = {
+    flatMap(UdfUtils.flatMapFuncToScalaFunc(f))(encoder)
+  }
+
+  /**
+   * Applies a function `f` to all rows.
+   *
+   * @group action
+   * @since 3.5.0
+   */
+  def foreach(f: T => Unit): Unit = {
+    foreachPartition(UdfUtils.foreachFuncToForeachPartitionsAdaptor(f))
+  }
+
+  /**
+   * (Java-specific) Runs `func` on each element of this Dataset.
+   *
+   * @group action
+   * @since 3.5.0
+   */
+  def foreach(func: ForeachFunction[T]): Unit = foreach(UdfUtils.foreachFuncToScalaFunc(func))
+
+  /**
+   * Applies a function `f` to each partition of this Dataset.
+   *
+   * @group action
+   * @since 3.5.0
+   */
+  def foreachPartition(f: Iterator[T] => Unit): Unit = {
+    // Delegate to mapPartition with empty result.
+    mapPartitions(UdfUtils.foreachPartitionFuncToMapPartitionsAdaptor(f))(RowEncoder(Seq.empty))
+      .collect()
+  }
+
+  /**
+   * (Java-specific) Runs `func` on each partition of this Dataset.
+   *
+   * @group action
+   * @since 3.5.0
+   */
+  def foreachPartition(func: ForeachPartitionFunction[T]): Unit = {
+    foreachPartition(UdfUtils.foreachPartitionFuncToScalaFunc(func))
+  }
+
+  /**
    * Returns the first `n` rows in the Dataset.
    *
    * Running take requires moving data into the application's driver process, and doing so with a
@@ -2703,22 +2917,86 @@ class Dataset[T] private[sql] (
     new DataFrameWriterV2[T](table, this)
   }
 
+  /**
+   * Persist this Dataset with the default storage level (`MEMORY_AND_DISK`).
+   *
+   * @group basic
+   * @since 3.4.0
+   */
   def persist(): this.type = {
-    throw new UnsupportedOperationException("persist is not implemented.")
+    sparkSession.analyze { builder =>
+      builder.getPersistBuilder.setRelation(plan.getRoot)
+    }
+    this
   }
 
+  /**
+   * Persist this Dataset with the given storage level.
+   *
+   * @param newLevel
+   *   One of: `MEMORY_ONLY`, `MEMORY_AND_DISK`, `MEMORY_ONLY_SER`, `MEMORY_AND_DISK_SER`,
+   *   `DISK_ONLY`, `MEMORY_ONLY_2`, `MEMORY_AND_DISK_2`, etc.
+   * @group basic
+   * @since 3.4.0
+   */
   def persist(newLevel: StorageLevel): this.type = {
-    throw new UnsupportedOperationException("persist is not implemented.")
+    sparkSession.analyze { builder =>
+      builder.getPersistBuilder
+        .setRelation(plan.getRoot)
+        .setStorageLevel(StorageLevelProtoConverter.toConnectProtoType(newLevel))
+    }
+    this
   }
 
+  /**
+   * Mark the Dataset as non-persistent, and remove all blocks for it from memory and disk. This
+   * will not un-persist any cached data that is built upon this Dataset.
+   *
+   * @param blocking
+   *   Whether to block until all blocks are deleted.
+   * @group basic
+   * @since 3.4.0
+   */
   def unpersist(blocking: Boolean): this.type = {
-    throw new UnsupportedOperationException("unpersist() is not implemented.")
+    sparkSession.analyze { builder =>
+      builder.getUnpersistBuilder
+        .setRelation(plan.getRoot)
+        .setBlocking(blocking)
+    }
+    this
   }
 
+  /**
+   * Mark the Dataset as non-persistent, and remove all blocks for it from memory and disk. This
+   * will not un-persist any cached data that is built upon this Dataset.
+   *
+   * @group basic
+   * @since 3.4.0
+   */
   def unpersist(): this.type = unpersist(blocking = false)
 
-  def cache(): this.type = {
-    throw new UnsupportedOperationException("cache() is not implemented.")
+  /**
+   * Persist this Dataset with the default storage level (`MEMORY_AND_DISK`).
+   *
+   * @group basic
+   * @since 3.4.0
+   */
+  def cache(): this.type = persist()
+
+  /**
+   * Get the Dataset's current storage level, or StorageLevel.NONE if not persisted.
+   *
+   * @group basic
+   * @since 3.4.0
+   */
+  def storageLevel: StorageLevel = {
+    StorageLevelProtoConverter.toStorageLevel(
+      sparkSession
+        .analyze { builder =>
+          builder.getGetStorageLevelBuilder.setRelation(plan.getRoot)
+        }
+        .getGetStorageLevel
+        .getStorageLevel)
   }
 
   def withWatermark(eventTime: String, delayThreshold: String): Dataset[T] = {
@@ -2727,14 +3005,6 @@ class Dataset[T] private[sql] (
 
   def observe(name: String, expr: Column, exprs: Column*): Dataset[T] = {
     throw new UnsupportedOperationException("observe is not implemented.")
-  }
-
-  def foreach(f: T => Unit): Unit = {
-    throw new UnsupportedOperationException("foreach is not implemented.")
-  }
-
-  def foreachPartition(f: Iterator[T] => Unit): Unit = {
-    throw new UnsupportedOperationException("foreach is not implemented.")
   }
 
   def checkpoint(): Dataset[T] = {
@@ -2772,12 +3042,21 @@ class Dataset[T] private[sql] (
     sparkSession.sameSemantics(this.plan, other.plan)
   }
 
+  /**
+   * Returns a `hashCode` of the logical query plan against this [[Dataset]].
+   *
+   * @note
+   *   Unlike the standard `hashCode`, the hash is calculated against the query plan simplified by
+   *   tolerating the cosmetic differences such as attribute names.
+   * @since 3.4.0
+   */
+  @DeveloperApi
   def semanticHash(): Int = {
-    throw new UnsupportedOperationException("semanticHash is not implemented.")
+    sparkSession.semanticHash(this.plan)
   }
 
   def toJSON: Dataset[String] = {
-    throw new UnsupportedOperationException("toJSON is not implemented.")
+    select(to_json(struct(col("*")))).as(StringEncoder)
   }
 
   private[sql] def analyze: proto.AnalyzePlanResponse = {

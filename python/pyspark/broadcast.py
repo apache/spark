@@ -207,7 +207,7 @@ class Broadcast(Generic[T]):
         >>> b = spark.sparkContext.broadcast([1, 2, 3, 4, 5])
         >>> c = spark.sparkContext.broadcast(1)
 
-        Read the pickled representation of value fron temp file.
+        Read the pickled representation of value from temp file.
 
         >>> with tempfile.TemporaryDirectory() as d:
         ...     path = os.path.join(d, "test.txt")
