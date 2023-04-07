@@ -25,18 +25,15 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 
 /**
- * A helper class used to detect duplicate relations fast in `DeduplicateRelations`
+ * A helper class used to detect duplicate relations fast in `DeduplicateRelations`. Two relations
+ * are duplicated if:
+ *  1. they are the same class.
+ *  2. they have the same output attribute IDs.
+ *
+ * The first condition is necessary because the CTE relation definition node and reference node have
+ * the same output attribute IDs but they are not duplicated.
  */
-case class ReferenceEqualPlanWrapper(plan: LogicalPlan) {
-  private val _hashCode = System.identityHashCode(plan)
-  override def hashCode(): Int = _hashCode
-  override def equals(obj: Any): Boolean = obj match {
-    case wrapper: ReferenceEqualPlanWrapper =>
-      plan.eq(wrapper.plan)
-    case _ =>
-      false
-  }
-}
+case class RelationWrapper(cls: Class[_], outputAttrIds: Seq[Long])
 
 object DeduplicateRelations extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = {
@@ -93,12 +90,12 @@ object DeduplicateRelations extends Rule[LogicalPlan] {
    *          whether the plan is changed or not)
    */
   private def renewDuplicatedRelations(
-      existingRelations: mutable.HashSet[ReferenceEqualPlanWrapper],
+      existingRelations: mutable.HashSet[RelationWrapper],
       plan: LogicalPlan): (LogicalPlan, Boolean) = plan match {
     case p: LogicalPlan if p.isStreaming => (plan, false)
 
     case m: MultiInstanceRelation =>
-      val planWrapper = ReferenceEqualPlanWrapper(m)
+      val planWrapper = RelationWrapper(m.getClass, m.output.map(_.exprId.id))
       if (existingRelations.contains(planWrapper)) {
         val newNode = m.newInstance()
         newNode.copyTagsFrom(m)

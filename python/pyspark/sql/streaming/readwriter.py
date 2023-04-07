@@ -1153,7 +1153,6 @@ class DataStreamWriter:
         This API is evolving.
 
         Examples
-        TODO(SPARK-43054): remove the SKIP flags below
         --------
         >>> import time
         >>> df = spark.readStream.format("rate").load()
@@ -1265,6 +1264,7 @@ class DataStreamWriter:
         self._jwrite.foreach(jForeachWriter)
         return self
 
+    # TODO(SPARK-42944): remove the doctest: +SKIP flag below
     def foreachBatch(self, func: Callable[["DataFrame", int], None]) -> "DataStreamWriter":
         """
         Sets the output of the streaming query to be processed using the provided
@@ -1284,7 +1284,6 @@ class DataStreamWriter:
 
         Examples
         --------
-        # TODO(SPARK-42944): remove the SKIP flags below
         >>> import time
         >>> df = spark.readStream.format("rate").load()
         >>> def func(batch_df, batch_id):
@@ -1306,6 +1305,7 @@ class DataStreamWriter:
         ensure_callback_server_started(gw)
         return self
 
+    # TODO(SPARK-42940): remove the doctest: +SKIP flag below
     def start(
         self,
         path: Optional[str] = None,
@@ -1365,7 +1365,6 @@ class DataStreamWriter:
         'this_query'
         >>> q.stop()
 
-        # TODO(SPARK-42940): remove the SKIP flag below
         >>> q.isActive # doctest: +SKIP
         False
 

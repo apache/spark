@@ -776,12 +776,12 @@ pyspark_connect = Module(
         "pyspark.sql.tests.connect.test_parity_arrow_map",
         "pyspark.sql.tests.connect.test_parity_pandas_grouped_map",
         "pyspark.sql.tests.connect.test_parity_pandas_cogrouped_map",
+        "pyspark.sql.tests.connect.streaming.test_parity_streaming",
         # ml doctests
         "pyspark.ml.connect.functions",
         # ml unittests
         "pyspark.ml.tests.connect.test_connect_function",
-        # streaming unittests
-        "pyspark.sql.tests.connect.streaming.test_parity_streaming",
+        "pyspark.ml.tests.connect.test_parity_torch_distributor",
     ],
     excluded_python_implementations=[
         "PyPy"  # Skip these tests under PyPy since they require numpy, pandas, and pyarrow and
