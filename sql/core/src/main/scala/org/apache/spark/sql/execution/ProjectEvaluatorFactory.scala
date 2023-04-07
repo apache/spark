@@ -17,18 +17,18 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.{TaskEvaluator, TaskEvaluatorFactory}
+import org.apache.spark.{PartitionEvaluator, PartitionEvaluatorFactory}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, UnsafeProjection}
 
 class ProjectEvaluatorFactory(projectList: Seq[Expression], childOutput: Seq[Attribute])
-  extends TaskEvaluatorFactory[InternalRow, InternalRow] {
+  extends PartitionEvaluatorFactory[InternalRow, InternalRow] {
 
-  override def createEvaluator(): TaskEvaluator[InternalRow, InternalRow] = {
-    new ProjectTaskEvaluator
+  override def createEvaluator(): PartitionEvaluator[InternalRow, InternalRow] = {
+    new ProjectPartitionEvaluator
   }
 
-  class ProjectTaskEvaluator extends TaskEvaluator[InternalRow, InternalRow] {
+  class ProjectPartitionEvaluator extends PartitionEvaluator[InternalRow, InternalRow] {
     override def eval(
         partitionIndex: Int,
         inputs: Iterator[InternalRow]*): Iterator[InternalRow] = {

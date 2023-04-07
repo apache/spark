@@ -92,7 +92,7 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
 
   protected override def doExecute(): RDD[InternalRow] = {
     val evaluatorFactory = new ProjectEvaluatorFactory(projectList, child.output)
-    if (conf.getConf(SQLConf.USE_TASK_EVALUATOR)) {
+    if (conf.usePartitionEvaluator) {
       child.execute().mapPartitionsWithEvaluator(evaluatorFactory)
     } else {
       child.execute().mapPartitionsWithIndexInternal { (index, iter) =>
@@ -274,7 +274,7 @@ case class FilterExec(condition: Expression, child: SparkPlan)
   protected override def doExecute(): RDD[InternalRow] = {
     val numOutputRows = longMetric("numOutputRows")
     val evaluatorFactory = new FilterEvaluatorFactory(condition, child.output, numOutputRows)
-    if (conf.getConf(SQLConf.USE_TASK_EVALUATOR)) {
+    if (conf.usePartitionEvaluator) {
       child.execute().mapPartitionsWithEvaluator(evaluatorFactory)
     } else {
       child.execute().mapPartitionsWithIndexInternal { (index, iter) =>

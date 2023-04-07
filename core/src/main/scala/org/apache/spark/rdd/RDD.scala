@@ -916,8 +916,8 @@ abstract class RDD[T: ClassTag](
   @DeveloperApi
   @Since("3.5.0")
   def mapPartitionsWithEvaluator[U: ClassTag](
-      taskEvaluatorFactory: TaskEvaluatorFactory[T, U]): RDD[U] = withScope {
-    new MapPartitionsWithEvaluatorRDD(this, taskEvaluatorFactory)
+      evaluatorFactory: PartitionEvaluatorFactory[T, U]): RDD[U] = withScope {
+    new MapPartitionsWithEvaluatorRDD(this, evaluatorFactory)
   }
 
   /**
@@ -929,8 +929,8 @@ abstract class RDD[T: ClassTag](
   @Since("3.5.0")
   def zipPartitionsWithEvaluator[U: ClassTag](
       rdd2: RDD[T],
-      taskEvaluatorFactory: TaskEvaluatorFactory[T, U]): RDD[U] = withScope {
-    new ZippedPartitionsWithEvaluatorRDD(this, rdd2, taskEvaluatorFactory)
+      evaluatorFactory: PartitionEvaluatorFactory[T, U]): RDD[U] = withScope {
+    new ZippedPartitionsWithEvaluatorRDD(this, rdd2, evaluatorFactory)
   }
 
   /**

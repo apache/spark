@@ -19,16 +19,16 @@ package org.apache.spark.rdd
 
 import scala.reflect.ClassTag
 
-import org.apache.spark.{Partition, TaskContext, TaskEvaluatorFactory}
+import org.apache.spark.{Partition, PartitionEvaluatorFactory, TaskContext}
 
 private[spark] class ZippedPartitionsWithEvaluatorRDD[T : ClassTag, U : ClassTag](
     var rdd1: RDD[T],
     var rdd2: RDD[T],
-    taskEvaluatorFactory: TaskEvaluatorFactory[T, U])
+    evaluatorFactory: PartitionEvaluatorFactory[T, U])
   extends ZippedPartitionsBaseRDD[U](rdd1.context, List(rdd1, rdd2)) {
 
   override def compute(split: Partition, context: TaskContext): Iterator[U] = {
-    val evaluator = taskEvaluatorFactory.createEvaluator()
+    val evaluator = evaluatorFactory.createEvaluator()
     val partitions = split.asInstanceOf[ZippedPartitionsPartition].partitions
     evaluator.eval(
       split.index,

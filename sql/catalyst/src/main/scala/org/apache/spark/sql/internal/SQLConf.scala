@@ -1808,9 +1808,9 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
-  val USE_TASK_EVALUATOR = buildConf("spark.sql.execution.useTaskEvaluator")
+  val USE_PARTITION_EVALUATOR = buildConf("spark.sql.execution.usePartitionEvaluator")
     .internal()
-    .doc("When true, use TaskEvaluator to execute SQL operators.")
+    .doc("When true, use PartitionEvaluator to execute SQL operators.")
     .version("3.5.0")
     .booleanConf
     .createWithDefault(false)
@@ -5034,6 +5034,8 @@ class SQLConf extends Serializable with Logging {
 
   def allowsTempViewCreationWithMultipleNameparts: Boolean =
     getConf(SQLConf.ALLOW_TEMP_VIEW_CREATION_WITH_MULTIPLE_NAME_PARTS)
+
+  def usePartitionEvaluator: Boolean = getConf(SQLConf.USE_PARTITION_EVALUATOR)
 
   /** ********************** SQLConf functionality methods ************ */
 

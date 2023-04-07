@@ -753,7 +753,7 @@ case class WholeStageCodegenExec(child: SparkPlan)(val codegenStageId: Int)
     val evaluatorFactory = new WholeStageCodegenEvaluatorFactory(
       cleanedSource, durationMs, references)
     if (rdds.length == 1) {
-      if (conf.getConf(SQLConf.USE_TASK_EVALUATOR)) {
+      if (conf.usePartitionEvaluator) {
         rdds.head.mapPartitionsWithEvaluator(evaluatorFactory)
       } else {
         rdds.head.mapPartitionsWithIndex { (index, iter) =>
@@ -763,7 +763,7 @@ case class WholeStageCodegenExec(child: SparkPlan)(val codegenStageId: Int)
       }
     } else {
       // Right now, we support up to two input RDDs.
-      if (conf.getConf(SQLConf.USE_TASK_EVALUATOR)) {
+      if (conf.usePartitionEvaluator) {
         rdds.head.zipPartitionsWithEvaluator(rdds(1), evaluatorFactory)
       } else {
         rdds.head.zipPartitions(rdds(1)) { (leftIter, rightIter) =>

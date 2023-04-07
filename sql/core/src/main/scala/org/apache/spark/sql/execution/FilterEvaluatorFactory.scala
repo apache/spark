@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.{TaskEvaluator, TaskEvaluatorFactory}
+import org.apache.spark.{PartitionEvaluator, PartitionEvaluatorFactory}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, Predicate}
 import org.apache.spark.sql.execution.metric.SQLMetric
@@ -25,13 +25,13 @@ import org.apache.spark.sql.execution.metric.SQLMetric
 class FilterEvaluatorFactory(
     condition: Expression,
     childOutput: Seq[Attribute],
-    numOutputRows: SQLMetric) extends TaskEvaluatorFactory[InternalRow, InternalRow] {
+    numOutputRows: SQLMetric) extends PartitionEvaluatorFactory[InternalRow, InternalRow] {
 
-  override def createEvaluator(): TaskEvaluator[InternalRow, InternalRow] = {
-    new FilterTaskEvaluator
+  override def createEvaluator(): PartitionEvaluator[InternalRow, InternalRow] = {
+    new FilterPartitionEvaluator
   }
 
-  class FilterTaskEvaluator extends TaskEvaluator[InternalRow, InternalRow] {
+  class FilterPartitionEvaluator extends PartitionEvaluator[InternalRow, InternalRow] {
     override def eval(
         partitionIndex: Int,
         inputs: Iterator[InternalRow]*): Iterator[InternalRow] = {

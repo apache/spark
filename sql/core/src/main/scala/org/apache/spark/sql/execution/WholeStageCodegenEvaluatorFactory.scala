@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.{TaskEvaluator, TaskEvaluatorFactory}
+import org.apache.spark.{PartitionEvaluator, PartitionEvaluatorFactory}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodeAndComment, CodeGenerator}
 import org.apache.spark.sql.execution.metric.SQLMetric
@@ -25,13 +25,13 @@ import org.apache.spark.sql.execution.metric.SQLMetric
 class WholeStageCodegenEvaluatorFactory(
     cleanedSource: CodeAndComment,
     durationMs: SQLMetric,
-    references: Array[Any]) extends TaskEvaluatorFactory[InternalRow, InternalRow] {
+    references: Array[Any]) extends PartitionEvaluatorFactory[InternalRow, InternalRow] {
 
-  override def createEvaluator(): TaskEvaluator[InternalRow, InternalRow] = {
-    new WholeStageCodegenTaskEvaluator()
+  override def createEvaluator(): PartitionEvaluator[InternalRow, InternalRow] = {
+    new WholeStageCodegenPartitionEvaluator()
   }
 
-  class WholeStageCodegenTaskEvaluator extends TaskEvaluator[InternalRow, InternalRow] {
+  class WholeStageCodegenPartitionEvaluator extends PartitionEvaluator[InternalRow, InternalRow] {
     override def eval(
         partitionIndex: Int,
         inputs: Iterator[InternalRow]*): Iterator[InternalRow] = {

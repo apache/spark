@@ -19,17 +19,17 @@ package org.apache.spark.rdd
 
 import scala.reflect.ClassTag
 
-import org.apache.spark.{Partition, TaskContext, TaskEvaluatorFactory}
+import org.apache.spark.{Partition, PartitionEvaluatorFactory, TaskContext}
 
 private[spark] class MapPartitionsWithEvaluatorRDD[T : ClassTag, U : ClassTag](
     var prev: RDD[T],
-    taskEvaluatorFactory: TaskEvaluatorFactory[T, U])
+    evaluatorFactory: PartitionEvaluatorFactory[T, U])
   extends RDD[U](prev) {
 
   override def getPartitions: Array[Partition] = firstParent[T].partitions
 
   override def compute(split: Partition, context: TaskContext): Iterator[U] = {
-    val evaluator = taskEvaluatorFactory.createEvaluator()
+    val evaluator = evaluatorFactory.createEvaluator()
     val input = firstParent[T].iterator(split, context)
     evaluator.eval(split.index, input)
   }

@@ -20,11 +20,12 @@ package org.apache.spark
 import org.apache.spark.annotation.DeveloperApi
 
 /**
- * An evaluator for computing RDD partitions. Spark serializes and sends [[TaskEvaluatorFactory]]
- * to executors, and then creates [[TaskEvaluator]] via the factory at the executor side.
+ * An evaluator for computing RDD partitions. Spark serializes and sends
+ * [[PartitionEvaluatorFactory]] to executors, and then creates [[PartitionEvaluator]] via the
+ * factory at the executor side.
  */
 @DeveloperApi
-trait TaskEvaluator[T, U] {
+trait PartitionEvaluator[T, U] {
 
   /**
    * Evaluates the RDD partition at the given index. There can be more than one input iterators,
