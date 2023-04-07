@@ -873,9 +873,9 @@ case class HashAggregateExec(
         val functionString = truncatedString(allAggregateExpressions, "[", ", ", "]", maxFields)
         val outputString = truncatedString(output, "[", ", ", "]", maxFields)
         if (verbose) {
-          val resultString = resultExpressions.mkString(", results=[", ", ", "]")
-          s"HashAggregate(keys=$keyString, functions=$functionString$resultString" +
-            s", output=$outputString)"
+          val resultString = truncatedString(resultExpressions, "[", ", ", "]", maxFields)
+          s"HashAggregate(keys=$keyString, functions=$functionString, results=$resultString, " +
+            s"output=$outputString)"
         } else {
           s"HashAggregate(keys=$keyString, functions=$functionString)"
         }

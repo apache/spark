@@ -134,9 +134,9 @@ case class ObjectHashAggregateExec(
     val functionString = truncatedString(allAggregateExpressions, "[", ", ", "]", maxFields)
     val outputString = truncatedString(output, "[", ", ", "]", maxFields)
     if (verbose) {
-      val resultString = resultExpressions.mkString(", results=[", ", ", "]")
-      s"ObjectHashAggregate(keys=$keyString, functions=$functionString$resultString" +
-        s", output=$outputString)"
+      val resultString = truncatedString(resultExpressions, "[", ", ", "]", maxFields)
+      s"ObjectHashAggregate(keys=$keyString, functions=$functionString, results=$resultString, " +
+        s"output=$outputString)"
     } else {
       s"ObjectHashAggregate(keys=$keyString, functions=$functionString)"
     }

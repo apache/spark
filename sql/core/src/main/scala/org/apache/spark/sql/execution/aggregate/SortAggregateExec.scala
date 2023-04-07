@@ -116,8 +116,9 @@ case class SortAggregateExec(
     val functionString = truncatedString(allAggregateExpressions, "[", ", ", "]", maxFields)
     val outputString = truncatedString(output, "[", ", ", "]", maxFields)
     if (verbose) {
-      val resultString = resultExpressions.mkString(", results=[", ", ", "]")
-      s"SortAggregate(key=$keyString, functions=$functionString$resultString, output=$outputString)"
+      val resultString = truncatedString(resultExpressions, "[", ", ", "]", maxFields)
+      s"SortAggregate(key=$keyString, functions=$functionString, results=$resultString, " +
+        s"output=$outputString)"
     } else {
       s"SortAggregate(key=$keyString, functions=$functionString)"
     }
