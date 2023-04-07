@@ -3040,13 +3040,16 @@ class Dataset[T] private[sql](
   /**
    * Returns a new Dataset with duplicates rows removed, within watermark.
    *
-   * For a static batch [[Dataset]], it just drops duplicate rows. For a streaming [[Dataset]],
-   * this will keep all data across triggers as intermediate state to drop duplicated rows. The
-   * state will be kept to guarantee the semantic, "Events are deduplicated as long as the time
-   * distance of earliest and latest events are smaller than the delay threshold of watermark."
-   * The watermark for the input [[Dataset]] must be set via [[withWatermark]]. Users are
-   * encouraged to set the delay threshold of watermark longer than max timestamp differences
-   * among duplicated events. In addition, too late data older than watermark will be dropped.
+   * This only works with streaming [[Dataset]], and watermark for the input [[Dataset]] must be
+   * set via [[withWatermark]].
+   *
+   * For a streaming [[Dataset]], this will keep all data across triggers as intermediate state
+   * to drop duplicated rows. The state will be kept to guarantee the semantic, "Events are
+   * deduplicated as long as the time distance of earliest and latest events are smaller than the
+   * delay threshold of watermark." Users are encouraged to set the delay threshold of watermark
+   * longer than max timestamp differences among duplicated events.
+   *
+   * Note: too late data older than watermark will be dropped.
    *
    * @group typedrel
    * @since 3.5.0
@@ -3059,39 +3062,40 @@ class Dataset[T] private[sql](
    * Returns a new Dataset with duplicates rows removed, considering only the subset of columns,
    * within watermark.
    *
-   * For a static batch [[Dataset]], it just drops duplicate rows. For a streaming [[Dataset]],
-   * this will keep all data across triggers as intermediate state to drop duplicated rows. The
-   * state will be kept to guarantee the semantic, "Events are deduplicated as long as the time
-   * distance of earliest and latest events are smaller than the delay threshold of watermark."
-   * The watermark for the input [[Dataset]] must be set via [[withWatermark]]. Users are
-   * encouraged to set the delay threshold of watermark longer than max timestamp differences
-   * among duplicated events. In addition, too late data older than watermark will be dropped.
+   * This only works with streaming [[Dataset]], and watermark for the input [[Dataset]] must be
+   * set via [[withWatermark]].
+   *
+   * For a streaming [[Dataset]], this will keep all data across triggers as intermediate state
+   * to drop duplicated rows. The state will be kept to guarantee the semantic, "Events are
+   * deduplicated as long as the time distance of earliest and latest events are smaller than the
+   * delay threshold of watermark." Users are encouraged to set the delay threshold of watermark
+   * longer than max timestamp differences among duplicated events.
+   *
+   * Note: too late data older than watermark will be dropped.
    *
    * @group typedrel
    * @since 3.5.0
    */
-  def dropDuplicatesWithinWatermark(colNames: Seq[String]): Dataset[T] = {
-    if (!isStreaming) {
-      dropDuplicates(colNames)
-    } else {
-      withTypedPlan {
-        val groupCols = groupColsFromDropDuplicates(colNames)
-        DeduplicateWithinWatermark(groupCols, logicalPlan)
-      }
-    }
+  def dropDuplicatesWithinWatermark(colNames: Seq[String]): Dataset[T] = withTypedPlan {
+    val groupCols = groupColsFromDropDuplicates(colNames)
+    // UnsupportedOperationChecker will fail the query if this is called with batch Dataset.
+    DeduplicateWithinWatermark(groupCols, logicalPlan)
   }
 
   /**
    * Returns a new Dataset with duplicates rows removed, considering only the subset of columns,
    * within watermark.
    *
-   * For a static batch [[Dataset]], it just drops duplicate rows. For a streaming [[Dataset]],
-   * this will keep all data across triggers as intermediate state to drop duplicated rows. The
-   * state will be kept to guarantee the semantic, "Events are deduplicated as long as the time
-   * distance of earliest and latest events are smaller than the delay threshold of watermark."
-   * The watermark for the input [[Dataset]] must be set via [[withWatermark]]. Users are
-   * encouraged to set the delay threshold of watermark longer than max timestamp differences
-   * among duplicated events. In addition, too late data older than watermark will be dropped.
+   * This only works with streaming [[Dataset]], and watermark for the input [[Dataset]] must be
+   * set via [[withWatermark]].
+   *
+   * For a streaming [[Dataset]], this will keep all data across triggers as intermediate state
+   * to drop duplicated rows. The state will be kept to guarantee the semantic, "Events are
+   * deduplicated as long as the time distance of earliest and latest events are smaller than the
+   * delay threshold of watermark." Users are encouraged to set the delay threshold of watermark
+   * longer than max timestamp differences among duplicated events.
+   *
+   * Note: too late data older than watermark will be dropped.
    *
    * @group typedrel
    * @since 3.5.0
@@ -3104,13 +3108,16 @@ class Dataset[T] private[sql](
    * Returns a new Dataset with duplicates rows removed, considering only the subset of columns,
    * within watermark.
    *
-   * For a static batch [[Dataset]], it just drops duplicate rows. For a streaming [[Dataset]],
-   * this will keep all data across triggers as intermediate state to drop duplicated rows. The
-   * state will be kept to guarantee the semantic, "Events are deduplicated as long as the time
-   * distance of earliest and latest events are smaller than the delay threshold of watermark."
-   * The watermark for the input [[Dataset]] must be set via [[withWatermark]]. Users are
-   * encouraged to set the delay threshold of watermark longer than max timestamp differences
-   * among duplicated events. In addition, too late data older than watermark will be dropped.
+   * This only works with streaming [[Dataset]], and watermark for the input [[Dataset]] must be
+   * set via [[withWatermark]].
+   *
+   * For a streaming [[Dataset]], this will keep all data across triggers as intermediate state
+   * to drop duplicated rows. The state will be kept to guarantee the semantic, "Events are
+   * deduplicated as long as the time distance of earliest and latest events are smaller than the
+   * delay threshold of watermark." Users are encouraged to set the delay threshold of watermark
+   * longer than max timestamp differences among duplicated events.
+   *
+   * Note: too late data older than watermark will be dropped.
    *
    * @group typedrel
    * @since 3.5.0

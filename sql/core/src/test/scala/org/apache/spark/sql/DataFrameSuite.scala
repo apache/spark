@@ -1716,32 +1716,6 @@ class DataFrameSuite extends QueryTest
   }
 
   test("SPARK-7324 dropDuplicates") {
-    def verify(
-        df: DataFrame,
-        cols: Seq[String],
-        expectedAnswer: Row*): Unit = {
-      def verifyWithSorted(dfToVerify: DataFrame, expectedAnswer: Row*): Unit = {
-        checkDataset(dfToVerify.sort("key", "value1", "value2"), expectedAnswer: _*)
-      }
-
-      if (cols.isEmpty) {
-        verifyWithSorted(df.dropDuplicates(), expectedAnswer: _*)
-        verifyWithSorted(df.dropDuplicatesWithinWatermark(), expectedAnswer: _*)
-      } else {
-        verifyWithSorted(df.dropDuplicates(cols), expectedAnswer: _*)
-        verifyWithSorted(df.dropDuplicatesWithinWatermark(cols), expectedAnswer: _*)
-
-        if (cols.length > 1) {
-          verifyWithSorted(df.dropDuplicates(cols.head, cols.tail: _*), expectedAnswer: _*)
-          verifyWithSorted(df.dropDuplicatesWithinWatermark(cols.head, cols.tail: _*),
-            expectedAnswer: _*)
-        } else {
-          verifyWithSorted(df.dropDuplicates(cols.head), expectedAnswer: _*)
-          verifyWithSorted(df.dropDuplicatesWithinWatermark(cols.head), expectedAnswer: _*)
-        }
-      }
-    }
-
     val testData = sparkContext.parallelize(
       (2, 1, 2) :: (1, 1, 1) ::
       (1, 2, 1) :: (2, 1, 2) ::
@@ -1749,23 +1723,35 @@ class DataFrameSuite extends QueryTest
       (2, 1, 1) :: (1, 1, 2) ::
       (1, 2, 2) :: (1, 2, 1) :: Nil).toDF("key", "value1", "value2")
 
-    verify(testData, Seq(),
-      Row(1, 1, 1), Row(1, 1, 2),
-      Row(1, 2, 1), Row(1, 2, 2),
-      Row(2, 1, 1), Row(2, 1, 2),
-      Row(2, 2, 1), Row(2, 2, 2)
-    )
+    checkAnswer(
+      testData.dropDuplicates(),
+      Seq(Row(2, 1, 2), Row(1, 1, 1), Row(1, 2, 1),
+        Row(2, 2, 2), Row(2, 1, 1), Row(2, 2, 1),
+        Row(1, 1, 2), Row(1, 2, 2)))
 
-    verify(testData, Seq("key", "value1"), Row(1, 1, 1), Row(1, 2, 1), Row(2, 1, 2), Row(2, 2, 2))
+    checkAnswer(
+      testData.dropDuplicates(Seq("key", "value1")),
+      Seq(Row(2, 1, 2), Row(1, 2, 1), Row(1, 1, 1), Row(2, 2, 2)))
 
-    verify(testData, Seq("value1", "value2"),
-      Row(1, 1, 1), Row(1, 2, 1), Row(2, 1, 2), Row(2, 2, 2))
+    checkAnswer(
+      testData.dropDuplicates(Seq("value1", "value2")),
+      Seq(Row(2, 1, 2), Row(1, 2, 1), Row(1, 1, 1), Row(2, 2, 2)))
 
-    verify(testData, Seq("key"), Row(1, 1, 1), Row(2, 1, 2))
+    checkAnswer(
+      testData.dropDuplicates(Seq("key")),
+      Seq(Row(2, 1, 2), Row(1, 1, 1)))
 
-    verify(testData, Seq("value1"), Row(1, 2, 1), Row(2, 1, 2))
+    checkAnswer(
+      testData.dropDuplicates(Seq("value1")),
+      Seq(Row(2, 1, 2), Row(1, 2, 1)))
 
-    verify(testData, Seq("value2"), Row(1, 1, 1), Row(2, 1, 2))
+    checkAnswer(
+      testData.dropDuplicates(Seq("value2")),
+      Seq(Row(2, 1, 2), Row(1, 1, 1)))
+
+    checkAnswer(
+      testData.dropDuplicates("key", "value1"),
+      Seq(Row(2, 1, 2), Row(1, 2, 1), Row(1, 1, 1), Row(2, 2, 2)))
   }
 
   test("SPARK-8621: support empty string column name") {

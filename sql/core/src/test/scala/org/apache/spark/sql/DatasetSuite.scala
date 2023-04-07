@@ -1513,9 +1513,15 @@ class DatasetSuite extends QueryTest
 
   test("dropDuplicates") {
     val ds = Seq(("a", 1), ("a", 2), ("b", 1), ("a", 1)).toDS()
-    verifyDropDuplicates(ds, Seq("_1"), ("a", 1), ("b", 1))
-    verifyDropDuplicates(ds, Seq("_2"), ("a", 1), ("a", 2))
-    verifyDropDuplicates(ds, Seq("_1", "_2"), ("a", 1), ("a", 2), ("b", 1))
+    checkDataset(
+      ds.dropDuplicates("_1"),
+      ("a", 1), ("b", 1))
+    checkDataset(
+      ds.dropDuplicates("_2"),
+      ("a", 1), ("a", 2))
+    checkDataset(
+      ds.dropDuplicates("_1", "_2"),
+      ("a", 1), ("a", 2), ("b", 1))
   }
 
   test("dropDuplicates: columns with same column name") {
@@ -1523,29 +1529,9 @@ class DatasetSuite extends QueryTest
     val ds2 = Seq(("a", 1), ("a", 2), ("b", 1), ("a", 1)).toDS()
     // The dataset joined has two columns of the same name "_2".
     val joined = ds1.join(ds2, "_1").select(ds1("_2").as[Int], ds2("_2").as[Int])
-    verifyDropDuplicates(joined, Seq(), (1, 1), (1, 2), (2, 1), (2, 2))
-  }
-
-  private def verifyDropDuplicates[T : Ordering](
-      ds: Dataset[T],
-      cols: Seq[String],
-      expectedAnswer: T*): Unit = {
-    if (cols.isEmpty) {
-      checkDatasetUnorderly(ds.dropDuplicates(), expectedAnswer: _*)
-      checkDatasetUnorderly(ds.dropDuplicatesWithinWatermark(), expectedAnswer: _*)
-    } else {
-      checkDatasetUnorderly(ds.dropDuplicates(cols), expectedAnswer: _*)
-      checkDatasetUnorderly(ds.dropDuplicatesWithinWatermark(cols), expectedAnswer: _*)
-
-      if (cols.length > 1) {
-        checkDatasetUnorderly(ds.dropDuplicates(cols.head, cols.tail: _*), expectedAnswer: _*)
-        checkDatasetUnorderly(ds.dropDuplicatesWithinWatermark(cols.head, cols.tail: _*),
-          expectedAnswer: _*)
-      } else {
-        checkDatasetUnorderly(ds.dropDuplicates(cols.head), expectedAnswer: _*)
-        checkDatasetUnorderly(ds.dropDuplicatesWithinWatermark(cols.head), expectedAnswer: _*)
-      }
-    }
+    checkDataset(
+      joined.dropDuplicates(),
+      (1, 2), (1, 1), (2, 1), (2, 2))
   }
 
   test("SPARK-16097: Encoders.tuple should handle null object correctly") {

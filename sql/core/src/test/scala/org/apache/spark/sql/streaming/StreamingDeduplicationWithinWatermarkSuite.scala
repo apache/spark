@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.streaming
 
-import org.apache.spark.sql.{AnalysisException, Dataset}
+import org.apache.spark.sql.{AnalysisException, Dataset, SaveMode}
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes.Append
 import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.functions.timestamp_seconds
@@ -25,6 +25,24 @@ import org.apache.spark.sql.functions.timestamp_seconds
 class StreamingDeduplicationWithinWatermarkSuite extends StateStoreMetricsTest {
 
   import testImplicits._
+
+  test("deduplicate in batch DataFrame") {
+    def testAndVerify(df: Dataset[_]): Unit = {
+      val exc = intercept[AnalysisException] {
+        df.write.format("noop").mode(SaveMode.Append).save()
+      }
+
+      assert(exc.getMessage.contains("dropDuplicatesWithinWatermark is not supported"))
+      assert(exc.getMessage.contains("batch DataFrames/DataSets"))
+    }
+
+    val result = spark.range(10).dropDuplicatesWithinWatermark()
+    testAndVerify(result)
+
+    val result2 = spark.range(10).withColumn("newcol", $"id")
+      .dropDuplicatesWithinWatermark("newcol")
+    testAndVerify(result2)
+  }
 
   test("deduplicate without event time column should result in error") {
     def testAndVerify(df: Dataset[_]): Unit = {

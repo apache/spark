@@ -3967,14 +3967,16 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         """Return a new :class:`DataFrame` with duplicate rows removed,
          optionally only considering certain columns, within watermark.
 
-        For a static batch :class:`DataFrame`, it just drops duplicate rows. For a streaming
-        :class:`DataFrame`, this will keep all data across triggers as intermediate state to drop
-        duplicated rows. The state will be kept to guarantee the semantic, "Events are deduplicated
-        as long as the time distance of earliest and latest events are smaller than the delay
-        threshold of watermark." The watermark for the input :class:`DataFrame` must be set via
-        :func:`withWatermark`. Users are encouraged to set the delay threshold of watermark longer
-        than max timestamp differences among duplicated events. In addition, too late data older
-        than watermark will be dropped.
+         This only works with streaming :class:`DataFrame`, and watermark for the input
+         :class:`DataFrame` must be set via :func:`withWatermark`.
+
+        For a streaming :class:`DataFrame`, this will keep all data across triggers as intermediate
+        state to drop duplicated rows. The state will be kept to guarantee the semantic, "Events
+        are deduplicated as long as the time distance of earliest and latest events are smaller
+        than the delay threshold of watermark." Users are encouraged to set the delay threshold of
+        watermark longer than max timestamp differences among duplicated events.
+
+        Note: too late data older than watermark will be dropped.
 
          .. versionadded:: 3.5.0
 
