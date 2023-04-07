@@ -58,16 +58,21 @@ class CatalogSuite extends RemoteSparkSession with SQLHelper {
     val currentCatalog = spark.catalog.currentCatalog()
     assert(currentCatalog == "spark_catalog")
     try {
-      spark.catalog.setCurrentCatalog("spark_catalog")
+      val catalogs = spark.catalog.listCatalogs().collect()
+      assert(catalogs.length == 1)
+      assert(catalogs.map(_.name) sameElements Array("spark_catalog"))
       val message = intercept[StatusRuntimeException] {
         spark.catalog.setCurrentCatalog("notExists")
       }.getMessage
       assert(message.contains("plugin class not found"))
-      val catalogs = spark.catalog.listCatalogs().collect()
-      assert(catalogs.length == 1)
-      assert(catalogs.map(_.name) sameElements Array("spark_catalog"))
+      spark.catalog.setCurrentCatalog("testcat")
+      assert(spark.catalog.currentCatalog().equals("testcat"))
+      val catalogsAfterChange = spark.catalog.listCatalogs().collect()
+      assert(catalogsAfterChange.length == 2)
+      assert(catalogsAfterChange.map(_.name).toSet == Set("testcat", "spark_catalog"))
     } finally {
       spark.catalog.setCurrentCatalog(currentCatalog)
+      assert(spark.catalog.currentCatalog() == "spark_catalog")
     }
   }
 
