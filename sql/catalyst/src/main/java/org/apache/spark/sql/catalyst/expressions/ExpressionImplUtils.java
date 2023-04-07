@@ -22,6 +22,7 @@ import org.apache.spark.unsafe.types.UTF8String;
 
 import javax.crypto.Cipher;
 import javax.crypto.spec.GCMParameterSpec;
+import javax.crypto.spec.IvParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
 import java.nio.ByteBuffer;
 import java.security.GeneralSecurityException;
@@ -34,6 +35,9 @@ public class ExpressionImplUtils {
   private static final SecureRandom secureRandom = new SecureRandom();
   private static final int GCM_IV_LEN = 12;
   private static final int GCM_TAG_LEN = 128;
+
+  private static final int CBC_IV_LEN = 16;
+
 
   /**
    * Function to check if a given number string is a valid Luhn number
@@ -114,6 +118,24 @@ public class ExpressionImplUtils {
           GCMParameterSpec parameterSpec = new GCMParameterSpec(GCM_TAG_LEN, input, 0, GCM_IV_LEN);
           cipher.init(Cipher.DECRYPT_MODE, secretKey, parameterSpec);
           return cipher.doFinal(input, GCM_IV_LEN, input.length - GCM_IV_LEN);
+        }
+      } else if (mode.equalsIgnoreCase("CBC") &&
+          (padding.equalsIgnoreCase("PKCS") || padding.equalsIgnoreCase("DEFAULT"))) {
+        Cipher cipher = Cipher.getInstance("AES/CBC/PKCS5Padding");
+        if (opmode == Cipher.ENCRYPT_MODE) {
+          byte[] iv = new byte[CBC_IV_LEN];
+          secureRandom.nextBytes(iv);
+          cipher.init(Cipher.ENCRYPT_MODE, secretKey, new IvParameterSpec(iv));
+          byte[] encrypted = cipher.doFinal(input, 0, input.length);
+          ByteBuffer byteBuffer = ByteBuffer.allocate(iv.length + encrypted.length);
+          byteBuffer.put(iv);
+          byteBuffer.put(encrypted);
+          return byteBuffer.array();
+        } else {
+          assert(opmode == Cipher.DECRYPT_MODE);
+          IvParameterSpec parameterSpec = new IvParameterSpec(input, 0, CBC_IV_LEN);
+          cipher.init(Cipher.DECRYPT_MODE, secretKey, parameterSpec);
+          return cipher.doFinal(input, CBC_IV_LEN, input.length - CBC_IV_LEN);
         }
       } else {
         throw QueryExecutionErrors.aesModeUnsupportedError(mode, padding);
