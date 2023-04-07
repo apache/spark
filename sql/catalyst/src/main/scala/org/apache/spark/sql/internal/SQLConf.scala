@@ -1808,6 +1808,13 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val USE_TASK_EVALUATOR = buildConf("spark.sql.execution.useTaskEvaluator")
+    .internal()
+    .doc("When true, use TaskEvaluator to execute SQL operators.")
+    .version("3.5.0")
+    .booleanConf
+    .createWithDefault(false)
+
   val STATE_STORE_PROVIDER_CLASS =
     buildConf("spark.sql.streaming.stateStore.providerClass")
       .internal()
