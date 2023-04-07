@@ -2247,7 +2247,7 @@ package object config {
       .internal()
       .doc("Max number of unknown executors by decommission to retain. This affects " +
         "whether executor could receive decommission request sent before its registration.")
-      .version("3.4.0")
+      .version("3.5.0")
       .intConf
       .checkValue(_ >= 0, "needs to be a non-negative value")
       .createWithDefault(0)
