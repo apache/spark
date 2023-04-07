@@ -429,6 +429,7 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
           Row(null, null, 5, "E") ::
           Row(null, null, 6, "F") :: Nil)
 
+      print("About to do full join with right.N =!= 3\n")
       checkAnswer(
         left.join(right, ($"left.N" === $"right.N") && ($"right.N" =!= 3), "full"),
         Row(1, "A", null, null) ::
@@ -438,6 +439,7 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
           Row(4, "D", 4, "D") ::
           Row(null, null, 5, "E") ::
           Row(null, null, 6, "F") :: Nil)
+      print("Done doing full join with right.N =!= 3\n")
 
       // Make sure we are UnknownPartitioning as the outputPartitioning for the outer join
       // operator.
@@ -1453,6 +1455,75 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
       val result2 = sql(queryBuildRight)
 
       checkAnswer(result1, result2)
+    }
+  }
+
+  test("Full outer join with duplicate references in condition") {
+    withTempView("v1", "v2") {
+      sql("""create or replace temp view v1 as
+            |select * from values
+            |(1, 1),
+            |(2, 2),
+            |(3, 1)
+            |as v1(key, value)""".stripMargin)
+
+      sql("""create or replace temp view v2 as
+            |select * from values
+            |(1, 22, 22),
+            |(3, -1, -1),
+            |(7, null, null)
+            |as v2(a, b, c)""".stripMargin)
+
+      val expected = Row(1, 1, null, null, null) ::
+        Row(null, null, 1, 22, 22) ::
+        Row(2, 2, null, null, null) ::
+        Row(3, 1, 3, -1, -1) ::
+        Row(null, null, 7, null, null) ::
+        Nil
+
+      checkAnswer(sql("""select *
+                        |from v1
+                        |full outer join v2
+                        |on key = a
+                        |and value > b
+                        |and value > c""".stripMargin),
+        expected)
+    }
+  }
+
+  test("Left outer join with duplicate references in condition") {
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      withTempView("v1", "v2") {
+        sql(
+          """create or replace temp view v1 as
+            |select * from values
+            |(1, 1),
+            |(2, 2),
+            |(3, 1)
+            |as v1(key, value)""".stripMargin)
+
+        sql(
+          """create or replace temp view v2 as
+            |select * from values
+            |(1, 22, 22),
+            |(3, -1, -1),
+            |(7, null, null)
+            |as v2(a, b, c)""".stripMargin)
+
+        val expected = Row(1, 1, null, null, null) ::
+          Row(2, 2, null, null, null) ::
+          Row(3, 1, 3, -1, -1) ::
+          Nil
+
+        checkAnswer(sql(
+          """select *
+            |from v1
+            |left outer join v2
+            |on key = a
+            |and value > b
+            |and value > c""".stripMargin),
+          expected)
+      }
     }
   }
 }
