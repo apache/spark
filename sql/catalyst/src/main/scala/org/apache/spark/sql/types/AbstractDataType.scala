@@ -202,7 +202,6 @@ private[sql] object FractionalType {
 
 
 private[sql] abstract class FractionalType extends NumericType {
-  private[sql] val fractional: Fractional[InternalType]
   private[sql] val asIntegral: Integral[InternalType]
 }
 

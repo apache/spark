@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.trees.SQLQueryContext
 import org.apache.spark.sql.catalyst.trees.TreePattern.{BINARY_ARITHMETIC, TreePattern, UNARY_POSITIVE}
+import org.apache.spark.sql.catalyst.types.{PhysicalDecimalType, PhysicalFractionalType}
 import org.apache.spark.sql.catalyst.util.{IntervalMathUtils, IntervalUtils, MathUtils, TypeUtils}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
@@ -821,10 +822,11 @@ case class Divide(
 
   private lazy val div: (Any, Any) => Any = dataType match {
     case d @ DecimalType.Fixed(precision, scale) => (l, r) => {
-      val value = d.fractional.asInstanceOf[Fractional[Any]].div(l, r)
+      val value =
+        PhysicalDecimalType(precision, scale).fractional.asInstanceOf[Fractional[Any]].div(l, r)
       checkDecimalOverflow(value.asInstanceOf[Decimal], precision, scale)
     }
-    case ft: FractionalType => ft.fractional.asInstanceOf[Fractional[Any]].div
+    case ft: FractionalType => PhysicalFractionalType.fractional(ft).div
   }
 
   override def evalOperation(left: Any, right: Any): Any = div(left, right)
