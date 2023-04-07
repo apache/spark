@@ -26,6 +26,7 @@ from typing import cast
 import io
 from contextlib import redirect_stdout
 
+from pyspark import StorageLevel
 from pyspark.sql import SparkSession, Row
 from pyspark.sql.functions import col, lit, count, sum, mean, struct
 from pyspark.sql.pandas.utils import pyarrow_version_less_than_minimum
@@ -1076,21 +1077,26 @@ class DataFrameTestsMixin:
 
     def test_cache_table(self):
         spark = self.spark
-        with self.tempView("tab1", "tab2"):
-            spark.createDataFrame([(2, 2), (3, 3)]).createOrReplaceTempView("tab1")
-            spark.createDataFrame([(2, 4), (3, 4)]).createOrReplaceTempView("tab2")
-            self.assertFalse(spark.catalog.isCached("tab1"))
-            self.assertFalse(spark.catalog.isCached("tab2"))
+        tables = ["tab1", "tab2", "tab3"]
+        with self.tempView(*tables):
+            for i, tab in enumerate(tables):
+                spark.createDataFrame([(2, i), (3, i)]).createOrReplaceTempView(tab)
+                self.assertFalse(spark.catalog.isCached(tab))
             spark.catalog.cacheTable("tab1")
+            spark.catalog.cacheTable("tab3", StorageLevel.OFF_HEAP)
             self.assertTrue(spark.catalog.isCached("tab1"))
             self.assertFalse(spark.catalog.isCached("tab2"))
+            self.assertTrue(spark.catalog.isCached("tab3"))
             spark.catalog.cacheTable("tab2")
             spark.catalog.uncacheTable("tab1")
+            spark.catalog.uncacheTable("tab3")
             self.assertFalse(spark.catalog.isCached("tab1"))
             self.assertTrue(spark.catalog.isCached("tab2"))
+            self.assertFalse(spark.catalog.isCached("tab3"))
             spark.catalog.clearCache()
             self.assertFalse(spark.catalog.isCached("tab1"))
             self.assertFalse(spark.catalog.isCached("tab2"))
+            self.assertFalse(spark.catalog.isCached("tab3"))
             self.assertRaisesRegex(
                 AnalysisException,
                 "does_not_exist",
