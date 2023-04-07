@@ -34,7 +34,6 @@ class ShortType private() extends IntegralType {
   // Defined with a private constructor so the companion object is the only possible instantiation.
   private[sql] type InternalType = Short
   @transient private[sql] lazy val tag = typeTag[InternalType]
-  private[sql] val integral = implicitly[Integral[Short]]
 
   /**
    * The default size of a value of the ShortType is 2 bytes.
