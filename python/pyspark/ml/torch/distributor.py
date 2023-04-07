@@ -31,6 +31,7 @@ import time
 from typing import Union, Callable, List, Dict, Optional, Any, Tuple, Generator
 
 from pyspark import cloudpickle
+from pyspark.resource.information import ResourceInformation
 from pyspark.sql import SparkSession
 from pyspark.taskcontext import BarrierTaskContext
 from pyspark.ml.torch.log_communication import (  # type: ignore
@@ -52,6 +53,20 @@ def _get_active_session() -> SparkSession:
     if spark is None:
         raise RuntimeError("An active SparkSession is required for the distributor.")
     return spark
+
+
+def _get_resources(session: SparkSession) -> Dict[str, ResourceInformation]:
+    from pyspark.sql.utils import is_remote
+
+    if not is_remote():
+        resources = session.sparkContext.resources
+    else:
+        resources = session._client._analyze(  # type: ignore[attr-defined]
+            method="resources"
+        ).resources
+        assert resources is not None
+
+    return resources
 
 
 def _get_conf(spark: SparkSession, key: str, default_value: str) -> str:
@@ -86,7 +101,7 @@ def _get_conf_boolean(spark: SparkSession, key: str, default_value: str) -> bool
     return value == "true"
 
 
-def get_logger(name: str) -> logging.Logger:
+def _get_logger(name: str) -> logging.Logger:
     """
     Gets a logger by name, or creates and configures it for the first time.
     """
@@ -99,7 +114,7 @@ def get_logger(name: str) -> logging.Logger:
     return logger
 
 
-def get_gpus_owned(context: Union[SparkSession, BarrierTaskContext]) -> List[str]:
+def _get_gpus_owned(context: Union[SparkSession, BarrierTaskContext]) -> List[str]:
     """Gets the number of GPUs that Spark scheduled to the calling task.
 
     Parameters
@@ -119,11 +134,11 @@ def get_gpus_owned(context: Union[SparkSession, BarrierTaskContext]) -> List[str
     """
     CUDA_VISIBLE_DEVICES = "CUDA_VISIBLE_DEVICES"
     pattern = re.compile("^[1-9][0-9]*|0$")
-    if isinstance(context, SparkSession):
-        # TODO(SPARK-42994): Support sc.resources in Spark Connect
-        addresses = context.sparkContext.resources["gpu"].addresses
-    else:
+    if isinstance(context, BarrierTaskContext):
         addresses = context.resources()["gpu"].addresses
+    else:
+        addresses = _get_resources(context)["gpu"].addresses
+
     if any(not pattern.match(address) for address in addresses):
         raise ValueError(
             f"Found GPU addresses {addresses} which "
@@ -151,7 +166,7 @@ class Distributor:
         use_gpu: bool = True,
     ):
         self.spark = _get_active_session()
-        self.logger = get_logger(self.__class__.__name__)
+        self.logger = _get_logger(self.__class__.__name__)
         self.num_processes = num_processes
         self.local_mode = local_mode
         self.use_gpu = use_gpu
@@ -188,8 +203,7 @@ class Distributor:
                 return math.ceil(self.num_processes / task_gpu_amount)
             else:
                 key = "spark.driver.resource.gpu.amount"
-                # TODO(SPARK-42994): Support sc.resources in Spark Connect
-                if "gpu" not in self.spark.sparkContext.resources:
+                if "gpu" not in _get_resources(self.spark):
                     raise RuntimeError("GPUs were unable to be found on the driver.")
                 num_available_gpus = int(_get_conf(self.spark, key, "0"))
                 if num_available_gpus == 0:
@@ -266,8 +280,7 @@ class TorchDistributor(Distributor):
     .. versionadded:: 3.4.0
 
     .. versionchanged:: 3.5.0
-        Supports Spark Connect. Note that local mode with GPU is not supported yet, will be fixed
-        in SPARK-42994.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -457,7 +470,7 @@ class TorchDistributor(Distributor):
         old_cuda_visible_devices = os.environ.get(CUDA_VISIBLE_DEVICES, "")
         try:
             if self.use_gpu:
-                gpus_owned = get_gpus_owned(self.spark)
+                gpus_owned = _get_gpus_owned(self.spark)
                 random.seed(hash(train_object))
                 selected_gpus = [str(e) for e in random.sample(gpus_owned, self.num_processes)]
                 os.environ[CUDA_VISIBLE_DEVICES] = ",".join(selected_gpus)
@@ -539,7 +552,7 @@ class TorchDistributor(Distributor):
                 if CUDA_VISIBLE_DEVICES in os.environ:
                     return
 
-                gpus_owned = get_gpus_owned(context)
+                gpus_owned = _get_gpus_owned(context)
                 os.environ[CUDA_VISIBLE_DEVICES] = ",".join(gpus_owned)
 
             context = BarrierTaskContext.get()

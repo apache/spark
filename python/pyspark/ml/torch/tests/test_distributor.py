@@ -36,7 +36,7 @@ except ImportError:
     have_torch = False
 
 from pyspark import SparkConf, SparkContext
-from pyspark.ml.torch.distributor import TorchDistributor, get_gpus_owned
+from pyspark.ml.torch.distributor import TorchDistributor, _get_gpus_owned
 from pyspark.ml.torch.torch_run_process_wrapper import clean_and_terminate, check_parent_alive
 from pyspark.sql import SparkSession
 from pyspark.testing.utils import SPARK_HOME
@@ -328,11 +328,11 @@ class TorchDistributorLocalUnitTestsMixin:
 
     def test_get_gpus_owned_local(self) -> None:
         addresses = ["0", "1", "2"]
-        self.assertEqual(get_gpus_owned(self.spark), addresses)
+        self.assertEqual(_get_gpus_owned(self.spark), addresses)
 
         env_vars = {"CUDA_VISIBLE_DEVICES": "3,4,5"}
         self.setup_env_vars(env_vars)
-        self.assertEqual(get_gpus_owned(self.spark), ["3", "4", "5"])
+        self.assertEqual(_get_gpus_owned(self.spark), ["3", "4", "5"])
         self.delete_env_vars(env_vars)
 
     def test_local_training_succeeds(self) -> None:

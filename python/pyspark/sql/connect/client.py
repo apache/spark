@@ -59,6 +59,7 @@ import grpc
 from google.protobuf import text_format
 from google.rpc import error_details_pb2
 
+from pyspark.resource.information import ResourceInformation
 import pyspark.sql.connect.proto as pb2
 import pyspark.sql.connect.proto.base_pb2_grpc as grpc_lib
 import pyspark.sql.connect.types as types
@@ -416,6 +417,7 @@ class AnalyzeResult:
         is_same_semantics: Optional[bool],
         semantic_hash: Optional[int],
         storage_level: Optional[StorageLevel],
+        resources: Optional[Dict[str, ResourceInformation]],
     ):
         self.schema = schema
         self.explain_string = explain_string
@@ -428,6 +430,7 @@ class AnalyzeResult:
         self.is_same_semantics = is_same_semantics
         self.semantic_hash = semantic_hash
         self.storage_level = storage_level
+        self.resources = resources
 
     @classmethod
     def fromProto(cls, pb: Any) -> "AnalyzeResult":
@@ -442,6 +445,7 @@ class AnalyzeResult:
         is_same_semantics: Optional[bool] = None
         semantic_hash: Optional[int] = None
         storage_level: Optional[StorageLevel] = None
+        resources: Optional[Dict[str, ResourceInformation]] = None
 
         if pb.HasField("schema"):
             schema = types.proto_schema_to_pyspark_data_type(pb.schema.schema)
@@ -475,6 +479,12 @@ class AnalyzeResult:
                 deserialized=pb.get_storage_level.storage_level.deserialized,
                 replication=pb.get_storage_level.storage_level.replication,
             )
+        elif pb.HasField("get_resources"):
+            resources = {}
+            for key, resource in pb.get_resources.resources.items():
+                name = resource.name
+                addresses = [address for address in resource.addresses]
+                resources[key] = ResourceInformation(name, addresses)
         else:
             raise SparkConnectException("No analyze result found!")
 
@@ -490,6 +500,7 @@ class AnalyzeResult:
             is_same_semantics,
             semantic_hash,
             storage_level,
+            resources,
         )
 
 
@@ -867,6 +878,8 @@ class SparkConnectClient(object):
                 req.unpersist.blocking = cast(bool, kwargs.get("blocking"))
         elif method == "get_storage_level":
             req.get_storage_level.relation.CopyFrom(cast(pb2.Relation, kwargs.get("relation")))
+        elif method == "resources":
+            req.get_resources.SetInParent()
         else:
             raise ValueError(f"Unknown Analyze method: {method}")
 

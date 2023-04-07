@@ -462,6 +462,15 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
             self, field_name: typing_extensions.Literal["relation", b"relation"]
         ) -> None: ...
 
+    class GetResources(google.protobuf.message.Message):
+        """Returns the result of 'SparkContext.resources'"""
+
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        def __init__(
+            self,
+        ) -> None: ...
+
     SESSION_ID_FIELD_NUMBER: builtins.int
     USER_CONTEXT_FIELD_NUMBER: builtins.int
     CLIENT_TYPE_FIELD_NUMBER: builtins.int
@@ -478,6 +487,7 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
     PERSIST_FIELD_NUMBER: builtins.int
     UNPERSIST_FIELD_NUMBER: builtins.int
     GET_STORAGE_LEVEL_FIELD_NUMBER: builtins.int
+    GET_RESOURCES_FIELD_NUMBER: builtins.int
     session_id: builtins.str
     """(Required)
 
@@ -519,6 +529,8 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
     def unpersist(self) -> global___AnalyzePlanRequest.Unpersist: ...
     @property
     def get_storage_level(self) -> global___AnalyzePlanRequest.GetStorageLevel: ...
+    @property
+    def get_resources(self) -> global___AnalyzePlanRequest.GetResources: ...
     def __init__(
         self,
         *,
@@ -538,6 +550,7 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
         persist: global___AnalyzePlanRequest.Persist | None = ...,
         unpersist: global___AnalyzePlanRequest.Unpersist | None = ...,
         get_storage_level: global___AnalyzePlanRequest.GetStorageLevel | None = ...,
+        get_resources: global___AnalyzePlanRequest.GetResources | None = ...,
     ) -> None: ...
     def HasField(
         self,
@@ -552,6 +565,8 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
             b"ddl_parse",
             "explain",
             b"explain",
+            "get_resources",
+            b"get_resources",
             "get_storage_level",
             b"get_storage_level",
             "input_files",
@@ -591,6 +606,8 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
             b"ddl_parse",
             "explain",
             b"explain",
+            "get_resources",
+            b"get_resources",
             "get_storage_level",
             b"get_storage_level",
             "input_files",
@@ -640,6 +657,7 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
         "persist",
         "unpersist",
         "get_storage_level",
+        "get_resources",
     ] | None: ...
 
 global___AnalyzePlanRequest = AnalyzePlanRequest
@@ -834,6 +852,49 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
             self, field_name: typing_extensions.Literal["storage_level", b"storage_level"]
         ) -> None: ...
 
+    class GetResources(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        class ResourcesEntry(google.protobuf.message.Message):
+            DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+            KEY_FIELD_NUMBER: builtins.int
+            VALUE_FIELD_NUMBER: builtins.int
+            key: builtins.str
+            @property
+            def value(self) -> pyspark.sql.connect.proto.common_pb2.ResourceInformation: ...
+            def __init__(
+                self,
+                *,
+                key: builtins.str = ...,
+                value: pyspark.sql.connect.proto.common_pb2.ResourceInformation | None = ...,
+            ) -> None: ...
+            def HasField(
+                self, field_name: typing_extensions.Literal["value", b"value"]
+            ) -> builtins.bool: ...
+            def ClearField(
+                self, field_name: typing_extensions.Literal["key", b"key", "value", b"value"]
+            ) -> None: ...
+
+        RESOURCES_FIELD_NUMBER: builtins.int
+        @property
+        def resources(
+            self,
+        ) -> google.protobuf.internal.containers.MessageMap[
+            builtins.str, pyspark.sql.connect.proto.common_pb2.ResourceInformation
+        ]: ...
+        def __init__(
+            self,
+            *,
+            resources: collections.abc.Mapping[
+                builtins.str, pyspark.sql.connect.proto.common_pb2.ResourceInformation
+            ]
+            | None = ...,
+        ) -> None: ...
+        def ClearField(
+            self, field_name: typing_extensions.Literal["resources", b"resources"]
+        ) -> None: ...
+
     SESSION_ID_FIELD_NUMBER: builtins.int
     SCHEMA_FIELD_NUMBER: builtins.int
     EXPLAIN_FIELD_NUMBER: builtins.int
@@ -848,6 +909,7 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
     PERSIST_FIELD_NUMBER: builtins.int
     UNPERSIST_FIELD_NUMBER: builtins.int
     GET_STORAGE_LEVEL_FIELD_NUMBER: builtins.int
+    GET_RESOURCES_FIELD_NUMBER: builtins.int
     session_id: builtins.str
     @property
     def schema(self) -> global___AnalyzePlanResponse.Schema: ...
@@ -875,6 +937,8 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
     def unpersist(self) -> global___AnalyzePlanResponse.Unpersist: ...
     @property
     def get_storage_level(self) -> global___AnalyzePlanResponse.GetStorageLevel: ...
+    @property
+    def get_resources(self) -> global___AnalyzePlanResponse.GetResources: ...
     def __init__(
         self,
         *,
@@ -892,6 +956,7 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
         persist: global___AnalyzePlanResponse.Persist | None = ...,
         unpersist: global___AnalyzePlanResponse.Unpersist | None = ...,
         get_storage_level: global___AnalyzePlanResponse.GetStorageLevel | None = ...,
+        get_resources: global___AnalyzePlanResponse.GetResources | None = ...,
     ) -> None: ...
     def HasField(
         self,
@@ -900,6 +965,8 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
             b"ddl_parse",
             "explain",
             b"explain",
+            "get_resources",
+            b"get_resources",
             "get_storage_level",
             b"get_storage_level",
             "input_files",
@@ -933,6 +1000,8 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
             b"ddl_parse",
             "explain",
             b"explain",
+            "get_resources",
+            b"get_resources",
             "get_storage_level",
             b"get_storage_level",
             "input_files",
@@ -977,6 +1046,7 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
         "persist",
         "unpersist",
         "get_storage_level",
+        "get_resources",
     ] | None: ...
 
 global___AnalyzePlanResponse = AnalyzePlanResponse

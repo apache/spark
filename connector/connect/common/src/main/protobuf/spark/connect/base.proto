@@ -86,6 +86,7 @@ message AnalyzePlanRequest {
     Persist persist = 14;
     Unpersist unpersist = 15;
     GetStorageLevel get_storage_level = 16;
+    GetResources get_resources = 17;
   }
 
   message Schema {
@@ -188,6 +189,9 @@ message AnalyzePlanRequest {
     // (Required) The logical plan to get the storage level.
     Relation relation = 1;
   }
+
+  // Returns the result of 'SparkContext.resources'
+  message GetResources { }
 }
 
 // Response to performing analysis of the query. Contains relevant metadata to be able to
@@ -209,6 +213,7 @@ message AnalyzePlanResponse {
     Persist persist = 12;
     Unpersist unpersist = 13;
     GetStorageLevel get_storage_level = 14;
+    GetResources get_resources = 15;
   }
 
   message Schema {
@@ -259,6 +264,10 @@ message AnalyzePlanResponse {
   message GetStorageLevel {
     // (Required) The StorageLevel as a result of get_storage_level request.
     StorageLevel storage_level = 1;
+  }
+
+  message GetResources {
+    map<string, ResourceInformation> resources = 1;
   }
 }
 

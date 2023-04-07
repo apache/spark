@@ -28,8 +28,6 @@ except ImportError:
 
 from pyspark.sql import SparkSession
 
-from pyspark.ml.torch.distributor import TorchDistributor
-
 from pyspark.ml.torch.tests.test_distributor import (
     TorchDistributorBaselineUnitTestsMixin,
     TorchDistributorLocalUnitTestsMixin,
@@ -47,18 +45,6 @@ class TorchDistributorBaselineUnitTestsOnConnect(
 
     def tearDown(self) -> None:
         self.spark.stop()
-
-    def test_get_num_tasks_fails(self) -> None:
-        inputs = [1, 5, 4]
-
-        # This is when the conf isn't set and we request GPUs
-        for num_processes in inputs:
-            with self.subTest():
-                # TODO(SPARK-42994): Support sc.resources
-                # with self.assertRaisesRegex(RuntimeError, "driver"):
-                #     TorchDistributor(num_processes, True, True)
-                with self.assertRaisesRegex(RuntimeError, "unset"):
-                    TorchDistributor(num_processes, False, True)
 
 
 @unittest.skipIf(not have_torch, "torch is required")
@@ -79,21 +65,6 @@ class TorchDistributorLocalUnitTestsOnConnect(
         shutil.rmtree(self.mnist_dir_path)
         os.unlink(self.gpu_discovery_script_file.name)
         self.spark.stop()
-
-    # TODO(SPARK-42994): Support sc.resources
-    @unittest.skip("need to support sc.resources")
-    def test_get_num_tasks_locally(self):
-        super().test_get_num_tasks_locally()
-
-    # TODO(SPARK-42994): Support sc.resources
-    @unittest.skip("need to support sc.resources")
-    def test_get_gpus_owned_local(self):
-        super().test_get_gpus_owned_local()
-
-    # TODO(SPARK-42994): Support sc.resources
-    @unittest.skip("need to support sc.resources")
-    def test_local_training_succeeds(self):
-        super().test_local_training_succeeds()
 
 
 @unittest.skipIf(not have_torch, "torch is required")

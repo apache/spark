@@ -194,6 +194,22 @@ private[connect] class SparkConnectAnalyzeHandler(
             .setStorageLevel(StorageLevelProtoConverter.toConnectProtoType(storageLevel))
             .build())
 
+      case proto.AnalyzePlanRequest.AnalyzeCase.GET_RESOURCES =>
+        builder.setGetResources(
+          proto.AnalyzePlanResponse.GetResources
+            .newBuilder()
+            .putAllResources(
+              session.sparkContext.resources
+                .mapValues(resource =>
+                  proto.ResourceInformation
+                    .newBuilder()
+                    .setName(resource.name)
+                    .addAllAddresses(resource.addresses.toIterable.asJava)
+                    .build())
+                .toMap
+                .asJava)
+            .build())
+
       case other => throw InvalidPlanInput(s"Unknown Analyze Method $other!")
     }
 
