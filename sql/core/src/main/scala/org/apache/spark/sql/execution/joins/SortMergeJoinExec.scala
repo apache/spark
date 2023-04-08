@@ -1037,7 +1037,7 @@ case class SortMergeJoinExec(
       ctx, rightOutputRow, right, setDefaultValue = true)
     val resultVars = leftResultVars ++ rightResultVars
     val (_, conditionCheck, _) =
-      getJoinCondition(ctx, leftResultVars, left, right, Some(rightOutputRow))
+      getJoinCondition(ctx, None, left, right, Some(rightOutputRow), Some(leftOutputRow))
 
     // Generate code for result output in separate function, as we need to output result from
     // multiple places in join code.
