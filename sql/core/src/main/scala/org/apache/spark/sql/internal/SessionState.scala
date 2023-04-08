@@ -125,6 +125,9 @@ private[sql] class SessionState(
       plan: LogicalPlan,
       mode: CommandExecutionMode.Value = CommandExecutionMode.ALL): QueryExecution =
     createQueryExecution(plan, mode)
+
+  def executePlan(plan: LogicalPlan): QueryExecution =
+    createQueryExecution(plan, CommandExecutionMode.ALL)
 }
 
 private[sql] object SessionState {
