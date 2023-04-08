@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.types
 
-import scala.math.Ordering
 import scala.reflect.runtime.universe.typeTag
 
 import org.apache.spark.annotation.Unstable
@@ -50,8 +49,6 @@ case class YearMonthIntervalType(startField: Byte, endField: Byte) extends AnsiI
   private[sql] type InternalType = Int
 
   @transient private[sql] lazy val tag = typeTag[InternalType]
-
-  private[sql] val ordering = implicitly[Ordering[InternalType]]
 
   /**
    * Year-month interval values always occupy 4 bytes.
