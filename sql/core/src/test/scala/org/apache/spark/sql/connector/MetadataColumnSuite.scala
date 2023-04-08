@@ -325,4 +325,19 @@ class MetadataColumnSuite extends DatasourceV2SQLBase {
         Seq(Row("a", 0), Row("b", 0), Row("c", 0)))
     }
   }
+
+  test("SPARK-43030: deduplicate relations with metadata columns") {
+    withTable(tbl) {
+      prepareTable()
+      val df = spark.table(tbl)
+      val unioned = df.filter($"id" > 2).select("id", "index").union(
+        df.select("id", "index"))
+      checkAnswer(unioned, Seq(Row(3, 0), Row(1, 0), Row(2, 0), Row(3, 0)))
+      val relations = unioned.logicalPlan.collect {
+        case r: DataSourceV2Relation => r
+      }
+      assert(relations.length == 2)
+      assert(relations(0).output != relations(1).output)
+    }
+  }
 }
