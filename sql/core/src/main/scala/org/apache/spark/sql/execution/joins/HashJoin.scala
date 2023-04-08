@@ -458,6 +458,7 @@ trait HashJoin extends JoinCodegenSupport {
       val ev =
         BindReferences.bindReference(expr, streamedPlan.output ++ buildPlan.output).genCode(ctx)
       s"""
+         |$initBlock
          |boolean $conditionPassed = true;
          |${eval.trim}
          |if ($matched != null) {
@@ -657,6 +658,7 @@ trait HashJoin extends JoinCodegenSupport {
       val ev =
         BindReferences.bindReference(expr, streamedPlan.output ++ buildPlan.output).genCode(ctx)
       s"""
+         |$initBlock
          |$eval
          |${ev.code}
          |$existsVar = !${ev.isNull} && ${ev.value};

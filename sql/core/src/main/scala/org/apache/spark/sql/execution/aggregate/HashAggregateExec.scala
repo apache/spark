@@ -551,6 +551,7 @@ case class HashAggregateExec(
     def outputFromRowBasedMap: String = {
       s"""
          |while ($limitNotReachedCondition $iterTermForFastHashMap.next()) {
+         |  ${initBlock}
          |  UnsafeRow $keyTerm = (UnsafeRow) $iterTermForFastHashMap.getKey();
          |  UnsafeRow $bufferTerm = (UnsafeRow) $iterTermForFastHashMap.getValue();
          |  $outputFunc($keyTerm, $bufferTerm);
@@ -577,6 +578,7 @@ case class HashAggregateExec(
       s"""
          |while ($limitNotReachedCondition $iterTermForFastHashMap.hasNext()) {
          |  InternalRow $row = (InternalRow) $iterTermForFastHashMap.next();
+         |  ${initBlock}
          |  ${generateKeyRow.code}
          |  ${generateBufferRow.code}
          |  $outputFunc(${generateKeyRow.value}, ${generateBufferRow.value});
@@ -591,6 +593,7 @@ case class HashAggregateExec(
     def outputFromRegularHashMap: String = {
       s"""
          |while ($limitNotReachedCondition $iterTerm.next()) {
+         |  ${initBlock}
          |  UnsafeRow $keyTerm = (UnsafeRow) $iterTerm.getKey();
          |  UnsafeRow $bufferTerm = (UnsafeRow) $iterTerm.getValue();
          |  $outputFunc($keyTerm, $bufferTerm);
@@ -728,7 +731,7 @@ case class HashAggregateExec(
       val boundUpdateExprs = updateExprs.map { updateExprsForOneFunc =>
         bindReferences(updateExprsForOneFunc, inputAttrs)
       }
-      val initBlock = ctx.subexpressionElimination(boundUpdateExprs.flatten: _*)
+      val initBlock = ctx.subexpressionElimination(boundUpdateExprs.flatten)
       val unsafeRowBufferEvals = boundUpdateExprs.map { boundUpdateExprsForOneFunc =>
         boundUpdateExprsForOneFunc.map(_.genCode(ctx))
       }
@@ -771,7 +774,7 @@ case class HashAggregateExec(
           val boundUpdateExprs = updateExprs.map { updateExprsForOneFunc =>
             bindReferences(updateExprsForOneFunc, inputAttrs)
           }
-          val initBlock = ctx.subexpressionElimination(boundUpdateExprs.flatten: _*)
+          val initBlock = ctx.subexpressionElimination(boundUpdateExprs.flatten)
           val fastRowEvals = boundUpdateExprs.map { boundUpdateExprsForOneFunc =>
             boundUpdateExprsForOneFunc.map(_.genCode(ctx))
           }

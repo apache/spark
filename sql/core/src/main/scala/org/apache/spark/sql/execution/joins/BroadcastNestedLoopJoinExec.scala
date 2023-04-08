@@ -464,6 +464,7 @@ case class BroadcastNestedLoopJoinExec(
     s"""
        |for (int $arrayIndex = 0; $arrayIndex < $buildRowArrayTerm.length; $arrayIndex++) {
        |  UnsafeRow $buildRow = (UnsafeRow) $buildRowArrayTerm[$arrayIndex];
+       |  ${initBlock}
        |  $checkCondition {
        |    $numOutput.add(1);
        |    ${consume(ctx, resultVars)}
@@ -497,6 +498,7 @@ case class BroadcastNestedLoopJoinExec(
          |boolean $foundMatch = false;
          |for (int $arrayIndex = 0; $arrayIndex < $buildRowArrayTerm.length; $arrayIndex++) {
          |  UnsafeRow $buildRow = (UnsafeRow) $buildRowArrayTerm[$arrayIndex];
+         |  ${initBlock}
          |  boolean $shouldOutputRow = false;
          |  $checkCondition {
          |    $shouldOutputRow = true;
@@ -548,6 +550,7 @@ case class BroadcastNestedLoopJoinExec(
          |boolean $foundMatch = false;
          |for (int $arrayIndex = 0; $arrayIndex < $buildRowArrayTerm.length; $arrayIndex++) {
          |  UnsafeRow $buildRow = (UnsafeRow) $buildRowArrayTerm[$arrayIndex];
+         |  ${initBlock}
          |  $checkCondition {
          |    $foundMatch = true;
          |    break;
