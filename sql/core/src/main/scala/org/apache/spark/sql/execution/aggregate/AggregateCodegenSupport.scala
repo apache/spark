@@ -207,7 +207,7 @@ trait AggregateCodegenSupport
     val boundUpdateExprs = updateExprs.map { updateExprsForOneFunc =>
       bindReferences(updateExprsForOneFunc, inputAttrs)
     }
-    val initBlock = ctx.subexpressionElimination(boundUpdateExprs.flatten: _*)
+    val initBlock = ctx.subexpressionElimination(boundUpdateExprs.flatten)
     val bufferEvals = boundUpdateExprs.map { boundUpdateExprsForOneFunc =>
       boundUpdateExprsForOneFunc.map(_.genCode(ctx))
     }
@@ -297,7 +297,7 @@ trait AggregateCodegenSupport
       aggCodeBlocks: Seq[Block]): Option[Seq[String]] = {
     val inputVars = aggBufferUpdatingExprs.map { aggExprsForOneFunc =>
       val inputVarsForOneFunc = aggExprsForOneFunc.map(
-        CodeGenerator.getLocalInputVariableValues(ctx, _)._1).reduce(_ ++ _).toSeq
+        CodeGenerator.getLocalInputVariableValues(ctx, _)._1.toSet).reduce(_ ++ _).toSeq
       val paramLength = CodeGenerator.calculateParamLengthFromExprValues(inputVarsForOneFunc)
 
       // Checks if a parameter length for the `aggExprsForOneFunc` does not go over the JVM limit

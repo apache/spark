@@ -22,6 +22,7 @@ import java.util.Objects
 import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.expressions.EquivalentExpressions.supportedExpression
+import org.apache.spark.sql.catalyst.expressions.codegen.ExprValue
 import org.apache.spark.sql.catalyst.expressions.objects.LambdaVariable
 import org.apache.spark.util.Utils
 
@@ -194,4 +195,11 @@ case class ExpressionEquals(e: Expression) {
  * Instead of appending to a mutable list/buffer of Expressions, just update the "flattened"
  * useCount in this wrapper in-place.
  */
-case class ExpressionStats(expr: Expression)(var useCount: Int)
+case class ExpressionStats(expr: Expression)(
+  var useCount: Int,
+  var initialized: Option[String] = None,
+  var isNull: Option[ExprValue] = None,
+  var value: Option[ExprValue] = None,
+  var funcName: Option[String] = None,
+  var params: Option[Seq[Class[_]]] = None,
+  var addedFunction: Boolean = false)

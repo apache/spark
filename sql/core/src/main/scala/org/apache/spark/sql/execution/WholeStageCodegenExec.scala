@@ -45,6 +45,11 @@ import org.apache.spark.util.Utils
  */
 trait CodegenSupport extends SparkPlan {
 
+  def reusableExpressions(): (Seq[Expression], AttributeSet) = (Seq(), AttributeSet.empty)
+
+  var initBlock: Block = EmptyBlock
+  var commonExpressions = Map[ExpressionEquals, ExpressionStats]()
+
   /** Prefix used in the current operator's variable names. */
   private def variablePrefix: String = this match {
     case _: HashAggregateExec => "hashAgg"
@@ -176,6 +181,7 @@ trait CodegenSupport extends SparkPlan {
     ctx.currentVars = inputVars
     ctx.INPUT_ROW = null
     ctx.freshNamePrefix = parent.variablePrefix
+    ctx.commonExpressions = parent.commonExpressions
     val evaluated = evaluateRequiredVariables(output, inputVars, parent.usedInputs)
 
     // Under certain conditions, we can put the logic to consume the rows of this operator into
@@ -342,8 +348,6 @@ trait CodegenSupport extends SparkPlan {
   def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
     throw new UnsupportedOperationException
   }
-
-  var initBlock: Block = EmptyBlock
 
   /**
    * Whether or not the result rows of this operator should be copied before putting into a buffer.
@@ -660,6 +664,50 @@ case class WholeStageCodegenExec(child: SparkPlan)(val codegenStageId: Int)
   def doCodeGen(): (CodegenContext, CodeAndComment) = {
     val startTime = System.nanoTime()
     val ctx = new CodegenContext
+
+    if (SQLConf.get.subexpressionEliminationEnabled) {
+      val stack = mutable.Stack[SparkPlan](child)
+      var attributeSet = AttributeSet.empty
+      val executeSeq =
+        new mutable.ArrayBuffer[(CodegenSupport, Seq[Expression], EquivalentExpressions)]()
+      var equivalence = new EquivalentExpressions
+      while (stack.nonEmpty) {
+        stack.pop() match {
+          case _: WholeStageCodegenExec =>
+          case _: InputRDDCodegen =>
+          case c: CodegenSupport =>
+            val (newReusableExpressions, newAttributeSet) = c.reusableExpressions()
+            // If the input attributes changed, collect current common expressions and clear
+            // equivalentExpressions
+            if (!attributeSet.subsetOf(newAttributeSet)) {
+              equivalence = new EquivalentExpressions
+            }
+            if (newReusableExpressions.nonEmpty) {
+              val bondExpressions =
+                BindReferences.bindReferences(newReusableExpressions, newAttributeSet.toSeq)
+              executeSeq += ((c, bondExpressions, equivalence))
+              ctx.wholeStageSubexpressionElimination(bondExpressions, equivalence)
+            }
+            attributeSet = newAttributeSet
+            stack.pushAll(c.children)
+
+          case _ =>
+        }
+      }
+      executeSeq.reverse.foreach { case (plan, bondExpressions, equivalence) =>
+        val commonExprs =
+          equivalence.getAllExprStates(1)
+            .map(stat => ExpressionEquals(stat.expr) -> stat).toMap
+        plan.commonExpressions = commonExprs
+        bondExpressions.foreach {
+          _.foreach { expr =>
+            commonExprs.get(ExpressionEquals(expr)).map { stat =>
+              plan.initBlock += ctx.initCommonExpression(stat)
+            }
+          }
+        }
+      }
+    }
     val code = child.asInstanceOf[CodegenSupport].produce(ctx, this)
 
     // main next function.

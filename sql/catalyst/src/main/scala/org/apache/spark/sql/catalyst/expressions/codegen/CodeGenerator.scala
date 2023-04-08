@@ -422,7 +422,7 @@ class CodegenContext extends Logging {
    *  equivalentExpressions will match the tree containing `col1 + col2` and it will only
    *  be evaluated once.
    */
-  private val equivalentExpressions: EquivalentExpressions = new EquivalentExpressions
+  private[sql] val equivalentExpressions: EquivalentExpressions = new EquivalentExpressions
 
   // Foreach expression that is participating in subexpression elimination, the state to use.
   // Visible for testing.
@@ -1027,69 +1027,80 @@ class CodegenContext extends Logging {
     splitExpressions(subexprFunctions.toSeq, "subexprFunc_split", Seq("InternalRow" -> INPUT_ROW))
   }
 
-  def subexpressionElimination(expressions: Expression*): Block = {
+  def subexpressionElimination(expressions: Seq[Expression]): Block = {
     var initBlock: Block = EmptyBlock
     if (SQLConf.get.subexpressionEliminationEnabled) {
-      // Create a clear EquivalentExpressions and SubExprEliminationState mapping
-      val equivalentExpressions: EquivalentExpressions = new EquivalentExpressions
-      // Add current expression tree and compute the common subexpressions.
-      expressions.map(equivalentExpressions.addExprTree(_))
-
-      commonExpressions.clear()
-      commonExpressions ++= equivalentExpressions.getAllExprStates(1).map { stats =>
-        val expr = stats.expr
-        val initialized = addMutableState(JAVA_BOOLEAN, "subExprInit")
-        initBlock += code"$initialized = false;\n"
-        val wrapperFunc: ExprCode => ExprCode = { eval =>
-          val (inputVars, exprCodes) = {
-            val (inputVars, exprCodes) = getLocalInputVariableValues(this, expr)
-            (inputVars.toSeq, exprCodes.toSeq)
-          }
-          val isNullLiteral = eval.isNull match {
-            case TrueLiteral | FalseLiteral => true
-            case _ => false
-          }
-          val (isNull, isNullEvalCode) = if (!isNullLiteral) {
-            val v = addMutableState(JAVA_BOOLEAN, "subExprIsNull")
-            (JavaCode.isNullGlobal(v), s"$v = ${eval.isNull};")
-          } else {
-            (eval.isNull, "")
-          }
-          val value = addMutableState(javaType(expr.dataType), "subExprValue")
-          val code = if (isValidParamLength(calculateParamLengthFromExprValues(inputVars))) {
-            // Generate the code for this expression tree and wrap it in a function.
-            val fnName = freshName("subExpr")
-            val argList =
-              inputVars.map(v => s"${CodeGenerator.typeName(v.javaType)} ${v.variableName}")
-            val fn =
-              s"""
-                 |private void $fnName(${argList.mkString(", ")}) {
-                 |  if (!$initialized) {
-                 |    ${eval.code}
-                 |    $initialized = true;
-                 |    $isNullEvalCode
-                 |    $value = ${eval.value};
-                 |  }
-                 |}
-                 """.stripMargin
-            val inputVariables = inputVars.map(_.variableName).mkString(", ")
-            code"${addNewFunction(fnName, fn)}($inputVariables);"
-          } else {
-            code"""
-                  |if (!$initialized) {
-                  |  ${eval.code}
-                  |  $initialized = true;
-                  |  $isNullEvalCode
-                  |  $value = ${eval.value};
-                  |}
-               """.stripMargin
-          }
-          ExprCode(code, isNull, JavaCode.global(value, expr.dataType))
-        }
-        ExpressionEquals(expr) -> (stats.useCount, wrapperFunc, None)
-      }.toMap
+      val equivalence = new EquivalentExpressions
+      wholeStageSubexpressionElimination(expressions, equivalence)
+      equivalence.getAllExprStates(1).map(initBlock += initCommonExpression(_))
     }
     initBlock
+  }
+
+  def wholeStageSubexpressionElimination(
+       expressions: Seq[Expression],
+       equivalence: EquivalentExpressions): Unit = {
+    expressions.map(equivalence.addExprTree(_))
+  }
+
+  def initCommonExpression(stats: ExpressionStats): Block = {
+    if (stats.initialized.isEmpty) {
+      val expr = stats.expr
+      stats.initialized = Some(addMutableState(JAVA_BOOLEAN, "subExprInit"))
+      stats.isNull = Some(JavaCode.isNullGlobal(addMutableState(JAVA_BOOLEAN, "subExprIsNull")))
+      stats.value = Some(JavaCode.global(addMutableState(javaType(expr.dataType), "subExprValue"),
+        expr.dataType))
+      stats.funcName = Some(freshName("subExpr"))
+      commonExpressions += ExpressionEquals(expr) -> stats
+      code"${stats.initialized.get} = false;\n"
+    } else {
+      EmptyBlock
+    }
+  }
+
+  def genReusedCode(stats: ExpressionStats, eval: ExprCode): ExprCode = {
+    val (inputVars, _) = getLocalInputVariableValues(this, stats.expr)
+    val (initialized, isNull, value) = (stats.initialized.get, stats.isNull.get, stats.value.get)
+    val validParamLength = isValidParamLength(calculateParamLengthFromExprValues(inputVars))
+    if(!stats.addedFunction && validParamLength) {
+      // Generate the code for this expression tree and wrap it in a function.
+      val argList =
+        inputVars.map(v => s"${CodeGenerator.typeName(v.javaType)} ${v.variableName}")
+      val fn =
+        s"""
+           |private void ${stats.funcName.get}(${argList.mkString(", ")}) {
+           |  if (!$initialized) {
+           |    ${eval.code}
+           |    $initialized = true;
+           |    $isNull = ${eval.isNull};
+           |    $value = ${eval.value};
+           |  }
+           |}
+         """.stripMargin
+      stats.funcName = Some(addNewFunction(stats.funcName.get, fn))
+      stats.params = Some(inputVars.map(_.javaType))
+      stats.addedFunction = true
+    }
+    // input vars changed, e.g. some input vars now are GlobalValue.
+    if (inputVars.map(_.javaType) != stats.params.get) {
+      eval
+    } else {
+      val code =
+        if (validParamLength) {
+          val inputVariables = inputVars.map(_.variableName).mkString(", ")
+          code"${stats.funcName.get}($inputVariables);"
+        } else {
+          code"""
+                |if (!$initialized) {
+                |  ${eval.code}
+                |  $initialized = true;
+                |  $isNull = ${eval.isNull};
+                |  $value = ${eval.value};
+                |}
+           """.stripMargin
+        }
+      ExprCode(code, isNull, value)
+    }
   }
 
   /**
@@ -1104,7 +1115,7 @@ class CodegenContext extends Logging {
     // as well because some expressions may implement `CodegenFallback`.
     val cleanedExpressions = expressions.map(_.freshCopyIfContainsStatefulExpression())
     val initBlock = if (doSubexpressionElimination) {
-      subexpressionElimination(cleanedExpressions: _*)
+      subexpressionElimination(cleanedExpressions)
     } else {
       EmptyBlock
     }
@@ -1148,8 +1159,7 @@ class CodegenContext extends Logging {
     }
   }
 
-  private[spark] val commonExpressions =
-    new mutable.HashMap[ExpressionEquals, (Int, ExprCode => ExprCode, Option[ExprCode])]
+  var commonExpressions = Map[ExpressionEquals, ExpressionStats]()
 }
 
 /**
@@ -1686,9 +1696,9 @@ object CodeGenerator extends Logging {
       ctx: CodegenContext,
       expr: Expression,
       subExprs: Map[ExpressionEquals, SubExprEliminationState] = Map.empty)
-      : (Set[VariableValue], Set[ExprCode]) = {
-    val argSet = mutable.Set[VariableValue]()
-    val exprCodesNeedEvaluate = mutable.Set[ExprCode]()
+      : (Seq[VariableValue], Seq[ExprCode]) = {
+    val argSet = mutable.LinkedHashSet[VariableValue]()
+    val exprCodesNeedEvaluate = mutable.LinkedHashSet[ExprCode]()
 
     if (ctx.INPUT_ROW != null) {
       argSet += JavaCode.variable(ctx.INPUT_ROW, classOf[InternalRow])
@@ -1725,7 +1735,7 @@ object CodeGenerator extends Logging {
       }
     }
 
-    (argSet.toSet, exprCodesNeedEvaluate.toSet)
+    (argSet.toSeq, exprCodesNeedEvaluate.toSeq)
   }
 
   /**
