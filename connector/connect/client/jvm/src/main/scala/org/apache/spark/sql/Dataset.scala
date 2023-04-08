@@ -23,12 +23,14 @@ import scala.collection.mutable
 import scala.util.control.NonFatal
 
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.api.java.function._
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
-import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{PrimitiveLongEncoder, ProductEncoder, StringEncoder, UnboundRowEncoder}
+import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders._
 import org.apache.spark.sql.catalyst.expressions.RowOrdering
-import org.apache.spark.sql.connect.client.SparkResult
+import org.apache.spark.sql.connect.client.{SparkResult, UdfUtils}
 import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, StorageLevelProtoConverter}
+import org.apache.spark.sql.expressions.ScalarUserDefinedFunction
 import org.apache.spark.sql.functions.{struct, to_json}
 import org.apache.spark.sql.types.{Metadata, StructType}
 import org.apache.spark.storage.StorageLevel
@@ -2469,6 +2471,150 @@ class Dataset[T] private[sql] (
   def transform[U](t: Dataset[T] => Dataset[U]): Dataset[U] = t(this)
 
   /**
+   * (Scala-specific) Returns a new Dataset that only contains elements where `func` returns
+   * `true`.
+   *
+   * @group typedrel
+   * @since 3.5.0
+   */
+  def filter(func: T => Boolean): Dataset[T] = {
+    val udf = ScalarUserDefinedFunction(
+      function = func,
+      inputEncoders = encoder :: Nil,
+      outputEncoder = PrimitiveBooleanEncoder)
+    sparkSession.newDataset[T](encoder) { builder =>
+      builder.getFilterBuilder
+        .setInput(plan.getRoot)
+        .setCondition(udf.apply(col("*")).expr)
+    }
+  }
+
+  /**
+   * (Java-specific) Returns a new Dataset that only contains elements where `func` returns
+   * `true`.
+   *
+   * @group typedrel
+   * @since 3.5.0
+   */
+  def filter(f: FilterFunction[T]): Dataset[T] = {
+    filter(UdfUtils.filterFuncToScalaFunc(f))
+  }
+
+  /**
+   * (Scala-specific) Returns a new Dataset that contains the result of applying `func` to each
+   * element.
+   *
+   * @group typedrel
+   * @since 3.5.0
+   */
+  def map[U: Encoder](f: T => U): Dataset[U] = {
+    mapPartitions(UdfUtils.mapFuncToMapPartitionsAdaptor(f))
+  }
+
+  /**
+   * (Java-specific) Returns a new Dataset that contains the result of applying `func` to each
+   * element.
+   *
+   * @group typedrel
+   * @since 3.5.0
+   */
+  def map[U](f: MapFunction[T, U], encoder: Encoder[U]): Dataset[U] = {
+    map(UdfUtils.mapFunctionToScalaFunc(f))(encoder)
+  }
+
+  /**
+   * (Scala-specific) Returns a new Dataset that contains the result of applying `func` to each
+   * partition.
+   *
+   * @group typedrel
+   * @since 3.5.0
+   */
+  def mapPartitions[U: Encoder](func: Iterator[T] => Iterator[U]): Dataset[U] = {
+    val outputEncoder = encoderFor[U]
+    val udf = ScalarUserDefinedFunction(
+      function = func,
+      inputEncoders = encoder :: Nil,
+      outputEncoder = outputEncoder)
+    sparkSession.newDataset(outputEncoder) { builder =>
+      builder.getMapPartitionsBuilder
+        .setInput(plan.getRoot)
+        .setFunc(udf.apply(col("*")).expr.getCommonInlineUserDefinedFunction)
+    }
+  }
+
+  /**
+   * (Java-specific) Returns a new Dataset that contains the result of applying `f` to each
+   * partition.
+   *
+   * @group typedrel
+   * @since 3.5.0
+   */
+  def mapPartitions[U](f: MapPartitionsFunction[T, U], encoder: Encoder[U]): Dataset[U] = {
+    mapPartitions(UdfUtils.mapPartitionsFuncToScalaFunc(f))(encoder)
+  }
+
+  /**
+   * (Scala-specific) Returns a new Dataset by first applying a function to all elements of this
+   * Dataset, and then flattening the results.
+   *
+   * @group typedrel
+   * @since 3.5.0
+   */
+  def flatMap[U: Encoder](func: T => TraversableOnce[U]): Dataset[U] =
+    mapPartitions(UdfUtils.flatMapFuncToMapPartitionsAdaptor(func))
+
+  /**
+   * (Java-specific) Returns a new Dataset by first applying a function to all elements of this
+   * Dataset, and then flattening the results.
+   *
+   * @group typedrel
+   * @since 3.5.0
+   */
+  def flatMap[U](f: FlatMapFunction[T, U], encoder: Encoder[U]): Dataset[U] = {
+    flatMap(UdfUtils.flatMapFuncToScalaFunc(f))(encoder)
+  }
+
+  /**
+   * Applies a function `f` to all rows.
+   *
+   * @group action
+   * @since 3.5.0
+   */
+  def foreach(f: T => Unit): Unit = {
+    foreachPartition(UdfUtils.foreachFuncToForeachPartitionsAdaptor(f))
+  }
+
+  /**
+   * (Java-specific) Runs `func` on each element of this Dataset.
+   *
+   * @group action
+   * @since 3.5.0
+   */
+  def foreach(func: ForeachFunction[T]): Unit = foreach(UdfUtils.foreachFuncToScalaFunc(func))
+
+  /**
+   * Applies a function `f` to each partition of this Dataset.
+   *
+   * @group action
+   * @since 3.5.0
+   */
+  def foreachPartition(f: Iterator[T] => Unit): Unit = {
+    // Delegate to mapPartition with empty result.
+    mapPartitions(UdfUtils.foreachPartitionFuncToMapPartitionsAdaptor(f))(RowEncoder(Seq.empty))
+      .collect()
+  }
+
+  /**
+   * (Java-specific) Runs `func` on each partition of this Dataset.
+   *
+   * @group action
+   * @since 3.5.0
+   */
+  def foreachPartition(func: ForeachPartitionFunction[T]): Unit = {
+    foreachPartition(UdfUtils.foreachPartitionFuncToScalaFunc(func))
+  }
+
+  /**
    * Returns the first `n` rows in the Dataset.
    *
    * Running take requires moving data into the application's driver process, and doing so with a
@@ -2859,14 +3005,6 @@ class Dataset[T] private[sql] (
 
   def observe(name: String, expr: Column, exprs: Column*): Dataset[T] = {
     throw new UnsupportedOperationException("observe is not implemented.")
-  }
-
-  def foreach(f: T => Unit): Unit = {
-    throw new UnsupportedOperationException("foreach is not implemented.")
-  }
-
-  def foreachPartition(f: Iterator[T] => Unit): Unit = {
-    throw new UnsupportedOperationException("foreach is not implemented.")
   }
 
   def checkpoint(): Dataset[T] = {
