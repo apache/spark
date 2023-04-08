@@ -949,6 +949,13 @@ class SparkConnectClient(object):
                         if b.HasField("sql_command_result"):
                             logger.debug("Received the SQL command result.")
                             yield {"sql_command_result": b.sql_command_result.relation}
+                        if b.HasField("write_stream_operation_start_result"):
+                            field = "write_stream_operation_start_result"
+                            yield {field: b.write_stream_operation_start_result}
+                        if b.HasField("streaming_query_command_result"):
+                            yield {
+                                "streaming_query_command_result": b.streaming_query_command_result
+                            }
                         if b.HasField("arrow_batch"):
                             logger.debug(
                                 f"Received arrow batch rows={b.arrow_batch.row_count} "

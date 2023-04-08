@@ -2768,6 +2768,15 @@ class DataFrameSuite extends QueryTest
     checkAnswer(swappedDf.filter($"key"($"map") > "a"), Row(2, Map(2 -> "b")))
   }
 
+  test("SPARK-42655 Fix ambiguous column reference error") {
+    val df1 = sparkContext.parallelize(List((1, 2, 3, 4, 5))).toDF("id", "col2", "col3",
+      "col4", "col5")
+    val op_cols_mixed_case = List("id", "col2", "col3", "col4", "col5", "ID")
+    val df2 = df1.select(op_cols_mixed_case.head, op_cols_mixed_case.tail: _*)
+    // should not throw any error.
+    checkAnswer(df2.select("id"), Row(1))
+  }
+
   test("SPARK-26057: attribute deduplication on already analyzed plans") {
     withTempView("a", "b", "v") {
       val df1 = Seq(("1-1", 6)).toDF("id", "n")

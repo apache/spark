@@ -30,7 +30,10 @@ export SPARK_HOME=$FWDIR
 SCALA_BINARY_VER=`grep "scala.binary.version" "${SPARK_HOME}/pom.xml" | head -n1 | awk -F '[<>]' '{print $3}'`
 SCALA_ARG="-Pscala-${SCALA_BINARY_VER}"
 
-# Build the jars needed for spark submit and spark connect
-build/sbt "${SCALA_ARG}" -Phive -Pconnect package
+BUILD="${BUILD:-1}"
+if [ "$BUILD" -eq "1" ]; then
+  # Build the jars needed for spark submit and spark connect
+  build/sbt "${SCALA_ARG}" -Phive -Pconnect package || exit 1
+fi
 
 exec "${SPARK_HOME}"/bin/spark-shell --conf spark.plugins=org.apache.spark.sql.connect.SparkConnectPlugin "$@"
