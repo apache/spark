@@ -933,7 +933,7 @@ private[spark] class TaskSetManager(
           // if the exception has an error class which means a user error, not retry
           logError(s"$task has a user exception: ${ef.description}; not retrying")
           sched.dagScheduler.taskEnded(tasks(index), reason, null, accumUpdates, metricPeaks, info)
-          abort(s"$task has a user exception: ${ef.description}")
+          abort(s"$task has a user exception: ${ef.description}", ef.exception)
           return
         }
         val key = ef.description

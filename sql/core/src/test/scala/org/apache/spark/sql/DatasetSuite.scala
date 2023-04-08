@@ -1942,18 +1942,18 @@ class DatasetSuite extends QueryTest
     // If the primitive values are from Option, we need to do runtime null check.
     val ds = Seq(Some(1), None).toDS().as[Int]
     val e1 = intercept[RuntimeException](ds.collect())
-    assert(e1.getCause.isInstanceOf[NullPointerException])
+    assert(e1.getCause.getCause.isInstanceOf[NullPointerException])
     val e2 = intercept[SparkException](ds.map(_ * 2).collect())
-    assert(e2.getCause.isInstanceOf[NullPointerException])
+    assert(e2.getCause.getCause.isInstanceOf[NullPointerException])
 
     withTempPath { path =>
       Seq(Integer.valueOf(1), null).toDF("i").write.parquet(path.getCanonicalPath)
       // If the primitive values are from files, we need to do runtime null check.
       val ds = spark.read.parquet(path.getCanonicalPath).as[Int]
       val e1 = intercept[RuntimeException](ds.collect())
-      assert(e1.getCause.isInstanceOf[NullPointerException])
+      assert(e1.getCause.getCause.isInstanceOf[NullPointerException])
       val e2 = intercept[SparkException](ds.map(_ * 2).collect())
-      assert(e2.getCause.isInstanceOf[NullPointerException])
+      assert(e2.getCause.getCause.isInstanceOf[NullPointerException])
     }
   }
 

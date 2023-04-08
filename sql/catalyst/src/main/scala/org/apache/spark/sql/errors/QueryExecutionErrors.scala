@@ -2795,7 +2795,9 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
   def nullPointException(errMsg: String): SparkUserException = {
     new SparkUserException(
       errorClass = "_LEGACY_ERROR_TEMP_3044",
-      messageParameters = Map("field" -> errMsg)
-    )
+      messageParameters = Map(
+        "field" -> errMsg
+      ),
+      cause = new NullPointerException)
   }
 }

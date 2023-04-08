@@ -403,10 +403,10 @@ class RuntimeNullChecksV2Writes extends QueryTest with SQLTestUtils with SharedS
   }
 
   private def assertNotNullException(e: SparkException, colPath: Seq[String]): Unit = {
-    e.getCause match {
+    e.getCause.getCause match {
       case npe: NullPointerException =>
-        assert(npe.getMessage.contains("Null value appeared in non-nullable field"))
-        assert(npe.getMessage.contains(colPath.mkString("\n", "\n", "\n")))
+        assert(e.getCause.getMessage.contains("Null value appeared in non-nullable field"))
+        assert(e.getCause.getMessage.contains(colPath.mkString("\n", "\n", "\n")))
       case other =>
         fail(s"Unexpected exception cause: $other")
     }
