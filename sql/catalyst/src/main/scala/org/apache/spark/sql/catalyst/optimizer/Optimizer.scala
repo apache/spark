@@ -679,6 +679,8 @@ object RemoveNoopUnion extends Rule[LogicalPlan] {
       d.withNewChildren(Seq(simplifyUnion(u)))
     case d @ Deduplicate(_, u: Union) =>
       d.withNewChildren(Seq(simplifyUnion(u)))
+    case d @ DeduplicateWithinWatermark(_, u: Union) =>
+      d.withNewChildren(Seq(simplifyUnion(u)))
   }
 }
 
@@ -1451,6 +1453,9 @@ object CombineUnions extends Rule[LogicalPlan] {
     // Only handle distinct-like 'Deduplicate', where the keys == output
     case Deduplicate(keys: Seq[Attribute], u: Union) if AttributeSet(keys) == u.outputSet =>
       Deduplicate(keys, flattenUnion(u, true))
+    case DeduplicateWithinWatermark(keys: Seq[Attribute], u: Union)
+      if AttributeSet(keys) == u.outputSet =>
+      DeduplicateWithinWatermark(keys, flattenUnion(u, true))
   }
 
   private def flattenUnion(union: Union, flattenDistinct: Boolean): Union = {
