@@ -30,11 +30,11 @@ from pyspark.testing.pandasutils import ComparisonTestBase, TestUtils
 from pyspark.testing.sqlutils import SQLTestUtils
 
 
-class DataFrameConversionTest(ComparisonTestBase, SQLTestUtils, TestUtils):
+class DataFrameConversionTestsMixin:
     """Test cases for "small data" conversion and I/O."""
 
     def setUp(self):
-        self.tmp_dir = tempfile.mkdtemp(prefix=DataFrameConversionTest.__name__)
+        self.tmp_dir = tempfile.mkdtemp(prefix=DataFrameConversionTests.__name__)
 
     def tearDown(self):
         shutil.rmtree(self.tmp_dir, ignore_errors=True)
@@ -256,6 +256,10 @@ class DataFrameConversionTest(ComparisonTestBase, SQLTestUtils, TestUtils):
             ps.DataFrame.from_records([(1, 2), (3, 4)], nrows=1),
             pd.DataFrame.from_records([(1, 2), (3, 4)], nrows=1),
         )
+
+
+class DataFrameConversionTests(ComparisonTestBase, SQLTestUtils, TestUtils):
+    pass
 
 
 if __name__ == "__main__":

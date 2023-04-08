@@ -52,13 +52,18 @@ class SparkConnectStreamHandler(responseObserver: StreamObserver[ExecutePlanResp
     session.withActive {
 
       // Add debug information to the query execution so that the jobs are traceable.
-      val debugString = v.toString
-      session.sparkContext.setLocalProperty(
-        "callSite.short",
-        s"Spark Connect - ${StringUtils.abbreviate(debugString, 128)}")
-      session.sparkContext.setLocalProperty(
-        "callSite.long",
-        StringUtils.abbreviate(debugString, 2048))
+      try {
+        val debugString = v.toString
+        session.sparkContext.setLocalProperty(
+          "callSite.short",
+          s"Spark Connect - ${StringUtils.abbreviate(debugString, 128)}")
+        session.sparkContext.setLocalProperty(
+          "callSite.long",
+          StringUtils.abbreviate(debugString, 2048))
+      } catch {
+        case e: Throwable =>
+          logWarning("Fail to extract or attach the debug information", e)
+      }
 
       v.getPlan.getOpTypeCase match {
         case proto.Plan.OpTypeCase.COMMAND => handleCommand(session, v)

@@ -117,21 +117,12 @@ def create_training_function(mnist_dir_path: str) -> Callable:
                 optimizer.step()
             print(f"epoch {epoch} finished.")
 
-        return "success"
+        return "success" * 4096
 
     return train_fn
 
 
-@unittest.skipIf(not have_torch, "torch is required")
-class TorchDistributorBaselineUnitTests(unittest.TestCase):
-    def setUp(self) -> None:
-        conf = SparkConf()
-        self.sc = SparkContext("local[4]", conf=conf)
-        self.spark = SparkSession(self.sc)
-
-    def tearDown(self) -> None:
-        self.spark.stop()
-
+class TorchDistributorBaselineUnitTestsMixin:
     def setup_env_vars(self, input_map: Dict[str, str]) -> None:
         for key, value in input_map.items():
             os.environ[key] = value
@@ -175,8 +166,8 @@ class TorchDistributorBaselineUnitTests(unittest.TestCase):
         ]
         for ssl_conf_key, ssl_conf_value, pytorch_conf_key, pytorch_conf_value in inputs:
             with self.subTest():
-                self.spark.sparkContext._conf.set(ssl_conf_key, ssl_conf_value)
-                self.spark.sparkContext._conf.set(pytorch_conf_key, pytorch_conf_value)
+                self.spark.conf.set(ssl_conf_key, ssl_conf_value)
+                self.spark.conf.set(pytorch_conf_key, pytorch_conf_value)
                 distributor = TorchDistributor(1, True, False)
                 distributor._check_encryption()
 
@@ -186,8 +177,8 @@ class TorchDistributorBaselineUnitTests(unittest.TestCase):
         for ssl_conf_key, ssl_conf_value, pytorch_conf_key, pytorch_conf_value in inputs:
             with self.subTest():
                 with self.assertRaisesRegex(Exception, "encryption"):
-                    self.spark.sparkContext._conf.set(ssl_conf_key, ssl_conf_value)
-                    self.spark.sparkContext._conf.set(pytorch_conf_key, pytorch_conf_value)
+                    self.spark.conf.set(ssl_conf_key, ssl_conf_value)
+                    self.spark.conf.set(pytorch_conf_key, pytorch_conf_value)
                     distributor = TorchDistributor(1, True, False)
                     distributor._check_encryption()
 
@@ -279,9 +270,18 @@ class TorchDistributorBaselineUnitTests(unittest.TestCase):
 
 
 @unittest.skipIf(not have_torch, "torch is required")
-class TorchDistributorLocalUnitTests(unittest.TestCase):
+class TorchDistributorBaselineUnitTests(TorchDistributorBaselineUnitTestsMixin, unittest.TestCase):
     def setUp(self) -> None:
-        class_name = self.__class__.__name__
+        conf = SparkConf()
+        sc = SparkContext("local[4]", conf=conf)
+        self.spark = SparkSession(sc)
+
+    def tearDown(self) -> None:
+        self.spark.stop()
+
+
+class TorchDistributorLocalUnitTestsMixin:
+    def _get_spark_conf(self) -> SparkConf:
         self.gpu_discovery_script_file = tempfile.NamedTemporaryFile(delete=False)
         self.gpu_discovery_script_file.write(
             b'echo {\\"name\\": \\"gpu\\", \\"addresses\\": [\\"0\\",\\"1\\",\\"2\\"]}'
@@ -294,21 +294,13 @@ class TorchDistributorLocalUnitTests(unittest.TestCase):
             self.gpu_discovery_script_file.name,
             stat.S_IRWXU | stat.S_IXGRP | stat.S_IRGRP | stat.S_IROTH | stat.S_IXOTH,
         )
-        conf = SparkConf().set("spark.test.home", SPARK_HOME)
 
+        conf = SparkConf().set("spark.test.home", SPARK_HOME)
         conf = conf.set("spark.driver.resource.gpu.amount", "3")
         conf = conf.set(
             "spark.driver.resource.gpu.discoveryScript", self.gpu_discovery_script_file.name
         )
-
-        self.sc = SparkContext("local-cluster[2,2,1024]", class_name, conf=conf)
-        self.spark = SparkSession(self.sc)
-        self.mnist_dir_path = tempfile.mkdtemp()
-
-    def tearDown(self) -> None:
-        shutil.rmtree(self.mnist_dir_path)
-        os.unlink(self.gpu_discovery_script_file.name)
-        self.spark.stop()
+        return conf
 
     def setup_env_vars(self, input_map: Dict[str, str]) -> None:
         for key, value in input_map.items():
@@ -336,11 +328,11 @@ class TorchDistributorLocalUnitTests(unittest.TestCase):
 
     def test_get_gpus_owned_local(self) -> None:
         addresses = ["0", "1", "2"]
-        self.assertEqual(get_gpus_owned(self.sc), addresses)
+        self.assertEqual(get_gpus_owned(self.spark), addresses)
 
         env_vars = {"CUDA_VISIBLE_DEVICES": "3,4,5"}
         self.setup_env_vars(env_vars)
-        self.assertEqual(get_gpus_owned(self.sc), ["3", "4", "5"])
+        self.assertEqual(get_gpus_owned(self.spark), ["3", "4", "5"])
         self.delete_env_vars(env_vars)
 
     def test_local_training_succeeds(self) -> None:
@@ -382,27 +374,40 @@ class TorchDistributorLocalUnitTests(unittest.TestCase):
         output = TorchDistributor(num_processes=2, local_mode=True, use_gpu=False).run(
             train_fn, 0.001
         )
-        self.assertEqual(output, "success")
+        self.assertEqual(output, "success" * 4096)
 
 
 @unittest.skipIf(not have_torch, "torch is required")
-class TorchDistributorDistributedUnitTests(unittest.TestCase):
+class TorchDistributorLocalUnitTests(TorchDistributorLocalUnitTestsMixin, unittest.TestCase):
     def setUp(self) -> None:
         class_name = self.__class__.__name__
+        conf = self._get_spark_conf()
+        sc = SparkContext("local-cluster[2,2,1024]", class_name, conf=conf)
+        self.spark = SparkSession(sc)
+        self.mnist_dir_path = tempfile.mkdtemp()
+
+    def tearDown(self) -> None:
+        shutil.rmtree(self.mnist_dir_path)
+        os.unlink(self.gpu_discovery_script_file.name)
+        self.spark.stop()
+
+
+class TorchDistributorDistributedUnitTestsMixin:
+    def _get_spark_conf(self) -> SparkConf:
         self.gpu_discovery_script_file = tempfile.NamedTemporaryFile(delete=False)
         self.gpu_discovery_script_file.write(
             b'echo {\\"name\\": \\"gpu\\", \\"addresses\\": [\\"0\\",\\"1\\",\\"2\\"]}'
         )
         self.gpu_discovery_script_file.close()
         # create temporary directory for Worker resources coordination
-        self.tempdir = tempfile.NamedTemporaryFile(delete=False)
-        os.unlink(self.tempdir.name)
+        tempdir = tempfile.NamedTemporaryFile(delete=False)
+        os.unlink(tempdir.name)
         os.chmod(
             self.gpu_discovery_script_file.name,
             stat.S_IRWXU | stat.S_IXGRP | stat.S_IRGRP | stat.S_IROTH | stat.S_IXOTH,
         )
-        conf = SparkConf().set("spark.test.home", SPARK_HOME)
 
+        conf = SparkConf().set("spark.test.home", SPARK_HOME)
         conf = conf.set(
             "spark.worker.resource.gpu.discoveryScript", self.gpu_discovery_script_file.name
         )
@@ -410,15 +415,7 @@ class TorchDistributorDistributedUnitTests(unittest.TestCase):
         conf = conf.set("spark.task.cpus", "2")
         conf = conf.set("spark.task.resource.gpu.amount", "1")
         conf = conf.set("spark.executor.resource.gpu.amount", "1")
-
-        self.sc = SparkContext("local-cluster[2,2,1024]", class_name, conf=conf)
-        self.spark = SparkSession(self.sc)
-        self.mnist_dir_path = tempfile.mkdtemp()
-
-    def tearDown(self) -> None:
-        shutil.rmtree(self.mnist_dir_path)
-        os.unlink(self.gpu_discovery_script_file.name)
-        self.spark.stop()
+        return conf
 
     def test_dist_training_succeeds(self) -> None:
         CUDA_VISIBLE_DEVICES = "CUDA_VISIBLE_DEVICES"
@@ -442,13 +439,11 @@ class TorchDistributorDistributedUnitTests(unittest.TestCase):
 
         for spark_conf_value, num_processes, expected_output in inputs:
             with self.subTest():
-                self.spark.sparkContext._conf.set(
-                    "spark.task.resource.gpu.amount", str(spark_conf_value)
-                )
+                self.spark.conf.set("spark.task.resource.gpu.amount", str(spark_conf_value))
                 distributor = TorchDistributor(num_processes, False, True)
                 self.assertEqual(distributor._get_num_tasks(), expected_output)
 
-        self.spark.sparkContext._conf.set("spark.task.resource.gpu.amount", "1")
+        self.spark.conf.set("spark.task.resource.gpu.amount", "1")
 
     def test_distributed_file_with_pytorch(self) -> None:
         test_file_path = "python/test_support/test_pytorch_training_file.py"
@@ -462,11 +457,27 @@ class TorchDistributorDistributedUnitTests(unittest.TestCase):
         output = TorchDistributor(num_processes=2, local_mode=False, use_gpu=False).run(
             train_fn, 0.001
         )
-        self.assertEqual(output, "success")
+        self.assertEqual(output, "success" * 4096)
 
 
 @unittest.skipIf(not have_torch, "torch is required")
-class TorchWrapperUnitTests(unittest.TestCase):
+class TorchDistributorDistributedUnitTests(
+    TorchDistributorDistributedUnitTestsMixin, unittest.TestCase
+):
+    def setUp(self) -> None:
+        class_name = self.__class__.__name__
+        conf = self._get_spark_conf()
+        sc = SparkContext("local-cluster[2,2,1024]", class_name, conf=conf)
+        self.spark = SparkSession(sc)
+        self.mnist_dir_path = tempfile.mkdtemp()
+
+    def tearDown(self) -> None:
+        shutil.rmtree(self.mnist_dir_path)
+        os.unlink(self.gpu_discovery_script_file.name)
+        self.spark.stop()
+
+
+class TorchWrapperUnitTestsMixin:
     def test_clean_and_terminate(self) -> None:
         def kill_task(task: "subprocess.Popen") -> None:
             time.sleep(1)
@@ -487,6 +498,11 @@ class TorchWrapperUnitTests(unittest.TestCase):
         t.start()
         time.sleep(2)
         self.assertEqual(mock_clean_and_terminate.call_count, 0)
+
+
+@unittest.skipIf(not have_torch, "torch is required")
+class TorchWrapperUnitTests(TorchWrapperUnitTestsMixin, unittest.TestCase):
+    pass
 
 
 if __name__ == "__main__":

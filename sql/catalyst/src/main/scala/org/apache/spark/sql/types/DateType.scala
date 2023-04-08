@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.types
 
-import scala.math.Ordering
 import scala.reflect.runtime.universe.typeTag
 
 import org.apache.spark.annotation.Stable
@@ -39,8 +38,6 @@ class DateType private() extends DatetimeType {
   private[sql] type InternalType = Int
 
   @transient private[sql] lazy val tag = typeTag[InternalType]
-
-  private[sql] val ordering = implicitly[Ordering[InternalType]]
 
   /**
    * The default size of a value of the DateType is 4 bytes.

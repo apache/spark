@@ -339,10 +339,8 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
         "type" ->  toSQLType(dataType)))
   }
 
-  def noDefaultForDataTypeError(dataType: DataType): SparkRuntimeException = {
-    new SparkRuntimeException(
-      errorClass = "_LEGACY_ERROR_TEMP_2004",
-      messageParameters = Map("dataType" -> dataType.toString()))
+  def noDefaultForDataTypeError(dataType: DataType): SparkException = {
+    SparkException.internalError(s"No default value for type: ${toSQLType(dataType)}.")
   }
 
   def orderedOperationUnsupportedByDataTypeError(
@@ -350,6 +348,13 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
     new SparkIllegalArgumentException(
       errorClass = "_LEGACY_ERROR_TEMP_2005",
       messageParameters = Map("dataType" -> dataType.toString()))
+  }
+
+  def orderedOperationUnsupportedByDataTypeError(
+      dataType: String): SparkIllegalArgumentException = {
+    new SparkIllegalArgumentException(
+      errorClass = "_LEGACY_ERROR_TEMP_2005",
+      messageParameters = Map("dataType" -> dataType))
   }
 
   def regexGroupIndexLessThanZeroError(): SparkIllegalArgumentException = {
@@ -369,7 +374,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
 
   def invalidUrlError(url: UTF8String, e: URISyntaxException): SparkIllegalArgumentException = {
     new SparkIllegalArgumentException(
-      errorClass = "_LEGACY_ERROR_TEMP_2008",
+      errorClass = "INVALID_URL",
       messageParameters = Map(
         "url" -> url.toString,
         "ansiConfig" -> toSQLConf(SQLConf.ANSI_ENABLED.key)),
@@ -654,11 +659,11 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
   def binaryArithmeticCauseOverflowError(
       eval1: Short, symbol: String, eval2: Short): SparkArithmeticException = {
     new SparkArithmeticException(
-      errorClass = "_LEGACY_ERROR_TEMP_2044",
+      errorClass = "BINARY_ARITHMETIC_OVERFLOW",
       messageParameters = Map(
-        "sqlValue1" -> toSQLValue(eval1, ShortType),
+        "value1" -> toSQLValue(eval1, ShortType),
         "symbol" -> symbol,
-        "sqlValue2" -> toSQLValue(eval2, ShortType)),
+        "value2" -> toSQLValue(eval2, ShortType)),
       context = Array.empty,
       summary = "")
   }
@@ -1605,9 +1610,9 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
         "prettyName" -> prettyName))
   }
 
-  def elementAtByIndexZeroError(context: SQLQueryContext): RuntimeException = {
+  def invalidIndexOfZeroError(context: SQLQueryContext): RuntimeException = {
     new SparkRuntimeException(
-      errorClass = "ELEMENT_AT_BY_INDEX_ZERO",
+      errorClass = "INVALID_INDEX_OF_ZERO",
       cause = null,
       messageParameters = Map.empty,
       context = getQueryContext(context),

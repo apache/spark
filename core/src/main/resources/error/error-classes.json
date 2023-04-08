@@ -35,6 +35,12 @@
     ],
     "sqlState" : "22003"
   },
+  "BINARY_ARITHMETIC_OVERFLOW" : {
+    "message" : [
+      "<value1> <symbol> <value2> caused overflow."
+    ],
+    "sqlState" : "22003"
+  },
   "CANNOT_CAST_DATATYPE" : {
     "message" : [
       "Cannot cast <sourceType> to <targetType>."
@@ -536,12 +542,6 @@
     ],
     "sqlState" : "23505"
   },
-  "ELEMENT_AT_BY_INDEX_ZERO" : {
-    "message" : [
-      "The index 0 is invalid. An index shall be either < 0 or > 0 (the first element has index 1)."
-    ],
-    "sqlState" : "22003"
-  },
   "EMPTY_JSON_FIELD_VALUE" : {
     "message" : [
       "Failed to parse an empty string for data type <dataType>."
@@ -915,6 +915,12 @@
     ],
     "sqlState" : "42602"
   },
+  "INVALID_INDEX_OF_ZERO" : {
+    "message" : [
+      "The index 0 is invalid. An index shall be either < 0 or > 0 (the first element has index 1)."
+    ],
+    "sqlState" : "22003"
+  },
   "INVALID_JSON_ROOT_FIELD" : {
     "message" : [
       "Cannot convert JSON root field to target Spark type."
@@ -1061,6 +1067,11 @@
       "The value of the typed literal <valueType> is invalid: <value>."
     ],
     "sqlState" : "42604"
+  },
+  "INVALID_URL" : {
+    "message" : [
+      "The url is invalid: <url>. If necessary set <ansiConfig> to \"false\" to bypass this error."
+    ]
   },
   "INVALID_WHERE_CONDITION" : {
     "message" : [
@@ -3695,11 +3706,6 @@
       "Unsuccessful try to zip maps with <size> unique keys due to exceeding the array size limit <maxRoundedArrayLength>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2004" : {
-    "message" : [
-      "no default for type <dataType>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2005" : {
     "message" : [
       "Type <dataType> does not support ordered operations."
@@ -3713,11 +3719,6 @@
   "_LEGACY_ERROR_TEMP_2007" : {
     "message" : [
       "Regex group count is <groupCount>, but the specified group index is <groupIndex>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2008" : {
-    "message" : [
-      "Find an invalid url string <url>. If necessary set <ansiConfig> to false to bypass this error."
     ]
   },
   "_LEGACY_ERROR_TEMP_2010" : {
@@ -3878,11 +3879,6 @@
   "_LEGACY_ERROR_TEMP_2043" : {
     "message" : [
       "- <sqlValue> caused overflow."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2044" : {
-    "message" : [
-      "<sqlValue1> <symbol> <sqlValue2> caused overflow."
     ]
   },
   "_LEGACY_ERROR_TEMP_2045" : {

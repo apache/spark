@@ -27,6 +27,8 @@ object IntegrationTestUtils {
 
   // System properties used for testing and debugging
   private val DEBUG_SC_JVM_CLIENT = "spark.debug.sc.jvm.client"
+  // Enable this flag to print all client debug log + server logs to the console
+  private[connect] val isDebug = System.getProperty(DEBUG_SC_JVM_CLIENT, "false").toBoolean
 
   private[sql] lazy val scalaVersion = {
     versionNumberString.split('.') match {
@@ -43,7 +45,25 @@ object IntegrationTestUtils {
     }
     sys.props.getOrElse("spark.test.home", sys.env("SPARK_HOME"))
   }
-  private[connect] val isDebug = System.getProperty(DEBUG_SC_JVM_CLIENT, "false").toBoolean
+
+  private[connect] lazy val debugConfig: Seq[String] = {
+    val log4j2 = s"$sparkHome/connector/connect/client/jvm/src/test/resources/log4j2.properties"
+    if (isDebug) {
+      Seq(
+        // Enable to see the server plan change log
+        // "--conf",
+        // "spark.sql.planChangeLog.level=WARN",
+
+        // Enable to see the server grpc received
+        // "--conf",
+        // "spark.connect.grpc.interceptor.classes=" +
+        //  "org.apache.spark.sql.connect.service.LoggingInterceptor",
+
+        // Redirect server log into console
+        "--conf",
+        s"spark.driver.extraJavaOptions=-Dlog4j.configuration=$log4j2")
+    } else Seq.empty
+  }
 
   // Log server start stop debug info into console
   // scalastyle:off println
