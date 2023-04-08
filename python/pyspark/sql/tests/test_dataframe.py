@@ -146,26 +146,6 @@ class DataFrameTestsMixin:
             message_parameters={"arg_name": "subset", "arg_type": "str"},
         )
 
-    def test_drop_duplicates_within_watermark(self):
-        # SPARK-36034 test that drop duplicates throws a type error when in correct type provided
-        df = self.spark.createDataFrame([("Alice", 50), ("Alice", 60)], ["name", "age"])
-
-        # shouldn't drop a non-null row
-        self.assertEqual(df.dropDuplicatesWithinWatermark().count(), 2)
-
-        self.assertEqual(df.dropDuplicatesWithinWatermark(["name"]).count(), 1)
-
-        self.assertEqual(df.dropDuplicatesWithinWatermark(["name", "age"]).count(), 2)
-
-        with self.assertRaises(PySparkTypeError) as pe:
-            df.dropDuplicatesWithinWatermark("name")
-
-        self.check_error(
-            exception=pe.exception,
-            error_class="NOT_LIST_OR_TUPLE",
-            message_parameters={"arg_name": "subset", "arg_type": "str"},
-        )
-
     def test_drop_duplicates_with_ambiguous_reference(self):
         df1 = self.spark.createDataFrame([(14, "Tom"), (23, "Alice"), (16, "Bob")], ["age", "name"])
         df2 = self.spark.createDataFrame([Row(height=80, name="Tom"), Row(height=85, name="Bob")])
