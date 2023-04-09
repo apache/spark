@@ -31,7 +31,7 @@ from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
 
 
-class NamespaceTest(PandasOnSparkTestCase, SQLTestUtils):
+class NamespaceTestsMixin:
     def test_from_pandas(self):
         pdf = pd.DataFrame({"year": [2015, 2016], "month": [2, 3], "day": [4, 5]})
         psdf = ps.from_pandas(pdf)
@@ -614,6 +614,10 @@ class NamespaceTest(PandasOnSparkTestCase, SQLTestUtils):
                 "The method.*pd.*{}.*not implemented yet.".format(name),
             ):
                 getattr(ps, name)()
+
+
+class NamespaceTests(NamespaceTestsMixin, PandasOnSparkTestCase, SQLTestUtils):
+    pass
 
 
 if __name__ == "__main__":

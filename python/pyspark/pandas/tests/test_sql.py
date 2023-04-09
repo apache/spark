@@ -21,7 +21,7 @@ from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
 
 
-class SQLTest(PandasOnSparkTestCase, SQLTestUtils):
+class SQLTestsMixin:
     def test_error_variable_not_exist(self):
         with self.assertRaisesRegex(KeyError, "variable_foo"):
             ps.sql("select * from {variable_foo}")
@@ -93,6 +93,10 @@ class SQLTest(PandasOnSparkTestCase, SQLTestUtils):
             ps.sql("SELECT {col}, {col2} FROM {tbl}", col=psdf.A, col2=psdf.B, tbl=psdf), psdf
         )
         self.assert_eq(ps.sql("SELECT {tbl.A}, {tbl.B} FROM {tbl}", tbl=psdf), psdf)
+
+
+class SQLTests(SQLTestsMixin, PandasOnSparkTestCase, SQLTestUtils):
+    pass
 
 
 if __name__ == "__main__":
