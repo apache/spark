@@ -49,7 +49,7 @@ from pandas.api.types import (  # type: ignore[attr-defined]
 from pandas.tseries.offsets import DateOffset
 import pyarrow as pa
 import pyarrow.parquet as pq
-from pyspark.sql import functions as F, Column, DataFrame as SparkDataFrame
+from pyspark.sql import functions as F, Column
 from pyspark.sql.functions import pandas_udf
 from pyspark.sql.types import (
     ByteType,
@@ -69,7 +69,7 @@ from pyspark.sql.types import (
 )
 
 from pyspark import pandas as ps
-from pyspark.pandas._typing import Axis, Dtype, Label, Name
+from pyspark.pandas._typing import Axis, Dtype, Label, Name, GenericDataFrame
 from pyspark.pandas.base import IndexOpsMixin
 from pyspark.pandas.utils import (
     align_diff_frames,
@@ -94,6 +94,8 @@ from pyspark.pandas.spark.utils import as_nullable_spark_type, force_decimal_pre
 from pyspark.pandas.indexes import Index, DatetimeIndex, TimedeltaIndex
 from pyspark.pandas.indexes.multi import MultiIndex
 
+# For Supporting Spark Connect
+from pyspark.sql.connect.column import Column as ConnectColumn
 
 __all__ = [
     "from_pandas",
@@ -3427,7 +3429,7 @@ def merge_asof(
     else:
         on = None
 
-    if tolerance is not None and not isinstance(tolerance, Column):
+    if tolerance is not None and not isinstance(tolerance, (Column, ConnectColumn)):
         tolerance = F.lit(tolerance)
 
     as_of_joined_table = left_table._joinAsOf(
@@ -3720,7 +3722,7 @@ def read_orc(
 
 
 def _get_index_map(
-    sdf: SparkDataFrame, index_col: Optional[Union[str, List[str]]] = None
+    sdf: GenericDataFrame, index_col: Optional[Union[str, List[str]]] = None
 ) -> Tuple[Optional[List[Column]], Optional[List[Label]]]:
     index_spark_columns: Optional[List[Column]]
     index_names: Optional[List[Label]]
