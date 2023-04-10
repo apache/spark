@@ -647,7 +647,7 @@ To use a custom metrics.properties for the application master and executors, upd
   <td>0.9.0</td>
 </tr>
 <tr>
-  <td><code>spark.yarn.report.logging.frequency</code></td>
+  <td><code>spark.yarn.report.loggingFrequency</code></td>
   <td><code>30</code></td>
   <td>
     Maximum number of application reports processed until the next application status 

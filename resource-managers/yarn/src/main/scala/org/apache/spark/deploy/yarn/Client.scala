@@ -1164,7 +1164,7 @@ private[spark] class Client(
       val state = report.getYarnApplicationState
       reportsSinceLastLog += 1
       if (logApplicationReport) {
-        if (reportsSinceLastLog >= reportsTillNextLog || lastState != state) {
+        if (lastState != state || reportsSinceLastLog >= reportsTillNextLog) {
           logInfo(s"Application report for $appId (state: $state)")
           reportsSinceLastLog = 0
         }
