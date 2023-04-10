@@ -27,7 +27,7 @@ import org.scalatest.Assertions._
 import org.scalatest.exceptions.TestFailedException
 import org.scalatest.prop.TableDrivenPropertyChecks._
 
-import org.apache.spark.{SparkConf, SparkException, TaskContext}
+import org.apache.spark.{SparkConf, SparkException, SparkUserException, TaskContext}
 import org.apache.spark.TestUtils.withListener
 import org.apache.spark.internal.config.MAX_RESULT_SIZE
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
@@ -1942,20 +1942,22 @@ class DatasetSuite extends QueryTest
     // If the primitive values are from Option, we need to do runtime null check.
     val ds = Seq(Some(1), None).toDS().as[Int]
     val e1 = intercept[RuntimeException](ds.collect())
-    assert(e1.getCause.getCause.isInstanceOf[NullPointerException])
+    assertNotNullException(e1)
     val e2 = intercept[SparkException](ds.map(_ * 2).collect())
-    assert(e2.getCause.getCause.isInstanceOf[NullPointerException])
+    assertNotNullException(e2)
 
     withTempPath { path =>
       Seq(Integer.valueOf(1), null).toDF("i").write.parquet(path.getCanonicalPath)
       // If the primitive values are from files, we need to do runtime null check.
       val ds = spark.read.parquet(path.getCanonicalPath).as[Int]
       val e1 = intercept[RuntimeException](ds.collect())
-      assert(e1.getCause.getCause.isInstanceOf[NullPointerException])
-      val e2 = intercept[SparkException](ds.map(_ * 2).collect())
-      assert(e2.getCause.getCause.isInstanceOf[NullPointerException])
+      assertNotNullException(e1)
+      assertNotNullException(e2)
     }
   }
+
+
+
 
   test("SPARK-23025: Add support for null type in scala reflection") {
     val data = Seq(("a", null))
@@ -1972,7 +1974,7 @@ class DatasetSuite extends QueryTest
   test("SPARK-23835: null primitive data type should throw NullPointerException") {
     val ds = Seq[(Option[Int], Option[Int])]((Some(1), None)).toDS()
     val e = intercept[RuntimeException](ds.as[(Int, Int)].collect())
-    assert(e.getCause.isInstanceOf[NullPointerException])
+    assertNotNullException(e)
   }
 
   test("SPARK-24569: Option of primitive types are mistakenly mapped to struct type") {
@@ -2427,6 +2429,15 @@ class DatasetSuite extends QueryTest
         override def accept(path: Path): Boolean = path.getName.endsWith("parquet")
       })
       assert(parquetFiles.size === 10)
+    }
+  }
+
+  private def assertNotNullException(e: Exception): Unit = {
+    e.getCause match {
+      case userException: SparkUserException =>
+        assert(e.getMessage.contains("Null value appeared in non-nullable field"))
+      case other =>
+        fail(s"Unexpected exception cause: $other")
     }
   }
 }

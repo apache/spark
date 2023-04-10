@@ -2797,7 +2797,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       errorClass = "_LEGACY_ERROR_TEMP_3044",
       messageParameters = Map(
         "field" -> errMsg
-      ),
-      cause = new NullPointerException)
+      )
+    )
   }
 }

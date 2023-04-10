@@ -19,7 +19,7 @@ package org.apache.spark.sql
 
 import java.util.Collections
 
-import org.apache.spark.{SparkConf, SparkException}
+import org.apache.spark.{SparkConf, SparkException, SparkUserException}
 import org.apache.spark.sql.connector.catalog.{Column => ColumnV2, Identifier, InMemoryTableCatalog}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.internal.SQLConf
@@ -403,10 +403,10 @@ class RuntimeNullChecksV2Writes extends QueryTest with SQLTestUtils with SharedS
   }
 
   private def assertNotNullException(e: SparkException, colPath: Seq[String]): Unit = {
-    e.getCause.getCause match {
-      case npe: NullPointerException =>
-        assert(e.getCause.getMessage.contains("Null value appeared in non-nullable field"))
-        assert(e.getCause.getMessage.contains(colPath.mkString("\n", "\n", "\n")))
+    e.getCause match {
+      case userException: SparkUserException =>
+        assert(e.getMessage.contains("Null value appeared in non-nullable field"))
+        assert(e.getMessage.contains(colPath.mkString("\n", "\n", "\n")))
       case other =>
         fail(s"Unexpected exception cause: $other")
     }
