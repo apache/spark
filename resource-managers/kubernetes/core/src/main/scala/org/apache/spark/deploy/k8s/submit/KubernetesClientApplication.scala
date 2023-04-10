@@ -202,7 +202,6 @@ private[spark] class KubernetesClientApplication extends SparkApplication {
     // The master URL has been checked for validity already in SparkSubmit.
     // We just need to get rid of the "k8s://" prefix here.
     val master = KubernetesUtils.parseMasterUrl(sparkConf.get("spark.master"))
-    val watcher = new LoggingPodStatusWatcherImpl(kubernetesConf)
 
     Utils.tryWithResource(SparkKubernetesClientFactory.createKubernetesClient(
       master,
@@ -216,7 +215,7 @@ private[spark] class KubernetesClientApplication extends SparkApplication {
           kubernetesConf,
           new KubernetesDriverBuilder(),
           kubernetesClient,
-          watcher)
+          new LoggingPodStatusWatcherImpl(kubernetesConf, kubernetesClient))
         client.run()
     }
   }
