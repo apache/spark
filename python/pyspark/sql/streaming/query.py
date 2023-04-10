@@ -36,7 +36,7 @@ class StreamingQuery:
     All these methods are thread-safe.
 
     .. versionadded:: 2.0.0
-    
+
     .. versionchanged:: 3.5.0
         Supports Spark Connect.
 

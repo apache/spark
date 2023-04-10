@@ -42,7 +42,7 @@ class DataStreamReader(OptionUtils):
     Use :attr:`SparkSession.readStream <pyspark.sql.SparkSession.readStream>` to access this.
 
     .. versionadded:: 2.0.0
-    
+
     .. versionchanged:: 3.5.0
         Supports Spark Connect.
 
