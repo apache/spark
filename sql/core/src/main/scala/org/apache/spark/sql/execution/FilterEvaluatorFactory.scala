@@ -37,7 +37,7 @@ class FilterEvaluatorFactory(
         inputs: Iterator[InternalRow]*): Iterator[InternalRow] = {
       assert(inputs.length == 1)
       val predicate = Predicate.create(condition, childOutput)
-      predicate.initialize(0)
+      predicate.initialize(partitionIndex)
       inputs.head.filter { row =>
         val r = predicate.eval(row)
         if (r) numOutputRows += 1
