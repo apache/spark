@@ -77,16 +77,6 @@ object IntegrationTestUtils {
     Files.exists(Paths.get(filePath))
   }
 
-  private[sql] lazy val protobufJarPath: Option[File] = {
-    try {
-      Some(findJar("connector/protobuf", "spark-protobuf", "spark-protobuf"))
-    } catch {
-      case _: AssertionError => None
-    }
-  }
-
-  private[sql] lazy val isSparkProtobufJarAvailable: Boolean = protobufJarPath.isDefined
-
   /**
    * Find a jar in the Spark project artifacts. It requires a build first (e.g. build/sbt package,
    * build/mvn clean install -DskipTests) so that this method can find the jar in the target

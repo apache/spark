@@ -868,7 +868,6 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper {
   }
 
   test("protobuf functions") {
-    assert(IntegrationTestUtils.isSparkProtobufJarAvailable)
     // scalastyle:off line.size.limit
     // If `common.desc` needs to be updated, execute the following command to regenerate it:
     //  1. cd connector/connect/common/src/main/protobuf/spark/connect
