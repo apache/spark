@@ -15,12 +15,12 @@
 # limitations under the License.
 #
 
-from typing import Any, Union, cast
+from typing import Any, Union, cast, Callable
 
 from pandas.api.types import CategoricalDtype
 
 from pyspark.pandas.base import column_op, IndexOpsMixin
-from pyspark.pandas._typing import Dtype, IndexOpsLike, SeriesOrIndex
+from pyspark.pandas._typing import Dtype, IndexOpsLike, SeriesOrIndex, GenericColumn
 from pyspark.pandas.data_type_ops.base import (
     DataTypeOps,
     _as_categorical_type,
@@ -46,9 +46,9 @@ class BinaryOps(DataTypeOps):
         _sanitize_list_like(right)
 
         if isinstance(right, IndexOpsMixin) and isinstance(right.spark.data_type, BinaryType):
-            return column_op(F.concat)(left, right)
+            return column_op(cast(Callable[..., GenericColumn], F.concat))(left, right)
         elif isinstance(right, bytes):
-            return column_op(F.concat)(left, F.lit(right))
+            return column_op(cast(Callable[..., GenericColumn], F.concat))(left, F.lit(right))
         else:
             raise TypeError(
                 "Concatenation can not be applied to %s and the given type." % self.pretty_name
@@ -71,26 +71,26 @@ class BinaryOps(DataTypeOps):
 
         _sanitize_list_like(right)
 
-        return column_op(Column.__lt__)(left, right)
+        return column_op(cast(Callable[..., GenericColumn], Column.__lt__))(left, right)
 
     def le(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         from pyspark.pandas.base import column_op
 
         _sanitize_list_like(right)
 
-        return column_op(Column.__le__)(left, right)
+        return column_op(cast(Callable[..., GenericColumn], Column.__le__))(left, right)
 
     def ge(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         from pyspark.pandas.base import column_op
 
         _sanitize_list_like(right)
-        return column_op(Column.__ge__)(left, right)
+        return column_op(cast(Callable[..., GenericColumn], Column.__ge__))(left, right)
 
     def gt(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         from pyspark.pandas.base import column_op
 
         _sanitize_list_like(right)
-        return column_op(Column.__gt__)(left, right)
+        return column_op(cast(Callable[..., GenericColumn], Column.__gt__))(left, right)
 
     def astype(self, index_ops: IndexOpsLike, dtype: Union[str, type, Dtype]) -> IndexOpsLike:
         dtype, spark_type = pandas_on_spark_type(dtype)

@@ -30,6 +30,7 @@ on:
         description: Branch to run the build against
         required: false
         type: string
+        # Change 'master' to 'branch-3.5' in branch-3.5 branch after cutting it.
         default: master
       hadoop:
         description: Hadoop version to run with. HADOOP_PROFILE environment variable should accept it.
@@ -101,7 +102,7 @@ jobs:
               \"java-11-17\": \"true\",
               \"lint\" : \"true\",
               \"k8s-integration-tests\" : \"true\",
-              \"proto-breaking-changes-check\" : \"true\",
+              \"breaking-changes-buf\" : \"true\",
             }"
           echo $precondition # For debugging
           # Remove `\n` to avoid "Invalid format" error
@@ -355,6 +356,9 @@ jobs:
         fetch-depth: 0
         repository: apache/spark
         ref: ${{ inputs.branch }}
+    - name: Add GITHUB_WORKSPACE to git trust safe.directory
+      run: |
+        git config --global --add safe.directory ${GITHUB_WORKSPACE}
     - name: Sync the current branch with the latest in Apache Spark
       if: github.repository != 'apache/spark'
       run: |
@@ -442,6 +446,9 @@ jobs:
         fetch-depth: 0
         repository: apache/spark
         ref: ${{ inputs.branch }}
+    - name: Add GITHUB_WORKSPACE to git trust safe.directory
+      run: |
+        git config --global --add safe.directory ${GITHUB_WORKSPACE}
     - name: Sync the current branch with the latest in Apache Spark
       if: github.repository != 'apache/spark'
       run: |
@@ -488,17 +495,12 @@ jobs:
         name: test-results-sparkr--8-${{ inputs.hadoop }}-hive2.3
         path: "**/target/test-reports/*.xml"
 
-  proto-breaking-changes-check-master:
+  breaking-changes-buf:
     needs: [precondition]
-    if: always() && fromJson(needs.precondition.outputs.required).proto-breaking-changes-check == 'true'
-    name: Spark Connect proto backwards compatibility check (master)
-    continue-on-error: true
+    if: always() && fromJson(needs.precondition.outputs.required).breaking-changes-buf == 'true'
+    # Change 'branch-3.4' to 'branch-3.5' in master branch after cutting branch-3.5 branch.
+    name: Breaking change detection with Buf (branch-3.4)
     runs-on: ubuntu-22.04
-    env:
-      LC_ALL: C.UTF-8
-      LANG: C.UTF-8
-      PYSPARK_DRIVER_PYTHON: python3.9
-      PYSPARK_PYTHON: python3.9
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v3
@@ -512,45 +514,12 @@ jobs:
         git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF#refs/heads/}
         git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
         git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
-    # Install the `buf` CLI
-    - uses: bufbuild/buf-setup-action@v1
+    - name: Install Buf
+      uses: bufbuild/buf-setup-action@v1
       with:
         github_token: ${{ secrets.GITHUB_TOKEN }}
-    # Run buf breaking.
-    - uses: bufbuild/buf-breaking-action@v1
-      with:
-        input: connector/connect/common/src/main
-        against: 'https://github.com/apache/spark.git#branch=master,subdir=connector/connect/common/src/main'
-
-  proto-breaking-changes-check-release:
-    needs: [precondition]
-    if: always() && fromJson(needs.precondition.outputs.required).proto-breaking-changes-check == 'true'
-    name: Spark Connect proto backwards compatibility check (master)
-    runs-on: ubuntu-22.04
-    env:
-      LC_ALL: C.UTF-8
-      LANG: C.UTF-8
-      PYSPARK_DRIVER_PYTHON: python3.9
-      PYSPARK_PYTHON: python3.9
-    steps:
-    - name: Checkout Spark repository
-      uses: actions/checkout@v3
-      with:
-        fetch-depth: 0
-        repository: apache/spark
-        ref: ${{ inputs.branch }}
-    - name: Sync the current branch with the latest in Apache Spark
-      if: github.repository != 'apache/spark'
-      run: |
-        git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF#refs/heads/}
-        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
-        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
-    # Install the `buf` CLI
-    - uses: bufbuild/buf-setup-action@v1
-      with:
-        github_token: ${{ secrets.GITHUB_TOKEN }}
-    # Run buf breaking.
-    - uses: bufbuild/buf-breaking-action@v1
+    - name: Detect breaking changes
+      uses: bufbuild/buf-breaking-action@v1
       with:
         input: connector/connect/common/src/main
         against: 'https://github.com/apache/spark.git#branch=branch-3.4,subdir=connector/connect/common/src/main'
@@ -578,6 +547,9 @@ jobs:
         fetch-depth: 0
         repository: apache/spark
         ref: ${{ inputs.branch }}
+    - name: Add GITHUB_WORKSPACE to git trust safe.directory
+      run: |
+        git config --global --add safe.directory ${GITHUB_WORKSPACE}
     - name: Sync the current branch with the latest in Apache Spark
       if: github.repository != 'apache/spark'
       run: |
@@ -640,7 +612,7 @@ jobs:
     - name: Install dependencies for Python code generation check
       run: |
         # See more in "Installation" https://docs.buf.build/installation#tarball
-        curl -LO https://github.com/bufbuild/buf/releases/download/v1.16.0/buf-Linux-x86_64.tar.gz
+        curl -LO https://github.com/bufbuild/buf/releases/download/v1.17.0/buf-Linux-x86_64.tar.gz
         mkdir -p $HOME/buf
         tar -xvzf buf-Linux-x86_64.tar.gz -C $HOME/buf --strip-components 1
         python3.9 -m pip install 'protobuf==3.19.5' 'mypy-protobuf==3.3.0'

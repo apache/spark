@@ -24,6 +24,36 @@ ERROR_CLASSES_JSON = """
       "Argument `<arg_name>` is required when <condition>."
     ]
   },
+  "CANNOT_ACCESS_TO_DUNDER": {
+    "message": [
+      "Dunder(double underscore) attribute is for internal use only."
+    ]
+  },
+  "CANNOT_APPLY_IN_FOR_COLUMN": {
+    "message": [
+      "Cannot apply 'in' operator against a column: please use 'contains' in a string column or 'array_contains' function for an array column."
+    ]
+  },
+  "CANNOT_BE_EMPTY": {
+    "message": [
+      "At least one <item> must be specified."
+    ]
+  },
+  "CANNOT_CONVERT_COLUMN_INTO_BOOL": {
+    "message": [
+      "Cannot convert column into bool: please use '&' for 'and', '|' for 'or', '~' for 'not' when building DataFrame boolean expressions."
+    ]
+  },
+  "CANNOT_PARSE_DATATYPE": {
+    "message": [
+      "Unable to parse datatype from schema. <error>."
+    ]
+  },
+  "CANNOT_SET_TOGETHER": {
+    "message": [
+      "<arg_list> should not be set together."
+    ]
+  },
   "COLUMN_IN_LIST": {
     "message": [
       "`<func_name>` does not allow a Column in a list."
@@ -47,6 +77,21 @@ ERROR_CLASSES_JSON = """
   "JVM_ATTRIBUTE_NOT_SUPPORTED" : {
     "message" : [
       "Attribute `<attr_name>` is not supported in Spark Connect as it depends on the JVM. If you need to use this attribute, do not use Spark Connect when creating your session."
+    ]
+  },
+  "LENGTH_SHOULD_BE_THE_SAME" : {
+    "message" : [
+      "<arg1> and <arg2> should be of the same length, got <arg1_length> and <arg2_length>."
+    ]
+  },
+  "MIXED_TYPE_REPLACEMENT" : {
+    "message" : [
+      "Mixed type replacements are not supported."
+    ]
+  },
+  "NEGATIVE_VALUE" : {
+    "message" : [
+      "Value for `<arg_name>` must be >= 0, got '<arg_value>'."
     ]
   },
   "NOT_BOOL" : {
@@ -164,6 +209,16 @@ ERROR_CLASSES_JSON = """
       "<objectName> is not iterable."
     ]
   },
+  "NOT_LIST_OF_COLUMN" : {
+    "message" : [
+      "Argument `<arg_name>` should be a list[Column]."
+    ]
+  },
+  "NOT_LIST_OF_FLOAT_OR_INT" : {
+    "message" : [
+      "Argument `<arg_name>` should be a list[float, int], got <arg_type>."
+    ]
+  },
   "NOT_LIST_OF_STR" : {
     "message" : [
       "Argument `<arg_name>` should be a list[str], got <arg_type>."
@@ -177,6 +232,11 @@ ERROR_CLASSES_JSON = """
   "NOT_LIST_OR_TUPLE" : {
     "message" : [
       "Argument `<arg_name>` should be a list or tuple, got <arg_type>."
+    ]
+  },
+  "NOT_OBSERVATION_OR_STR" : {
+    "message" : [
+      "Argument `<arg_name>` should be a Observation or str, got <arg_type>."
     ]
   },
   "NOT_SAME_TYPE" : {
@@ -199,6 +259,16 @@ ERROR_CLASSES_JSON = """
       "No active Spark session found. Please create a new Spark session before running the code."
     ]
   },
+  "ONLY_ALLOWED_FOR_SINGLE_COLUMN" : {
+    "message" : [
+      "Argument `<arg_name>` can only be provided for a single column."
+    ]
+  },
+  "SLICE_WITH_STEP" : {
+    "message" : [
+      "Slice with step is not supported."
+    ]
+  },
   "UNSUPPORTED_NUMPY_ARRAY_SCALAR" : {
     "message" : [
       "The type of array scalar '<dtype>' is not supported."
@@ -207,6 +277,21 @@ ERROR_CLASSES_JSON = """
   "UNSUPPORTED_PARAM_TYPE_FOR_HIGHER_ORDER_FUNCTION" : {
     "message" : [
       "Function `<func_name>` should use only POSITIONAL or POSITIONAL OR KEYWORD arguments."
+    ]
+  },
+  "VALUE_NOT_ANY_OR_ALL" : {
+    "message" : [
+      "Value for `<arg_name>` must be 'any' or 'all', got '<arg_value>'."
+    ]
+  },
+  "VALUE_NOT_PEARSON" : {
+    "message" : [
+      "Value for `<arg_name>` only supports the 'pearson', got '<arg_value>'."
+    ]
+  },
+  "VALUE_NOT_POSITIVE" : {
+    "message" : [
+      "Value for `<arg_name>` must be positive, got '<arg_value>'."
     ]
   },
   "WRONG_NUM_ARGS_FOR_HIGHER_ORDER_FUNCTION" : {

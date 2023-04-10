@@ -2917,7 +2917,6 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         df = self.connect.read.table(self.tbl_name)
         for f in (
             "rdd",
-            "withWatermark",
             "foreach",
             "foreachPartition",
             "checkpoint",
@@ -2947,7 +2946,6 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             "newSession",
             "sparkContext",
             "streams",
-            "readStream",
         ):
             with self.assertRaises(NotImplementedError):
                 getattr(self.connect, f)()

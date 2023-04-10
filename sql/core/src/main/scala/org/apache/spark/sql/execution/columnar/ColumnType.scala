@@ -21,7 +21,6 @@ import java.math.{BigDecimal, BigInteger}
 import java.nio.ByteBuffer
 
 import scala.annotation.tailrec
-import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
@@ -191,11 +190,6 @@ private[columnar] abstract class NativeColumnType[T <: AtomicType](
     val dataType: T,
     val defaultSize: Int)
   extends ColumnType[T#InternalType] {
-
-  /**
-   * Scala TypeTag. Can be used to create primitive arrays and hash tables.
-   */
-  def scalaTag: TypeTag[dataType.InternalType] = dataType.tag
 }
 
 private[columnar] object INT extends NativeColumnType(IntegerType, 4) {

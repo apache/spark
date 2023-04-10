@@ -32,28 +32,36 @@ from typing import Union, Callable, List, Dict, Optional, Any, Tuple, Generator
 
 from pyspark import cloudpickle
 from pyspark.sql import SparkSession
+from pyspark.taskcontext import BarrierTaskContext
 from pyspark.ml.torch.log_communication import (  # type: ignore
-    get_driver_host,
     LogStreamingClient,
     LogStreamingServer,
 )
-from pyspark.context import SparkContext
-from pyspark.taskcontext import BarrierTaskContext
 
 
-# TODO(SPARK-41589): will move the functions and tests to an external file
-#       once we are in agreement about which functions should be in utils.py
-def get_conf_boolean(sc: SparkContext, key: str, default_value: str) -> bool:
-    """Get the conf "key" from the given spark context,
+def _get_active_session() -> SparkSession:
+    from pyspark.sql.utils import is_remote
+
+    if not is_remote():
+        spark = SparkSession.getActiveSession()
+    else:
+        import pyspark.sql.connect.session
+
+        spark = pyspark.sql.connect.session._active_spark_session  # type: ignore[assignment]
+
+    if spark is None:
+        raise RuntimeError("An active SparkSession is required for the distributor.")
+    return spark
+
+
+def _get_conf(spark: SparkSession, key: str, default_value: str) -> str:
+    """Get the conf "key" from the given spark session,
     or return the default value if the conf is not set.
-    This expects the conf value to be a boolean or string;
-    if the value is a string, this checks for all capitalization
-    patterns of "true" and "false" to match Scala.
 
     Parameters
     ----------
-    sc : :class:`SparkContext`
-        The :class:`SparkContext` for the distributor.
+    spark : :class:`SparkSession`
+        The :class:`SparkSession` for the distributor.
     key : str
         string for conf name
     default_value : str
@@ -61,25 +69,21 @@ def get_conf_boolean(sc: SparkContext, key: str, default_value: str) -> bool:
 
     Returns
     -------
-    bool
-        Returns the boolean value that corresponds to the conf
-
-    Raises
-    ------
-    ValueError
-        Thrown when the conf value is not a valid boolean
+    str
+        Returns the string value that corresponds to the conf
     """
-    val = sc.getConf().get(key, default_value)
-    lowercase_val = val.lower()
-    if lowercase_val == "true":
-        return True
-    if lowercase_val == "false":
-        return False
-    raise ValueError(
-        f"The conf value for '{key}' was expected to be a boolean "
-        f"value but found value of type {type(val)} "
-        f"with value: {val}"
-    )
+    value = spark.conf.get(key, default_value)
+    assert value is not None
+    return value
+
+
+# TODO(SPARK-41589): will move the functions and tests to an external file
+#       once we are in agreement about which functions should be in utils.py
+def _get_conf_boolean(spark: SparkSession, key: str, default_value: str) -> bool:
+    value = _get_conf(spark=spark, key=key, default_value=default_value)
+    value = value.lower()
+    assert value in ["true", "false"]
+    return value == "true"
 
 
 def get_logger(name: str) -> logging.Logger:
@@ -95,13 +99,13 @@ def get_logger(name: str) -> logging.Logger:
     return logger
 
 
-def get_gpus_owned(context: Union[SparkContext, BarrierTaskContext]) -> List[str]:
+def get_gpus_owned(context: Union[SparkSession, BarrierTaskContext]) -> List[str]:
     """Gets the number of GPUs that Spark scheduled to the calling task.
 
     Parameters
     ----------
-    context : :class:`SparkContext` or :class:`BarrierTaskContext`
-        The :class:`SparkContext` or :class:`BarrierTaskContext` that has GPUs available.
+    context : :class:`SparkSession` or :class:`BarrierTaskContext`
+        The :class:`SparkSession` or :class:`BarrierTaskContext` that has GPUs available.
 
     Returns
     -------
@@ -115,8 +119,9 @@ def get_gpus_owned(context: Union[SparkContext, BarrierTaskContext]) -> List[str
     """
     CUDA_VISIBLE_DEVICES = "CUDA_VISIBLE_DEVICES"
     pattern = re.compile("^[1-9][0-9]*|0$")
-    if isinstance(context, SparkContext):
-        addresses = context.resources["gpu"].addresses
+    if isinstance(context, SparkSession):
+        # TODO(SPARK-42994): Support sc.resources in Spark Connect
+        addresses = context.sparkContext.resources["gpu"].addresses
     else:
         addresses = context.resources()["gpu"].addresses
     if any(not pattern.match(address) for address in addresses):
@@ -145,20 +150,17 @@ class Distributor:
         local_mode: bool = True,
         use_gpu: bool = True,
     ):
+        self.spark = _get_active_session()
         self.logger = get_logger(self.__class__.__name__)
         self.num_processes = num_processes
         self.local_mode = local_mode
         self.use_gpu = use_gpu
-        self.spark = SparkSession.getActiveSession()
-        if not self.spark:
-            raise RuntimeError("An active SparkSession is required for the distributor.")
-        self.sc = self.spark.sparkContext
         self.num_tasks = self._get_num_tasks()
         self.ssl_conf = None
 
     def _create_input_params(self) -> Dict[str, Any]:
         input_params = self.__dict__.copy()
-        for unneeded_param in ["spark", "sc", "ssl_conf", "logger"]:
+        for unneeded_param in ["spark", "ssl_conf", "logger"]:
             del input_params[unneeded_param]
         return input_params
 
@@ -176,20 +178,20 @@ class Distributor:
         RuntimeError
             Raised when the SparkConf was misconfigured.
         """
-
         if self.use_gpu:
             if not self.local_mode:
                 key = "spark.task.resource.gpu.amount"
-                task_gpu_amount = int(self.sc.getConf().get(key, "0"))
+                task_gpu_amount = int(_get_conf(self.spark, key, "0"))
                 if task_gpu_amount < 1:
                     raise RuntimeError(f"'{key}' was unset, so gpu usage is unavailable.")
                 # TODO(SPARK-41916): Address situation when spark.task.resource.gpu.amount > 1
                 return math.ceil(self.num_processes / task_gpu_amount)
             else:
                 key = "spark.driver.resource.gpu.amount"
-                if "gpu" not in self.sc.resources:
+                # TODO(SPARK-42994): Support sc.resources in Spark Connect
+                if "gpu" not in self.spark.sparkContext.resources:
                     raise RuntimeError("GPUs were unable to be found on the driver.")
-                num_available_gpus = int(self.sc.getConf().get(key, "0"))
+                num_available_gpus = int(_get_conf(self.spark, key, "0"))
                 if num_available_gpus == 0:
                     raise RuntimeError("GPU resources were not configured properly on the driver.")
                 if self.num_processes > num_available_gpus:
@@ -215,12 +217,12 @@ class Distributor:
             Thrown when the user requires ssl encryption or when the user initializes
             the Distributor parent class.
         """
-        if not "ssl_conf":
+        if not hasattr(self, "ssl_conf"):
             raise RuntimeError(
                 "Distributor doesn't have this functionality. Use TorchDistributor instead."
             )
-        is_ssl_enabled = get_conf_boolean(self.sc, "spark.ssl.enabled", "false")
-        ignore_ssl = get_conf_boolean(self.sc, self.ssl_conf, "false")  # type: ignore
+        is_ssl_enabled = _get_conf_boolean(self.spark, "spark.ssl.enabled", "false")
+        ignore_ssl = _get_conf_boolean(self.spark, self.ssl_conf, "false")  # type: ignore
         if is_ssl_enabled:
             name = self.__class__.__name__
             if ignore_ssl:
@@ -262,6 +264,10 @@ class TorchDistributor(Distributor):
     A class to support distributed training on PyTorch and PyTorch Lightning using PySpark.
 
     .. versionadded:: 3.4.0
+
+    .. versionchanged:: 3.5.0
+        Supports Spark Connect. Note that local mode with GPU is not supported yet, will be fixed
+        in SPARK-42994.
 
     Parameters
     ----------
@@ -451,7 +457,7 @@ class TorchDistributor(Distributor):
         old_cuda_visible_devices = os.environ.get(CUDA_VISIBLE_DEVICES, "")
         try:
             if self.use_gpu:
-                gpus_owned = get_gpus_owned(self.sc)
+                gpus_owned = get_gpus_owned(self.spark)
                 random.seed(hash(train_object))
                 selected_gpus = [str(e) for e in random.sample(gpus_owned, self.num_processes)]
                 os.environ[CUDA_VISIBLE_DEVICES] = ",".join(selected_gpus)
@@ -499,6 +505,7 @@ class TorchDistributor(Distributor):
         # Spark task program
         def wrapped_train_fn(_):  # type: ignore[no-untyped-def]
             import os
+            import pandas as pd
             from pyspark import BarrierTaskContext
 
             CUDA_VISIBLE_DEVICES = "CUDA_VISIBLE_DEVICES"
@@ -554,7 +561,21 @@ class TorchDistributor(Distributor):
                     pass
 
             if context.partitionId() == 0:
-                yield output
+                output_bytes = cloudpickle.dumps(output)
+                output_size = len(output_bytes)
+
+                # In Spark Connect, DataFrame.collect stacks rows to size
+                # 'spark.connect.grpc.arrow.maxBatchSize' (default 4MiB),
+                # here use 4KiB for each chunk, which mean each arrow batch
+                # may contain about 1000 chunks.
+                chunks = []
+                chunk_size = 4096
+                index = 0
+                while index < output_size:
+                    chunks.append(output_bytes[index : index + chunk_size])
+                    index += chunk_size
+
+                yield pd.DataFrame(data={"chunk": chunks})
 
         return wrapped_train_fn
 
@@ -568,7 +589,8 @@ class TorchDistributor(Distributor):
             raise RuntimeError("Unknown combination of parameters")
 
         log_streaming_server = LogStreamingServer()
-        self.driver_address = get_driver_host(self.sc)
+        self.driver_address = _get_conf(self.spark, "spark.driver.host", "")
+        assert self.driver_address != ""
         log_streaming_server.start(spark_host_address=self.driver_address)
         time.sleep(1)  # wait for the server to start
         self.log_streaming_server_port = log_streaming_server.port
@@ -578,19 +600,20 @@ class TorchDistributor(Distributor):
         )
         self._check_encryption()
         self.logger.info(
-            f"Started distributed training with {self.num_processes} executor proceses"
+            f"Started distributed training with {self.num_processes} executor processes"
         )
         try:
-            result = (
-                self.sc.parallelize(range(self.num_tasks), self.num_tasks)
-                .barrier()
-                .mapPartitions(spark_task_function)
-                .collect()[0]
+            rows = (
+                self.spark.range(start=0, end=self.num_tasks, step=1, numPartitions=self.num_tasks)
+                .mapInPandas(func=spark_task_function, schema="chunk binary", barrier=True)
+                .collect()
             )
+            output_bytes = b"".join([row.chunk for row in rows])
+            result = cloudpickle.loads(output_bytes)
         finally:
             log_streaming_server.shutdown()
         self.logger.info(
-            f"Finished distributed training with {self.num_processes} executor proceses"
+            f"Finished distributed training with {self.num_processes} executor processes"
         )
         return result
 
