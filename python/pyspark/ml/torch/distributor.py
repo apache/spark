@@ -59,10 +59,7 @@ def _get_resources(session: SparkSession) -> Dict[str, ResourceInformation]:
     if not is_remote():
         resources = session.sparkContext.resources
     else:
-        resources = session._client._analyze(  # type: ignore[attr-defined]
-            method="resources"
-        ).resources
-        assert resources is not None
+        resources = session._client._resources()  # type: ignore[attr-defined]
 
     return resources
 
@@ -183,7 +180,7 @@ class Distributor:
 
     def _create_input_params(self) -> Dict[str, Any]:
         input_params = self.__dict__.copy()
-        for unneeded_param in ["spark", "ssl_conf", "logger"]:
+        for unneeded_param in ["spark", "ssl_conf", "logger", "is_remote", "local_master"]:
             del input_params[unneeded_param]
         return input_params
 

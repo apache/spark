@@ -417,7 +417,6 @@ class AnalyzeResult:
         is_same_semantics: Optional[bool],
         semantic_hash: Optional[int],
         storage_level: Optional[StorageLevel],
-        resources: Optional[Dict[str, ResourceInformation]],
     ):
         self.schema = schema
         self.explain_string = explain_string
@@ -430,7 +429,6 @@ class AnalyzeResult:
         self.is_same_semantics = is_same_semantics
         self.semantic_hash = semantic_hash
         self.storage_level = storage_level
-        self.resources = resources
 
     @classmethod
     def fromProto(cls, pb: Any) -> "AnalyzeResult":
@@ -445,7 +443,6 @@ class AnalyzeResult:
         is_same_semantics: Optional[bool] = None
         semantic_hash: Optional[int] = None
         storage_level: Optional[StorageLevel] = None
-        resources: Optional[Dict[str, ResourceInformation]] = None
 
         if pb.HasField("schema"):
             schema = types.proto_schema_to_pyspark_data_type(pb.schema.schema)
@@ -479,12 +476,6 @@ class AnalyzeResult:
                 deserialized=pb.get_storage_level.storage_level.deserialized,
                 replication=pb.get_storage_level.storage_level.replication,
             )
-        elif pb.HasField("get_resources"):
-            resources = {}
-            for key, resource in pb.get_resources.resources.items():
-                name = resource.name
-                addresses = [address for address in resource.addresses]
-                resources[key] = ResourceInformation(name, addresses)
         else:
             raise SparkConnectException("No analyze result found!")
 
@@ -500,7 +491,6 @@ class AnalyzeResult:
             is_same_semantics,
             semantic_hash,
             storage_level,
-            resources,
         )
 
 
@@ -650,6 +640,14 @@ class SparkConnectClient(object):
             )
             for x in metrics.metrics
         )
+
+    def _resources(self) -> Dict[str, ResourceInformation]:
+        logger.info("Fetching the resources")
+        cmd = pb2.Command()
+        cmd.get_resources_command.SetInParent()
+        (_, properties) = self.execute_command(cmd)
+        resources = properties["get_resources_command_result"]
+        return resources
 
     def _build_observed_metrics(
         self, metrics: List["pb2.ExecutePlanResponse.ObservedMetrics"]
@@ -878,8 +876,6 @@ class SparkConnectClient(object):
                 req.unpersist.blocking = cast(bool, kwargs.get("blocking"))
         elif method == "get_storage_level":
             req.get_storage_level.relation.CopyFrom(cast(pb2.Relation, kwargs.get("relation")))
-        elif method == "resources":
-            req.get_resources.SetInParent()
         else:
             raise ValueError(f"Unknown Analyze method: {method}")
 
@@ -969,6 +965,13 @@ class SparkConnectClient(object):
                             yield {
                                 "streaming_query_command_result": b.streaming_query_command_result
                             }
+                        if b.HasField("get_resources_command_result"):
+                            resources = {}
+                            for key, resource in b.get_resources_command_result.resources.items():
+                                name = resource.name
+                                addresses = [address for address in resource.addresses]
+                                resources[key] = ResourceInformation(name, addresses)
+                            yield {"get_resources_command_result": resources}
                         if b.HasField("arrow_batch"):
                             logger.debug(
                                 f"Received arrow batch rows={b.arrow_batch.row_count} "
