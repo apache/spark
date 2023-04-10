@@ -471,7 +471,7 @@ class QueryExecutionErrorsSuite
     }
   }
 
-  test("UNRECOGNIZED_SQL_TYPE: unrecognized SQL type -100") {
+  test("UNRECOGNIZED_SQL_TYPE: unrecognized SQL type DATALINK") {
     Utils.classForName("org.h2.Driver")
 
     val properties = new Properties()
