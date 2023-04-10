@@ -114,11 +114,11 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
   }
 
   /**
-   * Returns whether the plan is a simple filter over scan and the filter is likely selective
+   * Returns whether the plan exists a simple filter over scan and the filter is likely selective
    * Also check if the plan only has simple expressions (attribute reference, literals) so that we
    * do not add a subquery that might have an expensive computation
    */
-  private def isSelectiveFilterOverScan(
+  private def existsSelectiveFilterOverScan(
       plan: LogicalPlan,
       filterCreationSideExp: Expression): Boolean = {
     @tailrec
@@ -174,15 +174,13 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
       filterCreationSideExp: Expression,
       filterCreationSidePlan: LogicalPlan): LogicalPlan = {
     var selected = filterCreationSidePlan
-    filterCreationSidePlan.collect {
-      case ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, _, _, left, right, _)
-        if canPruneLeft(joinType) =>
-        if (leftKeys.contains(filterCreationSideExp)) {
-          selected = confirmFilterCreationSidePlan(filterCreationSideExp, left)
-        }
-        if (rightKeys.contains(filterCreationSideExp)) {
-          selected = confirmFilterCreationSidePlan(filterCreationSideExp, right)
-        }
+    filterCreationSidePlan.collectFirst {
+      case ExtractEquiJoinKeys(joinType, leftKeys, _, _, _, left, _, _)
+        if canPruneLeft(joinType) && leftKeys.contains(filterCreationSideExp) =>
+        selected = confirmFilterCreationSidePlan(filterCreationSideExp, left)
+      case ExtractEquiJoinKeys(joinType, _, rightKeys, _, _, _, right, _)
+        if canPruneLeft(joinType) && rightKeys.contains(filterCreationSideExp) =>
+        selected = confirmFilterCreationSidePlan(filterCreationSideExp, right)
     }
     selected
   }
@@ -242,7 +240,7 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
       filterCreationSideExp: Expression,
       hint: JoinHint): Boolean = {
     findExpressionAndTrackLineageDown(filterApplicationSideExp, filterApplicationSide).isDefined &&
-      isSelectiveFilterOverScan(filterCreationSide, filterCreationSideExp) &&
+      existsSelectiveFilterOverScan(filterCreationSide, filterCreationSideExp) &&
       (isProbablyShuffleJoin(filterApplicationSide, filterCreationSide, hint) ||
         probablyHasShuffle(filterApplicationSide)) &&
       satisfyByteSizeRequirement(filterApplicationSide)
