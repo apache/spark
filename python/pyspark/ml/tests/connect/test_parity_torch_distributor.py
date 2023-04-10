@@ -66,6 +66,10 @@ class TorchDistributorLocalUnitTestsOnConnect(
         os.unlink(self.gpu_discovery_script_file.name)
         self.spark.stop()
 
+    @unittest.skip("Distributor on Connect doesn't use the GPUs on driver")
+    def test_local_training_succeeds(self):
+        super().test_local_training_succeeds()
+
 
 @unittest.skipIf(not have_torch, "torch is required")
 class TorchDistributorDistributedUnitTestsOnConnect(
