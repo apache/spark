@@ -54,13 +54,11 @@ def _get_active_session(is_remote: bool) -> SparkSession:
 
 
 def _get_resources(session: SparkSession) -> Dict[str, ResourceInformation]:
-    from pyspark.sql.utils import is_remote
-
-    if not is_remote():
+    resources: Dict[str, ResourceInformation] = {}
+    try:
         resources = session.sparkContext.resources
-    else:
+    except Exception:
         resources = session._client._resources()  # type: ignore[attr-defined]
-
     return resources
 
 
