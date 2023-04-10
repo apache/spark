@@ -71,7 +71,7 @@ class StreamingQuery:
 
         Get the unique id of this query that persists across restarts from checkpoint data
 
-        >>> sq.id # doctest: +ELLIPSIS
+        >>> sq.id
         '...'
 
         >>> sq.stop()
@@ -98,7 +98,7 @@ class StreamingQuery:
 
         Get the unique id of this query that does not persist across restarts
 
-        >>> sq.runId # doctest: +ELLIPSIS
+        >>> sq.runId
         '...'
 
         >>> sq.stop()
@@ -223,7 +223,7 @@ class StreamingQuery:
 
         Get the current status of the query
 
-        >>> sq.status # doctest: +ELLIPSIS
+        >>> sq.status
         {'message': '...', 'isDataAvailable': ..., 'isTriggerActive': ...}
 
         >>> sq.stop()
@@ -252,7 +252,7 @@ class StreamingQuery:
 
         Get an array of the most recent query progress updates for this query
 
-        >>> sq.recentProgress # doctest: +ELLIPSIS
+        >>> sq.recentProgress
         [...]
 
         >>> sq.stop()

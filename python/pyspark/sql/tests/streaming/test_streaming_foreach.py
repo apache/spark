@@ -22,7 +22,7 @@ import time
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 
-class StreamingTestsForeachFamily(ReusedSQLTestCase):
+class StreamingTestsForeach(ReusedSQLTestCase):
     class ForeachWriterTester:
         def __init__(self, spark):
             self.spark = spark
@@ -354,7 +354,7 @@ class StreamingTestsForeachFamily(ReusedSQLTestCase):
 
 if __name__ == "__main__":
     import unittest
-    from pyspark.sql.tests.streaming.test_streaming_foreach_family import *  # noqa: F401
+    from pyspark.sql.tests.streaming.test_streaming_foreach import *  # noqa: F401
 
     try:
         import xmlrunner

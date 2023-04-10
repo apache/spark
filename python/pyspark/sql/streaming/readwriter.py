@@ -52,7 +52,7 @@ class DataStreamReader(OptionUtils):
 
     Examples
     --------
-    >>> spark.readStream # doctest: +ELLIPSIS
+    >>> spark.readStream
     <...streaming.readwriter.DataStreamReader object ...>
 
     The example below uses Rate source that generates rows continuously.
@@ -92,7 +92,7 @@ class DataStreamReader(OptionUtils):
 
         Examples
         --------
-        >>> spark.readStream.format("text") # doctest: +ELLIPSIS
+        >>> spark.readStream.format("text")
         <...streaming.readwriter.DataStreamReader object ...>
 
         This API allows to configure other sources to read. The example below writes a small text
@@ -135,9 +135,9 @@ class DataStreamReader(OptionUtils):
         Examples
         --------
         >>> from pyspark.sql.types import StructField, StructType, StringType
-        >>> spark.readStream.schema(StructType([StructField("data", StringType(), True)])) # doctest: +ELLIPSIS
+        >>> spark.readStream.schema(StructType([StructField("data", StringType(), True)]))
         <...streaming.readwriter.DataStreamReader object ...>
-        >>> spark.readStream.schema("col0 INT, col1 DOUBLE") # doctest: +ELLIPSIS
+        >>> spark.readStream.schema("col0 INT, col1 DOUBLE")
         <...streaming.readwriter.DataStreamReader object ...>
 
         The example below specifies a different schema to CSV file.
@@ -174,7 +174,7 @@ class DataStreamReader(OptionUtils):
 
         Examples
         --------
-        >>> spark.readStream.option("x", 1) # doctest: +ELLIPSIS
+        >>> spark.readStream.option("x", 1)
         <...streaming.readwriter.DataStreamReader object ...>
 
         The example below specifies 'rowsPerSecond' option to Rate source in order to generate
@@ -200,7 +200,7 @@ class DataStreamReader(OptionUtils):
 
         Examples
         --------
-        >>> spark.readStream.options(x="1", y=2) # doctest: +ELLIPSIS
+        >>> spark.readStream.options(x="1", y=2)
         <...streaming.readwriter.DataStreamReader object ...>
 
         The example below specifies 'rowsPerSecond' and 'numPartitions' options to
@@ -766,7 +766,7 @@ class DataStreamWriter:
         Examples
         --------
         >>> df = spark.readStream.format("rate").load()
-        >>> df.writeStream.outputMode('append') # doctest: +ELLIPSIS
+        >>> df.writeStream.outputMode('append')
         <...streaming.readwriter.DataStreamWriter object ...>
 
         The example below uses Complete mode that the entire aggregated counts are printed out.
@@ -800,7 +800,7 @@ class DataStreamWriter:
         Examples
         --------
         >>> df = spark.readStream.format("rate").load()
-        >>> df.writeStream.format("text") # doctest: +ELLIPSIS
+        >>> df.writeStream.format("text")
         <...streaming.readwriter.DataStreamWriter object ...>
 
         This API allows to configure the source to write. The example below writes a CSV
@@ -834,7 +834,7 @@ class DataStreamWriter:
         Examples
         --------
         >>> df = spark.readStream.format("rate").load()
-        >>> df.writeStream.option("x", 1) # doctest: +ELLIPSIS
+        >>> df.writeStream.option("x", 1)
         <...streaming.readwriter.DataStreamWriter object ...>
 
         The example below specifies 'numRows' option to Console source in order to print
@@ -862,7 +862,7 @@ class DataStreamWriter:
         Examples
         --------
         >>> df = spark.readStream.format("rate").load()
-        >>> df.writeStream.option("x", 1) # doctest: +ELLIPSIS
+        >>> df.writeStream.option("x", 1)
         <...streaming.readwriter.DataStreamWriter object ...>
 
         The example below specifies 'numRows' and 'truncate' options to Console source in order
@@ -907,7 +907,7 @@ class DataStreamWriter:
         Examples
         --------
         >>> df = spark.readStream.format("rate").load()
-        >>> df.writeStream.partitionBy("value") # doctest: +ELLIPSIS
+        >>> df.writeStream.partitionBy("value")
         <...streaming.readwriter.DataStreamWriter object ...>
 
         Partition-by timestamp column from Rate source.
@@ -1017,17 +1017,17 @@ class DataStreamWriter:
 
         Trigger the query for execution every 5 seconds
 
-        >>> df.writeStream.trigger(processingTime='5 seconds') # doctest: +ELLIPSIS
+        >>> df.writeStream.trigger(processingTime='5 seconds')
         <...streaming.readwriter.DataStreamWriter object ...>
 
         Trigger the query for execution every 5 seconds
 
-        >>> df.writeStream.trigger(continuous='5 seconds') # doctest: +ELLIPSIS
+        >>> df.writeStream.trigger(continuous='5 seconds')
         <...streaming.readwriter.DataStreamWriter object ...>
 
         Trigger the query for reading all available data with multiple batches
 
-        >>> df.writeStream.trigger(availableNow=True) # doctest: +ELLIPSIS
+        >>> df.writeStream.trigger(availableNow=True)
         <...streaming.readwriter.DataStreamWriter object ...>
         """
         params = [processingTime, once, continuous, availableNow]
