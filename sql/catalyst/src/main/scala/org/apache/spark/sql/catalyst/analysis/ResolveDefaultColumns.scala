@@ -55,8 +55,7 @@ case class ResolveDefaultColumns(catalog: SessionCatalog) extends Rule[LogicalPl
       (_ => SQLConf.get.enableDefaultColumns), ruleId) {
       case i: InsertIntoStatement if insertsFromInlineTable(i) =>
         resolveDefaultColumnsForInsertFromInlineTable(i)
-      case i@InsertIntoStatement(_, _, _, project: Project, _, _)
-        if !project.projectList.exists(_.isInstanceOf[Star]) =>
+      case i: InsertIntoStatement if insertsFromProject(i).isDefined =>
         resolveDefaultColumnsForInsertFromProject(i)
       case u: UpdateTable =>
         resolveDefaultColumnsForUpdate(u)
@@ -88,6 +87,25 @@ case class ResolveDefaultColumns(catalog: SessionCatalog) extends Rule[LogicalPl
         true
       case _ =>
         false
+    }
+  }
+
+  /**
+   * Checks if a logical plan is an INSERT INTO command where the inserted data comes from a SELECT
+   * list, with possible other unary operators like sorting and/or alias(es) in between.
+   */
+  private def insertsFromProject(i: InsertIntoStatement): Option[Project] = {
+    var node = i.query
+    def matches(node: LogicalPlan): Boolean = node match {
+      case _: GlobalLimit | _: LocalLimit | _: Offset | _: SubqueryAlias | _: Sort => true
+      case _ => false
+    }
+    while (matches(node)) {
+      node = node.children.head
+    }
+    node match {
+      case p: Project => Some(p)
+      case _ => None
     }
   }
 
@@ -130,14 +148,24 @@ case class ResolveDefaultColumns(catalog: SessionCatalog) extends Rule[LogicalPl
       getInsertTableSchemaWithoutPartitionColumns(i)
     insertTableSchemaWithoutPartitionColumns.map { schema =>
       val regenerated: InsertIntoStatement = regenerateUserSpecifiedCols(i, schema)
-      val project: Project = i.query.asInstanceOf[Project]
-      val (expanded: Project, addedDefaults: Boolean) =
-        addMissingDefaultValuesForInsertFromProject(project, schema, i.userSpecifiedCols.size)
-      val replaced: Option[LogicalPlan] =
-        replaceExplicitDefaultValuesForInputOfInsertInto(schema, expanded, addedDefaults)
-      replaced.map { r =>
-        regenerated.copy(query = r)
-      }.getOrElse(i)
+      val project: Project = insertsFromProject(i).get
+      if (project.projectList.exists(_.isInstanceOf[Star])) {
+        i
+      } else {
+        val (expanded: Project, addedDefaults: Boolean) =
+          addMissingDefaultValuesForInsertFromProject(project, schema, i.userSpecifiedCols.size)
+        val replaced: Option[LogicalPlan] =
+          replaceExplicitDefaultValuesForInputOfInsertInto(schema, expanded, addedDefaults)
+        replaced.map { r =>
+          // Replace the INSERT INTO source relation, copying unary operators until we reach the
+          // original projection which we replace with the new projection with new values.
+          def replace(plan: LogicalPlan): LogicalPlan = plan match {
+            case _: Project => r
+            case u: UnaryNode => u.withNewChildren(Seq(replace(u.child)))
+          }
+          regenerated.copy(query = replace(regenerated.query))
+        }.getOrElse(i)
+      }
     }.getOrElse(i)
   }
 
