@@ -20,6 +20,7 @@ import typing
 import os
 import functools
 import unittest
+import uuid
 
 from pyspark import Row, SparkConf
 from pyspark.testing.utils import PySparkErrorTestUtils
@@ -126,6 +127,7 @@ class PlanOnlyTestFixture(unittest.TestCase):
         cls.connect.set_hook("range", cls._session_range)
         cls.connect.set_hook("sql", cls._session_sql)
         cls.connect.set_hook("with_plan", cls._with_plan)
+        cls.connect.set_hook("session_id", str(uuid.uuid4()))
 
     @classmethod
     def tearDownClass(cls):
@@ -133,6 +135,7 @@ class PlanOnlyTestFixture(unittest.TestCase):
         cls.connect.drop_hook("range")
         cls.connect.drop_hook("sql")
         cls.connect.drop_hook("with_plan")
+        cls.connect.drop_hook("session_id")
 
 
 @unittest.skipIf(not should_test_connect, connect_requirement_message)

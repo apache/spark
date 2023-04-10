@@ -1786,7 +1786,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
     def test_different_spark_session_join_or_union(self):
         df = self.connect.range(10).limit(3)
 
-        spark2 = RemoteSparkSession(connectionString='sc://localhost')
+        spark2 = RemoteSparkSession(connectionString="sc://localhost")
         df2 = spark2.range(10).limit(3)
 
         with self.assertRaises(PySparkException):
