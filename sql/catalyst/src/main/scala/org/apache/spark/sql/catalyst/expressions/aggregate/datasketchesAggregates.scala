@@ -181,12 +181,12 @@ sealed trait HllSketchAggregate
  */
 @ExpressionDescription(
   usage = """
-    _FUNC_(expr[, lgConfigK, tgtHllType]) - Returns the estimated number of unique values.
-      `lgConfigK` the log-base-2 of K, where K is the number of buckets or slots for the HllSketch.
-      `tgtHllType` the target type of the HllSketch to be used (HLL_4, HLL_6, HLL_8). """,
+    _FUNC_(expr, lgConfigK, tgtHllType) - Returns the estimated number of unique values.
+      `lgConfigK` (optional) the log-base-2 of K, with K = the number of buckets for the HllSketch.
+      `tgtHllType` (optional) the target type of the HllSketch (HLL_4, HLL_6, HLL_8). """,
   examples = """
     Examples:
-      > SELECT _FUNC_(col1) FROM VALUES (1), (1), (2), (2), (3) tab(col1);
+      > SELECT _FUNC_(col1, 12, 'HLL_4') FROM VALUES (1), (1), (2), (2), (3) tab(col1);
        3
   """,
   group = "agg_funcs",
@@ -269,12 +269,12 @@ case class HllSketchEstimate(
  */
 @ExpressionDescription(
   usage = """
-    _FUNC_(expr[, lgConfigK, tgtHllType]) - Returns the HllSketch's compact binary representation.
-      `lgConfigK` the log-base-2 of K, where K is the number of buckets or slots for the HllSketch.
-      `tgtHllType` the target type of the HllSketch to be used (HLL_4, HLL_6, HLL_8). """,
+    _FUNC_(expr, lgConfigK, tgtHllType) - Returns the HllSketch's compact binary representation.
+      `lgConfigK` (optional) the log-base-2 of K, with K = the number of buckets for the HllSketch.
+      `tgtHllType` (optional) the target type of the HllSketch (HLL_4, HLL_6, HLL_8). """,
   examples = """
     Examples:
-      > SELECT hllsketch_binary_estimate(_FUNC_(col1))
+      > SELECT hllsketch_binary_estimate(_FUNC_(col1), 12, 'HLL_4')
       FROM VALUES (1), (1), (2), (2), (3) tab(col1);
        3
   """,
@@ -357,11 +357,11 @@ case class HllSketchBinary(
  */
 @ExpressionDescription(
   usage = """
-    _FUNC_(expr[, lgMaxK]) - Returns the estimated number of unique values.
-      `lgMaxK` The largest maximum size for lgConfigK for the union operation.""",
+    _FUNC_(expr, lgMaxK) - Returns the estimated number of unique values.
+      `lgMaxK` (optional) The largest maximum size for lgConfigK for the union operation.""",
   examples = """
     Examples:
-      > SELECT _FUNC_(hllsketch_binary(col1))
+      > SELECT _FUNC_(hllsketch_binary(col1, 12, 'HLL_4'))
       FROM VALUES (1), (1), (2), (2), (3) tab(col1);
        3
   """,
