@@ -27,15 +27,15 @@ from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 
 class StreamingTestsMixin:
-    def test_streaming_query_functions_sanity(self):
+    def test_streaming_query_functions_basic(self):
         df = self.spark.readStream.format("rate").option("rowsPerSecond", 10).load()
         query = (
             df.writeStream.format("memory")
-            .queryName("test_streaming_query_functions_sanity")
+            .queryName("test_streaming_query_functions_basic")
             .start()
         )
         try:
-            self.assertEquals(query.name, "test_streaming_query_functions_sanity")
+            self.assertEquals(query.name, "test_streaming_query_functions_basic")
             self.assertTrue(isinstance(query.id, str))
             self.assertTrue(isinstance(query.runId, str))
             self.assertTrue(query.isActive)
@@ -109,12 +109,6 @@ class StreamingTestsMixin:
                 .schema(bad_schema)
                 .load(path="python/test_support/sql/streaming", schema=schema, format="text")
             )
-            # TODO: Moving this outside of with block will trigger the following error,
-            # which doesn't happen in non-connect
-            # pyspark.errors.exceptions.connect.AnalysisException:
-            # There is a 'path' option set and load() is called with a path parameter.
-            # Either remove the path option, or call load() without the parameter.
-            # To ignore this check, set 'spark.sql.legacy.pathOptionBehavior.enabled' to 'true'.
             self.assertTrue(df.isStreaming)
             self.assertEqual(df.schema.simpleString(), "struct<data:string>")
 
