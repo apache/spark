@@ -778,7 +778,7 @@ class TorchDistributor(Distributor):
 
             >>> model = distributor.run(train, 1e-3, 64)
 
-            where train is a function and 1e-3 is a regular numeric input to the function.
+            where train is a function and 1e-3 and 64 are regular numeric inputs to the function.
 
             If train_object is a python file, then args would be the command-line arguments for
             that python file which are all in the form of strings. An example would be
@@ -787,11 +787,21 @@ class TorchDistributor(Distributor):
 
             where since the input is a path, all of the parameters are strings that can be
             handled by argparse in that python file.
+        kwargs :
+            If train_object is a python function and not a path to a python file, kwargs need
+            to be the key-work input parameters to that function. It would look like
+
+            >>> model = distributor.run(train, tol=1e-3, max_iter=64)
+
+            where train is a function that has 2 arguments `tol` and `max_iter`.
+
+            If train_object is a python file, then you should not set kwargs arguments.
 
         Returns
         -------
-            Returns the output of train_object called with args if the train_object is a
-            Callable with an expected output. Returns None if train_object is a file.
+            Returns the output of train_object called with args inside spark rank 0 task if the
+            train_object is a Callable with an expected output. Returns None if train_object is
+            a file.
         """
         if isinstance(train_object, str):
             framework_wrapper_fn = TorchDistributor._run_training_on_pytorch_file
@@ -808,6 +818,35 @@ class TorchDistributor(Distributor):
         return output
 
     def train_on_dataframe(self, train_function, spark_dataframe, *args, **kwargs):
+        """
+        Runs distributed training using provided spark DataFrame as input data.
+
+        Parameters
+        ----------
+        train_function :
+            Either a PyTorch function, PyTorch Lightning function that launches distributed
+            training. Note that inside the function, you can call
+            `pyspark.ml.torch.distributor.get_spark_partition_data_loader` API to get a torch
+            data loader, the data loader loads data from the corresponding partition of the
+            input spark DataFrame.
+        spark_dataframe :
+            An input spark DataFrame that can be used in PyTorch `train_function` function.
+            See `train_function` argument doc for details.
+        args :
+            `args` need to be the input parameters to `train_function` function. It would look like
+
+            >>> model = distributor.run(train, 1e-3, 64)
+
+            where train is a function and 1e-3 and 64 are regular numeric inputs to the function.
+        kwargs :
+            `kwargs` need to be the key-work input parameters to `train_function` function.
+            It would look like
+
+            >>> model = distributor.run(train, tol=1e-3, max_iter=64)
+
+            where train is a function that has 2 arguments `tol` and `max_iter`.
+        """
+
         if self.local_mode:
             raise ValueError(
                 "`TorchDistributor.train_on_dataframe` requires setting `TorchDistributor.local_mode` to `False`."
