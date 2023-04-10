@@ -57,6 +57,9 @@ message SqlCommand {
 
   // (Optional) A map of parameter names to literal expressions.
   map<string, Expression.Literal> args = 2;
+
+  // (Optional) A map of parameter names to column expressions.
+  map<string, Expression.UnresolvedAttribute> columns = 3;
 }
 
 // A command that can create DataFrame global temp view or local temp view.

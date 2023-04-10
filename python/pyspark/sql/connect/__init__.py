@@ -16,3 +16,8 @@
 #
 
 """Spark Connect client"""
+from pyspark.sql.connect.column import Column
+from pyspark.sql.connect.dataframe import DataFrame
+from pyspark.sql.connect.session import SparkSession
+
+__all__ = ["DataFrame", "Column", "SparkSession"]

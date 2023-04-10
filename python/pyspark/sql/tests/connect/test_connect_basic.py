@@ -2039,6 +2039,31 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             self.spark.sql(query).__repr__(),
         )
 
+    def test_string_sql_formatter(self):
+        self.connect.sql(
+            "SELECT * FROM range(10) WHERE id > {bound1} AND id < {bound2}", bound1=7, bound2=9
+        ).show()
+
+        mydf = self.connect.range(10)
+        self.connect.sql(
+            "SELECT {col} FROM {mydf} WHERE id IN {x}", col=mydf.id, mydf=mydf, x=tuple(range(4))
+        ).show()
+
+        self.connect.sql(
+            """
+           SELECT m1.a, m2.b
+           FROM {table1} m1 INNER JOIN {table2} m2
+           ON m1.key = m2.key
+           ORDER BY m1.a, m2.b""",
+            table1=self.connect.createDataFrame([(1, "a"), (2, "b")], ["a", "key"]),
+            table2=self.connect.createDataFrame([(3, "a"), (4, "b"), (5, "b")], ["b", "key"]),
+        ).show()
+
+        mydf = self.connect.createDataFrame([(1, 4), (2, 4), (3, 6)], ["A", "B"])
+        self.connect.sql("SELECT {df.A}, {df[B]} FROM {df}", df=mydf).show()
+
+        self.connect.sql("SELECT * FROM {df} WHERE {df[B]} > :minB", {"minB": 5}, df=mydf).show()
+
     def test_explain_string(self):
         # SPARK-41122: test explain API.
         plan_str = self.connect.sql("SELECT 1")._explain_string(extended=True)

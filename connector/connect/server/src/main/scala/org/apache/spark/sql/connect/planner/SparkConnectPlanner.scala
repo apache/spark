@@ -225,8 +225,13 @@ class SparkConnectPlanner(val session: SparkSession) {
 
   private def transformSql(sql: proto.SQL): LogicalPlan = {
     val args = sql.getArgsMap
+    val query = if (sql.getColumnsMap.isEmpty) {
+      sql.getQuery
+    } else {
+      parseSqlWithColumns(sql.getQuery, sql.getColumnsMap.asScala.toMap)
+    }
     val parser = session.sessionState.sqlParser
-    val parsedPlan = parser.parsePlan(sql.getQuery)
+    val parsedPlan = parser.parsePlan(query)
     if (!args.isEmpty) {
       ParameterizedQuery(parsedPlan, args.asScala.mapValues(transformLiteral).toMap)
     } else {
@@ -1797,14 +1802,17 @@ class SparkConnectPlanner(val session: SparkSession) {
     }
   }
 
-  def handleSqlCommand(
+  private def handleSqlCommand(
       getSqlCommand: SqlCommand,
       sessionId: String,
       responseObserver: StreamObserver[ExecutePlanResponse]): Unit = {
     // Eagerly execute commands of the provided SQL string.
-    val df = session.sql(
-      getSqlCommand.getSql,
-      getSqlCommand.getArgsMap.asScala.mapValues(transformLiteral).toMap)
+    val sql = if (getSqlCommand.getColumnsMap.isEmpty) {
+      getSqlCommand.getSql
+    } else {
+      parseSqlWithColumns(getSqlCommand.getSql, getSqlCommand.getColumnsMap.asScala.toMap)
+    }
+    val df = session.sql(sql, getSqlCommand.getArgsMap.asScala.mapValues(transformLiteral).toMap)
     // Check if commands have been executed.
     val isCommand = df.queryExecution.commandExecuted.isInstanceOf[CommandResult]
     val rows = df.logicalPlan match {
@@ -1854,7 +1862,8 @@ class SparkConnectPlanner(val session: SparkSession) {
             proto.SQL
               .newBuilder()
               .setQuery(getSqlCommand.getSql)
-              .putAllArgs(getSqlCommand.getArgsMap)))
+              .putAllArgs(getSqlCommand.getArgsMap)
+              .putAllColumns(getSqlCommand.getColumnsMap)))
     }
     // Exactly one SQL Command Result Batch
     responseObserver.onNext(
@@ -1866,6 +1875,18 @@ class SparkConnectPlanner(val session: SparkSession) {
 
     // Send Metrics
     SparkConnectStreamHandler.sendMetricsToResponse(sessionId, df)
+  }
+
+  private def parseSqlWithColumns(
+      sqlText: String,
+      columns: Map[String, proto.Expression.UnresolvedAttribute]): String = {
+    columns
+      .mapValues(column => {
+        transformUnresolvedAttribute(column).sql
+      })
+      .foldLeft(sqlText)((sql, column) => {
+        sql.replaceAllLiterally(s"{${column._1}}", column._2)
+      })
   }
 
   private def handleRegisterUserDefinedFunction(

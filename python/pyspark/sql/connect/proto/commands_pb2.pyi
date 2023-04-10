@@ -194,8 +194,33 @@ class SqlCommand(google.protobuf.message.Message):
             self, field_name: typing_extensions.Literal["key", b"key", "value", b"value"]
         ) -> None: ...
 
+    class ColumnsEntry(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        KEY_FIELD_NUMBER: builtins.int
+        VALUE_FIELD_NUMBER: builtins.int
+        key: builtins.str
+        @property
+        def value(
+            self,
+        ) -> pyspark.sql.connect.proto.expressions_pb2.Expression.UnresolvedAttribute: ...
+        def __init__(
+            self,
+            *,
+            key: builtins.str = ...,
+            value: pyspark.sql.connect.proto.expressions_pb2.Expression.UnresolvedAttribute
+            | None = ...,
+        ) -> None: ...
+        def HasField(
+            self, field_name: typing_extensions.Literal["value", b"value"]
+        ) -> builtins.bool: ...
+        def ClearField(
+            self, field_name: typing_extensions.Literal["key", b"key", "value", b"value"]
+        ) -> None: ...
+
     SQL_FIELD_NUMBER: builtins.int
     ARGS_FIELD_NUMBER: builtins.int
+    COLUMNS_FIELD_NUMBER: builtins.int
     sql: builtins.str
     """(Required) SQL Query."""
     @property
@@ -205,6 +230,13 @@ class SqlCommand(google.protobuf.message.Message):
         builtins.str, pyspark.sql.connect.proto.expressions_pb2.Expression.Literal
     ]:
         """(Optional) A map of parameter names to literal expressions."""
+    @property
+    def columns(
+        self,
+    ) -> google.protobuf.internal.containers.MessageMap[
+        builtins.str, pyspark.sql.connect.proto.expressions_pb2.Expression.UnresolvedAttribute
+    ]:
+        """(Optional) A map of parameter names to column expressions."""
     def __init__(
         self,
         *,
@@ -213,9 +245,16 @@ class SqlCommand(google.protobuf.message.Message):
             builtins.str, pyspark.sql.connect.proto.expressions_pb2.Expression.Literal
         ]
         | None = ...,
+        columns: collections.abc.Mapping[
+            builtins.str, pyspark.sql.connect.proto.expressions_pb2.Expression.UnresolvedAttribute
+        ]
+        | None = ...,
     ) -> None: ...
     def ClearField(
-        self, field_name: typing_extensions.Literal["args", b"args", "sql", b"sql"]
+        self,
+        field_name: typing_extensions.Literal[
+            "args", b"args", "columns", b"columns", "sql", b"sql"
+        ],
     ) -> None: ...
 
 global___SqlCommand = SqlCommand

@@ -542,6 +542,30 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
     assert(array(2).toString == InternalRow(3, "kafka", 3, "kafka").toString)
   }
 
+  test("transform sql with UnresolvedAttribute(column)") {
+
+    val sqlStr =
+      "SELECT {col} FROM range(10) WHERE id IN (1, 2, 3)"
+    val querySql = proto.SQL
+      .newBuilder()
+      .setQuery(sqlStr)
+      .putColumns(
+        "col",
+        proto.Expression.UnresolvedAttribute
+          .newBuilder()
+          .setUnparsedIdentifier("id")
+          .build())
+      .build()
+    val df =
+      Dataset.ofRows(spark, transform(proto.Relation.newBuilder.setSql(querySql).build()))
+    val array = df.collect()
+    assert(array.length == 3)
+    assert(array(0).toString == InternalRow(1).toString)
+    assert(array(1).toString == InternalRow(2).toString)
+    assert(array(2).toString == InternalRow(3).toString)
+
+  }
+
   test("transform UnresolvedStar with target field") {
     val rows = (0 until 10).map { i =>
       InternalRow(InternalRow(InternalRow(i, i + 1)))

@@ -111,6 +111,9 @@ message SQL {
 
   // (Optional) A map of parameter names to literal expressions.
   map<string, Expression.Literal> args = 2;
+
+  // (Optional) A map of parameter names to column expressions.
+  map<string, Expression.UnresolvedAttribute> columns = 3;
 }
 
 // Relation that reads from a file / table or other data source. Does not have additional
