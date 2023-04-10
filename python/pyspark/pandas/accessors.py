@@ -171,7 +171,7 @@ class PandasOnSparkFrameMethods:
                 for scol, label in zip(internal.data_spark_columns, internal.column_labels)
             ]
         )
-        sdf = attach_func(sdf, name_like_string(column))  # type: ignore[assignment]
+        sdf = attach_func(sdf, name_like_string(column))
 
         return DataFrame(
             InternalFrame(

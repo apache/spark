@@ -67,9 +67,10 @@ from pyspark.sql.types import (
     StructType,
     DataType,
 )
+from pyspark.sql.dataframe import DataFrame as PySparkDataFrame
 
 from pyspark import pandas as ps
-from pyspark.pandas._typing import Axis, Dtype, Label, Name, GenericDataFrame
+from pyspark.pandas._typing import Axis, Dtype, Label, Name
 from pyspark.pandas.base import IndexOpsMixin
 from pyspark.pandas.utils import (
     align_diff_frames,
@@ -95,7 +96,7 @@ from pyspark.pandas.indexes import Index, DatetimeIndex, TimedeltaIndex
 from pyspark.pandas.indexes.multi import MultiIndex
 
 # For Supporting Spark Connect
-from pyspark.sql.connect.column import Column as ConnectColumn
+from pyspark.sql.utils import is_remote
 
 __all__ = [
     "from_pandas",
@@ -3429,7 +3430,11 @@ def merge_asof(
     else:
         on = None
 
-    if tolerance is not None and not isinstance(tolerance, (Column, ConnectColumn)):
+    if is_remote():
+        from pyspark.sql.connect.column import Column as ConnectColumn
+
+        Column = ConnectColumn
+    if tolerance is not None and not isinstance(tolerance, Column):
         tolerance = F.lit(tolerance)
 
     as_of_joined_table = left_table._joinAsOf(
@@ -3454,10 +3459,10 @@ def merge_asof(
     data_columns = []
     column_labels = []
 
-    def left_scol_for(label: Label) -> Column:
+    def left_scol_for(label: Label) -> Column:  # type: ignore[valid-type]
         return scol_for(as_of_joined_table, left_internal.spark_column_name_for(label))
 
-    def right_scol_for(label: Label) -> Column:
+    def right_scol_for(label: Label) -> Column:  # type: ignore[valid-type]
         return scol_for(as_of_joined_table, right_internal.spark_column_name_for(label))
 
     for label in left_internal.column_labels:
@@ -3471,7 +3476,7 @@ def merge_asof(
                 pass
             else:
                 col = col + left_suffix
-                scol = scol.alias(col)
+                scol = scol.alias(col)  # type: ignore[attr-defined]
                 label = tuple([str(label[0]) + left_suffix] + list(label[1:]))
         exprs.append(scol)
         data_columns.append(col)
@@ -3479,7 +3484,7 @@ def merge_asof(
     for label in right_internal.column_labels:
         # recover `right_prefix` here.
         col = right_internal.spark_column_name_for(label)[len(right_prefix) :]
-        scol = right_scol_for(label).alias(col)
+        scol = right_scol_for(label).alias(col)  # type: ignore[attr-defined]
         if label in duplicate_columns:
             spark_column_name = left_internal.spark_column_name_for(label)
             if spark_column_name in left_as_of_names + left_join_on_names and (
@@ -3488,7 +3493,7 @@ def merge_asof(
                 continue
             else:
                 col = col + right_suffix
-                scol = scol.alias(col)
+                scol = scol.alias(col)  # type: ignore[attr-defined]
                 label = tuple([str(label[0]) + right_suffix] + list(label[1:]))
         exprs.append(scol)
         data_columns.append(col)
@@ -3722,7 +3727,7 @@ def read_orc(
 
 
 def _get_index_map(
-    sdf: GenericDataFrame, index_col: Optional[Union[str, List[str]]] = None
+    sdf: PySparkDataFrame, index_col: Optional[Union[str, List[str]]] = None
 ) -> Tuple[Optional[List[Column]], Optional[List[Label]]]:
     index_spark_columns: Optional[List[Column]]
     index_names: Optional[List[Label]]
