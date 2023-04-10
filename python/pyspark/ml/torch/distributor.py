@@ -822,7 +822,7 @@ class TorchDistributor(Distributor):
         )
 
 
-def get_spark_partition_data_loader(num_samples, batch_size):
+def get_spark_partition_data_loader(num_samples, batch_size, prefetch=2):
     from pyspark.sql.types import StructType
     from pyspark.ml.torch.data import SparkPartitionTorchDataset
     from torch.utils.data import DataLoader
@@ -835,5 +835,9 @@ def get_spark_partition_data_loader(num_samples, batch_size):
 
     dataset = SparkPartitionTorchDataset(arrow_file, schema, num_samples)
 
-    # TODO: support data prefetch
-    return DataLoader(dataset, batch_size)
+    return DataLoader(
+        dataset,
+        batch_size,
+        num_workers=1,
+        prefetch_factor=prefetch
+    )
