@@ -31,12 +31,7 @@ from pyspark.testing.sqlutils import (
 @unittest.skipIf(
     not have_pandas or not have_pyarrow, pandas_requirement_message or pyarrow_requirement_message
 )
-class PythonUDFArrowTests(BaseUDFTestsMixin, ReusedSQLTestCase):
-    @classmethod
-    def setUpClass(cls):
-        super(PythonUDFArrowTests, cls).setUpClass()
-        cls.spark.conf.set("spark.sql.execution.pythonUDF.arrow.enabled", "true")
-
+class PythonUDFArrowTestsMixin(BaseUDFTestsMixin):
     @unittest.skip("Unrelated test, and it fails when it runs duplicatedly.")
     def test_broadcast_in_udf(self):
         super(PythonUDFArrowTests, self).test_broadcast_in_udf()
@@ -116,6 +111,13 @@ class PythonUDFArrowTests(BaseUDFTestsMixin, ReusedSQLTestCase):
             .first()
         )
         self.assertEquals(row_false[0], "[1, 2, 3]")
+
+
+class PythonUDFArrowTests(PythonUDFArrowTestsMixin, ReusedSQLTestCase):
+    @classmethod
+    def setUpClass(cls):
+        super(PythonUDFArrowTests, cls).setUpClass()
+        cls.spark.conf.set("spark.sql.execution.pythonUDF.arrow.enabled", "true")
 
 
 if __name__ == "__main__":
