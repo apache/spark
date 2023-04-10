@@ -290,7 +290,7 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSpark
         val dfRead = sqlContext.read.jdbc(jdbcUrl, "ts_with_timezone", new Properties)
         dfRead.collect()
       }.getMessage
-      assert(e.contains("Unrecognized SQL type -101"))
+      assert(e.contains("Unrecognized SQL type - name: TIMESTAMP WITH TZ, id: -101"))
     }
   }
 

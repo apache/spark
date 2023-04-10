@@ -1535,7 +1535,7 @@
   },
   "UNRECOGNIZED_SQL_TYPE" : {
     "message" : [
-      "Unrecognized SQL type <typeName>."
+      "Unrecognized SQL type - name: <typeName>, id: <jdbcType>."
     ],
     "sqlState" : "42704"
   },
