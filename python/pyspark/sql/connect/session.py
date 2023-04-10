@@ -660,7 +660,7 @@ class SparkSession:
             raise RuntimeError("There should not be an existing Spark Session or Spark Context.")
 
     @property
-    def session_id(self):
+    def session_id(self) -> str:
         return self._session_id
 
 
