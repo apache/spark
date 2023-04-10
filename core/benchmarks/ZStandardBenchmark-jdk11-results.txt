@@ -6,22 +6,22 @@ OpenJDK 64-Bit Server VM 11.0.18+10 on Linux 5.15.0-1035-azure
 Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 Benchmark ZStandardCompressionCodec:                    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 --------------------------------------------------------------------------------------------------------------------------------------
-Compression 10000 times at level 1 without buffer pool            525            586          76          0.0       52549.5       1.0X
-Compression 10000 times at level 2 without buffer pool            588            590           2          0.0       58820.6       0.9X
-Compression 10000 times at level 3 without buffer pool            797            798           1          0.0       79683.9       0.7X
-Compression 10000 times at level 1 with buffer pool               299            300           1          0.0       29912.7       1.8X
-Compression 10000 times at level 2 with buffer pool               366            367           1          0.0       36601.0       1.4X
-Compression 10000 times at level 3 with buffer pool               556            557           1          0.0       55581.0       0.9X
+Compression 10000 times at level 1 without buffer pool            523            608          96          0.0       52324.2       1.0X
+Compression 10000 times at level 2 without buffer pool            597            598           1          0.0       59668.8       0.9X
+Compression 10000 times at level 3 without buffer pool            792            794           2          0.0       79185.9       0.7X
+Compression 10000 times at level 1 with buffer pool               332            333           1          0.0       33188.3       1.6X
+Compression 10000 times at level 2 with buffer pool               398            399           1          0.0       39798.4       1.3X
+Compression 10000 times at level 3 with buffer pool               589            590           1          0.0       58927.7       0.9X
 
 OpenJDK 64-Bit Server VM 11.0.18+10 on Linux 5.15.0-1035-azure
 Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
 Benchmark ZStandardCompressionCodec:                        Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------------------------
-Decompression 10000 times from level 1 without buffer pool            719            720           1          0.0       71876.1       1.0X
-Decompression 10000 times from level 2 without buffer pool            719            720           1          0.0       71935.5       1.0X
-Decompression 10000 times from level 3 without buffer pool            719            721           2          0.0       71905.8       1.0X
-Decompression 10000 times from level 1 with buffer pool               527            528           2          0.0       52678.4       1.4X
-Decompression 10000 times from level 2 with buffer pool               527            528           1          0.0       52706.1       1.4X
-Decompression 10000 times from level 3 with buffer pool               527            528           1          0.0       52653.2       1.4X
+Decompression 10000 times from level 1 without buffer pool            722            722           1          0.0       72153.7       1.0X
+Decompression 10000 times from level 2 without buffer pool            723            724           2          0.0       72298.9       1.0X
+Decompression 10000 times from level 3 without buffer pool            722            722           1          0.0       72190.6       1.0X
+Decompression 10000 times from level 1 with buffer pool               530            531           1          0.0       53047.3       1.4X
+Decompression 10000 times from level 2 with buffer pool               529            530           0          0.0       52938.3       1.4X
+Decompression 10000 times from level 3 with buffer pool               530            531           1          0.0       52954.7       1.4X
 
 
