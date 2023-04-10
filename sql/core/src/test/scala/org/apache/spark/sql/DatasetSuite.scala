@@ -1957,9 +1957,6 @@ class DatasetSuite extends QueryTest
     }
   }
 
-
-
-
   test("SPARK-23025: Add support for null type in scala reflection") {
     val data = Seq(("a", null))
     checkDataset(data.toDS(), data: _*)
