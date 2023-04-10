@@ -10,10 +10,10 @@ def strc_to_numc(data,col_name):
         while True:
             print('-----------------------------------------------------------------------')
             print(col_name,' has null values. ','Please replace the null values.')
-            replace_or_not='y'#input('Do you want to the system to replace the null values for {} and then encode the values[Y/n]?: '.format(col_name))
+            replace_or_not=input('Do you want to the system to replace the null values for {} and then encode the values[Y/n]?: '.format(col_name))
             if replace_or_not.lower()=='y':
                 print('------------------------------------------------')
-                new_str=''#input('Enter the new value or press ENTER to assign the default value(missing): ')
+                new_str=input('Enter the new value or press ENTER to assign the default value(missing): ')
                 if len(new_str)==0:
                     new_str='Missing'
                 print('Replace the values')
@@ -67,7 +67,7 @@ def fill_null_str(data_frame,col_name,replace_str_with='Missing'):
     while True:
         if replace_str_with in np.unique(col_data.dropna().unique().to_numpy()):
             print('The value({}) already exists in the column: {}'.format(replace_str_with,col_name))
-            ow_or_not='y'#input('Do you still want to replace with the given value [Y/n]?: ')
+            ow_or_not=input('Do you still want to replace with the given value [Y/n]?: ')
             if ow_or_not.lower()=='y':
                 replaced_col=col_data.fillna(replace_str_with)
                 return replaced_col
