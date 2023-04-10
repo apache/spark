@@ -90,6 +90,10 @@ class MockRemoteSession:
 @unittest.skipIf(not should_test_connect, connect_requirement_message)
 class PlanOnlyTestFixture(unittest.TestCase):
     @classmethod
+    def _session_id(cls):
+        return cls.session_id
+
+    @classmethod
     def _read_table(cls, table_name):
         return DataFrame.withPlan(Read(table_name), cls.connect)
 
@@ -122,12 +126,13 @@ class PlanOnlyTestFixture(unittest.TestCase):
         cls.connect = MockRemoteSession()
         cls.session = SparkSession.builder.remote().getOrCreate()
         cls.tbl_name = "test_connect_plan_only_table_1"
+        cls.session_id = str(uuid.uuid4())
 
         cls.connect.set_hook("readTable", cls._read_table)
         cls.connect.set_hook("range", cls._session_range)
         cls.connect.set_hook("sql", cls._session_sql)
         cls.connect.set_hook("with_plan", cls._with_plan)
-        cls.connect.set_hook("session_id", str(uuid.uuid4()))
+        cls.connect.set_hook("session_id", cls._session_id)
 
     @classmethod
     def tearDownClass(cls):
