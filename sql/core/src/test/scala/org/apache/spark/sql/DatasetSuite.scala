@@ -1952,6 +1952,7 @@ class DatasetSuite extends QueryTest
       val ds = spark.read.parquet(path.getCanonicalPath).as[Int]
       val e1 = intercept[RuntimeException](ds.collect())
       assertNotNullException(e1)
+      val e2 = intercept[SparkException](ds.map(_ * 2).collect())
       assertNotNullException(e2)
     }
   }
