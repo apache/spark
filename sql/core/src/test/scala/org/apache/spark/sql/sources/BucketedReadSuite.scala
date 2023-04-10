@@ -1010,8 +1010,7 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils with Adapti
     }
   }
 
-  test("bucket coalescing is applied when join expressions match with partitioning expressions",
-    DisableAdaptiveExecution("Expected shuffle num mismatched")) {
+  test("bucket coalescing is applied when join expressions match with partitioning expressions") {
     withTable("t1", "t2") {
       df1.write.format("parquet").bucketBy(8, "i", "j").saveAsTable("t1")
       df2.write.format("parquet").bucketBy(4, "i", "j").saveAsTable("t2")
@@ -1024,10 +1023,10 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils with Adapti
             expectedNumShuffles: Int,
             expectedCoalescedNumBuckets: Option[Int]): Unit = {
           val plan = sql(query).queryExecution.executedPlan
-          val shuffles = plan.collect { case s: ShuffleExchangeExec => s }
+          val shuffles = collect(plan) { case s: ShuffleExchangeExec => s }
           assert(shuffles.length == expectedNumShuffles)
 
-          val scans = plan.collect {
+          val scans = collect(plan) {
             case f: FileSourceScanExec if f.optionalNumCoalescedBuckets.isDefined => f
           }
           if (expectedCoalescedNumBuckets.isDefined) {
