@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.execution.{FileSourceScanExec, SortExec, SparkPlan}
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, AdaptiveSparkPlanHelper, DisableAdaptiveExecution}
 import org.apache.spark.sql.execution.datasources.BucketingUtils
-import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
+import org.apache.spark.sql.execution.exchange.{Exchange, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.joins.SortMergeJoinExec
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -1047,6 +1047,22 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils with Adapti
           Some(4))
         // Coalescing is not applied when join expressions do not match with bucket columns.
         verify("SELECT * FROM t1 JOIN t2 ON t1.i = t2.i", 2, None)
+      }
+    }
+  }
+
+  test("SPARK-43021: Make coalesceBucketsInJoin effective enable AQE") {
+    withSQLConf(
+      SQLConf.COALESCE_BUCKETS_IN_JOIN_ENABLED.key -> "true",
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      withTable("bucketed_table1", "bucketed_table2") {
+        df1.write.format("parquet").bucketBy(4, "i").saveAsTable("bucketed_table1")
+        df2.write.format("parquet").bucketBy(2, "i").saveAsTable("bucketed_table2")
+        val t1 = spark.table("bucketed_table1")
+        val t2 = spark.table("bucketed_table2")
+        val plan = t1.join(t2, t1("i") === t2("i")).queryExecution.executedPlan
+        assert(collect(plan) { case _: Exchange => true }.size === 0)
       }
     }
   }
