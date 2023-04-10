@@ -16,7 +16,6 @@
 #
 
 import json
-import sys
 from typing import Any, Dict, List, Optional
 
 from py4j.java_gateway import JavaObject, java_import
@@ -638,6 +637,7 @@ class StreamingQueryManager:
 def _test() -> None:
     import doctest
     import os
+    import sys
     from pyspark.sql import SparkSession
     import pyspark.sql.streaming.query
     from py4j.protocol import Py4JError
