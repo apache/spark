@@ -41,7 +41,7 @@ object ParquetVectorizedBytePackerDecoderBenchmark extends SqlBasedBenchmark {
     val dataSourceName: String = "parquet"
     val benchmarkName: String = "Vector Decode Benchmark For Parquet"
 
-    private val N = 1000000
+    private val N = 100000000
     private val numIters = 10
 
     private val df = spark
@@ -65,9 +65,8 @@ object ParquetVectorizedBytePackerDecoderBenchmark extends SqlBasedBenchmark {
             df.write.format(dataSourceName).save(path)
             spark.read.format(dataSourceName).load(path).createOrReplaceTempView(s"t1")
             val benchmark = new Benchmark(s"Selection", numRows, numIters, output = output)
-            addCase(benchmark, "Selection after optimization", "true", "select * from t1")
-            addCase(benchmark, "Selection before optimization", "false", "select * from t1")
-
+            addCase(benchmark, "Without Java Vector API", "false", "select * from t1")
+            addCase(benchmark, "With Java Vector API", "true", "select * from t1")
             benchmark.run()
         }
     }

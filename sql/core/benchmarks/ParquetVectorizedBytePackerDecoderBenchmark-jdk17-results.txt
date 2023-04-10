@@ -1,0 +1,6 @@
+Java HotSpot(TM) 64-Bit Server VM 17.0.5+9-LTS-191 on Linux 5.15.0-60-generic
+Intel(R) Xeon(R) Platinum 8358P CPU @ 2.60GHz
+Selection:                                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Without Java Vector API                            4696           4802          89         21.3          47.0       1.0X
+With Java Vector API                               3742           3927         230         26.7          37.4       1.3X

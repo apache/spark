@@ -79,7 +79,7 @@ public final class VectorizedRleValuesReader extends ValuesReader
   private static final int NUM_VALUES_TO_PACK = 8;
   private static final Boolean vector512Support;
   static {
-    if (supportVector512FromCPUFlags() && SQLConf.get().parquetVector512Read()) {
+    if (supportVector512FromCPUFlags()) {
       vector512Support = true;
     } else {
       vector512Support = false;
@@ -956,7 +956,7 @@ public final class VectorizedRleValuesReader extends ValuesReader
           }
           currentBufferIdx = 0;
           int valueIndex = 0;
-          if (vector512Support) {
+          if (vector512Support && SQLConf.get().parquetVector512Read()) {
             int byteIndex = 0;
             int unpackCount = packerVector512.getUnpackCount();
             int inputByteCountPerVector = packerVector512.getUnpackCount() / BITS_PER_BYTE * bitWidth;

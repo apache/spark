@@ -1068,7 +1068,7 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
-  val PARQUET_VECTOR512_READ_ENABLED = buildConf("sql.parquet.vector512.read.enabled")
+  val PARQUET_VECTOR512_READ_ENABLED = buildConf("spark.sql.parquet.vector512.read.enabled")
     .doc("If true and CPU contains avx512vbmi & avx512_vbmi2 instruction set, speed up parquet read " +
       "with using Java Vector API. For Intel CPU, Ice Lake or newer contains the required instruction set.")
     .version("3.5.0")
