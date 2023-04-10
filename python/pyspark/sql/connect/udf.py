@@ -78,7 +78,6 @@ def _create_py_udf(
         and not isinstance(return_type, ArrayType)
     )
     if is_arrow_enabled and is_output_atomic_type and is_func_with_args:
-        print("entering _create_arrow_py_udf")
         return _create_arrow_py_udf(f, regular_udf)
     else:
         return regular_udf

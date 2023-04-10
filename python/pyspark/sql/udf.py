@@ -145,7 +145,6 @@ def _create_py_udf(
 
 
 def _create_arrow_py_udf(f, regular_udf):  # type: ignore
-    print("entered _create_arrow_py_udf")
     require_minimum_pandas_version()
     require_minimum_pyarrow_version()
 
