@@ -820,6 +820,9 @@ class TorchDistributor(Distributor):
     def train_on_dataframe(self, train_function, spark_dataframe, *args, **kwargs):
         """
         Runs distributed training using provided spark DataFrame as input data.
+        You should ensure the input spark DataFrame have evenly divided partitions,
+        and this method starts a barrier spark job that each spark task in the job
+        process one partition of the input spark DataFrame.
 
         Parameters
         ----------
@@ -845,6 +848,10 @@ class TorchDistributor(Distributor):
             >>> model = distributor.run(train, tol=1e-3, max_iter=64)
 
             where train is a function that has 2 arguments `tol` and `max_iter`.
+
+        Returns
+        -------
+            Returns the output of `train_function` called with args inside spark rank 0 task.
         """
 
         if self.local_mode:
@@ -862,6 +869,25 @@ class TorchDistributor(Distributor):
 
 
 def get_spark_partition_data_loader(num_samples, batch_size, prefetch=2):
+    """
+    This function must be called inside the `train_function` where `train_function`
+    is the input argument of `TorchDistributor.train_on_dataframe`.
+    The function returns a pytorch data loader that loads data from
+    the corresponding spark partition data.
+
+    Parameters
+    ----------
+    num_samples :
+        Number of samples to generate per epoch. If `num_samples` is less than the number of
+        rows in the spark partition, it generate the first `num_samples` rows of
+        the spark partition, if `num_samples` is greater than the number of
+        rows in the spark partition, then after the iterator loaded all rows from the partition,
+        it wraps round back to the first row.
+    batch_size:
+        How many samples per batch to load.
+    prefetch:
+        Number of batches loaded in advance.
+    """
     from pyspark.sql.types import StructType
     from pyspark.ml.torch.data import SparkPartitionTorchDataset
     from torch.utils.data import DataLoader
