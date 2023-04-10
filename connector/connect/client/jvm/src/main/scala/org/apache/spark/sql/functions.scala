@@ -540,8 +540,8 @@ object functions {
     grouping_id((Seq(colName) ++ colNames).map(n => Column(n)): _*)
 
   /**
-   * Aggregate function: returns the estimated number of unique items in a group,
-   * using a Datasketches HllSketch instance configured with lgConfigK and tgtHllType args.
+   * Aggregate function: returns the estimated number of unique items in a group, using a
+   * Datasketches HllSketch instance configured with lgConfigK and tgtHllType args.
    *
    * @group agg_funcs
    * @since 3.5.0
@@ -550,8 +550,8 @@ object functions {
     Column.fn("hllsketch_estimate", e, lit(lgConfigK), lit(tgtHllType))
 
   /**
-   * Aggregate function: returns the estimated number of unique items in a group,
-   * using a Datasketches HllSketch instance configured with lgConfigK and tgtHllType args.
+   * Aggregate function: returns the estimated number of unique items in a group, using a
+   * Datasketches HllSketch instance configured with lgConfigK and tgtHllType args.
    *
    * @group agg_funcs
    * @since 3.5.0
@@ -561,8 +561,8 @@ object functions {
   }
 
   /**
-   * Aggregate function: returns the estimated number of unique items in a group,
-   * using a Datasketches HllSketch instance with default configuration.
+   * Aggregate function: returns the estimated number of unique items in a group, using a
+   * Datasketches HllSketch instance with default configuration.
    *
    * @group agg_funcs
    * @since 3.5.0
@@ -572,8 +572,8 @@ object functions {
   }
 
   /**
-   * Aggregate function: returns the estimated number of unique items in a group,
-   * using a Datasketches HllSketch instance with default configuration.
+   * Aggregate function: returns the estimated number of unique items in a group, using a
+   * Datasketches HllSketch instance with default configuration.
    *
    * @group agg_funcs
    * @since 3.5.0
@@ -583,8 +583,8 @@ object functions {
   }
 
   /**
-   * Aggregate function: returns the compact binary representation of the Datasketches
-   * HllSketch configured with lgConfigK and tgtHllType args.
+   * Aggregate function: returns the compact binary representation of the Datasketches HllSketch
+   * configured with lgConfigK and tgtHllType args.
    *
    * @group agg_funcs
    * @since 3.5.0
@@ -594,8 +594,8 @@ object functions {
   }
 
   /**
-   * Aggregate function: returns the compact binary representation of the Datasketches
-   * HllSketch configured with lgConfigK and tgtHllType args.
+   * Aggregate function: returns the compact binary representation of the Datasketches HllSketch
+   * configured with lgConfigK and tgtHllType args.
    *
    * @group agg_funcs
    * @since 3.5.0
@@ -605,8 +605,8 @@ object functions {
   }
 
   /**
-   * Aggregate function: returns the compact binary representation of the Datasketches
-   * HllSketch configured with default values.
+   * Aggregate function: returns the compact binary representation of the Datasketches HllSketch
+   * configured with default values.
    *
    * @group agg_funcs
    * @since 3.5.0
@@ -616,8 +616,8 @@ object functions {
   }
 
   /**
-   * Aggregate function: returns the compact binary representation of the Datasketches
-   * HllSketch configured with default values.
+   * Aggregate function: returns the compact binary representation of the Datasketches HllSketch
+   * configured with default values.
    *
    * @group agg_funcs
    * @since 3.5.0
@@ -627,9 +627,9 @@ object functions {
   }
 
   /**
-   * Aggregate function: returns the estimated number of unique items in a group, derived
-   * by merging the binary representations of Datasketches HllSketch objects via a Datasketches
-   * Union instance configured with lgMaxK arg.
+   * Aggregate function: returns the estimated number of unique items in a group, derived by
+   * merging the binary representations of Datasketches HllSketch objects via a Datasketches Union
+   * instance configured with lgMaxK arg.
    *
    * @group agg_funcs
    * @since 3.5.0
@@ -639,9 +639,9 @@ object functions {
   }
 
   /**
-   * Aggregate function: returns the estimated number of unique items in a group, derived
-   * by merging the binary representations of Datasketches HllSketch objects via a Datasketches
-   * Union instance configured with lgMaxK arg.
+   * Aggregate function: returns the estimated number of unique items in a group, derived by
+   * merging the binary representations of Datasketches HllSketch objects via a Datasketches Union
+   * instance configured with lgMaxK arg.
    *
    * @group agg_funcs
    * @since 3.5.0
@@ -651,9 +651,9 @@ object functions {
   }
 
   /**
-   * Aggregate function: returns the estimated number of unique items in a group, derived
-   * by merging the binary representations of Datasketches HllSketch objects via a Datasketches
-   * Union instance configured with default values.
+   * Aggregate function: returns the estimated number of unique items in a group, derived by
+   * merging the binary representations of Datasketches HllSketch objects via a Datasketches Union
+   * instance configured with default values.
    *
    * @group agg_funcs
    * @since 3.5.0
@@ -663,9 +663,9 @@ object functions {
   }
 
   /**
-   * Aggregate function: returns the estimated number of distinct items in a group, derived
-   * by merging the binary representations of Datasketches HllSketch objects via a Datasketches
-   * Union instance configured with default values.
+   * Aggregate function: returns the estimated number of distinct items in a group, derived by
+   * merging the binary representations of Datasketches HllSketch objects via a Datasketches Union
+   * instance configured with default values.
    *
    * @group agg_funcs
    * @since 3.5.0

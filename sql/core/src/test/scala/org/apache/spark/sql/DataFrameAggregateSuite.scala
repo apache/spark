@@ -1647,25 +1647,25 @@ class DataFrameAggregateSuite extends QueryTest
     ).toDF("id", "value")
 
     // validate that the functions error out when lgConfigK < 0
-    val error0 = intercept[AnalysisException] {
+    val error0 = intercept[SparkException] {
       val res = df1.groupBy("id")
         .agg(
           hllsketch_estimate("value", -1, "HLL_4").as("hllsketch")
         )
       checkAnswer(res, Nil)
     }
-    assert(error0.toString contains "DATATYPE_MISMATCH")
+    assert(error0.toString contains "SketchesArgumentException")
 
-    val error1 = intercept[AnalysisException] {
+    val error1 = intercept[SparkException] {
       val res = df1.groupBy("id")
         .agg(
           hllsketch_binary("value", -1, "HLL_4").as("hllsketch")
         )
       checkAnswer(res, Nil)
     }
-    assert(error1.toString contains "DATATYPE_MISMATCH")
+    assert(error1.toString contains "SketchesArgumentException")
 
-    val error2 = intercept[AnalysisException] {
+    val error2 = intercept[SparkException] {
       val res = df1.groupBy("id")
         .agg(
           hllsketch_binary("value").as("hllsketch")
@@ -1675,7 +1675,7 @@ class DataFrameAggregateSuite extends QueryTest
         )
       checkAnswer(res, Nil)
     }
-    assert(error2.toString contains "DATATYPE_MISMATCH")
+    assert(error2.toString contains "SketchesArgumentException")
 
     // validate that the functions error out with unsupported tgtHllType
     val error3 = intercept[SparkException] {
@@ -1685,7 +1685,7 @@ class DataFrameAggregateSuite extends QueryTest
         )
       checkAnswer(res, Nil)
     }
-    assert(error3.toString contains "IllegalArgumentException")
+    assert(error3.toString contains "SketchesArgumentException")
 
     val error4 = intercept[SparkException] {
       val res = df1.groupBy("id")
@@ -1694,7 +1694,7 @@ class DataFrameAggregateSuite extends QueryTest
         )
       checkAnswer(res, Nil)
     }
-    assert(error4.toString contains "IllegalArgumentException")
+    assert(error4.toString contains "SketchesArgumentException")
 
   }
 }

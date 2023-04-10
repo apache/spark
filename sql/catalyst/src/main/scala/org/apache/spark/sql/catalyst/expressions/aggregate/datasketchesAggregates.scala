@@ -17,19 +17,22 @@
 
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
+
 import java.util.Locale
 
 import org.apache.datasketches.hll.{HllSketch, TgtHllType, Union}
-import org.apache.datasketches.memory.WritableMemory
+import org.apache.datasketches.memory.Memory
+import org.apache.datasketches.SketchesArgumentException
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionDescription, Literal}
 import org.apache.spark.sql.catalyst.trees.{BinaryLike, TernaryLike}
-import org.apache.spark.sql.catalyst.util.TypeUtils.{toSQLExpr, toSQLId, toSQLType, toSQLValue}
+import org.apache.spark.sql.catalyst.util.TypeUtils.{toSQLExpr, toSQLId, toSQLType}
 import org.apache.spark.sql.types.{BinaryType, DataType, IntegerType, LongType, NullType, StringType}
 import org.apache.spark.unsafe.types.UTF8String
+
 
 /**
  * This datasketchesAggregates file is intended to encapsulate all of the
@@ -45,8 +48,12 @@ sealed trait HllSketchAggregate
   // Hllsketch config - mark as lazy so that they're not evaluated during tree transformation.
 
   lazy val lgConfigK: Int = second.eval().asInstanceOf[Int]
-  lazy val tgtHllType: TgtHllType =
+  lazy val tgtHllType: TgtHllType = try {
     TgtHllType.valueOf(third.eval().asInstanceOf[UTF8String].toString.toUpperCase(Locale.ROOT))
+  } catch {
+    case _: IllegalArgumentException =>
+      throw new SketchesArgumentException("Invalid tgtHllType value")
+  }
 
   // Type checking
 
@@ -67,15 +74,6 @@ sealed trait HllSketchAggregate
               "inputName" -> "lgConfigK",
               "inputType" -> toSQLType(second.dataType),
               "inputExpr" -> toSQLExpr(second)
-            )
-          )
-        } else if (lgConfigK <= 0L) {
-          DataTypeMismatch(
-            errorSubClass = "VALUE_OUT_OF_RANGE",
-            messageParameters = Map(
-              "exprName" -> "lgConfigK",
-              "valueRange" -> s"[0, positive]",
-              "currentValue" -> toSQLValue(lgConfigK, IntegerType)
             )
           )
         } else if (!third.foldable) {
@@ -160,7 +158,7 @@ sealed trait HllSketchAggregate
 
   /** Convert the underlying HllSketch into an updateable byte array  */
   override def serialize(sketch: HllSketch): Array[Byte] = {
-    sketch.toCompactByteArray
+    sketch.toUpdatableByteArray
   }
 
   /** De-serializes the updateable byte array into a HllSketch instance */
@@ -252,7 +250,7 @@ case class HllSketchEstimate(
    * @return A long value representing the number of uniques
    */
   override def eval(sketch: HllSketch): Any = {
-    sketch.getEstimate.toLong
+    Math.round(sketch.getEstimate)
   }
 }
 
@@ -429,15 +427,6 @@ case class HllSketchUnionEstimate(
               "inputExpr" -> toSQLExpr(right)
             )
           )
-        } else if (lgMaxK <= 0L) {
-          DataTypeMismatch(
-            errorSubClass = "VALUE_OUT_OF_RANGE",
-            messageParameters = Map(
-              "exprName" -> "lgMaxK",
-              "valueRange" -> s"[0, positive]",
-              "currentValue" -> toSQLValue(lgMaxK, IntegerType)
-            )
-          )
         } else {
           TypeCheckSuccess
         }
@@ -482,7 +471,7 @@ case class HllSketchUnionEstimate(
     if (v != null) {
       child.dataType match {
         case BinaryType =>
-          union.update(HllSketch.wrap(WritableMemory.writableWrap(v.asInstanceOf[Array[Byte]])))
+          union.update(HllSketch.wrap(Memory.wrap(v.asInstanceOf[Array[Byte]])))
         case _ => throw new UnsupportedOperationException(
           s"A Union instance can only be updated with a valid HllSketch byte array")
       }
