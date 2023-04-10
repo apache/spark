@@ -40,10 +40,8 @@ from pyspark.ml.torch.log_communication import (  # type: ignore
 )
 
 
-def _get_active_session() -> SparkSession:
-    from pyspark.sql.utils import is_remote
-
-    if not is_remote():
+def _get_active_session(is_remote: bool) -> SparkSession:
+    if not is_remote:
         spark = SparkSession.getActiveSession()
     else:
         import pyspark.sql.connect.session
@@ -165,7 +163,17 @@ class Distributor:
         local_mode: bool = True,
         use_gpu: bool = True,
     ):
-        self.spark = _get_active_session()
+        from pyspark.sql.utils import is_remote
+
+        self.is_remote = is_remote()
+        self.spark = _get_active_session(self.is_remote)
+
+        # indicate whether the server side is local mode
+        self.local_master = False
+        master = _get_conf(self.spark, "spark.master", "")
+        if master == "local" or master.startswith("local["):
+            self.local_master = True
+
         self.logger = _get_logger(self.__class__.__name__)
         self.num_processes = num_processes
         self.local_mode = local_mode
@@ -469,7 +477,7 @@ class TorchDistributor(Distributor):
         cuda_state_was_set = CUDA_VISIBLE_DEVICES in os.environ
         old_cuda_visible_devices = os.environ.get(CUDA_VISIBLE_DEVICES, "")
         try:
-            if self.use_gpu:
+            if self.use_gpu and not self.is_remote:
                 gpus_owned = _get_gpus_owned(self.spark)
                 random.seed(hash(train_object))
                 selected_gpus = [str(e) for e in random.sample(gpus_owned, self.num_processes)]
@@ -514,6 +522,10 @@ class TorchDistributor(Distributor):
         input_params = self.input_params
         driver_address = self.driver_address
         log_streaming_server_port = self.log_streaming_server_port
+        local_master = self.local_master
+        gpus: List[str] = []
+        if local_master and use_gpu:
+            gpus = _get_gpus_owned(self.spark)
 
         # Spark task program
         def wrapped_train_fn(_):  # type: ignore[no-untyped-def]
@@ -548,12 +560,23 @@ class TorchDistributor(Distributor):
                 os.environ["NODE_RANK"] = str(context.partitionId())
                 os.environ["RANK"] = str(context.partitionId())
 
-            def set_gpus(context: "BarrierTaskContext") -> None:
-                if CUDA_VISIBLE_DEVICES in os.environ:
-                    return
+            if local_master:
+                # distributed training on a local mode spark cluster
+                def set_gpus(context: "BarrierTaskContext") -> None:
+                    if CUDA_VISIBLE_DEVICES in os.environ:
+                        return
 
-                gpus_owned = _get_gpus_owned(context)
-                os.environ[CUDA_VISIBLE_DEVICES] = ",".join(gpus_owned)
+                    gpu_owned = gpus[context.partitionId()]
+                    os.environ[CUDA_VISIBLE_DEVICES] = gpu_owned
+
+            else:
+
+                def set_gpus(context: "BarrierTaskContext") -> None:
+                    if CUDA_VISIBLE_DEVICES in os.environ:
+                        return
+
+                    gpus_owned = _get_gpus_owned(context)
+                    os.environ[CUDA_VISIBLE_DEVICES] = ",".join(gpus_owned)
 
             context = BarrierTaskContext.get()
 
