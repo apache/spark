@@ -33,10 +33,11 @@ from pyspark.ml.torch.tests.test_data_loader import TorchDistributorDataLoaderUn
 @unittest.skipIf(not have_torch, "torch is required")
 class TorchDistributorBaselineUnitTestsOnConnect(TorchDistributorDataLoaderUnitTests):
     def setUp(self) -> None:
-        self.spark = SparkSession.builder \
-            .remote("local[1]") \
-            .config("spark.default.parallelism", "1") \
+        self.spark = (
+            SparkSession.builder.remote("local[1]")
+            .config("spark.default.parallelism", "1")
             .getOrCreate()
+        )
 
 
 if __name__ == "__main__":

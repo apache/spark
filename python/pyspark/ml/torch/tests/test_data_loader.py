@@ -47,10 +47,12 @@ from pyspark.ml.linalg import Vectors
 @unittest.skipIf(not have_torch, "torch is required")
 class TorchDistributorDataLoaderUnitTests(unittest.TestCase):
     def setUp(self) -> None:
-        self.spark = SparkSession.builder \
-            .master("local[1]") \
-            .config("spark.default.parallelism", "1") \
+        self.spark = (
+            SparkSession.builder
+            .master("local[1]")
+            .config("spark.default.parallelism", "1")
             .getOrCreate()
+        )
 
     def tearDown(self) -> None:
         self.spark.stop()

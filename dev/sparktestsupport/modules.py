@@ -603,6 +603,7 @@ pyspark_ml = Module(
         "pyspark.ml.tests.test_wrapper",
         "pyspark.ml.torch.tests.test_distributor",
         "pyspark.ml.torch.tests.test_log_communication",
+        "pyspark.ml.torch.tests.test_data_loader",
     ],
     excluded_python_implementations=[
         "PyPy"  # Skip these tests under PyPy since they require numpy and it isn't available there
@@ -778,6 +779,7 @@ pyspark_connect = Module(
         # ml unittests
         "pyspark.ml.tests.connect.test_connect_function",
         "pyspark.ml.tests.connect.test_parity_torch_distributor",
+        "pyspark.ml.tests.connect.test_parity_torch_data_loader",
     ],
     excluded_python_implementations=[
         "PyPy"  # Skip these tests under PyPy since they require numpy, pandas, and pyarrow and
