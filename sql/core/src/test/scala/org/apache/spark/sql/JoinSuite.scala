@@ -1456,72 +1456,38 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
     }
   }
 
-  test("Full outer join with duplicate stream-side references in condition") {
-    withTempView("v1", "v2") {
-      sql("""create or replace temp view v1 as
-            |select * from values
-            |(1, 1),
-            |(2, 2),
-            |(3, 1)
-            |as v1(key, value)""".stripMargin)
-
-      sql("""create or replace temp view v2 as
-            |select * from values
-            |(1, 22, 22),
-            |(3, -1, -1),
-            |(7, null, null)
-            |as v2(a, b, c)""".stripMargin)
-
-      val expected = Row(1, 1, null, null, null) ::
-        Row(null, null, 1, 22, 22) ::
-        Row(2, 2, null, null, null) ::
-        Row(3, 1, 3, -1, -1) ::
-        Row(null, null, 7, null, null) ::
-        Nil
-
-      checkAnswer(sql("""select *
-                        |from v1
-                        |full outer join v2
-                        |on key = a
-                        |and value > b
-                        |and value > c""".stripMargin),
-        expected)
-    }
+  def dupStreamSideTest(hint: String, check: SparkPlan => Unit): Unit = {
+    val query =
+      s"""select /*+ ${hint}(r) */ *
+         |from testData2 l
+         |full outer join testData3 r
+         |on l.a = r.a
+         |and l.b < (r.b + 1)
+         |and l.b < (r.a + 1)""".stripMargin
+    val df = sql(query)
+    val plan = df.queryExecution.executedPlan
+    check(plan)
+    val expected = Row(1, 1, null, null) ::
+      Row(1, 2, null, null) ::
+      Row(null, null, 1, null) ::
+      Row(2, 1, 2, 2) ::
+      Row(2, 2, 2, 2) ::
+      Row(3, 1, null, null) ::
+      Row(3, 2, null, null) :: Nil
+    checkAnswer(df, expected)
   }
 
-  test("Left outer join with duplicate stream-side references in condition") {
-    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
-      withTempView("v1", "v2") {
-        sql(
-          """create or replace temp view v1 as
-            |select * from values
-            |(1, 1),
-            |(2, 2),
-            |(3, 1)
-            |as v1(key, value)""".stripMargin)
-
-        sql(
-          """create or replace temp view v2 as
-            |select * from values
-            |(1, 22, 22),
-            |(3, -1, -1),
-            |(7, null, null)
-            |as v2(a, b, c)""".stripMargin)
-
-        val expected = Row(1, 1, null, null, null) ::
-          Row(2, 2, null, null, null) ::
-          Row(3, 1, 3, -1, -1) ::
-          Nil
-
-        checkAnswer(sql(
-          """select *
-            |from v1
-            |left outer join v2
-            |on key = a
-            |and value > b
-            |and value > c""".stripMargin),
-          expected)
-      }
+  test("Full outer join with duplicate stream-side references in condition (SMJ)") {
+    def check(plan: SparkPlan): Unit = {
+      assert(collect(plan) { case _: SortMergeJoinExec => true }.size === 1)
     }
+    dupStreamSideTest("MERGE", check)
+  }
+
+  test("Full outer join with duplicate stream-side references in condition (SHJ)") {
+    def check(plan: SparkPlan): Unit = {
+      assert(collect(plan) { case _: ShuffledHashJoinExec => true }.size === 1)
+    }
+    dupStreamSideTest("SHUFFLE_HASH", check)
   }
 }
