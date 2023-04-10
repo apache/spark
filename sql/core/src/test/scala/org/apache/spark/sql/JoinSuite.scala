@@ -1456,7 +1456,7 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
     }
   }
 
-  test("Full outer join with duplicate stream-side references in condition (SMJ)") {
+  test("Full outer join with duplicate stream-side references in condition") {
     withTempView("v1", "v2") {
       sql("""create or replace temp view v1 as
             |select * from values
@@ -1472,16 +1472,6 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
             |(7, null, null)
             |as v2(a, b, c)""".stripMargin)
 
-      val df = sql("""select *
-                     |from v1
-                     |full outer join v2
-                     |on key = a
-                     |and value > b
-                     |and value > c""".stripMargin)
-
-      val plan = df.queryExecution.executedPlan
-      assert(collect(plan) { case _: SortMergeJoinExec => true }.size === 1)
-
       val expected = Row(1, 1, null, null, null) ::
         Row(null, null, 1, 22, 22) ::
         Row(2, 2, null, null, null) ::
@@ -1489,44 +1479,49 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
         Row(null, null, 7, null, null) ::
         Nil
 
-      checkAnswer(df, expected)
+      checkAnswer(sql("""select *
+                        |from v1
+                        |full outer join v2
+                        |on key = a
+                        |and value > b
+                        |and value > c""".stripMargin),
+        expected)
     }
   }
 
-  test("Full outer join with duplicate stream-side references in condition (SHJ)") {
-    withTempView("v1", "v2") {
-      sql("""create or replace temp view v1 as
+  test("Left outer join with duplicate stream-side references in condition") {
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      withTempView("v1", "v2") {
+        sql(
+          """create or replace temp view v1 as
             |select * from values
             |(1, 1),
             |(2, 2),
             |(3, 1)
             |as v1(key, value)""".stripMargin)
 
-      sql("""create or replace temp view v2 as
+        sql(
+          """create or replace temp view v2 as
             |select * from values
             |(1, 22, 22),
             |(3, -1, -1),
             |(7, null, null)
             |as v2(a, b, c)""".stripMargin)
 
-      val df = sql("""select /*+ SHUFFLE_HASH(v2) */ *
-                     |from v1
-                     |full outer join v2
-                     |on key = a
-                     |and value > b
-                     |and value > c""".stripMargin)
+        val expected = Row(1, 1, null, null, null) ::
+          Row(2, 2, null, null, null) ::
+          Row(3, 1, 3, -1, -1) ::
+          Nil
 
-      val plan = df.queryExecution.executedPlan
-      assert(collect(plan) { case _: ShuffledHashJoinExec => true }.size === 1)
-
-      val expected = Row(1, 1, null, null, null) ::
-        Row(null, null, 1, 22, 22) ::
-        Row(2, 2, null, null, null) ::
-        Row(3, 1, 3, -1, -1) ::
-        Row(null, null, 7, null, null) ::
-        Nil
-
-      checkAnswer(df, expected)
+        checkAnswer(sql(
+          """select *
+            |from v1
+            |left outer join v2
+            |on key = a
+            |and value > b
+            |and value > c""".stripMargin),
+          expected)
+      }
     }
   }
 }

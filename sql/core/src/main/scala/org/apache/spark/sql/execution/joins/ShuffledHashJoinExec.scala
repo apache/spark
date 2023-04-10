@@ -367,7 +367,7 @@ case class ShuffledHashJoinExec(
 
     // Generate code for join condition
     val (_, conditionCheck, _) =
-      getJoinCondition(ctx, None, streamedPlan, buildPlan, Some(buildRow), Some(streamedRow))
+      getJoinCondition(ctx, streamedVars, streamedPlan, buildPlan, Some(buildRow))
 
     // Generate code for result output in separate function, as we need to output result from
     // multiple places in join code.

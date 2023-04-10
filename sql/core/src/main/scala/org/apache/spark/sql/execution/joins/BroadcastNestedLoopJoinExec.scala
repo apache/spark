@@ -452,8 +452,7 @@ case class BroadcastNestedLoopJoinExec(
 
   private def codegenInner(ctx: CodegenContext, input: Seq[ExprCode]): String = {
     val (_, buildRowArrayTerm) = prepareBroadcast(ctx)
-    val (buildRow, checkCondition, buildVars) = getJoinCondition(ctx, Some(input), streamed,
-      broadcast)
+    val (buildRow, checkCondition, buildVars) = getJoinCondition(ctx, input, streamed, broadcast)
 
     val resultVars = buildSide match {
       case BuildLeft => buildVars ++ input
@@ -475,7 +474,7 @@ case class BroadcastNestedLoopJoinExec(
 
   private def codegenOuter(ctx: CodegenContext, input: Seq[ExprCode]): String = {
     val (buildRowArray, buildRowArrayTerm) = prepareBroadcast(ctx)
-    val (buildRow, checkCondition, _) = getJoinCondition(ctx, Some(input), streamed, broadcast)
+    val (buildRow, checkCondition, _) = getJoinCondition(ctx, input, streamed, broadcast)
     val buildVars = genOneSideJoinVars(ctx, buildRow, broadcast, setDefaultValue = true)
 
     val resultVars = buildSide match {
@@ -541,7 +540,7 @@ case class BroadcastNestedLoopJoinExec(
         ""
       }
     } else {
-      val (buildRow, checkCondition, _) = getJoinCondition(ctx, Some(input), streamed, broadcast)
+      val (buildRow, checkCondition, _) = getJoinCondition(ctx, input, streamed, broadcast)
       val foundMatch = ctx.freshName("foundMatch")
       val arrayIndex = ctx.freshName("arrayIndex")
 
