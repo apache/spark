@@ -19,6 +19,13 @@ package org.apache.spark.sql.execution.datasources.parquet;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Paths;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 import org.apache.parquet.Preconditions;
 import org.apache.parquet.bytes.ByteBufferInputStream;
@@ -30,6 +37,9 @@ import org.apache.parquet.io.ParquetDecodingException;
 import org.apache.parquet.io.api.Binary;
 
 import org.apache.spark.sql.execution.vectorized.WritableColumnVector;
+import org.apache.spark.sql.internal.SQLConf;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * A values reader for Parquet's run-length encoded data. This is based off of the version in
@@ -44,6 +54,7 @@ import org.apache.spark.sql.execution.vectorized.WritableColumnVector;
  */
 public final class VectorizedRleValuesReader extends ValuesReader
     implements VectorizedValuesReader {
+  private static final Logger LOG = LoggerFactory.getLogger(VectorizedRleValuesReader.class);
   // Current decoding mode. The encoded data contains groups of either run length encoded data
   // (RLE) or bit packed data. Each group contains a header that indicates which group it is and
   // the number of values in the group.
@@ -60,6 +71,20 @@ public final class VectorizedRleValuesReader extends ValuesReader
   private int bitWidth;
   private int bytesWidth;
   private BytePacker packer;
+  private BytePacker packerVector512;
+  private static final int BITS_PER_BYTE = 8;
+  // register of avx512 are 512 bits, and can load up to 64 bytes
+  private static final int BYTES_PER_VECTOR_512 = 64;
+  // values are bit packed 8 at a time, so reading bitWidth will always work
+  private static final int NUM_VALUES_TO_PACK = 8;
+  private static final Boolean vector512Support;
+  static {
+    if (supportVector512FromCPUFlags() && SQLConf.get().parquetVector512Read()) {
+      vector512Support = true;
+    } else {
+      vector512Support = false;
+    }
+  }
 
   // Current decoding mode and values
   private MODE mode;
@@ -125,6 +150,9 @@ public final class VectorizedRleValuesReader extends ValuesReader
     this.bitWidth = bitWidth;
     this.bytesWidth = BytesUtils.paddedByteCountFromBits(bitWidth);
     this.packer = Packer.LITTLE_ENDIAN.newBytePacker(bitWidth);
+    if (vector512Support) {
+      this.packerVector512 = Packer.LITTLE_ENDIAN.newBytePackerVector(bitWidth);
+    }
   }
 
   @Override
@@ -928,11 +956,35 @@ public final class VectorizedRleValuesReader extends ValuesReader
           }
           currentBufferIdx = 0;
           int valueIndex = 0;
-          while (valueIndex < this.currentCount) {
-            // values are bit packed 8 at a time, so reading bitWidth will always work
-            ByteBuffer buffer = in.slice(bitWidth);
-            this.packer.unpack8Values(buffer, buffer.position(), this.currentBuffer, valueIndex);
-            valueIndex += 8;
+          if (vector512Support) {
+            int byteIndex = 0;
+            int unpackCount = packerVector512.getUnpackCount();
+            int inputByteCountPerVector = packerVector512.getUnpackCount() / BITS_PER_BYTE * bitWidth;
+            int totalByteCount = currentCount * bitWidth / BITS_PER_BYTE;
+            int totalByteCountVector = totalByteCount - BYTES_PER_VECTOR_512;
+            ByteBuffer buffer = in.slice(totalByteCount);
+            if (buffer.hasArray()) {
+              for (; byteIndex < totalByteCountVector; byteIndex += inputByteCountPerVector, valueIndex += unpackCount) {
+                packerVector512.unpackValuesUsingVector(buffer.array(), buffer.arrayOffset() + buffer.position() + byteIndex, currentBuffer, valueIndex);
+              }
+              for (; byteIndex < totalByteCount; byteIndex += bitWidth, valueIndex += NUM_VALUES_TO_PACK) {
+                packer.unpack8Values(buffer.array(), buffer.arrayOffset() + buffer.position() + byteIndex, currentBuffer, valueIndex);
+              }
+            } else {
+              for (; byteIndex < totalByteCountVector; byteIndex += inputByteCountPerVector, valueIndex += unpackCount) {
+                packerVector512.unpackValuesUsingVector(buffer, buffer.position() + byteIndex, currentBuffer, valueIndex);
+              }
+              for (; byteIndex < totalByteCount; byteIndex += bitWidth, valueIndex += NUM_VALUES_TO_PACK) {
+                packer.unpack8Values(buffer, buffer.position() + byteIndex, currentBuffer, valueIndex);
+              }
+            }
+          } else {
+            while (valueIndex < this.currentCount) {
+              // values are bit packed 8 at a time, so reading bitWidth will always work
+              ByteBuffer buffer = in.slice(bitWidth);
+              this.packer.unpack8Values(buffer, buffer.position(), this.currentBuffer, valueIndex);
+              valueIndex += 8;
+            }
           }
           break;
         default:
@@ -963,5 +1015,30 @@ public final class VectorizedRleValuesReader extends ValuesReader
       currentCount -= num;
       left -= num;
     }
+  }
+  private static Boolean supportVector512FromCPUFlags() {
+    try {
+      String os = System.getProperty("os.name");
+      if (os == null || !os.toLowerCase().startsWith("linux")) {
+        return false;
+      }
+      List<String> allLines = Files.readAllLines(Paths.get("/proc/cpuinfo"), StandardCharsets.UTF_8);
+      for (String line : allLines) {
+        if (line != null && line.startsWith("flags")) {
+          int index = line.indexOf(":");
+          if (index < 0) {
+            continue;
+          }
+          line = line.substring(index + 1);
+          Set<String> flagsSet = Arrays.stream(line.split(" ")).collect(Collectors.toSet());
+          if (flagsSet.contains("avx512vbmi") && flagsSet.contains("avx512_vbmi2")) {
+            return true;
+          }
+        }
+      }
+    } catch (Exception ex) {
+      LOG.warn("Failed to get CPU info");
+    }
+    return false;
   }
 }

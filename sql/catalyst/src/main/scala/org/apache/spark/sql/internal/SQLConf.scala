@@ -1068,6 +1068,13 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val PARQUET_VECTOR512_READ_ENABLED = buildConf("sql.parquet.vector512.read.enabled")
+    .doc("If true and CPU contains avx512vbmi & avx512_vbmi2 instruction set, speed up parquet read " +
+      "with using Java Vector API. For Intel CPU, Ice Lake or newer contains the required instruction set.")
+    .version("3.5.0")
+    .booleanConf
+    .createWithDefault(false)
+
   val PARQUET_WRITE_LEGACY_FORMAT = buildConf("spark.sql.parquet.writeLegacyFormat")
     .doc("If true, data will be written in a way of Spark 1.4 and earlier. For example, decimal " +
       "values will be written in Apache Parquet's fixed-length byte array format, which other " +
@@ -4501,6 +4508,8 @@ class SQLConf extends Serializable with Logging {
     getConf(PARQUET_FILTER_PUSHDOWN_INFILTERTHRESHOLD)
 
   def parquetAggregatePushDown: Boolean = getConf(PARQUET_AGGREGATE_PUSHDOWN_ENABLED)
+
+  def parquetVector512Read: Boolean = getConf(PARQUET_VECTOR512_READ_ENABLED, false)
 
   def orcFilterPushDown: Boolean = getConf(ORC_FILTER_PUSHDOWN_ENABLED)
 
