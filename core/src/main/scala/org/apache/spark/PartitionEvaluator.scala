@@ -17,7 +17,7 @@
 
 package org.apache.spark
 
-import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.annotation.{DeveloperApi, Since}
 
 /**
  * An evaluator for computing RDD partitions. Spark serializes and sends
@@ -25,6 +25,7 @@ import org.apache.spark.annotation.DeveloperApi
  * factory at the executor side.
  */
 @DeveloperApi
+@Since("3.5.0")
 trait PartitionEvaluator[T, U] {
 
   /**
