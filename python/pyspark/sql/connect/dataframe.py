@@ -331,6 +331,9 @@ class DataFrame:
 
     drop_duplicates = dropDuplicates
 
+    def dropDuplicatesWithinWatermark(self, subset: Optional[List[str]] = None) -> "DataFrame":
+        raise NotImplementedError("dropDuplicatesWithinWatermark() is not implemented.")
+
     def distinct(self) -> "DataFrame":
         return DataFrame.withPlan(
             plan.Deduplicate(child=self._plan, all_columns_as_keys=True), session=self._session
