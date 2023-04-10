@@ -510,7 +510,7 @@ class TorchDistributor(Distributor):
         log_streaming_server_port = self.log_streaming_server_port
 
         if input_dataframe is not None:
-            schema_json = input_dataframe.sdf.schema.jsonValue()
+            schema_json = input_dataframe.schema.jsonValue()
         else:
             schema_json = None
 
@@ -612,7 +612,7 @@ class TorchDistributor(Distributor):
         self.log_streaming_server_port = log_streaming_server.port
 
         spark_task_function = self._get_spark_task_function(
-            framework_wrapper_fn, train_object, *args, **kwargs
+            framework_wrapper_fn, train_object, spark_dataframe, *args, **kwargs
         )
         self._check_encryption()
         self.logger.info(
@@ -747,8 +747,8 @@ class TorchDistributor(Distributor):
 
                     if __name__ == "__main__":
                         with open("{pickle_file_path}", "rb") as f:
-                            train_fn, args = cloudpickle.load(f)
-                        output = train_fn(*args)
+                            train_fn, args, kwargs = cloudpickle.load(f)
+                        output = train_fn(*args, **kwargs)
                         with open("{output_file_path}", "wb") as f:
                             cloudpickle.dump(output, f)
                     """
@@ -822,7 +822,7 @@ class TorchDistributor(Distributor):
         )
 
 
-def get_spark_partition_data_loader(num_samples):
+def get_spark_partition_data_loader(num_samples, batch_size):
     from pyspark.sql.types import StructType
     from pyspark.ml.torch.data import SparkPartitionTorchDataset
     from torch.utils.data import DataLoader
@@ -836,4 +836,4 @@ def get_spark_partition_data_loader(num_samples):
     dataset = SparkPartitionTorchDataset(arrow_file, schema, num_samples)
 
     # TODO: support data prefetch
-    return DataLoader(dataset)
+    return DataLoader(dataset, batch_size)

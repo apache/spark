@@ -28,6 +28,7 @@ class SparkPartitionTorchDataset(torch.utils.data.IterableDataset):
 
     @staticmethod
     def _extract_field_value(value, field_type):
+        # TODO: avoid checking field type for every row.
         if field_type == "vector":
             if value['type'] == 1:
                 # dense vector
@@ -35,11 +36,11 @@ class SparkPartitionTorchDataset(torch.utils.data.IterableDataset):
             if value['type'] == 0:
                 # sparse vector
                 size = int(value['size'])
-                np_array = np.empty(size)
+                np_array = np.zeros(size, dtype=np.float64)
                 for index, elem_value in zip(value['indices'], value['values']):
                     np_array[index] = elem_value
                 return np_array
-        if field_type == "double":
+        if field_type in ["float", "double", "int", "bigint", "smallint"]:
             return value
 
         raise ValueError(
@@ -54,7 +55,7 @@ class SparkPartitionTorchDataset(torch.utils.data.IterableDataset):
         count = 0
 
         while count < self.num_samples:
-            with open(self.arrow_file_path, "wb") as f:
+            with open(self.arrow_file_path, "rb") as f:
                 batch_iter = serializer.load_stream(f)
                 for batch in batch_iter:
                     # TODO: we can optimize this further by directly extracting
