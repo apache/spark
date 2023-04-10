@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark
 import org.apache.spark.sql.catalyst.trees.TreePattern
 import org.apache.spark.sql.catalyst.trees.TreePattern._
+import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, METADATA_COL_ATTR_KEY}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.collection.BitSet
@@ -557,16 +558,19 @@ object FileSourceMetadataAttribute {
   /**
    * True if the given data type is supported in file source metadata attributes.
    *
-   * Strings are spark [[UTFString]], but implementations can also provide scala [[String]] and it
-   * will be converted automatically as needed.
-   *
-   * Currently, only a handful of atomic (primitive) types are supported.
+   * The set of supported types is limited by [[ColumnVectorUtils.populate]], which the constant
+   * file metadata implementation relies on. In general, types that can be partition columns are
+   * supported (including most primitive types). Notably unsupported types include [[ObjectType]],
+   * [[UserDefinedType]], and the complex types ([[StructType]], [[MapType]], [[ArrayType]]).
    */
-  def isSupportedType(dataType: DataType): Boolean = dataType match {
-    case _: LongType | _: IntegerType | _: ShortType | _: ByteType => true
-    case _: DoubleType | _: FloatType => true
-    case _: StringType => true
-    case _: TimestampType => true // really just Long
+  def isSupportedType(dataType: DataType): Boolean = dataType.physicalDataType match {
+    case PhysicalNullType => true
+    case PhysicalBooleanType => true
+    case PhysicalByteType | PhysicalShortType | PhysicalIntegerType | PhysicalLongType => true
+    case PhysicalFloatType | PhysicalDoubleType => true
+    case PhysicalBinaryType | PhysicalStringType => true
+    case _: PhysicalDecimalType => true
+    case PhysicalCalendarIntervalType => true
     case _ => false
   }
 

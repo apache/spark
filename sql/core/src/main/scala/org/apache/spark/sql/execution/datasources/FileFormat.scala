@@ -276,14 +276,11 @@ object FileFormat {
           // while internally, the TimestampType `file_modification_time` is stored in microsecond
           row.update(i, fileModificationTime * 1000L)
         case other =>
-          // Other metadata columns use the file-provided value (if any). As a courtesy, convert any
-          // normal strings to the required [[UTF8String]].
-          //
-          // TODO(frj): Do we need to potentially support value-producing functions?
-          otherConstantMetadataColumnValues.get(other) match {
-            case Some(v: String) => row.update(i, UTF8String.fromString(v))
-            case Some(v) => row.update(i, v)
-            case None => row.setNullAt(i)
+          // Other metadata columns use the file-provided value (if any). Automatically convert raw
+          // values (including nulls) to literals as a courtesy.
+          Literal(otherConstantMetadataColumnValues.get(other).orNull) match {
+            case Literal(null, _) => row.setNullAt(i)
+            case literal => row.update(i, literal.value)
           }
       }
     }

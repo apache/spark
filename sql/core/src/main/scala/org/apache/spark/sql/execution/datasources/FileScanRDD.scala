@@ -30,11 +30,11 @@ import org.apache.spark.paths.SparkPath
 import org.apache.spark.rdd.{InputFileBlockHolder, RDD}
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.{FileSourceOptions, InternalRow}
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, GenericInternalRow, JoinedRow, UnsafeProjection, UnsafeRow}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, GenericInternalRow, JoinedRow, Literal, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.FileFormat._
-import org.apache.spark.sql.execution.vectorized.ConstantColumnVector
+import org.apache.spark.sql.execution.vectorized.{ColumnVectorUtils, ConstantColumnVector}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.vectorized.{ColumnarBatch, ColumnVector}
 import org.apache.spark.unsafe.types.UTF8String
@@ -159,6 +159,7 @@ class FileScanRDD(
        */
       private def createMetadataColumnVector(c: ColumnarBatch): Array[ColumnVector] = {
         val path = currentFile.toPath
+        lazy val tmpRow = new GenericInternalRow(1) // for populating custom metadata fields
         metadataColumns.map(a => (a.name, a.dataType)).map {
           case (FILE_PATH, dataType) =>
             require(dataType == StringType)
@@ -192,26 +193,20 @@ class FileScanRDD(
             // while internally, the TimestampType is stored in microsecond
             columnVector.setLong(currentFile.modificationTime * 1000L)
             columnVector
-          case (other, otherType: AtomicType) =>
-            // Other metadata columns use the file-provided value, if one exists
-            //
-            // WARNING: If caller provided a normal string, convert it to UTF8String as a courtesy.
-            val value = currentFile.otherConstantMetadataColumnValues.get(other).orNull
-            val columnVector = new ConstantColumnVector(c.numRows(), otherType)
-            (value, otherType) match {
-              case (v: java.lang.Long, TimestampType) => columnVector.setLong(v)
-              case (v: java.lang.Long, LongType) => columnVector.setLong(v)
-              case (v: java.lang.Integer, IntegerType) => columnVector.setInt(v)
-              case (v: java.lang.Short, ShortType) => columnVector.setShort(v)
-              case (v: java.lang.Byte, ByteType) => columnVector.setByte(v)
-              case (v: java.lang.Float, FloatType) => columnVector.setFloat(v)
-              case (v: java.lang.Double, DoubleType) => columnVector.setDouble(v)
-              case (v: String, StringType) => columnVector.setUtf8String(UTF8String.fromString(v))
-              case (v: UTF8String, StringType) => columnVector.setUtf8String(v)
-              case (null, _) => columnVector.setNull() // missing or null
-              case (v: Any, dataType) => throw new IllegalArgumentException(
-                s"${v.getClass.getSimpleName} is not compatible with $dataType")
+          case (other, dataType: DataType) =>
+            // Other metadata columns use the file-provided value, if one exists. Automatically
+            // convert raw values (including nulls) to literals as a courtesy, then populate the
+            // column by passing the resulting value through the `tmpRow` we allocated above.
+            Literal(currentFile.otherConstantMetadataColumnValues.get(other).orNull) match {
+              case Literal(null, _) =>
+                tmpRow.setNullAt(0)
+              case literal =>
+                require(dataType == literal.dataType)
+                tmpRow.update(0, literal.value)
             }
+
+            val columnVector = new ConstantColumnVector(c.numRows(), dataType)
+            ColumnVectorUtils.populate(columnVector, tmpRow, 0)
             columnVector
         }.toArray
       }

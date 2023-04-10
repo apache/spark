@@ -24,9 +24,9 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types.StructType
 
 /**
- * A file status augmented with optional metadata. File formats can use the extra metadata to expose
- * custom file-constant metadata columns, but in general tasks and readers can use the per-file
- * metadata however they see fit.
+ * A file status augmented with optional metadata, which tasks and file readers can use however they
+ * see fit. For example, a custom [[FileIndex]] and [[FileFormat]] working together could expose
+ * this extra metadata as file-constant fields of the file source metadata column.
  */
 case class FileStatusWithMetadata(fileStatus: FileStatus, metadata: Map[String, Any] = Map.empty) {
   // Wrapper methods to improve source compatibility in code that still expects a [[FileStatus]].

@@ -23,7 +23,7 @@ import org.apache.hadoop.fs.{FileStatus, Path}
 
 import org.apache.spark.sql.{DataFrame, Dataset, QueryTest, Row}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Expression, FileSourceConstantMetadataStructField, FileSourceGeneratedMetadataStructField}
+import org.apache.spark.sql.catalyst.expressions.{Expression, FileSourceConstantMetadataStructField, FileSourceGeneratedMetadataStructField, Literal}
 import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
 import org.apache.spark.sql.functions.{col, lit, when}
 import org.apache.spark.sql.test.SharedSparkSession
@@ -97,10 +97,10 @@ class FileSourceCustomMetadataStructSuite extends QueryTest with SharedSparkSess
     withTempData("parquet", FILE_SCHEMA) { (_, f0, f1) =>
       val format = new TestFileFormat(extraConstantMetadataFields)
       val files = Seq(
-        // NOTE: The implementation should accept both String and UTF8String for StringType fields
-        // (it should really be UTF8String, but that's inconvenient and error-prone for the user).
+        // NOTE: The implementation accepts both raw values and literals for any field, and
+        // StringType fields can be String or UTF8String.
         FileStatusWithMetadata(f0, Map("foo" -> 0, "bar" -> UTF8String.fromString("000"))),
-        FileStatusWithMetadata(f1, Map("foo" -> 1, "bar" -> "111")))
+        FileStatusWithMetadata(f1, Map("foo" -> Literal(1), "bar" -> "111")))
       val df = createDF(format, files)
 
       // Query in declared order
@@ -177,8 +177,8 @@ class FileSourceCustomMetadataStructSuite extends QueryTest with SharedSparkSess
     withTempData("parquet", FILE_SCHEMA) { (_, f0, f1) =>
       val format = new TestFileFormat(extraConstantMetadataFields)
       val files = Seq(
-        FileStatusWithMetadata(f0, Map("foo" -> 0)),
-        FileStatusWithMetadata(f1, Map("bar" -> "111")))
+        FileStatusWithMetadata(f0, Map("foo" -> 0)), // no entry for bar
+        FileStatusWithMetadata(f1, Map("foo" -> null, "bar" -> "111"))) // set foo null
       val df = createDF(format, files)
 
       // Query in declared order
