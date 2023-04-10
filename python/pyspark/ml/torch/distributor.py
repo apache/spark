@@ -668,13 +668,17 @@ class TorchDistributor(Distributor):
     @contextmanager
     def _setup_spark_partition_data(partition_data_iterator, input_schema_json):
         from pyspark.sql.pandas.serializers import ArrowStreamSerializer
+        from pyspark.files import SparkFiles
         import json
 
         if input_schema_json is None:
             yield
             return
 
-        save_dir = TorchDistributor._create_save_dir()
+        # We need to temporarily write partition data into a temp dir,
+        # partition data might be huge, so we need to write it under
+        # configured `SPARK_LOCAL_DIRS`.
+        save_dir = TorchDistributor._create_save_dir(root_dir=SparkFiles.getRootDirectory())
 
         try:
             serializer = ArrowStreamSerializer()
@@ -721,9 +725,9 @@ class TorchDistributor(Distributor):
         return output
 
     @staticmethod
-    def _create_save_dir() -> str:
+    def _create_save_dir(root_dir=None) -> str:
         # TODO: need to do this in a safe way to avoid issues during concurrent runs
-        return tempfile.mkdtemp()
+        return tempfile.mkdtemp(dir=root_dir)
 
     @staticmethod
     def _cleanup_files(save_dir: str) -> None:
