@@ -22,6 +22,7 @@ import scala.annotation.tailrec
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.BloomFilterAggregate
 import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
+import org.apache.spark.sql.catalyst.plans.{Inner, JoinType, LeftAnti, LeftOuter, LeftSemi, RightOuter}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{INVOKE, JSON_TO_STRUCT, LIKE_FAMLIY, PYTHON_UDF, REGEXP_EXTRACT_FAMILY, REGEXP_REPLACE, SCALA_UDF}
@@ -148,11 +149,14 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
           predicateReference ++ condition.references,
           hasHitFilter = true,
           hasHitSelectiveFilter = hasHitSelectiveFilter || isLikelySelective(condition))
-      case ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, _, _, left, right, _)
-        if canPruneLeft(joinType) =>
-        if (leftKeys.contains(filterCreationSideExp)) {
+      case ExtractEquiJoinKeys(joinType, _, _, _, _, left, right, _) =>
+        // Runtime filters use one side of the [[Join]] to build a set of join key values and prune
+        // the other side of the [[Join]]. It's also OK to use a superset of the join key values to
+        // do the pruning. For inner [[Join]]s, one side of the [[Join]] always produces a superset
+        // of the join key values.
+        if (isLeftSideSuperset(joinType, left, filterCreationSideExp)) {
           isSelective(left, predicateReference, hasHitFilter, hasHitSelectiveFilter)
-        } else if (rightKeys.contains(filterCreationSideExp)) {
+        } else if (isRightSideSuperset(joinType, right, filterCreationSideExp)) {
           isSelective(right, predicateReference, hasHitFilter, hasHitSelectiveFilter)
         } else {
           false
@@ -170,17 +174,41 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
       REGEXP_EXTRACT_FAMILY, REGEXP_REPLACE)
   }
 
-  private def confirmFilterCreationSidePlan(
+  private def isLeftSideSuperset(
+      joinType: JoinType,
+      left: LogicalPlan,
+      filterCreationSideExp: Expression): Boolean = joinType match {
+    case Inner | LeftSemi | LeftAnti | LeftOuter | RightOuter =>
+      left.output.exists(_.semanticEquals(filterCreationSideExp))
+    case _ => false
+  }
+
+  private def isRightSideSuperset(
+      joinType: JoinType,
+      right: LogicalPlan,
+      filterCreationSideExp: Expression): Boolean = joinType match {
+    case Inner | LeftOuter | RightOuter =>
+      right.output.exists(_.semanticEquals(filterCreationSideExp))
+    case _ => false
+  }
+
+  /**
+   * There are two situations with the filter creation side plan:
+   * 1. One side of [[Join]] as filter creation side plan directly.
+   * 2. Some side of [[Join]] may have multiple levels of [[Join]],
+   *    any non [[Join]] node in the entire [[Join]] tree may act as filter creation side plan.
+   */
+  private def extractFilterCreationSidePlan(
       filterCreationSideExp: Expression,
       filterCreationSidePlan: LogicalPlan): LogicalPlan = {
     var selected = filterCreationSidePlan
     filterCreationSidePlan.collectFirst {
-      case ExtractEquiJoinKeys(joinType, leftKeys, _, _, _, left, _, _)
-        if canPruneLeft(joinType) && leftKeys.contains(filterCreationSideExp) =>
-        selected = confirmFilterCreationSidePlan(filterCreationSideExp, left)
-      case ExtractEquiJoinKeys(joinType, _, rightKeys, _, _, _, right, _)
-        if canPruneLeft(joinType) && rightKeys.contains(filterCreationSideExp) =>
-        selected = confirmFilterCreationSidePlan(filterCreationSideExp, right)
+      case ExtractEquiJoinKeys(joinType, _, _, _, _, left, _, _)
+        if isLeftSideSuperset(joinType, left, filterCreationSideExp) =>
+        selected = extractFilterCreationSidePlan(filterCreationSideExp, left)
+      case ExtractEquiJoinKeys(joinType, _, _, _, _, _, right, _)
+        if isRightSideSuperset(joinType, right, filterCreationSideExp) =>
+        selected = extractFilterCreationSidePlan(filterCreationSideExp, right)
     }
     selected
   }
@@ -324,13 +352,13 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
             val oldLeft = newLeft
             val oldRight = newRight
             if (canPruneLeft(joinType) && filteringHasBenefit(left, right, l, r, hint)) {
-              val filterCreationSidePlan = confirmFilterCreationSidePlan(r, right)
+              val filterCreationSidePlan = extractFilterCreationSidePlan(r, right)
               newLeft = injectFilter(l, newLeft, r, filterCreationSidePlan)
             }
             // Did we actually inject on the left? If not, try on the right
             if (newLeft.fastEquals(oldLeft) && canPruneRight(joinType) &&
               filteringHasBenefit(right, left, r, l, hint)) {
-              val filterCreationSidePlan = confirmFilterCreationSidePlan(l, left)
+              val filterCreationSidePlan = extractFilterCreationSidePlan(l, left)
               newRight = injectFilter(r, newRight, l, filterCreationSidePlan)
             }
             if (!newLeft.fastEquals(oldLeft) || !newRight.fastEquals(oldRight)) {
