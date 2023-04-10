@@ -75,6 +75,7 @@ def _create_udf(
     name: Optional[str] = None,
     deterministic: bool = True,
 ) -> "UserDefinedFunctionLike":
+    """Create a regular(non-Arrow-optimized) Python UDF."""
     # Set the name of the UserDefinedFunction object to be the name of function f
     udf_obj = UserDefinedFunction(
         f, returnType=returnType, name=name, evalType=evalType, deterministic=deterministic
@@ -88,6 +89,7 @@ def _create_py_udf(
     evalType: int,
     useArrow: Optional[bool] = None,
 ) -> "UserDefinedFunctionLike":
+    """Create a regular/Arrow-optimized Python UDF."""
     # The following table shows the results when the type coercion in Arrow is needed, that is,
     # when the user-specified return type(SQL Type) of the UDF and the actual instance(Python
     # Value(Type)) that the UDF returns are different.
@@ -145,6 +147,7 @@ def _create_py_udf(
 
 
 def _create_arrow_py_udf(f, regular_udf):  # type: ignore
+    """Create an Arrow-optimized Python UDF out of a regular Python UDF."""
     require_minimum_pandas_version()
     require_minimum_pyarrow_version()
 
