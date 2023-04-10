@@ -2136,6 +2136,61 @@ streamingDf <- dropDuplicates(streamingDf, "guid", "eventTime")
 
 </div>
 
+Specifically for streaming, you can deduplicate records in data streams using a unique identifier in the events, within the time range of watermark.
+For example, if you set the delay threshold of watermark as "1 hour", duplicated events which occurred within 1 hour can be correctly deduplicated.
+(For more details, please refer to the API doc of [dropDuplicatesWithinWatermark](/api/scala/org/apache/spark/sql/Dataset.html#dropDuplicatesWithinWatermark():org.apache.spark.sql.Dataset[T]).)
+
+This can be used to deal with use case where event time column cannot be a part of unique identifier, mostly due to the case
+where event times are somehow different for the same records. (E.g. non-idempotent writer where issuing event time happens at write)
+
+Users are encouraged to set the delay threshold of watermark longer than max timestamp differences among duplicated events.
+
+This feature requires watermark with delay threshold to be set in streaming DataFrame/Dataset.
+
+<div class="codetabs">
+
+<div data-lang="python"  markdown="1">
+
+{% highlight python %}
+streamingDf = spark.readStream. ...
+
+# deduplicate using guid column with watermark based on eventTime column
+streamingDf \
+  .withWatermark("eventTime", "10 hours") \
+  .dropDuplicatesWithinWatermark("guid")
+{% endhighlight %}
+
+</div>
+
+<div data-lang="scala"  markdown="1">
+
+{% highlight scala %}
+val streamingDf = spark.readStream. ...  // columns: guid, eventTime, ...
+
+// deduplicate using guid column with watermark based on eventTime column
+streamingDf
+  .withWatermark("eventTime", "10 hours")
+  .dropDuplicatesWithinWatermark("guid")
+{% endhighlight %}
+
+</div>
+
+<div data-lang="java"  markdown="1">
+
+{% highlight java %}
+Dataset<Row> streamingDf = spark.readStream(). ...;  // columns: guid, eventTime, ...
+
+// deduplicate using guid column with watermark based on eventTime column
+streamingDf
+  .withWatermark("eventTime", "10 hours")
+  .dropDuplicatesWithinWatermark("guid");
+{% endhighlight %}
+
+
+</div>
+
+</div>
+
 ### Policy for handling multiple watermarks
 A streaming query can have multiple input streams that are unioned or joined together.
 Each of the input streams can have a different threshold of late data that needs to
