@@ -58,8 +58,6 @@ private object PostgresDialect extends JdbcDialect with SQLConfHelper {
       // money type seems to be broken but one workaround is to handle it as string.
       // See SPARK-34333 and https://github.com/pgjdbc/pgjdbc/issues/100
       Some(StringType)
-    } else if (sqlType == Types.VARCHAR && "text".equalsIgnoreCase(typeName)) {
-      Some(StringType)
     } else if (sqlType == Types.OTHER) {
       Some(StringType)
     } else if (sqlType == Types.ARRAY) {
@@ -80,7 +78,9 @@ private object PostgresDialect extends JdbcDialect with SQLConfHelper {
     case "int8" | "oid" => Some(LongType)
     case "float4" => Some(FloatType)
     case "float8" => Some(DoubleType)
-    case "text" | "varchar" | "char" | "bpchar" | "cidr" | "inet" | "json" | "jsonb" | "uuid" |
+    case "varchar" => Some(VarcharType(precision))
+    case "char" | "bpchar" => Some(CharType(precision))
+    case "text" | "cidr" | "inet" | "json" | "jsonb" | "uuid" |
          "xml" | "tsvector" | "tsquery" | "macaddr" | "macaddr8" | "txid_snapshot" | "point" |
          "line" | "lseg" | "box" | "path" | "polygon" | "circle" | "pg_lsn" | "varbit" |
          "interval" | "pg_snapshot" =>
