@@ -23,6 +23,7 @@ check_dependencies(__name__)
 
 import sys
 import functools
+from inspect import getfullargspec
 from typing import cast, Callable, Any, TYPE_CHECKING, Optional, Union
 
 from pyspark.rdd import PythonEvalType
@@ -33,7 +34,7 @@ from pyspark.sql.connect.expressions import (
 )
 from pyspark.sql.connect.column import Column
 from pyspark.sql.connect.types import UnparsedDataType
-from pyspark.sql.types import DataType, StringType
+from pyspark.sql.types import ArrayType, DataType, MapType, StringType, StructType
 from pyspark.sql.udf import UDFRegistration as PySparkUDFRegistration
 
 
@@ -45,6 +46,42 @@ if TYPE_CHECKING:
     )
     from pyspark.sql.connect.session import SparkSession
     from pyspark.sql.types import StringType
+
+
+def _create_py_udf(
+    f: Callable[..., Any],
+    returnType: "DataTypeOrString",
+    evalType: int,
+    useArrow: Optional[bool] = None,
+) -> "UserDefinedFunctionLike":
+    from pyspark.sql.udf import _create_arrow_py_udf
+    from pyspark.sql.connect.session import _active_spark_session
+
+    if _active_spark_session is None:
+        is_arrow_enabled = False
+    else:
+        is_arrow_enabled = (
+            _active_spark_session.conf.get("spark.sql.execution.pythonUDF.arrow.enabled") == "true"
+            if useArrow is None
+            else useArrow
+        )
+
+    regular_udf = _create_udf(f, returnType, evalType)
+    return_type = regular_udf.returnType
+    try:
+        is_func_with_args = len(getfullargspec(f).args) > 0
+    except TypeError:
+        is_func_with_args = False
+    is_output_atomic_type = (
+        not isinstance(return_type, StructType)
+        and not isinstance(return_type, MapType)
+        and not isinstance(return_type, ArrayType)
+    )
+    if is_arrow_enabled and is_output_atomic_type and is_func_with_args:
+        print("entering _create_arrow_py_udf")
+        return _create_arrow_py_udf(f, regular_udf)
+    else:
+        return regular_udf
 
 
 def _create_udf(
