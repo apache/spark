@@ -40,7 +40,7 @@ from pyspark.sql.types import (
     DecimalType,
     BooleanType,
 )
-from pyspark.errors import PySparkTypeError
+from pyspark.errors import PySparkTypeError, PySparkValueError
 from pyspark.errors.exceptions.connect import SparkConnectException
 from pyspark.testing.connectutils import should_test_connect
 from pyspark.sql.tests.connect.test_connect_basic import SparkConnectSQLTestCase
@@ -954,11 +954,14 @@ class SparkConnectColumnTests(SparkConnectSQLTestCase):
             message_parameters={"arg_name": "fieldName", "arg_type": "int"},
         )
 
-        with self.assertRaisesRegex(
-            ValueError,
-            "dropFields requires at least 1 field",
-        ):
+        with self.assertRaises(PySparkValueError) as pe:
             cdf.select(cdf.x.dropFields()).show()
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="CANNOT_BE_EMPTY",
+            message_parameters={"item": "dropFields"},
+        )
 
     def test_column_string_ops(self):
         # SPARK-41764: test string ops

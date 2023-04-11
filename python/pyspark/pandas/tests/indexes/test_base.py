@@ -34,7 +34,7 @@ from pyspark.pandas.missing.indexes import (
 from pyspark.testing.pandasutils import ComparisonTestBase, TestUtils, SPARK_CONF_ARROW_ENABLED
 
 
-class IndexesTest(ComparisonTestBase, TestUtils):
+class IndexesTestsMixin:
     @property
     def pdf(self):
         return pd.DataFrame(
@@ -2582,6 +2582,10 @@ class IndexesTest(ComparisonTestBase, TestUtils):
 
         with self.assertRaisesRegex(NotImplementedError, "nunique is not defined for MultiIndex"):
             psmidx.nunique()
+
+
+class IndexesTests(IndexesTestsMixin, ComparisonTestBase, TestUtils):
+    pass
 
 
 if __name__ == "__main__":

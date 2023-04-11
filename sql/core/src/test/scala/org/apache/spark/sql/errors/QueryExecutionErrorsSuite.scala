@@ -492,7 +492,7 @@ class QueryExecutionErrorsSuite
     }
   }
 
-  test("UNRECOGNIZED_SQL_TYPE: unrecognized SQL type -100") {
+  test("UNRECOGNIZED_SQL_TYPE: unrecognized SQL type DATALINK") {
     Utils.classForName("org.h2.Driver")
 
     val properties = new Properties()
@@ -502,7 +502,8 @@ class QueryExecutionErrorsSuite
     val url = "jdbc:h2:mem:testdb0"
     val urlWithUserAndPass = "jdbc:h2:mem:testdb0;user=testUser;password=testPass"
     val tableName = "test.table1"
-    val unrecognizedColumnType = -100
+    val unrecognizedColumnType = java.sql.Types.DATALINK
+    val unrecognizedColumnTypeName = "h2" + java.sql.Types.DATALINK.toString
 
     var conn: java.sql.Connection = null
     try {
@@ -539,6 +540,7 @@ class QueryExecutionErrorsSuite
           val resultSetMetaData = mock(classOf[ResultSetMetaData])
           when(resultSetMetaData.getColumnCount).thenReturn(1)
           when(resultSetMetaData.getColumnType(1)).thenReturn(unrecognizedColumnType)
+          when(resultSetMetaData.getColumnTypeName(1)).thenReturn(unrecognizedColumnTypeName)
 
           val resultSet = mock(classOf[ResultSet])
           when(resultSet.next()).thenReturn(true).thenReturn(false)
@@ -566,7 +568,7 @@ class QueryExecutionErrorsSuite
         spark.read.jdbc(urlWithUserAndPass, tableName, new Properties()).collect()
       },
       errorClass = "UNRECOGNIZED_SQL_TYPE",
-      parameters = Map("typeName" -> unrecognizedColumnType.toString),
+      parameters = Map("typeName" -> unrecognizedColumnTypeName, "jdbcType" -> "DATALINK"),
       sqlState = "42704")
 
     JdbcDialects.unregisterDialect(testH2DialectUnrecognizedSQLType)

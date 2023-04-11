@@ -28,7 +28,6 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connect.client.SparkConnectClient
 import org.apache.spark.sql.connect.client.util.IntegrationTestUtils._
 import org.apache.spark.sql.connect.common.config.ConnectCommon
-import org.apache.spark.util.Utils
 
 /**
  * An util class to start a local spark connect server in a different process for local E2E tests.
@@ -175,16 +174,5 @@ trait RemoteSparkSession extends ConnectFunSuite with BeforeAndAfterAll {
     }
     spark = null
     super.afterAll()
-  }
-
-  /**
-   * Drops table `tableName` after calling `f`.
-   */
-  protected def withTable(tableNames: String*)(f: => Unit): Unit = {
-    Utils.tryWithSafeFinally(f) {
-      tableNames.foreach { name =>
-        spark.sql(s"DROP TABLE IF EXISTS $name").collect()
-      }
-    }
   }
 }

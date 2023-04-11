@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.types
 
-import scala.math.{Fractional, Numeric}
 import scala.reflect.runtime.universe.typeTag
 import scala.util.Try
 
@@ -36,11 +35,7 @@ class DoubleType private() extends FractionalType {
   // Defined with a private constructor so the companion object is the only possible instantiation.
   private[sql] type InternalType = Double
   @transient private[sql] lazy val tag = typeTag[InternalType]
-  private[sql] val numeric = implicitly[Numeric[Double]]
-  private[sql] val fractional = implicitly[Fractional[Double]]
   private[sql] val asIntegral = DoubleType.DoubleAsIfIntegral
-
-  override private[sql] def exactNumeric = DoubleExactNumeric
 
   /**
    * The default size of a value of the DoubleType is 8 bytes.
