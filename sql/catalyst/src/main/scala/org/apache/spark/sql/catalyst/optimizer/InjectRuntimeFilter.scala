@@ -151,15 +151,17 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
           predicateReference ++ condition.references,
           hasHitFilter = true,
           hasHitSelectiveFilter = hasHitSelectiveFilter || isLikelySelective(condition))
-      case ExtractEquiJoinKeys(joinType, _, _, _, _, left, right, _) =>
+      case ExtractEquiJoinKeys(joinType, _, _, _, _, left, right, hint) =>
         // Runtime filters use one side of the [[Join]] to build a set of join key values and prune
         // the other side of the [[Join]]. It's also OK to use a superset of the join key values to
         // do the pruning. For inner [[Join]]s, one side of the [[Join]] always produces a superset
         // of the join key values.
         if (isLeftSideSuperset(joinType, left, filterCreationSideExp)) {
-          existsSelectiveFilterOverScan(left, filterCreationSideExp, filterCreationSidePlans)
+          !hintToBroadcastLeft(hint) && !canBroadcastBySize(left, conf) &&
+            existsSelectiveFilterOverScan(left, filterCreationSideExp, filterCreationSidePlans)
         } else if (isRightSideSuperset(joinType, right, filterCreationSideExp)) {
-          existsSelectiveFilterOverScan(right, filterCreationSideExp, filterCreationSidePlans)
+          !hintToBroadcastRight(hint) && !canBroadcastBySize(right, conf) &&
+            existsSelectiveFilterOverScan(right, filterCreationSideExp, filterCreationSidePlans)
         } else {
           false
         }
