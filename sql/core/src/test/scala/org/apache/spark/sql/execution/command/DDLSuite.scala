@@ -2071,6 +2071,8 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
   }
 
   test(s"Add a directory when ${SQLConf.LEGACY_ADD_SINGLE_FILE_IN_ADD_FILE.key} set to false") {
+    // SPARK-43093: Don't use `withTempDir` to clean up temp dir, it will cause test cases in
+    // shared session that need to execute `Executor.updateDependencies` test fail.
     val directoryToAdd = Utils.createDirectory(
       root = Utils.createTempDir().getCanonicalPath, namePrefix = "addDirectory")
     val testFile = File.createTempFile("testFile", "1", directoryToAdd)
