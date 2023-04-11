@@ -19,34 +19,34 @@ import torch
 import numpy as np
 
 
+def _extract_pandas_value(value, field_type):
+    # TODO: avoid checking field type for every row.
+    if field_type == "vector":
+        if value['type'] == 1:
+            # dense vector
+            return value['values']
+        if value['type'] == 0:
+            # sparse vector
+            size = int(value['size'])
+            np_array = np.zeros(size, dtype=np.float64)
+            for index, elem_value in zip(value['indices'], value['values']):
+                np_array[index] = elem_value
+            return np_array
+    if field_type in ["float", "double", "int", "bigint", "smallint"]:
+        return value
+
+    raise ValueError(
+        "SparkPartitionTorchDataset does not support loading data from field of "
+        f"type {field_type}."
+    )
+
+
 class SparkPartitionTorchDataset(torch.utils.data.IterableDataset):
 
     def __init__(self, arrow_file_path, schema, num_samples):
         self.arrow_file_path = arrow_file_path
         self.num_samples = num_samples
         self.field_types = [field.dataType.simpleString() for field in schema]
-
-    @staticmethod
-    def _extract_field_value(value, field_type):
-        # TODO: avoid checking field type for every row.
-        if field_type == "vector":
-            if value['type'] == 1:
-                # dense vector
-                return value['values']
-            if value['type'] == 0:
-                # sparse vector
-                size = int(value['size'])
-                np_array = np.zeros(size, dtype=np.float64)
-                for index, elem_value in zip(value['indices'], value['values']):
-                    np_array[index] = elem_value
-                return np_array
-        if field_type in ["float", "double", "int", "bigint", "smallint"]:
-            return value
-
-        raise ValueError(
-            "SparkPartitionTorchDataset does not support loading data from field of "
-            f"type {field_type}."
-        )
 
     def __iter__(self):
         from pyspark.sql.pandas.serializers import ArrowStreamSerializer
@@ -70,9 +70,28 @@ class SparkPartitionTorchDataset(torch.utils.data.IterableDataset):
                     batch_pdf = batch.to_pandas()
                     for row in batch_pdf.itertuples(index=False):
                         yield [
-                            SparkPartitionTorchDataset._extract_field_value(value, field_type)
+                            _extract_pandas_value(value, field_type)
                             for value, field_type in zip(row, self.field_types)
                         ]
                         count += 1
                         if count == self.num_samples:
                             return
+
+
+class PandasTorchDataset(torch.utils.data.IterableDataset):
+
+    def __init__(self, pandas_data, field_types):
+        self.pandas_data = pandas_data
+        self.field_types = field_types
+
+    def __iter__(self):
+        import pandas as pd
+        if isinstance(self.pandas_data, pd.Series):
+            for v in self.pandas_data:
+                yield _extract_pandas_value(v, self.field_types)
+        elif isinstance(self.pandas_data, pd.DataFrame):
+            for row in self.pandas_data.itertuples(index=False):
+                yield [
+                    _extract_pandas_value(value, field_type)
+                    for value, field_type in zip(row, self.field_types)
+                ]
