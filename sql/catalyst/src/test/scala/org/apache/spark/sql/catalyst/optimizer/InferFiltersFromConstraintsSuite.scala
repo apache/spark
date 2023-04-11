@@ -371,4 +371,22 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
     val optimized = Optimize.execute(originalQuery)
     comparePlans(optimized, correctAnswer)
   }
+
+  test("SPARK-43095: Avoid Once strategy's idempotence is broken for batch: Infer Filters") {
+    val x = testRelation.as("x")
+    val y = testRelation.as("y")
+    val z = testRelation.as("z")
+
+    val originalQuery =
+      x.join(y, condition = Some($"x.a" === $"y.a"))
+        .select($"x.a", $"x.a".as("xa")).as("xy")
+        .join(z, condition = Some($"xy.a" === $"z.a"))
+
+    val correctAnswer =
+      x.where($"a".isNotNull).join(y.where($"a".isNotNull), condition = Some($"x.a" === $"y.a"))
+        .select($"x.a", $"x.a".as("xa")).as("xy")
+        .join(z.where($"a".isNotNull), condition = Some($"xy.a" === $"z.a"))
+
+    comparePlans(InferFiltersFromConstraints(originalQuery.analyze), correctAnswer.analyze)
+  }
 }

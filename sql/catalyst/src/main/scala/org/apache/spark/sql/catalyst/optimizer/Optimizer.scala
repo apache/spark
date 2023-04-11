@@ -1430,6 +1430,10 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan]
       .union(constructIsNotNullConstraints(constraints, plan.output))
       .filter { c =>
         c.references.nonEmpty && c.references.subsetOf(plan.outputSet) && c.deterministic
+      }.filterNot {
+        // Avoid once strategy idempotence is broken.
+        case a EqualNullSafe b => a.semanticEquals(b)
+        case _ => false
       } -- plan.constraints
     if (newPredicates.isEmpty) {
       plan
