@@ -41,7 +41,7 @@ import org.apache.spark.sql.execution.{SparkPlan, SQLExecution}
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, AdaptiveSparkPlanHelper, QueryStageExec}
 import org.apache.spark.sql.execution.arrow.ArrowConverters
 import org.apache.spark.sql.types.{ArrayType, DataType, MapType, StructField, StructType, UserDefinedType}
-import org.apache.spark.util.ThreadUtils
+import org.apache.spark.util.{ThreadUtils, Utils}
 
 class SparkConnectStreamHandler(responseObserver: StreamObserver[ExecutePlanResponse])
     extends Logging {
@@ -55,7 +55,8 @@ class SparkConnectStreamHandler(responseObserver: StreamObserver[ExecutePlanResp
 
       // Add debug information to the query execution so that the jobs are traceable.
       try {
-        val debugString = v.toString
+        val debugString =
+          Utils.redact(session.sessionState.conf.stringRedactionPattern, v.toString)
         session.sparkContext.setLocalProperty(
           "callSite.short",
           s"Spark Connect - ${StringUtils.abbreviate(debugString, 128)}")

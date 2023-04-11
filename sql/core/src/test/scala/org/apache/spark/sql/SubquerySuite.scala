@@ -525,11 +525,11 @@ class SubquerySuite extends QueryTest
   }
 
   test("SPARK-18504 extra GROUP BY column in correlated scalar subquery is not permitted") {
-    withTempView("t") {
-      Seq((1, 1), (1, 2)).toDF("c1", "c2").createOrReplaceTempView("t")
+    withTempView("v") {
+      Seq((1, 1), (1, 2)).toDF("c1", "c2").createOrReplaceTempView("v")
 
       val exception = intercept[AnalysisException] {
-        sql("select (select sum(-1) from t t2 where t1.c2 = t2.c1 group by t2.c2) sum from t t1")
+        sql("select (select sum(-1) from v t2 where t1.c2 = t2.c1 group by t2.c2) sum from v t1")
       }
       checkError(
         exception,
@@ -538,7 +538,7 @@ class SubquerySuite extends QueryTest
         parameters = Map("value" -> "c2"),
         sqlState = None,
         context = ExpectedContext(
-          fragment = "(select sum(-1) from t t2 where t1.c2 = t2.c1 group by t2.c2)",
+          fragment = "(select sum(-1) from v t2 where t1.c2 = t2.c1 group by t2.c2)",
           start = 7, stop = 67)) }
   }
 
@@ -1126,9 +1126,9 @@ class SubquerySuite extends QueryTest
   }
 
   test("SPARK-20688: correctly check analysis for scalar sub-queries") {
-    withTempView("t") {
-      Seq(1 -> "a").toDF("i", "j").createOrReplaceTempView("t")
-      val query = "SELECT (SELECT count(*) FROM t WHERE a = 1)"
+    withTempView("v") {
+      Seq(1 -> "a").toDF("i", "j").createOrReplaceTempView("v")
+      val query = "SELECT (SELECT count(*) FROM v WHERE a = 1)"
       checkError(
         exception =
           intercept[AnalysisException](sql(query)),
@@ -1136,7 +1136,7 @@ class SubquerySuite extends QueryTest
         sqlState = None,
         parameters = Map(
           "objectName" -> "`a`",
-          "proposal" -> "`t`.`i`, `t`.`j`"),
+          "proposal" -> "`v`.`i`, `v`.`j`"),
         context = ExpectedContext(
           fragment = "a",
           start = 37,
@@ -2032,15 +2032,15 @@ class SubquerySuite extends QueryTest
   }
 
   test("SPARK-28379: non-aggregated single row correlated scalar subquery") {
-    withTempView("t") {
-      Seq((0, 1), (1, 2)).toDF("c1", "c2").createOrReplaceTempView("t")
+    withTempView("v") {
+      Seq((0, 1), (1, 2)).toDF("c1", "c2").createOrReplaceTempView("v")
       // inline table
       checkAnswer(
-        sql("select c1, c2, (select col1 from values (0, 1) where col2 = c2) from t"),
+        sql("select c1, c2, (select col1 from values (0, 1) where col2 = c2) from v"),
         Row(0, 1, 0) :: Row(1, 2, null) :: Nil)
       // one row relation
       checkAnswer(
-        sql("select c1, c2, (select a from (select 1 as a) where a = c2) from t"),
+        sql("select c1, c2, (select a from (select 1 as a) where a = c2) from v"),
         Row(0, 1, 1) :: Row(1, 2, null) :: Nil)
       // limit 1 with order by
       checkAnswer(
@@ -2048,7 +2048,7 @@ class SubquerySuite extends QueryTest
           """
             |select c1, c2, (
             |  select b from (select * from l order by a asc nulls last limit 1) where a = c2
-            |) from t
+            |) from v
             |""".stripMargin),
         Row(0, 1, 2.0) :: Row(1, 2, null) :: Nil)
       // limit 1 with window
@@ -2059,7 +2059,7 @@ class SubquerySuite extends QueryTest
             |  select w from (
             |    select a, sum(b) over (partition by a) w from l order by a asc nulls last limit 1
             |  ) where a = c1 + c2
-            |) from t
+            |) from v
             |""".stripMargin),
         Row(0, 1, 4.0) :: Row(1, 2, null) :: Nil)
       // set operations
@@ -2068,7 +2068,7 @@ class SubquerySuite extends QueryTest
           """
             |select c1, c2, (
             |  select a from ((select 1 as a) intersect (select 1 as a)) where a = c2
-            |) from t
+            |) from v
             |""".stripMargin),
         Row(0, 1, 1) :: Row(1, 2, null) :: Nil)
       // join
@@ -2078,17 +2078,17 @@ class SubquerySuite extends QueryTest
             |select c1, c2, (
             |  select a from (select * from (select 1 as a) join (select 1 as b) on a = b)
             |  where a = c2
-            |) from t
+            |) from v
             |""".stripMargin),
         Row(0, 1, 1) :: Row(1, 2, null) :: Nil)
     }
   }
 
   test("SPARK-35080: correlated equality predicates contain only outer references") {
-    withTempView("t") {
-      Seq((0, 1), (1, 1)).toDF("c1", "c2").createOrReplaceTempView("t")
+    withTempView("v") {
+      Seq((0, 1), (1, 1)).toDF("c1", "c2").createOrReplaceTempView("v")
       checkAnswer(
-        sql("select c1, c2, (select count(*) from l where c1 = c2) from t"),
+        sql("select c1, c2, (select count(*) from l where c1 = c2) from v"),
         Row(0, 1, 0) :: Row(1, 1, 8) :: Nil)
     }
   }
@@ -2159,18 +2159,18 @@ class SubquerySuite extends QueryTest
   }
 
   test("SPARK-36747: should not combine Project with Aggregate") {
-    withTempView("t") {
-      Seq((0, 1), (1, 2)).toDF("c1", "c2").createOrReplaceTempView("t")
+    withTempView("v") {
+      Seq((0, 1), (1, 2)).toDF("c1", "c2").createOrReplaceTempView("v")
       checkAnswer(
         sql("""
-              |SELECT m, (SELECT SUM(c2) FROM t WHERE c1 = m)
-              |FROM (SELECT MIN(c2) AS m FROM t)
+              |SELECT m, (SELECT SUM(c2) FROM v WHERE c1 = m)
+              |FROM (SELECT MIN(c2) AS m FROM v)
               |""".stripMargin),
         Row(1, 2) :: Nil)
       checkAnswer(
         sql("""
-              |SELECT c, (SELECT SUM(c2) FROM t WHERE c1 = c)
-              |FROM (SELECT c1 AS c FROM t GROUP BY c1)
+              |SELECT c, (SELECT SUM(c2) FROM v WHERE c1 = c)
+              |FROM (SELECT c1 AS c FROM v GROUP BY c1)
               |""".stripMargin),
         Row(0, 1) :: Row(1, 2) :: Nil)
     }
@@ -2545,18 +2545,18 @@ class SubquerySuite extends QueryTest
     // This test contains a subquery expression with another subquery expression nested inside.
     // It acts as a regression test to ensure that the MergeScalarSubqueries rule does not attempt
     // to merge them together.
-    withTable("t", "t2") {
-      sql("create table t(col int) using csv")
-      checkAnswer(sql("select(select sum((select sum(col) from t)) from t)"), Row(null))
+    withTable("t1", "t2") {
+      sql("create table t1(col int) using csv")
+      checkAnswer(sql("select(select sum((select sum(col) from t1)) from t1)"), Row(null))
 
       checkAnswer(sql(
         """
           |select
           |  (select sum(
           |    (select sum(
-          |        (select sum(col) from t))
-          |     from t))
-          |  from t)
+          |        (select sum(col) from t1))
+          |     from t1))
+          |  from t1)
           |""".stripMargin),
         Row(null))
 
@@ -2566,9 +2566,9 @@ class SubquerySuite extends QueryTest
           |select
           |  (select sum(
           |    (select sum(
-          |        (select sum(col) from t))
+          |        (select sum(col) from t1))
           |     from t2))
-          |  from t)
+          |  from t1)
           |""".stripMargin),
         Row(null))
     }
@@ -2699,22 +2699,17 @@ class SubquerySuite extends QueryTest
   test("SPARK-42937: Outer join with subquery in condition") {
     withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
       SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
-      withTempView("t2") {
-        // this is the same as the view t created in beforeAll, but that gets dropped by
-        // one of the tests above
-        r.filter($"c".isNotNull && $"d".isNotNull).createOrReplaceTempView("t2")
-        val expected = Row(1, 2.0d, null, null) :: Row(1, 2.0d, null, null) ::
-          Row(3, 3.0d, 3, 2.0d) :: Row(null, 5.0d, null, null) :: Nil
-        checkAnswer(sql(
-          """
-            |select *
-            |from l
-            |left outer join r
-            |on a = c
-            |and a in (select c from t2 where d in (1.0, 2.0))
-            |where b > 1.0""".stripMargin),
-          expected)
-      }
+      val expected = Row(1, 2.0d, null, null) :: Row(1, 2.0d, null, null) ::
+        Row(3, 3.0d, 3, 2.0d) :: Row(null, 5.0d, null, null) :: Nil
+      checkAnswer(sql(
+        """
+          |select *
+          |from l
+          |left outer join r
+          |on a = c
+          |and a in (select c from t where d in (1.0, 2.0))
+          |where b > 1.0""".stripMargin),
+        expected)
     }
   }
 }

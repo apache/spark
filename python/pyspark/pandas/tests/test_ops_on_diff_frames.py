@@ -35,7 +35,7 @@ from pyspark.pandas.typedef.typehints import (
 )
 
 
-class OpsOnDiffFramesEnabledTest(PandasOnSparkTestCase, SQLTestUtils):
+class OpsOnDiffFramesEnabledTestsMixin:
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
@@ -1118,7 +1118,7 @@ class OpsOnDiffFramesEnabledTest(PandasOnSparkTestCase, SQLTestUtils):
         self.assert_eq(psdf.sort_index(), pdf.sort_index())
 
 
-class OpsOnDiffFramesDisabledTest(PandasOnSparkTestCase, SQLTestUtils):
+class OpsOnDiffFramesDisabledTestsMixin:
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
@@ -1324,6 +1324,18 @@ class OpsOnDiffFramesDisabledTest(PandasOnSparkTestCase, SQLTestUtils):
                 psser.eq(other)
             with self.assertRaisesRegex(ValueError, "Cannot combine the series or dataframe"):
                 psser == other
+
+
+class OpsOnDiffFramesEnabledTests(
+    OpsOnDiffFramesEnabledTestsMixin, PandasOnSparkTestCase, SQLTestUtils
+):
+    pass
+
+
+class OpsOnDiffFramesDisabledTests(
+    OpsOnDiffFramesDisabledTestsMixin, PandasOnSparkTestCase, SQLTestUtils
+):
+    pass
 
 
 if __name__ == "__main__":
