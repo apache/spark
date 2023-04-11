@@ -32,7 +32,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.connect.artifact.SparkConnectArtifactManager
-import org.apache.spark.sql.connect.common.DataTypeProtoConverter
+import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, ProtoUtils}
 import org.apache.spark.sql.connect.common.LiteralValueProtoConverter.toLiteralProto
 import org.apache.spark.sql.connect.config.Connect.CONNECT_GRPC_ARROW_MAX_BATCH_SIZE
 import org.apache.spark.sql.connect.planner.SparkConnectPlanner
@@ -54,19 +54,15 @@ class SparkConnectStreamHandler(responseObserver: StreamObserver[ExecutePlanResp
     session.withActive {
 
       // Add debug information to the query execution so that the jobs are traceable.
-      try {
-        val debugString =
-          Utils.redact(session.sessionState.conf.stringRedactionPattern, v.toString)
-        session.sparkContext.setLocalProperty(
-          "callSite.short",
-          s"Spark Connect - ${StringUtils.abbreviate(debugString, 128)}")
-        session.sparkContext.setLocalProperty(
-          "callSite.long",
-          StringUtils.abbreviate(debugString, 2048))
-      } catch {
-        case e: Throwable =>
-          logWarning("Fail to extract or attach the debug information", e)
-      }
+      val debugString = Utils.redact(
+        session.sessionState.conf.stringRedactionPattern,
+        ProtoUtils.redact(v).toString)
+      session.sparkContext.setLocalProperty(
+        "callSite.short",
+        s"Spark Connect - ${StringUtils.abbreviate(debugString, 128)}")
+      session.sparkContext.setLocalProperty(
+        "callSite.long",
+        StringUtils.abbreviate(debugString, 2048))
 
       v.getPlan.getOpTypeCase match {
         case proto.Plan.OpTypeCase.COMMAND => handleCommand(session, v)
