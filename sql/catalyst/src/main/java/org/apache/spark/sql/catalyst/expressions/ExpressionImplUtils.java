@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions;
 
+import org.apache.spark.SparkException;
 import org.apache.spark.sql.errors.QueryExecutionErrors;
 import org.apache.spark.unsafe.types.UTF8String;
 
@@ -27,6 +28,7 @@ import javax.crypto.spec.SecretKeySpec;
 import java.nio.ByteBuffer;
 import java.security.GeneralSecurityException;
 import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.util.Arrays;
 
@@ -133,15 +135,7 @@ public class ExpressionImplUtils {
         if (opmode == Cipher.ENCRYPT_MODE) {
           byte[] salt = new byte[CBC_SALT_LEN];
           secureRandom.nextBytes(salt);
-          final byte[] keyAndSalt = arrConcat(key, salt);
-          byte[] hash = new byte[0];
-          byte[] keyAndIv = new byte[0];
-          for (int i = 0; i < 3 && keyAndIv.length < key.length + CBC_IV_LEN; i++) {
-            final byte[] hashData = arrConcat(hash, keyAndSalt);
-            final MessageDigest md = MessageDigest.getInstance("SHA-256");
-            hash = md.digest(hashData);
-            keyAndIv = arrConcat(keyAndIv, hash);
-          }
+          final byte[] keyAndIv = getKeyAndIv(key, salt);
           final byte[] keyValue = Arrays.copyOfRange(keyAndIv, 0, key.length);
           final byte[] iv = Arrays.copyOfRange(keyAndIv, key.length, key.length + CBC_IV_LEN);
           cipher.init(
@@ -162,17 +156,9 @@ public class ExpressionImplUtils {
             throw new IllegalArgumentException(
               "Initial bytes from input do not match OpenSSL SALTED_MAGIC salt value.");
           }
-          final byte[] salt = Arrays.copyOfRange(input, SALTED_MAGIC.length,
-            SALTED_MAGIC.length + CBC_SALT_LEN);
-          final byte[] keyAndSalt = arrConcat(key, salt);
-          byte[] hash = new byte[0];
-          byte[] keyAndIv = new byte[0];
-          for (int i = 0; i < 3 && keyAndIv.length < key.length + CBC_IV_LEN; i++) {
-            final byte[] hashData = arrConcat(hash, keyAndSalt);
-            final MessageDigest md = MessageDigest.getInstance("SHA-256");
-            hash = md.digest(hashData);
-            keyAndIv = arrConcat(keyAndIv, hash);
-          }
+          final byte[] salt = Arrays.copyOfRange(
+            input, SALTED_MAGIC.length, SALTED_MAGIC.length + CBC_SALT_LEN);
+          final byte[] keyAndIv = getKeyAndIv(key, salt);
           final byte[] keyValue = Arrays.copyOfRange(keyAndIv, 0, key.length);
           final byte[] iv = Arrays.copyOfRange(keyAndIv, key.length, key.length + CBC_IV_LEN);
           cipher.init(
@@ -187,6 +173,23 @@ public class ExpressionImplUtils {
     } catch (GeneralSecurityException e) {
       throw QueryExecutionErrors.aesCryptoError(e.getMessage());
     }
+  }
+
+  private static byte[] getKeyAndIv(byte[] key, byte[] salt) {
+    final byte[] keyAndSalt = arrConcat(key, salt);
+    byte[] hash = new byte[0];
+    byte[] keyAndIv = new byte[0];
+    for (int i = 0; i < 3 && keyAndIv.length < key.length + CBC_IV_LEN; i++) {
+      final byte[] hashData = arrConcat(hash, keyAndSalt);
+      try {
+        final MessageDigest md = MessageDigest.getInstance("SHA-256");
+        hash = md.digest(hashData);
+        keyAndIv = arrConcat(keyAndIv, hash);
+      } catch (NoSuchAlgorithmException e) {
+        // Double-check the used algorithm in the message digest.
+      }
+    }
+    return keyAndIv;
   }
 
   private static byte[] arrConcat(final byte[] arr1, final byte[] arr2) {
