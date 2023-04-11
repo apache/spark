@@ -1155,7 +1155,7 @@ All unpivot value columns must have the same size as there are value column name
 
 [SQLSTATE: 42704](sql-error-conditions-sqlstates.html#class-42-syntax-error-or-access-rule-violation)
 
-Unrecognized SQL type `<typeName>`.
+Unrecognized SQL type - name: `<typeName>`, id: `<jdbcType>`.
 
 ### UNRESOLVED_ALL_IN_GROUP_BY
 

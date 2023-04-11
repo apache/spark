@@ -1012,10 +1012,10 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       messageParameters = Map("catalogString" -> dt.catalogString))
   }
 
-  def unrecognizedSqlTypeError(sqlType: Int): Throwable = {
+  def unrecognizedSqlTypeError(jdbcTypeId: String, typeName: String): Throwable = {
     new SparkSQLException(
       errorClass = "UNRECOGNIZED_SQL_TYPE",
-      messageParameters = Map("typeName" -> sqlType.toString))
+      messageParameters = Map("typeName" -> typeName, "jdbcType" -> jdbcTypeId))
   }
 
   def unsupportedJdbcTypeError(content: String): SparkSQLException = {
