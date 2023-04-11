@@ -154,7 +154,6 @@ def _test() -> None:
     import os
     from pyspark.sql import SparkSession as PySparkSession
     import pyspark.sql.connect.streaming.query
-    from py4j.protocol import Py4JError
 
     os.chdir(os.environ["SPARK_HOME"])
 

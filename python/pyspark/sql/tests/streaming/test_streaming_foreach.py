@@ -17,7 +17,6 @@
 
 import os
 import tempfile
-import time
 
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 

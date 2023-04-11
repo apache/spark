@@ -17,7 +17,6 @@
 
 import unittest
 
-from pyspark.testing.connectutils import should_test_connect
 from pyspark.sql.tests.streaming.test_streaming import StreamingTestsMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
 
