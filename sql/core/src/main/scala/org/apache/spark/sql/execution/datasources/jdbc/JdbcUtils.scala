@@ -187,7 +187,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
     case java.sql.Types.BIT => BooleanType // @see JdbcDialect for quirks
     case java.sql.Types.BLOB => BinaryType
     case java.sql.Types.BOOLEAN => BooleanType
-    case java.sql.Types.CHAR => StringType
+    case java.sql.Types.CHAR => CharType(precision)
     case java.sql.Types.CLOB => StringType
     case java.sql.Types.DATE => DateType
     case java.sql.Types.DECIMAL if precision != 0 || scale != 0 =>
@@ -216,7 +216,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
     case java.sql.Types.TIMESTAMP => TimestampType
     case java.sql.Types.TINYINT => IntegerType
     case java.sql.Types.VARBINARY => BinaryType
-    case java.sql.Types.VARCHAR => StringType
+    case java.sql.Types.VARCHAR => VarcharType(precision)
     case _ =>
       // For unmatched types:
       // including java.sql.Types.ARRAY,DATALINK,DISTINCT,JAVA_OBJECT,NULL,OTHER,REF_CURSOR,
