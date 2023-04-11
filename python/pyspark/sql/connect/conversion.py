@@ -179,16 +179,27 @@ class LocalDataToArrowConversion:
 
             return convert_binary
 
-        elif isinstance(dataType, (TimestampType, TimestampNTZType)):
+        elif isinstance(dataType, TimestampType):
 
-            def convert_timestample(value: Any) -> Any:
+            def convert_timestamp(value: Any) -> Any:
                 if value is None:
                     return None
                 else:
                     assert isinstance(value, datetime.datetime)
                     return value.astimezone(datetime.timezone.utc)
 
-            return convert_timestample
+            return convert_timestamp
+
+        elif isinstance(dataType, TimestampNTZType):
+
+            def convert_timestamp_ntz(value: Any) -> Any:
+                if value is None:
+                    return None
+                else:
+                    assert isinstance(value, datetime.datetime) and value.tzinfo is None
+                    return value
+
+            return convert_timestamp_ntz
 
         elif isinstance(dataType, DecimalType):
 
@@ -383,20 +394,27 @@ class ArrowTableToRowsConversion:
 
             return convert_binary
 
-        elif isinstance(dataType, (TimestampType, TimestampNTZType)):
+        elif isinstance(dataType, TimestampType):
 
             def convert_timestample(value: Any) -> Any:
                 if value is None:
                     return None
                 else:
                     assert isinstance(value, datetime.datetime)
-                    if value.tzinfo is not None:
-                        # always remove the time zone for now
-                        return value.replace(tzinfo=None)
-                    else:
-                        return value
+                    return value.astimezone().replace(tzinfo=None)
 
             return convert_timestample
+
+        elif isinstance(dataType, TimestampNTZType):
+
+            def convert_timestample_ntz(value: Any) -> Any:
+                if value is None:
+                    return None
+                else:
+                    assert isinstance(value, datetime.datetime)
+                    return value
+
+            return convert_timestample_ntz
 
         elif isinstance(dataType, UserDefinedType):
             udt: UserDefinedType = dataType

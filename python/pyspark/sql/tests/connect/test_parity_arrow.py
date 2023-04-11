@@ -102,11 +102,6 @@ class ArrowParityTests(ArrowTestsMixin, ReusedConnectTestCase):
     def test_toPandas_with_map_type_nulls(self):
         self.check_toPandas_with_map_type_nulls(True)
 
-    # TODO(SPARK-42985): Respect session timezone
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_createDataFrame_respect_session_timezone(self):
-        self.check_createDataFrame_respect_session_timezone(True)
-
     def test_createDataFrame_with_array_type(self):
         self.check_createDataFrame_with_array_type(True)
 
