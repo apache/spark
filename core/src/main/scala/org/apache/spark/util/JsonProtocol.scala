@@ -545,7 +545,7 @@ private[spark] object JsonProtocol {
       g.writeNumberField("Total Records Read", taskMetrics.shuffleReadMetrics.recordsRead)
       g.writeNumberField("Remote Requests Duration",
         taskMetrics.shuffleReadMetrics.remoteReqsDuration)
-      g.writeFieldName("Push Based Shuffle")
+      g.writeFieldName("Shuffle Push Read Metrics")
       writeShufflePushReadMetrics()
       g.writeEndObject()
     }
