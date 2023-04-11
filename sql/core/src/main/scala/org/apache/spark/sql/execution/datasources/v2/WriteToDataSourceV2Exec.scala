@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
-import java.util.UUID
-
 import scala.collection.JavaConverters._
 
 import org.apache.spark.{SparkEnv, SparkException, TaskContext}
@@ -27,17 +25,16 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, TableSpec, UnaryNode}
+import org.apache.spark.sql.catalyst.plans.logical.{AppendData, LogicalPlan, TableSpec, UnaryNode}
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, WriteDeltaProjections}
 import org.apache.spark.sql.catalyst.util.RowDeltaUtils.{DELETE_OPERATION, INSERT_OPERATION, UPDATE_OPERATION}
-import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Identifier, StagedTable, StagingTableCatalog, SupportsWrite, Table, TableCatalog}
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Identifier, StagedTable, StagingTableCatalog, Table, TableCatalog}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.metric.CustomMetric
-import org.apache.spark.sql.connector.write.{BatchWrite, DataWriter, DataWriterFactory, DeltaWrite, DeltaWriter, LogicalWriteInfoImpl, PhysicalWriteInfoImpl, V1Write, Write, WriterCommitMessage}
+import org.apache.spark.sql.connector.write.{BatchWrite, DataWriter, DataWriterFactory, DeltaWrite, DeltaWriter, PhysicalWriteInfoImpl, Write, WriterCommitMessage}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.execution.metric.{CustomMetrics, SQLMetric, SQLMetrics}
-import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.{LongAccumulator, Utils}
 
 /**
@@ -69,10 +66,9 @@ case class CreateTableAsSelectExec(
     catalog: TableCatalog,
     ident: Identifier,
     partitioning: Seq[Transform],
-    plan: LogicalPlan,
-    query: SparkPlan,
+    query: LogicalPlan,
     tableSpec: TableSpec,
-    writeOptions: CaseInsensitiveStringMap,
+    writeOptions: Map[String, String],
     ifNotExists: Boolean) extends TableWriteExecHelper {
 
   val properties = CatalogV2Util.convertTableProperties(tableSpec)
@@ -90,11 +86,8 @@ case class CreateTableAsSelectExec(
       CharVarcharUtils.getRawSchema(query.schema, conf).asNullable)
     val table = catalog.createTable(ident, columns,
       partitioning.toArray, properties.asJava)
-    writeToTable(catalog, table, writeOptions, ident)
+    writeToTable(catalog, table, writeOptions, ident, query)
   }
-
-  override protected def withNewChildInternal(newChild: SparkPlan): CreateTableAsSelectExec =
-    copy(query = newChild)
 }
 
 /**
@@ -110,10 +103,9 @@ case class AtomicCreateTableAsSelectExec(
     catalog: StagingTableCatalog,
     ident: Identifier,
     partitioning: Seq[Transform],
-    plan: LogicalPlan,
-    query: SparkPlan,
+    query: LogicalPlan,
     tableSpec: TableSpec,
-    writeOptions: CaseInsensitiveStringMap,
+    writeOptions: Map[String, String],
     ifNotExists: Boolean) extends TableWriteExecHelper {
 
   val properties = CatalogV2Util.convertTableProperties(tableSpec)
@@ -130,11 +122,8 @@ case class AtomicCreateTableAsSelectExec(
       CharVarcharUtils.getRawSchema(query.schema, conf).asNullable)
     val stagedTable = catalog.stageCreate(
       ident, columns, partitioning.toArray, properties.asJava)
-    writeToTable(catalog, stagedTable, writeOptions, ident)
+    writeToTable(catalog, stagedTable, writeOptions, ident, query)
   }
-
-  override protected def withNewChildInternal(newChild: SparkPlan): AtomicCreateTableAsSelectExec =
-    copy(query = newChild)
 }
 
 /**
@@ -151,10 +140,9 @@ case class ReplaceTableAsSelectExec(
     catalog: TableCatalog,
     ident: Identifier,
     partitioning: Seq[Transform],
-    plan: LogicalPlan,
-    query: SparkPlan,
+    query: LogicalPlan,
     tableSpec: TableSpec,
-    writeOptions: CaseInsensitiveStringMap,
+    writeOptions: Map[String, String],
     orCreate: Boolean,
     invalidateCache: (TableCatalog, Table, Identifier) => Unit) extends TableWriteExecHelper {
 
@@ -180,11 +168,8 @@ case class ReplaceTableAsSelectExec(
       CharVarcharUtils.getRawSchema(query.schema, conf).asNullable)
     val table = catalog.createTable(
       ident, columns, partitioning.toArray, properties.asJava)
-    writeToTable(catalog, table, writeOptions, ident)
+    writeToTable(catalog, table, writeOptions, ident, query)
   }
-
-  override protected def withNewChildInternal(newChild: SparkPlan): ReplaceTableAsSelectExec =
-    copy(query = newChild)
 }
 
 /**
@@ -203,10 +188,9 @@ case class AtomicReplaceTableAsSelectExec(
     catalog: StagingTableCatalog,
     ident: Identifier,
     partitioning: Seq[Transform],
-    plan: LogicalPlan,
-    query: SparkPlan,
+    query: LogicalPlan,
     tableSpec: TableSpec,
-    writeOptions: CaseInsensitiveStringMap,
+    writeOptions: Map[String, String],
     orCreate: Boolean,
     invalidateCache: (TableCatalog, Table, Identifier) => Unit) extends TableWriteExecHelper {
 
@@ -233,11 +217,8 @@ case class AtomicReplaceTableAsSelectExec(
     } else {
       throw QueryCompilationErrors.cannotReplaceMissingTableError(ident)
     }
-    writeToTable(catalog, staged, writeOptions, ident)
+    writeToTable(catalog, staged, writeOptions, ident, query)
   }
-
-  override protected def withNewChildInternal(newChild: SparkPlan): AtomicReplaceTableAsSelectExec =
-    copy(query = newChild)
 }
 
 /**
@@ -578,38 +559,27 @@ case class DeltaWithMetadataWritingSparkTask(
   }
 }
 
-private[v2] trait TableWriteExecHelper extends V2TableWriteExec with SupportsV1Write {
+private[v2] trait TableWriteExecHelper extends LeafV2CommandExec {
+  override def output: Seq[Attribute] = Nil
+
   protected def writeToTable(
       catalog: TableCatalog,
       table: Table,
-      writeOptions: CaseInsensitiveStringMap,
-      ident: Identifier): Seq[InternalRow] = {
+      writeOptions: Map[String, String],
+      ident: Identifier,
+      query: LogicalPlan): Seq[InternalRow] = {
     Utils.tryWithSafeFinallyAndFailureCallbacks({
+      val relation = DataSourceV2Relation.create(table, Some(catalog), Some(ident))
+      val append = AppendData.byPosition(relation, query, writeOptions)
+      val qe = session.sessionState.executePlan(append)
+      qe.assertCommandExecuted()
+
       table match {
-        case table: SupportsWrite =>
-          val info = LogicalWriteInfoImpl(
-            queryId = UUID.randomUUID().toString,
-            query.schema,
-            writeOptions)
-          val writeBuilder = table.newWriteBuilder(info)
-
-          val write = writeBuilder.build()
-          val writtenRows = write match {
-            case v1: V1Write => writeWithV1(v1.toInsertableRelation)
-            case v2 => writeWithV2(v2.toBatch)
-          }
-
-          table match {
-            case st: StagedTable => st.commitStagedChanges()
-            case _ =>
-          }
-          writtenRows
-
+        case st: StagedTable => st.commitStagedChanges()
         case _ =>
-          // Table does not support writes - staged changes are also rolled back below if table
-          // is staging.
-          throw QueryExecutionErrors.unsupportedTableWritesError(ident)
       }
+
+      Nil
     })(catchBlock = {
       table match {
         // Failure rolls back the staged writes and metadata changes.
