@@ -20,9 +20,9 @@ package org.apache.spark.sql.catalyst.expressions.aggregate
 
 import java.util.Locale
 
+import org.apache.datasketches.SketchesArgumentException
 import org.apache.datasketches.hll.{HllSketch, TgtHllType, Union}
 import org.apache.datasketches.memory.Memory
-import org.apache.datasketches.SketchesArgumentException
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
