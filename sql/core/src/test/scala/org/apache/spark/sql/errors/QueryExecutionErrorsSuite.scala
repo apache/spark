@@ -140,6 +140,25 @@ class QueryExecutionErrorsSuite
     }
   }
 
+  test("INVALID_PARAMETER_VALUE.AES_SALTED_MAGIC: AES decrypt failure - invalid salt") {
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        sql(
+          """
+            |SELECT aes_decrypt(
+            |  unbase64('INVALID_SALT_ERGxwEOTDpDD4bQvDtQaNe+gXGudCcUk='),
+            |  '0000111122223333',
+            |  'CBC', 'PKCS')
+            |""".stripMargin).collect()
+      },
+      errorClass = "INVALID_PARAMETER_VALUE.AES_SALTED_MAGIC",
+      parameters = Map(
+        "parameter" -> "`expr`",
+        "functionName" -> "`aes_decrypt`",
+        "saltedMagic" -> "0x20D5402C80D200B4"),
+      sqlState = "22023")
+  }
+
   test("UNSUPPORTED_FEATURE: unsupported combinations of AES modes and padding") {
     val key16 = "abcdefghijklmnop"
     val key32 = "abcdefghijklmnop12345678ABCDEFGH"

@@ -153,8 +153,7 @@ public class ExpressionImplUtils {
           assert(opmode == Cipher.DECRYPT_MODE);
           final byte[] shouldBeMagic = Arrays.copyOfRange(input, 0, SALTED_MAGIC.length);
           if (!Arrays.equals(shouldBeMagic, SALTED_MAGIC)) {
-            throw new IllegalArgumentException(
-              "Initial bytes from input do not match OpenSSL SALTED_MAGIC salt value.");
+            throw QueryExecutionErrors.aesInvalidSalt(shouldBeMagic);
           }
           final byte[] salt = Arrays.copyOfRange(
             input, SALTED_MAGIC.length, SALTED_MAGIC.length + CBC_SALT_LEN);
