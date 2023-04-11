@@ -821,9 +821,10 @@ case class Divide(
   }
 
   private lazy val div: (Any, Any) => Any = dataType match {
-    case d @ DecimalType.Fixed(precision, scale) => (l, r) => {
-      val value =
-        PhysicalDecimalType(precision, scale).fractional.asInstanceOf[Fractional[Any]].div(l, r)
+    case d @ DecimalType.Fixed(precision, scale) =>
+      val fractional = PhysicalDecimalType(precision, scale).fractional
+      (l, r) => {
+      val value = fractional.asInstanceOf[Fractional[Any]].div(l, r)
       checkDecimalOverflow(value.asInstanceOf[Decimal], precision, scale)
     }
     case ft: FractionalType => PhysicalFractionalType.fractional(ft).div
