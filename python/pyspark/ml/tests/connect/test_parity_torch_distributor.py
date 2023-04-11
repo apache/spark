@@ -27,7 +27,7 @@ except ImportError:
     have_torch = False
 
 from pyspark.sql import SparkSession
-
+from pyspark.ml.torch.distributor import TorchDistributor
 from pyspark.ml.torch.tests.test_distributor import (
     TorchDistributorBaselineUnitTestsMixin,
     TorchDistributorLocalUnitTestsMixin,
@@ -66,9 +66,41 @@ class TorchDistributorLocalUnitTestsOnConnect(
         os.unlink(self.gpu_discovery_script_file.name)
         self.spark.stop()
 
-    @unittest.skip("Distributor on Connect doesn't use the GPUs on driver")
-    def test_local_training_succeeds(self):
-        super().test_local_training_succeeds()
+    def _get_inputs_for_test_local_training_succeeds(self):
+        return [
+            ("0,1,2", 1, True, "0,1,2"),
+            ("0,1,2", 3, True, "0,1,2"),
+            ("0,1,2", 2, False, "0,1,2"),
+            (None, 3, False, "NONE"),
+        ]
+
+
+@unittest.skipIf(not have_torch, "torch is required")
+class TorchDistributorLocalUnitTestsIIOnConnect(
+    TorchDistributorLocalUnitTestsMixin, unittest.TestCase
+):
+    def setUp(self) -> None:
+        class_name = self.__class__.__name__
+        conf = self._get_spark_conf()
+        builder = SparkSession.builder.appName(class_name)
+        for k, v in conf.getAll():
+            if k not in ["spark.master", "spark.remote", "spark.app.name"]:
+                builder = builder.config(k, v)
+        self.spark = builder.remote("local[4]").getOrCreate()
+        self.mnist_dir_path = tempfile.mkdtemp()
+
+    def tearDown(self) -> None:
+        shutil.rmtree(self.mnist_dir_path)
+        os.unlink(self.gpu_discovery_script_file.name)
+        self.spark.stop()
+
+    def _get_inputs_for_test_local_training_succeeds(self):
+        return [
+            ("0,1,2", 1, True, "0,1,2"),
+            ("0,1,2", 3, True, "0,1,2"),
+            ("0,1,2", 2, False, "0,1,2"),
+            (None, 3, False, "NONE"),
+        ]
 
 
 @unittest.skipIf(not have_torch, "torch is required")

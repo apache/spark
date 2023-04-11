@@ -479,6 +479,9 @@ class TorchDistributor(Distributor):
         cuda_state_was_set = CUDA_VISIBLE_DEVICES in os.environ
         old_cuda_visible_devices = os.environ.get(CUDA_VISIBLE_DEVICES, "")
         try:
+            # Only replace the GPUs with 'SparkContext.resources' in legacy mode.
+            # In connect mode, this replacement is skipped since only GPUs on the client side
+            # can be used.
             if self.use_gpu and not self.is_remote:
                 gpus_owned = _get_gpus_owned(self.spark)
                 random.seed(hash(train_object))

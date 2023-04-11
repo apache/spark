@@ -335,14 +335,17 @@ class TorchDistributorLocalUnitTestsMixin:
         self.assertEqual(_get_gpus_owned(self.spark), ["3", "4", "5"])
         self.delete_env_vars(env_vars)
 
-    def test_local_training_succeeds(self) -> None:
-        CUDA_VISIBLE_DEVICES = "CUDA_VISIBLE_DEVICES"
-        inputs = [
+    def _get_inputs_for_test_local_training_succeeds(self):
+        return [
             ("0,1,2", 1, True, "1"),
             ("0,1,2", 3, True, "1,2,0"),
             ("0,1,2", 2, False, "0,1,2"),
             (None, 3, False, "NONE"),
         ]
+
+    def test_local_training_succeeds(self) -> None:
+        CUDA_VISIBLE_DEVICES = "CUDA_VISIBLE_DEVICES"
+        inputs = self._get_inputs_for_test_local_training_succeeds()
 
         for i, (cuda_env_var, num_processes, use_gpu, expected) in enumerate(inputs):
             with self.subTest(f"subtest: {i + 1}"):
@@ -383,6 +386,21 @@ class TorchDistributorLocalUnitTests(TorchDistributorLocalUnitTestsMixin, unitte
         class_name = self.__class__.__name__
         conf = self._get_spark_conf()
         sc = SparkContext("local-cluster[2,2,1024]", class_name, conf=conf)
+        self.spark = SparkSession(sc)
+        self.mnist_dir_path = tempfile.mkdtemp()
+
+    def tearDown(self) -> None:
+        shutil.rmtree(self.mnist_dir_path)
+        os.unlink(self.gpu_discovery_script_file.name)
+        self.spark.stop()
+
+
+@unittest.skipIf(not have_torch, "torch is required")
+class TorchDistributorLocalUnitTestsII(TorchDistributorLocalUnitTestsMixin, unittest.TestCase):
+    def setUp(self) -> None:
+        class_name = self.__class__.__name__
+        conf = self._get_spark_conf()
+        sc = SparkContext("local[4]", class_name, conf=conf)
         self.spark = SparkSession(sc)
         self.mnist_dir_path = tempfile.mkdtemp()
 
