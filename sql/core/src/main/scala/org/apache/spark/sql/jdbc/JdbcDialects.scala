@@ -106,14 +106,16 @@ abstract class JdbcDialect extends Serializable with Logging {
   def getJDBCType(dt: DataType): Option[JdbcType] = None
 
   /**
-   * Convert java.sql.Timestamp to a Long value (internal representation of a TimestampNTZType)
-   * holding the microseconds since the epoch of 1970-01-01 00:00:00Z for this timestamp.
-   * @param Java Timestamp returned from JDBC driver getTimestamp method.
-   * @return A long value holding the microseconds from epoch to this time instant.
+   * Convert java.sql.Timestamp to a LocalDateTime representing the same wall-clock time as the
+   * value stored in a remote database.
+   * JDBC dialects should override this function to provide implementations that suite their
+   * JDBC drivers.
+   * @param t Timestamp returned from JDBC driver getTimestamp method.
+   * @return A LocalDateTime representing the same wall clock time as the timestamp in database.
    */
   @Since("3.5.0")
-  def convertJavaTimestampToTimestampNTZ(t: Timestamp): Long = {
-    DateTimeUtils.fromJavaTimestampNoRebase(t)
+  def convertJavaTimestampToTimestampNTZ(t: Timestamp): LocalDateTime = {
+    DateTimeUtils.microsToLocalDateTime(DateTimeUtils.fromJavaTimestampNoRebase(t))
   }
 
   /**
