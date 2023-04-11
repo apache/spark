@@ -26,7 +26,11 @@ import javax.crypto.spec.IvParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
 import java.nio.ByteBuffer;
 import java.security.GeneralSecurityException;
+import java.security.MessageDigest;
 import java.security.SecureRandom;
+import java.util.Arrays;
+
+import static java.nio.charset.StandardCharsets.US_ASCII;
 
 /**
  * An utility class for constructing expressions.
@@ -37,6 +41,10 @@ public class ExpressionImplUtils {
   private static final int GCM_TAG_LEN = 128;
 
   private static final int CBC_IV_LEN = 16;
+  private static final int CBC_SALT_LEN = 8;
+  /** OpenSSL's magic initial bytes. */
+  private static final String SALTED_STR = "Salted__";
+  private static final byte[] SALTED_MAGIC = SALTED_STR.getBytes(US_ASCII);
 
 
   /**
@@ -123,18 +131,54 @@ public class ExpressionImplUtils {
           (padding.equalsIgnoreCase("PKCS") || padding.equalsIgnoreCase("DEFAULT"))) {
         Cipher cipher = Cipher.getInstance("AES/CBC/PKCS5Padding");
         if (opmode == Cipher.ENCRYPT_MODE) {
-          byte[] iv = new byte[CBC_IV_LEN];
-          secureRandom.nextBytes(iv);
-          cipher.init(Cipher.ENCRYPT_MODE, secretKey, new IvParameterSpec(iv));
+          byte[] salt = new byte[CBC_SALT_LEN];
+          secureRandom.nextBytes(salt);
+          final byte[] keyAndSalt = arrConcat(key, salt);
+          byte[] hash = new byte[0];
+          byte[] keyAndIv = new byte[0];
+          for (int i = 0; i < 3 && keyAndIv.length < key.length + CBC_IV_LEN; i++) {
+            final byte[] hashData = arrConcat(hash, keyAndSalt);
+            final MessageDigest md = MessageDigest.getInstance("SHA-256");
+            hash = md.digest(hashData);
+            keyAndIv = arrConcat(keyAndIv, hash);
+          }
+          final byte[] keyValue = Arrays.copyOfRange(keyAndIv, 0, key.length);
+          final byte[] iv = Arrays.copyOfRange(keyAndIv, key.length, key.length + CBC_IV_LEN);
+          cipher.init(
+            Cipher.ENCRYPT_MODE,
+            new SecretKeySpec(keyValue, "AES"),
+            new IvParameterSpec(iv));
           byte[] encrypted = cipher.doFinal(input, 0, input.length);
-          ByteBuffer byteBuffer = ByteBuffer.allocate(iv.length + encrypted.length);
-          byteBuffer.put(iv);
+          ByteBuffer byteBuffer = ByteBuffer.allocate(
+            SALTED_MAGIC.length + CBC_SALT_LEN + encrypted.length);
+          byteBuffer.put(SALTED_MAGIC);
+          byteBuffer.put(salt);
           byteBuffer.put(encrypted);
           return byteBuffer.array();
         } else {
           assert(opmode == Cipher.DECRYPT_MODE);
-          IvParameterSpec parameterSpec = new IvParameterSpec(input, 0, CBC_IV_LEN);
-          cipher.init(Cipher.DECRYPT_MODE, secretKey, parameterSpec);
+          final byte[] shouldBeMagic = Arrays.copyOfRange(input, 0, SALTED_MAGIC.length);
+          if (!Arrays.equals(shouldBeMagic, SALTED_MAGIC)) {
+            throw new IllegalArgumentException(
+              "Initial bytes from input do not match OpenSSL SALTED_MAGIC salt value.");
+          }
+          final byte[] salt = Arrays.copyOfRange(input, SALTED_MAGIC.length,
+            SALTED_MAGIC.length + CBC_SALT_LEN);
+          final byte[] keyAndSalt = arrConcat(key, salt);
+          byte[] hash = new byte[0];
+          byte[] keyAndIv = new byte[0];
+          for (int i = 0; i < 3 && keyAndIv.length < key.length + CBC_IV_LEN; i++) {
+            final byte[] hashData = arrConcat(hash, keyAndSalt);
+            final MessageDigest md = MessageDigest.getInstance("SHA-256");
+            hash = md.digest(hashData);
+            keyAndIv = arrConcat(keyAndIv, hash);
+          }
+          final byte[] keyValue = Arrays.copyOfRange(keyAndIv, 0, key.length);
+          final byte[] iv = Arrays.copyOfRange(keyAndIv, key.length, key.length + CBC_IV_LEN);
+          cipher.init(
+            Cipher.DECRYPT_MODE,
+            new SecretKeySpec(keyValue, "AES"),
+            new IvParameterSpec(iv, 0, CBC_IV_LEN));
           return cipher.doFinal(input, CBC_IV_LEN, input.length - CBC_IV_LEN);
         }
       } else {
@@ -143,5 +187,12 @@ public class ExpressionImplUtils {
     } catch (GeneralSecurityException e) {
       throw QueryExecutionErrors.aesCryptoError(e.getMessage());
     }
+  }
+
+  private static byte[] arrConcat(final byte[] arr1, final byte[] arr2) {
+    final byte[] res = new byte[arr1.length + arr2.length];
+    System.arraycopy(arr1, 0, res, 0, arr1.length);
+    System.arraycopy(arr2, 0, res, arr1.length, arr2.length);
+    return res;
   }
 }
