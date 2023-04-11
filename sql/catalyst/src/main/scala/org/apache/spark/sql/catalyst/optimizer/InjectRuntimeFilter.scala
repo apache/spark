@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.optimizer
 
 import scala.annotation.tailrec
+import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.BloomFilterAggregate
@@ -121,7 +122,8 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
    */
   private def existsSelectiveFilterOverScan(
       plan: LogicalPlan,
-      filterCreationSideExp: Expression): Boolean = {
+      filterCreationSideExp: Expression,
+      filterCreationSidePlans: ArrayBuffer[LogicalPlan]): Boolean = {
     @tailrec
     def isSelective(
         p: LogicalPlan,
@@ -155,13 +157,17 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
         // do the pruning. For inner [[Join]]s, one side of the [[Join]] always produces a superset
         // of the join key values.
         if (isLeftSideSuperset(joinType, left, filterCreationSideExp)) {
-          isSelective(left, predicateReference, hasHitFilter, hasHitSelectiveFilter)
+          existsSelectiveFilterOverScan(left, filterCreationSideExp, filterCreationSidePlans)
         } else if (isRightSideSuperset(joinType, right, filterCreationSideExp)) {
-          isSelective(right, predicateReference, hasHitFilter, hasHitSelectiveFilter)
+          existsSelectiveFilterOverScan(right, filterCreationSideExp, filterCreationSidePlans)
         } else {
           false
         }
-      case _: LeafNode => hasHitSelectiveFilter
+      case _: LeafNode =>
+        if (hasHitSelectiveFilter) {
+          filterCreationSidePlans += plan
+        }
+        hasHitSelectiveFilter
       case _ => false
     }
 
@@ -190,27 +196,6 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
     case Inner | LeftOuter | RightOuter =>
       right.output.exists(_.semanticEquals(filterCreationSideExp))
     case _ => false
-  }
-
-  /**
-   * There are two situations with the filter creation side plan:
-   * 1. One side of [[Join]] as filter creation side plan directly.
-   * 2. Some side of [[Join]] may have multiple levels of [[Join]],
-   *    any non [[Join]] node in the entire [[Join]] tree may act as filter creation side plan.
-   */
-  private def extractFilterCreationSidePlan(
-      filterCreationSideExp: Expression,
-      filterCreationSidePlan: LogicalPlan): LogicalPlan = {
-    var selected = filterCreationSidePlan
-    filterCreationSidePlan.collectFirst {
-      case ExtractEquiJoinKeys(joinType, _, _, _, _, left, _, _)
-        if isLeftSideSuperset(joinType, left, filterCreationSideExp) =>
-        selected = extractFilterCreationSidePlan(filterCreationSideExp, left)
-      case ExtractEquiJoinKeys(joinType, _, _, _, _, _, right, _)
-        if isRightSideSuperset(joinType, right, filterCreationSideExp) =>
-        selected = extractFilterCreationSidePlan(filterCreationSideExp, right)
-    }
-    selected
   }
 
   private def isProbablyShuffleJoin(left: LogicalPlan,
@@ -266,9 +251,11 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
       filterCreationSide: LogicalPlan,
       filterApplicationSideExp: Expression,
       filterCreationSideExp: Expression,
-      hint: JoinHint): Boolean = {
+      hint: JoinHint,
+      filterCreationSidePlans: ArrayBuffer[LogicalPlan]): Boolean = {
     findExpressionAndTrackLineageDown(filterApplicationSideExp, filterApplicationSide).isDefined &&
-      existsSelectiveFilterOverScan(filterCreationSide, filterCreationSideExp) &&
+      existsSelectiveFilterOverScan(
+        filterCreationSide, filterCreationSideExp, filterCreationSidePlans) &&
       (isProbablyShuffleJoin(filterApplicationSide, filterCreationSide, hint) ||
         probablyHasShuffle(filterApplicationSide)) &&
       satisfyByteSizeRequirement(filterApplicationSide)
@@ -351,14 +338,16 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
             isSimpleExpression(l) && isSimpleExpression(r)) {
             val oldLeft = newLeft
             val oldRight = newRight
-            if (canPruneLeft(joinType) && filteringHasBenefit(left, right, l, r, hint)) {
-              val filterCreationSidePlan = extractFilterCreationSidePlan(r, right)
+            val filterCreationSidePlans = ArrayBuffer.empty[LogicalPlan]
+            if (canPruneLeft(joinType) &&
+              filteringHasBenefit(left, right, l, r, hint, filterCreationSidePlans)) {
+              val filterCreationSidePlan = filterCreationSidePlans.head
               newLeft = injectFilter(l, newLeft, r, filterCreationSidePlan)
             }
             // Did we actually inject on the left? If not, try on the right
             if (newLeft.fastEquals(oldLeft) && canPruneRight(joinType) &&
-              filteringHasBenefit(right, left, r, l, hint)) {
-              val filterCreationSidePlan = extractFilterCreationSidePlan(l, left)
+              filteringHasBenefit(right, left, r, l, hint, filterCreationSidePlans)) {
+              val filterCreationSidePlan = filterCreationSidePlans.head
               newRight = injectFilter(r, newRight, l, filterCreationSidePlan)
             }
             if (!newLeft.fastEquals(oldLeft) || !newRight.fastEquals(oldRight)) {
