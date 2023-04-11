@@ -3055,19 +3055,26 @@ class ApplyInPandasWithState(google.protobuf.message.Message):
     OUTPUT_MODE_FIELD_NUMBER: builtins.int
     TIMEOUT_CONF_FIELD_NUMBER: builtins.int
     @property
-    def input(self) -> global___Relation: ...
+    def input(self) -> global___Relation:
+        """(Required) Input relation for applyInPandasWithState."""
     @property
     def grouping_expressions(
         self,
     ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
         pyspark.sql.connect.proto.expressions_pb2.Expression
-    ]: ...
+    ]:
+        """(Required) Expressions for grouping keys."""
     @property
-    def func(self) -> pyspark.sql.connect.proto.expressions_pb2.CommonInlineUserDefinedFunction: ...
+    def func(self) -> pyspark.sql.connect.proto.expressions_pb2.CommonInlineUserDefinedFunction:
+        """(Required) Input user-defined function."""
     output_schema: builtins.str
+    """(Required) Schema for the output DataFrame."""
     state_schema: builtins.str
+    """(Required) Schema for the state."""
     output_mode: builtins.str
+    """(Required) The output mode of the function."""
     timeout_conf: builtins.str
+    """(Required) Timeout configuration for groups that do not receive data for a while."""
     def __init__(
         self,
         *,
