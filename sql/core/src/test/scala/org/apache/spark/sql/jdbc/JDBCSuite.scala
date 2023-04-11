@@ -18,7 +18,7 @@
 package org.apache.spark.sql.jdbc
 
 import java.math.BigDecimal
-import java.sql.{Date, DriverManager, SQLException, Timestamp}
+import java.sql.{Date, DriverManager, Timestamp}
 import java.time.{Instant, LocalDate, LocalDateTime}
 import java.util.{Calendar, GregorianCalendar, Properties, TimeZone}
 
@@ -28,7 +28,7 @@ import scala.util.Random
 import org.mockito.ArgumentMatchers._
 import org.mockito.Mockito._
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkException, SparkSQLException}
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row}
 import org.apache.spark.sql.catalyst.{analysis, TableIdentifier}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
@@ -1267,7 +1267,7 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
   test("SPARK 12941: The data type mapping for StringType to Oracle") {
     val oracleDialect = JdbcDialects.get("jdbc:oracle://127.0.0.1/db")
     assert(oracleDialect.getJDBCType(StringType).
-      map(_.databaseTypeDefinition).get == "VARCHAR2(255)")
+      map(_.databaseTypeDefinition).get == "CLOB")
   }
 
   test("SPARK-16625: General data types to be mapped to Oracle") {
@@ -1285,7 +1285,7 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
     assert(getJdbcType(oracleDialect, DoubleType) == "NUMBER(19, 4)")
     assert(getJdbcType(oracleDialect, ByteType) == "NUMBER(3)")
     assert(getJdbcType(oracleDialect, ShortType) == "NUMBER(5)")
-    assert(getJdbcType(oracleDialect, StringType) == "VARCHAR2(255)")
+    assert(getJdbcType(oracleDialect, StringType) == "CLOB")
     assert(getJdbcType(oracleDialect, BinaryType) == "BLOB")
     assert(getJdbcType(oracleDialect, DateType) == "DATE")
     assert(getJdbcType(oracleDialect, TimestampType) == "TIMESTAMP")
@@ -1447,14 +1447,19 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
   }
 
   test("unsupported types") {
-    var e = intercept[SQLException] {
-      spark.read.jdbc(urlWithUserAndPass, "TEST.TIMEZONE", new Properties()).collect()
-    }.getMessage
-    assert(e.contains("Unsupported type TIMESTAMP_WITH_TIMEZONE"))
-    e = intercept[SQLException] {
-      spark.read.jdbc(urlWithUserAndPass, "TEST.ARRAY_TABLE", new Properties()).collect()
-    }.getMessage
-    assert(e.contains("Unsupported type ARRAY"))
+    checkError(
+      exception = intercept[SparkSQLException] {
+        spark.read.jdbc(urlWithUserAndPass, "TEST.TIMEZONE", new Properties()).collect()
+      },
+      errorClass = "UNRECOGNIZED_SQL_TYPE",
+      parameters =
+        Map("typeName" -> "TIMESTAMP WITH TIME ZONE", "jdbcType" -> "TIMESTAMP_WITH_TIMEZONE"))
+    checkError(
+      exception = intercept[SparkSQLException] {
+        spark.read.jdbc(urlWithUserAndPass, "TEST.ARRAY_TABLE", new Properties()).collect()
+      },
+      errorClass = "UNRECOGNIZED_SQL_TYPE",
+      parameters = Map("typeName" -> "INTEGER ARRAY", "jdbcType" -> "ARRAY"))
   }
 
   test("SPARK-19318: Connection properties keys should be case-sensitive.") {

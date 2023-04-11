@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.plans.logical.statsEstimation
 
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap}
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, Statistics, Union}
+import org.apache.spark.sql.catalyst.types.PhysicalDataType
 import org.apache.spark.sql.types._
 
 /**
@@ -29,34 +30,8 @@ import org.apache.spark.sql.types._
 object UnionEstimation {
   import EstimationUtils._
 
-  private def createStatComparator(dt: DataType): (Any, Any) => Boolean = dt match {
-    case ByteType => (a: Any, b: Any) =>
-      ByteType.ordering.lt(a.asInstanceOf[Byte], b.asInstanceOf[Byte])
-    case ShortType => (a: Any, b: Any) =>
-      ShortType.ordering.lt(a.asInstanceOf[Short], b.asInstanceOf[Short])
-    case IntegerType => (a: Any, b: Any) =>
-      IntegerType.ordering.lt(a.asInstanceOf[Int], b.asInstanceOf[Int])
-    case LongType => (a: Any, b: Any) =>
-      LongType.ordering.lt(a.asInstanceOf[Long], b.asInstanceOf[Long])
-    case FloatType => (a: Any, b: Any) =>
-      FloatType.ordering.lt(a.asInstanceOf[Float], b.asInstanceOf[Float])
-    case DoubleType => (a: Any, b: Any) =>
-      DoubleType.ordering.lt(a.asInstanceOf[Double], b.asInstanceOf[Double])
-    case _: DecimalType => (a: Any, b: Any) =>
-      dt.asInstanceOf[DecimalType].ordering.lt(a.asInstanceOf[Decimal], b.asInstanceOf[Decimal])
-    case DateType => (a: Any, b: Any) =>
-      DateType.ordering.lt(a.asInstanceOf[DateType.InternalType],
-        b.asInstanceOf[DateType.InternalType])
-    case TimestampType => (a: Any, b: Any) =>
-      TimestampType.ordering.lt(a.asInstanceOf[TimestampType.InternalType],
-        b.asInstanceOf[TimestampType.InternalType])
-    case TimestampNTZType => (a: Any, b: Any) =>
-      TimestampNTZType.ordering.lt(a.asInstanceOf[TimestampNTZType.InternalType],
-        b.asInstanceOf[TimestampNTZType.InternalType])
-    case i: AnsiIntervalType => (a: Any, b: Any) =>
-      i.ordering.lt(a.asInstanceOf[i.InternalType], b.asInstanceOf[i.InternalType])
-    case _ =>
-      throw new IllegalStateException(s"Unsupported data type: ${dt.catalogString}")
+  private def createStatComparator(dt: DataType): (Any, Any) => Boolean = {
+    PhysicalDataType.ordering(dt).lt _
   }
 
   private def isTypeSupported(dt: DataType): Boolean = dt match {
