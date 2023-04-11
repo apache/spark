@@ -916,9 +916,11 @@ case class Cast(
     case TimestampType =>
       buildCast[Long](_, t => timestampToLong(t))
     case x: NumericType if ansiEnabled =>
-      b => PhysicalNumericType.exactNumeric(x).toLong(b)
+      val exactNumeric = PhysicalNumericType.exactNumeric(x)
+      b => exactNumeric.toLong(b)
     case x: NumericType =>
-      b => PhysicalNumericType.numeric(x).toLong(b)
+      val numeric = PhysicalNumericType.numeric(x)
+      b => numeric.toLong(b)
     case x: DayTimeIntervalType =>
       buildCast[Long](_, i => dayTimeIntervalToLong(i, x.startField, x.endField))
     case x: YearMonthIntervalType =>
@@ -948,9 +950,11 @@ case class Cast(
     case TimestampType =>
       buildCast[Long](_, t => timestampToLong(t).toInt)
     case x: NumericType if ansiEnabled =>
-      b => PhysicalNumericType.exactNumeric(x).toInt(b)
+      val exactNumeric = PhysicalNumericType.exactNumeric(x)
+      b => exactNumeric.toInt(b)
     case x: NumericType =>
-      b => PhysicalNumericType.numeric(x).toInt(b)
+      val numeric = PhysicalNumericType.numeric(x)
+      b => numeric.toInt(b)
     case x: DayTimeIntervalType =>
       buildCast[Long](_, i => dayTimeIntervalToInt(i, x.startField, x.endField))
     case x: YearMonthIntervalType =>
@@ -984,9 +988,10 @@ case class Cast(
     case TimestampType =>
       buildCast[Long](_, t => timestampToLong(t).toShort)
     case x: NumericType if ansiEnabled =>
+      val exactNumeric = PhysicalNumericType.exactNumeric(x)
       b =>
         val intValue = try {
-          PhysicalNumericType.exactNumeric(x).toInt(b)
+          exactNumeric.toInt(b)
         } catch {
           case _: ArithmeticException =>
             throw QueryExecutionErrors.castingCauseOverflowError(b, from, ShortType)
@@ -997,7 +1002,8 @@ case class Cast(
           throw QueryExecutionErrors.castingCauseOverflowError(b, from, ShortType)
         }
     case x: NumericType =>
-      b => PhysicalNumericType.numeric(x).toInt(b).toShort
+      val numeric = PhysicalNumericType.numeric(x)
+      b => numeric.toInt(b).toShort
     case x: DayTimeIntervalType =>
       buildCast[Long](_, i => dayTimeIntervalToShort(i, x.startField, x.endField))
     case x: YearMonthIntervalType =>
@@ -1031,9 +1037,10 @@ case class Cast(
     case TimestampType =>
       buildCast[Long](_, t => timestampToLong(t).toByte)
     case x: NumericType if ansiEnabled =>
+      val exactNumeric = PhysicalNumericType.exactNumeric(x)
       b =>
         val intValue = try {
-          PhysicalNumericType.exactNumeric(x).toInt(b)
+          exactNumeric.toInt(b)
         } catch {
           case _: ArithmeticException =>
             throw QueryExecutionErrors.castingCauseOverflowError(b, from, ByteType)
@@ -1044,7 +1051,8 @@ case class Cast(
           throw QueryExecutionErrors.castingCauseOverflowError(b, from, ByteType)
         }
     case x: NumericType =>
-      b => PhysicalNumericType.numeric(x).toInt(b).toByte
+      val numeric = PhysicalNumericType.numeric(x)
+      b => numeric.toInt(b).toByte
     case x: DayTimeIntervalType =>
       buildCast[Long](_, i => dayTimeIntervalToByte(i, x.startField, x.endField))
     case x: YearMonthIntervalType =>
@@ -1114,8 +1122,9 @@ case class Cast(
     case t: IntegralType =>
       b => changePrecision(Decimal(t.integral.asInstanceOf[Integral[Any]].toLong(b)), target)
     case x: FractionalType =>
+      val fractional = PhysicalFractionalType.fractional(x)
       b => try {
-        changePrecision(Decimal(PhysicalFractionalType.fractional(x).toDouble(b)), target)
+        changePrecision(Decimal(fractional.toDouble(b)), target)
       } catch {
         case _: NumberFormatException => null
       }
@@ -1156,7 +1165,8 @@ case class Cast(
     case TimestampType =>
       buildCast[Long](_, t => timestampToDouble(t))
     case x: NumericType =>
-      b => PhysicalNumericType.numeric(x).toDouble(b)
+      val numeric = PhysicalNumericType.numeric(x)
+      b => numeric.toDouble(b)
   }
 
   // FloatConverter
@@ -1182,7 +1192,8 @@ case class Cast(
     case TimestampType =>
       buildCast[Long](_, t => timestampToDouble(t).toFloat)
     case x: NumericType =>
-      b => PhysicalNumericType.numeric(x).toFloat(b)
+      val numeric = PhysicalNumericType.numeric(x)
+      b => numeric.toFloat(b)
   }
 
   private[this] def castArray(fromType: DataType, toType: DataType): Any => Any = {
