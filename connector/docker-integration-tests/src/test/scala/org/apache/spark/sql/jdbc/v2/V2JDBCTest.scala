@@ -41,12 +41,6 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
 
   val namespaceOpt: Option[String] = None
 
-  val typeMapping: Map[DataType, DataType] = Map.empty
-
-  def getExpectedType(dt: DataType): DataType = {
-    typeMapping.getOrElse(dt, dt)
-  }
-
   private def catalogAndNamespace =
     namespaceOpt.map(namespace => s"$catalogName.$namespace").getOrElse(catalogName)
 
@@ -78,10 +72,8 @@ private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFu
   def testRenameColumn(tbl: String): Unit = {
     sql(s"ALTER TABLE $tbl RENAME COLUMN ID TO RENAMED")
     val t = spark.table(s"$tbl")
-    var expectedSchema = new StructType()
-      .add("RENAMED", StringType, true, defaultMetadata)
-      .add("ID1", StringType, true, defaultMetadata)
-      .add("ID2", StringType, true, defaultMetadata)
+    val expectedSchema = new StructType().add("RENAMED", StringType, true, defaultMetadata)
+      .add("ID1", StringType, true, defaultMetadata).add("ID2", StringType, true, defaultMetadata)
     assert(t.schema === expectedSchema)
   }
 

@@ -137,9 +137,9 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
   test("load a table") {
     val t = spark.table("h2.test.people")
     val expectedSchema = new StructType()
-      .add("NAME", StringType, true, defaultMetadata)
+      .add("NAME", VarcharType(32), true, defaultMetadata)
       .add("ID", IntegerType, true, defaultMetadata)
-    assert(t.schema === expectedSchema)
+    assert(t.schema === CharVarcharUtils.replaceCharVarcharWithStringInSchema(expectedSchema))
     Seq(
       "h2.test.not_existing_table" -> "`h2`.`test`.`not_existing_table`",
       "h2.bad_test.not_existing_table" -> "`h2`.`bad_test`.`not_existing_table`"
