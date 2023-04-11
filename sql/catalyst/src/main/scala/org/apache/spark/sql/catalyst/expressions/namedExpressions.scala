@@ -564,13 +564,9 @@ object FileSourceMetadataAttribute {
    * [[UserDefinedType]], and the complex types ([[StructType]], [[MapType]], [[ArrayType]]).
    */
   def isSupportedType(dataType: DataType): Boolean = dataType.physicalDataType match {
-    case PhysicalNullType => true
-    case PhysicalBooleanType => true
-    case PhysicalByteType | PhysicalShortType | PhysicalIntegerType | PhysicalLongType => true
-    case PhysicalFloatType | PhysicalDoubleType => true
-    case PhysicalBinaryType | PhysicalStringType => true
-    case _: PhysicalDecimalType => true
-    case PhysicalCalendarIntervalType => true
+    // PhysicalPrimitiveType covers: Boolean, Byte, Double, Float, Integer, Long, Null, Short
+    case _: PhysicalPrimitiveType | _: PhysicalDecimalType => true
+    case PhysicalBinaryType | PhysicalStringType | PhysicalCalendarIntervalType => true
     case _ => false
   }
 

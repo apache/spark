@@ -60,7 +60,7 @@ object PhysicalDataType {
   def ordering(dt: DataType): Ordering[Any] = apply(dt).ordering.asInstanceOf[Ordering[Any]]
 }
 
-trait PhysicalPrimitiveType
+sealed trait PhysicalPrimitiveType
 
 class PhysicalBinaryType() extends PhysicalDataType {
   private[sql] val ordering =
