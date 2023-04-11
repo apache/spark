@@ -842,18 +842,25 @@ message CoGroupMap {
 }
 
 message ApplyInPandasWithState {
+  // (Required) Input relation for applyInPandasWithState.
   Relation input = 1;
 
+  // (Required) Expressions for grouping keys.
   repeated Expression grouping_expressions = 2;
 
+  // (Required) Input user-defined function.
   CommonInlineUserDefinedFunction func = 3;
 
+  // (Required) Schema for the output DataFrame.
   string output_schema = 4;
 
+  // (Required) Schema for the state.
   string state_schema = 5;
 
+  // (Required) The output mode of the function.
   string output_mode = 6;
 
+  // (Required) Timeout configuration for groups that do not receive data for a while.
   string timeout_conf = 7;
 }
 

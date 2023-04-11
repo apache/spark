@@ -2048,15 +2048,15 @@ class CoGroupMap(LogicalPlan):
 class ApplyInPandasWithState(LogicalPlan):
     """Logical plan object for a applyInPandasWithState."""
     def __init__(
-            self,
-            child: Optional["LogicalPlan"],
-            grouping_cols: Sequence[Column],
-            function: "UserDefinedFunction",
-            output_schema: str,
-            state_schema: str,
-            output_mode: str,
-            timeout_conf: str,
-            cols: List[str],
+        self,
+        child: Optional["LogicalPlan"],
+        grouping_cols: Sequence[Column],
+        function: "UserDefinedFunction",
+        output_schema: str,
+        state_schema: str,
+        output_mode: str,
+        timeout_conf: str,
+        cols: List[str],
     ):
         assert isinstance(grouping_cols, list) and all(isinstance(c, Column) for c in grouping_cols)
 

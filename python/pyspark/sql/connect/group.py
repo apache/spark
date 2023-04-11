@@ -281,7 +281,6 @@ class GroupedData:
             evalType=PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE,
         )
 
-        # TODO: raise type error
         output_schema: str = outputStructType.json() if isinstance(outputStructType, StructType)\
             else outputStructType
 
