@@ -75,7 +75,7 @@ class ResolveDefaultColumnsSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("SPARK-43085: Column DEFAULT assignment for target tables with three-part names") {
+  test("SPARK-43085: Column DEFAULT assignment for target tables with multi-part names") {
     withDatabase("demos") {
       sql("create database demos")
       withTable("demos.test_ts") {
