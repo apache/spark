@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
+import org.apache.spark.sql.connector.catalog.{CatalogManager, LookupCatalog}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -49,7 +50,9 @@ import org.apache.spark.sql.types._
  *
  * @param catalog  the catalog to use for looking up the schema of INSERT INTO table objects.
  */
-case class ResolveDefaultColumns(catalog: SessionCatalog) extends Rule[LogicalPlan] {
+case class ResolveDefaultColumns(
+    catalog: SessionCatalog, override val catalogManager: CatalogManager)
+  extends Rule[LogicalPlan] with LookupCatalog {
   override def apply(plan: LogicalPlan): LogicalPlan = {
     plan.resolveOperatorsWithPruning(
       (_ => SQLConf.get.enableDefaultColumns), ruleId) {
@@ -569,7 +572,20 @@ case class ResolveDefaultColumns(catalog: SessionCatalog) extends Rule[LogicalPl
     // found" error. In the latter cases, return out of this rule without changing anything and let
     // the analyzer return a proper error message elsewhere.
     val tableName: TableIdentifier = source match {
-      case Some(r: UnresolvedRelation) => TableIdentifier(r.name)
+      case Some(r: UnresolvedRelation) =>
+        r.multipartIdentifier match {
+          case CatalogAndIdentifier(catalog, identifier) =>
+            TableIdentifier(
+              table = identifier.name,
+              database = if (identifier.namespace().nonEmpty) {
+                Some(identifier.namespace().head)
+              } else {
+                None
+              },
+              catalog = Some(catalog.name))
+          case _ =>
+            return None
+        }
       case Some(r: UnresolvedCatalogRelation) => r.tableMeta.identifier
       case _ => return None
     }
