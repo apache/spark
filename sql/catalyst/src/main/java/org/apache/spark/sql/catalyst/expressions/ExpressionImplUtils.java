@@ -175,6 +175,8 @@ public class ExpressionImplUtils {
     }
   }
 
+  // Derive the key and init vector in the same way as OpenSSL's EVP_BytesToKey
+  // since the version 1.1.0c which switched to SHA-256 as the hash.
   private static byte[] getKeyAndIv(byte[] key, byte[] salt) {
     final byte[] keyAndSalt = arrConcat(key, salt);
     byte[] hash = new byte[0];
