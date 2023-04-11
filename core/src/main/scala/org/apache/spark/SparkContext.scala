@@ -476,8 +476,7 @@ class SparkContext(config: SparkConf) extends Logging {
     _conf.getOption("spark.repl.class.outputDir").orElse {
       val isSparkConnectEnabled =
         _conf.get(PLUGINS).contains("org.apache.spark.sql.connect.SparkConnectPlugin")
-      val testingSparkConnect = _conf.getOption("connect.test").contains("true")
-      if (isSparkConnectEnabled || testingSparkConnect) {
+      if (isSparkConnectEnabled) {
         // For Spark Connect, we piggyback on the existing REPL integration to load class
         // files on the executors.
         // This is a temporary intermediate step due to unavailable classloader isolation.

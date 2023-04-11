@@ -17,14 +17,11 @@
 
 package org.apache.spark.sql.connect
 
-import java.util.concurrent.TimeUnit
-
 import scala.io.StdIn
 import scala.sys.exit
 
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.connect.service.SparkConnectService
 
 /**
  * A simple main class method to start the spark connect server as a service for client tests
@@ -38,10 +35,10 @@ private[sql] object SimpleSparkConnectService {
   private val stopCommand = "q"
 
   def main(args: Array[String]): Unit = {
-    val conf = new SparkConf().set("connect.test", "true")
+    val conf = new SparkConf()
+    conf.set("spark.plugins", "org.apache.spark.sql.connect.SparkConnectPlugin")
     val sparkSession = SparkSession.builder().config(conf).getOrCreate()
     val sparkContext = sparkSession.sparkContext // init spark context
-    SparkConnectService.start()
     // scalastyle:off println
     println("Ready for client connections.")
     // scalastyle:on println
@@ -51,8 +48,6 @@ private[sql] object SimpleSparkConnectService {
         // scalastyle:off println
         println("No more client connections.")
         // scalastyle:on println
-        // Wait for 1 min for the server to stop
-        SparkConnectService.stop(Some(1), Some(TimeUnit.MINUTES))
         sparkSession.close()
         exit(0)
       }
