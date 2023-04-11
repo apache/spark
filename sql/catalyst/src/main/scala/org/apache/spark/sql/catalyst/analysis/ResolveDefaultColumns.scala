@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
 import org.apache.spark.sql.connector.catalog.{CatalogManager, LookupCatalog}
+import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.NamespaceHelper
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -580,7 +581,7 @@ case class ResolveDefaultColumns(
               database = if (identifier.namespace().nonEmpty) {
                 Some(identifier.namespace().head)
               } else {
-                None
+                Some(catalogManager.currentNamespace.quoted)
               },
               catalog = Some(catalog.name))
           case _ =>
