@@ -572,6 +572,7 @@ case class ResolveDefaultColumns(
     // Lookup the relation from the catalog by name. This either succeeds or returns some "not
     // found" error. In the latter cases, return out of this rule without changing anything and let
     // the analyzer return a proper error message elsewhere.
+    // var viewCheck: S
     val tableName: TableIdentifier = source match {
       case Some(r: UnresolvedRelation) =>
         r.multipartIdentifier match {
@@ -587,24 +588,29 @@ case class ResolveDefaultColumns(
           case _ =>
             return None
         }
-      case Some(r: UnresolvedCatalogRelation) => r.tableMeta.identifier
-      case _ => return None
+      case Some(r: UnresolvedCatalogRelation) =>
+        return Some(r.tableMeta.schema)
+      case _ =>
+        return None
     }
     // First try to get the table metadata directly. If that fails, check for views below.
     if (catalog.tableExists(tableName)) {
       return Some(catalog.getTableMetadata(tableName).schema)
     }
     val lookup: LogicalPlan = try {
-      catalog.lookupRelation(tableName)
+      val viewName: TableIdentifier = source match {
+        case Some(r: UnresolvedRelation) => TableIdentifier(r.name)
+        case _ => return None
+      }
+      catalog.lookupRelation(viewName)
     } catch {
       case _: AnalysisException => return None
     }
     lookup match {
-      case SubqueryAlias(_, r: UnresolvedCatalogRelation) =>
-        Some(r.tableMeta.schema)
       case SubqueryAlias(_, r: View) if r.isTempView =>
         Some(r.desc.schema)
-      case _ => None
+      case _ =>
+        None
     }
   }
 
