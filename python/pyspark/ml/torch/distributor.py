@@ -164,10 +164,11 @@ class Distributor:
         self.spark = _get_active_session(self.is_remote)
 
         # indicate whether the server side is local mode
-        self.local_master = False
+        self.is_spark_local_master = False
+        # Refer to 'org.apache.spark.util.Utils#isLocalMaster'
         master = _get_conf(self.spark, "spark.master", "")
         if master == "local" or master.startswith("local["):
-            self.local_master = True
+            self.is_spark_local_master = True
 
         self.logger = _get_logger(self.__class__.__name__)
         self.num_processes = num_processes
@@ -178,7 +179,13 @@ class Distributor:
 
     def _create_input_params(self) -> Dict[str, Any]:
         input_params = self.__dict__.copy()
-        for unneeded_param in ["spark", "ssl_conf", "logger", "is_remote", "local_master"]:
+        for unneeded_param in [
+            "spark",
+            "ssl_conf",
+            "logger",
+            "is_remote",
+            "is_spark_local_master",
+        ]:
             del input_params[unneeded_param]
         return input_params
 
@@ -517,10 +524,10 @@ class TorchDistributor(Distributor):
         input_params = self.input_params
         driver_address = self.driver_address
         log_streaming_server_port = self.log_streaming_server_port
-        local_master = self.local_master
-        gpus: List[str] = []
-        if local_master and use_gpu:
-            gpus = _get_gpus_owned(self.spark)
+        is_spark_local_master = self.is_spark_local_master
+        driver_owned_gpus: List[str] = []
+        if is_spark_local_master and use_gpu:
+            driver_owned_gpus = _get_gpus_owned(self.spark)
 
         # Spark task program
         def wrapped_train_fn(_):  # type: ignore[no-untyped-def]
@@ -555,13 +562,13 @@ class TorchDistributor(Distributor):
                 os.environ["NODE_RANK"] = str(context.partitionId())
                 os.environ["RANK"] = str(context.partitionId())
 
-            if local_master:
+            if is_spark_local_master:
                 # distributed training on a local mode spark cluster
                 def set_gpus(context: "BarrierTaskContext") -> None:
                     if CUDA_VISIBLE_DEVICES in os.environ:
                         return
 
-                    gpu_owned = gpus[context.partitionId()]
+                    gpu_owned = driver_owned_gpus[context.partitionId()]
                     os.environ[CUDA_VISIBLE_DEVICES] = gpu_owned
 
             else:
