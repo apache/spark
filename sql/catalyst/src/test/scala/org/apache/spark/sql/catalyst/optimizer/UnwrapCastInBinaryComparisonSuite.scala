@@ -392,9 +392,8 @@ class UnwrapCastInBinaryComparisonSuite extends PlanTest with ExpressionEvalHelp
       (f5 >= castTimestamp(dateLit) && f5 < castTimestamp(dateAddOne)) ||
         (f6 >= castTimestampNTZ(dateLit) && f6 < castTimestampNTZ(dateAddOne)))
     assertEquivalent(
-      castDate(f5) <=> dateLit || castDate(f6) === dateLit,
-      (f5 >= castTimestamp(dateLit) && f5 < castTimestamp(dateAddOne)) ||
-        (f6 >= castTimestampNTZ(dateLit) && f6 < castTimestampNTZ(dateAddOne)))
+      castDate(f5) <=> dateLit || castDate(f6) <=> dateLit,
+      castDate(f5) <=> dateLit || castDate(f6) <=> dateLit)
     assertEquivalent(
       dateLit < castDate(f5) || dateLit < castDate(f6),
       castTimestamp(dateAddOne) <= f5 || castTimestampNTZ(dateAddOne) <= f6)
