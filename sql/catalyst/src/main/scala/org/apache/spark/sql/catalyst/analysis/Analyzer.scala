@@ -606,7 +606,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         groupingAttrs: Seq[Expression],
         gid: Attribute): Seq[NamedExpression] = {
       def replaceExprs(e: Expression): Expression = e match {
-        case e if AggregateExpression.isAggregate(e) => e
+        case e: AggregateExpression => e
         case e =>
           // Replace expression by expand output attribute.
           val index = groupByAliases.indexWhere(_.child.semanticEquals(e))
@@ -864,9 +864,12 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
     // Support any aggregate expression that can appear in an Aggregate plan except Pandas UDF.
     // TODO: Support Pandas UDF.
     private def checkValidAggregateExpression(expr: Expression): Unit = expr match {
-      case _: AggregateExpression => // OK and leave the argument check to CheckAnalysis.
-      case expr: PythonUDF if PythonUDF.isGroupedAggPandasUDF(expr) =>
-        throw QueryCompilationErrors.pandasUDFAggregateNotSupportedInPivotError()
+      case a: AggregateExpression =>
+        if (a.aggregateFunction.isInstanceOf[PythonUDAF]) {
+          throw QueryCompilationErrors.pandasUDFAggregateNotSupportedInPivotError()
+        } else {
+          // OK and leave the argument check to CheckAnalysis.
+        }
       case e: Attribute =>
         throw QueryCompilationErrors.aggregateExpressionRequiredForPivotError(e.sql)
       case e => e.children.foreach(checkValidAggregateExpression)
@@ -2495,17 +2498,13 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       val windowedAggExprs: Set[Expression] = exprs.flatMap { expr =>
         expr.collect {
           case WindowExpression(ae: AggregateExpression, _) => ae
-          case WindowExpression(e: PythonUDF, _) if PythonUDF.isGroupedAggPandasUDF(e) => e
           case UnresolvedWindowExpression(ae: AggregateExpression, _) => ae
-          case UnresolvedWindowExpression(e: PythonUDF, _)
-            if PythonUDF.isGroupedAggPandasUDF(e) => e
         }
       }.toSet
 
       // Find the first Aggregate Expression that is not Windowed.
       exprs.exists(_.exists {
         case ae: AggregateExpression => !windowedAggExprs.contains(ae)
-        case e: PythonUDF => PythonUDF.isGroupedAggPandasUDF(e) && !windowedAggExprs.contains(e)
         case _ => false
       })
     }
