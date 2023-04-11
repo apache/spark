@@ -76,19 +76,19 @@ class ResolveDefaultColumnsSuite extends QueryTest with SharedSparkSession {
   }
 
   test("SPARK-43085: Column DEFAULT assignment for target tables with three-part names") {
-    withDatabase("main.demos") {
-      sql("create database main.demos")
-      withTable("main.demos.test_ts") {
-        sql("create table main.demos.test_ts (id int, ts timestamp) using parquet")
-        sql("insert into main.demos.test_ts(ts) values (timestamp'2023-01-01')")
-        checkAnswer(spark.table("main.demos.test_ts"),
+    withDatabase("demos") {
+      sql("create database demos")
+      withTable("demos.test_ts") {
+        sql("create table demos.test_ts (id int, ts timestamp) using parquet")
+        sql("insert into demos.test_ts(ts) values (timestamp'2023-01-01')")
+        checkAnswer(spark.table("demos.test_ts"),
           sql("select null, timestamp'2023-01-01'"))
       }
-      withTable("main.demos.test_ts") {
-        sql("create table main.demos.test_ts (id int, ts timestamp) using parquet")
-        sql("use catalog main")
-        sql("insert into demos.test_ts(ts) values (timestamp'2023-01-01')")
-        checkAnswer(spark.table("main.demos.test_ts"),
+      withTable("demos.test_ts") {
+        sql("create table demos.test_ts (id int, ts timestamp) using parquet")
+        sql("use database demos")
+        sql("insert into test_ts(ts) values (timestamp'2023-01-01')")
+        checkAnswer(spark.table("demos.test_ts"),
           sql("select null, timestamp'2023-01-01'"))
       }
     }
