@@ -1364,7 +1364,6 @@ class DataStreamWriter:
         >>> q.name
         'this_query'
         >>> q.stop()
-
         >>> q.isActive # doctest: +SKIP
         False
 
