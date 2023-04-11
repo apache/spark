@@ -2039,7 +2039,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             self.spark.sql(query).__repr__(),
         )
 
-    def test_string_sql_formatter(self):
+    def test_sql_with_dataframes_and_columns(self):
         self.connect.sql(
             "SELECT * FROM range(10) WHERE id > {bound1} AND id < {bound2}", bound1=7, bound2=9
         ).show()

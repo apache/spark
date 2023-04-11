@@ -69,9 +69,9 @@ class SQLStringFormatter(string.Formatter):
         return val
 
     def clear(self) -> None:
-        for _, n in self._temp_views:
-            self._session.catalog.dropTempView(n)
+        """TODO We need to find a better time to drop view"""
         self._temp_views = []
+        self._unresolvedColumns = {}
 
     @property
     def unresolvedColumns(self) -> typing.Dict[str, Expression]:
