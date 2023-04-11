@@ -1142,6 +1142,8 @@ private[spark] class Client(
       logApplicationReport: Boolean = true,
       interval: Long = sparkConf.get(REPORT_INTERVAL)): YarnAppReport = {
     var lastState: YarnApplicationState = null
+    val reportsTillNextLog: Int = sparkConf.get(REPORT_LOG_FREQUENCY)
+    var reportsSinceLastLog: Int = 0
     while (true) {
       Thread.sleep(interval)
       val report: ApplicationReport =
@@ -1160,9 +1162,12 @@ private[spark] class Client(
               Some(msg))
         }
       val state = report.getYarnApplicationState
-
+      reportsSinceLastLog += 1
       if (logApplicationReport) {
-        logInfo(s"Application report for $appId (state: $state)")
+        if (lastState != state || reportsSinceLastLog >= reportsTillNextLog) {
+          logInfo(s"Application report for $appId (state: $state)")
+          reportsSinceLastLog = 0
+        }
 
         // If DEBUG is enabled, log report details every iteration
         // Otherwise, log them every time the application changes state
