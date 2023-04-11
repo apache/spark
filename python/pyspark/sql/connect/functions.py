@@ -2441,9 +2441,11 @@ def sha2(col: "ColumnOrName", numBits: int) -> Column:
 sha2.__doc__ = pysparkfuncs.sha2.__doc__
 
 
-def hllsketch_estimate(col: "ColumnOrName", lgConfigK: Optional[int] = None, tgtHllType: Optional[str] = None) -> Column:
+def hllsketch_estimate(
+    col: "ColumnOrName", lgConfigK: Optional[int] = None, tgtHllType: Optional[str] = None
+) -> Column:
     if lgConfigK is not None and tgtHllType is not None:
-        return _invoke_function("hllsketch_estimate", _to_col(col), lgConfigK, tgtHllType)
+        return _invoke_function("hllsketch_estimate", _to_col(col), lit(lgConfigK), lit(tgtHllType))
     else:
         return _invoke_function("hllsketch_estimate", _to_col(col))
 
@@ -2451,9 +2453,11 @@ def hllsketch_estimate(col: "ColumnOrName", lgConfigK: Optional[int] = None, tgt
 hllsketch_estimate.__doc__ = pysparkfuncs.hllsketch_estimate.__doc__
 
 
-def hllsketch_binary(col: "ColumnOrName", lgConfigK: Optional[int] = None, tgtHllType: Optional[str] = None) -> Column:
+def hllsketch_binary(
+    col: "ColumnOrName", lgConfigK: Optional[int] = None, tgtHllType: Optional[str] = None
+) -> Column:
     if lgConfigK is not None and tgtHllType is not None:
-        return _invoke_function("hllsketch_binary", _to_col(col), lgConfigK, tgtHllType)
+        return _invoke_function("hllsketch_binary", _to_col(col), lit(lgConfigK), lit(tgtHllType))
     else:
         return _invoke_function("hllsketch_binary", _to_col(col))
 
@@ -2463,7 +2467,7 @@ hllsketch_binary.__doc__ = pysparkfuncs.hllsketch_binary.__doc__
 
 def hllsketch_union_estimate(col: "ColumnOrName", lgMaxK: Optional[int] = None) -> Column:
     if lgMaxK is not None:
-        return _invoke_function("hllsketch_union_estimate", _to_col(col), lgMaxK)
+        return _invoke_function("hllsketch_union_estimate", _to_col(col), lit(lgMaxK))
     else:
         return _invoke_function("hllsketch_union_estimate", _to_col(col))
 

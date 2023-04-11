@@ -10114,7 +10114,9 @@ def unwrap_udt(col: "ColumnOrName") -> Column:
 
 
 @try_remote_functions
-def hllsketch_estimate(col: "ColumnOrName", lgConfigK: Optional[int] = None, tgtHllType: Optional[str] = None) -> Column:
+def hllsketch_estimate(
+    col: "ColumnOrName", lgConfigK: Optional[int] = None, tgtHllType: Optional[str] = None
+) -> Column:
     """
     Aggregate function: returns the estimated number of unique values in column `col`,
     using a Datasketches HllSketch instance.
@@ -10152,7 +10154,9 @@ def hllsketch_estimate(col: "ColumnOrName", lgConfigK: Optional[int] = None, tgt
 
 
 @try_remote_functions
-def hllsketch_binary(col: "ColumnOrName", lgConfigK: Optional[int] = None, tgtHllType: Optional[str] = None) -> Column:
+def hllsketch_binary(
+    col: "ColumnOrName", lgConfigK: Optional[int] = None, tgtHllType: Optional[str] = None
+) -> Column:
     """
     Aggregate function: returns the compact binary representation of a Datasketches HllSketch,
     updated with the values in column `col`.
@@ -10193,8 +10197,9 @@ def hllsketch_binary(col: "ColumnOrName", lgConfigK: Optional[int] = None, tgtHl
 @try_remote_functions
 def hllsketch_union_estimate(col: "ColumnOrName", lgMaxK: Optional[int] = None) -> Column:
     """
-    Aggregate function: returns the estimated number of unique items in a group, derived by merging the binary
-    representations of Datasketches HllSketch objects in column `col` via a Datasketches Union instance.
+    Aggregate function: returns the estimated number of unique items in a group, derived by
+    merging the binary representations of Datasketches HllSketch objects in column `col`
+    via a Datasketches Union instance.
 
     .. versionadded:: 3.5.0
 
