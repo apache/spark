@@ -114,9 +114,12 @@ object ExpressionEncoder {
       If(IsNull(input), Literal.create(null, result.dataType), result)
     }
 
+    val serializer = nullSafe(newSerializerInput, newSerializer)
+    val deserializer = nullSafe(newDeserializerInput, newDeserializer)
+
     new ExpressionEncoder[Any](
-      nullSafe(newSerializerInput, newSerializer),
-      nullSafe(newDeserializerInput, newDeserializer),
+      serializer,
+      deserializer,
       ClassTag(cls))
   }
 
