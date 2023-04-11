@@ -74,7 +74,7 @@ class SQLStringFormatter(string.Formatter):
         self._temp_views = []
 
     @property
-    def unresolvedColumns(self):
+    def unresolvedColumns(self) -> typing.Dict[str, Expression]:
         return self._unresolvedColumns
 
 

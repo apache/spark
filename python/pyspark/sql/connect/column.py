@@ -470,7 +470,7 @@ class Column:
         )
 
     @property
-    def expr(self):
+    def expr(self) -> "Expression":
         return self._expr
 
 
