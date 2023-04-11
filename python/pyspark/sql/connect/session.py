@@ -14,7 +14,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-import logging
 
 from pyspark.sql.connect.sql_formatter import SQLStringFormatter
 from pyspark.sql.connect.utils import check_dependencies
@@ -661,9 +660,6 @@ class SparkSession:
 
                 # The regular PySpark session is registered as an active session
                 # so would not be garbage-collected.
-                logger = logging.getLogger("py4j")
-                logger.setLevel(logging.INFO)
-                logger.addHandler(logging.StreamHandler())
                 PySparkSession(
                     SparkContext.getOrCreate(create_conf(loadDefaults=True, _jvm=SparkContext._jvm))
                 )
