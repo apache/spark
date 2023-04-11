@@ -166,6 +166,7 @@ object CheckConnectJvmClientCompatibility {
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.javaRDD"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.writeStream"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.this"),
+      ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.dropDuplicatesWithinWatermark"),
 
       // functions
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.functions.udf"),
