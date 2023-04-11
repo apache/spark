@@ -572,7 +572,6 @@ case class ResolveDefaultColumns(
     // Lookup the relation from the catalog by name. This either succeeds or returns some "not
     // found" error. In the latter cases, return out of this rule without changing anything and let
     // the analyzer return a proper error message elsewhere.
-    // var viewCheck: S
     val tableName: TableIdentifier = source match {
       case Some(r: UnresolvedRelation) =>
         r.multipartIdentifier match {
