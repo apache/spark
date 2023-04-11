@@ -68,8 +68,7 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCT
     assert(t.schema === expectedSchema)
     sql(s"ALTER TABLE $tbl ALTER COLUMN id TYPE STRING")
     t = spark.table(tbl)
-    val expectedType = getExpectedType(StringType)
-    expectedSchema = new StructType().add("ID", expectedType, true, defaultMetadata)
+    expectedSchema = new StructType().add("ID", StringType, true, defaultMetadata)
     assert(t.schema === expectedSchema)
     // Update column type from STRING to INTEGER
     val msg = intercept[AnalysisException] {

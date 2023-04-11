@@ -23,7 +23,6 @@ import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.{SparkConf, SparkSQLFeatureNotSupportedException}
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
 import org.apache.spark.sql.jdbc.DatabaseOnDocker
 import org.apache.spark.sql.types._
@@ -73,8 +72,6 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest
         s"mysql?user=root&password=rootpass&allowPublicKeyRetrieval=true&useSSL=false"
   }
 
-  override val typeMapping: Map[DataType, DataType] = Map(StringType -> VarcharType(65535))
-
   override def sparkConf: SparkConf = super.sparkConf
     .set("spark.sql.catalog.mysql", classOf[JDBCTableCatalog].getName)
     .set("spark.sql.catalog.mysql.url", db.getJdbcUrl(dockerIp, externalPort))
@@ -100,9 +97,7 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTest
     assert(t.schema === expectedSchema)
     sql(s"ALTER TABLE $tbl ALTER COLUMN id TYPE STRING")
     t = spark.table(tbl)
-    val expectedType = getExpectedType(StringType)
-    expectedSchema = new StructType().add("ID", expectedType, true, defaultMetadata)
-    expectedSchema = CharVarcharUtils.replaceCharVarcharWithStringInSchema(expectedSchema)
+    expectedSchema = new StructType().add("ID", StringType, true, defaultMetadata)
     assert(t.schema === expectedSchema)
     // Update column type from STRING to INTEGER
     val msg1 = intercept[AnalysisException] {
