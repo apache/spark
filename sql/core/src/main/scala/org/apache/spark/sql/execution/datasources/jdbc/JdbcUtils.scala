@@ -310,7 +310,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
       fields(i) = StructField(columnName, columnType, nullable, metadata.build())
       i = i + 1
     }
-    new StructType(fields)
+    CharVarcharUtils.replaceCharVarcharWithStringInSchema(new StructType(fields))
   }
 
   /**
