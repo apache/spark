@@ -449,7 +449,7 @@ class DataStreamWriter:
     # TODO (SPARK-42944): Implement and uncomment the doc
     def foreachBatch(self, func: Callable[["DataFrame", int], None]) -> "DataStreamWriter":
         raise NotImplementedError("foreachBatch() is not implemented.")
-    
+
     # foreachBatch.__doc__ = PySparkDataStreamWriter.foreachBatch.__doc__
 
     def _start_internal(
