@@ -49,11 +49,12 @@ import org.apache.spark.sql.types._
  * (1, 5)
  * (4, 6)
  *
- * @param catalog  the catalog to use for looking up the schema of INSERT INTO table objects.
+ * @param catalogManager the catalog manager to use for looking up the schema of INSERT INTO table
+ *                       objects.
  */
-case class ResolveDefaultColumns(
-    catalog: SessionCatalog, override val catalogManager: CatalogManager)
+case class ResolveDefaultColumns(override val catalogManager: CatalogManager)
   extends Rule[LogicalPlan] with LookupCatalog {
+  val catalog: SessionCatalog = catalogManager.v1SessionCatalog
   override def apply(plan: LogicalPlan): LogicalPlan = {
     plan.resolveOperatorsWithPruning(
       (_ => SQLConf.get.enableDefaultColumns), ruleId) {
