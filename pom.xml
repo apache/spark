@@ -108,12 +108,15 @@
   </modules>
 
   <properties>
+    <!--
+    <aether.connector.connectTimeout>60000</aether.connector.connectTimeout>
+    -->
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
     <java.version>1.8</java.version>
     <maven.compiler.source>${java.version}</maven.compiler.source>
     <maven.compiler.target>${java.version}</maven.compiler.target>
-    <maven.version>3.8.7</maven.version>
+    <maven.version>3.9.1</maven.version>
     <exec-maven-plugin.version>1.6.0</exec-maven-plugin.version>
     <sbt.project.name>spark</sbt.project.name>
     <slf4j.version>2.0.7</slf4j.version>
