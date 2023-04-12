@@ -2507,4 +2507,13 @@ package object config {
       .version("3.5.0")
       .intConf
       .createWithDefault(Int.MaxValue)
+
+  private[spark] val SHUFFLE_SERVER_RECOVERY_DISABLED =
+    ConfigBuilder("spark.shuffle.server.recovery.disabled")
+      .internal()
+      .doc("Set to true for applications that prefer to disable recovery when the External " +
+        "Shuffle Service restarts.")
+      .version("3.5.0")
+      .booleanConf
+      .createWithDefault(false)
 }
