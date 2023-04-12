@@ -1456,7 +1456,7 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
     }
   }
 
-  def dupStreamSideTest(hint: String, check: SparkPlan => Unit): Unit = {
+  def dupStreamSideColTest(hint: String, check: SparkPlan => Unit): Unit = {
     val query =
       s"""select /*+ ${hint}(r) */ *
          |from testData2 l
@@ -1477,17 +1477,17 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
     checkAnswer(df, expected)
   }
 
-  test("Full outer join with duplicate stream-side references in condition (SMJ)") {
+  test("SPARK-43113: Full outer join with duplicate stream-side references in condition (SMJ)") {
     def check(plan: SparkPlan): Unit = {
       assert(collect(plan) { case _: SortMergeJoinExec => true }.size === 1)
     }
-    dupStreamSideTest("MERGE", check)
+    dupStreamSideColTest("MERGE", check)
   }
 
-  test("Full outer join with duplicate stream-side references in condition (SHJ)") {
+  test("SPARK-43113: Full outer join with duplicate stream-side references in condition (SHJ)") {
     def check(plan: SparkPlan): Unit = {
       assert(collect(plan) { case _: ShuffledHashJoinExec => true }.size === 1)
     }
-    dupStreamSideTest("SHUFFLE_HASH", check)
+    dupStreamSideColTest("SHUFFLE_HASH", check)
   }
 }
