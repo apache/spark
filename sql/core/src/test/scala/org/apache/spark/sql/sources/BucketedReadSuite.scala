@@ -25,9 +25,9 @@ import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.execution.{FileSourceScanExec, SortExec, SparkPlan}
-import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, AdaptiveSparkPlanHelper, DisableAdaptiveExecution}
+import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, AdaptiveSparkPlanHelper}
 import org.apache.spark.sql.execution.datasources.BucketingUtils
-import org.apache.spark.sql.execution.exchange.{Exchange, ShuffleExchangeExec}
+import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.execution.joins.SortMergeJoinExec
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -1010,8 +1010,7 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils with Adapti
     }
   }
 
-  test("bucket coalescing is applied when join expressions match with partitioning expressions",
-    DisableAdaptiveExecution("Expected shuffle num mismatched")) {
+  test("bucket coalescing is applied when join expressions match with partitioning expressions") {
     withTable("t1", "t2") {
       df1.write.format("parquet").bucketBy(8, "i", "j").saveAsTable("t1")
       df2.write.format("parquet").bucketBy(4, "i", "j").saveAsTable("t2")
@@ -1020,21 +1019,25 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils with Adapti
         SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "0",
         SQLConf.COALESCE_BUCKETS_IN_JOIN_ENABLED.key -> "true") {
         def verify(
-            query: String,
-            expectedNumShuffles: Int,
-            expectedCoalescedNumBuckets: Option[Int]): Unit = {
-          val plan = sql(query).queryExecution.executedPlan
-          val shuffles = plan.collect { case s: ShuffleExchangeExec => s }
-          assert(shuffles.length == expectedNumShuffles)
+                    query: String,
+                    expectedNumShuffles: Int,
+                    expectedCoalescedNumBuckets: Option[Int]): Unit = {
+          Seq(true, false).foreach { aqeEnabled =>
+            withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqeEnabled.toString) {
+              val plan = sql(query).queryExecution.executedPlan
+              val shuffles = collect(plan) { case s: ShuffleExchangeExec => s }
+              assert(shuffles.length == expectedNumShuffles)
 
-          val scans = plan.collect {
-            case f: FileSourceScanExec if f.optionalNumCoalescedBuckets.isDefined => f
-          }
-          if (expectedCoalescedNumBuckets.isDefined) {
-            assert(scans.length == 1)
-            assert(scans.head.optionalNumCoalescedBuckets == expectedCoalescedNumBuckets)
-          } else {
-            assert(scans.isEmpty)
+              val scans = collect(plan) {
+                case f: FileSourceScanExec if f.optionalNumCoalescedBuckets.isDefined => f
+              }
+              if (expectedCoalescedNumBuckets.isDefined) {
+                assert(scans.length == 1)
+                assert(scans.head.optionalNumCoalescedBuckets == expectedCoalescedNumBuckets)
+              } else {
+                assert(scans.isEmpty)
+              }
+            }
           }
         }
 
@@ -1047,22 +1050,6 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils with Adapti
           Some(4))
         // Coalescing is not applied when join expressions do not match with bucket columns.
         verify("SELECT * FROM t1 JOIN t2 ON t1.i = t2.i", 2, None)
-      }
-    }
-  }
-
-  test("SPARK-43021: Make coalesceBucketsInJoin effective enable AQE") {
-    withSQLConf(
-      SQLConf.COALESCE_BUCKETS_IN_JOIN_ENABLED.key -> "true",
-      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
-      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
-      withTable("bucketed_table1", "bucketed_table2") {
-        df1.write.format("parquet").bucketBy(4, "i").saveAsTable("bucketed_table1")
-        df2.write.format("parquet").bucketBy(2, "i").saveAsTable("bucketed_table2")
-        val t1 = spark.table("bucketed_table1")
-        val t2 = spark.table("bucketed_table2")
-        val plan = t1.join(t2, t1("i") === t2("i")).queryExecution.executedPlan
-        assert(collect(plan) { case _: Exchange => true }.size === 0)
       }
     }
   }
