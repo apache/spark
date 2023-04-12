@@ -2219,6 +2219,28 @@ class SparkConnectPlanner(val session: SparkSession) {
           .build()
         respBuilder.setExplain(explain)
 
+      case StreamingQueryCommand.CommandCase.EXCEPTION =>
+        val result = query.exception()
+        val exception = result match {
+          case Some(e) =>
+            StreamingQueryCommandResult.ExceptionResult
+              .newBuilder()
+              .setHasException(true)
+              .setMessage(e.getMessage)
+              .addAllStackTraceList(e.getStackTrace.map(_.toString))
+              .setCause(e.getCause.toString)
+              .build()
+          case None =>
+            StreamingQueryCommandResult.ExceptionResult
+              .newBuilder()
+              .setHasException(false)
+              .build()
+        }
+        respBuilder.setException(exception)
+
+      case StreamingQueryCommand.CommandCase.AWAIT_TERMINATION =>
+        query.restart()
+
       case StreamingQueryCommand.CommandCase.COMMAND_NOT_SET =>
         throw new IllegalArgumentException("Missing command in StreamingQueryCommand")
     }

@@ -257,14 +257,20 @@ message StreamingQueryCommand {
     bool process_all_available = 6;
     // explain() API. Returns logical and physical plans.
     ExplainCommand explain = 7;
-
-    // TODO(SPARK-42960) Add more commands: await_termination(), exception() etc.
+    // exception() API. Returns the exception in the query if any.
+    bool exception = 8;
+    // awaitTermination() API. Waits for the termination of the query.
+    AwaitTerminationCommand await_termination = 9;
   }
 
   message ExplainCommand {
     // TODO: Consider reusing Explain from AnalyzePlanRequest message.
     //       We can not do this right now since it base.proto imports this file.
     bool extended = 1;
+  }
+
+  message AwaitTerminationCommand {
+    int64 timeout_ms = 0;
   }
 }
 
@@ -277,6 +283,7 @@ message StreamingQueryCommandResult {
     StatusResult status = 2;
     RecentProgressResult recent_progress = 3;
     ExplainResult explain = 4;
+    ExceptionResult exception = 5;
   }
 
   message StatusResult {
@@ -295,6 +302,14 @@ message StreamingQueryCommandResult {
   message ExplainResult {
     // Logical and physical plans as string
     string result = 1;
+  }
+
+  message ExceptionResult {
+    // Exception as string
+    bool has_exception = 1;
+    optional string message = 2;
+    optional repeated string stack_trace = 3;
+    optional string cause = 4;
   }
 }
 

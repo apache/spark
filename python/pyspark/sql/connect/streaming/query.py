@@ -125,7 +125,13 @@ class StreamingQuery:
     explain.__doc__ = PySparkStreamingQuery.explain.__doc__
 
     def exception(self) -> Optional[StreamingQueryException]:
-        raise NotImplementedError()
+        cmd = pb2.StreamingQueryCommand()
+        cmd.exception = True
+        result = self._execute_streaming_query_cmd(cmd).exception.result
+        if result == "":
+            return None
+        else:
+            return result
 
     exception.__doc__ = PySparkStreamingQuery.exception.__doc__
 
