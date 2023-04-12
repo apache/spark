@@ -75,6 +75,16 @@ private[sql] class SparkConnectClient(
     stub.executePlan(request)
   }
 
+  def interrupt(requestId: String): Unit = {
+    val request = proto.InterruptRequest
+      .newBuilder()
+      .setUserContext(userContext)
+      .setSessionId(sessionId)
+      .setRequestId(requestId)
+      .build()
+    stub.interruptExecute(request)
+  }
+
   /**
    * Dispatch the [[proto.ConfigRequest]] to the Spark Connect server.
    * @return

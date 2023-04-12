@@ -26,6 +26,7 @@ import org.apache.arrow.vector.FieldVector
 import org.apache.arrow.vector.ipc.ArrowStreamReader
 
 import org.apache.spark.connect.proto
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, ExpressionEncoder, RowEncoder}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.UnboundRowEncoder
@@ -37,7 +38,9 @@ import org.apache.spark.sql.util.ArrowUtils
 import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch, ColumnVector}
 
 private[sql] class SparkResult[T](
+    sparkSession: SparkSession,
     responses: java.util.Iterator[proto.ExecutePlanResponse],
+    requestId: String,
     allocator: BufferAllocator,
     encoder: AgnosticEncoder[T])
     extends AutoCloseable
@@ -183,6 +186,10 @@ private[sql] class SparkResult[T](
    */
   override def close(): Unit = {
     batches.foreach(_.close())
+  }
+
+  def interrupt(): Unit = {
+    sparkSession.interrupt(requestId)
   }
 
   override def cleaner: AutoCloseable = AutoCloseables(batches.toSeq)

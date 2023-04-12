@@ -440,9 +440,9 @@ class SparkSession private[sql] (
   }
 
   private[sql] def execute[T](plan: proto.Plan, encoder: AgnosticEncoder[T]): SparkResult[T] = {
-    val queryId = UUID.randomUUID.toString
-    val value = client.execute(plan, queryId)
-    val result = new SparkResult(value, allocator, encoder)
+    val requestId = UUID.randomUUID.toString
+    val value = client.execute(plan, requestId)
+    val result = new SparkResult(this, value, requestId, allocator, encoder)
     cleaner.register(result)
     result
   }
@@ -464,6 +464,10 @@ class SparkSession private[sql] (
   def execute(extension: com.google.protobuf.Any): Unit = {
     val command = proto.Command.newBuilder().setExtension(extension).build()
     execute(command)
+  }
+
+  private[sql] def interrupt(requestId: String): Unit = {
+    client.interrupt(requestId)
   }
 
   /**

@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.connect.service
 
-import java.util.UUID
 import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.JavaConverters._
@@ -53,11 +52,13 @@ class SparkConnectStreamHandler(responseObserver: StreamObserver[ExecutePlanResp
         .getOrCreateIsolatedSession(v.getUserContext.getUserId, v.getSessionId)
         .session
 
-    val jobGroupId =
-      s"${Option(v.getUserContext.getUserId).getOrElse("unset" + UUID.randomUUID.toString)}_" +
-      s"${v.getSessionId}_${Option(v.getRequestId).getOrElse("unset" + UUID.randomUUID.toString)}"
-    log.error(s"Job groupp id is $jobGroupId")
     session.withActive {
+      // todo handle unset
+      val jobGroupId =
+        s"User_${v.getUserContext.getUserId}_Session_${v.getSessionId}_Request_${v.getRequestId}"
+      log.error(s"Job groupp id is $jobGroupId")
+      // todo: save to set set interruptOnCancel=true?
+      session.sparkContext.setJobGroup(jobGroupId, "NO DESCRIPTION", interruptOnCancel = true)
 
       // Add debug information to the query execution so that the jobs are traceable.
       try {
@@ -220,7 +221,7 @@ object SparkConnectStreamHandler {
           val partition = signal.synchronized {
             var part = partitions(currentPartitionId)
             while (part == null && error.isEmpty) {
-              signal.wait(5000L)
+              signal.wait(1000L)
               part = partitions(currentPartitionId)
             }
             partitions(currentPartitionId) = null

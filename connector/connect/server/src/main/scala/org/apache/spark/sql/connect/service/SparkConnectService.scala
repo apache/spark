@@ -190,6 +190,14 @@ class SparkConnectService(debug: Boolean)
   override def addArtifacts(responseObserver: StreamObserver[AddArtifactsResponse])
       : StreamObserver[AddArtifactsRequest] = new SparkConnectAddArtifactsHandler(
     responseObserver)
+
+  override def interruptExecute(
+      request: proto.InterruptRequest,
+      responseObserver: StreamObserver[proto.InterruptResponse]): Unit = {
+    try {
+      new SparkConnectInterruptHandler(responseObserver).handle(request)
+    } catch handleError("interrupt", observer = responseObserver)
+  }
 }
 
 /**
