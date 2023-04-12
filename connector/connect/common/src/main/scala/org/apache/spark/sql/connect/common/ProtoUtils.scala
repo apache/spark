@@ -24,40 +24,46 @@ import com.google.protobuf.Descriptors.FieldDescriptor
 
 private[connect] object ProtoUtils {
   private val format = java.text.NumberFormat.getInstance()
-  private val NUM_FIRST_BYTES = 8
+  private val MAX_BYTES_SIZE = 8
+  private val MAX_STRING_SIZE = 1024
 
-  def abbreviateBytes(message: Message): Message = {
+  def abbreviate(message: Message): Message = {
     val builder = message.toBuilder
 
     message.getAllFields.asScala.iterator.foreach {
+      case (field: FieldDescriptor, string: String)
+          if field.getJavaType == FieldDescriptor.JavaType.STRING && string != null =>
+        val size = string.size
+        if (size > MAX_STRING_SIZE) {
+          builder.setField(field, createString(string.take(MAX_STRING_SIZE), size))
+        } else {
+          builder.setField(field, string)
+        }
+
       case (field: FieldDescriptor, byteString: ByteString)
           if field.getJavaType == FieldDescriptor.JavaType.BYTE_STRING && byteString != null =>
-        val size = byteString.size()
-        if (size > NUM_FIRST_BYTES) {
-          val bytes = Array.ofDim[Byte](NUM_FIRST_BYTES)
-          var i = 0
-          while (i < NUM_FIRST_BYTES) {
-            bytes(i) = byteString.byteAt(i)
-            i += 1
-          }
-          builder.setField(field, createByteString(Some(bytes), size))
+        val size = byteString.size
+        if (size > MAX_BYTES_SIZE) {
+          val prefix = Array.tabulate(MAX_BYTES_SIZE)(byteString.byteAt)
+          builder.setField(field, createByteString(prefix, size))
         } else {
-          builder.setField(field, createByteString(None, size))
+          builder.setField(field, byteString)
         }
 
       case (field: FieldDescriptor, byteArray: Array[Byte])
           if field.getJavaType == FieldDescriptor.JavaType.BYTE_STRING && byteArray != null =>
-        val size = byteArray.length
-        if (size > NUM_FIRST_BYTES) {
-          builder.setField(field, createByteString(Some(byteArray.take(NUM_FIRST_BYTES)), size))
+        val size = byteArray.size
+        if (size > MAX_BYTES_SIZE) {
+          val prefix = byteArray.take(MAX_BYTES_SIZE)
+          builder.setField(field, createByteString(prefix, size))
         } else {
-          builder.setField(field, createByteString(None, size))
+          builder.setField(field, byteArray)
         }
 
       // TODO: should also support 1, repeated msg; 2, map<xxx, msg>
       case (field: FieldDescriptor, msg: Message)
           if field.getJavaType == FieldDescriptor.JavaType.MESSAGE && msg != null =>
-        builder.setField(field, abbreviateBytes(msg))
+        builder.setField(field, abbreviate(msg))
 
       case (field: FieldDescriptor, value: Any) => builder.setField(field, value)
     }
@@ -65,12 +71,14 @@ private[connect] object ProtoUtils {
     builder.build()
   }
 
-  private def createByteString(firstBytes: Option[Array[Byte]], size: Int): ByteString = {
-    var byteStrings = Array.empty[ByteString]
-    firstBytes.foreach { bytes =>
-      byteStrings :+= ByteString.copyFrom(bytes)
-    }
-    byteStrings :+= ByteString.copyFromUtf8(s"*********(redacted, size=${format.format(size)})")
-    ByteString.copyFrom(byteStrings.toIterable.asJava)
+  private def createByteString(prefix: Array[Byte], size: Int): ByteString = {
+    ByteString.copyFrom(
+      List(
+        ByteString.copyFrom(prefix),
+        ByteString.copyFromUtf8(s"*********(redacted, size=${format.format(size)})")).asJava)
+  }
+
+  private def createString(prefix: String, size: Int): String = {
+    s"$prefix*********(redacted, size=${format.format(size)})"
   }
 }
