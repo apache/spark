@@ -17,6 +17,7 @@
 
 import json
 import time
+import sys
 from typing import TYPE_CHECKING, Any, cast, Dict, List, Optional
 
 from pyspark.errors import StreamingQueryException
@@ -141,7 +142,8 @@ class StreamingQuery:
         cmd.stop = True
         self._execute_streaming_query_cmd(cmd)
 
-    stop.__doc__ = PySparkStreamingQuery.stop.__doc__
+    # TODO (SPARK-42962): uncomment below
+    # stop.__doc__ = PySparkStreamingQuery.stop.__doc__
 
     def explain(self, extended: bool = False) -> None:
         cmd = pb2.StreamingQueryCommand()
@@ -184,10 +186,31 @@ class StreamingQuery:
 
 
 def _test() -> None:
-    # TODO(SPARK-43031): port _test() from legacy query.py.
-    pass
+    import doctest
+    import os
+    from pyspark.sql import SparkSession as PySparkSession
+    import pyspark.sql.connect.streaming.query
+
+    os.chdir(os.environ["SPARK_HOME"])
+
+    globs = pyspark.sql.connect.streaming.query.__dict__.copy()
+
+    globs["spark"] = (
+        PySparkSession.builder.appName("sql.connect.streaming.query tests")
+        .remote("local[4]")
+        .getOrCreate()
+    )
+
+    (failure_count, test_count) = doctest.testmod(
+        pyspark.sql.connect.streaming.query,
+        globs=globs,
+        optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE | doctest.REPORT_NDIFF,
+    )
+    globs["spark"].stop()
+
+    if failure_count:
+        sys.exit(-1)
 
 
 if __name__ == "__main__":
-    # TODO(SPARK-43031): Add this file dev/sparktestsupport/modules.py to enable testing in CI.
     _test()
