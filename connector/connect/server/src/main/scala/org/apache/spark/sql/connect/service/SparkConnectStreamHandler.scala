@@ -56,7 +56,7 @@ class SparkConnectStreamHandler(responseObserver: StreamObserver[ExecutePlanResp
       // Add debug information to the query execution so that the jobs are traceable.
       val debugString = Utils.redact(
         session.sessionState.conf.stringRedactionPattern,
-        ProtoUtils.redact(v).toString)
+        ProtoUtils.abbreviateBytes(v).toString)
       session.sparkContext.setLocalProperty(
         "callSite.short",
         s"Spark Connect - ${StringUtils.abbreviate(debugString, 128)}")
