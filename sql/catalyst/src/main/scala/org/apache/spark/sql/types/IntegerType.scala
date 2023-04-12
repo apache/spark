@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.types
 
-import scala.math.{Integral, Numeric, Ordering}
 import scala.reflect.runtime.universe.typeTag
 
 import org.apache.spark.annotation.Stable
@@ -35,10 +34,6 @@ class IntegerType private() extends IntegralType {
   // Defined with a private constructor so the companion object is the only possible instantiation.
   private[sql] type InternalType = Int
   @transient private[sql] lazy val tag = typeTag[InternalType]
-  private[sql] val numeric = implicitly[Numeric[Int]]
-  private[sql] val integral = implicitly[Integral[Int]]
-  private[sql] val ordering = implicitly[Ordering[InternalType]]
-  override private[sql] val exactNumeric = IntegerExactNumeric
 
   /**
    * The default size of a value of the IntegerType is 4 bytes.
