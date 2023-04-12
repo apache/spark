@@ -60,7 +60,7 @@ object PhysicalDataType {
   def ordering(dt: DataType): Ordering[Any] = apply(dt).ordering.asInstanceOf[Ordering[Any]]
 }
 
-trait PhysicalPrimitiveType
+sealed trait PhysicalPrimitiveType
 
 sealed abstract class PhysicalNumericType extends PhysicalDataType {
   // Unfortunately we can't get this implicitly as that breaks Spark Serialization. In order for
