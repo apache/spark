@@ -389,10 +389,9 @@ case class WriteDelta(
   }
 }
 
-trait V2CreateTableAsSelectPlan extends Command with V2CreateTablePlan with KeepAnalyzedQuery {
+trait V2CreateTableAsSelectPlan extends V2CreateTablePlan with AnalysisOnlyCommand {
   def name: LogicalPlan
   def query: LogicalPlan
-  def isQueryAnalyzed: Boolean
 
   override lazy val resolved: Boolean = childrenResolved && {
     // the table schema is created from the query schema, so the only resolution needed is to check
@@ -401,7 +400,7 @@ trait V2CreateTableAsSelectPlan extends Command with V2CreateTablePlan with Keep
     references.map(_.fieldNames).forall(query.schema.findNestedField(_).isDefined)
   }
 
-  override def children: Seq[LogicalPlan] = if (isQueryAnalyzed) Seq(name) else Seq(name, query)
+  override def childrenToAnalyze: Seq[LogicalPlan] = Seq(name, query)
 
   override def tableSchema: StructType = query.schema
 
@@ -412,6 +411,7 @@ trait V2CreateTableAsSelectPlan extends Command with V2CreateTablePlan with Keep
 
   override protected def withNewChildrenInternal(
       newChildren: IndexedSeq[LogicalPlan]): V2CreateTableAsSelectPlan = {
+    assert(!isAnalyzed)
     newChildren match {
       case Seq(newName, newQuery) =>
         withNewNameAndQuery(newName, newQuery)
@@ -477,14 +477,14 @@ case class CreateTableAsSelect(
     tableSpec: TableSpec,
     writeOptions: Map[String, String],
     ignoreIfExists: Boolean,
-    isQueryAnalyzed: Boolean = false)
+    isAnalyzed: Boolean = false)
   extends V2CreateTableAsSelectPlan {
+
+  override def markAsAnalyzed(ac: AnalysisContext): LogicalPlan = copy(isAnalyzed = true)
 
   override def withPartitioning(rewritten: Seq[Transform]): V2CreateTablePlan = {
     this.copy(partitioning = rewritten)
   }
-
-  override def storeAnalyzedQuery(): Command = copy(isQueryAnalyzed = true)
 
   override protected def withNewName(newName: LogicalPlan): CreateTableAsSelect = {
     copy(name = newName)
@@ -540,10 +540,10 @@ case class ReplaceTableAsSelect(
     tableSpec: TableSpec,
     writeOptions: Map[String, String],
     orCreate: Boolean,
-    isQueryAnalyzed: Boolean = false)
+    isAnalyzed: Boolean = false)
   extends V2CreateTableAsSelectPlan {
 
-  override def storeAnalyzedQuery(): Command = copy(isQueryAnalyzed = true)
+  override def markAsAnalyzed(ac: AnalysisContext): LogicalPlan = copy(isAnalyzed = true)
 
   override def withPartitioning(rewritten: Seq[Transform]): V2CreateTablePlan = {
     this.copy(partitioning = rewritten)
