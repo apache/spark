@@ -19,6 +19,7 @@ from pyspark.sql.connect.utils import check_dependencies
 check_dependencies(__name__)
 
 import array
+import itertools
 import datetime
 import decimal
 
@@ -31,6 +32,7 @@ from pyspark.sql.types import (
     TimestampType,
     TimestampNTZType,
     MapType,
+    StructField,
     StructType,
     ArrayType,
     BinaryType,
@@ -38,6 +40,7 @@ from pyspark.sql.types import (
     DecimalType,
     StringType,
     UserDefinedType,
+    cast,
 )
 
 from pyspark.sql.connect.types import to_arrow_schema
@@ -45,6 +48,7 @@ from pyspark.sql.connect.types import to_arrow_schema
 from typing import (
     Any,
     Callable,
+    Dict,
     Sequence,
     List,
 )
@@ -99,10 +103,10 @@ class LocalDataToArrowConversion:
 
             field_names = dataType.fieldNames()
 
-            field_convs = {
-                field.name: LocalDataToArrowConversion._create_converter(field.dataType)
+            field_convs = [
+                LocalDataToArrowConversion._create_converter(field.dataType)
                 for field in dataType.fields
-            }
+            ]
 
             def convert_struct(value: Any) -> Any:
                 if value is None:
@@ -113,24 +117,15 @@ class LocalDataToArrowConversion:
                     ), f"{type(value)} {value}"
 
                     _dict = {}
-                    if isinstance(value, dict):
-                        for k, v in value.items():
-                            assert isinstance(k, str)
-                            _dict[k] = field_convs[k](v)
-                    elif isinstance(value, Row) and hasattr(value, "__fields__"):
-                        for k, v in value.asDict(recursive=False).items():
-                            assert isinstance(k, str)
-                            _dict[k] = field_convs[k](v)
-                    elif not isinstance(value, Row) and hasattr(value, "__dict__"):
-                        for k, v in value.__dict__.items():
-                            assert isinstance(k, str)
-                            _dict[k] = field_convs[k](v)
-                    else:
-                        i = 0
-                        for v in value:
-                            field_name = field_names[i]
-                            _dict[field_name] = field_convs[field_name](v)
-                            i += 1
+                    if not isinstance(value, Row) and hasattr(value, "__dict__"):
+                        value = value.__dict__
+                    for i, field in enumerate(field_names):
+                        if isinstance(value, dict):
+                            v = value.get(field)
+                        else:
+                            v = value[i]
+
+                        _dict[f"col_{i}"] = field_convs[i](v)
 
                     return _dict
 
@@ -179,16 +174,27 @@ class LocalDataToArrowConversion:
 
             return convert_binary
 
-        elif isinstance(dataType, (TimestampType, TimestampNTZType)):
+        elif isinstance(dataType, TimestampType):
 
-            def convert_timestample(value: Any) -> Any:
+            def convert_timestamp(value: Any) -> Any:
                 if value is None:
                     return None
                 else:
                     assert isinstance(value, datetime.datetime)
                     return value.astimezone(datetime.timezone.utc)
 
-            return convert_timestample
+            return convert_timestamp
+
+        elif isinstance(dataType, TimestampNTZType):
+
+            def convert_timestamp_ntz(value: Any) -> Any:
+                if value is None:
+                    return None
+                else:
+                    assert isinstance(value, datetime.datetime) and value.tzinfo is None
+                    return value
+
+            return convert_timestamp_ntz
 
         elif isinstance(dataType, DecimalType):
 
@@ -255,8 +261,6 @@ class LocalDataToArrowConversion:
 
         assert schema is not None and isinstance(schema, StructType)
 
-        pa_schema = to_arrow_schema(schema)
-
         column_names = schema.fieldNames()
 
         column_convs = [
@@ -275,6 +279,27 @@ class LocalDataToArrowConversion:
                     value = item[i]
 
                 pylist[i].append(column_convs[i](value))
+
+        def normalize(dt: DataType) -> DataType:
+            if isinstance(dt, StructType):
+                return StructType(
+                    [
+                        StructField(f"col_{i}", normalize(field.dataType), nullable=field.nullable)
+                        for i, field in enumerate(dt.fields)
+                    ]
+                )
+            elif isinstance(dt, ArrayType):
+                return ArrayType(normalize(dt.elementType), containsNull=dt.containsNull)
+            elif isinstance(dt, MapType):
+                return MapType(
+                    normalize(dt.keyType),
+                    normalize(dt.valueType),
+                    valueContainsNull=dt.valueContainsNull,
+                )
+            else:
+                return dt
+
+        pa_schema = to_arrow_schema(cast(StructType, normalize(schema)))
 
         return pa.Table.from_arrays(pylist, schema=pa_schema)
 
@@ -319,13 +344,30 @@ class ArrowTableToRowsConversion:
 
         elif isinstance(dataType, StructType):
 
-            field_convs = {
-                f.name: ArrowTableToRowsConversion._create_converter(f.dataType)
-                for f in dataType.fields
-            }
-            need_conv = any(
-                ArrowTableToRowsConversion._need_converter(f.dataType) for f in dataType.fields
-            )
+            field_names = dataType.names
+
+            if len(set(field_names)) == len(field_names):
+                dedup_field_names = field_names
+            else:
+                gen_new_name: Dict[str, Callable[[], str]] = {}
+                for name, group in itertools.groupby(dataType.names):
+                    if len(list(group)) > 1:
+
+                        def _gen(_name: str) -> Callable[[], str]:
+                            _i = itertools.count()
+                            return lambda: f"{_name}_{next(_i)}"
+
+                    else:
+
+                        def _gen(_name: str) -> Callable[[], str]:
+                            return lambda: _name
+
+                    gen_new_name[name] = _gen(name)
+                dedup_field_names = [gen_new_name[name]() for name in dataType.names]
+
+            field_convs = [
+                ArrowTableToRowsConversion._create_converter(f.dataType) for f in dataType.fields
+            ]
 
             def convert_struct(value: Any) -> Any:
                 if value is None:
@@ -333,14 +375,11 @@ class ArrowTableToRowsConversion:
                 else:
                     assert isinstance(value, dict)
 
-                    if need_conv:
-                        _dict = {}
-                        for k, v in value.items():
-                            assert isinstance(k, str)
-                            _dict[k] = field_convs[k](v)
-                        return Row(**_dict)
-                    else:
-                        return Row(**value)
+                    _values = [
+                        field_convs[i](value.get(name, None))
+                        for i, name in enumerate(dedup_field_names)
+                    ]
+                    return _create_row(field_names, _values)
 
             return convert_struct
 
@@ -383,20 +422,27 @@ class ArrowTableToRowsConversion:
 
             return convert_binary
 
-        elif isinstance(dataType, (TimestampType, TimestampNTZType)):
+        elif isinstance(dataType, TimestampType):
 
             def convert_timestample(value: Any) -> Any:
                 if value is None:
                     return None
                 else:
                     assert isinstance(value, datetime.datetime)
-                    if value.tzinfo is not None:
-                        # always remove the time zone for now
-                        return value.replace(tzinfo=None)
-                    else:
-                        return value
+                    return value.astimezone().replace(tzinfo=None)
 
             return convert_timestample
+
+        elif isinstance(dataType, TimestampNTZType):
+
+            def convert_timestample_ntz(value: Any) -> Any:
+                if value is None:
+                    return None
+                else:
+                    assert isinstance(value, datetime.datetime)
+                    return value
+
+            return convert_timestample_ntz
 
         elif isinstance(dataType, UserDefinedType):
             udt: UserDefinedType = dataType
@@ -425,13 +471,10 @@ class ArrowTableToRowsConversion:
             ArrowTableToRowsConversion._create_converter(f.dataType) for f in schema.fields
         ]
 
-        # table.to_pylist() automatically remove columns with duplicated names,
-        # to avoid this, use columnar lists here.
-        # TODO: support duplicated field names in the one struct. e.g. SF.struct("a", "a")
         columnar_data = [column.to_pylist() for column in table.columns]
 
         rows: List[Row] = []
         for i in range(0, table.num_rows):
-            values = [field_converters[j](columnar_data[j][i]) for j in range(0, table.num_columns)]
-            rows.append(_create_row(fields=table.column_names, values=values))
+            values = [field_converters[j](columnar_data[j][i]) for j in range(table.num_columns)]
+            rows.append(_create_row(fields=schema.fieldNames(), values=values))
         return rows

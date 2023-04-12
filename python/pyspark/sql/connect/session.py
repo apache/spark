@@ -47,6 +47,7 @@ from pandas.api.types import (  # type: ignore[attr-defined]
 )
 
 from pyspark import SparkContext, SparkConf, __version__
+from pyspark.sql.connect import proto
 from pyspark.sql.connect.client import SparkConnectClient
 from pyspark.sql.connect.conf import RuntimeConf
 from pyspark.sql.connect.dataframe import DataFrame
@@ -54,7 +55,7 @@ from pyspark.sql.connect.plan import SQL, Range, LocalRelation, CachedRelation
 from pyspark.sql.connect.readwriter import DataFrameReader
 from pyspark.sql.connect.streaming import DataStreamReader
 from pyspark.sql.pandas.serializers import ArrowStreamPandasSerializer
-from pyspark.sql.pandas.types import to_arrow_schema, to_arrow_type, _get_local_timezone
+from pyspark.sql.pandas.types import to_arrow_schema, to_arrow_type
 from pyspark.sql.session import classproperty, SparkSession as PySparkSession
 from pyspark.sql.types import (
     _infer_schema,
@@ -172,32 +173,38 @@ class SparkSession:
     def readStream(self) -> "DataStreamReader":
         return DataStreamReader(self)
 
+    def _get_configs(self, *keys: str) -> Tuple[Optional[str], ...]:
+        op = proto.ConfigRequest.Operation(get=proto.ConfigRequest.Get(keys=keys))
+        configs = dict(self._client.config(op).pairs)
+        return tuple(configs.get(key) for key in keys)
+
     def _inferSchemaFromList(
         self, data: Iterable[Any], names: Optional[List[str]] = None
     ) -> StructType:
         """
         Infer schema from list of Row, dict, or tuple.
-
-        Refer to 'pyspark.sql.session._inferSchemaFromList' with default configurations:
-
-          - 'infer_dict_as_struct' : False
-          - 'infer_array_from_first_element' : False
-          - 'prefer_timestamp_ntz' : False
         """
         if not data:
             raise ValueError("can not infer schema from empty dataset")
-        infer_dict_as_struct = False
-        infer_array_from_first_element = False
-        prefer_timestamp_ntz = False
+
+        (
+            infer_dict_as_struct,
+            infer_array_from_first_element,
+            prefer_timestamp_ntz,
+        ) = self._get_configs(
+            "spark.sql.pyspark.inferNestedDictAsStruct.enabled",
+            "spark.sql.pyspark.legacy.inferArrayTypeFromFirstElement.enabled",
+            "spark.sql.timestampType",
+        )
         return reduce(
             _merge_type,
             (
                 _infer_schema(
                     row,
                     names,
-                    infer_dict_as_struct=infer_dict_as_struct,
-                    infer_array_from_first_element=infer_array_from_first_element,
-                    prefer_timestamp_ntz=prefer_timestamp_ntz,
+                    infer_dict_as_struct=(infer_dict_as_struct == "true"),
+                    infer_array_from_first_element=(infer_array_from_first_element == "true"),
+                    prefer_timestamp_ntz=(prefer_timestamp_ntz == "TIMESTAMP_NTZ"),
                 )
                 for row in data
             ),
@@ -276,10 +283,12 @@ class SparkSession:
                     for t in data.dtypes
                 ]
 
+            timezone, safecheck = self._get_configs(
+                "spark.sql.session.timeZone", "spark.sql.execution.pandas.convertToArrowArraySafely"
+            )
+
             ser = ArrowStreamPandasSerializer(
-                _get_local_timezone(),  # 'spark.session.timezone' should be respected
-                False,  # 'spark.sql.execution.pandas.convertToArrowArraySafely' should be respected
-                True,
+                cast(str, timezone), safecheck == "true", assign_cols_by_name=True
             )
 
             _table = pa.Table.from_batches(
@@ -358,7 +367,7 @@ class SparkSession:
                         elif isinstance(_parsed, DataType):
                             _inferred_schema = StructType().add("value", _parsed)
                         _schema_str = None
-                    if _inferred_schema is None or not isinstance(_inferred_schema, StructType):
+                    if _has_nulltype(_inferred_schema):
                         raise ValueError(
                             "Some of types cannot be determined after inferring, "
                             "a StructType Schema is required in this case"

@@ -978,6 +978,11 @@
           "expects a binary value with 16, 24 or 32 bytes, but got <actualLength> bytes."
         ]
       },
+      "AES_SALTED_MAGIC" : {
+        "message" : [
+          "Initial bytes from input <saltedMagic> do not match 'Salted__' (0x53616C7465645F5F)."
+        ]
+      },
       "PATTERN" : {
         "message" : [
           "<value>."
@@ -1423,6 +1428,11 @@
   "SORT_BY_WITHOUT_BUCKETING" : {
     "message" : [
       "sortBy must be used together with bucketBy."
+    ]
+  },
+  "SQL_CONF_NOT_FOUND" : {
+    "message" : [
+      "The SQL config <sqlConf> cannot be found. Please verify that the config exists."
     ]
   },
   "STAR_GROUP_BY_POS" : {

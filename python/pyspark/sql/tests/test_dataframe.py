@@ -1700,6 +1700,26 @@ class DataFrameTestsMixin:
             message_parameters={"arg_name": "condition", "arg_type": "int"},
         )
 
+    def test_duplicate_field_names(self):
+        data = [Row(Row("a", 1), Row(2, 3, "b", 4, "c")), Row(Row("x", 6), Row(7, 8, "y", 9, "z"))]
+        schema = (
+            StructType()
+            .add("struct", StructType().add("x", StringType()).add("x", IntegerType()))
+            .add(
+                "struct",
+                StructType()
+                .add("a", IntegerType())
+                .add("x", IntegerType())
+                .add("x", StringType())
+                .add("y", IntegerType())
+                .add("y", StringType()),
+            )
+        )
+        df = self.spark.createDataFrame(data, schema=schema)
+
+        self.assertEqual(df.schema, schema)
+        self.assertEqual(df.collect(), data)
+
 
 class QueryExecutionListenerTests(unittest.TestCase, SQLTestUtils):
     # These tests are separate because it uses 'spark.sql.queryExecutionListeners' which is
