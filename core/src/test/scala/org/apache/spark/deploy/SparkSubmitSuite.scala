@@ -550,18 +550,42 @@ class SparkSubmitSuite
     Files.delete(Paths.get("TestUDTF.jar"))
   }
 
-  test("SPARK-43014: Do not overwrite `spark.app.submitTime` in k8s cluster mode driver") {
+  test("SPARK-43014: Set `spark.app.submitTime` if missing ") {
+    val clArgs1 = Seq(
+      "--deploy-mode", "client",
+      "--master", "k8s://host:port",
+      "--class", "org.SomeClass",
+      "/home/thejar.jar")
+    val appArgs1 = new SparkSubmitArguments(clArgs1)
+    val (_, _, conf1, _) = submit.prepareSubmitEnvironment(appArgs1)
+    conf1.getOption("spark.app.submitTime").isDefined should be(true)
+
     val submitTime = 1234567.toString
+    val clArgs2 = Seq(
+      "--deploy-mode", "client",
+      "--master", "k8s://host:port",
+      "--class", "org.SomeClass",
+      "--conf", "spark.app.submitTime=" + submitTime,
+      "/home/thejar.jar")
+    val appArgs2 = new SparkSubmitArguments(clArgs2)
+    val (_, _, conf2, _) = submit.prepareSubmitEnvironment(appArgs2)
+    conf2.get("spark.app.submitTime") should be (submitTime)
+  }
+
+  test("SPARK-43014: Overwrite `spark.app.submitTime` in k8s cluster mode driver " +
+    "when `spark.kubernetes.setSubmitTimeInDriver` is true") {
+    val submitTime = System.currentTimeMillis() - 1000
     val clArgs = Seq(
       "--deploy-mode", "client",
       "--master", "k8s://host:port",
       "--class", "org.SomeClass",
       "--conf", "spark.app.submitTime=" + submitTime,
       "--conf", "spark.kubernetes.submitInDriver=true",
+      "--conf", "spark.kubernetes.setSubmitTimeInDriver=true",
       "/home/thejar.jar")
     val appArgs = new SparkSubmitArguments(clArgs)
     val (_, _, conf, _) = submit.prepareSubmitEnvironment(appArgs)
-    conf.get("spark.app.submitTime") should be (submitTime)
+    conf.getLong("spark.app.submitTime", -1) should be > submitTime
   }
 
   /**

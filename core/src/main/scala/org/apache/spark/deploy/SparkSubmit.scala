@@ -904,8 +904,10 @@ private[spark] class SparkSubmit extends Logging {
       childArgs ++= Seq("--verbose")
     }
 
-    if (!isKubernetesClusterModeDriver) {
-      // SubmitTime should not be overwritten when run Driver in k8s cluster mode
+    sparkConf.setIfMissing("spark.app.submitTime", System.currentTimeMillis().toString)
+    val setSubmitTimeInClusterModeDriver =
+      sparkConf.getBoolean("spark.kubernetes.setSubmitTimeInDriver", false)
+    if (isKubernetesClusterModeDriver && setSubmitTimeInClusterModeDriver) {
       sparkConf.set("spark.app.submitTime", System.currentTimeMillis().toString)
     }
 
