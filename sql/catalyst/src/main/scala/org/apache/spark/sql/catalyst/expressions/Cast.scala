@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.trees.{SQLQueryContext, TreeNodeTag}
 import org.apache.spark.sql.catalyst.trees.TreePattern._
-import org.apache.spark.sql.catalyst.types.{PhysicalFractionalType, PhysicalNumericType}
+import org.apache.spark.sql.catalyst.types.{PhysicalFractionalType, PhysicalIntegralType, PhysicalNumericType}
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
@@ -872,10 +872,10 @@ case class Cast(
     case x: IntegralType =>
       if (x == LongType) {
         b => IntervalUtils.longToDayTimeInterval(
-          x.integral.asInstanceOf[Integral[Any]].toLong(b), it.startField, it.endField)
+          PhysicalIntegralType.integral(x).toLong(b), it.startField, it.endField)
       } else {
         b => IntervalUtils.intToDayTimeInterval(
-          x.integral.asInstanceOf[Integral[Any]].toInt(b), it.startField, it.endField)
+          PhysicalIntegralType.integral(x).toInt(b), it.startField, it.endField)
       }
     case DecimalType.Fixed(p, s) =>
       buildCast[Decimal](_, d =>
@@ -892,10 +892,10 @@ case class Cast(
     case x: IntegralType =>
       if (x == LongType) {
         b => IntervalUtils.longToYearMonthInterval(
-          x.integral.asInstanceOf[Integral[Any]].toLong(b), it.startField, it.endField)
+          PhysicalIntegralType.integral(x).toLong(b), it.startField, it.endField)
       } else {
         b => IntervalUtils.intToYearMonthInterval(
-          x.integral.asInstanceOf[Integral[Any]].toInt(b), it.startField, it.endField)
+          PhysicalIntegralType.integral(x).toInt(b), it.startField, it.endField)
       }
     case DecimalType.Fixed(p, s) =>
       buildCast[Decimal](_, d =>
@@ -1120,7 +1120,7 @@ case class Cast(
     case dt: DecimalType =>
       b => toPrecision(b.asInstanceOf[Decimal], target, getContextOrNull())
     case t: IntegralType =>
-      b => changePrecision(Decimal(t.integral.asInstanceOf[Integral[Any]].toLong(b)), target)
+      b => changePrecision(Decimal(PhysicalIntegralType.integral(t).toLong(b)), target)
     case x: FractionalType =>
       val fractional = PhysicalFractionalType.fractional(x)
       b => try {

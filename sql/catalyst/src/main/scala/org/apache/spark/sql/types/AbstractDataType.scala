@@ -184,9 +184,7 @@ private[sql] object IntegralType extends AbstractDataType {
 }
 
 
-private[sql] abstract class IntegralType extends NumericType {
-  private[sql] val integral: Integral[InternalType]
-}
+private[sql] abstract class IntegralType extends NumericType
 
 
 private[sql] object FractionalType {
