@@ -35,7 +35,6 @@ class FloatType private() extends FractionalType {
   // Defined with a private constructor so the companion object is the only possible instantiation.
   private[sql] type InternalType = Float
   @transient private[sql] lazy val tag = typeTag[InternalType]
-  private[sql] val asIntegral = FloatType.FloatAsIfIntegral
 
   /**
    * The default size of a value of the FloatType is 4 bytes.

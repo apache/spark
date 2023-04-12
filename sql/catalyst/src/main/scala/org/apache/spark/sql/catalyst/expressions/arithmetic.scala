@@ -886,8 +886,8 @@ case class IntegralDivide(
     val integral = left.dataType match {
       case i: IntegralType =>
         PhysicalIntegralType.integral(i)
-      case d: DecimalType =>
-        d.asIntegral.asInstanceOf[Integral[Any]]
+      case DecimalType.Fixed(p, s) =>
+        PhysicalDecimalType(p, s).asIntegral.asInstanceOf[Integral[Any]]
       case _: YearMonthIntervalType =>
         PhysicalIntegerType.integral.asInstanceOf[Integral[Any]]
       case _: DayTimeIntervalType =>
@@ -981,7 +981,7 @@ case class Remainder(
       (left, right) => integral.rem(left, right)
 
     case d @ DecimalType.Fixed(precision, scale) =>
-      val integral = d.asIntegral.asInstanceOf[Integral[Any]]
+      val integral = PhysicalDecimalType(precision, scale).asIntegral.asInstanceOf[Integral[Any]]
       (left, right) =>
         checkDecimalOverflow(integral.rem(left, right).asInstanceOf[Decimal], precision, scale)
   }
