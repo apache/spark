@@ -1162,9 +1162,9 @@ class DataStreamWriter:
         >>> def print_row(row):
         ...     print(row)
         ...
-        >>> q = df.writeStream.foreach(print_row).start() # doctest: +SKIP
-        >>> time.sleep(3) # doctest: +SKIP
-        >>> q.stop() # doctest: +SKIP
+        >>> q = df.writeStream.foreach(print_row).start()
+        >>> time.sleep(3)
+        >>> q.stop()
 
         Print every row using a object with process() method
 
@@ -1179,9 +1179,9 @@ class DataStreamWriter:
         ...     def close(self, error):
         ...         print("Closed with error: %s" % str(error))
         ...
-        >>> q = df.writeStream.foreach(print_row).start() # doctest: +SKIP
-        >>> time.sleep(3) # doctest: +SKIP
-        >>> q.stop() # doctest: +SKIP
+        >>> q = df.writeStream.foreach(print_row).start()
+        >>> time.sleep(3)
+        >>> q.stop()
         """
 
         from pyspark.rdd import _wrap_function
@@ -1264,7 +1264,6 @@ class DataStreamWriter:
         self._jwrite.foreach(jForeachWriter)
         return self
 
-    # TODO(SPARK-42944): remove the doctest: +SKIP flag below
     def foreachBatch(self, func: Callable[["DataFrame", int], None]) -> "DataStreamWriter":
         """
         Sets the output of the streaming query to be processed using the provided
@@ -1289,9 +1288,9 @@ class DataStreamWriter:
         >>> def func(batch_df, batch_id):
         ...     batch_df.collect()
         ...
-        >>> q = df.writeStream.foreachBatch(func).start() # doctest: +SKIP
-        >>> time.sleep(3) # doctest: +SKIP
-        >>> q.stop() # doctest: +SKIP
+        >>> q = df.writeStream.foreachBatch(func).start()
+        >>> time.sleep(3)
+        >>> q.stop()
         """
 
         from pyspark.java_gateway import ensure_callback_server_started
@@ -1305,7 +1304,6 @@ class DataStreamWriter:
         ensure_callback_server_started(gw)
         return self
 
-    # TODO(SPARK-42940): remove the doctest: +SKIP flag below
     def start(
         self,
         path: Optional[str] = None,
@@ -1364,7 +1362,7 @@ class DataStreamWriter:
         >>> q.name
         'this_query'
         >>> q.stop()
-        >>> q.isActive # doctest: +SKIP
+        >>> q.isActive
         False
 
         Example with using other parameters with a trigger.

@@ -751,8 +751,6 @@ pyspark_connect = Module(
         "pyspark.sql.connect.dataframe",
         "pyspark.sql.connect.functions",
         "pyspark.sql.connect.avro.functions",
-        "pyspark.sql.connect.streaming.readwriter",
-        "pyspark.sql.connect.streaming.query",
         # sql unittests
         "pyspark.sql.tests.connect.test_client",
         "pyspark.sql.tests.connect.test_connect_plan",

@@ -156,7 +156,6 @@ class StreamingQuery:
         """
         return self._jsq.isActive()
 
-    # TODO(SPARK-42960): remove the doctest: +SKIP flag below
     def awaitTermination(self, timeout: Optional[int] = None) -> Optional[bool]:
         """
         Waits for the termination of `this` query, either by :func:`query.stop()` or by an
@@ -191,7 +190,7 @@ class StreamingQuery:
 
         Return whether the query has terminated or not within 5 seconds
 
-        >>> sq.awaitTermination(5) # doctest: +SKIP
+        >>> sq.awaitTermination(5)
         False
 
         >>> sq.stop()
@@ -317,7 +316,6 @@ class StreamingQuery:
         """
         return self._jsq.processAllAvailable()
 
-    # TODO(SPARK-42940): remove the doctest: +SKIP flag below
     def stop(self) -> None:
         """
         Stop this streaming query.
@@ -335,7 +333,7 @@ class StreamingQuery:
 
         >>> sq.stop()
 
-        >>> sq.isActive # doctest: +SKIP
+        >>> sq.isActive
         False
         """
         self._jsq.stop()

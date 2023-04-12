@@ -66,10 +66,11 @@ class StreamingQuery:
 
     isActive.__doc__ = PySparkStreamingQuery.isActive.__doc__
 
+    # TODO (SPARK-42960): Implement and uncomment the doc
     def awaitTermination(self, timeout: Optional[int] = None) -> Optional[bool]:
         raise NotImplementedError()
 
-    awaitTermination.__doc__ = PySparkStreamingQuery.awaitTermination.__doc__
+    # awaitTermination.__doc__ = PySparkStreamingQuery.awaitTermination.__doc__
 
     @property
     def status(self) -> Dict[str, Any]:
@@ -115,7 +116,8 @@ class StreamingQuery:
         cmd.stop = True
         self._execute_streaming_query_cmd(cmd)
 
-    stop.__doc__ = PySparkStreamingQuery.stop.__doc__
+    # TODO (SPARK-42962): uncomment below
+    # stop.__doc__ = PySparkStreamingQuery.stop.__doc__
 
     def explain(self, extended: bool = False) -> None:
         cmd = pb2.StreamingQueryCommand()
@@ -125,6 +127,7 @@ class StreamingQuery:
 
     explain.__doc__ = PySparkStreamingQuery.explain.__doc__
 
+    # TODO (SPARK-42960): Implement and uncomment the doc
     def exception(self) -> Optional[StreamingQueryException]:
         raise NotImplementedError()
 
