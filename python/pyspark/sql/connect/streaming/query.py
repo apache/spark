@@ -16,12 +16,16 @@
 #
 
 import json
+import time
 from typing import TYPE_CHECKING, Any, cast, Dict, List, Optional
 
 from pyspark.errors import StreamingQueryException
 import pyspark.sql.connect.proto as pb2
 from pyspark.sql.streaming.query import (
     StreamingQuery as PySparkStreamingQuery,
+)
+from pyspark.errors.exceptions.captured import (
+    StreamingQueryException as CapturedStreamingQueryException,
 )
 
 __all__ = [
@@ -65,8 +69,31 @@ class StreamingQuery:
 
     isActive.__doc__ = PySparkStreamingQuery.isActive.__doc__
 
+    def _execute_await_termination_cmd(self, timeout: int = 10) -> bool:
+        cmd = pb2.StreamingQueryCommand()
+        cmd.await_termination.timeout_ms = timeout
+        terminated = self._execute_streaming_query_cmd(cmd).await_termination.terminated
+        return terminated
+    
+    def _await_termination(self, timeoutMs: Optional[int]) -> Optional[bool]:
+        terminated = False
+        if timeoutMs is None:
+            while not terminated:
+                terminated = self._execute_await_termination_cmd()
+        else:
+            reqTimeoutMs = min(timeoutMs, 10)
+            while timeoutMs > 0 and not terminated:
+                start = time.time()
+                terminated = self._execute_await_termination_cmd(reqTimeoutMs)
+                end = time.time()
+                timeoutMs = (end - start) * 1000
+            return terminated
+
     def awaitTermination(self, timeout: Optional[int] = None) -> Optional[bool]:
-        raise NotImplementedError()
+        if timeout is not None:
+            if not isinstance(timeout, (int, float)) or timeout < 0:
+                raise ValueError("timeout must be a positive integer or float. Got %s" % timeout)
+        return self._await_termination(int(timeout * 1000))
 
     awaitTermination.__doc__ = PySparkStreamingQuery.awaitTermination.__doc__
 
@@ -128,10 +155,12 @@ class StreamingQuery:
         cmd = pb2.StreamingQueryCommand()
         cmd.exception = True
         result = self._execute_streaming_query_cmd(cmd).exception.result
-        if result == "":
+        if not result.has_exception:
             return None
         else:
-            return result
+            msg = result.message.split(": ", 1)[1]  # Drop the Java StreamingQueryException type info
+            stackTrace = "\n\t at ".join(map(lambda x: x.toString(), result.stack_trace))
+            return CapturedStreamingQueryException(msg, stackTrace, result.cause)
 
     exception.__doc__ = PySparkStreamingQuery.exception.__doc__
 

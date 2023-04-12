@@ -270,7 +270,7 @@ message StreamingQueryCommand {
   }
 
   message AwaitTerminationCommand {
-    int64 timeout_ms = 0;
+    int64 timeout_ms = 1;
   }
 }
 
@@ -284,6 +284,7 @@ message StreamingQueryCommandResult {
     RecentProgressResult recent_progress = 3;
     ExplainResult explain = 4;
     ExceptionResult exception = 5;
+    AwaitTerminationResult await_termination = 6;
   }
 
   message StatusResult {
@@ -308,8 +309,11 @@ message StreamingQueryCommandResult {
     // Exception as string
     bool has_exception = 1;
     optional string message = 2;
-    optional repeated string stack_trace = 3;
+    repeated string stack_trace = 3;
     optional string cause = 4;
   }
-}
 
+  message AwaitTerminationResult {
+    bool terminated = 1;
+  }
+}
