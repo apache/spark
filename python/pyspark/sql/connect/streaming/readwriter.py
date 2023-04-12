@@ -94,12 +94,11 @@ class DataStreamReader(OptionUtils):
         if schema is not None:
             self.schema(schema)
         self.options(**options)
-        if path is not None:
-            if type(path) != str or len(path.strip()) == 0:
-                raise ValueError(
-                    "If the path is provided for stream, it needs to be a "
-                    + "non-empty string. List of paths are not supported."
-                )
+        if path is not None and (type(path) != str or len(path.strip()) == 0):
+            raise ValueError(
+                "If the path is provided for stream, it needs to be a "
+                + "non-empty string. List of paths are not supported."
+            )
 
         plan = DataSource(
             format=self._format,
