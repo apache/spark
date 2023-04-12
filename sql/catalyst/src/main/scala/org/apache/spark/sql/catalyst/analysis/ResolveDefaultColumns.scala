@@ -19,15 +19,12 @@ package org.apache.spark.sql.catalyst.analysis
 
 import scala.collection.mutable
 
-import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.catalog.{SessionCatalog, UnresolvedCatalogRelation}
+import org.apache.spark.sql.catalyst.catalog.UnresolvedCatalogRelation
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
-import org.apache.spark.sql.connector.catalog.{CatalogManager, LookupCatalog}
-import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.NamespaceHelper
+import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogV2Util, LookupCatalog, TableCatalog, ViewCatalog}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -54,7 +51,6 @@ import org.apache.spark.sql.types._
  */
 case class ResolveDefaultColumns(override val catalogManager: CatalogManager)
   extends Rule[LogicalPlan] with LookupCatalog {
-  val catalog: SessionCatalog = catalogManager.v1SessionCatalog
   override def apply(plan: LogicalPlan): LogicalPlan = {
     plan.resolveOperatorsWithPruning(
       (_ => SQLConf.get.enableDefaultColumns), ruleId) {
@@ -555,62 +551,25 @@ case class ResolveDefaultColumns(override val catalogManager: CatalogManager)
    * Returns the schema for the target table of a DML command, looking into the catalog if needed.
    */
   private def getSchemaForTargetTable(table: LogicalPlan): Option[StructType] = {
-    // First find the source relation. Note that we use 'collectFirst' to descend past any
-    // SubqueryAlias nodes that may be present.
-    val source: Option[LogicalPlan] = table.collectFirst {
-      case r: NamedRelation if !r.skipSchemaResolution =>
-        // Here we only resolve the default columns in the tables that require schema resolution
-        // during write operations.
-        r
+    val unresolvedCatalogRelation = table.collectFirst {
       case r: UnresolvedCatalogRelation => r
     }
-    // Check if the target table is already resolved. If so, return the computed schema.
-    source.foreach { r =>
-      if (r.schema.fields.nonEmpty) {
-        return Some(r.schema)
-      }
+    val unresolvedRelation = table.collectFirst {
+      case r: UnresolvedRelation if !r.skipSchemaResolution => r
     }
-    // Lookup the relation from the catalog by name. This either succeeds or returns some "not
-    // found" error. In the latter cases, return out of this rule without changing anything and let
-    // the analyzer return a proper error message elsewhere.
-    val tableName: TableIdentifier = source match {
-      case Some(r: UnresolvedRelation) =>
+    unresolvedCatalogRelation.map { r =>
+      Some(r.tableMeta.schema)
+    }.getOrElse {
+      unresolvedRelation.map { r =>
         r.multipartIdentifier match {
-          case CatalogAndIdentifier(catalog, identifier) =>
-            TableIdentifier(
-              table = identifier.name,
-              database = if (identifier.namespace().nonEmpty) {
-                Some(identifier.namespace().head)
-              } else {
-                Some(catalogManager.currentNamespace.quoted)
-              },
-              catalog = Some(catalog.name))
+          case CatalogAndIdentifier(t: TableCatalog, id) =>
+            Some(CatalogV2Util.v2ColumnsToStructType(t.loadTable(id).columns()))
+          case CatalogAndIdentifier(v: ViewCatalog, id) =>
+            Some(v.loadView(id).schema())
           case _ =>
-            return None
+            None
         }
-      case Some(r: UnresolvedCatalogRelation) =>
-        return Some(r.tableMeta.schema)
-      case _ =>
-        return None
-    }
-    // First try to get the table metadata directly. If that fails, check for views below.
-    if (catalog.tableExists(tableName)) {
-      return Some(catalog.getTableMetadata(tableName).schema)
-    }
-    val lookup: LogicalPlan = try {
-      val viewName: TableIdentifier = source match {
-        case Some(r: UnresolvedRelation) => TableIdentifier(r.name)
-        case _ => return None
-      }
-      catalog.lookupRelation(viewName)
-    } catch {
-      case _: AnalysisException => return None
-    }
-    lookup match {
-      case SubqueryAlias(_, r: View) if r.isTempView =>
-        Some(r.desc.schema)
-      case _ =>
-        None
+      }.getOrElse(None)
     }
   }
 
