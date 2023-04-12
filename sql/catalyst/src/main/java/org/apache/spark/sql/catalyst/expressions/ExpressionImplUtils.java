@@ -175,19 +175,15 @@ public class ExpressionImplUtils {
 
   // Derive the key and init vector in the same way as OpenSSL's EVP_BytesToKey
   // since the version 1.1.0c which switched to SHA-256 as the hash.
-  private static byte[] getKeyAndIv(byte[] key, byte[] salt) {
+  private static byte[] getKeyAndIv(byte[] key, byte[] salt) throws NoSuchAlgorithmException {
     final byte[] keyAndSalt = arrConcat(key, salt);
     byte[] hash = new byte[0];
     byte[] keyAndIv = new byte[0];
     for (int i = 0; i < 3 && keyAndIv.length < key.length + CBC_IV_LEN; i++) {
       final byte[] hashData = arrConcat(hash, keyAndSalt);
-      try {
-        final MessageDigest md = MessageDigest.getInstance("SHA-256");
-        hash = md.digest(hashData);
-        keyAndIv = arrConcat(keyAndIv, hash);
-      } catch (NoSuchAlgorithmException e) {
-        // Double-check the used algorithm in the message digest.
-      }
+      final MessageDigest md = MessageDigest.getInstance("SHA-256");
+      hash = md.digest(hashData);
+      keyAndIv = arrConcat(keyAndIv, hash);
     }
     return keyAndIv;
   }
