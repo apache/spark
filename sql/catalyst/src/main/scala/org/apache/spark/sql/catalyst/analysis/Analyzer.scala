@@ -313,7 +313,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       TimeWindowing ::
       SessionWindowing ::
       ResolveWindowTime ::
-      ResolveDefaultColumns(catalogManager) ::
+      ResolveDefaultColumns(ResolveRelations) ::
       ResolveInlineTables ::
       ResolveLambdaVariables ::
       ResolveTimeZone ::

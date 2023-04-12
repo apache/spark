@@ -24,8 +24,9 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
-import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogV2Util, LookupCatalog, TableCatalog, ViewCatalog}
+import org.apache.spark.sql.connector.catalog.CatalogV2Util
 import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -46,11 +47,10 @@ import org.apache.spark.sql.types._
  * (1, 5)
  * (4, 6)
  *
- * @param catalogManager the catalog manager to use for looking up the schema of INSERT INTO table
- *                       objects.
+ * @param resolveRelations rule to resolve relations from the catalog. This should generally map to
+ *                         the the ResolveRelations analyzer rule.
  */
-case class ResolveDefaultColumns(override val catalogManager: CatalogManager)
-  extends Rule[LogicalPlan] with LookupCatalog {
+case class ResolveDefaultColumns(resolveRelations: Rule[LogicalPlan]) extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = {
     plan.resolveOperatorsWithPruning(
       (_ => SQLConf.get.enableDefaultColumns), ruleId) {
@@ -551,26 +551,24 @@ case class ResolveDefaultColumns(override val catalogManager: CatalogManager)
    * Returns the schema for the target table of a DML command, looking into the catalog if needed.
    */
   private def getSchemaForTargetTable(table: LogicalPlan): Option[StructType] = {
-    val unresolvedCatalogRelation = table.collectFirst {
-      case r: UnresolvedCatalogRelation => r
-    }
-    val unresolvedRelation = table.collectFirst {
-      case r: UnresolvedRelation if !r.skipSchemaResolution => r
-    }
-    unresolvedCatalogRelation.map { r =>
-      Some(r.tableMeta.schema)
-    }.getOrElse {
-      unresolvedRelation.map { r =>
-        r.multipartIdentifier match {
-          case CatalogAndIdentifier(t: TableCatalog, id) =>
-            Some(CatalogV2Util.v2ColumnsToStructType(t.loadTable(id).columns()))
-          case CatalogAndIdentifier(v: ViewCatalog, id) =>
-            Some(v.loadView(id).schema())
-          case _ =>
-            None
+    table.foreach {
+      case r: UnresolvedCatalogRelation =>
+        return Some(r.tableMeta.schema)
+      case d: DataSourceV2Relation =>
+        return Some(CatalogV2Util.v2ColumnsToStructType(d.table.columns()))
+      case r: UnresolvedRelation if !r.skipSchemaResolution =>
+        val resolved = resolveRelations(r)
+        resolved.collectFirst {
+          case u: UnresolvedCatalogRelation =>
+            return Some(u.tableMeta.schema)
         }
-      }.getOrElse(None)
+        resolved.collectFirst {
+          case v: View =>
+            return Some(v.schema)
+        }
+      case _ =>
     }
+    None
   }
 
   /**
