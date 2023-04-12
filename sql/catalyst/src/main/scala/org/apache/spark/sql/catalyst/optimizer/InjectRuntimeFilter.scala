@@ -154,12 +154,10 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
         // Runtime filters use one side of the [[Join]] to build a set of join key values and prune
         // the other side of the [[Join]]. It's also OK to use a superset of the join key values to
         // do the pruning.
-        if (isLeftSideSuperset(joinType, left, filterCreationSideExp) &&
-          !hintToBroadcastLeft(hint) && !canBroadcastBySize(left, conf)) {
-           extractSelectiveFilterOverScan(left, filterCreationSideExp)
-        } else if (isRightSideSuperset(joinType, right, filterCreationSideExp) &&
-          !hintToBroadcastRight(hint) && !canBroadcastBySize(right, conf)) {
-            extractSelectiveFilterOverScan(right, filterCreationSideExp)
+        if (isLeftSideSuperset(joinType, left, filterCreationSideExp)) {
+          extractSelectiveFilterOverScan(left, filterCreationSideExp)
+        } else if (isRightSideSuperset(joinType, right, filterCreationSideExp)) {
+          extractSelectiveFilterOverScan(right, filterCreationSideExp)
         } else {
           None
         }
