@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.types
 
-import scala.math.{Fractional, Numeric}
 import scala.reflect.runtime.universe.typeTag
 import scala.util.Try
 
@@ -36,11 +35,7 @@ class FloatType private() extends FractionalType {
   // Defined with a private constructor so the companion object is the only possible instantiation.
   private[sql] type InternalType = Float
   @transient private[sql] lazy val tag = typeTag[InternalType]
-  private[sql] val numeric = implicitly[Numeric[Float]]
-  private[sql] val fractional = implicitly[Fractional[Float]]
   private[sql] val asIntegral = FloatType.FloatAsIfIntegral
-
-  override private[sql] def exactNumeric = FloatExactNumeric
 
   /**
    * The default size of a value of the FloatType is 4 bytes.
