@@ -615,9 +615,10 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
             groupingAttrs(index)
           }
       }
-      aggregations.map { agg =>
-        replaceExprs(replaceGroupingFunc(agg, groupByExprs, gid)).asInstanceOf[NamedExpression]
-      }
+      aggregations
+        .map(replaceGroupingFunc(_, groupByExprs, gid))
+        .map(replaceExprs)
+        .map(_.asInstanceOf[NamedExpression])
     }
 
     /*
