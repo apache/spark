@@ -18,6 +18,7 @@ package org.apache.spark.sql
 
 import java.io.Closeable
 import java.net.URI
+import java.util.UUID
 import java.util.concurrent.TimeUnit._
 import java.util.concurrent.atomic.AtomicLong
 
@@ -255,7 +256,7 @@ class SparkSession private[sql] (
             .setSql(sqlText)
             .putAllArgs(args.asScala.mapValues(toLiteralProto).toMap.asJava)))
       val plan = proto.Plan.newBuilder().setCommand(cmd)
-      val responseIter = client.execute(plan.build())
+      val responseIter = client.execute(plan.build(), UUID.randomUUID.toString)
 
       val response = responseIter.asScala
         .find(_.hasSqlCommandResult)
@@ -439,7 +440,8 @@ class SparkSession private[sql] (
   }
 
   private[sql] def execute[T](plan: proto.Plan, encoder: AgnosticEncoder[T]): SparkResult[T] = {
-    val value = client.execute(plan)
+    val queryId = UUID.randomUUID.toString
+    val value = client.execute(plan, queryId)
     val result = new SparkResult(value, allocator, encoder)
     cleaner.register(result)
     result
@@ -450,12 +452,12 @@ class SparkSession private[sql] (
     f(builder)
     builder.getCommonBuilder.setPlanId(planIdGenerator.getAndIncrement())
     val plan = proto.Plan.newBuilder().setRoot(builder).build()
-    client.execute(plan).asScala.foreach(_ => ())
+    client.execute(plan, UUID.randomUUID.toString).asScala.foreach(_ => ())
   }
 
   private[sql] def execute(command: proto.Command): Unit = {
     val plan = proto.Plan.newBuilder().setCommand(command).build()
-    client.execute(plan).asScala.foreach(_ => ())
+    client.execute(plan, UUID.randomUUID.toString).asScala.foreach(_ => ())
   }
 
   @DeveloperApi

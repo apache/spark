@@ -26,6 +26,7 @@ import scala.util.control.NonFatal
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.{AddArtifactsRequest, AddArtifactsResponse}
 import org.apache.spark.connect.proto.AddArtifactsResponse.ArtifactSummary
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.connect.artifact.SparkConnectArtifactManager
 import org.apache.spark.util.Utils
 
@@ -35,7 +36,7 @@ import org.apache.spark.util.Utils
  * @param responseObserver
  */
 class SparkConnectAddArtifactsHandler(val responseObserver: StreamObserver[AddArtifactsResponse])
-    extends StreamObserver[AddArtifactsRequest] {
+    extends StreamObserver[AddArtifactsRequest] with Logging {
 
   // Temporary directory where artifacts are rebuilt from the bytes sent over the wire.
   protected val stagingDir: Path = Utils.createTempDir().toPath

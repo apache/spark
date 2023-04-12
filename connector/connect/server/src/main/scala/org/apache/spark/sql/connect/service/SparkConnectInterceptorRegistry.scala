@@ -38,6 +38,7 @@ object SparkConnectInterceptorRegistry {
     // Adding a new interceptor at compile time works like the eaxmple below with the dummy
     // interceptor:
     // interceptor[DummyInterceptor](classOf[DummyInterceptor])
+    interceptor[LoggingInterceptor](classOf[LoggingInterceptor])
   )
 
   /**

@@ -271,6 +271,8 @@ message ExecutePlanRequest {
   // collate streaming responses from different queries within the dedicated session.
   string session_id = 1;
 
+  optional string request_id = 5;
+
   // (Required) User context
   //
   // user_context.user_id and session+id both identify a unique remote spark session on the

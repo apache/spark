@@ -61,12 +61,15 @@ private[sql] class SparkConnectClient(
   def analyze(request: proto.AnalyzePlanRequest): proto.AnalyzePlanResponse =
     stub.analyzePlan(request)
 
-  def execute(plan: proto.Plan): java.util.Iterator[proto.ExecutePlanResponse] = {
+  def execute(
+      plan: proto.Plan,
+      requestId: String): java.util.Iterator[proto.ExecutePlanResponse] = {
     val request = proto.ExecutePlanRequest
       .newBuilder()
       .setPlan(plan)
       .setUserContext(userContext)
       .setSessionId(sessionId)
+      .setRequestId(requestId)
       .setClientType(userAgent)
       .build()
     stub.executePlan(request)
