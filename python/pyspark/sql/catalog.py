@@ -929,11 +929,13 @@ class Catalog:
         ----------
         tableName : str
             name of the table to get.
-        storageLevel : :class:`StorageLevel`
-            storage level to set for persistence.
 
             .. versionchanged:: 3.4.0
                 Allow ``tableName`` to be qualified with catalog name.
+
+        storageLevel : :class:`StorageLevel`
+            storage level to set for persistence.
+
             .. versionchanged:: 3.5.0
                 Allow to specify storage level.
 
