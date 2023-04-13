@@ -49,8 +49,10 @@ trait FunctionRegistryBase[T] {
 
   final def registerFunction(
       name: FunctionIdentifier, builder: FunctionBuilder, source: String): Unit = {
+    var builderClassName = builder.getClass.getCanonicalName
+    if (builderClassName == null) builderClassName = builder.getClass.getName
     val info = new ExpressionInfo(
-      builder.getClass.getName,
+      builderClassName,
       name.database.orNull,
       name.funcName,
       null,
