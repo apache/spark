@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partition
 import org.apache.spark.sql.catalyst.util.{truncatedString, CaseInsensitiveMap}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources._
-import org.apache.spark.sql.execution.datasources.parquet.{ParquetFileFormat => ParquetSource}
+import org.apache.spark.sql.execution.datasources.parquet.{ParquetFileFormat => ParquetSource, ParquetRowIndexUtil}
 import org.apache.spark.sql.execution.datasources.v2.PushedDownOperators
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.execution.vectorized.ConstantColumnVector
@@ -703,7 +703,8 @@ case class FileSourceScanExec(
               relation.sparkSession, relation.options, filePath) &&
             // SPARK-39634: Allow file splitting in combination with row index generation once
             // the fix for PARQUET-2161 is available.
-            !RowIndexUtil.isNeededForSchema(requiredSchema)
+            (!relation.fileFormat.isInstanceOf[ParquetSource]
+              || !ParquetRowIndexUtil.isNeededForSchema(requiredSchema))
           PartitionedFileUtil.splitFiles(
             sparkSession = relation.sparkSession,
             file = file,

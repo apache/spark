@@ -216,19 +216,17 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
       // Metadata attributes are part of a column of type struct up to this point. Here we extract
       // this column from the schema and specify a matcher for that.
       object MetadataStructColumn {
+        // The column returned by [[FileFormat.createFileMetadataCol]] is sanitized and lacks
+        // the internal metadata we rely on here. Map back to the real fields by field name.
+        lazy val availableMetadataFields = fsRelation.fileFormat.metadataSchemaFields
+          .map(field => field.name.toLowerCase(Locale.ROOT) -> field).toMap
+
         def unapply(attributeReference: AttributeReference): Option[AttributeReference] = {
           attributeReference match {
             case attr @ FileSourceMetadataAttribute(
                 MetadataAttributeWithLogicalName(
                   AttributeReference(_, schema: StructType, _, _),
                   FileFormat.METADATA_NAME)) =>
-              // The column returned by [[FileFormat.createFileMetadataCol]] is sanitized and lacks
-              // the internal metadata we rely on here. Map back to the real fields by field name,
-              // and restore their missing metadata.
-              val availableMetadataFields = FileFormat.metadataSchemaFields(fsRelation.fileFormat)
-                .map(field => field.name.toLowerCase(Locale.ROOT) -> field)
-                .toMap
-
               val adjustedFields = schema.fields.map { field =>
                 val metadata = availableMetadataFields(field.name.toLowerCase(Locale.ROOT)).metadata
                 field.copy(metadata = metadata)
@@ -243,14 +241,8 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
         case MetadataStructColumn(attr) => attr
       }
 
-      // We divide metadata columns into two categories: constant and generated.
-      // For constant metadata columns, we create these attributes as non-nullable
-      //  when passing to readers, since the values are always available.
-      // For generated metadata columns, they are set as nullable when passed to readers,
-      //  as the values will be null when trying to read the missing column from the file.
-      //  They are then replaced by the actual values later in the process.
-      // We then restore the specified nullability in the metadata projection node below.
-      // Also remember the attribute for each column name, so we can easily map back to it.
+      // Track constant and generated columns separately, because they are used differently in code
+      // below. Also remember the attribute for each logical column name, so we can map back to it.
       val constantMetadataColumns = mutable.Buffer.empty[Attribute]
       val generatedMetadataColumns = mutable.Buffer.empty[Attribute]
       val metadataColumnsByName = mutable.Map.empty[String, Attribute]

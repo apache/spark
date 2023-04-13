@@ -35,9 +35,6 @@ import org.apache.spark.unsafe.types.CalendarInterval
 
 object LiteralValueProtoConverter {
 
-  private lazy val nullType =
-    proto.DataType.newBuilder().setNull(proto.DataType.NULL.getDefaultInstance).build()
-
   /**
    * Transforms literal value to the `proto.Expression.Literal.Builder`.
    *
@@ -95,7 +92,7 @@ object LiteralValueProtoConverter {
       case v: Array[_] => builder.setArray(arrayBuilder(v))
       case v: CalendarInterval =>
         builder.setCalendarInterval(calendarIntervalBuilder(v.months, v.days, v.microseconds))
-      case null => builder.setNull(nullType)
+      case null => builder.setNull(ProtoDataTypes.NullType)
       case _ => throw new UnsupportedOperationException(s"literal $literal not supported (yet).")
     }
   }

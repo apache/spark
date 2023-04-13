@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.aggregate.ApproximatePercentile.PercentileDigest
 import org.apache.spark.sql.catalyst.trees.TernaryLike
+import org.apache.spark.sql.catalyst.types.PhysicalNumericType
 import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData}
 import org.apache.spark.sql.catalyst.util.QuantileSummaries
 import org.apache.spark.sql.catalyst.util.QuantileSummaries.{defaultCompressThreshold, Stats}
@@ -178,7 +179,8 @@ case class ApproximatePercentile(
         case DateType | _: YearMonthIntervalType => value.asInstanceOf[Int].toDouble
         case TimestampType | TimestampNTZType | _: DayTimeIntervalType =>
           value.asInstanceOf[Long].toDouble
-        case n: NumericType => n.numeric.toDouble(value.asInstanceOf[n.InternalType])
+        case n: NumericType =>
+          PhysicalNumericType.numeric(n).toDouble(value.asInstanceOf[n.InternalType])
         case other: DataType =>
           throw QueryExecutionErrors.dataTypeUnexpectedError(other)
       }

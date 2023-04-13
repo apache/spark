@@ -1012,10 +1012,10 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       messageParameters = Map("catalogString" -> dt.catalogString))
   }
 
-  def unrecognizedSqlTypeError(sqlType: Int): Throwable = {
+  def unrecognizedSqlTypeError(jdbcTypeId: String, typeName: String): Throwable = {
     new SparkSQLException(
       errorClass = "UNRECOGNIZED_SQL_TYPE",
-      messageParameters = Map("typeName" -> sqlType.toString))
+      messageParameters = Map("typeName" -> typeName, "jdbcType" -> jdbcTypeId))
   }
 
   def unsupportedJdbcTypeError(content: String): SparkSQLException = {
@@ -2139,8 +2139,10 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       cause = null)
   }
 
-  def noSuchElementExceptionError(key: String): Throwable = {
-    new NoSuchElementException(key)
+  def sqlConfigNotFoundError(key: String): SparkNoSuchElementException = {
+    new SparkNoSuchElementException(
+      errorClass = "SQL_CONF_NOT_FOUND",
+      messageParameters = Map("sqlConf" -> toSQLConf(key)))
   }
 
   def cannotMutateReadOnlySQLConfError(): SparkUnsupportedOperationException = {
@@ -2647,6 +2649,15 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
         "parameter" -> (toSQLId("expr") + ", " + toSQLId("key")),
         "functionName" -> aesFuncName,
         "detailMessage" -> detailMessage))
+  }
+
+  def aesInvalidSalt(saltedMagic: Array[Byte]): RuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "INVALID_PARAMETER_VALUE.AES_SALTED_MAGIC",
+      messageParameters = Map(
+        "parameter" -> toSQLId("expr"),
+        "functionName" -> toSQLId("aes_decrypt"),
+        "saltedMagic" -> saltedMagic.map("%02X" format _).mkString("0x", "", "")))
   }
 
   def hiveTableWithAnsiIntervalsError(tableName: String): SparkUnsupportedOperationException = {

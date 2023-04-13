@@ -304,6 +304,9 @@ message ExecutePlanResponse {
     // Response for commands on a streaming query.
     StreamingQueryCommandResult streaming_query_command_result = 9;
 
+    // Response for 'SparkContext.resources'.
+    GetResourcesCommandResult get_resources_command_result = 10;
+
     // Support arbitrary result objects.
     google.protobuf.Any extension = 999;
   }
