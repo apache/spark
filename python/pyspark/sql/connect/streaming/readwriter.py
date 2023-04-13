@@ -432,6 +432,7 @@ class DataStreamWriter:
 
     trigger.__doc__ = PySparkDataStreamWriter.trigger.__doc__
 
+    # TODO (SPARK-43054): Implement and uncomment the doc
     @overload
     def foreach(self, f: Callable[[Row], None]) -> "DataStreamWriter":
         ...
@@ -443,7 +444,13 @@ class DataStreamWriter:
     def foreach(self, f: Union[Callable[[Row], None], "SupportsProcess"]) -> "DataStreamWriter":
         raise NotImplementedError("foreach() is not implemented.")
 
-    foreach.__doc__ = PySparkDataStreamWriter.foreach.__doc__
+    # foreach.__doc__ = PySparkDataStreamWriter.foreach.__doc__
+
+    # TODO (SPARK-42944): Implement and uncomment the doc
+    def foreachBatch(self, func: Callable[["DataFrame", int], None]) -> "DataStreamWriter":
+        raise NotImplementedError("foreachBatch() is not implemented.")
+
+    # foreachBatch.__doc__ = PySparkDataStreamWriter.foreachBatch.__doc__
 
     def _start_internal(
         self,
@@ -501,7 +508,8 @@ class DataStreamWriter:
             **options,
         )
 
-    start.__doc__ = PySparkDataStreamWriter.start.__doc__
+    # TODO (SPARK-42962): uncomment below
+    # start.__doc__ = PySparkDataStreamWriter.start.__doc__
 
     def toTable(
         self,
@@ -526,10 +534,32 @@ class DataStreamWriter:
 
 
 def _test() -> None:
-    # TODO(SPARK-43031): port _test() from legacy query.py.
-    pass
+    import sys
+    import doctest
+    from pyspark.sql import SparkSession as PySparkSession
+    import pyspark.sql.connect.streaming.readwriter
+
+    globs = pyspark.sql.connect.readwriter.__dict__.copy()
+
+    globs["spark"] = (
+        PySparkSession.builder.appName("sql.connect.streaming.readwriter tests")
+        .remote("local[4]")
+        .getOrCreate()
+    )
+
+    (failure_count, test_count) = doctest.testmod(
+        pyspark.sql.connect.streaming.readwriter,
+        globs=globs,
+        optionflags=doctest.ELLIPSIS
+        | doctest.NORMALIZE_WHITESPACE
+        | doctest.IGNORE_EXCEPTION_DETAIL,
+    )
+
+    globs["spark"].stop()
+
+    if failure_count:
+        sys.exit(-1)
 
 
 if __name__ == "__main__":
-    # TODO(SPARK-43031): Add this file dev/sparktestsupport/modules.py to enable testing in CI.
     _test()
