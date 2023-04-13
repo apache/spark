@@ -21,7 +21,7 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable
 
 import com.google.common.collect.{Lists, Maps}
-import com.google.protobuf.{Any => ProtoAny, ByteString}
+import com.google.protobuf.{ByteString, Any => ProtoAny}
 import io.grpc.stub.StreamObserver
 
 import org.apache.spark.{Partition, SparkEnv, TaskContext}
@@ -39,7 +39,7 @@ import org.apache.spark.connect.proto.WriteStreamOperationStartResult
 import org.apache.spark.ml.{functions => MLFunctions}
 import org.apache.spark.sql.{Column, Dataset, Encoders, SparkSession}
 import org.apache.spark.sql.avro.{AvroDataToCatalyst, CatalystDataToAvro}
-import org.apache.spark.sql.catalyst.{expressions, AliasIdentifier, FunctionIdentifier}
+import org.apache.spark.sql.catalyst.{AliasIdentifier, FunctionIdentifier, expressions}
 import org.apache.spark.sql.catalyst.analysis.{GlobalTempView, LocalTempView, MultiAlias, ParameterizedQuery, UnresolvedAlias, UnresolvedAttribute, UnresolvedDeserializer, UnresolvedExtractValue, UnresolvedFunction, UnresolvedRegex, UnresolvedRelation, UnresolvedStar}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions._
@@ -52,7 +52,7 @@ import org.apache.spark.sql.connect.artifact.SparkConnectArtifactManager
 import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, InvalidPlanInput, LiteralValueProtoConverter, StorageLevelProtoConverter, UdfPacket}
 import org.apache.spark.sql.connect.config.Connect.CONNECT_GRPC_ARROW_MAX_BATCH_SIZE
 import org.apache.spark.sql.connect.plugin.SparkConnectPluginRegistry
-import org.apache.spark.sql.connect.service.SparkConnectStreamHandler
+import org.apache.spark.sql.connect.service.{SparkConnectService, SparkConnectStreamHandler}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.arrow.ArrowConverters
@@ -2226,9 +2226,7 @@ class SparkConnectPlanner(val session: SparkSession) {
             StreamingQueryCommandResult.ExceptionResult
               .newBuilder()
               .setHasException(true)
-              .setMessage(e.getMessage)
-              .addAllStackTrace(e.getStackTrace.map(_.toString).toIterable.asJava)
-              .setCause(e.getCause.toString)
+              .setErrorMessage(SparkConnectService.extractErrorMessage(e))
               .build()
           case None =>
             StreamingQueryCommandResult.ExceptionResult

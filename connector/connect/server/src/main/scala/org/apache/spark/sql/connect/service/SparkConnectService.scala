@@ -56,6 +56,8 @@ class SparkConnectService(debug: Boolean)
     extends proto.SparkConnectServiceGrpc.SparkConnectServiceImplBase
     with Logging {
 
+  import SparkConnectService._
+
   private def allClasses(cl: Class[_]): Seq[Class[_]] = {
     val classes = ArrayBuffer.empty[Class[_]]
     if (cl != null && !cl.equals(classOf[java.lang.Object])) {
@@ -85,7 +87,7 @@ class SparkConnectService(debug: Boolean)
             .setDomain("org.apache.spark")
             .putMetadata("classes", compact(render(allClasses(st.getClass).map(_.getName))))
             .build()))
-      .setMessage(StringUtils.abbreviate(st.getMessage, 2048))
+      .setMessage(extractErrorMessage(st))
       .build()
   }
 
@@ -293,5 +295,9 @@ object SparkConnectService {
         server.shutdownNow()
       }
     }
+  }
+
+  def extractErrorMessage(st: Throwable): String = {
+    StringUtils.abbreviate(st.getMessage, 2048)
   }
 }

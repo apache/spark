@@ -25,9 +25,7 @@ import pyspark.sql.connect.proto as pb2
 from pyspark.sql.streaming.query import (
     StreamingQuery as PySparkStreamingQuery,
 )
-from pyspark.errors.exceptions.captured import (
-    StreamingQueryException as CapturedStreamingQueryException,
-)
+from pyspark.errors.exceptions.connect import StreamingQueryException as CapturedStreamingQueryException
 
 __all__ = [
     "StreamingQuery",  # TODO(SPARK-43032): "StreamingQueryManager"
@@ -80,14 +78,16 @@ class StreamingQuery:
         terminated = False
         if timeoutMs is None:
             while not terminated:
+                # When no timeout is set, query the server every 10ms until query terminates
                 terminated = self._execute_await_termination_cmd()
         else:
             reqTimeoutMs = min(timeoutMs, 10)
             while timeoutMs > 0 and not terminated:
+                # When timeout is set, query the server every reqTimeoutMs until query terminates or timout
                 start = time.time()
                 terminated = self._execute_await_termination_cmd(reqTimeoutMs)
                 end = time.time()
-                timeoutMs = (end - start) * 1000
+                timeoutMs -= (end - start) * 1000
             return terminated
 
     def awaitTermination(self, timeout: Optional[int] = None) -> Optional[bool]:
@@ -156,13 +156,11 @@ class StreamingQuery:
     def exception(self) -> Optional[StreamingQueryException]:
         cmd = pb2.StreamingQueryCommand()
         cmd.exception = True
-        result = self._execute_streaming_query_cmd(cmd).exception.result
-        if not result.has_exception:
+        exception = self._execute_streaming_query_cmd(cmd).exception
+        if not exception.has_exception:
             return None
         else:
-            msg = result.message.split(": ", 1)[1]  # Drop the Java StreamingQueryException type info
-            stackTrace = "\n\t at ".join(map(lambda x: x.toString(), result.stack_trace))
-            return CapturedStreamingQueryException(msg, stackTrace, result.cause)
+            return CapturedStreamingQueryException(exception.error_message)
 
     exception.__doc__ = PySparkStreamingQuery.exception.__doc__
 

@@ -24,7 +24,7 @@ from pyspark.sql import Row
 from pyspark.sql.functions import lit
 from pyspark.sql.types import StructType, StructField, IntegerType, StringType
 from pyspark.testing.sqlutils import ReusedSQLTestCase
-
+from pyspark.errors.exceptions.connect import SparkConnectException
 
 class StreamingTestsMixin:
     def test_streaming_query_functions_basic(self):
@@ -285,11 +285,21 @@ class StreamingTestsMixin:
             # This is expected
             self._assert_exception_tree_contains_msg(e, "ZeroDivisionError")
         finally:
+            exception = sq.exception()
             sq.stop()
-        self.assertIsInstance(sq.exception(), StreamingQueryException)
-        self._assert_exception_tree_contains_msg(sq.exception(), "ZeroDivisionError")
+        self.assertIsInstance(exception, StreamingQueryException)
+        self._assert_exception_tree_contains_msg(exception, "ZeroDivisionError")
 
     def _assert_exception_tree_contains_msg(self, exception, msg):
+        if isinstance(exception, SparkConnectException):
+            self._assert_exception_tree_contains_msg_connect(exception, msg)
+        else:
+            self._assert_exception_tree_contains_msg_default(exception, msg)
+
+    def _assert_exception_tree_contains_msg_connect(self, exception, msg):
+        self.assertTrue(msg in exception.message, "Exception tree doesn't contain the expected message: %s" % msg)
+
+    def _assert_exception_tree_contains_msg_default(self, exception, msg):
         e = exception
         contains = msg in e.desc
         while e.cause is not None and not contains:

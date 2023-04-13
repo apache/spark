@@ -308,9 +308,7 @@ message StreamingQueryCommandResult {
   message ExceptionResult {
     // Exception as string
     bool has_exception = 1;
-    optional string message = 2;
-    repeated string stack_trace = 3;
-    optional string cause = 4;
+    optional string error_message = 2;
   }
 
   message AwaitTerminationResult {

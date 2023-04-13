@@ -1090,13 +1090,13 @@ class SparkConnectClient(object):
         # We have to cast the value here because, a RpcError is a Call as well.
         # https://grpc.github.io/grpc/python/grpc.html#grpc.UnaryUnaryMultiCallable.__call__
         status = rpc_status.from_call(cast(grpc.Call, rpc_error))
+        print("wei===1")
         if status:
             for d in status.details:
                 if d.Is(error_details_pb2.ErrorInfo.DESCRIPTOR):
                     info = error_details_pb2.ErrorInfo()
                     d.Unpack(info)
                     raise convert_exception(info, status.message) from None
-
             raise SparkConnectGrpcException(status.message) from None
         else:
             raise SparkConnectGrpcException(str(rpc_error)) from None
