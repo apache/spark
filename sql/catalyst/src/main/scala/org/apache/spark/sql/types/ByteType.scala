@@ -34,7 +34,6 @@ class ByteType private() extends IntegralType {
   // Defined with a private constructor so the companion object is the only possible instantiation.
   private[sql] type InternalType = Byte
   @transient private[sql] lazy val tag = typeTag[InternalType]
-  private[sql] val integral = implicitly[Integral[Byte]]
 
   /**
    * The default size of a value of the ByteType is 1 byte.
