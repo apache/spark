@@ -271,33 +271,23 @@ class Dataset[T] private[sql](
   private[sql] def getRows(
       numRows: Int,
       truncate: Int): Seq[Seq[String]] = {
-    val newDf = toDF()
-    val data = newDf.logicalPlan match {
+    val newDf = logicalPlan match {
       case c: CommandResult =>
-        // Do the casting locally to avoid triggering a job
-        val projectList = c.output.map { a =>
-          if (a.dataType == BinaryType) {
-            a
-          } else {
-            Alias(Cast(a, StringType), a.name)()
-          }
-        }
-        val projection = new InterpretedMutableProjection(projectList, c.output)
-        val casted = LocalRelation(projectList.map(_.toAttribute),
-          c.rows.take(numRows + 1).map(projection(_).copy()))
-        Dataset.ofRows(sparkSession, casted).collect()
-      case _ =>
-        val castCols = newDf.logicalPlan.output.map { col =>
-          // Since binary types in top-level schema fields have a specific format to print,
-          // so we do not cast them to strings here.
-          if (col.dataType == BinaryType) {
-            Column(col)
-          } else {
-            Column(col).cast(StringType)
-          }
-        }
-        newDf.select(castCols: _*).take(numRows + 1)
+        // Convert to `LocalRelation` and let `ConvertToLocalRelation` do the casting locally to
+        // avoid triggering a job
+        Dataset.ofRows(sparkSession, LocalRelation(c.output, c.rows))
+      case _ => toDF()
     }
+    val castCols = newDf.logicalPlan.output.map { col =>
+      // Since binary types in top-level schema fields have a specific format to print,
+      // so we do not cast them to strings here.
+      if (col.dataType == BinaryType) {
+        Column(col)
+      } else {
+        Column(col).cast(StringType)
+      }
+    }
+    val data = newDf.select(castCols: _*).take(numRows + 1)
 
     // For array values, replace Seq and Array with square brackets
     // For cells that are beyond `truncate` characters, replace it with the
