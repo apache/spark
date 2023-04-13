@@ -45,9 +45,9 @@ trait JoinCodegenSupport extends CodegenSupport with BaseJoinExec {
     val streamVars2 = streamVars.map(_.copy())
     val checkCondition = if (condition.isDefined) {
       val expr = condition.get
-      // evaluate the variables from build side that used by condition
-      val eval = evaluateRequiredVariables(buildPlan.output ++ streamPlan.output,
-        buildVars ++ streamVars2, expr.references)
+      // evaluate the variables that are used by the condition
+      val eval = evaluateRequiredVariables(streamPlan.output ++ buildPlan.output,
+        streamVars2 ++ buildVars, expr.references)
 
       // filter the output via condition
       ctx.currentVars = streamVars2 ++ buildVars
