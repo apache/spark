@@ -524,6 +524,14 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
     assert(podConfigured1.container.getPorts.contains(ports))
   }
 
+  test("SPARK-35723: set k8s exec pod reqeust and limit memory separately") {
+    baseConf.set("spark.kubernetes.executor.request.memory", "256")
+    initDefaultProfile(baseConf)
+    val step = new BasicExecutorFeatureStep(newExecutorConf(), new SecurityManager(baseConf),
+      defaultProfile)
+    val executor = step.configurePod(SparkPod.initialPod())
+    assert(amountAndFormat(executor.container.getResources.getRequests.get("memory")) === "256Mi")
+  }
   // There is always exactly one controller reference, and it points to the driver pod.
   private def checkOwnerReferences(executor: Pod, driverPodUid: String): Unit = {
     assert(executor.getMetadata.getOwnerReferences.size() === 1)

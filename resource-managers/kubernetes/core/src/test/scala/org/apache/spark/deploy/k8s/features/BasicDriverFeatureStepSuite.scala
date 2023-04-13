@@ -371,7 +371,24 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
     assert(sparkJars.exists(path =>
       path.startsWith(FILE_UPLOAD_PATH) && path.endsWith("some-local-jar.jar")))
   }
-
+  test("SPARK-35723: set k8s driver pod reqeust and limit memory separately") {
+    val initPod = SparkPod.initialPod()
+    val sparkConf = new SparkConf()
+      .set(CONTAINER_IMAGE, "spark-driver:latest")
+      .set(KUBERNETES_DRIVER_REQUEST_MEMORY, "256")
+      .set(KUBERNETES_DRIVER_POD_NAME, "spark-driver-pod")
+      .set(DRIVER_CORES, 2)
+      .set(KUBERNETES_DRIVER_LIMIT_CORES, "4")
+      .set(DRIVER_MEMORY.key, "256M")
+      .set(DRIVER_MEMORY_OVERHEAD, 200L)
+      .set(CONTAINER_IMAGE, "spark-driver:latest")
+      .set(IMAGE_PULL_SECRETS, TEST_IMAGE_PULL_SECRETS)
+    val driverConf = KubernetesTestConf.createDriverConf(sparkConf)
+    val configuredPod = new BasicDriverFeatureStep(driverConf).configurePod(initPod)
+    val resourceRequirements = configuredPod.container.getResources
+    val requests = resourceRequirements.getRequests.asScala
+    assert(amountAndFormat(requests("memory")) === "256Mi")
+  }
   def containerPort(name: String, portNumber: Int): ContainerPort =
     new ContainerPortBuilder()
       .withName(name)

@@ -81,12 +81,18 @@ private[spark] class BasicDriverFeatureStep(conf: KubernetesDriverConf)
     .getOrElse(math.max((memoryOverheadFactor * driverMemoryMiB).toInt,
       ResourceProfile.MEMORY_OVERHEAD_MIN_MIB))
   private val driverMemoryWithOverheadMiB = driverMemoryMiB + memoryOverheadMiB
-
+  private val driverMemoryRequestMiB =
+    if (conf.contains(KUBERNETES_DRIVER_REQUEST_MEMORY)) {
+      conf.get(KUBERNETES_DRIVER_REQUEST_MEMORY).get
+    } else {
+      driverMemoryWithOverheadMiB
+    }
   override def configurePod(pod: SparkPod): SparkPod = {
     val driverCustomEnvs = KubernetesUtils.buildEnvVars(
       Seq(ENV_APPLICATION_ID -> conf.appId) ++ conf.environment)
     val driverCpuQuantity = new Quantity(driverCoresRequest)
     val driverMemoryQuantity = new Quantity(s"${driverMemoryWithOverheadMiB}Mi")
+    val driverMemoryRequestQuantity = new Quantity(s"${driverMemoryRequestMiB}Mi")
     val maybeCpuLimitQuantity = driverLimitCores.map { limitCores =>
       ("cpu", new Quantity(limitCores))
     }
@@ -133,7 +139,7 @@ private[spark] class BasicDriverFeatureStep(conf: KubernetesDriverConf)
       .editOrNewResources()
         .addToRequests("cpu", driverCpuQuantity)
         .addToLimits(maybeCpuLimitQuantity.toMap.asJava)
-        .addToRequests("memory", driverMemoryQuantity)
+        .addToRequests("memory", driverMemoryRequestQuantity)
         .addToLimits("memory", driverMemoryQuantity)
         .addToLimits(driverResourceQuantities.asJava)
         .endResources()

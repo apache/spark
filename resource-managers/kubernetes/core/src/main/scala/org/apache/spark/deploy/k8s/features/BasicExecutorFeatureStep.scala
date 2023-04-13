@@ -117,6 +117,12 @@ private[spark] class BasicExecutorFeatureStep(
       .replaceAll("[^\\w-]+", "_")
 
     val executorMemoryQuantity = new Quantity(s"${execResources.totalMemMiB}Mi")
+    val executorMemoryRequestQuantity =
+      if (kubernetesConf.sparkConf.contains(KUBERNETES_EXECUTOR_REQUEST_MEMORY)) {
+        new Quantity(s"${kubernetesConf.get(KUBERNETES_EXECUTOR_REQUEST_MEMORY).get}Mi")
+      } else {
+        executorMemoryQuantity
+      }
     val executorCpuQuantity = new Quantity(executorCoresRequest)
     val executorResourceQuantities =
       buildExecutorResourcesQuantities(execResources.customResources.values.toSet)
@@ -191,7 +197,7 @@ private[spark] class BasicExecutorFeatureStep(
       .withImage(executorContainerImage)
       .withImagePullPolicy(kubernetesConf.imagePullPolicy)
       .editOrNewResources()
-        .addToRequests("memory", executorMemoryQuantity)
+        .addToRequests("memory", executorMemoryRequestQuantity)
         .addToLimits("memory", executorMemoryQuantity)
         .addToRequests("cpu", executorCpuQuantity)
         .addToLimits(executorResourceQuantities.asJava)
