@@ -20,6 +20,8 @@ import os
 import struct
 import sys
 import unittest
+import signal
+from contextlib import contextmanager
 from time import time, sleep
 from typing import Dict, Optional
 
@@ -99,6 +101,25 @@ def eventually(condition, timeout=30.0, catch_assertions=False):
             "Test failed due to timeout after %g sec, with last condition returning: %s"
             % (timeout, lastValue)
         )
+
+
+@contextmanager
+def timeout(time):
+    def raise_timeout(signum, frame):
+        raise TimeoutError
+
+    # Register a function to raise a TimeoutError on the signal.
+    signal.signal(signal.SIGALRM, raise_timeout)
+    # Schedule the signal to be sent after ``time``.
+    signal.alarm(time)
+
+    try:
+        yield
+    except TimeoutError as e:
+        raise e
+    finally:
+        # Unregister the signal
+        signal.signal(signal.SIGALRM, signal.SIG_IGN)
 
 
 class QuietTest:

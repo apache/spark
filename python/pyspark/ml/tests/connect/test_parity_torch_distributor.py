@@ -34,6 +34,7 @@ from pyspark.ml.torch.tests.test_distributor import (
     TorchDistributorDistributedUnitTestsMixin,
     TorchWrapperUnitTestsMixin,
 )
+from pyspark.testing.utils import timeout
 
 
 @unittest.skipIf(not have_torch, "torch is required")
@@ -74,8 +75,28 @@ class TorchDistributorLocalUnitTestsOnConnect(
             (None, 3, False, "NONE"),
         ]
 
+    def test_get_num_tasks_locally(self):
+        with timeout(20):
+            super().test_get_num_tasks_locally()
 
-@unittest.skip("unstable, ignore for now")
+    def test_get_gpus_owned_local(self):
+        with timeout(20):
+            super().test_get_gpus_owned_local()
+
+    def test_local_training_succeeds(self):
+        with timeout(20):
+            super().test_local_training_succeeds()
+
+    def test_local_file_with_pytorch(self):
+        with timeout(120):
+            super().test_local_file_with_pytorch()
+
+    def test_end_to_end_run_locally(self):
+        with timeout(120):
+            super().test_end_to_end_run_locally()
+
+
+@unittest.skipIf(not have_torch, "torch is required")
 class TorchDistributorLocalUnitTestsIIOnConnect(
     TorchDistributorLocalUnitTestsMixin, unittest.TestCase
 ):
@@ -102,6 +123,26 @@ class TorchDistributorLocalUnitTestsIIOnConnect(
             (None, 3, False, "NONE"),
         ]
 
+    def test_get_num_tasks_locally(self):
+        with timeout(20):
+            super().test_get_num_tasks_locally()
+
+    def test_get_gpus_owned_local(self):
+        with timeout(20):
+            super().test_get_gpus_owned_local()
+
+    def test_local_training_succeeds(self):
+        with timeout(20):
+            super().test_local_training_succeeds()
+
+    def test_local_file_with_pytorch(self):
+        with timeout(120):
+            super().test_local_file_with_pytorch()
+
+    def test_end_to_end_run_locally(self):
+        with timeout(120):
+            super().test_end_to_end_run_locally()
+
 
 @unittest.skipIf(not have_torch, "torch is required")
 class TorchDistributorDistributedUnitTestsOnConnect(
@@ -122,6 +163,22 @@ class TorchDistributorDistributedUnitTestsOnConnect(
         shutil.rmtree(self.mnist_dir_path)
         os.unlink(self.gpu_discovery_script_file.name)
         self.spark.stop()
+
+    def test_get_num_tasks_distributed(self):
+        with timeout(120):
+            super().test_get_num_tasks_distributed()
+
+    def test_dist_training_succeeds(self):
+        with timeout(120):
+            super().test_dist_training_succeeds()
+
+    def test_distributed_file_with_pytorch(self):
+        with timeout(120):
+            super().test_distributed_file_with_pytorch()
+
+    def test_end_to_end_run_distributedly(self):
+        with timeout(120):
+            super().test_end_to_end_run_distributedly()
 
 
 @unittest.skipIf(not have_torch, "torch is required")
