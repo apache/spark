@@ -274,14 +274,18 @@ class Dataset[T] private[sql](
     val newDf = toDF()
     val data = newDf.logicalPlan match {
       case c: CommandResult =>
-        val localProject = LocalProject(c.output.map { a =>
+        // Do the casting locally to avoid triggering a job
+        val projectList = c.output.map { a =>
           if (a.dataType == BinaryType) {
             a
           } else {
             Alias(Cast(a, StringType), a.name)()
           }
-        }, c)
-        Dataset.ofRows(sparkSession, localProject).take(numRows + 1)
+        }
+        val projection = new InterpretedMutableProjection(projectList, c.output)
+        val casted = LocalRelation(projectList.map(_.toAttribute),
+          c.rows.take(numRows + 1).map(projection(_).copy()))
+        Dataset.ofRows(sparkSession, casted).collect()
       case _ =>
         val castCols = newDf.logicalPlan.output.map { col =>
           // Since binary types in top-level schema fields have a specific format to print,
