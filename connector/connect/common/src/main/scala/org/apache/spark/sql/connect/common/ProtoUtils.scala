@@ -60,7 +60,7 @@ private[connect] object ProtoUtils {
           builder.setField(field, byteArray)
         }
 
-      // TODO: should also support 1, repeated msg; 2, map<xxx, msg>
+      // TODO(SPARK-43117): should also support 1, repeated msg; 2, map<xxx, msg>
       case (field: FieldDescriptor, msg: Message)
           if field.getJavaType == FieldDescriptor.JavaType.MESSAGE && msg != null =>
         builder.setField(field, abbreviate(msg))
