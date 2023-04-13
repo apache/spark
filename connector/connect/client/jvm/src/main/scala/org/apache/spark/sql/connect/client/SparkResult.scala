@@ -21,6 +21,7 @@ import java.util.Collections
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 
+import com.google.protobuf.ByteString
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.FieldVector
 import org.apache.arrow.vector.ipc.ArrowStreamReader
@@ -39,7 +40,8 @@ import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch, Column
 private[sql] class SparkResult[T](
     responses: java.util.Iterator[proto.ExecutePlanResponse],
     allocator: BufferAllocator,
-    encoder: AgnosticEncoder[T])
+    encoder: AgnosticEncoder[T],
+    arrowData: Option[ByteString] = None)
     extends AutoCloseable
     with Cleanable {
 
@@ -56,6 +58,27 @@ private[sql] class SparkResult[T](
       encoder
     }
     ExpressionEncoder(agnosticEncoder)
+  }
+
+  private def processLocalArrowData(): Unit = {
+    val reader = new ArrowStreamReader(arrowData.get.newInput(), allocator)
+    try {
+      val root = reader.getVectorSchemaRoot
+      structType = ArrowUtils.fromArrowSchema(root.getSchema)
+      boundEncoder = createEncoder(structType).resolveAndBind(structType.toAttributes)
+      while (reader.loadNextBatch()) {
+        val rowCount = root.getRowCount
+        if (rowCount > 0) {
+          val vectors = root.getFieldVectors.asScala
+            .map(v => new ArrowColumnVector(transferToNewVector(v)))
+            .toArray[ColumnVector]
+          batches += new ColumnarBatch(vectors, rowCount)
+          numRecords += rowCount
+        }
+      }
+    } finally {
+      reader.close()
+    }
   }
 
   private def processResponses(stopOnFirstNonEmptyResponse: Boolean): Boolean = {
@@ -110,8 +133,13 @@ private[sql] class SparkResult[T](
    * Returns the number of elements in the result.
    */
   def length: Int = {
-    // We need to process all responses to make sure numRecords is correct.
-    processResponses(stopOnFirstNonEmptyResponse = false)
+    if (arrowData.isDefined) {
+      processLocalArrowData()
+    } else {
+      // We need to process all responses to make sure numRecords is correct.
+      processResponses(stopOnFirstNonEmptyResponse = false)
+    }
+
     numRecords
   }
 
@@ -120,7 +148,12 @@ private[sql] class SparkResult[T](
    *   the schema of the result.
    */
   def schema: StructType = {
-    processResponses(stopOnFirstNonEmptyResponse = true)
+    if (arrowData.isDefined) {
+      processLocalArrowData()
+    } else {
+      processResponses(stopOnFirstNonEmptyResponse = true)
+    }
+
     structType
   }
 
@@ -142,7 +175,30 @@ private[sql] class SparkResult[T](
   /**
    * Returns an iterator over the contents of the result.
    */
-  def iterator: java.util.Iterator[T] with AutoCloseable = {
+  def iterator: java.util.Iterator[T] with AutoCloseable = if (arrowData.isDefined) {
+    new java.util.Iterator[T] with AutoCloseable {
+
+      processLocalArrowData()
+
+      private[this] val iterator: java.util.Iterator[InternalRow] = if (batches.isEmpty) {
+        Collections.emptyIterator()
+      } else {
+        batches(0).rowIterator()
+      }
+      private[this] val deserializer: Deserializer[T] = boundEncoder.createDeserializer()
+
+      override def hasNext: Boolean = iterator.hasNext
+
+      override def next(): T = {
+        if (!hasNext) {
+          throw new NoSuchElementException
+        }
+        deserializer(iterator.next())
+      }
+
+      override def close(): Unit = SparkResult.this.close()
+    }
+  } else {
     new java.util.Iterator[T] with AutoCloseable {
       private[this] var batchIndex: Int = -1
       private[this] var iterator: java.util.Iterator[InternalRow] = Collections.emptyIterator()

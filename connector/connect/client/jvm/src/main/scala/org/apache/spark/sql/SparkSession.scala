@@ -470,8 +470,16 @@ class SparkSession private[sql] (
   }
 
   private[sql] def execute[T](plan: proto.Plan, encoder: AgnosticEncoder[T]): SparkResult[T] = {
-    val value = client.execute(plan)
-    val result = new SparkResult(value, allocator, encoder)
+    val result = if (plan.hasRoot && plan.getRoot.hasLocalRelation) {
+      // Short circuit local relation RPCs
+      val localRelation = plan.getRoot.getLocalRelation
+      new SparkResult(Seq.empty[proto.ExecutePlanResponse].iterator.asJava,
+        allocator, encoder, Some(localRelation.getData))
+    } else {
+      val value = client.execute(plan)
+      new SparkResult(value, allocator, encoder)
+    }
+
     cleaner.register(result)
     result
   }
