@@ -65,8 +65,8 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
     references.filter(a => usedMoreThanOnce.contains(a.exprId))
   }
 
-  override def reusableExpressions(): (Seq[Expression], AttributeSet) =
-    (projectList, AttributeSet(child.output))
+  override def reusableExpressions(): (Seq[Expression], Seq[Attribute]) =
+    (projectList, child.output)
 
 
   override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
@@ -233,8 +233,8 @@ case class FilterExec(condition: Expression, child: SparkPlan)
     child.asInstanceOf[CodegenSupport].produce(ctx, this)
   }
 
-  override def reusableExpressions(): (Seq[Expression], AttributeSet) =
-    (otherPreds, AttributeSet(child.output))
+  override def reusableExpressions(): (Seq[Expression], Seq[Attribute]) =
+    (otherPreds, child.output)
 
   override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
     val numOutput = metricTerm(ctx, "numOutputRows")
