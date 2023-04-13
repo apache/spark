@@ -414,17 +414,13 @@ trait V2CreateTableAsSelectPlan extends V2CreateTablePlan with AnalysisOnlyComma
     assert(!isAnalyzed)
     newChildren match {
       case Seq(newName, newQuery) =>
-        withNewNameAndQuery(newName, newQuery)
-      case Seq(newName) =>
-        withNewName(newName)
+        withNameAndQuery(newName, newQuery)
       case others =>
-        throw new IllegalArgumentException("Must be either 1 or 2 children: " + others)
+        throw new IllegalArgumentException("Must be 2 children: " + others)
     }
   }
 
-  protected def withNewName(newName: LogicalPlan): V2CreateTableAsSelectPlan
-
-  protected def withNewNameAndQuery(
+  protected def withNameAndQuery(
       newName: LogicalPlan,
       newQuery: LogicalPlan): V2CreateTableAsSelectPlan
 }
@@ -486,11 +482,7 @@ case class CreateTableAsSelect(
     this.copy(partitioning = rewritten)
   }
 
-  override protected def withNewName(newName: LogicalPlan): CreateTableAsSelect = {
-    copy(name = newName)
-  }
-
-  override protected def withNewNameAndQuery(
+  override protected def withNameAndQuery(
       newName: LogicalPlan,
       newQuery: LogicalPlan): CreateTableAsSelect = {
     copy(name = newName, query = newQuery)
@@ -549,11 +541,7 @@ case class ReplaceTableAsSelect(
     this.copy(partitioning = rewritten)
   }
 
-  override protected def withNewName(newName: LogicalPlan): ReplaceTableAsSelect = {
-    copy(name = newName)
-  }
-
-  override protected def withNewNameAndQuery(
+  override protected def withNameAndQuery(
       newName: LogicalPlan,
       newQuery: LogicalPlan): ReplaceTableAsSelect = {
     copy(name = newName, query = newQuery)
