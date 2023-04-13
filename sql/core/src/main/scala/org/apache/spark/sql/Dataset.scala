@@ -272,7 +272,7 @@ class Dataset[T] private[sql](
       numRows: Int,
       truncate: Int): Seq[Seq[String]] = {
     val newDf = toDF()
-    val data: Array[Row] = newDf.logicalPlan match {
+    val data = newDf.logicalPlan match {
       case c: CommandResult =>
         val localProject = LocalProject(c.output.map { a =>
           if (a.dataType == BinaryType) {
