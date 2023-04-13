@@ -39,13 +39,12 @@ import org.apache.hadoop.yarn.exceptions.ApplicationAttemptNotFoundException
 import org.apache.hadoop.yarn.util.{ConverterUtils, Records}
 
 import org.apache.spark._
-import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.deploy.{ExecutorFailureTracker, SparkHadoopUtil}
 import org.apache.spark.deploy.history.HistoryServer
 import org.apache.spark.deploy.security.HadoopDelegationTokenManager
 import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
-import org.apache.spark.internal.config.Streaming.STREAMING_DYN_ALLOCATION_MAX_EXECUTORS
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.metrics.{MetricsSystem, MetricsSystemInstances}
 import org.apache.spark.resource.ResourceProfile
@@ -100,25 +99,7 @@ private[spark] class ApplicationMaster(
 
   private val client = new YarnRMClient()
 
-  // Default to twice the number of executors (twice the maximum number of executors if dynamic
-  // allocation is enabled), with a minimum of 3.
-
-  private val maxNumExecutorFailures = {
-    val effectiveNumExecutors =
-      if (Utils.isStreamingDynamicAllocationEnabled(sparkConf)) {
-        sparkConf.get(STREAMING_DYN_ALLOCATION_MAX_EXECUTORS)
-      } else if (Utils.isDynamicAllocationEnabled(sparkConf)) {
-        sparkConf.get(DYN_ALLOCATION_MAX_EXECUTORS)
-      } else {
-        sparkConf.get(EXECUTOR_INSTANCES).getOrElse(0)
-      }
-    // By default, effectiveNumExecutors is Int.MaxValue if dynamic allocation is enabled. We need
-    // avoid the integer overflow here.
-    val defaultMaxNumExecutorFailures = math.max(3,
-      if (effectiveNumExecutors > Int.MaxValue / 2) Int.MaxValue else (2 * effectiveNumExecutors))
-
-    sparkConf.get(MAX_EXECUTOR_FAILURES).getOrElse(defaultMaxNumExecutorFailures)
-  }
+  private val maxNumExecutorFailures = ExecutorFailureTracker.maxNumExecutorFailures(sparkConf)
 
   @volatile private var exitCode = 0
   @volatile private var unregistered = false
@@ -355,7 +336,7 @@ private[spark] class ApplicationMaster(
 
   def stopUnmanaged(stagingDir: Path): Unit = {
     if (!finished) {
-      finish(FinalApplicationStatus.SUCCEEDED, ApplicationMaster.EXIT_SUCCESS)
+      finish(FinalApplicationStatus.SUCCEEDED, SparkExitCode.EXIT_SUCCESS)
     }
     if (!unregistered) {
       // It's ok to clean staging dir first because unmanaged AM can't be retried.
@@ -586,11 +567,11 @@ private[spark] class ApplicationMaster(
       try {
         if (allocator.getNumExecutorsFailed >= maxNumExecutorFailures) {
           finish(FinalApplicationStatus.FAILED,
-            ApplicationMaster.EXIT_MAX_EXECUTOR_FAILURES,
+            SparkExitCode.EXCEED_MAX_EXECUTOR_FAILURES,
             s"Max number of executor failures ($maxNumExecutorFailures) reached")
         } else if (allocator.isAllNodeExcluded) {
           finish(FinalApplicationStatus.FAILED,
-            ApplicationMaster.EXIT_MAX_EXECUTOR_FAILURES,
+            SparkExitCode.EXCEED_MAX_EXECUTOR_FAILURES,
             "Due to executor failures all available nodes are excluded")
         } else {
           logDebug("Sending progress")
@@ -755,7 +736,7 @@ private[spark] class ApplicationMaster(
             finish(FinalApplicationStatus.FAILED, ApplicationMaster.EXIT_EXCEPTION_USER_CLASS)
           } else {
             mainMethod.invoke(null, userArgs.toArray)
-            finish(FinalApplicationStatus.SUCCEEDED, ApplicationMaster.EXIT_SUCCESS)
+            finish(FinalApplicationStatus.SUCCEEDED, SparkExitCode.EXIT_SUCCESS)
             logDebug("Done running user class")
           }
         } catch {
@@ -871,7 +852,7 @@ private[spark] class ApplicationMaster(
         if (shutdown || !clientModeTreatDisconnectAsFailed) {
           if (exitCode == 0) {
             logInfo(s"Driver terminated or disconnected! Shutting down. $remoteAddress")
-            finish(FinalApplicationStatus.SUCCEEDED, ApplicationMaster.EXIT_SUCCESS)
+            finish(FinalApplicationStatus.SUCCEEDED, SparkExitCode.EXIT_SUCCESS)
           } else {
             logError(s"Driver terminated with exit code ${exitCode}! Shutting down. $remoteAddress")
             finish(FinalApplicationStatus.FAILED, exitCode)
@@ -889,9 +870,7 @@ private[spark] class ApplicationMaster(
 object ApplicationMaster extends Logging {
 
   // exit codes for different causes, no reason behind the values
-  private val EXIT_SUCCESS = 0
   private val EXIT_UNCAUGHT_EXCEPTION = 10
-  private val EXIT_MAX_EXECUTOR_FAILURES = 11
   private val EXIT_REPORTER_FAILURE = 12
   private val EXIT_SC_NOT_INITED = 13
   private val EXIT_EXCEPTION_USER_CLASS = 15

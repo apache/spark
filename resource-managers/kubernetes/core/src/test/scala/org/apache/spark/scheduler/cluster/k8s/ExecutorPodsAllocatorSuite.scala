@@ -39,10 +39,10 @@ import org.apache.spark.deploy.k8s.{KubernetesExecutorConf, KubernetesExecutorSp
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.Fabric8Aliases._
-import org.apache.spark.internal.config.{DYN_ALLOCATION_EXECUTOR_IDLE_TIMEOUT, EXECUTOR_INSTANCES}
+import org.apache.spark.internal.config._
 import org.apache.spark.resource._
 import org.apache.spark.scheduler.cluster.k8s.ExecutorLifecycleTestUtils._
-import org.apache.spark.util.ManualClock
+import org.apache.spark.util.{ManualClock, SparkExitCode}
 
 class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
 
@@ -150,8 +150,8 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
   test("SPARK-41210: Window based executor failure tracking mechanism") {
     var _exitCode = -1
     val _conf = conf.clone
-      .set(KUBERNETES_MAX_EXECUTOR_FAILURES.key, "2")
-      .set(KUBERNETES_EXECUTOR_ATTEMPT_FAILURE_VALIDITY_INTERVAL_MS.key, "2s")
+      .set(MAX_EXECUTOR_FAILURES.key, "2")
+      .set(EXECUTOR_ATTEMPT_FAILURE_VALIDITY_INTERVAL_MS.key, "2s")
     podsAllocatorUnderTest = new ExecutorPodsAllocator(_conf, secMgr,
       executorBuilder, kubernetesClient, snapshotsStore, waitForExecutorPodsClock) {
       override private[spark] def stopApplication(exitCode: Int): Unit = {
@@ -184,7 +184,7 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     snapshotsStore.updatePod(failedExecutorWithoutDeletion(5))
     snapshotsStore.notifySubscribers()
     assert(podsAllocatorUnderTest.getNumExecutorsFailed === 3)
-    assert(_exitCode === ExecutorPodsAllocator.EXIT_MAX_EXECUTOR_FAILURES)
+    assert(_exitCode === SparkExitCode.EXCEED_MAX_EXECUTOR_FAILURES)
   }
 
   test("SPARK-36052: test splitSlots") {
