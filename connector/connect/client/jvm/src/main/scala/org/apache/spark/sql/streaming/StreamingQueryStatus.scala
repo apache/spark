@@ -41,7 +41,7 @@ class StreamingQueryStatus protected[sql](
     val message: String,
     val isDataAvailable: Boolean,
     val isTriggerActive: Boolean) extends Serializable {
-  // This is a copy of the class in sql/core/.../streaming/StreamingQueryStatus.scala
+  // This is a copy of the same class in sql/core/.../streaming/StreamingQueryStatus.scala
 
   /** The compact JSON representation of this status. */
   def json: String = compact(render(jsonValue))

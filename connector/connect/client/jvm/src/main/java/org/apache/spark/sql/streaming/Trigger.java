@@ -34,6 +34,7 @@ import org.apache.spark.sql.execution.streaming.ProcessingTimeTrigger;
  */
 @Evolving
 public class Trigger {
+  // This is a copy of the same class in sql/core/.../streaming/Trigger.java
 
   /**
    * A trigger policy that runs a query periodically based on an interval in processing time.
