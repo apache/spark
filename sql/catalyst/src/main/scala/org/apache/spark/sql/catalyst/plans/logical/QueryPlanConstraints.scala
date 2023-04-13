@@ -66,19 +66,16 @@ trait ConstraintHelper {
     val predicates = constraints.filterNot(_.isInstanceOf[IsNotNull])
     predicates.foreach {
       case eq @ EqualTo(l: Attribute, r: Attribute) =>
-        val candidateConstraints = predicates - eq
+        val candidateConstraints = predicates - eq - EqualNullSafe(l, r)
         inferredConstraints ++= replaceConstraints(candidateConstraints, l, r)
         inferredConstraints ++= replaceConstraints(candidateConstraints, r, l)
       case eq @ EqualTo(l @ Cast(_: Attribute, _, _, _), r: Attribute) =>
-        inferredConstraints ++= replaceConstraints(predicates - eq, r, l)
+        inferredConstraints ++= replaceConstraints(predicates - eq - EqualNullSafe(l, r), r, l)
       case eq @ EqualTo(l: Attribute, r @ Cast(_: Attribute, _, _, _)) =>
-        inferredConstraints ++= replaceConstraints(predicates - eq, l, r)
+        inferredConstraints ++= replaceConstraints(predicates - eq - EqualNullSafe(l, r), l, r)
       case _ => // No inference
     }
-    (inferredConstraints -- constraints).filterNot {
-      case a EqualNullSafe b => a.semanticEquals(b)
-      case _ => false
-    }
+    inferredConstraints -- constraints
   }
 
   private def replaceConstraints(

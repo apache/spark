@@ -377,26 +377,26 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
     val y = testRelation.as("y")
     val z = testRelation.as("z")
 
-    // Test filter out true literal
+    // Removes EqualNullSafe when constructing candidate constraints
     comparePlans(
       InferFiltersFromConstraints(x.select($"x.a", $"x.a".as("xa"))
         .where($"xa" <=> $"x.a" && $"xa" === $"x.a").analyze),
       x.select($"x.a", $"x.a".as("xa"))
         .where($"xa".isNotNull && $"x.a".isNotNull && $"xa" <=> $"x.a" && $"xa" === $"x.a").analyze)
 
-    // Test filter out true literal and once strategy's idempotence is not broken
+    // Once strategy's idempotence is not broken
     val originalQuery =
       x.join(y, condition = Some($"x.a" === $"y.a"))
         .select($"x.a", $"x.a".as("xa")).as("xy")
-        .join(z, condition = Some($"xy.a" === $"z.a"))
+        .join(z, condition = Some($"xy.a" === $"z.a")).analyze
 
     val correctAnswer =
       x.where($"a".isNotNull).join(y.where($"a".isNotNull), condition = Some($"x.a" === $"y.a"))
         .select($"x.a", $"x.a".as("xa")).as("xy")
-        .join(z.where($"a".isNotNull), condition = Some($"xy.a" === $"z.a"))
+        .join(z.where($"a".isNotNull), condition = Some($"xy.a" === $"z.a")).analyze
 
-    comparePlans(
-      InferFiltersFromConstraints(InferFiltersFromConstraints(originalQuery.analyze)),
-      correctAnswer.analyze)
+    val optimizedQuery = InferFiltersFromConstraints(originalQuery)
+    comparePlans(optimizedQuery, correctAnswer)
+    comparePlans(InferFiltersFromConstraints(optimizedQuery), correctAnswer)
   }
 }
