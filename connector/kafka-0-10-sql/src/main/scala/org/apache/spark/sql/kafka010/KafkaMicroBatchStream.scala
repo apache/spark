@@ -33,7 +33,7 @@ import org.apache.spark.sql.connector.read.streaming._
 import org.apache.spark.sql.kafka010.KafkaSourceProvider._
 import org.apache.spark.sql.kafka010.MockedSystemClock.currentMockSystemTime
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
-import org.apache.spark.util.{Clock, ManualClock, SystemClock, UninterruptibleThread, Utils}
+import org.apache.spark.util.{Clock, ManualClock, SystemClock, Utils}
 
 /**
  * A [[MicroBatchStream]] that reads data from Kafka.
