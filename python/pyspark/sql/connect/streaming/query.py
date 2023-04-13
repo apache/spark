@@ -155,7 +155,6 @@ class StreamingQuery:
 
     explain.__doc__ = PySparkStreamingQuery.explain.__doc__
 
-    # TODO (SPARK-42960): Implement and uncomment the doc
     def exception(self) -> Optional[StreamingQueryException]:
         cmd = pb2.StreamingQueryCommand()
         cmd.exception = True

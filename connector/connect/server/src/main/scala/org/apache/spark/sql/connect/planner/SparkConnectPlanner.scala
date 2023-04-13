@@ -21,7 +21,7 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable
 
 import com.google.common.collect.{Lists, Maps}
-import com.google.protobuf.{ByteString, Any => ProtoAny}
+import com.google.protobuf.{Any => ProtoAny, ByteString}
 import io.grpc.stub.StreamObserver
 
 import org.apache.spark.{Partition, SparkEnv, TaskContext}
@@ -39,7 +39,7 @@ import org.apache.spark.connect.proto.WriteStreamOperationStartResult
 import org.apache.spark.ml.{functions => MLFunctions}
 import org.apache.spark.sql.{Column, Dataset, Encoders, SparkSession}
 import org.apache.spark.sql.avro.{AvroDataToCatalyst, CatalystDataToAvro}
-import org.apache.spark.sql.catalyst.{AliasIdentifier, FunctionIdentifier, expressions}
+import org.apache.spark.sql.catalyst.{expressions, AliasIdentifier, FunctionIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{GlobalTempView, LocalTempView, MultiAlias, ParameterizedQuery, UnresolvedAlias, UnresolvedAttribute, UnresolvedDeserializer, UnresolvedExtractValue, UnresolvedFunction, UnresolvedRegex, UnresolvedRelation, UnresolvedStar}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions._

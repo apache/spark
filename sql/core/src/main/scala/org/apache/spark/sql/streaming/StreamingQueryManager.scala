@@ -429,9 +429,9 @@ class StreamingQueryManager private[sql] (
   private def unregisterTerminatedStream(terminatedQuery: StreamingQuery): Unit = {
     activeQueriesSharedLock.synchronized {
       // remove from shared state only if the streaming execution also matches
-//      sparkSession.sharedState.activeStreamingQueries.remove(
-//        terminatedQuery.id, terminatedQuery)
-//      activeQueries -= terminatedQuery.id
+      sparkSession.sharedState.activeStreamingQueries.remove(
+        terminatedQuery.id, terminatedQuery)
+      activeQueries -= terminatedQuery.id
     }
   }
 }

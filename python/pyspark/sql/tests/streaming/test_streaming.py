@@ -40,40 +40,6 @@ class StreamingTestsMixin:
             self.assertTrue(isinstance(query.id, str))
             self.assertTrue(isinstance(query.runId, str))
             self.assertTrue(query.isActive)
-            # TODO: Will be uncommented with [SPARK-42960]
-            # self.assertEqual(query.exception(), None)
-            # self.assertFalse(query.awaitTermination(1))
-            query.processAllAvailable()
-            recentProgress = query.recentProgress
-            lastProgress = query.lastProgress
-            self.assertEqual(lastProgress["name"], query.name)
-            self.assertEqual(lastProgress["id"], query.id)
-            self.assertTrue(any(p == lastProgress for p in recentProgress))
-            query.explain()
-
-        except Exception as e:
-            self.fail(
-                "Streaming query functions sanity check shouldn't throw any error. "
-                "Error message: " + str(e)
-            )
-
-        finally:
-            query.stop()
-
-
-class StreamingTestsMixin:
-    def test_streaming_query_functions_basic(self):
-        df = self.spark.readStream.format("rate").option("rowsPerSecond", 10).load()
-        query = (
-            df.writeStream.format("memory")
-            .queryName("test_streaming_query_functions_basic")
-            .start()
-        )
-        try:
-            self.assertEquals(query.name, "test_streaming_query_functions_basic")
-            self.assertTrue(isinstance(query.id, str))
-            self.assertTrue(isinstance(query.runId, str))
-            self.assertTrue(query.isActive)
             self.assertEqual(query.exception(), None)
             self.assertFalse(query.awaitTermination(1))
             query.processAllAvailable()
