@@ -47,10 +47,11 @@ import org.apache.spark.sql.types._
  * (1, 5)
  * (4, 6)
  *
- * @param resolveRelations rule to resolve relations from the catalog. This should generally map to
- *                         the the ResolveRelations analyzer rule.
+ * @param resolveRelation function to resolve relations from the catalog. This should generally map
+ *                        to the 'resolveRelationOrTempView' method of the ResolveRelations rule.
  */
-case class ResolveDefaultColumns(resolveRelations: Rule[LogicalPlan]) extends Rule[LogicalPlan] {
+case class ResolveDefaultColumns(
+    resolveRelation: UnresolvedRelation => LogicalPlan) extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = {
     plan.resolveOperatorsWithPruning(
       (_ => SQLConf.get.enableDefaultColumns), ruleId) {
@@ -551,24 +552,23 @@ case class ResolveDefaultColumns(resolveRelations: Rule[LogicalPlan]) extends Ru
    * Returns the schema for the target table of a DML command, looking into the catalog if needed.
    */
   private def getSchemaForTargetTable(table: LogicalPlan): Option[StructType] = {
-    table.foreach {
+    val resolved = table match {
+      case r: UnresolvedRelation if !r.skipSchemaResolution && !r.isStreaming =>
+        resolveRelation(r)
+      case other =>
+        other
+    }
+    var result: Option[StructType] = None
+    resolved.foreach {
       case r: UnresolvedCatalogRelation =>
-        return Some(r.tableMeta.schema)
+        result = Some(r.tableMeta.schema)
       case d: DataSourceV2Relation =>
-        return Some(CatalogV2Util.v2ColumnsToStructType(d.table.columns()))
-      case r: UnresolvedRelation if !r.skipSchemaResolution =>
-        val resolved = resolveRelations(r)
-        resolved.collectFirst {
-          case u: UnresolvedCatalogRelation =>
-            return Some(u.tableMeta.schema)
-        }
-        resolved.collectFirst {
-          case v: View =>
-            return Some(v.schema)
-        }
+        result = Some(CatalogV2Util.v2ColumnsToStructType(d.table.columns()))
+      case v: View if v.isTempViewStoringAnalyzedPlan =>
+        result = Some(v.schema)
       case _ =>
     }
-    None
+    result
   }
 
   /**

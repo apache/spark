@@ -24,7 +24,7 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{StructField, StructType, TimestampType}
 
 class ResolveDefaultColumnsSuite extends QueryTest with SharedSparkSession {
-  val rule = ResolveDefaultColumns(resolveRelations = null)
+  val rule = ResolveDefaultColumns(null)
   // This is the internal storage for the timestamp 2020-12-31 00:00:00.0.
   val literal = Literal(1609401600000000L, TimestampType)
   val table = UnresolvedInlineTable(
