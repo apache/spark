@@ -24,7 +24,7 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{StructField, StructType, TimestampType}
 
 class ResolveDefaultColumnsSuite extends QueryTest with SharedSparkSession {
-  val rule = ResolveDefaultColumns(catalog = null)
+  val rule = ResolveDefaultColumns(null)
   // This is the internal storage for the timestamp 2020-12-31 00:00:00.0.
   val literal = Literal(1609401600000000L, TimestampType)
   val table = UnresolvedInlineTable(
@@ -72,6 +72,25 @@ class ResolveDefaultColumnsSuite extends QueryTest with SharedSparkSession {
       sql("insert into t (ts) values (timestamp'2020-12-31')")
       checkAnswer(spark.table("t"),
         sql("select null, timestamp'2020-12-31'").collect().head)
+    }
+  }
+
+  test("SPARK-43085: Column DEFAULT assignment for target tables with multi-part names") {
+    withDatabase("demos") {
+      sql("create database demos")
+      withTable("demos.test_ts") {
+        sql("create table demos.test_ts (id int, ts timestamp) using parquet")
+        sql("insert into demos.test_ts(ts) values (timestamp'2023-01-01')")
+        checkAnswer(spark.table("demos.test_ts"),
+          sql("select null, timestamp'2023-01-01'"))
+      }
+      withTable("demos.test_ts") {
+        sql("create table demos.test_ts (id int, ts timestamp) using parquet")
+        sql("use database demos")
+        sql("insert into test_ts(ts) values (timestamp'2023-01-01')")
+        checkAnswer(spark.table("demos.test_ts"),
+          sql("select null, timestamp'2023-01-01'"))
+      }
     }
   }
 }

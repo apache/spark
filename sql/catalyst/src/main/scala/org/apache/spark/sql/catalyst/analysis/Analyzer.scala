@@ -313,7 +313,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       TimeWindowing ::
       SessionWindowing ::
       ResolveWindowTime ::
-      ResolveDefaultColumns(v1SessionCatalog) ::
+      ResolveDefaultColumns(ResolveRelations.resolveRelationOrTempView) ::
       ResolveInlineTables ::
       ResolveLambdaVariables ::
       ResolveTimeZone ::
@@ -1278,6 +1278,11 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
           case _ => None
         }
       }
+    }
+
+    /** Consumes an unresolved relation and resolves it to a v1 or v2 relation or temporary view. */
+    def resolveRelationOrTempView(u: UnresolvedRelation): LogicalPlan = {
+      EliminateSubqueryAliases(resolveRelation(u).getOrElse(u))
     }
   }
 
