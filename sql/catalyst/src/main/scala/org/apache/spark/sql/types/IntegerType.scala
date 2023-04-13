@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.types
 
-import scala.reflect.runtime.universe.typeTag
-
 import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.catalyst.types.{PhysicalDataType, PhysicalIntegerType}
 
@@ -29,12 +27,6 @@ import org.apache.spark.sql.catalyst.types.{PhysicalDataType, PhysicalIntegerTyp
  */
 @Stable
 class IntegerType private() extends IntegralType {
-  // The companion object and this class is separated so the companion object also subclasses
-  // this type. Otherwise, the companion object would be of type "IntegerType$" in byte code.
-  // Defined with a private constructor so the companion object is the only possible instantiation.
-  private[sql] type InternalType = Int
-  @transient private[sql] lazy val tag = typeTag[InternalType]
-
   /**
    * The default size of a value of the IntegerType is 4 bytes.
    */
