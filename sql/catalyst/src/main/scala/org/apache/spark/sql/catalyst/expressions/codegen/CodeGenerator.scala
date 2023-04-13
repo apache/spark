@@ -1159,7 +1159,7 @@ class CodegenContext extends Logging {
     }
   }
 
-  var commonExpressions = Map[ExpressionEquals, ExpressionStats]()
+  var commonExpressions = mutable.Map[ExpressionEquals, ExpressionStats]()
 }
 
 /**

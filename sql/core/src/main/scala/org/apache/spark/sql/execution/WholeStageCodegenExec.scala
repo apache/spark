@@ -45,10 +45,10 @@ import org.apache.spark.util.Utils
  */
 trait CodegenSupport extends SparkPlan {
 
-  def reusableExpressions(): (Seq[Expression], AttributeSet) = (Seq(), AttributeSet.empty)
+  def reusableExpressions(): (Seq[Expression], Seq[Attribute]) = (Seq(), Seq())
 
   var initBlock: Block = EmptyBlock
-  var commonExpressions = Map[ExpressionEquals, ExpressionStats]()
+  var commonExpressions = mutable.Map.empty[ExpressionEquals, ExpressionStats]
 
   /** Prefix used in the current operator's variable names. */
   private def variablePrefix: String = this match {
@@ -667,7 +667,7 @@ case class WholeStageCodegenExec(child: SparkPlan)(val codegenStageId: Int)
 
     if (SQLConf.get.subexpressionEliminationEnabled) {
       val stack = mutable.Stack[SparkPlan](child)
-      var attributeSet = AttributeSet.empty
+      var attributeSeq = Seq[Attribute]()
       val executeSeq =
         new mutable.ArrayBuffer[(CodegenSupport, Seq[Expression], EquivalentExpressions)]()
       var equivalence = new EquivalentExpressions
@@ -676,19 +676,20 @@ case class WholeStageCodegenExec(child: SparkPlan)(val codegenStageId: Int)
           case _: WholeStageCodegenExec =>
           case _: InputRDDCodegen =>
           case c: CodegenSupport =>
-            val (newReusableExpressions, newAttributeSet) = c.reusableExpressions()
+            val (newReusableExpressions, newAttributeSeq) = c.reusableExpressions()
             // If the input attributes changed, collect current common expressions and clear
             // equivalentExpressions
-            if (!attributeSet.subsetOf(newAttributeSet)) {
+            if (attributeSeq.size != newAttributeSeq.size ||
+              attributeSeq.zip(newAttributeSeq).exists(tup => !tup._1.equals(tup._2))) {
               equivalence = new EquivalentExpressions
             }
             if (newReusableExpressions.nonEmpty) {
               val bondExpressions =
-                BindReferences.bindReferences(newReusableExpressions, newAttributeSet.toSeq)
+                BindReferences.bindReferences(newReusableExpressions, newAttributeSeq.toSeq)
               executeSeq += ((c, bondExpressions, equivalence))
               ctx.wholeStageSubexpressionElimination(bondExpressions, equivalence)
             }
-            attributeSet = newAttributeSet
+            attributeSeq = newAttributeSeq
             stack.pushAll(c.children)
 
           case _ =>
@@ -698,11 +699,11 @@ case class WholeStageCodegenExec(child: SparkPlan)(val codegenStageId: Int)
         val commonExprs =
           equivalence.getAllExprStates(1)
             .map(stat => ExpressionEquals(stat.expr) -> stat).toMap
-        plan.commonExpressions = commonExprs
         bondExpressions.foreach {
           _.foreach { expr =>
             commonExprs.get(ExpressionEquals(expr)).map { stat =>
               plan.initBlock += ctx.initCommonExpression(stat)
+              plan.commonExpressions += ExpressionEquals(expr) -> stat
             }
           }
         }
