@@ -122,6 +122,7 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
   private def extractSelectiveFilterOverScan(
       plan: LogicalPlan,
       filterCreationSideExp: Expression): Option[LogicalPlan] = {
+    var currentPlan: LogicalPlan = plan
     @tailrec
     def extract(
         p: LogicalPlan,
@@ -150,19 +151,21 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
           predicateReference ++ condition.references,
           hasHitFilter = true,
           hasHitSelectiveFilter = hasHitSelectiveFilter || isLikelySelective(condition))
-      case ExtractEquiJoinKeys(joinType, _, _, _, _, left, right, hint) =>
+      case ExtractEquiJoinKeys(_, _, _, _, _, left, right, _) =>
         // Runtime filters use one side of the [[Join]] to build a set of join key values and prune
         // the other side of the [[Join]]. It's also OK to use a superset of the join key values
         // (ignore null values) to do the pruning.
         if (left.output.exists(_.semanticEquals(filterCreationSideExp))) {
-          extractSelectiveFilterOverScan(left, filterCreationSideExp)
+          currentPlan = left
+          extract(left, AttributeSet.empty, hasHitFilter = false, hasHitSelectiveFilter = false)
         } else if (right.output.exists(_.semanticEquals(filterCreationSideExp))) {
-          extractSelectiveFilterOverScan(right, filterCreationSideExp)
+          currentPlan = right
+          extract(right, AttributeSet.empty, hasHitFilter = false, hasHitSelectiveFilter = false)
         } else {
           None
         }
       case _: LeafNode if hasHitSelectiveFilter =>
-        Some(plan)
+        Some(currentPlan)
       case _ => None
     }
 
