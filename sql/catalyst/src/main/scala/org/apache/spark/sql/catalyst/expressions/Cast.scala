@@ -620,7 +620,7 @@ case class Cast(
         if (array.numElements > 0) {
           val toUTF8String = castToString(et)
           if (array.isNullAt(0)) {
-            if (!legacyCastToStr) builder.append("null")
+            if (!legacyCastToStr) builder.append("NULL")
           } else {
             builder.append(toUTF8String(array.get(0, et)).asInstanceOf[UTF8String])
           }
@@ -628,7 +628,7 @@ case class Cast(
           while (i < array.numElements) {
             builder.append(",")
             if (array.isNullAt(i)) {
-              if (!legacyCastToStr) builder.append(" null")
+              if (!legacyCastToStr) builder.append(" NULL")
             } else {
               builder.append(" ")
               builder.append(toUTF8String(array.get(i, et)).asInstanceOf[UTF8String])
@@ -651,7 +651,7 @@ case class Cast(
           builder.append(keyToUTF8String(keyArray.get(0, kt)).asInstanceOf[UTF8String])
           builder.append(" ->")
           if (valueArray.isNullAt(0)) {
-            if (!legacyCastToStr) builder.append(" null")
+            if (!legacyCastToStr) builder.append(" NULL")
           } else {
             builder.append(" ")
             builder.append(valueToUTF8String(valueArray.get(0, vt)).asInstanceOf[UTF8String])
@@ -662,7 +662,7 @@ case class Cast(
             builder.append(keyToUTF8String(keyArray.get(i, kt)).asInstanceOf[UTF8String])
             builder.append(" ->")
             if (valueArray.isNullAt(i)) {
-              if (!legacyCastToStr) builder.append(" null")
+              if (!legacyCastToStr) builder.append(" NULL")
             } else {
               builder.append(" ")
               builder.append(valueToUTF8String(valueArray.get(i, vt))
@@ -682,7 +682,7 @@ case class Cast(
           val st = fields.map(_.dataType)
           val toUTF8StringFuncs = st.map(castToString)
           if (row.isNullAt(0)) {
-            if (!legacyCastToStr) builder.append("null")
+            if (!legacyCastToStr) builder.append("NULL")
           } else {
             builder.append(toUTF8StringFuncs(0)(row.get(0, st(0))).asInstanceOf[UTF8String])
           }
@@ -690,7 +690,7 @@ case class Cast(
           while (i < row.numFields) {
             builder.append(",")
             if (row.isNullAt(i)) {
-              if (!legacyCastToStr) builder.append(" null")
+              if (!legacyCastToStr) builder.append(" NULL")
             } else {
               builder.append(" ")
               builder.append(toUTF8StringFuncs(i)(row.get(i, st(i))).asInstanceOf[UTF8String])
@@ -1421,14 +1421,14 @@ case class Cast(
        |$buffer.append("[");
        |if ($array.numElements() > 0) {
        |  if ($array.isNullAt(0)) {
-       |    ${appendIfNotLegacyCastToStr(buffer, "null")}
+       |    ${appendIfNotLegacyCastToStr(buffer, "NULL")}
        |  } else {
        |    $buffer.append($elementToStringFunc(${CodeGenerator.getValue(array, et, "0")}));
        |  }
        |  for (int $loopIndex = 1; $loopIndex < $array.numElements(); $loopIndex++) {
        |    $buffer.append(",");
        |    if ($array.isNullAt($loopIndex)) {
-       |      ${appendIfNotLegacyCastToStr(buffer, " null")}
+       |      ${appendIfNotLegacyCastToStr(buffer, " NULL")}
        |    } else {
        |      $buffer.append(" ");
        |      $buffer.append($elementToStringFunc(${CodeGenerator.getValue(array, et, loopIndex)}));
@@ -1478,7 +1478,7 @@ case class Cast(
        |  $buffer.append($keyToStringFunc($getMapFirstKey));
        |  $buffer.append(" ->");
        |  if ($map.valueArray().isNullAt(0)) {
-       |    ${appendIfNotLegacyCastToStr(buffer, " null")}
+       |    ${appendIfNotLegacyCastToStr(buffer, " NULL")}
        |  } else {
        |    $buffer.append(" ");
        |    $buffer.append($valueToStringFunc($getMapFirstValue));
@@ -1488,7 +1488,7 @@ case class Cast(
        |    $buffer.append($keyToStringFunc($getMapKeyArray));
        |    $buffer.append(" ->");
        |    if ($map.valueArray().isNullAt($loopIndex)) {
-       |      ${appendIfNotLegacyCastToStr(buffer, " null")}
+       |      ${appendIfNotLegacyCastToStr(buffer, " NULL")}
        |    } else {
        |      $buffer.append(" ");
        |      $buffer.append($valueToStringFunc($getMapValueArray));
@@ -1512,7 +1512,7 @@ case class Cast(
       code"""
          |${if (i != 0) code"""$buffer.append(",");""" else EmptyBlock}
          |if ($row.isNullAt($i)) {
-         |  ${appendIfNotLegacyCastToStr(buffer, if (i == 0) "null" else " null")}
+         |  ${appendIfNotLegacyCastToStr(buffer, if (i == 0) "NULL" else " NULL")}
          |} else {
          |  ${if (i != 0) code"""$buffer.append(" ");""" else EmptyBlock}
          |

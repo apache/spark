@@ -1530,7 +1530,7 @@ class DataFrame(Frame, Generic[T]):
         # |  A|  B|   C|
         # +---+---+----+
         # |  1|  2| 3.0|
-        # |  4|  1|null|
+        # |  4|  1|NULL|
         # +---+---+----+
 
         pair_scols: List[GenericColumn] = []
@@ -1560,10 +1560,10 @@ class DataFrame(Frame, Generic[T]):
         # |                  2|                  2|                3.0|                3.0|
         # |                  0|                  0|                4.0|                4.0|
         # |                  0|                  1|                4.0|                1.0|
-        # |                  0|                  2|               null|               null|
+        # |                  0|                  2|               NULL|               NULL|
         # |                  1|                  1|                1.0|                1.0|
-        # |                  1|                  2|               null|               null|
-        # |                  2|                  2|               null|               null|
+        # |                  1|                  2|               NULL|               NULL|
+        # |                  2|                  2|               NULL|               NULL|
         # +-------------------+-------------------+-------------------+-------------------+
         sdf = sdf.select(F.inline(F.array(*pair_scols)))  # type: ignore[arg-type]
 
@@ -1586,15 +1586,15 @@ class DataFrame(Frame, Generic[T]):
         # +-------------------+-------------------+----------------+
         # |__tmp_index_1_col__|__tmp_index_2_col__|__tmp_corr_col__|
         # +-------------------+-------------------+----------------+
-        # |                  2|                  2|            null|
-        # |                  1|                  2|            null|
-        # |                  2|                  1|            null|
+        # |                  2|                  2|            NULL|
+        # |                  1|                  2|            NULL|
+        # |                  2|                  1|            NULL|
         # |                  1|                  1|             1.0|
         # |                  0|                  0|             1.0|
         # |                  0|                  1|            -1.0|
         # |                  1|                  0|            -1.0|
-        # |                  0|                  2|            null|
-        # |                  2|                  0|            null|
+        # |                  0|                  2|            NULL|
+        # |                  2|                  0|            NULL|
         # +-------------------+-------------------+----------------+
 
         auxiliary_col_name = verify_temp_column_name(sdf, "__corr_auxiliary_temp_column__")
@@ -12929,7 +12929,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         # |species|legs|wings|
         # +-------+----+-----+
         # |   bird|   2|  0.0|
-        # |   null|null|  2.0|
+        # |   NULL|NULL|  2.0|
         # +-------+----+-----+
         sdf = (
             sdf.select(F.arrays_zip(*[F.col(name) for name in mode_col_names]).alias(zip_col_name))
