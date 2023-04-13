@@ -122,13 +122,13 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
   private def extractSelectiveFilterOverScan(
       plan: LogicalPlan,
       filterCreationSideExp: Expression): Option[LogicalPlan] = {
-    var currentPlan: LogicalPlan = plan
     @tailrec
     def extract(
         p: LogicalPlan,
         predicateReference: AttributeSet,
         hasHitFilter: Boolean,
-        hasHitSelectiveFilter: Boolean): Option[LogicalPlan] = p match {
+        hasHitSelectiveFilter: Boolean,
+        currentPlan: LogicalPlan): Option[LogicalPlan] = p match {
       case Project(projectList, child) if hasHitFilter =>
         // We need to make sure all expressions referenced by filter predicates are simple
         // expressions.
@@ -138,29 +138,31 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
             child,
             referencedExprs.map(_.references).foldLeft(AttributeSet.empty)(_ ++ _),
             hasHitFilter,
-            hasHitSelectiveFilter)
+            hasHitSelectiveFilter,
+            currentPlan)
         } else {
           None
         }
       case Project(_, child) =>
         assert(predicateReference.isEmpty && !hasHitSelectiveFilter)
-        extract(child, predicateReference, hasHitFilter, hasHitSelectiveFilter)
+        extract(child, predicateReference, hasHitFilter, hasHitSelectiveFilter, currentPlan)
       case Filter(condition, child) if isSimpleExpression(condition) =>
         extract(
           child,
           predicateReference ++ condition.references,
           hasHitFilter = true,
-          hasHitSelectiveFilter = hasHitSelectiveFilter || isLikelySelective(condition))
+          hasHitSelectiveFilter = hasHitSelectiveFilter || isLikelySelective(condition),
+          currentPlan)
       case ExtractEquiJoinKeys(_, _, _, _, _, left, right, _) =>
         // Runtime filters use one side of the [[Join]] to build a set of join key values and prune
         // the other side of the [[Join]]. It's also OK to use a superset of the join key values
         // (ignore null values) to do the pruning.
         if (left.output.exists(_.semanticEquals(filterCreationSideExp))) {
-          currentPlan = left
-          extract(left, AttributeSet.empty, hasHitFilter = false, hasHitSelectiveFilter = false)
+          extract(left, AttributeSet.empty,
+            hasHitFilter = false, hasHitSelectiveFilter = false, currentPlan = left)
         } else if (right.output.exists(_.semanticEquals(filterCreationSideExp))) {
-          currentPlan = right
-          extract(right, AttributeSet.empty, hasHitFilter = false, hasHitSelectiveFilter = false)
+          extract(right, AttributeSet.empty,
+            hasHitFilter = false, hasHitSelectiveFilter = false, currentPlan = right)
         } else {
           None
         }
@@ -170,7 +172,8 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
     }
 
     if (!plan.isStreaming) {
-      extract(plan, AttributeSet.empty, hasHitFilter = false, hasHitSelectiveFilter = false)
+      extract(plan, AttributeSet.empty,
+        hasHitFilter = false, hasHitSelectiveFilter = false, currentPlan = plan)
     } else {
       None
     }
