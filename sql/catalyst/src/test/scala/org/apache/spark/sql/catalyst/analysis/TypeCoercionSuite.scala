@@ -1763,8 +1763,8 @@ object TypeCoercionSuite {
     Seq(DoubleType, FloatType, DecimalType.SYSTEM_DEFAULT, DecimalType(10, 2))
   val numericTypes: Seq[DataType] = integralTypes ++ fractionalTypes
   val datetimeTypes: Seq[DataType] = Seq(DateType, TimestampType, TimestampNTZType)
-  val intervalTypes: Seq[DataType] = Seq(CalendarIntervalType, DayTimeIntervalType.DEFAULT,
-    YearMonthIntervalType.DEFAULT)
+  val intervalTypes: Seq[DataType] = Seq(CalendarIntervalType,
+    DayTimeIntervalType.defaultConcreteType, YearMonthIntervalType.defaultConcreteType)
   val atomicTypes: Seq[DataType] =
     numericTypes ++ datetimeTypes ++ Seq(BinaryType, BooleanType, StringType)
   val complexTypes: Seq[DataType] =
