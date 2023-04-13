@@ -28,16 +28,15 @@ import org.apache.spark.sql.connect.client.util.RemoteSparkSession
  * these tests only works with SBT for now.
  */
 class KeyValueGroupedDatasetE2ETestSuite extends RemoteSparkSession {
-  // TODO: RowEncoder not supported?
-//  test("flatGroupMap dataframe") {
-//    val rows = Arrays.asList(Row("a", 10), Row("a", 20), Row("b", 1), Row("b", 2), Row("c", 1))
-//    val schema = StructType(Array(
-//      StructField("name", StringType), StructField("data", IntegerType)))
-//    val df = spark.createDataFrame(rows, schema)
-//    val values = df.groupByKey(_.getString(0))(StringEncoder)
-//      .flatMapGroups((_, it) => Seq(it.toSeq.size))(PrimitiveIntEncoder).collectAsList()
-//    assert(values == Arrays.asList[Int](2, 2, 1))
-//  }
+
+  test("mapGroups") {
+    val values = spark
+      .range(10)
+      .groupByKey(v => v % 2)(PrimitiveLongEncoder)
+      .mapGroups((_, it) => it.toSeq.size)(PrimitiveIntEncoder)
+      .collectAsList()
+    assert(values == Arrays.asList[Int](5, 5))
+  }
 
   test("flatGroupMap") {
     val values = spark
@@ -78,6 +77,37 @@ class KeyValueGroupedDatasetE2ETestSuite extends RemoteSparkSession {
     assert(values == Arrays.asList[Int](5, 5))
   }
 
+  test("keyAs mapValues - cogroup") {
+    val grouped = spark
+      .range(10)
+      .groupByKey(v => v % 2)(PrimitiveLongEncoder)
+      .keyAs[Double](PrimitiveDoubleEncoder)
+      .mapValues(v => v * 2)(PrimitiveLongEncoder)
+    val otherGrouped = spark
+      .range(10)
+      .groupByKey(v => v / 2)(PrimitiveLongEncoder)
+      .keyAs[Double](PrimitiveDoubleEncoder)
+      .mapValues(v => v * 2)(PrimitiveLongEncoder)
+    val values = grouped
+      .cogroup(otherGrouped) { (k, it, otherIt) =>
+        Iterator(String.valueOf(k), it.mkString(",") + ";" + otherIt.mkString(","))
+      }(StringEncoder)
+      .collectAsList()
+
+    assert(
+      values == Arrays.asList[String](
+        "0.0",
+        "0,4,8,12,16;0,2",
+        "1.0",
+        "2,6,10,14,18;4,6",
+        "2.0",
+        ";8,10",
+        "3.0",
+        ";12,14",
+        "4.0",
+        ";16,18"))
+  }
+
   test("mapValues - flatGroupMap") {
     val values = spark
       .range(10)
@@ -102,13 +132,13 @@ class KeyValueGroupedDatasetE2ETestSuite extends RemoteSparkSession {
     val grouped = spark
       .range(10)
       .groupByKey(v => v % 2)(PrimitiveLongEncoder)
-    val aggregated = grouped
+    val values = grouped
       .flatMapSortedGroups(functions.desc("id")) { (g, iter) =>
         Iterator(String.valueOf(g), iter.mkString(","))
       }(StringEncoder)
       .collectAsList()
 
-    assert(aggregated == Arrays.asList[String]("0", "8,6,4,2,0", "1", "9,7,5,3,1"))
+    assert(values == Arrays.asList[String]("0", "8,6,4,2,0", "1", "9,7,5,3,1"))
 
     // Star is not allowed as group sort column
     val message = intercept[StatusRuntimeException] {
@@ -119,5 +149,49 @@ class KeyValueGroupedDatasetE2ETestSuite extends RemoteSparkSession {
         .collectAsList()
     }.getMessage
     assert(message.contains("Invalid usage of '*' in MapGroups"))
+  }
+
+  test("cogroup") {
+    val grouped = spark
+      .range(10)
+      .groupByKey(v => v % 2)(PrimitiveLongEncoder)
+    val otherGrouped = spark
+      .range(10)
+      .groupByKey(v => v / 2)(PrimitiveLongEncoder)
+    val values = grouped
+      .cogroup(otherGrouped) { (k, it, otherIt) =>
+        Seq(it.toSeq.size + otherIt.seq.size)
+      }(PrimitiveIntEncoder)
+      .collectAsList()
+
+    assert(values == Arrays.asList[Int](7, 7, 2, 2, 2))
+  }
+
+  test("cogroupSorted") {
+    val grouped = spark
+      .range(10)
+      .groupByKey(v => v % 2)(PrimitiveLongEncoder)
+    val otherGrouped = spark
+      .range(10)
+      .groupByKey(v => v / 2)(PrimitiveLongEncoder)
+    val values = grouped
+      .cogroupSorted(otherGrouped)(functions.desc("id"))(functions.desc("id")) {
+        (k, it, otherIt) =>
+          Iterator(String.valueOf(k), it.mkString(",") + ";" + otherIt.mkString(","))
+      }(StringEncoder)
+      .collectAsList()
+
+    assert(
+      values == Arrays.asList[String](
+        "0",
+        "8,6,4,2,0;1,0",
+        "1",
+        "9,7,5,3,1;3,2",
+        "2",
+        ";5,4",
+        "3",
+        ";7,6",
+        "4",
+        ";9,8"))
   }
 }

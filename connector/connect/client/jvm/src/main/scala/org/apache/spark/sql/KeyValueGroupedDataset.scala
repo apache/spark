@@ -20,6 +20,7 @@ package org.apache.spark.sql
 import java.util.Arrays
 
 import scala.collection.JavaConverters._
+import scala.language.existentials
 
 import org.apache.spark.api.java.function._
 import org.apache.spark.connect.proto
@@ -193,6 +194,124 @@ class KeyValueGroupedDataset[K, V] private[sql] () extends Serializable {
       encoder: Encoder[U]): Dataset[U] = {
     flatMapSortedGroups(SortExprs: _*)(UdfUtils.flatMapGroupsFuncToScalaFunc(f))(encoder)
   }
+
+  /**
+   * (Scala-specific) Applies the given function to each group of data. For each unique group, the
+   * function will be passed the group key and an iterator that contains all of the elements in
+   * the group. The function can return an element of arbitrary type which will be returned as a
+   * new [[Dataset]].
+   *
+   * This function does not support partial aggregation, and as a result requires shuffling all
+   * the data in the [[Dataset]]. If an application intends to perform an aggregation over each
+   * key, it is best to use the reduce function or an
+   * `org.apache.spark.sql.expressions#Aggregator`.
+   *
+   * Internally, the implementation will spill to disk if any given group is too large to fit into
+   * memory. However, users must take care to avoid materializing the whole iterator for a group
+   * (for example, by calling `toList`) unless they are sure that this is possible given the
+   * memory constraints of their cluster.
+   *
+   * @since 3.5.0
+   */
+  def mapGroups[U: Encoder](f: (K, Iterator[V]) => U): Dataset[U] = {
+    flatMapGroups(UdfUtils.mapGroupsFuncToFlatMapAdaptor(f))
+  }
+
+  /**
+   * (Java-specific) Applies the given function to each group of data. For each unique group, the
+   * function will be passed the group key and an iterator that contains all of the elements in
+   * the group. The function can return an element of arbitrary type which will be returned as a
+   * new [[Dataset]].
+   *
+   * This function does not support partial aggregation, and as a result requires shuffling all
+   * the data in the [[Dataset]]. If an application intends to perform an aggregation over each
+   * key, it is best to use the reduce function or an
+   * `org.apache.spark.sql.expressions#Aggregator`.
+   *
+   * Internally, the implementation will spill to disk if any given group is too large to fit into
+   * memory. However, users must take care to avoid materializing the whole iterator for a group
+   * (for example, by calling `toList`) unless they are sure that this is possible given the
+   * memory constraints of their cluster.
+   *
+   * @since 3.5.0
+   */
+  def mapGroups[U](f: MapGroupsFunction[K, V, U], encoder: Encoder[U]): Dataset[U] = {
+    mapGroups(UdfUtils.mapGroupsFuncToScalaFunc(f))(encoder)
+  }
+
+  /**
+   * (Scala-specific) Applies the given function to each cogrouped data. For each unique group,
+   * the function will be passed the grouping key and 2 iterators containing all elements in the
+   * group from [[Dataset]] `this` and `other`. The function can return an iterator containing
+   * elements of an arbitrary type which will be returned as a new [[Dataset]].
+   *
+   * @since 3.5.0
+   */
+  def cogroup[U, R: Encoder](other: KeyValueGroupedDataset[K, U])(
+      f: (K, Iterator[V], Iterator[U]) => TraversableOnce[R]): Dataset[R] = {
+    cogroupSorted(other)()()(f)
+  }
+
+  /**
+   * (Java-specific) Applies the given function to each cogrouped data. For each unique group, the
+   * function will be passed the grouping key and 2 iterators containing all elements in the group
+   * from [[Dataset]] `this` and `other`. The function can return an iterator containing elements
+   * of an arbitrary type which will be returned as a new [[Dataset]].
+   *
+   * @since 3.5.0
+   */
+  def cogroup[U, R](
+      other: KeyValueGroupedDataset[K, U],
+      f: CoGroupFunction[K, V, U, R],
+      encoder: Encoder[R]): Dataset[R] = {
+    cogroup(other)(UdfUtils.coGroupFunctionToScalaFunc(f))(encoder)
+  }
+
+  /**
+   * (Scala-specific) Applies the given function to each sorted cogrouped data. For each unique
+   * group, the function will be passed the grouping key and 2 sorted iterators containing all
+   * elements in the group from [[Dataset]] `this` and `other`. The function can return an
+   * iterator containing elements of an arbitrary type which will be returned as a new
+   * [[Dataset]].
+   *
+   * This is equivalent to [[KeyValueGroupedDataset#cogroup]], except for the iterators to be
+   * sorted according to the given sort expressions. That sorting does not add computational
+   * complexity.
+   *
+   * @see
+   *   [[org.apache.spark.sql.KeyValueGroupedDataset#cogroup]]
+   * @since 3.5.0
+   */
+  def cogroupSorted[U, R: Encoder](other: KeyValueGroupedDataset[K, U])(thisSortExprs: Column*)(
+      otherSortExprs: Column*)(
+      f: (K, Iterator[V], Iterator[U]) => TraversableOnce[R]): Dataset[R] = {
+    throw new UnsupportedOperationException
+  }
+
+  /**
+   * (Java-specific) Applies the given function to each sorted cogrouped data. For each unique
+   * group, the function will be passed the grouping key and 2 sorted iterators containing all
+   * elements in the group from [[Dataset]] `this` and `other`. The function can return an
+   * iterator containing elements of an arbitrary type which will be returned as a new
+   * [[Dataset]].
+   *
+   * This is equivalent to [[KeyValueGroupedDataset#cogroup]], except for the iterators to be
+   * sorted according to the given sort expressions. That sorting does not add computational
+   * complexity.
+   *
+   * @see
+   *   [[org.apache.spark.sql.KeyValueGroupedDataset#cogroup]]
+   * @since 3.5.0
+   */
+  def cogroupSorted[U, R](
+      other: KeyValueGroupedDataset[K, U],
+      thisSortExprs: Array[Column],
+      otherSortExprs: Array[Column],
+      f: CoGroupFunction[K, V, U, R],
+      encoder: Encoder[R]): Dataset[R] = {
+    cogroupSorted(other)(thisSortExprs: _*)(otherSortExprs: _*)(
+      UdfUtils.coGroupFunctionToScalaFunc(f))(encoder)
+  }
 }
 
 /**
@@ -239,20 +358,50 @@ private class KeyValueGroupedDatasetImpl[K, V, IK, IV](
 
   override def flatMapSortedGroups[U: Encoder](sortExprs: Column*)(
       f: (K, Iterator[V]) => TraversableOnce[U]): Dataset[U] = {
+    // Apply mapValues changes to the udf
     val nf: (K, Iterator[IV]) => TraversableOnce[U] =
       UdfUtils.mapValuesAdaptor(f, valueMapFunc)
     val outputEncoder = encoderFor[U]
-    val ivEncoder = ds.encoder
-    val udf = ScalarUserDefinedFunction(
-      function = nf,
-      inputEncoders = kEncoder :: ivEncoder :: Nil,
-      outputEncoder = outputEncoder)
     sparkSession.newDataset[U](outputEncoder) { builder =>
       builder.getGroupMapBuilder
         .setInput(plan.getRoot)
         .addAllSortingExpressions(sortExprs.map(e => e.expr).asJava)
-        .addAllGroupingExpressions(Arrays.asList(groupFunc.apply(col("*")).expr))
-        .setFunc(udf.apply(col("*"), col("*")).expr.getCommonInlineUserDefinedFunction)
+        .addAllGroupingExpressions(getGroupingExpressions)
+        .setFunc(getUdfFunc(nf, outputEncoder)(ds.encoder))
     }
+  }
+
+  override def cogroupSorted[U, R: Encoder](other: KeyValueGroupedDataset[K, U])(
+      thisSortExprs: Column*)(otherSortExprs: Column*)(
+      f: (K, Iterator[V], Iterator[U]) => TraversableOnce[R]): Dataset[R] = {
+    assert(other.isInstanceOf[KeyValueGroupedDatasetImpl[K, U, _, _]])
+    val otherImpl = other.asInstanceOf[KeyValueGroupedDatasetImpl[K, U, _, _]]
+    // Apply mapValues changes to the udf
+    val nf = UdfUtils.mapValuesAdaptor(f, valueMapFunc, otherImpl.valueMapFunc)
+    val outputEncoder = encoderFor[R]
+    sparkSession.newDataset[R](outputEncoder) { builder =>
+      builder.getCoGroupMapBuilder
+        .setInput(plan.getRoot)
+        .addAllInputGroupingExpressions(getGroupingExpressions)
+        .addAllInputSortingExpressions(thisSortExprs.map(e => e.expr).asJava)
+        .setOther(otherImpl.plan.getRoot)
+        .addAllOtherGroupingExpressions(otherImpl.getGroupingExpressions)
+        .addAllOtherSortingExpressions(otherSortExprs.map(e => e.expr).asJava)
+        .setFunc(getUdfFunc(nf, outputEncoder)(ds.encoder, otherImpl.groupFunc.inputEncoder))
+    }
+  }
+
+  private def getGroupingExpressions = {
+    Arrays.asList(groupFunc.apply(col("*")).expr)
+  }
+
+  private def getUdfFunc[U: Encoder](nf: AnyRef, outputEncoder: AgnosticEncoder[U])(
+      inEncoders: AgnosticEncoder[_]*): proto.CommonInlineUserDefinedFunction = {
+    val inputEncoders = kEncoder +: inEncoders // Apply keyAs changes by setting kEncoder
+    val udf = ScalarUserDefinedFunction(
+      function = nf,
+      inputEncoders = inputEncoders,
+      outputEncoder = outputEncoder)
+    udf.apply(inputEncoders.map(_ => col("*")): _*).expr.getCommonInlineUserDefinedFunction
   }
 }

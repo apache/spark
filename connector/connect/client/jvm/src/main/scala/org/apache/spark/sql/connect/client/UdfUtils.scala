@@ -48,13 +48,6 @@ private[sql] object UdfUtils {
 
   def mapFunctionToScalaFunc[T, U](f: MapFunction[T, U]): T => U = f.call
 
-  def flatMapFuncToScalaFunc[T, U](f: FlatMapFunction[T, U]): T => TraversableOnce[U] = x =>
-    f.call(x).asScala
-
-  def flatMapGroupsFuncToScalaFunc[K, V, U](
-      f: FlatMapGroupsFunction[K, V, U]): (K, Iterator[V]) => TraversableOnce[U] = (key, data) =>
-    f.call(key, data.asJava).asScala
-
   def mapPartitionsFuncToScalaFunc[T, U](
       f: MapPartitionsFunction[T, U]): Iterator[T] => Iterator[U] = x => f.call(x.asJava).asScala
 
@@ -63,12 +56,41 @@ private[sql] object UdfUtils {
   def foreachPartitionFuncToScalaFunc[T](f: ForeachPartitionFunction[T]): Iterator[T] => Unit =
     x => f.call(x.asJava)
 
+  def flatMapFuncToScalaFunc[T, U](f: FlatMapFunction[T, U]): T => TraversableOnce[U] = x =>
+    f.call(x).asScala
+
+  def flatMapGroupsFuncToScalaFunc[K, V, U](
+      f: FlatMapGroupsFunction[K, V, U]): (K, Iterator[V]) => TraversableOnce[U] = (key, data) =>
+    f.call(key, data.asJava).asScala
+
+  def mapGroupsFuncToScalaFunc[K, V, U](f: MapGroupsFunction[K, V, U]): (K, Iterator[V]) => U =
+    (key, data) => f.call(key, data.asJava)
+
+  def coGroupFunctionToScalaFunc[K, V, U, R](
+      f: CoGroupFunction[K, V, U, R]): (K, Iterator[V], Iterator[U]) => TraversableOnce[R] =
+    (key, left, right) => f.call(key, left.asJava, right.asJava).asScala
+
+  def mapGroupsFuncToFlatMapAdaptor[K, V, U](
+      f: (K, Iterator[V]) => U): (K, Iterator[V]) => TraversableOnce[U] = {
+    (key: K, it: Iterator[V]) => Iterator(f(key, it))
+  }
+
   def mapValuesAdaptor[K, V, U, IV](
       f: (K, Iterator[V]) => TraversableOnce[U],
       valueMapFunc: IV => V): (K, Iterator[IV]) => TraversableOnce[U] = {
     (k: K, itr: Iterator[IV]) =>
       {
         f(k, itr.map(v => valueMapFunc(v)))
+      }
+  }
+
+  def mapValuesAdaptor[K, V, U, R, IV, IU](
+      f: (K, Iterator[V], Iterator[U]) => TraversableOnce[R],
+      valueMapFunc: IV => V,
+      otherValueMapFunc: IU => U): (K, Iterator[IV], Iterator[IU]) => TraversableOnce[R] = {
+    (k: K, itr: Iterator[IV], otherItr: Iterator[IU]) =>
+      {
+        f(k, itr.map(v => valueMapFunc(v)), otherItr.map(u => otherValueMapFunc(u)))
       }
   }
 

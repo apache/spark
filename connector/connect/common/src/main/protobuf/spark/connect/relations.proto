@@ -860,6 +860,12 @@ message CoGroupMap {
 
   // (Required) Input user-defined function.
   CommonInlineUserDefinedFunction func = 5;
+
+  // (Optional) Expressions for sorting. Only used by Scala Sorted CoGroup Map API.
+  repeated Expression input_sorting_expressions = 6;
+
+  // (Optional) Expressions for sorting. Only used by Scala Sorted CoGroup Map API.
+  repeated Expression other_sorting_expressions = 7;
 }
 
 message ApplyInPandasWithState {
