@@ -1019,9 +1019,9 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils with Adapti
         SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "0",
         SQLConf.COALESCE_BUCKETS_IN_JOIN_ENABLED.key -> "true") {
         def verify(
-                    query: String,
-                    expectedNumShuffles: Int,
-                    expectedCoalescedNumBuckets: Option[Int]): Unit = {
+            query: String,
+            expectedNumShuffles: Int,
+            expectedCoalescedNumBuckets: Option[Int]): Unit = {
           Seq(true, false).foreach { aqeEnabled =>
             withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqeEnabled.toString) {
               val plan = sql(query).queryExecution.executedPlan
