@@ -40,6 +40,7 @@ import google.protobuf.descriptor
 import google.protobuf.internal.containers
 import google.protobuf.internal.enum_type_wrapper
 import google.protobuf.message
+import pyspark.sql.connect.proto.common_pb2
 import pyspark.sql.connect.proto.expressions_pb2
 import pyspark.sql.connect.proto.relations_pb2
 import sys
@@ -66,6 +67,7 @@ class Command(google.protobuf.message.Message):
     SQL_COMMAND_FIELD_NUMBER: builtins.int
     WRITE_STREAM_OPERATION_START_FIELD_NUMBER: builtins.int
     STREAMING_QUERY_COMMAND_FIELD_NUMBER: builtins.int
+    GET_RESOURCES_COMMAND_FIELD_NUMBER: builtins.int
     EXTENSION_FIELD_NUMBER: builtins.int
     @property
     def register_function(
@@ -84,6 +86,8 @@ class Command(google.protobuf.message.Message):
     @property
     def streaming_query_command(self) -> global___StreamingQueryCommand: ...
     @property
+    def get_resources_command(self) -> global___GetResourcesCommand: ...
+    @property
     def extension(self) -> google.protobuf.any_pb2.Any:
         """This field is used to mark extensions to the protocol. When plugins generate arbitrary
         Commands they can add them here. During the planning the correct resolution is done.
@@ -99,6 +103,7 @@ class Command(google.protobuf.message.Message):
         sql_command: global___SqlCommand | None = ...,
         write_stream_operation_start: global___WriteStreamOperationStart | None = ...,
         streaming_query_command: global___StreamingQueryCommand | None = ...,
+        get_resources_command: global___GetResourcesCommand | None = ...,
         extension: google.protobuf.any_pb2.Any | None = ...,
     ) -> None: ...
     def HasField(
@@ -110,6 +115,8 @@ class Command(google.protobuf.message.Message):
             b"create_dataframe_view",
             "extension",
             b"extension",
+            "get_resources_command",
+            b"get_resources_command",
             "register_function",
             b"register_function",
             "sql_command",
@@ -133,6 +140,8 @@ class Command(google.protobuf.message.Message):
             b"create_dataframe_view",
             "extension",
             b"extension",
+            "get_resources_command",
+            b"get_resources_command",
             "register_function",
             b"register_function",
             "sql_command",
@@ -157,6 +166,7 @@ class Command(google.protobuf.message.Message):
         "sql_command",
         "write_stream_operation_start",
         "streaming_query_command",
+        "get_resources_command",
         "extension",
     ] | None: ...
 
@@ -1065,63 +1075,36 @@ class StreamingQueryCommandResult(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
         HAS_EXCEPTION_FIELD_NUMBER: builtins.int
-        MESSAGE_FIELD_NUMBER: builtins.int
-        STACK_TRACE_FIELD_NUMBER: builtins.int
-        CAUSE_FIELD_NUMBER: builtins.int
+        ERROR_MESSAGE_FIELD_NUMBER: builtins.int
         has_exception: builtins.bool
         """Exception as string"""
-        message: builtins.str
-        @property
-        def stack_trace(
-            self,
-        ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]: ...
-        cause: builtins.str
+        error_message: builtins.str
         def __init__(
             self,
             *,
             has_exception: builtins.bool = ...,
-            message: builtins.str | None = ...,
-            stack_trace: collections.abc.Iterable[builtins.str] | None = ...,
-            cause: builtins.str | None = ...,
+            error_message: builtins.str | None = ...,
         ) -> None: ...
         def HasField(
             self,
             field_name: typing_extensions.Literal[
-                "_cause",
-                b"_cause",
-                "_message",
-                b"_message",
-                "cause",
-                b"cause",
-                "message",
-                b"message",
+                "_error_message", b"_error_message", "error_message", b"error_message"
             ],
         ) -> builtins.bool: ...
         def ClearField(
             self,
             field_name: typing_extensions.Literal[
-                "_cause",
-                b"_cause",
-                "_message",
-                b"_message",
-                "cause",
-                b"cause",
+                "_error_message",
+                b"_error_message",
+                "error_message",
+                b"error_message",
                 "has_exception",
                 b"has_exception",
-                "message",
-                b"message",
-                "stack_trace",
-                b"stack_trace",
             ],
         ) -> None: ...
-        @typing.overload
         def WhichOneof(
-            self, oneof_group: typing_extensions.Literal["_cause", b"_cause"]
-        ) -> typing_extensions.Literal["cause"] | None: ...
-        @typing.overload
-        def WhichOneof(
-            self, oneof_group: typing_extensions.Literal["_message", b"_message"]
-        ) -> typing_extensions.Literal["message"] | None: ...
+            self, oneof_group: typing_extensions.Literal["_error_message", b"_error_message"]
+        ) -> typing_extensions.Literal["error_message"] | None: ...
 
     class AwaitTerminationResult(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
@@ -1211,3 +1194,61 @@ class StreamingQueryCommandResult(google.protobuf.message.Message):
     ] | None: ...
 
 global___StreamingQueryCommandResult = StreamingQueryCommandResult
+
+class GetResourcesCommand(google.protobuf.message.Message):
+    """Command to get the output of 'SparkContext.resources'"""
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    def __init__(
+        self,
+    ) -> None: ...
+
+global___GetResourcesCommand = GetResourcesCommand
+
+class GetResourcesCommandResult(google.protobuf.message.Message):
+    """Response for command 'GetResourcesCommand'."""
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    class ResourcesEntry(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        KEY_FIELD_NUMBER: builtins.int
+        VALUE_FIELD_NUMBER: builtins.int
+        key: builtins.str
+        @property
+        def value(self) -> pyspark.sql.connect.proto.common_pb2.ResourceInformation: ...
+        def __init__(
+            self,
+            *,
+            key: builtins.str = ...,
+            value: pyspark.sql.connect.proto.common_pb2.ResourceInformation | None = ...,
+        ) -> None: ...
+        def HasField(
+            self, field_name: typing_extensions.Literal["value", b"value"]
+        ) -> builtins.bool: ...
+        def ClearField(
+            self, field_name: typing_extensions.Literal["key", b"key", "value", b"value"]
+        ) -> None: ...
+
+    RESOURCES_FIELD_NUMBER: builtins.int
+    @property
+    def resources(
+        self,
+    ) -> google.protobuf.internal.containers.MessageMap[
+        builtins.str, pyspark.sql.connect.proto.common_pb2.ResourceInformation
+    ]: ...
+    def __init__(
+        self,
+        *,
+        resources: collections.abc.Mapping[
+            builtins.str, pyspark.sql.connect.proto.common_pb2.ResourceInformation
+        ]
+        | None = ...,
+    ) -> None: ...
+    def ClearField(
+        self, field_name: typing_extensions.Literal["resources", b"resources"]
+    ) -> None: ...
+
+global___GetResourcesCommandResult = GetResourcesCommandResult

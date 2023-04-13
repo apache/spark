@@ -24,10 +24,29 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types.StructType
 
 /**
+ * A file status augmented with optional metadata, which tasks and file readers can use however they
+ * see fit. For example, a custom [[FileIndex]] and [[FileFormat]] working together could expose
+ * this extra metadata as file-constant fields of the file source metadata column.
+ */
+case class FileStatusWithMetadata(fileStatus: FileStatus, metadata: Map[String, Any] = Map.empty) {
+  // Wrapper methods to improve source compatibility in code that still expects a [[FileStatus]].
+  def getPath: Path = fileStatus.getPath
+  def getLen: Long = fileStatus.getLen
+  def getModificationTime: Long = fileStatus.getModificationTime
+  def isDirectory: Boolean = fileStatus.isDirectory
+}
+
+/**
  * A collection of data files from a partitioned relation, along with the partition values in the
  * form of an [[InternalRow]].
  */
-case class PartitionDirectory(values: InternalRow, files: Seq[FileStatus])
+case class PartitionDirectory(values: InternalRow, files: Seq[FileStatusWithMetadata])
+
+object PartitionDirectory {
+  // For backward compat with code that does not know about extra file metadata
+  def apply(values: InternalRow, files: Array[FileStatus]): PartitionDirectory =
+    PartitionDirectory(values, files.map(FileStatusWithMetadata(_)))
+}
 
 /**
  * An interface for objects capable of enumerating the root paths of a relation as well as the

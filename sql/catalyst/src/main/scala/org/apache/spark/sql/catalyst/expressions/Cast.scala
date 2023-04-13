@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.trees.{SQLQueryContext, TreeNodeTag}
 import org.apache.spark.sql.catalyst.trees.TreePattern._
-import org.apache.spark.sql.catalyst.types.{PhysicalFractionalType, PhysicalNumericType}
+import org.apache.spark.sql.catalyst.types.{PhysicalFractionalType, PhysicalIntegralType, PhysicalNumericType}
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
@@ -620,7 +620,7 @@ case class Cast(
         if (array.numElements > 0) {
           val toUTF8String = castToString(et)
           if (array.isNullAt(0)) {
-            if (!legacyCastToStr) builder.append("null")
+            if (!legacyCastToStr) builder.append("NULL")
           } else {
             builder.append(toUTF8String(array.get(0, et)).asInstanceOf[UTF8String])
           }
@@ -628,7 +628,7 @@ case class Cast(
           while (i < array.numElements) {
             builder.append(",")
             if (array.isNullAt(i)) {
-              if (!legacyCastToStr) builder.append(" null")
+              if (!legacyCastToStr) builder.append(" NULL")
             } else {
               builder.append(" ")
               builder.append(toUTF8String(array.get(i, et)).asInstanceOf[UTF8String])
@@ -651,7 +651,7 @@ case class Cast(
           builder.append(keyToUTF8String(keyArray.get(0, kt)).asInstanceOf[UTF8String])
           builder.append(" ->")
           if (valueArray.isNullAt(0)) {
-            if (!legacyCastToStr) builder.append(" null")
+            if (!legacyCastToStr) builder.append(" NULL")
           } else {
             builder.append(" ")
             builder.append(valueToUTF8String(valueArray.get(0, vt)).asInstanceOf[UTF8String])
@@ -662,7 +662,7 @@ case class Cast(
             builder.append(keyToUTF8String(keyArray.get(i, kt)).asInstanceOf[UTF8String])
             builder.append(" ->")
             if (valueArray.isNullAt(i)) {
-              if (!legacyCastToStr) builder.append(" null")
+              if (!legacyCastToStr) builder.append(" NULL")
             } else {
               builder.append(" ")
               builder.append(valueToUTF8String(valueArray.get(i, vt))
@@ -682,7 +682,7 @@ case class Cast(
           val st = fields.map(_.dataType)
           val toUTF8StringFuncs = st.map(castToString)
           if (row.isNullAt(0)) {
-            if (!legacyCastToStr) builder.append("null")
+            if (!legacyCastToStr) builder.append("NULL")
           } else {
             builder.append(toUTF8StringFuncs(0)(row.get(0, st(0))).asInstanceOf[UTF8String])
           }
@@ -690,7 +690,7 @@ case class Cast(
           while (i < row.numFields) {
             builder.append(",")
             if (row.isNullAt(i)) {
-              if (!legacyCastToStr) builder.append(" null")
+              if (!legacyCastToStr) builder.append(" NULL")
             } else {
               builder.append(" ")
               builder.append(toUTF8StringFuncs(i)(row.get(i, st(i))).asInstanceOf[UTF8String])
@@ -872,10 +872,10 @@ case class Cast(
     case x: IntegralType =>
       if (x == LongType) {
         b => IntervalUtils.longToDayTimeInterval(
-          x.integral.asInstanceOf[Integral[Any]].toLong(b), it.startField, it.endField)
+          PhysicalIntegralType.integral(x).toLong(b), it.startField, it.endField)
       } else {
         b => IntervalUtils.intToDayTimeInterval(
-          x.integral.asInstanceOf[Integral[Any]].toInt(b), it.startField, it.endField)
+          PhysicalIntegralType.integral(x).toInt(b), it.startField, it.endField)
       }
     case DecimalType.Fixed(p, s) =>
       buildCast[Decimal](_, d =>
@@ -892,10 +892,10 @@ case class Cast(
     case x: IntegralType =>
       if (x == LongType) {
         b => IntervalUtils.longToYearMonthInterval(
-          x.integral.asInstanceOf[Integral[Any]].toLong(b), it.startField, it.endField)
+          PhysicalIntegralType.integral(x).toLong(b), it.startField, it.endField)
       } else {
         b => IntervalUtils.intToYearMonthInterval(
-          x.integral.asInstanceOf[Integral[Any]].toInt(b), it.startField, it.endField)
+          PhysicalIntegralType.integral(x).toInt(b), it.startField, it.endField)
       }
     case DecimalType.Fixed(p, s) =>
       buildCast[Decimal](_, d =>
@@ -1120,7 +1120,7 @@ case class Cast(
     case dt: DecimalType =>
       b => toPrecision(b.asInstanceOf[Decimal], target, getContextOrNull())
     case t: IntegralType =>
-      b => changePrecision(Decimal(t.integral.asInstanceOf[Integral[Any]].toLong(b)), target)
+      b => changePrecision(Decimal(PhysicalIntegralType.integral(t).toLong(b)), target)
     case x: FractionalType =>
       val fractional = PhysicalFractionalType.fractional(x)
       b => try {
@@ -1421,14 +1421,14 @@ case class Cast(
        |$buffer.append("[");
        |if ($array.numElements() > 0) {
        |  if ($array.isNullAt(0)) {
-       |    ${appendIfNotLegacyCastToStr(buffer, "null")}
+       |    ${appendIfNotLegacyCastToStr(buffer, "NULL")}
        |  } else {
        |    $buffer.append($elementToStringFunc(${CodeGenerator.getValue(array, et, "0")}));
        |  }
        |  for (int $loopIndex = 1; $loopIndex < $array.numElements(); $loopIndex++) {
        |    $buffer.append(",");
        |    if ($array.isNullAt($loopIndex)) {
-       |      ${appendIfNotLegacyCastToStr(buffer, " null")}
+       |      ${appendIfNotLegacyCastToStr(buffer, " NULL")}
        |    } else {
        |      $buffer.append(" ");
        |      $buffer.append($elementToStringFunc(${CodeGenerator.getValue(array, et, loopIndex)}));
@@ -1478,7 +1478,7 @@ case class Cast(
        |  $buffer.append($keyToStringFunc($getMapFirstKey));
        |  $buffer.append(" ->");
        |  if ($map.valueArray().isNullAt(0)) {
-       |    ${appendIfNotLegacyCastToStr(buffer, " null")}
+       |    ${appendIfNotLegacyCastToStr(buffer, " NULL")}
        |  } else {
        |    $buffer.append(" ");
        |    $buffer.append($valueToStringFunc($getMapFirstValue));
@@ -1488,7 +1488,7 @@ case class Cast(
        |    $buffer.append($keyToStringFunc($getMapKeyArray));
        |    $buffer.append(" ->");
        |    if ($map.valueArray().isNullAt($loopIndex)) {
-       |      ${appendIfNotLegacyCastToStr(buffer, " null")}
+       |      ${appendIfNotLegacyCastToStr(buffer, " NULL")}
        |    } else {
        |      $buffer.append(" ");
        |      $buffer.append($valueToStringFunc($getMapValueArray));
@@ -1512,7 +1512,7 @@ case class Cast(
       code"""
          |${if (i != 0) code"""$buffer.append(",");""" else EmptyBlock}
          |if ($row.isNullAt($i)) {
-         |  ${appendIfNotLegacyCastToStr(buffer, if (i == 0) "null" else " null")}
+         |  ${appendIfNotLegacyCastToStr(buffer, if (i == 0) "NULL" else " NULL")}
          |} else {
          |  ${if (i != 0) code"""$buffer.append(" ");""" else EmptyBlock}
          |

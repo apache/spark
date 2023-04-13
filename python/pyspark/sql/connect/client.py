@@ -59,6 +59,7 @@ import grpc
 from google.protobuf import text_format
 from google.rpc import error_details_pb2
 
+from pyspark.resource.information import ResourceInformation
 import pyspark.sql.connect.proto as pb2
 import pyspark.sql.connect.proto.base_pb2_grpc as grpc_lib
 import pyspark.sql.connect.types as types
@@ -640,6 +641,14 @@ class SparkConnectClient(object):
             for x in metrics.metrics
         )
 
+    def _resources(self) -> Dict[str, ResourceInformation]:
+        logger.info("Fetching the resources")
+        cmd = pb2.Command()
+        cmd.get_resources_command.SetInParent()
+        (_, properties) = self.execute_command(cmd)
+        resources = properties["get_resources_command_result"]
+        return resources
+
     def _build_observed_metrics(
         self, metrics: List["pb2.ExecutePlanResponse.ObservedMetrics"]
     ) -> Iterator[PlanObservedMetrics]:
@@ -678,11 +687,12 @@ class SparkConnectClient(object):
         req.plan.CopyFrom(plan)
         table, schema, metrics, observed_metrics, _ = self._execute_and_fetch(req)
         assert table is not None
-        pdf = table.rename_columns([f"col_{i}" for i in range(len(table.column_names))]).to_pandas()
-        pdf.columns = table.column_names
 
         schema = schema or types.from_arrow_schema(table.schema)
         assert schema is not None and isinstance(schema, StructType)
+
+        pdf = table.to_pandas()
+        pdf.columns = schema.fieldNames()
 
         for field, pa_field in zip(schema, table.schema):
             if isinstance(field.dataType, TimestampType):
@@ -956,6 +966,13 @@ class SparkConnectClient(object):
                             yield {
                                 "streaming_query_command_result": b.streaming_query_command_result
                             }
+                        if b.HasField("get_resources_command_result"):
+                            resources = {}
+                            for key, resource in b.get_resources_command_result.resources.items():
+                                name = resource.name
+                                addresses = [address for address in resource.addresses]
+                                resources[key] = ResourceInformation(name, addresses)
+                            yield {"get_resources_command_result": resources}
                         if b.HasField("arrow_batch"):
                             logger.debug(
                                 f"Received arrow batch rows={b.arrow_batch.row_count} "

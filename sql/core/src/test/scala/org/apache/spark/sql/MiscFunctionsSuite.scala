@@ -62,21 +62,26 @@ class MiscFunctionsSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("SPARK-37591: AES functions - GCM mode") {
+  test("SPARK-37591, SPARK-43038: AES functions - GCM/CBC mode") {
     Seq(
-      ("abcdefghijklmnop", ""),
-      ("abcdefghijklmnop", "abcdefghijklmnop"),
-      ("abcdefghijklmnop12345678", "Spark"),
-      ("abcdefghijklmnop12345678ABCDEFGH", "GCM mode")
-    ).foreach { case (key, input) =>
-      val df = Seq((key, input)).toDF("key", "input")
-      val encrypted = df.selectExpr("aes_encrypt(input, key, 'GCM', 'NONE') AS enc", "input", "key")
-      assert(encrypted.schema("enc").dataType === BinaryType)
-      assert(encrypted.filter($"enc" === $"input").isEmpty)
-      val result = encrypted.selectExpr(
-        "CAST(aes_decrypt(enc, key, 'GCM', 'NONE') AS STRING) AS res", "input")
-      assert(!result.filter($"res" === $"input").isEmpty &&
-        result.filter($"res" =!= $"input").isEmpty)
+      "GCM" -> "NONE",
+      "CBC" -> "PKCS").foreach { case (mode, padding) =>
+      Seq(
+        ("abcdefghijklmnop", ""),
+        ("abcdefghijklmnop", "abcdefghijklmnop"),
+        ("abcdefghijklmnop12345678", "Spark"),
+        ("abcdefghijklmnop12345678ABCDEFGH", "GCM mode")
+      ).foreach { case (key, input) =>
+        val df = Seq((key, input)).toDF("key", "input")
+        val encrypted = df.selectExpr(
+          s"aes_encrypt(input, key, '$mode', '$padding') AS enc", "input", "key")
+        assert(encrypted.schema("enc").dataType === BinaryType)
+        assert(encrypted.filter($"enc" === $"input").isEmpty)
+        val result = encrypted.selectExpr(
+          s"CAST(aes_decrypt(enc, key, '$mode', '$padding') AS STRING) AS res", "input")
+        assert(!result.filter($"res" === $"input").isEmpty &&
+          result.filter($"res" =!= $"input").isEmpty)
+      }
     }
   }
 }

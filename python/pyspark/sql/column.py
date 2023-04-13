@@ -304,7 +304,7 @@ class Column:
     |(value = foo)|(value <=> foo)|(value <=> NULL)|
     +-------------+---------------+----------------+
     |         true|           true|           false|
-    |         null|          false|            true|
+    |         NULL|          false|            true|
     +-------------+---------------+----------------+
     >>> df2 = spark.createDataFrame([
     ...     Row(value = 'bar'),

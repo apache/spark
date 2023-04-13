@@ -25,7 +25,9 @@ import pyspark.sql.connect.proto as pb2
 from pyspark.sql.streaming.query import (
     StreamingQuery as PySparkStreamingQuery,
 )
-from pyspark.errors.exceptions.connect import StreamingQueryException as CapturedStreamingQueryException
+from pyspark.errors.exceptions.connect import (
+    StreamingQueryException as CapturedStreamingQueryException,
+)
 
 __all__ = [
     "StreamingQuery",  # TODO(SPARK-43032): "StreamingQueryManager"
@@ -73,7 +75,7 @@ class StreamingQuery:
         cmd.await_termination.timeout_ms = timeout
         terminated = self._execute_streaming_query_cmd(cmd).await_termination.terminated
         return terminated
-    
+
     def _await_termination(self, timeoutMs: Optional[int]) -> Optional[bool]:
         terminated = False
         if timeoutMs is None:
@@ -153,6 +155,7 @@ class StreamingQuery:
 
     explain.__doc__ = PySparkStreamingQuery.explain.__doc__
 
+    # TODO (SPARK-42960): Implement and uncomment the doc
     def exception(self) -> Optional[StreamingQueryException]:
         cmd = pb2.StreamingQueryCommand()
         cmd.exception = True
