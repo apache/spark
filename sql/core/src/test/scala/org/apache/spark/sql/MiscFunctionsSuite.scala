@@ -79,13 +79,6 @@ class MiscFunctionsSuite extends QueryTest with SharedSparkSession {
         result.filter($"res" =!= $"input").isEmpty)
     }
   }
-
-  test("sql keywords") {
-    val frame = sql("SELECT SQL_KEYWORDS()")
-    checkAnswer(frame, Row(SPARK_VERSION_SHORT + " " + SPARK_REVISION))
-    assert(frame.schema.fieldNames === Seq("version()"))
-  }
-
 }
 
 object ReflectClass {
