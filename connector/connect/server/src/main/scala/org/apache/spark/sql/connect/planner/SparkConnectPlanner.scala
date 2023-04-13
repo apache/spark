@@ -1793,6 +1793,8 @@ class SparkConnectPlanner(val session: SparkSession) {
           responseObserver)
       case proto.Command.CommandTypeCase.STREAMING_QUERY_COMMAND =>
         handleStreamingQueryCommand(command.getStreamingQueryCommand, sessionId, responseObserver)
+      case proto.Command.CommandTypeCase.GET_RESOURCES_COMMAND =>
+        handleGetResourcesCommand(command.getGetResourcesCommand, sessionId, responseObserver)
       case _ => throw new UnsupportedOperationException(s"$command not supported.")
     }
   }
@@ -2228,6 +2230,31 @@ class SparkConnectPlanner(val session: SparkSession) {
         .newBuilder()
         .setSessionId(sessionId)
         .setStreamingQueryCommandResult(respBuilder.build())
+        .build())
+  }
+
+  def handleGetResourcesCommand(
+      command: proto.GetResourcesCommand,
+      sessionId: String,
+      responseObserver: StreamObserver[proto.ExecutePlanResponse]): Unit = {
+    responseObserver.onNext(
+      proto.ExecutePlanResponse
+        .newBuilder()
+        .setSessionId(sessionId)
+        .setGetResourcesCommandResult(
+          proto.GetResourcesCommandResult
+            .newBuilder()
+            .putAllResources(
+              session.sparkContext.resources
+                .mapValues(resource =>
+                  proto.ResourceInformation
+                    .newBuilder()
+                    .setName(resource.name)
+                    .addAllAddresses(resource.addresses.toIterable.asJava)
+                    .build())
+                .toMap
+                .asJava)
+            .build())
         .build())
   }
 

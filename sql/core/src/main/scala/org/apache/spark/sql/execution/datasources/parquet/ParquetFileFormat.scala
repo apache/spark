@@ -350,9 +350,23 @@ class ParquetFileFormat
 
     case _ => false
   }
+
+  override def metadataSchemaFields: Seq[StructField] = {
+    super.metadataSchemaFields :+ ParquetFileFormat.ROW_INDEX_FIELD
+  }
 }
 
 object ParquetFileFormat extends Logging {
+  val ROW_INDEX = "row_index"
+
+  // A name for a temporary column that holds row indexes computed by the file format reader
+  // until they can be placed in the _metadata struct.
+  val ROW_INDEX_TEMPORARY_COLUMN_NAME = s"_tmp_metadata_$ROW_INDEX"
+
+  // The field readers can use to access the generated row index column.
+  val ROW_INDEX_FIELD = FileSourceGeneratedMetadataStructField(
+    ROW_INDEX, ROW_INDEX_TEMPORARY_COLUMN_NAME, LongType, nullable = false)
+
   private[parquet] def readSchema(
       footers: Seq[Footer], sparkSession: SparkSession): Option[StructType] = {
 

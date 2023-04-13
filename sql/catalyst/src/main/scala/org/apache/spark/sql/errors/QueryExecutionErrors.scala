@@ -2651,6 +2651,15 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
         "detailMessage" -> detailMessage))
   }
 
+  def aesInvalidSalt(saltedMagic: Array[Byte]): RuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "INVALID_PARAMETER_VALUE.AES_SALTED_MAGIC",
+      messageParameters = Map(
+        "parameter" -> toSQLId("expr"),
+        "functionName" -> toSQLId("aes_decrypt"),
+        "saltedMagic" -> saltedMagic.map("%02X" format _).mkString("0x", "", "")))
+  }
+
   def hiveTableWithAnsiIntervalsError(tableName: String): SparkUnsupportedOperationException = {
     new SparkUnsupportedOperationException(
       errorClass = "_LEGACY_ERROR_TEMP_2276",

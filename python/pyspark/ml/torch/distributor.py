@@ -31,6 +31,7 @@ import time
 from typing import Union, Callable, List, Dict, Optional, Any, Tuple, Generator
 
 from pyspark import cloudpickle
+from pyspark.resource.information import ResourceInformation
 from pyspark.sql import SparkSession
 from pyspark.taskcontext import BarrierTaskContext
 from pyspark.ml.torch.log_communication import (  # type: ignore
@@ -39,10 +40,8 @@ from pyspark.ml.torch.log_communication import (  # type: ignore
 )
 
 
-def _get_active_session() -> SparkSession:
-    from pyspark.sql.utils import is_remote
-
-    if not is_remote():
+def _get_active_session(is_remote: bool) -> SparkSession:
+    if not is_remote:
         spark = SparkSession.getActiveSession()
     else:
         import pyspark.sql.connect.session
@@ -52,6 +51,15 @@ def _get_active_session() -> SparkSession:
     if spark is None:
         raise RuntimeError("An active SparkSession is required for the distributor.")
     return spark
+
+
+def _get_resources(session: SparkSession) -> Dict[str, ResourceInformation]:
+    resources: Dict[str, ResourceInformation] = {}
+    try:
+        resources = session.sparkContext.resources
+    except Exception:
+        resources = session._client._resources()  # type: ignore[attr-defined]
+    return resources
 
 
 def _get_conf(spark: SparkSession, key: str, default_value: str) -> str:
@@ -86,7 +94,7 @@ def _get_conf_boolean(spark: SparkSession, key: str, default_value: str) -> bool
     return value == "true"
 
 
-def get_logger(name: str) -> logging.Logger:
+def _get_logger(name: str) -> logging.Logger:
     """
     Gets a logger by name, or creates and configures it for the first time.
     """
@@ -99,7 +107,7 @@ def get_logger(name: str) -> logging.Logger:
     return logger
 
 
-def get_gpus_owned(context: Union[SparkSession, BarrierTaskContext]) -> List[str]:
+def _get_gpus_owned(context: Union[SparkSession, BarrierTaskContext]) -> List[str]:
     """Gets the number of GPUs that Spark scheduled to the calling task.
 
     Parameters
@@ -119,11 +127,11 @@ def get_gpus_owned(context: Union[SparkSession, BarrierTaskContext]) -> List[str
     """
     CUDA_VISIBLE_DEVICES = "CUDA_VISIBLE_DEVICES"
     pattern = re.compile("^[1-9][0-9]*|0$")
-    if isinstance(context, SparkSession):
-        # TODO(SPARK-42994): Support sc.resources in Spark Connect
-        addresses = context.sparkContext.resources["gpu"].addresses
-    else:
+    if isinstance(context, BarrierTaskContext):
         addresses = context.resources()["gpu"].addresses
+    else:
+        addresses = _get_resources(context)["gpu"].addresses
+
     if any(not pattern.match(address) for address in addresses):
         raise ValueError(
             f"Found GPU addresses {addresses} which "
@@ -150,8 +158,19 @@ class Distributor:
         local_mode: bool = True,
         use_gpu: bool = True,
     ):
-        self.spark = _get_active_session()
-        self.logger = get_logger(self.__class__.__name__)
+        from pyspark.sql.utils import is_remote
+
+        self.is_remote = is_remote()
+        self.spark = _get_active_session(self.is_remote)
+
+        # indicate whether the server side is local mode
+        self.is_spark_local_master = False
+        # Refer to 'org.apache.spark.util.Utils#isLocalMaster'
+        master = _get_conf(self.spark, "spark.master", "")
+        if master == "local" or master.startswith("local["):
+            self.is_spark_local_master = True
+
+        self.logger = _get_logger(self.__class__.__name__)
         self.num_processes = num_processes
         self.local_mode = local_mode
         self.use_gpu = use_gpu
@@ -160,7 +179,13 @@ class Distributor:
 
     def _create_input_params(self) -> Dict[str, Any]:
         input_params = self.__dict__.copy()
-        for unneeded_param in ["spark", "ssl_conf", "logger"]:
+        for unneeded_param in [
+            "spark",
+            "ssl_conf",
+            "logger",
+            "is_remote",
+            "is_spark_local_master",
+        ]:
             del input_params[unneeded_param]
         return input_params
 
@@ -188,8 +213,7 @@ class Distributor:
                 return math.ceil(self.num_processes / task_gpu_amount)
             else:
                 key = "spark.driver.resource.gpu.amount"
-                # TODO(SPARK-42994): Support sc.resources in Spark Connect
-                if "gpu" not in self.spark.sparkContext.resources:
+                if "gpu" not in _get_resources(self.spark):
                     raise RuntimeError("GPUs were unable to be found on the driver.")
                 num_available_gpus = int(_get_conf(self.spark, key, "0"))
                 if num_available_gpus == 0:
@@ -266,8 +290,7 @@ class TorchDistributor(Distributor):
     .. versionadded:: 3.4.0
 
     .. versionchanged:: 3.5.0
-        Supports Spark Connect. Note that local mode with GPU is not supported yet, will be fixed
-        in SPARK-42994.
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -456,8 +479,11 @@ class TorchDistributor(Distributor):
         cuda_state_was_set = CUDA_VISIBLE_DEVICES in os.environ
         old_cuda_visible_devices = os.environ.get(CUDA_VISIBLE_DEVICES, "")
         try:
-            if self.use_gpu:
-                gpus_owned = get_gpus_owned(self.spark)
+            # Only replace the GPUs with 'SparkContext.resources' in legacy mode.
+            # In connect mode, this replacement is skipped since only GPUs on the client side
+            # can be used.
+            if self.use_gpu and not self.is_remote:
+                gpus_owned = _get_gpus_owned(self.spark)
                 random.seed(hash(train_object))
                 selected_gpus = [str(e) for e in random.sample(gpus_owned, self.num_processes)]
                 os.environ[CUDA_VISIBLE_DEVICES] = ",".join(selected_gpus)
@@ -501,6 +527,10 @@ class TorchDistributor(Distributor):
         input_params = self.input_params
         driver_address = self.driver_address
         log_streaming_server_port = self.log_streaming_server_port
+        is_spark_local_master = self.is_spark_local_master
+        driver_owned_gpus: List[str] = []
+        if is_spark_local_master and use_gpu:
+            driver_owned_gpus = _get_gpus_owned(self.spark)
 
         # Spark task program
         def wrapped_train_fn(_):  # type: ignore[no-untyped-def]
@@ -535,12 +565,23 @@ class TorchDistributor(Distributor):
                 os.environ["NODE_RANK"] = str(context.partitionId())
                 os.environ["RANK"] = str(context.partitionId())
 
-            def set_gpus(context: "BarrierTaskContext") -> None:
-                if CUDA_VISIBLE_DEVICES in os.environ:
-                    return
+            if is_spark_local_master:
+                # distributed training on a local mode spark cluster
+                def set_gpus(context: "BarrierTaskContext") -> None:
+                    if CUDA_VISIBLE_DEVICES in os.environ:
+                        return
 
-                gpus_owned = get_gpus_owned(context)
-                os.environ[CUDA_VISIBLE_DEVICES] = ",".join(gpus_owned)
+                    gpu_owned = driver_owned_gpus[context.partitionId()]
+                    os.environ[CUDA_VISIBLE_DEVICES] = gpu_owned
+
+            else:
+
+                def set_gpus(context: "BarrierTaskContext") -> None:
+                    if CUDA_VISIBLE_DEVICES in os.environ:
+                        return
+
+                    gpus_owned = _get_gpus_owned(context)
+                    os.environ[CUDA_VISIBLE_DEVICES] = ",".join(gpus_owned)
 
             context = BarrierTaskContext.get()
 
