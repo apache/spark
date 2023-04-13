@@ -234,20 +234,6 @@ object Project {
   }
 }
 
-// `LocalProject` is used only in `Dataset.getRows()` to avoid any job execution due to casting
-// columns to String.
-case class LocalProject(projectList: Seq[NamedExpression], child: LogicalPlan)
-  extends OrderPreservingUnaryNode {
-  override def output: Seq[Attribute] = projectList.map(_.toAttribute)
-
-  override def maxRows: Option[Long] = child.maxRows
-
-  override def maxRowsPerPartition: Option[Long] = child.maxRowsPerPartition
-
-  override protected def withNewChildInternal(newChild: LogicalPlan): LocalProject =
-    copy(child = newChild)
-}
-
 /**
  * Applies a [[Generator]] to a stream of input rows, combining the
  * output of each into a new stream of rows.  This operation is similar to a `flatMap` in functional

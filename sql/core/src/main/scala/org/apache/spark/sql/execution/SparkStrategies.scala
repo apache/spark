@@ -854,8 +854,6 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         execution.SortExec(sortExprs, global, planLater(child)) :: Nil
       case logical.Project(projectList, child) =>
         execution.ProjectExec(projectList, planLater(child)) :: Nil
-      case logical.LocalProject(projectList, child) =>
-        execution.LocalProjectExec(projectList, planLater(child)) :: Nil
       case logical.Filter(condition, child) =>
         execution.FilterExec(condition, planLater(child)) :: Nil
       case f: logical.TypedFilter =>
