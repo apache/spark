@@ -19,14 +19,14 @@ package org.apache.spark.sql.catalyst.analysis
 
 import scala.collection.mutable
 
-import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.catalog.{SessionCatalog, UnresolvedCatalogRelation}
+import org.apache.spark.sql.catalyst.catalog.UnresolvedCatalogRelation
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
+import org.apache.spark.sql.connector.catalog.CatalogV2Util
 import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -47,9 +47,11 @@ import org.apache.spark.sql.types._
  * (1, 5)
  * (4, 6)
  *
- * @param catalog  the catalog to use for looking up the schema of INSERT INTO table objects.
+ * @param resolveRelation function to resolve relations from the catalog. This should generally map
+ *                        to the 'resolveRelationOrTempView' method of the ResolveRelations rule.
  */
-case class ResolveDefaultColumns(catalog: SessionCatalog) extends Rule[LogicalPlan] {
+case class ResolveDefaultColumns(
+    resolveRelation: UnresolvedRelation => LogicalPlan) extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = {
     plan.resolveOperatorsWithPruning(
       (_ => SQLConf.get.enableDefaultColumns), ruleId) {
@@ -578,44 +580,19 @@ case class ResolveDefaultColumns(catalog: SessionCatalog) extends Rule[LogicalPl
    * Returns the schema for the target table of a DML command, looking into the catalog if needed.
    */
   private def getSchemaForTargetTable(table: LogicalPlan): Option[StructType] = {
-    // First find the source relation. Note that we use 'collectFirst' to descend past any
-    // SubqueryAlias nodes that may be present.
-    val source: Option[LogicalPlan] = table.collectFirst {
-      case r: NamedRelation if !r.skipSchemaResolution =>
-        // Here we only resolve the default columns in the tables that require schema resolution
-        // during write operations.
-        r
-      case r: UnresolvedCatalogRelation => r
+    val resolved = table match {
+      case r: UnresolvedRelation if !r.skipSchemaResolution && !r.isStreaming =>
+        resolveRelation(r)
+      case other =>
+        other
     }
-    // Check if the target table is already resolved. If so, return the computed schema.
-    source.foreach { r =>
-      if (r.schema.fields.nonEmpty) {
-        return Some(r.schema)
-      }
-    }
-    // Lookup the relation from the catalog by name. This either succeeds or returns some "not
-    // found" error. In the latter cases, return out of this rule without changing anything and let
-    // the analyzer return a proper error message elsewhere.
-    val tableName: TableIdentifier = source match {
-      case Some(r: UnresolvedRelation) => TableIdentifier(r.name)
-      case Some(r: UnresolvedCatalogRelation) => r.tableMeta.identifier
-      case _ => return None
-    }
-    // First try to get the table metadata directly. If that fails, check for views below.
-    if (catalog.tableExists(tableName)) {
-      return Some(catalog.getTableMetadata(tableName).schema)
-    }
-    val lookup: LogicalPlan = try {
-      catalog.lookupRelation(tableName)
-    } catch {
-      case _: AnalysisException => return None
-    }
-    lookup match {
-      case SubqueryAlias(_, r: UnresolvedCatalogRelation) =>
-        Some(r.tableMeta.schema)
-      case SubqueryAlias(_, r: View) if r.isTempView =>
-        Some(r.desc.schema)
-      case _ => None
+    resolved.collectFirst {
+      case r: UnresolvedCatalogRelation =>
+        r.tableMeta.schema
+      case d: DataSourceV2Relation if !d.skipSchemaResolution && !d.isStreaming =>
+        CatalogV2Util.v2ColumnsToStructType(d.table.columns())
+      case v: View if v.isTempViewStoringAnalyzedPlan =>
+        v.schema
     }
   }
 
