@@ -296,7 +296,7 @@ class SparkSession private[sql] (
    *   sparkSession.readStream.schema(schema).json("/path/to/directory/of/json/files")
    * }}}
    *
-   * @since 2.0.0
+   * @since 3.5.0
    */
   def readStream: DataStreamReader = new DataStreamReader(this)
 

@@ -2940,7 +2940,7 @@ class Dataset[T] private[sql] (
    * Interface for saving the content of the streaming Dataset out into external storage.
    *
    * @group basic
-   * @since 2.0.0
+   * @since 3.5.0
    */
   def writeStream: DataStreamWriter[T] = {
     new DataStreamWriter[T](this)
@@ -3051,7 +3051,7 @@ class Dataset[T] private[sql] (
    *                       (e.g. "1 minute" or "5 hours"). NOTE: This should not be negative.
    *
    * @group streaming
-   * @since 2.1.0
+   * @since 3.5.0
    */
   def withWatermark(eventTime: String, delayThreshold: String): Dataset[T] = {
     sparkSession.newDataset(encoder) { builder =>

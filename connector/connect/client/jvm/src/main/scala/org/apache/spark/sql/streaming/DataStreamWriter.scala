@@ -250,7 +250,7 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
   }
 
   /**
-   * TODO(SPARK-XXXXX)
+   * TODO(SPARK-43133) Add foreach() API in Scala.
    */
   // def foreach(writer: ForeachWriter[T]): DataStreamWriter[T] = {
 

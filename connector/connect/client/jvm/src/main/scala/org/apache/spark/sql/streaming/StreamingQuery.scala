@@ -27,7 +27,6 @@ import org.apache.spark.connect.proto.Command
 import org.apache.spark.connect.proto.ExecutePlanResponse
 import org.apache.spark.connect.proto.StreamingQueryCommand
 import org.apache.spark.connect.proto.StreamingQueryCommandResult
-import org.apache.spark.connect.proto.StreamingQueryInstanceId
 import org.apache.spark.sql.SparkSession
 
 /**
@@ -37,6 +36,7 @@ import org.apache.spark.sql.SparkSession
  */
 @Evolving
 trait StreamingQuery {
+  // This is a copy of StreamingQuery in sql/core/.../streaming/StreamingQuery.scala
 
   /**
    * Returns the user-specified name of the query, or null if not specified.
@@ -185,7 +185,7 @@ class RemoteStreamingQuery(
   override val sparkSession: SparkSession) extends StreamingQuery {
 
   override def isActive: Boolean = {
-    executeQueryCmdWith(_.setStatus(true)).getStatus.getIsActive
+    executeQueryCmd(_.setStatus(true)).getStatus.getIsActive
   }
 
   override def exception: Option[StreamingQueryException] = {
@@ -193,7 +193,7 @@ class RemoteStreamingQuery(
   }
 
   override def status: StreamingQueryStatus = {
-    val statusResp = executeQueryCmdWith(_.setStatus(true)).getStatus
+    val statusResp = executeQueryCmd(_.setStatus(true)).getStatus
     new StreamingQueryStatus(
       message = statusResp.getStatusMessage,
       isDataAvailable = statusResp.getIsDataAvailable,
@@ -202,7 +202,7 @@ class RemoteStreamingQuery(
   }
 
   override def recentProgress: Array[StreamingQueryProgress] = {
-    executeQueryCmdWith(_.setRecentProgress(true))
+    executeQueryCmd(_.setRecentProgress(true))
       .getRecentProgress
       .getRecentProgressJsonList
       .asScala
@@ -211,7 +211,7 @@ class RemoteStreamingQuery(
   }
 
   override def lastProgress: StreamingQueryProgress = {
-    executeQueryCmdWith(_.setLastProgress(true))
+    executeQueryCmd(_.setLastProgress(true))
       .getRecentProgress
       .getRecentProgressJsonList
       .asScala
@@ -229,11 +229,11 @@ class RemoteStreamingQuery(
   }
 
   override def processAllAvailable(): Unit = {
-    executeQueryCmdWith(_.setProcessAllAvailable(true))
+    executeQueryCmd(_.setProcessAllAvailable(true))
   }
 
   override def stop(): Unit = {
-    executeQueryCmdWith(_.setStop(true))
+    executeQueryCmd(_.setStop(true))
   }
 
   override def explain(): Unit = {
@@ -246,7 +246,7 @@ class RemoteStreamingQuery(
       .setExtended(extended)
       .build()
 
-    val explain = executeQueryCmdWith(_.setExplain(explainCmd))
+    val explain = executeQueryCmd(_.setExplain(explainCmd))
       .getExplain
       .getResult
 
@@ -255,33 +255,23 @@ class RemoteStreamingQuery(
     // scalastyle:on println
   }
 
-  private def executeQueryCmdWith(
-    buildCmdFn: StreamingQueryCommand.Builder => StreamingQueryCommand.Builder
+  private def executeQueryCmd(
+    setCmdFn: StreamingQueryCommand.Builder => Unit // Sets the command field, like stop().
   ): StreamingQueryCommandResult = {
-    val queryId = StreamingQueryInstanceId
-      .newBuilder()
+
+    val cmdBuilder = Command.newBuilder()
+    val queryCmdBuilder = cmdBuilder.getStreamingQueryCommandBuilder
+
+    // Set queryId.
+    queryCmdBuilder
+      .getQueryIdBuilder
       .setId(id.toString)
       .setRunId(runId.toString)
-      .build()
 
-    val queryCmd = buildCmdFn(
-      StreamingQueryCommand
-      .newBuilder()
-      .setQueryId(queryId)
-    ).build()
+    // Set command.
+    setCmdFn(queryCmdBuilder)
 
-    executeQueryCmd(queryCmd)
-  }
-
-  private def executeQueryCmd(queryCmd: StreamingQueryCommand)
-  : StreamingQueryCommandResult = {
-
-    val cmd = Command
-      .newBuilder()
-      .setStreamingQueryCommand(queryCmd)
-      .build()
-
-    val resp = sparkSession.execute(cmd).head
+    val resp = sparkSession.execute(cmdBuilder.build()).head
 
     if (!resp.hasStreamingQueryCommandResult) {
       throw new RuntimeException("Unexpected missing response for streaming query command")
@@ -312,5 +302,5 @@ object RemoteStreamingQuery {
   }
 }
 
-// TODO(SPARK-XXXXX)
+// TODO(SPARK-43134): Improve Exception API in Scala.
 class StreamingQueryException private[sql]() extends Exception

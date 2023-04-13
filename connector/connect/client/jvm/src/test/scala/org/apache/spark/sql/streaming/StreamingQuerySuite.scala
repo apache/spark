@@ -66,9 +66,11 @@ class StreamingQuerySuite extends RemoteSparkSession with SQLHelper {
 
       // Verify some of the API.
       assert(query.isActive)
+      query.explain()
+
       eventually(timeout(10.seconds)) {
         assert(query.status.isDataAvailable)
-        assert(query.recentProgress.length > 0)
+        assert(query.recentProgress.length > 0) // Query made progress.
       }
 
       // Don't wait for any processed data. Otherwise the test could take multiple seconds.

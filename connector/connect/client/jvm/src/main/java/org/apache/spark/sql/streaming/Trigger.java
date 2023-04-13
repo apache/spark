@@ -30,7 +30,7 @@ import org.apache.spark.sql.execution.streaming.ProcessingTimeTrigger;
 /**
  * Policy used to indicate how often results should be produced by a [[StreamingQuery]].
  *
- * @since 2.0.0
+ * @since 3.5.0
  */
 @Evolving
 public class Trigger {
@@ -39,7 +39,7 @@ public class Trigger {
    * A trigger policy that runs a query periodically based on an interval in processing time.
    * If `interval` is 0, the query will run as fast as possible.
    *
-   * @since 2.2.0
+   * @since 3.5.0
    */
   public static Trigger ProcessingTime(long intervalMs) {
       return ProcessingTimeTrigger.create(intervalMs, TimeUnit.MILLISECONDS);
@@ -55,7 +55,7 @@ public class Trigger {
    *    df.writeStream().trigger(Trigger.ProcessingTime(10, TimeUnit.SECONDS))
    * }}}
    *
-   * @since 2.2.0
+   * @since 3.5.0
    */
   public static Trigger ProcessingTime(long interval, TimeUnit timeUnit) {
       return ProcessingTimeTrigger.create(interval, timeUnit);
@@ -70,7 +70,7 @@ public class Trigger {
    *    import scala.concurrent.duration._
    *    df.writeStream.trigger(Trigger.ProcessingTime(10.seconds))
    * }}}
-   * @since 2.2.0
+   * @since 3.5.0
    */
   public static Trigger ProcessingTime(Duration interval) {
       return ProcessingTimeTrigger.apply(interval);
@@ -83,7 +83,7 @@ public class Trigger {
    * {{{
    *    df.writeStream.trigger(Trigger.ProcessingTime("10 seconds"))
    * }}}
-   * @since 2.2.0
+   * @since 3.5.0
    */
   public static Trigger ProcessingTime(String interval) {
       return ProcessingTimeTrigger.apply(interval);
@@ -92,7 +92,7 @@ public class Trigger {
   /**
    * A trigger that processes all available data in a single batch then terminates the query.
    *
-   * @since 2.2.0
+   * @since 3.5.0
    * @deprecated This is deprecated as of Spark 3.4.0. Use {@link #AvailableNow()} to leverage
    *             better guarantee of processing, fine-grained scale of batches, and better gradual
    *             processing of watermark advancement including no-data batch.
@@ -118,7 +118,7 @@ public class Trigger {
    *   if the last batch advances the watermark. This helps to maintain smaller and predictable
    *   state size and smaller latency on the output of stateful operators.
    *
-   * @since 3.3.0
+   * @since 3.5.0
    */
   public static Trigger AvailableNow() {
     return AvailableNowTrigger$.MODULE$;
@@ -128,7 +128,7 @@ public class Trigger {
    * A trigger that continuously processes streaming data, asynchronously checkpointing at
    * the specified interval.
    *
-   * @since 2.3.0
+   * @since 3.5.0
    */
   public static Trigger Continuous(long intervalMs) {
     return ContinuousTrigger.apply(intervalMs);
@@ -143,7 +143,7 @@ public class Trigger {
    *    df.writeStream.trigger(Trigger.Continuous(10, TimeUnit.SECONDS))
    * }}}
    *
-   * @since 2.3.0
+   * @since 3.5.0
    */
   public static Trigger Continuous(long interval, TimeUnit timeUnit) {
     return ContinuousTrigger.create(interval, timeUnit);
@@ -158,7 +158,7 @@ public class Trigger {
    *    import scala.concurrent.duration._
    *    df.writeStream.trigger(Trigger.Continuous(10.seconds))
    * }}}
-   * @since 2.3.0
+   * @since 3.5.0
    */
   public static Trigger Continuous(Duration interval) {
     return ContinuousTrigger.apply(interval);
@@ -171,7 +171,7 @@ public class Trigger {
    * {{{
    *    df.writeStream.trigger(Trigger.Continuous("10 seconds"))
    * }}}
-   * @since 2.3.0
+   * @since 3.5.0
    */
   public static Trigger Continuous(String interval) {
     return ContinuousTrigger.apply(interval);
