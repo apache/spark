@@ -196,30 +196,36 @@ abstract class Expression extends TreeNode[Expression] {
     }.getOrElse {
       val isNull = ctx.freshName("isNull")
       val value = ctx.freshName("value")
-      val exprKey = ExpressionEquals(this)
-      val eval = ctx.commonExpressions.get(exprKey) match {
-        case Some(stats) =>
-          // We should reuse the currentVar references which code is not empty
-          val nonEmptyRefs = this.exists {
-            case BoundReference(ordinal, _, _) =>
-              ctx.currentVars != null && ctx.currentVars(ordinal) != null &&
-                ctx.currentVars(ordinal).code != EmptyBlock
-            case _ => false
-          }
-          val eval = doGenCode(ctx, ExprCode(
-            JavaCode.isNullVariable(isNull),
-            JavaCode.variable(value, dataType)))
-          if (eval.code != EmptyBlock && !nonEmptyRefs) {
-            ctx.genReusedCode(stats, eval)
-          } else {
-            eval
-          }
+      val eval =
+        if (EquivalentExpressions.supportedExpression(this)) {
+          ctx.commonExpressions.get(ExpressionEquals(this)) match {
+            case Some(stats) =>
+              // We should reuse the currentVar references which code is not empty
+              val nonEmptyRefs = this.exists {
+                case BoundReference(ordinal, _, _) =>
+                  ctx.currentVars != null && ctx.currentVars(ordinal) != null &&
+                    ctx.currentVars(ordinal).code != EmptyBlock
+                case _ => false
+              }
+              val eval = doGenCode(ctx, ExprCode(
+                JavaCode.isNullVariable(isNull),
+                JavaCode.variable(value, dataType)))
+              if (eval.code != EmptyBlock && !nonEmptyRefs) {
+                ctx.genReusedCode(stats, eval)
+              } else {
+                eval
+              }
 
-        case None =>
+            case None =>
+              doGenCode(ctx, ExprCode(
+                JavaCode.isNullVariable(isNull),
+                JavaCode.variable(value, dataType)))
+          }
+        } else {
           doGenCode(ctx, ExprCode(
             JavaCode.isNullVariable(isNull),
             JavaCode.variable(value, dataType)))
-      }
+        }
       reduceCodeSize(ctx, eval)
       if (eval.code.toString.nonEmpty) {
         // Add `this` in the comment.

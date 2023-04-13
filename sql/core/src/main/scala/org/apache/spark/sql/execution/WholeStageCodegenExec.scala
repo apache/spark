@@ -680,12 +680,12 @@ case class WholeStageCodegenExec(child: SparkPlan)(val codegenStageId: Int)
             // If the input attributes changed, collect current common expressions and clear
             // equivalentExpressions
             if (attributeSeq.size != newAttributeSeq.size ||
-              attributeSeq.zip(newAttributeSeq).exists(tup => !tup._1.equals(tup._2))) {
+              attributeSeq.zip(newAttributeSeq).exists { case (left, right) => left != right }) {
               equivalence = new EquivalentExpressions
             }
             if (newReusableExpressions.nonEmpty) {
               val bondExpressions =
-                BindReferences.bindReferences(newReusableExpressions, newAttributeSeq.toSeq)
+                BindReferences.bindReferences(newReusableExpressions, newAttributeSeq)
               executeSeq += ((c, bondExpressions, equivalence))
               ctx.wholeStageSubexpressionElimination(bondExpressions, equivalence)
             }
