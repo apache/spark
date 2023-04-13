@@ -26,8 +26,8 @@ import org.apache.spark.internal.config.Streaming.STREAMING_DYN_ALLOCATION_MAX_E
 import org.apache.spark.util.{Clock, SystemClock, Utils}
 
 /**
- * FailureTracker is responsible for tracking executor failures both for each host separately
- * and for all hosts altogether.
+ * ExecutorFailureTracker is responsible for tracking executor failures both for each host
+ * separately and for all hosts altogether.
  */
 private[spark] class ExecutorFailureTracker(
   sparkConf: SparkConf,
