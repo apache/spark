@@ -385,7 +385,7 @@ class TorchDistributorLocalUnitTests(TorchDistributorLocalUnitTestsMixin, unitte
     def setUp(self) -> None:
         class_name = self.__class__.__name__
         conf = self._get_spark_conf()
-        sc = SparkContext("local-cluster[2,2,1024]", class_name, conf=conf)
+        sc = SparkContext("local-cluster[2,2,512]", class_name, conf=conf)
         self.spark = SparkSession(sc)
         self.mnist_dir_path = tempfile.mkdtemp()
 
@@ -400,7 +400,7 @@ class TorchDistributorLocalUnitTestsII(TorchDistributorLocalUnitTestsMixin, unit
     def setUp(self) -> None:
         class_name = self.__class__.__name__
         conf = self._get_spark_conf()
-        sc = SparkContext("local[4]", class_name, conf=conf)
+        sc = SparkContext("local[2]", class_name, conf=conf)
         self.spark = SparkSession(sc)
         self.mnist_dir_path = tempfile.mkdtemp()
 
@@ -485,7 +485,7 @@ class TorchDistributorDistributedUnitTests(
     def setUp(self) -> None:
         class_name = self.__class__.__name__
         conf = self._get_spark_conf()
-        sc = SparkContext("local-cluster[2,2,1024]", class_name, conf=conf)
+        sc = SparkContext("local-cluster[2,2,512]", class_name, conf=conf)
         self.spark = SparkSession(sc)
         self.mnist_dir_path = tempfile.mkdtemp()
 

@@ -58,7 +58,7 @@ class TorchDistributorLocalUnitTestsOnConnect(
         for k, v in conf.getAll():
             if k not in ["spark.master", "spark.remote", "spark.app.name"]:
                 builder = builder.config(k, v)
-        self.spark = builder.remote("local-cluster[2,2,1024]").getOrCreate()
+        self.spark = builder.remote("local-cluster[2,2,512]").getOrCreate()
         self.mnist_dir_path = tempfile.mkdtemp()
 
     def tearDown(self) -> None:
@@ -86,7 +86,7 @@ class TorchDistributorLocalUnitTestsIIOnConnect(
         for k, v in conf.getAll():
             if k not in ["spark.master", "spark.remote", "spark.app.name"]:
                 builder = builder.config(k, v)
-        self.spark = builder.remote("local[4]").getOrCreate()
+        self.spark = builder.remote("local[2]").getOrCreate()
         self.mnist_dir_path = tempfile.mkdtemp()
 
     def tearDown(self) -> None:
@@ -115,7 +115,7 @@ class TorchDistributorDistributedUnitTestsOnConnect(
             if k not in ["spark.master", "spark.remote", "spark.app.name"]:
                 builder = builder.config(k, v)
 
-        self.spark = builder.remote("local-cluster[2,2,1024]").getOrCreate()
+        self.spark = builder.remote("local-cluster[2,2,512]").getOrCreate()
         self.mnist_dir_path = tempfile.mkdtemp()
 
     def tearDown(self) -> None:
