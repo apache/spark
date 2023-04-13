@@ -390,7 +390,6 @@ case class WriteDelta(
 }
 
 trait V2CreateTableAsSelectPlan extends V2CreateTablePlan with AnalysisOnlyCommand {
-  def name: LogicalPlan
   def query: LogicalPlan
 
   override lazy val resolved: Boolean = childrenResolved && {
@@ -403,11 +402,6 @@ trait V2CreateTableAsSelectPlan extends V2CreateTablePlan with AnalysisOnlyComma
   override def childrenToAnalyze: Seq[LogicalPlan] = Seq(name, query)
 
   override def tableSchema: StructType = query.schema
-
-  override def tableName: Identifier = {
-    assert(name.resolved)
-    name.asInstanceOf[ResolvedIdentifier].identifier
-  }
 
   override protected def withNewChildrenInternal(
       newChildren: IndexedSeq[LogicalPlan]): V2CreateTableAsSelectPlan = {
@@ -427,9 +421,14 @@ trait V2CreateTableAsSelectPlan extends V2CreateTablePlan with AnalysisOnlyComma
 
 /** A trait used for logical plan nodes that create or replace V2 table definitions. */
 trait V2CreateTablePlan extends LogicalPlan {
-  def tableName: Identifier
+  def name: LogicalPlan
   def partitioning: Seq[Transform]
   def tableSchema: StructType
+
+  def tableName: Identifier = {
+    assert(name.resolved)
+    name.asInstanceOf[ResolvedIdentifier].identifier
+  }
 
   /**
    * Creates a copy of this node with the new partitioning transforms. This method is used to
@@ -449,11 +448,6 @@ case class CreateTable(
     ignoreIfExists: Boolean) extends UnaryCommand with V2CreateTablePlan {
 
   override def child: LogicalPlan = name
-
-  override def tableName: Identifier = {
-    assert(child.resolved)
-    child.asInstanceOf[ResolvedIdentifier].identifier
-  }
 
   override protected def withNewChildInternal(newChild: LogicalPlan): V2CreateTablePlan =
     copy(name = newChild)
@@ -505,11 +499,6 @@ case class ReplaceTable(
     orCreate: Boolean) extends UnaryCommand with V2CreateTablePlan {
 
   override def child: LogicalPlan = name
-
-  override def tableName: Identifier = {
-    assert(child.resolved)
-    child.asInstanceOf[ResolvedIdentifier].identifier
-  }
 
   override protected def withNewChildInternal(newChild: LogicalPlan): V2CreateTablePlan =
     copy(name = newChild)
