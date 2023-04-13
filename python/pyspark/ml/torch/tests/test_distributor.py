@@ -296,6 +296,8 @@ class TorchDistributorLocalUnitTestsMixin:
         )
 
         conf = SparkConf().set("spark.test.home", SPARK_HOME)
+        conf = conf.set("spark.driver.memory", "512M")
+        conf = conf.set("spark.executor.memory", "512M")
         conf = conf.set("spark.driver.resource.gpu.amount", "3")
         conf = conf.set(
             "spark.driver.resource.gpu.discoveryScript", self.gpu_discovery_script_file.name
@@ -426,6 +428,8 @@ class TorchDistributorDistributedUnitTestsMixin:
         )
 
         conf = SparkConf().set("spark.test.home", SPARK_HOME)
+        conf = conf.set("spark.driver.memory", "512M")
+        conf = conf.set("spark.executor.memory", "512M")
         conf = conf.set(
             "spark.worker.resource.gpu.discoveryScript", self.gpu_discovery_script_file.name
         )
