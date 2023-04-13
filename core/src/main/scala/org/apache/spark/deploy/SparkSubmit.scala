@@ -905,7 +905,7 @@ private[spark] class SparkSubmit extends Logging {
     }
 
     val setSubmitTimeInClusterModeDriver =
-      sparkConf.getBoolean("spark.kubernetes.setSubmitTimeInDriver", false)
+      sparkConf.getBoolean("spark.kubernetes.setSubmitTimeInDriver", true)
     if (!sparkConf.contains("spark.app.submitTime")
       || isKubernetesClusterModeDriver && setSubmitTimeInClusterModeDriver ) {
       sparkConf.set("spark.app.submitTime", System.currentTimeMillis().toString)
