@@ -558,17 +558,14 @@ case class ResolveDefaultColumns(
       case other =>
         other
     }
-    var result: Option[StructType] = None
-    resolved.foreach {
+    resolved.collectFirst {
       case r: UnresolvedCatalogRelation =>
-        result = Some(r.tableMeta.schema)
+        r.tableMeta.schema
       case d: DataSourceV2Relation if !d.skipSchemaResolution && !d.isStreaming =>
-        result = Some(CatalogV2Util.v2ColumnsToStructType(d.table.columns()))
+        CatalogV2Util.v2ColumnsToStructType(d.table.columns())
       case v: View if v.isTempViewStoringAnalyzedPlan =>
-        result = Some(v.schema)
-      case _ =>
+        v.schema
     }
-    result
   }
 
   /**
