@@ -75,10 +75,10 @@ private[connect] object ProtoUtils {
     ByteString.copyFrom(
       List(
         ByteString.copyFrom(prefix),
-        ByteString.copyFromUtf8(s"*********(redacted, size=${format.format(size)})")).asJava)
+        ByteString.copyFromUtf8(s"[truncated(size=${format.format(size)})]")).asJava)
   }
 
   private def createString(prefix: String, size: Int): String = {
-    s"$prefix*********(redacted, size=${format.format(size)})"
+    s"$prefix[truncated(size=${format.format(size)})]"
   }
 }
