@@ -233,11 +233,6 @@ private[kafka010] class KafkaMicroBatchStream(
    * the checkpoint.
    */
   private def getOrCreateInitialPartitionOffsets(): PartitionOffsetMap = {
-    // Make sure that `KafkaConsumer.poll` is only called in StreamExecutionThread.
-    // Otherwise, interrupting a thread while running `KafkaConsumer.poll` may hang forever
-    // (KAFKA-1894).
-    assert(Thread.currentThread().isInstanceOf[UninterruptibleThread])
-
     // SparkSession is required for getting Hadoop configuration for writing to checkpoints
     assert(SparkSession.getActiveSession.nonEmpty)
 
