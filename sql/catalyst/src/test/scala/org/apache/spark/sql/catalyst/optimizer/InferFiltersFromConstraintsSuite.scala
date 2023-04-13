@@ -377,6 +377,14 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
     val y = testRelation.as("y")
     val z = testRelation.as("z")
 
+    // Test filter out true literal
+    comparePlans(
+      InferFiltersFromConstraints(x.select($"x.a", $"x.a".as("xa"))
+        .where($"xa" <=> $"x.a" && $"xa" === $"x.a").analyze),
+      x.select($"x.a", $"x.a".as("xa"))
+        .where($"xa".isNotNull && $"x.a".isNotNull && $"xa" <=> $"x.a" && $"xa" === $"x.a").analyze)
+
+    // Test filter out true literal and once strategy's idempotence is not broken
     val originalQuery =
       x.join(y, condition = Some($"x.a" === $"y.a"))
         .select($"x.a", $"x.a".as("xa")).as("xy")
@@ -387,6 +395,8 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
         .select($"x.a", $"x.a".as("xa")).as("xy")
         .join(z.where($"a".isNotNull), condition = Some($"xy.a" === $"z.a"))
 
-    comparePlans(InferFiltersFromConstraints(originalQuery.analyze), correctAnswer.analyze)
+    comparePlans(
+      InferFiltersFromConstraints(InferFiltersFromConstraints(originalQuery.analyze)),
+      correctAnswer.analyze)
   }
 }

@@ -75,7 +75,10 @@ trait ConstraintHelper {
         inferredConstraints ++= replaceConstraints(predicates - eq, l, r)
       case _ => // No inference
     }
-    inferredConstraints -- constraints
+    (inferredConstraints -- constraints).filterNot {
+      case a EqualNullSafe b => a.semanticEquals(b)
+      case _ => false
+    }
   }
 
   private def replaceConstraints(
