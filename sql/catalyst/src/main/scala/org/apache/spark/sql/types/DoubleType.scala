@@ -35,7 +35,6 @@ class DoubleType private() extends FractionalType {
   // Defined with a private constructor so the companion object is the only possible instantiation.
   private[sql] type InternalType = Double
   @transient private[sql] lazy val tag = typeTag[InternalType]
-  private[sql] val asIntegral = DoubleType.DoubleAsIfIntegral
 
   /**
    * The default size of a value of the DoubleType is 8 bytes.
