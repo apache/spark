@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReferences
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.plans.physical._
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.types.{LongType, StructType}
@@ -116,6 +117,33 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
 
   override protected def withNewChildInternal(newChild: SparkPlan): ProjectExec =
     copy(child = newChild)
+}
+
+case class LocalProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
+  extends UnaryExecNode {
+
+  @transient private lazy val project = UnsafeProjection.create(projectList, child.output)
+
+  override def output: Seq[Attribute] = projectList.map(_.toAttribute)
+
+  override protected def withNewChildInternal(newChild: SparkPlan): LocalProjectExec =
+    copy(child = newChild)
+
+  override def executeCollect(): Array[InternalRow] = {
+    child.executeCollect().map(project)
+  }
+
+  override def executeTake(n: Int): Array[InternalRow] = {
+    child.executeTake(n).map(project)
+  }
+
+  override def executeTail(n: Int): Array[InternalRow] = {
+    child.executeTail(n).map(project)
+  }
+
+  override protected def doExecute(): RDD[InternalRow] = {
+    throw QueryExecutionErrors.executeCodePathUnsupportedError("LocalProjectExec")
+  }
 }
 
 trait GeneratePredicateHelper extends PredicateHelper {

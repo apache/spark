@@ -272,16 +272,28 @@ class Dataset[T] private[sql](
       numRows: Int,
       truncate: Int): Seq[Seq[String]] = {
     val newDf = toDF()
-    val castCols = newDf.logicalPlan.output.map { col =>
-      // Since binary types in top-level schema fields have a specific format to print,
-      // so we do not cast them to strings here.
-      if (col.dataType == BinaryType) {
-        Column(col)
-      } else {
-        Column(col).cast(StringType)
-      }
+    val data: Array[Row] = newDf.logicalPlan match {
+      case c: CommandResult =>
+        val localProject = LocalProject(c.output.map { a =>
+          if (a.dataType == BinaryType) {
+            a
+          } else {
+            Alias(Cast(a, StringType), a.name)()
+          }
+        }, c)
+        Dataset.ofRows(sparkSession, localProject).take(numRows + 1)
+      case _ =>
+        val castCols = newDf.logicalPlan.output.map { col =>
+          // Since binary types in top-level schema fields have a specific format to print,
+          // so we do not cast them to strings here.
+          if (col.dataType == BinaryType) {
+            Column(col)
+          } else {
+            Column(col).cast(StringType)
+          }
+        }
+        newDf.select(castCols: _*).take(numRows + 1)
     }
-    val data = newDf.select(castCols: _*).take(numRows + 1)
 
     // For array values, replace Seq and Array with square brackets
     // For cells that are beyond `truncate` characters, replace it with the

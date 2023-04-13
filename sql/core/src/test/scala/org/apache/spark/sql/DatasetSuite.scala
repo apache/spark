@@ -2429,6 +2429,23 @@ class DatasetSuite extends QueryTest
       assert(parquetFiles.size === 10)
     }
   }
+
+  test("SPARK-43124: Show does not trigger job execution on CommandResults") {
+    withTable("t1") {
+      sql("create table t1(c int) using parquet")
+
+      @volatile var jobCounter = 0
+      val listener = new SparkListener {
+        override def onJobStart(jobStart: SparkListenerJobStart): Unit = {
+          jobCounter += 1
+        }
+      }
+      withListener(spark.sparkContext, listener) { _ =>
+        sql("show tables").show()
+      }
+      assert(jobCounter === 0)
+    }
+  }
 }
 
 class DatasetLargeResultCollectingSuite extends QueryTest
