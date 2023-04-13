@@ -67,7 +67,7 @@ trait ColumnResolutionHelper extends Logging {
             case p: Project =>
               (newExprs, Project(p.projectList ++ missingAttrs, newChild))
 
-            case a@Aggregate(groupExprs, aggExprs, child) =>
+            case a @ Aggregate(groupExprs, aggExprs, child) =>
               if (missingAttrs.forall(attr => groupExprs.exists(_.semanticEquals(attr)))) {
                 // All the missing attributes are grouping expressions, valid case.
                 (newExprs,
