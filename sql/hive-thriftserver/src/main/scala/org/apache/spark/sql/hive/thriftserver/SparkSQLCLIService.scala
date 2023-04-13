@@ -103,7 +103,11 @@ private[hive] class SparkSQLCLIService(hiveServer: HiveServer2, sqlContext: SQLC
       case GetInfoType.CLI_SERVER_NAME => new GetInfoValue("Spark SQL")
       case GetInfoType.CLI_DBMS_NAME => new GetInfoValue("Spark SQL")
       case GetInfoType.CLI_DBMS_VER => new GetInfoValue(sqlContext.sparkContext.version)
-      case GetInfoType.CLI_ODBC_KEYWORDS => new GetInfoValue("Unimplemented")
+      case GetInfoType.CLI_ODBC_KEYWORDS =>
+        val keywords = sqlContext.sql("SELECT SQL_KEYWORDS()")
+          .collect().head.getMap[String, Boolean](0)
+          .keys.toSeq.sorted.mkString(",")
+        new GetInfoValue(keywords)
       case _ => super.getInfo(sessionHandle, getInfoType)
     }
   }

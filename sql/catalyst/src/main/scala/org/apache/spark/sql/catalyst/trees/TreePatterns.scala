@@ -98,6 +98,7 @@ object TreePattern extends Enumeration  {
   val UPPER_OR_LOWER: Value = Value
   val UP_CAST: Value = Value
   val DISTRIBUTED_SEQUENCE_ID: Value = Value
+  val SQL_KEYWORDS: Value = Value
 
   // Logical plan patterns (alphabetically ordered)
   val AGGREGATE: Value = Value

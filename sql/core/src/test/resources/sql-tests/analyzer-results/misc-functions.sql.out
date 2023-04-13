@@ -117,3 +117,11 @@ Project [if ((v#x > 5)) cast(raise_error(concat(too big: , cast(v#x as string)),
             +- SubqueryAlias T
                +- Project [col1#x AS v#x]
                   +- LocalRelation [col1#x]
+
+
+-- !query
+SELECT EXPLODE(SQL_KEYWORDS())
+-- !query analysis
+Project [key#x, value#x]
++- Generate explode(sql_keywords()), false, [key#x, value#x]
+   +- OneRowRelation

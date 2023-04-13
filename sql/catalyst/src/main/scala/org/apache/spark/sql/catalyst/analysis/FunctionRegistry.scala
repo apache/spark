@@ -742,6 +742,7 @@ object FunctionRegistry {
     expression[SparkVersion]("version"),
     expression[TypeOf]("typeof"),
     expression[EqualNull]("equal_null"),
+    expression[SQLKeywords]("sql_keywords"),
 
     // grouping sets
     expression[Grouping]("grouping"),
