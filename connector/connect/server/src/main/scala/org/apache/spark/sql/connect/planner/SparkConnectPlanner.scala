@@ -597,7 +597,11 @@ class SparkConnectPlanner(val session: SparkSession) {
     Dataset
       .ofRows(session, transformRelation(rel.getInput))
       .groupBy(cols: _*)
-      .applyInPandasWithState(pythonUdf, outputSchema, stateSchema, rel.getOutputMode,
+      .applyInPandasWithState(
+        pythonUdf,
+        outputSchema,
+        stateSchema,
+        rel.getOutputMode,
         rel.getTimeoutConf)
       .logicalPlan
   }
