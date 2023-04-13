@@ -711,9 +711,9 @@ private[spark] object SparkConf extends Logging {
     "spark.kafka.consumer.cache.capacity" -> Seq(
       AlternateConfig("spark.sql.kafkaConsumerCache.capacity", "3.0")),
     MAX_EXECUTOR_FAILURES.key -> Seq(
-      AlternateConfig("spark.yarn.max.executor.failures", "1.0")),
+      AlternateConfig("spark.yarn.max.executor.failures", "3.5")),
     EXECUTOR_ATTEMPT_FAILURE_VALIDITY_INTERVAL_MS.key -> Seq(
-      AlternateConfig("spark.yarn.executor.failuresValidityInterval", "2.0"))
+      AlternateConfig("spark.yarn.executor.failuresValidityInterval", "3.5"))
   )
 
   /**
