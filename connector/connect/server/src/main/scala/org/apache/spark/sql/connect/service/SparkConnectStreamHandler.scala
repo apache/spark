@@ -32,7 +32,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.connect.artifact.SparkConnectArtifactManager
-import org.apache.spark.sql.connect.common.DataTypeProtoConverter
+import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, ProtoUtils}
 import org.apache.spark.sql.connect.common.LiteralValueProtoConverter.toLiteralProto
 import org.apache.spark.sql.connect.config.Connect.CONNECT_GRPC_ARROW_MAX_BATCH_SIZE
 import org.apache.spark.sql.connect.planner.SparkConnectPlanner
@@ -56,7 +56,9 @@ class SparkConnectStreamHandler(responseObserver: StreamObserver[ExecutePlanResp
       // Add debug information to the query execution so that the jobs are traceable.
       try {
         val debugString =
-          Utils.redact(session.sessionState.conf.stringRedactionPattern, v.toString)
+          Utils.redact(
+            session.sessionState.conf.stringRedactionPattern,
+            ProtoUtils.abbreviate(v).toString)
         session.sparkContext.setLocalProperty(
           "callSite.short",
           s"Spark Connect - ${StringUtils.abbreviate(debugString, 128)}")

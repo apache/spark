@@ -147,7 +147,7 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
     assert(types(6).equals("class [B"))
     assert(types(7).equals("class [B"))
     assert(types(8).equals("class [B"))
-    assert(rows(0).getString(0).equals("the"))
+    assert(rows(0).getString(0).equals("the".padTo(10, ' ')))
     assert(rows(0).getString(1).equals("quick"))
     assert(rows(0).getString(2).equals("brown"))
     assert(rows(0).getString(3).equals("fox"))

@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
 
 import org.apache.commons.lang3.StringUtils
@@ -48,7 +47,6 @@ import org.apache.spark.sql.execution.streaming.continuous.{WriteToContinuousDat
 import org.apache.spark.sql.internal.StaticSQLConf.WAREHOUSE_PATH
 import org.apache.spark.sql.sources.{BaseRelation, TableScan}
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.storage.StorageLevel
 
 class DataSourceV2Strategy(session: SparkSession) extends Strategy with PredicateHelper {
@@ -187,16 +185,14 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
         partitioning, qualifyLocInTableSpec(tableSpec), ifNotExists) :: Nil
 
     case CreateTableAsSelect(ResolvedIdentifier(catalog, ident), parts, query, tableSpec,
-        options, ifNotExists, analyzedQuery) =>
-      assert(analyzedQuery.isDefined)
-      val writeOptions = new CaseInsensitiveStringMap(options.asJava)
+        options, ifNotExists, true) =>
       catalog match {
         case staging: StagingTableCatalog =>
-          AtomicCreateTableAsSelectExec(staging, ident, parts, analyzedQuery.get, planLater(query),
-            qualifyLocInTableSpec(tableSpec), writeOptions, ifNotExists) :: Nil
+          AtomicCreateTableAsSelectExec(staging, ident, parts, query,
+            qualifyLocInTableSpec(tableSpec), options, ifNotExists) :: Nil
         case _ =>
-          CreateTableAsSelectExec(catalog.asTableCatalog, ident, parts, analyzedQuery.get,
-            planLater(query), qualifyLocInTableSpec(tableSpec), writeOptions, ifNotExists) :: Nil
+          CreateTableAsSelectExec(catalog.asTableCatalog, ident, parts, query,
+            qualifyLocInTableSpec(tableSpec), options, ifNotExists) :: Nil
       }
 
     case RefreshTable(r: ResolvedTable) =>
@@ -221,19 +217,16 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       }
 
     case ReplaceTableAsSelect(ResolvedIdentifier(catalog, ident),
-        parts, query, tableSpec, options, orCreate, analyzedQuery) =>
-      assert(analyzedQuery.isDefined)
-      val writeOptions = new CaseInsensitiveStringMap(options.asJava)
+        parts, query, tableSpec, options, orCreate, true) =>
       catalog match {
         case staging: StagingTableCatalog =>
           AtomicReplaceTableAsSelectExec(
             staging,
             ident,
             parts,
-            analyzedQuery.get,
-            planLater(query),
+            query,
             qualifyLocInTableSpec(tableSpec),
-            writeOptions,
+            options,
             orCreate = orCreate,
             invalidateCache) :: Nil
         case _ =>
@@ -241,10 +234,9 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
             catalog.asTableCatalog,
             ident,
             parts,
-            analyzedQuery.get,
-            planLater(query),
+            query,
             qualifyLocInTableSpec(tableSpec),
-            writeOptions,
+            options,
             orCreate = orCreate,
             invalidateCache) :: Nil
       }
