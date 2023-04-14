@@ -336,7 +336,7 @@ private[spark] class ApplicationMaster(
 
   def stopUnmanaged(stagingDir: Path): Unit = {
     if (!finished) {
-      finish(FinalApplicationStatus.SUCCEEDED, SparkExitCode.EXIT_SUCCESS)
+      finish(FinalApplicationStatus.SUCCEEDED, ApplicationMaster.EXIT_SUCCESS)
     }
     if (!unregistered) {
       // It's ok to clean staging dir first because unmanaged AM can't be retried.
@@ -736,7 +736,7 @@ private[spark] class ApplicationMaster(
             finish(FinalApplicationStatus.FAILED, ApplicationMaster.EXIT_EXCEPTION_USER_CLASS)
           } else {
             mainMethod.invoke(null, userArgs.toArray)
-            finish(FinalApplicationStatus.SUCCEEDED, SparkExitCode.EXIT_SUCCESS)
+            finish(FinalApplicationStatus.SUCCEEDED, ApplicationMaster.EXIT_SUCCESS)
             logDebug("Done running user class")
           }
         } catch {
@@ -852,7 +852,7 @@ private[spark] class ApplicationMaster(
         if (shutdown || !clientModeTreatDisconnectAsFailed) {
           if (exitCode == 0) {
             logInfo(s"Driver terminated or disconnected! Shutting down. $remoteAddress")
-            finish(FinalApplicationStatus.SUCCEEDED, SparkExitCode.EXIT_SUCCESS)
+            finish(FinalApplicationStatus.SUCCEEDED, ApplicationMaster.EXIT_SUCCESS)
           } else {
             logError(s"Driver terminated with exit code ${exitCode}! Shutting down. $remoteAddress")
             finish(FinalApplicationStatus.FAILED, exitCode)
@@ -870,6 +870,7 @@ private[spark] class ApplicationMaster(
 object ApplicationMaster extends Logging {
 
   // exit codes for different causes, no reason behind the values
+  private val EXIT_SUCCESS = ApplicationMaster.EXIT_SUCCESS
   private val EXIT_UNCAUGHT_EXCEPTION = 10
   private val EXIT_MAX_EXECUTOR_FAILURES = SparkExitCode.EXCEED_MAX_EXECUTOR_FAILURES
   private val EXIT_REPORTER_FAILURE = 12
