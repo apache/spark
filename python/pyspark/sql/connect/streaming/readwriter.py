@@ -21,7 +21,7 @@ check_dependencies(__name__)
 
 from typing import cast, overload, Callable, Dict, List, Optional, TYPE_CHECKING, Union
 
-from pyspark.sql.connect.plan import DataSource, LogicalPlan, WriteStreamOperation
+from pyspark.sql.connect.plan import DataSource, LogicalPlan, Read, WriteStreamOperation
 import pyspark.sql.connect.proto as pb2
 from pyspark.sql.connect.readwriter import OptionUtils, to_str
 from pyspark.sql.connect.streaming.query import StreamingQuery

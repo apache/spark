@@ -881,7 +881,7 @@ class SparkConnectPlanner(val session: SparkSession) {
           multipartIdentifier,
           new CaseInsensitiveStringMap(rel.getNamedTable.getOptionsMap),
           isStreaming = true)
-        
+
       case proto.Read.ReadTypeCase.DATA_SOURCE if rel.getIsStreaming =>
         val streamSource = rel.getDataSource
         val reader = session.readStream
