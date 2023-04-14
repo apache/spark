@@ -26,6 +26,7 @@ import scala.reflect.runtime.universe.TypeTag
 
 import com.google.common.cache.{CacheBuilder, CacheLoader}
 import org.apache.arrow.memory.RootAllocator
+import org.apache.arrow.vector.ipc.ArrowStreamReader
 
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.connect.proto
@@ -470,19 +471,24 @@ class SparkSession private[sql] (
   }
 
   private[sql] def execute[T](plan: proto.Plan, encoder: AgnosticEncoder[T]): SparkResult[T] = {
-    val result = if (plan.hasRoot && plan.getRoot.hasLocalRelation) {
+    val value = if (plan.hasRoot && plan.getRoot.hasLocalRelation) {
       // Short circuit local relation RPCs
       val localRelation = plan.getRoot.getLocalRelation
-      new SparkResult(
-        Seq.empty[proto.ExecutePlanResponse].iterator.asJava,
-        allocator,
-        encoder,
-        Some(localRelation.getData))
+      val response = proto.ExecutePlanResponse.newBuilder()
+      val reader = new ArrowStreamReader(localRelation.getData.newInput(), allocator)
+      reader.loadNextBatch()
+      val batch = proto.ExecutePlanResponse.ArrowBatch
+        .newBuilder()
+        .setRowCount(reader.getVectorSchemaRoot.getRowCount)
+        .setData(localRelation.getData)
+        .build()
+      response.setArrowBatch(batch)
+      Seq[proto.ExecutePlanResponse](response.build()).iterator.asJava
     } else {
-      val value = client.execute(plan)
-      new SparkResult(value, allocator, encoder)
+      client.execute(plan)
     }
 
+    val result = new SparkResult(value, allocator, encoder)
     cleaner.register(result)
     result
   }
