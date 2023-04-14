@@ -417,6 +417,7 @@ private[hive] object HiveTableUtil {
   def configureJobPropertiesForStorageHandler(
       tableDesc: TableDesc, conf: Configuration, input: Boolean): Unit = {
     val property = tableDesc.getProperties.getProperty(META_TABLE_STORAGE)
+    if (property == null) { return }
     val storageHandler =
       org.apache.hadoop.hive.ql.metadata.HiveUtils.getStorageHandler(conf, property)
     if (storageHandler != null) {
