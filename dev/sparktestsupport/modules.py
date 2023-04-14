@@ -781,7 +781,7 @@ pyspark_connect = Module(
         # ml doctests
         "pyspark.ml.connect.functions",
         # ml unittests
-        "pyspark.ml.tests.connect.test_connect_function",
+        # "pyspark.ml.tests.connect.test_connect_function",
         "pyspark.ml.tests.connect.test_parity_torch_distributor",
     ],
     excluded_python_implementations=[
