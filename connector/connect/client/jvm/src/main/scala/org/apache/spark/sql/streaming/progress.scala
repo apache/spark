@@ -20,5 +20,5 @@ package org.apache.spark.sql.streaming
 class StreamingQueryProgress private[sql](
   val json: String
 ) {
-  // TODO: (Implement full object by parsing from json).
+  // TODO(SPARK-43128): (Implement full object by parsing from json).
 }
