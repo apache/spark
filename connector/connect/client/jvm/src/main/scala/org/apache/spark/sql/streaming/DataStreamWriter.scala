@@ -197,7 +197,7 @@ final class DataStreamWriter[T] private[sql] (ds: Dataset[T]) {
    * @since 3.5.0
    */
   def options(options: java.util.Map[String, String]): DataStreamWriter[T] = {
-    this.options(options.asScala)
+    sinkBuilder.putAllOptions(options)
     this
   }
 
