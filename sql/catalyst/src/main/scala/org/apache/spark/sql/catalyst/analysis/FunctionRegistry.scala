@@ -507,8 +507,8 @@ object FunctionRegistry {
     expression[RegrIntercept]("regr_intercept"),
     expression[Mode]("mode"),
     expression[HllSketchEstimate]("hllsketch_estimate"),
-    expression[HllSketchBinary]("hllsketch_binary"),
-    expression[HllSketchUnionEstimate]("hllsketch_union_estimate"),
+    expression[HllSketchAgg]("hll_sketch_agg"),
+    expression[HllUnionAgg]("hll_union_agg"),
 
     // string functions
     expression[Ascii]("ascii"),
@@ -745,6 +745,8 @@ object FunctionRegistry {
     expression[SparkVersion]("version"),
     expression[TypeOf]("typeof"),
     expression[EqualNull]("equal_null"),
+    expression[HllSketchEstimate]("hll_sketch_estimate"),
+    expression[HllUnion]("hll_union"),
 
     // grouping sets
     expression[Grouping]("grouping"),

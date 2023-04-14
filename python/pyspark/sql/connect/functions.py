@@ -2441,38 +2441,42 @@ def sha2(col: "ColumnOrName", numBits: int) -> Column:
 sha2.__doc__ = pysparkfuncs.sha2.__doc__
 
 
-def hllsketch_estimate(
+def hll_sketch_agg(
     col: "ColumnOrName", lgConfigK: Optional[int] = None, tgtHllType: Optional[str] = None
 ) -> Column:
     if lgConfigK is not None and tgtHllType is not None:
-        return _invoke_function("hllsketch_estimate", _to_col(col), lit(lgConfigK), lit(tgtHllType))
+        return _invoke_function("hll_sketch_agg", _to_col(col), lit(lgConfigK), lit(tgtHllType))
+    elif lgConfigK is not None:
+        return _invoke_function("hll_sketch_agg", _to_col(col), lit(lgConfigK))
     else:
-        return _invoke_function("hllsketch_estimate", _to_col(col))
+        return _invoke_function("hll_sketch_agg", _to_col(col))
 
 
-hllsketch_estimate.__doc__ = pysparkfuncs.hllsketch_estimate.__doc__
+hll_sketch_agg.__doc__ = pysparkfuncs.hll_sketch_agg.__doc__
 
 
-def hllsketch_binary(
-    col: "ColumnOrName", lgConfigK: Optional[int] = None, tgtHllType: Optional[str] = None
-) -> Column:
-    if lgConfigK is not None and tgtHllType is not None:
-        return _invoke_function("hllsketch_binary", _to_col(col), lit(lgConfigK), lit(tgtHllType))
-    else:
-        return _invoke_function("hllsketch_binary", _to_col(col))
-
-
-hllsketch_binary.__doc__ = pysparkfuncs.hllsketch_binary.__doc__
-
-
-def hllsketch_union_estimate(col: "ColumnOrName", lgMaxK: Optional[int] = None) -> Column:
+def hll_union_agg(col: "ColumnOrName", lgMaxK: Optional[int] = None) -> Column:
     if lgMaxK is not None:
-        return _invoke_function("hllsketch_union_estimate", _to_col(col), lit(lgMaxK))
+        return _invoke_function("hll_union_agg", _to_col(col), lit(lgMaxK))
     else:
-        return _invoke_function("hllsketch_union_estimate", _to_col(col))
+        return _invoke_function("hll_union_agg", _to_col(col))
 
 
-hllsketch_union_estimate.__doc__ = pysparkfuncs.hllsketch_union_estimate.__doc__
+hll_union_agg.__doc__ = pysparkfuncs.hll_union_agg.__doc__
+
+
+def hll_sketch_estimate(col: "ColumnOrName") -> Column:
+    return _invoke_function("hll_sketch_estimate", _to_col(col))
+
+
+hll_sketch_estimate.__doc__ = pysparkfuncs.hll_sketch_estimate.__doc__
+
+
+def hll_union(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
+    return _invoke_function("hll_union", _to_col(col1), _to_col(col2))
+
+
+hll_union.__doc__ = pysparkfuncs.hll_union.__doc__
 
 
 # User Defined Function

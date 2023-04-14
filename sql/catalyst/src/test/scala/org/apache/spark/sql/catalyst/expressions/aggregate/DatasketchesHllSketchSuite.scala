@@ -21,11 +21,12 @@ import scala.collection.immutable.NumericRange
 import scala.util.Random
 
 import org.apache.datasketches.hll.HllSketch
+import org.apache.datasketches.memory.Memory
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.BoundReference
-import org.apache.spark.sql.types.{DataType, IntegerType, LongType, StringType}
+import org.apache.spark.sql.catalyst.expressions.{BoundReference, HllSketchEstimate}
+import org.apache.spark.sql.types.{BinaryType, DataType, IntegerType, LongType, StringType}
 import org.apache.spark.unsafe.types.UTF8String
 
 
@@ -36,7 +37,7 @@ class DatasketchesHllSketchSuite extends SparkFunSuite {
 
     // create a map of agg function instances
     val aggFunctionMap = Seq.tabulate(numSketches)(index => {
-      val sketch = new HllSketchEstimate(BoundReference(0, dataType, nullable = true))
+      val sketch = new HllSketchAgg(BoundReference(0, dataType, nullable = true))
       index -> (sketch, sketch.createAggregationBuffer())
     }).toMap
 
@@ -46,8 +47,8 @@ class DatasketchesHllSketchSuite extends SparkFunSuite {
       aggFunction.update(aggBuffer, InternalRow(value))
     })
 
-    def serializeDeserialize(tuple: (HllSketchEstimate, HllSketch)):
-      (HllSketchEstimate, HllSketch) = {
+    def serializeDeserialize(tuple: (HllSketchAgg, HllSketch)):
+      (HllSketchAgg, HllSketch) = {
       val (agg, buf) = tuple
       val serialized = agg.serialize(buf)
       (agg, agg.deserialize(serialized))
@@ -62,8 +63,9 @@ class DatasketchesHllSketchSuite extends SparkFunSuite {
       (prevAgg, prevAgg.merge(prevBuf, curBuf))
     })
 
-    (mergedAgg.eval(mergedBuf).asInstanceOf[Long],
-    mergedBuf.getLowerBound(3).toLong to mergedBuf.getUpperBound(3).toLong)
+    val estimator = HllSketchEstimate(BoundReference(0, BinaryType, nullable = true))
+    val estimate = estimator.eval(InternalRow(mergedBuf.toUpdatableByteArray)).asInstanceOf[Long]
+    (estimate, mergedBuf.getLowerBound(3).toLong to mergedBuf.getUpperBound(3).toLong)
   }
 
   test("Test min/max values of supported datatypes") {
@@ -79,13 +81,31 @@ class DatasketchesHllSketchSuite extends SparkFunSuite {
     val (stringEstimate, stringEstimateRange) = simulateUpdateMerge(StringType, stringRange)
     assert(stringEstimate == stringRange.size ||
       stringEstimateRange.contains(stringRange.size.toLong))
+
+    val binaryRange = Seq.tabulate(1000)(i => UTF8String.fromString(Random.nextString(i)).getBytes)
+    val (binaryEstimate, binaryEstimateRange) = simulateUpdateMerge(BinaryType, binaryRange)
+    assert(binaryEstimate == binaryRange.size ||
+      binaryEstimateRange.contains(binaryRange.size.toLong))
   }
 
   test("Test lgMaxK results in downsampling sketches with larger lgConfigK") {
-    // TODO
-  }
+    val aggFunc1 = new HllSketchAgg(BoundReference(0, IntegerType, nullable = true), 12)
+    val sketch1 = aggFunc1.createAggregationBuffer()
+    (0 to 100).map(i => aggFunc1.update(sketch1, InternalRow(i)))
+    val binary1 = aggFunc1.eval(sketch1)
 
-  test("Test sparse and dense sketches can be merged") {
-    // TODO
+    val aggFunc2 = new HllSketchAgg(BoundReference(0, IntegerType, nullable = true), 10)
+    val sketch2 = aggFunc2.createAggregationBuffer()
+    (0 to 100).map(i => aggFunc2.update(sketch2, InternalRow(i)))
+    sketch2.isCompact
+    val binary2 = aggFunc2.eval(sketch2)
+
+    val aggFunc3 = new HllUnionAgg(BoundReference(0, BinaryType, nullable = true), 8)
+    val union1 = aggFunc3.createAggregationBuffer()
+    aggFunc3.update(union1, InternalRow(binary1))
+    aggFunc3.update(union1, InternalRow(binary2))
+    val binary3 = aggFunc3.eval(union1)
+
+    assert(HllSketch.heapify(Memory.wrap(binary3.asInstanceOf[Array[Byte]])).getLgConfigK == 8)
   }
 }

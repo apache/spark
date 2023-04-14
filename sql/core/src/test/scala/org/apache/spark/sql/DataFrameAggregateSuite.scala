@@ -1546,7 +1546,8 @@ class DataFrameAggregateSuite extends QueryTest
     checkAnswer(res, Row(Array(1), Array(1)))
   }
 
-  test("SPARK-16484: hllsketch_estimate positive tests") {
+  test("SPARK-16484: hll_*_agg + hll_union + hll_sketch_estimate positive tests") {
+
     val df1 = Seq(
       (1, "a"), (1, "a"), (1, "a"),
       (1, "b"),
@@ -1564,40 +1565,35 @@ class DataFrameAggregateSuite extends QueryTest
     ).toDF("id", "value")
     df2.createOrReplaceTempView("df2")
 
-    // empty column test
-    val res0 = df1.withColumn("empty_col", lit(null)).groupBy("id")
-      .agg(
-        hllsketch_estimate("empty_col").as("distinct_count")
-      )
-    checkAnswer(res0, Row(1, 0))
-
     // first test hllsketch_estimate via dataframe + sql, with and without configs
     val res1 = df1.groupBy("id")
       .agg(
         count("value").as("count"),
-        hllsketch_estimate("value").as("distinct_count_1"),
-        hllsketch_estimate("value", 20, "HLL_8").as("distinct_count_2")
+        hll_sketch_estimate(hll_sketch_agg("value")).as("distinct_count_1"),
+        hll_sketch_estimate(hll_sketch_agg("value", 20)).as("distinct_count_2"),
+        hll_sketch_estimate(hll_sketch_agg("value", 20, "HLL_8")).as("distinct_count_3")
       )
-    checkAnswer(res1, Row(1, 7, 4, 4))
+    checkAnswer(res1, Row(1, 7, 4, 4, 4))
 
     val res2 = sql(
       """select
         | id,
         | count(value) as count,
-        | hllsketch_estimate(value) as distinct_count_1,
-        | hllsketch_estimate(value, 20, 'HLL_8') as distinct_count_2
+        | hll_sketch_estimate(hll_sketch_agg(value)) as distinct_count_1,
+        | hll_sketch_estimate(hll_sketch_agg(value, 20)) as distinct_count_2,
+        | hll_sketch_estimate(hll_sketch_agg(value, 20, 'HLL_8')) as distinct_count_3
         |from df1
         |group by 1
         |""".stripMargin)
-    checkAnswer(res2, Row(1, 7, 4, 4))
+    checkAnswer(res2, Row(1, 7, 4, 4, 4))
 
     // next test hllsketch_binary via dataframe + sql, with and without configs
     val df3 = df1.groupBy("id")
       .agg(
         count("value").as("count"),
-        hllsketch_binary("value").as("hllsketch_1"),
-        hllsketch_binary("value", 20, "HLL_8").as("hllsketch_2"),
-        hllsketch_binary("value").as("hllsketch_3")
+        hll_sketch_agg("value").as("hllsketch_1"),
+        hll_sketch_agg("value", 20, "HLL_8").as("hllsketch_2"),
+        hll_sketch_agg("value").as("hllsketch_3")
       )
     df3.createOrReplaceTempView("df3")
 
@@ -1607,9 +1603,9 @@ class DataFrameAggregateSuite extends QueryTest
       """select
         | id,
         | count(value),
-        | hllsketch_binary(value) as hllsketch_1,
-        | hllsketch_binary(value, 20, 'HLL_8') as hllsketch_2,
-        | hllsketch_binary(value, 20, 'HLL_8') as hllsketch_3
+        | hll_sketch_agg(value) as hllsketch_1,
+        | hll_sketch_agg(value, 20, 'HLL_8') as hllsketch_2,
+        | hll_sketch_agg(value, 20, 'HLL_8') as hllsketch_3
         |from df2
         |group by 1
         |""".stripMargin)
@@ -1618,9 +1614,9 @@ class DataFrameAggregateSuite extends QueryTest
     val res3 = df3.union(df4).groupBy("id")
       .agg(
         sum("count").as("count"),
-        hllsketch_union_estimate("hllsketch_1", 20).as("distinct_count_1"),
-        hllsketch_union_estimate("hllsketch_2").as("distinct_count_2"),
-        hllsketch_union_estimate("hllsketch_3").as("distinct_count_3")
+        hll_sketch_estimate(hll_union_agg("hllsketch_1", 20)).as("distinct_count_1"),
+        hll_sketch_estimate(hll_union_agg("hllsketch_2")).as("distinct_count_2"),
+        hll_sketch_estimate(hll_union_agg("hllsketch_3")).as("distinct_count_3")
       )
     checkAnswer(res3, Row(1, 15, 6, 6, 6))
 
@@ -1628,13 +1624,34 @@ class DataFrameAggregateSuite extends QueryTest
       """select
         | id,
         | sum(count) as count,
-        | hllsketch_union_estimate(hllsketch_1, 20) as distinct_count_1,
-        | hllsketch_union_estimate(hllsketch_2) as distinct_count_2,
-        | hllsketch_union_estimate(hllsketch_3) as distinct_count_3
+        | hll_sketch_estimate(hll_union_agg(hllsketch_1, 20)) as distinct_count_1,
+        | hll_sketch_estimate(hll_union_agg(hllsketch_2)) as distinct_count_2,
+        | hll_sketch_estimate(hll_union_agg(hllsketch_3)) as distinct_count_3
         |from (select * from df3 union all select * from df4)
         |group by 1
         |""".stripMargin)
     checkAnswer(res4, Row(1, 15, 6, 6, 6))
+
+    val df5 = Seq(
+      (1, "a"), (1, "a"), (1, "a"),
+      (1, "b"),
+      (1, null),
+      (2, null), (2, null), (2, null)
+    ).toDF("id", "value")
+
+    // empty column test
+    val res5 = df5.where(expr("id = 2")).groupBy("id")
+      .agg(
+        hll_sketch_estimate(hll_sketch_agg("value")).as("distinct_count")
+      )
+    checkAnswer(res5, Row(2, 0))
+
+    // partial empty column test
+    val res0 = df5.groupBy("id")
+      .agg(
+        hll_sketch_estimate(hll_sketch_agg("value")).as("distinct_count")
+      )
+    checkAnswer(res0, Seq(Row(1, 2), Row(2, 0)))
   }
 
   test("SPARK-16484: hllsketch_estimate negative tests") {
@@ -1645,12 +1662,13 @@ class DataFrameAggregateSuite extends QueryTest
       (1, "c"), (1, "c"),
       (1, "d")
     ).toDF("id", "value")
+    df1.createOrReplaceTempView("df1")
 
     // validate that the functions error out when lgConfigK < 0
     val error0 = intercept[SparkException] {
       val res = df1.groupBy("id")
         .agg(
-          hllsketch_estimate("value", -1, "HLL_4").as("hllsketch")
+          hll_sketch_agg("value", -1, "HLL_4").as("hllsketch")
         )
       checkAnswer(res, Nil)
     }
@@ -1659,43 +1677,70 @@ class DataFrameAggregateSuite extends QueryTest
     val error1 = intercept[SparkException] {
       val res = df1.groupBy("id")
         .agg(
-          hllsketch_binary("value", -1, "HLL_4").as("hllsketch")
+          hll_sketch_agg("value").as("hllsketch")
+        )
+        .agg(
+          hll_union_agg("hllsketch", -1)
         )
       checkAnswer(res, Nil)
     }
     assert(error1.toString contains "SketchesArgumentException")
 
+    // validate that the functions error out with unsupported tgtHllType
     val error2 = intercept[SparkException] {
       val res = df1.groupBy("id")
         .agg(
-          hllsketch_binary("value").as("hllsketch")
-        )
-        .agg(
-          hllsketch_union_estimate("hllsketch", -1)
+          hll_sketch_agg("value", 12, "HLL_5").as("hllsketch")
         )
       checkAnswer(res, Nil)
     }
     assert(error2.toString contains "SketchesArgumentException")
 
-    // validate that the functions error out with unsupported tgtHllType
-    val error3 = intercept[SparkException] {
-      val res = df1.groupBy("id")
-        .agg(
-          hllsketch_estimate("value", 12, "HLL_5").as("hllsketch")
-        )
+    // validate that the functions error out when provided unexpected types
+    val error3 = intercept[AnalysisException] {
+      val res = sql(
+        """
+          |select
+          | id,
+          | hll_sketch_agg(value, 'text')
+          |from
+          | df1
+          |group by 1
+          |""".stripMargin)
       checkAnswer(res, Nil)
     }
-    assert(error3.toString contains "SketchesArgumentException")
+    assert(error3.toString contains "UNEXPECTED_INPUT_TYPE")
 
-    val error4 = intercept[SparkException] {
-      val res = df1.groupBy("id")
-        .agg(
-          hllsketch_binary("value", 12, "HLL_5").as("hllsketch")
-        )
+    val error4 = intercept[AnalysisException] {
+      val res = sql(
+        """
+          |select
+          | id,
+          | hll_sketch_agg(value, 12, 12)
+          |from
+          | df1
+          |group by 1
+          |""".stripMargin)
       checkAnswer(res, Nil)
     }
-    assert(error4.toString contains "SketchesArgumentException")
+    assert(error4.toString contains "UNEXPECTED_INPUT_TYPE")
 
+    val error5 = intercept[AnalysisException] {
+      val res = sql(
+        """with sketch_cte as (
+          |select
+          | id,
+          | hll_sketch_agg(value) as sketch
+          |from
+          | df1
+          |group by 1
+          |)
+          |
+          |select hll_union_agg(sketch, 'Hll_4') from sketch_cte
+          |""".stripMargin)
+      checkAnswer(res, Nil)
+    }
+    assert(error5.toString contains "UNEXPECTED_INPUT_TYPE")
   }
 }
 
