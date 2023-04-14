@@ -109,7 +109,7 @@ object ExpressionEncoder {
       }
 
       if (enc.objSerializer.nullable) {
-        If (IsNull(input), Literal.create(null, newDeserializer.dataType), newDeserializer)
+        If(IsNull(input), Literal.create(null, newDeserializer.dataType), newDeserializer)
       } else {
         newDeserializer
       }
