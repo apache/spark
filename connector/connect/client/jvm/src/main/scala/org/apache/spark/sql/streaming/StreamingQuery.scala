@@ -30,8 +30,8 @@ import org.apache.spark.connect.proto.StreamingQueryCommandResult
 import org.apache.spark.sql.SparkSession
 
 /**
- * A handle to a query that is executing continuously in the background as new data arrives.
- * All these methods are thread-safe.
+ * A handle to a query that is executing continuously in the background as new data arrives. All
+ * these methods are thread-safe.
  * @since 3.5.0
  */
 @Evolving
@@ -39,19 +39,19 @@ trait StreamingQuery {
   // This is a copy of StreamingQuery in sql/core/.../streaming/StreamingQuery.scala
 
   /**
-   * Returns the user-specified name of the query, or null if not specified.
-   * This name can be specified in the `org.apache.spark.sql.streaming.DataStreamWriter`
-   * as `dataframe.writeStream.queryName("query").start()`.
-   * This name, if set, must be unique across all active queries.
+   * Returns the user-specified name of the query, or null if not specified. This name can be
+   * specified in the `org.apache.spark.sql.streaming.DataStreamWriter` as
+   * `dataframe.writeStream.queryName("query").start()`. This name, if set, must be unique across
+   * all active queries.
    *
    * @since 3.5.0
    */
   def name: String
 
   /**
-   * Returns the unique id of this query that persists across restarts from checkpoint data.
-   * That is, this id is generated when a query is started for the first time, and
-   * will be the same every time it is restarted from checkpoint data. Also see [[runId]].
+   * Returns the unique id of this query that persists across restarts from checkpoint data. That
+   * is, this id is generated when a query is started for the first time, and will be the same
+   * every time it is restarted from checkpoint data. Also see [[runId]].
    *
    * @since 3.5.0
    */
@@ -59,8 +59,8 @@ trait StreamingQuery {
 
   /**
    * Returns the unique id of this run of the query. That is, every start/restart of a query will
-   * generate a unique runId. Therefore, every time a query is restarted from
-   * checkpoint, it will have the same [[id]] but different [[runId]]s.
+   * generate a unique runId. Therefore, every time a query is restarted from checkpoint, it will
+   * have the same [[id]] but different [[runId]]s.
    */
   def runId: UUID
 
@@ -86,8 +86,8 @@ trait StreamingQuery {
   def status: StreamingQueryStatus
 
   /**
-   * Returns an array of the most recent [[StreamingQueryProgress]] updates for this query.
-   * The number of progress updates retained for each stream is configured by Spark session
+   * Returns an array of the most recent [[StreamingQueryProgress]] updates for this query. The
+   * number of progress updates retained for each stream is configured by Spark session
    * configuration `spark.sql.streaming.numRecentProgressUpdates`.
    *
    * @since 3.5.0
@@ -104,9 +104,10 @@ trait StreamingQuery {
   /**
    * Blocks until all available data in the source has been processed and committed to the sink.
    * This method is intended for testing. Note that in the case of continually arriving data, this
-   * method may block forever. Additionally, this method is only guaranteed to block until data that
-   * has been synchronously appended data to a `org.apache.spark.sql.execution.streaming.Source`
-   * prior to invocation. (i.e. `getOffset` must immediately reflect the addition).
+   * method may block forever. Additionally, this method is only guaranteed to block until data
+   * that has been synchronously appended data to a
+   * `org.apache.spark.sql.execution.streaming.Source` prior to invocation. (i.e. `getOffset` must
+   * immediately reflect the addition).
    * @since 3.5.0
    */
   def processAllAvailable(): Unit
@@ -134,17 +135,19 @@ trait StreamingQuery {
   /**
    * Prints the physical plan to the console for debugging purposes.
    *
-   * @param extended whether to do extended explain or not
+   * @param extended
+   *   whether to do extended explain or not
    * @since 3.5.0
    */
   def explain(extended: Boolean): Unit
 }
 
 class RemoteStreamingQuery(
-  override val id: UUID,
-  override val runId: UUID,
-  override val name: String,
-  override val sparkSession: SparkSession) extends StreamingQuery {
+    override val id: UUID,
+    override val runId: UUID,
+    override val name: String,
+    override val sparkSession: SparkSession)
+    extends StreamingQuery {
 
   override def isActive: Boolean = {
     executeQueryCmd(_.setStatus(true)).getStatus.getIsActive
@@ -155,25 +158,18 @@ class RemoteStreamingQuery(
     new StreamingQueryStatus(
       message = statusResp.getStatusMessage,
       isDataAvailable = statusResp.getIsDataAvailable,
-      isTriggerActive = statusResp.getIsTriggerActive
-    )
+      isTriggerActive = statusResp.getIsTriggerActive)
   }
 
   override def recentProgress: Array[StreamingQueryProgress] = {
-    executeQueryCmd(_.setRecentProgress(true))
-      .getRecentProgress
-      .getRecentProgressJsonList
-      .asScala
+    executeQueryCmd(_.setRecentProgress(true)).getRecentProgress.getRecentProgressJsonList.asScala
       .map(json => new StreamingQueryProgress(json))
       .toArray
   }
 
   override def lastProgress: StreamingQueryProgress = {
-    executeQueryCmd(_.setLastProgress(true))
-      .getRecentProgress
-      .getRecentProgressJsonList
-      .asScala
-      .headOption
+    executeQueryCmd(
+      _.setLastProgress(true)).getRecentProgress.getRecentProgressJsonList.asScala.headOption
       .map(json => new StreamingQueryProgress(json))
       .orNull
   }
@@ -191,14 +187,12 @@ class RemoteStreamingQuery(
   }
 
   override def explain(extended: Boolean): Unit = {
-    val explainCmd = StreamingQueryCommand
-      .ExplainCommand.newBuilder()
+    val explainCmd = StreamingQueryCommand.ExplainCommand
+      .newBuilder()
       .setExtended(extended)
       .build()
 
-    val explain = executeQueryCmd(_.setExplain(explainCmd))
-      .getExplain
-      .getResult
+    val explain = executeQueryCmd(_.setExplain(explainCmd)).getExplain.getResult
 
     // scalastyle:off println
     println(explain)
@@ -206,15 +200,14 @@ class RemoteStreamingQuery(
   }
 
   private def executeQueryCmd(
-    setCmdFn: StreamingQueryCommand.Builder => Unit // Sets the command field, like stop().
+      setCmdFn: StreamingQueryCommand.Builder => Unit // Sets the command field, like stop().
   ): StreamingQueryCommandResult = {
 
     val cmdBuilder = Command.newBuilder()
     val queryCmdBuilder = cmdBuilder.getStreamingQueryCommandBuilder
 
     // Set queryId.
-    queryCmdBuilder
-      .getQueryIdBuilder
+    queryCmdBuilder.getQueryIdBuilder
       .setId(id.toString)
       .setRunId(runId.toString)
 
@@ -234,8 +227,8 @@ class RemoteStreamingQuery(
 object RemoteStreamingQuery {
 
   def fromStartCommandResponse(
-    sparkSession: SparkSession,
-    response: ExecutePlanResponse): RemoteStreamingQuery = {
+      sparkSession: SparkSession,
+      response: ExecutePlanResponse): RemoteStreamingQuery = {
 
     if (!response.hasWriteStreamOperationStartResult) {
       throw new RuntimeException("Unexpected: No result in response for start stream command")
@@ -247,10 +240,6 @@ object RemoteStreamingQuery {
       id = UUID.fromString(result.getQueryId.getId),
       runId = UUID.fromString(result.getQueryId.getRunId),
       name = if (result.getName.isEmpty) null else result.getName,
-      sparkSession = sparkSession
-    )
+      sparkSession = sparkSession)
   }
 }
-
-// TODO(SPARK-43134): Improve Exception API in Scala.
-class StreamingQueryException private[sql]() extends Exception

@@ -53,8 +53,7 @@ class StreamingQuerySuite extends RemoteSparkSession with SQLHelper {
       // Start the query
       val queryName = "sparkConnectStreamingQuery"
 
-      val query = countsDF
-        .writeStream
+      val query = countsDF.writeStream
         .format("memory")
         .queryName(queryName)
         .trigger(Trigger.ProcessingTime("1 second"))
