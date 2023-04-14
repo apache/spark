@@ -471,7 +471,6 @@ class SparkSession private[sql] (
     client.execute(plan).asScala.toSeq
   }
 
-
   @DeveloperApi
   def execute(extension: com.google.protobuf.Any): Unit = {
     val command = proto.Command.newBuilder().setExtension(extension).build()

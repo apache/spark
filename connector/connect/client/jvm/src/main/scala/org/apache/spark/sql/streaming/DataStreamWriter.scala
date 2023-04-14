@@ -39,20 +39,16 @@ import org.apache.spark.sql.execution.streaming.ProcessingTimeTrigger
  * @since 3.5.0
  */
 @Evolving
-final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
+final class DataStreamWriter[T] private[sql] (ds: Dataset[T]) {
 
   /**
-   * Specifies how data of a streaming DataFrame/Dataset is written to a streaming sink.
-   * <ul>
-   * <li> `OutputMode.Append()`: only the new rows in the streaming DataFrame/Dataset will be
-   * written to the sink.</li>
-   * <li> `OutputMode.Complete()`: all the rows in the streaming DataFrame/Dataset will be written
-   * to the sink every time there are some updates.</li>
-   * <li> `OutputMode.Update()`: only the rows that were updated in the streaming
-   * DataFrame/Dataset will be written to the sink every time there are some updates.
-   * If the query doesn't contain aggregations, it will be equivalent to
-   * `OutputMode.Append()` mode.</li>
-   * </ul>
+   * Specifies how data of a streaming DataFrame/Dataset is written to a streaming sink. <ul> <li>
+   * `OutputMode.Append()`: only the new rows in the streaming DataFrame/Dataset will be written
+   * to the sink.</li> <li> `OutputMode.Complete()`: all the rows in the streaming
+   * DataFrame/Dataset will be written to the sink every time there are some updates.</li> <li>
+   * `OutputMode.Update()`: only the rows that were updated in the streaming DataFrame/Dataset
+   * will be written to the sink every time there are some updates. If the query doesn't contain
+   * aggregations, it will be equivalent to `OutputMode.Append()` mode.</li> </ul>
    *
    * @since 3.5.0
    */
@@ -62,16 +58,13 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
   }
 
   /**
-   * Specifies how data of a streaming DataFrame/Dataset is written to a streaming sink.
-   * <ul>
-   * <li> `append`: only the new rows in the streaming DataFrame/Dataset will be written to
-   * the sink.</li>
-   * <li> `complete`: all the rows in the streaming DataFrame/Dataset will be written to the sink
-   * every time there are some updates.</li>
-   * <li> `update`: only the rows that were updated in the streaming DataFrame/Dataset will
-   * be written to the sink every time there are some updates. If the query doesn't
-   * contain aggregations, it will be equivalent to `append` mode.</li>
-   * </ul>
+   * Specifies how data of a streaming DataFrame/Dataset is written to a streaming sink. <ul> <li>
+   * `append`: only the new rows in the streaming DataFrame/Dataset will be written to the
+   * sink.</li> <li> `complete`: all the rows in the streaming DataFrame/Dataset will be written
+   * to the sink every time there are some updates.</li> <li> `update`: only the rows that were
+   * updated in the streaming DataFrame/Dataset will be written to the sink every time there are
+   * some updates. If the query doesn't contain aggregations, it will be equivalent to `append`
+   * mode.</li> </ul>
    *
    * @since 3.5.0
    */
@@ -81,8 +74,8 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
   }
 
   /**
-   * Set the trigger for the stream query. The default value is `ProcessingTime(0)` and it will run
-   * the query as fast as possible.
+   * Set the trigger for the stream query. The default value is `ProcessingTime(0)` and it will
+   * run the query as fast as possible.
    *
    * Scala Example:
    * {{{
@@ -117,8 +110,8 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
   }
 
   /**
-   * Specifies the name of the [[StreamingQuery]] that can be started with `start()`.
-   * This name must be unique among all the currently active queries in the associated SQLContext.
+   * Specifies the name of the [[StreamingQuery]] that can be started with `start()`. This name
+   * must be unique among all the currently active queries in the associated SQLContext.
    *
    * @since 3.5.0
    */
@@ -142,15 +135,12 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
    * laid out on the file system similar to Hive's partitioning scheme. As an example, when we
    * partition a dataset by year and then month, the directory layout would look like:
    *
-   * <ul>
-   * <li> year=2016/month=01/</li>
-   * <li> year=2016/month=02/</li>
-   * </ul>
+   * <ul> <li> year=2016/month=01/</li> <li> year=2016/month=02/</li> </ul>
    *
-   * Partitioning is one of the most widely used techniques to optimize physical data layout.
-   * It provides a coarse-grained index for skipping unnecessary data reads when queries have
-   * predicates on the partitioned columns. In order for partitioning to work well, the number
-   * of distinct values in each column should typically be less than tens of thousands.
+   * Partitioning is one of the most widely used techniques to optimize physical data layout. It
+   * provides a coarse-grained index for skipping unnecessary data reads when queries have
+   * predicates on the partitioned columns. In order for partitioning to work well, the number of
+   * distinct values in each column should typically be less than tens of thousands.
    *
    * @since 3.5.0
    */
@@ -213,9 +203,9 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
   }
 
   /**
-   * Starts the execution of the streaming query, which will continually output results to the given
-   * path as new data arrives. The returned [[StreamingQuery]] object can be used to interact with
-   * the stream.
+   * Starts the execution of the streaming query, which will continually output results to the
+   * given path as new data arrives. The returned [[StreamingQuery]] object can be used to
+   * interact with the stream.
    *
    * @since 3.5.0
    */
@@ -225,16 +215,14 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
   }
 
   /**
-   * Starts the execution of the streaming query, which will continually output results to the given
-   * path as new data arrives. The returned [[StreamingQuery]] object can be used to interact with
-   * the stream. Throws a `TimeoutException` if the following conditions are met:
-   *  - Another run of the same streaming query, that is a streaming query
-   *    sharing the same checkpoint location, is already active on the same
-   *    Spark Driver
-   *  - The SQL configuration `spark.sql.streaming.stopActiveRunOnRestart`
-   *    is enabled
-   *  - The active run cannot be stopped within the timeout controlled by
-   *    the SQL configuration `spark.sql.streaming.stopTimeout`
+   * Starts the execution of the streaming query, which will continually output results to the
+   * given path as new data arrives. The returned [[StreamingQuery]] object can be used to
+   * interact with the stream. Throws a `TimeoutException` if the following conditions are met:
+   *   - Another run of the same streaming query, that is a streaming query sharing the same
+   *     checkpoint location, is already active on the same Spark Driver
+   *   - The SQL configuration `spark.sql.streaming.stopActiveRunOnRestart` is enabled
+   *   - The active run cannot be stopped within the timeout controlled by the SQL configuration
+   *     `spark.sql.streaming.stopTimeout`
    *
    * @since 3.5.0
    */
@@ -254,18 +242,16 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
    */
   // def foreach(writer: ForeachWriter[T]): DataStreamWriter[T] = {
 
-
   /**
    * :: Experimental ::
    *
    * (Scala-specific) Sets the output of the streaming query to be processed using the provided
    * function. This is supported only in the micro-batch execution modes (that is, when the
    * trigger is not continuous). In every micro-batch, the provided function will be called in
-   * every micro-batch with (i) the output rows as a Dataset and (ii) the batch identifier.
-   * The batchId can be used to deduplicate and transactionally write the output
-   * (that is, the provided Dataset) to external systems. The output Dataset is guaranteed
-   * to be exactly the same for the same batchId (assuming all operations are deterministic
-   * in the query).
+   * every micro-batch with (i) the output rows as a Dataset and (ii) the batch identifier. The
+   * batchId can be used to deduplicate and transactionally write the output (that is, the
+   * provided Dataset) to external systems. The output Dataset is guaranteed to be exactly the
+   * same for the same batchId (assuming all operations are deterministic in the query).
    *
    * @since 3.5.0
    */
@@ -280,11 +266,10 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
    * (Java-specific) Sets the output of the streaming query to be processed using the provided
    * function. This is supported only in the micro-batch execution modes (that is, when the
    * trigger is not continuous). In every micro-batch, the provided function will be called in
-   * every micro-batch with (i) the output rows as a Dataset and (ii) the batch identifier.
-   * The batchId can be used to deduplicate and transactionally write the output
-   * (that is, the provided Dataset) to external systems. The output Dataset is guaranteed
-   * to be exactly the same for the same batchId (assuming all operations are deterministic
-   * in the query).
+   * every micro-batch with (i) the output rows as a Dataset and (ii) the batch identifier. The
+   * batchId can be used to deduplicate and transactionally write the output (that is, the
+   * provided Dataset) to external systems. The output Dataset is guaranteed to be exactly the
+   * same for the same batchId (assuming all operations are deterministic in the query).
    *
    * @since 3.5.0
    */

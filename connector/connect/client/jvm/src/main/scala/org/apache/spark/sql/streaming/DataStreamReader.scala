@@ -33,7 +33,7 @@ import org.apache.spark.sql.types.StructType
  * @since 3.5.0
  */
 @Evolving
-final class DataStreamReader private[sql](sparkSession: SparkSession) {
+final class DataStreamReader private[sql] (sparkSession: SparkSession) {
 
   /**
    * Specifies the input data source format.
@@ -45,11 +45,10 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) {
     this
   }
 
-
   /**
    * Specifies the input schema. Some data sources (e.g. JSON) can infer the input schema
-   * automatically from data. By specifying the schema here, the underlying data source can
-   * skip the schema inference step, and thus speed up data loading.
+   * automatically from data. By specifying the schema here, the underlying data source can skip
+   * the schema inference step, and thus speed up data loading.
    *
    * @since 3.5.0
    */
@@ -61,9 +60,9 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) {
   }
 
   /**
-   * Specifies the schema by using the input DDL-formatted string. Some data sources (e.g. JSON) can
-   * infer the input schema automatically from data. By specifying the schema here, the underlying
-   * data source can skip the schema inference step, and thus speed up data loading.
+   * Specifies the schema by using the input DDL-formatted string. Some data sources (e.g. JSON)
+   * can infer the input schema automatically from data. By specifying the schema here, the
+   * underlying data source can skip the schema inference step, and thus speed up data loading.
    *
    * @since 3.5.0
    */
@@ -123,17 +122,15 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) {
     this
   }
 
-
   /**
-   * Loads input data stream in as a `DataFrame`, for data streams that don't require a path
-   * (e.g. external key-value stores).
+   * Loads input data stream in as a `DataFrame`, for data streams that don't require a path (e.g.
+   * external key-value stores).
    *
    * @since 3.5.0
    */
   def load(): DataFrame = {
     sparkSession.newDataFrame { relationBuilder =>
-      relationBuilder
-        .getReadBuilder
+      relationBuilder.getReadBuilder
         .setIsStreaming(true)
         .setDataSource(sourceBuilder.build())
     }
@@ -159,15 +156,12 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) {
    * This function goes through the input once to determine the input schema. If you know the
    * schema in advance, use the version that specifies the schema to avoid the extra scan.
    *
-   * You can set the following option(s):
-   * <ul>
-   * <li>`maxFilesPerTrigger` (default: no max limit): sets the maximum number of new files to be
-   * considered in every trigger.</li>
-   * </ul>
+   * You can set the following option(s): <ul> <li>`maxFilesPerTrigger` (default: no max limit):
+   * sets the maximum number of new files to be considered in every trigger.</li> </ul>
    *
-   * You can find the JSON-specific options for reading JSON file stream in
-   * <a href="https://spark.apache.org/docs/latest/sql-data-sources-json.html#data-source-option">
-   *   Data Source Option</a> in the version you use.
+   * You can find the JSON-specific options for reading JSON file stream in <a
+   * href="https://spark.apache.org/docs/latest/sql-data-sources-json.html#data-source-option">
+   * Data Source Option</a> in the version you use.
    *
    * @since 3.5.0
    */
@@ -182,15 +176,12 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) {
    * is enabled. To avoid going through the entire data once, disable `inferSchema` option or
    * specify the schema explicitly using `schema`.
    *
-   * You can set the following option(s):
-   * <ul>
-   * <li>`maxFilesPerTrigger` (default: no max limit): sets the maximum number of new files to be
-   * considered in every trigger.</li>
-   * </ul>
+   * You can set the following option(s): <ul> <li>`maxFilesPerTrigger` (default: no max limit):
+   * sets the maximum number of new files to be considered in every trigger.</li> </ul>
    *
-   * You can find the CSV-specific options for reading CSV file stream in
-   * <a href="https://spark.apache.org/docs/latest/sql-data-sources-csv.html#data-source-option">
-   *   Data Source Option</a> in the version you use.
+   * You can find the CSV-specific options for reading CSV file stream in <a
+   * href="https://spark.apache.org/docs/latest/sql-data-sources-csv.html#data-source-option">
+   * Data Source Option</a> in the version you use.
    *
    * @since 3.5.0
    */
@@ -199,16 +190,12 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) {
   /**
    * Loads a ORC file stream, returning the result as a `DataFrame`.
    *
-   * You can set the following option(s):
-   * <ul>
-   * <li>`maxFilesPerTrigger` (default: no max limit): sets the maximum number of new files to be
-   * considered in every trigger.</li>
-   * </ul>
+   * You can set the following option(s): <ul> <li>`maxFilesPerTrigger` (default: no max limit):
+   * sets the maximum number of new files to be considered in every trigger.</li> </ul>
    *
-   * ORC-specific option(s) for reading ORC file stream can be found in
-   * <a href=
-   *   "https://spark.apache.org/docs/latest/sql-data-sources-orc.html#data-source-option">
-   *   Data Source Option</a> in the version you use.
+   * ORC-specific option(s) for reading ORC file stream can be found in <a href=
+   * "https://spark.apache.org/docs/latest/sql-data-sources-orc.html#data-source-option"> Data
+   * Source Option</a> in the version you use.
    *
    * @since 3.5.0
    */
@@ -219,16 +206,12 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) {
   /**
    * Loads a Parquet file stream, returning the result as a `DataFrame`.
    *
-   * You can set the following option(s):
-   * <ul>
-   * <li>`maxFilesPerTrigger` (default: no max limit): sets the maximum number of new files to be
-   * considered in every trigger.</li>
-   * </ul>
+   * You can set the following option(s): <ul> <li>`maxFilesPerTrigger` (default: no max limit):
+   * sets the maximum number of new files to be considered in every trigger.</li> </ul>
    *
-   * Parquet-specific option(s) for reading Parquet file stream can be found in
-   * <a href=
-   *   "https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#data-source-option">
-   *   Data Source Option</a> in the version you use.
+   * Parquet-specific option(s) for reading Parquet file stream can be found in <a href=
+   * "https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#data-source-option"> Data
+   * Source Option</a> in the version you use.
    *
    * @since 3.5.0
    */
@@ -239,7 +222,8 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) {
   /**
    * Define a Streaming DataFrame on a Table. The DataSource corresponding to the table should
    * support streaming mode.
-   * @param tableName The name of the table
+   * @param tableName
+   *   The name of the table
    * @since 3.5.0
    */
   def table(tableName: String): DataFrame = {
@@ -249,8 +233,8 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) {
 
   /**
    * Loads text files and returns a `DataFrame` whose schema starts with a string column named
-   * "value", and followed by partitioned columns if there are any.
-   * The text files must be encoded as UTF-8.
+   * "value", and followed by partitioned columns if there are any. The text files must be encoded
+   * as UTF-8.
    *
    * By default, each line in the text files is a new row in the resulting DataFrame. For example:
    * {{{
@@ -261,15 +245,12 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) {
    *   spark.readStream().text("/path/to/directory/")
    * }}}
    *
-   * You can set the following option(s):
-   * <ul>
-   * <li>`maxFilesPerTrigger` (default: no max limit): sets the maximum number of new files to be
-   * considered in every trigger.</li>
-   * </ul>
+   * You can set the following option(s): <ul> <li>`maxFilesPerTrigger` (default: no max limit):
+   * sets the maximum number of new files to be considered in every trigger.</li> </ul>
    *
-   * You can find the text-specific options for reading text files in
-   * <a href="https://spark.apache.org/docs/latest/sql-data-sources-text.html#data-source-option">
-   *   Data Source Option</a> in the version you use.
+   * You can find the text-specific options for reading text files in <a
+   * href="https://spark.apache.org/docs/latest/sql-data-sources-text.html#data-source-option">
+   * Data Source Option</a> in the version you use.
    *
    * @since 3.5.0
    */
@@ -277,13 +258,13 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) {
 
   /**
    * Loads text file(s) and returns a `Dataset` of String. The underlying schema of the Dataset
-   * contains a single string column named "value".
-   * The text files must be encoded as UTF-8.
+   * contains a single string column named "value". The text files must be encoded as UTF-8.
    *
    * If the directory structure of the text files contains partitioning information, those are
    * ignored in the resulting Dataset. To include partitioning information as columns, use `text`.
    *
-   * By default, each line in the text file is a new element in the resulting Dataset. For example:
+   * By default, each line in the text file is a new element in the resulting Dataset. For
+   * example:
    * {{{
    *   // Scala:
    *   spark.readStream.textFile("/path/to/spark/README.md")
@@ -294,7 +275,8 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) {
    *
    * You can set the text-specific options as specified in `DataStreamReader.text`.
    *
-   * @param path input path
+   * @param path
+   *   input path
    * @since 3.5.0
    */
   def textFile(path: String): Dataset[String] = {

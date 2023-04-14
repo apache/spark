@@ -130,8 +130,7 @@ object CheckConnectJvmClientCompatibility {
       IncludeByName("org.apache.spark.sql.streaming.DataStreamReader.*"),
       IncludeByName("org.apache.spark.sql.streaming.DataStreamWriter.*"),
       IncludeByName("org.apache.spark.sql.streaming.StreamingQuery.*"),
-      IncludeByName("org.apache.spark.sql.streaming.StreamingQueryStatus.*")
-    )
+      IncludeByName("org.apache.spark.sql.streaming.StreamingQueryStatus.*"))
     val excludeRules = Seq(
       // Filter unsupported rules:
       // Note when muting errors for a method, checks on all overloading methods are also muted.

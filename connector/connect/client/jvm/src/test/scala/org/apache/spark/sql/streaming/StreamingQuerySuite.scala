@@ -33,8 +33,7 @@ class StreamingQuerySuite extends RemoteSparkSession with SQLHelper {
     withSQLConf(
       "spark.sql.shuffle.partitions" -> "1" // Avoid too many reducers.
     ) {
-      val readDF = spark
-        .readStream
+      val readDF = spark.readStream
         .format("rate")
         .option("rowsPerSecond", "10")
         .option("numPartitions", "1")
@@ -47,18 +46,14 @@ class StreamingQuerySuite extends RemoteSparkSession with SQLHelper {
         .withWatermark("timestamp", "10 seconds")
         .groupBy(window(col("timestamp"), "5 seconds"))
         .count()
-        .selectExpr(
-          "window.start as timestamp",
-          "count as num_events"
-        )
+        .selectExpr("window.start as timestamp", "count as num_events")
 
       assert(countsDF.schema.toDDL == "timestamp TIMESTAMP,num_events BIGINT NOT NULL")
 
       // Start the query
       val queryName = "sparkConnectStreamingQuery"
 
-      val query = countsDF
-        .writeStream
+      val query = countsDF.writeStream
         .format("memory")
         .queryName(queryName)
         .trigger(Trigger.ProcessingTime("1 second"))
@@ -66,12 +61,13 @@ class StreamingQuerySuite extends RemoteSparkSession with SQLHelper {
 
       // Verify some of the API.
       assert(query.isActive)
-      query.explain()
 
       eventually(timeout(10.seconds)) {
         assert(query.status.isDataAvailable)
         assert(query.recentProgress.length > 0) // Query made progress.
       }
+
+      query.explain() // Prints to console.
 
       // Don't wait for any processed data. Otherwise the test could take multiple seconds.
       query.stop()
