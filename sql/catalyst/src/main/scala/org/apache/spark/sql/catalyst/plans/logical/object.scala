@@ -703,3 +703,20 @@ case class CoGroup(
   override protected def withNewChildrenInternal(
       newLeft: LogicalPlan, newRight: LogicalPlan): CoGroup = copy(left = newLeft, right = newRight)
 }
+
+private[sql] object UntypedAggUtils {
+  def aggKeyColumn[A](
+      encoder: ExpressionEncoder[A],
+      groupingAttributes: Seq[Attribute]): NamedExpression = {
+    if (!encoder.isSerializedAsStructForTopLevel) {
+      assert(groupingAttributes.length == 1)
+      if (SQLConf.get.nameNonStructGroupingKeyAsValue) {
+        groupingAttributes.head
+      } else {
+        Alias(groupingAttributes.head, "key")()
+      }
+    } else {
+      Alias(CreateStruct(groupingAttributes), "key")()
+    }
+  }
+}

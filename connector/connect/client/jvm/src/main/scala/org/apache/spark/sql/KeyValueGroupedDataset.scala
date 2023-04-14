@@ -26,6 +26,7 @@ import org.apache.spark.api.java.function._
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
 import org.apache.spark.sql.connect.common.UdfUtils
+import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.ProductEncoder
 import org.apache.spark.sql.expressions.ScalarUserDefinedFunction
 import org.apache.spark.sql.functions.col
 
@@ -240,6 +241,131 @@ abstract class KeyValueGroupedDataset[K, V] private[sql] () extends Serializable
   }
 
   /**
+   * Internal helper function for building typed aggregations that return tuples. For simplicity
+   * and code reuse, we do this without the help of the type system and then use helper functions
+   * that cast appropriately for the user facing interface.
+   */
+  protected def aggUntyped(columns: TypedColumn[_, _]*): Dataset[_] = {
+    throw new UnsupportedOperationException
+  }
+
+  /**
+   * Computes the given aggregation, returning a [[Dataset]] of tuples for each unique key and the
+   * result of computing this aggregation over all elements in the group.
+   *
+   * @since 3.5.0
+   */
+  def agg[U1](col1: TypedColumn[V, U1]): Dataset[(K, U1)] =
+    aggUntyped(col1).asInstanceOf[Dataset[(K, U1)]]
+
+  /**
+   * Computes the given aggregations, returning a [[Dataset]] of tuples for each unique key and
+   * the result of computing these aggregations over all elements in the group.
+   *
+   * @since 3.5.0
+   */
+  def agg[U1, U2](col1: TypedColumn[V, U1], col2: TypedColumn[V, U2]): Dataset[(K, U1, U2)] =
+    aggUntyped(col1, col2).asInstanceOf[Dataset[(K, U1, U2)]]
+
+  /**
+   * Computes the given aggregations, returning a [[Dataset]] of tuples for each unique key and
+   * the result of computing these aggregations over all elements in the group.
+   *
+   * @since 3.5.0
+   */
+  def agg[U1, U2, U3](
+      col1: TypedColumn[V, U1],
+      col2: TypedColumn[V, U2],
+      col3: TypedColumn[V, U3]): Dataset[(K, U1, U2, U3)] =
+    aggUntyped(col1, col2, col3).asInstanceOf[Dataset[(K, U1, U2, U3)]]
+
+  /**
+   * Computes the given aggregations, returning a [[Dataset]] of tuples for each unique key and
+   * the result of computing these aggregations over all elements in the group.
+   *
+   * @since 3.5.0
+   */
+  def agg[U1, U2, U3, U4](
+      col1: TypedColumn[V, U1],
+      col2: TypedColumn[V, U2],
+      col3: TypedColumn[V, U3],
+      col4: TypedColumn[V, U4]): Dataset[(K, U1, U2, U3, U4)] =
+    aggUntyped(col1, col2, col3, col4).asInstanceOf[Dataset[(K, U1, U2, U3, U4)]]
+
+  /**
+   * Computes the given aggregations, returning a [[Dataset]] of tuples for each unique key and
+   * the result of computing these aggregations over all elements in the group.
+   *
+   * @since 3.5.0
+   */
+  def agg[U1, U2, U3, U4, U5](
+      col1: TypedColumn[V, U1],
+      col2: TypedColumn[V, U2],
+      col3: TypedColumn[V, U3],
+      col4: TypedColumn[V, U4],
+      col5: TypedColumn[V, U5]): Dataset[(K, U1, U2, U3, U4, U5)] =
+    aggUntyped(col1, col2, col3, col4, col5).asInstanceOf[Dataset[(K, U1, U2, U3, U4, U5)]]
+
+  /**
+   * Computes the given aggregations, returning a [[Dataset]] of tuples for each unique key and
+   * the result of computing these aggregations over all elements in the group.
+   *
+   * @since 3.5.0
+   */
+  def agg[U1, U2, U3, U4, U5, U6](
+      col1: TypedColumn[V, U1],
+      col2: TypedColumn[V, U2],
+      col3: TypedColumn[V, U3],
+      col4: TypedColumn[V, U4],
+      col5: TypedColumn[V, U5],
+      col6: TypedColumn[V, U6]): Dataset[(K, U1, U2, U3, U4, U5, U6)] =
+    aggUntyped(col1, col2, col3, col4, col5, col6)
+      .asInstanceOf[Dataset[(K, U1, U2, U3, U4, U5, U6)]]
+
+  /**
+   * Computes the given aggregations, returning a [[Dataset]] of tuples for each unique key and
+   * the result of computing these aggregations over all elements in the group.
+   *
+   * @since 3.5.0
+   */
+  def agg[U1, U2, U3, U4, U5, U6, U7](
+      col1: TypedColumn[V, U1],
+      col2: TypedColumn[V, U2],
+      col3: TypedColumn[V, U3],
+      col4: TypedColumn[V, U4],
+      col5: TypedColumn[V, U5],
+      col6: TypedColumn[V, U6],
+      col7: TypedColumn[V, U7]): Dataset[(K, U1, U2, U3, U4, U5, U6, U7)] =
+    aggUntyped(col1, col2, col3, col4, col5, col6, col7)
+      .asInstanceOf[Dataset[(K, U1, U2, U3, U4, U5, U6, U7)]]
+
+  /**
+   * Computes the given aggregations, returning a [[Dataset]] of tuples for each unique key and
+   * the result of computing these aggregations over all elements in the group.
+   *
+   * @since 3.5.0
+   */
+  def agg[U1, U2, U3, U4, U5, U6, U7, U8](
+      col1: TypedColumn[V, U1],
+      col2: TypedColumn[V, U2],
+      col3: TypedColumn[V, U3],
+      col4: TypedColumn[V, U4],
+      col5: TypedColumn[V, U5],
+      col6: TypedColumn[V, U6],
+      col7: TypedColumn[V, U7],
+      col8: TypedColumn[V, U8]): Dataset[(K, U1, U2, U3, U4, U5, U6, U7, U8)] =
+    aggUntyped(col1, col2, col3, col4, col5, col6, col7, col8)
+      .asInstanceOf[Dataset[(K, U1, U2, U3, U4, U5, U6, U7, U8)]]
+
+  /**
+   * Returns a [[Dataset]] that contains a tuple with each key and the number of items present for
+   * that key.
+   *
+   * @since 3.5.0
+   */
+  def count(): Dataset[(K, Long)] = agg(functions.count("*"))
+
+  /**
    * (Scala-specific) Applies the given function to each cogrouped data. For each unique group,
    * the function will be passed the grouping key and 2 iterators containing all elements in the
    * group from [[Dataset]] `this` and `other`. The function can return an iterator containing
@@ -328,6 +454,7 @@ private class KeyValueGroupedDatasetImpl[K, V, IK, IV](
     private val ikEncoder: AgnosticEncoder[IK],
     private val kEncoder: AgnosticEncoder[K],
     private val groupingFunc: IV => IK,
+    private val vEncoder: AgnosticEncoder[V],
     private val valueMapFunc: IV => V)
     extends KeyValueGroupedDataset[K, V] {
 
@@ -341,6 +468,7 @@ private class KeyValueGroupedDatasetImpl[K, V, IK, IV](
       ikEncoder,
       encoderFor[L],
       groupingFunc,
+      vEncoder,
       valueMapFunc)
   }
 
@@ -352,6 +480,7 @@ private class KeyValueGroupedDatasetImpl[K, V, IK, IV](
       ikEncoder,
       kEncoder,
       groupingFunc,
+      encoderFor[W],
       valueMapFunc.andThen(valueFunc))
   }
 
@@ -393,6 +522,18 @@ private class KeyValueGroupedDatasetImpl[K, V, IK, IV](
         .addAllOtherGroupingExpressions(otherImpl.getGroupingExpressions)
         .addAllOtherSortingExpressions(otherSortExprs.map(e => e.expr).asJava)
         .setFunc(getUdf(nf, outputEncoder)(ivEncoder, otherImpl.ivEncoder))
+    }
+  }
+
+  override protected def aggUntyped(columns: TypedColumn[_, _]*): Dataset[_] = {
+    // TODO: For each column, apply the valueMap func first
+    val rEnc = ProductEncoder.tuple(kEncoder +: columns.map(_.encoder)) // apply keyAs change
+    sparkSession.newDataset(rEnc) { builder =>
+      builder.getAggregateBuilder
+        .setInput(plan.getRoot)
+        .setGroupType(proto.Aggregate.GroupType.GROUP_TYPE_GROUPBYKEY)
+        .addAllGroupingExpressions(getGroupingExpressions)
+        .addAllAggregateExpressions(columns.map(_.expr).asJava)
     }
   }
 

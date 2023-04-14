@@ -215,4 +215,15 @@ class KeyValueGroupedDatasetE2ETestSuite extends RemoteSparkSession {
         "4",
         ";9,8"))
   }
+
+  test("agg") {
+    val values = spark
+      .range(10)
+      .groupByKey(v => v % 2)(PrimitiveLongEncoder)
+      .keyAs[Double](PrimitiveDoubleEncoder)
+      .agg(functions.count("*"))
+      .collectAsList()
+
+    assert(values == Arrays.asList[(Long, Double)]((0, 5), (1, 5)))
+  }
 }

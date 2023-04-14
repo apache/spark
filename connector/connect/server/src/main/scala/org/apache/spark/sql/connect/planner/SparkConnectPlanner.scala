@@ -40,7 +40,7 @@ import org.apache.spark.connect.proto.StreamingQueryManagerCommandResult.Streami
 import org.apache.spark.connect.proto.WriteStreamOperationStart
 import org.apache.spark.connect.proto.WriteStreamOperationStart.TriggerCase
 import org.apache.spark.ml.{functions => MLFunctions}
-import org.apache.spark.sql.{Column, Dataset, Encoders, SparkSession}
+import org.apache.spark.sql.{Column, Dataset, Encoders, SparkSession, TypedColumn}
 import org.apache.spark.sql.avro.{AvroDataToCatalyst, CatalystDataToAvro}
 import org.apache.spark.sql.catalyst.{expressions, AliasIdentifier, FunctionIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{GlobalTempView, LocalTempView, MultiAlias, ParameterizedQuery, UnresolvedAlias, UnresolvedAttribute, UnresolvedDeserializer, UnresolvedExtractValue, UnresolvedFunction, UnresolvedRegex, UnresolvedRelation, UnresolvedStar}
@@ -720,7 +720,7 @@ class SparkConnectPlanner(val session: SparkSession) {
       // There might be more than one inputs, but we only interested in the first one.
       // Most typed API takes one UDF input.
       // For the few that takes more than one inputs, e.g. grouping function mapping UDFs,
-      // we only interested in the first input which is the key of the grouping function.
+      // the first input which is the key of the grouping function.
       assert(udf.inputEncoders.nonEmpty)
       val inEnc = ExpressionEncoder(udf.inputEncoders.head) // single input encoder or key encoder
       ScalaUdf(udf.function, outEnc, generateObjAttr(outEnc), inEnc, generateObjAttr(inEnc))
@@ -1852,7 +1852,33 @@ class SparkConnectPlanner(val session: SparkSession) {
     output.logicalPlan
   }
 
+  def transformKeyValueGroupedAggregate(rel: proto.Aggregate): LogicalPlan = {
+    val ds = UntypedKeyValueGroupedDataset(
+      rel.getInput,
+      rel.getGroupingExpressionsList,
+      java.util.Collections.emptyList())
+
+    val namedColumns = rel.getAggregateExpressionsList.asScala.toSeq.map(expr => {
+      // Use any encoder as a placeholder to perform the TypedColumn#withInputType transformation
+      val any = ds.vEncoder
+      val newExpr = new TypedColumn(transformExpression(expr), any)
+        .withInputType(ds.vEncoder, ds.dataAttributes).expr
+      Column(newExpr).named
+    })
+    val keyColumn = UntypedAggUtils.aggKeyColumn(ds.kEncoder, ds.groupingAttributes)
+    logical.Aggregate(ds.groupingAttributes, keyColumn +: namedColumns, ds.analyzed)
+  }
+
   private def transformAggregate(rel: proto.Aggregate): LogicalPlan = {
+    rel.getGroupType match {
+      case proto.Aggregate.GroupType.GROUP_TYPE_GROUPBYKEY =>
+        transformKeyValueGroupedAggregate(rel)
+      case _ =>
+        transformRelationalGroupedAggregate(rel)
+    }
+  }
+
+  private def transformRelationalGroupedAggregate(rel: proto.Aggregate): LogicalPlan = {
     if (!rel.hasInput) {
       throw InvalidPlanInput("Aggregate needs a plan input")
     }
