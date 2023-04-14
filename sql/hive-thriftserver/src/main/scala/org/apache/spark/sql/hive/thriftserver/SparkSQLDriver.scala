@@ -66,8 +66,8 @@ private[hive] class SparkSQLDriver(val context: SQLContext = SparkSQLEnv.sqlCont
       }
       context.sparkContext.setJobDescription(substitutorCommand)
       val execution = context.sessionState.executePlan(context.sql(command).logicalPlan)
-      // Command type sql have been executed when call `context.sql(command).logicalPlan`,
-      // here Spark SQL CLI don't need to wrap it with new execution id when get hive result.
+      // The SQL command has been executed above via `executePlan`, therefore we don't need to
+      // wrap it again with a new execution ID when getting Hive result
       execution.logical match {
         case _: CommandResult =>
           hiveResponse = hiveResultString(execution.executedPlan)
