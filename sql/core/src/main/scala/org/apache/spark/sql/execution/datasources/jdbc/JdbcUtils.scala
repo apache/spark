@@ -37,7 +37,7 @@ import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions.SpecificInternalRow
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
-import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils, GenericArrayData}
+import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CharVarcharUtils, DateTimeUtils, GenericArrayData}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{instantToMicros, localDateToDays, toJavaDate, toJavaTimestamp}
 import org.apache.spark.sql.connector.catalog.{Identifier, TableChange}
 import org.apache.spark.sql.connector.catalog.index.{SupportsIndex, TableIndex}
@@ -187,7 +187,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
     case java.sql.Types.BIT => BooleanType // @see JdbcDialect for quirks
     case java.sql.Types.BLOB => BinaryType
     case java.sql.Types.BOOLEAN => BooleanType
-    case java.sql.Types.CHAR => StringType
+    case java.sql.Types.CHAR => CharType(precision)
     case java.sql.Types.CLOB => StringType
     case java.sql.Types.DATE => DateType
     case java.sql.Types.DECIMAL if precision != 0 || scale != 0 =>
@@ -216,7 +216,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
     case java.sql.Types.TIMESTAMP => TimestampType
     case java.sql.Types.TINYINT => IntegerType
     case java.sql.Types.VARBINARY => BinaryType
-    case java.sql.Types.VARCHAR => StringType
+    case java.sql.Types.VARCHAR => VarcharType(precision)
     case _ =>
       // For unmatched types:
       // including java.sql.Types.ARRAY,DATALINK,DISTINCT,JAVA_OBJECT,NULL,OTHER,REF_CURSOR,
@@ -310,7 +310,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
       fields(i) = StructField(columnName, columnType, nullable, metadata.build())
       i = i + 1
     }
-    new StructType(fields)
+    CharVarcharUtils.replaceCharVarcharWithStringInSchema(new StructType(fields))
   }
 
   /**
@@ -378,10 +378,17 @@ object JdbcUtils extends Logging with SQLConfHelper {
    * Creates `JDBCValueGetter`s according to [[StructType]], which can set
    * each value from `ResultSet` to each field of [[InternalRow]] correctly.
    */
+<<<<<<< HEAD
   private def makeGetters(
       dialect: JdbcDialect,
       schema: StructType): Array[JDBCValueGetter] =
     schema.fields.map(sf => makeGetter(sf.dataType, dialect, sf.metadata))
+=======
+  private def makeGetters(schema: StructType): Array[JDBCValueGetter] = {
+    val replaced = CharVarcharUtils.replaceCharVarcharWithStringInSchema(schema)
+    replaced.fields.map(sf => makeGetter(sf.dataType, sf.metadata))
+  }
+>>>>>>> c73c7003c6f3a8caa1fe3c2de34b745227aa2f45
 
   private def makeGetter(
       dt: DataType,

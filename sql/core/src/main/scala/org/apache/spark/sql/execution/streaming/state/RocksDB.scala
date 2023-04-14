@@ -393,6 +393,7 @@ class RocksDB(
     val readerMemUsage = getDBProperty("rocksdb.estimate-table-readers-mem")
     val memTableMemUsage = getDBProperty("rocksdb.size-all-mem-tables")
     val blockCacheUsage = getDBProperty("rocksdb.block-cache-usage")
+    val pinnedBlocksMemUsage = getDBProperty("rocksdb.block-cache-pinned-usage")
     // Get the approximate memory usage of this writeBatchWithIndex
     val writeBatchMemUsage = writeBatch.getWriteBatch.getDataSize
     val nativeOpsHistograms = Seq(
@@ -431,6 +432,7 @@ class RocksDB(
       numKeysOnLoadedVersion,
       numKeysOnWritingVersion,
       readerMemUsage + memTableMemUsage + blockCacheUsage + writeBatchMemUsage,
+      pinnedBlocksMemUsage,
       writeBatchMemUsage,
       totalSSTFilesBytes,
       nativeOpsLatencyMicros.toMap,
@@ -708,6 +710,7 @@ case class RocksDBMetrics(
     numCommittedKeys: Long,
     numUncommittedKeys: Long,
     totalMemUsageBytes: Long,
+    pinnedBlocksMemUsage: Long,
     writeBatchMemUsageBytes: Long,
     totalSSTFilesBytes: Long,
     nativeOpsHistograms: Map[String, RocksDBNativeHistogram],

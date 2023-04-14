@@ -114,44 +114,69 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
   }
 
   /**
-   * Returns whether the plan is a simple filter over scan and the filter is likely selective
-   * Also check if the plan only has simple expressions (attribute reference, literals) so that we
-   * do not add a subquery that might have an expensive computation
+   * Extracts a sub-plan which is a simple filter over scan from the input plan. The simple
+   * filter should be selective and the filter condition (including expressions in the child
+   * plan referenced by the filter condition) should be a simple expression, so that we do
+   * not add a subquery that might have an expensive computation.
    */
-  private def isSelectiveFilterOverScan(plan: LogicalPlan): Boolean = {
+  private def extractSelectiveFilterOverScan(
+      plan: LogicalPlan,
+      filterCreationSideExp: Expression): Option[LogicalPlan] = {
     @tailrec
-    def isSelective(
+    def extract(
         p: LogicalPlan,
         predicateReference: AttributeSet,
         hasHitFilter: Boolean,
-        hasHitSelectiveFilter: Boolean): Boolean = p match {
-      case Project(projectList, child) =>
-        if (hasHitFilter) {
-          // We need to make sure all expressions referenced by filter predicates are simple
-          // expressions.
-          val referencedExprs = projectList.filter(predicateReference.contains)
-          referencedExprs.forall(isSimpleExpression) &&
-            isSelective(
-              child,
-              referencedExprs.map(_.references).foldLeft(AttributeSet.empty)(_ ++ _),
-              hasHitFilter,
-              hasHitSelectiveFilter)
+        hasHitSelectiveFilter: Boolean,
+        currentPlan: LogicalPlan): Option[LogicalPlan] = p match {
+      case Project(projectList, child) if hasHitFilter =>
+        // We need to make sure all expressions referenced by filter predicates are simple
+        // expressions.
+        val referencedExprs = projectList.filter(predicateReference.contains)
+        if (referencedExprs.forall(isSimpleExpression)) {
+          extract(
+            child,
+            referencedExprs.map(_.references).foldLeft(AttributeSet.empty)(_ ++ _),
+            hasHitFilter,
+            hasHitSelectiveFilter,
+            currentPlan)
         } else {
-          assert(predicateReference.isEmpty && !hasHitSelectiveFilter)
-          isSelective(child, predicateReference, hasHitFilter, hasHitSelectiveFilter)
+          None
         }
-      case Filter(condition, child) =>
-        isSimpleExpression(condition) && isSelective(
+      case Project(_, child) =>
+        assert(predicateReference.isEmpty && !hasHitSelectiveFilter)
+        extract(child, predicateReference, hasHitFilter, hasHitSelectiveFilter, currentPlan)
+      case Filter(condition, child) if isSimpleExpression(condition) =>
+        extract(
           child,
           predicateReference ++ condition.references,
           hasHitFilter = true,
-          hasHitSelectiveFilter = hasHitSelectiveFilter || isLikelySelective(condition))
-      case _: LeafNode => hasHitSelectiveFilter
-      case _ => false
+          hasHitSelectiveFilter = hasHitSelectiveFilter || isLikelySelective(condition),
+          currentPlan)
+      case ExtractEquiJoinKeys(_, _, _, _, _, left, right, _) =>
+        // Runtime filters use one side of the [[Join]] to build a set of join key values and prune
+        // the other side of the [[Join]]. It's also OK to use a superset of the join key values
+        // (ignore null values) to do the pruning.
+        if (left.output.exists(_.semanticEquals(filterCreationSideExp))) {
+          extract(left, AttributeSet.empty,
+            hasHitFilter = false, hasHitSelectiveFilter = false, currentPlan = left)
+        } else if (right.output.exists(_.semanticEquals(filterCreationSideExp))) {
+          extract(right, AttributeSet.empty,
+            hasHitFilter = false, hasHitSelectiveFilter = false, currentPlan = right)
+        } else {
+          None
+        }
+      case _: LeafNode if hasHitSelectiveFilter =>
+        Some(currentPlan)
+      case _ => None
     }
 
-    !plan.isStreaming &&
-      isSelective(plan, AttributeSet.empty, hasHitFilter = false, hasHitSelectiveFilter = false)
+    if (!plan.isStreaming) {
+      extract(plan, AttributeSet.empty,
+        hasHitFilter = false, hasHitSelectiveFilter = false, currentPlan = plan)
+    } else {
+      None
+    }
   }
 
   private def isSimpleExpression(e: Expression): Boolean = {
@@ -200,23 +225,28 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
   }
 
   /**
-   * Check that:
+   * Extracts the beneficial filter creation plan with check show below:
    * - The filterApplicationSideJoinExp can be pushed down through joins, aggregates and windows
    *   (ie the expression references originate from a single leaf node)
    * - The filter creation side has a selective predicate
    * - The current join is a shuffle join or a broadcast join that has a shuffle below it
    * - The max filterApplicationSide scan size is greater than a configurable threshold
    */
-  private def filteringHasBenefit(
+  private def extractBeneficialFilterCreatePlan(
       filterApplicationSide: LogicalPlan,
       filterCreationSide: LogicalPlan,
       filterApplicationSideExp: Expression,
-      hint: JoinHint): Boolean = {
-    findExpressionAndTrackLineageDown(filterApplicationSideExp,
-      filterApplicationSide).isDefined && isSelectiveFilterOverScan(filterCreationSide) &&
+      filterCreationSideExp: Expression,
+      hint: JoinHint): Option[LogicalPlan] = {
+    if (findExpressionAndTrackLineageDown(
+      filterApplicationSideExp, filterApplicationSide).isDefined &&
       (isProbablyShuffleJoin(filterApplicationSide, filterCreationSide, hint) ||
         probablyHasShuffle(filterApplicationSide)) &&
-      satisfyByteSizeRequirement(filterApplicationSide)
+      satisfyByteSizeRequirement(filterApplicationSide)) {
+      extractSelectiveFilterOverScan(filterCreationSide, filterCreationSideExp)
+    } else {
+      None
+    }
   }
 
   def hasRuntimeFilter(left: LogicalPlan, right: LogicalPlan, leftKey: Expression,
@@ -296,13 +326,18 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
             isSimpleExpression(l) && isSimpleExpression(r)) {
             val oldLeft = newLeft
             val oldRight = newRight
-            if (canPruneLeft(joinType) && filteringHasBenefit(left, right, l, hint)) {
-              newLeft = injectFilter(l, newLeft, r, right)
+            if (canPruneLeft(joinType)) {
+              extractBeneficialFilterCreatePlan(left, right, l, r, hint).foreach {
+                filterCreationSidePlan =>
+                  newLeft = injectFilter(l, newLeft, r, filterCreationSidePlan)
+              }
             }
             // Did we actually inject on the left? If not, try on the right
-            if (newLeft.fastEquals(oldLeft) && canPruneRight(joinType) &&
-              filteringHasBenefit(right, left, r, hint)) {
-              newRight = injectFilter(r, newRight, l, left)
+            if (newLeft.fastEquals(oldLeft) && canPruneRight(joinType)) {
+              extractBeneficialFilterCreatePlan(right, left, r, l, hint).foreach {
+                filterCreationSidePlan =>
+                  newRight = injectFilter(r, newRight, l, filterCreationSidePlan)
+              }
             }
             if (!newLeft.fastEquals(oldLeft) || !newRight.fastEquals(oldRight)) {
               filterCounter = filterCounter + 1

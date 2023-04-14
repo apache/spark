@@ -18,6 +18,7 @@
 syntax = 'proto3';
 
 import "google/protobuf/any.proto";
+import "spark/connect/common.proto";
 import "spark/connect/expressions.proto";
 import "spark/connect/relations.proto";
 
@@ -37,6 +38,7 @@ message Command {
     SqlCommand sql_command = 5;
     WriteStreamOperationStart write_stream_operation_start = 6;
     StreamingQueryCommand streaming_query_command = 7;
+    GetResourcesCommand get_resources_command = 8;
 
     // This field is used to mark extensions to the protocol. When plugins generate arbitrary
     // Commands they can add them here. During the planning the correct resolution is done.
@@ -298,3 +300,10 @@ message StreamingQueryCommandResult {
   }
 }
 
+// Command to get the output of 'SparkContext.resources'
+message GetResourcesCommand { }
+
+// Response for command 'GetResourcesCommand'.
+message GetResourcesCommandResult {
+  map<string, ResourceInformation> resources = 1;
+}
