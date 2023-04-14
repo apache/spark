@@ -108,14 +108,14 @@ object ExpressionEncoder {
         s"`GetColumnByOrdinal`, but there are ${getColExprs.size}")
 
       val input = GetStructField(newDeserializerInput, index)
-      val newDeserializer = enc.objDeserializer.transformUp {
+      val childDeserializer = enc.objDeserializer.transformUp {
         case GetColumnByOrdinal(0, _) => input
       }
 
       if (enc.objSerializer.nullable) {
-        nullSafe(input, newDeserializer)
+        nullSafe(input, childDeserializer)
       } else {
-        newDeserializer
+        childDeserializer
       }
     }
     val newDeserializer =
