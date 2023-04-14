@@ -3055,8 +3055,7 @@ class Dataset[T] private[sql] (
    */
   def withWatermark(eventTime: String, delayThreshold: String): Dataset[T] = {
     sparkSession.newDataset(encoder) { builder =>
-      builder
-        .getWithWatermarkBuilder
+      builder.getWithWatermarkBuilder
         .setInput(plan.getRoot)
         .setEventTime(eventTime)
         .setDelayThreshold(delayThreshold)

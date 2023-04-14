@@ -237,17 +237,6 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) {
   }
 
   /**
-   * Define a Streaming DataFrame on a Table. The DataSource corresponding to the table should
-   * support streaming mode.
-   * @param tableName The name of the table
-   * @since 3.5.0
-   */
-  def table(tableName: String): DataFrame = {
-    require(tableName != null, "The table name can't be null")
-    throw new UnsupportedOperationException("table() is not yet implemented")
-  }
-
-  /**
    * Loads text files and returns a `DataFrame` whose schema starts with a string column named
    * "value", and followed by partitioned columns if there are any.
    * The text files must be encoded as UTF-8.

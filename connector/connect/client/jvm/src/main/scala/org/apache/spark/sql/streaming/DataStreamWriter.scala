@@ -23,7 +23,6 @@ import java.util.concurrent.TimeoutException
 import scala.collection.JavaConverters._
 
 import org.apache.spark.annotation.Evolving
-import org.apache.spark.api.java.function.VoidFunction2
 import org.apache.spark.connect.proto.Command
 import org.apache.spark.connect.proto.WriteStreamOperationStart
 import org.apache.spark.sql.Dataset
@@ -247,50 +246,6 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
 
     val resp = ds.sparkSession.execute(startCmd).head
     RemoteStreamingQuery.fromStartCommandResponse(ds.sparkSession, resp)
-  }
-
-  /**
-   * TODO(SPARK-43133) Add foreach() API in Scala.
-   */
-  // def foreach(writer: ForeachWriter[T]): DataStreamWriter[T] = {
-
-
-  /**
-   * :: Experimental ::
-   *
-   * (Scala-specific) Sets the output of the streaming query to be processed using the provided
-   * function. This is supported only in the micro-batch execution modes (that is, when the
-   * trigger is not continuous). In every micro-batch, the provided function will be called in
-   * every micro-batch with (i) the output rows as a Dataset and (ii) the batch identifier.
-   * The batchId can be used to deduplicate and transactionally write the output
-   * (that is, the provided Dataset) to external systems. The output Dataset is guaranteed
-   * to be exactly the same for the same batchId (assuming all operations are deterministic
-   * in the query).
-   *
-   * @since 3.5.0
-   */
-  @Evolving
-  def foreachBatch(function: (Dataset[T], Long) => Unit): DataStreamWriter[T] = {
-    throw new UnsupportedOperationException("foreachBatch() is not yet implemented")
-  }
-
-  /**
-   * :: Experimental ::
-   *
-   * (Java-specific) Sets the output of the streaming query to be processed using the provided
-   * function. This is supported only in the micro-batch execution modes (that is, when the
-   * trigger is not continuous). In every micro-batch, the provided function will be called in
-   * every micro-batch with (i) the output rows as a Dataset and (ii) the batch identifier.
-   * The batchId can be used to deduplicate and transactionally write the output
-   * (that is, the provided Dataset) to external systems. The output Dataset is guaranteed
-   * to be exactly the same for the same batchId (assuming all operations are deterministic
-   * in the query).
-   *
-   * @since 3.5.0
-   */
-  @Evolving
-  def foreachBatch(function: VoidFunction2[Dataset[T], java.lang.Long]): DataStreamWriter[T] = {
-    foreachBatch((batchDs: Dataset[T], batchId: Long) => function.call(batchDs, batchId))
   }
 
   private val sinkBuilder = WriteStreamOperationStart

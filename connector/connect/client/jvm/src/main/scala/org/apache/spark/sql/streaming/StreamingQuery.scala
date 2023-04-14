@@ -79,12 +79,6 @@ trait StreamingQuery {
   def isActive: Boolean
 
   /**
-   * Returns the [[StreamingQueryException]] if the query was terminated by an exception.
-   * @since 3.5.0
-   */
-  def exception: Option[StreamingQueryException]
-
-  /**
    * Returns the current status of the query.
    *
    * @since 3.5.0
@@ -106,38 +100,6 @@ trait StreamingQuery {
    * @since 3.5.0
    */
   def lastProgress: StreamingQueryProgress
-
-  /**
-   * Waits for the termination of `this` query, either by `query.stop()` or by an exception.
-   * If the query has terminated with an exception, then the exception will be thrown.
-   *
-   * If the query has terminated, then all subsequent calls to this method will either return
-   * immediately (if the query was terminated by `stop()`), or throw the exception
-   * immediately (if the query has terminated with exception).
-   *
-   * @throws StreamingQueryException if the query has terminated with an exception.
-   *
-   * @since 3.5.0
-   */
-  @throws[StreamingQueryException]
-  def awaitTermination(): Unit
-
-  /**
-   * Waits for the termination of `this` query, either by `query.stop()` or by an exception.
-   * If the query has terminated with an exception, then the exception will be thrown.
-   * Otherwise, it returns whether the query has terminated or not within the `timeoutMs`
-   * milliseconds.
-   *
-   * If the query has terminated, then all subsequent calls to this method will either return
-   * `true` immediately (if the query was terminated by `stop()`), or throw the exception
-   * immediately (if the query has terminated with exception).
-   *
-   * @throws StreamingQueryException if the query has terminated with an exception
-   *
-   * @since 3.5.0
-   */
-  @throws[StreamingQueryException]
-  def awaitTermination(timeoutMs: Long): Boolean
 
   /**
    * Blocks until all available data in the source has been processed and committed to the sink.
@@ -188,10 +150,6 @@ class RemoteStreamingQuery(
     executeQueryCmd(_.setStatus(true)).getStatus.getIsActive
   }
 
-  override def exception: Option[StreamingQueryException] = {
-    throw new UnsupportedOperationException("exception is not yet implemented")
-  }
-
   override def status: StreamingQueryStatus = {
     val statusResp = executeQueryCmd(_.setStatus(true)).getStatus
     new StreamingQueryStatus(
@@ -218,14 +176,6 @@ class RemoteStreamingQuery(
       .headOption
       .map(json => new StreamingQueryProgress(json))
       .orNull
-  }
-
-  override def awaitTermination(): Unit = {
-    throw new UnsupportedOperationException("awaitTermination() is not yet implemented")
-  }
-
-  override def awaitTermination(timeoutMs: Long): Boolean = {
-    throw new UnsupportedOperationException("awaitTermination() is not yet implemented")
   }
 
   override def processAllAvailable(): Unit = {
@@ -288,7 +238,7 @@ object RemoteStreamingQuery {
     response: ExecutePlanResponse): RemoteStreamingQuery = {
 
     if (!response.hasWriteStreamOperationStartResult) {
-      throw new RuntimeException("Unexpected response does not contain start stream result")
+      throw new RuntimeException("Unexpected: No result in response for start stream command")
     }
 
     val result = response.getWriteStreamOperationStartResult
