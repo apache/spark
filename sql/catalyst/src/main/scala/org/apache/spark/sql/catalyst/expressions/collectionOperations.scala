@@ -4806,7 +4806,7 @@ case class ArrayInsert(srcArrayExpr: Expression, posExpr: Expression, itemExpr: 
     }
   }
 
-  private lazy val isPrepend = second match {
+  private lazy val canBeOptimizedForPrepend = second match {
     case e: Expression if e.foldable =>
       e.eval().asInstanceOf[Int] == 1
     case _ => false
@@ -4828,7 +4828,7 @@ case class ArrayInsert(srcArrayExpr: Expression, posExpr: Expression, itemExpr: 
     val baseArr = arr.asInstanceOf[ArrayData]
     val arrayElementType = dataType.asInstanceOf[ArrayType].elementType
 
-    if (isPrepend) {
+    if (canBeOptimizedForPrepend) {
       val newArrayLength = baseArr.numElements() + 1
       if (newArrayLength > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
         throw QueryExecutionErrors.concatArraysWithElementsExceedLimitError(newArrayLength)
@@ -4912,7 +4912,7 @@ case class ArrayInsert(srcArrayExpr: Expression, posExpr: Expression, itemExpr: 
       val assignment = CodeGenerator.createArrayAssignment(values, elementType, arr,
         adjustedAllocIdx, i, first.dataType.asInstanceOf[ArrayType].containsNull)
 
-      if (isPrepend) {
+      if (canBeOptimizedForPrepend) {
         val zero = "0"
         s"""
            |int $resLength = $arr.numElements() + 1;
