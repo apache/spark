@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, UpdateTable}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
+import org.apache.spark.sql.connector.catalog.SupportsRowLevelOperations
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy
@@ -34,7 +35,7 @@ import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy
 object AlignRowLevelCommandAssignments extends Rule[LogicalPlan] {
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-    case u: UpdateTable if !u.skipSchemaResolution && u.resolved && !u.aligned =>
+    case u: UpdateTable if u.resolved && requiresAlignment(u.table) && !u.aligned =>
       val newTable = u.table.transform {
         case r: DataSourceV2Relation =>
           validateStoreAssignmentPolicy()
@@ -48,6 +49,14 @@ object AlignRowLevelCommandAssignments extends Rule[LogicalPlan] {
     // SPARK-28730: LEGACY store assignment policy is disallowed in data source v2
     if (conf.storeAssignmentPolicy == StoreAssignmentPolicy.LEGACY) {
       throw QueryCompilationErrors.legacyStoreAssignmentPolicyError()
+    }
+  }
+
+  private def requiresAlignment(table: LogicalPlan): Boolean = {
+    EliminateSubqueryAliases(table) match {
+      case r: NamedRelation if r.skipSchemaResolution => false
+      case DataSourceV2Relation(_: SupportsRowLevelOperations, _, _, _, _) => true
+      case _ => false
     }
   }
 }

@@ -19,9 +19,8 @@ package org.apache.spark.sql.catalyst.analysis
 
 import scala.collection.mutable
 
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.SQLConfHelper
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, CreateNamedStruct, Expression, GetArrayItem, GetArrayStructFields, GetMapValue, GetStructField, Literal, NamedExpression}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, CreateNamedStruct, Expression, GetStructField, Literal}
 import org.apache.spark.sql.catalyst.plans.logical.Assignment
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
@@ -30,16 +29,14 @@ import org.apache.spark.sql.types.{DataType, StructType}
 
 object AssignmentUtils extends SQLConfHelper with CastSupport {
 
-  private case class ColumnUpdate(ref: Seq[String], expr: Expression)
-
   /**
    * Aligns assignments to match table columns.
    * <p>
    * This method processes and reorders given assignments so that each target column gets
    * an expression it should be set to. If a column does not have a matching assignment,
    * it will be set to its current value. For example, if one passes table attributes c1, c2
-   * and an assignment c2 = 1, this method will return c1 = c1, c2 = 1. This alignment is
-   * required to construct an updated version of a row.
+   * and an assignment c2 = 1, this method will return c1 = c1, c2 = 1. This allows Spark to
+   * construct an updated version of a row.
    * <p>
    * This method also handles updates to nested columns. If there is an assignment to a particular
    * nested field, this method will construct a new struct with one field updated preserving other
@@ -57,11 +54,14 @@ object AssignmentUtils extends SQLConfHelper with CastSupport {
 
     val errors = new mutable.ArrayBuffer[String]()
 
-    val output = applyUpdates(
-      updates = assignments.map(toColumnUpdate),
-      cols = attrs.map(restoreActualType),
-      colExprs = attrs,
-      addError = err => errors += err)
+    val output = attrs.map { attr =>
+      applyAssignments(
+        col = restoreActualType(attr),
+        colExpr = attr,
+        assignments,
+        addError = err => errors += err,
+        colPath = Seq(attr.name))
+    }
 
     if (errors.nonEmpty) {
       throw QueryCompilationErrors.invalidRowLevelOperationAssignments(assignments, errors.toSeq)
@@ -70,72 +70,67 @@ object AssignmentUtils extends SQLConfHelper with CastSupport {
     attrs.zip(output).map { case (attr, expr) => Assignment(attr, expr) }
   }
 
-  private def toColumnUpdate(assignment: Assignment): ColumnUpdate = {
-    ColumnUpdate(toRef(assignment.key), assignment.value)
-  }
-
   private def restoreActualType(attr: Attribute): Attribute = {
     attr.withDataType(CharVarcharUtils.getRawType(attr.metadata).getOrElse(attr.dataType))
   }
 
-  private def applyUpdates(
-      updates: Seq[ColumnUpdate],
-      cols: Seq[Attribute],
-      colExprs: Seq[Expression],
+  private def applyAssignments(
+      col: Attribute,
+      colExpr: Expression,
+      assignments: Seq[Assignment],
       addError: String => Unit,
-      colPath: Seq[String] = Nil): Seq[Expression] = {
+      colPath: Seq[String]): Expression = {
 
-    // iterate through columns at the current level and find matching updates
-    cols.zip(colExprs).map { case (col, colExpr) =>
-      // find matches for this column or any of its children
-      val prefixMatchedUpdates = updates.filter(update => conf.resolver(update.ref.head, col.name))
-      val newColPath = colPath :+ col.name
-      prefixMatchedUpdates match {
-        // if there is no exact match and no match for children, return the column expr as is
-        case matchedUpdates if matchedUpdates.isEmpty =>
-          TableOutputResolver.checkNullability(colExpr, col, conf, colPath)
+    val (exactAssignments, otherAssignments) = assignments.partition { assignment =>
+      assignment.key.semanticEquals(colExpr)
+    }
 
-        // if there is only one update and it is an exact match, resolve the assigned expr
-        case Seq(matchedUpdate) if isExactMatch(matchedUpdate, col) =>
-          TableOutputResolver.resolveUpdate(matchedUpdate.expr, col, conf, addError, newColPath)
+    val fieldAssignments = otherAssignments.filter { assignment =>
+      assignment.key.exists(_.semanticEquals(colExpr))
+    }
 
-        // if there are matches only for children
-        case matchedUpdates if !hasExactMatch(matchedUpdates, col) =>
-          col.dataType match {
-            case colType: StructType =>
-              val fieldExprs = colType.fields.zipWithIndex.map { case (field, ordinal) =>
-                GetStructField(colExpr, ordinal, Some(field.name))
-              }
+    if (exactAssignments.size > 1) {
+      val conflictingValuesStr = exactAssignments.map(_.value.sql).mkString(", ")
+      addError(s"Multiple assignments for '${colPath.quoted}': $conflictingValuesStr")
+      colExpr
+    } else if (exactAssignments.nonEmpty && fieldAssignments.nonEmpty) {
+      val conflictingAssignments = exactAssignments ++ fieldAssignments
+      val conflictingAssignmentsStr = conflictingAssignments.map(_.sql).mkString(", ")
+      addError(s"Conflicting assignments for '${colPath.quoted}': $conflictingAssignmentsStr")
+      colExpr
+    } else if (exactAssignments.isEmpty && fieldAssignments.isEmpty) {
+      TableOutputResolver.checkNullability(colExpr, col, conf, colPath)
+    } else if (exactAssignments.nonEmpty) {
+      val value = exactAssignments.head.value
+      TableOutputResolver.resolveUpdate(value, col, conf, addError, colPath)
+    } else {
+      applyFieldAssignments(col, colExpr, fieldAssignments, addError, colPath)
+    }
+  }
 
-              val updatedFieldExprs = applyUpdates(
-                matchedUpdates.map(update => update.copy(ref = update.ref.tail)),
-                colType.toAttributes,
-                fieldExprs,
-                addError,
-                newColPath)
+  private def applyFieldAssignments(
+      col: Attribute,
+      colExpr: Expression,
+      assignments: Seq[Assignment],
+      addError: String => Unit,
+      colPath: Seq[String]): Expression = {
 
-              toNamedStruct(colType, updatedFieldExprs)
+    col.dataType match {
+      case structType: StructType =>
+        val fieldAttrs = structType.toAttributes
+        val fieldExprs = structType.fields.zipWithIndex.map { case (field, ordinal) =>
+          GetStructField(colExpr, ordinal, Some(field.name))
+        }
+        val updatedFieldExprs = fieldAttrs.zip(fieldExprs).map { case (fieldAttr, fieldExpr) =>
+          applyAssignments(fieldAttr, fieldExpr, assignments, addError, colPath :+ fieldAttr.name)
+        }
+        toNamedStruct(structType, updatedFieldExprs)
 
-            case otherType =>
-              addError(
-                "Updating nested fields is only supported for StructType but " +
-                s"'${newColPath.quoted}' is of type $otherType")
-              col
-          }
-
-        // if there are conflicting updates, throw an exception
-        // there are two illegal scenarios:
-        // - multiple updates to the same column
-        // - updates to a top-level struct and its nested fields (like 'a.b' and 'a.b.c')
-        case matchedUpdates if hasExactMatch(matchedUpdates, col) =>
-          val conflictingColNamesStr = matchedUpdates
-            .map(update => colPath ++ update.ref)
-            .map(conflictingColPath => s"'${conflictingColPath.quoted}'")
-            .distinct
-            .mkString(", ")
-          addError("Update conflicts for columns: " + conflictingColNamesStr)
-          col
-      }
+      case otherType =>
+        addError(
+          "Updating nested fields is only supported for StructType but " +
+          s"'${colPath.quoted}' is of type $otherType")
+        colExpr
     }
   }
 
@@ -146,19 +141,8 @@ object AssignmentUtils extends SQLConfHelper with CastSupport {
     CreateNamedStruct(namedStructExprs)
   }
 
-  private def hasExactMatch(updates: Seq[ColumnUpdate], col: NamedExpression): Boolean = {
-    updates.exists(isExactMatch(_, col))
-  }
-
-  private def isExactMatch(update: ColumnUpdate, col: NamedExpression): Boolean = {
-    update.ref match {
-      case Seq(namePart) if conf.resolver(namePart, col.name) => true
-      case _ => false
-    }
-  }
-
   /**
-   * Checks whether assignments are aligned and are compatible with table columns.
+   * Checks whether assignments are aligned and compatible with table columns.
    *
    * @param attrs table attributes
    * @param assignments assignments to check
@@ -170,35 +154,14 @@ object AssignmentUtils extends SQLConfHelper with CastSupport {
     }
 
     attrs.zip(assignments).forall { case (attr, assignment) =>
-      val key = assignment.key
-      val value = assignment.value
-
       val attrType = CharVarcharUtils.getRawType(attr.metadata).getOrElse(attr.dataType)
-
-      sameRef(toRef(key), toRef(attr)) &&
-        DataType.equalsIgnoreCompatibleNullability(value.dataType, attrType) &&
-        (attr.nullable || !value.nullable)
+      val isMatchingAssignment = assignment.key match {
+        case key: Attribute if conf.resolver(key.name, attr.name) => true
+        case _ => false
+      }
+      isMatchingAssignment &&
+        DataType.equalsIgnoreCompatibleNullability(assignment.value.dataType, attrType) &&
+        (attr.nullable || !assignment.value.nullable)
     }
-  }
-
-  private def sameRef(ref: Seq[String], otherRef: Seq[String]): Boolean = {
-    ref.size == otherRef.size && ref.zip(otherRef).forall { case (namePart, otherNamePart) =>
-      conf.resolver(namePart, otherNamePart)
-    }
-  }
-
-  private def toRef(expr: Expression): Seq[String] = expr match {
-    case attr: AttributeReference =>
-      Seq(attr.name)
-    case GetStructField(child, _, Some(name)) =>
-      toRef(child) :+ name
-    case arrayStructFields: GetArrayStructFields =>
-      throw new AnalysisException(s"Cannot update nested fields inside arrays: $arrayStructFields")
-    case mapValue: GetMapValue =>
-      throw new AnalysisException(s"Cannot update map values: $mapValue")
-    case arrItem: GetArrayItem =>
-      throw new AnalysisException(s"Cannot update array items: $arrItem")
-    case other =>
-      throw new AnalysisException(s"Cannot convert to a reference, unsupported expression: $other")
   }
 }

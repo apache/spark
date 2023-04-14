@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.expressions.objects.{AssertNotNull, StaticI
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.{Assignment, LogicalPlan, UpdateTable}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogNotFoundException, CatalogV2Util, Column, ColumnDefaultValue, Identifier, Table, TableCapability, TableCatalog}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogNotFoundException, CatalogV2Util, Column, ColumnDefaultValue, Identifier, SupportsRowLevelOperations, TableCapability, TableCatalog}
 import org.apache.spark.sql.connector.expressions.{LiteralValue, Transform}
 import org.apache.spark.sql.execution.datasources.v2.V2SessionCatalog
 import org.apache.spark.sql.internal.SQLConf
@@ -41,7 +41,7 @@ import org.apache.spark.sql.types.{BooleanType, IntegerType, StructType}
 class AlignUpdateAssignmentsSuite extends AnalysisTest {
 
   private val primitiveTable = {
-    val t = mock(classOf[Table])
+    val t = mock(classOf[SupportsRowLevelOperations])
     val schema = new StructType()
       .add("i", "INT", nullable = false)
       .add("l", "LONG")
@@ -52,7 +52,7 @@ class AlignUpdateAssignmentsSuite extends AnalysisTest {
   }
 
   private val nestedStructTable = {
-    val t = mock(classOf[Table])
+    val t = mock(classOf[SupportsRowLevelOperations])
     val schema = new StructType()
       .add("i", "INT")
       .add(
@@ -66,7 +66,7 @@ class AlignUpdateAssignmentsSuite extends AnalysisTest {
   }
 
   private val mapArrayTable = {
-    val t = mock(classOf[Table])
+    val t = mock(classOf[SupportsRowLevelOperations])
     val schema = new StructType()
       .add("i", "INT")
       .add("a", "ARRAY<STRUCT<i1: INT, i2: INT>>")
@@ -78,7 +78,7 @@ class AlignUpdateAssignmentsSuite extends AnalysisTest {
   }
 
   private val charVarcharTable = {
-    val t = mock(classOf[Table])
+    val t = mock(classOf[SupportsRowLevelOperations])
     val schema = new StructType()
       .add("c", "CHAR(5)")
       .add(
@@ -103,7 +103,7 @@ class AlignUpdateAssignmentsSuite extends AnalysisTest {
   }
 
   private val acceptsAnySchemaTable = {
-    val t = mock(classOf[Table])
+    val t = mock(classOf[SupportsRowLevelOperations])
     val schema = new StructType()
       .add("i", "INT", nullable = false)
       .add("l", "LONG")
@@ -115,7 +115,7 @@ class AlignUpdateAssignmentsSuite extends AnalysisTest {
   }
 
   private val defaultValuesTable = {
-    val t = mock(classOf[Table])
+    val t = mock(classOf[SupportsRowLevelOperations])
     val iDefault = new ColumnDefaultValue("42", LiteralValue(42, IntegerType))
     when(t.columns()).thenReturn(Array(
       Column.create("b", BooleanType, true, null, null),
@@ -603,32 +603,30 @@ class AlignUpdateAssignmentsSuite extends AnalysisTest {
         // two updates to a top-level column
         assertAnalysisException(
           "UPDATE primitive_table SET i = 1, l = 1L, i = -1",
-          "Update conflicts for columns: 'i'")
+          "Multiple assignments for 'i': 1, -1")
 
         // two updates to a nested column
         assertAnalysisException(
           "UPDATE nested_struct_table SET s.n_i = 1, s.n_s = null, s.n_i = -1",
-          "Update conflicts for columns: 's.n_i'")
+          "Multiple assignments for 's.n_i': 1, -1")
 
         // conflicting updates to a nested struct and its fields
         assertAnalysisException(
           "UPDATE nested_struct_table " +
           "SET s.n_s.dn_i = 1, s.n_s = named_struct('dn_i', 1, 'dn_l', 1L)",
-          "Update conflicts for columns: 's.n_s.dn_i', 's.n_s'")
+          "Conflicting assignments for 's.n_s'",
+          "cat.nested_struct_table.s.`n_s` = named_struct('dn_i', 1, 'dn_l', 1L)",
+          "cat.nested_struct_table.s.`n_s`.`dn_i` = 1")
       }
     }
   }
 
-  test("updates to nested structs in arrays and maps") {
+  test("updates to nested structs in arrays") {
     Seq(StoreAssignmentPolicy.ANSI, StoreAssignmentPolicy.STRICT).foreach { policy =>
       withSQLConf(SQLConf.STORE_ASSIGNMENT_POLICY.key -> policy.toString) {
         assertAnalysisException(
           "UPDATE map_array_table SET a.i1 = 1",
-          "Cannot update nested fields inside arrays")
-
-        assertAnalysisException(
-          "UPDATE map_array_table SET m.smth = 'X'",
-          "Cannot update map values")
+          "Updating nested fields is only supported for StructType but 'a' is of type ArrayType")
       }
     }
   }
@@ -765,11 +763,11 @@ class AlignUpdateAssignmentsSuite extends AnalysisTest {
     analyzed
   }
 
-  private def assertAnalysisException(query: String, errMsg: String): Unit = {
+  private def assertAnalysisException(query: String, messages: String*): Unit = {
     val exception = intercept[AnalysisException] {
       parseAndResolve(query)
     }
-    assert(exception.message.contains(errMsg))
+    messages.foreach(message => assert(exception.message.contains(message)))
   }
 
   private def assertNullCheckExists(plan: LogicalPlan, colPath: Seq[String]): Unit = {
