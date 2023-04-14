@@ -425,6 +425,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     {
       val ret = cast(array, IntegerType)
       assert(ret.resolved === false)
+      assert(ret.nullable)
     }
   }
 
@@ -446,6 +447,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     {
       val ret = cast(map, IntegerType)
       assert(ret.resolved === false)
+      assert(ret.nullable)
     }
   }
 
@@ -498,6 +500,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     {
       val ret = cast(struct, IntegerType)
       assert(ret.resolved === false)
+      assert(ret.nullable)
     }
   }
 

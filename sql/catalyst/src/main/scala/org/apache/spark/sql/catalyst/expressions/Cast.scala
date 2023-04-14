@@ -396,6 +396,22 @@ object Cast extends QueryErrorsBase {
 
     case (_, to: DecimalType) if !canNullSafeCastToDecimal(from, to) => true
     case (_: FractionalType, _: IntegralType) => true  // NaN, infinity
+
+    case (_: ArrayType, _: ArrayType) => false
+    case (_: MapType, _: MapType) => false
+    case (_: StructType, _: StructType) => false
+    case (_: ArrayType | _: MapType | _: StructType, _) => true
+
+    case (DateType | TimestampType, TimestampNTZType) => false
+    case (_, TimestampNTZType) => true
+    case (TimestampNTZType, DateType | TimestampType) => false
+    case (TimestampNTZType, _) => true
+
+    case (_: IntegralType | _: DecimalType, _: AnsiIntervalType) => false
+    case (_, _: AnsiIntervalType) => true
+    case (_: AnsiIntervalType, _: IntegralType | _: DecimalType) => false
+    case (_: AnsiIntervalType, _) => true
+
     case _ => false
   }
 
