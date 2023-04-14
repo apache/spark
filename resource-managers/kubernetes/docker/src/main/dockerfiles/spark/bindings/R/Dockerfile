@@ -17,6 +17,9 @@
 
 ARG base_img
 
+# Specify the User that the actual main process will run as
+ARG spark_uid=185
+
 FROM $base_img
 WORKDIR /
 
@@ -29,7 +32,8 @@ RUN mkdir ${SPARK_HOME}/R
 RUN \
   apt-get update && \
   apt install -y r-base r-base-dev && \
-  rm -rf /var/cache/apt/* && rm -rf /var/lib/apt/lists/*
+  rm -rf /var/cache/apt/* && rm -rf /var/lib/apt/lists/* && \
+  useradd -u ${spark_uid} spark
 
 COPY R ${SPARK_HOME}/R
 ENV R_HOME /usr/lib/R
@@ -37,6 +41,4 @@ ENV R_HOME /usr/lib/R
 WORKDIR /opt/spark/work-dir
 ENTRYPOINT [ "/opt/entrypoint.sh" ]
 
-# Specify the User that the actual main process will run as
-ARG spark_uid=185
 USER ${spark_uid}

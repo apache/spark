@@ -38,6 +38,7 @@ RUN set -ex && \
     rm /bin/sh && \
     ln -sv /bin/bash /bin/sh && \
     echo "auth required pam_wheel.so use_uid" >> /etc/pam.d/su && \
+    useradd -u ${spark_uid} spark && \
     chgrp root /etc/passwd && chmod ug+rw /etc/passwd && \
     rm -rf /var/cache/apt/* && rm -rf /var/lib/apt/lists/*
 
