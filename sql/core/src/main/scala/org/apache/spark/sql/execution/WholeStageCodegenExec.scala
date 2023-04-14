@@ -708,6 +708,8 @@ case class WholeStageCodegenExec(child: SparkPlan)(val codegenStageId: Int)
           }
         }
       }
+      // Do not support CSE in produce method.
+      ctx.commonExpressions.clear()
     }
     val code = child.asInstanceOf[CodegenSupport].produce(ctx, this)
 
