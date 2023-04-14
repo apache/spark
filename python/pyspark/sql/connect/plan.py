@@ -27,6 +27,7 @@ from inspect import signature, isclass
 
 import pyarrow as pa
 
+from pyspark.storagelevel import StorageLevel
 from pyspark.sql.types import DataType
 
 import pyspark.sql.connect.proto as proto
@@ -1882,14 +1883,24 @@ class IsCached(LogicalPlan):
 
 
 class CacheTable(LogicalPlan):
-    def __init__(self, table_name: str) -> None:
+    def __init__(self, table_name: str, storage_level: Optional[StorageLevel] = None) -> None:
         super().__init__(None)
         self._table_name = table_name
+        self._storage_level = storage_level
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
-        plan = proto.Relation(
-            catalog=proto.Catalog(cache_table=proto.CacheTable(table_name=self._table_name))
-        )
+        _cache_table = proto.CacheTable(table_name=self._table_name)
+        if self._storage_level:
+            _cache_table.storage_level.CopyFrom(
+                proto.StorageLevel(
+                    use_disk=self._storage_level.useDisk,
+                    use_memory=self._storage_level.useMemory,
+                    use_off_heap=self._storage_level.useOffHeap,
+                    deserialized=self._storage_level.deserialized,
+                    replication=self._storage_level.replication,
+                )
+            )
+        plan = proto.Relation(catalog=proto.Catalog(cache_table=_cache_table))
         return plan
 
 

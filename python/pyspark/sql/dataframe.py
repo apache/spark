@@ -535,7 +535,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         >>> with tempfile.TemporaryDirectory() as d:
         ...     # Create a table with Rate source.
         ...     df.writeStream.toTable(
-        ...         "my_table", checkpointLocation=d) # doctest: +ELLIPSIS
+        ...         "my_table", checkpointLocation=d)
         <...streaming.query.StreamingQuery object at 0x...>
         """
         return DataStreamWriter(self)
@@ -2308,8 +2308,8 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         | name|height|
         +-----+------+
         |  Bob|    85|
-        |Alice|  null|
-        | null|    80|
+        |Alice|  NULL|
+        | NULL|    80|
         +-----+------+
         >>> df.join(df2, 'name', 'outer').select('name', 'height').sort(desc("name")).show()
         +-----+------+
@@ -2317,7 +2317,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         +-----+------+
         |  Tom|    80|
         |  Bob|    85|
-        |Alice|  null|
+        |Alice|  NULL|
         +-----+------+
 
         Outer join for both DataFrams with multiple columns.
@@ -3278,10 +3278,10 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         +-----+----+-----+
         | name| age|count|
         +-----+----+-----+
-        | null|null|    2|
-        |Alice|null|    1|
+        | NULL|NULL|    2|
+        |Alice|NULL|    1|
         |Alice|   2|    1|
-        |  Bob|null|    1|
+        |  Bob|NULL|    1|
         |  Bob|   5|    1|
         +-----+----+-----+
         """
@@ -3327,12 +3327,12 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         +-----+----+-----+
         | name| age|count|
         +-----+----+-----+
-        | null|null|    2|
-        | null|   2|    1|
-        | null|   5|    1|
-        |Alice|null|    1|
+        | NULL|NULL|    2|
+        | NULL|   2|    1|
+        | NULL|   5|    1|
+        |Alice|NULL|    1|
         |Alice|   2|    1|
-        |  Bob|null|    1|
+        |  Bob|NULL|    1|
         |  Bob|   5|    1|
         +-----+----+-----+
         """
@@ -3778,8 +3778,8 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         +----+----+----+----+
         |col0|col1|col2|col3|
         +----+----+----+----+
-        |   1|   2|   3|null|
-        |null|   4|   5|   6|
+        |   1|   2|   3|NULL|
+        |NULL|   4|   5|   6|
         +----+----+----+----+
         """
         return DataFrame(self._jdf.unionByName(other._jdf, allowMissingColumns), self.sparkSession)
@@ -4146,10 +4146,10 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         +---+------+-----+----+
         |age|height| name|bool|
         +---+------+-----+----+
-        | 10|  80.5|Alice|null|
-        |  5|  50.0|  Bob|null|
-        | 50|  50.0|  Tom|null|
-        | 50|  50.0| null|true|
+        | 10|  80.5|Alice|NULL|
+        |  5|  50.0|  Bob|NULL|
+        | 50|  50.0|  Tom|NULL|
+        | 50|  50.0| NULL|true|
         +---+------+-----+----+
 
         Fill all null values with ``False`` for boolean columns.
@@ -4159,9 +4159,9 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         | age|height| name| bool|
         +----+------+-----+-----+
         |  10|  80.5|Alice|false|
-        |   5|  null|  Bob|false|
-        |null|  null|  Tom|false|
-        |null|  null| null| true|
+        |   5|  NULL|  Bob|false|
+        |NULL|  NULL|  Tom|false|
+        |NULL|  NULL| NULL| true|
         +----+------+-----+-----+
 
         Fill all null values with to 50 and "unknown" for 'age' and 'name' column respectively.
@@ -4170,10 +4170,10 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         +---+------+-------+----+
         |age|height|   name|bool|
         +---+------+-------+----+
-        | 10|  80.5|  Alice|null|
-        |  5|  null|    Bob|null|
-        | 50|  null|    Tom|null|
-        | 50|  null|unknown|true|
+        | 10|  80.5|  Alice|NULL|
+        |  5|  NULL|    Bob|NULL|
+        | 50|  NULL|    Tom|NULL|
+        | 50|  NULL|unknown|true|
         +---+------+-------+----+
         """
         if not isinstance(value, (float, int, str, bool, dict)):
@@ -4301,9 +4301,9 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         | age|height| name|
         +----+------+-----+
         |  20|    80|Alice|
-        |   5|  null|  Bob|
-        |null|    20|  Tom|
-        |null|  null| null|
+        |   5|  NULL|  Bob|
+        |NULL|    20|  Tom|
+        |NULL|  NULL| NULL|
         +----+------+-----+
 
         Replace 'Alice' to null in all columns.
@@ -4312,10 +4312,10 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         +----+------+----+
         | age|height|name|
         +----+------+----+
-        |  10|    80|null|
-        |   5|  null| Bob|
-        |null|    10| Tom|
-        |null|  null|null|
+        |  10|    80|NULL|
+        |   5|  NULL| Bob|
+        |NULL|    10| Tom|
+        |NULL|  NULL|NULL|
         +----+------+----+
 
         Replace 'Alice' to 'A', and 'Bob' to 'B' in the 'name' column.
@@ -4325,9 +4325,9 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         | age|height|name|
         +----+------+----+
         |  10|    80|   A|
-        |   5|  null|   B|
-        |null|    10| Tom|
-        |null|  null|null|
+        |   5|  NULL|   B|
+        |NULL|    10| Tom|
+        |NULL|  NULL|NULL|
         +----+------+----+
         """
         if value is _NoValue:

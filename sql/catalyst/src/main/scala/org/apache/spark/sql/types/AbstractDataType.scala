@@ -199,9 +199,7 @@ private[sql] object FractionalType {
 }
 
 
-private[sql] abstract class FractionalType extends NumericType {
-  private[sql] val asIntegral: Integral[InternalType]
-}
+private[sql] abstract class FractionalType extends NumericType
 
 private[sql] object AnyTimestampType extends AbstractDataType with Serializable {
   override private[sql] def defaultConcreteType: DataType = TimestampType
