@@ -567,11 +567,11 @@ private[spark] class ApplicationMaster(
       try {
         if (allocator.getNumExecutorsFailed >= maxNumExecutorFailures) {
           finish(FinalApplicationStatus.FAILED,
-            SparkExitCode.EXCEED_MAX_EXECUTOR_FAILURES,
+            ApplicationMaster.EXIT_MAX_EXECUTOR_FAILURES,
             s"Max number of executor failures ($maxNumExecutorFailures) reached")
         } else if (allocator.isAllNodeExcluded) {
           finish(FinalApplicationStatus.FAILED,
-            SparkExitCode.EXCEED_MAX_EXECUTOR_FAILURES,
+            ApplicationMaster.EXIT_MAX_EXECUTOR_FAILURES,
             "Due to executor failures all available nodes are excluded")
         } else {
           logDebug("Sending progress")
@@ -871,6 +871,7 @@ object ApplicationMaster extends Logging {
 
   // exit codes for different causes, no reason behind the values
   private val EXIT_UNCAUGHT_EXCEPTION = 10
+  private val EXIT_MAX_EXECUTOR_FAILURES = SparkExitCode.EXCEED_MAX_EXECUTOR_FAILURES
   private val EXIT_REPORTER_FAILURE = 12
   private val EXIT_SC_NOT_INITED = 13
   private val EXIT_EXCEPTION_USER_CLASS = 15
