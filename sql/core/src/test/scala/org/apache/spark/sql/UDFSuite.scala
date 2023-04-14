@@ -1064,28 +1064,10 @@ class UDFSuite extends QueryTest with SharedSparkSession {
     assert(e.isInstanceOf[java.lang.ArithmeticException])
   }
 
-  class TestPythonFunc extends SimplePythonFunction(
-    command = Array[Byte](),
-    envVars = null,
-    pythonIncludes = null,
-    pythonExec = "",
-    pythonVer = "",
-    broadcastVars = null,
-    accumulator = null
-  )
-
-  class DummyUDF extends UserDefinedPythonFunction(
-    name = "DummyUDF",
-    func = new TestPythonFunc,
-    dataType = BooleanType,
-    pythonEvalType = PythonEvalType.SQL_BATCHED_UDF,
-    udfDeterministic = true
-  )
-
   test("SPARK-43099: UDF className is correctly populated") {
-    spark.udf.registerPython("dummyUDF", new DummyUDF)
+    spark.udf.register("dummyUDF", (x: Int) => x + 1)
     val expressionInfo = spark.sessionState.catalog
       .lookupFunctionInfo(FunctionIdentifier("dummyUDF"))
-    assert(expressionInfo.getClassName != null)
+    assert(expressionInfo.getClassName.contains("org.apache.spark.sql.UDFRegistration$$Lambda"))
   }
 }
