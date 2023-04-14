@@ -17,6 +17,7 @@
 
 import os
 import shutil
+import stat
 import tempfile
 import unittest
 
@@ -27,6 +28,7 @@ except ImportError:
     have_torch = False
 
 from pyspark.sql import SparkSession
+from pyspark.testing.utils import SPARK_HOME
 
 from pyspark.ml.torch.tests.test_distributor import (
     TorchDistributorBaselineUnitTestsMixin,
@@ -40,31 +42,49 @@ from pyspark.ml.torch.tests.test_distributor import (
 class TorchDistributorBaselineUnitTestsOnConnect(
     TorchDistributorBaselineUnitTestsMixin, unittest.TestCase
 ):
-    def setUp(self) -> None:
-        self.spark = SparkSession.builder.remote("local[4]").getOrCreate()
+    @classmethod
+    def setUpClass(cls):
+        cls.spark = SparkSession.builder.remote("local[4]").getOrCreate()
 
-    def tearDown(self) -> None:
-        self.spark.stop()
+    @classmethod
+    def tearDownClass(cls):
+        cls.spark.stop()
 
 
-@unittest.skip("unstable, ignore for now")
+@unittest.skipIf(not have_torch, "torch is required")
 class TorchDistributorLocalUnitTestsOnConnect(
     TorchDistributorLocalUnitTestsMixin, unittest.TestCase
 ):
-    def setUp(self) -> None:
-        class_name = self.__class__.__name__
-        conf = self._get_spark_conf()
-        builder = SparkSession.builder.appName(class_name)
-        for k, v in conf.getAll():
-            if k not in ["spark.master", "spark.remote", "spark.app.name"]:
-                builder = builder.config(k, v)
-        self.spark = builder.remote("local-cluster[2,2,1024]").getOrCreate()
-        self.mnist_dir_path = tempfile.mkdtemp()
+    @classmethod
+    def setUpClass(cls):
+        cls.gpu_discovery_script_file = tempfile.NamedTemporaryFile(delete=False)
+        cls.gpu_discovery_script_file.write(
+            b'echo {\\"name\\": \\"gpu\\", \\"addresses\\": [\\"0\\",\\"1\\",\\"2\\"]}'
+        )
+        cls.gpu_discovery_script_file.close()
+        # create temporary directory for Worker resources coordination
+        cls.tempdir = tempfile.NamedTemporaryFile(delete=False)
+        os.unlink(cls.tempdir.name)
+        os.chmod(
+            cls.gpu_discovery_script_file.name,
+            stat.S_IRWXU | stat.S_IXGRP | stat.S_IRGRP | stat.S_IROTH | stat.S_IXOTH,
+        )
+        cls.mnist_dir_path = tempfile.mkdtemp()
 
-    def tearDown(self) -> None:
-        shutil.rmtree(self.mnist_dir_path)
-        os.unlink(self.gpu_discovery_script_file.name)
-        self.spark.stop()
+        cls.spark = (
+            SparkSession.builder.appName("TorchDistributorLocalUnitTestsOnConnect")
+            .config("spark.test.home", SPARK_HOME)
+            .config("spark.driver.resource.gpu.amount", "3")
+            .config("spark.driver.resource.gpu.discoveryScript", cls.gpu_discovery_script_file.name)
+            .remote("local-cluster[2,2,1024]")
+            .getOrCreate()
+        )
+
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.mnist_dir_path)
+        os.unlink(cls.gpu_discovery_script_file.name)
+        cls.spark.stop()
 
     def _get_inputs_for_test_local_training_succeeds(self):
         return [
@@ -75,24 +95,40 @@ class TorchDistributorLocalUnitTestsOnConnect(
         ]
 
 
-@unittest.skip("unstable, ignore for now")
+@unittest.skipIf(not have_torch, "torch is required")
 class TorchDistributorLocalUnitTestsIIOnConnect(
     TorchDistributorLocalUnitTestsMixin, unittest.TestCase
 ):
-    def setUp(self) -> None:
-        class_name = self.__class__.__name__
-        conf = self._get_spark_conf()
-        builder = SparkSession.builder.appName(class_name)
-        for k, v in conf.getAll():
-            if k not in ["spark.master", "spark.remote", "spark.app.name"]:
-                builder = builder.config(k, v)
-        self.spark = builder.remote("local[4]").getOrCreate()
-        self.mnist_dir_path = tempfile.mkdtemp()
+    @classmethod
+    def setUpClass(cls):
+        cls.gpu_discovery_script_file = tempfile.NamedTemporaryFile(delete=False)
+        cls.gpu_discovery_script_file.write(
+            b'echo {\\"name\\": \\"gpu\\", \\"addresses\\": [\\"0\\",\\"1\\",\\"2\\"]}'
+        )
+        cls.gpu_discovery_script_file.close()
+        # create temporary directory for Worker resources coordination
+        cls.tempdir = tempfile.NamedTemporaryFile(delete=False)
+        os.unlink(cls.tempdir.name)
+        os.chmod(
+            cls.gpu_discovery_script_file.name,
+            stat.S_IRWXU | stat.S_IXGRP | stat.S_IRGRP | stat.S_IROTH | stat.S_IXOTH,
+        )
+        cls.mnist_dir_path = tempfile.mkdtemp()
 
-    def tearDown(self) -> None:
-        shutil.rmtree(self.mnist_dir_path)
-        os.unlink(self.gpu_discovery_script_file.name)
-        self.spark.stop()
+        cls.spark = (
+            SparkSession.builder.appName("TorchDistributorLocalUnitTestsOnConnect")
+            .config("spark.test.home", SPARK_HOME)
+            .config("spark.driver.resource.gpu.amount", "3")
+            .config("spark.driver.resource.gpu.discoveryScript", cls.gpu_discovery_script_file.name)
+            .remote("local[4]")
+            .getOrCreate()
+        )
+
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.mnist_dir_path)
+        os.unlink(cls.gpu_discovery_script_file.name)
+        cls.spark.stop()
 
     def _get_inputs_for_test_local_training_succeeds(self):
         return [
@@ -107,21 +143,39 @@ class TorchDistributorLocalUnitTestsIIOnConnect(
 class TorchDistributorDistributedUnitTestsOnConnect(
     TorchDistributorDistributedUnitTestsMixin, unittest.TestCase
 ):
-    def setUp(self) -> None:
-        class_name = self.__class__.__name__
-        conf = self._get_spark_conf()
-        builder = SparkSession.builder.appName(class_name)
-        for k, v in conf.getAll():
-            if k not in ["spark.master", "spark.remote", "spark.app.name"]:
-                builder = builder.config(k, v)
+    @classmethod
+    def setUpClass(cls):
+        cls.gpu_discovery_script_file = tempfile.NamedTemporaryFile(delete=False)
+        cls.gpu_discovery_script_file.write(
+            b'echo {\\"name\\": \\"gpu\\", \\"addresses\\": [\\"0\\",\\"1\\",\\"2\\"]}'
+        )
+        cls.gpu_discovery_script_file.close()
+        # create temporary directory for Worker resources coordination
+        tempdir = tempfile.NamedTemporaryFile(delete=False)
+        os.unlink(tempdir.name)
+        os.chmod(
+            cls.gpu_discovery_script_file.name,
+            stat.S_IRWXU | stat.S_IXGRP | stat.S_IRGRP | stat.S_IROTH | stat.S_IXOTH,
+        )
+        cls.mnist_dir_path = tempfile.mkdtemp()
 
-        self.spark = builder.remote("local-cluster[2,2,1024]").getOrCreate()
-        self.mnist_dir_path = tempfile.mkdtemp()
+        cls.spark = (
+            SparkSession.builder.appName("TorchDistributorDistributedUnitTestsOnConnect")
+            .config("spark.test.home", SPARK_HOME)
+            .config("spark.worker.resource.gpu.discoveryScript", cls.gpu_discovery_script_file.name)
+            .config("spark.worker.resource.gpu.amount", "3")
+            .config("spark.task.cpus", "2")
+            .config("spark.task.resource.gpu.amount", "1")
+            .config("spark.executor.resource.gpu.amount", "1")
+            .remote("local-cluster[2,2,1024]")
+            .getOrCreate()
+        )
 
-    def tearDown(self) -> None:
-        shutil.rmtree(self.mnist_dir_path)
-        os.unlink(self.gpu_discovery_script_file.name)
-        self.spark.stop()
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.mnist_dir_path)
+        os.unlink(cls.gpu_discovery_script_file.name)
+        cls.spark.stop()
 
 
 @unittest.skipIf(not have_torch, "torch is required")
