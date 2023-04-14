@@ -67,7 +67,7 @@ trait ConstraintHelper {
     predicates.foreach {
       case eq @ EqualTo(l: Attribute, r: Attribute) =>
         // Also remove EqualNullSafe with the same l and r to avoid Once strategy's idempotence
-        // is broken.
+        // is broken. l = r and l <=> r can infer l <=> l and r <=> r which is useless.
         val candidateConstraints = predicates - eq - EqualNullSafe(l, r)
         inferredConstraints ++= replaceConstraints(candidateConstraints, l, r)
         inferredConstraints ++= replaceConstraints(candidateConstraints, r, l)
