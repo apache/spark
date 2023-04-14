@@ -489,7 +489,8 @@ private[hive] class HiveClientImpl(
       unsupportedFeatures += "skewed columns"
     }
 
-    if (h.getProperty(org.apache.hadoop.hive.metastore.api.hive_metastoreConstants.META_TABLE_STORAGE) != null) {
+    if (h.getProperty(
+      org.apache.hadoop.hive.metastore.api.hive_metastoreConstants.META_TABLE_STORAGE) != null) {
       unsupportedFeatures += "storage handler"
     }
 
