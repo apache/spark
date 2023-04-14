@@ -54,6 +54,9 @@ private[hive] case class HiveSimpleUDF(
 
   override lazy val deterministic: Boolean = isUDFDeterministic && children.forall(_.deterministic)
 
+  // It's stateful because `evaluator.inputs` is stateful.
+  override def stateful: Boolean = true
+
   override def nullable: Boolean = true
 
   @transient
@@ -135,6 +138,9 @@ private[hive] case class HiveGenericUDF(
   with CodegenFallback
   with Logging
   with UserDefinedExpression {
+
+  // It's stateful because `evaluator.deferredObjects` is stateful.
+  override def stateful: Boolean = true
 
   override def nullable: Boolean = true
 
