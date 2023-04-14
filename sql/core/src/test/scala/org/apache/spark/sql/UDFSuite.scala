@@ -25,8 +25,6 @@ import java.time.format.DateTimeFormatter
 import scala.collection.mutable.{ArrayBuffer, WrappedArray}
 
 import org.apache.spark.{SPARK_DOC_ROOT, SparkException}
-import org.apache.spark.api.python.PythonEvalType
-import org.apache.spark.api.python.SimplePythonFunction
 import org.apache.spark.sql.api.java._
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.encoders.{ExpressionEncoder, OuterScopes}
@@ -39,7 +37,6 @@ import org.apache.spark.sql.execution.aggregate.{ScalaAggregator, ScalaUDAF}
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.sql.execution.command.{CreateDataSourceTableAsSelectCommand, ExplainCommand}
 import org.apache.spark.sql.execution.datasources.InsertIntoHadoopFsRelationCommand
-import org.apache.spark.sql.execution.python.UserDefinedPythonFunction
 import org.apache.spark.sql.expressions.{Aggregator, MutableAggregationBuffer, SparkUserDefinedFunction, UserDefinedAggregateFunction}
 import org.apache.spark.sql.functions.{lit, struct, udaf, udf}
 import org.apache.spark.sql.internal.SQLConf
