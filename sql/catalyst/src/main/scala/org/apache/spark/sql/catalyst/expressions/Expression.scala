@@ -194,8 +194,6 @@ abstract class Expression extends TreeNode[Expression] {
         subExprState.eval.isNull,
         subExprState.eval.value)
     }.getOrElse {
-      val isNull = ctx.freshName("isNull")
-      val value = ctx.freshName("value")
       val eval =
         if (EquivalentExpressions.supportedExpression(this)) {
           ctx.commonExpressions.get(ExpressionEquals(this)) match {
@@ -208,8 +206,8 @@ abstract class Expression extends TreeNode[Expression] {
                 case _ => false
               }
               val eval = doGenCode(ctx, ExprCode(
-                JavaCode.isNullVariable(isNull),
-                JavaCode.variable(value, dataType)))
+                JavaCode.isNullVariable(ctx.freshName("isNull")),
+                JavaCode.variable(ctx.freshName("value"), dataType)))
               if (eval.code != EmptyBlock && !nonEmptyRefs) {
                 ctx.genReusedCode(stats, eval)
               } else {
@@ -218,13 +216,13 @@ abstract class Expression extends TreeNode[Expression] {
 
             case None =>
               doGenCode(ctx, ExprCode(
-                JavaCode.isNullVariable(isNull),
-                JavaCode.variable(value, dataType)))
+                JavaCode.isNullVariable(ctx.freshName("isNull")),
+                JavaCode.variable(ctx.freshName("value"), dataType)))
           }
         } else {
           doGenCode(ctx, ExprCode(
-            JavaCode.isNullVariable(isNull),
-            JavaCode.variable(value, dataType)))
+            JavaCode.isNullVariable(ctx.freshName("isNull")),
+            JavaCode.variable(ctx.freshName("value"), dataType)))
         }
       reduceCodeSize(ctx, eval)
       if (eval.code.toString.nonEmpty) {
