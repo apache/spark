@@ -272,7 +272,10 @@ message StreamingQueryCommand {
   }
 
   message AwaitTerminationCommand {
-    int64 timeout_ms = 1;
+    oneof timeout {
+      bool no_timeout = 1;
+      int64 timeout_ms = 2;
+    }
   }
 }
 
@@ -308,13 +311,15 @@ message StreamingQueryCommandResult {
   }
 
   message ExceptionResult {
-    // Exception as string
-    bool has_exception = 1;
-    optional string error_message = 2;
+    // Exception message as string
+    oneof exception_content {
+      bool no_exception = 1;
+      string exception_message = 2;
+    }
   }
 
   message AwaitTerminationResult {
-    bool terminated = 1;
+    optional bool terminated = 1;
   }
 }
 

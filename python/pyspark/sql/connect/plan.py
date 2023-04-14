@@ -307,7 +307,12 @@ class DataSource(LogicalPlan):
 
 
 class Read(LogicalPlan):
-    def __init__(self, table_name: str, options: Optional[Dict[str, str]] = None) -> None:
+    def __init__(
+        self,
+        table_name: str,
+        options: Optional[Dict[str, str]] = None,
+        is_streaming: Optional[bool] = None,
+    ) -> None:
         super().__init__(None)
         self.table_name = table_name
         self.options = options or {}

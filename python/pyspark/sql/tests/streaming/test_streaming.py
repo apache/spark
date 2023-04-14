@@ -253,8 +253,12 @@ class StreamingTestsMixin:
             duration = time.time() - now
             self.assertTrue(duration >= 2)
             self.assertFalse(res)
-        finally:
+
             q.processAllAvailable()
+            q.stop()
+            q.awaitTermination()
+            self.assertFalse(q.isActive)
+        finally:
             q.stop()
             shutil.rmtree(tmpPath)
 

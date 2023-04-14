@@ -879,16 +879,31 @@ class StreamingQueryCommand(google.protobuf.message.Message):
     class AwaitTerminationCommand(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
+        NO_TIMEOUT_FIELD_NUMBER: builtins.int
         TIMEOUT_MS_FIELD_NUMBER: builtins.int
+        no_timeout: builtins.bool
         timeout_ms: builtins.int
         def __init__(
             self,
             *,
+            no_timeout: builtins.bool = ...,
             timeout_ms: builtins.int = ...,
         ) -> None: ...
+        def HasField(
+            self,
+            field_name: typing_extensions.Literal[
+                "no_timeout", b"no_timeout", "timeout", b"timeout", "timeout_ms", b"timeout_ms"
+            ],
+        ) -> builtins.bool: ...
         def ClearField(
-            self, field_name: typing_extensions.Literal["timeout_ms", b"timeout_ms"]
+            self,
+            field_name: typing_extensions.Literal[
+                "no_timeout", b"no_timeout", "timeout", b"timeout", "timeout_ms", b"timeout_ms"
+            ],
         ) -> None: ...
+        def WhichOneof(
+            self, oneof_group: typing_extensions.Literal["timeout", b"timeout"]
+        ) -> typing_extensions.Literal["no_timeout", "timeout_ms"] | None: ...
 
     QUERY_ID_FIELD_NUMBER: builtins.int
     STATUS_FIELD_NUMBER: builtins.int
@@ -1074,37 +1089,41 @@ class StreamingQueryCommandResult(google.protobuf.message.Message):
     class ExceptionResult(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-        HAS_EXCEPTION_FIELD_NUMBER: builtins.int
-        ERROR_MESSAGE_FIELD_NUMBER: builtins.int
-        has_exception: builtins.bool
-        """Exception as string"""
-        error_message: builtins.str
+        NO_EXCEPTION_FIELD_NUMBER: builtins.int
+        EXCEPTION_MESSAGE_FIELD_NUMBER: builtins.int
+        no_exception: builtins.bool
+        exception_message: builtins.str
         def __init__(
             self,
             *,
-            has_exception: builtins.bool = ...,
-            error_message: builtins.str | None = ...,
+            no_exception: builtins.bool = ...,
+            exception_message: builtins.str = ...,
         ) -> None: ...
         def HasField(
             self,
             field_name: typing_extensions.Literal[
-                "_error_message", b"_error_message", "error_message", b"error_message"
+                "exception_content",
+                b"exception_content",
+                "exception_message",
+                b"exception_message",
+                "no_exception",
+                b"no_exception",
             ],
         ) -> builtins.bool: ...
         def ClearField(
             self,
             field_name: typing_extensions.Literal[
-                "_error_message",
-                b"_error_message",
-                "error_message",
-                b"error_message",
-                "has_exception",
-                b"has_exception",
+                "exception_content",
+                b"exception_content",
+                "exception_message",
+                b"exception_message",
+                "no_exception",
+                b"no_exception",
             ],
         ) -> None: ...
         def WhichOneof(
-            self, oneof_group: typing_extensions.Literal["_error_message", b"_error_message"]
-        ) -> typing_extensions.Literal["error_message"] | None: ...
+            self, oneof_group: typing_extensions.Literal["exception_content", b"exception_content"]
+        ) -> typing_extensions.Literal["no_exception", "exception_message"] | None: ...
 
     class AwaitTerminationResult(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
@@ -1114,11 +1133,23 @@ class StreamingQueryCommandResult(google.protobuf.message.Message):
         def __init__(
             self,
             *,
-            terminated: builtins.bool = ...,
+            terminated: builtins.bool | None = ...,
         ) -> None: ...
+        def HasField(
+            self,
+            field_name: typing_extensions.Literal[
+                "_terminated", b"_terminated", "terminated", b"terminated"
+            ],
+        ) -> builtins.bool: ...
         def ClearField(
-            self, field_name: typing_extensions.Literal["terminated", b"terminated"]
+            self,
+            field_name: typing_extensions.Literal[
+                "_terminated", b"_terminated", "terminated", b"terminated"
+            ],
         ) -> None: ...
+        def WhichOneof(
+            self, oneof_group: typing_extensions.Literal["_terminated", b"_terminated"]
+        ) -> typing_extensions.Literal["terminated"] | None: ...
 
     QUERY_ID_FIELD_NUMBER: builtins.int
     STATUS_FIELD_NUMBER: builtins.int
