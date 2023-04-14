@@ -19,17 +19,17 @@ package org.apache.spark.sql.execution.columnar.compression
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
+import org.apache.spark.sql.catalyst.types.PhysicalDataType
 import org.apache.spark.sql.execution.columnar._
 import org.apache.spark.sql.execution.columnar.ColumnarTestUtils._
 import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
-import org.apache.spark.sql.types.IntegralType
 
 class IntegralDeltaSuite extends SparkFunSuite {
   val nullValue = -1
   testIntegralDelta(new IntColumnStats, INT, IntDelta)
   testIntegralDelta(new LongColumnStats, LONG, LongDelta)
 
-  def testIntegralDelta[I <: IntegralType](
+  def testIntegralDelta[I <: PhysicalDataType](
       columnStats: ColumnStats,
       columnType: NativeColumnType[I],
       scheme: CompressionScheme): Unit = {
@@ -136,7 +136,8 @@ class IntegralDeltaSuite extends SparkFunSuite {
       assertResult(scheme.typeId, "Wrong compression scheme ID")(buffer.getInt())
 
       val decoder = scheme.decoder(buffer, columnType)
-      val columnVector = new OnHeapColumnVector(input.length, columnType.dataType)
+      val columnVector = new OnHeapColumnVector(input.length,
+        ColumnarDataTypeUtils.toLogicalDataType(columnType.dataType))
       decoder.decompress(columnVector, input.length)
 
       if (input.nonEmpty) {
