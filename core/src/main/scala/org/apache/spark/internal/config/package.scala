@@ -923,7 +923,7 @@ package object config {
 
   private[spark] val MAX_EXECUTOR_FAILURES =
     ConfigBuilder("spark.executor.maxNumFailures")
-      .doc("Spark exit if the number of failed executors exceeds this threshold. " +
+      .doc("Spark exits if the number of failed executors exceeds this threshold. " +
         "This configuration only takes effect on YARN, or on Kubernetes when " +
         "`spark.kubernetes.allocation.pods.allocator` is set to 'direct'.")
       .version("3.5.0")
