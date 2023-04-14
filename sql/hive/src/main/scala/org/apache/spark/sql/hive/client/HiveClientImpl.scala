@@ -172,9 +172,19 @@ private[hive] class HiveClientImpl(
     // got changed. We reset it to clientLoader.ClassLoader here.
     state.getConf.setClassLoader(clientLoader.classLoader)
     shim.setCurrentSessionState(state)
-    state.out = new PrintStream(outputBuffer, true, UTF_8.name())
-    state.err = new PrintStream(outputBuffer, true, UTF_8.name())
+    shimSessionState(state, "out", new PrintStream(outputBuffer, true, UTF_8.name()))
+    shimSessionState(state, "err", new PrintStream(outputBuffer, true, UTF_8.name()))
     state
+  }
+
+  def shimSessionState(state: SessionState, //
+                       field: String, stream: java.io.OutputStream): Unit = {
+    val fieldObj = state.getClass.getField(field)
+    val fieldValue = fieldObj.getType
+      // eg. PrintStream -> SessionStream (CDP 7.1 specified)
+      .getConstructor(classOf[java.io.OutputStream])
+      .newInstance(stream)
+    fieldObj.set(state, fieldValue)
   }
 
   /** Returns the configuration for the current session. */
@@ -313,15 +323,15 @@ private[hive] class HiveClientImpl(
   }
 
   def setOut(stream: PrintStream): Unit = withHiveState {
-    state.out = stream
+    shimSessionState(state, "out", stream)
   }
 
   def setInfo(stream: PrintStream): Unit = withHiveState {
-    state.info = stream
+    shimSessionState(state, "info", stream)
   }
 
   def setError(stream: PrintStream): Unit = withHiveState {
-    state.err = stream
+    shimSessionState(state, "err", stream)
   }
 
   private def setCurrentDatabaseRaw(db: String): Unit = {

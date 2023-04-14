@@ -99,9 +99,12 @@ private[hive] object SparkSQLCLIDriver extends Logging {
 
     sessionState.in = System.in
     try {
-      sessionState.out = new PrintStream(System.out, true, UTF_8.name())
-      sessionState.info = new PrintStream(System.err, true, UTF_8.name())
-      sessionState.err = new PrintStream(System.err, true, UTF_8.name())
+      shimSessionState(sessionState,
+        "out", new PrintStream(System.out, true, UTF_8.name()))
+      shimSessionState(sessionState,
+        "info", new PrintStream(System.err, true, UTF_8.name()))
+      shimSessionState(sessionState,
+        "err", new PrintStream(System.err, true, UTF_8.name()))
     } catch {
       case e: UnsupportedEncodingException => System.exit(3)
     }
@@ -180,9 +183,12 @@ private[hive] object SparkSQLCLIDriver extends Logging {
     // will set the output into an invalid buffer.
     sessionState.in = System.in
     try {
-      sessionState.out = new PrintStream(System.out, true, UTF_8.name())
-      sessionState.info = new PrintStream(System.err, true, UTF_8.name())
-      sessionState.err = new PrintStream(System.err, true, UTF_8.name())
+      shimSessionState(sessionState,
+        "out", new PrintStream(System.out, true, UTF_8.name()))
+      shimSessionState(sessionState,
+        "info", new PrintStream(System.err, true, UTF_8.name()))
+      shimSessionState(sessionState,
+        "err", new PrintStream(System.err, true, UTF_8.name()))
     } catch {
       case e: UnsupportedEncodingException => System.exit(3)
     }
@@ -300,6 +306,15 @@ private[hive] object SparkSQLCLIDriver extends Logging {
     System.exit(ret)
   }
 
+  def shimSessionState(state: SessionState, //
+                       field: String, stream: java.io.OutputStream): Unit = {
+    val fieldObj = state.getClass.getField(field)
+    val fieldValue = fieldObj.getType
+      // eg. PrintStream -> SessionStream (CDP 7.1 specified)
+      .getConstructor(classOf[java.io.OutputStream])
+      .newInstance(stream)
+    fieldObj.set(state, fieldValue)
+  }
 
   def isRemoteMode(state: CliSessionState): Boolean = {
     //    sessionState.isRemoteMode
