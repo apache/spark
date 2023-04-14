@@ -863,6 +863,13 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper {
     }.getMessage
     assert(message.contains("PARSE_SYNTAX_ERROR"))
   }
+
+  test("SparkSession.createDataFrame - large data set") {
+    val count = 2
+    val str = scala.util.Random.alphanumeric.take(100 * 1024 * 1024).mkString
+    val data = Seq.tabulate(count)(i => (i, str))
+    assert(spark.createDataFrame(data).count() === count)
+  }
 }
 
 private[sql] case class MyType(id: Long, a: Double, b: Double)
