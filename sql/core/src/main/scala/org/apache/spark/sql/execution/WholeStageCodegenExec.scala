@@ -675,8 +675,11 @@ case class WholeStageCodegenExec(child: SparkPlan)(val codegenStageId: Int)
         stack.pop() match {
           case _: WholeStageCodegenExec =>
           case _: InputRDDCodegen =>
-          case c: CodegenSupport =>
-            val (newReusableExpressions, newAttributeSeq) = c.reusableExpressions()
+          case plan: CodegenSupport =>
+            // Because this plan may already be optimized before, so remove stale commonExpressions
+            plan.initBlock = EmptyBlock
+            plan.commonExpressions.clear()
+            val (newReusableExpressions, newAttributeSeq) = plan.reusableExpressions()
             // If the input attributes changed, collect current common expressions and clear
             // equivalentExpressions
             if (attributeSeq.size != newAttributeSeq.size ||
@@ -686,11 +689,11 @@ case class WholeStageCodegenExec(child: SparkPlan)(val codegenStageId: Int)
             if (newReusableExpressions.nonEmpty) {
               val bondExpressions =
                 BindReferences.bindReferences(newReusableExpressions, newAttributeSeq)
-              executeSeq += ((c, bondExpressions, equivalence))
+              executeSeq += ((plan, bondExpressions, equivalence))
               ctx.wholeStageSubexpressionElimination(bondExpressions, equivalence)
             }
             attributeSeq = newAttributeSeq
-            stack.pushAll(c.children)
+            stack.pushAll(plan.children)
 
           case _ =>
         }
