@@ -203,7 +203,8 @@
     <commons-cli.version>1.5.0</commons-cli.version>
     <bouncycastle.version>1.60</bouncycastle.version>
     <tink.version>1.6.1</tink.version>
-    <tomcat.version>9.0.63</tomcat.version>
+    <tomcat.version>9.0.68</tomcat.version>
+    <tomcat-embed-core.version>9.0.72</tomcat-embed-core.version>
     <!--
     If you are changing Arrow version specification, please check
     ./python/pyspark/sql/pandas/utils.py, and ./python/setup.py too.
@@ -2600,6 +2601,8 @@
         <artifactId>datanucleus-core</artifactId>
         <version>${datanucleus-core.version}</version>
       </dependency>
+
+
       <dependency>
         <groupId>org.apache.thrift</groupId>
         <artifactId>libthrift</artifactId>
@@ -2615,7 +2618,7 @@
       <dependency>
         <groupId>org.apache.tomcat.embed</groupId>
         <artifactId>tomcat-embed-core</artifactId>
-        <version>${tomcat.version}</version>
+        <version>${tomcat-embed-core.version}</version>
       </dependency>
       <dependency>
         <groupId>org.apache.tomcat</groupId>
