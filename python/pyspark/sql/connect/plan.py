@@ -2047,6 +2047,7 @@ class CoGroupMap(LogicalPlan):
 
 class ApplyInPandasWithState(LogicalPlan):
     """Logical plan object for a applyInPandasWithState."""
+
     def __init__(
         self,
         child: Optional["LogicalPlan"],

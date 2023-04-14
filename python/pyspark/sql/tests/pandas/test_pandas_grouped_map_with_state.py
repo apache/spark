@@ -236,7 +236,9 @@ class GroupedApplyInPandasWithStateTestsMixin:
             q.stop()
 
 
-class GroupedApplyInPandasWithStateTests(GroupedApplyInPandasWithStateTestsMixin, ReusedSQLTestCase):
+class GroupedApplyInPandasWithStateTests(
+    GroupedApplyInPandasWithStateTestsMixin, ReusedSQLTestCase
+):
     pass
 
 

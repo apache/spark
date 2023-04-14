@@ -265,12 +265,12 @@ class GroupedData:
     applyInPandas.__doc__ = PySparkGroupedData.applyInPandas.__doc__
 
     def applyInPandasWithState(
-            self,
-            func: "PandasGroupedMapFunctionWithState",
-            outputStructType: Union[StructType, str],
-            stateStructType: Union[StructType, str],
-            outputMode: str,
-            timeoutConf: str
+        self,
+        func: "PandasGroupedMapFunctionWithState",
+        outputStructType: Union[StructType, str],
+        stateStructType: Union[StructType, str],
+        outputMode: str,
+        timeoutConf: str,
     ) -> "DataFrame":
         from pyspark.sql.connect.udf import UserDefinedFunction
         from pyspark.sql.connect.dataframe import DataFrame
@@ -281,11 +281,15 @@ class GroupedData:
             evalType=PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE,
         )
 
-        output_schema: str = outputStructType.json() if isinstance(outputStructType, StructType)\
+        output_schema: str = (
+            outputStructType.json()
+            if isinstance(outputStructType, StructType)
             else outputStructType
+        )
 
-        state_schema: str = stateStructType.json() if isinstance(stateStructType, StructType) \
-            else stateStructType
+        state_schema: str = (
+            stateStructType.json() if isinstance(stateStructType, StructType) else stateStructType
+        )
 
         return DataFrame.withPlan(
             plan.ApplyInPandasWithState(
