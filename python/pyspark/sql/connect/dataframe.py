@@ -41,11 +41,12 @@ import pyarrow as pa
 import json
 import warnings
 from collections.abc import Iterable
+from html import escape as html_escape
 
 from pyspark import _NoValue
 from pyspark._globals import _NoValueType
 from pyspark.sql.observation import Observation
-from pyspark.sql.types import Row, StructType
+from pyspark.sql.types import Row, BooleanType, StringType, StructType, _parse_datatype_json_string
 from pyspark.sql.dataframe import (
     DataFrame as PySparkDataFrame,
     DataFrameNaFunctions as PySparkDataFrameNaFunctions,
@@ -96,9 +97,41 @@ class DataFrame:
         self._schema = schema
         self._plan: Optional[plan.LogicalPlan] = None
         self._session: "SparkSession" = session
+        # Check whether _repr_html is supported or not, we use it to avoid calling RPC twice
+        # by __repr__ and _repr_html_ while eager evaluation opens.
+        self._support_repr_html = False
 
     def __repr__(self) -> str:
-        return "DataFrame[%s]" % (", ".join("%s: %s" % c for c in self.dtypes))
+        if not self._support_repr_html:
+            pdf = DataFrame.withPlan(
+                plan.EagerEvalString(child=self._plan, format="show_string"), session=self._session
+            ).toPandas()
+            assert pdf is not None
+            if pdf["eager_eval_string"][0] is not None:
+                return pdf["eager_eval_string"][0]
+            else:
+                _schema = _parse_datatype_json_string(pdf["schema"][0])
+                assert isinstance(_schema, StructType)
+                schema = _schema
+        else:
+            schema = self.schema
+        return "DataFrame[%s]" % (
+            ", ".join("%s: %s" % (str(f.name), f.dataType.simpleString()) for f in schema.fields)
+        )
+
+    def _repr_html_(self) -> Optional[str]:
+        if not self._support_repr_html:
+            self._support_repr_html = True
+        pdf = DataFrame.withPlan(
+            plan.EagerEvalString(child=self._plan, format="html_string"), session=self._session
+        ).toPandas()
+        assert pdf is not None
+        if pdf["eager_eval_string"][0] is not None:
+            return pdf["eager_eval_string"][0]
+        else:
+            return None
+
+    _repr_html_.__doc__ = PySparkDataFrame._repr_html_.__doc__
 
     @property
     def write(self) -> "DataFrameWriter":
@@ -1826,9 +1859,6 @@ class DataFrame:
 
     def toJSON(self, *args: Any, **kwargs: Any) -> None:
         raise NotImplementedError("toJSON() is not implemented.")
-
-    def _repr_html_(self, *args: Any, **kwargs: Any) -> None:
-        raise NotImplementedError("_repr_html_() is not implemented.")
 
     def sameSemantics(self, other: "DataFrame") -> bool:
         assert self._plan is not None

@@ -66,6 +66,7 @@ message Relation {
     GroupMap group_map = 31;
     CoGroupMap co_group_map = 32;
     WithWatermark with_watermark = 33;
+    EagerEvalString eager_eval_string = 34;
 
     // NA functions
     NAFill fill_na = 90;
@@ -454,6 +455,24 @@ message ShowString {
 
   // (Required) If set to true, prints output rows vertically (one line per column value).
   bool vertical = 4;
+}
+
+// Try eager evaluation.
+// It will invoke 'Dataset.showString' or 'Dataset.htmlString' to compose the result.
+// If 'spark.sql.repl.eagerEval.enabled' is 'false', it will return null.
+message EagerEvalString {
+  // (Required) The input relation.
+  Relation input = 1;
+
+  // (Required) The format of the output.
+  Format format = 2;
+
+  // Options for the output format.
+  enum Format {
+    FORMAT_UNSPECIFIED = 0;
+    FORMAT_SHOW_STRING = 1;
+    FORMAT_HTML_STRING = 2;
+  }
 }
 
 // Computes specified statistics for numeric and string columns.

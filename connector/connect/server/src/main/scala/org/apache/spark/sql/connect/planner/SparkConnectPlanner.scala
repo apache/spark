@@ -81,6 +81,8 @@ class SparkConnectPlanner(val session: SparkSession) {
     val plan = rel.getRelTypeCase match {
       // DataFrame API
       case proto.Relation.RelTypeCase.SHOW_STRING => transformShowString(rel.getShowString)
+      case proto.Relation.RelTypeCase.EAGER_EVAL_STRING =>
+        transformEagerEvalString(rel.getEagerEvalString)
       case proto.Relation.RelTypeCase.READ => transformReadRel(rel.getRead)
       case proto.Relation.RelTypeCase.PROJECT => transformProject(rel.getProject)
       case proto.Relation.RelTypeCase.FILTER => transformFilter(rel.getFilter)
@@ -221,6 +223,26 @@ class SparkConnectPlanner(val session: SparkSession) {
     LocalRelation.fromProduct(
       output = AttributeReference("show_string", StringType, false)() :: Nil,
       data = Tuple1.apply(showString) :: Nil)
+  }
+
+  private def transformEagerEvalString(rel: proto.EagerEvalString): LogicalPlan = {
+    val conf = session.sessionState.conf
+    val df = Dataset.ofRows(session, transformRelation(rel.getInput))
+    val eagerEvalString = if (conf.isReplEagerEvalEnabled) {
+      rel.getFormat match {
+        case proto.EagerEvalString.Format.FORMAT_SHOW_STRING =>
+          Some(df.showString(conf.replEagerEvalMaxNumRows, conf.replEagerEvalTruncate))
+        case proto.EagerEvalString.Format.FORMAT_HTML_STRING =>
+          Some(df.htmlString(conf.replEagerEvalMaxNumRows, conf.replEagerEvalTruncate))
+        case _ => throw InvalidPlanInput("Does not support " + rel.getFormat.name())
+      }
+    } else {
+      None
+    }
+    LocalRelation.fromProduct(
+      output = AttributeReference("eager_eval_string", StringType)() ::
+        AttributeReference("schema", StringType, false)() :: Nil,
+      data = (eagerEvalString.orNull, df.schema.json) :: Nil)
   }
 
   private def transformSql(sql: proto.SQL): LogicalPlan = {

@@ -95,6 +95,7 @@ class Relation(google.protobuf.message.Message):
     GROUP_MAP_FIELD_NUMBER: builtins.int
     CO_GROUP_MAP_FIELD_NUMBER: builtins.int
     WITH_WATERMARK_FIELD_NUMBER: builtins.int
+    EAGER_EVAL_STRING_FIELD_NUMBER: builtins.int
     FILL_NA_FIELD_NUMBER: builtins.int
     DROP_NA_FIELD_NUMBER: builtins.int
     REPLACE_FIELD_NUMBER: builtins.int
@@ -176,6 +177,8 @@ class Relation(google.protobuf.message.Message):
     @property
     def with_watermark(self) -> global___WithWatermark: ...
     @property
+    def eager_eval_string(self) -> global___EagerEvalString: ...
+    @property
     def fill_na(self) -> global___NAFill:
         """NA functions"""
     @property
@@ -245,6 +248,7 @@ class Relation(google.protobuf.message.Message):
         group_map: global___GroupMap | None = ...,
         co_group_map: global___CoGroupMap | None = ...,
         with_watermark: global___WithWatermark | None = ...,
+        eager_eval_string: global___EagerEvalString | None = ...,
         fill_na: global___NAFill | None = ...,
         drop_na: global___NADrop | None = ...,
         replace: global___NAReplace | None = ...,
@@ -289,6 +293,8 @@ class Relation(google.protobuf.message.Message):
             b"drop",
             "drop_na",
             b"drop_na",
+            "eager_eval_string",
+            b"eager_eval_string",
             "extension",
             b"extension",
             "fill_na",
@@ -390,6 +396,8 @@ class Relation(google.protobuf.message.Message):
             b"drop",
             "drop_na",
             b"drop_na",
+            "eager_eval_string",
+            b"eager_eval_string",
             "extension",
             b"extension",
             "fill_na",
@@ -497,6 +505,7 @@ class Relation(google.protobuf.message.Message):
         "group_map",
         "co_group_map",
         "with_watermark",
+        "eager_eval_string",
         "fill_na",
         "drop_na",
         "replace",
@@ -1803,6 +1812,58 @@ class ShowString(google.protobuf.message.Message):
     ) -> None: ...
 
 global___ShowString = ShowString
+
+class EagerEvalString(google.protobuf.message.Message):
+    """Try eager evaluation.
+    It will invoke 'Dataset.showString' or 'Dataset.htmlString' to compose the result.
+    If 'spark.sql.repl.eagerEval.enabled' is 'false', it will return null.
+    """
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    class _Format:
+        ValueType = typing.NewType("ValueType", builtins.int)
+        V: typing_extensions.TypeAlias = ValueType
+
+    class _FormatEnumTypeWrapper(
+        google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[
+            EagerEvalString._Format.ValueType
+        ],
+        builtins.type,
+    ):  # noqa: F821
+        DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
+        FORMAT_UNSPECIFIED: EagerEvalString._Format.ValueType  # 0
+        FORMAT_SHOW_STRING: EagerEvalString._Format.ValueType  # 1
+        FORMAT_HTML_STRING: EagerEvalString._Format.ValueType  # 2
+
+    class Format(_Format, metaclass=_FormatEnumTypeWrapper):
+        """Options for the output format."""
+
+    FORMAT_UNSPECIFIED: EagerEvalString.Format.ValueType  # 0
+    FORMAT_SHOW_STRING: EagerEvalString.Format.ValueType  # 1
+    FORMAT_HTML_STRING: EagerEvalString.Format.ValueType  # 2
+
+    INPUT_FIELD_NUMBER: builtins.int
+    FORMAT_FIELD_NUMBER: builtins.int
+    @property
+    def input(self) -> global___Relation:
+        """(Required) The input relation."""
+    format: global___EagerEvalString.Format.ValueType
+    """(Required) The format of the output."""
+    def __init__(
+        self,
+        *,
+        input: global___Relation | None = ...,
+        format: global___EagerEvalString.Format.ValueType = ...,
+    ) -> None: ...
+    def HasField(
+        self, field_name: typing_extensions.Literal["input", b"input"]
+    ) -> builtins.bool: ...
+    def ClearField(
+        self, field_name: typing_extensions.Literal["format", b"format", "input", b"input"]
+    ) -> None: ...
+
+global___EagerEvalString = EagerEvalString
 
 class StatSummary(google.protobuf.message.Message):
     """Computes specified statistics for numeric and string columns.

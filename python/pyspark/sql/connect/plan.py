@@ -387,6 +387,30 @@ class ShowString(LogicalPlan):
         return plan
 
 
+class EagerEvalString(LogicalPlan):
+    def __init__(self, child: Optional["LogicalPlan"], format: str) -> None:
+        super().__init__(child)
+        self._format = format
+
+    def plan(self, session: "SparkConnectClient") -> proto.Relation:
+        assert self._child is not None
+        plan = self._create_proto_relation()
+        plan.eager_eval_string.input.CopyFrom(self._child.plan(session))
+        if self._format == "show_string":
+            plan.eager_eval_string.format = proto.EagerEvalString.Format.FORMAT_SHOW_STRING
+        elif self._format == "html_string":
+            plan.eager_eval_string.format = proto.EagerEvalString.Format.FORMAT_HTML_STRING
+        else:
+            raise NotImplementedError(
+                """
+                Unsupported format: %s. Supported join types include:
+                "show_string", "html_string"
+                """
+                % self._format
+            )
+        return plan
+
+
 class Project(LogicalPlan):
     """Logical plan object for a projection.
 
