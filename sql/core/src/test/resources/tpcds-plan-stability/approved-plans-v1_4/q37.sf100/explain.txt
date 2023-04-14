@@ -113,7 +113,7 @@ Input [2]: [cs_item_sk#11, cs_sold_date_sk#12]
 
 (19) Filter [codegen id : 5]
 Input [2]: [cs_item_sk#11, cs_sold_date_sk#12]
-Condition : isnotnull(cs_item_sk#11)
+Condition : (isnotnull(cs_item_sk#11) AND might_contain(Subquery scalar-subquery#13, [id=#14], xxhash64(cs_item_sk#11, 42)))
 
 (20) Project [codegen id : 5]
 Output [1]: [cs_item_sk#11]
@@ -170,25 +170,71 @@ BroadcastExchange (33)
 
 
 (29) Scan parquet spark_catalog.default.date_dim
-Output [2]: [d_date_sk#10, d_date#13]
+Output [2]: [d_date_sk#10, d_date#15]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
 PushedFilters: [IsNotNull(d_date), GreaterThanOrEqual(d_date,2000-02-01), LessThanOrEqual(d_date,2000-04-01), IsNotNull(d_date_sk)]
 ReadSchema: struct<d_date_sk:int,d_date:date>
 
 (30) ColumnarToRow [codegen id : 1]
-Input [2]: [d_date_sk#10, d_date#13]
+Input [2]: [d_date_sk#10, d_date#15]
 
 (31) Filter [codegen id : 1]
-Input [2]: [d_date_sk#10, d_date#13]
-Condition : (((isnotnull(d_date#13) AND (d_date#13 >= 2000-02-01)) AND (d_date#13 <= 2000-04-01)) AND isnotnull(d_date_sk#10))
+Input [2]: [d_date_sk#10, d_date#15]
+Condition : (((isnotnull(d_date#15) AND (d_date#15 >= 2000-02-01)) AND (d_date#15 <= 2000-04-01)) AND isnotnull(d_date_sk#10))
 
 (32) Project [codegen id : 1]
 Output [1]: [d_date_sk#10]
-Input [2]: [d_date_sk#10, d_date#13]
+Input [2]: [d_date_sk#10, d_date#15]
 
 (33) BroadcastExchange
 Input [1]: [d_date_sk#10]
 Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [plan_id=5]
+
+Subquery:2 Hosting operator id = 19 Hosting Expression = Subquery scalar-subquery#13, [id=#14]
+ObjectHashAggregate (40)
++- Exchange (39)
+   +- ObjectHashAggregate (38)
+      +- * Project (37)
+         +- * Filter (36)
+            +- * ColumnarToRow (35)
+               +- Scan parquet spark_catalog.default.item (34)
+
+
+(34) Scan parquet spark_catalog.default.item
+Output [3]: [i_item_sk#1, i_current_price#4, i_manufact_id#5]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/item]
+PushedFilters: [IsNotNull(i_current_price), GreaterThanOrEqual(i_current_price,68.00), LessThanOrEqual(i_current_price,98.00), In(i_manufact_id, [677,694,808,940]), IsNotNull(i_item_sk)]
+ReadSchema: struct<i_item_sk:int,i_current_price:decimal(7,2),i_manufact_id:int>
+
+(35) ColumnarToRow [codegen id : 1]
+Input [3]: [i_item_sk#1, i_current_price#4, i_manufact_id#5]
+
+(36) Filter [codegen id : 1]
+Input [3]: [i_item_sk#1, i_current_price#4, i_manufact_id#5]
+Condition : ((((isnotnull(i_current_price#4) AND (i_current_price#4 >= 68.00)) AND (i_current_price#4 <= 98.00)) AND i_manufact_id#5 IN (677,940,694,808)) AND isnotnull(i_item_sk#1))
+
+(37) Project [codegen id : 1]
+Output [1]: [i_item_sk#1]
+Input [3]: [i_item_sk#1, i_current_price#4, i_manufact_id#5]
+
+(38) ObjectHashAggregate
+Input [1]: [i_item_sk#1]
+Keys: []
+Functions [1]: [partial_bloom_filter_agg(xxhash64(i_item_sk#1, 42), 239, 6582, 0, 0)]
+Aggregate Attributes [1]: [buf#16]
+Results [1]: [buf#17]
+
+(39) Exchange
+Input [1]: [buf#17]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=6]
+
+(40) ObjectHashAggregate
+Input [1]: [buf#17]
+Keys: []
+Functions [1]: [bloom_filter_agg(xxhash64(i_item_sk#1, 42), 239, 6582, 0, 0)]
+Aggregate Attributes [1]: [bloom_filter_agg(xxhash64(i_item_sk#1, 42), 239, 6582, 0, 0)#18]
+Results [1]: [bloom_filter_agg(xxhash64(i_item_sk#1, 42), 239, 6582, 0, 0)#18 AS bloomFilter#19]
 
 

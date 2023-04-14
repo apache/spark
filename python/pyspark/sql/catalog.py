@@ -19,6 +19,7 @@ import sys
 import warnings
 from typing import Any, Callable, NamedTuple, List, Optional, TYPE_CHECKING
 
+from pyspark.storagelevel import StorageLevel
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.session import SparkSession
 from pyspark.sql.types import StructType
@@ -87,6 +88,7 @@ class Catalog:
         """Create a new Catalog that wraps the underlying JVM object."""
         self._sparkSession = sparkSession
         self._jsparkSession = sparkSession._jsparkSession
+        self._sc = sparkSession._sc
         self._jcatalog = sparkSession._jsparkSession.catalog()
 
     def currentCatalog(self) -> str:
@@ -917,8 +919,9 @@ class Catalog:
         """
         return self._jcatalog.isCached(tableName)
 
-    def cacheTable(self, tableName: str) -> None:
-        """Caches the specified table in-memory.
+    def cacheTable(self, tableName: str, storageLevel: Optional[StorageLevel] = None) -> None:
+        """Caches the specified table in-memory or with given storage level.
+        Default MEMORY_AND_DISK.
 
         .. versionadded:: 2.0.0
 
@@ -930,11 +933,21 @@ class Catalog:
             .. versionchanged:: 3.4.0
                 Allow ``tableName`` to be qualified with catalog name.
 
+        storageLevel : :class:`StorageLevel`
+            storage level to set for persistence.
+
+            .. versionchanged:: 3.5.0
+                Allow to specify storage level.
+
         Examples
         --------
         >>> _ = spark.sql("DROP TABLE IF EXISTS tbl1")
         >>> _ = spark.sql("CREATE TABLE tbl1 (name STRING, age INT) USING parquet")
         >>> spark.catalog.cacheTable("tbl1")
+
+        or
+
+        >>> spark.catalog.cacheTable("tbl1", StorageLevel.OFF_HEAP)
 
         Throw an analysis exception when the table does not exist.
 
@@ -949,7 +962,11 @@ class Catalog:
         >>> spark.catalog.uncacheTable("tbl1")
         >>> _ = spark.sql("DROP TABLE tbl1")
         """
-        self._jcatalog.cacheTable(tableName)
+        if storageLevel:
+            javaStorageLevel = self._sc._getJavaStorageLevel(storageLevel)
+            self._jcatalog.cacheTable(tableName, javaStorageLevel)
+        else:
+            self._jcatalog.cacheTable(tableName)
 
     def uncacheTable(self, tableName: str) -> None:
         """Removes the specified table from the in-memory cache.

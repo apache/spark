@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.trees.SQLQueryContext
 import org.apache.spark.sql.catalyst.trees.TreePattern.{BINARY_ARITHMETIC, TreePattern, UNARY_POSITIVE}
-import org.apache.spark.sql.catalyst.types.{PhysicalDecimalType, PhysicalFractionalType}
+import org.apache.spark.sql.catalyst.types.{PhysicalDecimalType, PhysicalFractionalType, PhysicalIntegerType, PhysicalIntegralType, PhysicalLongType}
 import org.apache.spark.sql.catalyst.util.{IntervalMathUtils, IntervalUtils, MathUtils, TypeUtils}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
@@ -885,13 +885,13 @@ case class IntegralDivide(
   private lazy val div: (Any, Any) => Any = {
     val integral = left.dataType match {
       case i: IntegralType =>
-        i.integral.asInstanceOf[Integral[Any]]
-      case d: DecimalType =>
-        d.asIntegral.asInstanceOf[Integral[Any]]
+        PhysicalIntegralType.integral(i)
+      case DecimalType.Fixed(p, s) =>
+        PhysicalDecimalType(p, s).asIntegral.asInstanceOf[Integral[Any]]
       case _: YearMonthIntervalType =>
-        IntegerType.integral.asInstanceOf[Integral[Any]]
+        PhysicalIntegerType.integral.asInstanceOf[Integral[Any]]
       case _: DayTimeIntervalType =>
-        LongType.integral.asInstanceOf[Integral[Any]]
+        PhysicalLongType.integral.asInstanceOf[Integral[Any]]
     }
     (x, y) => {
       val res = super.dataType match {
@@ -977,11 +977,11 @@ case class Remainder(
 
     // catch-all cases
     case i: IntegralType =>
-      val integral = i.integral.asInstanceOf[Integral[Any]]
+      val integral = PhysicalIntegralType.integral(i)
       (left, right) => integral.rem(left, right)
 
     case d @ DecimalType.Fixed(precision, scale) =>
-      val integral = d.asIntegral.asInstanceOf[Integral[Any]]
+      val integral = PhysicalDecimalType(precision, scale).asIntegral.asInstanceOf[Integral[Any]]
       (left, right) =>
         checkDecimalOverflow(integral.rem(left, right).asInstanceOf[Decimal], precision, scale)
   }
