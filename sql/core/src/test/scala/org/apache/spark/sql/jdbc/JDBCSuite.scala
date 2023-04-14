@@ -33,8 +33,8 @@ import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row}
 import org.apache.spark.sql.catalyst.{analysis, TableIdentifier}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.ShowCreateTable
-import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeTestUtils}
-import org.apache.spark.sql.execution.{DataSourceScanExec, ExtendedMode}
+import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CharVarcharUtils, DateTimeTestUtils}
+import org.apache.spark.sql.execution.{DataSourceScanExec, ExtendedMode, ProjectExec}
 import org.apache.spark.sql.execution.command.{ExplainCommand, ShowCreateTableCommand}
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JDBCPartition, JDBCRelation, JdbcUtils}
@@ -315,8 +315,12 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
     // the plan only has PhysicalRDD to scan JDBCRelation.
     assert(parentPlan.isInstanceOf[org.apache.spark.sql.execution.WholeStageCodegenExec])
     val node = parentPlan.asInstanceOf[org.apache.spark.sql.execution.WholeStageCodegenExec]
-    assert(node.child.isInstanceOf[org.apache.spark.sql.execution.DataSourceScanExec])
-    assert(node.child.asInstanceOf[DataSourceScanExec].nodeName.contains("JDBCRelation"))
+    val child = node.child match {
+      case ProjectExec(_, c) => c
+      case o => o
+    }
+    assert(child.isInstanceOf[org.apache.spark.sql.execution.DataSourceScanExec])
+    assert(child.asInstanceOf[DataSourceScanExec].nodeName.contains("JDBCRelation"))
     df
   }
 
@@ -924,7 +928,7 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
     assert(Postgres.getCatalystType(java.sql.Types.ARRAY, "_numeric", 0, md) ==
       Some(ArrayType(DecimalType.SYSTEM_DEFAULT)))
     assert(Postgres.getCatalystType(java.sql.Types.ARRAY, "_bpchar", 64, md) ==
-      Some(ArrayType(StringType)))
+      Some(ArrayType(CharType(64))))
     assert(Postgres.getJDBCType(FloatType).map(_.databaseTypeDefinition).get == "FLOAT4")
     assert(Postgres.getJDBCType(DoubleType).map(_.databaseTypeDefinition).get == "FLOAT8")
     assert(Postgres.getJDBCType(ByteType).map(_.databaseTypeDefinition).get == "SMALLINT")
@@ -1373,20 +1377,20 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
 
   test("jdbc API support custom schema") {
     val parts = Array[String]("THEID < 2", "THEID >= 2")
-    val customSchema = "NAME STRING, THEID INT"
+    val customSchema = "NAME VARCHAR(32), THEID INT"
     val props = new Properties()
     props.put("customSchema", customSchema)
     val df = spark.read.jdbc(urlWithUserAndPass, "TEST.PEOPLE", parts, props)
     assert(df.schema.size === 2)
     val expectedSchema = new StructType(CatalystSqlParser.parseTableSchema(customSchema).map(
       f => StructField(f.name, f.dataType, f.nullable, defaultMetadata)).toArray)
-    assert(df.schema === expectedSchema)
+    assert(df.schema === CharVarcharUtils.replaceCharVarcharWithStringInSchema(expectedSchema))
     assert(df.count() === 3)
   }
 
   test("jdbc API custom schema DDL-like strings.") {
     withTempView("people_view") {
-      val customSchema = "NAME STRING, THEID INT"
+      val customSchema = "NAME VARCHAR(32), THEID INT"
       sql(
         s"""
            |CREATE TEMPORARY VIEW people_view
@@ -1398,7 +1402,8 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
       assert(df.schema.length === 2)
       val expectedSchema = new StructType(CatalystSqlParser.parseTableSchema(customSchema)
         .map(f => StructField(f.name, f.dataType, f.nullable, defaultMetadata)).toArray)
-      assert(df.schema === expectedSchema)
+
+      assert(df.schema === CharVarcharUtils.replaceCharVarcharWithStringInSchema(expectedSchema))
       assert(df.count() === 3)
     }
   }
@@ -1543,9 +1548,9 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
     }
 
   test("jdbc data source shouldn't have unnecessary metadata in its schema") {
-    val schema = StructType(Seq(StructField("NAME", StringType, true, defaultMetadata),
+    var schema = StructType(Seq(StructField("NAME", VarcharType(32), true, defaultMetadata),
       StructField("THEID", IntegerType, true, defaultMetadata)))
-
+    schema = CharVarcharUtils.replaceCharVarcharWithStringInSchema(schema)
     val df = spark.read.format("jdbc")
       .option("Url", urlWithUserAndPass)
       .option("DbTaBle", "TEST.PEOPLE")

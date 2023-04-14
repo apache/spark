@@ -18,8 +18,11 @@
 package org.apache.spark.sql.connector
 
 import org.apache.spark.sql.{AnalysisException, Row}
+import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
+import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.functions.{col, struct}
+import org.apache.spark.sql.types.IntegerType
 
 class MetadataColumnSuite extends DatasourceV2SQLBase {
   import testImplicits._
@@ -338,6 +341,19 @@ class MetadataColumnSuite extends DatasourceV2SQLBase {
       }
       assert(relations.length == 2)
       assert(relations(0).output != relations(1).output)
+    }
+  }
+
+  test("SPARK-43123: Metadata column related field metadata should not be leaked to catalogs") {
+    withTable(tbl, "testcat.target") {
+      prepareTable()
+      sql(s"CREATE TABLE testcat.target AS SELECT index FROM $tbl")
+      val cols = catalog("testcat").asTableCatalog.loadTable(
+        Identifier.of(Array.empty, "target")).columns()
+      assert(cols.length == 1)
+      assert(cols.head.name() == "index")
+      assert(cols.head.dataType() == IntegerType)
+      assert(cols.head.metadataInJSON() == null)
     }
   }
 }
