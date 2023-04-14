@@ -21,6 +21,7 @@ import org.apache.spark.sql.types._
 
 object ColumnarDataTypeUtils {
   def toLogicalDataType(dataType: PhysicalDataType): DataType = dataType match {
+    case PhysicalBooleanType => BooleanType
     case PhysicalIntegerType => IntegerType
     case PhysicalLongType => LongType
     case PhysicalByteType => ByteType
