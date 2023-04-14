@@ -75,7 +75,7 @@ class TorchDistributorLocalUnitTestsOnConnect(
         ]
 
 
-@unittest.skip("unstable, ignore for now")
+@unittest.skipIf(not have_torch, "torch is required")
 class TorchDistributorLocalUnitTestsIIOnConnect(
     TorchDistributorLocalUnitTestsMixin, unittest.TestCase
 ):
