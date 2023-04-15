@@ -125,10 +125,8 @@ class SparkSession private[sql] (
             .setSchema(encoder.schema.json)
             .setData(arrowData)
         } else {
-          // Cache the local relation: data + schema in JSON
-          // val cachePath = ""
-          // builder.getCachedRelationBuilder
-          //  .setPath(cachePath)
+          val cacheKey = client.cacheLocalRelation(encoder.schema.json, arrowData)
+          builder.getCachedRelationBuilder.setKey(cacheKey)
         }
       }
     }
