@@ -462,6 +462,7 @@ private[hive] class HiveClientImpl(
           ex, h.getDbName, h.getTableName)
     }
     val schema = StructType((cols ++ partCols).toArray)
+    val  schemaReorderingStr = h.getProperty(HiveClientImpl.KEY_EXPECTED_SCHEMA_ORDERING)
 
     val bucketSpec = if (h.getNumBuckets > 0) {
       val sortColumnOrders = h.getSortCols.asScala
@@ -1068,6 +1069,9 @@ private[hive] class HiveClientImpl(
 }
 
 private[hive] object HiveClientImpl extends Logging {
+
+  val KEY_EXPECTED_SCHEMA_ORDERING = "key_expected_schema_ordering"
+
   /** Converts the native StructField to Hive's FieldSchema. */
   def toHiveColumn(c: StructField): FieldSchema = {
     // For Hive Serde, we still need to to restore the raw type for char and varchar type.
@@ -1138,6 +1142,18 @@ private[hive] object HiveClientImpl extends Logging {
     val (partCols, schema) = table.schema.map(toHiveColumn).partition { c =>
       table.partitionColumnNames.contains(c.getName)
     }
+    table.expectedSchema.foreach(expctdSchma => {
+      val actualSchema = table.schema
+      if (!expctdSchma.equals(actualSchema)) {
+        // create ordering in string form
+        val value = expctdSchma.foldLeft(new StringBuilder())((sb, expctedSf) => {
+          val actualIndex = actualSchema.indexOf(expctedSf)
+          sb.append(actualIndex.toString).append(',')
+        }).toString()
+        hiveTable.setProperty(HiveClientImpl.KEY_EXPECTED_SCHEMA_ORDERING, value)
+      }
+    })
+
     hiveTable.setFields(schema.asJava)
     hiveTable.setPartCols(partCols.asJava)
     Option(table.owner).filter(_.nonEmpty).orElse(userName).foreach(hiveTable.setOwner)

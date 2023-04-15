@@ -252,7 +252,8 @@ case class CatalogTable(
     tracksPartitionsInCatalog: Boolean = false,
     schemaPreservesCase: Boolean = true,
     ignoredProperties: Map[String, String] = Map.empty,
-    viewOriginalText: Option[String] = None) {
+    viewOriginalText: Option[String] = None,
+    expectedSchema: Option[StructType] = None) {
 
   import CatalogTable._
 

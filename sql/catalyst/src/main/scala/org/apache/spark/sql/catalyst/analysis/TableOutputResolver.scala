@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.objects.AssertNotNull
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
-import org.apache.spark.sql.catalyst.util.CharVarcharUtils
+import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, HiveUtils}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
@@ -33,10 +33,20 @@ import org.apache.spark.sql.types.{ArrayType, DataType, DecimalType, IntegralTyp
 object TableOutputResolver {
   def resolveOutputColumns(
       tableName: String,
-      expected: Seq[Attribute],
-      query: LogicalPlan,
+      expectedX: Seq[Attribute],
+      queryX: LogicalPlan,
       byName: Boolean,
-      conf: SQLConf): LogicalPlan = {
+      conf: SQLConf, expectedOrder: Option[String] = None): LogicalPlan = {
+
+    val (query, expected) = if (expectedOrder.isEmpty || byName) {
+      queryX -> expectedX
+    } else {
+      // the input plan queryX is as per expected schema. we need to convert it to actual schema
+
+      val actualOutput = HiveUtils.convertExpectedToActual(expectedOrder.get, queryX.output)
+      Project(actualOutput, queryX) ->
+        HiveUtils.convertExpectedToActual(expectedOrder.get, expectedX)
+    }
 
     val actualExpectedCols = expected.map { attr =>
       attr.withDataType(CharVarcharUtils.getRawType(attr.metadata).getOrElse(attr.dataType))

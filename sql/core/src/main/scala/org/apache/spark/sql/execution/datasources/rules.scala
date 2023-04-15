@@ -234,10 +234,13 @@ case class PreprocessTableCreation(catalog: SessionCatalog) extends Rule[Logical
           normalizedTable.schema.find(_.name == partCol).get
         }
 
-        val reorderedSchema =
-          StructType(normalizedTable.schema.filterNot(partitionSchema.contains) ++ partitionSchema)
+        val expectedSchema = normalizedTable.schema
 
-        c.copy(tableDesc = normalizedTable.copy(schema = reorderedSchema))
+        val reorderedSchema =
+          StructType(expectedSchema.filterNot(partitionSchema.contains) ++ partitionSchema)
+
+        c.copy(tableDesc = normalizedTable.copy(schema = reorderedSchema,
+          expectedSchema = Option(expectedSchema)))
       }
 
     case create: V2CreateTablePlan if create.childrenResolved =>
@@ -393,7 +396,8 @@ object PreprocessTableInsertion extends Rule[LogicalPlan] {
     }
 
     val newQuery = TableOutputResolver.resolveOutputColumns(
-      tblName, expectedColumns, insert.query, byName = false, conf)
+      tblName, expectedColumns, insert.query, byName = false, conf,
+      catalogTable.map(_.properties.get("key_expected_schema_ordering")).getOrElse(None))
     if (normalizedPartSpec.nonEmpty) {
       if (normalizedPartSpec.size != partColNames.length) {
         throw QueryCompilationErrors.requestedPartitionsMismatchTablePartitionsError(

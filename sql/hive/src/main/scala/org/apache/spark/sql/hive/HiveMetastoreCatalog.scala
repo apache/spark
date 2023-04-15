@@ -33,6 +33,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.parquet.{ParquetFileFormat, ParquetOptions}
+import org.apache.spark.sql.hive.client.HiveClientImpl
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.HiveCaseSensitiveInferenceMode._
 import org.apache.spark.sql.internal.SQLConf.PartitionOverwriteMode
@@ -191,6 +192,8 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
       fileType: String,
       isWrite: Boolean): LogicalRelation = {
     val metastoreSchema = relation.tableMeta.schema
+    val schemaReorderStrOpt = relation.tableMeta.properties.get(
+      HiveClientImpl.KEY_EXPECTED_SCHEMA_ORDERING)
     val tableIdentifier =
       QualifiedTableName(relation.tableMeta.database, relation.tableMeta.identifier.table)
 
@@ -263,7 +266,6 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
           catalogProxy.cacheTable(tableIdentifier, created)
           created
         }
-
         logicalRelation
       })
     } else {
@@ -289,14 +291,13 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
                 options = hiveOptions.filter { case (k, _) => !k.equalsIgnoreCase("path") },
                 className = fileType).resolveRelation(),
               table = updatedTable)
-
           catalogProxy.cacheTable(tableIdentifier, created)
           created
         }
-
         logicalRelation
       })
     }
+
     // The inferred schema may have different field names as the table schema, we should respect
     // it, but also respect the exprId in table relation output.
     if (result.output.length != relation.output.length) {
@@ -316,7 +317,13 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
     val newOutput = result.output.zip(relation.output).map {
       case (a1, a2) => a1.withExprId(a2.exprId)
     }
-    result.copy(output = newOutput)
+    val temp = result.copy(output = newOutput)
+    schemaReorderStrOpt.map(str => {
+      val newOutput = org.apache.spark.sql.catalyst.util.HiveUtils.convertActualToExpected(
+        str, temp.output)
+      temp.copy(output = newOutput)
+    }).getOrElse(temp)
+
   }
 
   private def inferIfNeeded(

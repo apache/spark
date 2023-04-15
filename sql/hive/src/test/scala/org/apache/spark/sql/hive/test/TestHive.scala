@@ -45,6 +45,7 @@ import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.execution.{CommandExecutionMode, QueryExecution, SQLExecution}
 import org.apache.spark.sql.hive._
 import org.apache.spark.sql.hive.client.HiveClient
+import org.apache.spark.sql.hive.execution.InsertEventListener
 import org.apache.spark.sql.internal.{SessionState, SharedState, SQLConf, WithTestConf}
 import org.apache.spark.sql.internal.StaticSQLConf.{CATALOG_IMPLEMENTATION, WAREHOUSE_PATH}
 import org.apache.spark.util.{ShutdownHookManager, Utils}
@@ -65,6 +66,11 @@ object TestHive
         // SPARK-8910
         .set(UI_ENABLED, false)
         .set(config.UNSAFE_EXCEPTION_ON_MEMORY_LEAK, true)
+        .set("hive.metastore.dml.events", "true")
+        .set(InsertEventListener.keyForResultFileName, InsertEventListener.resultFileName)
+        .set("hive.metastore.event.listeners", classOf[InsertEventListener].getName)
+        .set("hive.exec.dynamic.partition.mode", "nonstrict")
+        .set("hive.exec.dynamic.partition", "true")
         // Hive changed the default of hive.metastore.disallow.incompatible.col.type.changes
         // from false to true. For details, see the JIRA HIVE-12320 and HIVE-17764.
         .set("spark.hadoop.hive.metastore.disallow.incompatible.col.type.changes", "false")
