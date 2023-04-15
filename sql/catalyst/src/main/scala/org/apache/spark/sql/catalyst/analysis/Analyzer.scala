@@ -605,31 +605,22 @@ class Analyzer(override val catalogManager: CatalogManager)
         aggregations: Seq[NamedExpression],
         groupByAliases: Seq[Alias],
         groupingAttrs: Seq[Expression],
-        gid: Attribute): Seq[NamedExpression] = aggregations.map { agg =>
-      // collect all the found AggregateExpression, so we can check an expression is part of
-      // any AggregateExpression or not.
-      val aggsBuffer = ArrayBuffer[Expression]()
-      // Returns whether the expression belongs to any expressions in `aggsBuffer` or not.
-      def isPartOfAggregation(e: Expression): Boolean = {
-        aggsBuffer.exists(a => a.exists(_ eq e))
-      }
-      replaceGroupingFunc(agg, groupByExprs, gid).transformDown {
-        // AggregateExpression should be computed on the unmodified value of its argument
-        // expressions, so we should not replace any references to grouping expression
-        // inside it.
-        case e if AggregateExpression.isAggregate(e) =>
-          aggsBuffer += e
-          e
-        case e if isPartOfAggregation(e) => e
+        gid: Attribute): Seq[NamedExpression] = {
+      def replaceExprs(e: Expression): Expression = e match {
+        case e if AggregateExpression.isAggregate(e) => e
         case e =>
           // Replace expression by expand output attribute.
           val index = groupByAliases.indexWhere(_.child.semanticEquals(e))
           if (index == -1) {
-            e
+            e.mapChildren(replaceExprs)
           } else {
             groupingAttrs(index)
           }
-      }.asInstanceOf[NamedExpression]
+      }
+      aggregations
+        .map(replaceGroupingFunc(_, groupByExprs, gid))
+        .map(replaceExprs)
+        .map(_.asInstanceOf[NamedExpression])
     }
 
     /*
