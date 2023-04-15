@@ -864,15 +864,16 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper {
       // build and verify the destructive iterator
       val iterator = res.destructiveIterator
       // batches is empty before traversing the result iterator
-      assert(res.batches.isEmpty)
+      assert(res.existingBatches().isEmpty)
       var previousBatch: ColumnarBatch = null
       val buffer = mutable.Buffer.empty[Long]
       while (iterator.hasNext) {
         // always having 1 batch, since a columnar batch will be removed and closed after
         // its data got consumed.
-        assert(res.batches.size === 1)
-        assert(res.batches.head != previousBatch)
-        previousBatch = res.batches.head
+        val batches = res.existingBatches()
+        assert(batches.size === 1)
+        assert(batches.head != previousBatch)
+        previousBatch = batches.head
 
         buffer.append(iterator.next())
       }

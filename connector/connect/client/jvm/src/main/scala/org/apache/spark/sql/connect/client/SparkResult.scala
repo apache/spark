@@ -46,7 +46,13 @@ private[sql] class SparkResult[T](
   private[this] var numRecords: Int = 0
   private[this] var structType: StructType = _
   private[this] var boundEncoder: ExpressionEncoder[T] = _
-  private[sql] val batches = mutable.Buffer.empty[ColumnarBatch]
+  private[this] var nextBatchIndex: Int = 0
+  private[this] val idxToBatches = mutable.Map.empty[Int, ColumnarBatch]
+
+  // Exposed only for UT.
+  private[sql] def existingBatches(): Seq[ColumnarBatch] = {
+    idxToBatches.values.toSeq
+  }
 
   private def createEncoder(schema: StructType): ExpressionEncoder[T] = {
     val agnosticEncoder = if (encoder == UnboundRowEncoder) {
@@ -70,14 +76,15 @@ private[sql] class SparkResult[T](
         val reader = new ArrowStreamReader(ipcStreamBytes.newInput(), allocator)
         try {
           val root = reader.getVectorSchemaRoot
-          if (batches.isEmpty) {
-            if (structType == null) {
-              // If the schema is not available yet, fallback to the schema from Arrow.
-              structType = ArrowUtils.fromArrowSchema(root.getSchema)
-            }
-            // TODO: create encoders that directly operate on arrow vectors.
+          if (structType == null) {
+            // If the schema is not available yet, fallback to the schema from Arrow.
+            structType = ArrowUtils.fromArrowSchema(root.getSchema)
+          }
+          // TODO: create encoders that directly operate on arrow vectors.
+          if (boundEncoder == null) {
             boundEncoder = createEncoder(structType).resolveAndBind(structType.toAttributes)
           }
+
           while (reader.loadNextBatch()) {
             val rowCount = root.getRowCount
             assert(root.getRowCount == response.getArrowBatch.getRowCount) // HUH!
@@ -85,7 +92,8 @@ private[sql] class SparkResult[T](
               val vectors = root.getFieldVectors.asScala
                 .map(v => new ArrowColumnVector(transferToNewVector(v)))
                 .toArray[ColumnVector]
-              batches += new ColumnarBatch(vectors, rowCount)
+              idxToBatches.put(nextBatchIndex, new ColumnarBatch(vectors, rowCount))
+              nextBatchIndex += 1
               numRecords += rowCount
               if (stopOnFirstNonEmptyResponse) {
                 return true
@@ -153,30 +161,30 @@ private[sql] class SparkResult[T](
 
   private def buildIterator(destructive: Boolean): java.util.Iterator[T] with AutoCloseable = {
     new java.util.Iterator[T] with AutoCloseable {
+      private[this] var batchIndex: Int = -1
       private[this] var iterator: java.util.Iterator[InternalRow] = Collections.emptyIterator()
       private[this] var deserializer: Deserializer[T] = _
-      private[this] var currentBatch: ColumnarBatch = _
-      private[this] val _destructive: Boolean = destructive
 
       override def hasNext: Boolean = {
         if (iterator.hasNext) {
           return true
         }
-        val batchIndex = batches.indexOf(currentBatch)
-        var nextBatchIndex = batchIndex + 1
-        if (_destructive && currentBatch != null) {
-          batches.remove(batchIndex)
+
+        val nextBatchIndex = batchIndex + 1
+        if (destructive && idxToBatches.contains(batchIndex)) {
+          val currentBatch = idxToBatches(batchIndex)
+          idxToBatches.remove(batchIndex)
           currentBatch.close()
-          nextBatchIndex -= 1
         }
-        val hasNextBatch = if (nextBatchIndex == batches.size) {
+
+        val hasNextBatch = if (!idxToBatches.contains(nextBatchIndex)) {
           processResponses(stopOnFirstNonEmptyResponse = true)
         } else {
           true
         }
         if (hasNextBatch) {
-          currentBatch = batches(nextBatchIndex)
-          iterator = currentBatch.rowIterator()
+          batchIndex = nextBatchIndex
+          iterator = idxToBatches(nextBatchIndex).rowIterator()
           if (deserializer == null) {
             deserializer = boundEncoder.createDeserializer()
           }
@@ -199,8 +207,8 @@ private[sql] class SparkResult[T](
    * Close this result, freeing any underlying resources.
    */
   override def close(): Unit = {
-    batches.foreach(_.close())
+    idxToBatches.values.foreach(_.close())
   }
 
-  override def cleaner: AutoCloseable = AutoCloseables(batches.toSeq)
+  override def cleaner: AutoCloseable = AutoCloseables(idxToBatches.values.toSeq)
 }
