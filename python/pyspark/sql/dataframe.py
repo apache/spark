@@ -22,7 +22,6 @@ import random
 import warnings
 from collections.abc import Iterable
 from functools import reduce
-from html import escape as html_escape
 from typing import (
     Any,
     Callable,

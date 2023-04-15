@@ -41,12 +41,11 @@ import pyarrow as pa
 import json
 import warnings
 from collections.abc import Iterable
-from html import escape as html_escape
 
 from pyspark import _NoValue
 from pyspark._globals import _NoValueType
 from pyspark.sql.observation import Observation
-from pyspark.sql.types import Row, BooleanType, StringType, StructType, _parse_datatype_json_string
+from pyspark.sql.types import Row, StructType, _parse_datatype_json_string
 from pyspark.sql.dataframe import (
     DataFrame as PySparkDataFrame,
     DataFrameNaFunctions as PySparkDataFrameNaFunctions,
