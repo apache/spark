@@ -2345,11 +2345,13 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       cause = null)
   }
 
-  def failedMergingSchemaError(schema: StructType, e: SparkException): Throwable = {
+  def failedMergingSchemaError(
+      leftSchema: StructType,
+      rightSchema: StructType,
+      e: SparkException): Throwable = {
     new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_2247",
-      messageParameters = Map(
-        "schema" -> schema.treeString),
+      errorClass = "CANNOT_MERGE_SCHEMAS",
+      messageParameters = Map("left" -> leftSchema.treeString, "right" -> rightSchema.treeString),
       cause = e)
   }
 

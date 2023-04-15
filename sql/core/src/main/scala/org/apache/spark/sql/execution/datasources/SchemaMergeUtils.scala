@@ -86,7 +86,7 @@ object SchemaMergeUtils extends Logging {
               try {
                 mergedSchema = mergedSchema.merge(schema)
               } catch { case cause: SparkException =>
-                throw QueryExecutionErrors.failedMergingSchemaError(schema, cause)
+                throw QueryExecutionErrors.failedMergingSchemaError(mergedSchema, schema, cause)
               }
             }
             Iterator.single(mergedSchema)
@@ -101,7 +101,7 @@ object SchemaMergeUtils extends Logging {
         try {
           finalSchema = finalSchema.merge(schema)
         } catch { case cause: SparkException =>
-          throw QueryExecutionErrors.failedMergingSchemaError(schema, cause)
+          throw QueryExecutionErrors.failedMergingSchemaError(finalSchema, schema, cause)
         }
       }
       Some(finalSchema)
