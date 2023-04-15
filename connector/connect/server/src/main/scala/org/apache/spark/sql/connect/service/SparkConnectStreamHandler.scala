@@ -186,7 +186,6 @@ object SparkConnectStreamHandler {
         SQLExecution.withNewExecutionId(dataframe.queryExecution, Some("collectArrow")) {
           val rows = dataframe.queryExecution.executedPlan.execute()
           val numPartitions = rows.getNumPartitions
-          var numSent = 0
 
           if (numPartitions > 0) {
             type Batch = (Array[Byte], Long)
