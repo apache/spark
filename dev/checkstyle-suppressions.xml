@@ -29,6 +29,8 @@
 
 <suppressions>
     <suppress checks=".*"
+              files="core/target/*"/>
+    <suppress checks=".*"
               files="core/src/main/java/org/apache/spark/util/collection/TimSort.java"/>
     <suppress checks=".*"
               files="connector/spark-ganglia-lgpl/src/main/java/com/codahale/metrics/ganglia/GangliaReporter.java"/>
