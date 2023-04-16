@@ -403,7 +403,7 @@ class EagerEvalString(LogicalPlan):
         else:
             raise NotImplementedError(
                 """
-                Unsupported format: %s. Supported join types include:
+                Unsupported format: %s. Supported format include:
                 "show_string", "html_string"
                 """
                 % self._format
