@@ -22,7 +22,6 @@ import java.io.IOException;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.mapred.FileSplit;
 import org.apache.parquet.HadoopReadOptions;
 import org.apache.parquet.ParquetReadOptions;
 import org.apache.parquet.format.converter.ParquetMetadataConverter;
@@ -45,27 +44,26 @@ public class ParquetFooterReader {
    * Reads footer for the input Parquet file 'split'. If 'skipRowGroup' is true,
    * this will skip reading the Parquet row group metadata.
    *
-   * @param partitionedFile a part (i.e. "block") of a single file that should be read
+   * @param file a part (i.e. "block") of a single file that should be read
    * @param configuration hadoop configuration of file
    * @param skipRowGroup If true, skip reading row groups;
    *                     if false, read row groups according to the file split range
    */
   public static ParquetMetadata readFooter(
       Configuration configuration,
-      PartitionedFile partitionedFile,
+      PartitionedFile file,
       boolean skipRowGroup) throws IOException {
-    FileSplit split = new FileSplit(partitionedFile.toPath(), partitionedFile.start(),
-        partitionedFile.length(), new String[] {});
+    long fileStart = file.start();
     ParquetMetadataConverter.MetadataFilter filter;
     if (skipRowGroup) {
       filter = ParquetMetadataConverter.SKIP_ROW_GROUPS;
     } else {
-      filter = HadoopReadOptions.builder(configuration, split.getPath())
-          .withRange(split.getStart(), split.getStart() + split.getLength())
+      filter = HadoopReadOptions.builder(configuration, file.toPath())
+          .withRange(fileStart, fileStart + file.length())
           .build()
           .getMetadataFilter();
     }
-    return readFooter(configuration, split.getPath(), filter);
+    return readFooter(configuration, file.toPath(), filter);
   }
 
   public static ParquetMetadata readFooter(Configuration configuration,
