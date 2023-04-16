@@ -563,7 +563,7 @@ abstract class FileStreamSinkSuite extends StreamTest {
           val outputDirPath = new Path(outputDir.getCanonicalPath)
           val hadoopConf = spark.sessionState.newHadoopConf()
           val fs = outputDirPath.getFileSystem(hadoopConf)
-          val logPath = FileStreamSink.getMetadataLogPath(fs, outputDirPath, conf)
+          val logPath = FileStreamSink.getMetadataLogPath(hadoopConf, outputDirPath, conf)
 
           val sinkLog = new FileStreamSinkLog(FileStreamSinkLog.VERSION, spark, logPath.toString)
 
@@ -648,6 +648,28 @@ abstract class FileStreamSinkSuite extends StreamTest {
         }
       }
     }
+  }
+  test("SPARK-43152: Support parametrisable output metadata path (_spark_metadata)") {
+    val outputDir = "/absolute/path/output"
+    val testCustomOutputMetadataDir = "/absolute/path/metadata"
+    withSQLConf(SQLConf.CUSTOM_OUTPUT_METADATA_PATH.key -> testCustomOutputMetadataDir) {
+      val outputDirPath = new Path(outputDir)
+      val hadoopConf = spark.sessionState.newHadoopConf()
+      val resultMetadataPath = FileStreamSink.getMetadataLogPath(hadoopConf, outputDirPath, conf)
+      assert(
+        resultMetadataPath.equals(
+          new Path(testCustomOutputMetadataDir + "/" + FileStreamSink.metadataDir)))
+    }
+  }
+
+  test(
+    "SPARK-43152: Use _spark_metadata in output data path " +
+      "if custom path for output metadata is not defined") {
+    val outputDir = "/absolute/path/output"
+    val outputDirPath = new Path(outputDir)
+    val hadoopConf = spark.sessionState.newHadoopConf()
+    val resultMetadataPath = FileStreamSink.getMetadataLogPath(hadoopConf, outputDirPath, conf)
+    assert(resultMetadataPath.equals(new Path(outputDir + "/" + FileStreamSink.metadataDir)))
   }
 }
 
