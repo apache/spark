@@ -2212,7 +2212,7 @@ class TaskSetManagerSuite
     assert(sched.taskSetsFailed.contains(taskSet.id))
   }
 
-  test("UserException lead to task set abortion") {
+  test("non-transient errors lead to task set abortion") {
     sc = new SparkContext("local", "test")
     sched = new FakeTaskScheduler(sc, ("exec1", "host1"))
     val taskSet = FakeTask.createTaskSet(1)
@@ -2224,9 +2224,8 @@ class TaskSetManagerSuite
       "Expect resource offer on iteration 0 to return a task")
     assert(offerResult.get.index === 0)
     val reason = new ExceptionFailure(
-      new SparkUserException("_LEGACY_ERROR_TEMP_3043",
-        Map("msg" -> "NPE")),
-      Seq.empty[AccumulableInfo])
+      new SparkException(
+        "_LEGACY_ERROR_TEMP_2104", Map.empty, null), null)
     manager.handleFailedTask(offerResult.get.taskId, TaskState.FAILED, reason)
     assert(sched.taskSetsFailed.contains(taskSet.id))
   }

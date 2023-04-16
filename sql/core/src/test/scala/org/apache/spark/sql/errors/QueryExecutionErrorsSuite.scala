@@ -551,7 +551,7 @@ class QueryExecutionErrorsSuite
     JdbcDialects.unregisterDialect(testH2DialectUnrecognizedSQLType)
   }
 
-  test("INVALID_BUCKET_FILE: error if there exists any malformed bucket files") {
+  test("TRANSIENT_INVALID_BUCKET_FILE: error if there exists any malformed bucket files") {
     val df1 = (0 until 50).map(i => (i % 5, i % 13, i.toString)).
       toDF("i", "j", "k").as("df1")
 
@@ -569,7 +569,7 @@ class QueryExecutionErrorsSuite
         exception = intercept[SparkException] {
           aggregated.count()
         },
-        errorClass = "INVALID_BUCKET_FILE",
+        errorClass = "TRANSIENT_INVALID_BUCKET_FILE",
         parameters = Map("path" -> ".+"),
         matchPVals = true)
     }

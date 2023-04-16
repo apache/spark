@@ -21,7 +21,6 @@ import java.io.NotSerializableException
 import java.nio.ByteBuffer
 import java.util.concurrent.{ConcurrentHashMap, ConcurrentLinkedQueue, TimeUnit}
 
-import scala.collection.immutable.Map
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
 import scala.math.max
 import scala.util.control.NonFatal
@@ -929,13 +928,14 @@ private[spark] class TaskSetManager(
             info.id, taskSet.id, tid, ef.description))
           return
         }
-        if (ef.className == classOf[SparkUserException].getName) {
-          // if the exception has an error class which means a user error, not retry
-          logError(s"$task has a user exception: ${ef.description}; not retrying")
+        if (!ef.isTransient) {
+          // if the exception has an error class which means a non-transient error, not retry
+          logError(s"$task has a non-transient exception: ${ef.description}; not retrying")
           sched.dagScheduler.taskEnded(tasks(index), reason, null, accumUpdates, metricPeaks, info)
-          abort(s"$task has a user exception: ${ef.description}", ef.exception)
+          abort(s"$task has a non-transient exception: ${ef.description}", ef.exception)
           return
         }
+
         val key = ef.description
         val now = clock.getTimeMillis()
         val (printFull, dupCount) = {

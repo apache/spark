@@ -355,24 +355,3 @@ private[spark] class SparkSQLFeatureNotSupportedException(
 
   override def getErrorClass: String = errorClass
 }
-
-/**
- * User error exception thrown from Spark with an error class.
- */
-private[spark] class SparkUserException(
-    errorClass: String,
-    messageParameters: Map[String, String],
-    cause: Throwable = null,
-    context: Array[QueryContext] = Array.empty,
-    summary: String = "")
-  extends RuntimeException(
-    SparkThrowableHelper.getMessage(errorClass, messageParameters, summary),
-    cause)
-    with SparkThrowable {
-
-  override def getMessageParameters: java.util.Map[String, String] = messageParameters.asJava
-
-  override def getErrorClass: String = errorClass
-
-  override def getQueryContext: Array[QueryContext] = context
-}

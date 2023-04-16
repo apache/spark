@@ -132,7 +132,8 @@ case class ExceptionFailure(
     private val exceptionWrapper: Option[ThrowableSerializationWrapper],
     accumUpdates: Seq[AccumulableInfo] = Seq.empty,
     private[spark] var accums: Seq[AccumulatorV2[_, _]] = Nil,
-    private[spark] var metricPeaks: Seq[Long] = Seq.empty)
+    private[spark] var metricPeaks: Seq[Long] = Seq.empty,
+    private[spark] var isTransient : Boolean = false)
   extends TaskFailedReason {
 
   /**
@@ -146,6 +147,11 @@ case class ExceptionFailure(
       preserveCause: Boolean) = {
     this(e.getClass.getName, e.getMessage, e.getStackTrace, Utils.exceptionString(e),
       if (preserveCause) Some(new ThrowableSerializationWrapper(e)) else None, accumUpdates)
+    e match {
+      case st: SparkThrowable =>
+        this.isTransient = SparkThrowableHelper.isTransientError(st.getErrorClass)
+      case _ =>
+    }
   }
 
   private[spark] def this(e: Throwable, accumUpdates: Seq[AccumulableInfo]) = {

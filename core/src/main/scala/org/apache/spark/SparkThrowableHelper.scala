@@ -66,6 +66,10 @@ private[spark] object SparkThrowableHelper {
     errorClass == "INTERNAL_ERROR"
   }
 
+  def isTransientError(errorClass: String): Boolean = {
+    errorClass.startsWith("TRANSIENT")
+  }
+
   def getMessage(e: SparkThrowable with Throwable, format: ErrorMessageFormat.Value): String = {
     import ErrorMessageFormat._
     format match {

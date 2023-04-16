@@ -793,7 +793,7 @@
     ],
     "sqlState" : "22003"
   },
-  "INVALID_BUCKET_FILE" : {
+  "TRANSIENT_INVALID_BUCKET_FILE" : {
     "message" : [
       "Invalid bucket file: <path>."
     ]
@@ -1436,7 +1436,7 @@
       "Static partition column <staticName> is also specified in the column list."
     ]
   },
-  "STREAM_FAILED" : {
+  "TRANSIENT_STREAM_FAILED" : {
     "message" : [
       "Query [id = <id>, runId = <runId>] terminated with exception: <message>"
     ]
@@ -1456,7 +1456,7 @@
     ],
     "sqlState" : "42P01"
   },
-  "TASK_WRITE_FAILED" : {
+  "TRANSIENT_TASK_WRITE_FAILED" : {
     "message" : [
       "Task failed while writing rows to <path>."
     ]
@@ -1480,7 +1480,7 @@
     ],
     "sqlState" : "54000"
   },
-  "UNABLE_TO_ACQUIRE_MEMORY" : {
+  "TRANSIENT_UNABLE_TO_ACQUIRE_MEMORY" : {
     "message" : [
       "Unable to acquire <requestedBytes> bytes of memory, got <receivedBytes>."
     ],
@@ -3975,7 +3975,7 @@
       "Parquet column cannot be converted in file <filePath>. Column: <column>, Expected: <logicalType>, Found: <physicalType>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2064" : {
+  "TRANSIENT_LEGACY_ERROR_TEMP_2064" : {
     "message" : [
       "Encountered error while reading file <path>. Details:"
     ]
@@ -4005,7 +4005,7 @@
       "Cannot remove reserved property: <property>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2070" : {
+  "TRANSIENT_LEGACY_ERROR_TEMP_2070" : {
     "message" : [
       "Writing job failed."
     ]
@@ -4130,7 +4130,7 @@
       "<ddl> is not supported temporarily."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2097" : {
+  "TRANSIENT_LEGACY_ERROR_TEMP_2097" : {
     "message" : [
       "Could not execute broadcast in <timeout> secs. You can increase the timeout for broadcasts via <broadcastTimeout> or disable broadcast join by setting <autoBroadcastJoinThreshold> to -1."
     ]
@@ -4165,17 +4165,17 @@
       "End of the iterator."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2105" : {
+  "TRANSIENT_LEGACY_ERROR_TEMP_2105" : {
     "message" : [
       "Could not allocate memory to grow BytesToBytesMap."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2106" : {
+  "TRANSIENT_LEGACY_ERROR_TEMP_2106" : {
     "message" : [
       "Can't acquire <size> bytes memory to build hash relation, got <got> bytes."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2107" : {
+  "TRANSIENT_LEGACY_ERROR_TEMP_2107" : {
     "message" : [
       "There is not enough memory to build hash map."
     ]
@@ -4823,7 +4823,7 @@
       "Cannot broadcast the table that is larger than <maxBroadcastTableBytes>GB: <dataSize> GB."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2250" : {
+  "TRANSIENT_LEGACY_ERROR_TEMP_2250" : {
     "message" : [
       "Not enough memory to build and broadcast the table to all worker nodes. As a workaround, you can either disable broadcast by setting <autoBroadcastjoinThreshold> to -1 or increase the spark driver memory by setting <driverMemory> to a higher value<analyzeTblMsg>"
     ]
@@ -4843,7 +4843,7 @@
       "Data source <sourceName> does not support continuous processing."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2254" : {
+  "TRANSIENT_LEGACY_ERROR_TEMP_2254" : {
     "message" : [
       "Data read failed."
     ]
@@ -5353,7 +5353,7 @@
       "Unexpected Py4J server <class>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_3001" : {
+  "TRANSIENT_LEGACY_ERROR_TEMP_3001" : {
     "message" : [
       "EOFException occurred while reading the port number from <daemonModule>'s stdout<additionalMessage>."
     ]
@@ -5500,7 +5500,7 @@
       "<errorMsg>"
     ]
   },
-  "_LEGACY_ERROR_TEMP_3029" : {
+  "TRANSIENT_LEGACY_ERROR_TEMP_3029" : {
     "message" : [
       "Exiting due to error from cluster scheduler: <message>"
     ]
@@ -5520,7 +5520,7 @@
       "Error occurred while waiting for replication to finish"
     ]
   },
-  "_LEGACY_ERROR_TEMP_3033" : {
+  "TRANSIENT_LEGACY_ERROR_TEMP_3033" : {
     "message" : [
       "Unable to register with external shuffle server due to : <message>"
     ]
@@ -5550,12 +5550,12 @@
       "get() failed for block <blockId> even though we held a lock"
     ]
   },
-  "_LEGACY_ERROR_TEMP_3039" : {
+  "TRANSIENT_LEGACY_ERROR_TEMP_3039" : {
     "message" : [
       "BlockManager returned null for BlockStatus query: <blockId>"
     ]
   },
-  "_LEGACY_ERROR_TEMP_3040" : {
+  "TRANSIENT_LEGACY_ERROR_TEMP_3040" : {
     "message" : [
       "BlockManagerMasterEndpoint returned false, expected true."
     ]
@@ -5568,11 +5568,6 @@
   "_LEGACY_ERROR_TEMP_3042" : {
     "message" : [
       "Failed to get block <blockId>, which is not a shuffle block"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3043" : {
-    "message" : [
-      "User exception: <msg>"
     ]
   },
   "_LEGACY_ERROR_TEMP_3044" : {
