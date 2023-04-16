@@ -1,0 +1,235 @@
+,manufacturer,model,displ,year,cyl,trans,drv,cty,hwy,fl,class
+1,audi,a4,1.8,1999,4,auto(l5),f,18,29,p,compact
+2,audi,a4,1.8,1999,4,manual(m5),f,21,29,p,compact
+3,audi,a4,2.0,2008,4,manual(m6),f,20,31,p,compact
+4,audi,a4,2.0,2008,4,auto(av),f,21,30,p,compact
+5,audi,a4,2.8,1999,6,auto(l5),f,16,26,p,compact
+6,audi,a4,2.8,1999,6,manual(m5),f,18,26,p,compact
+7,audi,a4,3.1,2008,6,auto(av),f,18,27,p,compact
+8,audi,a4 quattro,1.8,1999,4,manual(m5),4,18,26,p,compact
+9,audi,a4 quattro,1.8,1999,4,auto(l5),4,16,25,p,compact
+10,audi,a4 quattro,2.0,2008,4,manual(m6),4,20,28,p,compact
+11,audi,a4 quattro,2.0,2008,4,auto(s6),4,19,27,p,compact
+12,audi,a4 quattro,2.8,1999,6,auto(l5),4,15,25,p,compact
+13,audi,a4 quattro,2.8,1999,6,manual(m5),4,17,25,p,compact
+14,audi,a4 quattro,3.1,2008,6,auto(s6),4,17,25,p,compact
+15,audi,a4 quattro,3.1,2008,6,manual(m6),4,15,25,p,compact
+16,audi,a6 quattro,2.8,1999,6,auto(l5),4,15,24,p,midsize
+17,audi,a6 quattro,3.1,2008,6,auto(s6),4,17,25,p,midsize
+18,audi,a6 quattro,4.2,2008,8,auto(s6),4,16,23,p,midsize
+19,chevrolet,c1500 suburban 2wd,5.3,2008,8,auto(l4),r,14,20,r,suv
+20,chevrolet,c1500 suburban 2wd,5.3,2008,8,auto(l4),r,11,15,e,suv
+21,chevrolet,c1500 suburban 2wd,5.3,2008,8,auto(l4),r,14,20,r,suv
+22,chevrolet,c1500 suburban 2wd,5.7,1999,8,auto(l4),r,13,17,r,suv
+23,chevrolet,c1500 suburban 2wd,6.0,2008,8,auto(l4),r,12,17,r,suv
+24,chevrolet,corvette,5.7,1999,8,manual(m6),r,16,26,p,2seater
+25,chevrolet,corvette,5.7,1999,8,auto(l4),r,15,23,p,2seater
+26,chevrolet,corvette,6.2,2008,8,manual(m6),r,16,26,p,2seater
+27,chevrolet,corvette,6.2,2008,8,auto(s6),r,15,25,p,2seater
+28,chevrolet,corvette,7.0,2008,8,manual(m6),r,15,24,p,2seater
+29,chevrolet,k1500 tahoe 4wd,5.3,2008,8,auto(l4),4,14,19,r,suv
+30,chevrolet,k1500 tahoe 4wd,5.3,2008,8,auto(l4),4,11,14,e,suv
+31,chevrolet,k1500 tahoe 4wd,5.7,1999,8,auto(l4),4,11,15,r,suv
+32,chevrolet,k1500 tahoe 4wd,6.5,1999,8,auto(l4),4,14,17,d,suv
+33,chevrolet,malibu,2.4,1999,4,auto(l4),f,19,27,r,midsize
+34,chevrolet,malibu,2.4,2008,4,auto(l4),f,22,30,r,midsize
+35,chevrolet,malibu,3.1,1999,6,auto(l4),f,18,26,r,midsize
+36,chevrolet,malibu,3.5,2008,6,auto(l4),f,18,29,r,midsize
+37,chevrolet,malibu,3.6,2008,6,auto(s6),f,17,26,r,midsize
+38,dodge,caravan 2wd,2.4,1999,4,auto(l3),f,18,24,r,minivan
+39,dodge,caravan 2wd,3.0,1999,6,auto(l4),f,17,24,r,minivan
+40,dodge,caravan 2wd,3.3,1999,6,auto(l4),f,16,22,r,minivan
+41,dodge,caravan 2wd,3.3,1999,6,auto(l4),f,16,22,r,minivan
+42,dodge,caravan 2wd,3.3,2008,6,auto(l4),f,17,24,r,minivan
+43,dodge,caravan 2wd,3.3,2008,6,auto(l4),f,17,24,r,minivan
+44,dodge,caravan 2wd,3.3,2008,6,auto(l4),f,11,17,e,minivan
+45,dodge,caravan 2wd,3.8,1999,6,auto(l4),f,15,22,r,minivan
+46,dodge,caravan 2wd,3.8,1999,6,auto(l4),f,15,21,r,minivan
+47,dodge,caravan 2wd,3.8,2008,6,auto(l6),f,16,23,r,minivan
+48,dodge,caravan 2wd,4.0,2008,6,auto(l6),f,16,23,r,minivan
+49,dodge,dakota pickup 4wd,3.7,2008,6,manual(m6),4,15,19,r,pickup
+50,dodge,dakota pickup 4wd,3.7,2008,6,auto(l4),4,14,18,r,pickup
+51,dodge,dakota pickup 4wd,3.9,1999,6,auto(l4),4,13,17,r,pickup
+52,dodge,dakota pickup 4wd,3.9,1999,6,manual(m5),4,14,17,r,pickup
+53,dodge,dakota pickup 4wd,4.7,2008,8,auto(l5),4,14,19,r,pickup
+54,dodge,dakota pickup 4wd,4.7,2008,8,auto(l5),4,14,19,r,pickup
+55,dodge,dakota pickup 4wd,4.7,2008,8,auto(l5),4,9,12,e,pickup
+56,dodge,dakota pickup 4wd,5.2,1999,8,manual(m5),4,11,17,r,pickup
+57,dodge,dakota pickup 4wd,5.2,1999,8,auto(l4),4,11,15,r,pickup
+58,dodge,durango 4wd,3.9,1999,6,auto(l4),4,13,17,r,suv
+59,dodge,durango 4wd,4.7,2008,8,auto(l5),4,13,17,r,suv
+60,dodge,durango 4wd,4.7,2008,8,auto(l5),4,9,12,e,suv
+61,dodge,durango 4wd,4.7,2008,8,auto(l5),4,13,17,r,suv
+62,dodge,durango 4wd,5.2,1999,8,auto(l4),4,11,16,r,suv
+63,dodge,durango 4wd,5.7,2008,8,auto(l5),4,13,18,r,suv
+64,dodge,durango 4wd,5.9,1999,8,auto(l4),4,11,15,r,suv
+65,dodge,ram 1500 pickup 4wd,4.7,2008,8,manual(m6),4,12,16,r,pickup
+66,dodge,ram 1500 pickup 4wd,4.7,2008,8,auto(l5),4,9,12,e,pickup
+67,dodge,ram 1500 pickup 4wd,4.7,2008,8,auto(l5),4,13,17,r,pickup
+68,dodge,ram 1500 pickup 4wd,4.7,2008,8,auto(l5),4,13,17,r,pickup
+69,dodge,ram 1500 pickup 4wd,4.7,2008,8,manual(m6),4,12,16,r,pickup
+70,dodge,ram 1500 pickup 4wd,4.7,2008,8,manual(m6),4,9,12,e,pickup
+71,dodge,ram 1500 pickup 4wd,5.2,1999,8,auto(l4),4,11,15,r,pickup
+72,dodge,ram 1500 pickup 4wd,5.2,1999,8,manual(m5),4,11,16,r,pickup
+73,dodge,ram 1500 pickup 4wd,5.7,2008,8,auto(l5),4,13,17,r,pickup
+74,dodge,ram 1500 pickup 4wd,5.9,1999,8,auto(l4),4,11,15,r,pickup
+75,ford,expedition 2wd,4.6,1999,8,auto(l4),r,11,17,r,suv
+76,ford,expedition 2wd,5.4,1999,8,auto(l4),r,11,17,r,suv
+77,ford,expedition 2wd,5.4,2008,8,auto(l6),r,12,18,r,suv
+78,ford,explorer 4wd,4.0,1999,6,auto(l5),4,14,17,r,suv
+79,ford,explorer 4wd,4.0,1999,6,manual(m5),4,15,19,r,suv
+80,ford,explorer 4wd,4.0,1999,6,auto(l5),4,14,17,r,suv
+81,ford,explorer 4wd,4.0,2008,6,auto(l5),4,13,19,r,suv
+82,ford,explorer 4wd,4.6,2008,8,auto(l6),4,13,19,r,suv
+83,ford,explorer 4wd,5.0,1999,8,auto(l4),4,13,17,r,suv
+84,ford,f150 pickup 4wd,4.2,1999,6,auto(l4),4,14,17,r,pickup
+85,ford,f150 pickup 4wd,4.2,1999,6,manual(m5),4,14,17,r,pickup
+86,ford,f150 pickup 4wd,4.6,1999,8,manual(m5),4,13,16,r,pickup
+87,ford,f150 pickup 4wd,4.6,1999,8,auto(l4),4,13,16,r,pickup
+88,ford,f150 pickup 4wd,4.6,2008,8,auto(l4),4,13,17,r,pickup
+89,ford,f150 pickup 4wd,5.4,1999,8,auto(l4),4,11,15,r,pickup
+90,ford,f150 pickup 4wd,5.4,2008,8,auto(l4),4,13,17,r,pickup
+91,ford,mustang,3.8,1999,6,manual(m5),r,18,26,r,subcompact
+92,ford,mustang,3.8,1999,6,auto(l4),r,18,25,r,subcompact
+93,ford,mustang,4.0,2008,6,manual(m5),r,17,26,r,subcompact
+94,ford,mustang,4.0,2008,6,auto(l5),r,16,24,r,subcompact
+95,ford,mustang,4.6,1999,8,auto(l4),r,15,21,r,subcompact
+96,ford,mustang,4.6,1999,8,manual(m5),r,15,22,r,subcompact
+97,ford,mustang,4.6,2008,8,manual(m5),r,15,23,r,subcompact
+98,ford,mustang,4.6,2008,8,auto(l5),r,15,22,r,subcompact
+99,ford,mustang,5.4,2008,8,manual(m6),r,14,20,p,subcompact
+100,honda,civic,1.6,1999,4,manual(m5),f,28,33,r,subcompact
+101,honda,civic,1.6,1999,4,auto(l4),f,24,32,r,subcompact
+102,honda,civic,1.6,1999,4,manual(m5),f,25,32,r,subcompact
+103,honda,civic,1.6,1999,4,manual(m5),f,23,29,p,subcompact
+104,honda,civic,1.6,1999,4,auto(l4),f,24,32,r,subcompact
+105,honda,civic,1.8,2008,4,manual(m5),f,26,34,r,subcompact
+106,honda,civic,1.8,2008,4,auto(l5),f,25,36,r,subcompact
+107,honda,civic,1.8,2008,4,auto(l5),f,24,36,c,subcompact
+108,honda,civic,2.0,2008,4,manual(m6),f,21,29,p,subcompact
+109,hyundai,sonata,2.4,1999,4,auto(l4),f,18,26,r,midsize
+110,hyundai,sonata,2.4,1999,4,manual(m5),f,18,27,r,midsize
+111,hyundai,sonata,2.4,2008,4,auto(l4),f,21,30,r,midsize
+112,hyundai,sonata,2.4,2008,4,manual(m5),f,21,31,r,midsize
+113,hyundai,sonata,2.5,1999,6,auto(l4),f,18,26,r,midsize
+114,hyundai,sonata,2.5,1999,6,manual(m5),f,18,26,r,midsize
+115,hyundai,sonata,3.3,2008,6,auto(l5),f,19,28,r,midsize
+116,hyundai,tiburon,2.0,1999,4,auto(l4),f,19,26,r,subcompact
+117,hyundai,tiburon,2.0,1999,4,manual(m5),f,19,29,r,subcompact
+118,hyundai,tiburon,2.0,2008,4,manual(m5),f,20,28,r,subcompact
+119,hyundai,tiburon,2.0,2008,4,auto(l4),f,20,27,r,subcompact
+120,hyundai,tiburon,2.7,2008,6,auto(l4),f,17,24,r,subcompact
+121,hyundai,tiburon,2.7,2008,6,manual(m6),f,16,24,r,subcompact
+122,hyundai,tiburon,2.7,2008,6,manual(m5),f,17,24,r,subcompact
+123,jeep,grand cherokee 4wd,3.0,2008,6,auto(l5),4,17,22,d,suv
+124,jeep,grand cherokee 4wd,3.7,2008,6,auto(l5),4,15,19,r,suv
+125,jeep,grand cherokee 4wd,4.0,1999,6,auto(l4),4,15,20,r,suv
+126,jeep,grand cherokee 4wd,4.7,1999,8,auto(l4),4,14,17,r,suv
+127,jeep,grand cherokee 4wd,4.7,2008,8,auto(l5),4,9,12,e,suv
+128,jeep,grand cherokee 4wd,4.7,2008,8,auto(l5),4,14,19,r,suv
+129,jeep,grand cherokee 4wd,5.7,2008,8,auto(l5),4,13,18,r,suv
+130,jeep,grand cherokee 4wd,6.1,2008,8,auto(l5),4,11,14,p,suv
+131,land rover,range rover,4.0,1999,8,auto(l4),4,11,15,p,suv
+132,land rover,range rover,4.2,2008,8,auto(s6),4,12,18,r,suv
+133,land rover,range rover,4.4,2008,8,auto(s6),4,12,18,r,suv
+134,land rover,range rover,4.6,1999,8,auto(l4),4,11,15,p,suv
+135,lincoln,navigator 2wd,5.4,1999,8,auto(l4),r,11,17,r,suv
+136,lincoln,navigator 2wd,5.4,1999,8,auto(l4),r,11,16,p,suv
+137,lincoln,navigator 2wd,5.4,2008,8,auto(l6),r,12,18,r,suv
+138,mercury,mountaineer 4wd,4.0,1999,6,auto(l5),4,14,17,r,suv
+139,mercury,mountaineer 4wd,4.0,2008,6,auto(l5),4,13,19,r,suv
+140,mercury,mountaineer 4wd,4.6,2008,8,auto(l6),4,13,19,r,suv
+141,mercury,mountaineer 4wd,5.0,1999,8,auto(l4),4,13,17,r,suv
+142,nissan,altima,2.4,1999,4,manual(m5),f,21,29,r,compact
+143,nissan,altima,2.4,1999,4,auto(l4),f,19,27,r,compact
+144,nissan,altima,2.5,2008,4,auto(av),f,23,31,r,midsize
+145,nissan,altima,2.5,2008,4,manual(m6),f,23,32,r,midsize
+146,nissan,altima,3.5,2008,6,manual(m6),f,19,27,p,midsize
+147,nissan,altima,3.5,2008,6,auto(av),f,19,26,p,midsize
+148,nissan,maxima,3.0,1999,6,auto(l4),f,18,26,r,midsize
+149,nissan,maxima,3.0,1999,6,manual(m5),f,19,25,r,midsize
+150,nissan,maxima,3.5,2008,6,auto(av),f,19,25,p,midsize
+151,nissan,pathfinder 4wd,3.3,1999,6,auto(l4),4,14,17,r,suv
+152,nissan,pathfinder 4wd,3.3,1999,6,manual(m5),4,15,17,r,suv
+153,nissan,pathfinder 4wd,4.0,2008,6,auto(l5),4,14,20,p,suv
+154,nissan,pathfinder 4wd,5.6,2008,8,auto(s5),4,12,18,p,suv
+155,pontiac,grand prix,3.1,1999,6,auto(l4),f,18,26,r,midsize
+156,pontiac,grand prix,3.8,1999,6,auto(l4),f,16,26,p,midsize
+157,pontiac,grand prix,3.8,1999,6,auto(l4),f,17,27,r,midsize
+158,pontiac,grand prix,3.8,2008,6,auto(l4),f,18,28,r,midsize
+159,pontiac,grand prix,5.3,2008,8,auto(s4),f,16,25,p,midsize
+160,subaru,forester awd,2.5,1999,4,manual(m5),4,18,25,r,suv
+161,subaru,forester awd,2.5,1999,4,auto(l4),4,18,24,r,suv
+162,subaru,forester awd,2.5,2008,4,manual(m5),4,20,27,r,suv
+163,subaru,forester awd,2.5,2008,4,manual(m5),4,19,25,p,suv
+164,subaru,forester awd,2.5,2008,4,auto(l4),4,20,26,r,suv
+165,subaru,forester awd,2.5,2008,4,auto(l4),4,18,23,p,suv
+166,subaru,impreza awd,2.2,1999,4,auto(l4),4,21,26,r,subcompact
+167,subaru,impreza awd,2.2,1999,4,manual(m5),4,19,26,r,subcompact
+168,subaru,impreza awd,2.5,1999,4,manual(m5),4,19,26,r,subcompact
+169,subaru,impreza awd,2.5,1999,4,auto(l4),4,19,26,r,subcompact
+170,subaru,impreza awd,2.5,2008,4,auto(s4),4,20,25,p,compact
+171,subaru,impreza awd,2.5,2008,4,auto(s4),4,20,27,r,compact
+172,subaru,impreza awd,2.5,2008,4,manual(m5),4,19,25,p,compact
+173,subaru,impreza awd,2.5,2008,4,manual(m5),4,20,27,r,compact
+174,toyota,4runner 4wd,2.7,1999,4,manual(m5),4,15,20,r,suv
+175,toyota,4runner 4wd,2.7,1999,4,auto(l4),4,16,20,r,suv
+176,toyota,4runner 4wd,3.4,1999,6,auto(l4),4,15,19,r,suv
+177,toyota,4runner 4wd,3.4,1999,6,manual(m5),4,15,17,r,suv
+178,toyota,4runner 4wd,4.0,2008,6,auto(l5),4,16,20,r,suv
+179,toyota,4runner 4wd,4.7,2008,8,auto(l5),4,14,17,r,suv
+180,toyota,camry,2.2,1999,4,manual(m5),f,21,29,r,midsize
+181,toyota,camry,2.2,1999,4,auto(l4),f,21,27,r,midsize
+182,toyota,camry,2.4,2008,4,manual(m5),f,21,31,r,midsize
+183,toyota,camry,2.4,2008,4,auto(l5),f,21,31,r,midsize
+184,toyota,camry,3.0,1999,6,auto(l4),f,18,26,r,midsize
+185,toyota,camry,3.0,1999,6,manual(m5),f,18,26,r,midsize
+186,toyota,camry,3.5,2008,6,auto(s6),f,19,28,r,midsize
+187,toyota,camry solara,2.2,1999,4,auto(l4),f,21,27,r,compact
+188,toyota,camry solara,2.2,1999,4,manual(m5),f,21,29,r,compact
+189,toyota,camry solara,2.4,2008,4,manual(m5),f,21,31,r,compact
+190,toyota,camry solara,2.4,2008,4,auto(s5),f,22,31,r,compact
+191,toyota,camry solara,3.0,1999,6,auto(l4),f,18,26,r,compact
+192,toyota,camry solara,3.0,1999,6,manual(m5),f,18,26,r,compact
+193,toyota,camry solara,3.3,2008,6,auto(s5),f,18,27,r,compact
+194,toyota,corolla,1.8,1999,4,auto(l3),f,24,30,r,compact
+195,toyota,corolla,1.8,1999,4,auto(l4),f,24,33,r,compact
+196,toyota,corolla,1.8,1999,4,manual(m5),f,26,35,r,compact
+197,toyota,corolla,1.8,2008,4,manual(m5),f,28,37,r,compact
+198,toyota,corolla,1.8,2008,4,auto(l4),f,26,35,r,compact
+199,toyota,land cruiser wagon 4wd,4.7,1999,8,auto(l4),4,11,15,r,suv
+200,toyota,land cruiser wagon 4wd,5.7,2008,8,auto(s6),4,13,18,r,suv
+201,toyota,toyota tacoma 4wd,2.7,1999,4,manual(m5),4,15,20,r,pickup
+202,toyota,toyota tacoma 4wd,2.7,1999,4,auto(l4),4,16,20,r,pickup
+203,toyota,toyota tacoma 4wd,2.7,2008,4,manual(m5),4,17,22,r,pickup
+204,toyota,toyota tacoma 4wd,3.4,1999,6,manual(m5),4,15,17,r,pickup
+205,toyota,toyota tacoma 4wd,3.4,1999,6,auto(l4),4,15,19,r,pickup
+206,toyota,toyota tacoma 4wd,4.0,2008,6,manual(m6),4,15,18,r,pickup
+207,toyota,toyota tacoma 4wd,4.0,2008,6,auto(l5),4,16,20,r,pickup
+208,volkswagen,gti,2.0,1999,4,manual(m5),f,21,29,r,compact
+209,volkswagen,gti,2.0,1999,4,auto(l4),f,19,26,r,compact
+210,volkswagen,gti,2.0,2008,4,manual(m6),f,21,29,p,compact
+211,volkswagen,gti,2.0,2008,4,auto(s6),f,22,29,p,compact
+212,volkswagen,gti,2.8,1999,6,manual(m5),f,17,24,r,compact
+213,volkswagen,jetta,1.9,1999,4,manual(m5),f,33,44,d,compact
+214,volkswagen,jetta,2.0,1999,4,manual(m5),f,21,29,r,compact
+215,volkswagen,jetta,2.0,1999,4,auto(l4),f,19,26,r,compact
+216,volkswagen,jetta,2.0,2008,4,auto(s6),f,22,29,p,compact
+217,volkswagen,jetta,2.0,2008,4,manual(m6),f,21,29,p,compact
+218,volkswagen,jetta,2.5,2008,5,auto(s6),f,21,29,r,compact
+219,volkswagen,jetta,2.5,2008,5,manual(m5),f,21,29,r,compact
+220,volkswagen,jetta,2.8,1999,6,auto(l4),f,16,23,r,compact
+221,volkswagen,jetta,2.8,1999,6,manual(m5),f,17,24,r,compact
+222,volkswagen,new beetle,1.9,1999,4,manual(m5),f,35,44,d,subcompact
+223,volkswagen,new beetle,1.9,1999,4,auto(l4),f,29,41,d,subcompact
+224,volkswagen,new beetle,2.0,1999,4,manual(m5),f,21,29,r,subcompact
+225,volkswagen,new beetle,2.0,1999,4,auto(l4),f,19,26,r,subcompact
+226,volkswagen,new beetle,2.5,2008,5,manual(m5),f,20,28,r,subcompact
+227,volkswagen,new beetle,2.5,2008,5,auto(s6),f,20,29,r,subcompact
+228,volkswagen,passat,1.8,1999,4,manual(m5),f,21,29,p,midsize
+229,volkswagen,passat,1.8,1999,4,auto(l5),f,18,29,p,midsize
+230,volkswagen,passat,2.0,2008,4,auto(s6),f,19,28,p,midsize
+231,volkswagen,passat,2.0,2008,4,manual(m6),f,21,29,p,midsize
+232,volkswagen,passat,2.8,1999,6,auto(l5),f,16,26,p,midsize
+233,volkswagen,passat,2.8,1999,6,manual(m5),f,18,26,p,midsize
+234,volkswagen,passat,3.6,2008,6,auto(s6),f,17,26,p,midsize

@@ -10,10 +10,12 @@ def strc_to_numc(data,col_name):
         while True:
             print('-----------------------------------------------------------------------')
             print(col_name,' has null values. ','Please replace the null values.')
+            #replace_or_not='y'
             replace_or_not=input('Do you want to the system to replace the null values for {} and then encode the values[Y/n]?: '.format(col_name))
             if replace_or_not.lower()=='y':
                 print('------------------------------------------------')
                 new_str=input('Enter the new value or press ENTER to assign the default value(missing): ')
+                #new_str='Missing'
                 if len(new_str)==0:
                     new_str='Missing'
                 print('Replace the values')
@@ -89,8 +91,12 @@ def fill_null_str(data_frame,col_name,replace_str_with='Missing'):
 
 def fill_null_num(data_frame,col_name,impute_type='mode'):
     if impute_type=='mode':
-        replaced_col=data_frame[col_name].fillna(data_frame[col_name].mode()[0].astype(float))
-        return replaced_col
+        if len(data_frame[col_name].value_counts())==0:
+            replaced_col=data_frame[col_name].fillna(0)
+            return replaced_col
+        else:
+            replaced_col=data_frame[col_name].fillna(data_frame[col_name].mode()[0].astype(float))
+            return replaced_col
     elif impute_type=='median':
         replaced_col=data_frame[col_name].fillna(data_frame[col_name].median())
         return replaced_col
@@ -100,15 +106,18 @@ def fill_null_num(data_frame,col_name,impute_type='mode'):
     else:
         print('Impute type is not valid')
 
-#add an option to replace the null values of string type column with the label repeated more.
+
 def fill_null_data(data_frame,fill_null_sc='Missing',nc_impute_type='mode'):
     data=data_frame.copy()
     for col_name in data.columns:
         if data_frame[col_name].isnull().sum()>0:
-            if data[col_name].dtype=='O':
-                data[col_name]=fill_null_str(data,col_name,fill_null_sc)
-            else:
-                data[col_name]=fill_null_num(data,col_name,nc_impute_type)
+            try:
+                if data[col_name].dtype=='O':
+                    data[col_name]=fill_null_str(data,col_name,fill_null_sc)
+                else:
+                    data[col_name]=fill_null_num(data,col_name,nc_impute_type)
+            except:
+                print("Couldn't convert the values for the columns {} with datatype {}".format(col_name,data[col_name].dtype))
         else:
             pass
     return data

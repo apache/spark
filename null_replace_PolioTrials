@@ -1,0 +1,9 @@
+,Experiment,Group,Population,Paralytic,NonParalytic,FalseReports
+1,RandomizedControl,Vaccinated,200745,33,24,25
+2,RandomizedControl,Placebo,201229,115,27,20
+3,RandomizedControl,NotInoculated,338778,121,36,25
+4,RandomizedControl,IncompleteVaccinations,8484,1,1,0
+5,ObservedControl,Vaccinated,221998,38,18,20
+6,ObservedControl,Controls,725173,330,61,48
+7,ObservedControl,Grade2NotInoculated,123605,43,11,12
+8,ObservedControl,IncompleteVaccinations,9904,4,0,0

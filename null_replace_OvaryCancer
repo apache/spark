@@ -1,0 +1,17 @@
+,Freq,stage,operation,survival,xray
+1,10,early,radical,no,no
+2,17,early,radical,no,yes
+3,41,early,radical,yes,no
+4,64,early,radical,yes,yes
+5,1,early,limited,no,no
+6,3,early,limited,no,yes
+7,13,early,limited,yes,no
+8,9,early,limited,yes,yes
+9,38,advanced,radical,no,no
+10,64,advanced,radical,no,yes
+11,6,advanced,radical,yes,no
+12,11,advanced,radical,yes,yes
+13,3,advanced,limited,no,no
+14,13,advanced,limited,no,yes
+15,1,advanced,limited,yes,no
+16,5,advanced,limited,yes,yes

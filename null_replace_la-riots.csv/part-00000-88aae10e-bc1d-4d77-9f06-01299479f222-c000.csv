@@ -1,0 +1,64 @@
+first_name,last_name,age,gender,race,death_date,address,neighborhood,type,longitude,latitude
+Cesar A.,Aguilar,18.0,Male,Latino,1992-04-30,2009 W. 6th St.,Westlake,Officer-involved shooting,-118.2739756,34.0592814
+George,Alvarez,42.0,Male,Latino,1992-05-01,Main & College streets,Chinatown,Not riot-related,-118.2340982,34.0626901
+Wilson,Alvarez,40.0,Male,Latino,1992-05-23,3100 Rosecrans Ave.,Hawthorne,Homicide,-118.326816,33.901662
+Brian E.,Andrew,30.0,Male,Black,1992-04-30,Rosecrans & Chester avenues,Compton,Officer-involved shooting,-118.2153903,33.9034569
+Vivian,Austin,87.0,Female,Black,1992-05-03,1600 W. 60th St.,Harvard Park,Death,-118.304741,33.985667
+Franklin,Benavidez,27.0,Male,Latino,1992-04-30,4404 S. Western Ave.,Vermont Square,Officer-involved shooting,-118.3088215,34.0034731
+Carol,Benson,42.0,Female,Black,1992-05-02,Harbor Freeway near Slauson Avenue,South Park,Death,-118.2805037,33.98916756
+Patrick,Bettan,30.0,Male,White,1992-04-30,2740 W. Olympic Blvd.,Koreatown,Homicide,-118.293181,34.052068
+Hector,Castro,49.0,Male,Latino,1992-04-30,Vermont & Leeward avenues,Koreatown,Homicide,-118.291654,34.0587022
+Jerel L.,Channell,26.0,Male,Black,1992-04-30,Santa Monica Boulevard & Seward Street,Hollywood,Death,-118.3323783,34.09129756
+Gregory,Davis Jr.,15.0,Male,Black,1992-04-30,Vermont Avenue & 43rd Street,Vermont Square,Homicide,-118.2915492,34.005485
+John,Doe #80,20.0,Male,White,1992-05-02,5800 block of South Vermont Avenue,Vermont-Slauson,Homicide,-118.2914954,33.98939885
+Harry,Doller,56.0,Male,White,1992-05-01,3500 block of Winslow Drive,Silver Lake,Not riot-related,-118.278763,34.08778849
+Kevin J.,Edwards,35.0,Male,Black,1992-04-30,614 S. Locust Ave.,Compton,Not riot-related,-118.2002522,33.892421
+Howard,Epstein,45.0,Male,White,1992-04-30,Slauson & 7th avenues,Hyde Park,Homicide,-118.3247424,33.9890486
+Juana,Espinosa,65.0,Female,Latino,1992-05-02,7608 S. Compton Ave.,Compton,Homicide,-118.2461881,33.9198205
+Kevin A.,Evanahen,24.0,Male,White,1992-05-01,Braddock Drive & Inglewood Boulevard,Del Rey,Homicide,-118.4144533,33.99267241
+Jose L.,Garcia,15.0,Male,Latino,1992-04-30,1005 S. Fresno St.,Boyle Heights,Not riot-related,-118.2070419,34.0275527
+Mark,Garcia,15.0,Male,Latino,1992-04-30,10700 block of Burin Avenue,Lennox,Officer-involved shooting,-118.3537656,33.93895407
+Elias,Garcia Rivera,32.0,Male,Latino,1992-12-16,12834 Vanowen St.,Valley Glen,Homicide,-118.4137912,34.1939342
+Andreas,Garnica,36.0,Male,Latino,1992-04-30,2034 W. Pico Blvd.,Pico-Union,Not riot-related,-118.2818793,34.0468443
+Meeker,Gibson,35.0,Male,Black,1992-05-01,Holt & Loranne avenues,Pomona,Homicide,-117.7306469,34.0628458
+Matthew D.,Haines,32.0,Male,White,1992-04-30,Lemon Avenue & Pacific Coast Highway,Long Beach,Homicide,-118.1785114,33.7898575
+Jimmie,Harris,38.0,Male,Black,1992-04-29,Avalon Boulevard & Slauson Avenue,South Park,Death,-118.2651995,33.989245
+DeAndre,Harrison,17.0,Male,Black,1992-04-30,Central Avenue & 112th Street,Green Meadows,Officer-involved shooting,-118.2542949,33.9294721
+Paul D.,Horace,38.0,Male,Black,1992-05-01,1439 E. Walnut,Central-Alameda,Homicide,-118.2474139,34.0217355
+Betty,Jackson,56.0,Female,Black,1992-05-01,Main & 51st streets,South Park,Death,-118.2739305,33.9965216
+Dennis Ray,Jackson,38.0,Male,Black,1992-04-30,11322 Alvaro St.,Watts,Officer-involved shooting,-118.2537567,33.93229185
+Tranh,Lam,25.0,Male,Asian,1992-04-30,Willowbrook Avenue & Alondra Boulevard,Compton,Homicide,-118.2238673,33.8885943
+Edward Song,Lee,18.0,Male,Asian,1992-04-30,Hobart Boulevard & 3rd Street,Koreatown,Homicide,-118.3054392,34.0689851
+Frank D.,Lopez,36.0,Male,Latino,1992-04-30,16th Street & Central Avenue,Downtown,Homicide,-118.2487649,34.0264271
+Darnell R.,Mallory,18.0,Male,Black,1992-04-30,Santa Monica Boulevard & Seward Street,Hollywood,Death,-118.3341384,34.09097156
+Lucie R.,Maronian,51.0,Female,White,1992-05-01,1800 block of East New York Drive,Altadena,Homicide,-118.1134357,34.1785051
+Howard Eugene,Martin,22.0,Male,Black,1992-05-03,near North Los Robles Avenue & Claremont Street,Pasadena,Officer-involved shooting,-118.141613,34.1668637
+Ira F.,McCurry,45.0,Male,White,1992-04-30,Avalon Boulevard & 102nd Street,Green Meadows,Homicide,-118.265163,33.9437558
+Alfred V.,Miller,32.0,Male,Black,1992-05-01,Florence Avenue & Cimarron Street,Chesterfield Square,Homicide,-118.3157372,33.9745911
+Arturo C.,Miranda,23.0,Male,Latino,1992-04-29,120th Street & Central Avenue,Green Meadows,Homicide,-118.2543429,33.9237304
+Suzanne R.,Morgan,24.0,Female,Black,1992-05-01,2137 E. 115th St.,Watts,Not riot-related,-118.2344108,33.9304917
+Nissar,Mustafa,20.0,Male,White,1992-08-12,1601 S. Western Ave.,Harvard Heights,Homicide,-118.3090341,34.0435539
+Ernest,Neal Jr.,27.0,Male,Black,1992-04-30,Western Avenue & 92nd Street,Gramercy Park,Homicide,-118.309006,33.952709
+Anthony,Netherly,21.0,Male,Black,1992-04-30,San Pedro & 78th streets,Florence,Homicide,-118.2695156,33.9687806
+Charles W.,Orebo,21.0,Male,Black,1992-05-01,Florence Avenue & Flower Street,Florence,Officer-involved shooting,-118.2812901,33.9746575
+Juanita,Pettaway,37.0,Female,Black,1992-04-30,Santa Monica Boulevard & Seward Street,Hollywood,Death,-118.3331771,34.090696
+Juan A.,Pineda,20.0,Male,Latino,1992-04-30,4028 Santa Monica Blvd.,Silver Lake,Homicide,-118.281326,34.092221
+Hugo G.,Ramirez,23.0,Male,Latino,1992-05-03,12732 Bess St.,Baldwin Park,Not riot-related,-117.997106,34.070238
+Aaron,Ratinoff,68.0,Male,White,1992-05-01,11690 Gateway Blvd.,Sawtelle,Homicide,-118.4431,34.0286551
+Victor R.,Rivas,26.0,Male,Latino,1992-05-03,Pico Boulevard & Vermont Avenue,Pico-Union,Officer-involved shooting,-118.291583,34.0472563
+William,Ross,33.0,Male,White,1992-05-01,2882 W. 9th St.,Koreatown,Homicide,-118.291274,34.05569
+Juan V.,Salgado,20.0,Male,Latino,1992-05-20,3100 block of South Main Street,Historic South-Central,Homicide,-118.2713789,34.02062153
+Imad,Sharaf,31.0,Male,Black,1992-05-03,San Diego Freeway & San Fernando Mission Boulevard,Mission Hills,Not riot-related,-118.4717452,34.27185555
+Jose,Solorzano,25.0,Male,Latino,1992-05-01,Vermont Avenue & Santa Monica Boulevard,East Hollywood,Homicide,-118.291755,34.0908675
+George A.,Sosa,20.0,Male,Latino,1992-04-30,2600 block of Florence Avenue,Huntington Park,Homicide,-118.22518059,33.97418
+Anthony J.,Taylor,31.0,Male,Black,1992-04-30,11322 Alvaro St.,Watts,Officer-involved shooting,-118.2531966,33.9314634
+Dwight,Taylor,42.0,Male,Black,1992-04-29,4365 S. Vermont Ave.,Vermont Square,Homicide,-118.292169,34.004453
+James L.,Taylor,26.0,Male,Black,1992-04-30,5213 Sunset Blvd.,East Hollywood,Homicide,-118.3037557,34.0982485
+Wallace,Tope,54.0,Male,White,1993-11-24,5510 W. Sunset Blvd.,Hollywood,Homicide,-118.3098224,34.0980819
+Edward Anthony,Travens,15.0,Male,White,1992-04-29,San Fernando Road & San Fernando Mission Boulevard,San Fernando,Not riot-related,-118.4430027,34.28418731
+Eduardo C.,Vela,33.0,Male,Latino,1992-04-29,5100 block of West Slauson Avenue,Ladera Heights,Homicide,-118.3687199,33.9876036
+Fredrick,Ward,20.0,Male,Black,1992-05-02,11932 Cometa Ave.,Pacoima,Homicide,-118.412778,34.287098
+Louis A.,Watson,18.0,Male,Black,1992-04-29,4365 S. Vermont Ave.,Vermont Square,Homicide,-118.2915566,34.00524354
+Elbert O.,Wilkins,33.0,Male,Black,1992-04-30,Western Avenue & 92nd Street,Gramercy Park,Homicide,-118.3100043,33.95276731
+John H.,Willers,37.0,Male,White,1992-04-29,10621 Sepulveda Blvd.,Mission Hills,Homicide,-118.46777,34.263184
+Willie Bernard,Williams,29.0,Male,Black,1992-04-29,Gage & Western avenues,Chesterfield Square,Death,-118.3089517,33.9823625

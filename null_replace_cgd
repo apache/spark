@@ -1,0 +1,204 @@
+,id,center,random,treat,sex,age,height,weight,inherit,steroids,propylac,hos.cat,tstart,enum,tstop,status
+1,1,Scripps Institute,1989-06-07,rIFN-g,female,12,147.0,62.0,autosomal,0,0,US:other,0,1,219,1
+2,1,Scripps Institute,1989-06-07,rIFN-g,female,12,147.0,62.0,autosomal,0,0,US:other,219,2,373,1
+3,1,Scripps Institute,1989-06-07,rIFN-g,female,12,147.0,62.0,autosomal,0,0,US:other,373,3,414,0
+4,2,Scripps Institute,1989-06-07,placebo,male,15,159.0,47.5,autosomal,0,1,US:other,0,1,8,1
+5,2,Scripps Institute,1989-06-07,placebo,male,15,159.0,47.5,autosomal,0,1,US:other,8,2,26,1
+6,2,Scripps Institute,1989-06-07,placebo,male,15,159.0,47.5,autosomal,0,1,US:other,26,3,152,1
+7,2,Scripps Institute,1989-06-07,placebo,male,15,159.0,47.5,autosomal,0,1,US:other,152,4,241,1
+8,2,Scripps Institute,1989-06-07,placebo,male,15,159.0,47.5,autosomal,0,1,US:other,241,5,249,1
+9,2,Scripps Institute,1989-06-07,placebo,male,15,159.0,47.5,autosomal,0,1,US:other,249,6,322,1
+10,2,Scripps Institute,1989-06-07,placebo,male,15,159.0,47.5,autosomal,0,1,US:other,322,7,350,1
+11,2,Scripps Institute,1989-06-07,placebo,male,15,159.0,47.5,autosomal,0,1,US:other,350,8,439,0
+12,3,Scripps Institute,1989-06-08,rIFN-g,male,19,171.0,72.7,X-linked,0,1,US:other,0,1,382,0
+13,4,Scripps Institute,1989-06-23,rIFN-g,male,12,142.0,34.0,X-linked,0,1,US:other,0,1,388,0
+14,5,NIH,1989-07-08,placebo,male,17,162.5,52.7,X-linked,0,1,US:NIH,0,1,246,1
+15,5,NIH,1989-07-08,placebo,male,17,162.5,52.7,X-linked,0,1,US:NIH,246,2,253,1
+16,5,NIH,1989-07-08,placebo,male,17,162.5,52.7,X-linked,0,1,US:NIH,253,3,383,0
+17,6,Univ. of Utah,1989-07-10,rIFN-g,female,44,153.3,45.0,autosomal,0,0,US:other,0,1,364,0
+18,7,Univ. of Utah,1989-07-10,placebo,male,22,175.0,59.7,X-linked,0,1,US:other,0,1,292,1
+19,7,Univ. of Utah,1989-07-10,placebo,male,22,175.0,59.7,X-linked,0,1,US:other,292,2,364,0
+20,8,Univ. of Utah,1989-07-10,rIFN-g,male,7,111.0,17.4,X-linked,0,1,US:other,0,1,363,0
+21,9,NIH,1989-07-14,placebo,male,27,176.0,82.8,autosomal,0,1,US:NIH,0,1,294,1
+22,9,NIH,1989-07-14,placebo,male,27,176.0,82.8,autosomal,0,1,US:NIH,294,2,349,0
+23,10,NIH,1989-07-14,rIFN-g,male,5,113.0,19.5,X-linked,0,1,US:NIH,0,1,371,0
+24,11,NIH,1989-07-14,placebo,male,2,93.0,13.2,X-linked,0,1,US:NIH,0,1,19,1
+25,11,NIH,1989-07-14,placebo,male,2,93.0,13.2,X-linked,0,1,US:NIH,19,2,102,0
+26,12,NIH,1989-07-20,rIFN-g,male,8,124.0,25.4,X-linked,0,1,US:NIH,0,1,373,1
+27,12,NIH,1989-07-20,rIFN-g,male,8,124.0,25.4,X-linked,0,1,US:NIH,373,2,388,0
+28,13,NIH,1989-07-20,rIFN-g,male,12,144.0,36.9,X-linked,0,1,US:NIH,0,1,388,0
+29,14,Scripps Institute,1989-07-21,placebo,male,1,79.0,10.5,X-linked,0,1,US:other,0,1,211,1
+30,14,Scripps Institute,1989-07-21,placebo,male,1,79.0,10.5,X-linked,0,1,US:other,211,2,260,1
+31,14,Scripps Institute,1989-07-21,placebo,male,1,79.0,10.5,X-linked,0,1,US:other,260,3,265,1
+32,14,Scripps Institute,1989-07-21,placebo,male,1,79.0,10.5,X-linked,0,1,US:other,265,4,269,1
+33,14,Scripps Institute,1989-07-21,placebo,male,1,79.0,10.5,X-linked,0,1,US:other,269,5,307,1
+34,14,Scripps Institute,1989-07-21,placebo,male,1,79.0,10.5,X-linked,0,1,US:other,307,6,363,0
+35,15,Scripps Institute,1989-07-27,rIFN-g,male,9,134.5,32.7,autosomal,0,1,US:other,0,1,82,1
+36,15,Scripps Institute,1989-07-27,rIFN-g,male,9,134.5,32.7,autosomal,0,1,US:other,82,2,114,1
+37,15,Scripps Institute,1989-07-27,rIFN-g,male,9,134.5,32.7,autosomal,0,1,US:other,114,3,337,1
+38,15,Scripps Institute,1989-07-27,rIFN-g,male,9,134.5,32.7,autosomal,0,1,US:other,337,4,367,0
+39,16,NIH,1989-07-27,placebo,male,27,174.0,67.8,X-linked,0,1,US:NIH,0,1,365,0
+40,17,NIH,1989-07-28,placebo,male,14,143.5,33.4,X-linked,0,1,US:NIH,0,1,334,1
+41,17,NIH,1989-07-28,placebo,male,14,143.5,33.4,X-linked,0,1,US:NIH,334,2,370,1
+42,17,NIH,1989-07-28,placebo,male,14,143.5,33.4,X-linked,0,1,US:NIH,370,3,382,0
+43,18,Scripps Institute,1989-07-29,placebo,male,1,79.0,11.5,X-linked,0,1,US:other,0,1,18,1
+44,18,Scripps Institute,1989-07-29,placebo,male,1,79.0,11.5,X-linked,0,1,US:other,18,2,362,0
+45,19,NIH,1989-08-06,rIFN-g,male,11,149.0,50.9,autosomal,0,1,US:NIH,0,1,373,0
+46,20,NIH,1989-08-12,placebo,male,29,175.0,73.1,autosomal,0,1,US:NIH,0,1,280,1
+47,20,NIH,1989-08-12,placebo,male,29,175.0,73.1,autosomal,0,1,US:NIH,280,2,385,0
+48,21,NIH,1989-08-12,rIFN-g,female,31,167.0,51.8,autosomal,0,1,US:NIH,0,1,376,0
+49,22,NIH,1989-08-19,rIFN-g,male,7,121.0,19.9,X-linked,0,1,US:NIH,0,1,360,0
+50,23,NIH,1989-08-19,placebo,female,26,153.0,46.9,autosomal,0,1,US:NIH,0,1,306,0
+51,24,Mt. Sinai Medical Ctr,1989-08-19,rIFN-g,male,12,136.5,30.0,X-linked,0,1,US:other,0,1,160,0
+52,25,Mt. Sinai Medical Ctr,1989-08-19,placebo,male,7,120.0,23.0,X-linked,0,1,US:other,0,1,146,1
+53,25,Mt. Sinai Medical Ctr,1989-08-19,placebo,male,7,120.0,23.0,X-linked,0,1,US:other,146,2,316,0
+54,26,Mt. Sinai Medical Ctr,1989-08-19,placebo,male,1,79.0,10.6,X-linked,0,1,US:other,0,1,316,0
+55,27,Mt. Sinai Medical Ctr,1989-08-20,rIFN-g,male,3,97.8,13.0,X-linked,0,1,US:other,0,1,315,0
+56,28,Univ. of Minnesota,1989-08-21,placebo,male,7,109.0,14.7,X-linked,0,1,US:other,0,1,357,0
+57,29,Scripps Institute,1989-08-25,rIFN-g,male,5,102.0,18.0,X-linked,0,1,US:other,0,1,267,1
+58,29,Scripps Institute,1989-08-25,rIFN-g,male,5,102.0,18.0,X-linked,0,1,US:other,267,2,360,0
+59,30,Mott Children's Hosp,1989-08-25,placebo,male,1,79.0,12.2,X-linked,0,1,US:other,0,1,206,1
+60,30,Mott Children's Hosp,1989-08-25,placebo,male,1,79.0,12.2,X-linked,0,1,US:other,206,2,347,0
+61,31,Univ. of Minnesota,1989-08-25,placebo,male,5,101.0,15.4,X-linked,0,1,US:other,0,1,175,1
+62,31,Univ. of Minnesota,1989-08-25,placebo,male,5,101.0,15.4,X-linked,0,1,US:other,175,2,280,1
+63,31,Univ. of Minnesota,1989-08-25,placebo,male,5,101.0,15.4,X-linked,0,1,US:other,280,3,353,0
+64,32,Amsterdam,1989-08-27,placebo,male,18,179.0,67.0,autosomal,0,1,Europe:Amsterdam,0,1,308,0
+65,33,Amsterdam,1989-08-27,rIFN-g,male,13,151.0,49.0,X-linked,0,1,Europe:Amsterdam,0,1,327,0
+66,34,Amsterdam,1989-08-27,placebo,male,11,136.5,31.2,X-linked,0,0,Europe:Amsterdam,0,1,329,0
+67,35,Univ. of Minnesota,1989-09-01,placebo,male,24,169.7,59.0,X-linked,0,1,US:other,0,1,343,0
+68,36,NIH,1989-09-02,rIFN-g,male,13,145.2,36.2,X-linked,0,1,US:NIH,0,1,118,1
+69,36,NIH,1989-09-02,rIFN-g,male,13,145.2,36.2,X-linked,0,1,US:NIH,118,2,240,1
+70,36,NIH,1989-09-02,rIFN-g,male,13,145.2,36.2,X-linked,0,1,US:NIH,240,3,251,0
+71,37,Amsterdam,1989-09-07,rIFN-g,male,2,86.0,13.5,X-linked,0,1,Europe:Amsterdam,0,1,318,0
+72,38,Amsterdam,1989-09-07,rIFN-g,male,17,180.0,68.0,X-linked,0,1,Europe:Amsterdam,0,1,304,0
+73,39,Amsterdam,1989-09-07,placebo,male,35,181.5,80.0,autosomal,0,0,Europe:Amsterdam,0,1,316,0
+74,40,Mott Children's Hosp,1989-09-07,rIFN-g,male,7,116.6,23.3,X-linked,0,1,US:other,0,1,335,0
+75,41,Mott Children's Hosp,1989-09-07,rIFN-g,male,17,170.2,47.9,X-linked,0,1,US:other,0,1,274,1
+76,41,Mott Children's Hosp,1989-09-07,rIFN-g,male,17,170.2,47.9,X-linked,0,1,US:other,274,2,361,1
+77,41,Mott Children's Hosp,1989-09-07,rIFN-g,male,17,170.2,47.9,X-linked,0,1,US:other,361,3,365,0
+78,42,Mott Children's Hosp,1989-09-07,rIFN-g,male,8,125.4,27.7,X-linked,0,1,US:other,0,1,336,0
+79,43,Univ. of Utah,1989-09-08,rIFN-g,male,19,173.6,61.4,X-linked,0,0,US:other,0,1,350,0
+80,44,NIH,1989-09-09,rIFN-g,female,25,168.0,68.9,autosomal,0,1,US:NIH,0,1,187,1
+81,44,NIH,1989-09-09,rIFN-g,female,25,168.0,68.9,autosomal,0,1,US:NIH,187,2,356,0
+82,45,NIH,1989-09-09,rIFN-g,female,9,140.0,36.0,autosomal,0,1,US:NIH,0,1,339,0
+83,46,NIH,1989-09-09,placebo,male,28,174.0,63.7,X-linked,0,1,US:NIH,0,1,6,1
+84,46,NIH,1989-09-09,placebo,male,28,174.0,63.7,X-linked,0,1,US:NIH,6,2,301,0
+85,47,Texas Children's Hosp,1989-09-10,placebo,female,17,171.0,46.1,autosomal,0,1,US:other,0,1,330,0
+86,48,Amsterdam,1989-09-11,placebo,male,25,172.5,50.0,X-linked,0,1,Europe:Amsterdam,0,1,300,0
+87,49,Amsterdam,1989-09-11,rIFN-g,male,14,145.0,29.0,X-linked,0,0,Europe:Amsterdam,0,1,146,1
+88,49,Amsterdam,1989-09-11,rIFN-g,male,14,145.0,29.0,X-linked,0,0,Europe:Amsterdam,146,2,188,1
+89,49,Amsterdam,1989-09-11,rIFN-g,male,14,145.0,29.0,X-linked,0,0,Europe:Amsterdam,188,3,300,0
+90,50,Amsterdam,1989-09-11,placebo,male,25,187.5,74.0,autosomal,0,1,Europe:Amsterdam,0,1,304,1
+91,50,Amsterdam,1989-09-11,placebo,male,25,187.5,74.0,autosomal,0,1,Europe:Amsterdam,304,2,312,0
+92,51,NIH,1989-09-14,rIFN-g,female,13,139.0,34.8,autosomal,0,1,US:NIH,0,1,334,0
+93,52,Mott Children's Hosp,1989-09-14,placebo,male,20,173.0,68.4,X-linked,0,1,US:other,0,1,52,1
+94,52,Mott Children's Hosp,1989-09-14,placebo,male,20,173.0,68.4,X-linked,0,1,US:other,52,2,65,1
+95,52,Mott Children's Hosp,1989-09-14,placebo,male,20,173.0,68.4,X-linked,0,1,US:other,65,3,255,1
+96,52,Mott Children's Hosp,1989-09-14,placebo,male,20,173.0,68.4,X-linked,0,1,US:other,255,4,270,0
+97,53,Mott Children's Hosp,1989-09-14,placebo,male,5,114.5,23.0,X-linked,0,0,US:other,0,1,67,1
+98,53,Mott Children's Hosp,1989-09-14,placebo,male,5,114.5,23.0,X-linked,0,0,US:other,67,2,248,1
+99,53,Mott Children's Hosp,1989-09-14,placebo,male,5,114.5,23.0,X-linked,0,0,US:other,248,3,250,1
+100,53,Mott Children's Hosp,1989-09-14,placebo,male,5,114.5,23.0,X-linked,0,0,US:other,250,4,284,1
+101,53,Mott Children's Hosp,1989-09-14,placebo,male,5,114.5,23.0,X-linked,0,0,US:other,284,5,347,0
+102,54,Harvard Medical Sch,1989-09-15,rIFN-g,female,38,152.2,66.7,autosomal,0,1,US:other,0,1,293,0
+103,55,Univ. of Minnesota,1989-09-17,rIFN-g,male,12,138.0,28.1,X-linked,0,1,US:other,0,1,265,1
+104,55,Univ. of Minnesota,1989-09-17,rIFN-g,male,12,138.0,28.1,X-linked,0,1,US:other,265,2,303,0
+105,56,Scripps Institute,1989-09-17,rIFN-g,male,22,169.0,52.2,autosomal,0,1,US:other,0,1,337,0
+106,57,Amsterdam,1989-09-18,placebo,female,27,169.5,65.0,X-linked,1,0,Europe:Amsterdam,0,1,91,1
+107,57,Amsterdam,1989-09-18,placebo,female,27,169.5,65.0,X-linked,1,0,Europe:Amsterdam,91,2,121,1
+108,57,Amsterdam,1989-09-18,placebo,female,27,169.5,65.0,X-linked,1,0,Europe:Amsterdam,121,3,203,1
+109,57,Amsterdam,1989-09-18,placebo,female,27,169.5,65.0,X-linked,1,0,Europe:Amsterdam,203,4,287,0
+110,58,Amsterdam,1989-09-18,placebo,male,32,185.0,95.0,autosomal,0,1,Europe:Amsterdam,0,1,293,0
+111,59,Amsterdam,1989-09-18,rIFN-g,male,6,120.0,23.0,X-linked,0,1,Europe:Amsterdam,0,1,293,0
+112,60,Mott Children's Hosp,1989-09-21,rIFN-g,male,6,105.5,19.5,X-linked,1,1,US:other,0,1,318,0
+113,61,Mott Children's Hosp,1989-09-21,placebo,male,9,129.6,29.3,X-linked,0,0,US:other,0,1,318,1
+114,61,Mott Children's Hosp,1989-09-21,placebo,male,9,129.6,29.3,X-linked,0,0,US:other,318,2,359,0
+115,62,Texas Children's Hosp,1989-09-22,placebo,female,8,115.0,19.0,autosomal,0,1,US:other,0,1,57,1
+116,62,Texas Children's Hosp,1989-09-22,placebo,female,8,115.0,19.0,autosomal,0,1,US:other,57,2,121,1
+117,62,Texas Children's Hosp,1989-09-22,placebo,female,8,115.0,19.0,autosomal,0,1,US:other,121,3,351,0
+118,63,Univ. of Minnesota,1989-09-22,placebo,male,5,97.1,15.3,X-linked,0,1,US:other,0,1,226,1
+119,63,Univ. of Minnesota,1989-09-22,placebo,male,5,97.1,15.3,X-linked,0,1,US:other,226,2,322,0
+120,64,Univ. of Zurich,1989-09-23,rIFN-g,male,26,176.8,66.0,X-linked,0,1,Europe:other,0,1,65,1
+121,64,Univ. of Zurich,1989-09-23,rIFN-g,male,26,176.8,66.0,X-linked,0,1,Europe:other,65,2,343,0
+122,65,NIH,1989-09-25,rIFN-g,male,24,177.0,78.4,autosomal,0,1,US:NIH,0,1,269,0
+123,66,Amsterdam,1989-09-25,placebo,male,8,138.0,31.0,autosomal,0,0,Europe:Amsterdam,0,1,264,1
+124,66,Amsterdam,1989-09-25,placebo,male,8,138.0,31.0,autosomal,0,0,Europe:Amsterdam,264,2,286,0
+125,67,Amsterdam,1989-09-25,rIFN-g,male,9,144.0,34.4,autosomal,0,1,Europe:Amsterdam,0,1,286,0
+126,68,Amsterdam,1989-10-08,rIFN-g,female,23,170.0,49.0,autosomal,0,0,Europe:Amsterdam,0,1,273,0
+127,69,Texas Children's Hosp,1989-10-09,rIFN-g,male,6,111.9,17.9,X-linked,0,1,US:other,0,1,297,0
+128,70,Amsterdam,1989-10-15,placebo,female,23,122.0,31.2,autosomal,1,1,Europe:Amsterdam,0,1,236,1
+129,70,Amsterdam,1989-10-15,placebo,female,23,122.0,31.2,autosomal,1,1,Europe:Amsterdam,236,2,273,0
+130,71,Amsterdam,1989-10-15,rIFN-g,female,17,127.0,27.0,autosomal,0,1,Europe:Amsterdam,0,1,273,0
+131,72,Amsterdam,1989-10-15,rIFN-g,male,21,158.0,49.0,autosomal,0,1,Europe:Amsterdam,0,1,207,1
+132,72,Amsterdam,1989-10-15,rIFN-g,male,21,158.0,49.0,autosomal,0,1,Europe:Amsterdam,207,2,273,0
+133,73,Univ. of Zurich,1989-10-19,placebo,male,6,104.4,13.8,X-linked,0,1,Europe:other,0,1,294,0
+134,74,Univ. of Zurich,1989-10-19,rIFN-g,female,9,122.8,20.1,autosomal,0,1,Europe:other,0,1,303,0
+135,75,Texas Children's Hosp,1989-10-20,placebo,male,7,116.2,22.2,autosomal,0,1,US:other,0,1,281,0
+136,76,NIH,1989-10-20,placebo,male,11,123.0,24.3,X-linked,0,1,US:NIH,0,1,273,0
+137,77,Harvard Medical Sch,1989-10-23,placebo,male,14,144.0,32.8,X-linked,0,1,US:other,0,1,255,0
+138,78,Univ. of Washington,1989-10-23,rIFN-g,male,34,182.6,94.8,X-linked,0,0,US:other,0,1,269,0
+139,79,Univ. of Zurich,1989-10-26,placebo,male,25,176.9,73.5,X-linked,0,0,Europe:other,0,1,23,1
+140,79,Univ. of Zurich,1989-10-26,placebo,male,25,176.9,73.5,X-linked,0,0,Europe:other,23,2,270,0
+141,80,Univ. of Zurich,1989-10-26,rIFN-g,male,2,93.5,14.2,X-linked,0,1,Europe:other,0,1,270,0
+142,81,Texas Children's Hosp,1989-10-27,rIFN-g,male,7,119.7,21.5,X-linked,0,1,US:other,0,1,276,0
+143,82,Amsterdam,1989-10-30,placebo,male,1,81.0,10.4,X-linked,0,1,Europe:Amsterdam,0,1,264,0
+144,83,Univ. of Zurich,1989-11-02,placebo,male,8,121.6,22.4,X-linked,0,1,Europe:other,0,1,245,0
+145,84,Univ. of Zurich,1989-11-02,placebo,male,10,125.9,29.7,X-linked,0,1,Europe:other,0,1,261,0
+146,85,Scripps Institute,1989-11-02,placebo,female,19,159.0,46.0,autosomal,0,0,US:other,0,1,270,0
+147,86,NIH,1989-11-03,rIFN-g,male,4,103.8,16.8,X-linked,0,1,US:NIH,0,1,113,1
+148,86,NIH,1989-11-03,rIFN-g,male,4,103.8,16.8,X-linked,0,1,US:NIH,113,2,273,0
+149,87,NIH,1989-11-03,placebo,male,19,170.0,71.2,X-linked,0,1,US:NIH,0,1,99,1
+150,87,NIH,1989-11-03,placebo,male,19,170.0,71.2,X-linked,0,1,US:NIH,99,2,306,1
+151,88,Scripps Institute,1989-11-03,placebo,male,7,115.5,19.5,X-linked,0,1,US:other,0,1,274,0
+152,89,Texas Children's Hosp,1989-11-03,rIFN-g,male,8,116.8,20.0,X-linked,0,1,US:other,0,1,279,0
+153,90,Texas Children's Hosp,1989-11-04,placebo,male,11,141.5,36.0,X-linked,0,1,US:other,0,1,14,1
+154,90,Texas Children's Hosp,1989-11-04,placebo,male,11,141.5,36.0,X-linked,0,1,US:other,14,2,278,0
+155,91,L.A. Children's Hosp,1989-11-06,placebo,male,9,129.4,28.7,X-linked,0,1,US:other,0,1,278,0
+156,92,Univ. of Zurich,1989-11-09,rIFN-g,male,20,169.8,50.1,X-linked,0,1,Europe:other,0,1,284,0
+157,93,Univ. of Zurich,1989-11-09,placebo,male,34,166.5,58.2,autosomal,0,1,Europe:other,0,1,276,0
+158,94,L.A. Children's Hosp,1989-11-13,rIFN-g,male,5,112.3,20.7,X-linked,0,1,US:other,0,1,265,0
+159,95,Univ. of Zurich,1989-11-16,rIFN-g,male,6,119.9,26.2,X-linked,0,1,Europe:other,0,1,294,0
+160,96,Univ. of Zurich,1989-11-16,rIFN-g,male,11,139.2,34.9,X-linked,0,1,Europe:other,0,1,277,0
+161,97,Mott Children's Hosp,1989-11-17,rIFN-g,male,5,110.4,19.1,X-linked,0,1,US:other,0,1,259,0
+162,98,Univ. of Zurich,1989-11-23,placebo,male,3,91.7,14.4,autosomal,0,1,Europe:other,0,1,4,1
+163,98,Univ. of Zurich,1989-11-23,placebo,male,3,91.7,14.4,autosomal,0,1,Europe:other,4,2,159,1
+164,98,Univ. of Zurich,1989-11-23,placebo,male,3,91.7,14.4,autosomal,0,1,Europe:other,159,3,213,1
+165,98,Univ. of Zurich,1989-11-23,placebo,male,3,91.7,14.4,autosomal,0,1,Europe:other,213,4,287,0
+166,99,NIH,1989-11-24,rIFN-g,male,18,166.0,58.1,X-linked,0,1,US:NIH,0,1,263,0
+167,100,NIH,1989-11-25,rIFN-g,male,7,135.0,42.9,autosomal,0,1,US:NIH,0,1,167,1
+168,100,NIH,1989-11-25,rIFN-g,male,7,135.0,42.9,autosomal,0,1,US:NIH,167,2,240,0
+169,101,L.A. Children's Hosp,1989-11-27,rIFN-g,male,1,76.3,11.3,X-linked,0,1,US:other,0,1,217,0
+170,102,Scripps Institute,1989-11-27,rIFN-g,male,25,185.0,58.4,X-linked,0,1,US:other,0,1,271,0
+171,103,Scripps Institute,1989-11-27,placebo,male,31,170.0,80.5,X-linked,0,1,US:other,0,1,252,0
+172,104,Univ. of Zurich,1989-11-30,rIFN-g,male,9,131.3,24.0,X-linked,0,1,Europe:other,0,1,331,0
+173,105,Univ. of Minnesota,1989-12-01,rIFN-g,male,24,171.0,55.1,X-linked,0,1,US:other,0,1,255,0
+174,106,NIH,1989-12-03,placebo,female,12,166.0,51.9,autosomal,0,1,US:NIH,0,1,271,0
+175,107,NIH,1989-12-03,rIFN-g,male,10,129.0,27.4,X-linked,0,1,US:NIH,0,1,254,0
+176,108,Univ. of Washington,1989-12-04,rIFN-g,male,32,177.9,63.4,X-linked,0,0,US:other,0,1,185,0
+177,109,Harvard Medical Sch,1989-12-04,placebo,male,26,81.3,55.0,X-linked,0,1,US:other,0,1,213,0
+178,110,L.A. Children's Hosp,1989-12-11,rIFN-g,male,7,119.0,20.6,X-linked,0,1,US:other,0,1,165,1
+179,110,L.A. Children's Hosp,1989-12-11,rIFN-g,male,7,119.0,20.6,X-linked,0,1,US:other,165,2,210,0
+180,111,Harvard Medical Sch,1989-12-14,placebo,male,26,178.5,69.3,X-linked,0,1,US:other,0,1,203,0
+181,112,Univ. of Zurich,1989-12-15,placebo,female,11,138.6,36.1,autosomal,0,1,Europe:other,0,1,288,0
+182,113,Univ. of Zurich,1989-12-15,placebo,male,17,156.7,36.8,X-linked,0,1,Europe:other,0,1,269,0
+183,114,Univ. of Zurich,1989-12-15,placebo,male,10,143.0,31.3,X-linked,0,1,Europe:other,0,1,269,0
+184,115,Univ. of Washington,1989-12-18,placebo,male,25,185.0,74.6,X-linked,0,0,US:other,0,1,91,0
+185,116,Univ. of Washington,1989-12-18,placebo,male,21,189.0,101.5,X-linked,0,0,US:other,0,1,91,0
+186,117,L.A. Children's Hosp,1989-12-22,placebo,male,11,137.5,40.3,autosomal,0,1,US:other,0,1,192,0
+187,118,Texas Children's Hosp,1989-12-22,rIFN-g,male,4,108.1,17.3,X-linked,0,1,US:other,0,1,199,0
+188,119,L.A. Children's Hosp,1989-12-24,placebo,male,4,98.3,14.4,autosomal,0,1,US:other,0,1,11,1
+189,119,L.A. Children's Hosp,1989-12-24,placebo,male,4,98.3,14.4,autosomal,0,1,US:other,11,2,22,1
+190,119,L.A. Children's Hosp,1989-12-24,placebo,male,4,98.3,14.4,autosomal,0,1,US:other,22,3,169,1
+191,119,L.A. Children's Hosp,1989-12-24,placebo,male,4,98.3,14.4,autosomal,0,1,US:other,169,4,195,0
+192,121,Copenhagen,1989-12-25,placebo,female,22,163.0,49.1,autosomal,0,1,Europe:other,0,1,198,0
+193,122,Copenhagen,1989-12-25,placebo,male,17,169.0,63.5,X-linked,0,1,Europe:other,0,1,207,0
+194,123,Copenhagen,1989-12-25,placebo,male,19,182.0,63.9,X-linked,0,1,Europe:other,0,1,168,1
+195,123,Copenhagen,1989-12-25,placebo,male,19,182.0,63.9,X-linked,0,1,Europe:other,168,2,200,0
+196,125,Copenhagen,1989-12-25,rIFN-g,female,36,167.0,60.8,autosomal,0,1,Europe:other,0,1,197,0
+197,131,Scripps Institute,1989-12-25,rIFN-g,female,37,155.0,67.5,X-linked,0,1,US:other,0,1,243,0
+198,132,L.A. Children's Hosp,1989-12-25,placebo,female,7,113.0,20.4,autosomal,0,1,US:other,0,1,120,1
+199,132,L.A. Children's Hosp,1989-12-25,placebo,female,7,113.0,20.4,autosomal,0,1,US:other,120,2,203,0
+200,133,L.A. Children's Hosp,1989-12-28,rIFN-g,male,15,178.7,60.5,X-linked,0,1,US:other,0,1,197,0
+201,134,Scripps Institute,1989-12-29,placebo,female,6,130.0,21.6,autosomal,0,1,US:other,0,1,104,1
+202,134,Scripps Institute,1989-12-29,placebo,female,6,130.0,21.6,autosomal,0,1,US:other,104,2,227,0
+203,135,Scripps Institute,1989-12-29,placebo,female,3,96.0,13.1,autosomal,0,1,US:other,0,1,227,0

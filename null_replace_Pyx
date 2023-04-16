@@ -1,0 +1,73 @@
+,Bags,Group,Deviation,count
+1,1 and 2,near std,Below -R,34
+2,3,near std,Below -R,11
+3,4,near std,Below -R,20
+4,5,below std,Below -R,30
+5,6,below std,Below -R,32
+6,7,below std,Below -R,47
+7,8,above std,Below -R,11
+8,9,above std,Below -R,10
+9,10,above std,Below -R,14
+10,1 and 2,near std,(-R to -.2),57
+11,3,near std,(-R to -.2),17
+12,4,near std,(-R to -.2),22
+13,5,below std,(-R to -.2),102
+14,6,below std,(-R to -.2),27
+15,7,below std,(-R to -.2),65
+16,8,above std,(-R to -.2),21
+17,9,above std,(-R to -.2),38
+18,10,above std,(-R to -.2),13
+19,1 and 2,near std,(-.2 to -.l),172
+20,3,near std,(-.2 to -.l),100
+21,4,near std,(-.2 to -.l),135
+22,5,below std,(-.2 to -.l),107
+23,6,below std,(-.2 to -.l),267
+24,7,below std,(-.2 to -.l),141
+25,8,above std,(-.2 to -.l),110
+26,9,above std,(-.2 to -.l),103
+27,10,above std,(-.2 to -.l),126
+28,1 and 2,near std,(-.1 to 0),630
+29,3,near std,(-.1 to 0),412
+30,4,near std,(-.1 to 0),350
+31,5,below std,(-.1 to 0),289
+32,6,below std,(-.1 to 0),210
+33,7,below std,(-.1 to 0),380
+34,8,above std,(-.1 to 0),215
+35,9,above std,(-.1 to 0),228
+36,10,above std,(-.1 to 0),309
+37,1 and 2,near std,(0 to .l),597
+38,3,near std,(0 to .l),172
+39,4,near std,(0 to .l),184
+40,5,below std,(0 to .l),209
+41,6,below std,(0 to .l),236
+42,7,below std,(0 to .l),157
+43,8,above std,(0 to .l),361
+44,9,above std,(0 to .l),425
+45,10,above std,(0 to .l),290
+46,1 and 2,near std,(.1 to .2),366
+47,3,near std,(.1 to .2),218
+48,4,near std,(.1 to .2),222
+49,5,below std,(.1 to .2),184
+50,6,below std,(.1 to .2),144
+51,7,below std,(.1 to .2),135
+52,8,above std,(.1 to .2),156
+53,9,above std,(.1 to .2),140
+54,10,above std,(.1 to .2),168
+55,1 and 2,near std,(.2 to R),116
+56,3,near std,(.2 to R),57
+57,4,near std,(.2 to R),50
+58,5,below std,(.2 to R),50
+59,6,below std,(.2 to R),56
+60,7,below std,(.2 to R),50
+61,8,above std,(.2 to R),71
+62,9,above std,(.2 to R),36
+63,10,above std,(.2 to R),50
+64,1 and 2,near std,Above R,28
+65,3,near std,Above R,13
+66,4,near std,Above R,17
+67,5,below std,Above R,29
+68,6,below std,Above R,28
+69,7,below std,Above R,25
+70,8,above std,Above R,55
+71,9,above std,Above R,20
+72,10,above std,Above R,30
