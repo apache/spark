@@ -3960,6 +3960,14 @@ object SQLConf {
       .checkValue(_ > 0, "The difference must be positive.")
       .createWithDefault(4)
 
+  val UNWRAP_CAST_IN_JOIN_CONDITION_ENABLED =
+    buildConf("spark.sql.bucketing.unwrapCastInJoinCondition.enabled")
+      .doc("When true, unwrap the cast in the join condition to unlock bucketed reads if they " +
+        "are integral types.")
+      .version("3.5.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val BROADCAST_HASH_JOIN_OUTPUT_PARTITIONING_EXPAND_LIMIT =
     buildConf("spark.sql.execution.broadcastHashJoin.outputPartitioningExpandLimit")
       .internal()
@@ -4984,6 +4992,9 @@ class SQLConf extends Serializable with Logging {
 
   def coalesceBucketsInJoinMaxBucketRatio: Int =
     getConf(SQLConf.COALESCE_BUCKETS_IN_JOIN_MAX_BUCKET_RATIO)
+
+  def unwrapCastInJoinConditionEnabled: Boolean =
+    getConf(SQLConf.UNWRAP_CAST_IN_JOIN_CONDITION_ENABLED)
 
   def optimizeNullAwareAntiJoin: Boolean =
     getConf(SQLConf.OPTIMIZE_NULL_AWARE_ANTI_JOIN)
