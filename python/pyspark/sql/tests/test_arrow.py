@@ -809,7 +809,7 @@ class ArrowTestsMixin:
         for case in cases:
             run_test(*case)
 
-    def test_createDateFrame_with_category_type(self):
+    def test_createDataFrame_with_category_type(self):
         pdf = pd.DataFrame({"A": ["a", "b", "c", "a"]})
         pdf["B"] = pdf["A"].astype("category")
         category_first_element = dict(enumerate(pdf["B"].cat.categories))[0]
