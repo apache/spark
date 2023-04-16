@@ -43,7 +43,9 @@ from pyspark.sql.types import (
     cast,
 )
 
+from pyspark.storagelevel import StorageLevel
 from pyspark.sql.connect.types import to_arrow_schema
+import pyspark.sql.connect.proto as pb2
 
 from typing import (
     Any,
@@ -486,3 +488,23 @@ class ArrowTableToRowsConversion:
             values = [field_converters[j](columnar_data[j][i]) for j in range(table.num_columns)]
             rows.append(_create_row(fields=schema.fieldNames(), values=values))
         return rows
+
+
+def storage_level_to_proto(storage_level: StorageLevel) -> pb2.StorageLevel:
+    return pb2.StorageLevel(
+        use_disk=storage_level.useDisk,
+        use_memory=storage_level.useMemory,
+        use_off_heap=storage_level.useOffHeap,
+        deserialized=storage_level.deserialized,
+        replication=storage_level.replication,
+    )
+
+
+def proto_to_storage_level(storage_level: pb2.StorageLevel) -> StorageLevel:
+    return StorageLevel(
+        useDisk=storage_level.use_disk,
+        useMemory=storage_level.use_memory,
+        useOffHeap=storage_level.use_off_heap,
+        deserialized=storage_level.deserialized,
+        replication=storage_level.replication,
+    )
