@@ -857,7 +857,8 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper {
   }
 
   test("Dataset result destructive iterator") {
-    val df = spark.range(10).filter("id > 5 and id < 9")
+    val df = spark.range(0, 10, 1, 10)
+      .filter("id > 5 and id < 9")
     val res = df.collectResult()
 
     try {
@@ -877,6 +878,8 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper {
 
         buffer.append(iterator.next())
       }
+      // Batches should be closed and removed after traversing all the records.
+      assert(res.existingBatches().isEmpty)
 
       val expectedResult = Seq(6L, 7L, 8L)
       assert(buffer.size === 3 && expectedResult.forall(buffer.contains))
