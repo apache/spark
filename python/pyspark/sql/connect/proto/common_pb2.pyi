@@ -47,7 +47,6 @@ else:
 
 DESCRIPTOR: google.protobuf.descriptor.FileDescriptor
 
-@typing_extensions.final
 class StorageLevel(google.protobuf.message.Message):
     """StorageLevel for persisting Datasets/Tables."""
 

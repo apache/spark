@@ -35,7 +35,6 @@ from typing import (
 from pyspark.rdd import PythonEvalType
 from pyspark.sql.group import GroupedData as PySparkGroupedData
 from pyspark.sql.pandas.group_ops import PandasCogroupedOps as PySparkPandasCogroupedOps
-from pyspark.sql.types import DataType
 from pyspark.sql.types import NumericType
 from pyspark.sql.types import StructType
 
@@ -49,6 +48,7 @@ if TYPE_CHECKING:
         PandasGroupedMapFunction,
         GroupedMapPandasUserDefinedFunction,
         PandasCogroupedMapFunction,
+        PandasGroupedMapFunctionWithState,
     )
     from pyspark.sql.connect.dataframe import DataFrame
     from pyspark.sql.types import StructType
