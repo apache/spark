@@ -140,7 +140,7 @@
     <kafka.version>3.4.0</kafka.version>
     <!-- After 10.15.1.3, the minimum required version is JDK9 -->
     <derby.version>10.14.2.0</derby.version>
-    <parquet.version>1.12.3</parquet.version>
+    <parquet.version>1.13.0</parquet.version>
     <orc.version>1.8.3</orc.version>
     <orc.classifier>shaded-protobuf</orc.classifier>
     <jetty.version>9.4.51.v20230217</jetty.version>
@@ -2361,7 +2361,7 @@
             <groupId>${hive.group}</groupId>
             <artifactId>hive-service-rpc</artifactId>
           </exclusion>
-          <!-- parquet-hadoop-bundle:1.8.1 conflict with 1.12.3 -->
+          <!-- parquet-hadoop-bundle:1.8.1 conflict with 1.13.0 -->
           <exclusion>
             <groupId>org.apache.parquet</groupId>
             <artifactId>parquet-hadoop-bundle</artifactId>
