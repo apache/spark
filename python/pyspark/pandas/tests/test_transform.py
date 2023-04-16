@@ -33,15 +33,15 @@ def testing_transform(path):
         print('-------------------------------------')
         test_data=pd.read_csv(path+file)
         test1=encoding(test_data)
-        test1.to_csv('encoding'+'_'+file)
+        test1.to_csv(path+'encoding'+'_'+file)
         del test1
         print('test 1 success')
         test2=null_replace(test_data)
-        test2.to_csv('null_replace'+'_'+file)
+        test2.to_csv(path+'null_replace'+'_'+file)
         del test2
         print('test 2 success')
         test3=mani(test_data)
-        test3.to_csv('mani_comb'+'_'+file)
+        test3.to_csv(path+'mani_comb'+'_'+file)
         del test3
         print('test 3 success')
 

@@ -23,15 +23,15 @@ def test_case(data,name):
     print('-------------------------------------')
     test_data=data
     test1=encoding(test_data)
-    test1.to_csv('encoding'+'_'+name)
+    test1.to_csv('encoding'+'_'+name+'.csv')
     del test1
     print('test 1 success')
     test2=null_replace(test_data)
-    test2.to_csv('null_replace'+'_'+name)
+    test2.to_csv('null_replace'+'_'+name+'.csv')
     del test2
     print('test 2 success')
     test3=mani(test_data)
-    test3.to_csv('mani_comb'+'_'+name)
+    test3.to_csv('mani_comb'+'_'+name+'.csv')
     del test3
     print('test 3 success')
 
