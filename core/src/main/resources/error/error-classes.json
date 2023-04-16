@@ -102,7 +102,7 @@
       "Schema that cannot be merged with the initial schema:",
       "<right>."
     ],
-    "sqlState": "42KD9"
+    "sqlState" : "42KD9"
   },
   "CANNOT_MODIFY_CONFIG" : {
     "message" : [
