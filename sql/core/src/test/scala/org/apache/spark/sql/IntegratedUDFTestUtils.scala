@@ -30,9 +30,9 @@ import org.apache.spark.api.python.{PythonBroadcast, PythonEvalType, PythonFunct
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.sql.catalyst.expressions.{Cast, Expression, ExprId, PythonUDF}
 import org.apache.spark.sql.catalyst.plans.SQLHelper
-import org.apache.spark.sql.execution.python.UserDefinedPythonFunction
+import org.apache.spark.sql.execution.python.{UserDefinedPythonFunction, UserDefinedPythonTableFunction}
 import org.apache.spark.sql.expressions.SparkUserDefinedFunction
-import org.apache.spark.sql.types.{DataType, IntegerType, NullType, StringType}
+import org.apache.spark.sql.types.{DataType, IntegerType, NullType, StringType, StructField, StructType}
 
 /**
  * This object targets to integrate various UDF test cases so that Scalar UDF, Python UDF,
@@ -191,6 +191,59 @@ object IntegratedUDFTestUtils extends SQLHelper {
     throw new RuntimeException(s"Python executable [$pythonExec] and/or pyspark are unavailable.")
   }
 
+  private def createPythonUDTF(funcName: String, pythonScript: String): Array[Byte] = {
+    if (shouldTestPythonUDFs) {
+      var binaryPandasFunc: Array[Byte] = null
+      withTempPath { codePath =>
+        Files.write(codePath.toPath, pythonScript.getBytes(StandardCharsets.UTF_8))
+        withTempPath { path =>
+          Process(
+            Seq(
+              pythonExec,
+              "-c",
+              "from pyspark.serializers import CloudPickleSerializer; " +
+                s"f = open('$path', 'wb');" +
+                s"exec(open('$codePath', 'r').read());" +
+                "f.write(CloudPickleSerializer().dumps(" +
+                s"($funcName, returnType)))"),
+            None,
+            "PYTHONPATH" -> s"$pysparkPythonPath:$pythonPath").!!
+          binaryPandasFunc = Files.readAllBytes(path.toPath)
+        }
+      }
+      assert(binaryPandasFunc != null)
+      binaryPandasFunc
+    } else {
+      throw new RuntimeException(s"Python executable [$pythonExec] and/or pyspark are unavailable.")
+    }
+  }
+
+  private lazy val pythonTableFunc: Array[Byte] = {
+    val script =
+      """
+        |from pyspark.sql.types import StructType, StructField, IntegerType
+        |returnType = StructType([
+        |  StructField("a", IntegerType()),
+        |  StructField("b", IntegerType()),
+        |  StructField("c", IntegerType()),
+        |])
+        |class SimpleUDTF:
+        |    def __init__(self):
+        |        self._count = 0
+        |
+        |    def eval(self, a: int, b: int):
+        |        self._count += 1
+        |        yield a, b, a + b
+        |        yield a, b, a - b
+        |        yield a, b, b - a
+        |
+        |    def terminate(self):
+        |        self._count = 0
+        |""".stripMargin
+
+    createPythonUDTF("SimpleUDTF", script)
+  }
+
   private lazy val pandasFunc: Array[Byte] = if (shouldTestPandasUDFs) {
     var binaryPandasFunc: Array[Byte] = null
     withTempPath { path =>
@@ -291,6 +344,12 @@ object IntegratedUDFTestUtils extends SQLHelper {
     val prettyName: String
   }
 
+  sealed trait TestUDTF {
+    def apply(spark: SparkSession, exprs: Column*): DataFrame
+
+    val prettyName: String
+  }
+
   class PythonUDFWithoutId(
       name: String,
       func: PythonFunction,
@@ -358,6 +417,32 @@ object IntegratedUDFTestUtils extends SQLHelper {
     def apply(exprs: Column*): Column = udf(exprs: _*)
 
     val prettyName: String = "Regular Python UDF"
+  }
+
+  def createUserDefinedPythonTableFunction(name: String): UserDefinedPythonTableFunction = {
+    UserDefinedPythonTableFunction(
+      name = name,
+      func = SimplePythonFunction(
+        command = pythonTableFunc,
+        envVars = workerEnv.clone().asInstanceOf[java.util.Map[String, String]],
+        pythonIncludes = List.empty[String].asJava,
+        pythonExec = pythonExec,
+        pythonVer = pythonVer,
+        broadcastVars = List.empty[Broadcast[PythonBroadcast]].asJava,
+        accumulator = null),
+      returnType = StructType(Seq(
+        StructField("a", IntegerType),
+        StructField("b", IntegerType),
+        StructField("c", IntegerType))),
+      udfDeterministic = true)
+  }
+
+  case class TestPythonUDTF(name: String) extends TestUDTF {
+    private[IntegratedUDFTestUtils] lazy val udtf = createUserDefinedPythonTableFunction(name)
+
+    def apply(spark: SparkSession, exprs: Column*): DataFrame = udtf(spark, exprs: _*)
+
+    val prettyName: String = "Python UDTF"
   }
 
   /**

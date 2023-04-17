@@ -456,6 +456,54 @@ def assign_cols_by_name(runner_conf):
     )
 
 
+def read_udtf(pickleSer, infile, eval_type):
+    num_udtfs = read_int(infile)
+    if num_udtfs != 1:
+        raise RuntimeError("Got more than 1 UDTF")
+
+    # See `PythonUDFRunner.writeUDFs`.
+    num_arg = read_int(infile)
+    arg_offsets = [read_int(infile) for _ in range(num_arg)]
+    num_chained_funcs = read_int(infile)
+    if num_chained_funcs != 1:
+        raise RuntimeError("Got more than 1 chained UDTF")
+
+    handler, return_type = read_command(pickleSer, infile)
+    if not isinstance(handler, type):
+        raise RuntimeError(f"UDTF handler must be a class, but got {type(handler)}.")
+
+    # Instantiate the UDTF class.
+    try:
+        udtf = handler()
+    except Exception as e:
+        raise RuntimeError(f"Failed to init the UDTF handler: {str(e)}") from None
+
+    # Wrap the eval method.
+    if not hasattr(udtf, "eval"):
+        raise RuntimeError("Python UDTF must implement the eval method.")
+
+    def wrap_udtf(f, return_type):
+        if return_type.needConversion():
+            toInternal = return_type.toInternal
+            return lambda *a: map(toInternal, f(*a))
+        else:
+            return lambda *a: f(*a)
+
+    f = wrap_udtf(getattr(udtf, "eval"), return_type)
+
+    def mapper(a):
+        results = tuple(f(*[a[o] for o in arg_offsets]))
+        return results
+
+    # Return an iterator of iterators.
+    def func(_, it):
+        return map(mapper, it)
+
+    ser = BatchedSerializer(CPickleSerializer(), 100)
+
+    return udtf, func, None, ser, ser
+
+
 def read_udfs(pickleSer, infile, eval_type):
     runner_conf = {}
 
@@ -857,8 +905,11 @@ def main(infile, outfile):
 
         _accumulatorRegistry.clear()
         eval_type = read_int(infile)
+        udtf = None
         if eval_type == PythonEvalType.NON_UDF:
             func, profiler, deserializer, serializer = read_command(pickleSer, infile)
+        elif eval_type == PythonEvalType.SQL_TABLE_UDF:
+            udtf, func, profiler, deserializer, serializer = read_udtf(pickleSer, infile, eval_type)
         else:
             func, profiler, deserializer, serializer = read_udfs(pickleSer, infile, eval_type)
 
@@ -877,6 +928,16 @@ def main(infile, outfile):
             profiler.profile(process)
         else:
             process()
+
+        if eval_type == PythonEvalType.SQL_TABLE_UDF:
+            assert udtf is not None
+            # Terminate the UDTF handler.
+            if hasattr(udtf, "terminate"):
+                try:
+                    # TODO: allow terminate to yield more rows.
+                    udtf.terminate()
+                except BaseException as e:
+                    raise RuntimeError(f"Failed to terminate UDTF: {str(e)}") from None
 
         # Reset task context to None. This is a guard code to avoid residual context when worker
         # reuse.

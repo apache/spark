@@ -32,6 +32,7 @@ from typing import (
     overload,
     Optional,
     Tuple,
+    Type,
     TYPE_CHECKING,
     Union,
     ValuesView,
@@ -47,6 +48,7 @@ from pyspark.sql.types import ArrayType, DataType, StringType, StructType, _from
 
 # Keep UserDefinedFunction import for backwards compatible import; moved in SPARK-22409
 from pyspark.sql.udf import UserDefinedFunction, _create_py_udf  # noqa: F401
+from pyspark.sql.udtf import UserDefinedTableFunction, _create_udtf
 
 # Keep pandas_udf and PandasUDFType import for backwards compatible import; moved in SPARK-28264
 from pyspark.sql.pandas.functions import pandas_udf, PandasUDFType  # noqa: F401
@@ -11155,6 +11157,15 @@ def udf(
         )
     else:
         return _create_py_udf(f=f, returnType=returnType, useArrow=useArrow)
+
+
+def udtf(
+    f: Optional[Type] = None, *, returnType: Union[StructType, str], name: Optional[str] = None
+) -> Union[UserDefinedTableFunction, functools.partial]:
+    if f is None:
+        return functools.partial(_create_udtf, returnType=returnType, name=name)
+    else:
+        return _create_udtf(f=f, returnType=returnType, name=name)
 
 
 def _test() -> None:

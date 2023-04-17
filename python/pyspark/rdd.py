@@ -152,6 +152,8 @@ class PythonEvalType:
     SQL_MAP_ARROW_ITER_UDF: "ArrowMapIterUDFType" = 207
     SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE: "PandasGroupedMapUDFWithStateType" = 208
 
+    SQL_TABLE_UDF = 300
+
 
 def portable_hash(x: Hashable) -> int:
     """
