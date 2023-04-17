@@ -320,8 +320,6 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       ResolveRandomSeed ::
       ResolveBinaryArithmetic ::
       ResolveUnion ::
-      // row-level command assignments must be resolved after default value resolution
-      // but before rewriting row-level commands into executable plans
       ResolveRowLevelCommandAssignments ::
       RewriteDeleteFromTable ::
       typeCoercionRules ++

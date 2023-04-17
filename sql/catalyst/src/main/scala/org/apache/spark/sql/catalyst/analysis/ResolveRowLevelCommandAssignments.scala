@@ -29,11 +29,11 @@ import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy
 
 /**
- * A rule that resolves assignments in row-level operations.
+ * A rule that resolves assignments in row-level commands.
  *
- * Note that this rule must be run after resolving default values but before rewriting row-level
- * commands into executable plans. This rule does not apply to tables that accept any schema.
- * Such tables must inject their own rules to resolve assignments.
+ * Note that this rule must be run before rewriting row-level commands into executable plans.
+ * This rule does not apply to tables that accept any schema. Such tables must inject their own
+ * rules to resolve assignments.
  */
 object ResolveRowLevelCommandAssignments extends Rule[LogicalPlan] {
 
