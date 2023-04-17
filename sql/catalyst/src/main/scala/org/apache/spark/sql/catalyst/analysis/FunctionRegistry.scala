@@ -742,7 +742,6 @@ object FunctionRegistry {
     expression[SparkVersion]("version"),
     expression[TypeOf]("typeof"),
     expression[EqualNull]("equal_null"),
-    expression[SQLKeywords]("sql_keywords"),
 
     // grouping sets
     expression[Grouping]("grouping"),
@@ -994,7 +993,8 @@ object TableFunctionRegistry {
     generator[JsonTuple]("json_tuple"),
     generator[PosExplode]("posexplode"),
     generator[PosExplode]("posexplode_outer", outer = true),
-    generator[Stack]("stack")
+    generator[Stack]("stack"),
+    generator[SQLKeywords]("sql_keywords")
   )
 
   val builtin: SimpleTableFunctionRegistry = {

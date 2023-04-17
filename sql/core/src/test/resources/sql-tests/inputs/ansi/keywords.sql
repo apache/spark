@@ -1,2 +1,2 @@
 --SET spark.sql.ansi.enforceReservedKeywords = true
---IMPORT misc-functions.sql
+--IMPORT keywords.sql

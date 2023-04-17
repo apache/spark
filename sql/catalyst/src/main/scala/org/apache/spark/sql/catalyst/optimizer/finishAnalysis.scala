@@ -21,7 +21,6 @@ import java.time.{Instant, LocalDateTime}
 
 import org.apache.spark.sql.catalyst.CurrentUserContext.CURRENT_USER
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException, SqlBaseLexer}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.trees.TreePattern._
@@ -140,31 +139,6 @@ object SpecialDatetimeValues extends Rule[LogicalPlan] {
           .flatMap(s => conv(dt)(s.toString, cast.zoneId))
           .map(Literal(_, dt))
           .getOrElse(cast)
-    }
-  }
-}
-
-object GetSQLKeywords extends Rule[LogicalPlan] {
-  final private val regex = "'([A-Z_]+)'".r
-  private def reserved(token: String): Boolean = {
-    try {
-      CatalystSqlParser.parseTableIdentifier(token)
-      false
-    } catch {
-      case _: ParseException => true
-    }
-  }
-  override def apply(plan: LogicalPlan): LogicalPlan = {
-    lazy val tokens = (0 until SqlBaseLexer.VOCABULARY.getMaxTokenType).map { idx =>
-      SqlBaseLexer.VOCABULARY.getLiteralName(idx)
-    }.collect {
-      case lit if lit != null && regex.pattern.matcher(lit).matches() =>
-        val token = regex.findFirstMatchIn(lit).get.group(1)
-        (token -> reserved(token))
-    }.toMap
-
-    plan.transformAllExpressionsWithPruning(_.containsPattern(SQL_KEYWORDS)) {
-      case s @ SQLKeywords() => Literal.create(tokens, s.dataType)
     }
   }
 }
