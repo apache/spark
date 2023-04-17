@@ -82,17 +82,6 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper {
     assert(result(2) == 2)
   }
 
-  ignore("SPARK-42665: Ignore simple udf test until the udf is fully implemented.") {
-    def dummyUdf(x: Int): Int = x + 5
-    val myUdf = udf(dummyUdf _)
-    val df = spark.range(5).select(myUdf(Column("id")))
-    val result = df.collect()
-    assert(result.length == 5)
-    result.zipWithIndex.foreach { case (v, idx) =>
-      assert(v.getInt(0) == idx + 5)
-    }
-  }
-
   test("read and write") {
     val testDataPath = java.nio.file.Paths
       .get(
