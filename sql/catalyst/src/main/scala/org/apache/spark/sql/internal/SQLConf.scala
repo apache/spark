@@ -4192,7 +4192,7 @@ object SQLConf {
       .stringConf
       .transform(_.toUpperCase(Locale.ROOT))
       .checkValues(RegexEngineType.values.map(_.toString))
-      .createWithDefault(RegexEngineType.toString())
+      .createWithDefault(RegexEngineType.JAVA.toString())
 
   val LATERAL_COLUMN_ALIAS_IMPLICIT_ENABLED =
     buildConf("spark.sql.lateralColumnAlias.enableImplicitResolution")
