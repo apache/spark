@@ -38,6 +38,7 @@ from pyspark.errors import (  # noqa: F401
     UnknownException,
     SparkUpgradeException,
 )
+from pyspark.errors.exceptions.captured import CapturedException  # noqa: F401
 from pyspark.find_spark_home import _find_spark_home
 
 if TYPE_CHECKING:
