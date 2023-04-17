@@ -40,6 +40,7 @@ import warnings
 from pyspark.sql import functions as F, Column, DataFrame as PySparkDataFrame, SparkSession
 from pyspark.sql.types import DoubleType
 from pyspark.sql.utils import is_remote
+from pyspark.errors import PySparkTypeError
 import pandas as pd
 from pandas.api.types import is_list_like  # type: ignore[attr-defined]
 
@@ -951,6 +952,18 @@ def spark_column_equals(left: Column, right: Column) -> bool:
     False
     """
     if is_remote():
+        from pyspark.sql.connect.column import Column as ConnectColumn
+
+        if not isinstance(left, ConnectColumn):
+            raise PySparkTypeError(
+                error_class="NOT_COLUMN",
+                message_parameters={"arg_name": "left", "arg_type": type(left).__name__},
+            )
+        if not isinstance(right, ConnectColumn):
+            raise PySparkTypeError(
+                error_class="NOT_COLUMN",
+                message_parameters={"arg_name": "right", "arg_type": type(right).__name__},
+            )
         return repr(left) == repr(right)
     else:
         return left._jc.equals(right._jc)

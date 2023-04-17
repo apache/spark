@@ -23,7 +23,7 @@ from abc import ABCMeta, abstractmethod
 from typing import TYPE_CHECKING, Callable, Generic, List, Optional, Union
 
 from pyspark import StorageLevel
-from pyspark.sql import Column as PySparkColumn, DataFrame as SparkDataFrame
+from pyspark.sql import Column as PySparkColumn, DataFrame as PySparkDataFrame
 from pyspark.sql.types import DataType, StructType
 
 from pyspark.pandas._typing import IndexOpsLike
@@ -395,7 +395,7 @@ class SparkFrameMethods:
         """
         self.frame(index_col).printSchema()
 
-    def frame(self, index_col: Optional[Union[str, List[str]]] = None) -> SparkDataFrame:
+    def frame(self, index_col: Optional[Union[str, List[str]]] = None) -> PySparkDataFrame:
         """
         Return the current DataFrame as a Spark DataFrame.  :meth:`DataFrame.spark.frame` is an
         alias of  :meth:`DataFrame.to_spark`.
@@ -892,7 +892,7 @@ class SparkFrameMethods:
 
     def apply(
         self,
-        func: Callable[[SparkDataFrame], SparkDataFrame],
+        func: Callable[[PySparkDataFrame], PySparkDataFrame],
         index_col: Optional[Union[str, List[str]]] = None,
     ) -> "ps.DataFrame":
         """
@@ -953,6 +953,8 @@ class SparkFrameMethods:
             from pyspark.sql.connect.dataframe import DataFrame as ConnectDataFrame
 
             SparkDataFrame = ConnectDataFrame
+        else:
+            SparkDataFrame = PySparkDataFrame  # type: ignore[assignment]
         if not isinstance(output, SparkDataFrame):
             raise ValueError(
                 "The output of the function [%s] should be of a "

@@ -239,19 +239,11 @@ class BooleanOps(DataTypeOps):
             return right.__and__(left)
         else:
 
-            if is_remote():
-                from pyspark.sql.connect.column import Column as ConnectColumn
-
-                Column = ConnectColumn
-            else:
-                Column = PySparkColumn  # type: ignore[assignment]
-
-            def and_func(left: Column, right: Any) -> Column:  # type: ignore[valid-type]
-                if not isinstance(right, Column):
-                    if pd.isna(right):
-                        right = F.lit(None)
-                    else:
-                        right = F.lit(right)
+            def and_func(left: PySparkColumn, right: Any) -> PySparkColumn:
+                if pd.isna(right):
+                    right = F.lit(None)
+                else:
+                    right = F.lit(right)
                 scol = left & right
                 return F.when(scol.isNull(), False).otherwise(scol)
 
@@ -263,24 +255,12 @@ class BooleanOps(DataTypeOps):
             return right ^ left
         elif _is_valid_for_logical_operator(right):
 
-            if is_remote():
-                from pyspark.sql.connect.column import Column as ConnectColumn
-
-                Column = ConnectColumn
-            else:
-                Column = PySparkColumn  # type: ignore[assignment]
-
-            def xor_func(left: Column, right: Any) -> Column:  # type: ignore[valid-type]
-                if not isinstance(right, Column):
-                    if pd.isna(right):
-                        right = F.lit(None)
-                    else:
-                        right = F.lit(right)
-                scol = (
-                    left.cast("integer")  # type: ignore[attr-defined]
-                    .bitwiseXOR(right.cast("integer"))
-                    .cast("boolean")
-                )
+            def xor_func(left: PySparkColumn, right: Any) -> PySparkColumn:
+                if pd.isna(right):
+                    right = F.lit(None)
+                else:
+                    right = F.lit(right)
+                scol = left.cast("integer").bitwiseXOR(right.cast("integer")).cast("boolean")
                 return F.when(scol.isNull(), False).otherwise(scol)
 
             return column_op(xor_func)(left, right)
@@ -293,21 +273,12 @@ class BooleanOps(DataTypeOps):
             return right.__or__(left)
         else:
 
-            if is_remote():
-                from pyspark.sql.connect.column import Column as ConnectColumn
-
-                Column = ConnectColumn
-            else:
-                Column = PySparkColumn  # type: ignore[assignment]
-
-            def or_func(left: Column, right: Any) -> Column:  # type: ignore[valid-type]
-                if not isinstance(right, Column) and pd.isna(right):
+            def or_func(left: PySparkColumn, right: Any) -> PySparkColumn:
+                if pd.isna(right):
                     return F.lit(False)
                 else:
-                    scol = left | F.lit(right)  # type: ignore[operator]
-                    return F.when(left.isNull() | scol.isNull(), False).otherwise(  # type: ignore
-                        scol
-                    )
+                    scol = left | F.lit(right)
+                    return F.when(left.isNull() | scol.isNull(), False).otherwise(scol)
 
             return column_op(or_func)(left, right)
 
@@ -402,19 +373,11 @@ class BooleanExtensionOps(BooleanOps):
     def __and__(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         _sanitize_list_like(right)
 
-        if is_remote():
-            from pyspark.sql.connect.column import Column as ConnectColumn
-
-            Column = ConnectColumn
-        else:
-            Column = PySparkColumn  # type: ignore[assignment]
-
-        def and_func(left: Column, right: Any) -> Column:  # type: ignore[valid-type]
-            if not isinstance(right, Column):
-                if pd.isna(right):
-                    right = F.lit(None)
-                else:
-                    right = F.lit(right)
+        def and_func(left: PySparkColumn, right: Any) -> PySparkColumn:
+            if pd.isna(right):
+                right = F.lit(None)
+            else:
+                right = F.lit(right)
             return left & right
 
         return column_op(and_func)(left, right)
@@ -422,19 +385,11 @@ class BooleanExtensionOps(BooleanOps):
     def __or__(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         _sanitize_list_like(right)
 
-        if is_remote():
-            from pyspark.sql.connect.column import Column as ConnectColumn
-
-            Column = ConnectColumn
-        else:
-            Column = PySparkColumn  # type: ignore[assignment]
-
-        def or_func(left: Column, right: Any) -> Column:  # type: ignore[valid-type]
-            if not isinstance(right, Column):
-                if pd.isna(right):
-                    right = F.lit(None)
-                else:
-                    right = F.lit(right)
+        def or_func(left: PySparkColumn, right: Any) -> PySparkColumn:
+            if pd.isna(right):
+                right = F.lit(None)
+            else:
+                right = F.lit(right)
             return left | right
 
         return column_op(or_func)(left, right)
@@ -444,24 +399,12 @@ class BooleanExtensionOps(BooleanOps):
 
         if _is_boolean_type(right):
 
-            if is_remote():
-                from pyspark.sql.connect.column import Column as ConnectColumn
-
-                Column = ConnectColumn
-            else:
-                Column = PySparkColumn  # type: ignore[assignment]
-
-            def xor_func(left: Column, right: Any) -> Column:  # type: ignore[valid-type]
-                if not isinstance(right, Column):
-                    if pd.isna(right):
-                        right = F.lit(None)
-                    else:
-                        right = F.lit(right)
-                return (
-                    left.cast("integer")  # type: ignore[attr-defined]
-                    .bitwiseXOR(right.cast("integer"))
-                    .cast("boolean")
-                )
+            def xor_func(left: PySparkColumn, right: Any) -> PySparkColumn:
+                if pd.isna(right):
+                    right = F.lit(None)
+                else:
+                    right = F.lit(right)
+                return left.cast("integer").bitwiseXOR(right.cast("integer")).cast("boolean")
 
             return column_op(xor_func)(left, right)
         else:

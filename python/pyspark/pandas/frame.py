@@ -4868,12 +4868,12 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         else:
             raise TypeError("decimals must be an integer, a dict-like or a Series")
 
-            if is_remote():
-                from pyspark.sql.connect.column import Column as ConnectColumn
+        if is_remote():
+            from pyspark.sql.connect.column import Column as ConnectColumn
 
-                Column = ConnectColumn
-            else:
-                Column = PySparkColumn
+            Column = ConnectColumn
+        else:
+            Column = PySparkColumn  # type: ignore[assignment]
 
         def op(psser: ps.Series) -> Union[ps.Series, Column]:  # type: ignore[valid-type]
             label = psser._column_label
@@ -5567,14 +5567,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             tuple(list(label) + ([""] * (level - len(label)))) for label in column_labels
         ]
 
-        if is_remote():
-            from pyspark.sql.connect.column import Column as ConnectColumn
-
-            Column = ConnectColumn
-        else:
-            Column = PySparkColumn  # type: ignore[assignment]
         internal = self._internal.with_new_columns(
-            cast(Sequence[Union[Column, "Series"]], scols),  # type: ignore[valid-type]
+            cast(Sequence[Union[PySparkColumn, "Series"]], scols),
             column_labels=column_labels,
             data_fields=data_fields,
         )
@@ -8550,17 +8544,10 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         data_columns = []
         column_labels = []
 
-        if is_remote():
-            from pyspark.sql.connect.column import Column as ConnectColumn
-
-            Column = ConnectColumn
-        else:
-            Column = PySparkColumn  # type: ignore[assignment]
-
-        def left_scol_for(label: Label) -> Column:  # type: ignore[valid-type]
+        def left_scol_for(label: Label) -> PySparkColumn:
             return scol_for(left_table, left_internal.spark_column_name_for(label))
 
-        def right_scol_for(label: Label) -> Column:  # type: ignore[valid-type]
+        def right_scol_for(label: Label) -> PySparkColumn:
             return scol_for(right_table, right_internal.spark_column_name_for(label))
 
         for label in left_internal.column_labels:
@@ -8574,18 +8561,14 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 ):
                     right_scol = right_scol_for(label)
                     if how == "right":
-                        scol = right_scol.alias(col)  # type: ignore[attr-defined]
+                        scol = right_scol.alias(col)
                     elif how == "full":
-                        scol = (
-                            F.when(scol.isNotNull(), scol)  # type: ignore[attr-defined]
-                            .otherwise(right_scol)
-                            .alias(col)
-                        )
+                        scol = F.when(scol.isNotNull(), scol).otherwise(right_scol).alias(col)
                     else:
                         pass
                 else:
                     col = col + left_suffix
-                    scol = scol.alias(col)  # type: ignore[attr-defined]
+                    scol = scol.alias(col)
                     label = tuple([str(label[0]) + left_suffix] + list(label[1:]))
             exprs.append(scol)
             data_columns.append(col)
@@ -8593,7 +8576,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         for label in right_internal.column_labels:
             # recover `right_prefix` here.
             col = right_internal.spark_column_name_for(label)[len(right_prefix) :]
-            scol = right_scol_for(label).alias(col)  # type: ignore[attr-defined]
+            scol = right_scol_for(label).alias(col)
             if label in duplicate_columns:
                 spark_column_name = left_internal.spark_column_name_for(label)
                 if (
@@ -8603,7 +8586,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                     continue
                 else:
                     col = col + right_suffix
-                    scol = scol.alias(col)  # type: ignore[attr-defined]
+                    scol = scol.alias(col)
                     label = tuple([str(label[0]) + right_suffix] + list(label[1:]))
             exprs.append(scol)
             data_columns.append(col)
@@ -10242,13 +10225,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                     "shape (1,{}) doesn't match the shape (1,{})".format(len(col), level)
                 )
         fill_value = np.nan if fill_value is None else fill_value
-        if is_remote():
-            from pyspark.sql.connect.column import Column as ConnectColumn
-
-            Column = ConnectColumn
-        else:
-            Column = PySparkColumn  # type: ignore[assignment]
-        scols_or_pssers: List[Union[Column, "Series"]] = []  # type: ignore[valid-type]
+        scols_or_pssers: List[Union[PySparkColumn, "Series"]] = []
         labels = []
         for label in label_columns:
             if label in self._internal.column_labels:
@@ -10677,15 +10654,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 ).with_filter(F.lit(False))
             )
 
-        if is_remote():
-            from pyspark.sql.connect.column import Column as ConnectColumn
-
-            Column = ConnectColumn
-        else:
-            Column = PySparkColumn  # type: ignore[assignment]
-        column_labels: Dict[Label, Dict[Any, Column]] = defaultdict(  # type: ignore[valid-type]
-            dict
-        )
+        column_labels: Dict[Label, Dict[Any, PySparkColumn]] = defaultdict(dict)
         index_values = set()
         should_returns_series = False
         for label in self._internal.column_labels:
@@ -10991,13 +10960,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         if len(column_labels) == 0:
             return ps.Series([], dtype=bool)
 
-        if is_remote():
-            from pyspark.sql.connect.column import Column as ConnectColumn
-
-            Column = ConnectColumn
-        else:
-            Column = PySparkColumn  # type: ignore[assignment]
-        applied: List[Column] = []  # type: ignore[valid-type]
+        applied: List[PySparkColumn] = []
         for label in column_labels:
             scol = self._internal.spark_column_for(label)
 
@@ -11080,13 +11043,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         if len(column_labels) == 0:
             return ps.Series([], dtype=bool)
 
-        if is_remote():
-            from pyspark.sql.connect.column import Column as ConnectColumn
-
-            Column = ConnectColumn
-        else:
-            Column = PySparkColumn  # type: ignore[assignment]
-        applied: List[Column] = []  # type: ignore[valid-type]
+        applied: List[PySparkColumn] = []
         for label in column_labels:
             scol = self._internal.spark_column_for(label)
             any_col = F.max(F.coalesce(scol.cast("boolean"), F.lit(False)))
@@ -11937,14 +11894,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         """
         window = Window.orderBy(NATURAL_ORDER_COLUMN_NAME).rowsBetween(-periods, -periods)
 
-        if is_remote():
-            from pyspark.sql.connect.column import Column as ConnectColumn
-
-            Column = ConnectColumn
-        else:
-            Column = PySparkColumn  # type: ignore[assignment]
-
-        def op(psser: ps.Series) -> Column:  # type: ignore[valid-type]
+        def op(psser: ps.Series) -> PySparkColumn:
             prev_row = F.lag(psser.spark.column, periods).over(window)
             return ((psser.spark.column - prev_row) / prev_row).alias(
                 psser._internal.data_spark_column_names[0]
@@ -12304,14 +12254,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             if v < 0.0 or v > 1.0:
                 raise ValueError("percentiles should all be in the interval [0, 1].")
 
-        if is_remote():
-            from pyspark.sql.connect.column import Column as ConnectColumn
-
-            Column = ConnectColumn
-        else:
-            Column = PySparkColumn  # type: ignore[assignment]
-
-        def quantile(psser: "Series") -> Column:  # type: ignore[valid-type]
+        def quantile(psser: "Series") -> PySparkColumn:
             spark_type = psser.spark.data_type
             spark_column = psser.spark.column
             if isinstance(spark_type, (BooleanType, NumericType)):
@@ -12333,7 +12276,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             # |[[0.25, 2, 6], [0.5, 3, 7], [0.75, 4, 8]]|
             # +-----------------------------------------+
 
-            percentile_cols: List[Column] = []  # type: ignore[valid-type]
+            percentile_cols: List[PySparkColumn] = []
             percentile_col_names: List[str] = []
             column_labels: List[Label] = []
             for label, column in zip(
@@ -12348,9 +12291,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
                 if keep_column:
                     percentile_col = quantile(psser)
-                    percentile_cols.append(
-                        percentile_col.alias(column)  # type: ignore[attr-defined]
-                    )
+                    percentile_cols.append(percentile_col.alias(column))
                     percentile_col_names.append(column)
                     column_labels.append(label)
 
@@ -12365,7 +12306,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             # |[2, 3, 4]|[6, 7, 8]|
             # +---------+---------+
 
-            cols_dict: Dict[str, List[Column]] = {}  # type: ignore[valid-type]
+            cols_dict: Dict[str, List[PySparkColumn]] = {}
             for column in percentile_col_names:
                 cols_dict[column] = list()
                 for i in range(len(qq)):
@@ -12822,16 +12763,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         if axis == 0:
 
-            if is_remote():
-                from pyspark.sql.connect.column import Column as ConnectColumn
-
-                Column = ConnectColumn
-            else:
-                Column = PySparkColumn  # type: ignore[assignment]
-
-            def get_spark_column(
-                psdf: DataFrame, label: Label
-            ) -> Column:  # type: ignore[valid-type]
+            def get_spark_column(psdf: DataFrame, label: Label) -> PySparkColumn:
                 scol = psdf._internal.spark_column_for(label)
                 col_type = psdf._internal.spark_type_for(label)
 
@@ -12966,13 +12898,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         if numeric_only is None and axis == 0:
             numeric_only = True
 
-        if is_remote():
-            from pyspark.sql.connect.column import Column as ConnectColumn
-
-            Column = ConnectColumn
-        else:
-            Column = PySparkColumn  # type: ignore[assignment]
-        mode_scols: List[Column] = []  # type: ignore[valid-type]
+        mode_scols: List[PySparkColumn] = []
         mode_col_names: List[str] = []
         mode_labels: List[Label] = []
         for label, col_name in zip(

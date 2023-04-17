@@ -108,14 +108,7 @@ class NumericOps(DataTypeOps):
         if not is_valid_operand_for_numeric_arithmetic(right):
             raise TypeError("Modulo can not be applied to given types.")
 
-        if is_remote():
-            from pyspark.sql.connect.column import Column as ConnectColumn
-
-            Column = ConnectColumn
-        else:
-            Column = PySparkColumn  # type: ignore[assignment]
-
-        def mod(left: Column, right: Any) -> Column:  # type: ignore[valid-type]
+        def mod(left: PySparkColumn, right: Any) -> PySparkColumn:
             return ((left % right) + right) % right
 
         right = transform_boolean_operand_to_numeric(right, spark_type=left.spark.data_type)
@@ -205,14 +198,7 @@ class NumericOps(DataTypeOps):
         if not isinstance(right, numbers.Number):
             raise TypeError("Modulo can not be applied to given types.")
 
-        if is_remote():
-            from pyspark.sql.connect.column import Column as ConnectColumn
-
-            Column = ConnectColumn
-        else:
-            Column = PySparkColumn  # type: ignore[assignment]
-
-        def rmod(left: Column, right: Any) -> Column:  # type: ignore[valid-type]
+        def rmod(left: PySparkColumn, right: Any) -> PySparkColumn:
             return ((right % left) + left) % left
 
         right = transform_boolean_operand_to_numeric(right)
@@ -281,25 +267,15 @@ class IntegralOps(NumericOps):
         elif _is_valid_for_logical_operator(right):
             right_is_boolean = _is_boolean_type(right)
 
-            if is_remote():
-                from pyspark.sql.connect.column import Column as ConnectColumn
-
-                Column = ConnectColumn
-            else:
-                Column = PySparkColumn  # type: ignore[assignment]
-
-            def xor_func(left: Column, right: Any) -> Column:  # type: ignore[valid-type]
-                if not isinstance(right, Column):
-                    if pd.isna(right):
-                        right = F.lit(None)
-                    else:
-                        right = F.lit(right)
+            def xor_func(left: PySparkColumn, right: Any) -> PySparkColumn:
+                if pd.isna(right):
+                    right = F.lit(None)
+                else:
+                    right = F.lit(right)
                 return (
-                    left.bitwiseXOR(right.cast("integer")).cast(  # type: ignore[attr-defined]
-                        "boolean"
-                    )
+                    left.bitwiseXOR(right.cast("integer")).cast("boolean")
                     if right_is_boolean
-                    else left.bitwiseXOR(right)  # type: ignore[attr-defined]
+                    else left.bitwiseXOR(right)
                 )
 
             return column_op(xor_func)(left, right)
@@ -332,17 +308,10 @@ class IntegralOps(NumericOps):
         if not is_valid_operand_for_numeric_arithmetic(right):
             raise TypeError("True division can not be applied to given types.")
 
-        if is_remote():
-            from pyspark.sql.connect.column import Column as ConnectColumn
-
-            Column = ConnectColumn
-        else:
-            Column = PySparkColumn  # type: ignore[assignment]
-
-        def truediv(left: Column, right: Any) -> Column:  # type: ignore[valid-type]
+        def truediv(left: PySparkColumn, right: Any) -> PySparkColumn:
             return F.when(
                 F.lit(right != 0) | F.lit(right).isNull(),
-                left.__div__(right),  # type: ignore[attr-defined]
+                left.__div__(right),
             ).otherwise(F.lit(np.inf).__div__(left))
 
         right = transform_boolean_operand_to_numeric(right, spark_type=left.spark.data_type)
@@ -353,18 +322,11 @@ class IntegralOps(NumericOps):
         if not is_valid_operand_for_numeric_arithmetic(right):
             raise TypeError("Floor division can not be applied to given types.")
 
-        if is_remote():
-            from pyspark.sql.connect.column import Column as ConnectColumn
-
-            Column = ConnectColumn
-        else:
-            Column = PySparkColumn  # type: ignore[assignment]
-
-        def floordiv(left: Column, right: Any) -> Column:  # type: ignore[valid-type]
+        def floordiv(left: PySparkColumn, right: Any) -> PySparkColumn:
             return F.when(F.lit(right is np.nan), np.nan).otherwise(
                 F.when(
                     F.lit(right != 0) | F.lit(right).isNull(),
-                    F.floor(left.__div__(right)),  # type: ignore[attr-defined]
+                    F.floor(left.__div__(right)),
                 ).otherwise(F.lit(np.inf).__div__(left))
             )
 
@@ -376,17 +338,10 @@ class IntegralOps(NumericOps):
         if not isinstance(right, numbers.Number):
             raise TypeError("True division can not be applied to given types.")
 
-        if is_remote():
-            from pyspark.sql.connect.column import Column as ConnectColumn
-
-            Column = ConnectColumn
-        else:
-            Column = PySparkColumn  # type: ignore[assignment]
-
-        def rtruediv(left: Column, right: Any) -> Column:  # type: ignore[valid-type]
-            return F.when(
-                left == 0, F.lit(np.inf).__div__(right)  # type: ignore[arg-type]
-            ).otherwise(F.lit(right).__truediv__(left))
+        def rtruediv(left: PySparkColumn, right: Any) -> PySparkColumn:
+            return F.when(left == 0, F.lit(np.inf).__div__(right)).otherwise(
+                F.lit(right).__truediv__(left)
+            )
 
         right = transform_boolean_operand_to_numeric(right, spark_type=left.spark.data_type)
         return numpy_column_op(rtruediv)(left, right)
@@ -396,14 +351,7 @@ class IntegralOps(NumericOps):
         if not isinstance(right, numbers.Number):
             raise TypeError("Floor division can not be applied to given types.")
 
-        if is_remote():
-            from pyspark.sql.connect.column import Column as ConnectColumn
-
-            Column = ConnectColumn
-        else:
-            Column = PySparkColumn  # type: ignore[assignment]
-
-        def rfloordiv(left: Column, right: Any) -> Column:  # type: ignore[valid-type]
+        def rfloordiv(left: PySparkColumn, right: Any) -> PySparkColumn:
             return F.when(F.lit(left == 0), F.lit(np.inf).__div__(right)).otherwise(
                 F.floor(F.lit(right).__div__(left))
             )
@@ -450,17 +398,10 @@ class FractionalOps(NumericOps):
         if not is_valid_operand_for_numeric_arithmetic(right):
             raise TypeError("True division can not be applied to given types.")
 
-        if is_remote():
-            from pyspark.sql.connect.column import Column as ConnectColumn
-
-            Column = ConnectColumn
-        else:
-            Column = PySparkColumn  # type: ignore[assignment]
-
-        def truediv(left: Column, right: Any) -> Column:  # type: ignore[valid-type]
+        def truediv(left: PySparkColumn, right: Any) -> PySparkColumn:
             return F.when(
                 F.lit(right != 0) | F.lit(right).isNull(),
-                left.__div__(right),  # type: ignore[attr-defined]
+                left.__div__(right),
             ).otherwise(
                 F.when(F.lit(left == np.inf) | F.lit(left == -np.inf), left).otherwise(
                     F.lit(np.inf).__div__(left)
@@ -475,18 +416,11 @@ class FractionalOps(NumericOps):
         if not is_valid_operand_for_numeric_arithmetic(right):
             raise TypeError("Floor division can not be applied to given types.")
 
-        if is_remote():
-            from pyspark.sql.connect.column import Column as ConnectColumn
-
-            Column = ConnectColumn
-        else:
-            Column = PySparkColumn  # type: ignore[assignment]
-
-        def floordiv(left: Column, right: Any) -> Column:  # type: ignore[valid-type]
+        def floordiv(left: PySparkColumn, right: Any) -> PySparkColumn:
             return F.when(F.lit(right is np.nan), np.nan).otherwise(
                 F.when(
                     F.lit(right != 0) | F.lit(right).isNull(),
-                    F.floor(left.__div__(right)),  # type: ignore[attr-defined]
+                    F.floor(left.__div__(right)),
                 ).otherwise(
                     F.when(F.lit(left == np.inf) | F.lit(left == -np.inf), left).otherwise(
                         F.lit(np.inf).__div__(left)
@@ -502,17 +436,10 @@ class FractionalOps(NumericOps):
         if not isinstance(right, numbers.Number):
             raise TypeError("True division can not be applied to given types.")
 
-        if is_remote():
-            from pyspark.sql.connect.column import Column as ConnectColumn
-
-            Column = ConnectColumn
-        else:
-            Column = PySparkColumn  # type: ignore[assignment]
-
-        def rtruediv(left: Column, right: Any) -> Column:  # type: ignore[valid-type]
-            return F.when(
-                left == 0, F.lit(np.inf).__div__(right)  # type: ignore[arg-type]
-            ).otherwise(F.lit(right).__truediv__(left))
+        def rtruediv(left: PySparkColumn, right: Any) -> PySparkColumn:
+            return F.when(left == 0, F.lit(np.inf).__div__(right)).otherwise(
+                F.lit(right).__truediv__(left)
+            )
 
         right = transform_boolean_operand_to_numeric(right, spark_type=left.spark.data_type)
         return numpy_column_op(rtruediv)(left, right)
@@ -522,14 +449,7 @@ class FractionalOps(NumericOps):
         if not isinstance(right, numbers.Number):
             raise TypeError("Floor division can not be applied to given types.")
 
-        if is_remote():
-            from pyspark.sql.connect.column import Column as ConnectColumn
-
-            Column = ConnectColumn
-        else:
-            Column = PySparkColumn  # type: ignore[assignment]
-
-        def rfloordiv(left: Column, right: Any) -> Column:  # type: ignore[valid-type]
+        def rfloordiv(left: PySparkColumn, right: Any) -> PySparkColumn:
             return F.when(F.lit(left == 0), F.lit(np.inf).__div__(right)).otherwise(
                 F.when(F.lit(left) == np.nan, np.nan).otherwise(F.floor(F.lit(right).__div__(left)))
             )
