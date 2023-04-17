@@ -240,7 +240,7 @@ object SparkConnectStreamHandler {
                 }
                 partitions(currentPartitionId) = null
 
-                error.foreach { case other =>
+                error.foreach { other =>
                   throw other
                 }
                 part
