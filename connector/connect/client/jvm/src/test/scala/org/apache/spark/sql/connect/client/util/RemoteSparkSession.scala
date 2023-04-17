@@ -129,17 +129,19 @@ object SparkConnectServerUtils {
 trait RemoteSparkSession extends ConnectFunSuite with BeforeAndAfterAll {
   import SparkConnectServerUtils._
   var spark: SparkSession = _
+  protected lazy val serverPort: Int = port
 
   override def beforeAll(): Unit = {
     super.beforeAll()
     SparkConnectServerUtils.start()
-    spark = SparkSession.builder().client(SparkConnectClient.builder().port(port).build()).build()
+    spark =
+      SparkSession.builder().client(SparkConnectClient.builder().port(serverPort).build()).build()
 
     // Retry and wait for the server to start
     val stop = System.nanoTime() + TimeUnit.MINUTES.toNanos(1) // ~1 min
     var sleepInternalMs = TimeUnit.SECONDS.toMillis(1) // 1s with * 2 backoff
     var success = false
-    val error = new RuntimeException(s"Failed to start the test server on port $port.")
+    val error = new RuntimeException(s"Failed to start the test server on port $serverPort.")
 
     while (!success && System.nanoTime() < stop) {
       try {
