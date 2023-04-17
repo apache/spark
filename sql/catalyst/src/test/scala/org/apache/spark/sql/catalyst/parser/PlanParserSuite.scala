@@ -197,12 +197,6 @@ class PlanParserSuite extends AnalysisTest {
       parameters = Map.empty)
   }
 
-  test("SPARK-42552: select and union without parentheses") {
-    val plan = Distinct(OneRowRelation().select(Literal(1))
-      .union(OneRowRelation().select(Literal(1))))
-    assertEqual("select 1 union select 1", plan)
-  }
-
   test("unclosed bracketed comment two") {
     val query = """/*abc*/
                   |select 1 as a
@@ -248,6 +242,12 @@ class PlanParserSuite extends AnalysisTest {
         fragment = sql2,
         start = 0,
         stop = 25))
+  }
+
+  test("SPARK-42552: select and union without parentheses") {
+    val plan = Distinct(OneRowRelation().select(Literal(1))
+      .union(OneRowRelation().select(Literal(1))))
+    assertEqual("select 1 union select 1", plan)
   }
 
   test("set operations") {
