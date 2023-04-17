@@ -37,7 +37,7 @@ import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions.SpecificInternalRow
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
-import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils, GenericArrayData}
+import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CharVarcharUtils, DateTimeUtils, GenericArrayData}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{instantToMicros, localDateTimeToMicros, localDateToDays, toJavaDate, toJavaTimestamp, toJavaTimestampNoRebase}
 import org.apache.spark.sql.connector.catalog.{Identifier, TableChange}
 import org.apache.spark.sql.connector.catalog.index.{SupportsIndex, TableIndex}
@@ -177,68 +177,56 @@ object JdbcUtils extends Logging with SQLConfHelper {
    */
   private def getCatalystType(
       sqlType: Int,
+      typeName: String,
       precision: Int,
       scale: Int,
       signed: Boolean,
-      isTimestampNTZ: Boolean): DataType = {
-    val answer = sqlType match {
-      // scalastyle:off
-      case java.sql.Types.ARRAY         => null
-      case java.sql.Types.BIGINT        => if (signed) { LongType } else { DecimalType(20,0) }
-      case java.sql.Types.BINARY        => BinaryType
-      case java.sql.Types.BIT           => BooleanType // @see JdbcDialect for quirks
-      case java.sql.Types.BLOB          => BinaryType
-      case java.sql.Types.BOOLEAN       => BooleanType
-      case java.sql.Types.CHAR          => StringType
-      case java.sql.Types.CLOB          => StringType
-      case java.sql.Types.DATALINK      => null
-      case java.sql.Types.DATE          => DateType
-      case java.sql.Types.DECIMAL
-        if precision != 0 || scale != 0 => DecimalType.bounded(precision, scale)
-      case java.sql.Types.DECIMAL       => DecimalType.SYSTEM_DEFAULT
-      case java.sql.Types.DISTINCT      => null
-      case java.sql.Types.DOUBLE        => DoubleType
-      case java.sql.Types.FLOAT         => FloatType
-      case java.sql.Types.INTEGER       => if (signed) { IntegerType } else { LongType }
-      case java.sql.Types.JAVA_OBJECT   => null
-      case java.sql.Types.LONGNVARCHAR  => StringType
-      case java.sql.Types.LONGVARBINARY => BinaryType
-      case java.sql.Types.LONGVARCHAR   => StringType
-      case java.sql.Types.NCHAR         => StringType
-      case java.sql.Types.NCLOB         => StringType
-      case java.sql.Types.NULL          => null
-      case java.sql.Types.NUMERIC
-        if precision != 0 || scale != 0 => DecimalType.bounded(precision, scale)
-      case java.sql.Types.NUMERIC       => DecimalType.SYSTEM_DEFAULT
-      case java.sql.Types.NVARCHAR      => StringType
-      case java.sql.Types.OTHER         => null
-      case java.sql.Types.REAL          => DoubleType
-      case java.sql.Types.REF           => StringType
-      case java.sql.Types.REF_CURSOR    => null
-      case java.sql.Types.ROWID         => StringType
-      case java.sql.Types.SMALLINT      => IntegerType
-      case java.sql.Types.SQLXML        => StringType
-      case java.sql.Types.STRUCT        => StringType
-      case java.sql.Types.TIME          => TimestampType
-      case java.sql.Types.TIME_WITH_TIMEZONE
-                                        => null
-      case java.sql.Types.TIMESTAMP
-        if isTimestampNTZ               => TimestampNTZType
-      case java.sql.Types.TIMESTAMP     => TimestampType
-      case java.sql.Types.TIMESTAMP_WITH_TIMEZONE
-                                        => null
-      case java.sql.Types.TINYINT       => IntegerType
-      case java.sql.Types.VARBINARY     => BinaryType
-      case java.sql.Types.VARCHAR       => StringType
-      case _                            =>
-        throw QueryExecutionErrors.unrecognizedSqlTypeError(sqlType)
-      // scalastyle:on
-    }
-
-    if (answer == null) {
-      throw QueryExecutionErrors.unsupportedJdbcTypeError(JDBCType.valueOf(sqlType).getName)
-    }
-    answer
+      isTimestampNTZ: Boolean): DataType = sqlType match {
+    case java.sql.Types.BIGINT => if (signed) LongType else DecimalType(20, 0)
+    case java.sql.Types.BINARY => BinaryType
+    case java.sql.Types.BIT => BooleanType // @see JdbcDialect for quirks
+    case java.sql.Types.BLOB => BinaryType
+    case java.sql.Types.BOOLEAN => BooleanType
+    case java.sql.Types.CHAR => CharType(precision)
+    case java.sql.Types.CLOB => StringType
+    case java.sql.Types.DATE => DateType
+    case java.sql.Types.DECIMAL if precision != 0 || scale != 0 =>
+      DecimalType.bounded(precision, scale)
+    case java.sql.Types.DECIMAL => DecimalType.SYSTEM_DEFAULT
+    case java.sql.Types.DOUBLE => DoubleType
+    case java.sql.Types.FLOAT => FloatType
+    case java.sql.Types.INTEGER => if (signed) IntegerType else LongType
+    case java.sql.Types.LONGNVARCHAR => StringType
+    case java.sql.Types.LONGVARBINARY => BinaryType
+    case java.sql.Types.LONGVARCHAR => StringType
+    case java.sql.Types.NCHAR => StringType
+    case java.sql.Types.NCLOB => StringType
+    case java.sql.Types.NUMERIC if precision != 0 || scale != 0 =>
+      DecimalType.bounded(precision, scale)
+    case java.sql.Types.NUMERIC => DecimalType.SYSTEM_DEFAULT
+    case java.sql.Types.NVARCHAR => StringType
+    case java.sql.Types.REAL => DoubleType
+    case java.sql.Types.REF => StringType
+    case java.sql.Types.ROWID => StringType
+    case java.sql.Types.SMALLINT => IntegerType
+    case java.sql.Types.SQLXML => StringType
+    case java.sql.Types.STRUCT => StringType
+    case java.sql.Types.TIME => TimestampType
+    case java.sql.Types.TIMESTAMP if isTimestampNTZ => TimestampNTZType
+    case java.sql.Types.TIMESTAMP => TimestampType
+    case java.sql.Types.TINYINT => IntegerType
+    case java.sql.Types.VARBINARY => BinaryType
+    case java.sql.Types.VARCHAR => VarcharType(precision)
+    case _ =>
+      // For unmatched types:
+      // including java.sql.Types.ARRAY,DATALINK,DISTINCT,JAVA_OBJECT,NULL,OTHER,REF_CURSOR,
+      // TIME_WITH_TIMEZONE,TIMESTAMP_WITH_TIMEZONE, and among others.
+      val jdbcType = classOf[JDBCType].getEnumConstants()
+        .filter(_.getVendorTypeNumber == sqlType)
+        .headOption
+        .map(_.getName)
+        .getOrElse(sqlType.toString)
+      throw QueryExecutionErrors.unrecognizedSqlTypeError(jdbcType, typeName)
   }
 
   /**
@@ -318,11 +306,11 @@ object JdbcUtils extends Logging with SQLConfHelper {
 
       val columnType =
         dialect.getCatalystType(dataType, typeName, fieldSize, metadata).getOrElse(
-          getCatalystType(dataType, fieldSize, fieldScale, isSigned, isTimestampNTZ))
+          getCatalystType(dataType, typeName, fieldSize, fieldScale, isSigned, isTimestampNTZ))
       fields(i) = StructField(columnName, columnType, nullable, metadata.build())
       i = i + 1
     }
-    new StructType(fields)
+    CharVarcharUtils.replaceCharVarcharWithStringInSchema(new StructType(fields))
   }
 
   /**
@@ -380,8 +368,10 @@ object JdbcUtils extends Logging with SQLConfHelper {
    * Creates `JDBCValueGetter`s according to [[StructType]], which can set
    * each value from `ResultSet` to each field of [[InternalRow]] correctly.
    */
-  private def makeGetters(schema: StructType): Array[JDBCValueGetter] =
-    schema.fields.map(sf => makeGetter(sf.dataType, sf.metadata))
+  private def makeGetters(schema: StructType): Array[JDBCValueGetter] = {
+    val replaced = CharVarcharUtils.replaceCharVarcharWithStringInSchema(schema)
+    replaced.fields.map(sf => makeGetter(sf.dataType, sf.metadata))
+  }
 
   private def makeGetter(dt: DataType, metadata: Metadata): JDBCValueGetter = dt match {
     case BooleanType =>

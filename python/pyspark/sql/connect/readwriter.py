@@ -30,7 +30,7 @@ from pyspark.sql.readwriter import (
     DataFrameReader as PySparkDataFrameReader,
     DataFrameWriterV2 as PySparkDataFrameWriterV2,
 )
-from pyspark.errors import PySparkAttributeError
+from pyspark.errors import PySparkAttributeError, PySparkTypeError
 
 if TYPE_CHECKING:
     from pyspark.sql.connect.dataframe import DataFrame
@@ -80,7 +80,13 @@ class DataFrameReader(OptionUtils):
         elif isinstance(schema, str):
             self._schema = schema
         else:
-            raise TypeError(f"schema must be a StructType or str, but got {schema}")
+            raise PySparkTypeError(
+                error_class="NOT_STR_OR_STRUCT",
+                message_parameters={
+                    "arg_name": "schema",
+                    "arg_type": type(schema).__name__,
+                },
+            )
         return self
 
     schema.__doc__ = PySparkDataFrameReader.schema.__doc__
@@ -491,7 +497,13 @@ class DataFrameWriter(OptionUtils):
         self, numBuckets: int, col: Union[str, TupleOrListOfString], *cols: Optional[str]
     ) -> "DataFrameWriter":
         if not isinstance(numBuckets, int):
-            raise TypeError("numBuckets should be an int, got {0}.".format(type(numBuckets)))
+            raise PySparkTypeError(
+                error_class="NOT_INT",
+                message_parameters={
+                    "arg_name": "numBuckets",
+                    "arg_type": type(numBuckets).__name__,
+                },
+            )
 
         if isinstance(col, (list, tuple)):
             if cols:
@@ -499,8 +511,23 @@ class DataFrameWriter(OptionUtils):
 
             col, cols = col[0], col[1:]  # type: ignore[assignment]
 
-        if not all(isinstance(c, str) for c in cols) or not (isinstance(col, str)):
-            raise TypeError("all names should be `str`")
+        for c in cols:
+            if not isinstance(c, str):
+                raise PySparkTypeError(
+                    error_class="NOT_LIST_OF_STR",
+                    message_parameters={
+                        "arg_name": "cols",
+                        "arg_type": type(c).__name__,
+                    },
+                )
+        if not isinstance(col, str):
+            raise PySparkTypeError(
+                error_class="NOT_LIST_OF_STR",
+                message_parameters={
+                    "arg_name": "col",
+                    "arg_type": type(col).__name__,
+                },
+            )
 
         self._write.num_buckets = numBuckets
         self._write.bucket_cols = cast(List[str], [col, *cols])
@@ -525,8 +552,23 @@ class DataFrameWriter(OptionUtils):
 
             col, cols = col[0], col[1:]  # type: ignore[assignment]
 
-        if not all(isinstance(c, str) for c in cols) or not (isinstance(col, str)):
-            raise TypeError("all names should be `str`")
+        for c in cols:
+            if not isinstance(c, str):
+                raise PySparkTypeError(
+                    error_class="NOT_LIST_OF_STR",
+                    message_parameters={
+                        "arg_name": "cols",
+                        "arg_type": type(c).__name__,
+                    },
+                )
+        if not isinstance(col, str):
+            raise PySparkTypeError(
+                error_class="NOT_LIST_OF_STR",
+                message_parameters={
+                    "arg_name": "col",
+                    "arg_type": type(col).__name__,
+                },
+            )
 
         self._write.sort_cols = cast(List[str], [col, *cols])
         return self
