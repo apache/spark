@@ -95,6 +95,7 @@ class Relation(google.protobuf.message.Message):
     GROUP_MAP_FIELD_NUMBER: builtins.int
     CO_GROUP_MAP_FIELD_NUMBER: builtins.int
     WITH_WATERMARK_FIELD_NUMBER: builtins.int
+    CACHED_LOCAL_RELATION_FIELD_NUMBER: builtins.int
     FILL_NA_FIELD_NUMBER: builtins.int
     DROP_NA_FIELD_NUMBER: builtins.int
     REPLACE_FIELD_NUMBER: builtins.int
@@ -176,6 +177,8 @@ class Relation(google.protobuf.message.Message):
     @property
     def with_watermark(self) -> global___WithWatermark: ...
     @property
+    def cached_local_relation(self) -> global___CachedLocalRelation: ...
+    @property
     def fill_na(self) -> global___NAFill:
         """NA functions"""
     @property
@@ -245,6 +248,7 @@ class Relation(google.protobuf.message.Message):
         group_map: global___GroupMap | None = ...,
         co_group_map: global___CoGroupMap | None = ...,
         with_watermark: global___WithWatermark | None = ...,
+        cached_local_relation: global___CachedLocalRelation | None = ...,
         fill_na: global___NAFill | None = ...,
         drop_na: global___NADrop | None = ...,
         replace: global___NAReplace | None = ...,
@@ -267,6 +271,8 @@ class Relation(google.protobuf.message.Message):
             b"aggregate",
             "approx_quantile",
             b"approx_quantile",
+            "cached_local_relation",
+            b"cached_local_relation",
             "catalog",
             b"catalog",
             "co_group_map",
@@ -368,6 +374,8 @@ class Relation(google.protobuf.message.Message):
             b"aggregate",
             "approx_quantile",
             b"approx_quantile",
+            "cached_local_relation",
+            b"cached_local_relation",
             "catalog",
             b"catalog",
             "co_group_map",
@@ -497,6 +505,7 @@ class Relation(google.protobuf.message.Message):
         "group_map",
         "co_group_map",
         "with_watermark",
+        "cached_local_relation",
         "fill_na",
         "drop_na",
         "replace",
@@ -1518,6 +1527,25 @@ class LocalRelation(google.protobuf.message.Message):
     ) -> typing_extensions.Literal["schema"] | None: ...
 
 global___LocalRelation = LocalRelation
+
+class CachedLocalRelation(google.protobuf.message.Message):
+    """A local relation that has been cached already."""
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    KEY_FIELD_NUMBER: builtins.int
+    key: builtins.str
+    """(Required) A key refers to a serialized local relation in a cache.
+    The serialized representation contains enough info to restore of a LocalRelation.
+    """
+    def __init__(
+        self,
+        *,
+        key: builtins.str = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing_extensions.Literal["key", b"key"]) -> None: ...
+
+global___CachedLocalRelation = CachedLocalRelation
 
 class Sample(google.protobuf.message.Message):
     """Relation of type [[Sample]] that samples a fraction of the dataset."""
