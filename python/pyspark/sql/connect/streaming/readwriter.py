@@ -21,7 +21,7 @@ check_dependencies(__name__)
 
 from typing import cast, overload, Callable, Dict, List, Optional, TYPE_CHECKING, Union
 
-from pyspark.sql.connect.plan import DataSource, LogicalPlan, WriteStreamOperation
+from pyspark.sql.connect.plan import DataSource, LogicalPlan, Read, WriteStreamOperation
 import pyspark.sql.connect.proto as pb2
 from pyspark.sql.connect.readwriter import OptionUtils, to_str
 from pyspark.sql.connect.streaming.query import StreamingQuery
@@ -168,9 +168,75 @@ class DataStreamReader(OptionUtils):
 
     json.__doc__ = PySparkDataStreamReader.json.__doc__
 
-    # def orc() TODO
-    # def parquet() TODO
-    # def text() TODO
+    def orc(
+        self,
+        path: str,
+        mergeSchema: Optional[bool] = None,
+        pathGlobFilter: Optional[Union[bool, str]] = None,
+        recursiveFileLookup: Optional[Union[bool, str]] = None,
+    ) -> "DataFrame":
+        self._set_opts(
+            mergeSchema=mergeSchema,
+            pathGlobFilter=pathGlobFilter,
+            recursiveFileLookup=recursiveFileLookup,
+        )
+        if isinstance(path, str):
+            return self.load(path=path, format="orc")
+        else:
+            raise TypeError("path can be only a single string")
+
+    orc.__doc__ = PySparkDataStreamReader.orc.__doc__
+
+    def parquet(
+        self,
+        path: str,
+        mergeSchema: Optional[bool] = None,
+        pathGlobFilter: Optional[Union[bool, str]] = None,
+        recursiveFileLookup: Optional[Union[bool, str]] = None,
+        datetimeRebaseMode: Optional[Union[bool, str]] = None,
+        int96RebaseMode: Optional[Union[bool, str]] = None,
+    ) -> "DataFrame":
+        self._set_opts(
+            mergeSchema=mergeSchema,
+            pathGlobFilter=pathGlobFilter,
+            recursiveFileLookup=recursiveFileLookup,
+            datetimeRebaseMode=datetimeRebaseMode,
+            int96RebaseMode=int96RebaseMode,
+        )
+        self._set_opts(
+            mergeSchema=mergeSchema,
+            pathGlobFilter=pathGlobFilter,
+            recursiveFileLookup=recursiveFileLookup,
+            datetimeRebaseMode=datetimeRebaseMode,
+            int96RebaseMode=int96RebaseMode,
+        )
+        if isinstance(path, str):
+            return self.load(path=path, format="parquet")
+        else:
+            raise TypeError("path can be only a single string")
+
+    parquet.__doc__ = PySparkDataStreamReader.parquet.__doc__
+
+    def text(
+        self,
+        path: str,
+        wholetext: bool = False,
+        lineSep: Optional[str] = None,
+        pathGlobFilter: Optional[Union[bool, str]] = None,
+        recursiveFileLookup: Optional[Union[bool, str]] = None,
+    ) -> "DataFrame":
+        self._set_opts(
+            wholetext=wholetext,
+            lineSep=lineSep,
+            pathGlobFilter=pathGlobFilter,
+            recursiveFileLookup=recursiveFileLookup,
+        )
+        if isinstance(path, str):
+            return self.load(path=path, format="text")
+        else:
+            raise TypeError("path can be only a single string")
+
+    text.__doc__ = PySparkDataStreamReader.text.__doc__
 
     def csv(
         self,
@@ -245,7 +311,10 @@ class DataStreamReader(OptionUtils):
 
     csv.__doc__ = PySparkDataStreamReader.csv.__doc__
 
-    # def table() TODO. Use Read(table_name) relation.
+    def table(self, tableName: str) -> "DataFrame":
+        return self._df(Read(tableName, self._options, is_streaming=True))
+
+    table.__doc__ = PySparkDataStreamReader.table.__doc__
 
 
 DataStreamReader.__doc__ = PySparkDataStreamReader.__doc__
@@ -366,6 +435,7 @@ class DataStreamWriter:
 
     trigger.__doc__ = PySparkDataStreamWriter.trigger.__doc__
 
+    # TODO (SPARK-43054): Implement and uncomment the doc
     @overload
     def foreach(self, f: Callable[[Row], None]) -> "DataStreamWriter":
         ...
@@ -377,7 +447,13 @@ class DataStreamWriter:
     def foreach(self, f: Union[Callable[[Row], None], "SupportsProcess"]) -> "DataStreamWriter":
         raise NotImplementedError("foreach() is not implemented.")
 
-    foreach.__doc__ = PySparkDataStreamWriter.foreach.__doc__
+    # foreach.__doc__ = PySparkDataStreamWriter.foreach.__doc__
+
+    # TODO (SPARK-42944): Implement and uncomment the doc
+    def foreachBatch(self, func: Callable[["DataFrame", int], None]) -> "DataStreamWriter":
+        raise NotImplementedError("foreachBatch() is not implemented.")
+
+    # foreachBatch.__doc__ = PySparkDataStreamWriter.foreachBatch.__doc__
 
     def _start_internal(
         self,
@@ -435,7 +511,8 @@ class DataStreamWriter:
             **options,
         )
 
-    start.__doc__ = PySparkDataStreamWriter.start.__doc__
+    # TODO (SPARK-42962): uncomment below
+    # start.__doc__ = PySparkDataStreamWriter.start.__doc__
 
     def toTable(
         self,
@@ -460,10 +537,32 @@ class DataStreamWriter:
 
 
 def _test() -> None:
-    # TODO(SPARK-43031): port _test() from legacy query.py.
-    pass
+    import sys
+    import doctest
+    from pyspark.sql import SparkSession as PySparkSession
+    import pyspark.sql.connect.streaming.readwriter
+
+    globs = pyspark.sql.connect.readwriter.__dict__.copy()
+
+    globs["spark"] = (
+        PySparkSession.builder.appName("sql.connect.streaming.readwriter tests")
+        .remote("local[4]")
+        .getOrCreate()
+    )
+
+    (failure_count, test_count) = doctest.testmod(
+        pyspark.sql.connect.streaming.readwriter,
+        globs=globs,
+        optionflags=doctest.ELLIPSIS
+        | doctest.NORMALIZE_WHITESPACE
+        | doctest.IGNORE_EXCEPTION_DETAIL,
+    )
+
+    globs["spark"].stop()
+
+    if failure_count:
+        sys.exit(-1)
 
 
 if __name__ == "__main__":
-    # TODO(SPARK-43031): Add this file dev/sparktestsupport/modules.py to enable testing in CI.
     _test()

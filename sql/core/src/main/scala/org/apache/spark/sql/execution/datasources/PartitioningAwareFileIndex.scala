@@ -113,7 +113,7 @@ abstract class PartitioningAwareFileIndex(
     }
 
     val selectedPartitions = if (partitionSpec().partitionColumns.isEmpty) {
-      PartitionDirectory(InternalRow.empty, allFiles()
+      PartitionDirectory(InternalRow.empty, allFiles().toArray
         .filter(f => isNonEmptyFile(f) && matchFileMetadataPredicate(f))) :: Nil
     } else {
       if (recursiveFileLookup) {
@@ -132,7 +132,7 @@ abstract class PartitioningAwareFileIndex(
               // Directory does not exist, or has no children files
               Nil
           }
-          PartitionDirectory(values, files)
+          PartitionDirectory(values, files.toArray)
       }
     }
     logTrace("Selected files after partition pruning:\n\t" + selectedPartitions.mkString("\n\t"))
