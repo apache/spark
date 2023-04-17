@@ -85,8 +85,8 @@ class ResourceRequest(
     obj match {
       case that: ResourceRequest =>
         that.getClass == this.getClass &&
-          that.id == id && that.amount == amount && discoveryScript == discoveryScript &&
-          vendor == vendor
+          that.id == id && that.amount == amount && that.discoveryScript == discoveryScript &&
+          that.vendor == vendor
       case _ =>
         false
     }

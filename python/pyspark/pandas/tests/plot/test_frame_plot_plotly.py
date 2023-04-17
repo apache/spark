@@ -37,7 +37,7 @@ if have_plotly:
 
 
 @unittest.skipIf(not have_plotly, plotly_requirement_message)
-class DataFramePlotPlotlyTest(PandasOnSparkTestCase, TestUtils):
+class DataFramePlotPlotlyTestsMixin:
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
@@ -267,6 +267,10 @@ class DataFramePlotPlotlyTest(PandasOnSparkTestCase, TestUtils):
         expected["layout"]["xaxis"]["title"] = None
 
         self.assertEqual(pprint.pformat(actual.to_dict()), pprint.pformat(expected.to_dict()))
+
+
+class DataFramePlotPlotlyTests(DataFramePlotPlotlyTestsMixin, PandasOnSparkTestCase, TestUtils):
+    pass
 
 
 if __name__ == "__main__":

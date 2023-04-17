@@ -283,6 +283,7 @@ class RocksDB(
   def commit(): Long = {
     val newVersion = loadedVersion + 1
     val checkpointDir = createTempDir("checkpoint")
+    var rocksDBBackgroundThreadPaused = false
     try {
       // Make sure the directory does not exist. Native RocksDB fails if the directory to
       // checkpoint exists.
@@ -302,6 +303,7 @@ class RocksDB(
       logInfo("Pausing background work")
       val pauseTimeMs = timeTakenMs {
         db.pauseBackgroundWork() // To avoid files being changed while committing
+        rocksDBBackgroundThreadPaused = true
       }
 
       logInfo(s"Creating checkpoint for $newVersion in $checkpointDir")
@@ -332,7 +334,7 @@ class RocksDB(
         loadedVersion = -1  // invalidate loaded version
         throw t
     } finally {
-      db.continueBackgroundWork()
+      if (rocksDBBackgroundThreadPaused) db.continueBackgroundWork()
       silentDeleteRecursively(checkpointDir, s"committing $newVersion")
       // reset resources as either 1) we already pushed the changes and it has been committed or
       // 2) commit has failed and the current version is "invalidated".
@@ -391,6 +393,7 @@ class RocksDB(
     val readerMemUsage = getDBProperty("rocksdb.estimate-table-readers-mem")
     val memTableMemUsage = getDBProperty("rocksdb.size-all-mem-tables")
     val blockCacheUsage = getDBProperty("rocksdb.block-cache-usage")
+    val pinnedBlocksMemUsage = getDBProperty("rocksdb.block-cache-pinned-usage")
     // Get the approximate memory usage of this writeBatchWithIndex
     val writeBatchMemUsage = writeBatch.getWriteBatch.getDataSize
     val nativeOpsHistograms = Seq(
@@ -429,6 +432,7 @@ class RocksDB(
       numKeysOnLoadedVersion,
       numKeysOnWritingVersion,
       readerMemUsage + memTableMemUsage + blockCacheUsage + writeBatchMemUsage,
+      pinnedBlocksMemUsage,
       writeBatchMemUsage,
       totalSSTFilesBytes,
       nativeOpsLatencyMicros.toMap,
@@ -706,6 +710,7 @@ case class RocksDBMetrics(
     numCommittedKeys: Long,
     numUncommittedKeys: Long,
     totalMemUsageBytes: Long,
+    pinnedBlocksMemUsage: Long,
     writeBatchMemUsageBytes: Long,
     totalSSTFilesBytes: Long,
     nativeOpsHistograms: Map[String, RocksDBNativeHistogram],

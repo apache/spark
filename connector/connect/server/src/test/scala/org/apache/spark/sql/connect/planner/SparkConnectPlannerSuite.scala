@@ -28,6 +28,7 @@ import org.apache.spark.connect.proto.ExecutePlanResponse
 import org.apache.spark.connect.proto.Expression.{Alias, ExpressionString, UnresolvedStar}
 import org.apache.spark.sql.{AnalysisException, Dataset, Row}
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, UnsafeProjection}
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.connect.common.InvalidPlanInput
@@ -134,6 +135,24 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
     val res = transform(proto.Relation.newBuilder.setRead(readWithTable).build())
     assert(res !== null)
     assert(res.nodeName == "UnresolvedRelation")
+  }
+
+  test("Simple Table with options") {
+    val read = proto.Read.newBuilder().build()
+    // Invalid read without Table name.
+    intercept[InvalidPlanInput](transform(proto.Relation.newBuilder.setRead(read).build()))
+    val readWithTable = read.toBuilder
+      .setNamedTable(
+        proto.Read.NamedTable.newBuilder
+          .setUnparsedIdentifier("name")
+          .putOptions("p1", "v1")
+          .build())
+      .build()
+    val res = transform(proto.Relation.newBuilder.setRead(readWithTable).build())
+    res match {
+      case e: UnresolvedRelation => assert(e.options.get("p1") == "v1")
+      case _ => assert(false, "Do not have expected options")
+    }
   }
 
   test("Simple Project") {

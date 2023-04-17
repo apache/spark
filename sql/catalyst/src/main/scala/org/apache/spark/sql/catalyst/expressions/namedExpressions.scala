@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark
 import org.apache.spark.sql.catalyst.trees.TreePattern
 import org.apache.spark.sql.catalyst.trees.TreePattern._
+import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, METADATA_COL_ATTR_KEY}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.collection.BitSet
@@ -476,16 +477,39 @@ object VirtualColumn {
  * - unapply() will check if an attribute reference is the metadata attribute reference
  */
 object MetadataAttribute {
-  def apply(name: String, dataType: DataType, nullable: Boolean = true): AttributeReference =
-    AttributeReference(name, dataType, nullable,
-      new MetadataBuilder().putBoolean(METADATA_COL_ATTR_KEY, value = true).build())()
 
-  def unapply(attr: AttributeReference): Option[AttributeReference] = {
-    if (attr.metadata.contains(METADATA_COL_ATTR_KEY)
-      && attr.metadata.getBoolean(METADATA_COL_ATTR_KEY)) {
-      Some(attr)
-    } else None
+  def apply(name: String, dataType: DataType, nullable: Boolean = true): AttributeReference =
+    AttributeReference(name, dataType, nullable, metadata(name))()
+
+  def unapply(attr: AttributeReference): Option[AttributeReference] =
+    if (isValid(attr.metadata)) Some(attr) else None
+
+  def metadata(name: String): Metadata = new MetadataBuilder()
+    .putString(METADATA_COL_ATTR_KEY, name)
+    .build()
+
+  def isValid(metadata: Metadata): Boolean =
+    metadata.contains(METADATA_COL_ATTR_KEY)
+}
+
+/**
+ * A [[MetadataAttribute]] that works even if the attribute was renamed to avoid a conflict with
+ * some column name in the schema. See also [[LogicalPlan.getMetadataAttributeByName]].
+ *
+ * - apply() creates a logically-named attribute with the given physical name.
+ * - unapply() matches a [[MetadataAttribute]] and also returns its logical name.
+ */
+object MetadataAttributeWithLogicalName {
+  def unapply(attr: AttributeReference): Option[(AttributeReference, String)] = attr match {
+    case MetadataAttribute(a) => Some(a -> a.metadata.getString(METADATA_COL_ATTR_KEY))
+    case _ => None
   }
+}
+
+object MetadataStructFieldWithLogicalName {
+  def unapply(field: StructField): Option[(StructField, String)] = MetadataAttributeWithLogicalName
+    .unapply(field.toAttribute)
+    .map { case (_, name) => field -> name }
 }
 
 /**
@@ -502,79 +526,114 @@ object FileSourceMetadataAttribute {
   val FILE_SOURCE_METADATA_COL_ATTR_KEY = "__file_source_metadata_col"
 
   /**
-   * Cleanup the internal metadata information of an attribute if it is
-   * a [[FileSourceConstantMetadataAttribute]] or [[FileSourceGeneratedMetadataAttribute]].
+   * Removes the internal field metadata.
    */
   def cleanupFileSourceMetadataInformation(attr: Attribute): Attribute =
-    removeInternalMetadata(attr)
+    attr.withMetadata(removeInternalMetadata(attr.metadata))
+
+  /**
+   * Removes the internal field metadata.
+   */
+  def cleanupFileSourceMetadataInformation(field: StructField): StructField =
+    field.copy(metadata = removeInternalMetadata(field.metadata))
 
   def apply(name: String, dataType: DataType, nullable: Boolean = false): AttributeReference =
-    AttributeReference(name, dataType, nullable = nullable,
-      new MetadataBuilder()
-        .putBoolean(METADATA_COL_ATTR_KEY, value = true)
-        .putBoolean(FILE_SOURCE_METADATA_COL_ATTR_KEY, value = true).build())()
+    AttributeReference(name, dataType, nullable = nullable, metadata(name))()
 
   /** Matches if attr is any File source metadata attribute (including constant and generated). */
   def unapply(attr: AttributeReference): Option[AttributeReference] =
-    attr match {
-      case MetadataAttribute(attr)
-        if attr.metadata.contains(FILE_SOURCE_METADATA_COL_ATTR_KEY)
-          && attr.metadata.getBoolean(FILE_SOURCE_METADATA_COL_ATTR_KEY) => Some(attr)
-      case _ => None
-    }
+    if (isValid(attr.metadata)) Some(attr) else None
 
-  private def removeInternalMetadata(attr: Attribute) = {
-    attr.withMetadata(
-      new MetadataBuilder().withMetadata(attr.metadata)
-        .remove(METADATA_COL_ATTR_KEY)
-        .remove(FILE_SOURCE_METADATA_COL_ATTR_KEY)
-        .remove(FileSourceConstantMetadataAttribute.FILE_SOURCE_CONSTANT_METADATA_COL_ATTR_KEY)
-        .remove(FileSourceGeneratedMetadataAttribute.FILE_SOURCE_GENERATED_METADATA_COL_ATTR_KEY)
-        .build()
-    )
+  def metadata(name: String): Metadata = new MetadataBuilder()
+    .withMetadata(MetadataAttribute.metadata(name))
+    .putBoolean(FILE_SOURCE_METADATA_COL_ATTR_KEY, value = true)
+    .build()
+
+  def isValid(metadata: Metadata): Boolean = {
+    MetadataAttribute.isValid(metadata) &&
+    metadata.contains(FILE_SOURCE_METADATA_COL_ATTR_KEY) &&
+    metadata.getBoolean(FILE_SOURCE_METADATA_COL_ATTR_KEY)
+  }
+
+  /**
+   * True if the given data type is supported in file source metadata attributes.
+   *
+   * The set of supported types is limited by [[ColumnVectorUtils.populate]], which the constant
+   * file metadata implementation relies on. In general, types that can be partition columns are
+   * supported (including most primitive types). Notably unsupported types include [[ObjectType]],
+   * [[UserDefinedType]], and the complex types ([[StructType]], [[MapType]], [[ArrayType]]).
+   */
+  def isSupportedType(dataType: DataType): Boolean = dataType.physicalDataType match {
+    // PhysicalPrimitiveType covers: Boolean, Byte, Double, Float, Integer, Long, Null, Short
+    case _: PhysicalPrimitiveType | _: PhysicalDecimalType => true
+    case PhysicalBinaryType | PhysicalStringType | PhysicalCalendarIntervalType => true
+    case _ => false
+  }
+
+  /** Returns the type unchanged if valid; otherwise throws [[IllegalArgumentException]]. */
+  def validateType(dataType: DataType): DataType = {
+    require(isSupportedType(dataType), s"Unsupported data type: $dataType")
+    dataType
+  }
+
+  private def removeInternalMetadata(metadata: Metadata) = new MetadataBuilder()
+    .withMetadata(metadata)
+    .remove(METADATA_COL_ATTR_KEY)
+    .remove(FILE_SOURCE_METADATA_COL_ATTR_KEY)
+    .remove(FileSourceConstantMetadataStructField.FILE_SOURCE_CONSTANT_METADATA_COL_ATTR_KEY)
+    .remove(FileSourceGeneratedMetadataStructField.FILE_SOURCE_GENERATED_METADATA_COL_ATTR_KEY)
+    .build()
+}
+
+/**
+ * A [[StructField]] that describes a file source constant metadata struct field -- a member of the
+ * `_metadata` struct whose value is constant for a whole file (e.g. file name). Values are usually
+ * appended to the output and not generated per row.
+ */
+object FileSourceConstantMetadataStructField {
+
+  val FILE_SOURCE_CONSTANT_METADATA_COL_ATTR_KEY = "__file_source_constant_metadata_col"
+
+  /** Constructs a new metadata struct field of the given type; nullable by default */
+  def apply(name: String, dataType: DataType, nullable: Boolean = true): StructField =
+    StructField(name, FileSourceMetadataAttribute.validateType(dataType), nullable, metadata(name))
+
+  def unapply(field: StructField): Option[StructField] =
+    if (isValid(field.dataType, field.metadata)) Some(field) else None
+
+  def metadata(name: String): Metadata = new MetadataBuilder()
+    .withMetadata(FileSourceMetadataAttribute.metadata(name))
+    .putBoolean(FILE_SOURCE_CONSTANT_METADATA_COL_ATTR_KEY, value = true)
+    .build()
+
+  def isValid(dataType: DataType, metadata: Metadata): Boolean = {
+    FileSourceMetadataAttribute.isSupportedType(dataType) &&
+    FileSourceMetadataAttribute.isValid(metadata) &&
+    metadata.contains(FILE_SOURCE_CONSTANT_METADATA_COL_ATTR_KEY) &&
+    metadata.getBoolean(FILE_SOURCE_CONSTANT_METADATA_COL_ATTR_KEY)
   }
 }
 
 /**
- * The internal representation of the FileSourceConstantMetadataAttribute, it sets `__metadata_col`
- * and `__file_source_constant_metadata_col` to `true` in AttributeReference's metadata. This type
- * is used to represent metadata that is constant for a whole file, like file name. Values are
+ * Matches the internal representation of a file source constant metadata attribute -- a member of
+ * the `_metadata` struct whose value is constant for a whole file (e.g. file name). Values are
  * usually appended to the output and not generated per row.
- *
- * - apply() will create a file source metadata attribute reference
- * - unapply() will check if an attribute reference is the file source metadata attribute reference
  */
 object FileSourceConstantMetadataAttribute {
-
-  val FILE_SOURCE_CONSTANT_METADATA_COL_ATTR_KEY = "__file_source_constant_metadata_col"
-
-  def apply(name: String, dataType: DataType, nullable: Boolean = false): AttributeReference =
-    AttributeReference(name, dataType, nullable = nullable,
-      new MetadataBuilder()
-        .putBoolean(METADATA_COL_ATTR_KEY, value = true)
-        .putBoolean(FileSourceMetadataAttribute.FILE_SOURCE_METADATA_COL_ATTR_KEY, value = true)
-        .putBoolean(FILE_SOURCE_CONSTANT_METADATA_COL_ATTR_KEY, value = true).build())()
-
-  def unapply(attr: AttributeReference): Option[AttributeReference] =
-    attr match {
-      case FileSourceMetadataAttribute(attr)
-        if attr.metadata.contains(FILE_SOURCE_CONSTANT_METADATA_COL_ATTR_KEY)
-          && attr.metadata.getBoolean(FILE_SOURCE_CONSTANT_METADATA_COL_ATTR_KEY) => Some(attr)
-      case _ => None
-    }
+  def unapply(attr: AttributeReference): Option[AttributeReference] = {
+    val valid = FileSourceConstantMetadataStructField.isValid(attr.dataType, attr.metadata)
+    if (valid) Some(attr) else None
+  }
 }
 
 /**
- * The internal representation of the FileSourceGeneratedMetadataAttribute. It sets `__metadata_col`
- * and `__file_source_generated_metadata_col` to `true` in AttributeReference's metadata. In
- * contrast to [[FileSourceConstantMetadataAttribute]] it represents metadata columns that are not
- * constant per file and are generated as part of the scan.
+ * A [[StructField]] that describes a file source generated metadata struct field -- a member of the
+ * `metadata` struct that maps to some internal column the scanner returns.
  *
- * - apply() will create a file source generated metadata attribute reference
- * - unapply() will check if an attribute reference is the file source generated metadata attribute
- *   reference
+ * - apply() wil create a file source generated metadata struct field
+ * - unapply() matches a file source generated metadata struct field, and returns its internal name
  */
-object FileSourceGeneratedMetadataAttribute {
+object FileSourceGeneratedMetadataStructField {
 
   val FILE_SOURCE_GENERATED_METADATA_COL_ATTR_KEY = "__file_source_generated_metadata_col"
 
@@ -583,27 +642,49 @@ object FileSourceGeneratedMetadataAttribute {
    * 1. Before passing to readers, we create generated metadata attributes as nullable;
    *    Because, for row_index, the readers do not consider the column required.
    *    row_index can be generated with null in the process by readers.
-   * 2. When applying the projection, we change the nullability back to not-nullable;
+   * 2. When applying the projection, we restore the nullability specified here;
    *    For row_index, it is generated with nulls which are then replaced,
    *    so it will not be null in the returned output.
    *    See `FileSourceStrategy` for more information
    */
-  def apply(name: String, dataType: DataType, nullable: Boolean = false): AttributeReference =
-    AttributeReference(name, dataType, nullable = nullable,
-      new MetadataBuilder()
-        .putBoolean(METADATA_COL_ATTR_KEY, value = true)
-        .putBoolean(FileSourceMetadataAttribute.FILE_SOURCE_METADATA_COL_ATTR_KEY, value = true)
-        .putBoolean(FILE_SOURCE_GENERATED_METADATA_COL_ATTR_KEY, value = true).build())()
+  def apply(
+      name: String,
+      internalName: String,
+      dataType: DataType,
+      nullable: Boolean = true): StructField = {
+    val dt = FileSourceMetadataAttribute.validateType(dataType)
+    StructField(name, dt, nullable, metadata(name, internalName))
+  }
 
-  def unapply(attr: AttributeReference): Option[AttributeReference] =
-    attr match {
-      case FileSourceMetadataAttribute(attr)
-        if attr.metadata.contains(FILE_SOURCE_GENERATED_METADATA_COL_ATTR_KEY)
-          && attr.metadata.getBoolean(FILE_SOURCE_GENERATED_METADATA_COL_ATTR_KEY) => Some(attr)
-      case _ => None
-    }
+  def unapply(field: StructField): Option[(StructField, String)] =
+    getInternalNameIfValid(field.dataType, field.metadata).map(field -> _)
 
-  /** True if `structField` represents a file source generated metadata column. */
-  def isGeneratedMetadataColumn(structField: StructField): Boolean =
-    FileSourceGeneratedMetadataAttribute.unapply(structField.toAttribute).isDefined
+  def metadata(name: String, internalName: String): Metadata = new MetadataBuilder()
+    .withMetadata(FileSourceMetadataAttribute.metadata(name))
+    .putString(FILE_SOURCE_GENERATED_METADATA_COL_ATTR_KEY, internalName)
+    .build()
+
+  def isValid(dataType: DataType, metadata: Metadata): Boolean = {
+    FileSourceMetadataAttribute.isSupportedType(dataType) &&
+    FileSourceMetadataAttribute.isValid(metadata) &&
+    metadata.contains(FILE_SOURCE_GENERATED_METADATA_COL_ATTR_KEY)
+  }
+
+  def getInternalNameIfValid(dataType: DataType, metadata: Metadata): Option[String] = {
+    if (isValid(dataType, metadata)) {
+      Some(metadata.getString(FILE_SOURCE_GENERATED_METADATA_COL_ATTR_KEY))
+    } else None
+  }
+}
+
+/**
+ * Matches the internal representation of a file source generated metadata attribute -- a member of
+ * the `metadata` struct that maps to some internal column the scanner returns.
+ */
+object FileSourceGeneratedMetadataAttribute {
+  def unapply(attr: AttributeReference): Option[(AttributeReference, String)] = {
+    FileSourceGeneratedMetadataStructField
+      .getInternalNameIfValid(attr.dataType, attr.metadata)
+      .map(attr -> _)
+  }
 }

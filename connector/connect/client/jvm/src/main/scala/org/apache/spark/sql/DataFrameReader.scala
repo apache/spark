@@ -458,7 +458,9 @@ class DataFrameReader private[sql] (sparkSession: SparkSession) extends Logging 
    */
   def table(tableName: String): DataFrame = {
     sparkSession.newDataFrame { builder =>
-      builder.getReadBuilder.getNamedTableBuilder.setUnparsedIdentifier(tableName)
+      builder.getReadBuilder.getNamedTableBuilder
+        .setUnparsedIdentifier(tableName)
+        .putAllOptions(extraOptions.toMap.asJava)
     }
   }
 

@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.internal
 
-import java.util.{Locale, NoSuchElementException, Properties, TimeZone}
+import java.util.{Locale, Properties, TimeZone}
 import java.util
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
@@ -863,6 +863,16 @@ object SQLConf {
       .intConf
       .checkValue(_ >= 0, "The maximum must not be negative")
       .createWithDefault(100)
+
+  val SUBEXPRESSION_ELIMINATION_SKIP_FOR_SHORTCUT_EXPR =
+    buildConf("spark.sql.subexpressionElimination.skipForShortcutExpr")
+      .internal()
+      .doc("When true, shortcut eliminate subexpression with `AND`, `OR`. " +
+        "The subexpression may not need to eval even if it appears more than once. " +
+        "e.g., `if(or(a, and(b, b)))`, the expression `b` would be skipped if `a` is true.")
+      .version("3.5.0")
+      .booleanConf
+      .createWithDefault(false)
 
   val CASE_SENSITIVE = buildConf("spark.sql.caseSensitive")
     .internal()
@@ -1795,6 +1805,13 @@ object SQLConf {
     .internal()
     .doc("Whether to replace hash aggregate node with sort aggregate based on children's ordering")
     .version("3.3.0")
+    .booleanConf
+    .createWithDefault(false)
+
+  val USE_PARTITION_EVALUATOR = buildConf("spark.sql.execution.usePartitionEvaluator")
+    .internal()
+    .doc("When true, use PartitionEvaluator to execute SQL operators.")
+    .version("3.5.0")
     .booleanConf
     .createWithDefault(false)
 
@@ -4176,6 +4193,15 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val STABLE_DERIVED_COLUMN_ALIAS_ENABLED =
+    buildConf("spark.sql.stableDerivedColumnAlias.enabled")
+      .internal()
+      .doc("Enable deriving of stable column aliases from the lexer tree instead of parse tree " +
+        "and form them via pretty SQL print.")
+      .version("3.5.0")
+      .booleanConf
+      .createWithDefault(false)
+
   /**
    * Holds information about keys that have been deprecated.
    *
@@ -4601,6 +4627,9 @@ class SQLConf extends Serializable with Logging {
   def subexpressionEliminationCacheMaxEntries: Int =
     getConf(SUBEXPRESSION_ELIMINATION_CACHE_MAX_ENTRIES)
 
+  def subexpressionEliminationSkipForShotcutExpr: Boolean =
+    getConf(SUBEXPRESSION_ELIMINATION_SKIP_FOR_SHORTCUT_EXPR)
+
   def autoBroadcastJoinThreshold: Long = getConf(AUTO_BROADCASTJOIN_THRESHOLD)
 
   def limitInitialNumPartitions: Int = getConf(LIMIT_INITIAL_NUM_PARTITIONS)
@@ -5006,6 +5035,8 @@ class SQLConf extends Serializable with Logging {
   def allowsTempViewCreationWithMultipleNameparts: Boolean =
     getConf(SQLConf.ALLOW_TEMP_VIEW_CREATION_WITH_MULTIPLE_NAME_PARTS)
 
+  def usePartitionEvaluator: Boolean = getConf(SQLConf.USE_PARTITION_EVALUATOR)
+
   /** ********************** SQLConf functionality methods ************ */
 
   /** Set Spark SQL configuration properties. */
@@ -5041,7 +5072,7 @@ class SQLConf extends Serializable with Logging {
         // Try to use the default value
         Option(getConfigEntry(key)).map { e => e.stringConverter(e.readFrom(reader)) }
       }.
-      getOrElse(throw QueryExecutionErrors.noSuchElementExceptionError(key))
+      getOrElse(throw QueryExecutionErrors.sqlConfigNotFoundError(key))
   }
 
   /**

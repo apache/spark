@@ -45,7 +45,7 @@ class BinaryType private() extends AtomicType {
    */
   override def defaultSize: Int = 100
 
-  override def physicalDataType: PhysicalDataType = PhysicalBinaryType
+  private[sql] override def physicalDataType: PhysicalDataType = PhysicalBinaryType
 
   private[spark] override def asNullable: BinaryType = this
 }

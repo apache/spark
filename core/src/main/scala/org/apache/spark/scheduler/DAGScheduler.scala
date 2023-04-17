@@ -1183,11 +1183,7 @@ private[spark] class DAGScheduler(
   }
 
   private[scheduler] def handleBeginEvent(task: Task[_], taskInfo: TaskInfo): Unit = {
-    // Note that there is a chance that this task is launched after the stage is cancelled.
-    // In that case, we wouldn't have the stage anymore in stageIdToStage.
-    val stageAttemptId =
-      stageIdToStage.get(task.stageId).map(_.latestInfo.attemptNumber).getOrElse(-1)
-    listenerBus.post(SparkListenerTaskStart(task.stageId, stageAttemptId, taskInfo))
+    listenerBus.post(SparkListenerTaskStart(task.stageId, task.stageAttemptId, taskInfo))
   }
 
   private[scheduler] def handleSpeculativeTaskSubmitted(task: Task[_], taskIndex: Int): Unit = {
@@ -1618,19 +1614,23 @@ private[spark] class DAGScheduler(
     } else {
       // Because we posted SparkListenerStageSubmitted earlier, we should mark
       // the stage as completed here in case there are no tasks to run
-      markStageAsFinished(stage, None)
-
       stage match {
         case stage: ShuffleMapStage =>
           logDebug(s"Stage ${stage} is actually done; " +
               s"(available: ${stage.isAvailable}," +
               s"available outputs: ${stage.numAvailableOutputs}," +
               s"partitions: ${stage.numPartitions})")
-          markMapStageJobsAsFinished(stage)
+          if (!stage.shuffleDep.isShuffleMergeFinalizedMarked &&
+            stage.shuffleDep.getMergerLocs.nonEmpty) {
+            checkAndScheduleShuffleMergeFinalize(stage)
+          } else {
+            processShuffleMapStageCompletion(stage)
+          }
         case stage : ResultStage =>
           logDebug(s"Stage ${stage} is actually done; (partitions: ${stage.numPartitions})")
+          markStageAsFinished(stage)
+          submitWaitingChildStages(stage)
       }
-      submitWaitingChildStages(stage)
     }
   }
 

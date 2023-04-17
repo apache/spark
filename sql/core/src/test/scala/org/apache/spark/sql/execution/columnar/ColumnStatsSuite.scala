@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.columnar
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.types.PhysicalDataType
 import org.apache.spark.sql.types._
 
 class ColumnStatsSuite extends SparkFunSuite {
@@ -54,7 +55,7 @@ class ColumnStatsSuite extends SparkFunSuite {
       rows.foreach(columnStats.gatherStats(_, 0))
 
       val values = rows.take(10).map(_.get(0, columnType.dataType).asInstanceOf[T#InternalType])
-      val ordering = columnType.dataType.ordering.asInstanceOf[Ordering[T#InternalType]]
+      val ordering = PhysicalDataType.ordering(columnType.dataType)
       val stats = columnStats.collectedStatistics
 
       assertResult(values.min(ordering), "Wrong lower bound")(stats(0))
@@ -90,7 +91,7 @@ class ColumnStatsSuite extends SparkFunSuite {
       rows.foreach(columnStats.gatherStats(_, 0))
 
       val values = rows.take(10).map(_.get(0, columnType.dataType).asInstanceOf[T#InternalType])
-      val ordering = columnType.dataType.ordering.asInstanceOf[Ordering[T#InternalType]]
+      val ordering = PhysicalDataType.ordering(columnType.dataType)
       val stats = columnStats.collectedStatistics
 
       assertResult(values.min(ordering), "Wrong lower bound")(stats(0))

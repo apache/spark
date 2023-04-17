@@ -23,6 +23,9 @@ from pyspark.sql.types import DoubleType, LongType, BooleanType
 
 from pyspark.pandas.base import IndexOpsMixin
 
+# For Supporting Spark Connect
+from pyspark.sql.connect.column import Column as ConnectColumn
+
 
 unary_np_spark_mappings = {
     "abs": F.abs,
@@ -222,7 +225,9 @@ def maybe_dispatch_ufunc_to_spark_func(
 
         @no_type_check
         def convert_arguments(*args):
-            args = [F.lit(inp) if not isinstance(inp, Column) else inp for inp in args]
+            args = [
+                F.lit(inp) if not isinstance(inp, (Column, ConnectColumn)) else inp for inp in args
+            ]
             return np_spark_map_func(*args)
 
         return column_op(convert_arguments)(*inputs)

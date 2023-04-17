@@ -289,17 +289,17 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
   def nestedTypeMissingElementTypeError(
       dataType: String, ctx: PrimitiveDataTypeContext): Throwable = {
     dataType match {
-      case "array" =>
+      case "ARRAY" =>
         new ParseException(
           errorClass = "INCOMPLETE_TYPE_DEFINITION.ARRAY",
           messageParameters = Map("elementType" -> "<INT>"),
           ctx)
-      case "struct" =>
+      case "STRUCT" =>
         new ParseException(
           errorClass = "INCOMPLETE_TYPE_DEFINITION.STRUCT",
           messageParameters = Map.empty,
           ctx)
-      case "map" =>
+      case "MAP" =>
         new ParseException(
           errorClass = "INCOMPLETE_TYPE_DEFINITION.MAP",
           messageParameters = Map.empty,

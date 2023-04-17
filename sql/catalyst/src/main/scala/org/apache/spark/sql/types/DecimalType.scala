@@ -61,12 +61,6 @@ case class DecimalType(precision: Int, scale: Int) extends FractionalType {
 
   private[sql] type InternalType = Decimal
   @transient private[sql] lazy val tag = typeTag[InternalType]
-  private[sql] val numeric = Decimal.DecimalIsFractional
-  private[sql] val fractional = Decimal.DecimalIsFractional
-  private[sql] val ordering = Decimal.DecimalIsFractional
-  private[sql] val asIntegral = Decimal.DecimalAsIfIntegral
-
-  override private[sql] def exactNumeric = DecimalExactNumeric
 
   override def typeName: String = s"decimal($precision,$scale)"
 
@@ -111,7 +105,8 @@ case class DecimalType(precision: Int, scale: Int) extends FractionalType {
    */
   override def defaultSize: Int = if (precision <= Decimal.MAX_LONG_DIGITS) 8 else 16
 
-  override def physicalDataType: PhysicalDataType = PhysicalDecimalType(precision, scale)
+  private[sql] override def physicalDataType: PhysicalDataType =
+    PhysicalDecimalType(precision, scale)
 
   override def simpleString: String = s"decimal($precision,$scale)"
 

@@ -29,11 +29,14 @@ import org.apache.arrow.memory.RootAllocator
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.connect.proto
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.catalog.Catalog
 import org.apache.spark.sql.catalyst.{JavaTypeInference, ScalaReflection}
 import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, RowEncoder}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{BoxedLongEncoder, UnboundRowEncoder}
 import org.apache.spark.sql.connect.client.{SparkConnectClient, SparkResult}
 import org.apache.spark.sql.connect.client.util.{Cleaner, ConvertToArrow}
+import org.apache.spark.sql.connect.common.LiteralValueProtoConverter.toLiteralProto
+import org.apache.spark.sql.internal.CatalogImpl
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -213,12 +216,16 @@ class SparkSession private[sql] (
    * @param sqlText
    *   A SQL statement with named parameters to execute.
    * @param args
-   *   A map of parameter names to literal values.
+   *   A map of parameter names to Java/Scala objects that can be converted to SQL literal
+   *   expressions. See <a href="https://spark.apache.org/docs/latest/sql-ref-datatypes.html">
+   *   Supported Data Types</a> for supported value types in Scala/Java. For example, map keys:
+   *   "rank", "name", "birthdate"; map values: 1, "Steven", LocalDate.of(2023, 4, 2). Map value
+   *   can be also a `Column` of literal expression, in that case it is taken as is.
    *
    * @since 3.4.0
    */
   @Experimental
-  def sql(sqlText: String, args: Map[String, String]): DataFrame = {
+  def sql(sqlText: String, args: Map[String, Any]): DataFrame = {
     sql(sqlText, args.asJava)
   }
 
@@ -229,16 +236,24 @@ class SparkSession private[sql] (
    * @param sqlText
    *   A SQL statement with named parameters to execute.
    * @param args
-   *   A map of parameter names to literal values.
+   *   A map of parameter names to Java/Scala objects that can be converted to SQL literal
+   *   expressions. See <a href="https://spark.apache.org/docs/latest/sql-ref-datatypes.html">
+   *   Supported Data Types</a> for supported value types in Scala/Java. For example, map keys:
+   *   "rank", "name", "birthdate"; map values: 1, "Steven", LocalDate.of(2023, 4, 2). Map value
+   *   can be also a `Column` of literal expression, in that case it is taken as is.
    *
    * @since 3.4.0
    */
   @Experimental
-  def sql(sqlText: String, args: java.util.Map[String, String]): DataFrame = newDataFrame {
+  def sql(sqlText: String, args: java.util.Map[String, Any]): DataFrame = newDataFrame {
     builder =>
       // Send the SQL once to the server and then check the output.
       val cmd = newCommand(b =>
-        b.setSqlCommand(proto.SqlCommand.newBuilder().setSql(sqlText).putAllArgs(args)))
+        b.setSqlCommand(
+          proto.SqlCommand
+            .newBuilder()
+            .setSql(sqlText)
+            .putAllArgs(args.asScala.mapValues(toLiteralProto).toMap.asJava)))
       val plan = proto.Plan.newBuilder().setCommand(cmd)
       val responseIter = client.execute(plan.build())
 
@@ -271,6 +286,14 @@ class SparkSession private[sql] (
    * @since 3.4.0
    */
   def read: DataFrameReader = new DataFrameReader(this)
+
+  /**
+   * Interface through which the user may create, drop, alter or query underlying databases,
+   * tables, functions etc.
+   *
+   * @since 3.5.0
+   */
+  lazy val catalog: Catalog = new CatalogImpl(this)
 
   /**
    * Returns the specified table/view as a `DataFrame`. If it's a table, it must support batch
@@ -400,6 +423,13 @@ class SparkSession private[sql] (
     client.analyze(method, Some(plan), explainMode)
   }
 
+  private[sql] def analyze(
+      f: proto.AnalyzePlanRequest.Builder => Unit): proto.AnalyzePlanResponse = {
+    val builder = proto.AnalyzePlanRequest.newBuilder()
+    f(builder)
+    client.analyze(builder)
+  }
+
   private[sql] def sameSemantics(plan: proto.Plan, otherPlan: proto.Plan): Boolean = {
     client.sameSemantics(plan, otherPlan).getSameSemantics.getResult
   }
@@ -413,6 +443,14 @@ class SparkSession private[sql] (
     val result = new SparkResult(value, allocator, encoder)
     cleaner.register(result)
     result
+  }
+
+  private[sql] def execute(f: proto.Relation.Builder => Unit): Unit = {
+    val builder = proto.Relation.newBuilder()
+    f(builder)
+    builder.getCommonBuilder.setPlanId(planIdGenerator.getAndIncrement())
+    val plan = proto.Plan.newBuilder().setRoot(builder).build()
+    client.execute(plan).asScala.foreach(_ => ())
   }
 
   private[sql] def execute(command: proto.Command): Unit = {

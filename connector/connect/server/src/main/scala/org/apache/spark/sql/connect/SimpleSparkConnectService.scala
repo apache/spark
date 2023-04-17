@@ -38,14 +38,14 @@ private[sql] object SimpleSparkConnectService {
   private val stopCommand = "q"
 
   def main(args: Array[String]): Unit = {
+    val conf = new SparkConf()
+    val sparkSession = SparkSession.builder().config(conf).getOrCreate()
+    val sparkContext = sparkSession.sparkContext // init spark context
+    SparkConnectService.start()
+    // scalastyle:off println
+    println("Ready for client connections.")
+    // scalastyle:on println
     while (true) {
-      val conf = new SparkConf()
-      val sparkSession = SparkSession.builder().config(conf).getOrCreate()
-      val sparkContext = sparkSession.sparkContext // init spark context
-      SparkConnectService.start()
-      // scalastyle:off println
-      println("Ready for client connections.")
-      // scalastyle:on println
       val code = StdIn.readLine()
       if (code == stopCommand) {
         // scalastyle:off println

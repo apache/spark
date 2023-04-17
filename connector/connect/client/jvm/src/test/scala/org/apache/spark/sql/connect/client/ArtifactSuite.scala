@@ -75,7 +75,7 @@ class ArtifactSuite extends ConnectFunSuite with BeforeAndAfterEach {
   }
 
   private val CHUNK_SIZE: Int = 32 * 1024
-  protected def artifactFilePath: Path = baseResourcePath.resolve("artifact-tests")
+  protected def artifactFilePath: Path = commonResourcePath.resolve("artifact-tests")
   protected def artifactCrcPath: Path = artifactFilePath.resolve("crc")
 
   private def getCrcValues(filePath: Path): Seq[Long] = {

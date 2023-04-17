@@ -52,7 +52,6 @@ trait ConnectFunSuite extends AnyFunSuite { // scalastyle:ignore funsuite
       "common",
       "src",
       "test",
-      "resources",
-      "query-tests").toAbsolutePath
+      "resources").toAbsolutePath
   }
 }

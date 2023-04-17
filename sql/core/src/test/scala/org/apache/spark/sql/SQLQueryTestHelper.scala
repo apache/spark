@@ -23,12 +23,13 @@ import org.apache.spark.{SparkException, SparkThrowable}
 import org.apache.spark.ErrorMessageFormat.MINIMAL
 import org.apache.spark.SparkThrowableHelper.getMessage
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.catalyst.expressions.{CurrentDate, CurrentTimestampLike, CurrentUser, Literal}
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.HiveResult.hiveResultString
 import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.command.{DescribeColumnCommand, DescribeCommandBase}
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{DateType, StructType, TimestampType}
 
 trait SQLQueryTestHelper extends Logging {
 
@@ -49,9 +50,11 @@ trait SQLQueryTestHelper extends Logging {
       .replaceAll("Created Time.*", s"Created Time $notIncludedMsg")
       .replaceAll("Last Access.*", s"Last Access $notIncludedMsg")
       .replaceAll("Partition Statistics\t\\d+", s"Partition Statistics\t$notIncludedMsg")
+      .replaceAll("CTERelationDef \\d+,", s"CTERelationDef xxxx,")
+      .replaceAll("CTERelationRef \\d+,", s"CTERelationRef xxxx,")
+      .replaceAll("@\\w*,", s"@xxxxxxxx,")
       .replaceAll("\\*\\(\\d+\\) ", "*") // remove the WholeStageCodegen codegenStageIds
   }
-
 
   /**
    * Analyzes a query and returns the result as (schema of the output, normalized resolved plan
@@ -59,10 +62,39 @@ trait SQLQueryTestHelper extends Logging {
    */
   protected def getNormalizedQueryAnalysisResult(
       session: SparkSession, sql: String): (String, Seq[String]) = {
+    // Note that creating the following DataFrame includes eager execution for commands that create
+    // objects such as views. Therefore any following queries that reference these objects should
+    // find them in the catalog.
     val df = session.sql(sql)
     val schema = df.schema.catalogString
-    // Get the answer, but also get rid of the #1234 expression IDs that show up in analyzer plans.
-    (schema, Seq(replaceNotIncludedMsg(df.queryExecution.analyzed.toString)))
+    val analyzed = df.queryExecution.analyzed
+    // Determine if the analyzed plan contains any nondeterministic expressions.
+    var deterministic = true
+    analyzed.transformAllExpressionsWithSubqueries {
+      case expr: CurrentDate =>
+        deterministic = false
+        expr
+      case expr: CurrentTimestampLike =>
+        deterministic = false
+        expr
+      case expr: CurrentUser =>
+        deterministic = false
+        expr
+      case expr: Literal if expr.dataType == DateType || expr.dataType == TimestampType =>
+        deterministic = false
+        expr
+      case expr if !expr.deterministic =>
+        deterministic = false
+        expr
+    }
+    if (deterministic) {
+      // Perform query analysis, but also get rid of the #1234 expression IDs that show up in the
+      // resolved plans.
+      (schema, Seq(replaceNotIncludedMsg(analyzed.toString)))
+    } else {
+      // The analyzed plan is nondeterministic so elide it from the result to keep tests reliable.
+      (schema, Seq("[Analyzer test output redacted due to nondeterminism]"))
+    }
   }
 
   /** Executes a query and returns the result as (schema of the output, normalized output). */

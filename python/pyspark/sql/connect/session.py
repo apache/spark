@@ -47,13 +47,15 @@ from pandas.api.types import (  # type: ignore[attr-defined]
 )
 
 from pyspark import SparkContext, SparkConf, __version__
+from pyspark.sql.connect import proto
 from pyspark.sql.connect.client import SparkConnectClient
 from pyspark.sql.connect.conf import RuntimeConf
 from pyspark.sql.connect.dataframe import DataFrame
 from pyspark.sql.connect.plan import SQL, Range, LocalRelation, CachedRelation
 from pyspark.sql.connect.readwriter import DataFrameReader
+from pyspark.sql.connect.streaming import DataStreamReader
 from pyspark.sql.pandas.serializers import ArrowStreamPandasSerializer
-from pyspark.sql.pandas.types import to_arrow_schema, to_arrow_type, _get_local_timezone
+from pyspark.sql.pandas.types import to_arrow_schema, to_arrow_type
 from pyspark.sql.session import classproperty, SparkSession as PySparkSession
 from pyspark.sql.types import (
     _infer_schema,
@@ -167,32 +169,42 @@ class SparkSession:
 
     read.__doc__ = PySparkSession.read.__doc__
 
+    @property
+    def readStream(self) -> "DataStreamReader":
+        return DataStreamReader(self)
+
+    def _get_configs(self, *keys: str) -> Tuple[Optional[str], ...]:
+        op = proto.ConfigRequest.Operation(get=proto.ConfigRequest.Get(keys=keys))
+        configs = dict(self._client.config(op).pairs)
+        return tuple(configs.get(key) for key in keys)
+
     def _inferSchemaFromList(
         self, data: Iterable[Any], names: Optional[List[str]] = None
     ) -> StructType:
         """
         Infer schema from list of Row, dict, or tuple.
-
-        Refer to 'pyspark.sql.session._inferSchemaFromList' with default configurations:
-
-          - 'infer_dict_as_struct' : False
-          - 'infer_array_from_first_element' : False
-          - 'prefer_timestamp_ntz' : False
         """
         if not data:
             raise ValueError("can not infer schema from empty dataset")
-        infer_dict_as_struct = False
-        infer_array_from_first_element = False
-        prefer_timestamp_ntz = False
+
+        (
+            infer_dict_as_struct,
+            infer_array_from_first_element,
+            prefer_timestamp_ntz,
+        ) = self._get_configs(
+            "spark.sql.pyspark.inferNestedDictAsStruct.enabled",
+            "spark.sql.pyspark.legacy.inferArrayTypeFromFirstElement.enabled",
+            "spark.sql.timestampType",
+        )
         return reduce(
             _merge_type,
             (
                 _infer_schema(
                     row,
                     names,
-                    infer_dict_as_struct=infer_dict_as_struct,
-                    infer_array_from_first_element=infer_array_from_first_element,
-                    prefer_timestamp_ntz=prefer_timestamp_ntz,
+                    infer_dict_as_struct=(infer_dict_as_struct == "true"),
+                    infer_array_from_first_element=(infer_array_from_first_element == "true"),
+                    prefer_timestamp_ntz=(prefer_timestamp_ntz == "TIMESTAMP_NTZ"),
                 )
                 for row in data
             ),
@@ -208,9 +220,13 @@ class SparkSession:
             raise TypeError("data is already a DataFrame")
 
         _schema: Optional[Union[AtomicType, StructType]] = None
-        _schema_str: Optional[str] = None
         _cols: Optional[List[str]] = None
         _num_cols: Optional[int] = None
+
+        if isinstance(schema, str):
+            schema = self.client._analyze(  # type: ignore[assignment]
+                method="ddl_parse", ddl_string=schema
+            ).parsed
 
         if isinstance(schema, (AtomicType, StructType)):
             _schema = schema
@@ -219,24 +235,20 @@ class SparkSession:
             else:
                 _num_cols = 1
 
-        elif isinstance(schema, str):
-            _schema_str = schema
-
         elif isinstance(schema, (list, tuple)):
             # Must re-encode any unicode strings to be consistent with StructField names
             _cols = [x.encode("utf-8") if not isinstance(x, str) else x for x in schema]
             _num_cols = len(_cols)
 
-        if isinstance(data, Sized) and len(data) == 0:
+        if isinstance(data, np.ndarray) and data.ndim not in [1, 2]:
+            raise ValueError("NumPy array input should be of 1 or 2 dimensions.")
+        elif isinstance(data, Sized) and len(data) == 0:
             if _schema is not None:
                 return DataFrame.withPlan(LocalRelation(table=None, schema=_schema.json()), self)
-            elif _schema_str is not None:
-                return DataFrame.withPlan(LocalRelation(table=None, schema=_schema_str), self)
             else:
                 raise ValueError("can not infer schema from empty dataset")
 
         _table: Optional[pa.Table] = None
-        _inferred_schema: Optional[StructType] = None
 
         if isinstance(data, pd.DataFrame):
             # Logic was borrowed from `_create_from_pandas_with_arrow` in
@@ -269,10 +281,12 @@ class SparkSession:
                     for t in data.dtypes
                 ]
 
+            timezone, safecheck = self._get_configs(
+                "spark.sql.session.timeZone", "spark.sql.execution.pandas.convertToArrowArraySafely"
+            )
+
             ser = ArrowStreamPandasSerializer(
-                _get_local_timezone(),  # 'spark.session.timezone' should be respected
-                False,  # 'spark.sql.execution.pandas.convertToArrowArraySafely' should be respected
-                True,
+                cast(str, timezone), safecheck == "true", assign_cols_by_name=True
             )
 
             _table = pa.Table.from_batches(
@@ -284,9 +298,6 @@ class SparkSession:
                 _table = _table.rename_columns(schema.names).cast(arrow_schema)
 
         elif isinstance(data, np.ndarray):
-            if data.ndim not in [1, 2]:
-                raise ValueError("NumPy array input should be of 1 or 2 dimensions.")
-
             if _cols is None:
                 if data.ndim == 1 or data.shape[1] == 1:
                     _cols = ["value"]
@@ -296,21 +307,24 @@ class SparkSession:
             if data.ndim == 1:
                 if 1 != len(_cols):
                     raise ValueError(
-                        f"Length mismatch: Expected axis has 1 element, "
-                        f"new values have {len(_cols)} elements"
+                        f"Length mismatch: Expected axis has {len(_cols)} element, "
+                        "new values have 1 elements"
                     )
 
                 _table = pa.Table.from_arrays([pa.array(data)], _cols)
             else:
                 if data.shape[1] != len(_cols):
                     raise ValueError(
-                        f"Length mismatch: Expected axis has {data.shape[1]} elements, "
-                        f"new values have {len(_cols)} elements"
+                        f"Length mismatch: Expected axis has {len(_cols)} elements, "
+                        f"new values have {data.shape[1]} elements"
                     )
 
                 _table = pa.Table.from_arrays(
                     [pa.array(data[::, i]) for i in range(0, data.shape[1])], _cols
                 )
+
+            # The _table should already have the proper column names.
+            _cols = None
 
         else:
             _data = list(data)
@@ -318,7 +332,7 @@ class SparkSession:
             if isinstance(_data[0], dict):
                 # Sort the data to respect inferred schema.
                 # For dictionaries, we sort the schema in alphabetical order.
-                _data = [dict(sorted(d.items())) for d in _data]
+                _data = [dict(sorted(d.items())) if d is not None else None for d in _data]
 
             elif not isinstance(_data[0], (Row, tuple, list, dict)) and not hasattr(
                 _data[0], "__dict__"
@@ -328,44 +342,28 @@ class SparkSession:
                 _data = [[d] for d in _data]
 
             if _schema is not None:
-                if isinstance(_schema, StructType):
-                    _inferred_schema = _schema
-                else:
-                    _inferred_schema = StructType().add("value", _schema)
+                if not isinstance(_schema, StructType):
+                    _schema = StructType().add("value", _schema)
             else:
-                _inferred_schema = self._inferSchemaFromList(_data, _cols)
+                _schema = self._inferSchemaFromList(_data, _cols)
 
                 if _cols is not None and cast(int, _num_cols) < len(_cols):
                     _num_cols = len(_cols)
 
-                if _has_nulltype(_inferred_schema):
+                if _has_nulltype(_schema):
                     # For cases like createDataFrame([("Alice", None, 80.1)], schema)
                     # we can not infer the schema from the data itself.
-                    warnings.warn("failed to infer the schema from data")
-                    if _schema_str is not None:
-                        _parsed = self.client._analyze(
-                            method="ddl_parse", ddl_string=_schema_str
-                        ).parsed
-                        if isinstance(_parsed, StructType):
-                            _inferred_schema = _parsed
-                        elif isinstance(_parsed, DataType):
-                            _inferred_schema = StructType().add("value", _parsed)
-                        _schema_str = None
-                    if _inferred_schema is None or not isinstance(_inferred_schema, StructType):
-                        raise ValueError(
-                            "Some of types cannot be determined after inferring, "
-                            "a StructType Schema is required in this case"
-                        )
-
-                if _schema_str is None and _cols is None:
-                    _schema = _inferred_schema
+                    raise ValueError(
+                        "Some of types cannot be determined after inferring, "
+                        "a StructType Schema is required in this case"
+                    )
 
             from pyspark.sql.connect.conversion import LocalDataToArrowConversion
 
             # Spark Connect will try its best to build the Arrow table with the
             # inferred schema in the client side, and then rename the columns and
             # cast the datatypes in the server side.
-            _table = LocalDataToArrowConversion.convert(_data, _inferred_schema)
+            _table = LocalDataToArrowConversion.convert(_data, _schema)
 
         # TODO: Beside the validation on number of columns, we should also check
         # whether the Arrow Schema is compatible with the user provided Schema.
@@ -376,17 +374,17 @@ class SparkSession:
             )
 
         if _schema is not None:
-            return DataFrame.withPlan(LocalRelation(_table, schema=_schema.json()), self)
-        elif _schema_str is not None:
-            return DataFrame.withPlan(LocalRelation(_table, schema=_schema_str), self)
-        elif _cols is not None and len(_cols) > 0:
-            return DataFrame.withPlan(LocalRelation(_table), self).toDF(*_cols)
+            df = DataFrame.withPlan(LocalRelation(_table, schema=_schema.json()), self)
         else:
-            return DataFrame.withPlan(LocalRelation(_table), self)
+            df = DataFrame.withPlan(LocalRelation(_table), self)
+
+        if _cols is not None and len(_cols) > 0:
+            df = df.toDF(*_cols)
+        return df
 
     createDataFrame.__doc__ = PySparkSession.createDataFrame.__doc__
 
-    def sql(self, sqlQuery: str, args: Optional[Dict[str, str]] = None) -> "DataFrame":
+    def sql(self, sqlQuery: str, args: Optional[Dict[str, Any]] = None) -> "DataFrame":
         cmd = SQL(sqlQuery, args)
         data, properties = self.client.execute_command(cmd.command(self._client))
         if "sql_command_result" in properties:
@@ -483,10 +481,6 @@ class SparkSession:
     @property
     def streams(self) -> Any:
         raise NotImplementedError("streams() is not implemented.")
-
-    @property
-    def readStream(self) -> Any:
-        raise NotImplementedError("readStream() is not implemented.")
 
     @property
     def _jsc(self) -> None:

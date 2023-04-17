@@ -32,7 +32,7 @@ class NullType private() extends DataType {
   // Defined with a private constructor so the companion object is the only possible instantiation.
   override def defaultSize: Int = 1
 
-  override def physicalDataType: PhysicalDataType = PhysicalNullType
+  private[sql] override def physicalDataType: PhysicalDataType = PhysicalNullType
 
   private[spark] override def asNullable: NullType = this
 

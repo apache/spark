@@ -30,6 +30,7 @@ import org.apache.spark.sql.api.python.PythonSQLUtils
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.python.ApplyInPandasWithStatePythonRunner.{InType, OutType, OutTypeForState, STATE_METADATA_SCHEMA_FROM_PYTHON_WORKER}
 import org.apache.spark.sql.execution.python.ApplyInPandasWithStateWriter.STATE_METADATA_SCHEMA
@@ -152,7 +153,7 @@ class ApplyInPandasWithStatePythonRunner(
       //  UDF returns a StructType column in ColumnarBatch, select the children here
       val structVector = batch.column(ordinal).asInstanceOf[ArrowColumnVector]
       val dataType = schema(ordinal).dataType.asInstanceOf[StructType]
-      assert(dataType.sameType(expectedType),
+      assert(DataTypeUtils.sameType(dataType, expectedType),
         s"Schema equality check failure! type from Arrow: $dataType, expected type: $expectedType")
 
       val outputVectors = dataType.indices.map(structVector.getChild)

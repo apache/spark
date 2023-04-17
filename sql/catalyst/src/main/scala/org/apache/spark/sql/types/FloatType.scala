@@ -17,13 +17,11 @@
 
 package org.apache.spark.sql.types
 
-import scala.math.{Fractional, Numeric}
 import scala.reflect.runtime.universe.typeTag
 import scala.util.Try
 
 import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.catalyst.types.{PhysicalDataType, PhysicalFloatType}
-import org.apache.spark.sql.catalyst.util.SQLOrderingUtil
 
 /**
  * The data type representing `Float` values. Please use the singleton `DataTypes.FloatType`.
@@ -37,20 +35,13 @@ class FloatType private() extends FractionalType {
   // Defined with a private constructor so the companion object is the only possible instantiation.
   private[sql] type InternalType = Float
   @transient private[sql] lazy val tag = typeTag[InternalType]
-  private[sql] val numeric = implicitly[Numeric[Float]]
-  private[sql] val fractional = implicitly[Fractional[Float]]
-  private[sql] val ordering =
-    (x: Float, y: Float) => SQLOrderingUtil.compareFloats(x, y)
-  private[sql] val asIntegral = FloatType.FloatAsIfIntegral
-
-  override private[sql] def exactNumeric = FloatExactNumeric
 
   /**
    * The default size of a value of the FloatType is 4 bytes.
    */
   override def defaultSize: Int = 4
 
-  override def physicalDataType: PhysicalDataType = PhysicalFloatType
+  private[sql] override def physicalDataType: PhysicalDataType = PhysicalFloatType
 
   private[spark] override def asNullable: FloatType = this
 }

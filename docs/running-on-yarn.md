@@ -137,7 +137,7 @@ Note that for the first option, both executors and the application master will s
 log4j configuration, which may cause issues when they run on the same node (e.g. trying to write
 to the same log file).
 
-If you need a reference to the proper location to put log files in the YARN so that YARN can properly display and aggregate them, use `spark.yarn.app.container.log.dir` in your `log4j.properties`. For example, `log4j.appender.file_appender.File=${spark.yarn.app.container.log.dir}/spark.log`. For streaming applications, configuring `RollingFileAppender` and setting file location to YARN's log directory will avoid disk overflow caused by large log files, and logs can be accessed using YARN's log utility.
+If you need a reference to the proper location to put log files in the YARN so that YARN can properly display and aggregate them, use `spark.yarn.app.container.log.dir` in your `log4j2.properties`. For example, `appender.file_appender.fileName=${sys:spark.yarn.app.container.log.dir}/spark.log`. For streaming applications, configuring `RollingFileAppender` and setting file location to YARN's log directory will avoid disk overflow caused by large log files, and logs can be accessed using YARN's log utility.
 
 To use a custom metrics.properties for the application master and executors, update the `$SPARK_CONF_DIR/metrics.properties` file. It will automatically be uploaded with other configurations, so you don't need to specify it manually with `--files`.
 
@@ -645,6 +645,16 @@ To use a custom metrics.properties for the application master and executors, upd
     Interval between reports of the current Spark job status in cluster mode.
   </td>
   <td>0.9.0</td>
+</tr>
+<tr>
+  <td><code>spark.yarn.report.loggingFrequency</code></td>
+  <td><code>30</code></td>
+  <td>
+    Maximum number of application reports processed until the next application status 
+    is logged. If there is a change of state, the application status will be logged regardless
+    of the number of application reports processed.
+  </td>
+  <td>3.5.0</td>
 </tr>
 <tr>
   <td><code>spark.yarn.clientLaunchMonitorInterval</code></td>

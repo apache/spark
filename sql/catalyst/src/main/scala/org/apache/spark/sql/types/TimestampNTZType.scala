@@ -41,14 +41,12 @@ class TimestampNTZType private() extends DatetimeType {
 
   @transient private[sql] lazy val tag = typeTag[InternalType]
 
-  private[sql] val ordering = implicitly[Ordering[InternalType]]
-
   /**
    * The default size of a value of the TimestampNTZType is 8 bytes.
    */
   override def defaultSize: Int = 8
 
-  override def physicalDataType: PhysicalDataType = PhysicalLongType
+  private[sql] override def physicalDataType: PhysicalDataType = PhysicalLongType
 
   override def typeName: String = "timestamp_ntz"
 

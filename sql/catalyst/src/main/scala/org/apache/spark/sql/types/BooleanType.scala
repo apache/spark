@@ -42,7 +42,7 @@ class BooleanType private() extends AtomicType {
    */
   override def defaultSize: Int = 1
 
-  override def physicalDataType: PhysicalDataType = PhysicalBooleanType
+  private[sql] override def physicalDataType: PhysicalDataType = PhysicalBooleanType
 
   private[spark] override def asNullable: BooleanType = this
 }

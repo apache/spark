@@ -103,8 +103,10 @@ def sql(
 
             Also note that the index name(s) should be matched to the existing name.
     args : dict
-        A dictionary of named parameters that begin from the `:` marker and
-        their SQL literals for substituting.
+        A dictionary of parameter names to string values that are parsed as SQL literal
+        expressions. For example, dict keys: "rank", "name", "birthdate"; dict values:
+        "1", "'Steven'", "DATE'2023-03-21'". The fragments of string values belonged to SQL
+        comments are skipped while parsing.
 
         .. versionadded:: 3.4.0
 

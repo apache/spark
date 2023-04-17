@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.trees.{BinaryLike, SQLQueryContext, UnaryLike}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{ARRAYS_ZIP, CONCAT, TreePattern}
+import org.apache.spark.sql.catalyst.types.{DataTypeUtils, PhysicalDataType, PhysicalIntegralType}
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
@@ -67,7 +68,7 @@ trait BinaryArrayExpressionWithImplicitCast
 
   override def checkInputDataTypes(): TypeCheckResult = {
     (left.dataType, right.dataType) match {
-      case (ArrayType(e1, _), ArrayType(e2, _)) if e1.sameType(e2) =>
+      case (ArrayType(e1, _), ArrayType(e2, _)) if DataTypeUtils.sameType(e1, e2) =>
         TypeCheckResult.TypeCheckSuccess
       case _ =>
         DataTypeMismatch(
@@ -245,7 +246,7 @@ case class MapContainsKey(left: Expression, right: Expression)
         DataTypeMismatch(
           errorSubClass = "NULL_TYPE",
           Map("functionName" -> toSQLId(prettyName)))
-      case (MapType(kt, _, _), dt) if kt.sameType(dt) =>
+      case (MapType(kt, _, _), dt) if DataTypeUtils.sameType(kt, dt) =>
         TypeUtils.checkForOrderingExpr(kt, prettyName)
       case _ =>
         DataTypeMismatch(
@@ -898,11 +899,9 @@ trait ArraySortLike extends ExpectsInputTypes {
 
   @transient private lazy val lt: Comparator[Any] = {
     val ordering = arrayExpression.dataType match {
-      case _ @ ArrayType(n: AtomicType, _) => n.ordering.asInstanceOf[Ordering[Any]]
-      case _ @ ArrayType(a: ArrayType, _) => a.interpretedOrdering.asInstanceOf[Ordering[Any]]
-      case _ @ ArrayType(s: StructType, _) => s.interpretedOrdering.asInstanceOf[Ordering[Any]]
+      case _ @ ArrayType(n, _) =>
+        PhysicalDataType.ordering(n)
     }
-
     (o1: Any, o2: Any) => {
       if (o1 == null && o2 == null) {
         0
@@ -918,9 +917,8 @@ trait ArraySortLike extends ExpectsInputTypes {
 
   @transient private lazy val gt: Comparator[Any] = {
     val ordering = arrayExpression.dataType match {
-      case _ @ ArrayType(n: AtomicType, _) => n.ordering.asInstanceOf[Ordering[Any]]
-      case _ @ ArrayType(a: ArrayType, _) => a.interpretedOrdering.asInstanceOf[Ordering[Any]]
-      case _ @ ArrayType(s: StructType, _) => s.interpretedOrdering.asInstanceOf[Ordering[Any]]
+      case _ @ ArrayType(n, _) =>
+        PhysicalDataType.ordering(n)
     }
 
     (o1: Any, o2: Any) => {
@@ -1327,7 +1325,7 @@ case class ArrayContains(left: Expression, right: Expression)
             "inputSql" -> toSQLExpr(left),
             "inputType" -> toSQLType(left.dataType))
         )
-      case (ArrayType(e1, _), e2) if e1.sameType(e2) =>
+      case (ArrayType(e1, _), e2) if DataTypeUtils.sameType(e1, e2) =>
         TypeUtils.checkForOrderingExpr(e2, prettyName)
       case _ =>
         DataTypeMismatch(
@@ -1512,7 +1510,7 @@ case class ArrayPrepend(left: Expression, right: Expression)
 
   override def checkInputDataTypes(): TypeCheckResult = {
     (left.dataType, right.dataType) match {
-      case (ArrayType(e1, _), e2) if e1.sameType(e2) => TypeCheckResult.TypeCheckSuccess
+      case (ArrayType(e1, _), e2) if DataTypeUtils.sameType(e1, e2) => TypeCheckResult.TypeCheckSuccess
       case (ArrayType(e1, _), e2) => DataTypeMismatch(
         errorSubClass = "ARRAY_FUNCTION_DIFF_TYPES",
         messageParameters = Map(
@@ -2266,7 +2264,7 @@ case class ArrayPosition(left: Expression, right: Expression)
             "inputSql" -> toSQLExpr(left),
             "inputType" -> toSQLType(left.dataType))
         )
-      case (ArrayType(e1, _), e2) if e1.sameType(e2) =>
+      case (ArrayType(e1, _), e2) if DataTypeUtils.sameType(e1, e2) =>
         TypeUtils.checkForOrderingExpr(e2, prettyName)
       case _ =>
         DataTypeMismatch(
@@ -2426,7 +2424,7 @@ case class ElementAt(
             "inputSql" -> toSQLExpr(right),
             "inputType" -> toSQLType(right.dataType))
         )
-      case (MapType(e1, _, _), e2) if (!e2.sameType(e1)) =>
+      case (MapType(e1, _, _), e2) if (!DataTypeUtils.sameType(e2, e1)) =>
         DataTypeMismatch(
           errorSubClass = "MAP_FUNCTION_DIFF_TYPES",
           messageParameters = Map(
@@ -2488,7 +2486,7 @@ case class ElementAt(
           }
         } else {
           val idx = if (index == 0) {
-            throw QueryExecutionErrors.elementAtByIndexZeroError(getContextOrNull())
+            throw QueryExecutionErrors.invalidIndexOfZeroError(getContextOrNull())
           } else if (index > 0) {
             index - 1
           } else {
@@ -2543,7 +2541,7 @@ case class ElementAt(
              |  $indexOutOfBoundBranch
              |} else {
              |  if ($index == 0) {
-             |    throw QueryExecutionErrors.elementAtByIndexZeroError($errorContext);
+             |    throw QueryExecutionErrors.invalidIndexOfZeroError($errorContext);
              |  } else if ($index > 0) {
              |    $index--;
              |  } else {
@@ -3026,7 +3024,7 @@ case class Sequence(
     val startType = start.dataType
     def stepType = stepOpt.get.dataType
     val typesCorrect =
-      startType.sameType(stop.dataType) &&
+      DataTypeUtils.sameType(startType, stop.dataType) &&
         (startType match {
           case TimestampType | TimestampNTZType =>
             stepOpt.isEmpty || CalendarIntervalType.acceptsType(stepType) ||
@@ -3037,7 +3035,7 @@ case class Sequence(
               YearMonthIntervalType.acceptsType(stepType) ||
               DayTimeIntervalType.acceptsType(stepType)
           case _: IntegralType =>
-            stepOpt.isEmpty || stepType.sameType(startType)
+            stepOpt.isEmpty || DataTypeUtils.sameType(stepType, startType)
           case _ => false
         })
 
@@ -3072,9 +3070,11 @@ case class Sequence(
 
   @transient private lazy val impl: InternalSequence = dataType.elementType match {
     case iType: IntegralType =>
-      type T = iType.InternalType
-      val ct = ClassTag[T](iType.tag.mirror.runtimeClass(iType.tag.tpe))
-      new IntegralSequenceImpl(iType)(ct, iType.integral)
+      val physicalDataType = PhysicalDataType(iType)
+      type T = physicalDataType.InternalType
+      val integral = PhysicalIntegralType.integral(iType)
+      val ct = ClassTag[T](physicalDataType.tag.mirror.runtimeClass(physicalDataType.tag.tpe))
+      new IntegralSequenceImpl[T](iType)(ct, integral.asInstanceOf[Integral[T]])
 
     case TimestampType | TimestampNTZType =>
       if (stepOpt.isEmpty || CalendarIntervalType.acceptsType(stepOpt.get.dataType)) {
@@ -3193,7 +3193,7 @@ object Sequence {
     (elemType: IntegralType)(implicit num: Integral[T]) extends InternalSequence {
 
     override val defaultStep: DefaultStep = new DefaultStep(
-      (elemType.ordering.lteq _).asInstanceOf[LessThanOrEqualFn],
+      (PhysicalDataType.ordering(elemType).lteq _).asInstanceOf[LessThanOrEqualFn],
       elemType,
       num.one)
 
@@ -3238,7 +3238,7 @@ object Sequence {
     extends InternalSequenceBase(dt, outerDataType, scale, fromLong, zoneId) {
 
     override val defaultStep: DefaultStep = new DefaultStep(
-      (dt.ordering.lteq _).asInstanceOf[LessThanOrEqualFn],
+      (PhysicalDataType.ordering(dt).lteq _),
       YearMonthIntervalType(),
       Period.of(0, 1, 0))
 
@@ -3264,7 +3264,7 @@ object Sequence {
     extends InternalSequenceBase(dt, outerDataType, scale, fromLong, zoneId) {
 
     override val defaultStep: DefaultStep = new DefaultStep(
-      (dt.ordering.lteq _).asInstanceOf[LessThanOrEqualFn],
+      (PhysicalDataType.ordering(dt).lteq _),
       DayTimeIntervalType(),
       Duration.ofDays(1))
 
@@ -3294,7 +3294,7 @@ object Sequence {
     extends InternalSequenceBase(dt, outerDataType, scale, fromLong, zoneId) {
 
     override val defaultStep: DefaultStep = new DefaultStep(
-      (dt.ordering.lteq _).asInstanceOf[LessThanOrEqualFn],
+      (PhysicalDataType.ordering(dt).lteq _),
       CalendarIntervalType,
       new CalendarInterval(0, 1, 0))
 
@@ -3715,7 +3715,7 @@ case class ArrayRemove(left: Expression, right: Expression)
 
   override def checkInputDataTypes(): TypeCheckResult = {
     (left.dataType, right.dataType) match {
-      case (ArrayType(e1, _), e2) if e1.sameType(e2) =>
+      case (ArrayType(e1, _), e2) if DataTypeUtils.sameType(e1, e2) =>
         TypeUtils.checkForOrderingExpr(e2, prettyName)
       case _ =>
         DataTypeMismatch(
@@ -4766,7 +4766,7 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryL
   since = "3.4.0")
 case class ArrayInsert(srcArrayExpr: Expression, posExpr: Expression, itemExpr: Expression)
   extends TernaryExpression with ImplicitCastInputTypes with ComplexTypeMergingExpression
-    with QueryErrorsBase {
+    with QueryErrorsBase with SupportQueryContext {
 
   override def inputTypes: Seq[AbstractDataType] = {
     (srcArrayExpr.dataType, posExpr.dataType, itemExpr.dataType) match {
@@ -4791,7 +4791,7 @@ case class ArrayInsert(srcArrayExpr: Expression, posExpr: Expression, itemExpr: 
             "inputSql" -> toSQLExpr(second),
             "inputType" -> toSQLType(second.dataType))
         )
-      case (ArrayType(e1, _), e2, e3) if e1.sameType(e3) =>
+      case (ArrayType(e1, _), e2, e3) if DataTypeUtils.sameType(e1, e3) =>
         TypeCheckResult.TypeCheckSuccess
       case _ =>
         DataTypeMismatch(
@@ -4819,8 +4819,11 @@ case class ArrayInsert(srcArrayExpr: Expression, posExpr: Expression, itemExpr: 
   }
 
   override def nullSafeEval(arr: Any, pos: Any, item: Any): Any = {
-    val baseArr = arr.asInstanceOf[ArrayData]
     var posInt = pos.asInstanceOf[Int]
+    if (posInt == 0) {
+      throw QueryExecutionErrors.invalidIndexOfZeroError(getContextOrNull())
+    }
+    val baseArr = arr.asInstanceOf[ArrayData]
     val arrayElementType = dataType.asInstanceOf[ArrayType].elementType
 
     val newPosExtendsArrayLeft = (posInt < 0) && (-posInt > baseArr.numElements())
@@ -4894,12 +4897,17 @@ case class ArrayInsert(srcArrayExpr: Expression, posExpr: Expression, itemExpr: 
         values, elementType, resLength, s"$prettyName failed.")
       val assignment = CodeGenerator.createArrayAssignment(values, elementType, arr,
         adjustedAllocIdx, i, first.dataType.asInstanceOf[ArrayType].containsNull)
+      val errorContext = getContextOrNullCode(ctx)
 
       s"""
          |int $itemInsertionIndex = 0;
          |int $resLength = 0;
          |int $adjustedAllocIdx = 0;
          |boolean $insertedItemIsNull = ${itemExpr.isNull};
+         |
+         |if ($pos == 0) {
+         |  throw QueryExecutionErrors.invalidIndexOfZeroError($errorContext);
+         |}
          |
          |if ($pos < 0 && (java.lang.Math.abs($pos) > $arr.numElements())) {
          |
@@ -5001,6 +5009,8 @@ case class ArrayInsert(srcArrayExpr: Expression, posExpr: Expression, itemExpr: 
   override protected def withNewChildrenInternal(
       newSrcArrayExpr: Expression, newPosExpr: Expression, newItemExpr: Expression): ArrayInsert =
     copy(srcArrayExpr = newSrcArrayExpr, posExpr = newPosExpr, itemExpr = newItemExpr)
+
+  override def initQueryContext(): Option[SQLQueryContext] = Some(origin.context)
 }
 
 @ExpressionDescription(
@@ -5078,7 +5088,7 @@ case class ArrayAppend(left: Expression, right: Expression)
 
   override def checkInputDataTypes(): TypeCheckResult = {
     (left.dataType, right.dataType) match {
-      case (ArrayType(e1, _), e2) if e1.sameType(e2) => TypeCheckResult.TypeCheckSuccess
+      case (ArrayType(e1, _), e2) if DataTypeUtils.sameType(e1, e2) => TypeCheckResult.TypeCheckSuccess
       case (ArrayType(e1, _), e2) => DataTypeMismatch(
         errorSubClass = "ARRAY_FUNCTION_DIFF_TYPES",
         messageParameters = Map(

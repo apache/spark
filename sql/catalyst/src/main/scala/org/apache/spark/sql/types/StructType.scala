@@ -26,10 +26,10 @@ import com.fasterxml.jackson.databind.JsonNode
 
 import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.catalyst.analysis.Resolver
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, InterpretedOrdering}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, LegacyTypeStringParser}
 import org.apache.spark.sql.catalyst.trees.Origin
-import org.apache.spark.sql.catalyst.types.{PhysicalDataType, PhysicalStructType}
+import org.apache.spark.sql.catalyst.types.{DataTypeUtils, PhysicalDataType, PhysicalStructType}
 import org.apache.spark.sql.catalyst.util.{truncatedString, StringUtils}
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
 import org.apache.spark.sql.catalyst.util.StringUtils.StringConcat
@@ -439,7 +439,7 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
    */
   override def defaultSize: Int = fields.map(_.dataType.defaultSize).sum
 
-  override def physicalDataType: PhysicalDataType = PhysicalStructType(fields)
+  private[sql] override def physicalDataType: PhysicalDataType = PhysicalStructType(fields)
 
   override def simpleString: String = {
     val fieldTypes = fields.view.map(field => s"${field.name}:${field.dataType.simpleString}").toSeq
@@ -519,10 +519,6 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
   override private[spark] def existsRecursively(f: (DataType) => Boolean): Boolean = {
     f(this) || fields.exists(field => field.dataType.existsRecursively(f))
   }
-
-  @transient
-  private[sql] lazy val interpretedOrdering =
-    InterpretedOrdering.forSchema(this.fields.map(_.dataType))
 
   /**
    * These define and cache existence default values for the struct fields for efficiency purposes.
@@ -712,7 +708,7 @@ object StructType extends AbstractDataType {
         // Found a missing field in `source`.
         newFields += field
       } else if (bothStructType(found.get.dataType, field.dataType) &&
-          !found.get.dataType.sameType(field.dataType)) {
+          !DataTypeUtils.sameType(found.get.dataType, field.dataType)) {
         // Found a field with same name, but different data type.
         findMissingFields(found.get.dataType.asInstanceOf[StructType],
           field.dataType.asInstanceOf[StructType], resolver).map { missingType =>

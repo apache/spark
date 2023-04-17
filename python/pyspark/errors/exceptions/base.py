@@ -108,7 +108,7 @@ class TempTableAlreadyExistsException(AnalysisException):
     """
 
 
-class ParseException(PySparkException):
+class ParseException(AnalysisException):
     """
     Failed to parse a SQL command.
     """
@@ -117,6 +117,30 @@ class ParseException(PySparkException):
 class IllegalArgumentException(PySparkException):
     """
     Passed an illegal or inappropriate argument.
+    """
+
+
+class ArithmeticException(PySparkException):
+    """
+    Arithmetic exception thrown from Spark with an error class.
+    """
+
+
+class ArrayIndexOutOfBoundsException(PySparkException):
+    """
+    Array index out of bounds exception thrown from Spark with an error class.
+    """
+
+
+class DateTimeException(PySparkException):
+    """
+    Datetime exception thrown from Spark with an error class.
+    """
+
+
+class NumberFormatException(IllegalArgumentException):
+    """
+    Number format exception thrown from Spark with an error class.
     """
 
 
@@ -138,15 +162,21 @@ class PythonException(PySparkException):
     """
 
 
-class UnknownException(PySparkException):
+class SparkRuntimeException(PySparkException):
     """
-    None of the above exceptions.
+    Runtime exception thrown from Spark with an error class.
     """
 
 
 class SparkUpgradeException(PySparkException):
     """
     Exception thrown because of Spark upgrade.
+    """
+
+
+class UnknownException(PySparkException):
+    """
+    None of the above exceptions.
     """
 
 

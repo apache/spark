@@ -454,6 +454,9 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case Deduplicate(keys, child) if child.isStreaming =>
         StreamingDeduplicateExec(keys, planLater(child)) :: Nil
 
+      case DeduplicateWithinWatermark(keys, child) if child.isStreaming =>
+        StreamingDeduplicateWithinWatermarkExec(keys, planLater(child)) :: Nil
+
       case _ => Nil
     }
   }
@@ -806,10 +809,10 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         execution.python.FlatMapCoGroupsInPandasExec(
           f.leftAttributes, f.rightAttributes,
           func, output, planLater(left), planLater(right)) :: Nil
-      case logical.MapInPandas(func, output, child) =>
-        execution.python.MapInPandasExec(func, output, planLater(child)) :: Nil
-      case logical.PythonMapInArrow(func, output, child) =>
-        execution.python.PythonMapInArrowExec(func, output, planLater(child)) :: Nil
+      case logical.MapInPandas(func, output, child, isBarrier) =>
+        execution.python.MapInPandasExec(func, output, planLater(child), isBarrier) :: Nil
+      case logical.PythonMapInArrow(func, output, child, isBarrier) =>
+        execution.python.PythonMapInArrowExec(func, output, planLater(child), isBarrier) :: Nil
       case logical.AttachDistributedSequence(attr, child) =>
         execution.python.AttachDistributedSequenceExec(attr, planLater(child)) :: Nil
       case logical.MapElements(f, _, _, objAttr, child) =>
