@@ -24,7 +24,7 @@ import pickle
 from typing import (
     overload,
     Any,
-    BinaryIO, # type: ignore[import]
+    BinaryIO,  # type: ignore[import]
     Callable,
     Dict,
     Generic,
