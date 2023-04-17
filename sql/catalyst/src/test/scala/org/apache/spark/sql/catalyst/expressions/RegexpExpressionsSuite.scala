@@ -287,7 +287,7 @@ abstract class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalH
     checkLiteralRow("abc"  rlike _, "^ab", true)
     checkLiteralRow("abc"  rlike _, "^bc", false)
 
-    val func = if (conf.getConf(SQLConf.REGEX_ENGINE) == "java") {
+    val func = if (conf.getConf(SQLConf.REGEX_ENGINE).equalsIgnoreCase("JAVA")) {
       "rlike"
     } else {
       "rlikejoni"
@@ -578,7 +578,7 @@ abstract class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalH
 }
 
 class RegexpExpressionsJavaSuite extends RegexpExpressionsSuite {
-  override def getRegexEngine(): String = "java"
+  override def getRegexEngine(): String = "jAVA"
 
   test("SPARK-30759: cache initialization for literal patterns") {
     val expr = "A" like Literal.create("a", StringType)
