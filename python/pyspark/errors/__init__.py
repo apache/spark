@@ -39,6 +39,8 @@ from pyspark.errors.exceptions.base import (  # noqa: F401
     PySparkAttributeError,
 )
 
+from pyspark.errors.exceptions.captured import CapturedException
+
 
 __all__ = [
     "PySparkException",
@@ -59,4 +61,5 @@ __all__ = [
     "PySparkTypeError",
     "PySparkValueError",
     "PySparkAttributeError",
+    "CapturedException",
 ]
