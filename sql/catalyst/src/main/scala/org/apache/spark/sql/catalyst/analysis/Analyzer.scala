@@ -320,9 +320,9 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       ResolveRandomSeed ::
       ResolveBinaryArithmetic ::
       ResolveUnion ::
-      // row-level command assignments must be aligned after default value resolution
+      // row-level command assignments must be resolved after default value resolution
       // but before rewriting row-level commands into executable plans
-      AlignRowLevelCommandAssignments ::
+      ResolveRowLevelCommandAssignments ::
       RewriteDeleteFromTable ::
       typeCoercionRules ++
       Seq(
@@ -3341,40 +3341,6 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         } else {
           v2Write
         }
-
-      case m: MergeIntoTable if !m.skipSchemaResolution && m.resolved =>
-        resolveAssignments(m)
-    }
-
-    private def resolveAssignments(p: LogicalPlan): LogicalPlan = {
-      p.transformExpressions {
-        case assignment: Assignment =>
-          val nullHandled = if (!assignment.key.nullable && assignment.value.nullable) {
-            AssertNotNull(assignment.value)
-          } else {
-            assignment.value
-          }
-          val casted = if (assignment.key.dataType != nullHandled.dataType) {
-            val cast = Cast(nullHandled, assignment.key.dataType, ansiEnabled = true)
-            cast.setTagValue(Cast.BY_TABLE_INSERTION, ())
-            cast
-          } else {
-            nullHandled
-          }
-          val rawKeyType = assignment.key.transform {
-            case a: AttributeReference =>
-              CharVarcharUtils.getRawType(a.metadata).map(a.withDataType).getOrElse(a)
-          }.dataType
-          val finalValue = if (CharVarcharUtils.hasCharVarchar(rawKeyType)) {
-            CharVarcharUtils.stringLengthCheck(casted, rawKeyType)
-          } else {
-            casted
-          }
-          val cleanedKey = assignment.key.transform {
-            case a: AttributeReference => CharVarcharUtils.cleanAttrMetadata(a)
-          }
-          Assignment(cleanedKey, finalValue)
-      }
     }
   }
 
