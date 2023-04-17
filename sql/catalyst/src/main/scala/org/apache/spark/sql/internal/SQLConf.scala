@@ -4188,7 +4188,7 @@ object SQLConf {
 
   val REGEX_ENGINE =
     buildConf("spark.sql.regex.engine")
-      .version("3.4.1")
+      .version("3.5.0")
       .stringConf
       .transform(_.toUpperCase(Locale.ROOT))
       .checkValues(RegexEngineType.values.map(_.toString))
