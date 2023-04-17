@@ -2226,20 +2226,17 @@ class SparkConnectPlanner(val session: SparkSession) {
         val result = query.exception
         result match {
           case Some(e) =>
-            respBuilder
-              .getExceptionBuilder
+            respBuilder.getExceptionBuilder
               .setExceptionMessage(SparkConnectService.extractErrorMessage(e))
           case None =>
-            respBuilder
-              .getExceptionBuilder
+            respBuilder.getExceptionBuilder
               .setNoException(true)
         }
 
       case StreamingQueryCommand.CommandCase.AWAIT_TERMINATION =>
         if (command.getAwaitTermination.hasTimeoutMs) {
           val terminated = query.awaitTermination(command.getAwaitTermination.getTimeoutMs)
-          respBuilder
-            .getAwaitTerminationBuilder
+          respBuilder.getAwaitTerminationBuilder
             .setTerminated(terminated)
         } else {
           query.awaitTermination()
