@@ -137,12 +137,8 @@ class PandasConversionMixin:
                     )
                     import pyarrow
 
-                    # Rename columns to avoid duplicated column names.
-                    tmp_column_names = ["col_{}".format(i) for i in range(len(self.columns))]
                     self_destruct = jconf.arrowPySparkSelfDestructEnabled()
-                    batches = self.toDF(*tmp_column_names)._collect_as_arrow(
-                        split_batches=self_destruct
-                    )
+                    batches = self._collect_as_arrow(split_batches=self_destruct)
                     if len(batches) > 0:
                         table = pyarrow.Table.from_batches(batches)
                         # Ensure only the table has a reference to the batches, so that
@@ -164,7 +160,10 @@ class PandasConversionMixin:
                                     "use_threads": False,
                                 }
                             )
-                        pdf = table.to_pandas(**pandas_options)
+                        # Rename columns to avoid duplicated column names.
+                        pdf = table.rename_columns(
+                            [f"col_{i}" for i in range(table.num_columns)]
+                        ).to_pandas(**pandas_options)
                         # Rename back to the original column names.
                         pdf.columns = self.columns
                         for field in self.schema:
@@ -176,6 +175,7 @@ class PandasConversionMixin:
                                 pdf[field.name] = _convert_map_items_to_dict(pdf[field.name])
                         return pdf
                     else:
+                        tmp_column_names = ["col_{}".format(i) for i in range(len(self.columns))]
                         corrected_panda_types = {}
                         for index, field in enumerate(self.schema):
                             pandas_type = PandasConversionMixin._to_corrected_pandas_type(
