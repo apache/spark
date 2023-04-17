@@ -4015,7 +4015,7 @@ object RegexSubstitution extends Rule[LogicalPlan] {
       LikeAllJoni(child, patterns)
     case NotLikeAll(child, patterns) if (conf.regexEngine.equalsIgnoreCase("JONI")) =>
       NotLikeAllJoni(child, patterns)
-    case LikeAny(child, patterns) if (conf.regexEngine.equalsIgnoreCase("JONI"))=>
+    case LikeAny(child, patterns) if (conf.regexEngine.equalsIgnoreCase("JONI")) =>
       LikeAnyJoni(child, patterns)
     case NotLikeAny(child, patterns) if (conf.regexEngine.equalsIgnoreCase("JONI")) =>
       NotLikeAnyJoni(child, patterns)
