@@ -103,8 +103,8 @@ package object dsl {
       case _ => In(expr, list)
     }
 
-    def like(other: Expression, escapeChar: Char = '\\'): Expression = {
-      if (conf.regexEngine == "joni") {
+    def like(other: Expression, escapeChar: Char = '\\'): Predicate = {
+      if (conf.regexEngine.equalsIgnoreCase("JONI")) {
         LikeJoni(expr, other, escapeChar)
       } else {
         Like(expr, other, escapeChar)
@@ -113,40 +113,40 @@ package object dsl {
     def ilike(other: Expression, escapeChar: Char = '\\'): Expression =
       new ILike(expr, other, escapeChar)
 
-    def rlike(other: Expression): Expression = {
-      if (conf.regexEngine == "joni") {
+    def rlike(other: Expression): Predicate = {
+      if (conf.regexEngine.equalsIgnoreCase("JONI")) {
         RLikeJoni(expr, other)
       } else {
         RLike(expr, other)
       }
     }
 
-    def likeAll(others: Expression*): Expression = {
-      if (conf.regexEngine == "joni") {
+    def likeAll(others: Expression*): Predicate = {
+      if (conf.regexEngine.equalsIgnoreCase("JONI")) {
         LikeAllJoni(expr, others.map(_.eval(EmptyRow).asInstanceOf[UTF8String]))
       } else {
         LikeAll(expr, others.map(_.eval(EmptyRow).asInstanceOf[UTF8String]))
       }
     }
 
-    def notLikeAll(others: Expression*): Expression = {
-      if (conf.regexEngine == "joni") {
+    def notLikeAll(others: Expression*): Predicate = {
+      if (conf.regexEngine.equalsIgnoreCase("JONI")) {
         NotLikeAllJoni(expr, others.map(_.eval(EmptyRow).asInstanceOf[UTF8String]))
       } else {
         NotLikeAll(expr, others.map(_.eval(EmptyRow).asInstanceOf[UTF8String]))
       }
     }
 
-    def likeAny(others: Expression*): Expression = {
-      if (conf.regexEngine == "joni") {
+    def likeAny(others: Expression*): Predicate = {
+      if (conf.regexEngine.equalsIgnoreCase("JONI")) {
         LikeAnyJoni(expr, others.map(_.eval(EmptyRow).asInstanceOf[UTF8String]))
       } else {
         LikeAny(expr, others.map(_.eval(EmptyRow).asInstanceOf[UTF8String]))
       }
     }
 
-    def notLikeAny(others: Expression*): Expression = {
-      if (conf.regexEngine == "joni") {
+    def notLikeAny(others: Expression*): Predicate = {
+      if (conf.regexEngine.equalsIgnoreCase("JONI")) {
         NotLikeAnyJoni(expr, others.map(_.eval(EmptyRow).asInstanceOf[UTF8String]))
       } else {
         NotLikeAny(expr, others.map(_.eval(EmptyRow).asInstanceOf[UTF8String]))

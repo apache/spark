@@ -109,14 +109,14 @@ object RegexBenchmark extends SqlBasedBenchmark {
 
     benchmark.addCase(s"$name joni wholestage off", numIters = 2) { _ =>
       withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false",
-        SQLConf.REGEX_ENGINE.key -> "joni") {
+        SQLConf.REGEX_ENGINE.key -> "JONI") {
         f
       }
     }
 
     benchmark.addCase(s"$name joni wholestage on", numIters = 5) { _ =>
       withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
-        SQLConf.REGEX_ENGINE.key -> "joni") {
+        SQLConf.REGEX_ENGINE.key -> "JONI") {
         f
       }
     }

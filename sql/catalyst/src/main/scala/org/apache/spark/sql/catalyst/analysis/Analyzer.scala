@@ -4011,17 +4011,17 @@ object RemoveTempResolvedColumn extends Rule[LogicalPlan] {
 
 object RegexSubstitution extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
-    case Like(left, right, escapeChar) if (conf.regexEngine == "joni") =>
+    case Like(left, right, escapeChar) if (conf.regexEngine.equalsIgnoreCase("JONI")) =>
       LikeJoni(left, right, escapeChar)
-    case RLike(left, right) if (conf.regexEngine == "joni") =>
+    case RLike(left, right) if (conf.regexEngine.equalsIgnoreCase("JONI")) =>
       RLikeJoni(left, right)
-    case LikeAll(child, patterns) if (conf.regexEngine == "joni") =>
+    case LikeAll(child, patterns) if (conf.regexEngine.equalsIgnoreCase("JONI")) =>
       LikeAllJoni(child, patterns)
-    case NotLikeAll(child, patterns) if (conf.regexEngine == "joni") =>
+    case NotLikeAll(child, patterns) if (conf.regexEngine.equalsIgnoreCase("JONI")) =>
       NotLikeAllJoni(child, patterns)
-    case LikeAny(child, patterns) if (conf.regexEngine == "joni") =>
+    case LikeAny(child, patterns) if (conf.regexEngine.equalsIgnoreCase("JONI"))=>
       LikeAnyJoni(child, patterns)
-    case NotLikeAny(child, patterns) if (conf.regexEngine == "joni") =>
+    case NotLikeAny(child, patterns) if (conf.regexEngine.equalsIgnoreCase("JONI")) =>
       NotLikeAnyJoni(child, patterns)
   }
 }

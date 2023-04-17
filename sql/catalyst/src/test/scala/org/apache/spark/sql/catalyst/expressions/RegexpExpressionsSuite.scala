@@ -591,5 +591,5 @@ class RegexpExpressionsJavaSuite extends RegexpExpressionsSuite {
 }
 
 class RegexpExpressionsJoniSuite extends RegexpExpressionsSuite {
-  override def getRegexEngine(): String = "joni"
+  override def getRegexEngine(): String = "JONI"
 }

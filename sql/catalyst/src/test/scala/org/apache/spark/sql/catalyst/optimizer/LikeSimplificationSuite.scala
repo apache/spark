@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{BooleanType, StringType}
 
-abstract class LikeSimplificationSuite extends PlanTest {
+private abstract class LikeSimplificationSuite extends PlanTest {
 
   def getRegexEngine(): String
 
@@ -272,9 +272,9 @@ abstract class LikeSimplificationSuite extends PlanTest {
 }
 
 class LikeSimplificationJavaSuite extends LikeSimplificationSuite {
-  override def getRegexEngine(): String = "java"
+  override def getRegexEngine(): String = "JAVA"
 }
 
 class LikeSimplificationJoniSuite extends LikeSimplificationSuite {
-  override def getRegexEngine(): String = "joni"
+  override def getRegexEngine(): String = "JONI"
 }

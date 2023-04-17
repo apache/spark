@@ -4175,11 +4175,17 @@ object SQLConf {
     .checkValues(ErrorMessageFormat.values.map(_.toString))
     .createWithDefault(ErrorMessageFormat.PRETTY.toString)
 
+  object RegexEngineType extends Enumeration {
+    val JAVA, JONI = Value
+  }
+
   val REGEX_ENGINE =
-    buildConf("spark.sql.Regex.Engine")
-      .version("3.4.0")
+    buildConf("spark.sql.regex.engine")
+      .version("3.4.1")
       .stringConf
-      .createWithDefault("java")
+      .transform(_.toUpperCase(Locale.ROOT))
+      .checkValues(RegexEngineType.values.map(_.toString))
+      .createWithDefault(RegexEngineType.toString())
 
   val LATERAL_COLUMN_ALIAS_IMPLICIT_ENABLED =
     buildConf("spark.sql.lateralColumnAlias.enableImplicitResolution")
