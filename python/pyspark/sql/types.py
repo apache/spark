@@ -46,10 +46,10 @@ from typing import (
 )
 
 from py4j.protocol import register_input_converter
-from py4j.java_gateway import GatewayClient, JavaClass, JavaGateway, JavaObject
+from py4j.java_gateway import GatewayClient, JavaClass, JavaGateway, JavaObject, JVMView
 
 from pyspark.serializers import CloudPickleSerializer
-from pyspark.sql.utils import has_numpy
+from pyspark.sql.utils import has_numpy, get_active_spark_context
 
 if has_numpy:
     import numpy as np
@@ -74,6 +74,7 @@ __all__ = [
     "IntegerType",
     "LongType",
     "DayTimeIntervalType",
+    "YearMonthIntervalType",
     "Row",
     "ShortType",
     "ArrayType",
@@ -374,7 +375,20 @@ class LongType(IntegralType):
         return "bigint"
 
 
-class DayTimeIntervalType(AtomicType):
+class ShortType(IntegralType):
+    """Short data type, i.e. a signed 16-bit integer."""
+
+    def simpleString(self) -> str:
+        return "smallint"
+
+
+class AnsiIntervalType(AtomicType):
+    """The interval type which conforms to the ANSI SQL standard."""
+
+    pass
+
+
+class DayTimeIntervalType(AnsiIntervalType):
     """DayTimeIntervalType (datetime.timedelta)."""
 
     DAY = 0
@@ -433,11 +447,48 @@ class DayTimeIntervalType(AtomicType):
             return datetime.timedelta(microseconds=micros)
 
 
-class ShortType(IntegralType):
-    """Short data type, i.e. a signed 16-bit integer."""
+class YearMonthIntervalType(AnsiIntervalType):
+    """YearMonthIntervalType, represents year-month intervals of the SQL standard"""
 
-    def simpleString(self) -> str:
-        return "smallint"
+    YEAR = 0
+    MONTH = 1
+
+    _fields = {
+        YEAR: "year",
+        MONTH: "month",
+    }
+
+    _inverted_fields = dict(zip(_fields.values(), _fields.keys()))
+
+    def __init__(self, startField: Optional[int] = None, endField: Optional[int] = None):
+        if startField is None and endField is None:
+            # Default matched to scala side.
+            startField = YearMonthIntervalType.YEAR
+            endField = YearMonthIntervalType.MONTH
+        elif startField is not None and endField is None:
+            endField = startField
+
+        fields = YearMonthIntervalType._fields
+        if startField not in fields.keys() or endField not in fields.keys():
+            raise RuntimeError("interval %s to %s is invalid" % (startField, endField))
+        self.startField = cast(int, startField)
+        self.endField = cast(int, endField)
+
+    def _str_repr(self) -> str:
+        fields = YearMonthIntervalType._fields
+        start_field_name = fields[self.startField]
+        end_field_name = fields[self.endField]
+        if start_field_name == end_field_name:
+            return "interval %s" % start_field_name
+        else:
+            return "interval %s to %s" % (start_field_name, end_field_name)
+
+    simpleString = _str_repr
+
+    jsonValue = _str_repr
+
+    def __repr__(self) -> str:
+        return "%s(%d, %d)" % (type(self).__name__, self.startField, self.endField)
 
 
 class ArrayType(DataType):
@@ -1162,6 +1213,7 @@ _LENGTH_CHAR = re.compile(r"char\(\s*(\d+)\s*\)")
 _LENGTH_VARCHAR = re.compile(r"varchar\(\s*(\d+)\s*\)")
 _FIXED_DECIMAL = re.compile(r"decimal\(\s*(\d+)\s*,\s*(-?\d+)\s*\)")
 _INTERVAL_DAYTIME = re.compile(r"interval (day|hour|minute|second)( to (day|hour|minute|second))?")
+_INTERVAL_YEARMONTH = re.compile(r"interval (year|month)( to (year|month))?")
 
 
 def _parse_datatype_string(s: str) -> DataType:
@@ -1208,21 +1260,18 @@ def _parse_datatype_string(s: str) -> DataType:
         ...
     ParseException:...
     """
-    from pyspark import SparkContext
-
-    sc = SparkContext._active_spark_context
-    assert sc is not None
+    sc = get_active_spark_context()
 
     def from_ddl_schema(type_str: str) -> DataType:
-        assert sc is not None and sc._jvm is not None
         return _parse_datatype_json_string(
-            sc._jvm.org.apache.spark.sql.types.StructType.fromDDL(type_str).json()
+            cast(JVMView, sc._jvm).org.apache.spark.sql.types.StructType.fromDDL(type_str).json()
         )
 
     def from_ddl_datatype(type_str: str) -> DataType:
-        assert sc is not None and sc._jvm is not None
         return _parse_datatype_json_string(
-            sc._jvm.org.apache.spark.sql.api.python.PythonSQLUtils.parseDataType(type_str).json()
+            cast(JVMView, sc._jvm)
+            .org.apache.spark.sql.api.python.PythonSQLUtils.parseDataType(type_str)
+            .json()
         )
 
     try:
@@ -1314,6 +1363,14 @@ def _parse_datatype_json_value(json_value: Union[dict, str]) -> DataType:
             if first_field is not None and second_field is None:
                 return DayTimeIntervalType(first_field)
             return DayTimeIntervalType(first_field, second_field)
+        elif _INTERVAL_YEARMONTH.match(json_value):
+            m = _INTERVAL_YEARMONTH.match(json_value)
+            inverted_fields = YearMonthIntervalType._inverted_fields
+            first_field = inverted_fields.get(m.group(1))  # type: ignore[union-attr]
+            second_field = inverted_fields.get(m.group(3))  # type: ignore[union-attr]
+            if first_field is not None and second_field is None:
+                return YearMonthIntervalType(first_field)
+            return YearMonthIntervalType(first_field, second_field)
         elif _LENGTH_CHAR.match(json_value):
             m = _LENGTH_CHAR.match(json_value)
             return CharType(int(m.group(1)))  # type: ignore[union-attr]
@@ -1468,6 +1525,8 @@ def _infer_type(
         return TimestampNTZType()
     if dataType is DayTimeIntervalType:
         return DayTimeIntervalType()
+    if dataType is YearMonthIntervalType:
+        return YearMonthIntervalType()
     elif dataType is not None:
         return dataType()
 

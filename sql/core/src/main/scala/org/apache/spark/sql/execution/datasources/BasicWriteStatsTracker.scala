@@ -197,11 +197,6 @@ class BasicWriteJobStatsTracker(
     this(serializableHadoopConf, metrics - TASK_COMMIT_TIME, metrics(TASK_COMMIT_TIME))
   }
 
-  def writeCommitMetrics(): Map[String, SQLMetric] = {
-    Map(TASK_COMMIT_TIME -> taskCommitTimeMetric,
-      JOB_COMMIT_TIME -> driverSideMetrics(JOB_COMMIT_TIME))
-  }
-
   override def newTaskInstance(): WriteTaskStatsTracker = {
     new BasicWriteTaskStatsTracker(serializableHadoopConf.value, Some(taskCommitTimeMetric))
   }
@@ -244,22 +239,12 @@ object BasicWriteJobStatsTracker {
   val FILE_LENGTH_XATTR = "header.x-hadoop-s3a-magic-data-length"
 
   def metrics: Map[String, SQLMetric] = {
-    writeFilesMetrics ++ writeCommitMetrics
-  }
-
-  def writeFilesMetrics: Map[String, SQLMetric] = {
     val sparkContext = SparkContext.getActive.get
     Map(
       NUM_FILES_KEY -> SQLMetrics.createMetric(sparkContext, "number of written files"),
       NUM_OUTPUT_BYTES_KEY -> SQLMetrics.createSizeMetric(sparkContext, "written output"),
       NUM_OUTPUT_ROWS_KEY -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
-      NUM_PARTS_KEY -> SQLMetrics.createMetric(sparkContext, "number of dynamic part")
-    )
-  }
-
-  def writeCommitMetrics: Map[String, SQLMetric] = {
-    val sparkContext = SparkContext.getActive.get
-    Map(
+      NUM_PARTS_KEY -> SQLMetrics.createMetric(sparkContext, "number of dynamic part"),
       TASK_COMMIT_TIME -> SQLMetrics.createTimingMetric(sparkContext, "task commit time"),
       JOB_COMMIT_TIME -> SQLMetrics.createTimingMetric(sparkContext, "job commit time")
     )

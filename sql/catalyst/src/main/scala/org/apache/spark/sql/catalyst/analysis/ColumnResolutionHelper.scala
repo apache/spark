@@ -50,40 +50,39 @@ trait ColumnResolutionHelper extends Logging {
       (exprs, plan)
     } else {
       plan match {
-        case p: Project =>
-          // Resolving expressions against current plan.
-          val maybeResolvedExprs = exprs.map(resolveExpressionByPlanOutput(_, p))
-          // Recursively resolving expressions on the child of current plan.
-          val (newExprs, newChild) = resolveExprsAndAddMissingAttrs(maybeResolvedExprs, p.child)
-          // If some attributes used by expressions are resolvable only on the rewritten child
-          // plan, we need to add them into original projection.
-          val missingAttrs = (AttributeSet(newExprs) -- p.outputSet).intersect(newChild.outputSet)
-          (newExprs, Project(p.projectList ++ missingAttrs, newChild))
-
-        case a @ Aggregate(groupExprs, aggExprs, child) =>
-          val maybeResolvedExprs = exprs.map(resolveExpressionByPlanOutput(_, a))
-          val (newExprs, newChild) = resolveExprsAndAddMissingAttrs(maybeResolvedExprs, child)
-          val missingAttrs = (AttributeSet(newExprs) -- a.outputSet).intersect(newChild.outputSet)
-          if (missingAttrs.forall(attr => groupExprs.exists(_.semanticEquals(attr)))) {
-            // All the missing attributes are grouping expressions, valid case.
-            (newExprs, a.copy(aggregateExpressions = aggExprs ++ missingAttrs, child = newChild))
-          } else {
-            // Need to add non-grouping attributes, invalid case.
-            (exprs, a)
-          }
-
-        case g: Generate =>
-          val maybeResolvedExprs = exprs.map(resolveExpressionByPlanOutput(_, g))
-          val (newExprs, newChild) = resolveExprsAndAddMissingAttrs(maybeResolvedExprs, g.child)
-          (newExprs, g.copy(unrequiredChildIndex = Nil, child = newChild))
-
         // For `Distinct` and `SubqueryAlias`, we can't recursively resolve and add attributes
         // via its children.
         case u: UnaryNode if !u.isInstanceOf[Distinct] && !u.isInstanceOf[SubqueryAlias] =>
-          val maybeResolvedExprs = exprs.map(resolveExpressionByPlanOutput(_, u))
-          val (newExprs, newChild) = resolveExprsAndAddMissingAttrs(maybeResolvedExprs, u.child)
-          (newExprs, u.withNewChildren(Seq(newChild)))
+          val (newExprs, newChild) = {
+            // Resolving expressions against current plan.
+            val maybeResolvedExprs = exprs.map(resolveExpressionByPlanOutput(_, u))
+            // Recursively resolving expressions on the child of current plan.
+            resolveExprsAndAddMissingAttrs(maybeResolvedExprs, u.child)
+          }
+          // If some attributes used by expressions are resolvable only on the rewritten child
+          // plan, we need to add them into original projection.
+          lazy val missingAttrs =
+            (AttributeSet(newExprs) -- u.outputSet).intersect(newChild.outputSet)
+          u match {
+            case p: Project =>
+              (newExprs, Project(p.projectList ++ missingAttrs, newChild))
 
+            case a @ Aggregate(groupExprs, aggExprs, child) =>
+              if (missingAttrs.forall(attr => groupExprs.exists(_.semanticEquals(attr)))) {
+                // All the missing attributes are grouping expressions, valid case.
+                (newExprs,
+                  a.copy(aggregateExpressions = aggExprs ++ missingAttrs, child = newChild))
+              } else {
+                // Need to add non-grouping attributes, invalid case.
+                (exprs, a)
+              }
+
+            case g: Generate =>
+              (newExprs, g.copy(unrequiredChildIndex = Nil, child = newChild))
+
+            case _ =>
+              (newExprs, u.withNewChildren(Seq(newChild)))
+          }
         // For other operators, we can't recursively resolve and add attributes via its children.
         case other =>
           (exprs.map(resolveExpressionByPlanOutput(_, other)), other)

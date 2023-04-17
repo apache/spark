@@ -34,9 +34,10 @@ import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.adaptive.DisableAdaptiveExecutionSuite
 import org.apache.spark.sql.execution.aggregate.HashAggregateExec
 import org.apache.spark.sql.execution.command.DataWritingCommandExec
-import org.apache.spark.sql.execution.datasources.{BasicWriteJobStatsTracker, SQLHadoopMapReduceCommitProtocol, WriteFilesExec}
+import org.apache.spark.sql.execution.datasources.{BasicWriteJobStatsTracker, InsertIntoHadoopFsRelationCommand, SQLHadoopMapReduceCommitProtocol, V1WriteCommand}
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, ShuffledHashJoinExec}
+import org.apache.spark.sql.execution.window.WindowGroupLimitExec
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -830,33 +831,29 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
 
   test("SPARK-34567: Add metrics for CTAS operator") {
     withTable("t") {
-      var dataWriting: DataWritingCommandExec = null
+      var v1WriteCommand: V1WriteCommand = null
       val listener = new QueryExecutionListener {
         override def onFailure(f: String, qe: QueryExecution, e: Exception): Unit = {}
         override def onSuccess(funcName: String, qe: QueryExecution, duration: Long): Unit = {
           qe.executedPlan match {
             case dataWritingCommandExec: DataWritingCommandExec =>
-              dataWriting = dataWritingCommandExec
+              val createTableAsSelect = dataWritingCommandExec.cmd
+              v1WriteCommand = createTableAsSelect.asInstanceOf[InsertIntoHadoopFsRelationCommand]
             case _ =>
           }
         }
       }
       spark.listenerManager.register(listener)
       try {
-        sql("CREATE TABLE t USING PARQUET AS SELECT 1 as a")
+        val df = sql("CREATE TABLE t USING PARQUET AS SELECT 1 as a")
         sparkContext.listenerBus.waitUntilEmpty()
-        assert(dataWriting != null)
-        val metrics = if (conf.plannedWriteEnabled) {
-          dataWriting.child.asInstanceOf[WriteFilesExec].metrics
-        } else {
-          dataWriting.cmd.metrics
-        }
-        assert(metrics.contains("numFiles"))
-        assert(metrics("numFiles").value == 1)
-        assert(metrics.contains("numOutputBytes"))
-        assert(metrics("numOutputBytes").value > 0)
-        assert(metrics.contains("numOutputRows"))
-        assert(metrics("numOutputRows").value == 1)
+        assert(v1WriteCommand != null)
+        assert(v1WriteCommand.metrics.contains("numFiles"))
+        assert(v1WriteCommand.metrics("numFiles").value == 1)
+        assert(v1WriteCommand.metrics.contains("numOutputBytes"))
+        assert(v1WriteCommand.metrics("numOutputBytes").value > 0)
+        assert(v1WriteCommand.metrics.contains("numOutputRows"))
+        assert(v1WriteCommand.metrics("numOutputRows").value == 1)
       } finally {
         spark.listenerManager.unregister(listener)
       }
@@ -899,6 +896,16 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
           _.toString.matches(sizeMetricPattern)
         }))))
     )
+  }
+
+  test("SPARK-37099: Add numOutputRows metric for WindowGroupLimitExec") {
+    val data = Seq(("a", 1), ("a", 2), ("b", 1)).toDF("c1", "c2")
+    val w = Window.partitionBy("c1").orderBy("c2")
+    val df = data.select(row_number().over(w).as("r")).where("r = 1")
+    df.collect()
+    val windowGroupLimit = df.queryExecution.executedPlan.find(_.isInstanceOf[WindowGroupLimitExec])
+    assert(windowGroupLimit.isDefined)
+    assert(windowGroupLimit.get.metrics("numOutputRows").value == 2L)
   }
 }
 

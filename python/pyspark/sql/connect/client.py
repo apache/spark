@@ -35,6 +35,7 @@ import sys
 from types import TracebackType
 from typing import (
     Iterable,
+    Iterator,
     Optional,
     Any,
     Union,
@@ -58,6 +59,7 @@ import grpc
 from google.protobuf import text_format
 from google.rpc import error_details_pb2
 
+from pyspark.resource.information import ResourceInformation
 import pyspark.sql.connect.proto as pb2
 import pyspark.sql.connect.proto.base_pb2_grpc as grpc_lib
 import pyspark.sql.connect.types as types
@@ -513,8 +515,11 @@ class SparkConnectClient(object):
     """
 
     @classmethod
-    def retry_exception(cls, e: grpc.RpcError) -> bool:
-        return e.code() == grpc.StatusCode.UNAVAILABLE
+    def retry_exception(cls, e: Exception) -> bool:
+        if isinstance(e, grpc.RpcError):
+            return e.code() == grpc.StatusCode.UNAVAILABLE
+        else:
+            return False
 
     def __init__(
         self,
@@ -625,8 +630,8 @@ class SparkConnectClient(object):
 
         self._execute(req)
 
-    def _build_metrics(self, metrics: "pb2.ExecutePlanResponse.Metrics") -> List[PlanMetrics]:
-        return [
+    def _build_metrics(self, metrics: "pb2.ExecutePlanResponse.Metrics") -> Iterator[PlanMetrics]:
+        return (
             PlanMetrics(
                 x.name,
                 x.plan_id,
@@ -634,18 +639,33 @@ class SparkConnectClient(object):
                 [MetricValue(k, v.value, v.metric_type) for k, v in x.execution_metrics.items()],
             )
             for x in metrics.metrics
-        ]
+        )
+
+    def _resources(self) -> Dict[str, ResourceInformation]:
+        logger.info("Fetching the resources")
+        cmd = pb2.Command()
+        cmd.get_resources_command.SetInParent()
+        (_, properties) = self.execute_command(cmd)
+        resources = properties["get_resources_command_result"]
+        return resources
 
     def _build_observed_metrics(
         self, metrics: List["pb2.ExecutePlanResponse.ObservedMetrics"]
-    ) -> List[PlanObservedMetrics]:
-        return [
-            PlanObservedMetrics(
-                x.name,
-                [v for v in x.values],
-            )
-            for x in metrics
-        ]
+    ) -> Iterator[PlanObservedMetrics]:
+        return (PlanObservedMetrics(x.name, [v for v in x.values]) for x in metrics)
+
+    def to_table_as_iterator(self, plan: pb2.Plan) -> Iterator[Union[StructType, "pa.Table"]]:
+        """
+        Return given plan as a PyArrow Table iterator.
+        """
+        logger.info(f"Executing plan {self._proto_to_string(plan)}")
+        req = self._execute_plan_request_with_metadata()
+        req.plan.CopyFrom(plan)
+        for response in self._execute_and_fetch_as_iterator(req):
+            if isinstance(response, StructType):
+                yield response
+            elif isinstance(response, pa.RecordBatch):
+                yield pa.Table.from_batches([response])
 
     def to_table(self, plan: pb2.Plan) -> Tuple["pa.Table", Optional[StructType]]:
         """
@@ -667,11 +687,12 @@ class SparkConnectClient(object):
         req.plan.CopyFrom(plan)
         table, schema, metrics, observed_metrics, _ = self._execute_and_fetch(req)
         assert table is not None
-        pdf = table.rename_columns([f"col_{i}" for i in range(len(table.column_names))]).to_pandas()
-        pdf.columns = table.column_names
 
         schema = schema or types.from_arrow_schema(table.schema)
         assert schema is not None and isinstance(schema, StructType)
+
+        pdf = table.to_pandas()
+        pdf.columns = schema.fieldNames()
 
         for field, pa_field in zip(schema, table.schema):
             if isinstance(field.dataType, TimestampType):
@@ -872,8 +893,8 @@ class SparkConnectClient(object):
                         )
                     return AnalyzeResult.fromProto(resp)
             raise SparkConnectException("Invalid state during retry exception handling.")
-        except grpc.RpcError as rpc_error:
-            self._handle_error(rpc_error)
+        except Exception as error:
+            self._handle_error(error)
 
     def _execute(self, req: pb2.ExecutePlanRequest) -> None:
         """
@@ -897,8 +918,73 @@ class SparkConnectClient(object):
                                 "Received incorrect session identifier for request: "
                                 f"{b.session_id} != {self._session_id}"
                             )
-        except grpc.RpcError as rpc_error:
-            self._handle_error(rpc_error)
+        except Exception as error:
+            self._handle_error(error)
+
+    def _execute_and_fetch_as_iterator(
+        self, req: pb2.ExecutePlanRequest
+    ) -> Iterator[
+        Union[
+            "pa.RecordBatch",
+            StructType,
+            PlanMetrics,
+            PlanObservedMetrics,
+            Dict[str, Any],
+        ]
+    ]:
+        logger.info("ExecuteAndFetchAsIterator")
+
+        try:
+            for attempt in Retrying(
+                can_retry=SparkConnectClient.retry_exception, **self._retry_policy
+            ):
+                with attempt:
+                    for b in self._stub.ExecutePlan(req, metadata=self._builder.metadata()):
+                        if b.session_id != self._session_id:
+                            raise SparkConnectException(
+                                "Received incorrect session identifier for request: "
+                                f"{b.session_id} != {self._session_id}"
+                            )
+                        if b.HasField("metrics"):
+                            logger.debug("Received metric batch.")
+                            yield from self._build_metrics(b.metrics)
+                        if b.observed_metrics:
+                            logger.debug("Received observed metric batch.")
+                            yield from self._build_observed_metrics(b.observed_metrics)
+                        if b.HasField("schema"):
+                            logger.debug("Received the schema.")
+                            dt = types.proto_schema_to_pyspark_data_type(b.schema)
+                            assert isinstance(dt, StructType)
+                            yield dt
+                        if b.HasField("sql_command_result"):
+                            logger.debug("Received the SQL command result.")
+                            yield {"sql_command_result": b.sql_command_result.relation}
+                        if b.HasField("write_stream_operation_start_result"):
+                            field = "write_stream_operation_start_result"
+                            yield {field: b.write_stream_operation_start_result}
+                        if b.HasField("streaming_query_command_result"):
+                            yield {
+                                "streaming_query_command_result": b.streaming_query_command_result
+                            }
+                        if b.HasField("get_resources_command_result"):
+                            resources = {}
+                            for key, resource in b.get_resources_command_result.resources.items():
+                                name = resource.name
+                                addresses = [address for address in resource.addresses]
+                                resources[key] = ResourceInformation(name, addresses)
+                            yield {"get_resources_command_result": resources}
+                        if b.HasField("arrow_batch"):
+                            logger.debug(
+                                f"Received arrow batch rows={b.arrow_batch.row_count} "
+                                f"size={len(b.arrow_batch.data)}"
+                            )
+
+                            with pa.ipc.open_stream(b.arrow_batch.data) as reader:
+                                for batch in reader:
+                                    assert isinstance(batch, pa.RecordBatch)
+                                    yield batch
+        except Exception as error:
+            self._handle_error(error)
 
     def _execute_and_fetch(
         self, req: pb2.ExecutePlanRequest
@@ -911,49 +997,25 @@ class SparkConnectClient(object):
     ]:
         logger.info("ExecuteAndFetch")
 
-        m: Optional[pb2.ExecutePlanResponse.Metrics] = None
-        om: List[pb2.ExecutePlanResponse.ObservedMetrics] = []
+        observed_metrics: List[PlanObservedMetrics] = []
+        metrics: List[PlanMetrics] = []
         batches: List[pa.RecordBatch] = []
         schema: Optional[StructType] = None
-        properties = {}
-        try:
-            for attempt in Retrying(
-                can_retry=SparkConnectClient.retry_exception, **self._retry_policy
-            ):
-                with attempt:
-                    batches = []
-                    for b in self._stub.ExecutePlan(req, metadata=self._builder.metadata()):
-                        if b.session_id != self._session_id:
-                            raise SparkConnectException(
-                                "Received incorrect session identifier for request: "
-                                f"{b.session_id} != {self._session_id}"
-                            )
-                        if b.metrics is not None:
-                            logger.debug("Received metric batch.")
-                            m = b.metrics
-                        if b.observed_metrics is not None:
-                            logger.debug("Received observed metric batch.")
-                            om.extend(b.observed_metrics)
-                        if b.HasField("schema"):
-                            dt = types.proto_schema_to_pyspark_data_type(b.schema)
-                            assert isinstance(dt, StructType)
-                            schema = dt
-                        if b.HasField("sql_command_result"):
-                            properties["sql_command_result"] = b.sql_command_result.relation
-                        if b.HasField("arrow_batch"):
-                            logger.debug(
-                                f"Received arrow batch rows={b.arrow_batch.row_count} "
-                                f"size={len(b.arrow_batch.data)}"
-                            )
+        properties: Dict[str, Any] = {}
 
-                            with pa.ipc.open_stream(b.arrow_batch.data) as reader:
-                                for batch in reader:
-                                    assert isinstance(batch, pa.RecordBatch)
-                                    batches.append(batch)
-        except grpc.RpcError as rpc_error:
-            self._handle_error(rpc_error)
-        metrics: List[PlanMetrics] = self._build_metrics(m) if m is not None else []
-        observed_metrics: List[PlanObservedMetrics] = self._build_observed_metrics(om)
+        for response in self._execute_and_fetch_as_iterator(req):
+            if isinstance(response, StructType):
+                schema = response
+            elif isinstance(response, pa.RecordBatch):
+                batches.append(response)
+            elif isinstance(response, PlanMetrics):
+                metrics.append(response)
+            elif isinstance(response, PlanObservedMetrics):
+                observed_metrics.append(response)
+            elif isinstance(response, dict):
+                properties.update(**response)
+            else:
+                raise ValueError(f"Unknown response: {response}")
 
         if len(batches) > 0:
             table = pa.Table.from_batches(batches=batches)
@@ -997,10 +1059,32 @@ class SparkConnectClient(object):
                         )
                     return ConfigResult.fromProto(resp)
             raise SparkConnectException("Invalid state during retry exception handling.")
-        except grpc.RpcError as rpc_error:
-            self._handle_error(rpc_error)
+        except Exception as error:
+            self._handle_error(error)
 
-    def _handle_error(self, rpc_error: grpc.RpcError) -> NoReturn:
+    def _handle_error(self, error: Exception) -> NoReturn:
+        """
+        Handle errors that occur during RPC calls.
+
+        Parameters
+        ----------
+        error : Exception
+            An exception thrown during RPC calls.
+
+        Returns
+        -------
+        Throws the appropriate internal Python exception.
+        """
+        if isinstance(error, grpc.RpcError):
+            self._handle_rpc_error(error)
+        elif isinstance(error, ValueError):
+            if "Cannot invoke RPC" in str(error) and "closed" in str(error):
+                raise SparkConnectException(
+                    error_class="NO_ACTIVE_SESSION", message_parameters=dict()
+                ) from None
+        raise error
+
+    def _handle_rpc_error(self, rpc_error: grpc.RpcError) -> NoReturn:
         """
         Error handling helper for dealing with GRPC Errors. On the server side, certain
         exceptions are enriched with additional RPC Status information. These are

@@ -27,6 +27,8 @@ object IntegrationTestUtils {
 
   // System properties used for testing and debugging
   private val DEBUG_SC_JVM_CLIENT = "spark.debug.sc.jvm.client"
+  // Enable this flag to print all client debug log + server logs to the console
+  private[connect] val isDebug = System.getProperty(DEBUG_SC_JVM_CLIENT, "false").toBoolean
 
   private[sql] lazy val scalaVersion = {
     versionNumberString.split('.') match {
@@ -43,7 +45,25 @@ object IntegrationTestUtils {
     }
     sys.props.getOrElse("spark.test.home", sys.env("SPARK_HOME"))
   }
-  private[connect] val isDebug = System.getProperty(DEBUG_SC_JVM_CLIENT, "false").toBoolean
+
+  private[connect] lazy val debugConfig: Seq[String] = {
+    val log4j2 = s"$sparkHome/connector/connect/client/jvm/src/test/resources/log4j2.properties"
+    if (isDebug) {
+      Seq(
+        // Enable to see the server plan change log
+        // "--conf",
+        // "spark.sql.planChangeLog.level=WARN",
+
+        // Enable to see the server grpc received
+        // "--conf",
+        // "spark.connect.grpc.interceptor.classes=" +
+        //  "org.apache.spark.sql.connect.service.LoggingInterceptor",
+
+        // Redirect server log into console
+        "--conf",
+        s"spark.driver.extraJavaOptions=-Dlog4j.configuration=$log4j2")
+    } else Seq.empty
+  }
 
   // Log server start stop debug info into console
   // scalastyle:off println
@@ -65,7 +85,11 @@ object IntegrationTestUtils {
    * @return
    *   the jar
    */
-  private[sql] def findJar(path: String, sbtName: String, mvnName: String): File = {
+  private[sql] def findJar(
+      path: String,
+      sbtName: String,
+      mvnName: String,
+      test: Boolean = false): File = {
     val targetDir = new File(new File(sparkHome, path), "target")
     assert(
       targetDir.exists(),
@@ -73,14 +97,15 @@ object IntegrationTestUtils {
         s"SPARK_HOME='${new File(sparkHome).getCanonicalPath}'. " +
         "Make sure the spark project jars has been built (e.g. using build/sbt package)" +
         "and the env variable `SPARK_HOME` is set correctly.")
+    val suffix = if (test) "-tests.jar" else ".jar"
     val jars = recursiveListFiles(targetDir).filter { f =>
       // SBT jar
       (f.getParentFile.getName == scalaDir &&
-        f.getName.startsWith(sbtName) && f.getName.endsWith(".jar")) ||
+        f.getName.startsWith(sbtName) && f.getName.endsWith(suffix)) ||
       // Maven Jar
       (f.getParent.endsWith("target") &&
         f.getName.startsWith(mvnName) &&
-        f.getName.endsWith(s"${org.apache.spark.SPARK_VERSION}.jar"))
+        f.getName.endsWith(s"${org.apache.spark.SPARK_VERSION}$suffix"))
     }
     // It is possible we found more than one: one built by maven, and another by SBT
     assert(jars.nonEmpty, s"Failed to find the jar inside folder: ${targetDir.getCanonicalPath}")

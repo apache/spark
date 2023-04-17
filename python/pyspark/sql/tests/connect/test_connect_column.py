@@ -40,7 +40,7 @@ from pyspark.sql.types import (
     DecimalType,
     BooleanType,
 )
-from pyspark.errors import PySparkTypeError
+from pyspark.errors import PySparkTypeError, PySparkValueError
 from pyspark.errors.exceptions.connect import SparkConnectException
 from pyspark.testing.connectutils import should_test_connect
 from pyspark.sql.tests.connect.test_connect_basic import SparkConnectSQLTestCase
@@ -172,8 +172,8 @@ class SparkConnectColumnTests(SparkConnectSQLTestCase):
         # +---+----+----+
         # |  a|   b|   c|
         # +---+----+----+
-        # |  1|   1|null|
-        # |  2|null|null|
+        # |  1|   1|NULL|
+        # |  2|NULL|NULL|
         # |  3|   3|   1|
         # +---+----+----+
 
@@ -250,9 +250,9 @@ class SparkConnectColumnTests(SparkConnectSQLTestCase):
         # |                  a|         b|   c|
         # +-------------------+----------+----+
         # |2022-12-22 15:50:00|2022-12-25| 1.1|
-        # |2022-12-22 18:50:00|      null| 2.2|
+        # |2022-12-22 18:50:00|      NULL| 2.2|
         # |2022-12-23 15:50:00|2022-12-24| 3.3|
-        # |               null|2022-12-22|null|
+        # |               NULL|2022-12-22|NULL|
         # +-------------------+----------+----+
 
         cdf = self.connect.sql(query)
@@ -308,8 +308,8 @@ class SparkConnectColumnTests(SparkConnectSQLTestCase):
         # +---+----+---+----+
         # |  a|   b|  c|   d|
         # +---+----+---+----+
-        # |  1|   1|  0|null|
-        # |  2|null|  1| 2.0|
+        # |  1|   1|  0|NULL|
+        # |  2|NULL|  1| 2.0|
         # |  3|   3|  4| 3.5|
         # +---+----+---+----+
 
@@ -349,9 +349,9 @@ class SparkConnectColumnTests(SparkConnectSQLTestCase):
         # +----+----+----+
         # |   a|   b|   c|
         # +----+----+----+
-        # |   1|   1|null|
-        # |   2|null|   1|
-        # |null|   3|   4|
+        # |   1|   1|NULL|
+        # |   2|NULL|   1|
+        # |NULL|   3|   4|
         # +----+----+----+
 
         cdf = self.connect.sql(query)
@@ -576,8 +576,8 @@ class SparkConnectColumnTests(SparkConnectSQLTestCase):
         # +---+----+---+----+
         # |  a|   b|  c|   d|
         # +---+----+---+----+
-        # |  1|   1|  0|null|
-        # |  2|null|  1| 2.0|
+        # |  1|   1|  0|NULL|
+        # |  2|NULL|  1| 2.0|
         # |  3|   3|  4| 3.5|
         # +---+----+---+----+
 
@@ -632,9 +632,9 @@ class SparkConnectColumnTests(SparkConnectSQLTestCase):
         # |                  a|         b|   c|
         # +-------------------+----------+----+
         # |2022-12-22 15:50:00|2022-12-25| 1.1|
-        # |2022-12-22 18:50:00|      null| 2.2|
+        # |2022-12-22 18:50:00|      NULL| 2.2|
         # |2022-12-23 15:50:00|2022-12-24| 3.3|
-        # |               null|2022-12-22|null|
+        # |               NULL|2022-12-22|NULL|
         # +-------------------+----------+----+
 
         cdf = self.connect.sql(query)
@@ -692,7 +692,7 @@ class SparkConnectColumnTests(SparkConnectSQLTestCase):
         # |  a|   b|  c|
         # +---+----+---+
         # |  1|   1|  0|
-        # |  2|null|  1|
+        # |  2|NULL|  1|
         # |  3|   3|  4|
         # +---+----+---+
 
@@ -734,7 +734,7 @@ class SparkConnectColumnTests(SparkConnectSQLTestCase):
         # +----------------+-------------------+------------+----+
         # |{1.0, 1.0, 2022}|{b -> 123, a -> kk}|   [1, 2, 3]|2022|
         # |{2.0, 2.0, 2018}|          {a -> xy}|[-1, -2, -3]|2018|
-        # |{3.0, 3.0, null}|          {a -> ab}|  [-1, 0, 1]|null|
+        # |{3.0, 3.0, null}|          {a -> ab}|  [-1, 0, 1]|NULL|
         # +----------------+-------------------+------------+----+
 
         cdf = self.connect.sql(query)
@@ -798,8 +798,8 @@ class SparkConnectColumnTests(SparkConnectSQLTestCase):
         # +---+----+---+----+
         # |  a|   b|  c|   d|
         # +---+----+---+----+
-        # |  1|   1|  0|null|
-        # |  2|null|  1| 2.0|
+        # |  1|   1|  0|NULL|
+        # |  2|NULL|  1| 2.0|
         # |  3|   3|  4| 3.5|
         # +---+----+---+----+
 
@@ -857,7 +857,7 @@ class SparkConnectColumnTests(SparkConnectSQLTestCase):
         # +----------------------+----+
         # |   {1.0, 1.0, 2022, 1}|   0|
         # |{2.0, 2.0, 2018, null}|   2|
-        # |   {3.0, 3.0, null, 3}|null|
+        # |   {3.0, 3.0, null, 3}|NULL|
         # +----------------------+----+
 
         cdf = self.connect.sql(query)
@@ -954,11 +954,14 @@ class SparkConnectColumnTests(SparkConnectSQLTestCase):
             message_parameters={"arg_name": "fieldName", "arg_type": "int"},
         )
 
-        with self.assertRaisesRegex(
-            ValueError,
-            "dropFields requires at least 1 field",
-        ):
+        with self.assertRaises(PySparkValueError) as pe:
             cdf.select(cdf.x.dropFields()).show()
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="CANNOT_BE_EMPTY",
+            message_parameters={"item": "dropFields"},
+        )
 
     def test_column_string_ops(self):
         # SPARK-41764: test string ops
@@ -1018,7 +1021,7 @@ class SparkConnectColumnTests(SparkConnectSQLTestCase):
         self.assertEqual(cdf1.schema, sdf1.schema)
         self.assertEqual(cdf1.collect(), sdf1.collect())
 
-    def test_distributed_sequence_column(self):
+    def test_distributed_sequence_id(self):
         cdf = self.connect.range(10)
         expected = self.connect.range(0, 10).selectExpr("id as index", "id")
         self.assertEqual(

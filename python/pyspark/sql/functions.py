@@ -37,6 +37,8 @@ from typing import (
     ValuesView,
 )
 
+from py4j.java_gateway import JVMView
+
 from pyspark import SparkContext
 from pyspark.errors import PySparkTypeError, PySparkValueError
 from pyspark.rdd import PythonEvalType
@@ -49,7 +51,12 @@ from pyspark.sql.udf import UserDefinedFunction, _create_py_udf  # noqa: F401
 
 # Keep pandas_udf and PandasUDFType import for backwards compatible import; moved in SPARK-28264
 from pyspark.sql.pandas.functions import pandas_udf, PandasUDFType  # noqa: F401
-from pyspark.sql.utils import to_str, has_numpy, try_remote_functions
+from pyspark.sql.utils import (
+    to_str,
+    has_numpy,
+    try_remote_functions,
+    get_active_spark_context,
+)
 
 if TYPE_CHECKING:
     from pyspark.sql._typing import (
@@ -101,8 +108,7 @@ def _invoke_function_over_seq_of_columns(name: str, cols: "Iterable[ColumnOrName
     Invokes unary JVM function identified by name with
     and wraps the result with :class:`~pyspark.sql.Column`.
     """
-    sc = SparkContext._active_spark_context
-    assert sc is not None and sc._jvm is not None
+    sc = get_active_spark_context()
     return _invoke_function(name, _to_seq(sc, cols, _to_java_column))
 
 
@@ -1743,7 +1749,7 @@ def asc_nulls_first(col: "ColumnOrName") -> Column:
     +---+-----+
     |age| name|
     +---+-----+
-    |  0| null|
+    |  0| NULL|
     |  2|Alice|
     |  1|  Bob|
     +---+-----+
@@ -1788,7 +1794,7 @@ def asc_nulls_last(col: "ColumnOrName") -> Column:
     +---+-----+
     |  2|Alice|
     |  1|  Bob|
-    |  0| null|
+    |  0| NULL|
     +---+-----+
 
     """
@@ -1827,7 +1833,7 @@ def desc_nulls_first(col: "ColumnOrName") -> Column:
     +---+-----+
     |age| name|
     +---+-----+
-    |  0| null|
+    |  0| NULL|
     |  1|  Bob|
     |  2|Alice|
     +---+-----+
@@ -1872,7 +1878,7 @@ def desc_nulls_last(col: "ColumnOrName") -> Column:
     +---+-----+
     |  1|  Bob|
     |  2|Alice|
-    |  0| null|
+    |  0| NULL|
     +---+-----+
 
     """
@@ -2676,9 +2682,8 @@ def broadcast(df: DataFrame) -> DataFrame:
     +-----+---+
     """
 
-    sc = SparkContext._active_spark_context
-    assert sc is not None and sc._jvm is not None
-    return DataFrame(sc._jvm.functions.broadcast(df._jdf), df.sparkSession)
+    sc = get_active_spark_context()
+    return DataFrame(cast(JVMView, sc._jvm).functions.broadcast(df._jdf), df.sparkSession)
 
 
 @try_remote_functions
@@ -2707,16 +2712,16 @@ def coalesce(*cols: "ColumnOrName") -> Column:
     +----+----+
     |   a|   b|
     +----+----+
-    |null|null|
-    |   1|null|
-    |null|   2|
+    |NULL|NULL|
+    |   1|NULL|
+    |NULL|   2|
     +----+----+
 
     >>> cDf.select(coalesce(cDf["a"], cDf["b"])).show()
     +--------------+
     |coalesce(a, b)|
     +--------------+
-    |          null|
+    |          NULL|
     |             1|
     |             2|
     +--------------+
@@ -2725,9 +2730,9 @@ def coalesce(*cols: "ColumnOrName") -> Column:
     +----+----+----------------+
     |   a|   b|coalesce(a, 0.0)|
     +----+----+----------------+
-    |null|null|             0.0|
-    |   1|null|             1.0|
-    |null|   2|             0.0|
+    |NULL|NULL|             0.0|
+    |   1|NULL|             1.0|
+    |NULL|   2|             0.0|
     +----+----+----------------+
     """
     return _invoke_function_over_seq_of_columns("coalesce", cols)
@@ -2891,8 +2896,7 @@ def count_distinct(col: "ColumnOrName", *cols: "ColumnOrName") -> Column:
     |                           4|
     +----------------------------+
     """
-    sc = SparkContext._active_spark_context
-    assert sc is not None and sc._jvm is not None
+    sc = get_active_spark_context()
     return _invoke_function(
         "count_distinct", _to_java_column(col), _to_seq(sc, cols, _to_java_column)
     )
@@ -2935,7 +2939,7 @@ def first(col: "ColumnOrName", ignorenulls: bool = False) -> Column:
     +-----+----------+
     | name|first(age)|
     +-----+----------+
-    |Alice|      null|
+    |Alice|      NULL|
     |  Bob|         5|
     +-----+----------+
 
@@ -2980,7 +2984,7 @@ def grouping(col: "ColumnOrName") -> Column:
     +-----+--------------+--------+
     | name|grouping(name)|sum(age)|
     +-----+--------------+--------+
-    | null|             1|       7|
+    | NULL|             1|       7|
     |Alice|             0|       2|
     |  Bob|             0|       5|
     +-----+--------------+--------+
@@ -3024,12 +3028,12 @@ def grouping_id(*cols: "ColumnOrName") -> Column:
     +----+----+-------------+-------+
     |  c2|  c3|grouping_id()|sum(c1)|
     +----+----+-------------+-------+
-    |null|null|            3|      8|
-    |null|   a|            2|      4|
-    |null|   c|            2|      4|
-    |   a|null|            1|      4|
+    |NULL|NULL|            3|      8|
+    |NULL|   a|            2|      4|
+    |NULL|   c|            2|      4|
+    |   a|NULL|            1|      4|
     |   a|   a|            0|      4|
-    |   b|null|            1|      4|
+    |   b|NULL|            1|      4|
     |   b|   c|            0|      4|
     +----+----+-------------+-------+
     """
@@ -3121,8 +3125,8 @@ def isnull(col: "ColumnOrName") -> Column:
     +----+----+-----+-----+
     |   a|   b|   r1|   r2|
     +----+----+-----+-----+
-    |   1|null|false| true|
-    |null|   2| true|false|
+    |   1|NULL|false| true|
+    |NULL|   2| true|false|
     +----+----+-----+-----+
     """
     return _invoke_function_over_columns("isnull", col)
@@ -3165,7 +3169,7 @@ def last(col: "ColumnOrName", ignorenulls: bool = False) -> Column:
     +-----+---------+
     | name|last(age)|
     +-----+---------+
-    |Alice|     null|
+    |Alice|     NULL|
     |  Bob|        5|
     +-----+---------+
 
@@ -3304,8 +3308,7 @@ def percentile_approx(
      |-- key: long (nullable = true)
      |-- median: double (nullable = true)
     """
-    sc = SparkContext._active_spark_context
-    assert sc is not None and sc._jvm is not None
+    sc = get_active_spark_context()
 
     if isinstance(percentage, (list, tuple)):
         # A local list
@@ -3821,8 +3824,8 @@ def when(condition: Column, value: Any) -> Column:
     +----+
     | age|
     +----+
-    |null|
-    |null|
+    |NULL|
+    |NULL|
     |   3|
     +----+
     """
@@ -4047,10 +4050,10 @@ def lag(col: "ColumnOrName", offset: int = 1, default: Optional[Any] = None) -> 
     +---+---+-------------+
     | c1| c2|previos_value|
     +---+---+-------------+
-    |  a|  1|         null|
+    |  a|  1|         NULL|
     |  a|  2|            1|
     |  a|  3|            2|
-    |  b|  2|         null|
+    |  b|  2|         NULL|
     |  b|  8|            2|
     +---+---+-------------+
     >>> df.withColumn("previos_value", lag("c2", 1, 0).over(w)).show()
@@ -4130,9 +4133,9 @@ def lead(col: "ColumnOrName", offset: int = 1, default: Optional[Any] = None) ->
     +---+---+----------+
     |  a|  1|         2|
     |  a|  2|         3|
-    |  a|  3|      null|
+    |  a|  3|      NULL|
     |  b|  2|         8|
-    |  b|  8|      null|
+    |  b|  8|      NULL|
     +---+---+----------+
     >>> df.withColumn("next_value", lead("c2", 1, 0).over(w)).show()
     +---+---+----------+
@@ -4222,10 +4225,10 @@ def nth_value(col: "ColumnOrName", offset: int, ignoreNulls: Optional[bool] = Fa
     +---+---+---------+
     | c1| c2|nth_value|
     +---+---+---------+
-    |  a|  1|     null|
+    |  a|  1|     NULL|
     |  a|  2|        2|
     |  a|  3|        2|
-    |  b|  2|     null|
+    |  b|  2|     NULL|
     |  b|  8|        8|
     +---+---+---------+
     """
@@ -6226,8 +6229,7 @@ def concat_ws(sep: str, *cols: "ColumnOrName") -> Column:
     >>> df.select(concat_ws('-', df.s, df.d).alias('s')).collect()
     [Row(s='abcd-123')]
     """
-    sc = SparkContext._active_spark_context
-    assert sc is not None and sc._jvm is not None
+    sc = get_active_spark_context()
     return _invoke_function("concat_ws", sep, _to_seq(sc, cols, _to_java_column))
 
 
@@ -6360,8 +6362,7 @@ def format_string(format: str, *cols: "ColumnOrName") -> Column:
     >>> df.select(format_string('%d %s', df.a, df.b).alias('v')).collect()
     [Row(v='5 hello')]
     """
-    sc = SparkContext._active_spark_context
-    assert sc is not None and sc._jvm is not None
+    sc = get_active_spark_context()
     return _invoke_function("format_string", format, _to_seq(sc, cols, _to_java_column))
 
 
@@ -7419,8 +7420,7 @@ def array_join(
     >>> df.select(array_join(df.data, ",", "NULL").alias("joined")).collect()
     [Row(joined='a,b,c'), Row(joined='a,NULL')]
     """
-    sc = SparkContext._active_spark_context
-    assert sc is not None and sc._jvm is not None
+    get_active_spark_context()
     if null_replacement is None:
         return _invoke_function("array_join", _to_java_column(col), delimiter)
     else:
@@ -7602,14 +7602,14 @@ def get(col: "ColumnOrName", index: Union["ColumnOrName", int]) -> Column:
     +-------------+
     |get(data, -1)|
     +-------------+
-    |         null|
+    |         NULL|
     +-------------+
 
     >>> df.select(get(df.data, 3)).show()
     +------------+
     |get(data, 3)|
     +------------+
-    |        null|
+    |        NULL|
     +------------+
 
     >>> df.select(get(df.data, "index")).show()
@@ -8085,8 +8085,8 @@ def explode_outer(col: "ColumnOrName") -> Column:
     | id|  an_array| key|value|
     +---+----------+----+-----+
     |  1|[foo, bar]|   x|  1.0|
-    |  2|        []|null| null|
-    |  3|      null|null| null|
+    |  2|        []|NULL| NULL|
+    |  3|      NULL|NULL| NULL|
     +---+----------+----+-----+
 
     >>> df.select("id", "a_map", explode_outer("an_array")).show()
@@ -8095,8 +8095,8 @@ def explode_outer(col: "ColumnOrName") -> Column:
     +---+----------+----+
     |  1|{x -> 1.0}| foo|
     |  1|{x -> 1.0}| bar|
-    |  2|        {}|null|
-    |  3|      null|null|
+    |  2|        {}|NULL|
+    |  3|      NULL|NULL|
     +---+----------+----+
     """
     return _invoke_function_over_columns("explode_outer", col)
@@ -8136,8 +8136,8 @@ def posexplode_outer(col: "ColumnOrName") -> Column:
     | id|  an_array| pos| key|value|
     +---+----------+----+----+-----+
     |  1|[foo, bar]|   0|   x|  1.0|
-    |  2|        []|null|null| null|
-    |  3|      null|null|null| null|
+    |  2|        []|NULL|NULL| NULL|
+    |  3|      NULL|NULL|NULL| NULL|
     +---+----------+----+----+-----+
     >>> df.select("id", "a_map", posexplode_outer("an_array")).show()
     +---+----------+----+----+
@@ -8145,8 +8145,8 @@ def posexplode_outer(col: "ColumnOrName") -> Column:
     +---+----------+----+----+
     |  1|{x -> 1.0}|   0| foo|
     |  1|{x -> 1.0}|   1| bar|
-    |  2|        {}|null|null|
-    |  3|      null|null|null|
+    |  2|        {}|NULL|NULL|
+    |  3|      NULL|NULL|NULL|
     +---+----------+----+----+
     """
     return _invoke_function_over_columns("posexplode_outer", col)
@@ -8191,7 +8191,7 @@ def inline_outer(col: "ColumnOrName") -> Column:
     +---+----+----+
     |  1|   1|   2|
     |  1|   3|   4|
-    |  2|null|null|
+    |  2|NULL|NULL|
     +---+----+----+
     """
     return _invoke_function_over_columns("inline_outer", col)
@@ -8259,8 +8259,7 @@ def json_tuple(col: "ColumnOrName", *fields: str) -> Column:
     >>> df.select(df.key, json_tuple(df.jstring, 'f1', 'f2')).collect()
     [Row(key='1', c0='value1', c1='value2'), Row(key='2', c0='value12', c1=None)]
     """
-    sc = SparkContext._active_spark_context
-    assert sc is not None and sc._jvm is not None
+    sc = get_active_spark_context()
     return _invoke_function("json_tuple", _to_java_column(col), _to_seq(sc, fields))
 
 
@@ -8797,14 +8796,14 @@ def flatten(col: "ColumnOrName") -> Column:
     |data                    |
     +------------------------+
     |[[1, 2, 3], [4, 5], [6]]|
-    |[null, [4, 5]]          |
+    |[NULL, [4, 5]]          |
     +------------------------+
     >>> df.select(flatten(df.data).alias('r')).show()
     +------------------+
     |                 r|
     +------------------+
     |[1, 2, 3, 4, 5, 6]|
-    |              null|
+    |              NULL|
     +------------------+
     """
     return _invoke_function_over_columns("flatten", col)
@@ -9060,7 +9059,7 @@ def arrays_zip(*cols: "ColumnOrName") -> Column:
     +------------------------------------+
     |zipped                              |
     +------------------------------------+
-    |[{1, 2, 3}, {2, 4, 6}, {3, 6, null}]|
+    |[{1, 2, 3}, {2, 4, 6}, {3, 6, NULL}]|
     +------------------------------------+
     >>> df.printSchema()
     root
@@ -9212,8 +9211,7 @@ def from_csv(
     [Row(csv=Row(s='abc'))]
     """
 
-    sc = SparkContext._active_spark_context
-    assert sc is not None and sc._jvm is not None
+    get_active_spark_context()
     if isinstance(schema, str):
         schema = _create_column_from_literal(schema)
     elif isinstance(schema, Column):
@@ -9239,11 +9237,12 @@ def _unresolved_named_lambda_variable(*name_parts: Any) -> Column:
     ----------
     name_parts : str
     """
-    sc = SparkContext._active_spark_context
-    assert sc is not None and sc._jvm is not None
+    sc = get_active_spark_context()
     name_parts_seq = _to_seq(sc, name_parts)
-    expressions = sc._jvm.org.apache.spark.sql.catalyst.expressions
-    return Column(sc._jvm.Column(expressions.UnresolvedNamedLambdaVariable(name_parts_seq)))
+    expressions = cast(JVMView, sc._jvm).org.apache.spark.sql.catalyst.expressions
+    return Column(
+        cast(JVMView, sc._jvm).Column(expressions.UnresolvedNamedLambdaVariable(name_parts_seq))
+    )
 
 
 def _get_lambda_parameters(f: Callable) -> ValuesView[inspect.Parameter]:
@@ -9288,9 +9287,8 @@ def _create_lambda(f: Callable) -> Callable:
     """
     parameters = _get_lambda_parameters(f)
 
-    sc = SparkContext._active_spark_context
-    assert sc is not None and sc._jvm is not None
-    expressions = sc._jvm.org.apache.spark.sql.catalyst.expressions
+    sc = get_active_spark_context()
+    expressions = cast(JVMView, sc._jvm).org.apache.spark.sql.catalyst.expressions
 
     argnames = ["x", "y", "z"]
     args = [
@@ -9330,15 +9328,14 @@ def _invoke_higher_order_function(
 
     :return: a Column
     """
-    sc = SparkContext._active_spark_context
-    assert sc is not None and sc._jvm is not None
-    expressions = sc._jvm.org.apache.spark.sql.catalyst.expressions
+    sc = get_active_spark_context()
+    expressions = cast(JVMView, sc._jvm).org.apache.spark.sql.catalyst.expressions
     expr = getattr(expressions, name)
 
     jcols = [_to_java_column(col).expr() for col in cols]
     jfuns = [_create_lambda(f) for f in funs]
 
-    return Column(sc._jvm.Column(expr(*jcols + jfuns)))
+    return Column(cast(JVMView, sc._jvm).Column(expr(*jcols + jfuns)))
 
 
 @overload
@@ -10047,8 +10044,7 @@ def bucket(numBuckets: Union[Column, int], col: "ColumnOrName") -> Column:
             message_parameters={"arg_name": "numBuckets", "arg_type": type(numBuckets).__name__},
         )
 
-    sc = SparkContext._active_spark_context
-    assert sc is not None and sc._jvm is not None
+    get_active_spark_context()
     numBuckets = (
         _create_column_from_literal(numBuckets)
         if isinstance(numBuckets, int)
@@ -10100,8 +10096,7 @@ def call_udf(udfName: str, *cols: "ColumnOrName") -> Column:
     |         cc|
     +-----------+
     """
-    sc = SparkContext._active_spark_context
-    assert sc is not None and sc._jvm is not None
+    sc = get_active_spark_context()
     return _invoke_function("call_udf", udfName, _to_seq(sc, cols, _to_java_column))
 
 

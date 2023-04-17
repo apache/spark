@@ -47,7 +47,7 @@ from pandas.io.formats.printing import pprint_thing
 from pandas.api.types import CategoricalDtype, is_hashable  # type: ignore[attr-defined]
 from pandas._libs import lib
 
-from pyspark.sql import functions as F, Column
+from pyspark.sql import functions as F
 from pyspark.sql.types import (
     DayTimeIntervalType,
     FractionalType,
@@ -57,7 +57,7 @@ from pyspark.sql.types import (
 )
 
 from pyspark import pandas as ps  # For running doctests and reference resolution in PyCharm.
-from pyspark.pandas._typing import Dtype, Label, Name, Scalar
+from pyspark.pandas._typing import Dtype, Label, Name, Scalar, GenericDataFrame, GenericColumn
 from pyspark.pandas.config import get_option, option_context
 from pyspark.pandas.base import IndexOpsMixin
 from pyspark.pandas.frame import DataFrame
@@ -247,7 +247,9 @@ class Index(IndexOpsMixin):
     def _column_label(self) -> Optional[Label]:
         return self._psdf._internal.index_names[0]
 
-    def _with_new_scol(self, scol: Column, *, field: Optional[InternalField] = None) -> "Index":
+    def _with_new_scol(
+        self, scol: GenericColumn, *, field: Optional[InternalField] = None
+    ) -> "Index":
         """
         Copy pandas-on-Spark Index with the new Spark Column.
 
@@ -255,7 +257,7 @@ class Index(IndexOpsMixin):
         :return: the copied Index
         """
         internal = self._internal.copy(
-            index_spark_columns=[scol.alias(SPARK_DEFAULT_INDEX_NAME)],
+            index_spark_columns=[scol.alias(SPARK_DEFAULT_INDEX_NAME)],  # type: ignore[list-item]
             index_fields=[
                 field
                 if field is None or field.struct_field is None
@@ -1635,13 +1637,15 @@ class Index(IndexOpsMixin):
                     ('a', 'x', 1)],
                    ), Int64Index([1, 2, 0], dtype='int64'))
         """
-        sdf = self._internal.spark_frame
+        sdf: GenericDataFrame = self._internal.spark_frame
         if return_indexer:
             sequence_col = verify_temp_column_name(sdf, "__distributed_sequence_column__")
             sdf = InternalFrame.attach_distributed_sequence_column(sdf, column_name=sequence_col)
 
-        ordered_sdf = sdf.orderBy(*self._internal.index_spark_columns, ascending=ascending)
-        sdf = ordered_sdf.select(self._internal.index_spark_columns)
+        ordered_sdf = sdf.orderBy(
+            *self._internal.index_spark_columns, ascending=ascending  # type: ignore[arg-type]
+        )
+        sdf = ordered_sdf.select(self._internal.index_spark_columns)  # type: ignore[arg-type]
 
         internal = InternalFrame(
             spark_frame=sdf,
@@ -1657,7 +1661,7 @@ class Index(IndexOpsMixin):
             alias_sequence_scol = scol_for(ordered_sdf, sequence_col).alias(
                 SPARK_DEFAULT_INDEX_NAME
             )
-            indexer_sdf = ordered_sdf.select(alias_sequence_scol)
+            indexer_sdf = ordered_sdf.select(alias_sequence_scol)  # type: ignore[arg-type]
             indexer_internal = InternalFrame(
                 spark_frame=indexer_sdf,
                 index_spark_columns=[scol_for(indexer_sdf, SPARK_DEFAULT_INDEX_NAME)],
@@ -1831,7 +1835,7 @@ class Index(IndexOpsMixin):
                 self._internal.index_spark_columns, index_value_column_names
             )
         ]
-        sdf = sdf.select(index_value_columns)
+        sdf = sdf.select(index_value_columns)  # type: ignore[arg-type]
 
         sdf = InternalFrame.attach_default_index(sdf, default_index_type="distributed-sequence")
         # sdf here looks as below
@@ -1844,8 +1848,8 @@ class Index(IndexOpsMixin):
         # +-----------------+-----------------+-----------------+-----------------+
 
         # delete rows which are matched with given `loc`
-        sdf = sdf.where(~F.col(SPARK_INDEX_NAME_FORMAT(0)).isin(locs))
-        sdf = sdf.select(index_value_column_names)
+        sdf = sdf.where(~F.col(SPARK_INDEX_NAME_FORMAT(0)).isin(locs))  # type: ignore[arg-type]
+        sdf = sdf.select(index_value_column_names)  # type: ignore[arg-type]
         # sdf here looks as below, we should alias them back to origin spark column names
         # +-----------------+-----------------+-----------------+
         # |__index_value_0__|__index_value_1__|__index_value_2__|
@@ -1858,7 +1862,7 @@ class Index(IndexOpsMixin):
                 index_value_column_names, self._internal.index_spark_column_names
             )
         ]
-        sdf = sdf.select(index_origin_columns)
+        sdf = sdf.select(index_origin_columns)  # type: ignore[arg-type]
 
         internal = InternalFrame(
             spark_frame=sdf,
@@ -1966,7 +1970,7 @@ class Index(IndexOpsMixin):
         >>> psidx.argmax()
         4
         """
-        sdf = self._internal.spark_frame.select(self.spark.column)
+        sdf: GenericDataFrame = self._internal.spark_frame.select(self.spark.column)
         sequence_col = verify_temp_column_name(sdf, "__distributed_sequence_column__")
         sdf = InternalFrame.attach_distributed_sequence_column(sdf, column_name=sequence_col)
         # spark_frame here looks like below
@@ -1986,8 +1990,10 @@ class Index(IndexOpsMixin):
 
         return (
             sdf.orderBy(
-                scol_for(sdf, self._internal.data_spark_column_names[0]).desc(),
-                F.col(sequence_col).asc(),
+                scol_for(
+                    sdf, self._internal.data_spark_column_names[0]
+                ).desc(),  # type: ignore[arg-type]
+                F.col(sequence_col).asc(),  # type: ignore[arg-type]
             )
             .select(sequence_col)
             .first()[0]
@@ -2014,14 +2020,16 @@ class Index(IndexOpsMixin):
         >>> psidx.argmin()
         7
         """
-        sdf = self._internal.spark_frame.select(self.spark.column)
+        sdf: GenericDataFrame = self._internal.spark_frame.select(self.spark.column)
         sequence_col = verify_temp_column_name(sdf, "__distributed_sequence_column__")
         sdf = InternalFrame.attach_distributed_sequence_column(sdf, column_name=sequence_col)
 
         return (
             sdf.orderBy(
-                scol_for(sdf, self._internal.data_spark_column_names[0]).asc(),
-                F.col(sequence_col).asc(),
+                scol_for(
+                    sdf, self._internal.data_spark_column_names[0]
+                ).asc(),  # type: ignore[arg-type]
+                F.col(sequence_col).asc(),  # type: ignore[arg-type]
             )
             .select(sequence_col)
             .first()[0]

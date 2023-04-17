@@ -714,10 +714,9 @@ Project [c1#x, scalar-subquery#x [c1#x] AS scalarsubquery(c1)#xL]
 :                       :- Project [c1#x, c2#x]
 :                       :  +- SubqueryAlias t
 :                       :     +- CTERelationRef xxxx, true, [c1#x, c2#x]
-:                       +- Project [c2#x AS c2#x, c1#x AS c1#x]
-:                          +- Project [c2#x, c1#x]
-:                             +- SubqueryAlias t
-:                                +- CTERelationRef xxxx, true, [c1#x, c2#x]
+:                       +- Project [c2#x, c1#x]
+:                          +- SubqueryAlias t
+:                             +- CTERelationRef xxxx, true, [c1#x, c2#x]
 +- SubqueryAlias t1
    +- View (`t1`, [c1#x,c2#x])
       +- Project [cast(c1#x as int) AS c1#x, cast(c2#x as int) AS c2#x]

@@ -122,13 +122,15 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
     ).executeUpdate()
 
     conn.prepareStatement("CREATE TABLE char_types (" +
-      "c0 char(4), c1 character(4), c2 character varying(4), c3 varchar(4), c4 bpchar)"
+      "c0 char(4), c1 character(4), c2 character varying(4), c3 varchar(4), c4 bpchar(1))"
     ).executeUpdate()
     conn.prepareStatement("INSERT INTO char_types VALUES " +
       "('abcd', 'efgh', 'ijkl', 'mnop', 'q')").executeUpdate()
 
+    // SPARK-42916: character/char/bpchar w/o length specifier defaults to int max value, this will
+    // cause OOM as it will be padded with ' ' to 2147483647.
     conn.prepareStatement("CREATE TABLE char_array_types (" +
-      "c0 char(4)[], c1 character(4)[], c2 character varying(4)[], c3 varchar(4)[], c4 bpchar[])"
+      "c0 char(4)[], c1 character(4)[], c2 character varying(4)[], c3 varchar(4)[], c4 bpchar(1)[])"
     ).executeUpdate()
     conn.prepareStatement("INSERT INTO char_array_types VALUES " +
       """('{"a", "bcd"}', '{"ef", "gh"}', '{"i", "j", "kl"}', '{"mnop"}', '{"q", "r"}')"""
