@@ -240,3 +240,19 @@ Aggregate [k1#x, k2#x, spark_grouping_id#xL], [spark_grouping_id#xL AS grouping_
       +- SubqueryAlias t
          +- Project [col1#x AS k1#x, col2#x AS k2#x, col3#x AS v#x]
             +- LocalRelation [col1#x, col2#x, col3#x]
+
+
+-- !query
+SELECT CASE WHEN a IS NULL THEN count(b) WHEN b IS NULL THEN count(c) END
+FROM grouping
+GROUP BY GROUPING SETS (a, b, c)
+-- !query analysis
+Aggregate [a#x, b#x, c#x, spark_grouping_id#xL], [CASE WHEN isnull(a#x) THEN count(b#x) WHEN isnull(b#x) THEN count(c#x) END AS CASE WHEN (a IS NULL) THEN count(b) WHEN (b IS NULL) THEN count(c) END#xL]
++- Expand [[a#x, b#x, c#x, d#x, a#x, null, null, 3], [a#x, b#x, c#x, d#x, null, b#x, null, 5], [a#x, b#x, c#x, d#x, null, null, c#x, 6]], [a#x, b#x, c#x, d#x, a#x, b#x, c#x, spark_grouping_id#xL]
+   +- Project [a#x, b#x, c#x, d#x, a#x AS a#x, b#x AS b#x, c#x AS c#x]
+      +- SubqueryAlias grouping
+         +- View (`grouping`, [a#x,b#x,c#x,d#x])
+            +- Project [cast(a#x as string) AS a#x, cast(b#x as string) AS b#x, cast(c#x as string) AS c#x, cast(d#x as int) AS d#x]
+               +- Project [a#x, b#x, c#x, d#x]
+                  +- SubqueryAlias grouping
+                     +- LocalRelation [a#x, b#x, c#x, d#x]

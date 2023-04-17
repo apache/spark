@@ -119,13 +119,17 @@ class LocalDataToArrowConversion:
                     _dict = {}
                     if not isinstance(value, Row) and hasattr(value, "__dict__"):
                         value = value.__dict__
-                    for i, field in enumerate(field_names):
-                        if isinstance(value, dict):
-                            v = value.get(field)
-                        else:
-                            v = value[i]
-
-                        _dict[f"col_{i}"] = field_convs[i](v)
+                    if isinstance(value, dict):
+                        for i, field in enumerate(field_names):
+                            _dict[f"col_{i}"] = field_convs[i](value.get(field))
+                    else:
+                        if len(value) != len(field_names):
+                            raise ValueError(
+                                f"Length mismatch: Expected axis has {len(field_names)} elements, "
+                                f"new values have {len(value)} elements"
+                            )
+                        for i in range(len(field_names)):
+                            _dict[f"col_{i}"] = field_convs[i](value[i])
 
                     return _dict
 
@@ -272,13 +276,17 @@ class LocalDataToArrowConversion:
         for item in data:
             if not isinstance(item, Row) and hasattr(item, "__dict__"):
                 item = item.__dict__
-            for i, col in enumerate(column_names):
-                if isinstance(item, dict):
-                    value = item.get(col)
-                else:
-                    value = item[i]
-
-                pylist[i].append(column_convs[i](value))
+            if isinstance(item, dict):
+                for i, col in enumerate(column_names):
+                    pylist[i].append(column_convs[i](item.get(col)))
+            else:
+                if len(item) != len(column_names):
+                    raise ValueError(
+                        f"Length mismatch: Expected axis has {len(column_names)} elements, "
+                        f"new values have {len(item)} elements"
+                    )
+                for i in range(len(column_names)):
+                    pylist[i].append(column_convs[i](item[i]))
 
         def normalize(dt: DataType) -> DataType:
             if isinstance(dt, StructType):

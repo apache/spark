@@ -95,7 +95,8 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest {
               "rocksdbReadBlockCacheHitCount", "rocksdbReadBlockCacheMissCount",
               "rocksdbTotalBytesReadByCompaction", "rocksdbTotalBytesWrittenByCompaction",
               "rocksdbTotalCompactionLatencyMs", "rocksdbWriterStallLatencyMs",
-              "rocksdbTotalBytesReadThroughIterator", "rocksdbTotalBytesWrittenByFlush"))
+              "rocksdbTotalBytesReadThroughIterator", "rocksdbTotalBytesWrittenByFlush",
+              "rocksdbPinnedBlocksMemoryUsage"))
           }
         } finally {
           query.stop()
