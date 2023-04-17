@@ -45,7 +45,7 @@ from collections.abc import Iterable
 from pyspark import _NoValue
 from pyspark._globals import _NoValueType
 from pyspark.sql.observation import Observation
-from pyspark.sql.types import Row, StructType, _parse_datatype_json_string
+from pyspark.sql.types import Row, StructType
 from pyspark.sql.dataframe import (
     DataFrame as PySparkDataFrame,
     DataFrameNaFunctions as PySparkDataFrameNaFunctions,
@@ -113,8 +113,8 @@ class DataFrame:
             )
             if repl_eager_eval_enabled == "true":
                 return self._show_string(
-                    n=int(repl_eager_eval_max_num_rows),
-                    truncate=int(repl_eager_eval_truncate),
+                    n=int(cast(str, repl_eager_eval_max_num_rows)),
+                    truncate=int(cast(str, repl_eager_eval_truncate)),
                     vertical=False,
                 )
         return "DataFrame[%s]" % (", ".join("%s: %s" % c for c in self.dtypes))
@@ -135,8 +135,8 @@ class DataFrame:
             pdf = DataFrame.withPlan(
                 plan.HtmlString(
                     child=self._plan,
-                    num_rows=int(repl_eager_eval_max_num_rows),
-                    truncate=int(repl_eager_eval_truncate),
+                    num_rows=int(cast(str, repl_eager_eval_max_num_rows)),
+                    truncate=int(cast(str, repl_eager_eval_truncate)),
                 ),
                 session=self._session,
             ).toPandas()
