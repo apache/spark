@@ -626,7 +626,8 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
       location = location,
       comment = { if (description.isEmpty) None else Some(description) },
       serde = None,
-      external = tableType == CatalogTableType.EXTERNAL)
+      external = tableType == CatalogTableType.EXTERNAL,
+      temporary = tableType == CatalogTableType.TEMPORARY)
 
     val plan = CreateTable(
       name = UnresolvedIdentifier(ident),

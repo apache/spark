@@ -300,6 +300,7 @@ case class AlterTableSetPropertiesCommand(
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
     val table = catalog.getTableRawMetadata(tableName)
+    DDLUtils.verifyOperationNotSupported(table, "Set table properties")
     // This overrides old properties and update the comment parameter of CatalogTable
     // with the newly added/modified comment since CatalogTable also holds comment as its
     // direct property.
@@ -332,6 +333,7 @@ case class AlterTableUnsetPropertiesCommand(
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
     val table = catalog.getTableRawMetadata(tableName)
+    DDLUtils.verifyOperationNotSupported(table, "Unset table properties")
     if (!ifExists) {
       propKeys.foreach { k =>
         if (!table.properties.contains(k) && k != TableCatalog.PROP_COMMENT) {
@@ -372,6 +374,7 @@ case class AlterTableChangeColumnCommand(
     val catalog = sparkSession.sessionState.catalog
     val table = catalog.getTableRawMetadata(tableName)
     val resolver = sparkSession.sessionState.conf.resolver
+    DDLUtils.verifyOperationNotSupported(table, "Change table column")
     DDLUtils.verifyAlterTableType(catalog, table, isView = false)
 
     // Find the origin column from dataSchema by column name.
@@ -461,6 +464,7 @@ case class AlterTableSerDePropertiesCommand(
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
     val table = catalog.getTableRawMetadata(tableName)
+    DDLUtils.verifyOperationNotSupported(table, "Alter table serde")
     // For datasource tables, disallow setting serde or specifying partition
     if (partSpec.isDefined && DDLUtils.isDatasourceTable(table)) {
       throw QueryCompilationErrors.alterTableSetSerdeForSpecificPartitionNotSupportedError()
@@ -506,6 +510,7 @@ case class AlterTableAddPartitionCommand(
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
     val table = catalog.getTableMetadata(tableName)
+    DDLUtils.verifyOperationNotSupported(table, "Alter table add partition")
     DDLUtils.verifyPartitionProviderIsHive(sparkSession, table, "ALTER TABLE ADD PARTITION")
     val parts = partitionSpecsAndLocs.map { case (spec, location) =>
       val normalizedSpec = PartitioningUtils.normalizePartitionSpec(
@@ -562,6 +567,7 @@ case class AlterTableRenamePartitionCommand(
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
     val table = catalog.getTableMetadata(tableName)
+    DDLUtils.verifyOperationNotSupported(table, "Alter table rename partition")
     DDLUtils.verifyPartitionProviderIsHive(sparkSession, table, "ALTER TABLE RENAME PARTITION")
 
     val normalizedOldPartition = PartitioningUtils.normalizePartitionSpec(
@@ -609,6 +615,7 @@ case class AlterTableDropPartitionCommand(
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
     val table = catalog.getTableMetadata(tableName)
+    DDLUtils.verifyOperationNotSupported(table, "Alter table drop partition")
     DDLUtils.verifyPartitionProviderIsHive(sparkSession, table, "ALTER TABLE DROP PARTITION")
 
     val normalizedSpecs = specs.map { spec =>
@@ -892,6 +899,7 @@ case class AlterTableSetLocationCommand(
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
     val table = catalog.getTableMetadata(tableName)
+    DDLUtils.verifyOperationNotSupported(table, "Set table location")
     val locUri = CatalogUtils.stringToURI(location)
     partitionSpec match {
       case Some(spec) =>
@@ -977,6 +985,12 @@ object DDLUtils extends Logging {
           throw QueryCompilationErrors.cannotAlterTableWithAlterViewError()
         case _ =>
       }
+    }
+  }
+
+  def verifyOperationNotSupported(tableMetadata: CatalogTable, cmd: String): Unit = {
+    if (tableMetadata.isTemporary) {
+      throw QueryCompilationErrors.temporaryTableUnsupported(tableMetadata.identifier, cmd)
     }
   }
 

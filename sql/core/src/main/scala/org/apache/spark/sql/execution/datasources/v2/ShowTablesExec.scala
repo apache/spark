@@ -49,7 +49,7 @@ case class ShowTablesExec(
 
   private def isTempView(ident: Identifier): Boolean = {
     catalog match {
-      case s: V2SessionCatalog => s.isTempView(ident)
+      case s: V2SessionCatalog => s.isTempView(ident) || s.isTempTable(ident)
       case _ => false
     }
   }

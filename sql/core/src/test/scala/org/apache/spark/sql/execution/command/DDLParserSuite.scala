@@ -758,7 +758,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     val v1 = "CREATE TABLE table1 LIKE table2"
     val (target, source, fileFormat, provider, properties, exists) =
       parser.parsePlan(v1).collect {
-        case CreateTableLikeCommand(t, s, f, p, pr, e) => (t, s, f, p, pr, e)
+        case CreateTableLikeCommand(t, s, f, p, pr, e, _) => (t, s, f, p, pr, e)
       }.head
     assert(exists == false)
     assert(target.database.isEmpty)
@@ -771,7 +771,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     val v2 = "CREATE TABLE IF NOT EXISTS table1 LIKE table2"
     val (target2, source2, fileFormat2, provider2, properties2, exists2) =
       parser.parsePlan(v2).collect {
-        case CreateTableLikeCommand(t, s, f, p, pr, e) => (t, s, f, p, pr, e)
+        case CreateTableLikeCommand(t, s, f, p, pr, e, _) => (t, s, f, p, pr, e)
       }.head
     assert(exists2)
     assert(target2.database.isEmpty)
@@ -784,7 +784,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     val v3 = "CREATE TABLE table1 LIKE table2 LOCATION '/spark/warehouse'"
     val (target3, source3, fileFormat3, provider3, properties3, exists3) =
       parser.parsePlan(v3).collect {
-        case CreateTableLikeCommand(t, s, f, p, pr, e) => (t, s, f, p, pr, e)
+        case CreateTableLikeCommand(t, s, f, p, pr, e, _) => (t, s, f, p, pr, e)
       }.head
     assert(!exists3)
     assert(target3.database.isEmpty)
@@ -797,7 +797,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     val v4 = "CREATE TABLE IF NOT EXISTS table1 LIKE table2 LOCATION '/spark/warehouse'"
     val (target4, source4, fileFormat4, provider4, properties4, exists4) =
       parser.parsePlan(v4).collect {
-        case CreateTableLikeCommand(t, s, f, p, pr, e) => (t, s, f, p, pr, e)
+        case CreateTableLikeCommand(t, s, f, p, pr, e, _) => (t, s, f, p, pr, e)
       }.head
     assert(exists4)
     assert(target4.database.isEmpty)
@@ -810,7 +810,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     val v5 = "CREATE TABLE IF NOT EXISTS table1 LIKE table2 USING parquet"
     val (target5, source5, fileFormat5, provider5, properties5, exists5) =
       parser.parsePlan(v5).collect {
-        case CreateTableLikeCommand(t, s, f, p, pr, e) => (t, s, f, p, pr, e)
+        case CreateTableLikeCommand(t, s, f, p, pr, e, _) => (t, s, f, p, pr, e)
       }.head
     assert(exists5)
     assert(target5.database.isEmpty)
@@ -823,7 +823,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     val v6 = "CREATE TABLE IF NOT EXISTS table1 LIKE table2 USING ORC"
     val (target6, source6, fileFormat6, provider6, properties6, exists6) =
       parser.parsePlan(v6).collect {
-        case CreateTableLikeCommand(t, s, f, p, pr, e) => (t, s, f, p, pr, e)
+        case CreateTableLikeCommand(t, s, f, p, pr, e, _) => (t, s, f, p, pr, e)
       }.head
     assert(exists6)
     assert(target6.database.isEmpty)

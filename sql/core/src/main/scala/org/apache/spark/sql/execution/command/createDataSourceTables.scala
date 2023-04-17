@@ -49,8 +49,12 @@ case class CreateDataSourceTableCommand(table: CatalogTable, ignoreIfExists: Boo
     assert(table.tableType != CatalogTableType.VIEW)
     assert(table.provider.isDefined)
 
+    if (table.partitionColumnNames.nonEmpty) {
+      DDLUtils.verifyOperationNotSupported(table, "Create partitioned table")
+    }
+
     val sessionState = sparkSession.sessionState
-    if (sessionState.catalog.tableExists(table.identifier)) {
+    if (sessionState.catalog.tableExists(table)) {
       if (ignoreIfExists) {
         return Seq.empty[Row]
       } else {
@@ -137,7 +141,7 @@ case class CreateDataSourceTableCommand(table: CatalogTable, ignoreIfExists: Boo
  * }}}
  */
 case class CreateDataSourceTableAsSelectCommand(
-    table: CatalogTable,
+    catalogTable: CatalogTable,
     mode: SaveMode,
     query: LogicalPlan,
     outputColumnNames: Seq[String])
@@ -146,15 +150,19 @@ case class CreateDataSourceTableAsSelectCommand(
   override def innerChildren: Seq[LogicalPlan] = query :: Nil
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    assert(table.tableType != CatalogTableType.VIEW)
-    assert(table.provider.isDefined)
+    assert(catalogTable.tableType != CatalogTableType.VIEW)
+    assert(catalogTable.provider.isDefined)
 
     val sessionState = sparkSession.sessionState
-    val db = table.identifier.database.getOrElse(sessionState.catalog.getCurrentDatabase)
-    val tableIdentWithDB = table.identifier.copy(database = Some(db))
+    val db = catalogTable.identifier.database.getOrElse(sessionState.catalog.getCurrentDatabase)
+    val tableIdentWithDB = catalogTable.identifier.copy(database = Some(db))
+    val table = catalogTable.copy(identifier = tableIdentWithDB)
     val tableName = tableIdentWithDB.unquotedString
+    if (table.partitionColumnNames.nonEmpty) {
+      DDLUtils.verifyOperationNotSupported(table, "Create partitioned table")
+    }
 
-    if (sessionState.catalog.tableExists(tableIdentWithDB)) {
+    if (sessionState.catalog.tableExists(table)) {
       assert(mode != SaveMode.Overwrite,
         s"Expect the table $tableName has been dropped when the save mode is Overwrite")
 

@@ -333,7 +333,8 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
                 location = extraOptions.get("path"),
                 comment = extraOptions.get(TableCatalog.PROP_COMMENT),
                 serde = None,
-                external = false)
+                external = false,
+                temporary = false)
               runCommand(df.sparkSession) {
                 CreateTableAsSelect(
                   UnresolvedIdentifier(catalog.name +: ident.namespace.toSeq :+ ident.name),
@@ -598,7 +599,8 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
           location = extraOptions.get("path"),
           comment = extraOptions.get(TableCatalog.PROP_COMMENT),
           serde = None,
-          external = false)
+          external = false,
+          temporary = false)
         ReplaceTableAsSelect(
           UnresolvedIdentifier(nameParts),
           partitioningAsV2,
@@ -618,7 +620,8 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
           location = extraOptions.get("path"),
           comment = extraOptions.get(TableCatalog.PROP_COMMENT),
           serde = None,
-          external = false)
+          external = false,
+          temporary = false)
 
         CreateTableAsSelect(
           UnresolvedIdentifier(nameParts),

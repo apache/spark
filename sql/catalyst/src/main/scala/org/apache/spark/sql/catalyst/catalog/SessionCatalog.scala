@@ -30,7 +30,9 @@ import com.google.common.cache.{Cache, CacheBuilder}
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst._
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
@@ -41,7 +43,7 @@ import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, StringUtils}
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.internal.StaticSQLConf.GLOBAL_TEMP_DATABASE
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.{CaseInsensitiveStringMap, PartitioningUtils}
@@ -69,7 +71,9 @@ class SessionCatalog(
     functionExpressionBuilder: FunctionExpressionBuilder,
     cacheSize: Int = SQLConf.get.tableRelationCacheSize,
     cacheTTL: Long = SQLConf.get.metadataCacheTTL,
-    defaultDatabase: String = SQLConf.get.defaultDatabase) extends SQLConfHelper with Logging {
+    defaultDatabase: String = SQLConf.get.defaultDatabase,
+    scratchSessionDir: Option[String] = None)
+  extends SQLConfHelper with Logging {
   import SessionCatalog._
   import CatalogTypes.TablePartitionSpec
 
@@ -125,6 +129,15 @@ class SessionCatalog(
   /** List of temporary views, mapping from table name to their logical plan. */
   @GuardedBy("this")
   protected val tempViews = new mutable.HashMap[String, TemporaryViewRelation]
+
+  /** List of temporary tables, mapping from table identifier to their catalog table. */
+  @GuardedBy("this")
+  protected val tempTables = new mutable.HashMap[TableIdentifier, CatalogTable]
+
+  private[sql] def sessionDir: String = {
+    scratchSessionDir.getOrElse(throw new AnalysisException(
+      s"Please set ${StaticSQLConf.SCRATCH_DIR.key} if you want to use temporary table."))
+  }
 
   // Note: we track current database here because certain operations do not explicitly
   // specify the database (e.g. DROP TABLE my_table). In these cases we must first
@@ -350,7 +363,7 @@ class SessionCatalog(
   // ----------------------------------------------------------------------------
   // Tables
   // ----------------------------------------------------------------------------
-  // There are two kinds of tables, temporary views and metastore tables.
+  // There are two kinds of tables, temporary views/tables and metastore tables.
   // Temporary views are isolated across sessions and do not belong to any
   // particular database. Metastore tables can be used across multiple
   // sessions as their metadata is persisted in the underlying catalog.
@@ -391,7 +404,7 @@ class SessionCatalog(
     }
 
     requireDbExists(db)
-    if (tableExists(newTableDefinition.identifier)) {
+    if (tableExists(newTableDefinition)) {
       if (!ignoreIfExists) {
         throw new TableAlreadyExistsException(db = db, table = table)
       }
@@ -399,7 +412,12 @@ class SessionCatalog(
       if (validateLocation) {
         validateTableLocation(newTableDefinition)
       }
-      externalCatalog.createTable(newTableDefinition, ignoreIfExists)
+      if (tableDefinition.isTemporary) {
+        SparkHadoopUtil.createSessionDir(new Path(newTableDefinition.location), hadoopConf)
+        tempTables.put(qualifiedIdent, newTableDefinition)
+      } else {
+        externalCatalog.createTable(newTableDefinition, ignoreIfExists)
+      }
     }
   }
 
@@ -454,7 +472,11 @@ class SessionCatalog(
       tableDefinition.copy(identifier = qualifiedIdent)
     }
 
-    externalCatalog.alterTable(newTableDefinition)
+    if (tableDefinition.isTemporary) {
+      tempTables.put(qualifiedIdent, newTableDefinition)
+    } else {
+      externalCatalog.alterTable(newTableDefinition)
+    }
   }
 
   /**
@@ -500,7 +522,10 @@ class SessionCatalog(
     val table = qualifiedIdent.table
     requireDbExists(db)
     requireTableExists(qualifiedIdent)
-    externalCatalog.alterTableStats(db, table, newStats)
+    tempTables.get(qualifiedIdent) match {
+      case Some(table) => tempTables.put(qualifiedIdent, table.copy(stats = newStats))
+      case _ => externalCatalog.alterTableStats(db, table, newStats)
+    }
     // Invalidate the table relation cache
     refreshTable(qualifiedIdent)
   }
@@ -511,7 +536,18 @@ class SessionCatalog(
    */
   def tableExists(name: TableIdentifier): Boolean = {
     val qualifiedIdent = qualifyIdentifier(name)
-    externalCatalog.tableExists(qualifiedIdent.database.get, qualifiedIdent.table)
+    tempTables.contains(qualifiedIdent) ||
+      externalCatalog.tableExists(qualifiedIdent.database.get, qualifiedIdent.table)
+  }
+
+  def tableExists(table: CatalogTable): Boolean = {
+    val qualifiedIdent = qualifyIdentifier(table.identifier)
+    if (table.isTemporary) {
+      tempTables.contains(qualifiedIdent) ||
+        tempViews.exists(v => qualifyIdentifier(TableIdentifier(v._1)) == qualifiedIdent)
+    } else {
+      externalCatalog.tableExists(qualifiedIdent.database.get, qualifiedIdent.table)
+    }
   }
 
   /**
@@ -523,8 +559,10 @@ class SessionCatalog(
   @throws[NoSuchDatabaseException]
   @throws[NoSuchTableException]
   def getTableMetadata(name: TableIdentifier): CatalogTable = {
-    val t = getTableRawMetadata(name)
-    t.copy(schema = CharVarcharUtils.replaceCharVarcharWithStringInSchema(t.schema))
+    tempTables.getOrElse(qualifyIdentifier(name), {
+      val t = getTableRawMetadata(name)
+      t.copy(schema = CharVarcharUtils.replaceCharVarcharWithStringInSchema(t.schema))
+    })
   }
 
   /**
@@ -539,7 +577,7 @@ class SessionCatalog(
     val table = qualifiedIdent.table
     requireDbExists(db)
     requireTableExists(qualifiedIdent)
-    attachCatalogName(externalCatalog.getTable(db, table))
+    attachCatalogName(tempTables.getOrElse(qualifiedIdent, externalCatalog.getTable(db, table)))
   }
 
   /**
@@ -626,7 +664,8 @@ class SessionCatalog(
       viewDefinition: TemporaryViewRelation,
       overrideIfExists: Boolean): Unit = synchronized {
     val normalized = format(name)
-    if (tempViews.contains(normalized) && !overrideIfExists) {
+    if ((tempViews.contains(normalized) ||
+      tempTableExists(qualifyIdentifier(TableIdentifier(name)))) && !overrideIfExists) {
       throw new TempTableAlreadyExistsException(name)
     }
     tempViews.put(normalized, viewDefinition)
@@ -753,6 +792,31 @@ class SessionCatalog(
   // -------------------------------------------------------------
 
   /**
+   * Return whether a temp table with the specified name exists. If no database is specified, check
+   * with current database.
+   */
+  def tempTableExists(name: TableIdentifier): Boolean = {
+    tempTables.contains(qualifyIdentifier(name))
+  }
+
+  /**
+   * List all matching temporary tables.
+   */
+  def listLocalTempTables(db: String, pattern: String): Seq[TableIdentifier] = {
+    tempTables.keys.filter(_.database.contains(db)).filter { t =>
+      StringUtils.filterPattern(t.table :: Nil, pattern).nonEmpty
+    }.toSeq
+  }
+
+  /**
+   * Remove all existing temporary tables and their data.
+   */
+  def dropAllTempTables(): Unit = synchronized {
+    scratchSessionDir.foreach(SparkHadoopUtil.deleteDir(_, hadoopConf))
+    tempTables.clear()
+  }
+
+  /**
    * Retrieve the metadata of an existing temporary view or permanent table/view.
    *
    * If a database is specified in `name`, this will return the metadata of table/view in that
@@ -836,7 +900,10 @@ class SessionCatalog(
         throw new NoSuchTableException(globalTempViewManager.database, table)
       }
     } else {
-      if (name.database.isDefined || !tempViews.contains(table)) {
+      if (tempTables.contains(qualifiedIdent)) {
+        SparkHadoopUtil.deleteDir(new Path(tempTables(qualifiedIdent).location), hadoopConf)
+        tempTables.remove(qualifiedIdent)
+      } else if (name.database.isDefined || !tempViews.contains(table)) {
         requireDbExists(db)
         // When ignoreIfNotExists is false, no exception is issued when the table does not exist.
         // Instead, log it as an error message.
@@ -1061,7 +1128,7 @@ class SessionCatalog(
       requireDbExists(dbName)
       externalCatalog.listTables(dbName, pattern).map { name =>
         TableIdentifier(name, Some(dbName))
-      }
+      } ++ listLocalTempTables(dbName, pattern)
     }
 
     if (includeLocalTempViews) {
@@ -1865,6 +1932,7 @@ class SessionCatalog(
       FunctionIdentifier(f, Some(DEFAULT_DATABASE))
     }.foreach(dropFunction(_, ignoreIfNotExists = false))
     clearTempTables()
+    dropAllTempTables()
     globalTempViewManager.clear()
     functionRegistry.clear()
     tableFunctionRegistry.clear()
@@ -1899,6 +1967,7 @@ class SessionCatalog(
     target.currentDb = currentDb
     // copy over temporary views
     tempViews.foreach(kv => target.tempViews.put(kv._1, kv._2))
+    tempTables.foreach(kv => target.tempTables.put(kv._1, kv._2))
   }
 
   /**

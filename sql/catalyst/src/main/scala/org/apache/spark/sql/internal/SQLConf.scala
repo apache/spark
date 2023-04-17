@@ -5037,6 +5037,8 @@ class SQLConf extends Serializable with Logging {
 
   def usePartitionEvaluator: Boolean = getConf(SQLConf.USE_PARTITION_EVALUATOR)
 
+  def enableTemporayTable: Boolean = getConf(StaticSQLConf.SCRATCH_DIR).nonEmpty
+
   /** ********************** SQLConf functionality methods ************ */
 
   /** Set Spark SQL configuration properties. */

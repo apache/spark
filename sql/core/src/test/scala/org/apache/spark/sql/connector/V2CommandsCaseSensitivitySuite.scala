@@ -52,7 +52,7 @@ class V2CommandsCaseSensitivitySuite
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
         Seq("ID", "iD").foreach { ref =>
           val tableSpec = TableSpec(Map.empty, None, Map.empty,
-            None, None, None, false)
+            None, None, None, false, false)
           val plan = CreateTableAsSelect(
             UnresolvedIdentifier(Array("table_name")),
             Expressions.identity(ref) :: Nil,
@@ -76,7 +76,7 @@ class V2CommandsCaseSensitivitySuite
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
         Seq("POINT.X", "point.X", "poInt.x", "poInt.X").foreach { ref =>
           val tableSpec = TableSpec(Map.empty, None, Map.empty,
-            None, None, None, false)
+            None, None, None, false, false)
           val plan = CreateTableAsSelect(
             UnresolvedIdentifier(Array("table_name")),
             Expressions.bucket(4, ref) :: Nil,
@@ -101,7 +101,7 @@ class V2CommandsCaseSensitivitySuite
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
         Seq("ID", "iD").foreach { ref =>
           val tableSpec = TableSpec(Map.empty, None, Map.empty,
-            None, None, None, false)
+            None, None, None, false, false)
           val plan = ReplaceTableAsSelect(
             UnresolvedIdentifier(Array("table_name")),
             Expressions.identity(ref) :: Nil,
@@ -125,7 +125,7 @@ class V2CommandsCaseSensitivitySuite
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
         Seq("POINT.X", "point.X", "poInt.x", "poInt.X").foreach { ref =>
           val tableSpec = TableSpec(Map.empty, None, Map.empty,
-            None, None, None, false)
+            None, None, None, false, false)
           val plan = ReplaceTableAsSelect(
             UnresolvedIdentifier(Array("table_name")),
             Expressions.bucket(4, ref) :: Nil,

@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.commons.lang3.StringUtils
+import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
@@ -156,6 +157,15 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
           throw new IllegalStateException(s"[BUG] unexpected column expression: $column")
       }
 
+    case c @ CreateTable(ResolvedV1Identifier(ident), _, _, tableSpec, _) if tableSpec.temporary =>
+      val (storageFormat, provider) = getTempTableStorageFormatAndProvider(
+        ident.unquotedString,
+        c.tableSpec.provider,
+        c.tableSpec.options)
+      val withLocationUri = c.tableSpec.copy(location = storageFormat.locationUri.map(_.toString))
+      constructV1TableCmd(None, withLocationUri, ident, c.tableSchema, c.partitioning,
+        c.ignoreIfExists, storageFormat, provider)
+
     // For CREATE TABLE [AS SELECT], we should use the v1 command if the catalog is resolved to the
     // session catalog and the table provider is not v2.
     case c @ CreateTable(ResolvedV1Identifier(ident), _, _, _, _) =>
@@ -168,6 +178,16 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
       } else {
         c
       }
+
+    case c @ CreateTableAsSelect(ResolvedV1Identifier(ident), _, _, tableSpec, writeOptions, _, _)
+      if tableSpec.temporary =>
+      val (storageFormat, provider) = getTempTableStorageFormatAndProvider(
+        ident.unquotedString,
+        c.tableSpec.provider,
+        c.tableSpec.options ++ writeOptions)
+      val withLocationUri = c.tableSpec.copy(location = storageFormat.locationUri.map(_.toString))
+      constructV1TableCmd(Some(c.query), withLocationUri, ident, new StructType, c.partitioning,
+        c.ignoreIfExists, storageFormat, provider)
 
     case c @ CreateTableAsSelect(ResolvedV1Identifier(ident), _, _, _, writeOptions, _, _) =>
       val (storageFormat, provider) = getStorageFormatAndProvider(
@@ -452,9 +472,19 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
       provider: String): CreateTableV1 = {
     val tableDesc = buildCatalogTable(
       ident, tableSchema, partitioning, tableSpec.properties, provider,
-      tableSpec.location, tableSpec.comment, storageFormat, tableSpec.external)
+      tableSpec.location, tableSpec.comment, storageFormat, tableSpec.external, tableSpec.temporary)
     val mode = if (ignoreIfExists) SaveMode.Ignore else SaveMode.ErrorIfExists
     CreateTableV1(tableDesc, mode, query)
+  }
+
+  private def getTempTableStorageFormatAndProvider(
+      identifier: String,
+      provider: Option[String],
+      options: Map[String, String]): (CatalogStorageFormat, String) = {
+    val nonHiveStorageFormat = CatalogStorageFormat.empty.copy(
+      locationUri = Some(new Path(catalogManager.v1SessionCatalog.sessionDir, identifier).toUri),
+      properties = options)
+    (nonHiveStorageFormat, provider.getOrElse(conf.defaultDataSourceName))
   }
 
   private def getStorageFormatAndProvider(
@@ -528,8 +558,11 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
       location: Option[String],
       comment: Option[String],
       storageFormat: CatalogStorageFormat,
-      external: Boolean): CatalogTable = {
-    val tableType = if (external || location.isDefined) {
+      external: Boolean,
+      temporary: Boolean): CatalogTable = {
+    val tableType = if (temporary) {
+      CatalogTableType.TEMPORARY
+    } else if (external || location.isDefined) {
       CatalogTableType.EXTERNAL
     } else {
       CatalogTableType.MANAGED

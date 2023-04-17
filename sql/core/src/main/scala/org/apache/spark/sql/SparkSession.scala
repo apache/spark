@@ -29,6 +29,7 @@ import scala.util.control.NonFatal
 import org.apache.spark.{SPARK_VERSION, SparkConf, SparkContext, TaskContext}
 import org.apache.spark.annotation.{DeveloperApi, Experimental, Stable, Unstable}
 import org.apache.spark.api.java.JavaRDD
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.{ConfigEntry, EXECUTOR_ALLOW_SPARK_CONTEXT}
 import org.apache.spark.rdd.RDD
@@ -108,6 +109,13 @@ class SparkSession private(
   private[sql] def this(sc: SparkContext) = this(sc, new java.util.HashMap[String, String]())
 
   private[sql] val sessionUUID: String = UUID.randomUUID.toString
+
+  private val scratchAppDir = sparkContext.getConf.get(StaticSQLConf.SCRATCH_DIR).map { dir =>
+    SparkHadoopUtil.createSessionDir(s"$dir/${sparkContext.applicationId}",
+      sparkContext.hadoopConfiguration)
+  }
+
+  private[sql] val scratchSessionDir = scratchAppDir.map(dir => s"$dir/$sessionUUID")
 
   sparkContext.assertNotStopped()
 
@@ -758,6 +766,7 @@ class SparkSession private(
    * @since 2.0.0
    */
   def stop(): Unit = {
+    scratchAppDir.foreach(SparkHadoopUtil.deleteDir(_, sparkContext.hadoopConfiguration))
     sparkContext.stop()
   }
 

@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.util.{escapeSingleQuotedString, CharVarcharUtils}
-import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Table, TableCatalog}
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Table, TableCatalog, V1Table}
 import org.apache.spark.sql.connector.expressions.BucketTransform
 import org.apache.spark.sql.execution.LeafExecNode
 import org.apache.spark.unsafe.types.UTF8String
@@ -42,7 +42,7 @@ case class ShowCreateTableExec(
   }
 
   private def showCreateTable(table: Table, builder: StringBuilder): Unit = {
-    builder ++= s"CREATE TABLE ${table.name()} "
+    builder ++= s"CREATE${temporary(table)}TABLE ${table.name()} "
 
     showTableDataColumns(table, builder)
     showTableUsing(table, builder)
@@ -152,5 +152,10 @@ case class ShowCreateTableExec(
 
   private def concatByMultiLines(iter: Iterable[String]): String = {
     iter.mkString("(\n  ", ",\n  ", ")\n")
+  }
+
+  private def temporary(table: Table): String = table match {
+    case v: V1Table if v.v1Table.isTemporary => " TEMPORARY "
+    case _ => " "
   }
 }

@@ -26,7 +26,7 @@ The `CREATE TABLE` statement defines a new table using a Data Source.
 ### Syntax
 
 ```sql
-CREATE TABLE [ IF NOT EXISTS ] table_identifier
+CREATE [ TEMPORARY ] TABLE [ IF NOT EXISTS ] table_identifier
     [ ( col_name1 col_type1 [ COMMENT col_comment1 ], ... ) ]
     USING data_source
     [ OPTIONS ( key1=val1, key2=val2, ... ) ]
@@ -44,6 +44,10 @@ Note that, the clauses between the USING clause and the AS SELECT clause can com
 as any order. For example, you can write COMMENT table_comment after TBLPROPERTIES.
 
 ### Parameters
+
+* **TEMPORARY**
+
+  Temporary table only works if user set `spark.sql.scratch.dir`. Temporary table data persists only during the current Spark session. Spark drops the table at the end of the session. If you use the name of a permanent table to create the temporary table, the permanent table is inaccessible during the session unless you drop the temporary table. Temporary tables do not support partitioned columns.
 
 * **table_identifier**
 
@@ -110,6 +114,9 @@ input query, to make sure the table gets created contains exactly the same data 
 ### Examples
 
 ```sql
+
+-- Start Spark session with --conf spark.sql.scratch.dir=/tmp/spark-scratch and create temporary table
+CREATE TEMPORARY TABLE student_tmp AS SELECT * FROM student;
 
 --Use data source
 CREATE TABLE student (id INT, name STRING, age INT) USING CSV;

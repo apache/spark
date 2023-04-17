@@ -256,6 +256,8 @@ case class CatalogTable(
 
   import CatalogTable._
 
+  val isTemporary: Boolean = tableType == CatalogTableType.TEMPORARY
+
   /**
    * schema of this table's partition columns
    */
@@ -757,8 +759,9 @@ object CatalogTableType {
   val EXTERNAL = new CatalogTableType("EXTERNAL")
   val MANAGED = new CatalogTableType("MANAGED")
   val VIEW = new CatalogTableType("VIEW")
+  val TEMPORARY = new CatalogTableType("TEMPORARY")
 
-  val tableTypes = Seq(EXTERNAL, MANAGED, VIEW)
+  val tableTypes = Seq(EXTERNAL, MANAGED, VIEW, TEMPORARY)
 }
 
 

@@ -253,7 +253,7 @@ class DataFrameCallbackSuite extends QueryTest
       assert(commands(5)._1 == "command")
       assert(commands(5)._2.isInstanceOf[CreateDataSourceTableAsSelectCommand])
       assert(commands(5)._2.asInstanceOf[CreateDataSourceTableAsSelectCommand]
-        .table.partitionColumnNames == Seq("p"))
+        .catalogTable.partitionColumnNames == Seq("p"))
     }
 
     withTable("tab") {

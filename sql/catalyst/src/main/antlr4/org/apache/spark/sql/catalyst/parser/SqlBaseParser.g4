@@ -91,7 +91,7 @@ statement
     | createTableHeader (LEFT_PAREN createOrReplaceTableColTypeList RIGHT_PAREN)? tableProvider?
         createTableClauses
         (AS? query)?                                                   #createTable
-    | CREATE TABLE (IF NOT EXISTS)? target=tableIdentifier
+    | CREATE (TEMPORARY)? TABLE (IF NOT EXISTS)? target=tableIdentifier
         LIKE source=tableIdentifier
         (tableProvider |
         rowFormat |
@@ -285,7 +285,7 @@ unsupportedHiveNativeCommands
     ;
 
 createTableHeader
-    : CREATE TEMPORARY? EXTERNAL? TABLE (IF NOT EXISTS)? multipartIdentifier
+    : CREATE (TEMPORARY)? EXTERNAL? TABLE (IF NOT EXISTS)? multipartIdentifier
     ;
 
 replaceTableHeader

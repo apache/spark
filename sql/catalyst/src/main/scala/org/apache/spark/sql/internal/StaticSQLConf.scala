@@ -278,4 +278,11 @@ object StaticSQLConf {
       .version("3.1.0")
       .stringConf
       .createWithDefault("")
+
+  val SCRATCH_DIR = buildStaticConf("spark.sql.scratch.dir")
+    .doc("Scratch space for Spark temporary table. It will automatically cleaned when " +
+      "stopping Spark context.")
+    .version("3.5.0")
+    .stringConf
+    .createOptional
 }

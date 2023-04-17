@@ -84,7 +84,8 @@ case class CreateTableLikeCommand(
     fileFormat: CatalogStorageFormat,
     provider: Option[String],
     properties: Map[String, String] = Map.empty,
-    ifNotExists: Boolean) extends LeafRunnableCommand {
+    ifNotExists: Boolean,
+    isTemp: Boolean) extends LeafRunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
@@ -104,7 +105,10 @@ case class CreateTableLikeCommand(
       sourceTableDesc.provider
     }
 
-    val newStorage = if (fileFormat.inputFormat.isDefined) {
+    val newStorage = if (isTemp) {
+      fileFormat.copy(
+        locationUri = Some(new Path(catalog.sessionDir, targetTable.unquotedString).toUri))
+    } else if (fileFormat.inputFormat.isDefined) {
       fileFormat
     } else {
       sourceTableDesc.storage.copy(locationUri = fileFormat.locationUri)
@@ -112,7 +116,9 @@ case class CreateTableLikeCommand(
 
     // If the location is specified, we create an external table internally.
     // Otherwise create a managed table.
-    val tblType = if (newStorage.locationUri.isEmpty) {
+    val tblType = if (isTemp) {
+      CatalogTableType.TEMPORARY
+    } else if (newStorage.locationUri.isEmpty) {
       CatalogTableType.MANAGED
     } else {
       CatalogTableType.EXTERNAL
@@ -130,8 +136,12 @@ case class CreateTableLikeCommand(
         partitionColumnNames = sourceTableDesc.partitionColumnNames,
         bucketSpec = sourceTableDesc.bucketSpec,
         properties = properties,
-        tracksPartitionsInCatalog = sourceTableDesc.tracksPartitionsInCatalog)
+        tracksPartitionsInCatalog =
+          if (isTemp) false else sourceTableDesc.tracksPartitionsInCatalog)
 
+    if (newTableDesc.partitionColumnNames.nonEmpty) {
+      DDLUtils.verifyOperationNotSupported(newTableDesc, "Create table like partitioned table")
+    }
     catalog.createTable(newTableDesc, ifNotExists)
     Seq.empty[Row]
   }
@@ -196,6 +206,7 @@ case class AlterTableRenameCommand(
       catalog.renameTable(oldName, newName)
     } else {
       val table = catalog.getTableMetadata(oldName)
+      DDLUtils.verifyOperationNotSupported(table, "Rename table")
       DDLUtils.verifyAlterTableType(catalog, table, isView)
       // If `optStorageLevel` is defined, the old table was cached.
       val optCachedData = sparkSession.sharedState.cacheManager.lookupCachedData(
@@ -231,6 +242,7 @@ case class AlterTableAddColumnsCommand(
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
     val catalogTable = verifyAlterTableAddColumn(sparkSession.sessionState.conf, catalog, table)
+    DDLUtils.verifyOperationNotSupported(catalogTable, "Add column to table")
     val colsWithProcessedDefaults =
       constantFoldCurrentDefaultsToExistDefaults(sparkSession, catalogTable.provider)
 
@@ -886,7 +898,7 @@ case class ShowTablesCommand(
       tables.map { tableIdent =>
         val database = tableIdent.database.getOrElse("")
         val tableName = tableIdent.table
-        val isTemp = catalog.isTempView(tableIdent)
+        val isTemp = catalog.isTempView(tableIdent) || catalog.tempTableExists(tableIdent)
         if (isExtended) {
           val information = catalog.getTempViewOrPermanentTableMetadata(tableIdent).simpleString
           Row(database, tableName, isTemp, s"$information\n")
@@ -1167,7 +1179,7 @@ case class ShowCreateTableCommand(
 
         builder.toString()
       } else {
-        builder ++= s"CREATE TABLE ${table.quoted} "
+        builder ++= s"CREATE${temporary(metadata)}TABLE ${table.quoted} "
 
         showCreateDataSourceTable(metadata, builder)
         builder.toString()
@@ -1255,6 +1267,8 @@ case class ShowCreateTableCommand(
     showTableLocation(metadata, builder)
     showTableProperties(metadata, builder)
   }
+
+  private def temporary(table: CatalogTable): String = if (table.isTemporary) " TEMPORARY " else " "
 }
 
 /**

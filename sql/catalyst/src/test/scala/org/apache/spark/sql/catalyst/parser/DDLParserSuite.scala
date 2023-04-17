@@ -2573,7 +2573,7 @@ class DDLParserSuite extends AnalysisTest {
     val createTableResult =
       CreateTable(UnresolvedIdentifier(Seq("my_tab")), schemaWithDefaultColumn,
         Seq.empty[Transform], LogicalTableSpec(Map.empty[String, String], Some("parquet"),
-          Map.empty[String, String], None, None, None, false), false)
+          Map.empty[String, String], None, None, None, false, false), false)
     // Parse the CREATE TABLE statement twice, swapping the order of the NOT NULL and DEFAULT
     // options, to make sure that the parser accepts any ordering of these options.
     comparePlans(parsePlan(
@@ -2586,7 +2586,7 @@ class DDLParserSuite extends AnalysisTest {
       "b STRING NOT NULL DEFAULT \"abc\") USING parquet"),
       ReplaceTable(UnresolvedIdentifier(Seq("my_tab")), schemaWithDefaultColumn,
         Seq.empty[Transform], LogicalTableSpec(Map.empty[String, String], Some("parquet"),
-          Map.empty[String, String], None, None, None, false), false))
+          Map.empty[String, String], None, None, None, false, false), false))
     // These ALTER TABLE statements should parse successfully.
     comparePlans(
       parsePlan("ALTER TABLE t1 ADD COLUMN x int NOT NULL DEFAULT 42"),
@@ -2742,12 +2742,12 @@ class DDLParserSuite extends AnalysisTest {
       "CREATE TABLE my_tab(a INT, b INT NOT NULL GENERATED ALWAYS AS (a+1)) USING parquet"),
       CreateTable(UnresolvedIdentifier(Seq("my_tab")), schemaWithGeneratedColumn,
         Seq.empty[Transform], LogicalTableSpec(Map.empty[String, String], Some("parquet"),
-          Map.empty[String, String], None, None, None, false), false))
+          Map.empty[String, String], None, None, None, false, false), false))
     comparePlans(parsePlan(
       "REPLACE TABLE my_tab(a INT, b INT NOT NULL GENERATED ALWAYS AS (a+1)) USING parquet"),
       ReplaceTable(UnresolvedIdentifier(Seq("my_tab")), schemaWithGeneratedColumn,
         Seq.empty[Transform], LogicalTableSpec(Map.empty[String, String], Some("parquet"),
-          Map.empty[String, String], None, None, None, false), false))
+          Map.empty[String, String], None, None, None, false, false), false))
     // Two generation expressions
     checkError(
       exception = parseException("CREATE TABLE my_tab(a INT, " +

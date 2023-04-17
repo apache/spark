@@ -1799,4 +1799,14 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
       assert(catalog.getCachedTable(qualifiedName2) != null)
     }
   }
+
+  test("Set scratch dir if user want to use temporary table") {
+    withBasicCatalog { catalog =>
+      val e = intercept[AnalysisException] {
+        catalog.sessionDir
+      }
+      e.getMessage.contains(s"Please set ${StaticSQLConf.SCRATCH_DIR.key} if you want to " +
+        "use temporary table")
+    }
+  }
 }

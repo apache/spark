@@ -114,7 +114,8 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
       location = None,
       comment = None,
       serde = None,
-      external = false)
+      external = false,
+      temporary = false)
     runCommand(
       CreateTableAsSelect(
         UnresolvedIdentifier(tableName),
@@ -203,7 +204,8 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
       location = None,
       comment = None,
       serde = None,
-      external = false)
+      external = false,
+      temporary = false)
     runCommand(ReplaceTableAsSelect(
       UnresolvedIdentifier(tableName),
       partitioning.getOrElse(Seq.empty),

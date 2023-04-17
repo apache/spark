@@ -205,7 +205,7 @@ class SparkMetadataOperationSuite extends HiveThriftServer2TestBase {
 
     withJdbcStatement() { statement =>
       val metaData = statement.getConnection.getMetaData
-      checkResult(metaData.getTableTypes, Seq("TABLE", "VIEW"))
+      checkResult(metaData.getTableTypes, Seq("TABLE", "VIEW", "TEMPORARY"))
     }
   }
 

@@ -32,6 +32,7 @@ import scala.util.control.NonFatal
 import com.google.common.primitives.Longs
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
+import org.apache.hadoop.fs.permission.FsPermission
 import org.apache.hadoop.mapred.JobConf
 import org.apache.hadoop.security.{Credentials, UserGroupInformation}
 import org.apache.hadoop.security.token.{Token, TokenIdentifier}
@@ -648,4 +649,28 @@ private[spark] object SparkHadoopUtil extends Logging {
     }
   }
 
+  def createSessionDir(dir: String, conf: Configuration): String = {
+    createSessionDir(new Path(dir), conf)
+  }
+
+  def createSessionDir(path: Path, conf: Configuration): String = {
+    val fs = path.getFileSystem(conf)
+    if (!fs.mkdirs(path, new FsPermission("700"))) {
+      throw new IOException(s"Failed to create dir: $path.")
+    }
+    fs.makeQualified(path).toString
+  }
+
+  def deleteDir(path: String, conf: Configuration): Boolean = {
+    deleteDir(new Path(path), conf)
+  }
+
+  def deleteDir(path: Path, conf: Configuration): Boolean = {
+    val fs = path.getFileSystem(conf)
+    if (fs.exists(path)) {
+      fs.delete(path, true)
+    } else {
+      true
+    }
+  }
 }

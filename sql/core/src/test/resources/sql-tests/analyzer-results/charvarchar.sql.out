@@ -55,7 +55,7 @@ DescribeColumnCommand `spark_catalog`.`default`.`char_tbl2`, [spark_catalog, def
 -- !query
 create table char_tbl3 like char_tbl
 -- !query analysis
-CreateTableLikeCommand `char_tbl3`, `char_tbl`, Storage(), false
+CreateTableLikeCommand `char_tbl3`, `char_tbl`, Storage(), false, false
 
 
 -- !query

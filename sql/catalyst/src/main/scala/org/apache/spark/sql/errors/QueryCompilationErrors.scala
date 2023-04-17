@@ -3499,4 +3499,12 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       errorClass = "CANNOT_RENAME_ACROSS_SCHEMA", messageParameters = Map("type" -> "table")
     )
   }
+
+  def temporaryTableUnsupported(table: TableIdentifier, cmd: String): Throwable = {
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_FEATURE.TEMPORARY_TABLE_UNSUPPORTED",
+      messageParameters = Map(
+        "cmd" -> cmd,
+        "tableName" -> table.identifier))
+  }
 }

@@ -432,7 +432,8 @@ object PreprocessTableInsertion extends Rule[LogicalPlan] {
 object HiveOnlyCheck extends (LogicalPlan => Unit) {
   def apply(plan: LogicalPlan): Unit = {
     plan.foreach {
-      case CreateTableV1(tableDesc, _, _) if DDLUtils.isHiveTable(tableDesc) =>
+      case CreateTableV1(tableDesc, _, _)
+          if DDLUtils.isHiveTable(tableDesc) && !tableDesc.isTemporary =>
         throw QueryCompilationErrors.ddlWithoutHiveSupportEnabledError(
           "CREATE Hive TABLE (AS SELECT)")
       case i: InsertIntoDir if DDLUtils.isHiveTable(i.provider) =>

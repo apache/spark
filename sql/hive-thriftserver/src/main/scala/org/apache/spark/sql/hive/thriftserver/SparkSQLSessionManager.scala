@@ -88,6 +88,7 @@ private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2, sqlContext: 
     HiveThriftServer2.eventManager.onSessionClosed(sessionHandle.getSessionId.toString)
     val ctx = sparkSqlOperationManager.sessionToContexts.getOrDefault(sessionHandle, sqlContext)
     ctx.sparkSession.sessionState.catalog.getTempViewNames().foreach(ctx.uncacheTable)
+    ctx.sparkSession.sessionState.catalog.dropAllTempTables()
     super.closeSession(sessionHandle)
     sparkSqlOperationManager.sessionToContexts.remove(sessionHandle)
   }

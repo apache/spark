@@ -327,6 +327,10 @@ class V2SessionCatalog(catalog: SessionCatalog)
     catalog.isTempView(ident.namespace() :+ ident.name())
   }
 
+  def isTempTable(ident: Identifier): Boolean = {
+    catalog.tempTableExists(ident.asTableIdentifier)
+  }
+
   override def loadFunction(ident: Identifier): UnboundFunction = {
     V1Function(catalog.lookupPersistentFunction(ident.asFunctionIdentifier))
   }

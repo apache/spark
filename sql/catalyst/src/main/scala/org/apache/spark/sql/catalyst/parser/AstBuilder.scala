@@ -3828,14 +3828,15 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
     val columns = Option(ctx.createOrReplaceTableColTypeList())
       .map(visitCreateOrReplaceTableColTypeList).getOrElse(Nil)
     val provider = Option(ctx.tableProvider).map(_.multipartIdentifier.getText)
+      .orElse { if (temp) Some(conf.defaultDataSourceName) else None }
     val (partTransforms, partCols, bucketSpec, properties, options, location, comment, serdeInfo) =
       visitCreateTableClauses(ctx.createTableClauses())
 
-    if (provider.isDefined && serdeInfo.isDefined) {
+    if (!temp && provider.isDefined && serdeInfo.isDefined) {
       operationNotAllowed(s"CREATE TABLE ... USING ... ${serdeInfo.get.describe}", ctx)
     }
 
-    if (temp) {
+    if (temp && !conf.enableTemporayTable) {
       val asSelect = if (ctx.query == null) "" else " AS ..."
       operationNotAllowed(
         s"CREATE TEMPORARY TABLE ...$asSelect, use CREATE TEMPORARY VIEW instead", ctx)
@@ -3844,7 +3845,14 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
     val partitioning =
       partitionExpressions(partTransforms, partCols, ctx) ++ bucketSpec.map(_.asTransform)
     val tableSpec = TableSpec(properties, provider, options, location, comment,
-      serdeInfo, external)
+      serdeInfo, external, temp)
+
+    if (temp && partitioning.nonEmpty) {
+      operationNotAllowed("PARTITIONED BY on temporary table", ctx)
+    }
+    if (temp && location.nonEmpty) {
+      operationNotAllowed("specify LOCATION on temporary table", ctx)
+    }
 
     Option(ctx.query).map(plan) match {
       case Some(_) if columns.nonEmpty =>
@@ -3914,7 +3922,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
     val partitioning =
       partitionExpressions(partTransforms, partCols, ctx) ++ bucketSpec.map(_.asTransform)
     val tableSpec = TableSpec(properties, provider, options, location, comment,
-      serdeInfo, false)
+      serdeInfo, false, false)
 
     Option(ctx.query).map(plan) match {
       case Some(_) if columns.nonEmpty =>

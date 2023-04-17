@@ -158,7 +158,8 @@ abstract class BaseSessionStateBuilder(
       SessionState.newHadoopConf(session.sparkContext.hadoopConfiguration, conf),
       sqlParser,
       resourceLoader,
-      new SparkUDFExpressionBuilder)
+      new SparkUDFExpressionBuilder,
+      scratchSessionDir = session.scratchSessionDir)
     parentState.foreach(_.catalog.copyStateTo(catalog))
     catalog
   }
