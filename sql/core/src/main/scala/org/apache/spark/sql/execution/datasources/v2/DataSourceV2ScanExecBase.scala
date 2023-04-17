@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
+import scala.collection.JavaConverters._
+
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Expression, RowOrdering, SortOrder}
@@ -65,7 +67,7 @@ trait DataSourceV2ScanExecBase extends LeafExecNode {
   override def vectorTypes: Option[Seq[String]] = {
     val vectorTypes = readerFactory.getVectorTypes
     if (vectorTypes.isPresent) {
-      vectorTypes.get()
+      return Option(vectorTypes.get().asScala.toSeq)
     }
     Option.empty
   }

@@ -39,16 +39,16 @@ public interface PartitionReaderFactory extends Serializable {
   /**
    * @return a row-based partition reader to read data from the given {@link InputPartition}.
    * <p>
-   * Implementations probably need to cast the input partition to the concrete
-   * {@link InputPartition} class defined for the data source.
+   * @note Implementations probably need to cast the input partition to the concrete
+   *       {@link InputPartition} class defined for the data source.
    */
   PartitionReader<InternalRow> createReader(InputPartition partition);
 
   /**
    * @return a columnar partition reader to read data from the given {@link InputPartition}.
    * <p>
-   * Implementations probably need to cast the input partition to the concrete
-   * {@link InputPartition} class defined for the data source.
+   * @note Implementations probably need to cast the input partition to the concrete
+   *        {@link InputPartition} class defined for the data source.
    */
   default PartitionReader<ColumnarBatch> createColumnarReader(InputPartition partition) {
     throw new UnsupportedOperationException("Cannot create columnar reader.");
@@ -56,12 +56,13 @@ public interface PartitionReaderFactory extends Serializable {
 
   /**
    * @return true if the given {@link InputPartition} should be read by Spark in a columnar way.
-   * This means, implementations must also implement {@link #createColumnarReader(InputPartition)}
-   * for the input partitions that this method returns true.
    * <p>
-   * As of Spark 2.4, Spark can only read all input partition in a columnar way, or none of them.
-   * Data source can't mix columnar and row-based partitions. This may be relaxed in future
-   * versions.
+   * @note Implementations must also implement {@link #createColumnarReader(InputPartition)}
+   *       for the input partitions that this method returns true.
+   *       <p>
+   *       As of Spark 2.4, Spark can only read all input partition in a columnar way,
+   *       or none of them. Data source can't mix columnar and row-based partitions.
+   *       This may be relaxed in future versions.
    */
   default boolean supportColumnarReads(InputPartition partition) {
     return false;
