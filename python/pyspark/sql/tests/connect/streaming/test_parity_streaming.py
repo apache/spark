@@ -38,14 +38,6 @@ class StreamingParityTests(StreamingTestsMixin, ReusedConnectTestCase):
     def test_query_manager_await_termination(self):
         super().test_query_manager_await_termination()
 
-    @unittest.skip("table API will be supported later with SPARK-43042.")
-    def test_streaming_read_from_table(self):
-        super().test_streaming_read_from_table()
-
-    @unittest.skip("table API will be supported later with SPARK-43042.")
-    def test_streaming_write_to_table(self):
-        super().test_streaming_write_to_table()
-
     @unittest.skip("Query manager API will be supported later with SPARK-43032.")
     def test_stream_save_options(self):
         super().test_stream_save_options()
