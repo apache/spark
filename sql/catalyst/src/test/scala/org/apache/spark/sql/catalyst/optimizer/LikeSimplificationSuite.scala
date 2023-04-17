@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{BooleanType, StringType}
 
-private abstract class LikeSimplificationSuite extends PlanTest {
+abstract class LikeSimplificationSuite extends PlanTest {
 
   def getRegexEngine(): String
 
