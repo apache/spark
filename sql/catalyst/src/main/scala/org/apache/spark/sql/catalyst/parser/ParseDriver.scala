@@ -127,7 +127,7 @@ abstract class AbstractSqlParser extends ParserInterface with SQLConfHelper with
         toResult(parser)
       }
       catch {
-        case e: ParseCancellationException =>
+        case _: ParseCancellationException | _: ParseException =>
           // if we fail, parse with LL mode
           tokenStream.seek(0) // rewind input stream
           parser.reset()
