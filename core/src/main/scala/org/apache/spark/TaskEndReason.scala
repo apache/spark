@@ -149,7 +149,7 @@ case class ExceptionFailure(
       if (preserveCause) Some(new ThrowableSerializationWrapper(e)) else None, accumUpdates)
     e match {
       case st: SparkThrowable =>
-        this.isTransient = SparkThrowableHelper.isTransientError(st.getErrorClass)
+        this.isTransient = st.isTransientError
       case _ =>
     }
   }

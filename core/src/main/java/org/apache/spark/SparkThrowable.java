@@ -50,6 +50,10 @@ public interface SparkThrowable {
     return SparkThrowableHelper.isInternalError(this.getErrorClass());
   }
 
+  default boolean isTransientError() {
+    return SparkThrowableHelper.isTransientError(this.getErrorClass());
+  }
+
   default Map<String, String> getMessageParameters() {
     return new HashMap<>();
   }
