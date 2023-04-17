@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.util
 
+import java.util.concurrent.atomic.AtomicInteger
+
 import scala.collection.JavaConverters._
 
 import org.apache.arrow.memory.RootAllocator
@@ -137,7 +139,7 @@ private[sql] object ArrowUtils {
   /** Maps schema from Spark to Arrow. NOTE: timeZoneId required for TimestampType in StructType */
   def toArrowSchema(schema: StructType, timeZoneId: String): Schema = {
     new Schema(schema.map { field =>
-      toArrowField(field.name, field.dataType, field.nullable, timeZoneId)
+      toArrowField(field.name, deduplicateFieldNames(field.dataType), field.nullable, timeZoneId)
     }.asJava)
   }
 
@@ -156,5 +158,34 @@ private[sql] object ArrowUtils {
     val arrowSafeTypeCheck = Seq(SQLConf.PANDAS_ARROW_SAFE_TYPE_CONVERSION.key ->
       conf.arrowSafeTypeConversion.toString)
     Map(timeZoneConf ++ pandasColsByName ++ arrowSafeTypeCheck: _*)
+  }
+
+  private def deduplicateFieldNames(dt: DataType): DataType = dt match {
+    case udt: UserDefinedType[_] => deduplicateFieldNames(udt.sqlType)
+    case st @ StructType(fields) =>
+      val newNames = if (st.names.toSet.size == st.names.length) {
+        st.names
+      } else {
+        val genNawName = st.names.groupBy(identity).map {
+          case (name, names) if names.length > 1 =>
+            val i = new AtomicInteger()
+            name -> { () => s"${name}_${i.getAndIncrement()}" }
+          case (name, _) => name -> { () => name }
+        }
+        st.names.map(genNawName(_)())
+      }
+      val newFields =
+        fields.zip(newNames).map { case (StructField(_, dataType, nullable, metadata), name) =>
+          StructField(name, deduplicateFieldNames(dataType), nullable, metadata)
+        }
+      StructType(newFields)
+    case ArrayType(elementType, containsNull) =>
+      ArrayType(deduplicateFieldNames(elementType), containsNull)
+    case MapType(keyType, valueType, valueContainsNull) =>
+      MapType(
+        deduplicateFieldNames(keyType),
+        deduplicateFieldNames(valueType),
+        valueContainsNull)
+    case _ => dt
   }
 }

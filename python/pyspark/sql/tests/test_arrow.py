@@ -873,6 +873,41 @@ class ArrowTestsMixin:
         self.assertEqual([Row(c1=1, c2="string")], df.collect())
         self.assertGreater(self.spark.sparkContext.defaultParallelism, len(pdf))
 
+    def test_toPandas_duplicate_field_names(self):
+        for arrow_enabled in [True, False]:
+            with self.subTest(arrow_enabled=arrow_enabled):
+                self.check_toPandas_duplicate_field_names(arrow_enabled)
+
+    def check_toPandas_duplicate_field_names(self, arrow_enabled):
+        data = [Row(Row("a", 1), Row(2, 3, "b", 4, "c")), Row(Row("x", 6), Row(7, 8, "y", 9, "z"))]
+        schema = (
+            StructType()
+            .add("struct", StructType().add("x", StringType()).add("x", IntegerType()))
+            .add(
+                "struct",
+                StructType()
+                .add("a", IntegerType())
+                .add("x", IntegerType())
+                .add("x", StringType())
+                .add("y", IntegerType())
+                .add("y", StringType()),
+            )
+        )
+        if arrow_enabled:
+            expected = pd.DataFrame(
+                [
+                    [{"x_0": "a", "x_1": 1}, {"a": 2, "x_0": 3, "x_1": "b", "y_0": 4, "y_1": "c"}],
+                    [{"x_0": "x", "x_1": 6}, {"a": 7, "x_0": 8, "x_1": "y", "y_0": 9, "y_1": "z"}],
+                ],
+                columns=schema.names,
+            )
+        else:
+            expected = pd.DataFrame.from_records(data, columns=schema.names)
+
+        df = self.spark.createDataFrame(data, schema=schema)
+        with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": arrow_enabled}):
+            assert_frame_equal(df.toPandas(), expected)
+
 
 @unittest.skipIf(
     not have_pandas or not have_pyarrow,

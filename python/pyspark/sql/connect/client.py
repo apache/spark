@@ -681,7 +681,8 @@ class SparkConnectClient(object):
         schema = schema or types.from_arrow_schema(table.schema)
         assert schema is not None and isinstance(schema, StructType)
 
-        pdf = table.to_pandas()
+        # Rename columns to avoid duplicated column names.
+        pdf = table.rename_columns([f"col_{i}" for i in range(table.num_columns)]).to_pandas()
         pdf.columns = schema.fieldNames()
 
         for field, pa_field in zip(schema, table.schema):
