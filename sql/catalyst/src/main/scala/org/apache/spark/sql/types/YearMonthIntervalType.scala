@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.types
 
-import scala.reflect.runtime.universe.typeTag
-
 import org.apache.spark.annotation.Unstable
 import org.apache.spark.sql.catalyst.types.{PhysicalDataType, PhysicalIntegerType}
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -41,15 +39,6 @@ import org.apache.spark.sql.types.YearMonthIntervalType.fieldToString
  */
 @Unstable
 case class YearMonthIntervalType(startField: Byte, endField: Byte) extends AnsiIntervalType {
-  /**
-   * Internally, values of year-month intervals are stored in `Int` values as amount of months
-   * that are calculated by the formula:
-   *   -/+ (12 * YEAR + MONTH)
-   */
-  private[sql] type InternalType = Int
-
-  @transient private[sql] lazy val tag = typeTag[InternalType]
-
   /**
    * Year-month interval values always occupy 4 bytes.
    * The YEAR field is constrained by the upper bound 178956970 to fit to `Int`.
