@@ -36,6 +36,8 @@ _DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 # Preserve the calling directory
 _CALLING_DIR="$(pwd)"
 # Options used during compilation
+# SPARK-42380: Add `-Dmaven.resolver.transport=wagon` to `_COMPILE_JVM_OPTS` to stick
+# resolver transport type with Wagon which maven 3.8.7 used.
 _COMPILE_JVM_OPTS="-Xss128m -Xmx4g -XX:ReservedCodeCacheSize=128m -Dmaven.resolver.transport=wagon"
 
 # Installs any application tarball given a URL, the expected tarball name,
