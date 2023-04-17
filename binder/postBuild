@@ -20,7 +20,7 @@
 # This file is used for Binder integration to install PySpark available in
 # Jupyter notebook.
 
-VERSION=$(python -c "exec(open('python/pyspark/version.py').read()); print(__version__)")
+VERSION=$(python -c "exec(open('python/pyspark/version.py').read()); from distutils.version import LooseVersion; print('.'.join(map(str, LooseVersion(__version__).version[:3])))")
 TAG=$(git describe --tags --exact-match 2>/dev/null)
 
 # If a commit is tagged, exactly specified version of pyspark should be installed to avoid
