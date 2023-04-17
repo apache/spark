@@ -402,16 +402,15 @@ class TorchDistributorLocalUnitTestsMixin:
 class TorchDistributorLocalUnitTests(TorchDistributorLocalUnitTestsMixin, unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        (gpu_discovery_script_file_name, mnist_dir_path) = set_up_test_dirs()
-        cls.gpu_discovery_script_file_name = gpu_discovery_script_file_name
-        cls.mnist_dir_path = mnist_dir_path
-
+        (cls.gpu_discovery_script_file_name, cls.mnist_dir_path) = set_up_test_dirs()
         conf = SparkConf()
         for k, v in get_local_mode_conf().items():
             conf = conf.set(k, v)
-        conf = conf.set("spark.driver.resource.gpu.discoveryScript", gpu_discovery_script_file_name)
+        conf = conf.set(
+            "spark.driver.resource.gpu.discoveryScript", cls.gpu_discovery_script_file_name
+        )
 
-        sc = SparkContext("local-cluster[2,2,1024]", "TorchDistributorLocalUnitTests", conf=conf)
+        sc = SparkContext("local-cluster[2,2,1024]", cls.__name__, conf=conf)
         cls.spark = SparkSession(sc)
 
     @classmethod
@@ -425,16 +424,15 @@ class TorchDistributorLocalUnitTests(TorchDistributorLocalUnitTestsMixin, unitte
 class TorchDistributorLocalUnitTestsII(TorchDistributorLocalUnitTestsMixin, unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        (gpu_discovery_script_file_name, mnist_dir_path) = set_up_test_dirs()
-        cls.gpu_discovery_script_file_name = gpu_discovery_script_file_name
-        cls.mnist_dir_path = mnist_dir_path
-
+        (cls.gpu_discovery_script_file_name, cls.mnist_dir_path) = set_up_test_dirs()
         conf = SparkConf()
         for k, v in get_local_mode_conf().items():
             conf = conf.set(k, v)
-        conf = conf.set("spark.driver.resource.gpu.discoveryScript", gpu_discovery_script_file_name)
+        conf = conf.set(
+            "spark.driver.resource.gpu.discoveryScript", cls.gpu_discovery_script_file_name
+        )
 
-        sc = SparkContext("local[4]", "TorchDistributorLocalUnitTests", conf=conf)
+        sc = SparkContext("local[4]", cls.__name__, conf=conf)
         cls.spark = SparkSession(sc)
 
     @classmethod
@@ -494,18 +492,15 @@ class TorchDistributorDistributedUnitTests(
 ):
     @classmethod
     def setUpClass(cls):
-        (gpu_discovery_script_file_name, mnist_dir_path) = set_up_test_dirs()
-        cls.gpu_discovery_script_file_name = gpu_discovery_script_file_name
-        cls.mnist_dir_path = mnist_dir_path
-
+        (cls.gpu_discovery_script_file_name, cls.mnist_dir_path) = set_up_test_dirs()
         conf = SparkConf()
         for k, v in get_distributed_mode_conf().items():
             conf = conf.set(k, v)
-        conf = conf.set("spark.worker.resource.gpu.discoveryScript", gpu_discovery_script_file_name)
-
-        sc = SparkContext(
-            "local-cluster[2,2,1024]", "TorchDistributorDistributedUnitTests", conf=conf
+        conf = conf.set(
+            "spark.worker.resource.gpu.discoveryScript", cls.gpu_discovery_script_file_name
         )
+
+        sc = SparkContext("local-cluster[2,2,1024]", cls.__name__, conf=conf)
         cls.spark = SparkSession(sc)
 
     @classmethod

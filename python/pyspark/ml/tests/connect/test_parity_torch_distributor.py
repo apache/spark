@@ -57,15 +57,12 @@ class TorchDistributorLocalUnitTestsOnConnect(
 ):
     @classmethod
     def setUpClass(cls):
-        (gpu_discovery_script_file_name, mnist_dir_path) = set_up_test_dirs()
-        cls.gpu_discovery_script_file_name = gpu_discovery_script_file_name
-        cls.mnist_dir_path = mnist_dir_path
-
-        builder = SparkSession.builder.appName("TorchDistributorLocalUnitTestsOnConnect")
+        (cls.gpu_discovery_script_file_name, cls.mnist_dir_path) = set_up_test_dirs()
+        builder = SparkSession.builder.appName(cls.__name__)
         for k, v in get_local_mode_conf().items():
             builder = builder.config(k, v)
         builder = builder.config(
-            "spark.driver.resource.gpu.discoveryScript", gpu_discovery_script_file_name
+            "spark.driver.resource.gpu.discoveryScript", cls.gpu_discovery_script_file_name
         )
         cls.spark = builder.remote("local-cluster[2,2,1024]").getOrCreate()
 
@@ -90,16 +87,13 @@ class TorchDistributorLocalUnitTestsIIOnConnect(
 ):
     @classmethod
     def setUpClass(cls):
-        (gpu_discovery_script_file_name, mnist_dir_path) = set_up_test_dirs()
-        cls.gpu_discovery_script_file_name = gpu_discovery_script_file_name
-        cls.mnist_dir_path = mnist_dir_path
-
-        builder = SparkSession.builder.appName("TorchDistributorLocalUnitTestsIIOnConnect")
+        (cls.gpu_discovery_script_file_name, cls.mnist_dir_path) = set_up_test_dirs()
+        builder = SparkSession.builder.appName(cls.__name__)
         for k, v in get_local_mode_conf().items():
             builder = builder.config(k, v)
 
         builder = builder.config(
-            "spark.driver.resource.gpu.discoveryScript", gpu_discovery_script_file_name
+            "spark.driver.resource.gpu.discoveryScript", cls.gpu_discovery_script_file_name
         )
         cls.spark = builder.remote("local[4]").getOrCreate()
 
@@ -124,16 +118,13 @@ class TorchDistributorDistributedUnitTestsOnConnect(
 ):
     @classmethod
     def setUpClass(cls):
-        (gpu_discovery_script_file_name, mnist_dir_path) = set_up_test_dirs()
-        cls.gpu_discovery_script_file_name = gpu_discovery_script_file_name
-        cls.mnist_dir_path = mnist_dir_path
-
-        builder = SparkSession.builder.appName("TorchDistributorDistributedUnitTestsOnConnect")
+        (cls.gpu_discovery_script_file_name, cls.mnist_dir_path) = set_up_test_dirs()
+        builder = SparkSession.builder.appName(cls.__name__)
         for k, v in get_distributed_mode_conf().items():
             builder = builder.config(k, v)
 
         builder = builder.config(
-            "spark.worker.resource.gpu.discoveryScript", gpu_discovery_script_file_name
+            "spark.worker.resource.gpu.discoveryScript", cls.gpu_discovery_script_file_name
         )
         cls.spark = builder.remote("local-cluster[2,2,1024]").getOrCreate()
 
