@@ -123,6 +123,8 @@ class SparkConnectPlanner(val session: SparkSession) {
       case proto.Relation.RelTypeCase.WITH_COLUMNS => transformWithColumns(rel.getWithColumns)
       case proto.Relation.RelTypeCase.WITH_WATERMARK =>
         transformWithWatermark(rel.getWithWatermark)
+      case proto.Relation.RelTypeCase.CACHED_LOCAL_RELATION =>
+        transformCachedLocalRelation(rel.getCachedLocalRelation)
       case proto.Relation.RelTypeCase.HINT => transformHint(rel.getHint)
       case proto.Relation.RelTypeCase.UNPIVOT => transformUnpivot(rel.getUnpivot)
       case proto.Relation.RelTypeCase.REPARTITION_BY_EXPRESSION =>
@@ -618,6 +620,13 @@ class SparkConnectPlanner(val session: SparkSession) {
       .ofRows(session, transformRelation(rel.getInput))
       .withWatermark(rel.getEventTime, rel.getDelayThreshold)
       .logicalPlan
+  }
+
+  private def transformCachedLocalRelation(rel: proto.CachedLocalRelation): LogicalPlan = {
+    val cacheKey = rel.getKey
+    // scalastyle:off throwerror
+    throw new NotImplementedError(s"Caching of local relation: $cacheKey")
+    // scalastyle:on throwerror
   }
 
   private def transformHint(rel: proto.Hint): LogicalPlan = {

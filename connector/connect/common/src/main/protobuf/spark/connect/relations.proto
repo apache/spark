@@ -66,6 +66,7 @@ message Relation {
     GroupMap group_map = 31;
     CoGroupMap co_group_map = 32;
     WithWatermark with_watermark = 33;
+    CachedLocalRelation cached_local_relation = 34;
 
     // NA functions
     NAFill fill_na = 90;
@@ -374,6 +375,13 @@ message LocalRelation {
   // The server side will update the column names and data types according to this schema.
   // If the 'data' is not provided, then this schema will be required.
   optional string schema = 2;
+}
+
+// A local relation that has been cached already.
+message CachedLocalRelation {
+  // (Required) A key refers to a serialized local relation in a cache.
+  // The serialized representation contains enough info to restore of a LocalRelation.
+  string key = 1;
 }
 
 // Relation of type [[Sample]] that samples a fraction of the dataset.

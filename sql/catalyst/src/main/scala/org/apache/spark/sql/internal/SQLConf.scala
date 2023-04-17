@@ -4207,8 +4207,9 @@ object SQLConf {
       .doc("The threshold for the size in bytes of local relations to be cached at " +
         "the driver side after serialization.")
       .version("3.5.0")
-      .bytesConf(ByteUnit.MiB)
-      .createWithDefaultString("64mb")
+      .intConf
+      .checkValue(_ >= 0, "The threshold of cached local relations must not be negative")
+      .createWithDefault(64 * 1024 * 1024)
 
   /**
    * Holds information about keys that have been deprecated.
