@@ -27,7 +27,7 @@ import org.scalatest.Assertions._
 import org.scalatest.exceptions.TestFailedException
 import org.scalatest.prop.TableDrivenPropertyChecks._
 
-import org.apache.spark.{SparkConf, SparkException, SparkUserException, TaskContext}
+import org.apache.spark.{SparkConf, SparkException, TaskContext}
 import org.apache.spark.TestUtils.withListener
 import org.apache.spark.internal.config.MAX_RESULT_SIZE
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
@@ -2431,12 +2431,7 @@ class DatasetSuite extends QueryTest
   }
 
   private def assertNotNullException(e: Exception): Unit = {
-    e.getCause match {
-      case userException: SparkUserException =>
-        assert(e.getMessage.contains("Null value appeared in non-nullable field"))
-      case other =>
-        fail(s"Unexpected exception cause: $other")
-    }
+    assert(e.getMessage.contains("Null value appeared in non-nullable field"))
   }
 }
 
