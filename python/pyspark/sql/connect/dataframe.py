@@ -83,6 +83,7 @@ if TYPE_CHECKING:
         ArrowMapIterFunction,
     )
     from pyspark.sql.connect.session import SparkSession
+    from pyspark.pandas.frame import DataFrame as PandasOnSparkDataFrame
 
 
 class DataFrame:
@@ -329,6 +330,9 @@ class DataFrame:
     dropDuplicates.__doc__ = PySparkDataFrame.dropDuplicates.__doc__
 
     drop_duplicates = dropDuplicates
+
+    def dropDuplicatesWithinWatermark(self, subset: Optional[List[str]] = None) -> "DataFrame":
+        raise NotImplementedError("dropDuplicatesWithinWatermark() is not implemented.")
 
     def distinct(self) -> "DataFrame":
         return DataFrame.withPlan(
@@ -1736,11 +1740,31 @@ class DataFrame:
     def localCheckpoint(self, *args: Any, **kwargs: Any) -> None:
         raise NotImplementedError("localCheckpoint() is not implemented.")
 
-    def to_pandas_on_spark(self, *args: Any, **kwargs: Any) -> None:
-        raise NotImplementedError("to_pandas_on_spark() is not implemented.")
+    def to_pandas_on_spark(
+        self, index_col: Optional[Union[str, List[str]]] = None
+    ) -> "PandasOnSparkDataFrame":
+        warnings.warn(
+            "DataFrame.to_pandas_on_spark is deprecated. Use DataFrame.pandas_api instead.",
+            FutureWarning,
+        )
+        return self.pandas_api(index_col)
 
-    def pandas_api(self, *args: Any, **kwargs: Any) -> None:
-        raise NotImplementedError("pandas_api() is not implemented.")
+    def pandas_api(
+        self, index_col: Optional[Union[str, List[str]]] = None
+    ) -> "PandasOnSparkDataFrame":
+        from pyspark.pandas.namespace import _get_index_map
+        from pyspark.pandas.frame import DataFrame as PandasOnSparkDataFrame
+        from pyspark.pandas.internal import InternalFrame
+
+        index_spark_columns, index_names = _get_index_map(self, index_col)
+        internal = InternalFrame(
+            spark_frame=self,
+            index_spark_columns=index_spark_columns,
+            index_names=index_names,  # type: ignore[arg-type]
+        )
+        return PandasOnSparkDataFrame(internal)
+
+    pandas_api.__doc__ = PySparkDataFrame.pandas_api.__doc__
 
     def registerTempTable(self, name: str) -> None:
         warnings.warn("Deprecated in 2.0, use createOrReplaceTempView instead.", FutureWarning)

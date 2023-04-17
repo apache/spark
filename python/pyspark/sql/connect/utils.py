@@ -45,10 +45,10 @@ def require_minimum_grpc_version() -> None:
         import grpc
     except ImportError as error:
         raise ImportError(
-            "grpc >= %s must be installed; however, " "it was not found." % minimum_grpc_version
+            "grpcio >= %s must be installed; however, " "it was not found." % minimum_grpc_version
         ) from error
     if LooseVersion(grpc.__version__) < LooseVersion(minimum_grpc_version):
         raise ImportError(
-            "gRPC >= %s must be installed; however, "
+            "grpcio >= %s must be installed; however, "
             "your version was %s." % (minimum_grpc_version, grpc.__version__)
         )

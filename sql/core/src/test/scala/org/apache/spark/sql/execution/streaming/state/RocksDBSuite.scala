@@ -607,6 +607,7 @@ class RocksDBSuite extends SparkFunSuite {
         assert(metrics.nativeOpsHistograms("compaction").count > 0)
         assert(metrics.nativeOpsMetrics("totalBytesReadByCompaction") > 0)
         assert(metrics.nativeOpsMetrics("totalBytesWrittenByCompaction") > 0)
+        assert(metrics.pinnedBlocksMemUsage >= 0)
       }
     }
   }
