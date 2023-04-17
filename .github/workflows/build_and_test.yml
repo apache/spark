@@ -339,6 +339,8 @@ jobs:
             pyspark-pandas-slow
           - >-
             pyspark-connect, pyspark-errors
+          - >-
+            pyspark-pandas-connect
     env:
       MODULES_TO_TEST: ${{ matrix.modules }}
       HADOOP_PROFILE: ${{ inputs.hadoop }}

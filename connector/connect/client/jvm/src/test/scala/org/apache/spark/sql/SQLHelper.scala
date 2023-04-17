@@ -93,4 +93,15 @@ trait SQLHelper {
     try f(path)
     finally Utils.deleteRecursively(path)
   }
+
+  /**
+   * Drops table `tableName` after calling `f`.
+   */
+  protected def withTable(tableNames: String*)(f: => Unit): Unit = {
+    Utils.tryWithSafeFinally(f) {
+      tableNames.foreach { name =>
+        spark.sql(s"DROP TABLE IF EXISTS $name").collect()
+      }
+    }
+  }
 }
