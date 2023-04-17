@@ -22,6 +22,7 @@ import java.lang.reflect.InvocationTargetException
 import java.net.{URISyntaxException, URL}
 import java.time.{DateTimeException, LocalDate}
 import java.time.temporal.ChronoField
+import java.util.Collections
 import java.util.concurrent.TimeoutException
 
 import com.fasterxml.jackson.core.{JsonParser, JsonToken}
@@ -1187,7 +1188,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
 
   def cannotAcquireMemoryToBuildUnsafeHashedRelationError(): Throwable = {
     new SparkOutOfMemoryError(
-      "TRANSIENT_LEGACY_ERROR_TEMP_2107", java.util.Map.of())
+      "TRANSIENT_LEGACY_ERROR_TEMP_2107", Collections.emptyMap())
   }
 
   def rowLargerThan256MUnsupportedError(): SparkUnsupportedOperationException = {
