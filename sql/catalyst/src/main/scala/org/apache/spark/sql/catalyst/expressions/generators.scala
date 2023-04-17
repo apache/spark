@@ -520,7 +520,6 @@ case class Inline(child: Expression) extends UnaryExpression with CollectionGene
   override protected def withNewChildInternal(newChild: Expression): Inline = copy(child = newChild)
 }
 
-// scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = """_FUNC_() - Get Spark SQL keywords""",
   examples = """
@@ -531,7 +530,6 @@ case class Inline(child: Expression) extends UnaryExpression with CollectionGene
   """,
   since = "3.5.0",
   group = "generator_funcs")
-// scalastyle:on line.size.limit
 case class SQLKeywords() extends LeafExpression with Generator with CodegenFallback {
   override def elementSchema: StructType = new StructType()
     .add("keyword", StringType, nullable = false)

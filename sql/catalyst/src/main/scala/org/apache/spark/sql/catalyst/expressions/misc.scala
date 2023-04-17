@@ -466,3 +466,4 @@ case class TryAesDecrypt(
   override protected def withNewChildInternal(newChild: Expression): Expression =
     this.copy(replacement = newChild)
 }
+// scalastyle:on line.size.limit
