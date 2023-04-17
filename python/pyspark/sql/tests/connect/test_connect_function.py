@@ -134,8 +134,8 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
         # +---+----+----+
         # |  a|   b|   c|
         # +---+----+----+
-        # |  0| NaN|null|
-        # |  1|null| 2.0|
+        # |  0| NaN|NULL|
+        # |  1|NULL| 2.0|
         # |  2| 2.1| 3.5|
         # +---+----+----+
 
@@ -185,8 +185,8 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
         # +---+----+----+
         # |  a|   b|   c|
         # +---+----+----+
-        # |  0| NaN|null|
-        # |  1|null| 2.0|
+        # |  0| NaN|NULL|
+        # |  1|NULL| 2.0|
         # |  2| 2.1| 3.5|
         # +---+----+----+
 
@@ -272,8 +272,8 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
         # +---+----+----+
         # |  a|   b|   c|
         # +---+----+----+
-        # |  0| NaN|null|
-        # |  1|null| 2.0|
+        # |  0| NaN|NULL|
+        # |  1|NULL| 2.0|
         # |  2| 2.1| 3.5|
         # |  3| 3.1| NaN|
         # +---+----+----+
@@ -414,9 +414,9 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
         # +-----+----+----+
         # |    a|   b|   c|
         # +-----+----+----+
-        # |false|   1|null|
-        # | true|null| 2.0|
-        # | null|   3| 3.0|
+        # |false|   1|NULL|
+        # | true|NULL| 2.0|
+        # | NULL|   3| 3.0|
         # +-----+----+----+
 
         cdf = self.connect.sql(query)
@@ -460,9 +460,9 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
         # +-----+----+----+
         # |    a|   b|   c|
         # +-----+----+----+
-        # |false|   1|null|
-        # | true|null| 2.0|
-        # | null|   3| 3.5|
+        # |false|   1|NULL|
+        # | true|NULL| 2.0|
+        # | NULL|   3| 3.5|
         # +-----+----+----+
 
         cdf = self.connect.sql(query)
@@ -582,8 +582,8 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
         # +---+----+----+
         # |  a|   b|   c|
         # +---+----+----+
-        # |  0| NaN|null|
-        # |  1|null| 2.0|
+        # |  0| NaN|NULL|
+        # |  1|NULL| 2.0|
         # |  1| 2.1| 3.5|
         # |  0| 0.5| 1.0|
         # +---+----+----+
@@ -714,8 +714,8 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
         # +---+----+----+
         # |  a|   b|   c|
         # +---+----+----+
-        # |  0| NaN|null|
-        # |  1|null| 2.0|
+        # |  0| NaN|NULL|
+        # |  1|NULL| 2.0|
         # |  1| 2.1| 3.5|
         # |  0| 0.5| 1.0|
         # |  0| 1.5| 1.1|
@@ -1014,8 +1014,8 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
         # |        a|           b|           c|  d|  e|   f|
         # +---------+------------+------------+---+---+----+
         # |  [a, ab]|   [1, 2, 3]|[1, null, 3]|  1|  2|   a|
-        # |[x, null]|        null|      [1, 3]|  3|  4|   x|
-        # |     null|[-1, -2, -3]|          []|  5|  6|null|
+        # |[x, null]|        NULL|      [1, 3]|  3|  4|   x|
+        # |     NULL|[-1, -2, -3]|          []|  5|  6|NULL|
         # +---------+------------+------------+---+---+----+
 
         cdf = self.connect.sql(query)
@@ -1271,8 +1271,8 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
         # |        a|          b|                     c|  e|  f|     g|     h|
         # +---------+-----------+----------------------+---+---+------+------+
         # |{a -> ab}|  {x -> ab}|      {1 -> 2, 3 -> 4}|  1|  a|[1, 2]|[X, Y]|
-        # |{x -> yz}|{c -> null}|                  null|  2|  x|[3, 4]|[A, B]|
-        # |{c -> de}|       null|{-1 -> null, -3 -> -4}| -3|  c|  null|   [Z]|
+        # |{x -> yz}|{c -> null}|                  NULL|  2|  x|[3, 4]|[A, B]|
+        # |{c -> de}|       NULL|{-1 -> null, -3 -> -4}| -3|  c|  NULL|   [Z]|
         # +---------+-----------+----------------------+---+---+------+------+
 
         cdf = self.connect.sql(query)
@@ -1332,8 +1332,8 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
         # |        a|           b|           c|                     d|  e|  f|  g|
         # +---------+------------+------------+----------------------+---+---+---+
         # |  [a, ab]|   [1, 2, 3]|[1, null, 3]|      {1 -> 2, 3 -> 4}|  1|2.0|  3|
-        # |[x, null]|        null|      [1, 3]|                  null|  3|4.0|  5|
-        # |     null|[-1, -2, -3]|          []|{-1 -> null, -3 -> -4}|  7|NaN|  9|
+        # |[x, null]|        NULL|      [1, 3]|                  NULL|  3|4.0|  5|
+        # |     NULL|[-1, -2, -3]|          []|{-1 -> null, -3 -> -4}|  7|NaN|  9|
         # +---------+------------+------------+----------------------+---+---+---+
 
         cdf = self.connect.sql(query)
@@ -1455,9 +1455,9 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
         # +---------+------------+------------+---+---+----+-------------------+---------+
         # |        a|           b|           c|  d|  e|   f|                  g|        h|
         # +---------+------------+------------+---+---+----+-------------------+---------+
-        # |  [a, ab]|   [1, 2, 3]|[1, null, 3]|  1|  2|   a|               null| {0 -> 0}|
-        # |[x, null]|        null|      [1, 3]|  3|  4|   x|           {2 -> 0}|{-1 -> 1}|
-        # |     null|[-1, -2, -3]|          []|  5|  6|null|{-1 -> 2, -3 -> -4}|     null|
+        # |  [a, ab]|   [1, 2, 3]|[1, null, 3]|  1|  2|   a|               NULL| {0 -> 0}|
+        # |[x, null]|        NULL|      [1, 3]|  3|  4|   x|           {2 -> 0}|{-1 -> 1}|
+        # |     NULL|[-1, -2, -3]|          []|  5|  6|NULL|{-1 -> 2, -3 -> -4}|     NULL|
         # +---------+------------+------------+---+---+----+-------------------+---------+
 
         cdf = self.connect.sql(query)
@@ -1880,8 +1880,8 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
         # +--------+-----+----+
         # |       a|    b|   c|
         # +--------+-----+----+
-        # |   ab   |ab   |null|
-        # |      ab| null|  ab|
+        # |   ab   |ab   |NULL|
+        # |      ab| NULL|  ab|
         # +--------+-----+----+
 
         cdf = self.connect.sql(query)
@@ -2276,9 +2276,9 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
         # |  a|   b|   c|   d|
         # +---+----+----+----+
         # |  0| NaN|   x|[78]|
-        # |  1|null|   y|[79]|
+        # |  1|NULL|   y|[79]|
         # |  1| 2.1|   z|[7A]|
-        # |  0| 0.5|null|null|
+        # |  0| 0.5|NULL|NULL|
         # +---+----+----+----+
 
         cdf = self.connect.sql(query)
@@ -2342,9 +2342,9 @@ class SparkConnectFunctionTests(ReusedConnectTestCase, PandasOnSparkTestUtils, S
         # |   a|   b|   c|   d|
         # +----+----+----+----+
         # |-1.0| NaN|   x|[78]|
-        # |-2.1|null|   y|[79]|
+        # |-2.1|NULL|   y|[79]|
         # | 1.0| 2.1|   z|[7A]|
-        # | 0.0| 0.5|null|null|
+        # | 0.0| 0.5|NULL|NULL|
         # +----+----+----+----+
 
         cdf = self.connect.sql(query)

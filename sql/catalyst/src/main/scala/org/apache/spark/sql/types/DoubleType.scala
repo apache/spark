@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.types
 
-import scala.reflect.runtime.universe.typeTag
 import scala.util.Try
 
 import org.apache.spark.annotation.Stable
@@ -30,13 +29,6 @@ import org.apache.spark.sql.catalyst.types.{PhysicalDataType, PhysicalDoubleType
  */
 @Stable
 class DoubleType private() extends FractionalType {
-  // The companion object and this class is separated so the companion object also subclasses
-  // this type. Otherwise, the companion object would be of type "DoubleType$" in byte code.
-  // Defined with a private constructor so the companion object is the only possible instantiation.
-  private[sql] type InternalType = Double
-  @transient private[sql] lazy val tag = typeTag[InternalType]
-  private[sql] val asIntegral = DoubleType.DoubleAsIfIntegral
-
   /**
    * The default size of a value of the DoubleType is 8 bytes.
    */

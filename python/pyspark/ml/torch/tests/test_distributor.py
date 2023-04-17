@@ -108,10 +108,10 @@ def create_training_function(mnist_dir_path: str) -> Callable:
         ddp_model = DDP(model)
         optimizer = optim.SGD(ddp_model.parameters(), lr=learning_rate, momentum=momentum)
         for epoch in range(1, num_epochs + 1):
-            model.train()
+            ddp_model.train()
             for _, (data, target) in enumerate(data_loader):
                 optimizer.zero_grad()
-                output = model(data)
+                output = ddp_model(data)
                 loss = F.nll_loss(output, target)
                 loss.backward()
                 optimizer.step()

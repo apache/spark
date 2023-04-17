@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.types
 
-import scala.reflect.runtime.universe.typeTag
 import scala.util.Try
 
 import org.apache.spark.annotation.Stable
@@ -30,13 +29,6 @@ import org.apache.spark.sql.catalyst.types.{PhysicalDataType, PhysicalFloatType}
  */
 @Stable
 class FloatType private() extends FractionalType {
-  // The companion object and this class is separated so the companion object also subclasses
-  // this type. Otherwise, the companion object would be of type "FloatType$" in byte code.
-  // Defined with a private constructor so the companion object is the only possible instantiation.
-  private[sql] type InternalType = Float
-  @transient private[sql] lazy val tag = typeTag[InternalType]
-  private[sql] val asIntegral = FloatType.FloatAsIfIntegral
-
   /**
    * The default size of a value of the FloatType is 4 bytes.
    */

@@ -26,7 +26,39 @@ from pyspark.sql.types import StructType, StructField, IntegerType, StringType
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 
-class StreamingTests(ReusedSQLTestCase):
+class StreamingTestsMixin:
+    def test_streaming_query_functions_basic(self):
+        df = self.spark.readStream.format("rate").option("rowsPerSecond", 10).load()
+        query = (
+            df.writeStream.format("memory")
+            .queryName("test_streaming_query_functions_basic")
+            .start()
+        )
+        try:
+            self.assertEquals(query.name, "test_streaming_query_functions_basic")
+            self.assertTrue(isinstance(query.id, str))
+            self.assertTrue(isinstance(query.runId, str))
+            self.assertTrue(query.isActive)
+            # TODO: Will be uncommented with [SPARK-42960]
+            # self.assertEqual(query.exception(), None)
+            # self.assertFalse(query.awaitTermination(1))
+            query.processAllAvailable()
+            recentProgress = query.recentProgress
+            lastProgress = query.lastProgress
+            self.assertEqual(lastProgress["name"], query.name)
+            self.assertEqual(lastProgress["id"], query.id)
+            self.assertTrue(any(p == lastProgress for p in recentProgress))
+            query.explain()
+
+        except Exception as e:
+            self.fail(
+                "Streaming query functions sanity check shouldn't throw any error. "
+                "Error message: " + str(e)
+            )
+
+        finally:
+            query.stop()
+
     def test_stream_trigger(self):
         df = self.spark.readStream.format("text").load("python/test_support/sql/streaming")
 
@@ -77,8 +109,8 @@ class StreamingTests(ReusedSQLTestCase):
                 .schema(bad_schema)
                 .load(path="python/test_support/sql/streaming", schema=schema, format="text")
             )
-        self.assertTrue(df.isStreaming)
-        self.assertEqual(df.schema.simpleString(), "struct<data:string>")
+            self.assertTrue(df.isStreaming)
+            self.assertEqual(df.schema.simpleString(), "struct<data:string>")
 
     def test_stream_save_options(self):
         df = (
@@ -295,334 +327,6 @@ class StreamingTests(ReusedSQLTestCase):
             q.stop()
             shutil.rmtree(tmpPath)
 
-    class ForeachWriterTester:
-        def __init__(self, spark):
-            self.spark = spark
-
-        def write_open_event(self, partitionId, epochId):
-            self._write_event(self.open_events_dir, {"partition": partitionId, "epoch": epochId})
-
-        def write_process_event(self, row):
-            self._write_event(self.process_events_dir, {"value": "text"})
-
-        def write_close_event(self, error):
-            self._write_event(self.close_events_dir, {"error": str(error)})
-
-        def write_input_file(self):
-            self._write_event(self.input_dir, "text")
-
-        def open_events(self):
-            return self._read_events(self.open_events_dir, "partition INT, epoch INT")
-
-        def process_events(self):
-            return self._read_events(self.process_events_dir, "value STRING")
-
-        def close_events(self):
-            return self._read_events(self.close_events_dir, "error STRING")
-
-        def run_streaming_query_on_writer(self, writer, num_files):
-            self._reset()
-            try:
-                sdf = self.spark.readStream.format("text").load(self.input_dir)
-                sq = sdf.writeStream.foreach(writer).start()
-                for i in range(num_files):
-                    self.write_input_file()
-                    sq.processAllAvailable()
-            finally:
-                self.stop_all()
-
-        def assert_invalid_writer(self, writer, msg=None):
-            self._reset()
-            try:
-                sdf = self.spark.readStream.format("text").load(self.input_dir)
-                sq = sdf.writeStream.foreach(writer).start()
-                self.write_input_file()
-                sq.processAllAvailable()
-                self.fail("invalid writer %s did not fail the query" % str(writer))  # not expected
-            except Exception as e:
-                if msg:
-                    assert msg in str(e), "%s not in %s" % (msg, str(e))
-
-            finally:
-                self.stop_all()
-
-        def stop_all(self):
-            for q in self.spark.streams.active:
-                q.stop()
-
-        def _reset(self):
-            self.input_dir = tempfile.mkdtemp()
-            self.open_events_dir = tempfile.mkdtemp()
-            self.process_events_dir = tempfile.mkdtemp()
-            self.close_events_dir = tempfile.mkdtemp()
-
-        def _read_events(self, dir, json):
-            rows = self.spark.read.schema(json).json(dir).collect()
-            dicts = [row.asDict() for row in rows]
-            return dicts
-
-        def _write_event(self, dir, event):
-            import uuid
-
-            with open(os.path.join(dir, str(uuid.uuid4())), "w") as f:
-                f.write("%s\n" % str(event))
-
-        def __getstate__(self):
-            return (self.open_events_dir, self.process_events_dir, self.close_events_dir)
-
-        def __setstate__(self, state):
-            self.open_events_dir, self.process_events_dir, self.close_events_dir = state
-
-    # Those foreach tests are failed in macOS High Sierra by defined rules
-    # at http://sealiesoftware.com/blog/archive/2017/6/5/Objective-C_and_fork_in_macOS_1013.html
-    # To work around this, OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES.
-    def test_streaming_foreach_with_simple_function(self):
-        tester = self.ForeachWriterTester(self.spark)
-
-        def foreach_func(row):
-            tester.write_process_event(row)
-
-        tester.run_streaming_query_on_writer(foreach_func, 2)
-        self.assertEqual(len(tester.process_events()), 2)
-
-    def test_streaming_foreach_with_basic_open_process_close(self):
-        tester = self.ForeachWriterTester(self.spark)
-
-        class ForeachWriter:
-            def open(self, partitionId, epochId):
-                tester.write_open_event(partitionId, epochId)
-                return True
-
-            def process(self, row):
-                tester.write_process_event(row)
-
-            def close(self, error):
-                tester.write_close_event(error)
-
-        tester.run_streaming_query_on_writer(ForeachWriter(), 2)
-
-        open_events = tester.open_events()
-        self.assertEqual(len(open_events), 2)
-        self.assertSetEqual(set([e["epoch"] for e in open_events]), {0, 1})
-
-        self.assertEqual(len(tester.process_events()), 2)
-
-        close_events = tester.close_events()
-        self.assertEqual(len(close_events), 2)
-        self.assertSetEqual(set([e["error"] for e in close_events]), {"None"})
-
-    def test_streaming_foreach_with_open_returning_false(self):
-        tester = self.ForeachWriterTester(self.spark)
-
-        class ForeachWriter:
-            def open(self, partition_id, epoch_id):
-                tester.write_open_event(partition_id, epoch_id)
-                return False
-
-            def process(self, row):
-                tester.write_process_event(row)
-
-            def close(self, error):
-                tester.write_close_event(error)
-
-        tester.run_streaming_query_on_writer(ForeachWriter(), 2)
-
-        self.assertEqual(len(tester.open_events()), 2)
-
-        self.assertEqual(len(tester.process_events()), 0)  # no row was processed
-
-        close_events = tester.close_events()
-        self.assertEqual(len(close_events), 2)
-        self.assertSetEqual(set([e["error"] for e in close_events]), {"None"})
-
-    def test_streaming_foreach_without_open_method(self):
-        tester = self.ForeachWriterTester(self.spark)
-
-        class ForeachWriter:
-            def process(self, row):
-                tester.write_process_event(row)
-
-            def close(self, error):
-                tester.write_close_event(error)
-
-        tester.run_streaming_query_on_writer(ForeachWriter(), 2)
-        self.assertEqual(len(tester.open_events()), 0)  # no open events
-        self.assertEqual(len(tester.process_events()), 2)
-        self.assertEqual(len(tester.close_events()), 2)
-
-    def test_streaming_foreach_without_close_method(self):
-        tester = self.ForeachWriterTester(self.spark)
-
-        class ForeachWriter:
-            def open(self, partition_id, epoch_id):
-                tester.write_open_event(partition_id, epoch_id)
-                return True
-
-            def process(self, row):
-                tester.write_process_event(row)
-
-        tester.run_streaming_query_on_writer(ForeachWriter(), 2)
-        self.assertEqual(len(tester.open_events()), 2)  # no open events
-        self.assertEqual(len(tester.process_events()), 2)
-        self.assertEqual(len(tester.close_events()), 0)
-
-    def test_streaming_foreach_without_open_and_close_methods(self):
-        tester = self.ForeachWriterTester(self.spark)
-
-        class ForeachWriter:
-            def process(self, row):
-                tester.write_process_event(row)
-
-        tester.run_streaming_query_on_writer(ForeachWriter(), 2)
-        self.assertEqual(len(tester.open_events()), 0)  # no open events
-        self.assertEqual(len(tester.process_events()), 2)
-        self.assertEqual(len(tester.close_events()), 0)
-
-    def test_streaming_foreach_with_process_throwing_error(self):
-        from pyspark.errors import StreamingQueryException
-
-        tester = self.ForeachWriterTester(self.spark)
-
-        class ForeachWriter:
-            def process(self, row):
-                raise RuntimeError("test error")
-
-            def close(self, error):
-                tester.write_close_event(error)
-
-        try:
-            tester.run_streaming_query_on_writer(ForeachWriter(), 1)
-            self.fail("bad writer did not fail the query")  # this is not expected
-        except StreamingQueryException:
-            # TODO: Verify whether original error message is inside the exception
-            pass
-
-        self.assertEqual(len(tester.process_events()), 0)  # no row was processed
-        close_events = tester.close_events()
-        self.assertEqual(len(close_events), 1)
-        # TODO: Verify whether original error message is inside the exception
-
-    def test_streaming_foreach_with_invalid_writers(self):
-
-        tester = self.ForeachWriterTester(self.spark)
-
-        def func_with_iterator_input(iter):
-            for x in iter:
-                print(x)
-
-        tester.assert_invalid_writer(func_with_iterator_input)
-
-        class WriterWithoutProcess:
-            def open(self, partition):
-                pass
-
-        tester.assert_invalid_writer(WriterWithoutProcess(), "does not have a 'process'")
-
-        class WriterWithNonCallableProcess:
-            process = True
-
-        tester.assert_invalid_writer(
-            WriterWithNonCallableProcess(), "'process' in provided object is not callable"
-        )
-
-        class WriterWithNoParamProcess:
-            def process(self):
-                pass
-
-        tester.assert_invalid_writer(WriterWithNoParamProcess())
-
-        # Abstract class for tests below
-        class WithProcess:
-            def process(self, row):
-                pass
-
-        class WriterWithNonCallableOpen(WithProcess):
-            open = True
-
-        tester.assert_invalid_writer(
-            WriterWithNonCallableOpen(), "'open' in provided object is not callable"
-        )
-
-        class WriterWithNoParamOpen(WithProcess):
-            def open(self):
-                pass
-
-        tester.assert_invalid_writer(WriterWithNoParamOpen())
-
-        class WriterWithNonCallableClose(WithProcess):
-            close = True
-
-        tester.assert_invalid_writer(
-            WriterWithNonCallableClose(), "'close' in provided object is not callable"
-        )
-
-    def test_streaming_foreachBatch(self):
-        q = None
-        collected = dict()
-
-        def collectBatch(batch_df, batch_id):
-            collected[batch_id] = batch_df.collect()
-
-        try:
-            df = self.spark.readStream.format("text").load("python/test_support/sql/streaming")
-            q = df.writeStream.foreachBatch(collectBatch).start()
-            q.processAllAvailable()
-            self.assertTrue(0 in collected)
-            self.assertTrue(len(collected[0]), 2)
-        finally:
-            if q:
-                q.stop()
-
-    def test_streaming_foreachBatch_tempview(self):
-        q = None
-        collected = dict()
-
-        def collectBatch(batch_df, batch_id):
-            batch_df.createOrReplaceTempView("updates")
-            # it should use the spark session within given DataFrame, as microbatch execution will
-            # clone the session which is no longer same with the session used to start the
-            # streaming query
-            collected[batch_id] = batch_df.sparkSession.sql("SELECT * FROM updates").collect()
-
-        try:
-            df = self.spark.readStream.format("text").load("python/test_support/sql/streaming")
-            q = df.writeStream.foreachBatch(collectBatch).start()
-            q.processAllAvailable()
-            self.assertTrue(0 in collected)
-            self.assertTrue(len(collected[0]), 2)
-        finally:
-            if q:
-                q.stop()
-
-    def test_streaming_foreachBatch_propagates_python_errors(self):
-        from pyspark.errors import StreamingQueryException
-
-        q = None
-
-        def collectBatch(df, id):
-            raise RuntimeError("this should fail the query")
-
-        try:
-            df = self.spark.readStream.format("text").load("python/test_support/sql/streaming")
-            q = df.writeStream.foreachBatch(collectBatch).start()
-            q.processAllAvailable()
-            self.fail("Expected a failure")
-        except StreamingQueryException as e:
-            self.assertTrue("this should fail" in str(e))
-        finally:
-            if q:
-                q.stop()
-
-    def test_streaming_foreachBatch_graceful_stop(self):
-        # SPARK-39218: Make foreachBatch streaming query stop gracefully
-        def func(batch_df, _):
-            batch_df.sparkSession._jvm.java.lang.Thread.sleep(10000)
-
-        q = self.spark.readStream.format("rate").load().writeStream.foreachBatch(func).start()
-        time.sleep(3)  # 'rowsPerSecond' defaults to 1. Waits 3 secs out for the input.
-        q.stop()
-        self.assertIsNone(q.exception(), "No exception has to be propagated.")
-
     def test_streaming_read_from_table(self):
         with self.table("input_table", "this_query"):
             self.spark.sql("CREATE TABLE input_table (value string) USING parquet")
@@ -646,6 +350,10 @@ class StreamingTests(ReusedSQLTestCase):
             q.stop()
             result = self.spark.sql("SELECT value FROM output_table").collect()
             self.assertTrue(len(result) > 0)
+
+
+class StreamingTests(StreamingTestsMixin, ReusedSQLTestCase):
+    pass
 
 
 if __name__ == "__main__":
