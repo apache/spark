@@ -21,7 +21,7 @@ check_dependencies(__name__)
 
 from typing import cast, overload, Callable, Dict, List, Optional, TYPE_CHECKING, Union
 
-from pyspark.sql.connect.plan import DataSource, LogicalPlan, WriteStreamOperation
+from pyspark.sql.connect.plan import DataSource, LogicalPlan, Read, WriteStreamOperation
 import pyspark.sql.connect.proto as pb2
 from pyspark.sql.connect.readwriter import OptionUtils, to_str
 from pyspark.sql.connect.streaming.query import StreamingQuery
@@ -311,7 +311,10 @@ class DataStreamReader(OptionUtils):
 
     csv.__doc__ = PySparkDataStreamReader.csv.__doc__
 
-    # def table() TODO(SPARK-43042). Use Read(table_name) relation.
+    def table(self, tableName: str) -> "DataFrame":
+        return self._df(Read(tableName, self._options, is_streaming=True))
+
+    table.__doc__ = PySparkDataStreamReader.table.__doc__
 
 
 DataStreamReader.__doc__ = PySparkDataStreamReader.__doc__

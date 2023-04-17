@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.types
 
-import scala.reflect.runtime.universe.typeTag
-
 import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.catalyst.types.{PhysicalDataType, PhysicalLongType}
 
@@ -33,14 +31,6 @@ import org.apache.spark.sql.catalyst.types.{PhysicalDataType, PhysicalLongType}
  */
 @Stable
 class TimestampType private() extends DatetimeType {
-  /**
-   * Internally, a timestamp is stored as the number of microseconds from
-   * the epoch of 1970-01-01T00:00:00.000000Z (UTC+00:00)
-   */
-  private[sql] type InternalType = Long
-
-  @transient private[sql] lazy val tag = typeTag[InternalType]
-
   /**
    * The default size of a value of the TimestampType is 8 bytes.
    */

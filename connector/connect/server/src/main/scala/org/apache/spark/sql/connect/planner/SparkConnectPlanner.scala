@@ -829,12 +829,13 @@ class SparkConnectPlanner(val session: SparkSession) {
   private def transformReadRel(rel: proto.Read): LogicalPlan = {
 
     rel.getReadTypeCase match {
-      case proto.Read.ReadTypeCase.NAMED_TABLE if !rel.getIsStreaming =>
+      case proto.Read.ReadTypeCase.NAMED_TABLE =>
         val multipartIdentifier =
           CatalystSqlParser.parseMultipartIdentifier(rel.getNamedTable.getUnparsedIdentifier)
         UnresolvedRelation(
           multipartIdentifier,
-          new CaseInsensitiveStringMap(rel.getNamedTable.getOptionsMap))
+          new CaseInsensitiveStringMap(rel.getNamedTable.getOptionsMap),
+          isStreaming = rel.getIsStreaming)
 
       case proto.Read.ReadTypeCase.DATA_SOURCE if !rel.getIsStreaming =>
         val localMap = CaseInsensitiveMap[String](rel.getDataSource.getOptionsMap.asScala.toMap)
