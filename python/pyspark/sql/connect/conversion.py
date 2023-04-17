@@ -491,6 +491,7 @@ class ArrowTableToRowsConversion:
 
 
 def storage_level_to_proto(storage_level: StorageLevel) -> pb2.StorageLevel:
+    assert storage_level is not None and isinstance(storage_level, StorageLevel)
     return pb2.StorageLevel(
         use_disk=storage_level.useDisk,
         use_memory=storage_level.useMemory,
@@ -501,6 +502,7 @@ def storage_level_to_proto(storage_level: StorageLevel) -> pb2.StorageLevel:
 
 
 def proto_to_storage_level(storage_level: pb2.StorageLevel) -> StorageLevel:
+    assert storage_level is not None and isinstance(storage_level, pb2.StorageLevel)
     return StorageLevel(
         useDisk=storage_level.use_disk,
         useMemory=storage_level.use_memory,
