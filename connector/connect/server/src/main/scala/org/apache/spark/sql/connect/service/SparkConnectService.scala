@@ -126,7 +126,7 @@ class SparkConnectService(debug: Boolean)
       observer.onError(
         Status.UNKNOWN
           .withCause(e)
-          .withDescription(StringUtils.abbreviate(e.getMessage, 2048))
+          .withDescription(extractErrorMessage(e))
           .asRuntimeException())
   }
 
@@ -298,6 +298,11 @@ object SparkConnectService {
   }
 
   def extractErrorMessage(st: Throwable): String = {
-    StringUtils.abbreviate(st.getMessage, 2048)
+    val message = StringUtils.abbreviate(st.getMessage, 2048)
+    if (message != null) {
+      message
+    } else {
+      ""
+    }
   }
 }

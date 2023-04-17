@@ -316,10 +316,13 @@ class Read(LogicalPlan):
         super().__init__(None)
         self.table_name = table_name
         self.options = options or {}
+        self._is_streaming = is_streaming
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
         plan = self._create_proto_relation()
         plan.read.named_table.unparsed_identifier = self.table_name
+        if self._is_streaming is not None:
+            plan.read.is_streaming = self._is_streaming
         for k, v in self.options.items():
             plan.read.named_table.options[k] = v
         return plan
