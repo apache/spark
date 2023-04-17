@@ -102,31 +102,46 @@ class DataFrame:
 
     def __repr__(self) -> str:
         if not self._support_repr_html:
-            pdf = DataFrame.withPlan(
-                plan.EagerEvalString(child=self._plan, format="show_string"), session=self._session
-            ).toPandas()
-            assert pdf is not None
-            if pdf["eager_eval_string"][0] is not None:
-                return pdf["eager_eval_string"][0]
-            else:
-                _schema = _parse_datatype_json_string(pdf["schema"][0])
-                assert isinstance(_schema, StructType)
-                schema = _schema
-        else:
-            schema = self.schema
-        return "DataFrame[%s]" % (
-            ", ".join("%s: %s" % (str(f.name), f.dataType.simpleString()) for f in schema.fields)
-        )
+            (
+                repl_eager_eval_enabled,
+                repl_eager_eval_max_num_rows,
+                repl_eager_eval_truncate,
+            ) = self._session._get_configs(
+                "spark.sql.repl.eagerEval.enabled",
+                "spark.sql.repl.eagerEval.maxNumRows",
+                "spark.sql.repl.eagerEval.truncate",
+            )
+            if repl_eager_eval_enabled == "true":
+                return self._show_string(
+                    n=int(repl_eager_eval_max_num_rows),
+                    truncate=int(repl_eager_eval_truncate),
+                    vertical=False,
+                )
+        return "DataFrame[%s]" % (", ".join("%s: %s" % c for c in self.dtypes))
 
     def _repr_html_(self) -> Optional[str]:
         if not self._support_repr_html:
             self._support_repr_html = True
-        pdf = DataFrame.withPlan(
-            plan.EagerEvalString(child=self._plan, format="html_string"), session=self._session
-        ).toPandas()
-        assert pdf is not None
-        if pdf["eager_eval_string"][0] is not None:
-            return pdf["eager_eval_string"][0]
+        (
+            repl_eager_eval_enabled,
+            repl_eager_eval_max_num_rows,
+            repl_eager_eval_truncate,
+        ) = self._session._get_configs(
+            "spark.sql.repl.eagerEval.enabled",
+            "spark.sql.repl.eagerEval.maxNumRows",
+            "spark.sql.repl.eagerEval.truncate",
+        )
+        if repl_eager_eval_enabled == "true":
+            pdf = DataFrame.withPlan(
+                plan.HtmlString(
+                    child=self._plan,
+                    num_rows=int(repl_eager_eval_max_num_rows),
+                    truncate=int(repl_eager_eval_truncate),
+                ),
+                session=self._session,
+            ).toPandas()
+            assert pdf is not None
+            return pdf["html_string"][0]
         else:
             return None
 
