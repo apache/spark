@@ -179,11 +179,6 @@ object MimaExcludes {
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.ExceptionFailure.apply")
   )
 
-
-
-
-
-
   // Defulat exclude rules
   lazy val defaultExcludes = Seq(
     // Spark Internals
