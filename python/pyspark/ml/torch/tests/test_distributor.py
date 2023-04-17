@@ -125,10 +125,12 @@ def create_training_function(mnist_dir_path: str) -> Callable:
 def set_up_test_dirs():
     gpu_discovery_script_file = tempfile.NamedTemporaryFile(delete=False)
     gpu_discovery_script_file_name = gpu_discovery_script_file.name
-    gpu_discovery_script_file.write(
-        b'echo {\\"name\\": \\"gpu\\", \\"addresses\\": [\\"0\\",\\"1\\",\\"2\\"]}'
-    )
-    gpu_discovery_script_file.close()
+    try:
+        gpu_discovery_script_file.write(
+            b'echo {\\"name\\": \\"gpu\\", \\"addresses\\": [\\"0\\",\\"1\\",\\"2\\"]}'
+        )
+    finally:
+        gpu_discovery_script_file.close()
 
     # create temporary directory for Worker resources coordination
     tempdir = tempfile.NamedTemporaryFile(delete=False)
