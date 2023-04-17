@@ -40,13 +40,13 @@ import org.apache.spark.ml.{functions => MLFunctions}
 import org.apache.spark.sql.{Column, Dataset, Encoders, SparkSession}
 import org.apache.spark.sql.avro.{AvroDataToCatalyst, CatalystDataToAvro}
 import org.apache.spark.sql.catalyst.{expressions, AliasIdentifier, FunctionIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{GlobalTempView, LocalTempView, MultiAlias, ParameterizedQuery, UnresolvedAlias, UnresolvedAttribute, UnresolvedExtractValue, UnresolvedFunction, UnresolvedRegex, UnresolvedRelation, UnresolvedStar}
+import org.apache.spark.sql.catalyst.analysis.{GlobalTempView, LocalTempView, MultiAlias, ParameterizedQuery, UnresolvedAlias, UnresolvedAttribute, UnresolvedDeserializer, UnresolvedExtractValue, UnresolvedFunction, UnresolvedRegex, UnresolvedRelation, UnresolvedStar}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException, ParserUtils}
 import org.apache.spark.sql.catalyst.plans.{Cross, FullOuter, Inner, JoinType, LeftAnti, LeftOuter, LeftSemi, RightOuter, UsingJoin}
 import org.apache.spark.sql.catalyst.plans.logical
-import org.apache.spark.sql.catalyst.plans.logical.{CollectMetrics, CommandResult, Deduplicate, Except, Intersect, LocalRelation, LogicalPlan, Project, Sample, Sort, SubqueryAlias, Union, Unpivot, UnresolvedHint}
+import org.apache.spark.sql.catalyst.plans.logical.{CollectMetrics, CommandResult, Deduplicate, DeserializeToObject, Except, Intersect, LocalRelation, LogicalPlan, MapPartitions, Project, Sample, SerializeFromObject, Sort, SubqueryAlias, TypedFilter, Union, Unpivot, UnresolvedHint}
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CharVarcharUtils}
 import org.apache.spark.sql.connect.artifact.SparkConnectArtifactManager
 import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, InvalidPlanInput, LiteralValueProtoConverter, StorageLevelProtoConverter, UdfPacket}
@@ -493,25 +493,62 @@ class SparkConnectPlanner(val session: SparkSession) {
   }
 
   private def transformMapPartitions(rel: proto.MapPartitions): LogicalPlan = {
+    val baseRel = transformRelation(rel.getInput)
     val commonUdf = rel.getFunc
-    val pythonUdf = transformPythonUDF(commonUdf)
-    val isBarrier = if (rel.hasIsBarrier) rel.getIsBarrier else false
-    pythonUdf.evalType match {
-      case PythonEvalType.SQL_MAP_PANDAS_ITER_UDF =>
-        logical.MapInPandas(
-          pythonUdf,
-          pythonUdf.dataType.asInstanceOf[StructType].toAttributes,
-          transformRelation(rel.getInput),
-          isBarrier)
-      case PythonEvalType.SQL_MAP_ARROW_ITER_UDF =>
-        logical.PythonMapInArrow(
-          pythonUdf,
-          pythonUdf.dataType.asInstanceOf[StructType].toAttributes,
-          transformRelation(rel.getInput),
-          isBarrier)
+    commonUdf.getFunctionCase match {
+      case proto.CommonInlineUserDefinedFunction.FunctionCase.SCALAR_SCALA_UDF =>
+        transformTypedMapPartitions(commonUdf, baseRel)
+      case proto.CommonInlineUserDefinedFunction.FunctionCase.PYTHON_UDF =>
+        val pythonUdf = transformPythonUDF(commonUdf)
+        val isBarrier = if (rel.hasIsBarrier) rel.getIsBarrier else false
+        pythonUdf.evalType match {
+          case PythonEvalType.SQL_MAP_PANDAS_ITER_UDF =>
+            logical.MapInPandas(
+              pythonUdf,
+              pythonUdf.dataType.asInstanceOf[StructType].toAttributes,
+              baseRel,
+              isBarrier)
+          case PythonEvalType.SQL_MAP_ARROW_ITER_UDF =>
+            logical.PythonMapInArrow(
+              pythonUdf,
+              pythonUdf.dataType.asInstanceOf[StructType].toAttributes,
+              baseRel,
+              isBarrier)
+          case _ =>
+            throw InvalidPlanInput(
+              s"Function with EvalType: ${pythonUdf.evalType} is not supported")
+        }
       case _ =>
-        throw InvalidPlanInput(s"Function with EvalType: ${pythonUdf.evalType} is not supported")
+        throw InvalidPlanInput(
+          s"Function with ID: ${commonUdf.getFunctionCase.getNumber} is not supported")
     }
+  }
+
+  private def generateObjAttr[T](enc: ExpressionEncoder[T]): Attribute = {
+    val dataType = enc.deserializer.dataType
+    val nullable = !enc.clsTag.runtimeClass.isPrimitive
+    AttributeReference("obj", dataType, nullable)()
+  }
+
+  private def transformTypedMapPartitions(
+      fun: proto.CommonInlineUserDefinedFunction,
+      child: LogicalPlan): LogicalPlan = {
+    val udf = fun.getScalarScalaUdf
+    val udfPacket =
+      Utils.deserialize[UdfPacket](
+        udf.getPayload.toByteArray,
+        SparkConnectArtifactManager.classLoaderWithArtifacts)
+    assert(udfPacket.inputEncoders.size == 1)
+    val iEnc = ExpressionEncoder(udfPacket.inputEncoders.head)
+    val rEnc = ExpressionEncoder(udfPacket.outputEncoder)
+
+    val deserializer = UnresolvedDeserializer(iEnc.deserializer)
+    val deserialized = DeserializeToObject(deserializer, generateObjAttr(iEnc), child)
+    val mapped = MapPartitions(
+      udfPacket.function.asInstanceOf[Iterator[Any] => Iterator[Any]],
+      generateObjAttr(rEnc),
+      deserialized)
+    SerializeFromObject(rEnc.namedExpressions, mapped)
   }
 
   private def transformGroupMap(rel: proto.GroupMap): LogicalPlan = {
@@ -792,12 +829,13 @@ class SparkConnectPlanner(val session: SparkSession) {
   private def transformReadRel(rel: proto.Read): LogicalPlan = {
 
     rel.getReadTypeCase match {
-      case proto.Read.ReadTypeCase.NAMED_TABLE if !rel.getIsStreaming =>
+      case proto.Read.ReadTypeCase.NAMED_TABLE =>
         val multipartIdentifier =
           CatalystSqlParser.parseMultipartIdentifier(rel.getNamedTable.getUnparsedIdentifier)
         UnresolvedRelation(
           multipartIdentifier,
-          new CaseInsensitiveStringMap(rel.getNamedTable.getOptionsMap))
+          new CaseInsensitiveStringMap(rel.getNamedTable.getOptionsMap),
+          isStreaming = rel.getIsStreaming)
 
       case proto.Read.ReadTypeCase.DATA_SOURCE if !rel.getIsStreaming =>
         val localMap = CaseInsensitiveMap[String](rel.getDataSource.getOptionsMap.asScala.toMap)
@@ -887,7 +925,35 @@ class SparkConnectPlanner(val session: SparkSession) {
   private def transformFilter(rel: proto.Filter): LogicalPlan = {
     assert(rel.hasInput)
     val baseRel = transformRelation(rel.getInput)
-    logical.Filter(condition = transformExpression(rel.getCondition), child = baseRel)
+    val cond = rel.getCondition
+    cond.getExprTypeCase match {
+      case proto.Expression.ExprTypeCase.COMMON_INLINE_USER_DEFINED_FUNCTION
+          if isTypedFilter(cond.getCommonInlineUserDefinedFunction) =>
+        transformTypedFilter(cond.getCommonInlineUserDefinedFunction, baseRel)
+      case _ =>
+        logical.Filter(condition = transformExpression(cond), child = baseRel)
+    }
+  }
+
+  private def isTypedFilter(udf: proto.CommonInlineUserDefinedFunction): Boolean = {
+    // It is a scala udf && the udf argument is an unresolved start.
+    // This means the udf is a typed filter to filter on all inputs
+    udf.getFunctionCase == proto.CommonInlineUserDefinedFunction.FunctionCase.SCALAR_SCALA_UDF &&
+    udf.getArgumentsCount == 1 &&
+    udf.getArguments(0).getExprTypeCase == proto.Expression.ExprTypeCase.UNRESOLVED_STAR
+  }
+
+  private def transformTypedFilter(
+      fun: proto.CommonInlineUserDefinedFunction,
+      child: LogicalPlan): TypedFilter = {
+    val udf = fun.getScalarScalaUdf
+    val udfPacket =
+      Utils.deserialize[UdfPacket](
+        udf.getPayload.toByteArray,
+        SparkConnectArtifactManager.classLoaderWithArtifacts)
+    assert(udfPacket.inputEncoders.size == 1)
+    val iEnc = ExpressionEncoder(udfPacket.inputEncoders.head)
+    TypedFilter(udfPacket.function, child)(iEnc)
   }
 
   private def transformProject(rel: proto.Project): LogicalPlan = {
@@ -1065,7 +1131,7 @@ class SparkConnectPlanner(val session: SparkSession) {
         SparkConnectArtifactManager.classLoaderWithArtifacts)
     ScalaUDF(
       function = udfPacket.function,
-      dataType = udfPacket.outputEncoder.dataType,
+      dataType = transformDataType(udf.getOutputType),
       children = fun.getArgumentsList.asScala.map(transformExpression).toSeq,
       inputEncoders = udfPacket.inputEncoders.map(e => Option(ExpressionEncoder(e))),
       outputEncoder = Option(ExpressionEncoder(udfPacket.outputEncoder)),
@@ -1728,6 +1794,8 @@ class SparkConnectPlanner(val session: SparkSession) {
           responseObserver)
       case proto.Command.CommandTypeCase.STREAMING_QUERY_COMMAND =>
         handleStreamingQueryCommand(command.getStreamingQueryCommand, sessionId, responseObserver)
+      case proto.Command.CommandTypeCase.GET_RESOURCES_COMMAND =>
+        handleGetResourcesCommand(command.getGetResourcesCommand, sessionId, responseObserver)
       case _ => throw new UnsupportedOperationException(s"$command not supported.")
     }
   }
@@ -2163,6 +2231,31 @@ class SparkConnectPlanner(val session: SparkSession) {
         .newBuilder()
         .setSessionId(sessionId)
         .setStreamingQueryCommandResult(respBuilder.build())
+        .build())
+  }
+
+  def handleGetResourcesCommand(
+      command: proto.GetResourcesCommand,
+      sessionId: String,
+      responseObserver: StreamObserver[proto.ExecutePlanResponse]): Unit = {
+    responseObserver.onNext(
+      proto.ExecutePlanResponse
+        .newBuilder()
+        .setSessionId(sessionId)
+        .setGetResourcesCommandResult(
+          proto.GetResourcesCommandResult
+            .newBuilder()
+            .putAllResources(
+              session.sparkContext.resources
+                .mapValues(resource =>
+                  proto.ResourceInformation
+                    .newBuilder()
+                    .setName(resource.name)
+                    .addAllAddresses(resource.addresses.toIterable.asJava)
+                    .build())
+                .toMap
+                .asJava)
+            .build())
         .build())
   }
 

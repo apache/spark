@@ -45,7 +45,7 @@ from pyspark.pandas.typedef.typehints import (
 )
 
 
-class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
+class SeriesTestsMixin:
     @property
     def pser(self):
         return pd.Series([1, 2, 3, 4, 5, 6, 7], name="x")
@@ -3397,6 +3397,10 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
             ps.Series(["a", "b", "c"]).median()
         with self.assertRaisesRegex(TypeError, "Could not convert object"):
             ps.Series(["a", "b", "c"]).sem()
+
+
+class SeriesTests(SeriesTestsMixin, PandasOnSparkTestCase, SQLTestUtils):
+    pass
 
 
 if __name__ == "__main__":
