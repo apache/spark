@@ -320,6 +320,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       ResolveRandomSeed ::
       ResolveBinaryArithmetic ::
       ResolveUnion ::
+      ResolveRowLevelCommandAssignments ::
       RewriteDeleteFromTable ::
       typeCoercionRules ++
       Seq(
@@ -603,31 +604,22 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         aggregations: Seq[NamedExpression],
         groupByAliases: Seq[Alias],
         groupingAttrs: Seq[Expression],
-        gid: Attribute): Seq[NamedExpression] = aggregations.map { agg =>
-      // collect all the found AggregateExpression, so we can check an expression is part of
-      // any AggregateExpression or not.
-      val aggsBuffer = ArrayBuffer[Expression]()
-      // Returns whether the expression belongs to any expressions in `aggsBuffer` or not.
-      def isPartOfAggregation(e: Expression): Boolean = {
-        aggsBuffer.exists(a => a.exists(_ eq e))
-      }
-      replaceGroupingFunc(agg, groupByExprs, gid).transformDown {
-        // AggregateExpression should be computed on the unmodified value of its argument
-        // expressions, so we should not replace any references to grouping expression
-        // inside it.
-        case e if AggregateExpression.isAggregate(e) =>
-          aggsBuffer += e
-          e
-        case e if isPartOfAggregation(e) => e
+        gid: Attribute): Seq[NamedExpression] = {
+      def replaceExprs(e: Expression): Expression = e match {
+        case e if AggregateExpression.isAggregate(e) => e
         case e =>
           // Replace expression by expand output attribute.
           val index = groupByAliases.indexWhere(_.child.semanticEquals(e))
           if (index == -1) {
-            e
+            e.mapChildren(replaceExprs)
           } else {
             groupingAttrs(index)
           }
-      }.asInstanceOf[NamedExpression]
+      }
+      aggregations
+        .map(replaceGroupingFunc(_, groupByExprs, gid))
+        .map(replaceExprs)
+        .map(_.asInstanceOf[NamedExpression])
     }
 
     /*
@@ -3338,43 +3330,6 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         } else {
           v2Write
         }
-
-      case u: UpdateTable if !u.skipSchemaResolution && u.resolved =>
-        resolveAssignments(u)
-
-      case m: MergeIntoTable if !m.skipSchemaResolution && m.resolved =>
-        resolveAssignments(m)
-    }
-
-    private def resolveAssignments(p: LogicalPlan): LogicalPlan = {
-      p.transformExpressions {
-        case assignment: Assignment =>
-          val nullHandled = if (!assignment.key.nullable && assignment.value.nullable) {
-            AssertNotNull(assignment.value)
-          } else {
-            assignment.value
-          }
-          val casted = if (assignment.key.dataType != nullHandled.dataType) {
-            val cast = Cast(nullHandled, assignment.key.dataType, ansiEnabled = true)
-            cast.setTagValue(Cast.BY_TABLE_INSERTION, ())
-            cast
-          } else {
-            nullHandled
-          }
-          val rawKeyType = assignment.key.transform {
-            case a: AttributeReference =>
-              CharVarcharUtils.getRawType(a.metadata).map(a.withDataType).getOrElse(a)
-          }.dataType
-          val finalValue = if (CharVarcharUtils.hasCharVarchar(rawKeyType)) {
-            CharVarcharUtils.stringLengthCheck(casted, rawKeyType)
-          } else {
-            casted
-          }
-          val cleanedKey = assignment.key.transform {
-            case a: AttributeReference => CharVarcharUtils.cleanAttrMetadata(a)
-          }
-          Assignment(cleanedKey, finalValue)
-      }
     }
   }
 
