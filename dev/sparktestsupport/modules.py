@@ -778,6 +778,7 @@ pyspark_connect = Module(
         "pyspark.sql.tests.connect.test_parity_pandas_grouped_map",
         "pyspark.sql.tests.connect.test_parity_pandas_cogrouped_map",
         "pyspark.sql.tests.connect.streaming.test_parity_streaming",
+        "pyspark.sql.tests.connect.test_parity_pandas_grouped_map_with_state",
         # ml doctests
         "pyspark.ml.connect.functions",
         # ml unittests
