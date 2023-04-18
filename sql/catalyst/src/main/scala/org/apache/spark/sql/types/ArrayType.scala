@@ -20,7 +20,6 @@ package org.apache.spark.sql.types
 import org.json4s.JsonDSL._
 
 import org.apache.spark.annotation.Stable
-import org.apache.spark.sql.catalyst.types.{PhysicalArrayType, PhysicalDataType}
 import org.apache.spark.sql.catalyst.util.StringUtils.StringConcat
 
 /**
@@ -87,9 +86,6 @@ case class ArrayType(elementType: DataType, containsNull: Boolean) extends DataT
    * We assume that there is only 1 element on average in an array. See SPARK-18853.
    */
   override def defaultSize: Int = 1 * elementType.defaultSize
-
-  private[sql] override def physicalDataType: PhysicalDataType =
-    PhysicalArrayType(elementType, containsNull)
 
   override def simpleString: String = s"array<${elementType.simpleString}>"
 
