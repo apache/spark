@@ -2930,52 +2930,25 @@ class MapPartitions(google.protobuf.message.Message):
 
     INPUT_FIELD_NUMBER: builtins.int
     FUNC_FIELD_NUMBER: builtins.int
-    IS_BARRIER_FIELD_NUMBER: builtins.int
     @property
     def input(self) -> global___Relation:
         """(Required) Input relation for a mapPartitions-equivalent API: mapInPandas, mapInArrow."""
     @property
     def func(self) -> pyspark.sql.connect.proto.expressions_pb2.CommonInlineUserDefinedFunction:
         """(Required) Input user-defined function."""
-    is_barrier: builtins.bool
-    """(Optional) isBarrier."""
     def __init__(
         self,
         *,
         input: global___Relation | None = ...,
         func: pyspark.sql.connect.proto.expressions_pb2.CommonInlineUserDefinedFunction
         | None = ...,
-        is_barrier: builtins.bool | None = ...,
     ) -> None: ...
     def HasField(
-        self,
-        field_name: typing_extensions.Literal[
-            "_is_barrier",
-            b"_is_barrier",
-            "func",
-            b"func",
-            "input",
-            b"input",
-            "is_barrier",
-            b"is_barrier",
-        ],
+        self, field_name: typing_extensions.Literal["func", b"func", "input", b"input"]
     ) -> builtins.bool: ...
     def ClearField(
-        self,
-        field_name: typing_extensions.Literal[
-            "_is_barrier",
-            b"_is_barrier",
-            "func",
-            b"func",
-            "input",
-            b"input",
-            "is_barrier",
-            b"is_barrier",
-        ],
+        self, field_name: typing_extensions.Literal["func", b"func", "input", b"input"]
     ) -> None: ...
-    def WhichOneof(
-        self, oneof_group: typing_extensions.Literal["_is_barrier", b"_is_barrier"]
-    ) -> typing_extensions.Literal["is_barrier"] | None: ...
 
 global___MapPartitions = MapPartitions
 

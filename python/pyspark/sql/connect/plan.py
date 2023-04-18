@@ -1967,23 +1967,17 @@ class MapPartitions(LogicalPlan):
     """Logical plan object for a mapPartitions-equivalent API: mapInPandas, mapInArrow."""
 
     def __init__(
-        self,
-        child: Optional["LogicalPlan"],
-        function: "UserDefinedFunction",
-        cols: List[str],
-        is_barrier: bool,
+        self, child: Optional["LogicalPlan"], function: "UserDefinedFunction", cols: List[str]
     ) -> None:
         super().__init__(child)
 
         self._func = function._build_common_inline_user_defined_function(*cols)
-        self._is_barrier = is_barrier
 
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
         assert self._child is not None
         plan = self._create_proto_relation()
         plan.map_partitions.input.CopyFrom(self._child.plan(session))
         plan.map_partitions.func.CopyFrom(self._func.to_plan_udf(session))
-        plan.map_partitions.is_barrier = self._is_barrier
         return plan
 
 

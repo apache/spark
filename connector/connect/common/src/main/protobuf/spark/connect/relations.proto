@@ -839,9 +839,6 @@ message MapPartitions {
 
   // (Required) Input user-defined function.
   CommonInlineUserDefinedFunction func = 2;
-
-  // (Optional) isBarrier.
-  optional bool is_barrier = 3;
 }
 
 message GroupMap {
