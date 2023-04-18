@@ -1300,6 +1300,7 @@ class ExecutePlanResponse(google.protobuf.message.Message):
     METRICS_FIELD_NUMBER: builtins.int
     OBSERVED_METRICS_FIELD_NUMBER: builtins.int
     SCHEMA_FIELD_NUMBER: builtins.int
+    IS_LOCAL_BUILT_FIELD_NUMBER: builtins.int
     session_id: builtins.str
     @property
     def arrow_batch(self) -> global___ExecutePlanResponse.ArrowBatch: ...
@@ -1344,6 +1345,8 @@ class ExecutePlanResponse(google.protobuf.message.Message):
     @property
     def schema(self) -> pyspark.sql.connect.proto.types_pb2.DataType:
         """(Optional) The Spark schema. This field is available when `collect` is called."""
+    is_local_built: builtins.bool
+    """(Optional) Whether the ExecutePlanRequest is locally built."""
     def __init__(
         self,
         *,
@@ -1363,16 +1366,21 @@ class ExecutePlanResponse(google.protobuf.message.Message):
         observed_metrics: collections.abc.Iterable[global___ExecutePlanResponse.ObservedMetrics]
         | None = ...,
         schema: pyspark.sql.connect.proto.types_pb2.DataType | None = ...,
+        is_local_built: builtins.bool | None = ...,
     ) -> None: ...
     def HasField(
         self,
         field_name: typing_extensions.Literal[
+            "_is_local_built",
+            b"_is_local_built",
             "arrow_batch",
             b"arrow_batch",
             "extension",
             b"extension",
             "get_resources_command_result",
             b"get_resources_command_result",
+            "is_local_built",
+            b"is_local_built",
             "metrics",
             b"metrics",
             "response_type",
@@ -1392,12 +1400,16 @@ class ExecutePlanResponse(google.protobuf.message.Message):
     def ClearField(
         self,
         field_name: typing_extensions.Literal[
+            "_is_local_built",
+            b"_is_local_built",
             "arrow_batch",
             b"arrow_batch",
             "extension",
             b"extension",
             "get_resources_command_result",
             b"get_resources_command_result",
+            "is_local_built",
+            b"is_local_built",
             "metrics",
             b"metrics",
             "observed_metrics",
@@ -1418,6 +1430,11 @@ class ExecutePlanResponse(google.protobuf.message.Message):
             b"write_stream_operation_start_result",
         ],
     ) -> None: ...
+    @typing.overload
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["_is_local_built", b"_is_local_built"]
+    ) -> typing_extensions.Literal["is_local_built"] | None: ...
+    @typing.overload
     def WhichOneof(
         self, oneof_group: typing_extensions.Literal["response_type", b"response_type"]
     ) -> typing_extensions.Literal[

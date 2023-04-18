@@ -26,7 +26,6 @@ import scala.reflect.runtime.universe.TypeTag
 
 import com.google.common.cache.{CacheBuilder, CacheLoader}
 import org.apache.arrow.memory.RootAllocator
-import org.apache.arrow.vector.ipc.ArrowStreamReader
 
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.connect.proto
@@ -475,14 +474,11 @@ class SparkSession private[sql] (
       // Short circuit local relation RPCs
       val localRelation = plan.getRoot.getLocalRelation
       val response = proto.ExecutePlanResponse.newBuilder()
-      val reader = new ArrowStreamReader(localRelation.getData.newInput(), allocator)
-      reader.loadNextBatch()
       val batch = proto.ExecutePlanResponse.ArrowBatch
         .newBuilder()
-        .setRowCount(reader.getVectorSchemaRoot.getRowCount)
         .setData(localRelation.getData)
         .build()
-      response.setArrowBatch(batch)
+      response.setArrowBatch(batch).setIsLocalBuilt(true)
       Seq[proto.ExecutePlanResponse](response.build()).iterator.asJava
     } else {
       client.execute(plan)

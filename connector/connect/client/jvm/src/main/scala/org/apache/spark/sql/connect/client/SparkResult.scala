@@ -80,7 +80,10 @@ private[sql] class SparkResult[T](
           }
           while (reader.loadNextBatch()) {
             val rowCount = root.getRowCount
-            assert(root.getRowCount == response.getArrowBatch.getRowCount) // HUH!
+            assert(
+              response.getIsLocalBuilt ||
+                root.getRowCount == response.getArrowBatch.getRowCount
+            ) // HUH!
             if (rowCount > 0) {
               val vectors = root.getFieldVectors.asScala
                 .map(v => new ArrowColumnVector(transferToNewVector(v)))
