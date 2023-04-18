@@ -621,6 +621,21 @@ class SparkConnectClient(object):
         """
         self._channel.close()
 
+    @property
+    def host(self) -> str:
+        """
+        The hostname where this client intends to connect.
+        """
+        return self._builder.host
+
+    @property
+    def token(self) -> Optional[str]:
+        """
+        The authentication bearer token during connection.
+        If authentication is not using a bearer token, None will be returned.
+        """
+        return self._builder._token
+
     def _execute_plan_request_with_metadata(self) -> pb2.ExecutePlanRequest:
         req = pb2.ExecutePlanRequest()
         req.client_id = self._session_id
