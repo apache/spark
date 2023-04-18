@@ -24,7 +24,7 @@ import pickle
 from typing import (
     overload,
     Any,
-    BinaryIO,  # type: ignore[import]
+    BinaryIO,
     Callable,
     Dict,
     Generic,
@@ -94,7 +94,7 @@ class Broadcast(Generic[T]):
         ...
 
     @overload  # On worker with decryption server
-    def __init__(self: "Broadcast[Any]", *, sock_file: str):
+    def __init__(self: "Broadcast[Any]", *, sock_file: str):  # type: ignore
         ...
 
     def __init__(
