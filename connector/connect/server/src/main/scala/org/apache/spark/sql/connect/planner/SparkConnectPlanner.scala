@@ -2376,6 +2376,21 @@ class SparkConnectPlanner(val session: SparkSession) {
         .build())
   }
 
+  def handleStreamingQueryManagerCommand(
+    command: StreamingQueryManagerCommand,
+    sessionId: String,
+    responseObserver: StreamObserver[ExecutePlanResponse]): Unit = {
+
+//    val id = command.getQueryId.getId
+//    val runId = command.getQueryId.getRunId
+
+    val respBuilder = StreamingQueryManagerCommandResult
+      .newBuilder()
+//      .setQueryId(command.getQueryId)
+    val sqm = session.streams
+
+    }
+
   def handleGetResourcesCommand(
       command: proto.GetResourcesCommand,
       sessionId: String,

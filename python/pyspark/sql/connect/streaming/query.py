@@ -23,6 +23,7 @@ from pyspark.errors import StreamingQueryException, PySparkValueError
 import pyspark.sql.connect.proto as pb2
 from pyspark.sql.streaming.query import (
     StreamingQuery as PySparkStreamingQuery,
+    StreamingQueryManager as PySparkStreamingQueryManager,
 )
 from pyspark.errors.exceptions.connect import (
     StreamingQueryException as CapturedStreamingQueryException,
@@ -174,8 +175,54 @@ class StreamingQuery:
         return cast(pb2.StreamingQueryCommandResult, properties["streaming_query_command_result"])
 
 
-# TODO(SPARK-43032) class StreamingQueryManager:
+class StreamingQueryManager:
+    def __init__(self) -> None:
+        pass
 
+    @property
+    def active(self) -> List[StreamingQuery]:
+        pass
+
+    active.__doc__ = PySparkStreamingQueryManager.active.__doc__
+
+    def get(self, id: str) -> StreamingQuery:
+        pass
+
+    get.__doc__ = PySparkStreamingQueryManager.get.__doc__
+
+    def awaitAnyTermination(self, timeout: Optional[int] = None) -> Optional[bool]:
+        pass
+
+    awaitAnyTermination.__doc__ = PySparkStreamingQueryManager.awaitAnyTermination.__doc__
+
+    def resetTerminated(self) -> None:
+        pass
+
+    resetTerminated.__doc__ = PySparkStreamingQueryManager.resetTerminated.__doc__
+
+    def addListener(self, listener: Any) -> None:
+        # TODO(SPARK-42941): Change listener type to Connect StreamingQueryListener
+        raise NotImplementedError("addListener() is not implemented.")
+
+    # TODO(SPARK-42941): uncomment below
+    # addListener.__doc__ = PySparkStreamingQueryManager.addListener.__doc__
+
+    def removeListener(self, listener: Any) -> None:
+        # TODO(SPARK-42941): Change listener type to Connect StreamingQueryListener
+        raise NotImplementedError("removeListener() is not implemented.")
+
+    # TODO(SPARK-42941): uncomment below
+    # removeListener.__doc__ = PySparkStreamingQueryManager.removeListener.__doc__
+
+    def _execute_streaming_query_manager_cmd(
+        self, cmd: pb2.StreamingQueryManagerCommand
+    ) -> pb2.StreamingQueryManagerCommandResult:
+        # cmd.query_id.id = self._query_id
+        # cmd.query_id.run_id = self._run_id
+        exec_cmd = pb2.Command()
+        exec_cmd.streaming_query_command.CopyFrom(cmd)
+        (_, properties) = self._session.client.execute_command(exec_cmd)
+        return cast(pb2.StreamingQueryCommandResult, properties["streaming_query_command_result"])
 
 def _test() -> None:
     import doctest

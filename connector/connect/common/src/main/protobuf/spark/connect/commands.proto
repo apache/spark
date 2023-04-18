@@ -38,7 +38,8 @@ message Command {
     SqlCommand sql_command = 5;
     WriteStreamOperationStart write_stream_operation_start = 6;
     StreamingQueryCommand streaming_query_command = 7;
-    GetResourcesCommand get_resources_command = 8;
+    StreamingQueryManagerCommand streaming_query_manager_command = 8;
+    GetResourcesCommand get_resources_command = 9;
 
     // This field is used to mark extensions to the protocol. When plugins generate arbitrary
     // Commands they can add them here. During the planning the correct resolution is done.
@@ -244,9 +245,8 @@ message StreamingQueryCommand {
   // (Required) Query instance. See `StreamingQueryInstanceId`.
   StreamingQueryInstanceId query_id = 1;
 
+  // See documentation for the corresponding API method in StreamingQuery.
   oneof command {
-    // See documentation for the corresponding API method in StreamingQuery.
-
     // status() API.
     bool status = 2;
     // lastProgress() API.
@@ -318,6 +318,50 @@ message StreamingQueryCommandResult {
 
   message AwaitTerminationResult {
     bool terminated = 1;
+  }
+}
+
+// Commands for the streaming query manager.
+message StreamingQueryManagerCommand {
+
+  // See documentation for the corresponding API method in StreamingQueryManager.
+  oneof command {
+    // active() API, returns a list of active queries.
+    bool active = 1;
+    // get() API, returns the StreamingQuery identified by id.
+    GetCommand get = 2;
+    // awaitAnyTermination() API, wait until any query terminates or timeout.
+    AwaitAnyTerminationCommand await_any_termination = 3;
+    // resetTerminated() API.
+    bool reset_terminated = 4;
+  }
+
+  message GetCommand {
+    // (Required) The unique id of the query that it wants to get.
+    string id = 1;
+  }
+
+  message AwaitAnyTerminationCommand {
+    // (Optional) The waiting time in milliseconds to wait for any query to terminate.
+    optional int64 timeout = 1;
+  }
+}
+
+// Response for commands on the streaming query manager.
+message StreamingQueryManagerCommandResult {
+  oneof result_type {
+    ActiveResult active = 1;
+    GetResult get = 2;
+    bool await_any_termination = 3; // TODO: think about this
+  }
+
+  message ActiveResult {
+    // TODO: think about this
+    repeated StreamingQueryInstanceId active_queries = 1;
+  }
+
+  message GetResult {
+    StreamingQueryInstanceId query = 1;
   }
 }
 
