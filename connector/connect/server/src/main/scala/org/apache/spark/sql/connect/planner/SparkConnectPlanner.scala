@@ -2258,6 +2258,8 @@ class SparkConnectPlanner(val session: SparkSession) {
             .setTerminated(terminated)
         } else {
           query.awaitTermination()
+          respBuilder.getAwaitTerminationBuilder
+            .setTerminated(true)
         }
 
       case StreamingQueryCommand.CommandCase.COMMAND_NOT_SET =>

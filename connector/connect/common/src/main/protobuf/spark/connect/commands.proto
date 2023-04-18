@@ -272,10 +272,7 @@ message StreamingQueryCommand {
   }
 
   message AwaitTerminationCommand {
-    oneof timeout {
-      bool no_timeout = 1;
-      int64 timeout_ms = 2;
-    }
+    optional int64 timeout_ms = 2;
   }
 }
 

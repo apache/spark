@@ -69,23 +69,19 @@ class StreamingQuery:
 
     isActive.__doc__ = PySparkStreamingQuery.isActive.__doc__
 
-    def _execute_await_termination_cmd(self, timeoutMs: Optional[int] = None) -> Optional[bool]:
-        cmd = pb2.StreamingQueryCommand()
-        if timeoutMs is not None:
-            cmd.await_termination.timeout_ms = timeoutMs
-            terminated = self._execute_streaming_query_cmd(cmd).await_termination.terminated
-            return terminated
-        else:
-            cmd.await_termination.no_timeout = True
-            self._execute_streaming_query_cmd(cmd)
-
     def awaitTermination(self, timeout: Optional[int] = None) -> Optional[bool]:
+        cmd = pb2.StreamingQueryCommand()
         if timeout is not None:
             if not isinstance(timeout, (int, float)) or timeout <= 0:
                 raise ValueError("timeout must be a positive integer or float. Got %s" % timeout)
-            return self._execute_await_termination_cmd(int(timeout * 1000))
+            cmd.await_termination.timeout_ms = int(timeout * 1000)
+            terminated = self._execute_streaming_query_cmd(cmd).await_termination.terminated
+            return terminated
         else:
-            return self._execute_await_termination_cmd()
+            await_termination_cmd = pb2.StreamingQueryCommand.AwaitTerminationCommand()
+            cmd.await_termination.CopyFrom(await_termination_cmd)
+            self._execute_streaming_query_cmd(cmd)
+            return None
 
     awaitTermination.__doc__ = PySparkStreamingQuery.awaitTermination.__doc__
 

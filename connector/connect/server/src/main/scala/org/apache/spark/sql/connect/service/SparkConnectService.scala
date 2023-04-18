@@ -126,7 +126,7 @@ class SparkConnectService(debug: Boolean)
       observer.onError(
         Status.UNKNOWN
           .withCause(e)
-          .withDescription(extractErrorMessage(e))
+          .withDescription(StringUtils.abbreviate(e.getMessage, 2048))
           .asRuntimeException())
   }
 
