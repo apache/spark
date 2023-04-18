@@ -840,7 +840,7 @@ message MapPartitions {
   // (Required) Input user-defined function.
   CommonInlineUserDefinedFunction func = 2;
 
-  // (Optional) Whether to use barrier mode execution or not.
+  // (Optional) isBarrier.
   optional bool is_barrier = 3;
 }
 
