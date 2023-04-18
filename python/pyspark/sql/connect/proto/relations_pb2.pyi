@@ -96,6 +96,7 @@ class Relation(google.protobuf.message.Message):
     CO_GROUP_MAP_FIELD_NUMBER: builtins.int
     WITH_WATERMARK_FIELD_NUMBER: builtins.int
     APPLY_IN_PANDAS_WITH_STATE_FIELD_NUMBER: builtins.int
+    CACHED_LOCAL_RELATION_FIELD_NUMBER: builtins.int
     FILL_NA_FIELD_NUMBER: builtins.int
     DROP_NA_FIELD_NUMBER: builtins.int
     REPLACE_FIELD_NUMBER: builtins.int
@@ -179,6 +180,8 @@ class Relation(google.protobuf.message.Message):
     @property
     def apply_in_pandas_with_state(self) -> global___ApplyInPandasWithState: ...
     @property
+    def cached_local_relation(self) -> global___CachedLocalRelation: ...
+    @property
     def fill_na(self) -> global___NAFill:
         """NA functions"""
     @property
@@ -249,6 +252,7 @@ class Relation(google.protobuf.message.Message):
         co_group_map: global___CoGroupMap | None = ...,
         with_watermark: global___WithWatermark | None = ...,
         apply_in_pandas_with_state: global___ApplyInPandasWithState | None = ...,
+        cached_local_relation: global___CachedLocalRelation | None = ...,
         fill_na: global___NAFill | None = ...,
         drop_na: global___NADrop | None = ...,
         replace: global___NAReplace | None = ...,
@@ -510,6 +514,7 @@ class Relation(google.protobuf.message.Message):
         "co_group_map",
         "with_watermark",
         "apply_in_pandas_with_state",
+        "cached_local_relation",
         "fill_na",
         "drop_na",
         "replace",
