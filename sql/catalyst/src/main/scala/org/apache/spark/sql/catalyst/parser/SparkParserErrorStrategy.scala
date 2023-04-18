@@ -115,12 +115,11 @@ class SparkParserErrorStrategy() extends DefaultErrorStrategy {
 }
 
 /**
- * This class is inspired by [[org.antlr.v4.runtime.BailErrorStrategy]], which is
- * used in Two-stage parsing: This error strategy allows the first stage of two-stage
- * parsing to immediately terminate if an error is encountered, and immediately
- * fall back to the second stage. In addition to avoiding wasted work by attempting
- * to recover from errors here, the empty implementation of sync improves the
- * performance of the first stage.
+ * Inspired by [[org.antlr.v4.runtime.BailErrorStrategy]], which is used in two-stage parsing:
+ * This error strategy allows the first stage of two-stage parsing to immediately terminate
+ * if an error is encountered, and immediately fall back to the second stage. In addition to
+ * avoiding wasted work by attempting to recover from errors here, the empty implementation
+ * of sync improves the performance of the first stage.
  */
 class SparkParserBailErrorStrategy() extends SparkParserErrorStrategy {
 

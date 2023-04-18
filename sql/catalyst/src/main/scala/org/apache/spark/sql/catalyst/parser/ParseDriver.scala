@@ -119,25 +119,18 @@ abstract class AbstractSqlParser extends ParserInterface with SQLConfHelper with
     parser.SQL_standard_keyword_behavior = conf.enforceReservedKeywords
     parser.double_quoted_identifiers = conf.doubleQuotedIdentifiers
 
-    // You can save a great deal of time on correct inputs by using a two-stage parsing strategy.
-    //
-    // 1. Attempt to parse the input using BailErrorStrategy and PredictionMode.SLL.
-    //    If no exception is thrown, you know the answer is correct.
-    //
-    // 2. If a ParseCancellationException is thrown, retry the parse using the default
-    //    settings (DefaultErrorStrategy and PredictionMode.LL).
-    //
     // https://github.com/antlr/antlr4/issues/192#issuecomment-15238595
+    // Save a great deal of time on correct inputs by using a two-stage parsing strategy.
     try {
       try {
-        // first, try parsing with potentially faster SLL mode
+        // first, try parsing with potentially faster SLL mode w/ SparkParserBailErrorStrategy
         parser.setErrorHandler(new SparkParserBailErrorStrategy())
         parser.getInterpreter.setPredictionMode(PredictionMode.SLL)
         toResult(parser)
       }
       catch {
         case e: ParseCancellationException =>
-          // if we fail, parse with LL mode
+          // if we fail, parse with LL mode w/ SparkParserErrorStrategy
           tokenStream.seek(0) // rewind input stream
           parser.reset()
 
