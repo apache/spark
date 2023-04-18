@@ -256,6 +256,7 @@ class StreamingTestsMixin:
 
             q.processAllAvailable()
             q.stop()
+            # Sanity check when no parameter is set
             q.awaitTermination()
             self.assertFalse(q.isActive)
         finally:
