@@ -2053,6 +2053,45 @@ class CoGroupMap(LogicalPlan):
         return plan
 
 
+class ApplyInPandasWithState(LogicalPlan):
+    """Logical plan object for a applyInPandasWithState."""
+
+    def __init__(
+        self,
+        child: Optional["LogicalPlan"],
+        grouping_cols: Sequence[Column],
+        function: "UserDefinedFunction",
+        output_schema: str,
+        state_schema: str,
+        output_mode: str,
+        timeout_conf: str,
+        cols: List[str],
+    ):
+        assert isinstance(grouping_cols, list) and all(isinstance(c, Column) for c in grouping_cols)
+
+        super().__init__(child)
+        self._grouping_cols = grouping_cols
+        self._func = function._build_common_inline_user_defined_function(*cols)
+        self._output_schema = output_schema
+        self._state_schema = state_schema
+        self._output_mode = output_mode
+        self._timeout_conf = timeout_conf
+
+    def plan(self, session: "SparkConnectClient") -> proto.Relation:
+        assert self._child is not None
+        plan = self._create_proto_relation()
+        plan.apply_in_pandas_with_state.input.CopyFrom(self._child.plan(session))
+        plan.apply_in_pandas_with_state.grouping_expressions.extend(
+            [c.to_plan(session) for c in self._grouping_cols]
+        )
+        plan.apply_in_pandas_with_state.func.CopyFrom(self._func.to_plan_udf(session))
+        plan.apply_in_pandas_with_state.output_schema = self._output_schema
+        plan.apply_in_pandas_with_state.state_schema = self._state_schema
+        plan.apply_in_pandas_with_state.output_mode = self._output_mode
+        plan.apply_in_pandas_with_state.timeout_conf = self._timeout_conf
+        return plan
+
+
 class CachedRelation(LogicalPlan):
     def __init__(self, plan: proto.Relation) -> None:
         super(CachedRelation, self).__init__(None)
