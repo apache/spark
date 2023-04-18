@@ -114,15 +114,24 @@ abstract class AbstractSqlParser extends ParserInterface with SQLConfHelper with
     parser.addParseListener(UnclosedCommentProcessor(command, tokenStream))
     parser.removeErrorListeners()
     parser.addErrorListener(ParseErrorListener)
-    parser.setErrorHandler(new SparkParserErrorStrategy())
     parser.legacy_setops_precedence_enabled = conf.setOpsPrecedenceEnforced
     parser.legacy_exponent_literal_as_decimal_enabled = conf.exponentLiteralAsDecimalEnabled
     parser.SQL_standard_keyword_behavior = conf.enforceReservedKeywords
     parser.double_quoted_identifiers = conf.doubleQuotedIdentifiers
 
+    // You can save a great deal of time on correct inputs by using a two-stage parsing strategy.
+    //
+    // 1. Attempt to parse the input using BailErrorStrategy and PredictionMode.SLL.
+    //    If no exception is thrown, you know the answer is correct.
+    //
+    // 2. If a ParseCancellationException is thrown, retry the parse using the default
+    //    settings (DefaultErrorStrategy and PredictionMode.LL).
+    //
+    // https://github.com/antlr/antlr4/issues/192#issuecomment-15238595
     try {
       try {
         // first, try parsing with potentially faster SLL mode
+        parser.setErrorHandler(new SparkParserBailErrorStrategy())
         parser.getInterpreter.setPredictionMode(PredictionMode.SLL)
         toResult(parser)
       }
@@ -133,6 +142,7 @@ abstract class AbstractSqlParser extends ParserInterface with SQLConfHelper with
           parser.reset()
 
           // Try Again.
+          parser.setErrorHandler(new SparkParserErrorStrategy())
           parser.getInterpreter.setPredictionMode(PredictionMode.LL)
           toResult(parser)
       }
