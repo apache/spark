@@ -159,6 +159,15 @@ private[spark] trait BasicTestsSuite { k8sSuite: KubernetesSuite =>
       runSparkRemoteCheckAndVerifyCompletion(appArgs = Array(REMOTE_PAGE_RANK_FILE_NAME))
     }
   }
+
+  test("SPARK-42769: All executor pods have SPARK_DRIVER_POD_IP env variable", k8sTestTag) {
+    runSparkPiAndVerifyCompletion(
+      executorPodChecker = (executorPod: Pod) => {
+        doBasicExecutorPodCheck(executorPod)
+        executorPod.getSpec.getContainers.get(0).getEnv.asScala
+          .exists(envVar => envVar.getName == "SPARK_DRIVER_POD_IP")
+      })
+  }
 }
 
 private[spark] object BasicTestsSuite extends SparkFunSuite {

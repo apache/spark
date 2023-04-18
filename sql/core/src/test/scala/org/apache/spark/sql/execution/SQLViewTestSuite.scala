@@ -616,9 +616,9 @@ class PersistedViewTestSuite extends SQLViewTestSuite with SharedSparkSession {
             },
             errorClass = "INVALID_TEMP_OBJ_REFERENCE",
             parameters = Map(
-              "obj" -> "view",
+              "obj" -> "VIEW",
               "objName" -> s"`$SESSION_CATALOG_NAME`.`default`.`v1`",
-              "tempObj" -> "view",
+              "tempObj" -> "VIEW",
               "tempObjName" -> "`v2`"))
           val tempFunctionName = "temp_udf"
           val functionClass = "test.org.apache.spark.sql.MyDoubleAvg"
@@ -630,9 +630,9 @@ class PersistedViewTestSuite extends SQLViewTestSuite with SharedSparkSession {
               },
               errorClass = "INVALID_TEMP_OBJ_REFERENCE",
               parameters = Map(
-                "obj" -> "view",
+                "obj" -> "VIEW",
                 "objName" -> s"`$SESSION_CATALOG_NAME`.`default`.`v1`",
-                "tempObj" -> "function",
+                "tempObj" -> "FUNCTION",
                 "tempObjName" -> s"`$tempFunctionName`"))
           }
         }

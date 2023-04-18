@@ -47,3 +47,4 @@ Data Types
     TimestampType
     TimestampNTZType
     DayTimeIntervalType
+    YearMonthIntervalType

@@ -69,7 +69,7 @@ private[hive] object IsolatedClientLoader extends Logging {
             // If the error message contains hadoop, it is probably because the hadoop
             // version cannot be resolved.
             val fallbackVersion = if (VersionUtils.isHadoop3) {
-              "3.3.4"
+              "3.3.5"
             } else {
               "2.7.4"
             }
@@ -180,6 +180,9 @@ private[hive] object IsolatedClientLoader extends Logging {
  * @param config   A set of options that will be added to the HiveConf of the constructed client.
  * @param isolationOn When true, custom versions of barrier classes will be constructed.  Must be
  *                    true unless loading the version of hive that is on Spark's classloader.
+ * @param sessionStateIsolationOverride If present, this parameter will specify the value of
+ *                                      `sessionStateIsolationOn`. If empty (the default), the
+ *                                      value of `isolationOn` will be used.
  * @param baseClassLoader The spark classloader that is used to load shared classes.
  */
 private[hive] class IsolatedClientLoader(
@@ -189,10 +192,18 @@ private[hive] class IsolatedClientLoader(
     val execJars: Seq[URL] = Seq.empty,
     val config: Map[String, String] = Map.empty,
     val isolationOn: Boolean = true,
+    sessionStateIsolationOverride: Option[Boolean] = None,
     val baseClassLoader: ClassLoader = Thread.currentThread().getContextClassLoader,
     val sharedPrefixes: Seq[String] = Seq.empty,
     val barrierPrefixes: Seq[String] = Seq.empty)
   extends Logging {
+
+  /**
+   * This controls whether the generated clients maintain an independent/isolated copy of the
+   * Hive `SessionState`. If false, the Hive will leverage the global/static copy of
+   * `SessionState`; if true, it will generate a new copy of the state internally.
+   */
+  val sessionStateIsolationOn: Boolean = sessionStateIsolationOverride.getOrElse(isolationOn)
 
   /** All jars used by the hive specific classloader. */
   protected def allJars = execJars.toArray
@@ -232,51 +243,46 @@ private[hive] class IsolatedClientLoader(
   private[hive] val classLoader: MutableURLClassLoader = {
     val isolatedClassLoader =
       if (isolationOn) {
-        if (allJars.isEmpty) {
-          // See HiveUtils; this is the Java 9+ + builtin mode scenario
-          baseClassLoader
-        } else {
-          val rootClassLoader: ClassLoader =
-            if (SystemUtils.isJavaVersionAtLeast(JavaVersion.JAVA_9)) {
-              // In Java 9, the boot classloader can see few JDK classes. The intended parent
-              // classloader for delegation is now the platform classloader.
-              // See http://java9.wtf/class-loading/
-              val platformCL =
-              classOf[ClassLoader].getMethod("getPlatformClassLoader").
-                invoke(null).asInstanceOf[ClassLoader]
-              // Check to make sure that the root classloader does not know about Hive.
-              assert(Try(platformCL.loadClass("org.apache.hadoop.hive.conf.HiveConf")).isFailure)
-              platformCL
+        val rootClassLoader: ClassLoader =
+          if (SystemUtils.isJavaVersionAtLeast(JavaVersion.JAVA_9)) {
+            // In Java 9, the boot classloader can see few JDK classes. The intended parent
+            // classloader for delegation is now the platform classloader.
+            // See http://java9.wtf/class-loading/
+            val platformCL =
+            classOf[ClassLoader].getMethod("getPlatformClassLoader").
+              invoke(null).asInstanceOf[ClassLoader]
+            // Check to make sure that the root classloader does not know about Hive.
+            assert(Try(platformCL.loadClass("org.apache.hadoop.hive.conf.HiveConf")).isFailure)
+            platformCL
+          } else {
+            // The boot classloader is represented by null (the instance itself isn't accessible)
+            // and before Java 9 can see all JDK classes
+            null
+          }
+        new URLClassLoader(allJars, rootClassLoader) {
+          override def loadClass(name: String, resolve: Boolean): Class[_] = {
+            val loaded = findLoadedClass(name)
+            if (loaded == null) doLoadClass(name, resolve) else loaded
+          }
+          def doLoadClass(name: String, resolve: Boolean): Class[_] = {
+            val classFileName = name.replaceAll("\\.", "/") + ".class"
+            if (isBarrierClass(name)) {
+              // For barrier classes, we construct a new copy of the class.
+              val bytes = IOUtils.toByteArray(baseClassLoader.getResourceAsStream(classFileName))
+              logDebug(s"custom defining: $name - ${util.Arrays.hashCode(bytes)}")
+              defineClass(name, bytes, 0, bytes.length)
+            } else if (!isSharedClass(name)) {
+              logDebug(s"hive class: $name - ${getResource(classToPath(name))}")
+              super.loadClass(name, resolve)
             } else {
-              // The boot classloader is represented by null (the instance itself isn't accessible)
-              // and before Java 9 can see all JDK classes
-              null
-            }
-          new URLClassLoader(allJars, rootClassLoader) {
-            override def loadClass(name: String, resolve: Boolean): Class[_] = {
-              val loaded = findLoadedClass(name)
-              if (loaded == null) doLoadClass(name, resolve) else loaded
-            }
-            def doLoadClass(name: String, resolve: Boolean): Class[_] = {
-              val classFileName = name.replaceAll("\\.", "/") + ".class"
-              if (isBarrierClass(name)) {
-                // For barrier classes, we construct a new copy of the class.
-                val bytes = IOUtils.toByteArray(baseClassLoader.getResourceAsStream(classFileName))
-                logDebug(s"custom defining: $name - ${util.Arrays.hashCode(bytes)}")
-                defineClass(name, bytes, 0, bytes.length)
-              } else if (!isSharedClass(name)) {
-                logDebug(s"hive class: $name - ${getResource(classToPath(name))}")
-                super.loadClass(name, resolve)
-              } else {
-                // For shared classes, we delegate to baseClassLoader, but fall back in case the
-                // class is not found.
-                logDebug(s"shared class: $name")
-                try {
-                  baseClassLoader.loadClass(name)
-                } catch {
-                  case _: ClassNotFoundException =>
-                    super.loadClass(name, resolve)
-                }
+              // For shared classes, we delegate to baseClassLoader, but fall back in case the
+              // class is not found.
+              logDebug(s"shared class: $name")
+              try {
+                baseClassLoader.loadClass(name)
+              } catch {
+                case _: ClassNotFoundException =>
+                  super.loadClass(name, resolve)
               }
             }
           }

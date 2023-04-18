@@ -35,6 +35,7 @@ from pyspark.sql.types import (
     StringType,
     StructType,
 )
+from pyspark.ml.util import try_remote_functions
 from typing import Any, Callable, Iterator, List, Mapping, TYPE_CHECKING, Tuple, Union, Optional
 
 if TYPE_CHECKING:
@@ -60,11 +61,15 @@ PredictBatchFunction = Callable[
 ]
 
 
+@try_remote_functions
 def vector_to_array(col: Column, dtype: str = "float64") -> Column:
     """
     Converts a column of MLlib sparse/dense vectors into a column of dense arrays.
 
     .. versionadded:: 3.0.0
+
+    .. versionchanged:: 3.5.0
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -112,12 +117,16 @@ def vector_to_array(col: Column, dtype: str = "float64") -> Column:
     )
 
 
+@try_remote_functions
 def array_to_vector(col: Column) -> Column:
     """
     Converts a column of array of numeric type into a column of pyspark.ml.linalg.DenseVector
     instances
 
     .. versionadded:: 3.1.0
+
+    .. versionchanged:: 3.5.0
+        Supports Spark Connect.
 
     Parameters
     ----------
@@ -521,7 +530,7 @@ def predict_batch_udf(
         only showing top 5 rows
 
     * Multiple scalar columns
-        Input DataFrame has muliple columns of scalar values.  If the user-provided `predict`
+        Input DataFrame has multiple columns of scalar values.  If the user-provided `predict`
         function expects a single input, then the user must combine the multiple columns into a
         single tensor using `pyspark.sql.functions.array`.
 

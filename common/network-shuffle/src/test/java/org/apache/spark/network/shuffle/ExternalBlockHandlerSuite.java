@@ -125,7 +125,7 @@ public class ExternalBlockHandlerSuite {
     int reduceId = 0;
 
     // prepare the checksum file
-    File tmpDir = JavaUtils.createTempDir();
+    File tmpDir = JavaUtils.createDirectory(System.getProperty("java.io.tmpdir"), "spark");
     File checksumFile = new File(tmpDir,
       "shuffle_" + shuffleId + "_" + mapId + "_" + reduceId + ".checksum." + algorithm);
     DataOutputStream out = new DataOutputStream(new FileOutputStream(checksumFile));

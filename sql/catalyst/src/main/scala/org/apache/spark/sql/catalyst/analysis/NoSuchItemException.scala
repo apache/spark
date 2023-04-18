@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import org.apache.spark.SparkThrowableHelper
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
@@ -34,21 +35,60 @@ case class NoSuchDatabaseException(db: String)
   extends AnalysisException(errorClass = "SCHEMA_NOT_FOUND",
     messageParameters = Map("schemaName" -> quoteIdentifier(db)))
 
-class NoSuchNamespaceException(errorClass: String, messageParameters: Map[String, String])
-  extends AnalysisException(errorClass, messageParameters) {
+// any changes to this class should be backward compatible as it may be used by external connectors
+class NoSuchNamespaceException private(
+    message: String,
+    cause: Option[Throwable],
+    errorClass: Option[String],
+    messageParameters: Map[String, String])
+  extends AnalysisException(
+    message,
+    cause = cause,
+    errorClass = errorClass,
+    messageParameters = messageParameters) {
+
+  def this(errorClass: String, messageParameters: Map[String, String]) = {
+    this(
+      SparkThrowableHelper.getMessage(errorClass, messageParameters),
+      cause = None,
+      Some(errorClass),
+      messageParameters)
+  }
 
   def this(namespace: Seq[String]) = {
     this(errorClass = "SCHEMA_NOT_FOUND",
       Map("schemaName" -> quoteNameParts(namespace)))
   }
+
   def this(namespace: Array[String]) = {
     this(errorClass = "SCHEMA_NOT_FOUND",
       Map("schemaName" -> quoteNameParts(namespace)))
   }
+
+  def this(message: String, cause: Option[Throwable] = None) = {
+    this(message, cause, errorClass = None, messageParameters = Map.empty[String, String])
+  }
 }
 
-class NoSuchTableException(errorClass: String, messageParameters: Map[String, String])
-  extends AnalysisException(errorClass, messageParameters) {
+// any changes to this class should be backward compatible as it may be used by external connectors
+class NoSuchTableException private(
+    message: String,
+    cause: Option[Throwable],
+    errorClass: Option[String],
+    messageParameters: Map[String, String])
+  extends AnalysisException(
+    message,
+    cause = cause,
+    errorClass = errorClass,
+    messageParameters = messageParameters) {
+
+  def this(errorClass: String, messageParameters: Map[String, String]) = {
+    this(
+      SparkThrowableHelper.getMessage(errorClass, messageParameters),
+      cause = None,
+      Some(errorClass),
+      messageParameters)
+  }
 
   def this(db: String, table: String) = {
     this(errorClass = "TABLE_OR_VIEW_NOT_FOUND",
@@ -60,8 +100,18 @@ class NoSuchTableException(errorClass: String, messageParameters: Map[String, St
     this(errorClass = "TABLE_OR_VIEW_NOT_FOUND",
       messageParameters = Map("relationName" -> quoteNameParts(name)))
   }
+
+  def this(tableIdent: Identifier) = {
+    this(errorClass = "TABLE_OR_VIEW_NOT_FOUND",
+      messageParameters = Map("relationName" -> tableIdent.quoted))
+  }
+
+  def this(message: String, cause: Option[Throwable] = None) = {
+    this(message, cause, errorClass = None, messageParameters = Map.empty[String, String])
+  }
 }
 
+// any changes to this class should be backward compatible as it may be used by external connectors
 class NoSuchViewException(errorClass: String, messageParameters: Map[String, String])
   extends AnalysisException(errorClass, messageParameters) {
 
@@ -70,8 +120,22 @@ class NoSuchViewException(errorClass: String, messageParameters: Map[String, Str
       messageParameters = Map("relationName" -> ident.quoted))
 }
 
-class NoSuchPartitionException(errorClass: String, messageParameters: Map[String, String])
-  extends AnalysisException(errorClass, messageParameters) {
+// any changes to this class should be backward compatible as it may be used by external connectors
+class NoSuchPartitionException private(
+    message: String,
+    errorClass: Option[String],
+    messageParameters: Map[String, String])
+  extends AnalysisException(
+    message,
+    errorClass = errorClass,
+    messageParameters = messageParameters) {
+
+  def this(errorClass: String, messageParameters: Map[String, String]) = {
+    this(
+      SparkThrowableHelper.getMessage(errorClass, messageParameters),
+      Some(errorClass),
+      messageParameters)
+  }
 
   def this(db: String, table: String, spec: TablePartitionSpec) = {
     this(errorClass = "PARTITIONS_NOT_FOUND",
@@ -88,14 +152,35 @@ class NoSuchPartitionException(errorClass: String, messageParameters: Map[String
         .map( kv => quoteIdentifier(s"${kv._2}") + s" = ${kv._1}").mkString(", ") + ")"),
         "tableName" -> quoteNameParts(UnresolvedAttribute.parseAttributeName(tableName))))
   }
+
+  def this(message: String) = {
+    this(message, errorClass = None, messageParameters = Map.empty[String, String])
+  }
 }
 
 class NoSuchPermanentFunctionException(db: String, func: String)
   extends AnalysisException(errorClass = "ROUTINE_NOT_FOUND",
     Map("routineName" -> (quoteIdentifier(db) + "." + quoteIdentifier(func))))
 
-class NoSuchFunctionException(errorClass: String, messageParameters: Map[String, String])
-  extends AnalysisException(errorClass, messageParameters) {
+// any changes to this class should be backward compatible as it may be used by external connectors
+class NoSuchFunctionException private(
+    message: String,
+    cause: Option[Throwable],
+    errorClass: Option[String],
+    messageParameters: Map[String, String])
+  extends AnalysisException(
+    message,
+    cause = cause,
+    errorClass = errorClass,
+    messageParameters = messageParameters) {
+
+  def this(errorClass: String, messageParameters: Map[String, String]) = {
+    this(
+      SparkThrowableHelper.getMessage(errorClass, messageParameters),
+      cause = None,
+      Some(errorClass),
+      messageParameters)
+  }
 
   def this(db: String, func: String) = {
     this(errorClass = "ROUTINE_NOT_FOUND",
@@ -105,10 +190,28 @@ class NoSuchFunctionException(errorClass: String, messageParameters: Map[String,
   def this(identifier: Identifier) = {
     this(errorClass = "ROUTINE_NOT_FOUND", Map("routineName" -> identifier.quoted))
   }
+
+  def this(message: String, cause: Option[Throwable] = None) = {
+    this(message, cause, errorClass = None, messageParameters = Map.empty[String, String])
+  }
 }
 
-class NoSuchPartitionsException(errorClass: String, messageParameters: Map[String, String])
-  extends AnalysisException(errorClass, messageParameters) {
+// any changes to this class should be backward compatible as it may be used by external connectors
+class NoSuchPartitionsException private(
+    message: String,
+    errorClass: Option[String],
+    messageParameters: Map[String, String])
+  extends AnalysisException(
+    message,
+    errorClass = errorClass,
+    messageParameters = messageParameters) {
+
+  def this(errorClass: String, messageParameters: Map[String, String]) = {
+    this(
+      SparkThrowableHelper.getMessage(errorClass, messageParameters),
+      Some(errorClass),
+      messageParameters)
+  }
 
   def this(db: String, table: String, specs: Seq[TablePartitionSpec]) = {
     this(errorClass = "PARTITIONS_NOT_FOUND",
@@ -126,11 +229,43 @@ class NoSuchPartitionsException(errorClass: String, messageParameters: Map[Strin
           .mkString(", ")).mkString("), PARTITION (") + ")"),
         "tableName" -> quoteNameParts(UnresolvedAttribute.parseAttributeName(tableName))))
   }
+
+  def this(message: String) = {
+    this(message, errorClass = None, messageParameters = Map.empty[String, String])
+  }
 }
 
 class NoSuchTempFunctionException(func: String)
   extends AnalysisException(errorClass = "ROUTINE_NOT_FOUND", Map("routineName" -> s"`$func`"))
 
-class NoSuchIndexException(indexName: String, tableName: String, cause: Option[Throwable] = None)
-  extends AnalysisException(errorClass = "INDEX_NOT_FOUND",
-    Map("indexName" -> indexName, "tableName" -> tableName), cause)
+// any changes to this class should be backward compatible as it may be used by external connectors
+class NoSuchIndexException private(
+    message: String,
+    cause: Option[Throwable],
+    errorClass: Option[String],
+    messageParameters: Map[String, String])
+  extends AnalysisException(
+    message,
+    cause = cause,
+    errorClass = errorClass,
+    messageParameters = messageParameters) {
+
+  def this(
+      errorClass: String,
+      messageParameters: Map[String, String],
+      cause: Option[Throwable]) = {
+    this(
+      SparkThrowableHelper.getMessage(errorClass, messageParameters),
+      cause,
+      Some(errorClass),
+      messageParameters)
+  }
+
+  def this(indexName: String, tableName: String, cause: Option[Throwable]) = {
+    this("INDEX_NOT_FOUND", Map("indexName" -> indexName, "tableName" -> tableName), cause)
+  }
+
+  def this(message: String, cause: Option[Throwable] = None) = {
+    this(message, cause, errorClass = None, messageParameters = Map.empty[String, String])
+  }
+}

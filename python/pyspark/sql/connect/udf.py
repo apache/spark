@@ -19,21 +19,20 @@ User-defined function related classes and functions
 """
 from pyspark.sql.connect.utils import check_dependencies
 
-check_dependencies(__name__, __file__)
+check_dependencies(__name__)
 
 import sys
 import functools
 from typing import cast, Callable, Any, TYPE_CHECKING, Optional, Union
 
 from pyspark.rdd import PythonEvalType
-from pyspark.serializers import CloudPickleSerializer
 from pyspark.sql.connect.expressions import (
     ColumnReference,
     PythonUDF,
     CommonInlineUserDefinedFunction,
 )
 from pyspark.sql.connect.column import Column
-from pyspark.sql.connect.types import parse_data_type
+from pyspark.sql.connect.types import UnparsedDataType
 from pyspark.sql.types import DataType, StringType
 from pyspark.sql.udf import UDFRegistration as PySparkUDFRegistration
 
@@ -99,8 +98,8 @@ class UserDefinedFunction:
             )
 
         self.func = func
-        self._returnType = (
-            parse_data_type(returnType) if isinstance(returnType, str) else returnType
+        self.returnType: DataType = (
+            UnparsedDataType(returnType) if isinstance(returnType, str) else returnType
         )
         self._name = name or (
             func.__name__ if hasattr(func, "__name__") else func.__class__.__name__
@@ -116,20 +115,17 @@ class UserDefinedFunction:
         ]
         arg_exprs = [col._expr for col in arg_cols]
 
-        data_type_str = (
-            self._returnType.json() if isinstance(self._returnType, DataType) else self._returnType
-        )
         py_udf = PythonUDF(
-            output_type=data_type_str,
+            output_type=self.returnType,
             eval_type=self.evalType,
-            command=CloudPickleSerializer().dumps((self.func, self._returnType)),
+            func=self.func,
             python_ver="%d.%d" % sys.version_info[:2],
         )
         return CommonInlineUserDefinedFunction(
             function_name=self._name,
+            function=py_udf,
             deterministic=self.deterministic,
             arguments=arg_exprs,
-            function=py_udf,
         )
 
     def __call__(self, *cols: "ColumnOrName") -> Column:
@@ -164,7 +160,7 @@ class UserDefinedFunction:
         )
 
         wrapper.func = self.func  # type: ignore[attr-defined]
-        wrapper.returnType = self._returnType  # type: ignore[attr-defined]
+        wrapper.returnType = self.returnType  # type: ignore[attr-defined]
         wrapper.evalType = self.evalType  # type: ignore[attr-defined]
         wrapper.deterministic = self.deterministic  # type: ignore[attr-defined]
         wrapper.asNondeterministic = functools.wraps(  # type: ignore[attr-defined]
@@ -232,3 +228,18 @@ class UDFRegistration:
         return return_udf
 
     register.__doc__ = PySparkUDFRegistration.register.__doc__
+
+    def registerJavaFunction(
+        self,
+        name: str,
+        javaClassName: str,
+        returnType: Optional["DataTypeOrString"] = None,
+    ) -> None:
+        self.sparkSession._client.register_java(name, javaClassName, returnType)
+
+    registerJavaFunction.__doc__ = PySparkUDFRegistration.registerJavaFunction.__doc__
+
+    def registerJavaUDAF(self, name: str, javaClassName: str) -> None:
+        self.sparkSession._client.register_java(name, javaClassName, aggregate=True)
+
+    registerJavaUDAF.__doc__ = PySparkUDFRegistration.registerJavaUDAF.__doc__

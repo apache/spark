@@ -43,6 +43,9 @@ class DataStreamReader(OptionUtils):
 
     .. versionadded:: 2.0.0
 
+    .. versionchanged:: 3.5.0
+        Supports Spark Connect.
+
     Notes
     -----
     This API is evolving.
@@ -50,7 +53,7 @@ class DataStreamReader(OptionUtils):
     Examples
     --------
     >>> spark.readStream
-    <pyspark.sql.streaming.readwriter.DataStreamReader object ...>
+    <...streaming.readwriter.DataStreamReader object ...>
 
     The example below uses Rate source that generates rows continuously.
     After that, we operate a modulo by 3, and then writes the stream out to the console.
@@ -90,7 +93,7 @@ class DataStreamReader(OptionUtils):
         Examples
         --------
         >>> spark.readStream.format("text")
-        <pyspark.sql.streaming.readwriter.DataStreamReader object ...>
+        <...streaming.readwriter.DataStreamReader object ...>
 
         This API allows to configure other sources to read. The example below writes a small text
         file, and reads it back via Text source.
@@ -133,9 +136,9 @@ class DataStreamReader(OptionUtils):
         --------
         >>> from pyspark.sql.types import StructField, StructType, StringType
         >>> spark.readStream.schema(StructType([StructField("data", StringType(), True)]))
-        <pyspark.sql.streaming.readwriter.DataStreamReader object ...>
+        <...streaming.readwriter.DataStreamReader object ...>
         >>> spark.readStream.schema("col0 INT, col1 DOUBLE")
-        <pyspark.sql.streaming.readwriter.DataStreamReader object ...>
+        <...streaming.readwriter.DataStreamReader object ...>
 
         The example below specifies a different schema to CSV file.
 
@@ -172,7 +175,7 @@ class DataStreamReader(OptionUtils):
         Examples
         --------
         >>> spark.readStream.option("x", 1)
-        <pyspark.sql.streaming.readwriter.DataStreamReader object ...>
+        <...streaming.readwriter.DataStreamReader object ...>
 
         The example below specifies 'rowsPerSecond' option to Rate source in order to generate
         10 rows every second.
@@ -198,7 +201,7 @@ class DataStreamReader(OptionUtils):
         Examples
         --------
         >>> spark.readStream.options(x="1", y=2)
-        <pyspark.sql.streaming.readwriter.DataStreamReader object ...>
+        <...streaming.readwriter.DataStreamReader object ...>
 
         The example below specifies 'rowsPerSecond' and 'numPartitions' options to
         Rate source in order to generate 10 rows with 10 partitions every second.
@@ -764,7 +767,7 @@ class DataStreamWriter:
         --------
         >>> df = spark.readStream.format("rate").load()
         >>> df.writeStream.outputMode('append')
-        <pyspark.sql.streaming.readwriter.DataStreamWriter object ...>
+        <...streaming.readwriter.DataStreamWriter object ...>
 
         The example below uses Complete mode that the entire aggregated counts are printed out.
 
@@ -798,7 +801,7 @@ class DataStreamWriter:
         --------
         >>> df = spark.readStream.format("rate").load()
         >>> df.writeStream.format("text")
-        <pyspark.sql.streaming.readwriter.DataStreamWriter object ...>
+        <...streaming.readwriter.DataStreamWriter object ...>
 
         This API allows to configure the source to write. The example below writes a CSV
         file from Rate source in a streaming manner.
@@ -832,7 +835,7 @@ class DataStreamWriter:
         --------
         >>> df = spark.readStream.format("rate").load()
         >>> df.writeStream.option("x", 1)
-        <pyspark.sql.streaming.readwriter.DataStreamWriter object ...>
+        <...streaming.readwriter.DataStreamWriter object ...>
 
         The example below specifies 'numRows' option to Console source in order to print
         3 rows for every batch.
@@ -860,7 +863,7 @@ class DataStreamWriter:
         --------
         >>> df = spark.readStream.format("rate").load()
         >>> df.writeStream.option("x", 1)
-        <pyspark.sql.streaming.readwriter.DataStreamWriter object ...>
+        <...streaming.readwriter.DataStreamWriter object ...>
 
         The example below specifies 'numRows' and 'truncate' options to Console source in order
         to print 3 rows for every batch without truncating the results.
@@ -905,7 +908,7 @@ class DataStreamWriter:
         --------
         >>> df = spark.readStream.format("rate").load()
         >>> df.writeStream.partitionBy("value")
-        <pyspark.sql.streaming.readwriter.DataStreamWriter object ...>
+        <...streaming.readwriter.DataStreamWriter object ...>
 
         Partition-by timestamp column from Rate source.
 
@@ -1015,17 +1018,17 @@ class DataStreamWriter:
         Trigger the query for execution every 5 seconds
 
         >>> df.writeStream.trigger(processingTime='5 seconds')
-        <pyspark.sql.streaming.readwriter.DataStreamWriter object ...>
+        <...streaming.readwriter.DataStreamWriter object ...>
 
         Trigger the query for execution every 5 seconds
 
         >>> df.writeStream.trigger(continuous='5 seconds')
-        <pyspark.sql.streaming.readwriter.DataStreamWriter object ...>
+        <...streaming.readwriter.DataStreamWriter object ...>
 
         Trigger the query for reading all available data with multiple batches
 
         >>> df.writeStream.trigger(availableNow=True)
-        <pyspark.sql.streaming.readwriter.DataStreamWriter object ...>
+        <...streaming.readwriter.DataStreamWriter object ...>
         """
         params = [processingTime, once, continuous, availableNow]
 

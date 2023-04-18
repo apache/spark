@@ -30,7 +30,7 @@ object AQEUtils {
     // Project/Filter/LocalSort/CollectMetrics.
     // Note: we only care about `HashPartitioning` as `EnsureRequirements` can only optimize out
     // user-specified repartition with `HashPartitioning`.
-    case ShuffleExchangeExec(h: HashPartitioning, _, shuffleOrigin)
+    case ShuffleExchangeExec(h: HashPartitioning, _, shuffleOrigin, _)
         if shuffleOrigin == REPARTITION_BY_COL || shuffleOrigin == REPARTITION_BY_NUM =>
       val numPartitions = if (shuffleOrigin == REPARTITION_BY_NUM) {
         Some(h.numPartitions)

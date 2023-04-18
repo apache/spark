@@ -72,7 +72,21 @@ class RocksDB(
   tableFormatConfig.setFilterPolicy(bloomFilter)
   tableFormatConfig.setFormatVersion(conf.formatVersion)
 
-  private val dbOptions = new Options() // options to open the RocksDB
+  private val columnFamilyOptions = new ColumnFamilyOptions()
+
+  private val dbOptions =
+    new Options(new DBOptions(), columnFamilyOptions) // options to open the RocksDB
+
+  // Set RocksDB options around MemTable memory usage. By default, we let RocksDB
+  // use its internal default values for these settings.
+  if (conf.writeBufferSizeMB > 0L) {
+    columnFamilyOptions.setWriteBufferSize(conf.writeBufferSizeMB * 1024 * 1024)
+  }
+
+  if (conf.maxWriteBufferNumber > 0L) {
+    columnFamilyOptions.setMaxWriteBufferNumber(conf.maxWriteBufferNumber)
+  }
+
   dbOptions.setCreateIfMissing(true)
   dbOptions.setTableFormatConfig(tableFormatConfig)
   dbOptions.setMaxOpenFiles(conf.maxOpenFiles)
@@ -269,6 +283,7 @@ class RocksDB(
   def commit(): Long = {
     val newVersion = loadedVersion + 1
     val checkpointDir = createTempDir("checkpoint")
+    var rocksDBBackgroundThreadPaused = false
     try {
       // Make sure the directory does not exist. Native RocksDB fails if the directory to
       // checkpoint exists.
@@ -288,6 +303,7 @@ class RocksDB(
       logInfo("Pausing background work")
       val pauseTimeMs = timeTakenMs {
         db.pauseBackgroundWork() // To avoid files being changed while committing
+        rocksDBBackgroundThreadPaused = true
       }
 
       logInfo(s"Creating checkpoint for $newVersion in $checkpointDir")
@@ -318,7 +334,7 @@ class RocksDB(
         loadedVersion = -1  // invalidate loaded version
         throw t
     } finally {
-      db.continueBackgroundWork()
+      if (rocksDBBackgroundThreadPaused) db.continueBackgroundWork()
       silentDeleteRecursively(checkpointDir, s"committing $newVersion")
       // reset resources as either 1) we already pushed the changes and it has been committed or
       // 2) commit has failed and the current version is "invalidated".
@@ -377,6 +393,7 @@ class RocksDB(
     val readerMemUsage = getDBProperty("rocksdb.estimate-table-readers-mem")
     val memTableMemUsage = getDBProperty("rocksdb.size-all-mem-tables")
     val blockCacheUsage = getDBProperty("rocksdb.block-cache-usage")
+    val pinnedBlocksMemUsage = getDBProperty("rocksdb.block-cache-pinned-usage")
     // Get the approximate memory usage of this writeBatchWithIndex
     val writeBatchMemUsage = writeBatch.getWriteBatch.getDataSize
     val nativeOpsHistograms = Seq(
@@ -403,7 +420,9 @@ class RocksDB(
       /** Number of bytes read during compaction */
       "totalBytesReadByCompaction" -> COMPACT_READ_BYTES,
       /** Number of bytes written during compaction */
-      "totalBytesWrittenByCompaction" -> COMPACT_WRITE_BYTES
+      "totalBytesWrittenByCompaction" -> COMPACT_WRITE_BYTES,
+      /** Number of bytes written during flush */
+      "totalBytesWrittenByFlush" -> FLUSH_WRITE_BYTES
     ).toMap
     val nativeOpsMetrics = nativeOpsMetricTickers.mapValues { typ =>
       nativeStats.getTickerCount(typ)
@@ -413,6 +432,7 @@ class RocksDB(
       numKeysOnLoadedVersion,
       numKeysOnWritingVersion,
       readerMemUsage + memTableMemUsage + blockCacheUsage + writeBatchMemUsage,
+      pinnedBlocksMemUsage,
       writeBatchMemUsage,
       totalSSTFilesBytes,
       nativeOpsLatencyMicros.toMap,
@@ -556,7 +576,9 @@ case class RocksDBConf(
     resetStatsOnLoad : Boolean,
     formatVersion: Int,
     trackTotalNumberOfRows: Boolean,
-    maxOpenFiles: Int)
+    maxOpenFiles: Int,
+    writeBufferSizeMB: Long,
+    maxWriteBufferNumber: Int)
 
 object RocksDBConf {
   /** Common prefix of all confs in SQLConf that affects RocksDB */
@@ -580,7 +602,8 @@ object RocksDBConf {
   private val COMPACT_ON_COMMIT_CONF = SQLConfEntry("compactOnCommit", "false")
   private val BLOCK_SIZE_KB_CONF = SQLConfEntry("blockSizeKB", "4")
   private val BLOCK_CACHE_SIZE_MB_CONF = SQLConfEntry("blockCacheSizeMB", "8")
-  private val LOCK_ACQUIRE_TIMEOUT_MS_CONF = SQLConfEntry("lockAcquireTimeoutMs", "60000")
+  // See SPARK-42794 for details.
+  private val LOCK_ACQUIRE_TIMEOUT_MS_CONF = SQLConfEntry("lockAcquireTimeoutMs", "120000")
   private val RESET_STATS_ON_LOAD = SQLConfEntry("resetStatsOnLoad", "true")
   // Config to specify the number of open files that can be used by the DB. Value of -1 means
   // that files opened are always kept open.
@@ -606,6 +629,15 @@ object RocksDBConf {
   // again when you really need the know the number for observability/debuggability.
   private val TRACK_TOTAL_NUMBER_OF_ROWS = SQLConfEntry("trackTotalNumberOfRows", "true")
 
+  // Configuration to control maximum size of MemTable in RocksDB
+  private val WRITE_BUFFER_SIZE_MB_CONF = SQLConfEntry("writeBufferSizeMB", "-1")
+
+  // Configuration to set maximum number of MemTables in RocksDB, both active and immutable.
+  // If the active MemTable fills up and the total number of MemTables is larger than
+  // maxWriteBufferNumber, then RocksDB will stall further writes.
+  // This may happen if the flush process is slower than the write rate.
+  private val MAX_WRITE_BUFFER_NUMBER_CONF = SQLConfEntry("maxWriteBufferNumber", "-1")
+
   def apply(storeConf: StateStoreConf): RocksDBConf = {
     val sqlConfs = CaseInsensitiveMap[String](storeConf.sqlConfs)
     val extraConfs = CaseInsensitiveMap[String](storeConf.extraOptions)
@@ -627,6 +659,14 @@ object RocksDBConf {
       Try { getConfigMap(conf).getOrElse(conf.fullName, conf.default).toInt } getOrElse {
         throw new IllegalArgumentException(s"Invalid value for '${conf.fullName}', " +
           "must be an integer")
+      }
+    }
+
+    def getLongConf(conf: ConfEntry): Long = {
+      Try { getConfigMap(conf).getOrElse(conf.fullName, conf.default).toLong } getOrElse {
+        throw new IllegalArgumentException(
+          s"Invalid value for '${conf.fullName}', must be a long"
+        )
       }
     }
 
@@ -657,7 +697,9 @@ object RocksDBConf {
       getBooleanConf(RESET_STATS_ON_LOAD),
       getPositiveIntConf(FORMAT_VERSION),
       getBooleanConf(TRACK_TOTAL_NUMBER_OF_ROWS),
-      getIntConf(MAX_OPEN_FILES_CONF))
+      getIntConf(MAX_OPEN_FILES_CONF),
+      getLongConf(WRITE_BUFFER_SIZE_MB_CONF),
+      getIntConf(MAX_WRITE_BUFFER_NUMBER_CONF))
   }
 
   def apply(): RocksDBConf = apply(new StateStoreConf())
@@ -668,6 +710,7 @@ case class RocksDBMetrics(
     numCommittedKeys: Long,
     numUncommittedKeys: Long,
     totalMemUsageBytes: Long,
+    pinnedBlocksMemUsage: Long,
     writeBatchMemUsageBytes: Long,
     totalSSTFilesBytes: Long,
     nativeOpsHistograms: Map[String, RocksDBNativeHistogram],

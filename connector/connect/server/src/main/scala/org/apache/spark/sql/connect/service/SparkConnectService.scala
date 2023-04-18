@@ -39,9 +39,10 @@ import org.json4s.jackson.JsonMethods.{compact, render}
 import org.apache.spark.{SparkEnv, SparkException, SparkThrowable}
 import org.apache.spark.api.python.PythonException
 import org.apache.spark.connect.proto
+import org.apache.spark.connect.proto.{AddArtifactsRequest, AddArtifactsResponse}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.connect.config.Connect.CONNECT_GRPC_BINDING_PORT
+import org.apache.spark.sql.connect.config.Connect.{CONNECT_GRPC_BINDING_PORT, CONNECT_GRPC_MAX_INBOUND_MESSAGE_SIZE}
 
 /**
  * The SparkConnectService implementation.
@@ -73,6 +74,7 @@ class SparkConnectService(debug: Boolean)
   }
 
   private def buildStatusFromThrowable(st: Throwable): RPCStatus = {
+    val message = StringUtils.abbreviate(st.getMessage, 2048)
     RPCStatus
       .newBuilder()
       .setCode(RPCCode.INTERNAL_VALUE)
@@ -84,7 +86,7 @@ class SparkConnectService(debug: Boolean)
             .setDomain("org.apache.spark")
             .putMetadata("classes", compact(render(allClasses(st.getClass).map(_.getName))))
             .build()))
-      .setMessage(StringUtils.abbreviate(st.getMessage, 2048))
+      .setMessage(if (message != null) message else "")
       .build()
   }
 
@@ -179,6 +181,16 @@ class SparkConnectService(debug: Boolean)
       new SparkConnectConfigHandler(responseObserver).handle(request)
     } catch handleError("config", observer = responseObserver)
   }
+
+  /**
+   * This is the main entry method for all calls to add/transfer artifacts.
+   *
+   * @param responseObserver
+   * @return
+   */
+  override def addArtifacts(responseObserver: StreamObserver[AddArtifactsResponse])
+      : StreamObserver[AddArtifactsRequest] = new SparkConnectAddArtifactsHandler(
+    responseObserver)
 }
 
 /**
@@ -253,6 +265,7 @@ object SparkConnectService {
     val port = SparkEnv.get.conf.get(CONNECT_GRPC_BINDING_PORT)
     val sb = NettyServerBuilder
       .forPort(port)
+      .maxInboundMessageSize(SparkEnv.get.conf.get(CONNECT_GRPC_MAX_INBOUND_MESSAGE_SIZE).toInt)
       .addService(new SparkConnectService(debugMode))
 
     // Add all registered interceptors to the server builder.

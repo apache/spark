@@ -1,0 +1,14 @@
+{
+  "common": {
+    "planId": "0"
+  },
+  "read": {
+    "namedTable": {
+      "unparsedIdentifier": "tempdb.myTable",
+      "options": {
+        "p1": "v1",
+        "p2": "v2"
+      }
+    }
+  }
+}

@@ -9,9 +9,9 @@ license: |
   The ASF licenses this file to You under the Apache License, Version 2.0
   (the "License"); you may not use this file except in compliance with
   the License.  You may obtain a copy of the License at
- 
+
      http://www.apache.org/licenses/LICENSE-2.0
- 
+
   Unless required by applicable law or agreed to in writing, software
   distributed under the License is distributed on an "AS IS" BASIS,
   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -130,8 +130,8 @@ When reading from Hive metastore ORC tables and inserting to Hive metastore ORC 
 
 ### Configuration
 
-<table class="table">
-  <tr><th><b>Property Name</b></th><th><b>Default</b></th><th><b>Meaning</b></th><th><b>Since Version</b></th></tr>
+<table class="table table-striped">
+  <thead><tr><th><b>Property Name</b></th><th><b>Default</b></th><th><b>Meaning</b></th><th><b>Since Version</b></th></tr></thead>
   <tr>
     <td><code>spark.sql.orc.impl</code></td>
     <td><code>native</code></td>
@@ -156,7 +156,7 @@ When reading from Hive metastore ORC tables and inserting to Hive metastore ORC 
     <td><code>spark.sql.orc.columnarReaderBatchSize</code></td>
     <td><code>4096</code></td>
     <td>
-      The number of rows to include in an orc vectorized reader batch. The number should 
+      The number of rows to include in an orc vectorized reader batch. The number should
       be carefully chosen to minimize overhead and avoid OOMs in reading data.
     </td>
     <td>2.4.0</td>
@@ -165,7 +165,7 @@ When reading from Hive metastore ORC tables and inserting to Hive metastore ORC 
     <td><code>spark.sql.orc.columnarWriterBatchSize</code></td>
     <td><code>1024</code></td>
     <td>
-      The number of rows to include in an orc vectorized writer batch. The number should 
+      The number of rows to include in an orc vectorized writer batch. The number should
       be carefully chosen to minimize overhead and avoid OOMs in writing data.
     </td>
     <td>3.4.0</td>
@@ -192,9 +192,9 @@ When reading from Hive metastore ORC tables and inserting to Hive metastore ORC 
     <td><code>spark.sql.orc.aggregatePushdown</code></td>
     <td><code>false</code></td>
     <td>
-      If true, aggregates will be pushed down to ORC for optimization. Support MIN, MAX and 
-      COUNT as aggregate expression. For MIN/MAX, support boolean, integer, float and date 
-      type. For COUNT, support all data types. If statistics is missing from any ORC file 
+      If true, aggregates will be pushed down to ORC for optimization. Support MIN, MAX and
+      COUNT as aggregate expression. For MIN/MAX, support boolean, integer, float and date
+      type. For COUNT, support all data types. If statistics is missing from any ORC file
       footer, exception would be thrown.
     </td>
     <td>3.3.0</td>
@@ -231,8 +231,8 @@ Data source options of ORC can be set via:
   * `DataStreamWriter`
 * `OPTIONS` clause at [CREATE TABLE USING DATA_SOURCE](sql-ref-syntax-ddl-create-table-datasource.html)
 
-<table class="table">
-  <tr><th><b>Property Name</b></th><th><b>Default</b></th><th><b>Meaning</b></th><th><b>Scope</b></th></tr>
+<table class="table table-striped">
+  <thead><tr><th><b>Property Name</b></th><th><b>Default</b></th><th><b>Meaning</b></th><th><b>Scope</b></th></tr></thead>
   <tr>
     <td><code>mergeSchema</code></td>
     <td><code>false</code></td>

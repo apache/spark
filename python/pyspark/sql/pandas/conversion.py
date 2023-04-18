@@ -64,7 +64,7 @@ class PandasConversionMixin:
         .. versionadded:: 1.3.0
 
         .. versionchanged:: 3.4.0
-            Support Spark Connect.
+            Supports Spark Connect.
 
         Notes
         -----
@@ -182,7 +182,7 @@ class PandasConversionMixin:
                                 field.dataType
                             )
                             corrected_panda_types[tmp_column_names[index]] = (
-                                np.object0 if pandas_type is None else pandas_type
+                                object if pandas_type is None else pandas_type
                             )
 
                         pdf = pd.DataFrame(columns=tmp_column_names).astype(
@@ -232,7 +232,7 @@ class PandasConversionMixin:
             if isinstance(field.dataType, IntegralType) and pandas_col.isnull().any():
                 corrected_dtypes[index] = np.float64
             if isinstance(field.dataType, BooleanType) and pandas_col.isnull().any():
-                corrected_dtypes[index] = np.object  # type: ignore[attr-defined]
+                corrected_dtypes[index] = object
 
         df = pd.DataFrame()
         for index, t in enumerate(corrected_dtypes):

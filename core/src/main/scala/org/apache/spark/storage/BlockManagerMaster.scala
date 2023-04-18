@@ -108,6 +108,19 @@ class BlockManagerMaster(
     res
   }
 
+  def updateRDDBlockTaskInfo(blockId: RDDBlockId, taskId: Long): Unit = {
+    driverEndpoint.askSync[Unit](UpdateRDDBlockTaskInfo(blockId, taskId))
+  }
+
+  def updateRDDBlockVisibility(taskId: Long, visible: Boolean): Unit = {
+    driverEndpoint.ask[Unit](UpdateRDDBlockVisibility(taskId, visible))
+  }
+
+  /** Check whether a block is visible */
+  def isRDDBlockVisible(blockId: RDDBlockId): Boolean = {
+    driverEndpoint.askSync[Boolean](GetRDDBlockVisibility(blockId))
+  }
+
   /** Get locations of the blockId from the driver */
   def getLocations(blockId: BlockId): Seq[BlockManagerId] = {
     driverEndpoint.askSync[Seq[BlockManagerId]](GetLocations(blockId))

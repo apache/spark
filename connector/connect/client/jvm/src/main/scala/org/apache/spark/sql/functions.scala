@@ -16,24 +16,17 @@
  */
 package org.apache.spark.sql
 
-import java.math.{BigDecimal => JBigDecimal}
-import java.sql.{Date, Timestamp}
-import java.time.{Duration, Instant, LocalDate, LocalDateTime, Period}
 import java.util.Collections
 
 import scala.collection.JavaConverters._
 import scala.reflect.runtime.universe.{typeTag, TypeTag}
 
-import com.google.protobuf.ByteString
-
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.PrimitiveLongEncoder
-import org.apache.spark.sql.catalyst.util.{DateTimeUtils, IntervalUtils}
-import org.apache.spark.sql.connect.client.unsupported
+import org.apache.spark.sql.connect.common.LiteralValueProtoConverter._
 import org.apache.spark.sql.expressions.{ScalarUserDefinedFunction, UserDefinedFunction}
-import org.apache.spark.sql.types.{DataType, Decimal, StructType}
+import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.sql.types.DataType.parseTypeWithFallback
-import org.apache.spark.unsafe.types.CalendarInterval
 
 /**
  * Commonly used functions available for DataFrame operations. Using functions defined here
@@ -93,31 +86,9 @@ object functions {
    */
   def column(colName: String): Column = col(colName)
 
-  private def createLiteral(f: proto.Expression.Literal.Builder => Unit): Column = Column {
-    builder =>
-      val literalBuilder = proto.Expression.Literal.newBuilder()
-      f(literalBuilder)
-      builder.setLiteral(literalBuilder)
+  private def createLiteral(literalBuilder: proto.Expression.Literal.Builder): Column = Column {
+    builder => builder.setLiteral(literalBuilder)
   }
-
-  private def createDecimalLiteral(precision: Int, scale: Int, value: String): Column =
-    createLiteral { builder =>
-      builder.getDecimalBuilder
-        .setPrecision(precision)
-        .setScale(scale)
-        .setValue(value)
-    }
-
-  private def createCalendarIntervalLiteral(months: Int, days: Int, microseconds: Long): Column =
-    createLiteral { builder =>
-      builder.getCalendarIntervalBuilder
-        .setMonths(months)
-        .setDays(days)
-        .setMicroseconds(microseconds)
-    }
-
-  private val nullType =
-    proto.DataType.newBuilder().setNull(proto.DataType.NULL.getDefaultInstance).build()
 
   /**
    * Creates a [[Column]] of literal value.
@@ -128,37 +99,11 @@ object functions {
    *
    * @since 3.4.0
    */
-  @scala.annotation.tailrec
   def lit(literal: Any): Column = {
     literal match {
       case c: Column => c
       case s: Symbol => Column(s.name)
-      case v: Boolean => createLiteral(_.setBoolean(v))
-      case v: Byte => createLiteral(_.setByte(v))
-      case v: Short => createLiteral(_.setShort(v))
-      case v: Int => createLiteral(_.setInteger(v))
-      case v: Long => createLiteral(_.setLong(v))
-      case v: Float => createLiteral(_.setFloat(v))
-      case v: Double => createLiteral(_.setDouble(v))
-      case v: BigDecimal => createDecimalLiteral(v.precision, v.scale, v.toString)
-      case v: JBigDecimal => createDecimalLiteral(v.precision, v.scale, v.toString)
-      case v: String => createLiteral(_.setString(v))
-      case v: Char => createLiteral(_.setString(v.toString))
-      case v: Array[Char] => createLiteral(_.setString(String.valueOf(v)))
-      case v: Array[Byte] => createLiteral(_.setBinary(ByteString.copyFrom(v)))
-      case v: collection.mutable.WrappedArray[_] => lit(v.array)
-      case v: LocalDate => createLiteral(_.setDate(v.toEpochDay.toInt))
-      case v: Decimal => createDecimalLiteral(Math.max(v.precision, v.scale), v.scale, v.toString)
-      case v: Instant => createLiteral(_.setTimestamp(DateTimeUtils.instantToMicros(v)))
-      case v: Timestamp => createLiteral(_.setTimestamp(DateTimeUtils.fromJavaTimestamp(v)))
-      case v: LocalDateTime =>
-        createLiteral(_.setTimestampNtz(DateTimeUtils.localDateTimeToMicros(v)))
-      case v: Date => createLiteral(_.setDate(DateTimeUtils.fromJavaDate(v)))
-      case v: Duration => createLiteral(_.setDayTimeInterval(IntervalUtils.durationToMicros(v)))
-      case v: Period => createLiteral(_.setYearMonthInterval(IntervalUtils.periodToMonths(v)))
-      case v: CalendarInterval => createCalendarIntervalLiteral(v.months, v.days, v.microseconds)
-      case null => createLiteral(_.setNull(nullType))
-      case _ => unsupported(s"literal $literal not supported (yet).")
+      case _ => createLiteral(toLiteralProtoBuilder(literal))
     }
   }
   //////////////////////////////////////////////////////////////////////////////////////////////
@@ -1227,6 +1172,22 @@ object functions {
    */
   def map_from_arrays(keys: Column, values: Column): Column =
     Column.fn("map_from_arrays", keys, values)
+
+  /**
+   * Marks a DataFrame as small enough for use in broadcast joins.
+   *
+   * The following example marks the right DataFrame for broadcast hash join using `joinKey`.
+   * {{{
+   *   // left and right are DataFrames
+   *   left.join(broadcast(right), "joinKey")
+   * }}}
+   *
+   * @group normal_funcs
+   * @since 3.4.0
+   */
+  def broadcast[T](df: Dataset[T]): Dataset[T] = {
+    df.hint("broadcast")
+  }
 
   /**
    * Returns the first column that is not null, or null if all inputs are null.
@@ -4043,6 +4004,16 @@ object functions {
   def array_compact(column: Column): Column = Column.fn("array_compact", column)
 
   /**
+   * Returns an array containing value as well as all elements from array. The new element is
+   * positioned at the beginning of the array.
+   *
+   * @group collection_funcs
+   * @since 3.5.0
+   */
+  def array_prepend(column: Column, element: Any): Column =
+    Column.fn("array_prepend", column, lit(element))
+
+  /**
    * Removes duplicate values from the array.
    * @group collection_funcs
    * @since 3.4.0
@@ -4676,7 +4647,7 @@ object functions {
    * Invoke a function with an options map as its last argument. If there are no options, its
    * column is dropped.
    */
-  private def fnWithOptions(
+  private[sql] def fnWithOptions(
       name: String,
       options: Iterator[(String, String)],
       arguments: Column*): Column = {

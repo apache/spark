@@ -4045,6 +4045,17 @@ object functions {
   }
 
   /**
+   * Returns an array containing value as well as all elements from array. The new element is
+   * positioned at the beginning of the array.
+   *
+   * @group collection_funcs
+   * @since 3.5.0
+   */
+  def array_prepend(column: Column, element: Any): Column = withExpr {
+    ArrayPrepend(column.expr, lit(element).expr)
+  }
+
+  /**
    * Removes duplicate values from the array.
    * @group collection_funcs
    * @since 2.4.0

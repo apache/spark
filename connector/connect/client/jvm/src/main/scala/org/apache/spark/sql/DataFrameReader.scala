@@ -17,11 +17,17 @@
 
 package org.apache.spark.sql
 
+import java.util.Properties
+
 import scala.collection.JavaConverters._
 
 import org.apache.spark.annotation.Stable
+import org.apache.spark.connect.proto.Parse.ParseFormat
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.StringEncoder
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CharVarcharUtils}
+import org.apache.spark.sql.connect.common.DataTypeProtoConverter
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -185,6 +191,112 @@ class DataFrameReader private[sql] (sparkSession: SparkSession) extends Logging 
   }
 
   /**
+   * Construct a `DataFrame` representing the database table accessible via JDBC URL url named
+   * table and connection properties.
+   *
+   * You can find the JDBC-specific option and parameter documentation for reading tables via JDBC
+   * in <a
+   * href="https://spark.apache.org/docs/latest/sql-data-sources-jdbc.html#data-source-option">
+   * Data Source Option</a> in the version you use.
+   *
+   * @since 3.4.0
+   */
+  def jdbc(url: String, table: String, properties: Properties): DataFrame = {
+    // properties should override settings in extraOptions.
+    this.extraOptions ++= properties.asScala
+    // explicit url and dbtable should override all
+    this.extraOptions ++= Seq("url" -> url, "dbtable" -> table)
+    format("jdbc").load()
+  }
+
+  // scalastyle:off line.size.limit
+  /**
+   * Construct a `DataFrame` representing the database table accessible via JDBC URL url named
+   * table. Partitions of the table will be retrieved in parallel based on the parameters passed
+   * to this function.
+   *
+   * Don't create too many partitions in parallel on a large cluster; otherwise Spark might crash
+   * your external database systems.
+   *
+   * You can find the JDBC-specific option and parameter documentation for reading tables via JDBC
+   * in <a
+   * href="https://spark.apache.org/docs/latest/sql-data-sources-jdbc.html#data-source-option">
+   * Data Source Option</a> in the version you use.
+   *
+   * @param table
+   *   Name of the table in the external database.
+   * @param columnName
+   *   Alias of `partitionColumn` option. Refer to `partitionColumn` in <a
+   *   href="https://spark.apache.org/docs/latest/sql-data-sources-jdbc.html#data-source-option">
+   *   Data Source Option</a> in the version you use.
+   * @param connectionProperties
+   *   JDBC database connection arguments, a list of arbitrary string tag/value. Normally at least
+   *   a "user" and "password" property should be included. "fetchsize" can be used to control the
+   *   number of rows per fetch and "queryTimeout" can be used to wait for a Statement object to
+   *   execute to the given number of seconds.
+   * @since 3.4.0
+   */
+  // scalastyle:on line.size.limit
+  def jdbc(
+      url: String,
+      table: String,
+      columnName: String,
+      lowerBound: Long,
+      upperBound: Long,
+      numPartitions: Int,
+      connectionProperties: Properties): DataFrame = {
+    // columnName, lowerBound, upperBound and numPartitions override settings in extraOptions.
+    this.extraOptions ++= Map(
+      "partitionColumn" -> columnName,
+      "lowerBound" -> lowerBound.toString,
+      "upperBound" -> upperBound.toString,
+      "numPartitions" -> numPartitions.toString)
+    jdbc(url, table, connectionProperties)
+  }
+
+  /**
+   * Construct a `DataFrame` representing the database table accessible via JDBC URL url named
+   * table using connection properties. The `predicates` parameter gives a list expressions
+   * suitable for inclusion in WHERE clauses; each one defines one partition of the `DataFrame`.
+   *
+   * Don't create too many partitions in parallel on a large cluster; otherwise Spark might crash
+   * your external database systems.
+   *
+   * You can find the JDBC-specific option and parameter documentation for reading tables via JDBC
+   * in <a
+   * href="https://spark.apache.org/docs/latest/sql-data-sources-jdbc.html#data-source-option">
+   * Data Source Option</a> in the version you use.
+   *
+   * @param table
+   *   Name of the table in the external database.
+   * @param predicates
+   *   Condition in the where clause for each partition.
+   * @param connectionProperties
+   *   JDBC database connection arguments, a list of arbitrary string tag/value. Normally at least
+   *   a "user" and "password" property should be included. "fetchsize" can be used to control the
+   *   number of rows per fetch.
+   * @since 3.4.0
+   */
+  def jdbc(
+      url: String,
+      table: String,
+      predicates: Array[String],
+      connectionProperties: Properties): DataFrame = {
+    sparkSession.newDataFrame { builder =>
+      val dataSourceBuilder = builder.getReadBuilder.getDataSourceBuilder
+      format("jdbc")
+      dataSourceBuilder.setFormat(source)
+      predicates.foreach(predicate => dataSourceBuilder.addPredicates(predicate))
+      this.extraOptions ++= Seq("url" -> url, "dbtable" -> table)
+      val params = extraOptions ++ connectionProperties.asScala
+      params.foreach { case (k, v) =>
+        dataSourceBuilder.putOptions(k, v)
+      }
+      builder.build()
+    }
+  }
+
+  /**
    * Loads a JSON file and returns the results as a `DataFrame`.
    *
    * See the documentation on the overloaded `json()` method with varargs for more details.
@@ -217,6 +329,20 @@ class DataFrameReader private[sql] (sparkSession: SparkSession) extends Logging 
   }
 
   /**
+   * Loads a `Dataset[String]` storing JSON objects (<a href="http://jsonlines.org/">JSON Lines
+   * text format or newline-delimited JSON</a>) and returns the result as a `DataFrame`.
+   *
+   * Unless the schema is specified using `schema` function, this function goes through the input
+   * once to determine the input schema.
+   *
+   * @param jsonDataset
+   *   input Dataset with one JSON object per record
+   * @since 3.4.0
+   */
+  def json(jsonDataset: Dataset[String]): DataFrame =
+    parse(jsonDataset, ParseFormat.PARSE_FORMAT_JSON)
+
+  /**
    * Loads a CSV file and returns the result as a `DataFrame`. See the documentation on the other
    * overloaded `csv()` method for more details.
    *
@@ -242,6 +368,29 @@ class DataFrameReader private[sql] (sparkSession: SparkSession) extends Logging 
    */
   @scala.annotation.varargs
   def csv(paths: String*): DataFrame = format("csv").load(paths: _*)
+
+  /**
+   * Loads an `Dataset[String]` storing CSV rows and returns the result as a `DataFrame`.
+   *
+   * If the schema is not specified using `schema` function and `inferSchema` option is enabled,
+   * this function goes through the input once to determine the input schema.
+   *
+   * If the schema is not specified using `schema` function and `inferSchema` option is disabled,
+   * it determines the columns as string types and it reads only the first line to determine the
+   * names and the number of fields.
+   *
+   * If the enforceSchema is set to `false`, only the CSV header in the first line is checked to
+   * conform specified or inferred schema.
+   *
+   * @note
+   *   if `header` option is set to `true` when calling this API, all lines same with the header
+   *   will be removed if exists.
+   * @param csvDataset
+   *   input Dataset with one CSV row per record
+   * @since 3.4.0
+   */
+  def csv(csvDataset: Dataset[String]): DataFrame =
+    parse(csvDataset, ParseFormat.PARSE_FORMAT_CSV)
 
   /**
    * Loads a Parquet file, returning the result as a `DataFrame`. See the documentation on the
@@ -309,7 +458,9 @@ class DataFrameReader private[sql] (sparkSession: SparkSession) extends Logging 
    */
   def table(tableName: String): DataFrame = {
     sparkSession.newDataFrame { builder =>
-      builder.getReadBuilder.getNamedTableBuilder.setUnparsedIdentifier(tableName)
+      builder.getReadBuilder.getNamedTableBuilder
+        .setUnparsedIdentifier(tableName)
+        .putAllOptions(extraOptions.toMap.asJava)
     }
   }
 
@@ -384,15 +535,35 @@ class DataFrameReader private[sql] (sparkSession: SparkSession) extends Logging 
    */
   @scala.annotation.varargs
   def textFile(paths: String*): Dataset[String] = {
-    // scalastyle:off throwerror
-    // TODO: this method can be supported and should be included in the client API.
-    throw new NotImplementedError()
-    // scalastyle:on throwerror
+    assertNoSpecifiedSchema("textFile")
+    text(paths: _*).select("value").as(StringEncoder)
   }
 
   private def assertSourceFormatSpecified(): Unit = {
     if (source == null) {
       throw new IllegalArgumentException("The source format must be specified.")
+    }
+  }
+
+  private def parse(ds: Dataset[String], format: ParseFormat): DataFrame = {
+    sparkSession.newDataFrame { builder =>
+      val parseBuilder = builder.getParseBuilder
+        .setInput(ds.plan.getRoot)
+        .setFormat(format)
+      userSpecifiedSchema.foreach(schema =>
+        parseBuilder.setSchema(DataTypeProtoConverter.toConnectProtoType(schema)))
+      extraOptions.foreach { case (k, v) =>
+        parseBuilder.putOptions(k, v)
+      }
+    }
+  }
+
+  /**
+   * A convenient function for schema validation in APIs.
+   */
+  private def assertNoSpecifiedSchema(operation: String): Unit = {
+    if (userSpecifiedSchema.nonEmpty) {
+      throw QueryCompilationErrors.userSpecifiedSchemaUnsupportedError(operation)
     }
   }
 

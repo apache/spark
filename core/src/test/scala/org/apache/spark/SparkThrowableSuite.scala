@@ -210,6 +210,17 @@ class SparkThrowableSuite extends SparkFunSuite {
     )
   }
 
+  test("Error message does not do substitution on values") {
+    assert(
+      getMessage(
+        "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+        Map("objectName" -> "`foo`", "proposal" -> "`${bar}`, `baz`")
+      ) ==
+        "[UNRESOLVED_COLUMN.WITH_SUGGESTION] A column or function parameter with " +
+          "name `foo` cannot be resolved. Did you mean one of the following? [`${bar}`, `baz`]."
+    )
+  }
+
   test("Try catching legacy SparkError") {
     try {
       throw new SparkException("Arbitrary legacy message")

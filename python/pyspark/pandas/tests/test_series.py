@@ -45,7 +45,7 @@ from pyspark.pandas.typedef.typehints import (
 )
 
 
-class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
+class SeriesTestsMixin:
     @property
     def pser(self):
         return pd.Series([1, 2, 3, 4, 5, 6, 7], name="x")
@@ -1576,7 +1576,6 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         psser = ps.Series(pser)
 
         self.assert_eq(psser.astype(int), pser.astype(int))
-        self.assert_eq(psser.astype(np.int), pser.astype(np.int))
         self.assert_eq(psser.astype(np.int8), pser.astype(np.int8))
         self.assert_eq(psser.astype(np.int16), pser.astype(np.int16))
         self.assert_eq(psser.astype(np.int32), pser.astype(np.int32))
@@ -1592,7 +1591,6 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         self.assert_eq(psser.astype("i"), pser.astype("i"))
         self.assert_eq(psser.astype("long"), pser.astype("long"))
         self.assert_eq(psser.astype("short"), pser.astype("short"))
-        self.assert_eq(psser.astype(np.float), pser.astype(np.float))
         self.assert_eq(psser.astype(np.float32), pser.astype(np.float32))
         self.assert_eq(psser.astype(np.float64), pser.astype(np.float64))
         self.assert_eq(psser.astype("float"), pser.astype("float"))
@@ -3399,6 +3397,10 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
             ps.Series(["a", "b", "c"]).median()
         with self.assertRaisesRegex(TypeError, "Could not convert object"):
             ps.Series(["a", "b", "c"]).sem()
+
+
+class SeriesTests(SeriesTestsMixin, PandasOnSparkTestCase, SQLTestUtils):
+    pass
 
 
 if __name__ == "__main__":

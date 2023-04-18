@@ -3972,9 +3972,9 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
           exception = e,
           errorClass = "INVALID_TEMP_OBJ_REFERENCE",
           parameters = Map(
-            "obj" -> "view",
+            "obj" -> "VIEW",
             "objName" -> s"`$SESSION_CATALOG_NAME`.`default`.`$testViewName`",
-            "tempObj" -> "view",
+            "tempObj" -> "VIEW",
             "tempObjName" -> s"`$tempViewName`"))
 
         val e2 = intercept[AnalysisException] {
@@ -3991,9 +3991,9 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
           exception = e2,
           errorClass = "INVALID_TEMP_OBJ_REFERENCE",
           parameters = Map(
-            "obj" -> "view",
+            "obj" -> "VIEW",
             "objName" -> s"`$SESSION_CATALOG_NAME`.`default`.`$testViewName`",
-            "tempObj" -> "function",
+            "tempObj" -> "FUNCTION",
             "tempObjName" -> s"`$tempFuncName`"))
       }
     }

@@ -391,7 +391,7 @@ def infer_return_type(f: Callable) -> Union[SeriesType, DataFrameType, ScalarTyp
     >>> inferred.spark_type
     LongType()
 
-    >>> def func() -> ps.DataFrame[np.float, str]:
+    >>> def func() -> ps.DataFrame[float, str]:
     ...    pass
     >>> inferred = infer_return_type(func)
     >>> inferred.dtypes
@@ -399,7 +399,7 @@ def infer_return_type(f: Callable) -> Union[SeriesType, DataFrameType, ScalarTyp
     >>> inferred.spark_type
     StructType([StructField('c0', DoubleType(), True), StructField('c1', StringType(), True)])
 
-    >>> def func() -> ps.DataFrame[np.float]:
+    >>> def func() -> ps.DataFrame[float]:
     ...    pass
     >>> inferred = infer_return_type(func)
     >>> inferred.dtypes
@@ -423,7 +423,7 @@ def infer_return_type(f: Callable) -> Union[SeriesType, DataFrameType, ScalarTyp
     >>> inferred.spark_type
     LongType()
 
-    >>> def func() -> 'ps.DataFrame[np.float, str]':
+    >>> def func() -> 'ps.DataFrame[float, str]':
     ...    pass
     >>> inferred = infer_return_type(func)
     >>> inferred.dtypes
@@ -431,7 +431,7 @@ def infer_return_type(f: Callable) -> Union[SeriesType, DataFrameType, ScalarTyp
     >>> inferred.spark_type
     StructType([StructField('c0', DoubleType(), True), StructField('c1', StringType(), True)])
 
-    >>> def func() -> 'ps.DataFrame[np.float]':
+    >>> def func() -> 'ps.DataFrame[float]':
     ...    pass
     >>> inferred = infer_return_type(func)
     >>> inferred.dtypes
@@ -439,7 +439,7 @@ def infer_return_type(f: Callable) -> Union[SeriesType, DataFrameType, ScalarTyp
     >>> inferred.spark_type
     StructType([StructField('c0', DoubleType(), True)])
 
-    >>> def func() -> ps.DataFrame['a': np.float, 'b': int]:
+    >>> def func() -> ps.DataFrame['a': float, 'b': int]:
     ...     pass
     >>> inferred = infer_return_type(func)
     >>> inferred.dtypes
@@ -447,7 +447,7 @@ def infer_return_type(f: Callable) -> Union[SeriesType, DataFrameType, ScalarTyp
     >>> inferred.spark_type
     StructType([StructField('a', DoubleType(), True), StructField('b', LongType(), True)])
 
-    >>> def func() -> "ps.DataFrame['a': np.float, 'b': int]":
+    >>> def func() -> "ps.DataFrame['a': float, 'b': int]":
     ...     pass
     >>> inferred = infer_return_type(func)
     >>> inferred.dtypes

@@ -37,6 +37,7 @@ import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.objects._
+import org.apache.spark.sql.catalyst.types.{PhysicalBinaryType, PhysicalIntegerType, PhysicalLongType}
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, MapData}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types._
@@ -728,10 +729,10 @@ object ScalaReflection extends ScalaReflection {
     FloatType -> classOf[Float],
     DoubleType -> classOf[Double],
     StringType -> classOf[UTF8String],
-    DateType -> classOf[DateType.InternalType],
-    TimestampType -> classOf[TimestampType.InternalType],
-    TimestampNTZType -> classOf[TimestampNTZType.InternalType],
-    BinaryType -> classOf[BinaryType.InternalType],
+    DateType -> classOf[PhysicalIntegerType.InternalType],
+    TimestampType -> classOf[PhysicalLongType.InternalType],
+    TimestampNTZType -> classOf[PhysicalLongType.InternalType],
+    BinaryType -> classOf[PhysicalBinaryType.InternalType],
     CalendarIntervalType -> classOf[CalendarInterval]
   )
 
@@ -751,8 +752,8 @@ object ScalaReflection extends ScalaReflection {
   def dataTypeJavaClass(dt: DataType): Class[_] = {
     dt match {
       case _: DecimalType => classOf[Decimal]
-      case it: DayTimeIntervalType => classOf[it.InternalType]
-      case it: YearMonthIntervalType => classOf[it.InternalType]
+      case _: DayTimeIntervalType => classOf[PhysicalLongType.InternalType]
+      case _: YearMonthIntervalType => classOf[PhysicalIntegerType.InternalType]
       case _: StructType => classOf[InternalRow]
       case _: ArrayType => classOf[ArrayData]
       case _: MapType => classOf[MapData]

@@ -18,6 +18,7 @@
 import unittest
 
 from pyspark.errors.exceptions.connect import SparkConnectException
+from pyspark.sql.connect.column import Column
 from pyspark.sql.tests.test_functions import FunctionsTestsMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
 
@@ -42,8 +43,6 @@ class FunctionsParityTests(FunctionsTestsMixin, ReusedConnectTestCase):
         self.check_raise_error(SparkConnectException)
 
     def test_sorting_functions_with_column(self):
-        from pyspark.sql.connect.column import Column
-
         self.check_sorting_functions_with_column(Column)
 
 

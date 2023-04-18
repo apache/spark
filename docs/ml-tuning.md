@@ -93,6 +93,13 @@ However, it is also a well-established method for choosing parameters which is m
 
 <div class="codetabs">
 
+<div data-lang="python" markdown="1">
+
+Refer to the [`CrossValidator` Python docs](api/python/reference/api/pyspark.ml.tuning.CrossValidator.html) for more details on the API.
+
+{% include_example python/ml/cross_validator.py %}
+</div>
+
 <div data-lang="scala" markdown="1">
 
 Refer to the [`CrossValidator` Scala docs](api/scala/org/apache/spark/ml/tuning/CrossValidator.html) for details on the API.
@@ -105,13 +112,6 @@ Refer to the [`CrossValidator` Scala docs](api/scala/org/apache/spark/ml/tuning/
 Refer to the [`CrossValidator` Java docs](api/java/org/apache/spark/ml/tuning/CrossValidator.html) for details on the API.
 
 {% include_example java/org/apache/spark/examples/ml/JavaModelSelectionViaCrossValidationExample.java %}
-</div>
-
-<div data-lang="python" markdown="1">
-
-Refer to the [`CrossValidator` Python docs](api/python/reference/api/pyspark.ml.tuning.CrossValidator.html) for more details on the API.
-
-{% include_example python/ml/cross_validator.py %}
 </div>
 
 </div>
@@ -133,6 +133,13 @@ Like `CrossValidator`, `TrainValidationSplit` finally fits the `Estimator` using
 
 <div class="codetabs">
 
+<div data-lang="python" markdown="1">
+
+Refer to the [`TrainValidationSplit` Python docs](api/python/reference/api/pyspark.ml.tuning.TrainValidationSplit.html) for more details on the API.
+
+{% include_example python/ml/train_validation_split.py %}
+</div>
+
 <div data-lang="scala" markdown="1">
 
 Refer to the [`TrainValidationSplit` Scala docs](api/scala/org/apache/spark/ml/tuning/TrainValidationSplit.html) for details on the API.
@@ -145,13 +152,6 @@ Refer to the [`TrainValidationSplit` Scala docs](api/scala/org/apache/spark/ml/t
 Refer to the [`TrainValidationSplit` Java docs](api/java/org/apache/spark/ml/tuning/TrainValidationSplit.html) for details on the API.
 
 {% include_example java/org/apache/spark/examples/ml/JavaModelSelectionViaTrainValidationSplitExample.java %}
-</div>
-
-<div data-lang="python" markdown="1">
-
-Refer to the [`TrainValidationSplit` Python docs](api/python/reference/api/pyspark.ml.tuning.TrainValidationSplit.html) for more details on the API.
-
-{% include_example python/ml/train_validation_split.py %}
 </div>
 
 </div>

@@ -49,7 +49,7 @@ from pandas.api.types import (  # type: ignore[attr-defined]
 from pandas.tseries.offsets import DateOffset
 import pyarrow as pa
 import pyarrow.parquet as pq
-from pyspark.sql import functions as F, Column, DataFrame as SparkDataFrame
+from pyspark.sql import functions as F, Column
 from pyspark.sql.functions import pandas_udf
 from pyspark.sql.types import (
     ByteType,
@@ -69,7 +69,7 @@ from pyspark.sql.types import (
 )
 
 from pyspark import pandas as ps
-from pyspark.pandas._typing import Axis, Dtype, Label, Name
+from pyspark.pandas._typing import Axis, Dtype, Label, Name, GenericDataFrame
 from pyspark.pandas.base import IndexOpsMixin
 from pyspark.pandas.utils import (
     align_diff_frames,
@@ -94,6 +94,8 @@ from pyspark.pandas.spark.utils import as_nullable_spark_type, force_decimal_pre
 from pyspark.pandas.indexes import Index, DatetimeIndex, TimedeltaIndex
 from pyspark.pandas.indexes.multi import MultiIndex
 
+# For Supporting Spark Connect
+from pyspark.sql.connect.column import Column as ConnectColumn
 
 __all__ = [
     "from_pandas",
@@ -261,11 +263,17 @@ def read_csv(
         returning names where the callable function evaluates to `True`.
     squeeze : bool, default False
         If the parsed data only contains one column then return a Series.
+
+        .. deprecated:: 3.4.0
+
     mangle_dupe_cols : bool, default True
         Duplicate columns will be specified as 'X0', 'X1', ... 'XN', rather
         than 'X' ... 'X'. Passing in False will cause data to be overwritten if
         there are duplicate names in the columns.
         Currently only `True` is allowed.
+
+        .. deprecated:: 3.4.0
+
     dtype : Type name or dict of column -> type, default None
         Data type for data or columns. E.g. {‘a’: np.float64, ‘b’: np.int32} Use str or object
         together with suitable na_values settings to preserve and not interpret dtype.
@@ -978,6 +986,9 @@ def read_excel(
           column if the callable returns ``True``.
     squeeze : bool, default False
         If the parsed data only contains one column then return a Series.
+
+        .. deprecated:: 3.4.0
+
     dtype : Type name or dict of column -> type, default None
         Data type for data or columns. E.g. {'a': np.float64, 'b': np.int32}
         Use `object` to preserve data as stored in Excel and not interpret dtype.
@@ -1049,10 +1060,16 @@ def read_excel(
         Convert integral floats to int (i.e., 1.0 --> 1). If False, all numeric
         data will be read in as floats: Excel stores all numbers as floats
         internally.
+
+        .. deprecated:: 3.4.0
+
     mangle_dupe_cols : bool, default True
         Duplicate columns will be specified as 'X', 'X.1', ...'X.N', rather than
         'X'...'X'. Passing in False will cause data to be overwritten if there
         are duplicate names in the columns.
+
+        .. deprecated:: 3.4.0
+
     **kwds : optional
         Optional keyword arguments can be passed to ``TextFileReader``.
 
@@ -1733,6 +1750,8 @@ def to_datetime(
     )
 
 
+# TODO(SPARK-42621): Add `inclusive` parameter and replace `closed`.
+# See https://github.com/pandas-dev/pandas/issues/40245
 def date_range(
     start: Union[str, Any] = None,
     end: Union[str, Any] = None,
@@ -1768,6 +1787,9 @@ def date_range(
     closed : {None, 'left', 'right'}, optional
         Make the interval closed with respect to the given frequency to
         the 'left', 'right', or both sides (None, the default).
+
+        .. deprecated:: 3.4.0
+
     **kwargs
         For compatibility. Has no effect on the result.
 
@@ -2168,9 +2190,8 @@ def get_dummies(
     if sparse is not False:
         raise NotImplementedError("get_dummies currently does not support sparse")
 
-    if columns is not None:
-        if not is_list_like(columns):
-            raise TypeError("Input must be a list-like for parameter `columns`")
+    if columns is not None and not is_list_like(columns):
+        raise TypeError("Input must be a list-like for parameter `columns`")
 
     if dtype is None:
         dtype = "byte"
@@ -3407,7 +3428,7 @@ def merge_asof(
     else:
         on = None
 
-    if tolerance is not None and not isinstance(tolerance, Column):
+    if tolerance is not None and not isinstance(tolerance, (Column, ConnectColumn)):
         tolerance = F.lit(tolerance)
 
     as_of_joined_table = left_table._joinAsOf(
@@ -3700,7 +3721,7 @@ def read_orc(
 
 
 def _get_index_map(
-    sdf: SparkDataFrame, index_col: Optional[Union[str, List[str]]] = None
+    sdf: GenericDataFrame, index_col: Optional[Union[str, List[str]]] = None
 ) -> Tuple[Optional[List[Column]], Optional[List[Label]]]:
     index_spark_columns: Optional[List[Column]]
     index_names: Optional[List[Label]]

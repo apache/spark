@@ -45,6 +45,10 @@ case class EventTimeWatermark(
   final override val nodePatterns: Seq[TreePattern] = Seq(EVENT_TIME_WATERMARK)
 
   // Update the metadata on the eventTime column to include the desired delay.
+  // This is not allowed by default - WatermarkPropagator will throw an exception. We keep the
+  // logic here because we also maintain the compatibility flag. (See
+  // SQLConf.STATEFUL_OPERATOR_ALLOW_MULTIPLE for details.)
+  // TODO: Disallow updating the metadata once we remove the compatibility flag.
   override val output: Seq[Attribute] = child.output.map { a =>
     if (a semanticEquals eventTime) {
       val delayMs = EventTimeWatermark.getDelayMs(delay)

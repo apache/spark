@@ -44,7 +44,7 @@ class V2CommandsCaseSensitivitySuite
     schema.toAttributes)
 
   override protected def extendedAnalysisRules: Seq[Rule[LogicalPlan]] = {
-    Seq(PreprocessTableCreation(spark))
+    Seq(PreprocessTableCreation(spark.sessionState.catalog))
   }
 
   test("CreateTableAsSelect: using top level field for partitioning") {

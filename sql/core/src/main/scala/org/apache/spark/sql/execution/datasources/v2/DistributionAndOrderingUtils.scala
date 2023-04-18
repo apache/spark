@@ -36,6 +36,7 @@ object DistributionAndOrderingUtils {
       funCatalogOpt: Option[FunctionCatalog]): LogicalPlan = write match {
     case write: RequiresDistributionAndOrdering =>
       val numPartitions = write.requiredNumPartitions()
+      val partitionSize = write.advisoryPartitionSizeInBytes()
 
       val distribution = write.requiredDistribution match {
         case d: OrderedDistribution =>
@@ -49,17 +50,25 @@ object DistributionAndOrderingUtils {
 
       val queryWithDistribution = if (distribution.nonEmpty) {
         val optNumPartitions = if (numPartitions > 0) Some(numPartitions) else None
+        val optPartitionSize = if (partitionSize > 0) Some(partitionSize) else None
+
+        if (optNumPartitions.isDefined && optPartitionSize.isDefined) {
+          throw QueryCompilationErrors.numberAndSizeOfPartitionsNotAllowedTogether()
+        }
+
         // the conversion to catalyst expressions above produces SortOrder expressions
         // for OrderedDistribution and generic expressions for ClusteredDistribution
         // this allows RebalancePartitions/RepartitionByExpression to pick either
         // range or hash partitioning
         if (write.distributionStrictlyRequired()) {
-          RepartitionByExpression(distribution, query, optNumPartitions)
+          RepartitionByExpression(distribution, query, optNumPartitions, optPartitionSize)
         } else {
-          RebalancePartitions(distribution, query, optNumPartitions)
+          RebalancePartitions(distribution, query, optNumPartitions, optPartitionSize)
         }
       } else if (numPartitions > 0) {
         throw QueryCompilationErrors.numberOfPartitionsNotAllowedWithUnspecifiedDistributionError()
+      } else if (partitionSize > 0) {
+        throw QueryCompilationErrors.partitionSizeNotAllowedWithUnspecifiedDistributionError()
       } else {
         query
       }

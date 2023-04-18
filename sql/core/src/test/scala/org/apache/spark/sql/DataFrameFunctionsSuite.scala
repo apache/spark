@@ -2651,6 +2651,74 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     )
   }
 
+  test("SPARK-41233: array prepend") {
+    val df = Seq(
+      (Array[Int](2, 3, 4), Array("b", "c", "d"), Array("", ""), 2),
+      (Array.empty[Int], Array.empty[String], Array.empty[String], 2),
+      (null, null, null, 2)).toDF("a", "b", "c", "d")
+    checkAnswer(
+      df.select(array_prepend($"a", 1), array_prepend($"b", "a"), array_prepend($"c", "")),
+      Seq(
+        Row(Seq(1, 2, 3, 4), Seq("a", "b", "c", "d"), Seq("", "", "")),
+        Row(Seq(1), Seq("a"), Seq("")),
+        Row(null, null, null)))
+    checkAnswer(
+      df.select(array_prepend($"a", $"d")),
+      Seq(
+        Row(Seq(2, 2, 3, 4)),
+        Row(Seq(2)),
+        Row(null)))
+    checkAnswer(
+      df.selectExpr("array_prepend(a, d)"),
+      Seq(
+        Row(Seq(2, 2, 3, 4)),
+        Row(Seq(2)),
+        Row(null)))
+    checkAnswer(
+      OneRowRelation().selectExpr("array_prepend(array(1, 2), 1.23D)"),
+      Seq(
+        Row(Seq(1.23, 1.0, 2.0))
+      )
+    )
+    checkAnswer(
+      df.selectExpr("array_prepend(a, 1)", "array_prepend(b, \"a\")", "array_prepend(c, \"\")"),
+      Seq(
+        Row(Seq(1, 2, 3, 4), Seq("a", "b", "c", "d"), Seq("", "", "")),
+        Row(Seq(1), Seq("a"), Seq("")),
+        Row(null, null, null)))
+    checkError(
+      exception = intercept[AnalysisException] {
+        Seq(("a string element", "a")).toDF().selectExpr("array_prepend(_1, _2)")
+      },
+      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+      parameters = Map(
+        "paramIndex" -> "0",
+        "sqlExpr" -> "\"array_prepend(_1, _2)\"",
+        "inputSql" -> "\"_1\"",
+        "inputType" -> "\"STRING\"",
+        "requiredType" -> "\"ARRAY\""),
+      queryContext = Array(ExpectedContext("", "", 0, 20, "array_prepend(_1, _2)")))
+    checkError(
+      exception = intercept[AnalysisException] {
+        OneRowRelation().selectExpr("array_prepend(array(1, 2), '1')")
+      },
+      errorClass = "DATATYPE_MISMATCH.ARRAY_FUNCTION_DIFF_TYPES",
+      parameters = Map(
+        "sqlExpr" -> "\"array_prepend(array(1, 2), 1)\"",
+        "functionName" -> "`array_prepend`",
+        "dataType" -> "\"ARRAY\"",
+        "leftType" -> "\"ARRAY<INT>\"",
+        "rightType" -> "\"STRING\""),
+      queryContext = Array(ExpectedContext("", "", 0, 30, "array_prepend(array(1, 2), '1')")))
+    val df2 = Seq((Array[String]("a", "b", "c"), "d"),
+      (null, "d"),
+      (Array[String]("x", "y", "z"), null),
+      (null, null)
+    ).toDF("a", "b")
+    checkAnswer(df2.selectExpr("array_prepend(a, b)"),
+      Seq(Row(Seq("d", "a", "b", "c")), Row(null), Row(Seq(null, "x", "y", "z")), Row(null)))
+  }
+
   test("array remove") {
     val df = Seq(
       (Array[Int](2, 1, 2, 3), Array("a", "b", "c", "a"), Array("", ""), 2),
@@ -3123,17 +3191,27 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       Seq(Row(Seq[Double](3.0, 3.0, 2.0, 5.0, 1.0, 2.0)))
     )
     checkAnswer(df4.selectExpr("array_insert(a, b, c)"), Seq(Row(Seq(true, false, false))))
-    checkAnswer(df5.selectExpr("array_insert(a, b, c)"), Seq(Row(Seq("d", "a", "b", "c"))))
+
+    val e1 = intercept[SparkException] {
+      df5.selectExpr("array_insert(a, b, c)").show()
+    }
+    assert(e1.getCause.isInstanceOf[SparkRuntimeException])
+    checkError(
+      exception = e1.getCause.asInstanceOf[SparkRuntimeException],
+      errorClass = "INVALID_INDEX_OF_ZERO",
+      parameters = Map.empty,
+      context = ExpectedContext(
+        fragment = "array_insert(a, b, c)",
+        start = 0,
+        stop = 20)
+    )
+
     checkAnswer(df5.select(
       array_insert(col("a"), lit(1), col("c"))),
       Seq(Row(Seq("d", "a", "b", "c")))
     )
     // null checks
     checkAnswer(df6.selectExpr("array_insert(a, b, c)"), Seq(Row(Seq("a", null, "b", "c", "d"))))
-    checkAnswer(df5.select(
-      array_insert(col("a"), col("b"), lit(null).cast("string"))),
-      Seq(Row(Seq(null, "a", "b", "c")))
-    )
     checkAnswer(df6.select(
       array_insert(col("a"), col("b"), lit(null).cast("string"))),
       Seq(Row(Seq("a", null, "b", "c", null)))

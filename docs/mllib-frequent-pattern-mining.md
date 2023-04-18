@@ -52,6 +52,22 @@ We refer users to the papers for more details.
 **Examples**
 
 <div class="codetabs">
+
+<div data-lang="python" markdown="1">
+
+[`FPGrowth`](api/python/reference/api/pyspark.mllib.fpm.FPGrowth.html) implements the
+FP-growth algorithm.
+It takes an `RDD` of transactions, where each transaction is a `List` of items of a generic type.
+Calling `FPGrowth.train` with transactions returns an
+[`FPGrowthModel`](api/python/reference/api/pyspark.mllib.fpm.FPGrowthModel.html)
+that stores the frequent itemsets with their frequencies.
+
+Refer to the [`FPGrowth` Python docs](api/python/reference/api/pyspark.mllib.fpm.FPGrowth.html) for more details on the API.
+
+{% include_example python/mllib/fpgrowth_example.py %}
+
+</div>
+
 <div data-lang="scala" markdown="1">
 
 [`FPGrowth`](api/scala/org/apache/spark/mllib/fpm/FPGrowth.html) implements the
@@ -87,21 +103,6 @@ details) from `transactions`.
 Refer to the [`FPGrowth` Java docs](api/java/org/apache/spark/mllib/fpm/FPGrowth.html) for details on the API.
 
 {% include_example java/org/apache/spark/examples/mllib/JavaSimpleFPGrowth.java %}
-
-</div>
-
-<div data-lang="python" markdown="1">
-
-[`FPGrowth`](api/python/reference/api/pyspark.mllib.fpm.FPGrowth.html) implements the
-FP-growth algorithm.
-It takes an `RDD` of transactions, where each transaction is a `List` of items of a generic type.
-Calling `FPGrowth.train` with transactions returns an
-[`FPGrowthModel`](api/python/reference/api/pyspark.mllib.fpm.FPGrowthModel.html)
-that stores the frequent itemsets with their frequencies.
-
-Refer to the [`FPGrowth` Python docs](api/python/reference/api/pyspark.mllib.fpm.FPGrowth.html) for more details on the API.
-
-{% include_example python/mllib/fpgrowth_example.py %}
 
 </div>
 

@@ -24,7 +24,8 @@ import io.grpc.stub.StreamObserver
 import org.apache.spark.connect.proto
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{Dataset, SparkSession}
-import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, InvalidPlanInput}
+import org.apache.spark.sql.connect.artifact.SparkConnectArtifactManager
+import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, InvalidPlanInput, StorageLevelProtoConverter}
 import org.apache.spark.sql.connect.planner.SparkConnectPlanner
 import org.apache.spark.sql.execution.{CodegenMode, CostMode, ExtendedMode, FormattedMode, SimpleMode}
 
@@ -32,16 +33,18 @@ private[connect] class SparkConnectAnalyzeHandler(
     responseObserver: StreamObserver[proto.AnalyzePlanResponse])
     extends Logging {
 
-  def handle(request: proto.AnalyzePlanRequest): Unit = {
-    val session =
-      SparkConnectService
-        .getOrCreateIsolatedSession(request.getUserContext.getUserId, request.getClientId)
-        .session
-
-    val response = process(request, session)
-    responseObserver.onNext(response)
-    responseObserver.onCompleted()
-  }
+  def handle(request: proto.AnalyzePlanRequest): Unit =
+    SparkConnectArtifactManager.withArtifactClassLoader {
+      val session =
+        SparkConnectService
+          .getOrCreateIsolatedSession(request.getUserContext.getUserId, request.getSessionId)
+          .session
+      session.withActive {
+        val response = process(request, session)
+        responseObserver.onNext(response)
+        responseObserver.onCompleted()
+      }
+    }
 
   def process(
       request: proto.AnalyzePlanRequest,
@@ -139,10 +142,62 @@ private[connect] class SparkConnectAnalyzeHandler(
             .setParsed(DataTypeProtoConverter.toConnectProtoType(schema))
             .build())
 
+      case proto.AnalyzePlanRequest.AnalyzeCase.SAME_SEMANTICS =>
+        val target = Dataset.ofRows(
+          session,
+          planner.transformRelation(request.getSameSemantics.getTargetPlan.getRoot))
+        val other = Dataset.ofRows(
+          session,
+          planner.transformRelation(request.getSameSemantics.getOtherPlan.getRoot))
+        builder.setSameSemantics(
+          proto.AnalyzePlanResponse.SameSemantics
+            .newBuilder()
+            .setResult(target.sameSemantics(other)))
+
+      case proto.AnalyzePlanRequest.AnalyzeCase.SEMANTIC_HASH =>
+        val semanticHash = Dataset
+          .ofRows(session, planner.transformRelation(request.getSemanticHash.getPlan.getRoot))
+          .semanticHash()
+        builder.setSemanticHash(
+          proto.AnalyzePlanResponse.SemanticHash
+            .newBuilder()
+            .setResult(semanticHash))
+
+      case proto.AnalyzePlanRequest.AnalyzeCase.PERSIST =>
+        val target = Dataset
+          .ofRows(session, planner.transformRelation(request.getPersist.getRelation))
+        if (request.getPersist.hasStorageLevel) {
+          target.persist(
+            StorageLevelProtoConverter.toStorageLevel(request.getPersist.getStorageLevel))
+        } else {
+          target.persist()
+        }
+        builder.setPersist(proto.AnalyzePlanResponse.Persist.newBuilder().build())
+
+      case proto.AnalyzePlanRequest.AnalyzeCase.UNPERSIST =>
+        val target = Dataset
+          .ofRows(session, planner.transformRelation(request.getUnpersist.getRelation))
+        if (request.getUnpersist.hasBlocking) {
+          target.unpersist(request.getUnpersist.getBlocking)
+        } else {
+          target.unpersist()
+        }
+        builder.setUnpersist(proto.AnalyzePlanResponse.Unpersist.newBuilder().build())
+
+      case proto.AnalyzePlanRequest.AnalyzeCase.GET_STORAGE_LEVEL =>
+        val target = Dataset
+          .ofRows(session, planner.transformRelation(request.getGetStorageLevel.getRelation))
+        val storageLevel = target.storageLevel
+        builder.setGetStorageLevel(
+          proto.AnalyzePlanResponse.GetStorageLevel
+            .newBuilder()
+            .setStorageLevel(StorageLevelProtoConverter.toConnectProtoType(storageLevel))
+            .build())
+
       case other => throw InvalidPlanInput(s"Unknown Analyze Method $other!")
     }
 
-    builder.setClientId(request.getClientId)
+    builder.setSessionId(request.getSessionId)
     builder.build()
   }
 }

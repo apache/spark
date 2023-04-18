@@ -246,10 +246,6 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
     new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0024", ctx)
   }
 
-  def invalidIntervalLiteralError(ctx: IntervalContext): Throwable = {
-    new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0025", ctx)
-  }
-
   def invalidIntervalFormError(value: String, ctx: MultiUnitsIntervalContext): Throwable = {
     new ParseException(
       errorClass = "_LEGACY_ERROR_TEMP_0026",
@@ -293,17 +289,17 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
   def nestedTypeMissingElementTypeError(
       dataType: String, ctx: PrimitiveDataTypeContext): Throwable = {
     dataType match {
-      case "array" =>
+      case "ARRAY" =>
         new ParseException(
           errorClass = "INCOMPLETE_TYPE_DEFINITION.ARRAY",
           messageParameters = Map("elementType" -> "<INT>"),
           ctx)
-      case "struct" =>
+      case "STRUCT" =>
         new ParseException(
           errorClass = "INCOMPLETE_TYPE_DEFINITION.STRUCT",
           messageParameters = Map.empty,
           ctx)
-      case "map" =>
+      case "MAP" =>
         new ParseException(
           errorClass = "INCOMPLETE_TYPE_DEFINITION.MAP",
           messageParameters = Map.empty,
@@ -646,15 +642,31 @@ private[sql] object QueryParsingErrors extends QueryErrorsBase {
     new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0059", ctx)
   }
 
-  def duplicateCreateTableColumnOption(
+  def duplicateTableColumnDescriptor(
       ctx: ParserRuleContext,
       columnName: String,
-      optionName: String): Throwable = {
+      optionName: String,
+      isCreate: Boolean = true,
+      alterType: String = "ADD"): Throwable = {
+    val errorClass =
+      if (isCreate) {
+        "CREATE_TABLE_COLUMN_DESCRIPTOR_DUPLICATE"
+      } else {
+        "ALTER_TABLE_COLUMN_DESCRIPTOR_DUPLICATE"
+      }
+    val alterTypeMap: Map[String, String] =
+      if (isCreate) {
+        Map.empty
+      } else {
+        Map("type" -> alterType)
+      }
     new ParseException(
-      errorClass = "CREATE_TABLE_COLUMN_OPTION_DUPLICATE",
-      messageParameters = Map(
-        "columnName" -> columnName,
-        "optionName" -> optionName),
-      ctx)
+      errorClass = errorClass,
+      messageParameters = alterTypeMap ++ Map(
+          "columnName" -> columnName,
+          "optionName" -> optionName
+        ),
+      ctx
+    )
   }
 }

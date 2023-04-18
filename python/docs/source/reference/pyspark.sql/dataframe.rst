@@ -25,6 +25,8 @@ DataFrame
 .. autosummary::
     :toctree: api/
 
+    DataFrame.__getattr__
+    DataFrame.__getitem__
     DataFrame.agg
     DataFrame.alias
     DataFrame.approxQuantile
@@ -48,6 +50,7 @@ DataFrame
     DataFrame.distinct
     DataFrame.drop
     DataFrame.dropDuplicates
+    DataFrame.dropDuplicatesWithinWatermark
     DataFrame.drop_duplicates
     DataFrame.dropna
     DataFrame.dtypes

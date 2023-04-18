@@ -18,6 +18,7 @@ package org.apache.spark.sql
 
 import scala.collection.JavaConverters._
 
+import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.Expression.SortOrder.NullOrdering
 import org.apache.spark.connect.proto.Expression.SortOrder.SortDirection
@@ -50,7 +51,7 @@ import org.apache.spark.sql.types._
  *
  * @since 3.4.0
  */
-class Column private[sql] (private[sql] val expr: proto.Expression) extends Logging {
+class Column private[sql] (@DeveloperApi val expr: proto.Expression) extends Logging {
 
   private[sql] def this(name: String, planId: Option[Long]) =
     this(Column.nameToExpression(name, planId))
@@ -1310,6 +1311,11 @@ private[sql] object Column {
     val builder = proto.Expression.newBuilder()
     f(builder)
     new Column(builder.build())
+  }
+
+  @DeveloperApi
+  def apply(extension: com.google.protobuf.Any): Column = {
+    apply(_.setExtension(extension))
   }
 
   private[sql] def fn(name: String, inputs: Column*): Column = {

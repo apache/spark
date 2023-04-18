@@ -73,7 +73,7 @@ from pyspark.sql.types import (
 from pyspark.sql.window import Window
 
 from pyspark import pandas as ps  # For running doctests and reference resolution in PyCharm.
-from pyspark.pandas._typing import Axis, Dtype, Label, Name, Scalar, T
+from pyspark.pandas._typing import Axis, Dtype, Label, Name, Scalar, T, GenericColumn
 from pyspark.pandas.accessors import PandasOnSparkSeriesMethods
 from pyspark.pandas.categorical import CategoricalAccessor
 from pyspark.pandas.config import get_option
@@ -452,7 +452,9 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         self._anchor = psdf
         object.__setattr__(psdf, "_psseries", {self._column_label: self})
 
-    def _with_new_scol(self, scol: Column, *, field: Optional[InternalField] = None) -> "Series":
+    def _with_new_scol(
+        self, scol: GenericColumn, *, field: Optional[InternalField] = None
+    ) -> "Series":
         """
         Copy pandas-on-Spark Series with the new Spark Column.
 
@@ -461,7 +463,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         """
         name = name_like_string(self._column_label)
         internal = self._internal.copy(
-            data_spark_columns=[scol.alias(name)],
+            data_spark_columns=[scol.alias(name)],  # type: ignore[list-item]
             data_fields=[
                 field if field is None or field.struct_field is None else field.copy(name=name)
             ],
@@ -3585,6 +3587,8 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         """
         Concatenate two or more Series.
 
+        .. deprecated:: 3.4.0
+
         Parameters
         ----------
         to_append : Series or list/tuple of Series
@@ -3632,6 +3636,12 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         5    6
         dtype: int64
         """
+        warnings.warn(
+            "The Series.append method is deprecated "
+            "and will be removed in a future version. "
+            "Use pyspark.pandas.concat instead.",
+            FutureWarning,
+        )
         return first_series(
             self.to_frame().append(to_append.to_frame(), ignore_index, verify_integrity)
         ).rename(self.name)
@@ -5924,6 +5934,8 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         """
         Return the mean absolute deviation of values.
 
+        .. deprecated:: 3.4.0
+
         Examples
         --------
         >>> s = ps.Series([1, 2, 3, 4])
@@ -5937,7 +5949,11 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         >>> s.mad()
         1.0
         """
-
+        warnings.warn(
+            "The 'mad' method is deprecated and will be removed in a future version. "
+            "To compute the same result, you may do `(series - series.mean()).abs().mean()`.",
+            FutureWarning,
+        )
         sdf = self._internal.spark_frame
         spark_column = self.spark.column
         avg = unpack_scalar(sdf.select(F.avg(spark_column)))
@@ -6295,8 +6311,10 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         sdf_for_index = notnull._internal.spark_frame.select(notnull._internal.index_spark_columns)
 
         tmp_join_key = verify_temp_column_name(sdf_for_index, "__tmp_join_key__")
-        sdf_for_index = InternalFrame.attach_distributed_sequence_column(
-            sdf_for_index, tmp_join_key
+        sdf_for_index = (
+            InternalFrame.attach_distributed_sequence_column(  # type: ignore[assignment]
+                sdf_for_index, tmp_join_key
+            )
         )
         # sdf_for_index:
         # +----------------+-----------------+
@@ -6312,7 +6330,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         sdf_for_data = notnull._internal.spark_frame.select(
             notnull.spark.column.alias("values"), NATURAL_ORDER_COLUMN_NAME
         )
-        sdf_for_data = InternalFrame.attach_distributed_sequence_column(
+        sdf_for_data = InternalFrame.attach_distributed_sequence_column(  # type: ignore[assignment]
             sdf_for_data, SPARK_DEFAULT_SERIES_NAME
         )
         # sdf_for_data:
@@ -6331,7 +6349,9 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         ).drop("values", NATURAL_ORDER_COLUMN_NAME)
 
         tmp_join_key = verify_temp_column_name(sdf_for_data, "__tmp_join_key__")
-        sdf_for_data = InternalFrame.attach_distributed_sequence_column(sdf_for_data, tmp_join_key)
+        sdf_for_data = InternalFrame.attach_distributed_sequence_column(
+            sdf_for_data, tmp_join_key
+        )  # type: ignore[assignment]
         # sdf_for_index:                         sdf_for_data:
         # +----------------+-----------------+   +----------------+---+
         # |__tmp_join_key__|__index_level_0__|   |__tmp_join_key__|  0|
@@ -6404,7 +6424,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             raise ValueError("axis can only be 0 or 'index'")
         sdf = self._internal.spark_frame.select(self.spark.column, NATURAL_ORDER_COLUMN_NAME)
         seq_col_name = verify_temp_column_name(sdf, "__distributed_sequence_column__")
-        sdf = InternalFrame.attach_distributed_sequence_column(
+        sdf = InternalFrame.attach_distributed_sequence_column(  # type: ignore[assignment]
             sdf,
             seq_col_name,
         )
@@ -6464,7 +6484,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             raise ValueError("axis can only be 0 or 'index'")
         sdf = self._internal.spark_frame.select(self.spark.column, NATURAL_ORDER_COLUMN_NAME)
         seq_col_name = verify_temp_column_name(sdf, "__distributed_sequence_column__")
-        sdf = InternalFrame.attach_distributed_sequence_column(
+        sdf = InternalFrame.attach_distributed_sequence_column(  # type: ignore[assignment]
             sdf,
             seq_col_name,
         )
@@ -6686,7 +6706,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         sdf = self._internal.spark_frame
         index_col_name = verify_temp_column_name(sdf, "__search_sorted_index_col__")
         value_col_name = verify_temp_column_name(sdf, "__search_sorted_value_col__")
-        sdf = InternalFrame.attach_distributed_sequence_column(
+        sdf = InternalFrame.attach_distributed_sequence_column(  # type: ignore[assignment]
             sdf.select(self.spark.column.alias(value_col_name)), index_col_name
         )
 
@@ -6800,6 +6820,8 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         return (left_ser.copy(), right.copy()) if copy else (left_ser, right)
 
+    # TODO(SPARK-42620): Add `inclusive` parameter and replace `include_start` & `include_end`.
+    # See https://github.com/pandas-dev/pandas/issues/43248
     def between_time(
         self,
         start_time: Union[datetime.time, str],
@@ -6822,8 +6844,14 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             End time as a time filter limit.
         include_start : bool, default True
             Whether the start time needs to be included in the result.
+
+            .. deprecated:: 3.4.0
+
         include_end : bool, default True
             Whether the end time needs to be included in the result.
+
+            .. deprecated:: 3.4.0
+
         axis : {0 or 'index', 1 or 'columns'}, default 0
             Determine range time on index or columns value.
 

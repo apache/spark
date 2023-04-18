@@ -35,6 +35,7 @@ import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.spark.{ErrorMessageFormat, SparkConf, SparkContext, SparkFunSuite}
 import org.apache.spark.ProcessTestUtils.ProcessOutputCapturer
 import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
 import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.HiveUtils._
 import org.apache.spark.sql.hive.client.HiveClientImpl
@@ -805,5 +806,30 @@ class CliSuite extends SparkFunSuite {
         "spark_42448"),
       prompt = "spark-sql (spark_42448)>")(
       "select current_database();" -> "spark_42448")
+  }
+
+  test("SPARK-42823: multipart identifier support for specify database by --database option") {
+    val catalogName = "testcat"
+    val catalogImpl = s"spark.sql.catalog.$catalogName=${classOf[JDBCTableCatalog].getName}"
+    val catalogUrl =
+      s"spark.sql.catalog.$catalogName.url=jdbc:derby:memory:$catalogName;create=true"
+    val catalogDriver =
+      s"spark.sql.catalog.$catalogName.driver=org.apache.derby.jdbc.AutoloadedDriver"
+    val database = s"-database $catalogName.SYS"
+    val catalogConfigs =
+      Seq(catalogImpl, catalogDriver, catalogUrl, "spark.sql.catalogImplementation=in-memory")
+        .flatMap(Seq("--conf", _))
+    runCliWithin(
+      2.minute,
+      catalogConfigs ++ Seq("--database", s"$catalogName.SYS"))(
+      "SELECT CURRENT_CATALOG();" -> catalogName,
+      "SELECT CURRENT_SCHEMA();" -> "SYS")
+
+    runCliWithin(
+      2.minute,
+      catalogConfigs ++
+        Seq("--conf", s"spark.sql.defaultCatalog=$catalogName", "--database", "SYS"))(
+      "SELECT CURRENT_CATALOG();" -> catalogName,
+      "SELECT CURRENT_SCHEMA();" -> "SYS")
   }
 }

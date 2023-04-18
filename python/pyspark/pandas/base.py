@@ -18,6 +18,7 @@
 """
 Base and utility classes for pandas-on-Spark objects.
 """
+import warnings
 from abc import ABCMeta, abstractmethod
 from functools import wraps, partial
 from itertools import chain
@@ -30,7 +31,7 @@ from pyspark.sql import functions as F, Column, Window
 from pyspark.sql.types import LongType, BooleanType, NumericType
 
 from pyspark import pandas as ps  # For running doctests and reference resolution in PyCharm.
-from pyspark.pandas._typing import Axis, Dtype, IndexOpsLike, Label, SeriesOrIndex
+from pyspark.pandas._typing import Axis, Dtype, IndexOpsLike, Label, SeriesOrIndex, GenericColumn
 from pyspark.pandas.config import get_option, option_context
 from pyspark.pandas.internal import (
     InternalField,
@@ -66,7 +67,7 @@ def should_alignment_for_column_op(self: SeriesOrIndex, other: SeriesOrIndex) ->
 
 
 def align_diff_index_ops(
-    func: Callable[..., Column], this_index_ops: SeriesOrIndex, *args: Any
+    func: Callable[..., GenericColumn], this_index_ops: SeriesOrIndex, *args: Any
 ) -> SeriesOrIndex:
     """
     Align the `IndexOpsMixin` objects and apply the function.
@@ -177,7 +178,7 @@ def align_diff_index_ops(
                 ).rename(that_series.name)
 
 
-def booleanize_null(scol: Column, f: Callable[..., Column]) -> Column:
+def booleanize_null(scol: GenericColumn, f: Callable[..., GenericColumn]) -> GenericColumn:
     """
     Booleanize Null in Spark Column
     """
@@ -189,12 +190,12 @@ def booleanize_null(scol: Column, f: Callable[..., Column]) -> Column:
     if f in comp_ops:
         # if `f` is "!=", fill null with True otherwise False
         filler = f == Column.__ne__
-        scol = F.when(scol.isNull(), filler).otherwise(scol)
+        scol = F.when(scol.isNull(), filler).otherwise(scol)  # type: ignore[arg-type]
 
     return scol
 
 
-def column_op(f: Callable[..., Column]) -> Callable[..., SeriesOrIndex]:
+def column_op(f: Callable[..., GenericColumn]) -> Callable[..., SeriesOrIndex]:
     """
     A decorator that wraps APIs taking/returning Spark Column so that pandas-on-Spark Series can be
     supported too. If this decorator is used for the `f` function that takes Spark Column and
@@ -224,7 +225,7 @@ def column_op(f: Callable[..., Column]) -> Callable[..., SeriesOrIndex]:
             )
 
             field = InternalField.from_struct_field(
-                self._internal.spark_frame.select(scol).schema[0],
+                self._internal.spark_frame.select(scol).schema[0],  # type: ignore[arg-type]
                 use_extension_dtypes=any(
                     isinstance(col.dtype, extension_dtypes) for col in [self] + cols
                 ),
@@ -251,7 +252,7 @@ def column_op(f: Callable[..., Column]) -> Callable[..., SeriesOrIndex]:
     return wrapper
 
 
-def numpy_column_op(f: Callable[..., Column]) -> Callable[..., SeriesOrIndex]:
+def numpy_column_op(f: Callable[..., GenericColumn]) -> Callable[..., SeriesOrIndex]:
     @wraps(f)
     def wrapper(self: SeriesOrIndex, *args: Any) -> SeriesOrIndex:
         # PySpark does not support NumPy type out of the box. For now, we convert NumPy types
@@ -286,7 +287,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
 
     @abstractmethod
     def _with_new_scol(
-        self: IndexOpsLike, scol: Column, *, field: Optional[InternalField] = None
+        self: IndexOpsLike, scol: GenericColumn, *, field: Optional[InternalField] = None
     ) -> IndexOpsLike:
         pass
 
@@ -544,6 +545,8 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         .. note:: Disable the Spark config `spark.sql.optimizer.nestedSchemaPruning.enabled`
             for multi-index if you're using pandas-on-Spark < 1.7.0 with PySpark 3.1.1.
 
+        .. deprecated:: 3.4.0
+
         Returns
         -------
         is_monotonic : bool
@@ -605,9 +608,88 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         >>> midx.is_monotonic
         False
         """
+        warnings.warn(
+            "is_monotonic is deprecated and will be removed in a future version. "
+            "Use is_monotonic_increasing instead.",
+            FutureWarning,
+        )
         return self._is_monotonic("increasing")
 
-    is_monotonic_increasing = is_monotonic
+    @property
+    def is_monotonic_increasing(self) -> bool:
+        """
+        Return boolean if values in the object are monotonically increasing.
+
+        .. note:: the current implementation of is_monotonic_increasing requires to shuffle
+            and aggregate multiple times to check the order locally and globally,
+            which is potentially expensive. In case of multi-index, all data is
+            transferred to a single node which can easily cause out-of-memory errors.
+
+        .. note:: Disable the Spark config `spark.sql.optimizer.nestedSchemaPruning.enabled`
+            for multi-index if you're using pandas-on-Spark < 1.7.0 with PySpark 3.1.1.
+
+        Returns
+        -------
+        is_monotonic : bool
+
+        Examples
+        --------
+        >>> ser = ps.Series(['1/1/2018', '3/1/2018', '4/1/2018'])
+        >>> ser.is_monotonic_increasing
+        True
+
+        >>> df = ps.DataFrame({'dates': [None, '1/1/2018', '2/1/2018', '3/1/2018']})
+        >>> df.dates.is_monotonic_increasing
+        False
+
+        >>> df.index.is_monotonic_increasing
+        True
+
+        >>> ser = ps.Series([1])
+        >>> ser.is_monotonic_increasing
+        True
+
+        >>> ser = ps.Series([])
+        >>> ser.is_monotonic_increasing
+        True
+
+        >>> ser.rename("a").to_frame().set_index("a").index.is_monotonic_increasing
+        True
+
+        >>> ser = ps.Series([5, 4, 3, 2, 1], index=[1, 2, 3, 4, 5])
+        >>> ser.is_monotonic_increasing
+        False
+
+        >>> ser.index.is_monotonic_increasing
+        True
+
+        Support for MultiIndex
+
+        >>> midx = ps.MultiIndex.from_tuples(
+        ... [('x', 'a'), ('x', 'b'), ('y', 'c'), ('y', 'd'), ('z', 'e')])
+        >>> midx  # doctest: +SKIP
+        MultiIndex([('x', 'a'),
+                    ('x', 'b'),
+                    ('y', 'c'),
+                    ('y', 'd'),
+                    ('z', 'e')],
+                   )
+        >>> midx.is_monotonic_increasing
+        True
+
+        >>> midx = ps.MultiIndex.from_tuples(
+        ... [('z', 'a'), ('z', 'b'), ('y', 'c'), ('y', 'd'), ('x', 'e')])
+        >>> midx  # doctest: +SKIP
+        MultiIndex([('z', 'a'),
+                    ('z', 'b'),
+                    ('y', 'c'),
+                    ('y', 'd'),
+                    ('x', 'e')],
+                   )
+        >>> midx.is_monotonic_increasing
+        False
+        """
+        return self._is_monotonic("increasing")
 
     @property
     def is_monotonic_decreasing(self) -> bool:
@@ -1540,6 +1622,8 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         na_sentinel : int or None, default -1
             Value to mark "not found". If None, will not drop the NaN
             from the uniques of the values.
+
+            .. deprecated:: 3.4.0
 
         Returns
         -------

@@ -106,6 +106,7 @@ private[sql] object ArrowUtils {
               .add(MapVector.VALUE_NAME, valueType, nullable = valueContainsNull),
             nullable = false,
             timeZoneId)).asJava)
+      case udt: UserDefinedType[_] => toArrowField(name, udt.sqlType, nullable, timeZoneId)
       case dataType =>
         val fieldType = new FieldType(nullable, toArrowType(dataType, timeZoneId), null)
         new Field(name, fieldType, Seq.empty[Field].asJava)

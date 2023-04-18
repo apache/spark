@@ -21,6 +21,7 @@ import java.util.concurrent.atomic.AtomicLong
 
 import io.grpc.Server
 import io.grpc.inprocess.{InProcessChannelBuilder, InProcessServerBuilder}
+import java.util.Properties
 import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.connect.proto
@@ -41,7 +42,7 @@ class DatasetSuite extends ConnectFunSuite with BeforeAndAfterEach {
   private def newSparkSession(): SparkSession = {
     val client = new SparkConnectClient(
       proto.UserContext.newBuilder().build(),
-      InProcessChannelBuilder.forName(getClass.getName).directExecutor().build(),
+      InProcessChannelBuilder.forName(getClass.getName).directExecutor(),
       "test")
     new SparkSession(client, cleaner = SparkSession.cleaner, planIdGenerator = new AtomicLong)
   }
@@ -100,6 +101,33 @@ class DatasetSuite extends ConnectFunSuite with BeforeAndAfterEach {
     assert(actualPlan.equals(expectedPlan))
   }
 
+  test("write jdbc") {
+    val df = ss.newDataFrame(_ => ()).limit(10)
+
+    val builder = proto.WriteOperation.newBuilder()
+    builder
+      .setInput(df.plan.getRoot)
+      .setMode(proto.WriteOperation.SaveMode.SAVE_MODE_ERROR_IF_EXISTS)
+      .setSource("jdbc")
+      .putOptions("a", "b")
+      .putOptions("1", "2")
+      .putOptions("url", "url")
+      .putOptions("dbtable", "table")
+
+    val expectedPlan = proto.Plan
+      .newBuilder()
+      .setCommand(proto.Command.newBuilder().setWriteOperation(builder))
+      .build()
+
+    val connectionProperties = new Properties
+    connectionProperties.put("a", "b")
+    connectionProperties.put("1", "2")
+    df.write.jdbc("url", "table", connectionProperties)
+
+    val actualPlan = service.getAndClearLatestInputPlan()
+    assert(actualPlan.equals(expectedPlan))
+  }
+
   test("write V2") {
     val df = ss.newDataFrame(_ => ()).limit(10)
 
@@ -133,5 +161,17 @@ class DatasetSuite extends ConnectFunSuite with BeforeAndAfterEach {
     intercept[IllegalArgumentException] {
       df.groupBy().pivot(Column("c"), Seq(Column("col")))
     }
+  }
+
+  test("command extension") {
+    val extension = proto.ExamplePluginCommand.newBuilder().setCustomField("abc").build()
+    val command = proto.Command
+      .newBuilder()
+      .setExtension(com.google.protobuf.Any.pack(extension))
+      .build()
+    val expectedPlan = proto.Plan.newBuilder().setCommand(command).build()
+    ss.execute(com.google.protobuf.Any.pack(extension))
+    val actualPlan = service.getAndClearLatestInputPlan()
+    assert(actualPlan.equals(expectedPlan))
   }
 }

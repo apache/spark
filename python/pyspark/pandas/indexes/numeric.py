@@ -48,6 +48,8 @@ class Int64Index(IntegerIndex):
     storing axis labels for all pandas objects. Int64Index is a special case
     of `Index` with purely integer labels.
 
+    .. deprecated:: 3.4.0
+
     Parameters
     ----------
     data : array-like (1-dimensional)
@@ -109,6 +111,8 @@ class Float64Index(NumericIndex):
     Immutable sequence used for indexing and alignment. The basic object
     storing axis labels for all pandas objects. Float64Index is a special case
     of `Index` with purely float labels.
+
+    .. deprecated:: 3.4.0
 
     Parameters
     ----------

@@ -19,13 +19,27 @@ import json
 import os
 import time
 import uuid
+import functools
 
-from typing import Any, Dict, Generic, List, Optional, Sequence, Type, TypeVar, cast, TYPE_CHECKING
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    Generic,
+    List,
+    Optional,
+    Sequence,
+    Type,
+    TypeVar,
+    cast,
+    TYPE_CHECKING,
+)
 
 
 from pyspark import SparkContext, since
 from pyspark.ml.common import inherit_doc
 from pyspark.sql import SparkSession
+from pyspark.sql.utils import is_remote
 from pyspark.util import VersionUtils
 
 if TYPE_CHECKING:
@@ -40,6 +54,8 @@ W = TypeVar("W", bound="MLWriter")
 JW = TypeVar("JW", bound="JavaMLWriter")
 RL = TypeVar("RL", bound="MLReadable")
 JR = TypeVar("JR", bound="JavaMLReader")
+
+FuncT = TypeVar("FuncT", bound=Callable[..., Any])
 
 
 def _jvm() -> "JavaGateway":
@@ -715,3 +731,19 @@ class MetaAlgorithmReadWrite:
                 f"UIDs. List of UIDs: {list(uidMap.keys())}."
             )
         return uidMap
+
+
+def try_remote_functions(f: FuncT) -> FuncT:
+    """Mark API supported from Spark Connect."""
+
+    @functools.wraps(f)
+    def wrapped(*args: Any, **kwargs: Any) -> Any:
+
+        if is_remote() and "PYSPARK_NO_NAMESPACE_SHARE" not in os.environ:
+            from pyspark.ml.connect import functions
+
+            return getattr(functions, f.__name__)(*args, **kwargs)
+        else:
+            return f(*args, **kwargs)
+
+    return cast(FuncT, wrapped)
