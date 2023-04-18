@@ -130,6 +130,9 @@ class SparkSession private[sql] (
           builder.getCachedLocalRelationBuilder
             .setKey(cacheKey)
         }
+      } else {
+        builder.getLocalRelationBuilder
+          .setSchema(encoder.schema.json)
       }
     }
   }

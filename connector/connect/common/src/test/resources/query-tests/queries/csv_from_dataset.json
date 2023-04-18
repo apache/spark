@@ -6,6 +6,9 @@
     "input": {
       "common": {
         "planId": "0"
+      },
+      "localRelation": {
+        "schema": "{\"type\":\"struct\",\"fields\":[{\"name\":\"value\",\"type\":\"string\",\"nullable\":true,\"metadata\":{}}]}"
       }
     },
     "format": "PARSE_FORMAT_CSV",
