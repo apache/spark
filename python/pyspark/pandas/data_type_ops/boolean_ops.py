@@ -39,6 +39,7 @@ from pyspark.sql import functions as F
 from pyspark.sql.column import Column as PySparkColumn
 from pyspark.sql.types import BooleanType, StringType
 from pyspark.sql.utils import is_remote
+from pyspark.errors import PySparkValueError
 
 
 class BooleanOps(DataTypeOps):
@@ -240,10 +241,13 @@ class BooleanOps(DataTypeOps):
         else:
 
             def and_func(left: PySparkColumn, right: Any) -> PySparkColumn:
-                if pd.isna(right):
-                    right = F.lit(None)
-                else:
-                    right = F.lit(right)
+                try:
+                    is_null = pd.isna(right)
+                except PySparkValueError:
+                    # Complaining `PySparkValueError` means that `right` is a Column.
+                    is_null = False
+
+                right = F.lit(None) if is_null else F.lit(right)
                 scol = left & right
                 return F.when(scol.isNull(), False).otherwise(scol)
 
@@ -256,10 +260,13 @@ class BooleanOps(DataTypeOps):
         elif _is_valid_for_logical_operator(right):
 
             def xor_func(left: PySparkColumn, right: Any) -> PySparkColumn:
-                if pd.isna(right):
-                    right = F.lit(None)
-                else:
-                    right = F.lit(right)
+                try:
+                    is_null = pd.isna(right)
+                except PySparkValueError:
+                    # Complaining `PySparkValueError` means that `right` is a Column.
+                    is_null = False
+
+                right = F.lit(None) if is_null else F.lit(right)
                 scol = left.cast("integer").bitwiseXOR(right.cast("integer")).cast("boolean")
                 return F.when(scol.isNull(), False).otherwise(scol)
 
@@ -274,7 +281,13 @@ class BooleanOps(DataTypeOps):
         else:
 
             def or_func(left: PySparkColumn, right: Any) -> PySparkColumn:
-                if pd.isna(right):
+                try:
+                    is_null = pd.isna(right)
+                except PySparkValueError:
+                    # Complaining `PySparkValueError` means that `right` is a Column.
+                    is_null = False
+
+                if is_null:
                     return F.lit(False)
                 else:
                     scol = left | F.lit(right)
@@ -374,10 +387,13 @@ class BooleanExtensionOps(BooleanOps):
         _sanitize_list_like(right)
 
         def and_func(left: PySparkColumn, right: Any) -> PySparkColumn:
-            if pd.isna(right):
-                right = F.lit(None)
-            else:
-                right = F.lit(right)
+            try:
+                is_null = pd.isna(right)
+            except PySparkValueError:
+                # Complaining `PySparkValueError` means that `right` is a Column.
+                is_null = False
+
+            right = F.lit(None) if is_null else F.lit(right)
             return left & right
 
         return column_op(and_func)(left, right)
@@ -386,10 +402,13 @@ class BooleanExtensionOps(BooleanOps):
         _sanitize_list_like(right)
 
         def or_func(left: PySparkColumn, right: Any) -> PySparkColumn:
-            if pd.isna(right):
-                right = F.lit(None)
-            else:
-                right = F.lit(right)
+            try:
+                is_null = pd.isna(right)
+            except PySparkValueError:
+                # Complaining `PySparkValueError` means that `right` is a Column.
+                is_null = False
+
+            right = F.lit(None) if is_null else F.lit(right)
             return left | right
 
         return column_op(or_func)(left, right)
