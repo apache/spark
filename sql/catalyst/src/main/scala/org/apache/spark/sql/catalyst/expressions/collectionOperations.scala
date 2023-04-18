@@ -4806,7 +4806,7 @@ case class ArrayInsert(srcArrayExpr: Expression, posExpr: Expression, itemExpr: 
     }
   }
 
-  private lazy val position = if (second.foldable) {
+  private lazy val positivePos = if (second.foldable) {
     val pos = second.eval().asInstanceOf[Int]
     if (pos > 0) {
       Some(pos)
@@ -4831,8 +4831,8 @@ case class ArrayInsert(srcArrayExpr: Expression, posExpr: Expression, itemExpr: 
 
   override def nullSafeEval(arr: Any, pos: Any, item: Any): Any = {
     val baseArr = arr.asInstanceOf[ArrayData]
-    if (position.isDefined) {
-      val newArrayLength = math.max(baseArr.numElements() + 1, position.get)
+    if (positivePos.isDefined) {
+      val newArrayLength = math.max(baseArr.numElements() + 1, positivePos.get)
 
       if (newArrayLength > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
         throw QueryExecutionErrors.concatArraysWithElementsExceedLimitError(newArrayLength)
@@ -4840,7 +4840,7 @@ case class ArrayInsert(srcArrayExpr: Expression, posExpr: Expression, itemExpr: 
 
       val newArray = new Array[Any](newArrayLength)
 
-      val posInt = position.get - 1
+      val posInt = positivePos.get - 1
       baseArr.foreach(elementType, (i, v) => {
         if (i >= posInt) {
           newArray(i + 1) = v
@@ -4930,13 +4930,13 @@ case class ArrayInsert(srcArrayExpr: Expression, posExpr: Expression, itemExpr: 
       val assignment = CodeGenerator.createArrayAssignment(values, elementType, arr,
         adjustedAllocIdx, i, first.dataType.asInstanceOf[ArrayType].containsNull)
       val errorContext = getContextOrNullCode(ctx)
-      if (position.isDefined) {
+      if (positivePos.isDefined) {
         s"""
-           |int $itemInsertionIndex = ${position.get} - 1;
+           |int $itemInsertionIndex = ${positivePos.get - 1};
            |int $adjustedAllocIdx = 0;
            |boolean $insertedItemIsNull = ${itemExpr.isNull};
            |
-           |final int $resLength = java.lang.Math.max($arr.numElements() + 1, ${position.get});
+           |final int $resLength = java.lang.Math.max($arr.numElements() + 1, ${positivePos.get});
            |if ($resLength > ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}) {
            |  throw QueryExecutionErrors.createArrayWithElementsExceedLimitError($resLength);
            |}
