@@ -123,7 +123,7 @@ object ExpressionEncoder {
 
     new ExpressionEncoder[Any](
       nullSafe(newSerializerInput, newSerializer),
-      newDeserializer,
+      nullSafe(newDeserializerInput, newDeserializer),
       ClassTag(cls))
   }
 
