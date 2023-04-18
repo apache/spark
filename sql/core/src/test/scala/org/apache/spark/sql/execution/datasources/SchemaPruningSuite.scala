@@ -37,27 +37,27 @@ import org.apache.spark.sql.types._
 
 abstract class SchemaPruningSuite
   extends QueryTest
-    with FileBasedDataSourceTest
-    with SchemaPruningTest
-    with SharedSparkSession
-    with AdaptiveSparkPlanHelper {
+  with FileBasedDataSourceTest
+  with SchemaPruningTest
+  with SharedSparkSession
+  with AdaptiveSparkPlanHelper {
   case class FullName(first: String, middle: String, last: String)
   case class Company(name: String, address: String)
   case class Employer(id: Int, company: Company)
   case class Contact(
-                      id: Int,
-                      name: FullName,
-                      address: String,
-                      pets: Int,
-                      friends: Array[FullName] = Array.empty,
-                      relatives: Map[String, FullName] = Map.empty,
-                      employer: Employer = null,
-                      relations: Map[FullName, String] = Map.empty)
+    id: Int,
+    name: FullName,
+    address: String,
+    pets: Int,
+    friends: Array[FullName] = Array.empty,
+    relatives: Map[String, FullName] = Map.empty,
+    employer: Employer = null,
+    relations: Map[FullName, String] = Map.empty)
   case class Department(
-                         depId: Int,
-                         depName: String,
-                         contactId: Int,
-                         employer: Employer)
+    depId: Int,
+    depName: String,
+    contactId: Int,
+    employer: Employer)
 
   override protected def sparkConf: SparkConf =
     super.sparkConf.set(SQLConf.ANSI_ENABLED.key, "false")
@@ -78,13 +78,13 @@ abstract class SchemaPruningSuite
     Contact(0, janeDoe, "123 Main Street", 1, friends = Array(susanSmith),
       relatives = Map("brother" -> johnDoe), employer = employer,
       relations = Map(johnDoe -> "brother")) ::
-      Contact(1, johnDoe, "321 Wall Street", 3, relatives = Map("sister" -> janeDoe),
-        employer = employerWithNullCompany, relations = Map(janeDoe -> "sister")) :: Nil
+    Contact(1, johnDoe, "321 Wall Street", 3, relatives = Map("sister" -> janeDoe),
+      employer = employerWithNullCompany, relations = Map(janeDoe -> "sister")) :: Nil
 
   val departments =
     Department(0, "Engineering", 0, employer) ::
-      Department(1, "Marketing", 1, employerWithNullCompany) ::
-      Department(2, "Operation", 4, employerWithNullCompany2) :: Nil
+    Department(1, "Marketing", 1, employerWithNullCompany) ::
+    Department(2, "Operation", 4, employerWithNullCompany2) :: Nil
 
   val employees = Employee(0, janeDoe, company) :: Employee(1, johnDoe, company) :: Nil
 
@@ -93,18 +93,18 @@ abstract class SchemaPruningSuite
 
   private val briefContacts =
     BriefContact(2, Name("Janet", "Jones"), "567 Maple Drive") ::
-      BriefContact(3, Name("Jim", "Jones"), "6242 Ash Street") :: Nil
+    BriefContact(3, Name("Jim", "Jones"), "6242 Ash Street") :: Nil
 
   case class ContactWithDataPartitionColumn(
-                                             id: Int,
-                                             name: FullName,
-                                             address: String,
-                                             pets: Int,
-                                             friends: Array[FullName] = Array(),
-                                             relatives: Map[String, FullName] = Map(),
-                                             employer: Employer = null,
-                                             relations: Map[FullName, String] = Map(),
-                                             p: Int)
+    id: Int,
+    name: FullName,
+    address: String,
+    pets: Int,
+    friends: Array[FullName] = Array(),
+    relatives: Map[String, FullName] = Map(),
+    employer: Employer = null,
+    relations: Map[FullName, String] = Map(),
+    p: Int)
 
   case class BriefContactWithDataPartitionColumn(id: Int, name: Name, address: String, p: Int)
 
@@ -121,10 +121,10 @@ abstract class SchemaPruningSuite
     checkScan(query, "struct<address:string>")
     checkAnswer(query.orderBy("id"),
       Row("123 Main Street") ::
-        Row("321 Wall Street") ::
-        Row("567 Maple Drive") ::
-        Row("6242 Ash Street") ::
-        Nil)
+      Row("321 Wall Street") ::
+      Row("567 Maple Drive") ::
+      Row("6242 Ash Street") ::
+      Nil)
   }
 
   testSchemaPruning("select a single complex field with disabled nested schema pruning") {
@@ -157,10 +157,10 @@ abstract class SchemaPruningSuite
     checkScan(query, "struct<name:struct<first:string,middle:string,last:string>>")
     checkAnswer(query.orderBy("id"),
       Row("X.", Row("Jane", "X.", "Doe")) ::
-        Row("Y.", Row("John", "Y.", "Doe")) ::
-        Row(null, Row("Janet", null, "Jones")) ::
-        Row(null, Row("Jim", null, "Jones")) ::
-        Nil)
+      Row("Y.", Row("John", "Y.", "Doe")) ::
+      Row(null, Row("Janet", null, "Jones")) ::
+      Row(null, Row("Jim", null, "Jones")) ::
+      Nil)
   }
 
   testSchemaPruning("select a single complex field array and its parent struct array") {
@@ -169,8 +169,8 @@ abstract class SchemaPruningSuite
       "struct<friends:array<struct<first:string,middle:string,last:string>>>")
     checkAnswer(query.orderBy("id"),
       Row(Array("Z."), Array(Row("Susan", "Z.", "Smith"))) ::
-        Row(Array.empty[String], Array.empty[Row]) ::
-        Nil)
+      Row(Array.empty[String], Array.empty[Row]) ::
+      Nil)
   }
 
   testSchemaPruning("select a single complex field from a map entry and its parent map entry") {
@@ -180,8 +180,8 @@ abstract class SchemaPruningSuite
       "struct<relatives:map<string,struct<first:string,middle:string,last:string>>>")
     checkAnswer(query.orderBy("id"),
       Row("Y.", Row("John", "Y.", "Doe")) ::
-        Row(null, null) ::
-        Nil)
+      Row(null, null) ::
+      Nil)
   }
 
   testSchemaPruning("select a single complex field and the partition column") {
@@ -196,7 +196,7 @@ abstract class SchemaPruningSuite
     checkScan(query, "struct<name:struct<middle:string>,address:string>")
     checkAnswer(query.orderBy("id"),
       Row(null, "567 Maple Drive") ::
-        Row(null, "6242 Ash Street") :: Nil)
+      Row(null, "6242 Ash Street") :: Nil)
   }
 
   testSchemaPruning("no unnecessary schema pruning") {
@@ -209,12 +209,12 @@ abstract class SchemaPruningSuite
     // of the contacts relation, even though the fields are selected in different orders.
     checkScan(query,
       "struct<id:int,name:struct<first:string,middle:string,last:string>,address:string,pets:int," +
-        "friends:array<struct<first:string,middle:string,last:string>>," +
-        "relatives:map<string,struct<first:string,middle:string,last:string>>>")
+      "friends:array<struct<first:string,middle:string,last:string>>," +
+      "relatives:map<string,struct<first:string,middle:string,last:string>>>")
     checkAnswer(query.orderBy("id"),
       Row(2, "Jones", null, "Janet", null, null, null, null, null, null, null, "567 Maple Drive") ::
-        Row(3, "Jones", null, "Jim", null, null, null, null, null, null, null, "6242 Ash Street") ::
-        Nil)
+      Row(3, "Jones", null, "Jim", null, null, null, null, null, null, null, "6242 Ash Street") ::
+      Nil)
   }
 
   testSchemaPruning("empty schema intersection") {
@@ -279,7 +279,7 @@ abstract class SchemaPruningSuite
   }
 
   testSchemaPruning("select one complex field and having is null predicate on another " +
-    "complex field") {
+      "complex field") {
     val query = sql("select * from contacts")
       .where("name.middle is not null")
       .select(
@@ -296,7 +296,7 @@ abstract class SchemaPruningSuite
   }
 
   testSchemaPruning("select one deep nested complex field and having is null predicate on " +
-    "another deep nested complex field") {
+      "another deep nested complex field") {
     val query = sql("select * from contacts")
       .where("employer.company.address is not null")
       .selectExpr(
@@ -331,8 +331,8 @@ abstract class SchemaPruningSuite
 
     configs.foreach { case (nestedPruning, nestedPruningOnExpr) =>
       withSQLConf(
-        SQLConf.NESTED_SCHEMA_PRUNING_ENABLED.key -> nestedPruning.toString,
-        SQLConf.NESTED_PRUNING_ON_EXPRESSIONS.key -> nestedPruningOnExpr.toString) {
+          SQLConf.NESTED_SCHEMA_PRUNING_ENABLED.key -> nestedPruning.toString,
+          SQLConf.NESTED_PRUNING_ON_EXPRESSIONS.key -> nestedPruningOnExpr.toString) {
         val query1 = spark.table("contacts")
           .select(explode(col("friends.first")))
         if (nestedPruning) {
@@ -465,10 +465,10 @@ abstract class SchemaPruningSuite
 
   testSchemaPruning("select one deep nested complex field after join") {
     val query1 = sql("select contacts.name.middle from contacts, departments where " +
-      "contacts.id = departments.contactId")
+        "contacts.id = departments.contactId")
     checkScan(query1,
       "struct<id:int,name:struct<middle:string>>",
-      "struct<contactId:int>")
+    "struct<contactId:int>")
     checkAnswer(query1, Row("X.") :: Row("Y.") :: Nil)
 
     val query2 = sql("select contacts.name.middle from contacts, departments where " +
@@ -770,16 +770,16 @@ abstract class SchemaPruningSuite
 
   private val mixedCaseData =
     MixedCase(0, "r0c1", MixedCaseColumn("abc", 1)) ::
-      MixedCase(1, "r1c1", MixedCaseColumn("123", 2)) ::
-      Nil
+    MixedCase(1, "r1c1", MixedCaseColumn("123", 2)) ::
+    Nil
 
   testExactCaseQueryPruning("select with exact column names") {
     val query = sql("select CoL1, coL2.B from mixedcase")
     checkScan(query, "struct<CoL1:string,coL2:struct<B:int>>")
     checkAnswer(query.orderBy("id"),
       Row("r0c1", 1) ::
-        Row("r1c1", 2) ::
-        Nil)
+      Row("r1c1", 2) ::
+      Nil)
   }
 
   testMixedCaseQueryPruning("select with lowercase column names") {
@@ -787,8 +787,8 @@ abstract class SchemaPruningSuite
     checkScan(query, "struct<CoL1:string,coL2:struct<B:int>>")
     checkAnswer(query.orderBy("id"),
       Row("r0c1", 1) ::
-        Row("r1c1", 2) ::
-        Nil)
+      Row("r1c1", 2) ::
+      Nil)
   }
 
   testMixedCaseQueryPruning("select with different-case column names") {
@@ -796,8 +796,8 @@ abstract class SchemaPruningSuite
     checkScan(query, "struct<CoL1:string,coL2:struct<B:int>>")
     checkAnswer(query.orderBy("id"),
       Row("r0c1", 1) ::
-        Row("r1c1", 2) ::
-        Nil)
+      Row("r1c1", 2) ::
+      Nil)
   }
 
   testMixedCaseQueryPruning("filter with different-case column names") {
@@ -1138,17 +1138,17 @@ abstract class SchemaPruningSuite
     // with the existing pruning code. If we ever do support it, this test can be modified to check
     // for a narrower scan schema.
     val arrayQuery =
-    sql("""
-          |SELECT
-          |employer.company, friends[employer.id].first
-          |FROM contacts
-          |""".stripMargin)
+      sql("""
+            |SELECT
+            |employer.company, friends[employer.id].first
+            |FROM contacts
+            |""".stripMargin)
     checkScan(arrayQuery,
-      """struct<friends:array<struct<first:string,middle:string,last:string>>,
-        |employer:struct<id:int,company:struct<name:string,address:string>>>""".stripMargin)
+        """struct<friends:array<struct<first:string,middle:string,last:string>>,
+          |employer:struct<id:int,company:struct<name:string,address:string>>>""".stripMargin)
     checkAnswer(arrayQuery,
       Row(Row("abc", "123 Business Street"), "Susan") ::
-        Row(null, null) :: Row(null, null) :: Row(null, null) :: Nil)
+      Row(null, null) :: Row(null, null) :: Row(null, null) :: Nil)
 
     val mapQuery =
       sql("""
@@ -1157,8 +1157,8 @@ abstract class SchemaPruningSuite
             |FROM contacts
             |""".stripMargin)
     checkScan(mapQuery,
-      """struct<relatives:map<string,struct<first:string,middle:string,last:string>>,
-        |employer:struct<id:int,company:struct<name:string>>>""".stripMargin)
+        """struct<relatives:map<string,struct<first:string,middle:string,last:string>>,
+          |employer:struct<id:int,company:struct<name:string>>>""".stripMargin)
     checkAnswer(mapQuery, Row(0, null) :: Row(1, null) ::
       Row(null, null) :: Row(null, null) :: Nil)
   }
