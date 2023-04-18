@@ -123,7 +123,8 @@ class SparkParserErrorStrategy() extends DefaultErrorStrategy {
  */
 class SparkParserBailErrorStrategy() extends SparkParserErrorStrategy {
 
-  /** Instead of recovering from exception e, re-throw it wrapped
+  /**
+   * Instead of recovering from exception e, re-throw it wrapped
    * in a [[ParseCancellationException]] so it is not caught by the
    * rule function catches.  Use [[Exception#getCause]] to get the
    * original [[RecognitionException]].
@@ -137,7 +138,8 @@ class SparkParserBailErrorStrategy() extends SparkParserErrorStrategy {
     throw new ParseCancellationException(e)
   }
 
-  /** Make sure we don't attempt to recover inline; if the parser
+  /**
+   * Make sure we don't attempt to recover inline; if the parser
    * successfully recovers, it won't throw an exception.
    */
   @throws[RecognitionException]
