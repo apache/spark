@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalog.Catalog
 import org.apache.spark.sql.catalyst.{JavaTypeInference, ScalaReflection}
 import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, RowEncoder}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{BoxedLongEncoder, UnboundRowEncoder}
-import org.apache.spark.sql.connect.client.{SparkConnectClient, SparkResult}
+import org.apache.spark.sql.connect.client.{ClassFinder, SparkConnectClient, SparkResult}
 import org.apache.spark.sql.connect.client.util.{Cleaner, ConvertToArrow}
 import org.apache.spark.sql.connect.common.LiteralValueProtoConverter.toLiteralProto
 import org.apache.spark.sql.internal.CatalogImpl
@@ -494,6 +494,14 @@ class SparkSession private[sql] (
   @Experimental
   @scala.annotation.varargs
   def addArtifacts(uri: URI*): Unit = client.addArtifacts(uri)
+
+  /**
+   * Register a [[ClassFinder]] for dynamically generated classes.
+   *
+   * @since 3.5.0
+   */
+  @Experimental
+  def registerClassFinder(finder: ClassFinder): Unit = client.registerClassFinder(finder)
 
   /**
    * This resets the plan id generator so we can produce plans that are comparable.

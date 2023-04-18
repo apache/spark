@@ -18,7 +18,6 @@
 package org.apache.spark.sql.types
 
 import org.apache.spark.annotation.Unstable
-import org.apache.spark.sql.catalyst.types.{PhysicalDataType, PhysicalLongType}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.DayTimeIntervalType.fieldToString
 
@@ -46,8 +45,6 @@ case class DayTimeIntervalType(startField: Byte, endField: Byte) extends AnsiInt
    * The DAY field is constrained by the upper bound 106751991 to fit to `Long`.
    */
   override def defaultSize: Int = 8
-
-  private[sql] override def physicalDataType: PhysicalDataType = PhysicalLongType
 
   private[spark] override def asNullable: DayTimeIntervalType = this
 
