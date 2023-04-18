@@ -50,6 +50,7 @@ from pyspark.sql.types import (
     DataType,
     StringType,
 )
+from pyspark.errors import PySparkValueError
 
 # For Supporting Spark Connect
 from pyspark.sql.utils import is_remote
@@ -268,10 +269,13 @@ class IntegralOps(NumericOps):
             right_is_boolean = _is_boolean_type(right)
 
             def xor_func(left: PySparkColumn, right: Any) -> PySparkColumn:
-                if pd.isna(right):
-                    right = F.lit(None)
-                else:
-                    right = F.lit(right)
+                try:
+                    is_null = pd.isna(right)
+                except PySparkValueError:
+                    # Complaining `PySparkValueError` means that `right` is a Column.
+                    is_null = False
+
+                right = F.lit(None) if is_null else F.lit(right)
                 return (
                     left.bitwiseXOR(right.cast("integer")).cast("boolean")
                     if right_is_boolean
