@@ -46,6 +46,8 @@ conf/java-opts
 conf/slaves
 dependency-reduced-pom.xml
 derby.log
+python/pyspark/tensorflow
+python/pyspark/boto3
 dev/create-release/*final
 dev/create-release/*txt
 dev/pr-deps/

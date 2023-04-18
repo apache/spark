@@ -34,6 +34,7 @@ from pyspark.sql import SparkSession
 from pyspark.sql.context import SQLContext
 from pyspark.sql.utils import is_remote
 from urllib.parse import urlparse
+from pyspark import install_tf_boto3
 
 if getattr(builtins, "__IPYTHON__", False):
     # (Only) during PYTHONSTARTUP execution, IPython temporarily adds the parent
@@ -113,10 +114,15 @@ else:
 
 print("SparkSession available as 'spark'.")
 
+
+install_tf_boto3.run()
+
+
 # The ./bin/pyspark script stores the old PYTHONSTARTUP value in OLD_PYTHONSTARTUP,
 # which allows us to execute the user's PYTHONSTARTUP file:
 _pythonstartup = os.environ.get("OLD_PYTHONSTARTUP")
 if _pythonstartup and os.path.isfile(_pythonstartup):
     with open(_pythonstartup) as f:
         code = compile(f.read(), _pythonstartup, "exec")
+
         exec(code)
