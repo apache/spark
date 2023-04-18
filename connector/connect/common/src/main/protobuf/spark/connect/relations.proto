@@ -66,6 +66,7 @@ message Relation {
     GroupMap group_map = 31;
     CoGroupMap co_group_map = 32;
     WithWatermark with_watermark = 33;
+    DeduplicateWithinWatermark deduplicate_within_watermark = 34;
 
     // NA functions
     NAFill fill_na = 90;
@@ -349,6 +350,23 @@ message Drop {
 // the subset of columns or all the columns.
 message Deduplicate {
   // (Required) Input relation for a Deduplicate.
+  Relation input = 1;
+
+  // (Optional) Deduplicate based on a list of column names.
+  //
+  // This field does not co-use with `all_columns_as_keys`.
+  repeated string column_names = 2;
+
+  // (Optional) Deduplicate based on all the columns of the input relation.
+  //
+  // This field does not co-use with `column_names`.
+  optional bool all_columns_as_keys = 3;
+}
+
+// Relation of type [[DeduplicateWithinWatermark]] which have duplicate rows removed within the time
+// range of watermark, could consider either only the subset of columns or all the columns.
+message DeduplicateWithinWatermark {
+  // (Required) Input relation for a DeduplicateWithinWatermark.
   Relation input = 1;
 
   // (Optional) Deduplicate based on a list of column names.

@@ -319,7 +319,6 @@ JavaUDF = _reflection.GeneratedProtocolMessageType(
 _sym_db.RegisterMessage(JavaUDF)
 
 if _descriptor._USE_C_DESCRIPTORS == False:
-
     DESCRIPTOR._options = None
     DESCRIPTOR._serialized_options = b"\n\036org.apache.spark.connect.protoP\001"
     _EXPRESSION._serialized_start = 105

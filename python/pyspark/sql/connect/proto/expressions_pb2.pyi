@@ -51,6 +51,7 @@ else:
 
 DESCRIPTOR: google.protobuf.descriptor.FileDescriptor
 
+@typing_extensions.final
 class Expression(google.protobuf.message.Message):
     """Expression used to refer to fields, functions and similar. This can be used everywhere
     expressions in SQL appear.
@@ -58,11 +59,13 @@ class Expression(google.protobuf.message.Message):
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
+    @typing_extensions.final
     class Window(google.protobuf.message.Message):
         """Expression for the OVER clause or WINDOW clause."""
 
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
+        @typing_extensions.final
         class WindowFrame(google.protobuf.message.Message):
             """The window frame"""
 
@@ -96,6 +99,7 @@ class Expression(google.protobuf.message.Message):
             All rows having the same 'ORDER BY' ordering are considered as peers.
             """
 
+            @typing_extensions.final
             class FrameBoundary(google.protobuf.message.Message):
                 DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -232,6 +236,7 @@ class Expression(google.protobuf.message.Message):
             ],
         ) -> None: ...
 
+    @typing_extensions.final
     class SortOrder(google.protobuf.message.Message):
         """SortOrder is used to specify the  data ordering, it is normally used in Sort and Window.
         It is an unevaluable expression and cannot be evaluated, so can not be used in Projection.
@@ -306,6 +311,7 @@ class Expression(google.protobuf.message.Message):
             ],
         ) -> None: ...
 
+    @typing_extensions.final
     class Cast(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -356,9 +362,11 @@ class Expression(google.protobuf.message.Message):
             self, oneof_group: typing_extensions.Literal["cast_to_type", b"cast_to_type"]
         ) -> typing_extensions.Literal["type", "type_str"] | None: ...
 
+    @typing_extensions.final
     class Literal(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
+        @typing_extensions.final
         class Decimal(google.protobuf.message.Message):
             DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -417,6 +425,7 @@ class Expression(google.protobuf.message.Message):
                 self, oneof_group: typing_extensions.Literal["_scale", b"_scale"]
             ) -> typing_extensions.Literal["scale"] | None: ...
 
+        @typing_extensions.final
         class CalendarInterval(google.protobuf.message.Message):
             DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -440,6 +449,7 @@ class Expression(google.protobuf.message.Message):
                 ],
             ) -> None: ...
 
+        @typing_extensions.final
         class Array(google.protobuf.message.Message):
             DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -622,27 +632,31 @@ class Expression(google.protobuf.message.Message):
         ) -> None: ...
         def WhichOneof(
             self, oneof_group: typing_extensions.Literal["literal_type", b"literal_type"]
-        ) -> typing_extensions.Literal[
-            "null",
-            "binary",
-            "boolean",
-            "byte",
-            "short",
-            "integer",
-            "long",
-            "float",
-            "double",
-            "decimal",
-            "string",
-            "date",
-            "timestamp",
-            "timestamp_ntz",
-            "calendar_interval",
-            "year_month_interval",
-            "day_time_interval",
-            "array",
-        ] | None: ...
+        ) -> (
+            typing_extensions.Literal[
+                "null",
+                "binary",
+                "boolean",
+                "byte",
+                "short",
+                "integer",
+                "long",
+                "float",
+                "double",
+                "decimal",
+                "string",
+                "date",
+                "timestamp",
+                "timestamp_ntz",
+                "calendar_interval",
+                "year_month_interval",
+                "day_time_interval",
+                "array",
+            ]
+            | None
+        ): ...
 
+    @typing_extensions.final
     class UnresolvedAttribute(google.protobuf.message.Message):
         """An unresolved attribute that is not explicitly bound to a specific column, but the column
         is resolved during analysis by name.
@@ -683,6 +697,7 @@ class Expression(google.protobuf.message.Message):
             self, oneof_group: typing_extensions.Literal["_plan_id", b"_plan_id"]
         ) -> typing_extensions.Literal["plan_id"] | None: ...
 
+    @typing_extensions.final
     class UnresolvedFunction(google.protobuf.message.Message):
         """An unresolved function is not explicitly bound to one explicit function, but the function
         is resolved during analysis following Sparks name resolution rules.
@@ -733,6 +748,7 @@ class Expression(google.protobuf.message.Message):
             ],
         ) -> None: ...
 
+    @typing_extensions.final
     class ExpressionString(google.protobuf.message.Message):
         """Expression as string."""
 
@@ -750,6 +766,7 @@ class Expression(google.protobuf.message.Message):
             self, field_name: typing_extensions.Literal["expression", b"expression"]
         ) -> None: ...
 
+    @typing_extensions.final
     class UnresolvedStar(google.protobuf.message.Message):
         """UnresolvedStar is used to expand all the fields of a relation or struct."""
 
@@ -783,6 +800,7 @@ class Expression(google.protobuf.message.Message):
             self, oneof_group: typing_extensions.Literal["_unparsed_target", b"_unparsed_target"]
         ) -> typing_extensions.Literal["unparsed_target"] | None: ...
 
+    @typing_extensions.final
     class UnresolvedRegex(google.protobuf.message.Message):
         """Represents all of the input attributes to a given relational operator, for example in
         "SELECT `(id)?+.+` FROM ...".
@@ -816,6 +834,7 @@ class Expression(google.protobuf.message.Message):
             self, oneof_group: typing_extensions.Literal["_plan_id", b"_plan_id"]
         ) -> typing_extensions.Literal["plan_id"] | None: ...
 
+    @typing_extensions.final
     class UnresolvedExtractValue(google.protobuf.message.Message):
         """Extracts a value or values from an Expression"""
 
@@ -848,6 +867,7 @@ class Expression(google.protobuf.message.Message):
             field_name: typing_extensions.Literal["child", b"child", "extraction", b"extraction"],
         ) -> None: ...
 
+    @typing_extensions.final
     class UpdateFields(google.protobuf.message.Message):
         """Add, replace or drop a field of `StructType` expression by name."""
 
@@ -892,6 +912,7 @@ class Expression(google.protobuf.message.Message):
             ],
         ) -> None: ...
 
+    @typing_extensions.final
     class Alias(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -934,6 +955,7 @@ class Expression(google.protobuf.message.Message):
             self, oneof_group: typing_extensions.Literal["_metadata", b"_metadata"]
         ) -> typing_extensions.Literal["metadata"] | None: ...
 
+    @typing_extensions.final
     class LambdaFunction(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -970,6 +992,7 @@ class Expression(google.protobuf.message.Message):
             ],
         ) -> None: ...
 
+    @typing_extensions.final
     class UnresolvedNamedLambdaVariable(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -1142,27 +1165,31 @@ class Expression(google.protobuf.message.Message):
     ) -> None: ...
     def WhichOneof(
         self, oneof_group: typing_extensions.Literal["expr_type", b"expr_type"]
-    ) -> typing_extensions.Literal[
-        "literal",
-        "unresolved_attribute",
-        "unresolved_function",
-        "expression_string",
-        "unresolved_star",
-        "alias",
-        "cast",
-        "unresolved_regex",
-        "sort_order",
-        "lambda_function",
-        "window",
-        "unresolved_extract_value",
-        "update_fields",
-        "unresolved_named_lambda_variable",
-        "common_inline_user_defined_function",
-        "extension",
-    ] | None: ...
+    ) -> (
+        typing_extensions.Literal[
+            "literal",
+            "unresolved_attribute",
+            "unresolved_function",
+            "expression_string",
+            "unresolved_star",
+            "alias",
+            "cast",
+            "unresolved_regex",
+            "sort_order",
+            "lambda_function",
+            "window",
+            "unresolved_extract_value",
+            "update_fields",
+            "unresolved_named_lambda_variable",
+            "common_inline_user_defined_function",
+            "extension",
+        ]
+        | None
+    ): ...
 
 global___Expression = Expression
 
+@typing_extensions.final
 class CommonInlineUserDefinedFunction(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -1235,6 +1262,7 @@ class CommonInlineUserDefinedFunction(google.protobuf.message.Message):
 
 global___CommonInlineUserDefinedFunction = CommonInlineUserDefinedFunction
 
+@typing_extensions.final
 class PythonUDF(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -1278,6 +1306,7 @@ class PythonUDF(google.protobuf.message.Message):
 
 global___PythonUDF = PythonUDF
 
+@typing_extensions.final
 class ScalarScalaUDF(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -1327,6 +1356,7 @@ class ScalarScalaUDF(google.protobuf.message.Message):
 
 global___ScalarScalaUDF = ScalarScalaUDF
 
+@typing_extensions.final
 class JavaUDF(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 

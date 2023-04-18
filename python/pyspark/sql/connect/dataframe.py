@@ -332,7 +332,24 @@ class DataFrame:
     drop_duplicates = dropDuplicates
 
     def dropDuplicatesWithinWatermark(self, subset: Optional[List[str]] = None) -> "DataFrame":
-        raise NotImplementedError("dropDuplicatesWithinWatermark() is not implemented.")
+        if subset is not None and not isinstance(subset, (list, tuple)):
+            raise PySparkTypeError(
+                error_class="NOT_LIST_OR_TUPLE",
+                message_parameters={"arg_name": "subset", "arg_type": type(subset).__name__},
+            )
+
+        if subset is None:
+            return DataFrame.withPlan(
+                plan.DeduplicateWithinWatermark(child=self._plan, all_columns_as_keys=True), session=self._session
+            )
+        else:
+            return DataFrame.withPlan(
+                plan.DeduplicateWithinWatermark(child=self._plan, column_names=subset), session=self._session
+            )
+
+    dropDuplicatesWithinWatermark.__doc__ = PySparkDataFrame.dropDuplicatesWithinWatermark.__doc__
+
+    drop_duplicates_within_watermark = dropDuplicatesWithinWatermark
 
     def distinct(self) -> "DataFrame":
         return DataFrame.withPlan(

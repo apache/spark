@@ -47,6 +47,7 @@ else:
 
 DESCRIPTOR: google.protobuf.descriptor.FileDescriptor
 
+@typing_extensions.final
 class StorageLevel(google.protobuf.message.Message):
     """StorageLevel for persisting Datasets/Tables."""
 
@@ -94,6 +95,7 @@ class StorageLevel(google.protobuf.message.Message):
 
 global___StorageLevel = StorageLevel
 
+@typing_extensions.final
 class ResourceInformation(google.protobuf.message.Message):
     """ResourceInformation to hold information about a type of Resource.
     The corresponding class is 'org.apache.spark.resource.ResourceInformation'

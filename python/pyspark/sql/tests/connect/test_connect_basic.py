@@ -1218,6 +1218,14 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             df.dropDuplicates(["name"]).toPandas(), df2.dropDuplicates(["name"]).toPandas()
         )
 
+    def test_deduplicate_within_watermark_in_batch(self):
+        df = self.connect.read.table(self.tbl_name)
+        with self.assertRaisesRegex(
+                AnalysisException,
+                "dropDuplicatesWithinWatermark is not supported with batch DataFrames/DataSets",
+        ):
+            df.dropDuplicatesWithinWatermark().toPandas()
+
     def test_first(self):
         # SPARK-41002: test `first` API in Python Client
         df = self.connect.read.table(self.tbl_name)

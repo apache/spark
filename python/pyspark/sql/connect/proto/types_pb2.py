@@ -322,7 +322,6 @@ _sym_db.RegisterMessage(DataType.UDT)
 _sym_db.RegisterMessage(DataType.Unparsed)
 
 if _descriptor._USE_C_DESCRIPTORS == False:
-
     DESCRIPTOR._options = None
     DESCRIPTOR._serialized_options = b"\n\036org.apache.spark.connect.protoP\001"
     _DATATYPE._serialized_start = 45

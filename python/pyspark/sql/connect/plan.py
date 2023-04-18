@@ -600,6 +600,27 @@ class Deduplicate(LogicalPlan):
         return plan
 
 
+class DeduplicateWithinWatermark(LogicalPlan):
+    def __init__(
+            self,
+            child: Optional["LogicalPlan"],
+            all_columns_as_keys: bool = False,
+            column_names: Optional[List[str]] = None,
+    ) -> None:
+        super().__init__(child)
+        self.all_columns_as_keys = all_columns_as_keys
+        self.column_names = column_names
+
+    def plan(self, session: "SparkConnectClient") -> proto.Relation:
+        assert self._child is not None
+        plan = self._create_proto_relation()
+        plan.deduplicate_within_watermark.input.CopyFrom(self._child.plan(session))
+        plan.deduplicate_within_watermark.all_columns_as_keys = self.all_columns_as_keys
+        if self.column_names is not None:
+            plan.deduplicate_within_watermark.column_names.extend(self.column_names)
+        return plan
+
+
 class Sort(LogicalPlan):
     def __init__(
         self,
