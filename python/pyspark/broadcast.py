@@ -94,7 +94,7 @@ class Broadcast(Generic[T]):
         ...
 
     @overload  # On worker with decryption server
-    def __init__(self: "Broadcast[Any]", *, sock_file: str):  # type: ignore
+    def __init__(self: "Broadcast[Any]", *, sock_file: str):
         ...
 
     def __init__(
@@ -104,7 +104,7 @@ class Broadcast(Generic[T]):
         pickle_registry: Optional["BroadcastPickleRegistry"] = None,
         path: Optional[str] = None,
         sock_file: Optional[BinaryIO] = None,
-    ):
+    ):  # type: ignore
         """
         Should not be called directly by users -- use :meth:`SparkContext.broadcast`
         instead.
