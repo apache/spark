@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders._
 import org.apache.spark.sql.catalyst.expressions.RowOrdering
 import org.apache.spark.sql.connect.client.{SparkResult, UdfUtils}
 import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, StorageLevelProtoConverter}
-import org.apache.spark.sql.expressions.{ScalarUserDefinedFunction, SingleInputUserDefinedFunction}
+import org.apache.spark.sql.expressions.ScalarUserDefinedFunction
 import org.apache.spark.sql.functions.{struct, to_json}
 import org.apache.spark.sql.streaming.DataStreamWriter
 import org.apache.spark.sql.types.{Metadata, StructType}
@@ -1289,10 +1289,8 @@ class Dataset[T] private[sql] (
       sparkSession,
       plan,
       kEncoder,
-      SingleInputUserDefinedFunction(
-        function = func,
-        inputEncoder = encoder,
-        outputEncoder = kEncoder),
+      kEncoder,
+      func,
       UdfUtils.identical())
   }
 

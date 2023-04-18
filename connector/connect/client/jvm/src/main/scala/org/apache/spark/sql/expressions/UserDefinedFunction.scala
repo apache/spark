@@ -101,16 +101,29 @@ case class ScalarUserDefinedFunction(
     override val deterministic: Boolean)
     extends UserDefinedFunction {
 
-  import ScalarUserDefinedFunction._
+  private[this] lazy val udf = {
+    val udfPacketBytes = Utils.serialize(UdfPacket(function, inputEncoders, outputEncoder))
+    val scalaUdfBuilder = proto.ScalarScalaUDF
+      .newBuilder()
+      .setPayload(ByteString.copyFrom(udfPacketBytes))
+      // Send the real inputs and return types to obtain the types without deser the udf bytes.
+      .addAllInputTypes(
+        inputEncoders.map(_.dataType).map(DataTypeProtoConverter.toConnectProtoType).asJava)
+      .setOutputType(DataTypeProtoConverter.toConnectProtoType(outputEncoder.dataType))
+      .setNullable(nullable)
+
+    scalaUdfBuilder.build()
+  }
 
   @scala.annotation.varargs
   override def apply(exprs: Column*): Column = Column { builder =>
-    buildCommonInlineUdf(
-      builder,
-      serializeUdf(function, inputEncoders, outputEncoder, nullable),
-      deterministic,
-      name,
-      exprs)
+    val udfBuilder = builder.getCommonInlineUserDefinedFunctionBuilder
+    udfBuilder
+      .setDeterministic(deterministic)
+      .setScalarScalaUdf(udf)
+      .addAllArguments(exprs.map(_.expr).asJava)
+
+    name.foreach(udfBuilder.setFunctionName)
   }
 
   override def withName(name: String): ScalarUserDefinedFunction = copy(name = Option(name))
@@ -118,40 +131,6 @@ case class ScalarUserDefinedFunction(
   override def asNonNullable(): ScalarUserDefinedFunction = copy(nullable = false)
 
   override def asNondeterministic(): ScalarUserDefinedFunction = copy(deterministic = false)
-}
-
-/**
- * A special variant of [[ScalarUserDefinedFunction]] for functions that only has one input.
- */
-private[sql] case class SingleInputUserDefinedFunction[V, K](
-    function: V => K,
-    inputEncoder: AgnosticEncoder[V],
-    outputEncoder: AgnosticEncoder[K],
-    name: Option[String] = None,
-    override val nullable: Boolean = true,
-    override val deterministic: Boolean = true)
-    extends UserDefinedFunction {
-
-  import ScalarUserDefinedFunction._
-
-  @scala.annotation.varargs
-  override def apply(exprs: Column*): Column = Column { builder =>
-    buildCommonInlineUdf(
-      builder,
-      serializeUdf(function, Seq(inputEncoder), outputEncoder, nullable),
-      deterministic,
-      name,
-      exprs)
-  }
-
-  override def withName(name: String): SingleInputUserDefinedFunction[V, K] =
-    copy(name = Option(name))
-
-  override def asNonNullable(): SingleInputUserDefinedFunction[V, K] =
-    copy(nullable = false)
-
-  override def asNondeterministic(): SingleInputUserDefinedFunction[V, K] =
-    copy(deterministic = false)
 }
 
 object ScalarUserDefinedFunction {
@@ -178,38 +157,4 @@ object ScalarUserDefinedFunction {
       nullable = true,
       deterministic = true)
   }
-
-  private[sql] def serializeUdf(
-      function: AnyRef,
-      inputEncoders: Seq[AgnosticEncoder[_]],
-      outputEncoder: AgnosticEncoder[_],
-      nullable: Boolean): proto.ScalarScalaUDF = {
-    val udfPacketBytes = Utils.serialize(UdfPacket(function, inputEncoders, outputEncoder))
-    val scalaUdfBuilder = proto.ScalarScalaUDF
-      .newBuilder()
-      .setPayload(ByteString.copyFrom(udfPacketBytes))
-      // Send the real inputs and return types to obtain the types without deser the udf bytes.
-      .addAllInputTypes(
-        inputEncoders.map(_.dataType).map(DataTypeProtoConverter.toConnectProtoType).asJava)
-      .setOutputType(DataTypeProtoConverter.toConnectProtoType(outputEncoder.dataType))
-      .setNullable(nullable)
-
-    scalaUdfBuilder.build()
-  }
-
-  private[sql] def buildCommonInlineUdf(
-      builder: proto.Expression.Builder,
-      udf: proto.ScalarScalaUDF,
-      deterministic: Boolean,
-      name: Option[String],
-      exprs: Seq[Column]): Unit = {
-    val udfBuilder = builder.getCommonInlineUserDefinedFunctionBuilder
-    udfBuilder
-      .setDeterministic(deterministic)
-      .setScalarScalaUdf(udf)
-      .addAllArguments(exprs.map(_.expr).asJava)
-
-    name.foreach(udfBuilder.setFunctionName)
-  }
-
 }

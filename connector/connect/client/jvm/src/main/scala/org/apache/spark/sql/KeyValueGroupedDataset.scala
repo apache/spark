@@ -26,7 +26,7 @@ import org.apache.spark.api.java.function._
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
 import org.apache.spark.sql.connect.client.UdfUtils
-import org.apache.spark.sql.expressions.{ScalarUserDefinedFunction, SingleInputUserDefinedFunction}
+import org.apache.spark.sql.expressions.ScalarUserDefinedFunction
 import org.apache.spark.sql.functions.col
 
 /**
@@ -36,7 +36,7 @@ import org.apache.spark.sql.functions.col
  *
  * @since 3.5.0
  */
-class KeyValueGroupedDataset[K, V] private[sql] () extends Serializable {
+abstract class KeyValueGroupedDataset[K, V] private[sql] () extends Serializable {
 
   /**
    * Returns a new [[KeyValueGroupedDataset]] where the type of the key has been mapped to the
@@ -322,21 +322,25 @@ class KeyValueGroupedDataset[K, V] private[sql] () extends Serializable {
  * [[KeyValueGroupedDataset]] behaves on the server.
  */
 private class KeyValueGroupedDatasetImpl[K, V, IK, IV](
-    ds: Dataset[IV],
+    private val ds: Dataset[IV],
     private val sparkSession: SparkSession,
     private val plan: proto.Plan,
+    private val ikEncoder: AgnosticEncoder[IK],
     private val kEncoder: AgnosticEncoder[K],
-    private val groupFunc: SingleInputUserDefinedFunction[IV, IK],
+    private val groupingFunc: IV => IK,
     private val valueMapFunc: IV => V)
     extends KeyValueGroupedDataset[K, V] {
+
+  private val ivEncoder = ds.encoder
 
   override def keyAs[L: Encoder]: KeyValueGroupedDataset[L, V] = {
     new KeyValueGroupedDatasetImpl[L, V, IK, IV](
       ds,
       sparkSession,
       plan,
+      ikEncoder,
       encoderFor[L],
-      groupFunc,
+      groupingFunc,
       valueMapFunc)
   }
 
@@ -345,13 +349,14 @@ private class KeyValueGroupedDatasetImpl[K, V, IK, IV](
       ds,
       sparkSession,
       plan,
+      ikEncoder,
       kEncoder,
-      groupFunc,
+      groupingFunc,
       valueMapFunc.andThen(valueFunc))
   }
 
   override def keys: Dataset[K] = {
-    ds.map(groupFunc.function)(groupFunc.outputEncoder)
+    ds.map(groupingFunc)(ikEncoder)
       .dropDuplicates()
       .as(kEncoder)
   }
@@ -367,7 +372,7 @@ private class KeyValueGroupedDatasetImpl[K, V, IK, IV](
         .setInput(plan.getRoot)
         .addAllSortingExpressions(sortExprs.map(e => e.expr).asJava)
         .addAllGroupingExpressions(getGroupingExpressions)
-        .setFunc(getUdfFunc(nf, outputEncoder)(ds.encoder))
+        .setFunc(getUdf(nf, outputEncoder)(ivEncoder))
     }
   }
 
@@ -387,15 +392,19 @@ private class KeyValueGroupedDatasetImpl[K, V, IK, IV](
         .setOther(otherImpl.plan.getRoot)
         .addAllOtherGroupingExpressions(otherImpl.getGroupingExpressions)
         .addAllOtherSortingExpressions(otherSortExprs.map(e => e.expr).asJava)
-        .setFunc(getUdfFunc(nf, outputEncoder)(ds.encoder, otherImpl.groupFunc.inputEncoder))
+        .setFunc(getUdf(nf, outputEncoder)(ivEncoder, otherImpl.ivEncoder))
     }
   }
 
   private def getGroupingExpressions = {
-    Arrays.asList(groupFunc.apply(col("*")).expr)
+    val gf = ScalarUserDefinedFunction(
+      function = groupingFunc,
+      inputEncoders = ivEncoder :: Nil, // Using the original value and key encoders
+      outputEncoder = ikEncoder)
+    Arrays.asList(gf.apply(col("*")).expr)
   }
 
-  private def getUdfFunc[U: Encoder](nf: AnyRef, outputEncoder: AgnosticEncoder[U])(
+  private def getUdf[U: Encoder](nf: AnyRef, outputEncoder: AgnosticEncoder[U])(
       inEncoders: AgnosticEncoder[_]*): proto.CommonInlineUserDefinedFunction = {
     val inputEncoders = kEncoder +: inEncoders // Apply keyAs changes by setting kEncoder
     val udf = ScalarUserDefinedFunction(
