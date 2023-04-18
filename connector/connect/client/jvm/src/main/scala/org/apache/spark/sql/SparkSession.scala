@@ -125,8 +125,7 @@ class SparkSession private[sql] (
             .setSchema(encoder.schema.json)
             .setData(arrowData)
         } else {
-          // val cacheKey = client.cacheLocalRelation(arrowDataSize, arrowData, encoder.schema.json)
-          val cacheKey = "__fake_cache_key"
+          val cacheKey = client.cacheLocalRelation(arrowDataSize, arrowData, encoder.schema.json)
           builder.getCachedLocalRelationBuilder
             .setKey(cacheKey)
         }

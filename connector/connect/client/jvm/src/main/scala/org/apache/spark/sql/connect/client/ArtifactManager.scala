@@ -32,6 +32,7 @@ import Artifact._
 import com.google.protobuf.ByteString
 import io.grpc.ManagedChannel
 import io.grpc.stub.StreamObserver
+import org.apache.commons.codec.digest.DigestUtils.sha256Hex
 
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.AddArtifactsResponse
@@ -99,6 +100,15 @@ class ArtifactManager(userContext: proto.UserContext, channel: ManagedChannel) {
    * Currently only local files with extensions .jar and .class are supported.
    */
   def addArtifacts(uris: Seq[URI]): Unit = addArtifacts(uris.flatMap(parseArtifacts))
+
+  /**
+   * Cache the give blob at the session.
+   */
+  def cacheArtifact(blob: Array[Byte]): String = {
+    val id = sha256Hex(blob)
+    newCacheArtifact(id, new InMemory(blob))
+    id
+  }
 
   /**
    * Upload all class file artifacts from the local REPL(s) to the server.
@@ -289,6 +299,7 @@ class Artifact private (val path: Path, val storage: LocalData) {
 object Artifact {
   val CLASS_PREFIX: Path = Paths.get("classes")
   val JAR_PREFIX: Path = Paths.get("jars")
+  val CACHE_PREFIX: Path = Paths.get("cache")
 
   def newJarArtifact(fileName: Path, storage: LocalData): Artifact = {
     newArtifact(JAR_PREFIX, ".jar", fileName, storage)
@@ -296,6 +307,10 @@ object Artifact {
 
   def newClassArtifact(fileName: Path, storage: LocalData): Artifact = {
     newArtifact(CLASS_PREFIX, ".class", fileName, storage)
+  }
+
+  def newCacheArtifact(id: String, storage: LocalData): Artifact = {
+    newArtifact(CACHE_PREFIX, "", Paths.get(id), storage)
   }
 
   private def newArtifact(

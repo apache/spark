@@ -91,7 +91,11 @@ class SparkConnectArtifactManager private[connect] {
       remoteRelativePath: Path,
       serverLocalStagingPath: Path): Unit = {
     require(!remoteRelativePath.isAbsolute)
-    if (remoteRelativePath.startsWith("classes/")) {
+    if (remoteRelativePath.startsWith("cache/")) {
+      // scalastyle:off throwerror
+      throw new NotImplementedError("Move the local relation from staging to the local cache.")
+      // scalastyle:on throwerror
+    } else if (remoteRelativePath.startsWith("classes/")) {
       // Move class files to common location (shared among all users)
       val target = classArtifactDir.resolve(remoteRelativePath.toString.stripPrefix("classes/"))
       Files.createDirectories(target.getParent)

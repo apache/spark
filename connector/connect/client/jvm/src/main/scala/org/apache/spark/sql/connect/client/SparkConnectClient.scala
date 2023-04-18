@@ -17,8 +17,10 @@
 
 package org.apache.spark.sql.connect.client
 
+import com.google.protobuf.ByteString
 import io.grpc.{CallCredentials, CallOptions, Channel, ClientCall, ClientInterceptor, CompositeChannelCredentials, ForwardingClientCall, Grpc, InsecureChannelCredentials, ManagedChannel, ManagedChannelBuilder, Metadata, MethodDescriptor, Status, TlsChannelCredentials}
 import java.net.URI
+import java.nio.ByteBuffer
 import java.util.UUID
 import java.util.concurrent.Executor
 import scala.language.existentials
@@ -214,6 +216,19 @@ private[sql] class SparkConnectClient(
    */
   def shutdown(): Unit = {
     channel.shutdownNow()
+  }
+
+  /**
+   * Cache the given local relation at the server, and return its key in the remote cache.
+   */
+  def cacheLocalRelation(size: Int, data: ByteString, schema: String): String = {
+    val schemaBytes = schema.getBytes()
+    val locRelData = data.toByteArray
+    val locRel = ByteBuffer.allocate(4 + locRelData.length + schemaBytes.length)
+    locRel.putInt(size)
+    locRel.put(locRelData)
+    locRel.put(schemaBytes)
+    artifactManager.cacheArtifact(locRel.array())
   }
 }
 
