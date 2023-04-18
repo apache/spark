@@ -25,6 +25,7 @@ import scala.collection.JavaConverters._
 import org.apache.spark.annotation.Evolving
 import org.apache.spark.connect.proto.Command
 import org.apache.spark.connect.proto.WriteStreamOperationStart
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.Dataset
 import org.apache.spark.sql.execution.streaming.AvailableNowTrigger
 import org.apache.spark.sql.execution.streaming.ContinuousTrigger
@@ -38,7 +39,7 @@ import org.apache.spark.sql.execution.streaming.ProcessingTimeTrigger
  * @since 3.5.0
  */
 @Evolving
-final class DataStreamWriter[T] private[sql] (ds: Dataset[T]) {
+final class DataStreamWriter[T] private[sql] (ds: Dataset[T]) extends Logging {
 
   /**
    * Specifies how data of a streaming DataFrame/Dataset is written to a streaming sink. <ul> <li>
@@ -234,6 +235,29 @@ final class DataStreamWriter[T] private[sql] (ds: Dataset[T]) {
 
     val resp = ds.sparkSession.execute(startCmd).head
     RemoteStreamingQuery.fromStartCommandResponse(ds.sparkSession, resp)
+  }
+
+   /**
+   * Starts the execution of the streaming query, which will continually output results to the given
+   * table as new data arrives. The returned [[StreamingQuery]] object can be used to interact with
+   * the stream.
+   *
+   * For v1 table, partitioning columns provided by `partitionBy` will be respected no matter the
+   * table exists or not. A new table will be created if the table not exists.
+   *
+   * For v2 table, `partitionBy` will be ignored if the table already exists. `partitionBy` will be
+   * respected only if the v2 table does not exist. Besides, the v2 table created by this API lacks
+   * some functionalities (e.g., customized properties, options, and serde info). If you need them,
+   * please create the v2 table manually before the execution to avoid creating a table with
+   * incomplete information.
+   *
+   * @since 3.5.0
+   */
+  @Evolving
+  @throws[TimeoutException]
+  def toTable(tableName: String): StreamingQuery = {
+    sinkBuilder.setTableName(tableName)
+    start()
   }
 
   private val sinkBuilder = WriteStreamOperationStart

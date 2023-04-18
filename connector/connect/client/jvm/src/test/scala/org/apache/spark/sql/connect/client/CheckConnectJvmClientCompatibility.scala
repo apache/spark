@@ -130,7 +130,8 @@ object CheckConnectJvmClientCompatibility {
       IncludeByName("org.apache.spark.sql.streaming.DataStreamReader.*"),
       IncludeByName("org.apache.spark.sql.streaming.DataStreamWriter.*"),
       IncludeByName("org.apache.spark.sql.streaming.StreamingQuery.*"),
-      IncludeByName("org.apache.spark.sql.streaming.StreamingQueryStatus.*"))
+      IncludeByName("org.apache.spark.sql.streaming.StreamingQueryStatus.*"),
+      IncludeByName("org.apache.spark.sql.streaming.StreamingQueryProgress.*"))
     val excludeRules = Seq(
       // Filter unsupported rules:
       // Note when muting errors for a method, checks on all overloading methods are also muted.
@@ -220,6 +221,9 @@ object CheckConnectJvmClientCompatibility {
       ProblemFilters.exclude[Problem](
         "org.apache.spark.sql.streaming.DataStreamWriter.foreachBatch" // TODO(SPARK-42944)
       ),
+      ProblemFilters.exclude[Problem](
+        "org.apache.spark.sql.streaming.DataStreamWriter.SOURCE*" // These are constant vals.
+      ),
 
       // StreamingQuery
       ProblemFilters.exclude[Problem](
@@ -227,6 +231,10 @@ object CheckConnectJvmClientCompatibility {
       ),
       ProblemFilters.exclude[Problem](
         "org.apache.spark.sql.streaming.StreamingQuery.exception" // TODO(SPARK-43134)
+      ),
+
+      ProblemFilters.exclude[Problem](
+        "org.apache.spark.sql.streaming.StreamingQueryProgress.*" // TODO(SPARK-43128)
       ),
 
       // SQLImplicits

@@ -21,9 +21,11 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark.annotation.Evolving
 import org.apache.spark.connect.proto.Read.DataSource
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.Dataset
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.StringEncoder
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -33,7 +35,7 @@ import org.apache.spark.sql.types.StructType
  * @since 3.5.0
  */
 @Evolving
-final class DataStreamReader private[sql] (sparkSession: SparkSession) {
+final class DataStreamReader private[sql] (sparkSession: SparkSession) extends Logging {
 
   /**
    * Specifies the input data source format.
@@ -199,9 +201,7 @@ final class DataStreamReader private[sql] (sparkSession: SparkSession) {
    *
    * @since 3.5.0
    */
-  def orc(path: String): DataFrame = {
-    format("orc").load(path)
-  }
+  def orc(path: String): DataFrame = format("orc").load(path)
 
   /**
    * Loads a Parquet file stream, returning the result as a `DataFrame`.
@@ -215,9 +215,7 @@ final class DataStreamReader private[sql] (sparkSession: SparkSession) {
    *
    * @since 3.5.0
    */
-  def parquet(path: String): DataFrame = {
-    format("parquet").load(path)
-  }
+  def parquet(path: String): DataFrame = format("parquet").load(path)
 
   /**
    * Loads text files and returns a `DataFrame` whose schema starts with a string column named
@@ -268,7 +266,7 @@ final class DataStreamReader private[sql] (sparkSession: SparkSession) {
    * @since 3.5.0
    */
   def textFile(path: String): Dataset[String] = {
-    text(path).select("value").as[String](sparkSession.implicits.newStringEncoder)
+    text(path).select("value").as[String](StringEncoder)
   }
 
   private val sourceBuilder = DataSource.newBuilder()

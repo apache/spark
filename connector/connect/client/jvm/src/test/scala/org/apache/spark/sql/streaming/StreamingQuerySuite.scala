@@ -39,7 +39,7 @@ class StreamingQuerySuite extends RemoteSparkSession with SQLHelper {
         .option("numPartitions", "1")
         .load()
 
-      // Verify schema (results in RPC
+      // Verify schema (results in sending an RPC)
       assert(readDF.schema.toDDL == "timestamp TIMESTAMP,value BIGINT")
 
       val countsDF = readDF
@@ -59,18 +59,23 @@ class StreamingQuerySuite extends RemoteSparkSession with SQLHelper {
         .trigger(Trigger.ProcessingTime("1 second"))
         .start()
 
-      // Verify some of the API.
-      assert(query.isActive)
+      try {
+        // Verify some of the API.
+        assert(query.isActive)
 
-      eventually(timeout(10.seconds)) {
-        assert(query.status.isDataAvailable)
-        assert(query.recentProgress.length > 0) // Query made progress.
+        eventually(timeout(10.seconds)) {
+          assert(query.status.isDataAvailable)
+          assert(query.recentProgress.nonEmpty) // Query made progress.
+        }
+
+        query.explain() // Prints the plan to console.
+        // Consider verifying explain output by capturing stdout similar to
+        // test("Dataset explain") in ClientE2ETestSuite.
+
+      } finally {
+        // Don't wait for any processed data. Otherwise the test could take multiple seconds.
+        query.stop()
       }
-
-      query.explain() // Prints the plan to console.
-
-      // Don't wait for any processed data. Otherwise the test could take multiple seconds.
-      query.stop()
     }
   }
 }
