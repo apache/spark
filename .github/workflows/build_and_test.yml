@@ -51,7 +51,7 @@ on:
         default: ''
 
 concurrency:
-  group: ci-${{ github.event.pull_request.number || github.ref }}
+  group: ci-${{ github.event.pull_request.number || github.ref_name || github.ref }}
   cancel-in-progress: true
 
 jobs:
