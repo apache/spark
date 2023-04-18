@@ -230,13 +230,13 @@ object DeduplicateRelations extends Rule[LogicalPlan] {
         newVersion.copyTagsFrom(oldVersion)
         Seq((oldVersion, newVersion))
 
-      case oldVersion @ MapInPandas(_, output, _, _)
+      case oldVersion @ MapInPandas(_, output, _)
         if oldVersion.outputSet.intersect(conflictingAttributes).nonEmpty =>
         val newVersion = oldVersion.copy(output = output.map(_.newInstance()))
         newVersion.copyTagsFrom(oldVersion)
         Seq((oldVersion, newVersion))
 
-      case oldVersion @ PythonMapInArrow(_, output, _, _)
+      case oldVersion @ PythonMapInArrow(_, output, _)
         if oldVersion.outputSet.intersect(conflictingAttributes).nonEmpty =>
         val newVersion = oldVersion.copy(output = output.map(_.newInstance()))
         newVersion.copyTagsFrom(oldVersion)

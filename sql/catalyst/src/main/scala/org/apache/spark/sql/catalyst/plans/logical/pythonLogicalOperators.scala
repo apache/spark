@@ -53,8 +53,7 @@ case class FlatMapGroupsInPandas(
 case class MapInPandas(
     functionExpr: Expression,
     output: Seq[Attribute],
-    child: LogicalPlan,
-    isBarrier: Boolean) extends UnaryNode {
+    child: LogicalPlan) extends UnaryNode {
 
   override val producedAttributes = AttributeSet(output)
 
@@ -69,8 +68,7 @@ case class MapInPandas(
 case class PythonMapInArrow(
     functionExpr: Expression,
     output: Seq[Attribute],
-    child: LogicalPlan,
-    isBarrier: Boolean) extends UnaryNode {
+    child: LogicalPlan) extends UnaryNode {
 
   override val producedAttributes = AttributeSet(output)
 

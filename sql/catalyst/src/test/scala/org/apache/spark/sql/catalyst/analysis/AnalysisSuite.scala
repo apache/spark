@@ -691,8 +691,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     val mapInPandas = MapInPandas(
       pythonUdf,
       output,
-      project,
-      false)
+      project)
     val left = SubqueryAlias("temp0", mapInPandas)
     val right = SubqueryAlias("temp1", mapInPandas)
     val join = Join(left, right, Inner, None, JoinHint.NONE)

@@ -28,8 +28,7 @@ import org.apache.spark.sql.execution.SparkPlan
 case class PythonMapInArrowExec(
     func: Expression,
     output: Seq[Attribute],
-    child: SparkPlan,
-    override val isBarrier: Boolean)
+    child: SparkPlan)
   extends MapInBatchExec {
 
   override protected val pythonEvalType: Int = PythonEvalType.SQL_MAP_ARROW_ITER_UDF
