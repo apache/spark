@@ -27,7 +27,8 @@ class StreamingParityTests(StreamingTestsMixin, ReusedConnectTestCase):
         super().test_stream_await_termination()
 
     @unittest.skip(
-        "Query immediately quits after throw, allowing access to supported queries will be added in SPARK-42962."
+        "Query immediately quits after throw, " +
+        "allowing access to supported queries will be added in SPARK-42962."
     )
     def test_stream_exception(self):
         super().test_stream_exception()
