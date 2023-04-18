@@ -148,11 +148,11 @@ class StreamingQuery:
     def exception(self) -> Optional[StreamingQueryException]:
         cmd = pb2.StreamingQueryCommand()
         cmd.exception = True
-        exception = self._execute_streaming_query_cmd(cmd).exception
-        if exception.no_exception:
-            return None
+        response = self._execute_streaming_query_cmd(cmd)
+        if response.HasField("exception") and response.exception.HasField("exception_message"):
+            return CapturedStreamingQueryException(response.exception.exception_message)
         else:
-            return CapturedStreamingQueryException(exception.exception_message)
+            return None
 
     exception.__doc__ = PySparkStreamingQuery.exception.__doc__
 

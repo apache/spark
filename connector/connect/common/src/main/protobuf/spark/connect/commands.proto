@@ -312,10 +312,7 @@ message StreamingQueryCommandResult {
 
   message ExceptionResult {
     // Exception message as string
-    oneof exception_content {
-      bool no_exception = 1;
-      string exception_message = 2;
-    }
+    optional string exception_message = 1;
   }
 
   message AwaitTerminationResult {
