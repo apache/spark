@@ -53,6 +53,7 @@ class SparkConnectClientTestCase(unittest.TestCase):
         client = SparkConnectClient("sc://foo/")
         self.assertIsNone(client.token)
 
+
 class MockService:
     # Simplest mock of the SparkConnectService.
     # If this needs more complex logic, it needs to be replaced with Python mocking.
