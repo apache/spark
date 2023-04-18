@@ -498,7 +498,7 @@ class SparkSession private[sql] (
   /**
    * Register a [[ClassFinder]] for dynamically generated classes.
    *
-   * @since 3.4.0
+   * @since 3.5.0
    */
   @Experimental
   def registerClassFinder(finder: ClassFinder): Unit = client.registerClassFinder(finder)
