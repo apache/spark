@@ -179,9 +179,9 @@ class Relation(google.protobuf.message.Message):
     @property
     def with_watermark(self) -> global___WithWatermark: ...
     @property
-    def deduplicate_within_watermark(self) -> global___DeduplicateWithinWatermark: ...
-    @property
     def apply_in_pandas_with_state(self) -> global___ApplyInPandasWithState: ...
+    @property
+    def deduplicate_within_watermark(self) -> global___DeduplicateWithinWatermark: ...
     @property
     def fill_na(self) -> global___NAFill:
         """NA functions"""
@@ -252,8 +252,8 @@ class Relation(google.protobuf.message.Message):
         group_map: global___GroupMap | None = ...,
         co_group_map: global___CoGroupMap | None = ...,
         with_watermark: global___WithWatermark | None = ...,
-        deduplicate_within_watermark: global___DeduplicateWithinWatermark | None = ...,
         apply_in_pandas_with_state: global___ApplyInPandasWithState | None = ...,
+        deduplicate_within_watermark: global___DeduplicateWithinWatermark | None = ...,
         fill_na: global___NAFill | None = ...,
         drop_na: global___NADrop | None = ...,
         replace: global___NAReplace | None = ...,
@@ -481,55 +481,59 @@ class Relation(google.protobuf.message.Message):
     ) -> None: ...
     def WhichOneof(
         self, oneof_group: typing_extensions.Literal["rel_type", b"rel_type"]
-    ) -> typing_extensions.Literal[
-        "read",
-        "project",
-        "filter",
-        "join",
-        "set_op",
-        "sort",
-        "limit",
-        "aggregate",
-        "sql",
-        "local_relation",
-        "sample",
-        "offset",
-        "deduplicate",
-        "range",
-        "subquery_alias",
-        "repartition",
-        "to_df",
-        "with_columns_renamed",
-        "show_string",
-        "drop",
-        "tail",
-        "with_columns",
-        "hint",
-        "unpivot",
-        "to_schema",
-        "repartition_by_expression",
-        "map_partitions",
-        "collect_metrics",
-        "parse",
-        "group_map",
-        "co_group_map",
-        "with_watermark",
-        "apply_in_pandas_with_state",
-        "fill_na",
-        "drop_na",
-        "replace",
-        "summary",
-        "crosstab",
-        "describe",
-        "cov",
-        "corr",
-        "approx_quantile",
-        "freq_items",
-        "sample_by",
-        "catalog",
-        "extension",
-        "unknown",
-    ] | None: ...
+    ) -> (
+        typing_extensions.Literal[
+            "read",
+            "project",
+            "filter",
+            "join",
+            "set_op",
+            "sort",
+            "limit",
+            "aggregate",
+            "sql",
+            "local_relation",
+            "sample",
+            "offset",
+            "deduplicate",
+            "range",
+            "subquery_alias",
+            "repartition",
+            "to_df",
+            "with_columns_renamed",
+            "show_string",
+            "drop",
+            "tail",
+            "with_columns",
+            "hint",
+            "unpivot",
+            "to_schema",
+            "repartition_by_expression",
+            "map_partitions",
+            "collect_metrics",
+            "parse",
+            "group_map",
+            "co_group_map",
+            "with_watermark",
+            "apply_in_pandas_with_state",
+            "deduplicate_within_watermark",
+            "fill_na",
+            "drop_na",
+            "replace",
+            "summary",
+            "crosstab",
+            "describe",
+            "cov",
+            "corr",
+            "approx_quantile",
+            "freq_items",
+            "sample_by",
+            "catalog",
+            "extension",
+            "unknown",
+        ]
+        | None
+    ): ...
 
 global___Relation = Relation
 
@@ -3116,6 +3120,7 @@ class CoGroupMap(google.protobuf.message.Message):
 
 global___CoGroupMap = CoGroupMap
 
+@typing_extensions.final
 class ApplyInPandasWithState(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -3187,6 +3192,7 @@ class ApplyInPandasWithState(google.protobuf.message.Message):
 
 global___ApplyInPandasWithState = ApplyInPandasWithState
 
+@typing_extensions.final
 class CollectMetrics(google.protobuf.message.Message):
     """Collect arbitrary (named) metrics from a dataset."""
 
