@@ -42,13 +42,15 @@ trait JoinCodegenSupport extends CodegenSupport with BaseJoinExec {
       buildRow: Option[String] = None): (String, String, Seq[ExprCode]) = {
     val buildSideRow = buildRow.getOrElse(ctx.freshName("buildRow"))
     val buildVars = genOneSideJoinVars(ctx, buildSideRow, buildPlan, setDefaultValue = false)
+    val streamVars2 = streamVars.map(_.copy())
     val checkCondition = if (condition.isDefined) {
       val expr = condition.get
-      // evaluate the variables from build side that used by condition
-      val eval = evaluateRequiredVariables(buildPlan.output, buildVars, expr.references)
+      // evaluate the variables that are used by the condition
+      val eval = evaluateRequiredVariables(streamPlan.output ++ buildPlan.output,
+        streamVars2 ++ buildVars, expr.references)
 
       // filter the output via condition
-      ctx.currentVars = streamVars ++ buildVars
+      ctx.currentVars = streamVars2 ++ buildVars
       val ev =
         BindReferences.bindReference(expr, streamPlan.output ++ buildPlan.output).genCode(ctx)
       val skipRow = s"${ev.isNull} || !${ev.value}"
