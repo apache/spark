@@ -330,14 +330,16 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
       case ScalarSubquery(sub, children, exprId, conditions, hint, mayHaveCountBugOld)
         if children.nonEmpty =>
         val (newPlan, newCond) = decorrelate(sub, plan)
-        val mayHaveCountBug = if (mayHaveCountBugOld.isDefined) {
-          // For idempotency, we must save this variable the first time this rule is run. Afterward,
-          // the information about whether the subquery has a GROUP BY clause is lost because a
-          // GROUP BY is introduced if one wasn't already present.
-          mayHaveCountBugOld.get
-        } else {
+        val mayHaveCountBug = if (mayHaveCountBugOld.isEmpty) {
+          // Check whether the pre-rewrite subquery had empty groupingExpressions. If yes, it may
+          // be subject to the COUNT bug. If it has non-empty groupingExpressions, there is
+          // no COUNT bug.
           val (topPart, havingNode, aggNode) = splitSubquery(sub)
           (aggNode.isDefined && aggNode.get.groupingExpressions.isEmpty)
+        } else {
+          // For idempotency, we must save this variable the first time this rule is run, because
+          // decorrelation introduces a GROUP BY is if one wasn't already present.
+          mayHaveCountBugOld.get
         }
         ScalarSubquery(newPlan, children, exprId, getJoinCondition(newCond, conditions),
           hint, Some(mayHaveCountBug))
@@ -597,8 +599,13 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] with AliasHelpe
         if (Utils.isTesting) {
           assert(mayHaveCountBug.isDefined)
         }
-        if (resultWithZeroTups.isEmpty || !mayHaveCountBug.getOrElse(true)) {
-          // CASE 1: Subquery guaranteed not to have the COUNT bug
+        if (resultWithZeroTups.isEmpty) {
+          // CASE 1: Subquery guaranteed not to have the COUNT bug because it evaluates to NULL
+          // with zero tuples.
+          planWithoutCountBug
+        } else if (!mayHaveCountBug.getOrElse(true) &&
+          !conf.getConf(SQLConf.DECORRELATE_SUBQUERY_LEGACY_INCORRECT_COUNT_HANDLING_ENABLED)) {
+          // Subquery guaranteed not to have the COUNT bug because it had non-empty GROUP BY clause
           planWithoutCountBug
         } else {
           val (topPart, havingNode, aggNode) = splitSubquery(query)

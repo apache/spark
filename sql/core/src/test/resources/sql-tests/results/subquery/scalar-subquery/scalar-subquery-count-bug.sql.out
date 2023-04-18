@@ -144,3 +144,64 @@ struct<a:int,b:decimal(2,1),scalarsubquery(a):bigint>
 6	NULL	NULL
 NULL	5.0	NULL
 NULL	NULL	NULL
+
+
+-- !query
+set spark.sql.optimizer.decorrelateSubqueryLegacyIncorrectCountHandling.enabled = true
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.optimizer.decorrelateSubqueryLegacyIncorrectCountHandling.enabled	true
+
+
+-- !query
+select *, (select count(*) from r where l.a = r.c) from l
+-- !query schema
+struct<a:int,b:decimal(2,1),scalarsubquery(a):bigint>
+-- !query output
+1	2.0	0
+1	2.0	0
+2	1.0	2
+2	1.0	2
+3	3.0	1
+6	NULL	1
+NULL	5.0	0
+NULL	NULL	0
+
+
+-- !query
+select *, (select count(*) from r where l.a = r.c group by c) from l
+-- !query schema
+struct<a:int,b:decimal(2,1),scalarsubquery(a):bigint>
+-- !query output
+1	2.0	0
+1	2.0	0
+2	1.0	2
+2	1.0	2
+3	3.0	1
+6	NULL	1
+NULL	5.0	0
+NULL	NULL	0
+
+
+-- !query
+select *, (select count(*) from r where l.a = r.c group by 'constant') from l
+-- !query schema
+struct<a:int,b:decimal(2,1),scalarsubquery(a):bigint>
+-- !query output
+1	2.0	0
+1	2.0	0
+2	1.0	2
+2	1.0	2
+3	3.0	1
+6	NULL	1
+NULL	5.0	0
+NULL	NULL	0
+
+
+-- !query
+reset spark.sql.optimizer.decorrelateSubqueryLegacyIncorrectCountHandling.enabled
+-- !query schema
+struct<>
+-- !query output
+

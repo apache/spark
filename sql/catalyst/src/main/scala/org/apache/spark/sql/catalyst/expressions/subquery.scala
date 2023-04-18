@@ -255,8 +255,8 @@ object SubExprUtils extends PredicateHelper {
  *
  * Note: `exprId` is used to have a unique name in explain string output.
  *
- * `mayHaveCountBug` is whether the subquery has an aggregate like COUNT which may evaluate to
- * non-null on empty input. It is false if the subquery has a GROUP BY clause, because in that
+ * `mayHaveCountBug` is whether it's possible for the subquery to evaluate to non-null on
+ * empty input (zero tuples). It is false if the subquery has a GROUP BY clause, because in that
  * case the subquery yields no row at all on empty input to the GROUP BY, which evaluates to NULL.
  * It is set in PullupCorrelatedPredicates to true/false, before it is set its value is None.
  * See constructLeftJoins in RewriteCorrelatedScalarSubquery for more details.

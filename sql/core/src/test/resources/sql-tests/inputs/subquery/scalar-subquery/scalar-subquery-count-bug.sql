@@ -47,3 +47,12 @@ select *, (select count(*) from r where l.a = r.c having count(*) <= 1) from l;
 -- Empty groups are filtered by HAVING and should evaluate to null
 select *, (select count(*) from r where l.a = r.c having count(*) >= 2) from l;
 
+
+set spark.sql.optimizer.decorrelateSubqueryLegacyIncorrectCountHandling.enabled = true;
+
+-- With legacy behavior flag set, both cases evaluate to 0
+select *, (select count(*) from r where l.a = r.c) from l;
+select *, (select count(*) from r where l.a = r.c group by c) from l;
+select *, (select count(*) from r where l.a = r.c group by 'constant') from l;
+
+reset spark.sql.optimizer.decorrelateSubqueryLegacyIncorrectCountHandling.enabled;
