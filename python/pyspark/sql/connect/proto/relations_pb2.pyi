@@ -96,11 +96,8 @@ class Relation(google.protobuf.message.Message):
     GROUP_MAP_FIELD_NUMBER: builtins.int
     CO_GROUP_MAP_FIELD_NUMBER: builtins.int
     WITH_WATERMARK_FIELD_NUMBER: builtins.int
-<<<<<<< HEAD
-    DEDUPLICATE_WITHIN_WATERMARK_FIELD_NUMBER: builtins.int
-=======
     APPLY_IN_PANDAS_WITH_STATE_FIELD_NUMBER: builtins.int
->>>>>>> master
+    DEDUPLICATE_WITHIN_WATERMARK_FIELD_NUMBER: builtins.int
     FILL_NA_FIELD_NUMBER: builtins.int
     DROP_NA_FIELD_NUMBER: builtins.int
     REPLACE_FIELD_NUMBER: builtins.int
@@ -182,11 +179,9 @@ class Relation(google.protobuf.message.Message):
     @property
     def with_watermark(self) -> global___WithWatermark: ...
     @property
-<<<<<<< HEAD
     def deduplicate_within_watermark(self) -> global___DeduplicateWithinWatermark: ...
-=======
+    @property
     def apply_in_pandas_with_state(self) -> global___ApplyInPandasWithState: ...
->>>>>>> master
     @property
     def fill_na(self) -> global___NAFill:
         """NA functions"""
@@ -257,11 +252,8 @@ class Relation(google.protobuf.message.Message):
         group_map: global___GroupMap | None = ...,
         co_group_map: global___CoGroupMap | None = ...,
         with_watermark: global___WithWatermark | None = ...,
-<<<<<<< HEAD
         deduplicate_within_watermark: global___DeduplicateWithinWatermark | None = ...,
-=======
         apply_in_pandas_with_state: global___ApplyInPandasWithState | None = ...,
->>>>>>> master
         fill_na: global___NAFill | None = ...,
         drop_na: global___NADrop | None = ...,
         replace: global___NAReplace | None = ...,
@@ -489,60 +481,6 @@ class Relation(google.protobuf.message.Message):
     ) -> None: ...
     def WhichOneof(
         self, oneof_group: typing_extensions.Literal["rel_type", b"rel_type"]
-<<<<<<< HEAD
-    ) -> (
-        typing_extensions.Literal[
-            "read",
-            "project",
-            "filter",
-            "join",
-            "set_op",
-            "sort",
-            "limit",
-            "aggregate",
-            "sql",
-            "local_relation",
-            "sample",
-            "offset",
-            "deduplicate",
-            "range",
-            "subquery_alias",
-            "repartition",
-            "to_df",
-            "with_columns_renamed",
-            "show_string",
-            "drop",
-            "tail",
-            "with_columns",
-            "hint",
-            "unpivot",
-            "to_schema",
-            "repartition_by_expression",
-            "map_partitions",
-            "collect_metrics",
-            "parse",
-            "group_map",
-            "co_group_map",
-            "with_watermark",
-            "deduplicate_within_watermark",
-            "fill_na",
-            "drop_na",
-            "replace",
-            "summary",
-            "crosstab",
-            "describe",
-            "cov",
-            "corr",
-            "approx_quantile",
-            "freq_items",
-            "sample_by",
-            "catalog",
-            "extension",
-            "unknown",
-        ]
-        | None
-    ): ...
-=======
     ) -> typing_extensions.Literal[
         "read",
         "project",
@@ -592,7 +530,6 @@ class Relation(google.protobuf.message.Message):
         "extension",
         "unknown",
     ] | None: ...
->>>>>>> master
 
 global___Relation = Relation
 
