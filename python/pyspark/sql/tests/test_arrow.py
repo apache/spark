@@ -533,8 +533,10 @@ class ArrowTestsMixin:
             self.check_createDataFrame_with_single_data_type()
 
     def check_createDataFrame_with_single_data_type(self):
-        with self.assertRaisesRegex(ValueError, ".*IntegerType.*not supported.*"):
-            self.spark.createDataFrame(pd.DataFrame({"a": [1]}), schema="int").collect()
+        for schema in ["int", IntegerType()]:
+            with self.subTest(schema=schema):
+                with self.assertRaisesRegex(ValueError, ".*IntegerType.*not supported.*"):
+                    self.spark.createDataFrame(pd.DataFrame({"a": [1]}), schema=schema).collect()
 
     def test_createDataFrame_does_not_modify_input(self):
         # Some series get converted for Spark to consume, this makes sure input is unchanged
@@ -809,7 +811,7 @@ class ArrowTestsMixin:
         for case in cases:
             run_test(*case)
 
-    def test_createDateFrame_with_category_type(self):
+    def test_createDataFrame_with_category_type(self):
         pdf = pd.DataFrame({"A": ["a", "b", "c", "a"]})
         pdf["B"] = pdf["A"].astype("category")
         category_first_element = dict(enumerate(pdf["B"].cat.categories))[0]
