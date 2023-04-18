@@ -333,6 +333,9 @@ message PythonUDF {
   bytes command = 3;
   // (Required) Python version being used in the client.
   string python_ver = 4;
+  // (Optional) Whether this PythonUDF should be executed in barrier mode.
+  // Right now, barrier PythonUDF is only allowed in operators 'MapInPandas' and 'MapInArrow'.
+  optional bool is_barrier = 5;
 }
 
 message ScalarScalaUDF {

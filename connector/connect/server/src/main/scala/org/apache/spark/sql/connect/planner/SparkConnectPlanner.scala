@@ -496,20 +496,17 @@ class SparkConnectPlanner(val session: SparkSession) {
         transformTypedMapPartitions(commonUdf, baseRel)
       case proto.CommonInlineUserDefinedFunction.FunctionCase.PYTHON_UDF =>
         val pythonUdf = transformPythonUDF(commonUdf)
-        val isBarrier = if (rel.hasIsBarrier) rel.getIsBarrier else false
         pythonUdf.evalType match {
           case PythonEvalType.SQL_MAP_PANDAS_ITER_UDF =>
             logical.MapInPandas(
               pythonUdf,
               pythonUdf.dataType.asInstanceOf[StructType].toAttributes,
-              baseRel,
-              isBarrier)
+              baseRel)
           case PythonEvalType.SQL_MAP_ARROW_ITER_UDF =>
             logical.PythonMapInArrow(
               pythonUdf,
               pythonUdf.dataType.asInstanceOf[StructType].toAttributes,
-              baseRel,
-              isBarrier)
+              baseRel)
           case _ =>
             throw InvalidPlanInput(
               s"Function with EvalType: ${pythonUdf.evalType} is not supported")
@@ -1361,7 +1358,8 @@ class SparkConnectPlanner(val session: SparkSession) {
       func = transformPythonFunction(udf),
       dataType = transformDataType(udf.getOutputType),
       pythonEvalType = udf.getEvalType,
-      udfDeterministic = fun.getDeterministic)
+      udfDeterministic = fun.getDeterministic,
+      isBarrier = udf.hasIsBarrier && udf.getIsBarrier))
       .builder(fun.getArgumentsList.asScala.map(transformExpression).toSeq) match {
       case udaf: PythonUDAF => udaf.toAggregateExpression()
       case other => other

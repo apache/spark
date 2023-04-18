@@ -645,6 +645,7 @@ class TorchDistributor(Distributor):
 
                 yield pyarrow.RecordBatch.from_pandas(pd.DataFrame(data={"chunk": chunks}))
 
+        wrapped_train_fn.is_barrier = True  # type: ignore[attr-defined]
         return wrapped_train_fn
 
     def _run_distributed_training(

@@ -1242,6 +1242,7 @@ class PythonUDF(google.protobuf.message.Message):
     EVAL_TYPE_FIELD_NUMBER: builtins.int
     COMMAND_FIELD_NUMBER: builtins.int
     PYTHON_VER_FIELD_NUMBER: builtins.int
+    IS_BARRIER_FIELD_NUMBER: builtins.int
     @property
     def output_type(self) -> pyspark.sql.connect.proto.types_pb2.DataType:
         """(Required) Output type of the Python UDF"""
@@ -1251,6 +1252,10 @@ class PythonUDF(google.protobuf.message.Message):
     """(Required) The encoded commands of the Python UDF"""
     python_ver: builtins.str
     """(Required) Python version being used in the client."""
+    is_barrier: builtins.bool
+    """(Optional) Whether this PythonUDF should be executed in barrier mode.
+    Right now, barrier PythonUDF is only allowed in operators 'MapInPandas' and 'MapInArrow'.
+    """
     def __init__(
         self,
         *,
@@ -1258,23 +1263,39 @@ class PythonUDF(google.protobuf.message.Message):
         eval_type: builtins.int = ...,
         command: builtins.bytes = ...,
         python_ver: builtins.str = ...,
+        is_barrier: builtins.bool | None = ...,
     ) -> None: ...
     def HasField(
-        self, field_name: typing_extensions.Literal["output_type", b"output_type"]
+        self,
+        field_name: typing_extensions.Literal[
+            "_is_barrier",
+            b"_is_barrier",
+            "is_barrier",
+            b"is_barrier",
+            "output_type",
+            b"output_type",
+        ],
     ) -> builtins.bool: ...
     def ClearField(
         self,
         field_name: typing_extensions.Literal[
+            "_is_barrier",
+            b"_is_barrier",
             "command",
             b"command",
             "eval_type",
             b"eval_type",
+            "is_barrier",
+            b"is_barrier",
             "output_type",
             b"output_type",
             "python_ver",
             b"python_ver",
         ],
     ) -> None: ...
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["_is_barrier", b"_is_barrier"]
+    ) -> typing_extensions.Literal["is_barrier"] | None: ...
 
 global___PythonUDF = PythonUDF
 

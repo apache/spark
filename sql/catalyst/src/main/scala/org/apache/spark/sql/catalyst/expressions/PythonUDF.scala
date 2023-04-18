@@ -73,8 +73,17 @@ case class PythonUDF(
     children: Seq[Expression],
     evalType: Int,
     udfDeterministic: Boolean,
-    resultId: ExprId = NamedExpression.newExprId)
+    resultId: ExprId = NamedExpression.newExprId,
+    isBarrier: Boolean = false)
   extends Expression with PythonFuncExpression with Unevaluable {
+
+  if (isBarrier &&
+    evalType != PythonEvalType.SQL_MAP_PANDAS_ITER_UDF &&
+    evalType != PythonEvalType.SQL_MAP_ARROW_ITER_UDF) {
+    throw new IllegalArgumentException(
+      "Barrier PythonUDF is only allowed in MapInPandas and MapInArrow, " +
+        s"but got ${PythonEvalType.toString(evalType)}")
+  }
 
   lazy val resultAttribute: Attribute = AttributeReference(toPrettySQL(this), dataType, nullable)(
     exprId = resultId)

@@ -71,6 +71,7 @@ class UserDefinedFunctionLike(Protocol):
     func: Callable[..., Any]
     evalType: int
     deterministic: bool
+    is_barrier: bool
     @property
     def returnType(self) -> pyspark.sql.types.DataType: ...
     def __call__(self, *args: ColumnOrName) -> Column: ...

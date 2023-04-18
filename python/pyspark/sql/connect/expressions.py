@@ -612,6 +612,7 @@ class PythonUDF:
         eval_type: int,
         func: Callable[..., Any],
         python_ver: str,
+        is_barrier: Optional[bool] = None,
     ) -> None:
         self._output_type: DataType = (
             UnparsedDataType(output_type) if isinstance(output_type, str) else output_type
@@ -619,6 +620,7 @@ class PythonUDF:
         self._eval_type = eval_type
         self._func = func
         self._python_ver = python_ver
+        self.is_barrier = is_barrier
 
     def to_plan(self, session: "SparkConnectClient") -> proto.PythonUDF:
         if isinstance(self._output_type, UnparsedDataType):
@@ -634,6 +636,8 @@ class PythonUDF:
         expr.eval_type = self._eval_type
         expr.command = CloudPickleSerializer().dumps((self._func, output_type))
         expr.python_ver = self._python_ver
+        if self.is_barrier is not None:
+            expr.is_barrier = self.is_barrier
         return expr
 
     def __repr__(self) -> str:

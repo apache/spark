@@ -52,6 +52,15 @@ if TYPE_CHECKING:
 __all__ = ["UDFRegistration"]
 
 
+def _is_barrier(obj: Any) -> bool:
+    return (
+        obj is not None
+        and hasattr(obj, "is_barrier")
+        and isinstance(obj.is_barrier, bool)
+        and obj.is_barrier
+    )
+
+
 def _wrap_function(
     sc: SparkContext, func: Callable[..., Any], returnType: "DataTypeOrString"
 ) -> JavaObject:
@@ -193,6 +202,7 @@ def _create_arrow_py_udf(regular_udf):  # type: ignore
     pudf.func = f
     pudf.returnType = return_type
     pudf.evalType = regular_udf.evalType
+    pudf.is_barrier = _is_barrier(regular_udf)
     return pudf
 
 
@@ -248,6 +258,7 @@ class UserDefinedFunction:
         )
         self.evalType = evalType
         self.deterministic = deterministic
+        self.is_barrier = _is_barrier(func)
 
     @property
     def returnType(self) -> DataType:
@@ -377,7 +388,7 @@ class UserDefinedFunction:
         jdt = spark._jsparkSession.parseDataType(self.returnType.json())
         assert sc._jvm is not None
         judf = sc._jvm.org.apache.spark.sql.execution.python.UserDefinedPythonFunction(
-            self._name, wrapped_func, jdt, self.evalType, self.deterministic
+            self._name, wrapped_func, jdt, self.evalType, self.deterministic, _is_barrier(func)
         )
         return judf
 
@@ -478,6 +489,7 @@ class UserDefinedFunction:
         wrapper.returnType = self.returnType  # type: ignore[attr-defined]
         wrapper.evalType = self.evalType  # type: ignore[attr-defined]
         wrapper.deterministic = self.deterministic  # type: ignore[attr-defined]
+        wrapper.is_barrier = self.is_barrier  # type: ignore[attr-defined]
         wrapper.asNondeterministic = functools.wraps(  # type: ignore[attr-defined]
             self.asNondeterministic
         )(lambda: self.asNondeterministic()._wrapped())
@@ -613,6 +625,8 @@ class UDFRegistration:
             [Row(sum_udf(v1)=1), Row(sum_udf(v1)=5)]
 
         """
+        if _is_barrier(f):
+            raise ValueError("Invalid f: Can not register a barrier udf.")
 
         # This is to check whether the input function is from a user-defined function or
         # Python function.
