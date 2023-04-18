@@ -2247,8 +2247,9 @@ class SparkConnectPlanner(val session: SparkSession) {
 
       case StreamingQueryCommand.CommandCase.EXCEPTION =>
         val result = query.exception
-        result.foreach(e => respBuilder.getExceptionBuilder
-          .setExceptionMessage(SparkConnectService.extractErrorMessage(e)))
+        result.foreach(e =>
+          respBuilder.getExceptionBuilder
+            .setExceptionMessage(SparkConnectService.extractErrorMessage(e)))
 
       case StreamingQueryCommand.CommandCase.AWAIT_TERMINATION =>
         if (command.getAwaitTermination.hasTimeoutMs) {
