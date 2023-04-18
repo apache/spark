@@ -27,7 +27,8 @@ import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.trees.TreePattern.{GENERATOR, TreePattern}
-import org.apache.spark.sql.catalyst.util.{ArrayData, MapData, SQLKeywordUtils}
+import org.apache.spark.sql.catalyst.util.{ArrayData, MapData}
+import org.apache.spark.sql.catalyst.util.SQLKeywordUtils._
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -536,8 +537,9 @@ case class SQLKeywords() extends LeafExpression with Generator with CodegenFallb
     .add("reserved", BooleanType, nullable = false)
 
   override def eval(input: InternalRow): TraversableOnce[InternalRow] = {
-    SQLKeywordUtils.keywords.map { keyword =>
-      InternalRow(UTF8String.fromString(keyword), SQLKeywordUtils.isReserved(keyword))
+    val reservedList = getReservedList()
+    keywords.zip(reservedList).map { case (keyword, isReserved) =>
+      InternalRow(UTF8String.fromString(keyword), isReserved)
     }
   }
 

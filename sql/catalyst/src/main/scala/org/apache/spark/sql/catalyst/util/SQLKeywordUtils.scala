@@ -19,26 +19,34 @@ package org.apache.spark.sql.catalyst.util
 
 import scala.util.Try
 
+import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, SqlBaseLexer}
 
-private[sql] object SQLKeywordUtils {
+private[sql] object SQLKeywordUtils extends SQLConfHelper {
 
   final private val regex = "'([A-Z_]+)'".r
 
-  /**
-   * Determine whether an input sting is a reserved keyword or not. If a keyword is reserved, then
-   * it can not be used as table identifier. The same keyword might be reserved or non-reserved,
-   * when ANSI mode is ON/OFF.
-   */
-  def isReserved(token: String): Boolean = {
-    Try(CatalystSqlParser.parseTableIdentifier(token)).isFailure
-  }
-
-  def keywords: Seq[String] = {
+  lazy val keywords: Seq[String] = {
     (0 until SqlBaseLexer.VOCABULARY.getMaxTokenType).map { idx =>
       SqlBaseLexer.VOCABULARY.getLiteralName(idx)
     }.collect { case lit if lit != null && regex.pattern.matcher(lit).matches() =>
       regex.findFirstMatchIn(lit).get.group(1)
     }.sorted
+  }
+
+  /**
+   * Determine whether an input sting is a reserved keyword or not. If a keyword is reserved, then
+   * it can not be used as table identifier. The same keyword might be reserved or non-reserved,
+   * when ANSI mode is ON/OFF. */
+  private def isReserved(token: String): Boolean = {
+    Try(CatalystSqlParser.parseTableIdentifier(token)).isFailure
+  }
+
+  private lazy val nonAnsiReservedList = keywords.map(isReserved)
+
+  private lazy val ansiReservedList = keywords.map(isReserved)
+
+  def getReservedList(): Seq[Boolean] = {
+    if (conf.enforceReservedKeywords) ansiReservedList else nonAnsiReservedList
   }
 }
