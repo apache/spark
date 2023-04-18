@@ -37,7 +37,8 @@ private[sql] object SQLKeywordUtils extends SQLConfHelper {
   /**
    * Determine whether an input sting is a reserved keyword or not. If a keyword is reserved, then
    * it can not be used as table identifier. The same keyword might be reserved or non-reserved,
-   * when ANSI mode is ON/OFF. */
+   * when ANSI mode is ON/OFF.
+   */
   private def isReserved(token: String): Boolean = {
     Try(CatalystSqlParser.parseTableIdentifier(token)).isFailure
   }
