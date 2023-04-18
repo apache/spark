@@ -208,7 +208,7 @@ object Literal {
       case _ if v == null => true
       case ObjectType(cls) => cls.isInstance(v)
       case udt: UserDefinedType[_] => doValidate(v, udt.sqlType)
-      case dt => dataType.physicalDataType match {
+      case dt => PhysicalDataType(dataType) match {
         case PhysicalArrayType(et, _) =>
           v.isInstanceOf[ArrayData] && {
             val ar = v.asInstanceOf[ArrayData]

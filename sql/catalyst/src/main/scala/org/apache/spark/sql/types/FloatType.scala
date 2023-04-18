@@ -20,7 +20,6 @@ package org.apache.spark.sql.types
 import scala.util.Try
 
 import org.apache.spark.annotation.Stable
-import org.apache.spark.sql.catalyst.types.{PhysicalDataType, PhysicalFloatType}
 
 /**
  * The data type representing `Float` values. Please use the singleton `DataTypes.FloatType`.
@@ -33,8 +32,6 @@ class FloatType private() extends FractionalType {
    * The default size of a value of the FloatType is 4 bytes.
    */
   override def defaultSize: Int = 4
-
-  private[sql] override def physicalDataType: PhysicalDataType = PhysicalFloatType
 
   private[spark] override def asNullable: FloatType = this
 }

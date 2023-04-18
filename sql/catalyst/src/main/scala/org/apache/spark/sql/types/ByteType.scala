@@ -18,7 +18,6 @@
 package org.apache.spark.sql.types
 
 import org.apache.spark.annotation.Stable
-import org.apache.spark.sql.catalyst.types.{PhysicalByteType, PhysicalDataType}
 
 /**
  * The data type representing `Byte` values. Please use the singleton `DataTypes.ByteType`.
@@ -31,8 +30,6 @@ class ByteType private() extends IntegralType {
    * The default size of a value of the ByteType is 1 byte.
    */
   override def defaultSize: Int = 1
-
-  private[sql] override def physicalDataType: PhysicalDataType = PhysicalByteType
 
   override def simpleString: String = "tinyint"
 
