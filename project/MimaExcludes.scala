@@ -60,6 +60,10 @@ object MimaExcludes {
     // Avro source implementation is internal.
     ProblemFilters.exclude[Problem]("org.apache.spark.sql.v2.avro.*"),
 
+    // SPARK-43169: shaded and generated protobuf code
+    ProblemFilters.exclude[Problem]("org.sparkproject.spark_core.protobuf.*"),
+    ProblemFilters.exclude[Problem]("org.apache.spark.status.protobuf.StoreTypes*"),
+
     (problem: Problem) => problem match {
       case MissingClassProblem(cls) => !cls.fullName.startsWith("org.sparkproject.jpmml") &&
           !cls.fullName.startsWith("org.sparkproject.dmg.pmml")
