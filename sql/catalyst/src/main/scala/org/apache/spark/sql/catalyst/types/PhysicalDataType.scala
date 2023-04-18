@@ -23,7 +23,7 @@ import scala.reflect.runtime.universe.typeTag
 import org.apache.spark.sql.catalyst.expressions.{Ascending, BoundReference, InterpretedOrdering, SortOrder}
 import org.apache.spark.sql.catalyst.util.{ArrayData, SQLOrderingUtil}
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.types.{ArrayType, BinaryType, BooleanType, ByteExactNumeric, ByteType, DataType, DateType, DayTimeIntervalType, Decimal, DecimalExactNumeric, DecimalType, DoubleExactNumeric, DoubleType, FloatExactNumeric, FloatType, FractionalType, IntegerExactNumeric, IntegerType, IntegralType, LongExactNumeric, LongType, MapType, NullType, NumericType, ShortExactNumeric, ShortType, StringType, StructField, StructType, TimestampNTZType, TimestampType, YearMonthIntervalType}
+import org.apache.spark.sql.types.{ArrayType, BinaryType, BooleanType, ByteExactNumeric, ByteType, CalendarIntervalType, CharType, DataType, DateType, DayTimeIntervalType, Decimal, DecimalExactNumeric, DecimalType, DoubleExactNumeric, DoubleType, FloatExactNumeric, FloatType, FractionalType, IntegerExactNumeric, IntegerType, IntegralType, LongExactNumeric, LongType, MapType, NullType, NumericType, ShortExactNumeric, ShortType, StringType, StructField, StructType, TimestampNTZType, TimestampType, VarcharType, YearMonthIntervalType}
 import org.apache.spark.unsafe.types.{ByteArray, UTF8String}
 
 sealed abstract class PhysicalDataType {
@@ -39,6 +39,8 @@ object PhysicalDataType {
     case ShortType => PhysicalShortType
     case IntegerType => PhysicalIntegerType
     case LongType => PhysicalLongType
+    case VarcharType(_) => PhysicalStringType
+    case CharType(_) => PhysicalStringType
     case StringType => PhysicalStringType
     case FloatType => PhysicalFloatType
     case DoubleType => PhysicalDoubleType
@@ -47,6 +49,7 @@ object PhysicalDataType {
     case BinaryType => PhysicalBinaryType
     case TimestampType => PhysicalLongType
     case TimestampNTZType => PhysicalLongType
+    case CalendarIntervalType => PhysicalCalendarIntervalType
     case DayTimeIntervalType(_, _) => PhysicalLongType
     case YearMonthIntervalType(_, _) => PhysicalIntegerType
     case DateType => PhysicalIntegerType
@@ -89,6 +92,7 @@ object PhysicalNumericType {
 
 sealed abstract class PhysicalFractionalType extends PhysicalNumericType {
   private[sql] val fractional: Fractional[InternalType]
+  private[sql] val asIntegral: Integral[InternalType]
 }
 
 object PhysicalFractionalType {
@@ -160,6 +164,7 @@ case class PhysicalDecimalType(precision: Int, scale: Int) extends PhysicalFract
   private[sql] val numeric = Decimal.DecimalIsFractional
   override private[sql] def exactNumeric = DecimalExactNumeric
   private[sql] val fractional = Decimal.DecimalIsFractional
+  private[sql] val asIntegral = Decimal.DecimalAsIfIntegral
 }
 
 case object PhysicalDecimalType {
@@ -179,6 +184,7 @@ class PhysicalDoubleType() extends PhysicalFractionalType with PhysicalPrimitive
   private[sql] val numeric = implicitly[Numeric[Double]]
   override private[sql] def exactNumeric = DoubleExactNumeric
   private[sql] val fractional = implicitly[Fractional[Double]]
+  private[sql] val asIntegral = DoubleType.DoubleAsIfIntegral
 }
 case object PhysicalDoubleType extends PhysicalDoubleType
 
@@ -193,6 +199,7 @@ class PhysicalFloatType() extends PhysicalFractionalType with PhysicalPrimitiveT
   private[sql] val numeric = implicitly[Numeric[Float]]
   override private[sql] def exactNumeric = FloatExactNumeric
   private[sql] val fractional = implicitly[Fractional[Float]]
+  private[sql] val asIntegral = FloatType.FloatAsIfIntegral
 }
 case object PhysicalFloatType extends PhysicalFloatType
 

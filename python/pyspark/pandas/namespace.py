@@ -2190,9 +2190,8 @@ def get_dummies(
     if sparse is not False:
         raise NotImplementedError("get_dummies currently does not support sparse")
 
-    if columns is not None:
-        if not is_list_like(columns):
-            raise TypeError("Input must be a list-like for parameter `columns`")
+    if columns is not None and not is_list_like(columns):
+        raise TypeError("Input must be a list-like for parameter `columns`")
 
     if dtype is None:
         dtype = "byte"

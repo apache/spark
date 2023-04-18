@@ -17,7 +17,6 @@
 
 import os
 import shutil
-import tempfile
 import unittest
 
 have_torch = True
@@ -33,6 +32,9 @@ from pyspark.ml.torch.tests.test_distributor import (
     TorchDistributorLocalUnitTestsMixin,
     TorchDistributorDistributedUnitTestsMixin,
     TorchWrapperUnitTestsMixin,
+    set_up_test_dirs,
+    get_local_mode_conf,
+    get_distributed_mode_conf,
 )
 
 
@@ -40,31 +42,35 @@ from pyspark.ml.torch.tests.test_distributor import (
 class TorchDistributorBaselineUnitTestsOnConnect(
     TorchDistributorBaselineUnitTestsMixin, unittest.TestCase
 ):
-    def setUp(self) -> None:
-        self.spark = SparkSession.builder.remote("local[4]").getOrCreate()
+    @classmethod
+    def setUpClass(cls):
+        cls.spark = SparkSession.builder.remote("local[4]").getOrCreate()
 
-    def tearDown(self) -> None:
-        self.spark.stop()
+    @classmethod
+    def tearDownClass(cls):
+        cls.spark.stop()
 
 
 @unittest.skipIf(not have_torch, "torch is required")
 class TorchDistributorLocalUnitTestsOnConnect(
     TorchDistributorLocalUnitTestsMixin, unittest.TestCase
 ):
-    def setUp(self) -> None:
-        class_name = self.__class__.__name__
-        conf = self._get_spark_conf()
-        builder = SparkSession.builder.appName(class_name)
-        for k, v in conf.getAll():
-            if k not in ["spark.master", "spark.remote", "spark.app.name"]:
-                builder = builder.config(k, v)
-        self.spark = builder.remote("local-cluster[2,2,1024]").getOrCreate()
-        self.mnist_dir_path = tempfile.mkdtemp()
+    @classmethod
+    def setUpClass(cls):
+        (cls.gpu_discovery_script_file_name, cls.mnist_dir_path) = set_up_test_dirs()
+        builder = SparkSession.builder.appName(cls.__name__)
+        for k, v in get_local_mode_conf().items():
+            builder = builder.config(k, v)
+        builder = builder.config(
+            "spark.driver.resource.gpu.discoveryScript", cls.gpu_discovery_script_file_name
+        )
+        cls.spark = builder.remote("local-cluster[2,2,1024]").getOrCreate()
 
-    def tearDown(self) -> None:
-        shutil.rmtree(self.mnist_dir_path)
-        os.unlink(self.gpu_discovery_script_file.name)
-        self.spark.stop()
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.mnist_dir_path)
+        os.unlink(cls.gpu_discovery_script_file_name)
+        cls.spark.stop()
 
     def _get_inputs_for_test_local_training_succeeds(self):
         return [
@@ -79,20 +85,23 @@ class TorchDistributorLocalUnitTestsOnConnect(
 class TorchDistributorLocalUnitTestsIIOnConnect(
     TorchDistributorLocalUnitTestsMixin, unittest.TestCase
 ):
-    def setUp(self) -> None:
-        class_name = self.__class__.__name__
-        conf = self._get_spark_conf()
-        builder = SparkSession.builder.appName(class_name)
-        for k, v in conf.getAll():
-            if k not in ["spark.master", "spark.remote", "spark.app.name"]:
-                builder = builder.config(k, v)
-        self.spark = builder.remote("local[4]").getOrCreate()
-        self.mnist_dir_path = tempfile.mkdtemp()
+    @classmethod
+    def setUpClass(cls):
+        (cls.gpu_discovery_script_file_name, cls.mnist_dir_path) = set_up_test_dirs()
+        builder = SparkSession.builder.appName(cls.__name__)
+        for k, v in get_local_mode_conf().items():
+            builder = builder.config(k, v)
 
-    def tearDown(self) -> None:
-        shutil.rmtree(self.mnist_dir_path)
-        os.unlink(self.gpu_discovery_script_file.name)
-        self.spark.stop()
+        builder = builder.config(
+            "spark.driver.resource.gpu.discoveryScript", cls.gpu_discovery_script_file_name
+        )
+        cls.spark = builder.remote("local[4]").getOrCreate()
+
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.mnist_dir_path)
+        os.unlink(cls.gpu_discovery_script_file_name)
+        cls.spark.stop()
 
     def _get_inputs_for_test_local_training_succeeds(self):
         return [
@@ -107,21 +116,23 @@ class TorchDistributorLocalUnitTestsIIOnConnect(
 class TorchDistributorDistributedUnitTestsOnConnect(
     TorchDistributorDistributedUnitTestsMixin, unittest.TestCase
 ):
-    def setUp(self) -> None:
-        class_name = self.__class__.__name__
-        conf = self._get_spark_conf()
-        builder = SparkSession.builder.appName(class_name)
-        for k, v in conf.getAll():
-            if k not in ["spark.master", "spark.remote", "spark.app.name"]:
-                builder = builder.config(k, v)
+    @classmethod
+    def setUpClass(cls):
+        (cls.gpu_discovery_script_file_name, cls.mnist_dir_path) = set_up_test_dirs()
+        builder = SparkSession.builder.appName(cls.__name__)
+        for k, v in get_distributed_mode_conf().items():
+            builder = builder.config(k, v)
 
-        self.spark = builder.remote("local-cluster[2,2,1024]").getOrCreate()
-        self.mnist_dir_path = tempfile.mkdtemp()
+        builder = builder.config(
+            "spark.worker.resource.gpu.discoveryScript", cls.gpu_discovery_script_file_name
+        )
+        cls.spark = builder.remote("local-cluster[2,2,1024]").getOrCreate()
 
-    def tearDown(self) -> None:
-        shutil.rmtree(self.mnist_dir_path)
-        os.unlink(self.gpu_discovery_script_file.name)
-        self.spark.stop()
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.mnist_dir_path)
+        os.unlink(cls.gpu_discovery_script_file_name)
+        cls.spark.stop()
 
 
 @unittest.skipIf(not have_torch, "torch is required")
