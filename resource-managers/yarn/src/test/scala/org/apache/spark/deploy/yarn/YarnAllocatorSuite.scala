@@ -47,7 +47,7 @@ import org.apache.spark.resource.TestResourceIDs._
 import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.scheduler.SplitInfo
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.DecommissionExecutorsOnHost
-import org.apache.spark.util.{ManualClock, VersionUtils}
+import org.apache.spark.util.ManualClock
 
 class MockResolver extends SparkRackResolver(SparkHadoopUtil.get.conf) {
 
@@ -767,7 +767,6 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers {
   }
 
   test("Test YARN container decommissioning") {
-    assume(VersionUtils.isHadoop3)
     val rmClient: AMRMClient[ContainerRequest] = AMRMClient.createAMRMClient()
     val rmClientSpy = spy(rmClient)
     val allocateResponse = mock(classOf[AllocateResponse])
@@ -816,7 +815,7 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers {
 
     // host1 is now in DECOMMISSIONING state
     val httpAddress1 = "host1:420"
-    when(nodeReport.getNodeState).thenReturn(NodeState.valueOf("DECOMMISSIONING"))
+    when(nodeReport.getNodeState).thenReturn(NodeState.DECOMMISSIONING)
     when(nodeReport.getNodeId).thenReturn(nodeId)
     when(nodeId.getHost).thenReturn("host1")
     when(allocateResponse.getUpdatedNodes).thenReturn(nodeReportList)
