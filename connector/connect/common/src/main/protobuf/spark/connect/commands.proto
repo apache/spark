@@ -238,7 +238,7 @@ message StreamingQueryInstanceId {
   // checkpoint, it will have the same `id` but different `run_id`s.
   string run_id = 2;
 
-  // (Optional) The name of this run of the query.
+  // (Optional) The name of this query.
   optional string name = 3;
 }
 
