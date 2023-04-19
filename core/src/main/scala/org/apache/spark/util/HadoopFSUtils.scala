@@ -118,8 +118,7 @@ private[spark] object HadoopFSUtils extends Logging {
           s"Listing leaf files and directories for $s paths:<br/>${paths(0)}, ..."
       }
       sc.setJobDescription(description)
-      sc
-        .parallelize(paths, numParallelism)
+      sc.parallelize(paths, numParallelism)
         .mapPartitions { pathsEachPartition =>
           val hadoopConf = serializableConfiguration.value
           pathsEachPartition.toSeq.map { path =>
