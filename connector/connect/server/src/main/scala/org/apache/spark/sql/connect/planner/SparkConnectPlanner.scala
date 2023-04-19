@@ -30,6 +30,12 @@ import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.{ExecutePlanResponse, SqlCommand, StreamingQueryCommand, StreamingQueryCommandResult, StreamingQueryInstanceId, WriteStreamOperationStart, WriteStreamOperationStartResult}
 import org.apache.spark.connect.proto.ExecutePlanResponse.SqlCommandResult
 import org.apache.spark.connect.proto.Parse.ParseFormat
+import org.apache.spark.connect.proto.StreamingQueryCommand
+import org.apache.spark.connect.proto.StreamingQueryCommandResult
+import org.apache.spark.connect.proto.StreamingQueryManagerCommand
+import org.apache.spark.connect.proto.StreamingQueryManagerCommandResult
+import org.apache.spark.connect.proto.StreamingQueryInstanceId
+import org.apache.spark.connect.proto.WriteStreamOperationStart
 import org.apache.spark.connect.proto.WriteStreamOperationStart.TriggerCase
 import org.apache.spark.ml.{functions => MLFunctions}
 import org.apache.spark.sql.{Column, Dataset, Encoders, SparkSession}
@@ -2377,19 +2383,39 @@ class SparkConnectPlanner(val session: SparkSession) {
   }
 
   def handleStreamingQueryManagerCommand(
-    command: StreamingQueryManagerCommand,
-    sessionId: String,
-    responseObserver: StreamObserver[ExecutePlanResponse]): Unit = {
+      command: StreamingQueryManagerCommand,
+      sessionId: String,
+      responseObserver: StreamObserver[ExecutePlanResponse]): Unit = {
 
-//    val id = command.getQueryId.getId
-//    val runId = command.getQueryId.getRunId
-
-    val respBuilder = StreamingQueryManagerCommandResult
-      .newBuilder()
-//      .setQueryId(command.getQueryId)
+    val respBuilder = StreamingQueryManagerCommandResult.newBuilder()
     val sqm = session.streams
 
+    command.getCommandCase match {
+      case StreamingQueryManagerCommand.CommandCase.ACTIVE =>
+        val active_queries = session.streams.active
+        respBuilder.getActiveBuilder.addAllActiveQueries(
+//            active_queries.map(q => q.id.toString.asJava) // TODO
+        )
+
+      case StreamingQueryManagerCommand.CommandCase.GET_QUERY =>
+        val query = session.streams.get(command.getGetQuery.getId)
+        respBuilder.getQueryBuilder
+          .setId(query.id.toString)
+          .setRunId(query.runId.toString)
+          .setName(query.name)
+      case StreamingQueryManagerCommand.CommandCase.AWAIT_ANY_TERMINATION =>
+      case StreamingQueryManagerCommand.CommandCase.RESET_TERMINATED =>
+      case StreamingQueryManagerCommand.CommandCase.COMMAND_NOT_SET =>
+        throw new IllegalArgumentException("Missing command in StreamingQueryManagerCommand")
     }
+
+    responseObserver.onNext(
+      ExecutePlanResponse
+        .newBuilder()
+        .setSessionId(sessionId)
+        .setStreamingQueryManagerCommandResult(respBuilder.build())
+        .build())
+  }
 
   def handleGetResourcesCommand(
       command: proto.GetResourcesCommand,

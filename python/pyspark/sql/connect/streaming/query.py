@@ -176,8 +176,8 @@ class StreamingQuery:
 
 
 class StreamingQueryManager:
-    def __init__(self) -> None:
-        pass
+    def __init__(self, session: "SparkSession") -> None:
+        self._session = session
 
     @property
     def active(self) -> List[StreamingQuery]:
@@ -186,7 +186,10 @@ class StreamingQueryManager:
     active.__doc__ = PySparkStreamingQueryManager.active.__doc__
 
     def get(self, id: str) -> StreamingQuery:
-        pass
+        cmd = pb2.StreamingQueryManagerCommand()
+        cmd.get_query.id = id
+        result = self._execute_streaming_query_manager_cmd(cmd)
+        return StreamingQuery(self._session, result.id, result.run_id, result.name) # TODO: name none?
 
     get.__doc__ = PySparkStreamingQueryManager.get.__doc__
 
@@ -217,12 +220,10 @@ class StreamingQueryManager:
     def _execute_streaming_query_manager_cmd(
         self, cmd: pb2.StreamingQueryManagerCommand
     ) -> pb2.StreamingQueryManagerCommandResult:
-        # cmd.query_id.id = self._query_id
-        # cmd.query_id.run_id = self._run_id
         exec_cmd = pb2.Command()
-        exec_cmd.streaming_query_command.CopyFrom(cmd)
+        exec_cmd.streaming_query_manager_command.CopyFrom(cmd)
         (_, properties) = self._session.client.execute_command(exec_cmd)
-        return cast(pb2.StreamingQueryCommandResult, properties["streaming_query_command_result"])
+        return cast(pb2.StreamingQueryManagerCommandResult, properties["streaming_query_manager_command_result"])
 
 def _test() -> None:
     import doctest
