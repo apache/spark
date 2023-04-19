@@ -43,8 +43,6 @@ class ArrowParityTests(ArrowTestsMixin, ReusedConnectTestCase):
     def test_createDataFrame_with_ndarray(self):
         self.check_createDataFrame_with_ndarray(True)
 
-    # TODO(SPARK-42984): ValueError not raised
-    @unittest.skip("Fails in Spark Connect, should enable.")
     def test_createDataFrame_with_single_data_type(self):
         self.check_createDataFrame_with_single_data_type()
 
