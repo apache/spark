@@ -70,6 +70,87 @@ object TableOutputResolver {
     }
   }
 
+  def resolveUpdate(
+      value: Expression,
+      col: Attribute,
+      conf: SQLConf,
+      addError: String => Unit,
+      colPath: Seq[String]): Expression = {
+
+    (value.dataType, col.dataType) match {
+      // no need to reorder inner fields or cast if types are already compatible
+      case (valueType, colType) if DataType.equalsIgnoreCompatibleNullability(valueType, colType) =>
+        val canWriteExpr = canWrite(valueType, colType, byName = true, conf, addError, colPath)
+        if (canWriteExpr) checkNullability(value, col, conf, colPath) else value
+      case (valueType: StructType, colType: StructType) =>
+        val resolvedValue = resolveStructType(
+          value, valueType, col, colType,
+          byName = true, conf, addError, colPath)
+        resolvedValue.getOrElse(value)
+      case (valueType: ArrayType, colType: ArrayType) =>
+        val resolvedValue = resolveArrayType(
+          value, valueType, col, colType,
+          byName = true, conf, addError, colPath)
+        resolvedValue.getOrElse(value)
+      case (valueType: MapType, colType: MapType) =>
+        val resolvedValue = resolveMapType(
+          value, valueType, col, colType,
+          byName = true, conf, addError, colPath)
+        resolvedValue.getOrElse(value)
+      case _ =>
+        checkUpdate(value, col, conf, addError, colPath)
+    }
+  }
+
+  private def checkUpdate(
+      value: Expression,
+      attr: Attribute,
+      conf: SQLConf,
+      addError: String => Unit,
+      colPath: Seq[String]): Expression = {
+
+    val attrTypeHasCharVarchar = CharVarcharUtils.hasCharVarchar(attr.dataType)
+    val attrTypeWithoutCharVarchar = if (attrTypeHasCharVarchar) {
+      CharVarcharUtils.replaceCharVarcharWithString(attr.dataType)
+    } else {
+      attr.dataType
+    }
+
+    val canWriteValue = canWrite(
+      value.dataType, attrTypeWithoutCharVarchar,
+      byName = true, conf, addError, colPath)
+
+    if (canWriteValue) {
+      val nullCheckedValue = checkNullability(value, attr, conf, colPath)
+      val casted = cast(nullCheckedValue, attrTypeWithoutCharVarchar, conf, colPath.quoted)
+      val exprWithStrLenCheck = if (conf.charVarcharAsString || !attrTypeHasCharVarchar) {
+        casted
+      } else {
+        CharVarcharUtils.stringLengthCheck(casted, attr.dataType)
+      }
+      Alias(exprWithStrLenCheck, attr.name)(explicitMetadata = Some(attr.metadata))
+    } else {
+      value
+    }
+  }
+
+  private def canWrite(
+      valueType: DataType,
+      expectedType: DataType,
+      byName: Boolean,
+      conf: SQLConf,
+      addError: String => Unit,
+      colPath: Seq[String]): Boolean = {
+    conf.storeAssignmentPolicy match {
+      case StoreAssignmentPolicy.STRICT | StoreAssignmentPolicy.ANSI =>
+        DataTypeUtils.canWrite(
+          valueType, expectedType, byName, conf.resolver, colPath.quoted,
+          conf.storeAssignmentPolicy, addError)
+      case _ =>
+        true
+    }
+  }
+
   private def reorderColumnsByName(
       inputCols: Seq[NamedExpression],
       expectedCols: Seq[Attribute],
@@ -170,7 +251,7 @@ object TableOutputResolver {
     }
   }
 
-  private def checkNullability(
+  private[sql] def checkNullability(
       input: Expression,
       expected: Attribute,
       conf: SQLConf,
@@ -190,7 +271,7 @@ object TableOutputResolver {
   }
 
   private def resolveStructType(
-      input: NamedExpression,
+      input: Expression,
       inputType: StructType,
       expected: Attribute,
       expectedType: StructType,
@@ -221,7 +302,7 @@ object TableOutputResolver {
   }
 
   private def resolveArrayType(
-      input: NamedExpression,
+      input: Expression,
       inputType: ArrayType,
       expected: Attribute,
       expectedType: ArrayType,
@@ -247,7 +328,7 @@ object TableOutputResolver {
   }
 
   private def resolveMapType(
-      input: NamedExpression,
+      input: Expression,
       inputType: MapType,
       expected: Attribute,
       expectedType: MapType,
@@ -332,7 +413,6 @@ object TableOutputResolver {
     } else {
       tableAttr.dataType
     }
-    val storeAssignmentPolicy = conf.storeAssignmentPolicy
     lazy val outputField = if (isCompatible(tableAttr, queryExpr)) {
       if (requiresNullChecks(queryExpr, tableAttr, conf)) {
         val assert = AssertNotNull(queryExpr, colPath)
@@ -354,18 +434,11 @@ object TableOutputResolver {
       Some(Alias(exprWithStrLenCheck, tableAttr.name)(explicitMetadata = Some(tableAttr.metadata)))
     }
 
-    storeAssignmentPolicy match {
-      case StoreAssignmentPolicy.LEGACY =>
-        outputField
+    val canWriteExpr = canWrite(
+      queryExpr.dataType, attrTypeWithoutCharVarchar,
+      byName, conf, addError, colPath)
 
-      case StoreAssignmentPolicy.STRICT | StoreAssignmentPolicy.ANSI =>
-        // run the type check first to ensure type errors are present
-        val canWrite = DataType.canWrite(
-          queryExpr.dataType, attrTypeWithoutCharVarchar, byName, conf.resolver, colPath.quoted,
-          storeAssignmentPolicy, addError)
-
-        if (canWrite) outputField else None
-    }
+    if (canWriteExpr) outputField else None
   }
 
   private def cast(

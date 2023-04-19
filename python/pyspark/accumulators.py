@@ -249,9 +249,8 @@ class _UpdateRequestHandler(SocketServer.StreamRequestHandler):
             while not self.server.server_shutdown:  # type: ignore[attr-defined]
                 # Poll every 1 second for new data -- don't block in case of shutdown.
                 r, _, _ = select.select([self.rfile], [], [], 1)
-                if self.rfile in r:
-                    if func():
-                        break
+                if self.rfile in r and func():
+                    break
 
         def accum_updates() -> bool:
             num_updates = read_int(self.rfile)

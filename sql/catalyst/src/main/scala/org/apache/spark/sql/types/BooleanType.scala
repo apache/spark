@@ -18,7 +18,6 @@
 package org.apache.spark.sql.types
 
 import org.apache.spark.annotation.Stable
-import org.apache.spark.sql.catalyst.types.{PhysicalBooleanType, PhysicalDataType}
 
 /**
  * The data type representing `Boolean` values. Please use the singleton `DataTypes.BooleanType`.
@@ -31,8 +30,6 @@ class BooleanType private() extends AtomicType {
    * The default size of a value of the BooleanType is 1 byte.
    */
   override def defaultSize: Int = 1
-
-  private[sql] override def physicalDataType: PhysicalDataType = PhysicalBooleanType
 
   private[spark] override def asNullable: BooleanType = this
 }

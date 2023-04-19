@@ -136,7 +136,7 @@ object InterpretedUnsafeProjection {
     // Create the basic writer.
     val unsafeWriter: (SpecializedGetters, Int) => Unit = dt match {
       case udt: UserDefinedType[_] => generateFieldWriter(writer, udt.sqlType, nullable)
-      case _ => dt.physicalDataType match {
+      case _ => PhysicalDataType(dt) match {
         case PhysicalBooleanType => (v, i) => writer.write(i, v.getBoolean(i))
 
         case PhysicalByteType => (v, i) => writer.write(i, v.getByte(i))
