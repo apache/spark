@@ -36,10 +36,9 @@ class SparkPartitionTorchDataset(torch.utils.data.IterableDataset):
             if value['type'] == 0:
                 # sparse vector
                 size = int(value['size'])
-                np_array = np.zeros(size, dtype=np.float64)
-                for index, elem_value in zip(value['indices'], value['values']):
-                    np_array[index] = elem_value
-                return np_array
+                sparse_array = np.zeros(size, dtype=np.float64)
+                sparse_array[value['indices']] = value['values']
+                return sparse_array
         if field_type in ["float", "double", "int", "bigint", "smallint"]:
             return value
 
