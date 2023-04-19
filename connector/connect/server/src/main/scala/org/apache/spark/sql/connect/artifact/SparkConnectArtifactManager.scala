@@ -95,7 +95,7 @@ class SparkConnectArtifactManager private[connect] {
     require(!remoteRelativePath.isAbsolute)
     if (remoteRelativePath.startsWith("cache/")) {
       val tmpFile = serverLocalStagingPath.toFile
-      Utils.tryWithSafeFinally {
+      Utils.tryWithSafeFinallyAndFailureCallbacks {
         val updater = session.sparkContext.env.blockManager.TempFileBasedBlockStoreUpdater(
           blockId = CacheId(remoteRelativePath.toString.stripPrefix("cache/")),
           level = StorageLevel.MEMORY_AND_DISK,
@@ -103,9 +103,7 @@ class SparkConnectArtifactManager private[connect] {
           tmpFile = tmpFile,
           blockSize = tmpFile.length())
         updater.save()
-      } {
-        tmpFile.delete()
-      }
+      }(catchBlock = {tmpFile.delete()})
     } else if (remoteRelativePath.startsWith("classes/")) {
       // Move class files to common location (shared among all users)
       val target = classArtifactDir.resolve(remoteRelativePath.toString.stripPrefix("classes/"))

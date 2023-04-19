@@ -106,7 +106,7 @@ class ArtifactManager(userContext: proto.UserContext, channel: ManagedChannel) {
    */
   def cacheArtifact(blob: Array[Byte]): String = {
     val id = sha256Hex(blob)
-    newCacheArtifact(id, new InMemory(blob))
+    addArtifacts(newCacheArtifact(id, new InMemory(blob)) :: Nil)
     id
   }
 
