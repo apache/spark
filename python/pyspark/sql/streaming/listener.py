@@ -94,8 +94,7 @@ class StreamingQueryListener(ABC):
     @abstractmethod
     def onQueryIdle(self, event: "QueryIdleEvent") -> None:
         """
-        Called when the query is idle for a certain time period and waiting for new data to
-        process.
+        Called when the query is idle and waiting for new data to process.
         """
         pass
 
