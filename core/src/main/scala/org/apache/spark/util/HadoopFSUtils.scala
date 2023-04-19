@@ -121,7 +121,7 @@ private[spark] object HadoopFSUtils extends Logging {
       sc.parallelize(paths, numParallelism)
         .mapPartitions { pathsEachPartition =>
           val hadoopConf = serializableConfiguration.value
-          pathsEachPartition.toSeq.map { path =>
+          pathsEachPartition.map { path =>
             val leafFiles = listLeafFiles(
               path = path,
               hadoopConf = hadoopConf,
@@ -133,7 +133,7 @@ private[spark] object HadoopFSUtils extends Logging {
               parallelismThreshold = Int.MaxValue,
               parallelismMax = 0)
             (path, leafFiles)
-          }.iterator
+          }
         }.collect()
     } finally {
       sc.setJobDescription(previousJobDescription)
