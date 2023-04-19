@@ -24,7 +24,7 @@ import pyspark.pandas as ps
 from pyspark.testing.pandasutils import PandasOnSparkTestCase, TestUtils
 
 
-class CategoricalIndexTest(PandasOnSparkTestCase, TestUtils):
+class CategoricalIndexTestsMixin:
     def test_categorical_index(self):
         pidx = pd.CategoricalIndex([1, 2, 3])
         psidx = ps.CategoricalIndex([1, 2, 3])
@@ -452,6 +452,10 @@ class CategoricalIndexTest(PandasOnSparkTestCase, TestUtils):
                 TypeError,
                 lambda: psidx.map({1: 1, 2: 2.0, 3: "three"}),
             )
+
+
+class CategoricalIndexTests(CategoricalIndexTestsMixin, PandasOnSparkTestCase, TestUtils):
+    pass
 
 
 if __name__ == "__main__":

@@ -22,8 +22,9 @@ import scala.util.Random
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
+import org.apache.spark.sql.catalyst.types.PhysicalDataType
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData}
-import org.apache.spark.sql.types.{AtomicType, Decimal}
+import org.apache.spark.sql.types.Decimal
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 object ColumnarTestUtils {
@@ -95,7 +96,7 @@ object ColumnarTestUtils {
     row
   }
 
-  def makeUniqueValuesAndSingleValueRows[T <: AtomicType](
+  def makeUniqueValuesAndSingleValueRows[T <: PhysicalDataType](
       columnType: NativeColumnType[T],
       count: Int): (Seq[T#InternalType], Seq[GenericInternalRow]) = {
 

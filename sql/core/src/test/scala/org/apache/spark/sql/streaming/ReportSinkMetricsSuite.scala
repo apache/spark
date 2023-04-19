@@ -36,53 +36,56 @@ class ReportSinkMetricsSuite extends StreamTest {
 
   import testImplicits._
 
-  test("test ReportSinkMetrics") {
-    val inputData = MemoryStream[Int]
-    val df = inputData.toDF()
-    var query: StreamingQuery = null
+  Seq("true", "false").foreach { useCommitCoordinator =>
+    test(s"test ReportSinkMetrics with useCommitCoordinator=$useCommitCoordinator") {
+      val inputData = MemoryStream[Int]
+      val df = inputData.toDF()
+      var query: StreamingQuery = null
 
-    var metricsMap: java.util.Map[String, String] = null
+      var metricsMap: java.util.Map[String, String] = null
 
-    val listener = new StreamingQueryListener {
+      val listener = new StreamingQueryListener {
 
-      override def onQueryStarted(event: StreamingQueryListener.QueryStartedEvent): Unit = {}
+        override def onQueryStarted(event: StreamingQueryListener.QueryStartedEvent): Unit = {}
 
-      override def onQueryProgress(event: StreamingQueryListener.QueryProgressEvent): Unit = {
-        metricsMap = event.progress.sink.metrics
+        override def onQueryProgress(event: StreamingQueryListener.QueryProgressEvent): Unit = {
+          metricsMap = event.progress.sink.metrics
+        }
+
+        override def onQueryTerminated(
+          event: StreamingQueryListener.QueryTerminatedEvent): Unit = {}
       }
 
-      override def onQueryTerminated(
-        event: StreamingQueryListener.QueryTerminatedEvent): Unit = {}
-    }
+      spark.streams.addListener(listener)
 
-    spark.streams.addListener(listener)
+      withTempDir { dir =>
+        try {
+          query =
+            df.writeStream
+              .outputMode("append")
+              .format("org.apache.spark.sql.streaming.TestSinkProvider")
+              .option("useCommitCoordinator", useCommitCoordinator)
+              .option("checkPointLocation", dir.toString)
+              .start()
 
-    withTempDir { dir =>
-      try {
-        query =
-          df.writeStream
-            .outputMode("append")
-            .format("org.apache.spark.sql.streaming.TestSinkProvider")
-            .option("checkPointLocation", dir.toString)
-            .start()
+          inputData.addData(1, 2, 3)
 
-        inputData.addData(1, 2, 3)
+          failAfter(streamingTimeout) {
+            query.processAllAvailable()
+          }
 
-        failAfter(streamingTimeout) {
-          query.processAllAvailable()
+          spark.sparkContext.listenerBus.waitUntilEmpty()
+
+          assertResult(metricsMap) {
+            Map("metrics-1" -> "value-1", "metrics-2" -> "value-2").asJava
+          }
+        } finally {
+          if (query != null) {
+            query.stop()
+          }
+
+          spark.streams.removeListener(listener)
         }
-
-        spark.sparkContext.listenerBus.waitUntilEmpty()
-
-        assertResult(metricsMap) {
-          Map("metrics-1" -> "value-1", "metrics-2" -> "value-2").asJava
-        }
-      } finally {
-        if (query != null) {
-          query.stop()
-        }
-
-        spark.streams.removeListener(listener)
       }
     }
   }
@@ -98,7 +101,8 @@ class ReportSinkMetricsSuite extends StreamTest {
     with CreatableRelationProvider with Logging {
 
     override def getTable(options: CaseInsensitiveStringMap): Table = {
-      TestSinkTable
+      val useCommitCoordinator = options.getBoolean("useCommitCoordinator", false)
+      new TestSinkTable(useCommitCoordinator)
     }
 
     def createRelation(
@@ -113,7 +117,8 @@ class ReportSinkMetricsSuite extends StreamTest {
     def shortName(): String = "test"
   }
 
-  object TestSinkTable extends Table with SupportsWrite with ReportsSinkMetrics with Logging {
+  class TestSinkTable(useCommitCoordinator: Boolean)
+    extends Table with SupportsWrite with ReportsSinkMetrics with Logging {
 
     override def name(): String = "test"
 
@@ -131,7 +136,7 @@ class ReportSinkMetricsSuite extends StreamTest {
         override def build(): Write = {
           new Write {
             override def toStreaming: StreamingWrite = {
-              new TestSinkWrite()
+              new TestSinkWrite(useCommitCoordinator)
             }
           }
         }
@@ -143,13 +148,15 @@ class ReportSinkMetricsSuite extends StreamTest {
     }
   }
 
-  class TestSinkWrite()
+  class TestSinkWrite(useCommitCoordinator: Boolean)
     extends StreamingWrite with Logging with Serializable {
 
     def createStreamingWriterFactory(info: PhysicalWriteInfo): StreamingDataWriterFactory =
       PackedRowWriterFactory
 
+    override def useCommitCoordinator(): Boolean = useCommitCoordinator
+
     override def commit(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {}
 
     def abort(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {}
-}
+  }

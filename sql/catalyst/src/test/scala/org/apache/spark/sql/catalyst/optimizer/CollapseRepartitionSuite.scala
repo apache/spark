@@ -19,7 +19,6 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.Uuid
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
@@ -221,23 +220,6 @@ class CollapseRepartitionSuite extends PlanTest {
       val optimized = Optimize.execute(plan)
       val expected = testRelation.rebalance($"a").analyze
       comparePlans(optimized, expected)
-    }
-  }
-
-  test("SPARK-42832: Remove repartition if it is the child of LocalLimit") {
-    Seq(testRelation.distribute($"a")(2),
-      testRelation.rebalance(),
-      testRelation.rebalance($"a")).foreach { repartition =>
-      comparePlans(
-        Optimize.execute(repartition.limit(3).analyze),
-        testRelation.limit(3).analyze)
-    }
-
-    // In this case, do not remove repartition, the user may want to randomly take data.
-    Seq(testRelation.distribute()(2),
-      testRelation.distribute(Uuid())(2)).foreach { repartition =>
-      val plan = repartition.limit(3).analyze
-      comparePlans( Optimize.execute(plan), plan)
     }
   }
 }

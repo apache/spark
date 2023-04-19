@@ -20,6 +20,7 @@ import java.nio.file.{Files, Path}
 import java.util.{Collections, Properties}
 import java.util.concurrent.atomic.AtomicLong
 
+import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.util.{Failure, Success, Try}
 
@@ -31,6 +32,7 @@ import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach}
 import org.apache.spark.connect.proto
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{functions => fn}
+import org.apache.spark.sql.avro.{functions => avroFn}
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.StringEncoder
 import org.apache.spark.sql.connect.client.SparkConnectClient
@@ -2166,5 +2168,26 @@ class PlanGenerationTestSuite
   /* Reader API  */
   test("table API with options") {
     session.read.options(Map("p1" -> "v1", "p2" -> "v2")).table("tempdb.myTable")
+  }
+
+  /* Avro functions */
+  test("from_avro with options") {
+    binary.select(
+      avroFn.from_avro(
+        fn.col("bytes"),
+        """{"type": "int", "name": "id"}""",
+        Map("mode" -> "FAILFAST", "compression" -> "zstandard").asJava))
+  }
+
+  test("from_avro without options") {
+    binary.select(avroFn.from_avro(fn.col("bytes"), """{"type": "string", "name": "name"}"""))
+  }
+
+  test("to_avro with schema") {
+    simple.select(avroFn.to_avro(fn.col("a"), """{"type": "int", "name": "id"}"""))
+  }
+
+  test("to_avro without schema") {
+    simple.select(avroFn.to_avro(fn.col("id")))
   }
 }

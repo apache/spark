@@ -91,10 +91,14 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
   }
 
   protected override def doExecute(): RDD[InternalRow] = {
-    child.execute().mapPartitionsWithIndexInternal { (index, iter) =>
-      val project = UnsafeProjection.create(projectList, child.output)
-      project.initialize(index)
-      iter.map(project)
+    val evaluatorFactory = new ProjectEvaluatorFactory(projectList, child.output)
+    if (conf.usePartitionEvaluator) {
+      child.execute().mapPartitionsWithEvaluator(evaluatorFactory)
+    } else {
+      child.execute().mapPartitionsWithIndexInternal { (index, iter) =>
+        val evaluator = evaluatorFactory.createEvaluator()
+        evaluator.eval(index, iter)
+      }
     }
   }
 
@@ -269,13 +273,13 @@ case class FilterExec(condition: Expression, child: SparkPlan)
 
   protected override def doExecute(): RDD[InternalRow] = {
     val numOutputRows = longMetric("numOutputRows")
-    child.execute().mapPartitionsWithIndexInternal { (index, iter) =>
-      val predicate = Predicate.create(condition, child.output)
-      predicate.initialize(0)
-      iter.filter { row =>
-        val r = predicate.eval(row)
-        if (r) numOutputRows += 1
-        r
+    val evaluatorFactory = new FilterEvaluatorFactory(condition, child.output, numOutputRows)
+    if (conf.usePartitionEvaluator) {
+      child.execute().mapPartitionsWithEvaluator(evaluatorFactory)
+    } else {
+      child.execute().mapPartitionsWithIndexInternal { (index, iter) =>
+        val evaluator = evaluatorFactory.createEvaluator()
+        evaluator.eval(index, iter)
       }
     }
   }

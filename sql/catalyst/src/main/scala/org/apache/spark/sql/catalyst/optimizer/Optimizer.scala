@@ -679,6 +679,8 @@ object RemoveNoopUnion extends Rule[LogicalPlan] {
       d.withNewChildren(Seq(simplifyUnion(u)))
     case d @ Deduplicate(_, u: Union) =>
       d.withNewChildren(Seq(simplifyUnion(u)))
+    case d @ DeduplicateWithinWatermark(_, u: Union) =>
+      d.withNewChildren(Seq(simplifyUnion(u)))
   }
 }
 
@@ -1213,15 +1215,6 @@ object CollapseRepartition extends Rule[LogicalPlan] {
     // child.
     case r @ RebalancePartitions(_, child: RebalancePartitions, _, _) =>
       r.withNewChildren(child.children)
-    // Case 5: When a LocalLimit has a child of Repartition we can remove the Repartition.
-    // Because its output is determined by the number of partitions and the expressions of the
-    // Repartition. Therefore, it is feasible to remove Repartition except for repartition by
-    // nondeterministic expressions, because users may expect to randomly take data.
-    case l @ LocalLimit(_, r: RepartitionByExpression)
-        if r.partitionExpressions.nonEmpty && r.partitionExpressions.forall(_.deterministic) =>
-      l.copy(child = r.child)
-    case l @ LocalLimit(_, r: RebalancePartitions) =>
-      l.copy(child = r.child)
   }
 }
 
@@ -1460,6 +1453,9 @@ object CombineUnions extends Rule[LogicalPlan] {
     // Only handle distinct-like 'Deduplicate', where the keys == output
     case Deduplicate(keys: Seq[Attribute], u: Union) if AttributeSet(keys) == u.outputSet =>
       Deduplicate(keys, flattenUnion(u, true))
+    case DeduplicateWithinWatermark(keys: Seq[Attribute], u: Union)
+      if AttributeSet(keys) == u.outputSet =>
+      DeduplicateWithinWatermark(keys, flattenUnion(u, true))
   }
 
   private def flattenUnion(union: Union, flattenDistinct: Boolean): Union = {

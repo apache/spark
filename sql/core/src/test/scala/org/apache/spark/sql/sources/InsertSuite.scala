@@ -855,10 +855,10 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       spark.sessionState.catalog.createTable(newTable, false)
 
       sql("INSERT INTO TABLE test_table SELECT 1, 'a'")
-      val msg = intercept[AnalysisException] {
+      val msg = intercept[SparkException] {
         sql("INSERT INTO TABLE test_table SELECT 2, null")
-      }.getMessage
-      assert(msg.contains("Cannot write nullable values to non-null column 's'"))
+      }.getCause.getMessage
+      assert(msg.contains("Null value appeared in non-nullable field"))
     }
   }
 
@@ -1982,6 +1982,40 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         }
       }
     }
+  }
+
+  test("SPARK-43071: INSERT INTO from queries whose final operators are not projections") {
+    def runTest(insert: String, expected: Seq[Row]): Unit = {
+      withTable("t1", "t2") {
+        sql("create table t1(i boolean, s bigint default 42) using parquet")
+        sql("insert into t1 values (true, 41), (false, default)")
+        sql("create table t2(i boolean default true, s bigint default 42, " +
+          "t string default 'abc') using parquet")
+        sql(insert)
+        checkAnswer(spark.table("t2"), expected)
+      }
+    }
+    def expectFail(insert: String): Unit = {
+      withTable("t1", "t2") {
+        sql("create table t1(i boolean, s bigint default 42) using parquet")
+        sql("insert into t1 values (true, 41), (false, default)")
+        sql("create table t2(i boolean default true, s bigint default 42, " +
+          "t string default 'abc') using parquet")
+        assert(intercept[AnalysisException](sql(insert)).errorClass.get.startsWith(
+          "UNRESOLVED_COLUMN"))
+      }
+    }
+    // The DEFAULT references in these query patterns are detected and replaced.
+    runTest("insert into t2 (i, s) select default, s from t1 order by s limit 1",
+      Seq(Row(true, 41L, "abc")))
+    runTest("insert into t2 (i, s) select default, s from t1 order by s limit 1 offset 1",
+      Seq(Row(true, 42L, "abc")))
+    runTest("insert into t2 (i, s) select default, default from t1 inner join t1 using (i, s)",
+      Seq(Row(true, 42L, "abc"),
+        Row(true, 42L, "abc")))
+    // The DEFAULT references in these query patterns are not detected.
+    expectFail("insert into t2 (i, s) select default, 41L union all select default, 42L")
+    expectFail("insert into t2 (i, s) select default, min(s) from t1 group by i")
   }
 
   test("Stop task set if FileAlreadyExistsException was thrown") {

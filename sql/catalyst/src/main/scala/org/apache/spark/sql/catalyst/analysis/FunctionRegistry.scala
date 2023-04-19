@@ -50,7 +50,8 @@ trait FunctionRegistryBase[T] {
   final def registerFunction(
       name: FunctionIdentifier, builder: FunctionBuilder, source: String): Unit = {
     val info = new ExpressionInfo(
-      builder.getClass.getCanonicalName,
+      // SPARK-43099: getCanonicalName would return null on JDK15+
+      Option(builder.getClass.getCanonicalName).getOrElse(builder.getClass.getName),
       name.database.orNull,
       name.funcName,
       null,
