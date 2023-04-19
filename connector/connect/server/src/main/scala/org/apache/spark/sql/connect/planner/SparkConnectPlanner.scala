@@ -746,8 +746,8 @@ class SparkConnectPlanner(val session: SparkSession) {
     }
   }
 
-  private def transformDeduplicateWithinWatermark(rel: proto.DeduplicateWithinWatermark):
-  LogicalPlan = {
+  private def transformDeduplicateWithinWatermark(
+      rel: proto.DeduplicateWithinWatermark): LogicalPlan = {
     if (!rel.hasInput) {
       throw InvalidPlanInput("DeduplicateWithinWatermark needs a plan input")
     }
