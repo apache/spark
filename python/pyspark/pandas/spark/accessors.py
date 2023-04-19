@@ -204,6 +204,8 @@ class SparkSeriesMethods(SparkIndexOpsMethods["ps.Series"]):
             from pyspark.sql.connect.column import Column as ConnectColumn
 
             Column = ConnectColumn
+        else:
+            Column = PySparkColumn
         if not isinstance(output, Column):
             raise ValueError(
                 "The output of the function [%s] should be of a "
