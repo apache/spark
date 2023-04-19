@@ -269,27 +269,6 @@
     <parquet.deps.scope>compile</parquet.deps.scope>
     <parquet.test.deps.scope>test</parquet.test.deps.scope>
 
-    <!--
-      These default to Hadoop 3.x shaded client/minicluster jars, but since the shaded jars are
-      only available in 3.x, we have to switch to non-shaded Hadoop client jars when the active
-      profile is hadoop-2.
-
-      To make the above work, in the hadoop-2 profile section we bind hadoop-client-api to
-      hadoop-client and hadoop-client-runtime to hadoop-yarn-api, which is a dependency of the
-      former. This effectively moves the hadoop-yarn-api to the same level as hadoop-client, but
-      should be fine since both dependencies are required. We cannot use hadoop-client for both
-      of these because the maven enforcer plugin bans duplicate dependencies.
-
-      We still leave hadoop-client-minicluster to use hadoop-client because it is of test scope,
-      and is only used by spark-yarn module. To avoid the duplicate dependency issue we only
-      declare the dependency when we're using hadoop-3 profile, in
-      resource-managers/yarn/pom.xml.
-
-      Please check SPARK-36835 for more details.
-    -->
-    <hadoop-client-api.artifact>hadoop-client-api</hadoop-client-api.artifact>
-    <hadoop-client-runtime.artifact>hadoop-client-runtime</hadoop-client-runtime.artifact>
-    <hadoop-client-minicluster.artifact>hadoop-client-minicluster</hadoop-client-minicluster.artifact>
     <spark.yarn.isHadoopProvided>false</spark.yarn.isHadoopProvided>
 
     <!--
@@ -1283,19 +1262,19 @@
       <!-- Hadoop 3.x dependencies -->
       <dependency>
         <groupId>org.apache.hadoop</groupId>
-        <artifactId>${hadoop-client-api.artifact}</artifactId>
+        <artifactId>hadoop-client-api</artifactId>
         <version>${hadoop.version}</version>
         <scope>${hadoop.deps.scope}</scope>
       </dependency>
       <dependency>
         <groupId>org.apache.hadoop</groupId>
-        <artifactId>${hadoop-client-runtime.artifact}</artifactId>
+        <artifactId>hadoop-client-runtime</artifactId>
         <version>${hadoop.version}</version>
         <scope>${hadoop.deps.scope}</scope>
       </dependency>
       <dependency>
         <groupId>org.apache.hadoop</groupId>
-        <artifactId>${hadoop-client-minicluster.artifact}</artifactId>
+        <artifactId>hadoop-client-minicluster</artifactId>
         <version>${yarn.version}</version>
         <scope>test</scope>
       </dependency>
