@@ -224,3 +224,21 @@ struct<grouping_id(k1, k2):bigint,avg(v):double>
 0	2.0
 1	1.0
 1	2.0
+
+
+-- !query
+SELECT CASE WHEN a IS NULL THEN count(b) WHEN b IS NULL THEN count(c) END
+FROM grouping
+GROUP BY GROUPING SETS (a, b, c)
+-- !query schema
+struct<CASE WHEN (a IS NULL) THEN count(b) WHEN (b IS NULL) THEN count(c) END:bigint>
+-- !query output
+1
+1
+1
+1
+1
+1
+1
+1
+1

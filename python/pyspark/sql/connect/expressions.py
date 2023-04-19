@@ -106,6 +106,7 @@ class CaseWhen(Expression):
     def __init__(
         self, branches: Sequence[Tuple[Expression, Expression]], else_value: Optional[Expression]
     ):
+        super().__init__()
 
         assert isinstance(branches, list)
         for branch in branches:
@@ -142,6 +143,7 @@ class CaseWhen(Expression):
 
 class ColumnAlias(Expression):
     def __init__(self, parent: Expression, alias: Sequence[str], metadata: Any):
+        super().__init__()
 
         self._alias = alias
         self._metadata = metadata
@@ -649,6 +651,7 @@ class CommonInlineUserDefinedFunction(Expression):
         deterministic: bool = False,
         arguments: Sequence[Expression] = [],
     ):
+        super().__init__()
         self._function_name = function_name
         self._deterministic = deterministic
         self._arguments = arguments

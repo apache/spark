@@ -17,10 +17,7 @@
 
 package org.apache.spark.sql.types
 
-import scala.reflect.runtime.universe.typeTag
-
 import org.apache.spark.annotation.Stable
-import org.apache.spark.sql.catalyst.types.{PhysicalDataType, PhysicalLongType}
 
 /**
  * The data type representing `Long` values. Please use the singleton `DataTypes.LongType`.
@@ -29,18 +26,10 @@ import org.apache.spark.sql.catalyst.types.{PhysicalDataType, PhysicalLongType}
  */
 @Stable
 class LongType private() extends IntegralType {
-  // The companion object and this class is separated so the companion object also subclasses
-  // this type. Otherwise, the companion object would be of type "LongType$" in byte code.
-  // Defined with a private constructor so the companion object is the only possible instantiation.
-  private[sql] type InternalType = Long
-  @transient private[sql] lazy val tag = typeTag[InternalType]
-
   /**
    * The default size of a value of the LongType is 8 bytes.
    */
   override def defaultSize: Int = 8
-
-  private[sql] override def physicalDataType: PhysicalDataType = PhysicalLongType
 
   override def simpleString: String = "bigint"
 
