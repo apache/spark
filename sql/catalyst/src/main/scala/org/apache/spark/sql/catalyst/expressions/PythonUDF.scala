@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.SparkException
+import org.apache.spark.SparkException.internalError
 import org.apache.spark.api.python.{PythonEvalType, PythonFunction}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateFunction
@@ -106,12 +106,12 @@ case class PythonUDAF(
     resultId: ExprId = NamedExpression.newExprId)
   extends AggregateFunction with PythonFuncExpression {
 
-  override def aggBufferSchema: StructType =
-    throw SparkException.internalError("PythonUDAF.aggBufferSchema should not be called.")
-  override def aggBufferAttributes: Seq[AttributeReference] =
-    throw SparkException.internalError("PythonUDAF.aggBufferAttributes should not be called.")
-  override def inputAggBufferAttributes: Seq[AttributeReference] =
-    throw SparkException.internalError("PythonUDAF.inputAggBufferAttributes should not be called.")
+  override def aggBufferSchema: StructType = throw internalError(
+    "PythonUDAF.aggBufferSchema should not be called.")
+  override def aggBufferAttributes: Seq[AttributeReference] = throw internalError(
+    "PythonUDAF.aggBufferAttributes should not be called.")
+  override def inputAggBufferAttributes: Seq[AttributeReference] = throw internalError(
+    "PythonUDAF.inputAggBufferAttributes should not be called.")
   final override def eval(input: InternalRow = null): Any =
     throw QueryExecutionErrors.cannotEvaluateExpressionError(this)
   final override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode =
@@ -125,8 +125,6 @@ case class PythonUDAF(
     this.copy(resultId = ExprId(-1)).withNewChildren(canonicalizedChildren)
   }
 
-  override def sql(isDistinct: Boolean): String = this.sql
-
   override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): PythonUDAF =
     copy(children = newChildren)
 }
@@ -139,9 +137,25 @@ case class PrettyPythonUDF(
     name: String,
     dataType: DataType,
     children: Seq[Expression])
-  extends Expression with Unevaluable with NonSQLExpression {
+  extends AggregateFunction with NonSQLExpression {
+
+  override def aggBufferSchema: StructType = throw internalError(
+    "PrettyPythonUDF.aggBufferSchema should not be called.")
+  override def aggBufferAttributes: Seq[AttributeReference] = throw internalError(
+    "PrettyPythonUDF.aggBufferAttributes should not be called.")
+  override def inputAggBufferAttributes: Seq[AttributeReference] = throw internalError(
+    "PrettyPythonUDF.inputAggBufferAttributes should not be called.")
+  final override def eval(input: InternalRow = null): Any =
+    throw QueryExecutionErrors.cannotEvaluateExpressionError(this)
+  final override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode =
+    throw QueryExecutionErrors.cannotGenerateCodeForExpressionError(this)
 
   override def toString: String = s"$name(${children.mkString(", ")})"
+
+  override def sql(isDistinct: Boolean): String = {
+    val distinct = if (isDistinct) "DISTINCT " else ""
+    s"$name($distinct${children.mkString(", ")})"
+  }
 
   override def nullable: Boolean = true
 
