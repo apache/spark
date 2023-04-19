@@ -67,7 +67,8 @@ message Relation {
     CoGroupMap co_group_map = 32;
     WithWatermark with_watermark = 33;
     ApplyInPandasWithState apply_in_pandas_with_state = 34;
-    DeduplicateWithinWatermark deduplicate_within_watermark = 35;
+    HtmlString html_string = 35;
+    DeduplicateWithinWatermark deduplicate_within_watermark = 36;
 
     // NA functions
     NAFill fill_na = 90;
@@ -473,6 +474,20 @@ message ShowString {
 
   // (Required) If set to true, prints output rows vertically (one line per column value).
   bool vertical = 4;
+}
+
+// Compose the string representing rows for output.
+// It will invoke 'Dataset.htmlString' to compute the results.
+message HtmlString {
+  // (Required) The input relation.
+  Relation input = 1;
+
+  // (Required) Number of rows to show.
+  int32 num_rows = 2;
+
+  // (Required) If set to more than 0, truncates strings to
+  // `truncate` characters and all cells will be aligned right.
+  int32 truncate = 3;
 }
 
 // Computes specified statistics for numeric and string columns.

@@ -97,7 +97,7 @@ class Relation(google.protobuf.message.Message):
     CO_GROUP_MAP_FIELD_NUMBER: builtins.int
     WITH_WATERMARK_FIELD_NUMBER: builtins.int
     APPLY_IN_PANDAS_WITH_STATE_FIELD_NUMBER: builtins.int
-    DEDUPLICATE_WITHIN_WATERMARK_FIELD_NUMBER: builtins.int
+    HTML_STRING_FIELD_NUMBER: builtins.int
     FILL_NA_FIELD_NUMBER: builtins.int
     DROP_NA_FIELD_NUMBER: builtins.int
     REPLACE_FIELD_NUMBER: builtins.int
@@ -181,7 +181,7 @@ class Relation(google.protobuf.message.Message):
     @property
     def apply_in_pandas_with_state(self) -> global___ApplyInPandasWithState: ...
     @property
-    def deduplicate_within_watermark(self) -> global___DeduplicateWithinWatermark: ...
+    def html_string(self) -> global___HtmlString: ...
     @property
     def fill_na(self) -> global___NAFill:
         """NA functions"""
@@ -253,7 +253,7 @@ class Relation(google.protobuf.message.Message):
         co_group_map: global___CoGroupMap | None = ...,
         with_watermark: global___WithWatermark | None = ...,
         apply_in_pandas_with_state: global___ApplyInPandasWithState | None = ...,
-        deduplicate_within_watermark: global___DeduplicateWithinWatermark | None = ...,
+        html_string: global___HtmlString | None = ...,
         fill_na: global___NAFill | None = ...,
         drop_na: global___NADrop | None = ...,
         replace: global___NAReplace | None = ...,
@@ -314,6 +314,8 @@ class Relation(google.protobuf.message.Message):
             b"group_map",
             "hint",
             b"hint",
+            "html_string",
+            b"html_string",
             "join",
             b"join",
             "limit",
@@ -419,6 +421,8 @@ class Relation(google.protobuf.message.Message):
             b"group_map",
             "hint",
             b"hint",
+            "html_string",
+            b"html_string",
             "join",
             b"join",
             "limit",
@@ -481,59 +485,56 @@ class Relation(google.protobuf.message.Message):
     ) -> None: ...
     def WhichOneof(
         self, oneof_group: typing_extensions.Literal["rel_type", b"rel_type"]
-    ) -> (
-        typing_extensions.Literal[
-            "read",
-            "project",
-            "filter",
-            "join",
-            "set_op",
-            "sort",
-            "limit",
-            "aggregate",
-            "sql",
-            "local_relation",
-            "sample",
-            "offset",
-            "deduplicate",
-            "range",
-            "subquery_alias",
-            "repartition",
-            "to_df",
-            "with_columns_renamed",
-            "show_string",
-            "drop",
-            "tail",
-            "with_columns",
-            "hint",
-            "unpivot",
-            "to_schema",
-            "repartition_by_expression",
-            "map_partitions",
-            "collect_metrics",
-            "parse",
-            "group_map",
-            "co_group_map",
-            "with_watermark",
-            "apply_in_pandas_with_state",
-            "deduplicate_within_watermark",
-            "fill_na",
-            "drop_na",
-            "replace",
-            "summary",
-            "crosstab",
-            "describe",
-            "cov",
-            "corr",
-            "approx_quantile",
-            "freq_items",
-            "sample_by",
-            "catalog",
-            "extension",
-            "unknown",
-        ]
-        | None
-    ): ...
+    ) -> typing_extensions.Literal[
+        "read",
+        "project",
+        "filter",
+        "join",
+        "set_op",
+        "sort",
+        "limit",
+        "aggregate",
+        "sql",
+        "local_relation",
+        "sample",
+        "offset",
+        "deduplicate",
+        "range",
+        "subquery_alias",
+        "repartition",
+        "to_df",
+        "with_columns_renamed",
+        "show_string",
+        "drop",
+        "tail",
+        "with_columns",
+        "hint",
+        "unpivot",
+        "to_schema",
+        "repartition_by_expression",
+        "map_partitions",
+        "collect_metrics",
+        "parse",
+        "group_map",
+        "co_group_map",
+        "with_watermark",
+        "apply_in_pandas_with_state",
+        "html_string",
+        "fill_na",
+        "drop_na",
+        "replace",
+        "summary",
+        "crosstab",
+        "describe",
+        "cov",
+        "corr",
+        "approx_quantile",
+        "freq_items",
+        "sample_by",
+        "catalog",
+        "extension",
+        "unknown",
+    ] | None: ...
 
 global___Relation = Relation
 
@@ -1918,7 +1919,44 @@ class ShowString(google.protobuf.message.Message):
 
 global___ShowString = ShowString
 
-@typing_extensions.final
+class HtmlString(google.protobuf.message.Message):
+    """Compose the string representing rows for output.
+    It will invoke 'Dataset.htmlString' to compute the results.
+    """
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    INPUT_FIELD_NUMBER: builtins.int
+    NUM_ROWS_FIELD_NUMBER: builtins.int
+    TRUNCATE_FIELD_NUMBER: builtins.int
+    @property
+    def input(self) -> global___Relation:
+        """(Required) The input relation."""
+    num_rows: builtins.int
+    """(Required) Number of rows to show."""
+    truncate: builtins.int
+    """(Required) If set to more than 0, truncates strings to
+    `truncate` characters and all cells will be aligned right.
+    """
+    def __init__(
+        self,
+        *,
+        input: global___Relation | None = ...,
+        num_rows: builtins.int = ...,
+        truncate: builtins.int = ...,
+    ) -> None: ...
+    def HasField(
+        self, field_name: typing_extensions.Literal["input", b"input"]
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "input", b"input", "num_rows", b"num_rows", "truncate", b"truncate"
+        ],
+    ) -> None: ...
+
+global___HtmlString = HtmlString
+
 class StatSummary(google.protobuf.message.Message):
     """Computes specified statistics for numeric and string columns.
     It will invoke 'Dataset.summary' (same as 'StatFunctions.summary')
