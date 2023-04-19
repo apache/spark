@@ -18,7 +18,6 @@
 package org.apache.spark.sql.types
 
 import org.apache.spark.annotation.Unstable
-import org.apache.spark.sql.catalyst.types.{PhysicalDataType, PhysicalLongType}
 
 /**
  * The timestamp without time zone type represents a local time in microsecond precision,
@@ -35,8 +34,6 @@ class TimestampNTZType private() extends DatetimeType {
    * The default size of a value of the TimestampNTZType is 8 bytes.
    */
   override def defaultSize: Int = 8
-
-  private[sql] override def physicalDataType: PhysicalDataType = PhysicalLongType
 
   override def typeName: String = "timestamp_ntz"
 

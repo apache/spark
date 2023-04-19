@@ -18,7 +18,6 @@
 package org.apache.spark.sql.types
 
 import org.apache.spark.annotation.Stable
-import org.apache.spark.sql.catalyst.types.{PhysicalDataType, PhysicalLongType}
 
 /**
  * The timestamp type represents a time instant in microsecond precision.
@@ -35,8 +34,6 @@ class TimestampType private() extends DatetimeType {
    * The default size of a value of the TimestampType is 8 bytes.
    */
   override def defaultSize: Int = 8
-
-  private[sql] override def physicalDataType: PhysicalDataType = PhysicalLongType
 
   private[spark] override def asNullable: TimestampType = this
 }
