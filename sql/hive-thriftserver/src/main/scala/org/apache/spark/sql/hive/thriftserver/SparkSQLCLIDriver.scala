@@ -371,6 +371,9 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
   def printMasterAndAppId(): Unit = {
     val master = SparkSQLEnv.sparkContext.master
     val appId = SparkSQLEnv.sparkContext.applicationId
+    SparkSQLEnv.sparkContext.uiWebUrl.foreach {
+      webUrl => console.printInfo(s"Spark Web UI available at $webUrl")
+    }
     console.printInfo(s"Spark master: $master, Application Id: $appId")
   }
 
