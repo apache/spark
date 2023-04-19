@@ -254,13 +254,20 @@ object SubExprUtils extends PredicateHelper {
  * scalar subquery during planning.
  *
  * Note: `exprId` is used to have a unique name in explain string output.
+ *
+ * `mayHaveCountBug` is whether it's possible for the subquery to evaluate to non-null on
+ * empty input (zero tuples). It is false if the subquery has a GROUP BY clause, because in that
+ * case the subquery yields no row at all on empty input to the GROUP BY, which evaluates to NULL.
+ * It is set in PullupCorrelatedPredicates to true/false, before it is set its value is None.
+ * See constructLeftJoins in RewriteCorrelatedScalarSubquery for more details.
  */
 case class ScalarSubquery(
     plan: LogicalPlan,
     outerAttrs: Seq[Expression] = Seq.empty,
     exprId: ExprId = NamedExpression.newExprId,
     joinCond: Seq[Expression] = Seq.empty,
-    hint: Option[HintInfo] = None)
+    hint: Option[HintInfo] = None,
+    mayHaveCountBug: Option[Boolean] = None)
   extends SubqueryExpression(plan, outerAttrs, exprId, joinCond, hint) with Unevaluable {
   override def dataType: DataType = {
     assert(plan.schema.fields.nonEmpty, "Scalar subquery should have only one column")
