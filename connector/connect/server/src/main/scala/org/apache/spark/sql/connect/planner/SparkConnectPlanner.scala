@@ -18,6 +18,7 @@
 package org.apache.spark.sql.connect.planner
 
 import java.nio.ByteBuffer
+import java.nio.charset.StandardCharsets
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
@@ -651,19 +652,17 @@ class SparkConnectPlanner(val session: SparkSession) {
   private def transformCachedLocalRelation(rel: proto.CachedLocalRelation): LogicalPlan = {
     val blockManager = session.sparkContext.env.blockManager
     val key = rel.getKey
-    val cacheId = CacheId(key)
-    val (blob, blobSize) = blockManager.getLocalValues(cacheId) match {
-      case Some(blockResult) if blockResult.data.hasNext =>
-        (blockResult.data.next().asInstanceOf[Array[Byte]], blockResult.bytes.toInt)
-      case _ => throw InvalidPlanInput(s"Not found any cached local relation by the key $key.")
+    blockManager.getLocalBytes(CacheId(key)).map { blockData =>
+      val blob = blockData.toByteBuffer().array()
+      val blobSize = blockData.size.toInt
+      val size = ByteBuffer.wrap(blob).getInt
+      val intSize = 4
+      val data = blob.slice(intSize, intSize + size)
+      val schema = new String(blob.slice(intSize + size, blobSize), StandardCharsets.UTF_8)
+      transformLocalRelation(Option(schema), Option(data))
+    }.getOrElse {
+      throw InvalidPlanInput(s"Not found any cached local relation by the key: $key.")
     }
-    val intSize = 4
-    val size = ByteBuffer.wrap(blob).getInt
-    val data = blob.slice(intSize, intSize + size)
-    val schema = new String(blob.slice(intSize + size, blobSize))
-    // scalastyle:off throwerror
-    throw new NotImplementedError("Construct a local relation")
-    // scalastyle:on throwerror
   }
 
   private def transformHint(rel: proto.Hint): LogicalPlan = {
@@ -795,22 +794,22 @@ class SparkConnectPlanner(val session: SparkSession) {
     }
   }
 
-  private def transformLocalRelation(rel: proto.LocalRelation): LogicalPlan = {
-    var schema: StructType = null
-    if (rel.hasSchema) {
+  private def transformLocalRelation(
+      schema: Option[String],
+      data: Option[Array[Byte]]): LogicalPlan = {
+    val optStruct = schema.map { schemaStr =>
       val schemaType = DataType.parseTypeWithFallback(
-        rel.getSchema,
+        schemaStr,
         parseDatatypeString,
         fallbackParser = DataType.fromJson)
-      schema = schemaType match {
+      schemaType match {
         case s: StructType => s
         case d => StructType(Seq(StructField("value", d)))
       }
     }
-
-    if (rel.hasData) {
+    data.map { dataBytes =>
       val (rows, structType) = ArrowConverters.fromBatchWithSchemaIterator(
-        Iterator(rel.getData.toByteArray),
+        Iterator(dataBytes),
         TaskContext.get())
       if (structType == null) {
         throw InvalidPlanInput(s"Input data for LocalRelation does not produce a schema.")
@@ -818,10 +817,7 @@ class SparkConnectPlanner(val session: SparkSession) {
       val attributes = structType.toAttributes
       val proj = UnsafeProjection.create(attributes, attributes)
       val data = rows.map(proj)
-
-      if (schema == null) {
-        logical.LocalRelation(attributes, data.map(_.copy()).toSeq)
-      } else {
+      optStruct.map { struct =>
         def normalize(dt: DataType): DataType = dt match {
           case udt: UserDefinedType[_] => normalize(udt.sqlType)
           case StructType(fields) =>
@@ -836,9 +832,7 @@ class SparkConnectPlanner(val session: SparkSession) {
             MapType(normalize(keyType), normalize(valueType), valueContainsNull)
           case _ => dt
         }
-
-        val normalized = normalize(schema).asInstanceOf[StructType]
-
+        val normalized = normalize(struct).asInstanceOf[StructType]
         val project = Dataset
           .ofRows(
             session,
@@ -850,15 +844,24 @@ class SparkConnectPlanner(val session: SparkSession) {
           .asInstanceOf[Project]
 
         val proj = UnsafeProjection.create(project.projectList, project.child.output)
-        logical.LocalRelation(schema.toAttributes, data.map(proj).map(_.copy()).toSeq)
+        logical.LocalRelation(struct.toAttributes, data.map(proj).map(_.copy()).toSeq)
+      }.getOrElse {
+        logical.LocalRelation(attributes, data.map(_.copy()).toSeq)
       }
-    } else {
-      if (schema == null) {
+    }.getOrElse {
+      optStruct.map { struct =>
+        LocalRelation(struct.toAttributes, data = Seq.empty)
+      }.getOrElse {
         throw InvalidPlanInput(
           s"Schema for LocalRelation is required when the input data is not provided.")
       }
-      LocalRelation(schema.toAttributes, data = Seq.empty)
     }
+  }
+
+  private def transformLocalRelation(rel: proto.LocalRelation): LogicalPlan = {
+    transformLocalRelation(
+      if (rel.hasSchema) Some(rel.getSchema) else None,
+      if (rel.hasData) Some(rel.getData.toByteArray) else None)
   }
 
   /** Parse as DDL, with a fallback to JSON. Throws an exception if if fails to parse. */
