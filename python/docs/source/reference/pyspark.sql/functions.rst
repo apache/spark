@@ -241,9 +241,8 @@ Aggregate Functions
     first
     grouping
     grouping_id
-    hllsketch_estimate
-    hllsketch_binary
-    hllsketch_union_estimate
+    hll_sketch_agg
+    hll_union_agg
     kurtosis
     last
     max
@@ -358,4 +357,6 @@ Misc Functions
     xxhash64
     assert_true
     raise_error
+    hll_sketch_estimate
+    hll_union
 
