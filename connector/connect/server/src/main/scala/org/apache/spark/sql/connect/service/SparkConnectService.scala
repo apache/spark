@@ -43,7 +43,7 @@ import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.{AddArtifactsRequest, AddArtifactsResponse}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.connect.config.Connect.{CONNECT_GRPC_BINDING_PORT, CONNECT_GRPC_MAX_INBOUND_MESSAGE_SIZE, CONNECT_JVM_STACK_TRACE_SIZE}
+import org.apache.spark.sql.connect.config.Connect.{CONNECT_GRPC_BINDING_PORT, CONNECT_GRPC_MAX_INBOUND_MESSAGE_SIZE, CONNECT_JVM_STACK_TRACE_MAX_SIZE}
 import org.apache.spark.sql.internal.SQLConf.PYSPARK_JVM_STACKTRACE_ENABLED
 
 /**
@@ -84,8 +84,8 @@ class SparkConnectService(debug: Boolean)
 
     lazy val stackTrace = Option(ExceptionUtils.getStackTrace(st))
     val withStackTrace = if (stackTraceEnabled && stackTrace.nonEmpty) {
-      val size = SparkEnv.get.conf.get(CONNECT_JVM_STACK_TRACE_SIZE).toInt
-      errorInfo.putMetadata("stackTrace", StringUtils.abbreviate(stackTrace.get, size))
+      val maxSize = SparkEnv.get.conf.get(CONNECT_JVM_STACK_TRACE_MAX_SIZE)
+      errorInfo.putMetadata("stackTrace", StringUtils.abbreviate(stackTrace.get, maxSize))
     } else {
       errorInfo
     }
@@ -129,7 +129,9 @@ class SparkConnectService(debug: Boolean)
       try {
         session.conf.get(PYSPARK_JVM_STACKTRACE_ENABLED.key).toBoolean
       } catch {
-        case NonFatal(_) => true
+        case NonFatal(e) =>
+          logWarning(s"Failed to get Spark conf `PYSPARK_JVM_STACKTRACE_ENABLED`: $e")
+          true
       }
 
     {
