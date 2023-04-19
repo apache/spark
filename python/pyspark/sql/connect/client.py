@@ -269,18 +269,9 @@ class ChannelBuilder:
         user_agent : str
             The user_agent parameter specified in the connection string,
             or "_SPARK_CONNECT_PYTHON" when not specified.
+            The returned value will be percent encoded.
         """
-        user_agent = self.params.get(ChannelBuilder.PARAM_USER_AGENT, "_SPARK_CONNECT_PYTHON")
-        allowed_chars = string.ascii_letters + string.punctuation
-        if len(user_agent) > 200:
-            raise SparkConnectException(
-                "'user_agent' parameter cannot exceed 200 characters in length"
-            )
-        if set(user_agent).difference(allowed_chars):
-            raise SparkConnectException(
-                "Only alphanumeric and common punctuations are allowed for 'user_agent'"
-            )
-        return user_agent
+        return self.params.get(ChannelBuilder.PARAM_USER_AGENT, "_SPARK_CONNECT_PYTHON")
 
     def get(self, key: str) -> Any:
         """
