@@ -3507,25 +3507,6 @@
     -->
 
     <profile>
-      <id>hadoop-2</id>
-      <properties>
-        <!-- make sure to update IsolatedClientLoader whenever this version is changed -->
-        <hadoop.version>2.7.4</hadoop.version>
-        <curator.version>2.7.1</curator.version>
-        <commons-io.version>2.4</commons-io.version>
-        <!--
-          the declaration site above of these variables explains why we need to re-assign them here
-        -->
-        <hadoop-client-api.artifact>hadoop-client</hadoop-client-api.artifact>
-        <hadoop-client-runtime.artifact>hadoop-yarn-api</hadoop-client-runtime.artifact>
-        <hadoop-client-minicluster.artifact>hadoop-client</hadoop-client-minicluster.artifact>
-        <gcs-connector.version>hadoop2-2.2.11</gcs-connector.version>
-        <!-- SPARK-36547: Please don't upgrade the version below, otherwise there will be an error on building Hadoop 2.7 package -->
-        <scala-maven-plugin.version>4.3.0</scala-maven-plugin.version>
-      </properties>
-    </profile>
-
-    <profile>
       <id>hadoop-3</id>
       <!-- Default hadoop profile. Uses global properties. -->
     </profile>

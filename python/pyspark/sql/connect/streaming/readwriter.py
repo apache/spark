@@ -21,7 +21,7 @@ check_dependencies(__name__)
 
 from typing import cast, overload, Callable, Dict, List, Optional, TYPE_CHECKING, Union
 
-from pyspark.sql.connect.plan import DataSource, LogicalPlan, WriteStreamOperation
+from pyspark.sql.connect.plan import DataSource, LogicalPlan, Read, WriteStreamOperation
 import pyspark.sql.connect.proto as pb2
 from pyspark.sql.connect.readwriter import OptionUtils, to_str
 from pyspark.sql.connect.streaming.query import StreamingQuery
@@ -94,12 +94,11 @@ class DataStreamReader(OptionUtils):
         if schema is not None:
             self.schema(schema)
         self.options(**options)
-        if path is not None:
-            if type(path) != str or len(path.strip()) == 0:
-                raise ValueError(
-                    "If the path is provided for stream, it needs to be a "
-                    + "non-empty string. List of paths are not supported."
-                )
+        if path is not None and (type(path) != str or len(path.strip()) == 0):
+            raise ValueError(
+                "If the path is provided for stream, it needs to be a "
+                + "non-empty string. List of paths are not supported."
+            )
 
         plan = DataSource(
             format=self._format,
@@ -311,7 +310,10 @@ class DataStreamReader(OptionUtils):
 
     csv.__doc__ = PySparkDataStreamReader.csv.__doc__
 
-    # def table() TODO(SPARK-43042). Use Read(table_name) relation.
+    def table(self, tableName: str) -> "DataFrame":
+        return self._df(Read(tableName, self._options, is_streaming=True))
+
+    table.__doc__ = PySparkDataStreamReader.table.__doc__
 
 
 DataStreamReader.__doc__ = PySparkDataStreamReader.__doc__
