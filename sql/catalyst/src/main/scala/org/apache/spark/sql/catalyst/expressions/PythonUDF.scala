@@ -125,6 +125,8 @@ case class PythonUDAF(
     this.copy(resultId = ExprId(-1)).withNewChildren(canonicalizedChildren)
   }
 
+  override def sql(isDistinct: Boolean): String = this.sql
+
   override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): PythonUDAF =
     copy(children = newChildren)
 }
