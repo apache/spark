@@ -966,6 +966,10 @@ class SparkConnectClient(object):
                             yield {
                                 "streaming_query_command_result": b.streaming_query_command_result
                             }
+                        if b.HasField("streaming_query_manager_command_result"):
+                            yield {
+                                "streaming_query_manager_command_result": b.streaming_query_manager_command_result
+                            }
                         if b.HasField("get_resources_command_result"):
                             resources = {}
                             for key, resource in b.get_resources_command_result.resources.items():

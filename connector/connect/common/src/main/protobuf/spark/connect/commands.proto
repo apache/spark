@@ -38,8 +38,8 @@ message Command {
     SqlCommand sql_command = 5;
     WriteStreamOperationStart write_stream_operation_start = 6;
     StreamingQueryCommand streaming_query_command = 7;
-    StreamingQueryManagerCommand streaming_query_manager_command = 8;
-    GetResourcesCommand get_resources_command = 9;
+    GetResourcesCommand get_resources_command = 8;
+    StreamingQueryManagerCommand streaming_query_manager_command = 9;
 
     // This field is used to mark extensions to the protocol. When plugins generate arbitrary
     // Commands they can add them here. During the planning the correct resolution is done.
@@ -360,7 +360,6 @@ message StreamingQueryManagerCommandResult {
   }
 
   message ActiveResult {
-    // TODO: think about this
     repeated StreamingQueryInstanceId active_queries = 1;
   }
 

@@ -1916,6 +1916,9 @@ class SparkConnectPlanner(val session: SparkSession) {
           responseObserver)
       case proto.Command.CommandTypeCase.STREAMING_QUERY_COMMAND =>
         handleStreamingQueryCommand(command.getStreamingQueryCommand, sessionId, responseObserver)
+      case proto.Command.CommandTypeCase.STREAMING_QUERY_MANAGER_COMMAND =>
+        handleStreamingQueryManagerCommand(
+          command.getStreamingQueryManagerCommand, sessionId, responseObserver)
       case proto.Command.CommandTypeCase.GET_RESOURCES_COMMAND =>
         handleGetResourcesCommand(command.getGetResourcesCommand, sessionId, responseObserver)
       case _ => throw new UnsupportedOperationException(s"$command not supported.")
