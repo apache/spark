@@ -515,7 +515,7 @@ class JDBCWriteSuite extends SharedSparkSession with BeforeAndAfter {
           .jdbc(url1, "TEST.USERDBTYPETEST", properties)
       },
       errorClass = "PARSE_SYNTAX_ERROR",
-      parameters = Map("error" -> "'`'", "hint" -> ": extra input '`'"))
+      parameters = Map("error" -> "'`'", "hint" -> ""))
   }
 
   test("SPARK-10849: jdbc CreateTableColumnTypes duplicate columns") {
