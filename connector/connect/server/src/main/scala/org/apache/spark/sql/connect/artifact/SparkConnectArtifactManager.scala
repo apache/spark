@@ -22,9 +22,11 @@ import java.nio.file.{Files, Path, Paths, StandardCopyOption}
 import java.util.concurrent.CopyOnWriteArrayList
 
 import scala.collection.JavaConverters._
+import scala.reflect.ClassTag
 
 import org.apache.spark.{SparkContext, SparkEnv}
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.storage.{CacheId, StorageLevel}
 import org.apache.spark.util.Utils
 
 /**
@@ -92,9 +94,18 @@ class SparkConnectArtifactManager private[connect] {
       serverLocalStagingPath: Path): Unit = {
     require(!remoteRelativePath.isAbsolute)
     if (remoteRelativePath.startsWith("cache/")) {
-      // scalastyle:off throwerror
-      throw new NotImplementedError("Move the local relation from staging to the local cache.")
-      // scalastyle:on throwerror
+      val tmpFile = serverLocalStagingPath.toFile
+      Utils.tryWithSafeFinally {
+        val updater = session.sparkContext.env.blockManager.TempFileBasedBlockStoreUpdater(
+          blockId = CacheId(remoteRelativePath.toString.stripPrefix("cache/")),
+          level = StorageLevel.MEMORY_AND_DISK,
+          classTag = implicitly[ClassTag[Object]],
+          tmpFile = tmpFile,
+          blockSize = tmpFile.length())
+        updater.save()
+      } {
+        tmpFile.delete()
+      }
     } else if (remoteRelativePath.startsWith("classes/")) {
       // Move class files to common location (shared among all users)
       val target = classArtifactDir.resolve(remoteRelativePath.toString.stripPrefix("classes/"))

@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.connect.planner
 
+import java.nio.ByteBuffer
+
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 
@@ -65,6 +67,7 @@ import org.apache.spark.sql.internal.CatalogImpl
 import org.apache.spark.sql.streaming.Trigger
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.storage.CacheId
 import org.apache.spark.util.Utils
 
 final case class InvalidCommandInput(
@@ -646,9 +649,20 @@ class SparkConnectPlanner(val session: SparkSession) {
   }
 
   private def transformCachedLocalRelation(rel: proto.CachedLocalRelation): LogicalPlan = {
-    val cacheKey = rel.getKey
+    val blockManager = session.sparkContext.env.blockManager
+    val key = rel.getKey
+    val cacheId = CacheId(key)
+    val (blob, blobSize) = blockManager.getLocalValues(cacheId) match {
+      case Some(blockResult) if blockResult.data.hasNext =>
+        (blockResult.data.next().asInstanceOf[Array[Byte]], blockResult.bytes.toInt)
+      case _ => throw InvalidPlanInput(s"Not found any cached local relation by the key $key.")
+    }
+    val intSize = 4
+    val size = ByteBuffer.wrap(blob).getInt
+    val data = blob.slice(intSize, intSize + size)
+    val schema = new String(blob.slice(intSize + size, blobSize))
     // scalastyle:off throwerror
-    throw new NotImplementedError(s"Caching of local relation: $cacheKey")
+    throw new NotImplementedError("Construct a local relation")
     // scalastyle:on throwerror
   }
 
