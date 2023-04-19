@@ -49,9 +49,10 @@ private[sql] class SparkResult[T](
   private[this] var nextBatchIndex: Int = 0
   private[this] val idxToBatches = mutable.Map.empty[Int, ColumnarBatch]
 
-  // Exposed only for UT.
+  // Exposed for UT.
   private[sql] def existingBatches(): Seq[ColumnarBatch] = {
-    idxToBatches.values.toSeq
+    // Sort by key to get stable results.
+    idxToBatches.toSeq.sortBy(_._1).map(_._2)
   }
 
   private def createEncoder(schema: StructType): ExpressionEncoder[T] = {
@@ -84,7 +85,6 @@ private[sql] class SparkResult[T](
           if (boundEncoder == null) {
             boundEncoder = createEncoder(structType).resolveAndBind(structType.toAttributes)
           }
-
           while (reader.loadNextBatch()) {
             val rowCount = root.getRowCount
             assert(root.getRowCount == response.getArrowBatch.getRowCount) // HUH!
@@ -171,10 +171,8 @@ private[sql] class SparkResult[T](
         }
 
         val nextBatchIndex = batchIndex + 1
-        if (destructive && idxToBatches.contains(batchIndex)) {
-          val currentBatch = idxToBatches(batchIndex)
-          idxToBatches.remove(batchIndex)
-          currentBatch.close()
+        if (destructive) {
+          idxToBatches.remove(batchIndex).foreach(_.close())
         }
 
         val hasNextBatch = if (!idxToBatches.contains(nextBatchIndex)) {

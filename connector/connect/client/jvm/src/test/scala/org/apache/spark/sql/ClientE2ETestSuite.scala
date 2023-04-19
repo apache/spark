@@ -857,34 +857,36 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper {
   }
 
   test("Dataset result destructive iterator") {
-    val df = spark.range(0, 10, 1, 10)
+    val df = spark
+      .range(0, 10, 1, 10)
       .filter("id > 5 and id < 9")
-    val res = df.collectResult()
 
-    try {
-      // build and verify the destructive iterator
-      val iterator = res.destructiveIterator
-      // batches is empty before traversing the result iterator
-      assert(res.existingBatches().isEmpty)
-      var previousBatch: ColumnarBatch = null
-      val buffer = mutable.Buffer.empty[Long]
-      while (iterator.hasNext) {
-        // always having 1 batch, since a columnar batch will be removed and closed after
-        // its data got consumed.
-        val batches = res.existingBatches()
-        assert(batches.size === 1)
-        assert(batches.head != previousBatch)
-        previousBatch = batches.head
+    df.withResult { result =>
+      try {
+        // build and verify the destructive iterator
+        val iterator = result.destructiveIterator
+        // batches is empty before traversing the result iterator
+        assert(result.existingBatches().isEmpty)
+        var previousBatch: ColumnarBatch = null
+        val buffer = mutable.Buffer.empty[Long]
+        while (iterator.hasNext) {
+          // always having 1 batch, since a columnar batch will be removed and closed after
+          // its data got consumed.
+          val batches = result.existingBatches()
+          assert(batches.size === 1)
+          assert(batches.head != previousBatch)
+          previousBatch = batches.head
 
-        buffer.append(iterator.next())
+          buffer.append(iterator.next())
+        }
+        // Batches should be closed and removed after traversing all the records.
+        assert(result.existingBatches().isEmpty)
+
+        val expectedResult = Seq(6L, 7L, 8L)
+        assert(buffer.size === 3 && expectedResult.forall(buffer.contains))
+      } finally {
+        result.close()
       }
-      // Batches should be closed and removed after traversing all the records.
-      assert(res.existingBatches().isEmpty)
-
-      val expectedResult = Seq(6L, 7L, 8L)
-      assert(buffer.size === 3 && expectedResult.forall(buffer.contains))
-    } finally {
-      res.close()
     }
   }
 }
