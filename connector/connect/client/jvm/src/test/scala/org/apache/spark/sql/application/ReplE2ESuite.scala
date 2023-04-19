@@ -125,4 +125,12 @@ class ReplE2ESuite extends RemoteSparkSession {
     assertContains("Array[Int] = Array(5, 25, 45, 65, 85)", output)
   }
 
+  test("SPARK-43198: Filter does not throw ammonite-related class initialization exception") {
+    val input = """
+        |spark.range(10).filter(n => n % 2 == 0).as[Int].collect()
+      """.stripMargin
+    val output = runCommandsInShell(input)
+    assertContains("Array[Int] = Array(0, 2, 4, 6, 8)", output)
+  }
+
 }
