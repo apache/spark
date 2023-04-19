@@ -205,7 +205,7 @@ class SparkSeriesMethods(SparkIndexOpsMethods["ps.Series"]):
 
             Column = ConnectColumn
         else:
-            Column = PySparkColumn
+            Column = PySparkColumn  # type: ignore[assignment]
         if not isinstance(output, Column):
             raise ValueError(
                 "The output of the function [%s] should be of a "

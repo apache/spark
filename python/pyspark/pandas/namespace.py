@@ -49,7 +49,7 @@ from pandas.api.types import (  # type: ignore[attr-defined]
 from pandas.tseries.offsets import DateOffset
 import pyarrow as pa
 import pyarrow.parquet as pq
-from pyspark.sql import functions as F, Column
+from pyspark.sql import functions as F, Column as PySparkColumn
 from pyspark.sql.functions import pandas_udf
 from pyspark.sql.types import (
     ByteType,
@@ -3434,6 +3434,8 @@ def merge_asof(
         from pyspark.sql.connect.column import Column as ConnectColumn
 
         Column = ConnectColumn
+    else:
+        Column = PySparkColumn  # type: ignore[assignment]
     if tolerance is not None and not isinstance(tolerance, Column):
         tolerance = F.lit(tolerance)
 
@@ -3728,8 +3730,8 @@ def read_orc(
 
 def _get_index_map(
     sdf: PySparkDataFrame, index_col: Optional[Union[str, List[str]]] = None
-) -> Tuple[Optional[List[Column]], Optional[List[Label]]]:
-    index_spark_columns: Optional[List[Column]]
+) -> Tuple[Optional[List[PySparkColumn]], Optional[List[Label]]]:
+    index_spark_columns: Optional[List[PySparkColumn]]
     index_names: Optional[List[Label]]
     if index_col is not None:
         if isinstance(index_col, str):
