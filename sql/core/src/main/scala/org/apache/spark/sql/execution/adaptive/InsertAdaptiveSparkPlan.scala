@@ -122,7 +122,7 @@ case class InsertAdaptiveSparkPlan(
       return subqueryMap.toMap
     }
     plan.foreach(_.expressions.filter(_.containsPattern(PLAN_EXPRESSION)).foreach(_.foreach {
-      case expressions.ScalarSubquery(p, _, exprId, _, _)
+      case expressions.ScalarSubquery(p, _, exprId, _, _, _)
           if !subqueryMap.contains(exprId.id) =>
         val executedPlan = compileSubquery(p)
         verifyAdaptivePlan(executedPlan, p)

@@ -3224,6 +3224,15 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val DECORRELATE_SUBQUERY_LEGACY_INCORRECT_COUNT_HANDLING_ENABLED =
+    buildConf("spark.sql.optimizer.decorrelateSubqueryLegacyIncorrectCountHandling.enabled")
+      .internal()
+      .doc("If enabled, revert to legacy incorrect behavior for certain subqueries with COUNT or " +
+        "similar aggregates: see SPARK-43098.")
+      .version("3.5.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val OPTIMIZE_ONE_ROW_RELATION_SUBQUERY =
     buildConf("spark.sql.optimizer.optimizeOneRowRelationSubquery")
       .internal()
