@@ -46,7 +46,7 @@ object IntegrationTestUtils {
     sys.props.getOrElse("spark.test.home", sys.env("SPARK_HOME"))
   }
 
-  private[connect] lazy val debugConfig: Seq[String] = {
+  private[connect] def debugConfigs: Seq[String] = {
     val log4j2 = s"$sparkHome/connector/connect/client/jvm/src/test/resources/log4j2.properties"
     if (isDebug) {
       Seq(
@@ -90,7 +90,19 @@ object IntegrationTestUtils {
       sbtName: String,
       mvnName: String,
       test: Boolean = false): File = {
-    val targetDir = new File(new File(sparkHome, path), "target")
+    val jar = tryFindJar(path, sbtName, mvnName, test).getOrElse(
+      throw new RuntimeException(
+        s"Failed to find the jar inside folder: ${getTargetFilePath(path)}"))
+    debug("Using jar: " + jar.getCanonicalPath)
+    jar
+  }
+
+  private[sql] def tryFindJar(
+      path: String,
+      sbtName: String,
+      mvnName: String,
+      test: Boolean = false): Option[File] = {
+    val targetDir = getTargetFilePath(path).toFile
     assert(
       targetDir.exists(),
       s"Fail to locate the target folder: '${targetDir.getCanonicalPath}'. " +
@@ -98,7 +110,9 @@ object IntegrationTestUtils {
         "Make sure the spark project jars has been built (e.g. using build/sbt package)" +
         "and the env variable `SPARK_HOME` is set correctly.")
     val suffix = if (test) "-tests.jar" else ".jar"
-    val jars = recursiveListFiles(targetDir).filter { f =>
+    // It is possible there are more than one: one built by maven, and another by SBT,
+    // Return the first one found.
+    recursiveListFiles(targetDir).find { f =>
       // SBT jar
       (f.getParentFile.getName == scalaDir &&
         f.getName.startsWith(sbtName) && f.getName.endsWith(suffix)) ||
@@ -107,10 +121,10 @@ object IntegrationTestUtils {
         f.getName.startsWith(mvnName) &&
         f.getName.endsWith(s"${org.apache.spark.SPARK_VERSION}$suffix"))
     }
-    // It is possible we found more than one: one built by maven, and another by SBT
-    assert(jars.nonEmpty, s"Failed to find the jar inside folder: ${targetDir.getCanonicalPath}")
-    debug("Using jar: " + jars(0).getCanonicalPath)
-    jars(0) // return the first jar found
+  }
+
+  private def getTargetFilePath(path: String): java.nio.file.Path = {
+    Paths.get(sparkHome, path, "target").toAbsolutePath
   }
 
   private def recursiveListFiles(f: File): Array[File] = {
