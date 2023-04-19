@@ -346,7 +346,7 @@ message StreamingQueryManagerCommand {
 
   message AwaitAnyTerminationCommand {
     // (Optional) The waiting time in milliseconds to wait for any query to terminate.
-    optional int64 timeout = 1;
+    optional int64 timeout_ms = 1;
   }
 }
 
@@ -355,12 +355,17 @@ message StreamingQueryManagerCommandResult {
   oneof result_type {
     ActiveResult active = 1;
     StreamingQueryInstanceId query = 2;
-    bool await_any_termination = 3; // TODO: think about this
+    AwaitAnyTerminationResult await_any_termination = 3;
+    bool reset_terminated = 4;
   }
 
   message ActiveResult {
     // TODO: think about this
     repeated StreamingQueryInstanceId active_queries = 1;
+  }
+
+  message AwaitAnyTerminationResult {
+    optional bool terminated = 1;
   }
 }
 

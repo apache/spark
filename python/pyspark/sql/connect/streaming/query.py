@@ -181,7 +181,10 @@ class StreamingQueryManager:
 
     @property
     def active(self) -> List[StreamingQuery]:
-        pass
+        cmd = pb2.StreamingQueryManagerCommand()
+        cmd.active = True
+        queries = self._execute_streaming_query_manager_cmd(cmd).active.active_queries
+        return [StreamingQuery(self._session, q.id, q.run_id, q.name) for q in queries]
 
     active.__doc__ = PySparkStreamingQueryManager.active.__doc__
 
@@ -194,12 +197,26 @@ class StreamingQueryManager:
     get.__doc__ = PySparkStreamingQueryManager.get.__doc__
 
     def awaitAnyTermination(self, timeout: Optional[int] = None) -> Optional[bool]:
-        pass
+        cmd = pb2.StreamingQueryManagerCommand()
+        if timeout is not None:
+            if not isinstance(timeout, (int, float)) or timeout <= 0:
+                raise ValueError("timeout must be a positive integer or float. Got %s" % timeout)
+            cmd.await_any_termination.timeout_ms = int(timeout * 1000)
+            terminated = self._execute_streaming_query_manager_cmd(cmd).await_any_termination.terminated
+            return terminated
+        else:
+            await_any_termination_cmd = pb2.StreamingQueryManagerCommand.AwaitAnyTerminationCommand()
+            cmd.await_any_termination.CopyFrom(await_any_termination_cmd)
+            self._execute_streaming_query_manager_cmd(cmd)
+            return None
 
     awaitAnyTermination.__doc__ = PySparkStreamingQueryManager.awaitAnyTermination.__doc__
 
     def resetTerminated(self) -> None:
-        pass
+        cmd = pb2.StreamingQueryManagerCommand()
+        cmd.reset_terminated = True
+        self._execute_streaming_query_manager_cmd(cmd).active.active_queries
+        return None
 
     resetTerminated.__doc__ = PySparkStreamingQueryManager.resetTerminated.__doc__
 

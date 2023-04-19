@@ -32,9 +32,9 @@ import org.apache.spark.connect.proto.ExecutePlanResponse.SqlCommandResult
 import org.apache.spark.connect.proto.Parse.ParseFormat
 import org.apache.spark.connect.proto.StreamingQueryCommand
 import org.apache.spark.connect.proto.StreamingQueryCommandResult
+import org.apache.spark.connect.proto.StreamingQueryInstanceId
 import org.apache.spark.connect.proto.StreamingQueryManagerCommand
 import org.apache.spark.connect.proto.StreamingQueryManagerCommandResult
-import org.apache.spark.connect.proto.StreamingQueryInstanceId
 import org.apache.spark.connect.proto.WriteStreamOperationStart
 import org.apache.spark.connect.proto.WriteStreamOperationStart.TriggerCase
 import org.apache.spark.ml.{functions => MLFunctions}
@@ -2388,13 +2388,17 @@ class SparkConnectPlanner(val session: SparkSession) {
       responseObserver: StreamObserver[ExecutePlanResponse]): Unit = {
 
     val respBuilder = StreamingQueryManagerCommandResult.newBuilder()
-    val sqm = session.streams
 
     command.getCommandCase match {
       case StreamingQueryManagerCommand.CommandCase.ACTIVE =>
         val active_queries = session.streams.active
         respBuilder.getActiveBuilder.addAllActiveQueries(
-//            active_queries.map(q => q.id.toString.asJava) // TODO
+            active_queries.map(query => StreamingQueryInstanceId
+              .newBuilder()
+              .setId(query.id.toString)
+              .setRunId(query.runId.toString)
+              .setName(query.name)
+              .build())
         )
 
       case StreamingQueryManagerCommand.CommandCase.GET_QUERY =>
@@ -2403,8 +2407,21 @@ class SparkConnectPlanner(val session: SparkSession) {
           .setId(query.id.toString)
           .setRunId(query.runId.toString)
           .setName(query.name)
+
       case StreamingQueryManagerCommand.CommandCase.AWAIT_ANY_TERMINATION =>
+        if (command.getAwaitAnyTermination.hasTimeoutMs) {
+          val terminated = session.streams.awaitAnyTermination(
+            command.getAwaitAnyTermination.getTimeoutMs)
+          respBuilder.getAwaitAnyTerminationBuilder.setTerminated(terminated)
+        } else {
+          session.streams.awaitAnyTermination()
+          respBuilder.setAwaitAnyTermination(true)
+        }
+
       case StreamingQueryManagerCommand.CommandCase.RESET_TERMINATED =>
+        session.streams.resetTerminated()
+        respBuilder.setResetTerminated(true)
+
       case StreamingQueryManagerCommand.CommandCase.COMMAND_NOT_SET =>
         throw new IllegalArgumentException("Missing command in StreamingQueryManagerCommand")
     }
