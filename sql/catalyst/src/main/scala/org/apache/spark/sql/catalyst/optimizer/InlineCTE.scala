@@ -42,8 +42,9 @@ case class InlineCTE(alwaysInline: Boolean = false) extends Rule[LogicalPlan] {
 
   override def apply(plan: LogicalPlan): LogicalPlan = {
     if (!plan.isInstanceOf[Subquery] && plan.containsPattern(CTE)) {
-      val cteMap = mutable.HashMap.empty[Long, (CTERelationDef, Int)]
+      val cteMap = mutable.SortedMap.empty[Long, (CTERelationDef, Int, mutable.Map[Long, Int])]
       buildCTEMap(plan, cteMap)
+      cleanCTEMap(cteMap)
       val notInlined = mutable.ArrayBuffer.empty[CTERelationDef]
       val inlined = inlineCTE(plan, cteMap, notInlined)
       // CTEs in SQL Commands have been inlined by `CTESubstitution` already, so it is safe to add
@@ -70,32 +71,52 @@ case class InlineCTE(alwaysInline: Boolean = false) extends Rule[LogicalPlan] {
 
   def buildCTEMap(
       plan: LogicalPlan,
-      cteMap: mutable.HashMap[Long, (CTERelationDef, Int)]): Unit = {
+      cteMap: mutable.Map[Long, (CTERelationDef, Int, mutable.Map[Long, Int])],
+      referencingCTEDefId: Option[Long] = None): Unit = {
     plan match {
-      case WithCTE(_, cteDefs) =>
+      case WithCTE(child, cteDefs) =>
         cteDefs.foreach { cteDef =>
-          cteMap.put(cteDef.id, (cteDef, 0))
+          cteMap(cteDef.id) = (cteDef, 0, mutable.Map.empty.withDefaultValue(0))
         }
+        cteDefs.foreach { cteDef =>
+          buildCTEMap(cteDef, cteMap, Some(cteDef.id))
+        }
+        buildCTEMap(child, cteMap, referencingCTEDefId)
 
       case ref: CTERelationRef =>
-        val (cteDef, refCount) = cteMap(ref.cteId)
-        cteMap.update(ref.cteId, (cteDef, refCount + 1))
+        val (cteDef, refCount, refMap) = cteMap(ref.cteId)
+        referencingCTEDefId.foreach(refMap(_) += 1)
+        cteMap(ref.cteId) = (cteDef, refCount + 1, refMap)
 
       case _ =>
-    }
-
-    if (plan.containsPattern(CTE)) {
-      plan.children.foreach { child =>
-        buildCTEMap(child, cteMap)
-      }
-
-      plan.expressions.foreach { expr =>
-        if (expr.containsAllPatterns(PLAN_EXPRESSION, CTE)) {
-          expr.foreach {
-            case e: SubqueryExpression =>
-              buildCTEMap(e.plan, cteMap)
-            case _ =>
+        if (plan.containsPattern(CTE)) {
+          plan.children.foreach { child =>
+            buildCTEMap(child, cteMap, referencingCTEDefId)
           }
+
+          plan.expressions.foreach { expr =>
+            if (expr.containsAllPatterns(PLAN_EXPRESSION, CTE)) {
+              expr.foreach {
+                case e: SubqueryExpression => buildCTEMap(e.plan, cteMap, referencingCTEDefId)
+                case _ =>
+              }
+            }
+          }
+        }
+    }
+  }
+
+  private def cleanCTEMap(
+      cteRefMap: mutable.SortedMap[Long, (CTERelationDef, Int, mutable.Map[Long, Int])]
+    ) = {
+    cteRefMap.keys.toSeq.reverse.foreach { currentCTEId =>
+      val (_, currentRefCount, _) = cteRefMap(currentCTEId)
+      if (currentRefCount == 0) {
+        cteRefMap.keys.takeWhile(_ < currentCTEId).foreach { cteId =>
+          val (cteDef, refCount, refMap) = cteRefMap(cteId)
+          val uselessRefCount = refMap(currentCTEId)
+          refMap -= currentCTEId
+          cteRefMap(cteId) = (cteDef, refCount - uselessRefCount, refMap)
         }
       }
     }
@@ -103,15 +124,15 @@ case class InlineCTE(alwaysInline: Boolean = false) extends Rule[LogicalPlan] {
 
   private def inlineCTE(
       plan: LogicalPlan,
-      cteMap: mutable.HashMap[Long, (CTERelationDef, Int)],
+      cteMap: mutable.Map[Long, (CTERelationDef, Int, mutable.Map[Long, Int])],
       notInlined: mutable.ArrayBuffer[CTERelationDef]): LogicalPlan = {
     plan match {
       case WithCTE(child, cteDefs) =>
         cteDefs.foreach { cteDef =>
-          val (cte, refCount) = cteMap(cteDef.id)
+          val (cte, refCount, refMap) = cteMap(cteDef.id)
           if (refCount > 0) {
             val inlined = cte.copy(child = inlineCTE(cte.child, cteMap, notInlined))
-            cteMap.update(cteDef.id, (inlined, refCount))
+            cteMap(cteDef.id) = (inlined, refCount, refMap)
             if (!shouldInline(inlined, refCount)) {
               notInlined.append(inlined)
             }
@@ -120,7 +141,7 @@ case class InlineCTE(alwaysInline: Boolean = false) extends Rule[LogicalPlan] {
         inlineCTE(child, cteMap, notInlined)
 
       case ref: CTERelationRef =>
-        val (cteDef, refCount) = cteMap(ref.cteId)
+        val (cteDef, refCount, _) = cteMap(ref.cteId)
         if (shouldInline(cteDef, refCount)) {
           if (ref.outputSet == cteDef.outputSet) {
             cteDef.child
