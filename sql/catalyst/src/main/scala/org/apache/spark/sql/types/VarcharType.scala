@@ -17,13 +17,10 @@
 package org.apache.spark.sql.types
 
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.sql.catalyst.types.{PhysicalDataType, PhysicalStringType}
 
 @Experimental
 case class VarcharType(length: Int) extends AtomicType {
   require(length >= 0, "The length of varchar type cannot be negative.")
-
-  private[sql] override def physicalDataType: PhysicalDataType = PhysicalStringType
 
   override def defaultSize: Int = length
   override def typeName: String = s"varchar($length)"

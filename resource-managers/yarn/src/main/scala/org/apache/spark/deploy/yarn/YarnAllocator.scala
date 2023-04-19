@@ -35,6 +35,7 @@ import org.apache.hadoop.yarn.client.api.AMRMClient.ContainerRequest
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkException}
+import org.apache.spark.deploy.ExecutorFailureTracker
 import org.apache.spark.deploy.yarn.ResourceRequestHelper._
 import org.apache.spark.deploy.yarn.YarnSparkHadoopUtil._
 import org.apache.spark.deploy.yarn.config._
@@ -158,7 +159,7 @@ private[yarn] class YarnAllocator(
   private var executorIdCounter: Int =
     driverRef.askSync[Int](RetrieveLastAllocatedExecutorId)
 
-  private[spark] val failureTracker = new FailureTracker(sparkConf, clock)
+  private[spark] val failureTracker = new ExecutorFailureTracker(sparkConf, clock)
 
   private val allocatorNodeHealthTracker =
     new YarnAllocatorNodeHealthTracker(sparkConf, amClient, failureTracker)

@@ -18,7 +18,6 @@
 package org.apache.spark.sql.types
 
 import org.apache.spark.annotation.Stable
-import org.apache.spark.sql.catalyst.types.{PhysicalBinaryType, PhysicalDataType}
 
 /**
  * The data type representing `Array[Byte]` values.
@@ -30,8 +29,6 @@ class BinaryType private() extends AtomicType {
    * The default size of a value of the BinaryType is 100 bytes.
    */
   override def defaultSize: Int = 100
-
-  private[sql] override def physicalDataType: PhysicalDataType = PhysicalBinaryType
 
   private[spark] override def asNullable: BinaryType = this
 }

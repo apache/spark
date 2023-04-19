@@ -20,7 +20,6 @@ package org.apache.spark.sql.types
 import scala.util.Try
 
 import org.apache.spark.annotation.Stable
-import org.apache.spark.sql.catalyst.types.{PhysicalDataType, PhysicalDoubleType}
 
 /**
  * The data type representing `Double` values. Please use the singleton `DataTypes.DoubleType`.
@@ -33,8 +32,6 @@ class DoubleType private() extends FractionalType {
    * The default size of a value of the DoubleType is 8 bytes.
    */
   override def defaultSize: Int = 8
-
-  private[sql] override def physicalDataType: PhysicalDataType = PhysicalDoubleType
 
   private[spark] override def asNullable: DoubleType = this
 }
