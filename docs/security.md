@@ -193,6 +193,16 @@ The following table describes the different options available for configuring th
   </td>
   <td>1.4.0</td>
 </tr>
+<tr>
+  <td><code>spark.shuffle.server.recovery.disabled</code></td>
+  <td>false</td>
+  <td>
+    Set to true for applications that have higher security requirements and prefer that their
+    secret is not saved in the db. The shuffle data of such applications wll not be recovered after
+    the External Shuffle Service restarts.
+  </td>
+  <td>3.5.0</td>
+</tr>
 </table>
 
 
