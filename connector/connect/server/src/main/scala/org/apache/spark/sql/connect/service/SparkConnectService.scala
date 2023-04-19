@@ -76,7 +76,6 @@ class SparkConnectService(debug: Boolean)
   }
 
   private def buildStatusFromThrowable(st: Throwable, stackTraceEnabled: Boolean): RPCStatus = {
-    val message = StringUtils.abbreviate(st.getMessage, 2048)
     val errorInfo = ErrorInfo
       .newBuilder()
       .setReason(st.getClass.getName)
