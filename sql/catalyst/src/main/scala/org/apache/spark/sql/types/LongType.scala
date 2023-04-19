@@ -18,7 +18,6 @@
 package org.apache.spark.sql.types
 
 import org.apache.spark.annotation.Stable
-import org.apache.spark.sql.catalyst.types.{PhysicalDataType, PhysicalLongType}
 
 /**
  * The data type representing `Long` values. Please use the singleton `DataTypes.LongType`.
@@ -31,8 +30,6 @@ class LongType private() extends IntegralType {
    * The default size of a value of the LongType is 8 bytes.
    */
   override def defaultSize: Int = 8
-
-  private[sql] override def physicalDataType: PhysicalDataType = PhysicalLongType
 
   override def simpleString: String = "bigint"
 
