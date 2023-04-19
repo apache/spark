@@ -2398,7 +2398,8 @@ class SparkConnectPlanner(val session: SparkSession) {
               .setId(query.id.toString)
               .setRunId(query.runId.toString)
               .setName(query.name)
-              .build())
+              .build()
+            ).toIterable.asJava
         )
 
       case StreamingQueryManagerCommand.CommandCase.GET_QUERY =>
@@ -2415,7 +2416,7 @@ class SparkConnectPlanner(val session: SparkSession) {
           respBuilder.getAwaitAnyTerminationBuilder.setTerminated(terminated)
         } else {
           session.streams.awaitAnyTermination()
-          respBuilder.setAwaitAnyTermination(true)
+          respBuilder.getAwaitAnyTerminationBuilder.setTerminated(true)
         }
 
       case StreamingQueryManagerCommand.CommandCase.RESET_TERMINATED =>
