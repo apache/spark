@@ -82,6 +82,7 @@ class SparkConnectPlanner(val session: SparkSession) {
     val plan = rel.getRelTypeCase match {
       // DataFrame API
       case proto.Relation.RelTypeCase.SHOW_STRING => transformShowString(rel.getShowString)
+      case proto.Relation.RelTypeCase.HTML_STRING => transformHtmlString(rel.getHtmlString)
       case proto.Relation.RelTypeCase.READ => transformReadRel(rel.getRead)
       case proto.Relation.RelTypeCase.PROJECT => transformProject(rel.getProject)
       case proto.Relation.RelTypeCase.FILTER => transformFilter(rel.getFilter)
@@ -224,6 +225,15 @@ class SparkConnectPlanner(val session: SparkSession) {
     LocalRelation.fromProduct(
       output = AttributeReference("show_string", StringType, false)() :: Nil,
       data = Tuple1.apply(showString) :: Nil)
+  }
+
+  private def transformHtmlString(rel: proto.HtmlString): LogicalPlan = {
+    val htmlString = Dataset
+      .ofRows(session, transformRelation(rel.getInput))
+      .htmlString(rel.getNumRows, rel.getTruncate)
+    LocalRelation.fromProduct(
+      output = AttributeReference("html_string", StringType, false)() :: Nil,
+      data = Tuple1.apply(htmlString) :: Nil)
   }
 
   private def transformSql(sql: proto.SQL): LogicalPlan = {

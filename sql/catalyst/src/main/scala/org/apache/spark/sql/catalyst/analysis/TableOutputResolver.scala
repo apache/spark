@@ -143,7 +143,7 @@ object TableOutputResolver {
       colPath: Seq[String]): Boolean = {
     conf.storeAssignmentPolicy match {
       case StoreAssignmentPolicy.STRICT | StoreAssignmentPolicy.ANSI =>
-        DataType.canWrite(
+        DataTypeUtils.canWrite(
           valueType, expectedType, byName, conf.resolver, colPath.quoted,
           conf.storeAssignmentPolicy, addError)
       case _ =>
