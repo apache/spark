@@ -30,6 +30,7 @@ import org.apache.spark.TestUtils.withListener
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql.catalyst.{FooClassWithEnum, FooEnum, ScroogeLikeExample}
 import org.apache.spark.sql.catalyst.encoders.{OuterScopes, RowEncoder}
+import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
 import org.apache.spark.sql.catalyst.plans.{LeftAnti, LeftSemi}
 import org.apache.spark.sql.catalyst.util.sideBySide
 import org.apache.spark.sql.execution.{LogicalRDD, RDDScanExec, SQLExecution}
@@ -2151,6 +2152,50 @@ class DatasetSuite extends QueryTest
       })
       assert(parquetFiles.size === 10)
     }
+  }
+
+  test("SPARK-37829: DataFrame outer join") {
+    // Same as "SPARK-15441: Dataset outer join" but using DataFrames instead of Datasets
+    val left = Seq(ClassData("a", 1), ClassData("b", 2)).toDF().as("left")
+    val right = Seq(ClassData("x", 2), ClassData("y", 3)).toDF().as("right")
+    val joined = left.joinWith(right, $"left.b" === $"right.b", "left")
+
+    val leftFieldSchema = StructType(
+      Seq(
+        StructField("a", StringType),
+        StructField("b", IntegerType, nullable = false)
+      )
+    )
+    val rightFieldSchema = StructType(
+      Seq(
+        StructField("a", StringType),
+        StructField("b", IntegerType, nullable = false)
+      )
+    )
+    val expectedSchema = StructType(
+      Seq(
+        StructField(
+          "_1",
+          leftFieldSchema,
+          nullable = false
+        ),
+        // This is a left join, so the right output is nullable:
+        StructField(
+          "_2",
+          rightFieldSchema
+        )
+      )
+    )
+    assert(joined.schema === expectedSchema)
+
+    val result = joined.collect().toSet
+    val expected = Set(
+      new GenericRowWithSchema(Array("a", 1), leftFieldSchema) ->
+        null,
+      new GenericRowWithSchema(Array("b", 2), leftFieldSchema) ->
+        new GenericRowWithSchema(Array("x", 2), rightFieldSchema)
+    )
+    assert(result == expected)
   }
 }
 

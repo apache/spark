@@ -110,22 +110,29 @@ object ExpressionEncoder {
     }
     val newSerializer = CreateStruct(serializers)
 
+    def nullSafe(input: Expression, result: Expression): Expression = {
+      If(IsNull(input), Literal.create(null, result.dataType), result)
+    }
+
     val newDeserializerInput = GetColumnByOrdinal(0, newSerializer.dataType)
-    val deserializers = encoders.zipWithIndex.map { case (enc, index) =>
+    val childrenDeserializers = encoders.zipWithIndex.map { case (enc, index) =>
       val getColExprs = enc.objDeserializer.collect { case c: GetColumnByOrdinal => c }.distinct
       assert(getColExprs.size == 1, "object deserializer should have only one " +
         s"`GetColumnByOrdinal`, but there are ${getColExprs.size}")
 
       val input = GetStructField(newDeserializerInput, index)
-      enc.objDeserializer.transformUp {
+      val childDeserializer = enc.objDeserializer.transformUp {
         case GetColumnByOrdinal(0, _) => input
       }
-    }
-    val newDeserializer = NewInstance(cls, deserializers, ObjectType(cls), propagateNull = false)
 
-    def nullSafe(input: Expression, result: Expression): Expression = {
-      If(IsNull(input), Literal.create(null, result.dataType), result)
+      if (enc.objSerializer.nullable) {
+        nullSafe(input, childDeserializer)
+      } else {
+        childDeserializer
+      }
     }
+    val newDeserializer =
+      NewInstance(cls, childrenDeserializers, ObjectType(cls), propagateNull = false)
 
     new ExpressionEncoder[Any](
       nullSafe(newSerializerInput, newSerializer),
