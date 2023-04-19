@@ -184,7 +184,7 @@ class Relation(google.protobuf.message.Message):
     @property
     def html_string(self) -> global___HtmlString: ...
     @property
-    def deduplicate_within_watermark(self) -> global___DeduplicateWithinWatermark: ...
+    def deduplicate_within_watermark(self) -> global___Deduplicate: ...
     @property
     def fill_na(self) -> global___NAFill:
         """NA functions"""
@@ -257,7 +257,7 @@ class Relation(google.protobuf.message.Message):
         with_watermark: global___WithWatermark | None = ...,
         apply_in_pandas_with_state: global___ApplyInPandasWithState | None = ...,
         html_string: global___HtmlString | None = ...,
-        deduplicate_within_watermark: global___DeduplicateWithinWatermark | None = ...,
+        deduplicate_within_watermark: global___Deduplicate | None = ...,
         fill_na: global___NAFill | None = ...,
         drop_na: global___NADrop | None = ...,
         replace: global___NAReplace | None = ...,
@@ -1470,6 +1470,7 @@ class Deduplicate(google.protobuf.message.Message):
     INPUT_FIELD_NUMBER: builtins.int
     COLUMN_NAMES_FIELD_NUMBER: builtins.int
     ALL_COLUMNS_AS_KEYS_FIELD_NUMBER: builtins.int
+    WITHIN_WATERMARK_FIELD_NUMBER: builtins.int
     @property
     def input(self) -> global___Relation:
         """(Required) Input relation for a Deduplicate."""
@@ -1486,22 +1487,29 @@ class Deduplicate(google.protobuf.message.Message):
 
     This field does not co-use with `column_names`.
     """
+    within_watermark: builtins.bool
+    """(Optional) Deduplicate within the time range of watermark."""
     def __init__(
         self,
         *,
         input: global___Relation | None = ...,
         column_names: collections.abc.Iterable[builtins.str] | None = ...,
         all_columns_as_keys: builtins.bool | None = ...,
+        within_watermark: builtins.bool | None = ...,
     ) -> None: ...
     def HasField(
         self,
         field_name: typing_extensions.Literal[
             "_all_columns_as_keys",
             b"_all_columns_as_keys",
+            "_within_watermark",
+            b"_within_watermark",
             "all_columns_as_keys",
             b"all_columns_as_keys",
             "input",
             b"input",
+            "within_watermark",
+            b"within_watermark",
         ],
     ) -> builtins.bool: ...
     def ClearField(
@@ -1509,85 +1517,29 @@ class Deduplicate(google.protobuf.message.Message):
         field_name: typing_extensions.Literal[
             "_all_columns_as_keys",
             b"_all_columns_as_keys",
+            "_within_watermark",
+            b"_within_watermark",
             "all_columns_as_keys",
             b"all_columns_as_keys",
             "column_names",
             b"column_names",
             "input",
             b"input",
+            "within_watermark",
+            b"within_watermark",
         ],
     ) -> None: ...
+    @typing.overload
     def WhichOneof(
         self,
         oneof_group: typing_extensions.Literal["_all_columns_as_keys", b"_all_columns_as_keys"],
     ) -> typing_extensions.Literal["all_columns_as_keys"] | None: ...
+    @typing.overload
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["_within_watermark", b"_within_watermark"]
+    ) -> typing_extensions.Literal["within_watermark"] | None: ...
 
 global___Deduplicate = Deduplicate
-
-@typing_extensions.final
-class DeduplicateWithinWatermark(google.protobuf.message.Message):
-    """Relation of type [[DeduplicateWithinWatermark]] which have duplicate rows removed within the time
-    range of watermark, could consider either only the subset of columns or all the columns.
-    """
-
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
-
-    INPUT_FIELD_NUMBER: builtins.int
-    COLUMN_NAMES_FIELD_NUMBER: builtins.int
-    ALL_COLUMNS_AS_KEYS_FIELD_NUMBER: builtins.int
-    @property
-    def input(self) -> global___Relation:
-        """(Required) Input relation for a DeduplicateWithinWatermark."""
-    @property
-    def column_names(
-        self,
-    ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
-        """(Optional) Deduplicate based on a list of column names.
-
-        This field does not co-use with `all_columns_as_keys`.
-        """
-    all_columns_as_keys: builtins.bool
-    """(Optional) Deduplicate based on all the columns of the input relation.
-
-    This field does not co-use with `column_names`.
-    """
-    def __init__(
-        self,
-        *,
-        input: global___Relation | None = ...,
-        column_names: collections.abc.Iterable[builtins.str] | None = ...,
-        all_columns_as_keys: builtins.bool | None = ...,
-    ) -> None: ...
-    def HasField(
-        self,
-        field_name: typing_extensions.Literal[
-            "_all_columns_as_keys",
-            b"_all_columns_as_keys",
-            "all_columns_as_keys",
-            b"all_columns_as_keys",
-            "input",
-            b"input",
-        ],
-    ) -> builtins.bool: ...
-    def ClearField(
-        self,
-        field_name: typing_extensions.Literal[
-            "_all_columns_as_keys",
-            b"_all_columns_as_keys",
-            "all_columns_as_keys",
-            b"all_columns_as_keys",
-            "column_names",
-            b"column_names",
-            "input",
-            b"input",
-        ],
-    ) -> None: ...
-    def WhichOneof(
-        self,
-        oneof_group: typing_extensions.Literal["_all_columns_as_keys", b"_all_columns_as_keys"],
-    ) -> typing_extensions.Literal["all_columns_as_keys"] | None: ...
-
-global___DeduplicateWithinWatermark = DeduplicateWithinWatermark
 
 @typing_extensions.final
 class LocalRelation(google.protobuf.message.Message):

@@ -91,7 +91,7 @@ class SparkConnectPlanner(val session: SparkSession) {
       case proto.Relation.RelTypeCase.JOIN => transformJoin(rel.getJoin)
       case proto.Relation.RelTypeCase.DEDUPLICATE => transformDeduplicate(rel.getDeduplicate)
       case proto.Relation.RelTypeCase.DEDUPLICATE_WITHIN_WATERMARK =>
-        transformDeduplicate(rel.getDeduplicate, isWithinWatermark = true)
+        transformDeduplicate(rel.getDeduplicateWithinWatermark, isWithinWatermark = true)
       case proto.Relation.RelTypeCase.SET_OP => transformSetOperation(rel.getSetOp)
       case proto.Relation.RelTypeCase.SORT => transformSort(rel.getSort)
       case proto.Relation.RelTypeCase.DROP => transformDrop(rel.getDrop)

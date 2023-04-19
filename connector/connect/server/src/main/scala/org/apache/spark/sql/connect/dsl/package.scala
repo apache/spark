@@ -600,10 +600,11 @@ package object dsl {
         Relation
           .newBuilder()
           .setDeduplicateWithinWatermark(
-            DeduplicateWithinWatermark
+            Deduplicate
               .newBuilder()
               .setInput(logicalPlan)
-              .addAllColumnNames(colNames.asJava))
+              .addAllColumnNames(colNames.asJava)
+              .setWithinWatermark(true))
           .build()
 
       def distinct(): Relation =

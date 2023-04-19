@@ -382,11 +382,12 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
   }
 
   test("Test invalid deduplicateWithinWatermark") {
-    val deduplicateWithinWatermark = proto.DeduplicateWithinWatermark
+    val deduplicateWithinWatermark = proto.Deduplicate
       .newBuilder()
       .setInput(readRel)
       .setAllColumnsAsKeys(true)
       .addColumnNames("test")
+      .setWithinWatermark(true)
 
     val e = intercept[InvalidPlanInput] {
       transform(
@@ -397,9 +398,10 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
     assert(
       e.getMessage.contains("Cannot deduplicate on both all columns and a subset of columns"))
 
-    val deduplicateWithinWatermark2 = proto.DeduplicateWithinWatermark
+    val deduplicateWithinWatermark2 = proto.Deduplicate
       .newBuilder()
       .setInput(readRel)
+      .setWithinWatermark(true)
     val e2 = intercept[InvalidPlanInput] {
       transform(
         proto.Relation.newBuilder
