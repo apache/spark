@@ -662,12 +662,24 @@ class SubquerySuite extends QueryTest
     checkAnswer(
       sql(
         """
+          |select l.b, (select (min(r.c) + count(*)) is null
+          |from r
+          |where l.a = r.c) from l
+        """.stripMargin),
+      Row(1.0, false) :: Row(1.0, false) :: Row(2.0, true) :: Row(2.0, true) ::
+        Row(3.0, false) :: Row(5.0, true) :: Row(null, false) :: Row(null, true) :: Nil)
+  }
+
+  test("SPARK-43098: no COUNT bug with group-by") {
+    checkAnswer(
+      sql(
+        """
           |select l.b, (select (r.c + count(*)) is null
           |from r
           |where l.a = r.c group by r.c) from l
         """.stripMargin),
-      Row(1.0, false) :: Row(1.0, false) :: Row(2.0, true) :: Row(2.0, true) ::
-        Row(3.0, false) :: Row(5.0, true) :: Row(null, false) :: Row(null, true) :: Nil)
+      Row(1.0, false) :: Row(1.0, false) :: Row(2.0, null) :: Row(2.0, null) ::
+        Row(3.0, false) :: Row(5.0, null) :: Row(null, false) :: Row(null, null) :: Nil)
   }
 
   test("SPARK-16804: Correlated subqueries containing LIMIT - 1") {
@@ -1788,8 +1800,8 @@ class SubquerySuite extends QueryTest
           |  )
           |FROM l
         """.stripMargin),
-      Row(1.0, false) :: Row(1.0, false) :: Row(2.0, true) :: Row(2.0, true) ::
-        Row(3.0, false) :: Row(5.0, true) :: Row(null, false) :: Row(null, true) :: Nil)
+      Row(1.0, false) :: Row(1.0, false) :: Row(2.0, null) :: Row(2.0, null) ::
+        Row(3.0, false) :: Row(5.0, null) :: Row(null, false) :: Row(null, null) :: Nil)
   }
 
   test("SPARK-28441: COUNT bug with non-foldable expression") {
