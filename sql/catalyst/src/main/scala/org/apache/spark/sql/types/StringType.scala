@@ -18,7 +18,6 @@
 package org.apache.spark.sql.types
 
 import org.apache.spark.annotation.Stable
-import org.apache.spark.sql.catalyst.types.{PhysicalDataType, PhysicalStringType}
 
 /**
  * The data type representing `String` values. Please use the singleton `DataTypes.StringType`.
@@ -31,8 +30,6 @@ class StringType private() extends AtomicType {
    * The default size of a value of the StringType is 20 bytes.
    */
   override def defaultSize: Int = 20
-
-  private[sql] override def physicalDataType: PhysicalDataType = PhysicalStringType
 
   private[spark] override def asNullable: StringType = this
 }

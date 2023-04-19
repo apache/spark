@@ -18,14 +18,12 @@
 package org.apache.spark.sql.types
 
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.sql.catalyst.types.{PhysicalDataType, PhysicalStringType}
 
 @Experimental
 case class CharType(length: Int) extends AtomicType {
   require(length >= 0, "The length of char type cannot be negative.")
 
   override def defaultSize: Int = length
-  private[sql] override def physicalDataType: PhysicalDataType = PhysicalStringType
   override def typeName: String = s"char($length)"
   override def toString: String = s"CharType($length)"
   private[spark] override def asNullable: CharType = this
