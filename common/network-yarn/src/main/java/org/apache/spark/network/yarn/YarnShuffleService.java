@@ -416,19 +416,16 @@ public class YarnShuffleService extends AuxiliaryService {
     String appId = context.getApplicationId().toString();
     try {
       ByteBuffer appServiceData = context.getApplicationDataForService();
-      AppId fullId = new AppId(appId);
       String payload = JavaUtils.bytesToString(appServiceData);
       String shuffleSecret;
-      boolean updateDb = true;
       Map<String, Object> metaInfo;
       try {
         metaInfo = mapper.readValue(payload,
             new TypeReference<Map<String, Object>>() {});
         Object metadataStorageVal = metaInfo.get(SPARK_SHUFFLE_SERVER_RECOVERY_DISABLED);
         if (metadataStorageVal != null && (Boolean) metadataStorageVal) {
-          updateDb = false;
           AppsWithRecoveryDisabled.disableRecoveryOfApp(appId);
-          logger.info("Not saving metadata of application {}", appId);
+          logger.info("Disabling metadata persistence for application {}", appId);
         }
       } catch (IOException ioe) {
         logger.warn("Unable to parse application data for service: " + payload);
@@ -440,7 +437,8 @@ public class YarnShuffleService extends AuxiliaryService {
         } else {
           shuffleSecret = payload;
         }
-        if (db != null && updateDb) {
+        if (db != null && AppsWithRecoveryDisabled.isRecoveryEnabledForApp(appId)) {
+          AppId fullId = new AppId(appId);
           byte[] key = dbAppKey(fullId);
           byte[] value = mapper.writeValueAsString(shuffleSecret).getBytes(StandardCharsets.UTF_8);
           db.put(key, value);
