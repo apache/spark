@@ -578,7 +578,7 @@ abstract class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalH
 }
 
 class RegexpExpressionsJavaSuite extends RegexpExpressionsSuite {
-  override def getRegexEngine(): String = "jAVA"
+  override def getRegexEngine(): String = "JAVA"
 
   test("SPARK-30759: cache initialization for literal patterns") {
     val expr = "A" like Literal.create("a", StringType)
