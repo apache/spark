@@ -2923,7 +2923,6 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             "foreachPartition",
             "checkpoint",
             "localCheckpoint",
-            "_repr_html_",
         ):
             with self.assertRaises(NotImplementedError):
                 getattr(df, f)()
