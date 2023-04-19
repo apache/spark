@@ -95,14 +95,6 @@ package object config extends Logging {
       .stringConf
       .createOptional
 
-  private[spark] val EXECUTOR_ATTEMPT_FAILURE_VALIDITY_INTERVAL_MS =
-    ConfigBuilder("spark.yarn.executor.failuresValidityInterval")
-      .doc("Interval after which Executor failures will be considered independent and not " +
-        "accumulate towards the attempt count.")
-      .version("2.0.0")
-      .timeConf(TimeUnit.MILLISECONDS)
-      .createOptional
-
   private[spark] val MAX_APP_ATTEMPTS = ConfigBuilder("spark.yarn.maxAppAttempts")
     .doc("Maximum number of AM attempts before failing the app.")
     .version("1.3.0")
@@ -225,6 +217,18 @@ package object config extends Logging {
     .timeConf(TimeUnit.MILLISECONDS)
     .createWithDefaultString("1s")
 
+  private[spark] val REPORT_LOG_FREQUENCY = {
+    ConfigBuilder("spark.yarn.report.loggingFrequency")
+      .doc("Maximum number of application reports processed " +
+        "until the next application status is logged. " +
+        "If there is a change of state, the application status will be logged " +
+        "regardless of the number of application reports processed.")
+      .version("3.5.0")
+      .intConf
+      .checkValue(_ > 0, "logging frequency should be positive")
+      .createWithDefault(30)
+  }
+
   private[spark] val CLIENT_LAUNCH_MONITOR_INTERVAL =
     ConfigBuilder("spark.yarn.clientLaunchMonitorInterval")
       .doc("Interval between requests for status the client mode AM when starting the app.")
@@ -265,11 +269,6 @@ package object config extends Logging {
       .version("1.2.0")
       .intConf
       .createWithDefault(25)
-
-  private[spark] val MAX_EXECUTOR_FAILURES = ConfigBuilder("spark.yarn.max.executor.failures")
-    .version("1.0.0")
-    .intConf
-    .createOptional
 
   private[spark] val MAX_REPORTER_THREAD_FAILURES =
     ConfigBuilder("spark.yarn.scheduler.reporterThread.maxFailures")

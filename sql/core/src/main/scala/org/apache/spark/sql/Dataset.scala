@@ -26,6 +26,7 @@ import scala.reflect.runtime.universe.TypeTag
 import scala.util.control.NonFatal
 
 import org.apache.commons.lang3.StringUtils
+import org.apache.commons.text.StringEscapeUtils
 
 import org.apache.spark.TaskContext
 import org.apache.spark.annotation.{DeveloperApi, Stable, Unstable}
@@ -289,7 +290,7 @@ class Dataset[T] private[sql](
     schema.fieldNames.map(SchemaUtils.escapeMetaCharacters).toSeq +: data.map { row =>
       row.toSeq.map { cell =>
         val str = cell match {
-          case null => "null"
+          case null => "NULL"
           case binary: Array[Byte] => binary.map("%02X".format(_)).mkString("[", " ", "]")
           case _ =>
             // Escapes meta-characters not to break the `showString` format
@@ -397,6 +398,43 @@ class Dataset[T] private[sql](
       // For Data that has more than "numRows" records
       val rowsString = if (numRows == 1) "row" else "rows"
       sb.append(s"only showing top $numRows $rowsString\n")
+    }
+
+    sb.toString()
+  }
+
+  /**
+   * Compose the HTML representing rows for output
+   *
+   * @param _numRows Number of rows to show
+   * @param truncate If set to more than 0, truncates strings to `truncate` characters and
+   *                   all cells will be aligned right.
+   */
+  private[sql] def htmlString(
+      _numRows: Int,
+      truncate: Int = 20): String = {
+    val numRows = _numRows.max(0).min(ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH - 1)
+    // Get rows represented by Seq[Seq[String]], we may get one more line if it has more data.
+    val tmpRows = getRows(numRows, truncate)
+
+    val hasMoreData = tmpRows.length - 1 > numRows
+    val rows = tmpRows.take(numRows + 1)
+
+    val sb = new StringBuilder
+
+    sb.append("<table border='1'>\n")
+
+    sb.append(rows.head.map(StringEscapeUtils.escapeHtml4)
+      .mkString("<tr><th>", "</th><th>", "</th></tr>\n"))
+    rows.tail.foreach { row =>
+      sb.append(row.map(StringEscapeUtils.escapeHtml4)
+        .mkString("<tr><td>", "</td><td>", "</td></tr>\n"))
+    }
+
+    sb.append("</table>\n")
+
+    if (hasMoreData) {
+      sb.append(s"only showing top $numRows ${if (numRows == 1) "row" else "rows"}\n")
     }
 
     sb.toString()
@@ -2392,8 +2430,8 @@ class Dataset[T] private[sql](
    *   // +----+----+----+----+
    *   // |col0|col1|col2|col3|
    *   // +----+----+----+----+
-   *   // |   1|   2|   3|null|
-   *   // |   5|   4|null|   6|
+   *   // |   1|   2|   3|NULL|
+   *   // |   5|   4|NULL|   6|
    *   // +----+----+----+----+
    *
    *   df2.unionByName(df1, true).show
@@ -2402,8 +2440,8 @@ class Dataset[T] private[sql](
    *   // +----+----+----+----+
    *   // |col1|col0|col3|col2|
    *   // +----+----+----+----+
-   *   // |   4|   5|   6|null|
-   *   // |   2|   1|null|   3|
+   *   // |   4|   5|   6|NULL|
+   *   // |   2|   1|NULL|   3|
    *   // +----+----+----+----+
    * }}}
    *
@@ -2999,20 +3037,7 @@ class Dataset[T] private[sql](
    * @since 2.0.0
    */
   def dropDuplicates(colNames: Seq[String]): Dataset[T] = withTypedPlan {
-    val resolver = sparkSession.sessionState.analyzer.resolver
-    val allColumns = queryExecution.analyzed.output
-    // SPARK-31990: We must keep `toSet.toSeq` here because of the backward compatibility issue
-    // (the Streaming's state store depends on the `groupCols` order).
-    val groupCols = colNames.toSet.toSeq.flatMap { (colName: String) =>
-      // It is possibly there are more than one columns with the same name,
-      // so we call filter instead of find.
-      val cols = allColumns.filter(col => resolver(col.name, colName))
-      if (cols.isEmpty) {
-        throw QueryCompilationErrors.cannotResolveColumnNameAmongAttributesError(
-          colName, schema.fieldNames.mkString(", "))
-      }
-      cols
-    }
+    val groupCols = groupColsFromDropDuplicates(colNames)
     Deduplicate(groupCols, logicalPlan)
   }
 
@@ -3048,6 +3073,114 @@ class Dataset[T] private[sql](
   def dropDuplicates(col1: String, cols: String*): Dataset[T] = {
     val colNames: Seq[String] = col1 +: cols
     dropDuplicates(colNames)
+  }
+
+  /**
+   * Returns a new Dataset with duplicates rows removed, within watermark.
+   *
+   * This only works with streaming [[Dataset]], and watermark for the input [[Dataset]] must be
+   * set via [[withWatermark]].
+   *
+   * For a streaming [[Dataset]], this will keep all data across triggers as intermediate state
+   * to drop duplicated rows. The state will be kept to guarantee the semantic, "Events are
+   * deduplicated as long as the time distance of earliest and latest events are smaller than the
+   * delay threshold of watermark." Users are encouraged to set the delay threshold of watermark
+   * longer than max timestamp differences among duplicated events.
+   *
+   * Note: too late data older than watermark will be dropped.
+   *
+   * @group typedrel
+   * @since 3.5.0
+   */
+  def dropDuplicatesWithinWatermark(): Dataset[T] = {
+    dropDuplicatesWithinWatermark(this.columns)
+  }
+
+  /**
+   * Returns a new Dataset with duplicates rows removed, considering only the subset of columns,
+   * within watermark.
+   *
+   * This only works with streaming [[Dataset]], and watermark for the input [[Dataset]] must be
+   * set via [[withWatermark]].
+   *
+   * For a streaming [[Dataset]], this will keep all data across triggers as intermediate state
+   * to drop duplicated rows. The state will be kept to guarantee the semantic, "Events are
+   * deduplicated as long as the time distance of earliest and latest events are smaller than the
+   * delay threshold of watermark." Users are encouraged to set the delay threshold of watermark
+   * longer than max timestamp differences among duplicated events.
+   *
+   * Note: too late data older than watermark will be dropped.
+   *
+   * @group typedrel
+   * @since 3.5.0
+   */
+  def dropDuplicatesWithinWatermark(colNames: Seq[String]): Dataset[T] = withTypedPlan {
+    val groupCols = groupColsFromDropDuplicates(colNames)
+    // UnsupportedOperationChecker will fail the query if this is called with batch Dataset.
+    DeduplicateWithinWatermark(groupCols, logicalPlan)
+  }
+
+  /**
+   * Returns a new Dataset with duplicates rows removed, considering only the subset of columns,
+   * within watermark.
+   *
+   * This only works with streaming [[Dataset]], and watermark for the input [[Dataset]] must be
+   * set via [[withWatermark]].
+   *
+   * For a streaming [[Dataset]], this will keep all data across triggers as intermediate state
+   * to drop duplicated rows. The state will be kept to guarantee the semantic, "Events are
+   * deduplicated as long as the time distance of earliest and latest events are smaller than the
+   * delay threshold of watermark." Users are encouraged to set the delay threshold of watermark
+   * longer than max timestamp differences among duplicated events.
+   *
+   * Note: too late data older than watermark will be dropped.
+   *
+   * @group typedrel
+   * @since 3.5.0
+   */
+  def dropDuplicatesWithinWatermark(colNames: Array[String]): Dataset[T] = {
+    dropDuplicatesWithinWatermark(colNames.toSeq)
+  }
+
+  /**
+   * Returns a new Dataset with duplicates rows removed, considering only the subset of columns,
+   * within watermark.
+   *
+   * This only works with streaming [[Dataset]], and watermark for the input [[Dataset]] must be
+   * set via [[withWatermark]].
+   *
+   * For a streaming [[Dataset]], this will keep all data across triggers as intermediate state
+   * to drop duplicated rows. The state will be kept to guarantee the semantic, "Events are
+   * deduplicated as long as the time distance of earliest and latest events are smaller than the
+   * delay threshold of watermark." Users are encouraged to set the delay threshold of watermark
+   * longer than max timestamp differences among duplicated events.
+   *
+   * Note: too late data older than watermark will be dropped.
+   *
+   * @group typedrel
+   * @since 3.5.0
+   */
+  @scala.annotation.varargs
+  def dropDuplicatesWithinWatermark(col1: String, cols: String*): Dataset[T] = {
+    val colNames: Seq[String] = col1 +: cols
+    dropDuplicatesWithinWatermark(colNames)
+  }
+
+  private def groupColsFromDropDuplicates(colNames: Seq[String]): Seq[Attribute] = {
+    val resolver = sparkSession.sessionState.analyzer.resolver
+    val allColumns = queryExecution.analyzed.output
+    // SPARK-31990: We must keep `toSet.toSeq` here because of the backward compatibility issue
+    // (the Streaming's state store depends on the `groupCols` order).
+    colNames.toSet.toSeq.flatMap { (colName: String) =>
+      // It is possibly there are more than one columns with the same name,
+      // so we call filter instead of find.
+      val cols = allColumns.filter(col => resolver(col.name, colName))
+      if (cols.isEmpty) {
+        throw QueryCompilationErrors.cannotResolveColumnNameAmongAttributesError(
+          colName, schema.fieldNames.mkString(", "))
+      }
+      cols
+    }
   }
 
   /**

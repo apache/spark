@@ -353,6 +353,11 @@
           "The <functionName> does not support ordering on type <dataType>."
         ]
       },
+      "INVALID_ROW_LEVEL_OPERATION_ASSIGNMENTS" : {
+        "message" : [
+          "<errors>"
+        ]
+      },
       "IN_SUBQUERY_DATA_TYPE_MISMATCH" : {
         "message" : [
           "The data type of one or more elements in the left hand side of an IN subquery is not compatible with the data type of the output of the subquery. Mismatched columns: [<mismatchedColumns>], left side: [<leftType>], right side: [<rightType>]."
@@ -978,6 +983,11 @@
           "expects a binary value with 16, 24 or 32 bytes, but got <actualLength> bytes."
         ]
       },
+      "AES_SALTED_MAGIC" : {
+        "message" : [
+          "Initial bytes from input <saltedMagic> do not match 'Salted__' (0x53616C7465645F5F)."
+        ]
+      },
       "PATTERN" : {
         "message" : [
           "<value>."
@@ -1067,6 +1077,11 @@
       "The value of the typed literal <valueType> is invalid: <value>."
     ],
     "sqlState" : "42604"
+  },
+  "INVALID_URL" : {
+    "message" : [
+      "The url is invalid: <url>. If necessary set <ansiConfig> to \"false\" to bypass this error."
+    ]
   },
   "INVALID_WHERE_CONDITION" : {
     "message" : [
@@ -1420,6 +1435,11 @@
       "sortBy must be used together with bucketBy."
     ]
   },
+  "SQL_CONF_NOT_FOUND" : {
+    "message" : [
+      "The SQL config <sqlConf> cannot be found. Please verify that the config exists."
+    ]
+  },
   "STAR_GROUP_BY_POS" : {
     "message" : [
       "Star (*) is not allowed in a select list when GROUP BY an ordinal position is used."
@@ -1541,7 +1561,7 @@
   },
   "UNRECOGNIZED_SQL_TYPE" : {
     "message" : [
-      "Unrecognized SQL type <typeName>."
+      "Unrecognized SQL type - name: <typeName>, id: <jdbcType>."
     ],
     "sqlState" : "42704"
   },
@@ -3701,11 +3721,6 @@
       "Unsuccessful try to zip maps with <size> unique keys due to exceeding the array size limit <maxRoundedArrayLength>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2004" : {
-    "message" : [
-      "no default for type <dataType>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2005" : {
     "message" : [
       "Type <dataType> does not support ordered operations."
@@ -3719,11 +3734,6 @@
   "_LEGACY_ERROR_TEMP_2007" : {
     "message" : [
       "Regex group count is <groupCount>, but the specified group index is <groupIndex>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2008" : {
-    "message" : [
-      "Find an invalid url string <url>. If necessary set <ansiConfig> to false to bypass this error."
     ]
   },
   "_LEGACY_ERROR_TEMP_2010" : {

@@ -26,7 +26,7 @@ from shutil import rmtree
 
 DEFAULT_HADOOP = "hadoop3"
 DEFAULT_HIVE = "hive2.3"
-SUPPORTED_HADOOP_VERSIONS = ["hadoop2", "hadoop3", "without-hadoop"]
+SUPPORTED_HADOOP_VERSIONS = ["hadoop3", "without-hadoop"]
 SUPPORTED_HIVE_VERSIONS = ["hive2.3"]
 UNSUPPORTED_COMBINATIONS = []  # type: ignore
 
