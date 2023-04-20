@@ -1278,6 +1278,31 @@ class Dataset[T] private[sql] (
   }
 
   /**
+   * (Scala-specific) Reduces the elements of this Dataset using the specified binary function.
+   * The given `func` must be commutative and associative or the result may be non-deterministic.
+   *
+   * @group action
+   * @since 3.5.0
+   */
+  def reduce(func: (T, T) => T): T = {
+    val list = this
+      .groupByKey(UdfUtils.groupAllUnderBoolTrue())(PrimitiveBooleanEncoder)
+      .reduceGroups(func)
+      .collectAsList()
+    assert(list.size() == 1)
+    list.get(0)._2
+  }
+
+  /**
+   * (Java-specific) Reduces the elements of this Dataset using the specified binary function. The
+   * given `func` must be commutative and associative or the result may be non-deterministic.
+   *
+   * @group action
+   * @since 3.5.0
+   */
+  def reduce(func: ReduceFunction[T]): T = reduce(UdfUtils.mapReduceFuncToScalaFunc(func))
+
+  /**
    * (Scala-specific) Returns a [[KeyValueGroupedDataset]] where the data is grouped by the given
    * key `func`.
    *

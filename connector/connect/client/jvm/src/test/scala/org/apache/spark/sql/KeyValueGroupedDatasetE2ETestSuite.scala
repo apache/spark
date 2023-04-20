@@ -62,9 +62,9 @@ class KeyValueGroupedDatasetE2ETestSuite extends RemoteSparkSession {
   }
 
   test("keyAs - keys") {
-    // It is okay to cast from Long to Double, but not Long to Int.
     val session: SparkSession = spark
     import session.implicits._
+    // It is okay to cast from Long to Double, but not Long to Int.
     val values = spark
       .range(10)
       .groupByKey(v => v % 2)
@@ -217,13 +217,24 @@ class KeyValueGroupedDatasetE2ETestSuite extends RemoteSparkSession {
   }
 
   test("agg") {
+    val session: SparkSession = spark
+    import session.implicits._
     val values = spark
       .range(10)
-      .groupByKey(v => v % 2)(PrimitiveLongEncoder)
-      .keyAs[Double](PrimitiveDoubleEncoder)
+      .groupByKey(v => v % 2)
+      .keyAs[Double]
       .agg(functions.count("*"))
       .collectAsList()
 
     assert(values == Arrays.asList[(Long, Double)]((0, 5), (1, 5)))
+  }
+
+  test("reduceGroups") {
+    val session: SparkSession = spark
+    import session.implicits._
+    val ds = Seq("abc", "xyz", "hello").toDS()
+    val values = ds.groupByKey(_.length).reduceGroups(_ + _).collectAsList()
+
+    assert(values == Arrays.asList[(Int, String)]((3, "abcxyz"), (5, "hello")))
   }
 }

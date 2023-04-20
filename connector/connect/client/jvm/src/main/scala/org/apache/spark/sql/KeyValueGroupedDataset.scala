@@ -241,6 +241,28 @@ abstract class KeyValueGroupedDataset[K, V] private[sql] () extends Serializable
   }
 
   /**
+   * (Scala-specific) Reduces the elements of each group of data using the specified binary
+   * function. The given function must be commutative and associative or the result may be
+   * non-deterministic.
+   *
+   * @since 3.5.0
+   */
+  def reduceGroups(f: (V, V) => V): Dataset[(K, V)] = {
+    throw new UnsupportedOperationException
+  }
+
+  /**
+   * (Java-specific) Reduces the elements of each group of data using the specified binary
+   * function. The given function must be commutative and associative or the result may be
+   * non-deterministic.
+   *
+   * @since 3.5.0
+   */
+  def reduceGroups(f: ReduceFunction[V]): Dataset[(K, V)] = {
+    reduceGroups(UdfUtils.mapReduceFuncToScalaFunc(f))
+  }
+
+  /**
    * Internal helper function for building typed aggregations that return tuples. For simplicity
    * and code reuse, we do this without the help of the type system and then use helper functions
    * that cast appropriately for the user facing interface.
@@ -535,6 +557,18 @@ private class KeyValueGroupedDatasetImpl[K, V, IK, IV](
         .addAllGroupingExpressions(getGroupingExpressions)
         .addAllAggregateExpressions(columns.map(_.expr).asJava)
     }
+  }
+
+  override def reduceGroups(f: (V, V) => V): Dataset[(K, V)] = {
+    val inputEncoders = Seq(vEncoder, vEncoder)
+    val udf = ScalarUserDefinedFunction(
+      function = f,
+      inputEncoders = inputEncoders,
+      outputEncoder = vEncoder)
+    val input = udf.apply(inputEncoders.map(_ => col("*")): _*)
+    val expr = Column.fn("reduce", input).expr
+    val aggregator: TypedColumn[V, V] = new TypedColumn[V, V](expr, vEncoder)
+    agg(aggregator)
   }
 
   private def getGroupingExpressions = {

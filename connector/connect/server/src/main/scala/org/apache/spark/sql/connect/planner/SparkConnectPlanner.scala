@@ -67,6 +67,7 @@ import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JDBCPartiti
 import org.apache.spark.sql.execution.python.UserDefinedPythonFunction
 import org.apache.spark.sql.execution.stat.StatFunctions
 import org.apache.spark.sql.execution.streaming.StreamingQueryWrapper
+import org.apache.spark.sql.expressions.ReduceAggregator
 import org.apache.spark.sql.internal.CatalogImpl
 import org.apache.spark.sql.streaming.Trigger
 import org.apache.spark.sql.types._
@@ -1554,6 +1555,20 @@ class SparkConnectPlanner(val session: SparkSession) {
         val expr = transformExpression(fun.getArguments(0))
         Some(transformUnregisteredUDF(MLFunctions.arrayToVectorUdf, Seq(expr)))
 
+      case "reduce" =>
+        if (fun.getArgumentsCount != 1) {
+          throw InvalidPlanInput("reduce requires single child expression")
+        }
+        val udf = fun.getArgumentsList.asScala.toSeq.head match {
+          case expr
+              if expr.hasCommonInlineUserDefinedFunction
+                && expr.getCommonInlineUserDefinedFunction.hasScalarScalaUdf =>
+            ScalaUdf(expr.getCommonInlineUserDefinedFunction)
+          case other =>
+            throw InvalidPlanInput(s"reduce should be a scalar scala udf, but got $other")
+        }
+        Some(ReduceAggregator(udf.function)(udf.outEnc).toColumn.expr)
+
       case _ => None
     }
   }
@@ -1862,7 +1877,8 @@ class SparkConnectPlanner(val session: SparkSession) {
       // Use any encoder as a placeholder to perform the TypedColumn#withInputType transformation
       val any = ds.vEncoder
       val newExpr = new TypedColumn(transformExpression(expr), any)
-        .withInputType(ds.vEncoder, ds.dataAttributes).expr
+        .withInputType(ds.vEncoder, ds.dataAttributes)
+        .expr
       Column(newExpr).named
     })
     val keyColumn = UntypedAggUtils.aggKeyColumn(ds.kEncoder, ds.groupingAttributes)
