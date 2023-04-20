@@ -98,7 +98,6 @@ class Relation(google.protobuf.message.Message):
     WITH_WATERMARK_FIELD_NUMBER: builtins.int
     APPLY_IN_PANDAS_WITH_STATE_FIELD_NUMBER: builtins.int
     HTML_STRING_FIELD_NUMBER: builtins.int
-    DEDUPLICATE_WITHIN_WATERMARK_FIELD_NUMBER: builtins.int
     FILL_NA_FIELD_NUMBER: builtins.int
     DROP_NA_FIELD_NUMBER: builtins.int
     REPLACE_FIELD_NUMBER: builtins.int
@@ -184,8 +183,6 @@ class Relation(google.protobuf.message.Message):
     @property
     def html_string(self) -> global___HtmlString: ...
     @property
-    def deduplicate_within_watermark(self) -> global___Deduplicate: ...
-    @property
     def fill_na(self) -> global___NAFill:
         """NA functions"""
     @property
@@ -257,7 +254,6 @@ class Relation(google.protobuf.message.Message):
         with_watermark: global___WithWatermark | None = ...,
         apply_in_pandas_with_state: global___ApplyInPandasWithState | None = ...,
         html_string: global___HtmlString | None = ...,
-        deduplicate_within_watermark: global___Deduplicate | None = ...,
         fill_na: global___NAFill | None = ...,
         drop_na: global___NADrop | None = ...,
         replace: global___NAReplace | None = ...,
@@ -298,8 +294,6 @@ class Relation(google.protobuf.message.Message):
             b"crosstab",
             "deduplicate",
             b"deduplicate",
-            "deduplicate_within_watermark",
-            b"deduplicate_within_watermark",
             "describe",
             b"describe",
             "drop",
@@ -405,8 +399,6 @@ class Relation(google.protobuf.message.Message):
             b"crosstab",
             "deduplicate",
             b"deduplicate",
-            "deduplicate_within_watermark",
-            b"deduplicate_within_watermark",
             "describe",
             b"describe",
             "drop",
@@ -525,7 +517,6 @@ class Relation(google.protobuf.message.Message):
             "with_watermark",
             "apply_in_pandas_with_state",
             "html_string",
-            "deduplicate_within_watermark",
             "fill_na",
             "drop_na",
             "replace",

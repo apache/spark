@@ -90,8 +90,6 @@ class SparkConnectPlanner(val session: SparkSession) {
       case proto.Relation.RelTypeCase.TAIL => transformTail(rel.getTail)
       case proto.Relation.RelTypeCase.JOIN => transformJoin(rel.getJoin)
       case proto.Relation.RelTypeCase.DEDUPLICATE => transformDeduplicate(rel.getDeduplicate)
-      case proto.Relation.RelTypeCase.DEDUPLICATE_WITHIN_WATERMARK =>
-        transformDeduplicate(rel.getDeduplicateWithinWatermark, isWithinWatermark = true)
       case proto.Relation.RelTypeCase.SET_OP => transformSetOperation(rel.getSetOp)
       case proto.Relation.RelTypeCase.SORT => transformSort(rel.getSort)
       case proto.Relation.RelTypeCase.DROP => transformDrop(rel.getDrop)
@@ -725,8 +723,7 @@ class SparkConnectPlanner(val session: SparkSession) {
     CollectMetrics(rel.getName, metrics.map(_.named), transformRelation(rel.getInput))
   }
 
-  private def transformDeduplicate(rel: proto.Deduplicate,
-                                   isWithinWatermark: Boolean = false): LogicalPlan = {
+  private def transformDeduplicate(rel: proto.Deduplicate): LogicalPlan = {
     if (!rel.hasInput) {
       throw InvalidPlanInput("Deduplicate needs a plan input")
     }
@@ -741,7 +738,7 @@ class SparkConnectPlanner(val session: SparkSession) {
     val resolver = session.sessionState.analyzer.resolver
     val allColumns = queryExecution.analyzed.output
     if (rel.getAllColumnsAsKeys) {
-      if (isWithinWatermark) DeduplicateWithinWatermark(allColumns, queryExecution.analyzed)
+      if (rel.getWithinWatermark) DeduplicateWithinWatermark(allColumns, queryExecution.analyzed)
       else Deduplicate(allColumns, queryExecution.analyzed)
     } else {
       val toGroupColumnNames = rel.getColumnNamesList.asScala.toSeq
@@ -754,7 +751,7 @@ class SparkConnectPlanner(val session: SparkSession) {
         }
         cols
       }
-      if (isWithinWatermark) DeduplicateWithinWatermark(groupCols, queryExecution.analyzed)
+      if (rel.getWithinWatermark) DeduplicateWithinWatermark(groupCols, queryExecution.analyzed)
       else Deduplicate(groupCols, queryExecution.analyzed)
     }
   }

@@ -68,7 +68,6 @@ message Relation {
     WithWatermark with_watermark = 33;
     ApplyInPandasWithState apply_in_pandas_with_state = 34;
     HtmlString html_string = 35;
-    Deduplicate deduplicate_within_watermark = 36;
 
     // NA functions
     NAFill fill_na = 90;

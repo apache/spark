@@ -599,7 +599,7 @@ package object dsl {
       def deduplicateWithinWatermark(colNames: Seq[String]): Relation =
         Relation
           .newBuilder()
-          .setDeduplicateWithinWatermark(
+          .setDeduplicate(
             Deduplicate
               .newBuilder()
               .setInput(logicalPlan)
