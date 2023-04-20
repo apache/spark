@@ -100,29 +100,33 @@ Union false, false
 -- !query
 SELECT 1 AS three UNION SELECT 2 UNION SELECT 3 ORDER BY 1
 -- !query analysis
-org.apache.spark.sql.catalyst.parser.ParseException
-{
-  "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42601",
-  "messageParameters" : {
-    "error" : "'SELECT'",
-    "hint" : ""
-  }
-}
+Sort [three#x ASC NULLS FIRST], true
++- Distinct
+   +- Union false, false
+      :- Distinct
+      :  +- Union false, false
+      :     :- Project [1 AS three#x]
+      :     :  +- OneRowRelation
+      :     +- Project [2 AS 2#x]
+      :        +- OneRowRelation
+      +- Project [3 AS 3#x]
+         +- OneRowRelation
 
 
 -- !query
 SELECT 1 AS two UNION SELECT 2 UNION SELECT 2 ORDER BY 1
 -- !query analysis
-org.apache.spark.sql.catalyst.parser.ParseException
-{
-  "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42601",
-  "messageParameters" : {
-    "error" : "'SELECT'",
-    "hint" : ""
-  }
-}
+Sort [two#x ASC NULLS FIRST], true
++- Distinct
+   +- Union false, false
+      :- Distinct
+      :  +- Union false, false
+      :     :- Project [1 AS two#x]
+      :     :  +- OneRowRelation
+      :     +- Project [2 AS 2#x]
+      :        +- OneRowRelation
+      +- Project [2 AS 2#x]
+         +- OneRowRelation
 
 
 -- !query
@@ -221,29 +225,37 @@ Sort [two#x ASC NULLS FIRST], true
 -- !query
 SELECT 1.1 AS three UNION SELECT 2 UNION SELECT 3 ORDER BY 1
 -- !query analysis
-org.apache.spark.sql.catalyst.parser.ParseException
-{
-  "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42601",
-  "messageParameters" : {
-    "error" : "'SELECT'",
-    "hint" : ""
-  }
-}
+Sort [three#x ASC NULLS FIRST], true
++- Distinct
+   +- Union false, false
+      :- Distinct
+      :  +- Union false, false
+      :     :- Project [cast(three#x as decimal(11,1)) AS three#x]
+      :     :  +- Project [1.1 AS three#x]
+      :     :     +- OneRowRelation
+      :     +- Project [cast(2#x as decimal(11,1)) AS 2#x]
+      :        +- Project [2 AS 2#x]
+      :           +- OneRowRelation
+      +- Project [cast(3#x as decimal(11,1)) AS 3#x]
+         +- Project [3 AS 3#x]
+            +- OneRowRelation
 
 
 -- !query
 SELECT double(1.1) AS two UNION SELECT 2 UNION SELECT double(2.0) ORDER BY 1
 -- !query analysis
-org.apache.spark.sql.catalyst.parser.ParseException
-{
-  "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42601",
-  "messageParameters" : {
-    "error" : "'SELECT'",
-    "hint" : ""
-  }
-}
+Sort [two#x ASC NULLS FIRST], true
++- Distinct
+   +- Union false, false
+      :- Distinct
+      :  +- Union false, false
+      :     :- Project [cast(1.1 as double) AS two#x]
+      :     :  +- OneRowRelation
+      :     +- Project [cast(2#x as double) AS 2#x]
+      :        +- Project [2 AS 2#x]
+      :           +- OneRowRelation
+      +- Project [cast(2.0 as double) AS 2.0#x]
+         +- OneRowRelation
 
 
 -- !query
@@ -606,57 +618,59 @@ Sort [q1#xL ASC NULLS FIRST], true
 -- !query
 (SELECT 1,2,3 UNION SELECT 4,5,6) INTERSECT SELECT 4,5,6
 -- !query analysis
-org.apache.spark.sql.catalyst.parser.ParseException
-{
-  "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42601",
-  "messageParameters" : {
-    "error" : "'SELECT'",
-    "hint" : ""
-  }
-}
+Intersect false
+:- Distinct
+:  +- Union false, false
+:     :- Project [1 AS 1#x, 2 AS 2#x, 3 AS 3#x]
+:     :  +- OneRowRelation
+:     +- Project [4 AS 4#x, 5 AS 5#x, 6 AS 6#x]
+:        +- OneRowRelation
++- Project [4 AS 4#x, 5 AS 5#x, 6 AS 6#x]
+   +- OneRowRelation
 
 
 -- !query
 (SELECT 1,2,3 UNION SELECT 4,5,6 ORDER BY 1,2) INTERSECT SELECT 4,5,6
 -- !query analysis
-org.apache.spark.sql.catalyst.parser.ParseException
-{
-  "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42601",
-  "messageParameters" : {
-    "error" : "'SELECT'",
-    "hint" : ""
-  }
-}
+Intersect false
+:- Sort [1#x ASC NULLS FIRST, 2#x ASC NULLS FIRST], true
+:  +- Distinct
+:     +- Union false, false
+:        :- Project [1 AS 1#x, 2 AS 2#x, 3 AS 3#x]
+:        :  +- OneRowRelation
+:        +- Project [4 AS 4#x, 5 AS 5#x, 6 AS 6#x]
+:           +- OneRowRelation
++- Project [4 AS 4#x, 5 AS 5#x, 6 AS 6#x]
+   +- OneRowRelation
 
 
 -- !query
 (SELECT 1,2,3 UNION SELECT 4,5,6) EXCEPT SELECT 4,5,6
 -- !query analysis
-org.apache.spark.sql.catalyst.parser.ParseException
-{
-  "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42601",
-  "messageParameters" : {
-    "error" : "'SELECT'",
-    "hint" : ""
-  }
-}
+Except false
+:- Distinct
+:  +- Union false, false
+:     :- Project [1 AS 1#x, 2 AS 2#x, 3 AS 3#x]
+:     :  +- OneRowRelation
+:     +- Project [4 AS 4#x, 5 AS 5#x, 6 AS 6#x]
+:        +- OneRowRelation
++- Project [4 AS 4#x, 5 AS 5#x, 6 AS 6#x]
+   +- OneRowRelation
 
 
 -- !query
 (SELECT 1,2,3 UNION SELECT 4,5,6 ORDER BY 1,2) EXCEPT SELECT 4,5,6
 -- !query analysis
-org.apache.spark.sql.catalyst.parser.ParseException
-{
-  "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42601",
-  "messageParameters" : {
-    "error" : "'SELECT'",
-    "hint" : ""
-  }
-}
+Except false
+:- Sort [1#x ASC NULLS FIRST, 2#x ASC NULLS FIRST], true
+:  +- Distinct
+:     +- Union false, false
+:        :- Project [1 AS 1#x, 2 AS 2#x, 3 AS 3#x]
+:        :  +- OneRowRelation
+:        +- Project [4 AS 4#x, 5 AS 5#x, 6 AS 6#x]
+:           +- OneRowRelation
++- Project [4 AS 4#x, 5 AS 5#x, 6 AS 6#x]
+   +- OneRowRelation
 
 
 -- !query
@@ -1164,15 +1178,14 @@ Except All true
 -- !query
 SELECT cast('3.4' as decimal(38, 18)) UNION SELECT 'foo'
 -- !query analysis
-org.apache.spark.sql.catalyst.parser.ParseException
-{
-  "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42601",
-  "messageParameters" : {
-    "error" : "'SELECT'",
-    "hint" : ""
-  }
-}
+Distinct
++- Union false, false
+   :- Project [cast(CAST(3.4 AS DECIMAL(38,18))#x as double) AS CAST(3.4 AS DECIMAL(38,18))#x]
+   :  +- Project [cast(3.4 as decimal(38,18)) AS CAST(3.4 AS DECIMAL(38,18))#x]
+   :     +- OneRowRelation
+   +- Project [cast(foo#x as double) AS foo#x]
+      +- Project [foo AS foo#x]
+         +- OneRowRelation
 
 
 -- !query

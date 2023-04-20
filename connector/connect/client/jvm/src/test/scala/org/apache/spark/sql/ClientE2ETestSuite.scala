@@ -193,6 +193,7 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper {
   }
 
   test("write jdbc") {
+    assume(IntegrationTestUtils.isSparkHiveJarAvailable)
     if (SystemUtils.isJavaVersionAtLeast(JavaVersion.JAVA_9)) {
       val url = "jdbc:derby:memory:1234"
       val table = "t1"

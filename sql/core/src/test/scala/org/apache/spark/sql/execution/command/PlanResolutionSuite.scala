@@ -2377,7 +2377,7 @@ class PlanResolutionSuite extends AnalysisTest {
     checkError(
       exception = parseException(parsePlan)(sql),
       errorClass = "PARSE_SYNTAX_ERROR",
-      parameters = Map("error" -> "':'", "hint" -> ": extra input ':'"))
+      parameters = Map("error" -> "':'", "hint" -> ""))
   }
 
   test("create hive table - table file format") {
