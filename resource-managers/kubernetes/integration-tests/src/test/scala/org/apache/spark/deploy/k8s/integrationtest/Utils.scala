@@ -29,7 +29,6 @@ import org.apache.commons.compress.archivers.tar.{TarArchiveEntry, TarArchiveOut
 import org.apache.commons.compress.compressors.gzip.GzipCompressorOutputStream
 import org.apache.commons.compress.utils.IOUtils
 import org.apache.commons.io.output.ByteArrayOutputStream
-import org.apache.hadoop.util.VersionInfo
 
 import org.apache.spark.{SPARK_VERSION, SparkException}
 import org.apache.spark.internal.Logging
