@@ -111,7 +111,7 @@ sparkR.conf <- function(key, defaultValue) {
       tryCatch(callJMethod(conf, "get", key),
               error = function(e) {
                 estr <- as.character(e)
-                if (any(grepl("java.util.NoSuchElementException", estr, fixed = TRUE))) {
+                if (any(grepl("SQL_CONF_NOT_FOUND", estr, fixed = TRUE))) {
                   stop("Config '", key, "' is not set")
                 } else {
                   stop("Unknown error: ", estr)
