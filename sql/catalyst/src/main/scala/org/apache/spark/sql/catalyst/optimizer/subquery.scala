@@ -459,6 +459,7 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] with AliasHelpe
       case alias @ Alias(_: AttributeReference, _) =>
         (alias.exprId, Literal.create(null, alias.dataType))
       case alias @ Alias(l: Literal, _) =>
+        // SPARK-43156: copy value to get the correct value when extracting in constructLeftJoins
         (alias.exprId, l.copy(value = l.value))
       case ne => (ne.exprId, evalAggExprOnZeroTups(ne))
     }.toMap
