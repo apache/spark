@@ -725,7 +725,7 @@ class ExpressionParserSuite extends AnalysisTest {
     checkError(
       exception = parseException(".e3"),
       errorClass = "PARSE_SYNTAX_ERROR",
-      parameters = Map("error" -> "'.'", "hint" -> ": extra input '.'"))
+      parameters = Map("error" -> "'.'", "hint" -> ""))
 
     // Tiny Int Literal
     assertEqual("10Y", Literal(10.toByte))

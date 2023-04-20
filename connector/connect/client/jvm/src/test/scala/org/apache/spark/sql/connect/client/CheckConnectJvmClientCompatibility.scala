@@ -126,7 +126,12 @@ object CheckConnectJvmClientCompatibility {
       IncludeByName("org.apache.spark.sql.RuntimeConfig.*"),
       IncludeByName("org.apache.spark.sql.TypedColumn.*"),
       IncludeByName("org.apache.spark.sql.SQLImplicits.*"),
-      IncludeByName("org.apache.spark.sql.DatasetHolder.*"))
+      IncludeByName("org.apache.spark.sql.DatasetHolder.*"),
+      IncludeByName("org.apache.spark.sql.streaming.DataStreamReader.*"),
+      IncludeByName("org.apache.spark.sql.streaming.DataStreamWriter.*"),
+      IncludeByName("org.apache.spark.sql.streaming.StreamingQuery.*"),
+      IncludeByName("org.apache.spark.sql.streaming.StreamingQueryStatus.*"),
+      IncludeByName("org.apache.spark.sql.streaming.StreamingQueryProgress.*"))
     val excludeRules = Seq(
       // Filter unsupported rules:
       // Note when muting errors for a method, checks on all overloading methods are also muted.
@@ -164,7 +169,6 @@ object CheckConnectJvmClientCompatibility {
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.rdd"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.toJavaRDD"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.javaRDD"),
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.writeStream"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.Dataset.this"),
       ProblemFilters.exclude[Problem](
         "org.apache.spark.sql.Dataset.dropDuplicatesWithinWatermark"),
@@ -199,7 +203,6 @@ object CheckConnectJvmClientCompatibility {
         "org.apache.spark.sql.SparkSession.baseRelationToDataFrame"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.createDataset"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.executeCommand"),
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.readStream"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SparkSession.this"),
 
       // RuntimeConfig
@@ -207,6 +210,33 @@ object CheckConnectJvmClientCompatibility {
 
       // TypedColumn
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.TypedColumn.this"),
+
+      // DataStreamReader
+      ProblemFilters.exclude[Problem](
+        "org.apache.spark.sql.streaming.DataStreamReader.table" // TODO( SPARK-43144)
+      ),
+
+      // DataStreamWriter
+      ProblemFilters.exclude[Problem](
+        "org.apache.spark.sql.streaming.DataStreamWriter.foreach" // TODO(SPARK-43133)
+      ),
+      ProblemFilters.exclude[Problem](
+        "org.apache.spark.sql.streaming.DataStreamWriter.foreachBatch" // TODO(SPARK-42944)
+      ),
+      ProblemFilters.exclude[Problem](
+        "org.apache.spark.sql.streaming.DataStreamWriter.SOURCE*" // These are constant vals.
+      ),
+
+      // StreamingQuery
+      ProblemFilters.exclude[Problem](
+        "org.apache.spark.sql.streaming.StreamingQuery.awaitTermination" // TODO(SPARK-43143)
+      ),
+      ProblemFilters.exclude[Problem](
+        "org.apache.spark.sql.streaming.StreamingQuery.exception" // TODO(SPARK-43134)
+      ),
+      ProblemFilters.exclude[Problem](
+        "org.apache.spark.sql.streaming.StreamingQueryProgress.*" // TODO(SPARK-43128)
+      ),
 
       // SQLImplicits
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SQLImplicits.this"),
