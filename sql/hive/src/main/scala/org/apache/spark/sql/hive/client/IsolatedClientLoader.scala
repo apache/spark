@@ -265,10 +265,10 @@ private[hive] class IsolatedClientLoader(
             if (loaded == null) doLoadClass(name, resolve) else loaded
           }
           def doLoadClass(name: String, resolve: Boolean): Class[_] = {
-            val classFileName = name.replaceAll("\\.", "/") + ".class"
             if (isBarrierClass(name)) {
               // For barrier classes, we construct a new copy of the class.
-              val bytes = IOUtils.toByteArray(baseClassLoader.getResourceAsStream(classFileName))
+              val bytes = Utils.tryWithResource(
+                baseClassLoader.getResourceAsStream(classToPath(name)))(IOUtils.toByteArray)
               logDebug(s"custom defining: $name - ${util.Arrays.hashCode(bytes)}")
               defineClass(name, bytes, 0, bytes.length)
             } else if (!isSharedClass(name)) {
