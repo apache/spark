@@ -72,32 +72,33 @@ case class InlineCTE(alwaysInline: Boolean = false) extends Rule[LogicalPlan] {
   def buildCTEMap(
       plan: LogicalPlan,
       cteMap: mutable.Map[Long, (CTERelationDef, Int, mutable.Map[Long, Int])],
-      referencingCTEDefId: Option[Long] = None): Unit = {
+      outerRefMap: Option[mutable.Map[Long, Int]] = None): Unit = {
     plan match {
       case WithCTE(child, cteDefs) =>
         cteDefs.foreach { cteDef =>
           cteMap(cteDef.id) = (cteDef, 0, mutable.Map.empty.withDefaultValue(0))
         }
         cteDefs.foreach { cteDef =>
-          buildCTEMap(cteDef, cteMap, Some(cteDef.id))
+          val (_, _, refMap) = cteMap(cteDef.id)
+          buildCTEMap(cteDef, cteMap, Some(refMap))
         }
-        buildCTEMap(child, cteMap, referencingCTEDefId)
+        buildCTEMap(child, cteMap, outerRefMap)
 
       case ref: CTERelationRef =>
         val (cteDef, refCount, refMap) = cteMap(ref.cteId)
-        referencingCTEDefId.foreach(refMap(_) += 1)
         cteMap(ref.cteId) = (cteDef, refCount + 1, refMap)
+        outerRefMap.foreach(_(ref.cteId) += 1)
 
       case _ =>
         if (plan.containsPattern(CTE)) {
           plan.children.foreach { child =>
-            buildCTEMap(child, cteMap, referencingCTEDefId)
+            buildCTEMap(child, cteMap, outerRefMap)
           }
 
           plan.expressions.foreach { expr =>
             if (expr.containsAllPatterns(PLAN_EXPRESSION, CTE)) {
               expr.foreach {
-                case e: SubqueryExpression => buildCTEMap(e.plan, cteMap, referencingCTEDefId)
+                case e: SubqueryExpression => buildCTEMap(e.plan, cteMap, outerRefMap)
                 case _ =>
               }
             }
@@ -110,13 +111,11 @@ case class InlineCTE(alwaysInline: Boolean = false) extends Rule[LogicalPlan] {
       cteRefMap: mutable.SortedMap[Long, (CTERelationDef, Int, mutable.Map[Long, Int])]
     ) = {
     cteRefMap.keys.toSeq.reverse.foreach { currentCTEId =>
-      val (_, currentRefCount, _) = cteRefMap(currentCTEId)
+      val (_, currentRefCount, refMap) = cteRefMap(currentCTEId)
       if (currentRefCount == 0) {
-        cteRefMap.keys.takeWhile(_ < currentCTEId).foreach { cteId =>
-          val (cteDef, refCount, refMap) = cteRefMap(cteId)
-          val uselessRefCount = refMap(currentCTEId)
-          refMap -= currentCTEId
-          cteRefMap(cteId) = (cteDef, refCount - uselessRefCount, refMap)
+        refMap.foreach { case (referencedCTEId, uselessRefCount) =>
+          val (cteDef, refCount, refMap) = cteRefMap(referencedCTEId)
+          cteRefMap(referencedCTEId) = (cteDef, refCount - uselessRefCount, refMap)
         }
       }
     }
