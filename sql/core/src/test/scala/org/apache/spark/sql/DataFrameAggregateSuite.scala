@@ -1565,29 +1565,46 @@ class DataFrameAggregateSuite extends QueryTest
     ).toDF("id", "value")
     df2.createOrReplaceTempView("df2")
 
-    // first test hllsketch_estimate via dataframe + sql, with and without configs
+    // first test hll_sketch_agg, hll_sketch_estimate via dataframe + sql,
+    // with and without configs, via both DF and SQL implementations
     val res1 = df1.groupBy("id")
       .agg(
         count("value").as("count"),
-        hll_sketch_estimate(hll_sketch_agg("value")).as("distinct_count_1"),
-        hll_sketch_estimate(hll_sketch_agg("value", 20)).as("distinct_count_2"),
-        hll_sketch_estimate(hll_sketch_agg("value", 20, "HLL_8")).as("distinct_count_3")
+        hll_sketch_agg("value").as("sketch_1"),
+        hll_sketch_agg("value", 20).as("sketch_2"),
+        hll_sketch_agg("value", 20, "HLL_8").as("sketch_3")
       )
+      .withColumn("distinct_count_1", hll_sketch_estimate("sketch_1"))
+      .withColumn("distinct_count_2", hll_sketch_estimate("sketch_2"))
+      .withColumn("distinct_count_3", hll_sketch_estimate("sketch_3"))
+      .drop("sketch_1", "sketch_2", "sketch_3")
     checkAnswer(res1, Row(1, 7, 4, 4, 4))
 
     val res2 = sql(
-      """select
+      """with sketches as (
+        |select
         | id,
         | count(value) as count,
-        | hll_sketch_estimate(hll_sketch_agg(value)) as distinct_count_1,
-        | hll_sketch_estimate(hll_sketch_agg(value, 20)) as distinct_count_2,
-        | hll_sketch_estimate(hll_sketch_agg(value, 20, 'HLL_8')) as distinct_count_3
+        | hll_sketch_agg(value) as sketch_1,
+        | hll_sketch_agg(value, 20) as sketch_2,
+        | hll_sketch_agg(value, 20, 'HLL_8') as sketch_3
         |from df1
         |group by 1
+        |)
+        |
+        |select
+        | id,
+        | count,
+        | hll_sketch_estimate(sketch_1) as distinct_count_1,
+        | hll_sketch_estimate(sketch_2) as distinct_count_2,
+        | hll_sketch_estimate(sketch_3) as distinct_count_3
+        |from
+        | sketches
         |""".stripMargin)
     checkAnswer(res2, Row(1, 7, 4, 4, 4))
 
-    // next test hllsketch_binary via dataframe + sql, with and without configs
+    // now test hll_union_agg via dataframe + sql, with and without configs,
+    // unioning together sketches with default, non-default and different configurations
     val df3 = df1.groupBy("id")
       .agg(
         count("value").as("count"),
@@ -1597,12 +1614,10 @@ class DataFrameAggregateSuite extends QueryTest
       )
     df3.createOrReplaceTempView("df3")
 
-    // now test hllsketch_union_estimate via dataframe + sql, with and without configs,
-    // unioning together sketches with default, non-default and different configurations
     val df4 = sql(
       """select
         | id,
-        | count(value),
+        | count(value) as count,
         | hll_sketch_agg(value) as hllsketch_1,
         | hll_sketch_agg(value, 20, 'HLL_8') as hllsketch_2,
         | hll_sketch_agg(value, 20, 'HLL_8') as hllsketch_3
@@ -1632,7 +1647,52 @@ class DataFrameAggregateSuite extends QueryTest
         |""".stripMargin)
     checkAnswer(res4, Row(1, 15, 6, 6, 6))
 
-    val df5 = Seq(
+    // add tests to ensure hll_union works via both DF and SQL too
+    val df5 = df3.drop("count")
+    df5.createOrReplaceTempView("df5")
+
+    val df6 = df4.drop("count")
+      .withColumnRenamed("hllsketch_1", "hllsketch_4")
+      .withColumnRenamed("hllsketch_2", "hllsketch_5")
+      .withColumnRenamed("hllsketch_3", "hllsketch_6")
+    df6.createOrReplaceTempView("df6")
+
+    val res5 = df5.join(df6, "id")
+      .withColumn("distinct_count_1", hll_sketch_estimate(hll_union("hllsketch_1", "hllsketch_4")))
+      .withColumn("distinct_count_2", hll_sketch_estimate(hll_union("hllsketch_2", "hllsketch_5")))
+      .withColumn("distinct_count_3", hll_sketch_estimate(hll_union("hllsketch_3", "hllsketch_6")))
+      .drop("hllsketch_1", "hllsketch_2", "hllsketch_3",
+        "hllsketch_4", "hllsketch_5", "hllsketch_6")
+    checkAnswer(res5, Row(1, 6, 6, 6))
+
+    val res6 = sql(
+      """with joined as (
+        |  select
+        |    l.id,
+        |    l.hllsketch_1,
+        |    l.hllsketch_2,
+        |    l.hllsketch_3,
+        |    r.hllsketch_4,
+        |    r.hllsketch_5,
+        |    r.hllsketch_6
+        |  from
+        |    df5 l
+        |    join
+        |    df6 r
+        |     on l.id = r.id
+        | )
+        |
+        |select
+        |  id,
+        |  hll_sketch_estimate(hll_union(hllsketch_1, hllsketch_4)) as distinct_count_1,
+        |  hll_sketch_estimate(hll_union(hllsketch_2, hllsketch_5)) as distinct_count_2,
+        |  hll_sketch_estimate(hll_union(hllsketch_3, hllsketch_6)) as distinct_count_3
+        |from
+        | joined
+        |""".stripMargin)
+    checkAnswer(res6, Row(1, 6, 6, 6))
+
+    val df7 = Seq(
       (1, "a"), (1, "a"), (1, "a"),
       (1, "b"),
       (1, null),
@@ -1640,21 +1700,21 @@ class DataFrameAggregateSuite extends QueryTest
     ).toDF("id", "value")
 
     // empty column test
-    val res5 = df5.where(expr("id = 2")).groupBy("id")
+    val res7 = df7.where(expr("id = 2")).groupBy("id")
       .agg(
         hll_sketch_estimate(hll_sketch_agg("value")).as("distinct_count")
       )
-    checkAnswer(res5, Row(2, 0))
+    checkAnswer(res7, Row(2, 0))
 
     // partial empty column test
-    val res0 = df5.groupBy("id")
+    val res8 = df7.groupBy("id")
       .agg(
         hll_sketch_estimate(hll_sketch_agg("value")).as("distinct_count")
       )
-    checkAnswer(res0, Seq(Row(1, 2), Row(2, 0)))
+    checkAnswer(res8, Seq(Row(1, 2), Row(2, 0)))
   }
 
-  test("SPARK-16484: hllsketch_estimate negative tests") {
+  test("SPARK-16484: hll_*_agg negative tests") {
 
     val df1 = Seq(
       (1, "a"), (1, "a"), (1, "a"),
@@ -1668,7 +1728,7 @@ class DataFrameAggregateSuite extends QueryTest
     val error0 = intercept[SparkException] {
       val res = df1.groupBy("id")
         .agg(
-          hll_sketch_agg("value", -1, "HLL_4").as("hllsketch")
+          hll_sketch_agg("value", 1, "HLL_4").as("hllsketch")
         )
       checkAnswer(res, Nil)
     }
@@ -1680,7 +1740,7 @@ class DataFrameAggregateSuite extends QueryTest
           hll_sketch_agg("value").as("hllsketch")
         )
         .agg(
-          hll_union_agg("hllsketch", -1)
+          hll_union_agg("hllsketch", 30)
         )
       checkAnswer(res, Nil)
     }

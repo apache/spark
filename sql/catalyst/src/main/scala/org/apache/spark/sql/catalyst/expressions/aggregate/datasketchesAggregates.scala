@@ -27,7 +27,7 @@ import org.apache.datasketches.memory.Memory
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{ExpectsInputTypes, Expression, ExpressionDescription, Literal}
 import org.apache.spark.sql.catalyst.trees.{BinaryLike, TernaryLike}
-import org.apache.spark.sql.types.{AbstractDataType, AnyDataType, BinaryType, DataType, IntegerType, LongType, StringType}
+import org.apache.spark.sql.types.{AbstractDataType, BinaryType, DataType, IntegerType, LongType, StringType, TypeCollection}
 import org.apache.spark.unsafe.types.UTF8String
 
 
@@ -65,9 +65,20 @@ case class HllSketchAgg(
 
   // Hllsketch config - mark as lazy so that they're not evaluated during tree transformation.
 
-  lazy val lgConfigK: Int = second.eval().asInstanceOf[Int]
+  lazy val lgConfigK: Int = {
+    val lgConfigK = lgConfigKExpression.eval().asInstanceOf[Int]
+    // can't use HllUtil.checkLgK so replicate the check
+    if (lgConfigK < 4 || lgConfigK > 21) {
+      throw new SketchesArgumentException("Invalid lgConfigK value")
+    } else {
+      lgConfigK
+    }
+  }
+
   lazy val tgtHllType: TgtHllType = try {
-    TgtHllType.valueOf(third.eval().asInstanceOf[UTF8String].toString.toUpperCase(Locale.ROOT))
+    TgtHllType.valueOf(
+      tgtHllTypeExpression.eval().asInstanceOf[UTF8String].toString.toUpperCase(Locale.ROOT)
+    )
   } catch {
     case _: IllegalArgumentException =>
       throw new SketchesArgumentException("Invalid tgtHllType value")
@@ -120,7 +131,8 @@ case class HllSketchAgg(
 
   override def prettyName: String = "hll_sketch_agg"
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(AnyDataType, IntegerType, StringType)
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(TypeCollection(IntegerType, LongType, StringType, BinaryType), IntegerType, StringType)
 
   override def dataType: DataType = BinaryType
 
@@ -232,7 +244,15 @@ case class HllUnionAgg(
 
   // Union config - mark as lazy so that they're not evaluated during tree transformation.
 
-  lazy val lgMaxK: Int = lgMaxKExpression.eval().asInstanceOf[Int]
+  lazy val lgMaxK: Int = {
+    val lgMaxK = lgMaxKExpression.eval().asInstanceOf[Int]
+    // can't use HllUtil.checkLgK so replicate the check
+    if (lgMaxK < 4 || lgMaxK > 21) {
+      throw new SketchesArgumentException("Invalid lgMaxK value")
+    } else {
+      lgMaxK
+    }
+  }
 
   // Constructors
 

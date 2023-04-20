@@ -507,7 +507,6 @@ object FunctionRegistry {
     expression[RegrSlope]("regr_slope"),
     expression[RegrIntercept]("regr_intercept"),
     expression[Mode]("mode"),
-    expression[HllSketchEstimate]("hllsketch_estimate"),
     expression[HllSketchAgg]("hll_sketch_agg"),
     expression[HllUnionAgg]("hll_union_agg"),
 
