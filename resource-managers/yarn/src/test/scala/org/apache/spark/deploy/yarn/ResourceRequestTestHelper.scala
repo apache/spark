@@ -25,11 +25,6 @@ import org.apache.spark.util.Utils
 
 object ResourceRequestTestHelper {
   def initializeResourceTypes(resourceTypes: Seq[String]): Unit = {
-    if (!ResourceRequestHelper.isYarnResourceTypesAvailable()) {
-      throw new IllegalStateException("This method should not be invoked " +
-        "since YARN resource types is not available because of old Hadoop version!" )
-    }
-
     // ResourceUtils.reinitializeResources() is the YARN-way
     // to specify resources for the execution of the tests.
     // This method should receive standard resources with names of memory-mb and vcores.
@@ -69,11 +64,6 @@ object ResourceRequestTestHelper {
   }
 
   private def getResourceInformation(res: Resource, name: String): AnyRef = {
-    if (!ResourceRequestHelper.isYarnResourceTypesAvailable()) {
-      throw new IllegalStateException("assertResourceTypeValue() should not be invoked " +
-        "since yarn resource types is not available because of old Hadoop version!")
-    }
-
     val getResourceInformationMethod = res.getClass.getMethod("getResourceInformation",
       classOf[String])
     val resourceInformation = getResourceInformationMethod.invoke(res, name)

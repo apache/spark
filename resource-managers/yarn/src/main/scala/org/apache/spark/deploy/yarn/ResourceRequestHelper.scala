@@ -152,12 +152,6 @@ private object ResourceRequestHelper extends Logging {
       return
     }
 
-    if (!isYarnResourceTypesAvailable()) {
-      logWarning("Ignoring custom resource requests because " +
-          "the version of YARN does not support it!")
-      return
-    }
-
     val resInfoClass = Utils.classForName(RESOURCE_INFO_CLASS)
     val setResourceInformationMethod =
       try {
@@ -238,14 +232,5 @@ private object ResourceRequestHelper extends Logging {
     } catch {
       case  _: NoSuchMethodException => false
     }
-  }
-
-  /**
-   * Checks whether Hadoop 2.x or 3 is used as a dependency.
-   * In case of Hadoop 3 and later, the ResourceInformation class
-   * should be available on the classpath.
-   */
-  def isYarnResourceTypesAvailable(): Boolean = {
-    Try(Utils.classForName(RESOURCE_INFO_CLASS)).isSuccess
   }
 }

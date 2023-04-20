@@ -508,8 +508,7 @@ private[yarn] class YarnAllocator(
             s" ResourceProfile Id: $rpId, each with " +
             s"${resource.getVirtualCores} core(s) and " +
             s"${resource.getMemory} MB memory."
-          if (ResourceRequestHelper.isYarnResourceTypesAvailable() &&
-            ResourceRequestHelper.isYarnCustomResourcesNonEmpty(resource)) {
+          if (ResourceRequestHelper.isYarnCustomResourcesNonEmpty(resource)) {
             requestContainerMessage ++= s" with custom resources: " + resource.toString
           }
           logInfo(requestContainerMessage)

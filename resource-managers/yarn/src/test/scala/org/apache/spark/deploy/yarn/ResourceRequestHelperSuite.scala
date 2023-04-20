@@ -102,7 +102,6 @@ class ResourceRequestHelperSuite extends SparkFunSuite with Matchers {
       ResourceInformation(CUSTOM_RES_2, 10, "G"))
   ).foreach { case (name, resources) =>
     test(s"valid request: $name") {
-      assume(isYarnResourceTypesAvailable())
       val resourceDefs = resources.map { r => r.name }
       val requests = resources.map { r => (r.name, r.value.toString + r.unit) }.toMap
 
@@ -124,7 +123,6 @@ class ResourceRequestHelperSuite extends SparkFunSuite with Matchers {
     ("invalid unit", CUSTOM_RES_1, "123ppp")
   ).foreach { case (name, key, value) =>
     test(s"invalid request: $name") {
-      assume(isYarnResourceTypesAvailable())
       ResourceRequestTestHelper.initializeResourceTypes(Seq(key))
 
       val resource = createResource()
@@ -147,7 +145,6 @@ class ResourceRequestHelperSuite extends SparkFunSuite with Matchers {
     NEW_CONFIG_DRIVER_CORES -> "1G"
   ).foreach { case (key, value) =>
     test(s"disallowed resource request: $key") {
-      assume(isYarnResourceTypesAvailable())
       val conf = new SparkConf(false).set(key, value)
       val thrown = intercept[SparkException] {
         validateResources(conf)

@@ -188,7 +188,6 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers {
   }
 
   test("single container allocated with ResourceProfile") {
-    assume(isYarnResourceTypesAvailable())
     val yarnResources = Seq(sparkConf.get(YARN_GPU_DEVICE))
     ResourceRequestTestHelper.initializeResourceTypes(yarnResources)
     // create default profile so we get a different id to test below
@@ -223,7 +222,6 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers {
   }
 
   test("multiple containers allocated with ResourceProfiles") {
-    assume(isYarnResourceTypesAvailable())
     val yarnResources = Seq(sparkConf.get(YARN_GPU_DEVICE), sparkConf.get(YARN_FPGA_DEVICE))
     ResourceRequestTestHelper.initializeResourceTypes(yarnResources)
     // create default profile so we get a different id to test below
@@ -275,7 +273,6 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers {
   }
 
   test("custom resource requested from yarn") {
-    assume(isYarnResourceTypesAvailable())
     ResourceRequestTestHelper.initializeResourceTypes(List("gpu"))
 
     val mockAmClient = mock(classOf[AMRMClient[ContainerRequest]])
@@ -299,7 +296,6 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers {
   }
 
   test("custom spark resource mapped to yarn resource configs") {
-    assume(isYarnResourceTypesAvailable())
     val yarnMadeupResource = "yarn.io/madeup"
     val yarnResources = Seq(sparkConf.get(YARN_GPU_DEVICE), sparkConf.get(YARN_FPGA_DEVICE),
       yarnMadeupResource)
@@ -325,7 +321,6 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers {
   }
 
   test("gpu/fpga spark resource mapped to custom yarn resource") {
-    assume(isYarnResourceTypesAvailable())
     val gpuCustomName = "custom/gpu"
     val fpgaCustomName = "custom/fpga"
     val originalGpu = sparkConf.get(YARN_GPU_DEVICE)
