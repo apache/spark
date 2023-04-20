@@ -196,7 +196,7 @@ class StreamingQuery:
         >>> sq.stop()
         """
         if timeout is not None:
-            if not isinstance(timeout, (int, float)) or timeout < 0:
+            if not isinstance(timeout, (int, float)) or timeout <= 0:
                 raise ValueError("timeout must be a positive integer or float. Got %s" % timeout)
             return self._jsq.awaitTermination(int(timeout * 1000))
         else:
