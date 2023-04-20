@@ -272,13 +272,16 @@ package object dsl {
       def attr: UnresolvedAttribute = analysis.UnresolvedAttribute(s)
     }
     implicit class DslAttr(override val attr: UnresolvedAttribute) extends ImplicitAttribute {
-      def s: String = attr.name
+      def s: String = {
+        assert(attr.nameParts.length == 1, "attribute must have single name part")
+        attr.nameParts.head
+      }
     }
 
     abstract class ImplicitAttribute extends ImplicitOperators {
       def s: String
       def expr: UnresolvedAttribute = attr
-      def attr: UnresolvedAttribute = analysis.UnresolvedAttribute(s)
+      def attr: UnresolvedAttribute = analysis.UnresolvedAttribute(Seq(s))
 
       /** Creates a new AttributeReference of type boolean */
       def boolean: AttributeReference = AttributeReference(s, BooleanType, nullable = true)()
