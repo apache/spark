@@ -86,6 +86,7 @@ def _create_py_udf(
                 "Arrow optimization for Python UDFs cannot be enabled.",
                 UserWarning,
             )
+            return regular_udf
     else:
         return regular_udf
 
