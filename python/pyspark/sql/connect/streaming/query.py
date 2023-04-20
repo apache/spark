@@ -191,8 +191,8 @@ class StreamingQueryManager:
     def get(self, id: str) -> StreamingQuery:
         cmd = pb2.StreamingQueryManagerCommand()
         cmd.get_query.id = id
-        result = self._execute_streaming_query_manager_cmd(cmd)
-        return StreamingQuery(self._session, result.id, result.run_id, result.name) # TODO: name none?
+        query = self._execute_streaming_query_manager_cmd(cmd).query
+        return StreamingQuery(self._session, query.id, query.run_id, query.name) # TODO: name none?
 
     get.__doc__ = PySparkStreamingQueryManager.get.__doc__
 
