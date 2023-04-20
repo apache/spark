@@ -466,9 +466,6 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         )
 
     def test_collect_timestamp(self):
-        from pyspark.sql import functions as SF
-        from pyspark.sql.connect import functions as CF
-
         query = """
             SELECT * FROM VALUES
             (TIMESTAMP('2022-12-25 10:30:00'), 1),
@@ -652,10 +649,6 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
 
     def test_with_none_and_nan(self):
         # SPARK-41855: make createDataFrame support None and NaN
-
-        from pyspark.sql import functions as SF
-        from pyspark.sql.connect import functions as CF
-
         # SPARK-41814: test with eqNullSafe
         data1 = [Row(id=1, value=float("NaN")), Row(id=2, value=42.0), Row(id=3, value=None)]
         data2 = [Row(id=1, value=np.nan), Row(id=2, value=42.0), Row(id=3, value=None)]
@@ -1670,9 +1663,6 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
 
     def test_observe(self):
         # SPARK-41527: test DataFrame.observe()
-        from pyspark.sql import functions as SF
-        from pyspark.sql.connect import functions as CF
-
         observation_name = "my_metric"
 
         self.assert_eq(
@@ -3140,27 +3130,38 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         )
 
 
-class SparkConnectSessionTests(SparkConnectSQLTestCase):
+class SparkConnectSessionTests(ReusedConnectTestCase):
+    def setUp(self) -> None:
+        self.spark = (
+            PySparkSession.builder.config(conf=self.conf())
+            .appName(self.__class__.__name__)
+            .remote("local[4]")
+            .getOrCreate()
+        )
+
+    def tearDown(self):
+        self.spark.stop()
+
     def _check_no_active_session_error(self, e: PySparkException):
         self.check_error(exception=e, error_class="NO_ACTIVE_SESSION", message_parameters=dict())
 
     def test_stop_session(self):
-        df = self.connect.sql("select 1 as a, 2 as b")
-        catalog = self.connect.catalog
-        self.connect.stop()
+        df = self.spark.sql("select 1 as a, 2 as b")
+        catalog = self.spark.catalog
+        self.spark.stop()
 
         # _execute_and_fetch
         with self.assertRaises(SparkConnectException) as e:
-            self.connect.sql("select 1")
+            self.spark.sql("select 1")
         self._check_no_active_session_error(e.exception)
 
         with self.assertRaises(SparkConnectException) as e:
-            catalog.tableExists(self.tbl_name)
+            catalog.tableExists("table")
         self._check_no_active_session_error(e.exception)
 
         # _execute
         with self.assertRaises(SparkConnectException) as e:
-            self.connect.udf.register("test_func", lambda x: x + 1)
+            self.spark.udf.register("test_func", lambda x: x + 1)
         self._check_no_active_session_error(e.exception)
 
         # _analyze
@@ -3170,8 +3171,42 @@ class SparkConnectSessionTests(SparkConnectSQLTestCase):
 
         # Config
         with self.assertRaises(SparkConnectException) as e:
-            self.connect.conf.get("some.conf")
+            self.spark.conf.get("some.conf")
         self._check_no_active_session_error(e.exception)
+
+    def test_error_stack_trace(self):
+        with self.sql_conf({"spark.sql.pyspark.jvmStacktrace.enabled": True}):
+            with self.assertRaises(AnalysisException) as e:
+                self.spark.sql("select x").collect()
+            self.assertTrue("JVM stacktrace" in e.exception.message)
+            self.assertTrue(
+                "at org.apache.spark.sql.catalyst.analysis.CheckAnalysis" in e.exception.message
+            )
+
+        with self.sql_conf({"spark.sql.pyspark.jvmStacktrace.enabled": False}):
+            with self.assertRaises(AnalysisException) as e:
+                self.spark.sql("select x").collect()
+            self.assertFalse("JVM stacktrace" in e.exception.message)
+            self.assertFalse(
+                "at org.apache.spark.sql.catalyst.analysis.CheckAnalysis" in e.exception.message
+            )
+
+        # Create a new session with a different stack trace size.
+        self.spark.stop()
+        spark = (
+            PySparkSession.builder.config(conf=self.conf())
+            .config("spark.connect.jvmStacktrace.maxSize", 128)
+            .remote("local[4]")
+            .getOrCreate()
+        )
+        spark.conf.set("spark.sql.pyspark.jvmStacktrace.enabled", "true")
+        with self.assertRaises(AnalysisException) as e:
+            spark.sql("select x").collect()
+        self.assertTrue("JVM stacktrace" in e.exception.message)
+        self.assertFalse(
+            "at org.apache.spark.sql.catalyst.analysis.CheckAnalysis" in e.exception.message
+        )
+        spark.stop()
 
 
 @unittest.skipIf(not should_test_connect, connect_requirement_message)

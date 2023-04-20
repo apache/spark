@@ -30,6 +30,7 @@ from pyspark.storagelevel import StorageLevel
 from pyspark.sql.types import DataType
 
 import pyspark.sql.connect.proto as proto
+from pyspark.sql.connect.conversion import storage_level_to_proto
 from pyspark.sql.connect.column import Column
 from pyspark.sql.connect.expressions import (
     SortOrder,
@@ -1899,15 +1900,7 @@ class CacheTable(LogicalPlan):
     def plan(self, session: "SparkConnectClient") -> proto.Relation:
         _cache_table = proto.CacheTable(table_name=self._table_name)
         if self._storage_level:
-            _cache_table.storage_level.CopyFrom(
-                proto.StorageLevel(
-                    use_disk=self._storage_level.useDisk,
-                    use_memory=self._storage_level.useMemory,
-                    use_off_heap=self._storage_level.useOffHeap,
-                    deserialized=self._storage_level.deserialized,
-                    replication=self._storage_level.replication,
-                )
-            )
+            _cache_table.storage_level.CopyFrom(storage_level_to_proto(self._storage_level))
         plan = proto.Relation(catalog=proto.Catalog(cache_table=_cache_table))
         return plan
 
