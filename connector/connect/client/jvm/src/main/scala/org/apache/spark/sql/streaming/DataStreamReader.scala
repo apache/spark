@@ -218,6 +218,20 @@ final class DataStreamReader private[sql] (sparkSession: SparkSession) extends L
   def parquet(path: String): DataFrame = format("parquet").load(path)
 
   /**
+   * Define a Streaming DataFrame on a Table. The DataSource corresponding to the table should
+   * support streaming mode.
+   * @param tableName The name of the table
+   * @since 3.5.0
+   */
+  def table(tableName: String): DataFrame = {
+    require(tableName != null, "The table name can't be null")
+    sparkSession.newDataFrame { builder =>
+      builder.getReadBuilder.setIsStreaming(true).getNamedTableBuilder
+        .setUnparsedIdentifier(tableName)
+    }
+  }
+
+  /**
    * Loads text files and returns a `DataFrame` whose schema starts with a string column named
    * "value", and followed by partitioned columns if there are any. The text files must be encoded
    * as UTF-8.
