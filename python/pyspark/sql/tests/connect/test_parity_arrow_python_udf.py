@@ -29,8 +29,10 @@ class ArrowPythonUDFParityTests(UDFParityTests, PythonUDFArrowTestsMixin):
 
     @classmethod
     def tearDownClass(cls):
-        cls.spark.conf.unset("spark.sql.execution.pythonUDF.arrow.enabled")
-        super(ArrowPythonUDFParityTests, cls).tearDownClass()
+        try:
+            cls.spark.conf.unset("spark.sql.execution.pythonUDF.arrow.enabled")
+        finally:
+            super(ArrowPythonUDFParityTests, cls).tearDownClass()
 
 
 if __name__ == "__main__":
