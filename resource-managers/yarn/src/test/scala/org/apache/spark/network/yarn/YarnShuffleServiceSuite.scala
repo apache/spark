@@ -1037,14 +1037,17 @@ abstract class YarnShuffleServiceSuite extends SparkFunSuite with Matchers {
   }
 
   private def makeAppInfo(user: String, appId: ApplicationId,
-      metadataStorageDisabled: Boolean = false): ApplicationInitializationContext = {
+      metadataStorageDisabled: Boolean = false,
+      authEnabled: Boolean = true): ApplicationInitializationContext = {
     if (!metadataStorageDisabled) {
       val secret = ByteBuffer.wrap(new Array[Byte](0))
       new ApplicationInitializationContext(user, appId, secret)
     } else {
       val payload = new mutable.HashMap[String, Object]()
       payload.put(YarnShuffleService.SPARK_SHUFFLE_SERVER_RECOVERY_DISABLED, java.lang.Boolean.TRUE)
-      payload.put(YarnShuffleService.SECRET_KEY, "")
+      if (authEnabled) {
+        payload.put(YarnShuffleService.SECRET_KEY, "")
+      }
       val mapper = new ObjectMapper()
       mapper.registerModule(DefaultScalaModule)
       val jsonString = mapper.writeValueAsString(payload)
@@ -1226,7 +1229,7 @@ abstract class YarnShuffleServiceSuite extends SparkFunSuite with Matchers {
     "Authentication is turned off") {
     s1 = createYarnShuffleService()
     val app1Id = ApplicationId.newInstance(1681252509, 1)
-    val app1Data = makeAppInfo("user", app1Id, metadataStorageDisabled = true)
+    val app1Data = makeAppInfo("user", app1Id, metadataStorageDisabled = true, authEnabled = false)
     s1.initializeApplication(app1Data)
     val execShuffleInfo1 =
       new ExecutorShuffleInfo(
