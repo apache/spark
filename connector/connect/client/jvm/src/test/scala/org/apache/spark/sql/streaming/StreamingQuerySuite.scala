@@ -84,11 +84,28 @@ class StreamingQuerySuite extends RemoteSparkSession with SQLHelper {
       "spark.sql.shuffle.partitions" -> "1" // Avoid too many reducers.
     ) {
       spark.sql("DROP TABLE IF EXISTS my_table")
-      val q1 = spark.readStream.format("rate").load().writeStream.toTable("my_table")
-      val q2 = spark.readStream.table("my_table").writeStream.format("console").start()
+
+      val q1 = spark.readStream
+        .format("rate")
+        .load()
+        .writeStream
+        .toTable("my_table")
+
+      val q2 = spark.readStream
+        .table("my_table")
+        .writeStream
+        .format("memory")
+        .queryName("my_sink")
+        .start()
+
       try {
         q1.processAllAvailable()
         q2.processAllAvailable()
+        eventually(timeout(10.seconds)) {
+          assert(q2.recentProgress.nonEmpty) // Query made progress.
+          assert(q1.recentProgress.nonEmpty) // Query made progress.
+        }
+        assert(spark.table("my_sink").count() > 0)
       }
       finally {
         q1.stop()
