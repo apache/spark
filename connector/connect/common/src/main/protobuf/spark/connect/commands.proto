@@ -313,7 +313,7 @@ message StreamingQueryCommandResult {
   }
 
   message AwaitTerminationResult {
-    optional bool terminated = 1;
+    bool terminated = 1;
   }
 }
 

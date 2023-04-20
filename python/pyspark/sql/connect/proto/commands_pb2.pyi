@@ -1125,23 +1125,11 @@ class StreamingQueryCommandResult(google.protobuf.message.Message):
         def __init__(
             self,
             *,
-            terminated: builtins.bool | None = ...,
+            terminated: builtins.bool = ...,
         ) -> None: ...
-        def HasField(
-            self,
-            field_name: typing_extensions.Literal[
-                "_terminated", b"_terminated", "terminated", b"terminated"
-            ],
-        ) -> builtins.bool: ...
         def ClearField(
-            self,
-            field_name: typing_extensions.Literal[
-                "_terminated", b"_terminated", "terminated", b"terminated"
-            ],
+            self, field_name: typing_extensions.Literal["terminated", b"terminated"]
         ) -> None: ...
-        def WhichOneof(
-            self, oneof_group: typing_extensions.Literal["_terminated", b"_terminated"]
-        ) -> typing_extensions.Literal["terminated"] | None: ...
 
     QUERY_ID_FIELD_NUMBER: builtins.int
     STATUS_FIELD_NUMBER: builtins.int
