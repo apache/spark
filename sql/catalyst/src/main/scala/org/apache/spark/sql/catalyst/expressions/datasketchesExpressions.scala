@@ -29,7 +29,7 @@ import org.apache.spark.sql.types.{AbstractDataType, BinaryType, DataType, LongT
     of a Datasketches HllSketch. """,
   examples = """
     Examples:
-      > SELECT _FUNC_(hll_sketch_agg(col1)
+      > SELECT _FUNC_(hll_sketch_agg(col1))
       FROM VALUES (1), (1), (2), (2), (3) tab(col1);
        3
   """,
