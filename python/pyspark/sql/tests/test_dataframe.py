@@ -939,6 +939,9 @@ class DataFrameTestsMixin:
                 nonlocal observed_metrics
                 observed_metrics = event.progress.observedMetrics
 
+            def onQueryIdle(self, event):
+                pass
+
             def onQueryTerminated(self, event):
                 pass
 
