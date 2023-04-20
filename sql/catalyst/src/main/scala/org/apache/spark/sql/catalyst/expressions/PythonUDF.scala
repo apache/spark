@@ -117,6 +117,11 @@ case class PythonUDAF(
   final override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode =
     throw QueryExecutionErrors.cannotGenerateCodeForExpressionError(this)
 
+  override def sql(isDistinct: Boolean): String = {
+    val distinct = if (isDistinct) "DISTINCT " else ""
+    s"$name($distinct${children.mkString(", ")})"
+  }
+
   final override val nodePatterns: Seq[TreePattern] = Seq(PYTHON_UDAF)
 
   override lazy val canonicalized: Expression = {
@@ -153,8 +158,13 @@ case class PrettyPythonUDF(
   override def toString: String = s"$name(${children.mkString(", ")})"
 
   override def sql(isDistinct: Boolean): String = {
+    val prettyChildren = children.map(_.transform {
+      case a: Attribute => new PrettyAttribute(a)
+      case a: Alias => PrettyAttribute(a.sql, a.dataType)
+      case p: PythonFuncExpression => PrettyPythonUDF(p.name, p.dataType, p.children)
+    })
     val distinct = if (isDistinct) "DISTINCT " else ""
-    s"$name($distinct${children.mkString(", ")})"
+    s"$name($distinct${prettyChildren.mkString(", ")})"
   }
 
   override def nullable: Boolean = true
