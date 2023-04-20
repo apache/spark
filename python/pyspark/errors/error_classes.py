@@ -44,9 +44,19 @@ ERROR_CLASSES_JSON = """
       "Cannot convert column into bool: please use '&' for 'and', '|' for 'or', '~' for 'not' when building DataFrame boolean expressions."
     ]
   },
+  "CANNOT_INFER_ARRAY_TYPE": {
+    "message": [
+      "Can not infer Array Type from an list with None as the first element."
+    ]
+  },
   "CANNOT_PARSE_DATATYPE": {
     "message": [
       "Unable to parse datatype from schema. <error>."
+    ]
+  },
+  "CANNOT_PROVIDE_METADATA": {
+    "message": [
+      "metadata can only be provided for a single column."
     ]
   },
   "CANNOT_SET_TOGETHER": {
@@ -284,6 +294,16 @@ ERROR_CLASSES_JSON = """
       "Slice with step is not supported."
     ]
   },
+  "UNSUPPORTED_DATA_TYPE" : {
+    "message" : [
+      "Unsupported DataType `<data_type>`."
+    ]
+  },
+  "UNSUPPORTED_LITERAL" : {
+    "message" : [
+      "Unsupported Literal '<literal>'."
+    ]
+  },
   "UNSUPPORTED_NUMPY_ARRAY_SCALAR" : {
     "message" : [
       "The type of array scalar '<dtype>' is not supported."
@@ -307,6 +327,11 @@ ERROR_CLASSES_JSON = """
   "VALUE_NOT_POSITIVE" : {
     "message" : [
       "Value for `<arg_name>` must be positive, got '<arg_value>'."
+    ]
+  },
+  "VALUE_OUT_OF_BOUND" : {
+    "message" : [
+      "Value for `<arg_name>` must be between <min> and <max>."
     ]
   },
   "WRONG_NUM_ARGS_FOR_HIGHER_ORDER_FUNCTION" : {
