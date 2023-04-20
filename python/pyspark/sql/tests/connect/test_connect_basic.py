@@ -1223,8 +1223,8 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
     def test_deduplicate_within_watermark_in_batch(self):
         df = self.connect.read.table(self.tbl_name)
         with self.assertRaisesRegex(
-                AnalysisException,
-                "dropDuplicatesWithinWatermark is not supported with batch DataFrames/DataSets",
+            AnalysisException,
+            "dropDuplicatesWithinWatermark is not supported with batch DataFrames/DataSets",
         ):
             df.dropDuplicatesWithinWatermark().toPandas()
 
@@ -1779,7 +1779,6 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             self.connect.read.table(self.tbl_name).hint("REPARTITION", "id", 3).toPandas()
 
     def test_join_hint(self):
-
         cdf1 = self.connect.createDataFrame([(2, "Alice"), (5, "Bob")], schema=["age", "name"])
         cdf2 = self.connect.createDataFrame(
             [Row(height=80, name="Tom"), Row(height=85, name="Bob")]
@@ -2302,7 +2301,6 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         )
 
     def test_grouped_data(self):
-
         query = """
             SELECT * FROM VALUES
                 ('James', 'Sales', 3000, 2020),

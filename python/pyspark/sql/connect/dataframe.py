@@ -388,12 +388,12 @@ class DataFrame:
         if subset is None:
             return DataFrame.withPlan(
                 plan.Deduplicate(child=self._plan, all_columns_as_keys=True, within_watermark=True),
-                session=self._session
+                session=self._session,
             )
         else:
             return DataFrame.withPlan(
                 plan.Deduplicate(child=self._plan, column_names=subset, within_watermark=True),
-                session=self._session
+                session=self._session,
             )
 
     dropDuplicatesWithinWatermark.__doc__ = PySparkDataFrame.dropDuplicatesWithinWatermark.__doc__
@@ -614,7 +614,6 @@ class DataFrame:
         fraction: Optional[Union[int, float]] = None,
         seed: Optional[int] = None,
     ) -> "DataFrame":
-
         # For the cases below:
         #   sample(True, 0.5 [, seed])
         #   sample(True, fraction=0.5 [, seed])
