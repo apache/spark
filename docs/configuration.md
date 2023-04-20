@@ -1253,16 +1253,6 @@ Apart from these, the following properties are also available, and may be useful
   </td>
   <td>3.4.0</td>
 </tr>
-<tr>
-  <td><code>spark.shuffle.server.recovery.disabled</code></td>
-  <td>false</td>
-  <td>
-    Set to true for applications that have higher security requirements and prefer that their
-    secret is not saved in the db. The shuffle data of such applications wll not be recovered after
-    the External Shuffle Service restarts.
-  </td>
-  <td>3.5.0</td>
-</tr>
 </table>
 
 ### Spark UI

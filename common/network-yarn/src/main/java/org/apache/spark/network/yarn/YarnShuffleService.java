@@ -140,7 +140,7 @@ public class YarnShuffleService extends AuxiliaryService {
 
   @VisibleForTesting
   static final String SPARK_SHUFFLE_SERVER_RECOVERY_DISABLED =
-      "spark.shuffle.server.recovery.disabled";
+      "spark.yarn.shuffle.server.recovery.disabled";
   @VisibleForTesting
   static final String SECRET_KEY = "secret";
 

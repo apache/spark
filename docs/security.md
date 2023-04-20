@@ -60,6 +60,20 @@ distributing the shared secret. Each application will use a unique shared secret
 the case of YARN, this feature relies on YARN RPC encryption being enabled for the distribution of
 secrets to be secure.
 
+<table class="table table-striped">
+<thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
+<tr>
+  <td><code>spark.yarn.shuffle.server.recovery.disabled</code></td>
+  <td>false</td>
+  <td>
+    Set to true for applications that have higher security requirements and prefer that their
+    secret is not saved in the db. The shuffle data of such applications wll not be recovered after
+    the External Shuffle Service restarts.
+  </td>
+  <td>3.5.0</td>
+</tr>
+</table>
+
 ### Kubernetes
 
 On Kubernetes, Spark will also automatically generate an authentication secret unique to each
@@ -192,16 +206,6 @@ The following table describes the different options available for configuring th
     from clients that have authentication enabled, but do not request SASL-based encryption.
   </td>
   <td>1.4.0</td>
-</tr>
-<tr>
-  <td><code>spark.shuffle.server.recovery.disabled</code></td>
-  <td>false</td>
-  <td>
-    Set to true for applications that have higher security requirements and prefer that their
-    secret is not saved in the db. The shuffle data of such applications wll not be recovered after
-    the External Shuffle Service restarts.
-  </td>
-  <td>3.5.0</td>
 </tr>
 </table>
 

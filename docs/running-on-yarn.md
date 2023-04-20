@@ -650,7 +650,7 @@ To use a custom metrics.properties for the application master and executors, upd
   <td><code>spark.yarn.report.loggingFrequency</code></td>
   <td><code>30</code></td>
   <td>
-    Maximum number of application reports processed until the next application status 
+    Maximum number of application reports processed until the next application status
     is logged. If there is a change of state, the application status will be logged regardless
     of the number of application reports processed.
   </td>
@@ -682,6 +682,16 @@ To use a custom metrics.properties for the application master and executors, upd
     using unmanaged am.
   </td>
   <td>3.0.0</td>
+</tr>
+<tr>
+  <td><code>spark.yarn.shuffle.server.recovery.disabled</code></td>
+  <td>false</td>
+  <td>
+    Set to true for applications that have higher security requirements and prefer that their
+    secret is not saved in the db. The shuffle data of such applications wll not be recovered after
+    the External Shuffle Service restarts.
+  </td>
+  <td>3.5.0</td>
 </tr>
 </table>
 
