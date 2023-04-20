@@ -581,7 +581,7 @@ class CsvFunctionsSuite extends QueryTest with SharedSparkSession with Expressio
 
   test("StructsToCsv should not generate codes beyond 64KB") {
     val range = Range.inclusive(1, 5000)
-    val struct = CreateStruct.create(range.map(Literal(_)))
+    val struct = CreateStruct.create(range.map(Literal.apply))
     val expected = range.mkString(",")
     checkEvaluation(StructsToCsv(Map.empty, struct), expected)
   }
