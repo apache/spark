@@ -146,11 +146,7 @@ class ReusedConnectTestCase(unittest.TestCase, SQLTestUtils, PySparkErrorTestUti
         """
         Override this in subclasses to supply a more specific conf
         """
-        conf = SparkConf(loadDefaults=False)
-        # Disable JVM stack trace in Spark Connect tests to prevent the
-        # HTTP header size from exceeding the maximum allowed size.
-        conf.set("spark.sql.pyspark.jvmStacktrace.enabled", "false")
-        return conf
+        return SparkConf(loadDefaults=False)
 
     @classmethod
     def setUpClass(cls):
