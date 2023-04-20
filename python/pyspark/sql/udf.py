@@ -141,12 +141,12 @@ def _create_py_udf(
         and not isinstance(return_type, ArrayType)
     )
     if is_arrow_enabled and is_output_atomic_type and is_func_with_args:
-        return _create_arrow_py_udf(f, regular_udf)
+        return _create_arrow_py_udf(regular_udf)
     else:
         return regular_udf
 
 
-def _create_arrow_py_udf(f, regular_udf):  # type: ignore
+def _create_arrow_py_udf(regular_udf):  # type: ignore
     """Create an Arrow-optimized Python UDF out of a regular Python UDF."""
     require_minimum_pandas_version()
     require_minimum_pyarrow_version()
@@ -154,6 +154,7 @@ def _create_arrow_py_udf(f, regular_udf):  # type: ignore
     import pandas as pd
     from pyspark.sql.pandas.functions import _create_pandas_udf
 
+    f = regular_udf.func
     return_type = regular_udf.returnType
 
     # "result_func" ensures the result of a Python UDF to be consistent with/without Arrow
