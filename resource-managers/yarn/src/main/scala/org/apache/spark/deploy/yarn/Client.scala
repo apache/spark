@@ -77,10 +77,6 @@ private[spark] class Client(
 
   private val isClusterMode = sparkConf.get(SUBMIT_DEPLOY_MODE) == "cluster"
 
-  // ContainerLaunchContext.setTokensConf is only available in Hadoop 2.9+ and 3.x, so here we use
-  // reflection to avoid compilation for Hadoop 2.7 profile.
-  private val SET_TOKENS_CONF_METHOD = "setTokensConf"
-
   private val isClientUnmanagedAMEnabled = sparkConf.get(YARN_UNMANAGED_AM) && !isClusterMode
   private var appMaster: ApplicationMaster = _
   private var stagingDirPath: Path = _
@@ -382,16 +378,7 @@ private[spark] class Client(
       }
       copy.write(dob);
 
-      // since this method was added in Hadoop 2.9 and 3.0, we use reflection here to avoid
-      // compilation error for Hadoop 2.7 profile.
-      val setTokensConfMethod = try {
-        amContainer.getClass.getMethod(SET_TOKENS_CONF_METHOD, classOf[ByteBuffer])
-      } catch {
-        case _: NoSuchMethodException =>
-          throw new SparkException(s"Cannot find setTokensConf method in ${amContainer.getClass}." +
-              s" Please check YARN version and make sure it is 2.9+ or 3.x")
-      }
-      setTokensConfMethod.invoke(amContainer, ByteBuffer.wrap(dob.getData))
+      amContainer.setTokensConf(ByteBuffer.wrap(dob.getData))
     }
   }
 
