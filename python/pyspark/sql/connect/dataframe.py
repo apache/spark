@@ -387,11 +387,13 @@ class DataFrame:
 
         if subset is None:
             return DataFrame.withPlan(
-                plan.DeduplicateWithinWatermark(child=self._plan, all_columns_as_keys=True), session=self._session
+                plan.Deduplicate(child=self._plan, all_columns_as_keys=True, within_watermark=True),
+                session=self._session
             )
         else:
             return DataFrame.withPlan(
-                plan.DeduplicateWithinWatermark(child=self._plan, column_names=subset), session=self._session
+                plan.Deduplicate(child=self._plan, column_names=subset, within_watermark=True),
+                session=self._session
             )
 
     dropDuplicatesWithinWatermark.__doc__ = PySparkDataFrame.dropDuplicatesWithinWatermark.__doc__
