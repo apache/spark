@@ -18,7 +18,6 @@
 import decimal
 import datetime
 
-from pyspark.sql import functions as SF
 from pyspark.sql.types import (
     Row,
     StructField,
@@ -48,6 +47,7 @@ from pyspark.sql.tests.connect.test_connect_basic import SparkConnectSQLTestCase
 
 if should_test_connect:
     import pandas as pd
+    from pyspark.sql import functions as SF
     from pyspark.sql.connect import functions as CF
     from pyspark.sql.connect.column import Column
     from pyspark.sql.connect.expressions import DistributedSequenceID, LiteralExpression
@@ -482,9 +482,6 @@ class SparkConnectColumnTests(SparkConnectSQLTestCase):
         cdf = self.connect.range(0, 1)
         sdf = self.spark.range(0, 1)
 
-        from pyspark.sql import functions as SF
-        from pyspark.sql.connect import functions as CF
-
         cdf1 = cdf.select(
             CF.lit(0),
             CF.lit(1),
@@ -679,9 +676,6 @@ class SparkConnectColumnTests(SparkConnectSQLTestCase):
 
     def test_column_bitwise_ops(self):
         # SPARK-41751: test bitwiseAND, bitwiseOR, bitwiseXOR
-        from pyspark.sql import functions as SF
-        from pyspark.sql.connect import functions as CF
-
         query = """
             SELECT * FROM VALUES
             (1, 1, 0), (2, NULL, 1), (3, 3, 4)
@@ -718,9 +712,6 @@ class SparkConnectColumnTests(SparkConnectSQLTestCase):
         )
 
     def test_column_accessor(self):
-        from pyspark.sql import functions as SF
-        from pyspark.sql.connect import functions as CF
-
         query = """
             SELECT STRUCT(a, b, c) AS x, y, z, c FROM VALUES
             (float(1.0), double(1.0), '2022', MAP('b', '123', 'a', 'kk'), ARRAY(1, 2, 3)),
@@ -840,10 +831,6 @@ class SparkConnectColumnTests(SparkConnectSQLTestCase):
 
     def test_column_field_ops(self):
         # SPARK-41767: test withField, dropFields
-
-        from pyspark.sql import functions as SF
-        from pyspark.sql.connect import functions as CF
-
         query = """
             SELECT STRUCT(a, b, c, d) AS x, e FROM VALUES
             (float(1.0), double(1.0), '2022', 1, 0),
