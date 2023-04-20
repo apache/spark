@@ -354,16 +354,19 @@ case class ListQuery(
     plan: LogicalPlan,
     outerAttrs: Seq[Expression] = Seq.empty,
     exprId: ExprId = NamedExpression.newExprId,
-    childOutputs: Seq[Attribute] = Seq.empty,
+    // The plan of list query may have more columns after de-correlation, and we need to track the
+    // number of the columns of the original plan, to report the data type properly.
+    numCols: Int = -1,
     joinCond: Seq[Expression] = Seq.empty,
     hint: Option[HintInfo] = None)
   extends SubqueryExpression(plan, outerAttrs, exprId, joinCond, hint) with Unevaluable {
-  override def dataType: DataType = if (childOutputs.length > 1) {
+  def childOutputs: Seq[Attribute] = plan.output.take(numCols)
+  override def dataType: DataType = if (numCols > 1) {
     childOutputs.toStructType
   } else {
-    childOutputs.head.dataType
+    plan.output.head.dataType
   }
-  override lazy val resolved: Boolean = childrenResolved && plan.resolved && childOutputs.nonEmpty
+  override lazy val resolved: Boolean = childrenResolved && plan.resolved && numCols != -1
   override def nullable: Boolean = false
   override def withNewPlan(plan: LogicalPlan): ListQuery = copy(plan = plan)
   override def withNewHint(hint: Option[HintInfo]): ListQuery = copy(hint = hint)
@@ -373,7 +376,7 @@ case class ListQuery(
       plan.canonicalized,
       outerAttrs.map(_.canonicalized),
       ExprId(0),
-      childOutputs.map(_.canonicalized.asInstanceOf[Attribute]),
+      numCols,
       joinCond.map(_.canonicalized))
   }
 
