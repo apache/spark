@@ -364,7 +364,7 @@ message StreamingQueryManagerCommandResult {
   }
 
   message AwaitAnyTerminationResult {
-    optional bool terminated = 1;
+    bool terminated = 1;
   }
 }
 

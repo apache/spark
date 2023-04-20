@@ -853,7 +853,7 @@ class StreamingQueryInstanceId(google.protobuf.message.Message):
     checkpoint, it will have the same `id` but different `run_id`s.
     """
     name: builtins.str
-    """(Optional) The name of this run of the query."""
+    """(Optional) The name of this query."""
     def __init__(
         self,
         *,
@@ -1390,23 +1390,11 @@ class StreamingQueryManagerCommandResult(google.protobuf.message.Message):
         def __init__(
             self,
             *,
-            terminated: builtins.bool | None = ...,
+            terminated: builtins.bool = ...,
         ) -> None: ...
-        def HasField(
-            self,
-            field_name: typing_extensions.Literal[
-                "_terminated", b"_terminated", "terminated", b"terminated"
-            ],
-        ) -> builtins.bool: ...
         def ClearField(
-            self,
-            field_name: typing_extensions.Literal[
-                "_terminated", b"_terminated", "terminated", b"terminated"
-            ],
+            self, field_name: typing_extensions.Literal["terminated", b"terminated"]
         ) -> None: ...
-        def WhichOneof(
-            self, oneof_group: typing_extensions.Literal["_terminated", b"_terminated"]
-        ) -> typing_extensions.Literal["terminated"] | None: ...
 
     ACTIVE_FIELD_NUMBER: builtins.int
     QUERY_FIELD_NUMBER: builtins.int
