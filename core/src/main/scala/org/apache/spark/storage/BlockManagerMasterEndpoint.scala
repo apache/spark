@@ -848,7 +848,14 @@ class BlockManagerMasterEndpoint(
   private def getLocationsAndStatus(
       blockId: BlockId,
       requesterHost: String): Option[BlockLocationsAndStatus] = {
-    val locations = Option(blockLocations.get(blockId)).map(_.toSeq).getOrElse(Seq.empty)
+    var locations = Option(blockLocations.get(blockId)).map(_.toSeq).getOrElse(Seq.empty)
+
+    // locations sort by useDisk, when the block be persisted on the disk, the BlockManager
+    // with the persisted block is preferred.
+    if (locations.nonEmpty && !externalShuffleServiceRddFetchEnabled) {
+      locations = locations.sortBy(bmId => blockManagerInfo.get(bmId).
+        flatMap(_.getStatus(blockId)).get.storageLevel.useDisk)(Ordering.Boolean.reverse)
+    }
     val status = locations.headOption.flatMap { bmId =>
       if (externalShuffleServiceRddFetchEnabled && bmId.port == externalShuffleServicePort) {
         blockStatusByShuffleService.get(bmId).flatMap(m => m.get(blockId))
