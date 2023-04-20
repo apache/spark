@@ -136,10 +136,6 @@ object Utils extends Logging {
     }
   }
 
-  def isHadoop3(): Boolean = {
-    VersionInfo.getVersion.startsWith("3")
-  }
-
   def createZipFile(inFile: String, outFile: String): Unit = {
     val fileToZip = new File(inFile)
     val fis = new FileInputStream(fileToZip)

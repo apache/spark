@@ -60,10 +60,7 @@ class ParquetCodecSuite extends FileSourceCodecSuite {
   // Exclude "brotli" because the com.github.rdblue:brotli-codec dependency is not available
   // on Maven Central.
   override protected def availableCodecs: Seq[String] = {
-    Seq("none", "uncompressed", "snappy", "gzip", "zstd") ++ {
-      // Exclude "lz4" for Hadoop 2.x profile since the lz4-java support is only in 3.x
-      if (VersionUtils.isHadoop3) Seq("lz4") else Seq()
-    }
+    Seq("none", "uncompressed", "snappy", "gzip", "zstd", "lz4")
   }
 }
 
