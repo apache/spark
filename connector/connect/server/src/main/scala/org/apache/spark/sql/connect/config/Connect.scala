@@ -90,14 +90,4 @@ object Connect {
       .stringConf
       .toSequence
       .createWithDefault(Nil)
-
-  val CONNECT_JVM_STACK_TRACE_MAX_SIZE =
-    ConfigBuilder("spark.connect.jvmStacktrace.maxSize")
-      .doc("""
-          |Sets the maximum stack trace size to display when
-          |`spark.sql.pyspark.jvmStacktrace.enabled` is true.
-          |""".stripMargin)
-      .version("3.5.0")
-      .intConf
-      .createWithDefault(4096)
 }
