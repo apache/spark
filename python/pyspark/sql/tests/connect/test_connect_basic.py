@@ -3307,6 +3307,13 @@ class ChannelBuilderTests(unittest.TestCase):
         chan = ChannelBuilder("sc://host/;user_agent=Agent123%20%2F3.4")
         self.assertEqual("Agent123 /3.4", chan.userAgent)
 
+    def test_user_agent_len(self):
+        user_agent = "x" * 2049
+        chan = ChannelBuilder(f"sc://host/;user_agent={user_agent}")
+        with self.assertRaises(SparkConnectException) as err:
+            chan.userAgent
+        self.assertRegex(err.exception.message, "'user_agent' parameter should not exceed")
+
     def test_valid_channel_creation(self):
         chan = ChannelBuilder("sc://host").toChannel()
         self.assertIsInstance(chan, grpc.Channel)
