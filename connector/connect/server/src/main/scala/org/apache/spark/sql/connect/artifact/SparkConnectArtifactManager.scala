@@ -98,8 +98,8 @@ class SparkConnectArtifactManager private[connect] {
       Utils.tryWithSafeFinallyAndFailureCallbacks {
         val updater = session.sparkContext.env.blockManager.TempFileBasedBlockStoreUpdater(
           blockId = CacheId(remoteRelativePath.toString.stripPrefix("cache/")),
-          level = StorageLevel.MEMORY_AND_DISK,
-          classTag = implicitly[ClassTag[Object]],
+          level = StorageLevel.MEMORY_AND_DISK_SER,
+          classTag = implicitly[ClassTag[Array[Byte]]],
           tmpFile = tmpFile,
           blockSize = tmpFile.length())
         updater.save()
