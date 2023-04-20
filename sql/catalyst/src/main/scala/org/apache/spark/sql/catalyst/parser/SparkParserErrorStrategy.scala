@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.parser
 
 import org.antlr.v4.runtime.{DefaultErrorStrategy, InputMismatchException, IntStream, NoViableAltException, Parser, ParserRuleContext, RecognitionException, Recognizer, Token}
+import org.antlr.v4.runtime.misc.ParseCancellationException
 
 /**
  * A [[SparkRecognitionException]] extends the [[RecognitionException]] with more information
@@ -111,4 +112,47 @@ class SparkParserErrorStrategy() extends DefaultErrorStrategy {
       recognizer.notifyErrorListeners(recognizer.getCurrentToken, "", exceptionWithErrorClass)
     }
   }
+}
+
+/**
+ * Inspired by [[org.antlr.v4.runtime.BailErrorStrategy]], which is used in two-stage parsing:
+ * This error strategy allows the first stage of two-stage parsing to immediately terminate
+ * if an error is encountered, and immediately fall back to the second stage. In addition to
+ * avoiding wasted work by attempting to recover from errors here, the empty implementation
+ * of sync improves the performance of the first stage.
+ */
+class SparkParserBailErrorStrategy() extends SparkParserErrorStrategy {
+
+  /**
+   * Instead of recovering from exception e, re-throw it wrapped
+   * in a [[ParseCancellationException]] so it is not caught by the
+   * rule function catches.  Use [[Exception#getCause]] to get the
+   * original [[RecognitionException]].
+   */
+  override def recover(recognizer: Parser, e: RecognitionException): Unit = {
+    var context = recognizer.getContext
+    while (context != null) {
+      context.exception = e
+      context = context.getParent
+    }
+    throw new ParseCancellationException(e)
+  }
+
+  /**
+   * Make sure we don't attempt to recover inline; if the parser
+   * successfully recovers, it won't throw an exception.
+   */
+  @throws[RecognitionException]
+  override def recoverInline(recognizer: Parser): Token = {
+    val e = new InputMismatchException(recognizer)
+    var context = recognizer.getContext
+    while (context != null) {
+      context.exception = e
+      context = context.getParent
+    }
+    throw new ParseCancellationException(e)
+  }
+
+  /** Make sure we don't attempt to recover from problems in subrules. */
+  override def sync(recognizer: Parser): Unit = {}
 }
