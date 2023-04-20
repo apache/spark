@@ -226,7 +226,9 @@ final class DataStreamReader private[sql] (sparkSession: SparkSession) extends L
   def table(tableName: String): DataFrame = {
     require(tableName != null, "The table name can't be null")
     sparkSession.newDataFrame { builder =>
-      builder.getReadBuilder.setIsStreaming(true).getNamedTableBuilder
+      builder.getReadBuilder
+        .setIsStreaming(true)
+        .getNamedTableBuilder
         .setUnparsedIdentifier(tableName)
     }
   }
