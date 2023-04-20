@@ -103,7 +103,7 @@ class SparkConnectArtifactManager private[connect] {
           tmpFile = tmpFile,
           blockSize = tmpFile.length())
         updater.save()
-      }(catchBlock = {tmpFile.delete()})
+      }(catchBlock = { tmpFile.delete() })
     } else if (remoteRelativePath.startsWith("classes/")) {
       // Move class files to common location (shared among all users)
       val target = classArtifactDir.resolve(remoteRelativePath.toString.stripPrefix("classes/"))

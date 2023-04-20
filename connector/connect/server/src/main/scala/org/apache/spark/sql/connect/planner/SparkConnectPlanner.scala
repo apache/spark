@@ -662,17 +662,20 @@ class SparkConnectPlanner(val session: SparkSession) {
   private def transformCachedLocalRelation(rel: proto.CachedLocalRelation): LogicalPlan = {
     val blockManager = session.sparkContext.env.blockManager
     val key = rel.getKey
-    blockManager.getLocalBytes(CacheId(key)).map { blockData =>
-      val blob = blockData.toByteBuffer().array()
-      val blobSize = blockData.size.toInt
-      val size = ByteBuffer.wrap(blob).getInt
-      val intSize = 4
-      val data = blob.slice(intSize, intSize + size)
-      val schema = new String(blob.slice(intSize + size, blobSize), StandardCharsets.UTF_8)
-      transformLocalRelation(Option(schema), Option(data))
-    }.getOrElse {
-      throw InvalidPlanInput(s"Not found any cached local relation by the key: $key.")
-    }
+    blockManager
+      .getLocalBytes(CacheId(key))
+      .map { blockData =>
+        val blob = blockData.toByteBuffer().array()
+        val blobSize = blockData.size.toInt
+        val size = ByteBuffer.wrap(blob).getInt
+        val intSize = 4
+        val data = blob.slice(intSize, intSize + size)
+        val schema = new String(blob.slice(intSize + size, blobSize), StandardCharsets.UTF_8)
+        transformLocalRelation(Option(schema), Option(data))
+      }
+      .getOrElse {
+        throw InvalidPlanInput(s"Not found any cached local relation by the key: $key.")
+      }
   }
 
   private def transformHint(rel: proto.Hint): LogicalPlan = {
@@ -817,55 +820,60 @@ class SparkConnectPlanner(val session: SparkSession) {
         case d => StructType(Seq(StructField("value", d)))
       }
     }
-    data.map { dataBytes =>
-      val (rows, structType) = ArrowConverters.fromBatchWithSchemaIterator(
-        Iterator(dataBytes),
-        TaskContext.get())
-      if (structType == null) {
-        throw InvalidPlanInput(s"Input data for LocalRelation does not produce a schema.")
-      }
-      val attributes = structType.toAttributes
-      val proj = UnsafeProjection.create(attributes, attributes)
-      val data = rows.map(proj)
-      optStruct.map { struct =>
-        def normalize(dt: DataType): DataType = dt match {
-          case udt: UserDefinedType[_] => normalize(udt.sqlType)
-          case StructType(fields) =>
-            val newFields = fields.zipWithIndex.map {
-              case (StructField(_, dataType, nullable, metadata), i) =>
-                StructField(s"col_$i", normalize(dataType), nullable, metadata)
-            }
-            StructType(newFields)
-          case ArrayType(elementType, containsNull) =>
-            ArrayType(normalize(elementType), containsNull)
-          case MapType(keyType, valueType, valueContainsNull) =>
-            MapType(normalize(keyType), normalize(valueType), valueContainsNull)
-          case _ => dt
+    data
+      .map { dataBytes =>
+        val (rows, structType) =
+          ArrowConverters.fromBatchWithSchemaIterator(Iterator(dataBytes), TaskContext.get())
+        if (structType == null) {
+          throw InvalidPlanInput(s"Input data for LocalRelation does not produce a schema.")
         }
-        val normalized = normalize(struct).asInstanceOf[StructType]
-        val project = Dataset
-          .ofRows(
-            session,
-            logicalPlan =
-              logical.LocalRelation(normalize(structType).asInstanceOf[StructType].toAttributes))
-          .toDF(normalized.names: _*)
-          .to(normalized)
-          .logicalPlan
-          .asInstanceOf[Project]
+        val attributes = structType.toAttributes
+        val proj = UnsafeProjection.create(attributes, attributes)
+        val data = rows.map(proj)
+        optStruct
+          .map { struct =>
+            def normalize(dt: DataType): DataType = dt match {
+              case udt: UserDefinedType[_] => normalize(udt.sqlType)
+              case StructType(fields) =>
+                val newFields = fields.zipWithIndex.map {
+                  case (StructField(_, dataType, nullable, metadata), i) =>
+                    StructField(s"col_$i", normalize(dataType), nullable, metadata)
+                }
+                StructType(newFields)
+              case ArrayType(elementType, containsNull) =>
+                ArrayType(normalize(elementType), containsNull)
+              case MapType(keyType, valueType, valueContainsNull) =>
+                MapType(normalize(keyType), normalize(valueType), valueContainsNull)
+              case _ => dt
+            }
+            val normalized = normalize(struct).asInstanceOf[StructType]
+            val project = Dataset
+              .ofRows(
+                session,
+                logicalPlan = logical.LocalRelation(
+                  normalize(structType).asInstanceOf[StructType].toAttributes))
+              .toDF(normalized.names: _*)
+              .to(normalized)
+              .logicalPlan
+              .asInstanceOf[Project]
 
-        val proj = UnsafeProjection.create(project.projectList, project.child.output)
-        logical.LocalRelation(struct.toAttributes, data.map(proj).map(_.copy()).toSeq)
-      }.getOrElse {
-        logical.LocalRelation(attributes, data.map(_.copy()).toSeq)
+            val proj = UnsafeProjection.create(project.projectList, project.child.output)
+            logical.LocalRelation(struct.toAttributes, data.map(proj).map(_.copy()).toSeq)
+          }
+          .getOrElse {
+            logical.LocalRelation(attributes, data.map(_.copy()).toSeq)
+          }
       }
-    }.getOrElse {
-      optStruct.map { struct =>
-        LocalRelation(struct.toAttributes, data = Seq.empty)
-      }.getOrElse {
-        throw InvalidPlanInput(
-          s"Schema for LocalRelation is required when the input data is not provided.")
+      .getOrElse {
+        optStruct
+          .map { struct =>
+            LocalRelation(struct.toAttributes, data = Seq.empty)
+          }
+          .getOrElse {
+            throw InvalidPlanInput(
+              s"Schema for LocalRelation is required when the input data is not provided.")
+          }
       }
-    }
   }
 
   private def transformLocalRelation(rel: proto.LocalRelation): LogicalPlan = {
