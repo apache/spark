@@ -230,6 +230,7 @@ final class DataStreamReader private[sql] (sparkSession: SparkSession) extends L
         .setIsStreaming(true)
         .getNamedTableBuilder
         .setUnparsedIdentifier(tableName)
+        .putAllOptions(sourceBuilder.getOptionsMap)
     }
   }
 
