@@ -399,6 +399,21 @@
       <artifactId>unused</artifactId>
       <version>1.0.0</version>
     </dependency>
+    <dependency>
+      <groupId>com.google.crypto.tink</groupId>
+      <artifactId>tink</artifactId>
+      <version>${tink.version}</version>
+      <exclusions>
+        <exclusion>
+          <groupId>com.google.errorprone</groupId>
+          <artifactId>error_prone_annotations</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>com.google.http-client</groupId>
+          <artifactId>google-http-client</artifactId>
+        </exclusion>
+      </exclusions>
+    </dependency>
     <!--
          This is needed by the scalatest plugin, and so is declared here to be available in
          all child modules, just as scalatest is run in all children
