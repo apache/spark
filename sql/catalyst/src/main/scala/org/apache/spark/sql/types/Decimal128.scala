@@ -608,9 +608,26 @@ final class Decimal128 extends Ordered[Decimal128] with Serializable {
   } else if (this.isZero) {
     Decimal128.ZERO
   } else {
-    val resultScale = math.max(this._scale, that._scale)
-    val resultPrecision = math.min(DecimalType.MAX_PRECISION,
-      this._precision + that._scale + math.max(that._scale - this._scale, 0))
+    val intDig = this._precision - this._scale + that._scale
+    val scale = math.max(DecimalType.MINIMUM_ADJUSTED_SCALE, math.max(this._scale, that._scale))
+    val precision = intDig + scale
+
+    val (resultPrecision, resultScale) = if (precision <= DecimalType.MAX_PRECISION) {
+      // Adjustment only needed when we exceed max precision
+      (precision, scale)
+    } else {
+      // Precision/scale exceed maximum precision. Result must be adjusted to MAX_PRECISION.
+      val intDigits = precision - scale
+      // If original scale is less than MINIMUM_ADJUSTED_SCALE, use original scale value; otherwise
+      // preserve at least MINIMUM_ADJUSTED_SCALE fractional digits
+      val minScaleValue = Math.min(scale, 4)
+      // The resulting scale is the maximum between what is available without causing a loss of
+      // digits for the integer part of the decimal and the minimum guaranteed scale, which is
+      // computed above
+      val adjustedScale = Math.max(DecimalType.MAX_PRECISION - intDigits, minScaleValue)
+      (DecimalType.MAX_PRECISION, adjustedScale)
+    }
+
     val rescaleFactor = resultScale - this._scale + that._scale
 
     if (this.int128Val.eq(null) && that.int128Val.eq(null)) {
@@ -783,13 +800,13 @@ object Decimal128 {
     }
   }
 
-  def checkOverflow(high: Long, low: Long, msg: String): Unit = {
+  private def checkOverflow(high: Long, low: Long, msg: String): Unit = {
     if (Int128.overflows(high, low)) {
       throw overflowError(msg)
     }
   }
 
-  def overflowError(msg: String): ArithmeticException = {
+  private def overflowError(msg: String): ArithmeticException = {
     new ArithmeticException(s"Decimal overflow: $msg")
   }
 

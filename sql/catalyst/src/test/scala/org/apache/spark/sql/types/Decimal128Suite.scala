@@ -163,7 +163,7 @@ class Decimal128Suite extends SparkFunSuite with PrivateMethodTester with SQLHel
     assert(e2.getMessage.contains("BigInteger out of Int128 range"))
   }
 
-  // Accessor for the BigDecimal value of a Decimal, which will be null if it's using Longs
+  // Accessor for the Int128 value of a Decimal128, which will be null if it's using Longs
   private val int128Val = PrivateMethod[Int128](Symbol("int128Val"))
 
   /** Check whether a decimal is represented compactly (passing whether we expect it to be) */
@@ -248,73 +248,6 @@ class Decimal128Suite extends SparkFunSuite with PrivateMethodTester with SQLHel
     assert(Decimal128(10, 2, 0) - Decimal128(-90, 2, 0) === Decimal128(100, 3, 0))
   }
 
-  test("other arithmetic") {
-    // test +
-    assert(Decimal128(100, 3, 1) + Decimal128(-100, 3, 1) === Decimal128(0))
-    assert(Decimal128(100, 3, 1) + Decimal128(-100, 3, 2) === Decimal128(900, 3, 2))
-    assert(Decimal128(100, 3, 2) + Decimal128(-100, 3, 1) === Decimal128(-900, 3, 2))
-    assert(Decimal128(100, 3, 1) + Decimal128(-100, 3, 2) === Decimal128("9.00"))
-    assert(Decimal128("10.0") + Decimal128("-1.00") === Decimal128(BigDecimal("9.00")))
-    assert(Decimal128("15432.21543600787131") + Decimal128("57832.21543600787313") ===
-      Decimal128(BigDecimal("73264.43087201574444")))
-    val e1 = intercept[ArithmeticException](
-      Decimal128("170141183460469231731687303715884105727") + Decimal128(1))
-    assert(e1.getMessage.contains(
-      "Int128 Overflow. Int128(9223372036854775807, -1) add Int128(0, 1)."))
-
-    // test -
-    assert(Decimal128(100) - Decimal128(-100) === Decimal128(200))
-    assert(Decimal128(100, 3, 1) - Decimal128(-100, 3, 1) === Decimal128(200, 3, 1))
-    assert(Decimal128(100, 3, 1) - Decimal128(-100, 3, 2) === Decimal128(1100, 4, 2))
-    assert(Decimal128(100, 3, 2) - Decimal128(-100, 3, 1) === Decimal128(1100, 4, 2))
-    assert(Decimal128(100, 3, 1) - Decimal128(-100, 3, 2) === Decimal128("11.00"))
-    assert(Decimal128("10.0") - Decimal128("-1.00") === Decimal128(BigDecimal("11.00")))
-    assert(Decimal128("15432.21543600787131") - Decimal128("57832.21543600787313") ===
-      Decimal128(BigDecimal("-42400.00000000000182")))
-    val e2 = intercept[ArithmeticException](
-      Decimal128("-170141183460469231731687303715884105728") - Decimal128(1))
-    assert(e2.getMessage.contains(
-      "Int128 Overflow. Int128(-9223372036854775808, 0) subtract Int128(0, 1)."))
-
-    // test *
-    assert(Decimal128(100, 3, 1) * Decimal128(-100, 3, 1) === Decimal128(-10000, 5, 2))
-    assert(Decimal128(100, 3, 1) * Decimal128(-100, 3, 2) === Decimal128(-10000, 5, 3))
-    assert(Decimal128(100, 3, 2) * Decimal128(-100, 3, 1) === Decimal128(-10000, 5, 3))
-    assert(Decimal128(100, 3, 1) * Decimal128(-100, 3, 2) === Decimal128("-10.00"))
-    assert(Decimal128("10.0") * Decimal128("-1.00") === Decimal128(BigDecimal("-10.00")))
-    assert(Decimal128("15432.21543600787131") * Decimal128("57832.21543600787313") ===
-      Decimal128(BigDecimal("892479207.7500933852299992378118469003")))
-    assert(Decimal128(1e13) * Decimal128(1e13) === Decimal128(1e26))
-    val e3 = intercept[ArithmeticException](
-      Decimal128("12345678901234567890123456789012345678") * Decimal128(9))
-    assert(e3.getMessage.contains("Decimal overflow: Decimal128 multiply."))
-
-    // test /
-    assert(Decimal128(100, 3, 1) / Decimal128(-100, 3, 1) === Decimal128(-1, 1, 0))
-    assert(Decimal128(100, 3, 1) / Decimal128(-100, 3, 2) === Decimal128(-10, 2, 0))
-    assert(Decimal128(100, 3, 2) / Decimal128(-100, 3, 1) === Decimal128(-10, 2, 2))
-    assert(Decimal128(100, 3, 1) / Decimal128(-100, 3, 2) === Decimal128("-10.00"))
-    assert(Decimal128("10.0") / Decimal128("-1.00") === Decimal128(BigDecimal("-10.00")))
-    assert(Decimal128("15432.21543600") / Decimal128("57832.21543") ===
-      Decimal128(BigDecimal("0.26684462")))
-    assert(Decimal128(100) / Decimal128(0) === null)
-    val e4 = intercept[ArithmeticException](
-      Decimal128("12345678901234567890123456789012345678") / Decimal128(1, 1, 1))
-    assert(e4.getMessage.contains("Decimal overflow: Decimal128 division."))
-
-    // test %
-    assert(Decimal128(100, 3, 1) % Decimal128(-100, 3, 1) === Decimal128(0))
-    assert(Decimal128(100, 3, 1) % Decimal128(-100, 3, 2) === Decimal128(0))
-    assert(Decimal128(100, 3, 2) % Decimal128(-100, 3, 1) === Decimal128(100, 3, 2))
-    assert(Decimal128(100, 3, 1) % Decimal128(-100, 3, 2) === Decimal128("0.0"))
-    assert(Decimal128("10.0") % Decimal128("-1.00") === Decimal128(BigDecimal("0.0")))
-    assert(Decimal128("15432.21543600") % Decimal128("57832.21543") ===
-      Decimal128(BigDecimal("15432.21543600")))
-    assert(Decimal128(100) % Decimal128(3) === Decimal128(1))
-    assert(Decimal128(-100) % Decimal128(3) === Decimal128(-1))
-    assert(Decimal128(100) % Decimal128(0) === null)
-  }
-
   test("quot") {
     assert(Decimal128(100).quot(Decimal128(100)) === Decimal128(BigDecimal("1")))
     assert(Decimal128(100).quot(Decimal128(33)) === Decimal128(BigDecimal("3")))
@@ -332,9 +265,7 @@ class Decimal128Suite extends SparkFunSuite with PrivateMethodTester with SQLHel
     assert(-Decimal128(-100) === Decimal128(BigDecimal("100")))
     assert(Decimal128(100).abs === Decimal128(BigDecimal("100")))
     assert(Decimal128(-100).abs === Decimal128(BigDecimal("100")))
-  }
 
-  test("negate") {
     assert(-Decimal128("15432.21543600") === Decimal128(BigDecimal("-15432.21543600")))
     assert(-Decimal128("-57832.21543") === Decimal128(BigDecimal("57832.21543")))
   }
@@ -360,11 +291,9 @@ class Decimal128Suite extends SparkFunSuite with PrivateMethodTester with SQLHel
 
   test("fix loss of precision/scale when doing division operation") {
     val a = Decimal128(2) / Decimal128(3)
-    // Different from Decimal: assert(a.toDouble < 1.0 && a.toDouble > 0.6)
-    assert(a.toDouble == 1.0)
+    assert(a.toDouble < 1.0 && a.toDouble > 0.6)
     val b = Decimal128(1) / Decimal128(8)
-    // Different from Decimal: assert(b.toDouble === 0.125)
-    assert(b.toDouble === 0.0)
+    assert(b.toDouble === 0.125)
   }
 
   test("set/setOrNull") {
@@ -459,6 +388,13 @@ class Decimal128Suite extends SparkFunSuite with PrivateMethodTester with SQLHel
       assert(Decimal128.fromString(UTF8String.fromString(string)) === Decimal128(string))
       assert(Decimal128.fromStringANSI(UTF8String.fromString(string)) === Decimal128(string))
     }
+
+    val e1 = intercept[ArithmeticException](Decimal128.fromString(
+      UTF8String.fromString("28.9259999999999983799625624669715762138")))
+    assert(e1.getMessage.contains("BigInteger out of Int128 range"))
+    val e2 = intercept[ArithmeticException](Decimal128.fromStringANSI(
+      UTF8String.fromString("28.9259999999999983799625624669715762138")))
+    assert(e2.getMessage.contains("BigInteger out of Int128 range"))
   }
 
   test("SPARK-37451: Performance improvement regressed String to Decimal cast") {
@@ -525,6 +461,73 @@ class Decimal128Suite extends SparkFunSuite with PrivateMethodTester with SQLHel
       assert(decimal.toBigDecimal === bd,
         s"unscaled: $unscaled, scaleFrom: $scaleFrom, scaleTo: $scaleTo, mode: $roundMode")
     }
+  }
+
+  test("other arithmetic") {
+    // test +
+    assert(Decimal128(100, 3, 1) + Decimal128(-100, 3, 1) === Decimal128(0))
+    assert(Decimal128(100, 3, 1) + Decimal128(-100, 3, 2) === Decimal128(900, 3, 2))
+    assert(Decimal128(100, 3, 2) + Decimal128(-100, 3, 1) === Decimal128(-900, 3, 2))
+    assert(Decimal128(100, 3, 1) + Decimal128(-100, 3, 2) === Decimal128("9.00"))
+    assert(Decimal128("10.0") + Decimal128("-1.00") === Decimal128(BigDecimal("9.00")))
+    assert(Decimal128("15432.21543600787131") + Decimal128("57832.21543600787313") ===
+      Decimal128(BigDecimal("73264.43087201574444")))
+    val e1 = intercept[ArithmeticException](
+      Decimal128("170141183460469231731687303715884105727") + Decimal128(1))
+    assert(e1.getMessage.contains(
+      "Int128 Overflow. Int128(9223372036854775807, -1) add Int128(0, 1)."))
+
+    // test -
+    assert(Decimal128(100) - Decimal128(-100) === Decimal128(200))
+    assert(Decimal128(100, 3, 1) - Decimal128(-100, 3, 1) === Decimal128(200, 3, 1))
+    assert(Decimal128(100, 3, 1) - Decimal128(-100, 3, 2) === Decimal128(1100, 4, 2))
+    assert(Decimal128(100, 3, 2) - Decimal128(-100, 3, 1) === Decimal128(1100, 4, 2))
+    assert(Decimal128(100, 3, 1) - Decimal128(-100, 3, 2) === Decimal128("11.00"))
+    assert(Decimal128("10.0") - Decimal128("-1.00") === Decimal128(BigDecimal("11.00")))
+    assert(Decimal128("15432.21543600787131") - Decimal128("57832.21543600787313") ===
+      Decimal128(BigDecimal("-42400.00000000000182")))
+    val e2 = intercept[ArithmeticException](
+      Decimal128("-170141183460469231731687303715884105728") - Decimal128(1))
+    assert(e2.getMessage.contains(
+      "Int128 Overflow. Int128(-9223372036854775808, 0) subtract Int128(0, 1)."))
+
+    // test *
+    assert(Decimal128(100, 3, 1) * Decimal128(-100, 3, 1) === Decimal128(-10000, 5, 2))
+    assert(Decimal128(100, 3, 1) * Decimal128(-100, 3, 2) === Decimal128(-10000, 5, 3))
+    assert(Decimal128(100, 3, 2) * Decimal128(-100, 3, 1) === Decimal128(-10000, 5, 3))
+    assert(Decimal128(100, 3, 1) * Decimal128(-100, 3, 2) === Decimal128("-10.00"))
+    assert(Decimal128("10.0") * Decimal128("-1.00") === Decimal128(BigDecimal("-10.00")))
+    assert(Decimal128("15432.21543600787131") * Decimal128("57832.21543600787313") ===
+      Decimal128(BigDecimal("892479207.7500933852299992378118469003")))
+    assert(Decimal128(1e13) * Decimal128(1e13) === Decimal128(1e26))
+    val e3 = intercept[ArithmeticException](
+      Decimal128("12345678901234567890123456789012345678") * Decimal128(9))
+    assert(e3.getMessage.contains("Decimal overflow: Decimal128 multiply."))
+
+    // test /
+    assert(Decimal128(100, 3, 1) / Decimal128(-100, 3, 1) === Decimal128(-1, 1, 0))
+    assert(Decimal128(100, 3, 1) / Decimal128(-100, 3, 2) === Decimal128(-10, 2, 0))
+    assert(Decimal128(100, 3, 2) / Decimal128(-100, 3, 1) === Decimal128(-10, 2, 2))
+    assert(Decimal128(100, 3, 1) / Decimal128(-100, 3, 2) === Decimal128("-10.00"))
+    assert(Decimal128("10.0") / Decimal128("-1.00") === Decimal128(BigDecimal("-10.00")))
+    assert(Decimal128("15432.21543600") / Decimal128("57832.21543") ===
+      Decimal128(BigDecimal("0.26684462")))
+    assert(Decimal128(100) / Decimal128(0) === null)
+    val e4 = intercept[ArithmeticException](
+      Decimal128("12345678901234567890123456789012345678") / Decimal128(1, 1, 1))
+    assert(e4.getMessage.contains("Decimal overflow: Decimal128 division."))
+
+    // test %
+    assert(Decimal128(100, 3, 1) % Decimal128(-100, 3, 1) === Decimal128(0))
+    assert(Decimal128(100, 3, 1) % Decimal128(-100, 3, 2) === Decimal128(0))
+    assert(Decimal128(100, 3, 2) % Decimal128(-100, 3, 1) === Decimal128(100, 3, 2))
+    assert(Decimal128(100, 3, 1) % Decimal128(-100, 3, 2) === Decimal128("0.0"))
+    assert(Decimal128("10.0") % Decimal128("-1.00") === Decimal128(BigDecimal("0.0")))
+    assert(Decimal128("15432.21543600") % Decimal128("57832.21543") ===
+      Decimal128(BigDecimal("15432.21543600")))
+    assert(Decimal128(100) % Decimal128(3) === Decimal128(1))
+    assert(Decimal128(-100) % Decimal128(3) === Decimal128(-1))
+    assert(Decimal128(100) % Decimal128(0) === null)
   }
 
 }

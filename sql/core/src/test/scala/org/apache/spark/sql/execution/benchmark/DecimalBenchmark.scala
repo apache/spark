@@ -184,12 +184,8 @@ object DecimalBenchmark extends SqlBasedBenchmark {
 
     benchmark.addCase("Decimal128: s2 + l3 + l1 + s4", numIters) { _ =>
       for (i <- 0 until rowsNum) {
-        try {
-          decimal128DataMap("s2")(i) + decimal128DataMap("l3")(i) +
-            decimal128DataMap("l1")(i) + decimal128DataMap("s4")(i)
-        } catch {
-          case _: ArithmeticException =>
-        }
+        decimal128DataMap("s2")(i) + decimal128DataMap("l3")(i) +
+          decimal128DataMap("l1")(i) + decimal128DataMap("s4")(i)
       }
     }
 
