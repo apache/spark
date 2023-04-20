@@ -19,7 +19,11 @@
 Type-specific codes between pandas and PyArrow. Also contains some utils to correct
 pandas instances during the type conversion.
 """
-from typing import Optional, TYPE_CHECKING
+from datetime import datetime
+from typing import Any, Optional, TYPE_CHECKING
+
+import pyarrow as pa
+import numpy
 
 from pyspark.sql.types import (
     cast,
@@ -39,6 +43,7 @@ from pyspark.sql.types import (
     DayTimeIntervalType,
     ArrayType,
     MapType,
+    Row,
     StructType,
     StructField,
     NullType,
@@ -46,7 +51,7 @@ from pyspark.sql.types import (
 )
 
 if TYPE_CHECKING:
-    import pyarrow as pa
+    import pandas as pd
 
     from pyspark.sql.pandas._typing import SeriesLike as PandasSeriesLike
 
@@ -427,3 +432,133 @@ def _convert_dict_to_map_items(s: "PandasSeriesLike") -> "PandasSeriesLike":
     :return: pandas.Series of lists of (key, value) pairs
     """
     return cast("PandasSeriesLike", s.apply(lambda d: list(d.items()) if d is not None else None))
+
+
+# Returns True if the input type is a nested data type. This only applies to
+# data types that can appear after sql=>pyarrow=>pandas conversion.
+def is_nested_type(t: pa.DataType) -> bool:
+    return isinstance(t, (pa.StructType, pa.ListType, pa.MapType))
+
+
+# Returns True if the input type is interpreted to a different type in Python
+# (except numpy ones).
+def type_require_conversion(t: pa.DataType) -> bool:
+    return is_nested_type(t) or isinstance(t, pa.TimestampType)
+
+
+def verifyInputType(v, expected_arrow_type, accepted_python_type):
+    if type(v) is not accepted_python_type:
+        raise TypeError(
+            "Internal error converting UDF input: "
+            + f"{v} is not expected for {expected_arrow_type}. "
+            + f"Accepted value type is {accepted_python_type}"
+        )
+
+
+def verifyOutputType(v, expected_arrow_type, accepted_python_types):
+    if type(v) not in accepted_python_types:
+        raise TypeError(
+            "Error during casting UDF result: "
+            + f"{v} cannot be cast to {expected_arrow_type}. "
+            + f"Accepted value types are {accepted_python_types}"
+        )
+
+
+# Apply type conversion to a value of pyarrow type t recursively.
+def recursive_convert_inputs(v: Any, t: "pa.DataType") -> Any:
+    if v is None:
+        return v
+    if isinstance(t, pa.StructType):
+        assert isinstance(v, dict)
+        for i in range(0, t.num_fields):
+            field_type = t[i].type
+            if type_require_conversion(field_type):
+                name = t[i].name
+                v[name] = recursive_convert_inputs(v[name], field_type)
+        return Row(**v)
+    elif isinstance(t, pa.ListType):
+        if isinstance(v, list):
+            return v
+        # ListType is a "numpy.ndarray" in pandas.
+        assert isinstance(v, numpy.ndarray)
+        if type_require_conversion(t.value_type):
+            return list(
+                map(
+                    lambda arr_value: recursive_convert_inputs(arr_value, t.value_type),
+                    v,
+                )
+            )
+        else:
+            # Fast path when the array doesn't require extra conversion.
+            return v.tolist()
+    elif isinstance(t, pa.MapType):
+        assert isinstance(v, list)
+        key_converter = None
+        value_converter = None
+        if type_require_conversion(t.key_type):
+            key_converter = lambda v: recursive_convert_inputs(v, t.key_type)  # noqa: E731
+        if type_require_conversion(t.item_type):
+            value_converter = lambda v: recursive_convert_inputs(v, t.item_type)  # noqa: E731
+        # Only run converters if necessary.
+        if key_converter and value_converter:
+            return {
+                key_converter(dict_key): value_converter(dict_value) for dict_key, dict_value in v
+            }
+        elif key_converter:
+            return {key_converter(dict_key): dict_value for dict_key, dict_value in v}
+        elif value_converter:
+            return {dict_key: value_converter(dict_value) for dict_key, dict_value in v}
+        else:
+            return {dict_key: dict_value for dict_key, dict_value in v}
+    elif isinstance(t, pa.TimestampType):
+        if isinstance(v, datetime):
+            return v
+        else:
+            return v.to_pydatetime()
+    else:
+        return v
+
+
+def recursive_convert_outputs(v: Any, t: pa.DataType) -> Any:
+    if v is None:
+        return v
+    if isinstance(t, pa.StructType):
+        verifyOutputType(v, pa.StructType, [Row, dict, tuple])
+        if isinstance(v, Row) or isinstance(v, dict):
+            d = v.asDict(recursive=False) if isinstance(v, Row) else v
+            for i in range(0, t.num_fields):
+                field_type = t[i].type
+                if type_require_conversion(field_type):
+                    name = t[i].name
+                    d[name] = recursive_convert_outputs(d[name], field_type)
+            return d
+        else:
+            # tuples can be implicitly cast to struct type.
+            return v
+    elif isinstance(t, pa.ListType):
+        verifyOutputType(v, pa.ListType, [list])
+        if type_require_conversion(t.value_type):
+            return [recursive_convert_outputs(arr_value, t.value_type) for arr_value in v]
+        else:
+            # Fast path when the array doesn't require extra conversion.
+            return v
+    elif isinstance(t, pa.MapType):
+        # TODO, we should support it if v is in list type as well.
+        verifyOutputType(v, pa.MapType, [dict])
+        key_converter = None
+        value_converter = None
+        if type_require_conversion(t.key_type):
+            key_converter = lambda v: recursive_convert_outputs(v, t.key_type)  # noqa: E731
+        if type_require_conversion(t.item_type):
+            value_converter = lambda v: recursive_convert_outputs(v, t.item_type)  # noqa: E731
+        # Only run converters if necessary.
+        if key_converter and value_converter:
+            return [(key_converter(key), value_converter(v[key])) for key in v]
+        elif key_converter:
+            return [(key_converter(key), v[key]) for key in v]
+        elif value_converter:
+            return [(key, value_converter(v[key])) for key in v]
+        else:
+            return [(key, v[key]) for key in v]
+    else:
+        return v
