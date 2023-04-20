@@ -573,6 +573,9 @@ class StreamingQueryManager:
         ...     def onQueryProgress(self, event):
         ...         pass
         ...
+        ...     def onQueryIdle(self, event):
+        ...         pass
+        ...
         ...     def onQueryTerminated(self, event):
         ...         pass
         >>> test_listener = TestListener()
@@ -615,6 +618,9 @@ class StreamingQueryManager:
         ...         pass
         ...
         ...     def onQueryProgress(self, event):
+        ...         pass
+        ...
+        ...     def onQueryIdle(self, event):
         ...         pass
         ...
         ...     def onQueryTerminated(self, event):
