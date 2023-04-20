@@ -26,7 +26,6 @@ import org.apache.parquet.hadoop.ParquetOutputFormat
 
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.util.VersionUtils
 
 class ParquetCompressionCodecPrecedenceSuite extends ParquetTest with SharedSparkSession {
   test("Test `spark.sql.parquet.compression.codec` config") {

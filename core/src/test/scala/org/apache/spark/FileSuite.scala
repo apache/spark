@@ -39,7 +39,7 @@ import org.apache.spark.internal.config._
 import org.apache.spark.rdd.{HadoopRDD, NewHadoopRDD}
 import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.util.{Utils, VersionUtils}
+import org.apache.spark.util.Utils
 
 class FileSuite extends SparkFunSuite with LocalSparkContext {
   var tempDir: File = _
@@ -137,7 +137,7 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
   }
 
   // Hadoop "gzip" and "zstd" codecs require native library installed for sequence files
-  private val codecs = Seq((new DefaultCodec(), "default"), (new BZip2Codec(), "bzip2"), (new Lz4Codec(), "lz4")) ++ {
+  private val codecs = Seq((new DefaultCodec(), "default"), (new BZip2Codec(), "bzip2")) ++ {
     try {
       // See HADOOP-17125. Hadoop lower than 3.3.1 can throw an exception when its native
       // library for Snappy is unavailable. Here it calls `SnappyCodec.getCompressorType`
@@ -148,7 +148,7 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
       case _: LinkageError => None
       case NonFatal(_) => None
     }
-  }
+  } ++ Seq((new Lz4Codec(), "lz4"))
 
   codecs.foreach { case (codec, codecName) =>
     runSequenceFileCodecTest(codec, codecName)

@@ -20,7 +20,6 @@ package org.apache.spark.sql.execution.datasources
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
-import org.apache.spark.util.VersionUtils
 
 trait FileSourceCodecSuite extends QueryTest with SQLTestUtils with SharedSparkSession {
 
