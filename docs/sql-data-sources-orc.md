@@ -56,8 +56,7 @@ turned it off by default . You may enable it by
 
 ### Zstandard
 
-Spark supports both Hadoop 2 and 3. Since Spark 3.2, you can take advantage
-of Zstandard compression in ORC files on both Hadoop versions.
+Since Spark 3.2, you can take advantage of Zstandard compression in ORC files.
 Please see [Zstandard](https://facebook.github.io/zstd/) for the benefits.
 
 <div class="codetabs">
