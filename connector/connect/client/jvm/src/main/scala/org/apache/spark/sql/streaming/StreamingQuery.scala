@@ -22,6 +22,9 @@ import java.util.concurrent.TimeoutException
 
 import scala.collection.JavaConverters._
 
+import com.fasterxml.jackson.databind.{DeserializationFeature, ObjectMapper}
+import com.fasterxml.jackson.module.scala.{ClassTagExtensions, DefaultScalaModule}
+
 import org.apache.spark.annotation.Evolving
 import org.apache.spark.connect.proto.Command
 import org.apache.spark.connect.proto.ExecutePlanResponse
@@ -163,14 +166,14 @@ class RemoteStreamingQuery(
 
   override def recentProgress: Array[StreamingQueryProgress] = {
     executeQueryCmd(_.setRecentProgress(true)).getRecentProgress.getRecentProgressJsonList.asScala
-      .map(json => new StreamingQueryProgress(json))
+      .map(RemoteStreamingQuery.mapper.readValue[StreamingQueryProgress])
       .toArray
   }
 
   override def lastProgress: StreamingQueryProgress = {
     executeQueryCmd(
       _.setLastProgress(true)).getRecentProgress.getRecentProgressJsonList.asScala.headOption
-      .map(json => new StreamingQueryProgress(json))
+      .map(RemoteStreamingQuery.mapper.readValue[StreamingQueryProgress])
       .orNull
   }
 
@@ -225,6 +228,13 @@ class RemoteStreamingQuery(
 }
 
 object RemoteStreamingQuery {
+
+  private val mapper = {
+    val ret = new ObjectMapper() with ClassTagExtensions
+    ret.registerModule(DefaultScalaModule)
+    ret.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
+    ret
+  }
 
   def fromStartCommandResponse(
       sparkSession: SparkSession,
