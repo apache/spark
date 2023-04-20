@@ -81,6 +81,7 @@ class StreamingQuery:
             await_termination_cmd = pb2.StreamingQueryCommand.AwaitTerminationCommand()
             cmd.await_termination.CopyFrom(await_termination_cmd)
             self._execute_streaming_query_cmd(cmd)
+            return None
 
     awaitTermination.__doc__ = PySparkStreamingQuery.awaitTermination.__doc__
 
@@ -111,6 +112,8 @@ class StreamingQuery:
         progress = self._execute_streaming_query_cmd(cmd).recent_progress.recent_progress_json
         if len(progress) > 0:
             return json.loads(progress[-1])
+        else:
+            return None
 
     lastProgress.__doc__ = PySparkStreamingQuery.lastProgress.__doc__
 
@@ -143,6 +146,8 @@ class StreamingQuery:
         exception = self._execute_streaming_query_cmd(cmd).exception
         if exception.HasField("exception_message"):
             return CapturedStreamingQueryException(exception.exception_message)
+        else:
+            return None
 
     exception.__doc__ = PySparkStreamingQuery.exception.__doc__
 
