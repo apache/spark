@@ -119,6 +119,11 @@ class PythonUDFArrowTests(PythonUDFArrowTestsMixin, ReusedSQLTestCase):
         super(PythonUDFArrowTests, cls).setUpClass()
         cls.spark.conf.set("spark.sql.execution.pythonUDF.arrow.enabled", "true")
 
+    @classmethod
+    def tearDownClass(cls):
+        cls.spark.conf.unset("spark.sql.execution.pythonUDF.arrow.enabled")
+        super().tearDownClass()
+
 
 if __name__ == "__main__":
     from pyspark.sql.tests.test_arrow_python_udf import *  # noqa: F401
