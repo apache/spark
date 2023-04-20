@@ -40,7 +40,6 @@ from pyspark.sql.types import (
     DecimalType,
     StringType,
     UserDefinedType,
-    cast,
 )
 
 from pyspark.storagelevel import StorageLevel
@@ -104,6 +103,7 @@ class LocalDataToArrowConversion:
         elif isinstance(dataType, StructType):
 
             field_names = dataType.fieldNames()
+            dedup_field_names = _dedup_names(dataType.names)
 
             field_convs = [
                 LocalDataToArrowConversion._create_converter(field.dataType)
@@ -123,7 +123,7 @@ class LocalDataToArrowConversion:
                         value = value.__dict__
                     if isinstance(value, dict):
                         for i, field in enumerate(field_names):
-                            _dict[f"col_{i}"] = field_convs[i](value.get(field))
+                            _dict[dedup_field_names[i]] = field_convs[i](value.get(field))
                     else:
                         if len(value) != len(field_names):
                             raise ValueError(
@@ -131,7 +131,7 @@ class LocalDataToArrowConversion:
                                 f"new values have {len(value)} elements"
                             )
                         for i in range(len(field_names)):
-                            _dict[f"col_{i}"] = field_convs[i](value[i])
+                            _dict[dedup_field_names[i]] = field_convs[i](value[i])
 
                     return _dict
 
@@ -290,26 +290,16 @@ class LocalDataToArrowConversion:
                 for i in range(len(column_names)):
                     pylist[i].append(column_convs[i](item[i]))
 
-        def normalize(dt: DataType) -> DataType:
-            if isinstance(dt, StructType):
-                return StructType(
-                    [
-                        StructField(f"col_{i}", normalize(field.dataType), nullable=field.nullable)
-                        for i, field in enumerate(dt.fields)
-                    ]
-                )
-            elif isinstance(dt, ArrayType):
-                return ArrayType(normalize(dt.elementType), containsNull=dt.containsNull)
-            elif isinstance(dt, MapType):
-                return MapType(
-                    normalize(dt.keyType),
-                    normalize(dt.valueType),
-                    valueContainsNull=dt.valueContainsNull,
-                )
-            else:
-                return dt
-
-        pa_schema = to_arrow_schema(cast(StructType, normalize(schema)))
+        pa_schema = to_arrow_schema(
+            StructType(
+                [
+                    StructField(
+                        field.name, _deduplicate_field_names(field.dataType), field.nullable
+                    )
+                    for field in schema.fields
+                ]
+            )
+        )
 
         return pa.Table.from_arrays(pylist, schema=pa_schema)
 
@@ -355,25 +345,7 @@ class ArrowTableToRowsConversion:
         elif isinstance(dataType, StructType):
 
             field_names = dataType.names
-
-            if len(set(field_names)) == len(field_names):
-                dedup_field_names = field_names
-            else:
-                gen_new_name: Dict[str, Callable[[], str]] = {}
-                for name, group in itertools.groupby(dataType.names):
-                    if len(list(group)) > 1:
-
-                        def _gen(_name: str) -> Callable[[], str]:
-                            _i = itertools.count()
-                            return lambda: f"{_name}_{next(_i)}"
-
-                    else:
-
-                        def _gen(_name: str) -> Callable[[], str]:
-                            return lambda: _name
-
-                    gen_new_name[name] = _gen(name)
-                dedup_field_names = [gen_new_name[name]() for name in dataType.names]
+            dedup_field_names = _dedup_names(field_names)
 
             field_convs = [
                 ArrowTableToRowsConversion._create_converter(f.dataType) for f in dataType.fields
@@ -510,3 +482,48 @@ def proto_to_storage_level(storage_level: pb2.StorageLevel) -> StorageLevel:
         deserialized=storage_level.deserialized,
         replication=storage_level.replication,
     )
+
+
+def _deduplicate_field_names(dt: DataType) -> DataType:
+    if isinstance(dt, StructType):
+        dedup_field_names = _dedup_names(dt.names)
+
+        return StructType(
+            [
+                StructField(
+                    dedup_field_names[i],
+                    _deduplicate_field_names(field.dataType),
+                    nullable=field.nullable,
+                )
+                for i, field in enumerate(dt.fields)
+            ]
+        )
+    elif isinstance(dt, ArrayType):
+        return ArrayType(_deduplicate_field_names(dt.elementType), containsNull=dt.containsNull)
+    elif isinstance(dt, MapType):
+        return MapType(
+            _deduplicate_field_names(dt.keyType),
+            _deduplicate_field_names(dt.valueType),
+            valueContainsNull=dt.valueContainsNull,
+        )
+    else:
+        return dt
+
+
+def _dedup_names(names: List[str]) -> List[str]:
+    if len(set(names)) == len(names):
+        return names
+    else:
+
+        def _gen_dedup(_name: str) -> Callable[[], str]:
+            _i = itertools.count()
+            return lambda: f"{_name}_{next(_i)}"
+
+        def _gen_identity(_name: str) -> Callable[[], str]:
+            return lambda: _name
+
+        gen_new_name = {
+            name: _gen_dedup(name) if len(list(group)) > 1 else _gen_identity(name)
+            for name, group in itertools.groupby(sorted(names))
+        }
+        return [gen_new_name[name]() for name in names]
