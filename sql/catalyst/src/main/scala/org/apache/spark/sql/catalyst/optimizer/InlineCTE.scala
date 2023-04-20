@@ -72,33 +72,35 @@ case class InlineCTE(alwaysInline: Boolean = false) extends Rule[LogicalPlan] {
   def buildCTEMap(
       plan: LogicalPlan,
       cteMap: mutable.Map[Long, (CTERelationDef, Int, mutable.Map[Long, Int])],
-      outerRefMap: Option[mutable.Map[Long, Int]] = None): Unit = {
+      outerCTEId: Option[Long] = None): Unit = {
     plan match {
       case WithCTE(child, cteDefs) =>
         cteDefs.foreach { cteDef =>
           cteMap(cteDef.id) = (cteDef, 0, mutable.Map.empty.withDefaultValue(0))
         }
         cteDefs.foreach { cteDef =>
-          val (_, _, refMap) = cteMap(cteDef.id)
-          buildCTEMap(cteDef, cteMap, Some(refMap))
+          buildCTEMap(cteDef, cteMap, Some(cteDef.id))
         }
-        buildCTEMap(child, cteMap, outerRefMap)
+        buildCTEMap(child, cteMap, outerCTEId)
 
       case ref: CTERelationRef =>
         val (cteDef, refCount, refMap) = cteMap(ref.cteId)
         cteMap(ref.cteId) = (cteDef, refCount + 1, refMap)
-        outerRefMap.foreach(_(ref.cteId) += 1)
+        outerCTEId.foreach { cteId =>
+          val (_, _, outerRefMap) = cteMap(cteId)
+          outerRefMap(ref.cteId) += 1
+        }
 
       case _ =>
         if (plan.containsPattern(CTE)) {
           plan.children.foreach { child =>
-            buildCTEMap(child, cteMap, outerRefMap)
+            buildCTEMap(child, cteMap, outerCTEId)
           }
 
           plan.expressions.foreach { expr =>
             if (expr.containsAllPatterns(PLAN_EXPRESSION, CTE)) {
               expr.foreach {
-                case e: SubqueryExpression => buildCTEMap(e.plan, cteMap, outerRefMap)
+                case e: SubqueryExpression => buildCTEMap(e.plan, cteMap, outerCTEId)
                 case _ =>
               }
             }
