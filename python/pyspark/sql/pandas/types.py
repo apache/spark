@@ -51,8 +51,6 @@ from pyspark.sql.types import (
 )
 
 if TYPE_CHECKING:
-    import pandas as pd
-
     from pyspark.sql.pandas._typing import SeriesLike as PandasSeriesLike
 
 

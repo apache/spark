@@ -175,7 +175,7 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
         self._assign_cols_by_name = assign_cols_by_name
 
     def arrow_to_pandas(self, arrow_column) -> pd.Series:
-        """Convert an Arrow column to a pandas Seires."""
+        """Convert an Arrow column to a pandas Series."""
         pser = arrow_column.to_pandas(date_as_object=True)
         if type_require_conversion(arrow_column.type):
             # We have to do per-value conversion for nested types.
