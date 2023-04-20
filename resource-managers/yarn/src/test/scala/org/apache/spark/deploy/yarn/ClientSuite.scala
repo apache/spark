@@ -266,6 +266,7 @@ class ClientSuite extends SparkFunSuite with Matchers {
         val yarnConfiguration = mock(classOf[YarnConfiguration])
         when(rmContext.getYarnConfiguration).thenReturn(yarnConfiguration)
         val yarnScheduler = mock(classOf[YarnScheduler])
+
         val rmAppManager = new RMAppManager(rmContext,
           yarnScheduler,
           null,
