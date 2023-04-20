@@ -24,13 +24,11 @@ import scala.collection.JavaConverters._
 import org.json4s.jackson.JsonMethods._
 import org.scalatest.concurrent.Eventually
 import org.scalatest.concurrent.PatienceConfiguration.Timeout
-import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
 import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.StreamingQueryStatusAndProgressSuite._
 import org.apache.spark.sql.streaming.StreamingQuerySuite.clock
 import org.apache.spark.sql.streaming.util.StreamManualClock
@@ -230,42 +228,6 @@ class StreamingQueryStatusAndProgressSuite extends StreamTest with Eventually {
     }
   }
 
-  test("SPARK-19378: Continue reporting stateOp metrics even if there is no active trigger") {
-    import testImplicits._
-
-    withSQLConf(SQLConf.STREAMING_NO_DATA_PROGRESS_EVENT_INTERVAL.key -> "10") {
-      val inputData = MemoryStream[Int]
-
-      val query = inputData.toDS().toDF("value")
-        .select($"value")
-        .groupBy($"value")
-        .agg(count("*"))
-        .writeStream
-        .queryName("metric_continuity")
-        .format("memory")
-        .outputMode("complete")
-        .start()
-      try {
-        inputData.addData(1, 2)
-        query.processAllAvailable()
-
-        val progress = query.lastProgress
-        assert(progress.stateOperators.length > 0)
-        // Should emit new progresses every 10 ms, but we could be facing a slow Jenkins
-        eventually(timeout(1.minute)) {
-          val nextProgress = query.lastProgress
-          assert(nextProgress.timestamp !== progress.timestamp)
-          assert(nextProgress.numInputRows === 0)
-          assert(nextProgress.stateOperators.head.numRowsTotal === 2)
-          assert(nextProgress.stateOperators.head.numRowsUpdated === 0)
-          assert(nextProgress.sink.numOutputRows === 0)
-        }
-      } finally {
-        query.stop()
-      }
-    }
-  }
-
   test("SPARK-29973: Make `processedRowsPerSecond` calculated more accurately and meaningfully") {
     import testImplicits._
 
@@ -278,8 +240,7 @@ class StreamingQueryStatusAndProgressSuite extends StreamTest with Eventually {
       AdvanceManualClock(1000),
       waitUntilBatchProcessed,
       AssertOnQuery(query => {
-        assert(query.lastProgress.numInputRows == 0)
-        assert(query.lastProgress.processedRowsPerSecond == 0.0d)
+        assert(query.lastProgress == null)
         true
       }),
       AddData(inputData, 1, 2),
