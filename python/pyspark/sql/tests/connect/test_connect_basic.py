@@ -3314,6 +3314,11 @@ class ChannelBuilderTests(unittest.TestCase):
             chan.userAgent
         self.assertRegex(err.exception.message, "'user_agent' parameter should not exceed")
 
+        user_agent = "%C3%A4" * 341 # "%C3%A4" -> "ä"; (341 * 6 = 2046) < 2048
+        expected = "ä" * 341
+        chan = ChannelBuilder(f"sc://host/;user_agent={user_agent}")
+        self.assertEqual(expected, chan.userAgent)
+
     def test_valid_channel_creation(self):
         chan = ChannelBuilder("sc://host").toChannel()
         self.assertIsInstance(chan, grpc.Channel)
