@@ -563,7 +563,7 @@ object FileSourceMetadataAttribute {
    * supported (including most primitive types). Notably unsupported types include [[ObjectType]],
    * [[UserDefinedType]], and the complex types ([[StructType]], [[MapType]], [[ArrayType]]).
    */
-  def isSupportedType(dataType: DataType): Boolean = dataType.physicalDataType match {
+  def isSupportedType(dataType: DataType): Boolean = PhysicalDataType(dataType) match {
     // PhysicalPrimitiveType covers: Boolean, Byte, Double, Float, Integer, Long, Null, Short
     case _: PhysicalPrimitiveType | _: PhysicalDecimalType => true
     case PhysicalBinaryType | PhysicalStringType | PhysicalCalendarIntervalType => true

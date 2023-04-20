@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.ScalarSubquery._
 import org.apache.spark.sql.catalyst.expressions.SubExprUtils._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
+import org.apache.spark.sql.catalyst.optimizer.RewriteCorrelatedScalarSubquery.splitSubquery
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
@@ -32,6 +33,7 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.{EXISTS_SUBQUERY, IN_SUBQ
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.util.Utils
 
 /*
  * This file defines optimization rules related to subqueries.
@@ -325,16 +327,29 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
     }
 
     plan.transformExpressionsWithPruning(_.containsPattern(PLAN_EXPRESSION)) {
-      case ScalarSubquery(sub, children, exprId, conditions, hint) if children.nonEmpty =>
+      case ScalarSubquery(sub, children, exprId, conditions, hint, mayHaveCountBugOld)
+        if children.nonEmpty =>
         val (newPlan, newCond) = decorrelate(sub, plan)
-        ScalarSubquery(newPlan, children, exprId, getJoinCondition(newCond, conditions), hint)
+        val mayHaveCountBug = if (mayHaveCountBugOld.isEmpty) {
+          // Check whether the pre-rewrite subquery had empty groupingExpressions. If yes, it may
+          // be subject to the COUNT bug. If it has non-empty groupingExpressions, there is
+          // no COUNT bug.
+          val (topPart, havingNode, aggNode) = splitSubquery(sub)
+          (aggNode.isDefined && aggNode.get.groupingExpressions.isEmpty)
+        } else {
+          // For idempotency, we must save this variable the first time this rule is run, because
+          // decorrelation introduces a GROUP BY is if one wasn't already present.
+          mayHaveCountBugOld.get
+        }
+        ScalarSubquery(newPlan, children, exprId, getJoinCondition(newCond, conditions),
+          hint, Some(mayHaveCountBug))
       case Exists(sub, children, exprId, conditions, hint) if children.nonEmpty =>
         val (newPlan, newCond) = pullOutCorrelatedPredicates(sub, plan)
         Exists(newPlan, children, exprId, getJoinCondition(newCond, conditions), hint)
-      case ListQuery(sub, children, exprId, childOutputs, conditions, hint) if children.nonEmpty =>
+      case ListQuery(sub, children, exprId, numCols, conditions, hint) if children.nonEmpty =>
         val (newPlan, newCond) = pullOutCorrelatedPredicates(sub, plan)
         val joinCond = getJoinCondition(newCond, conditions)
-        ListQuery(newPlan, children, exprId, childOutputs, joinCond, hint)
+        ListQuery(newPlan, children, exprId, numCols, joinCond, hint)
       case LateralSubquery(sub, children, exprId, conditions, hint) if children.nonEmpty =>
         val (newPlan, newCond) = decorrelate(sub, plan, handleCountBug = true)
         LateralSubquery(newPlan, children, exprId, getJoinCondition(newCond, conditions), hint)
@@ -519,7 +534,7 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] with AliasHelpe
    * (optional second part) and the Aggregate below the HAVING CLAUSE (optional third part).
    * When the third part is empty, it means the subquery is a non-aggregated single-row subquery.
    */
-  private def splitSubquery(
+  def splitSubquery(
       plan: LogicalPlan): (Seq[LogicalPlan], Option[Filter], Option[Aggregate]) = {
     val topPart = ArrayBuffer.empty[LogicalPlan]
     var bottomPart: LogicalPlan = plan
@@ -569,7 +584,7 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] with AliasHelpe
       subqueries: ArrayBuffer[ScalarSubquery]): (LogicalPlan, AttributeMap[Attribute]) = {
     val subqueryAttrMapping = ArrayBuffer[(Attribute, Attribute)]()
     val newChild = subqueries.foldLeft(child) {
-      case (currentChild, ScalarSubquery(sub, _, _, conditions, subHint)) =>
+      case (currentChild, ScalarSubquery(sub, _, _, conditions, subHint, mayHaveCountBug)) =>
         val query = DecorrelateInnerQuery.rewriteDomainJoins(currentChild, sub, conditions)
         val origOutput = query.output.head
         // The subquery appears on the right side of the join, hence add its hint to the right
@@ -581,8 +596,16 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] with AliasHelpe
           currentChild.output :+ origOutput,
           Join(currentChild, query, LeftOuter, conditions.reduceOption(And), joinHint))
 
+        if (Utils.isTesting) {
+          assert(mayHaveCountBug.isDefined)
+        }
         if (resultWithZeroTups.isEmpty) {
-          // CASE 1: Subquery guaranteed not to have the COUNT bug
+          // CASE 1: Subquery guaranteed not to have the COUNT bug because it evaluates to NULL
+          // with zero tuples.
+          planWithoutCountBug
+        } else if (!mayHaveCountBug.getOrElse(true) &&
+          !conf.getConf(SQLConf.DECORRELATE_SUBQUERY_LEGACY_INCORRECT_COUNT_HANDLING_ENABLED)) {
+          // Subquery guaranteed not to have the COUNT bug because it had non-empty GROUP BY clause
           planWithoutCountBug
         } else {
           val (topPart, havingNode, aggNode) = splitSubquery(query)
@@ -800,7 +823,7 @@ object OptimizeOneRowRelationSubquery extends Rule[LogicalPlan] {
 
     case p: LogicalPlan => p.transformExpressionsUpWithPruning(
       _.containsPattern(SCALAR_SUBQUERY)) {
-      case s @ ScalarSubquery(OneRowSubquery(p @ Project(_, _: OneRowRelation)), _, _, _, _)
+      case s @ ScalarSubquery(OneRowSubquery(p @ Project(_, _: OneRowRelation)), _, _, _, _, _)
           if !hasCorrelatedSubquery(s.plan) && s.joinCond.isEmpty =>
         assert(p.projectList.size == 1)
         stripOuterReferences(p.projectList).head

@@ -66,6 +66,8 @@ message Relation {
     GroupMap group_map = 31;
     CoGroupMap co_group_map = 32;
     WithWatermark with_watermark = 33;
+    ApplyInPandasWithState apply_in_pandas_with_state = 34;
+    HtmlString html_string = 35;
 
     // NA functions
     NAFill fill_na = 90;
@@ -456,6 +458,20 @@ message ShowString {
   bool vertical = 4;
 }
 
+// Compose the string representing rows for output.
+// It will invoke 'Dataset.htmlString' to compute the results.
+message HtmlString {
+  // (Required) The input relation.
+  Relation input = 1;
+
+  // (Required) Number of rows to show.
+  int32 num_rows = 2;
+
+  // (Required) If set to more than 0, truncates strings to
+  // `truncate` characters and all cells will be aligned right.
+  int32 truncate = 3;
+}
+
 // Computes specified statistics for numeric and string columns.
 // It will invoke 'Dataset.summary' (same as 'StatFunctions.summary')
 // to compute the results.
@@ -838,6 +854,29 @@ message CoGroupMap {
 
   // (Required) Input user-defined function.
   CommonInlineUserDefinedFunction func = 5;
+}
+
+message ApplyInPandasWithState {
+  // (Required) Input relation for applyInPandasWithState.
+  Relation input = 1;
+
+  // (Required) Expressions for grouping keys.
+  repeated Expression grouping_expressions = 2;
+
+  // (Required) Input user-defined function.
+  CommonInlineUserDefinedFunction func = 3;
+
+  // (Required) Schema for the output DataFrame.
+  string output_schema = 4;
+
+  // (Required) Schema for the state.
+  string state_schema = 5;
+
+  // (Required) The output mode of the function.
+  string output_mode = 6;
+
+  // (Required) Timeout configuration for groups that do not receive data for a while.
+  string timeout_conf = 7;
 }
 
 // Collect arbitrary (named) metrics from a dataset.

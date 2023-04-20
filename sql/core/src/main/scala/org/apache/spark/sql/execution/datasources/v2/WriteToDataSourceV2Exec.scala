@@ -26,15 +26,16 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, LogicalPlan, TableSpec, UnaryNode}
-import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, WriteDeltaProjections}
+import org.apache.spark.sql.catalyst.util.{removeInternalMetadata, CharVarcharUtils, WriteDeltaProjections}
 import org.apache.spark.sql.catalyst.util.RowDeltaUtils.{DELETE_OPERATION, INSERT_OPERATION, UPDATE_OPERATION}
-import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Identifier, StagedTable, StagingTableCatalog, Table, TableCatalog}
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Column, Identifier, StagedTable, StagingTableCatalog, Table, TableCatalog}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.metric.CustomMetric
 import org.apache.spark.sql.connector.write.{BatchWrite, DataWriter, DataWriterFactory, DeltaWrite, DeltaWriter, PhysicalWriteInfoImpl, Write, WriterCommitMessage}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.execution.metric.{CustomMetrics, SQLMetric, SQLMetrics}
+import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.{LongAccumulator, Utils}
 
 /**
@@ -69,7 +70,7 @@ case class CreateTableAsSelectExec(
     query: LogicalPlan,
     tableSpec: TableSpec,
     writeOptions: Map[String, String],
-    ifNotExists: Boolean) extends TableWriteExecHelper {
+    ifNotExists: Boolean) extends V2CreateTableAsSelectBaseExec {
 
   val properties = CatalogV2Util.convertTableProperties(tableSpec)
 
@@ -78,14 +79,10 @@ case class CreateTableAsSelectExec(
       if (ifNotExists) {
         return Nil
       }
-
       throw QueryCompilationErrors.tableAlreadyExistsError(ident)
     }
-
-    val columns = CatalogV2Util.structTypeToV2Columns(
-      CharVarcharUtils.getRawSchema(query.schema, conf).asNullable)
-    val table = catalog.createTable(ident, columns,
-      partitioning.toArray, properties.asJava)
+    val table = catalog.createTable(
+      ident, getV2Columns(query.schema), partitioning.toArray, properties.asJava)
     writeToTable(catalog, table, writeOptions, ident, query)
   }
 }
@@ -106,7 +103,7 @@ case class AtomicCreateTableAsSelectExec(
     query: LogicalPlan,
     tableSpec: TableSpec,
     writeOptions: Map[String, String],
-    ifNotExists: Boolean) extends TableWriteExecHelper {
+    ifNotExists: Boolean) extends V2CreateTableAsSelectBaseExec {
 
   val properties = CatalogV2Util.convertTableProperties(tableSpec)
 
@@ -115,13 +112,10 @@ case class AtomicCreateTableAsSelectExec(
       if (ifNotExists) {
         return Nil
       }
-
       throw QueryCompilationErrors.tableAlreadyExistsError(ident)
     }
-    val columns = CatalogV2Util.structTypeToV2Columns(
-      CharVarcharUtils.getRawSchema(query.schema, conf).asNullable)
     val stagedTable = catalog.stageCreate(
-      ident, columns, partitioning.toArray, properties.asJava)
+      ident, getV2Columns(query.schema), partitioning.toArray, properties.asJava)
     writeToTable(catalog, stagedTable, writeOptions, ident, query)
   }
 }
@@ -144,7 +138,8 @@ case class ReplaceTableAsSelectExec(
     tableSpec: TableSpec,
     writeOptions: Map[String, String],
     orCreate: Boolean,
-    invalidateCache: (TableCatalog, Table, Identifier) => Unit) extends TableWriteExecHelper {
+    invalidateCache: (TableCatalog, Table, Identifier) => Unit)
+  extends V2CreateTableAsSelectBaseExec {
 
   val properties = CatalogV2Util.convertTableProperties(tableSpec)
 
@@ -164,10 +159,8 @@ case class ReplaceTableAsSelectExec(
     } else if (!orCreate) {
       throw QueryCompilationErrors.cannotReplaceMissingTableError(ident)
     }
-    val columns = CatalogV2Util.structTypeToV2Columns(
-      CharVarcharUtils.getRawSchema(query.schema, conf).asNullable)
     val table = catalog.createTable(
-      ident, columns, partitioning.toArray, properties.asJava)
+      ident, getV2Columns(query.schema), partitioning.toArray, properties.asJava)
     writeToTable(catalog, table, writeOptions, ident, query)
   }
 }
@@ -192,13 +185,13 @@ case class AtomicReplaceTableAsSelectExec(
     tableSpec: TableSpec,
     writeOptions: Map[String, String],
     orCreate: Boolean,
-    invalidateCache: (TableCatalog, Table, Identifier) => Unit) extends TableWriteExecHelper {
+    invalidateCache: (TableCatalog, Table, Identifier) => Unit)
+  extends V2CreateTableAsSelectBaseExec {
 
   val properties = CatalogV2Util.convertTableProperties(tableSpec)
 
   override protected def run(): Seq[InternalRow] = {
-    val columns = CatalogV2Util.structTypeToV2Columns(
-      CharVarcharUtils.getRawSchema(query.schema, conf).asNullable)
+    val columns = getV2Columns(query.schema)
     if (catalog.tableExists(ident)) {
       val table = catalog.loadTable(ident)
       invalidateCache(catalog, table, ident)
@@ -559,8 +552,13 @@ case class DeltaWithMetadataWritingSparkTask(
   }
 }
 
-private[v2] trait TableWriteExecHelper extends LeafV2CommandExec {
+private[v2] trait V2CreateTableAsSelectBaseExec extends LeafV2CommandExec {
   override def output: Seq[Attribute] = Nil
+
+  protected def getV2Columns(schema: StructType): Array[Column] = {
+    CatalogV2Util.structTypeToV2Columns(CharVarcharUtils.getRawSchema(
+      removeInternalMetadata(schema), conf).asNullable)
+  }
 
   protected def writeToTable(
       catalog: TableCatalog,

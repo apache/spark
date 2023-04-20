@@ -60,6 +60,7 @@ from google.protobuf import text_format
 from google.rpc import error_details_pb2
 
 from pyspark.resource.information import ResourceInformation
+from pyspark.sql.connect.conversion import storage_level_to_proto, proto_to_storage_level
 import pyspark.sql.connect.proto as pb2
 import pyspark.sql.connect.proto.base_pb2_grpc as grpc_lib
 import pyspark.sql.connect.types as types
@@ -469,13 +470,7 @@ class AnalyzeResult:
         elif pb.HasField("unpersist"):
             pass
         elif pb.HasField("get_storage_level"):
-            storage_level = StorageLevel(
-                useDisk=pb.get_storage_level.storage_level.use_disk,
-                useMemory=pb.get_storage_level.storage_level.use_memory,
-                useOffHeap=pb.get_storage_level.storage_level.use_off_heap,
-                deserialized=pb.get_storage_level.storage_level.deserialized,
-                replication=pb.get_storage_level.storage_level.replication,
-            )
+            storage_level = proto_to_storage_level(pb.get_storage_level.storage_level)
         else:
             raise SparkConnectException("No analyze result found!")
 
@@ -784,6 +779,21 @@ class SparkConnectClient(object):
         """
         self._channel.close()
 
+    @property
+    def host(self) -> str:
+        """
+        The hostname where this client intends to connect.
+        """
+        return self._builder.host
+
+    @property
+    def token(self) -> Optional[str]:
+        """
+        The authentication bearer token during connection.
+        If authentication is not using a bearer token, None will be returned.
+        """
+        return self._builder._token
+
     def _execute_plan_request_with_metadata(self) -> pb2.ExecutePlanRequest:
         req = pb2.ExecutePlanRequest()
         req.session_id = self._session_id
@@ -862,15 +872,7 @@ class SparkConnectClient(object):
             req.persist.relation.CopyFrom(cast(pb2.Relation, kwargs.get("relation")))
             if kwargs.get("storage_level", None) is not None:
                 storage_level = cast(StorageLevel, kwargs.get("storage_level"))
-                req.persist.storage_level.CopyFrom(
-                    pb2.StorageLevel(
-                        use_disk=storage_level.useDisk,
-                        use_memory=storage_level.useMemory,
-                        use_off_heap=storage_level.useOffHeap,
-                        deserialized=storage_level.deserialized,
-                        replication=storage_level.replication,
-                    )
-                )
+                req.persist.storage_level.CopyFrom(storage_level_to_proto(storage_level))
         elif method == "unpersist":
             req.unpersist.relation.CopyFrom(cast(pb2.Relation, kwargs.get("relation")))
             if kwargs.get("blocking", None) is not None:

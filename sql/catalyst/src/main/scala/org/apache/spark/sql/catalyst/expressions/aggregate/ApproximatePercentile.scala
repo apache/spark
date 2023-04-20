@@ -180,7 +180,8 @@ case class ApproximatePercentile(
         case TimestampType | TimestampNTZType | _: DayTimeIntervalType =>
           value.asInstanceOf[Long].toDouble
         case n: NumericType =>
-          PhysicalNumericType.numeric(n).toDouble(value.asInstanceOf[n.InternalType])
+          PhysicalNumericType.numeric(n)
+            .toDouble(value.asInstanceOf[PhysicalNumericType#InternalType])
         case other: DataType =>
           throw QueryExecutionErrors.dataTypeUnexpectedError(other)
       }

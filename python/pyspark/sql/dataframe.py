@@ -22,7 +22,6 @@ import random
 import warnings
 from collections.abc import Iterable
 from functools import reduce
-from html import escape as html_escape
 from typing import (
     Any,
     Callable,
@@ -936,32 +935,10 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         if not self._support_repr_html:
             self._support_repr_html = True
         if self.sparkSession._jconf.isReplEagerEvalEnabled():
-            max_num_rows = max(self.sparkSession._jconf.replEagerEvalMaxNumRows(), 0)
-            sock_info = self._jdf.getRowsToPython(
-                max_num_rows,
+            return self._jdf.htmlString(
+                self.sparkSession._jconf.replEagerEvalMaxNumRows(),
                 self.sparkSession._jconf.replEagerEvalTruncate(),
             )
-            rows = list(_load_from_socket(sock_info, BatchedSerializer(CPickleSerializer())))
-            head = rows[0]
-            row_data = rows[1:]
-            has_more_data = len(row_data) > max_num_rows
-            row_data = row_data[:max_num_rows]
-
-            html = "<table border='1'>\n"
-            # generate table head
-            html += "<tr><th>%s</th></tr>\n" % "</th><th>".join(map(lambda x: html_escape(x), head))
-            # generate table rows
-            for row in row_data:
-                html += "<tr><td>%s</td></tr>\n" % "</td><td>".join(
-                    map(lambda x: html_escape(x), row)
-                )
-            html += "</table>\n"
-            if has_more_data:
-                html += "only showing top %d %s\n" % (
-                    max_num_rows,
-                    "row" if max_num_rows == 1 else "rows",
-                )
-            return html
         else:
             return None
 
@@ -3599,6 +3576,9 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         ...        if ratio > 0.05:
         ...            # Trigger alert
         ...            pass
+        ...
+        ...    def onQueryIdle(self, event):
+        ...        pass
         ...
         ...    def onQueryTerminated(self, event):
         ...        pass
