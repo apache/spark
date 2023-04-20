@@ -1918,7 +1918,9 @@ class SparkConnectPlanner(val session: SparkSession) {
         handleStreamingQueryCommand(command.getStreamingQueryCommand, sessionId, responseObserver)
       case proto.Command.CommandTypeCase.STREAMING_QUERY_MANAGER_COMMAND =>
         handleStreamingQueryManagerCommand(
-          command.getStreamingQueryManagerCommand, sessionId, responseObserver)
+          command.getStreamingQueryManagerCommand,
+          sessionId,
+          responseObserver)
       case proto.Command.CommandTypeCase.GET_RESOURCES_COMMAND =>
         handleGetResourcesCommand(command.getGetResourcesCommand, sessionId, responseObserver)
       case _ => throw new UnsupportedOperationException(s"$command not supported.")
@@ -2396,14 +2398,16 @@ class SparkConnectPlanner(val session: SparkSession) {
       case StreamingQueryManagerCommand.CommandCase.ACTIVE =>
         val active_queries = session.streams.active
         respBuilder.getActiveBuilder.addAllActiveQueries(
-            active_queries.map(query => StreamingQueryInstanceId
-              .newBuilder()
-              .setId(query.id.toString)
-              .setRunId(query.runId.toString)
-              .setName(query.name)
-              .build()
-            ).toIterable.asJava
-        )
+          active_queries
+            .map(query =>
+              StreamingQueryInstanceId
+                .newBuilder()
+                .setId(query.id.toString)
+                .setRunId(query.runId.toString)
+                .setName(query.name)
+                .build())
+            .toIterable
+            .asJava)
 
       case StreamingQueryManagerCommand.CommandCase.GET_QUERY =>
         val query = session.streams.get(command.getGetQuery.getId)
@@ -2414,8 +2418,8 @@ class SparkConnectPlanner(val session: SparkSession) {
 
       case StreamingQueryManagerCommand.CommandCase.AWAIT_ANY_TERMINATION =>
         if (command.getAwaitAnyTermination.hasTimeoutMs) {
-          val terminated = session.streams.awaitAnyTermination(
-            command.getAwaitAnyTermination.getTimeoutMs)
+          val terminated =
+            session.streams.awaitAnyTermination(command.getAwaitAnyTermination.getTimeoutMs)
           respBuilder.getAwaitAnyTerminationBuilder.setTerminated(terminated)
         } else {
           session.streams.awaitAnyTermination()

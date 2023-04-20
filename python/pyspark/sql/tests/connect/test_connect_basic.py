@@ -2968,7 +2968,6 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         for f in (
             "newSession",
             "sparkContext",
-            "streams",
         ):
             with self.assertRaises(NotImplementedError):
                 getattr(self.connect, f)()
