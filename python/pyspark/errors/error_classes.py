@@ -101,9 +101,7 @@ ERROR_CLASSES_JSON = """
   },
   "CONTEXT_ONLY_VALID_ON_DRIVER" : {
     "message" : [
-      "It appears that you are attempting to reference SparkContext from a broadcast ",
-      "variable, action, or transformation. SparkContext can only be used on the driver, ",
-      "not in code that it run on workers. For more information, see SPARK-5063."
+      "It appears that you are attempting to reference SparkContext from a broadcast variable, action, or transformation. SparkContext can only be used on the driver, not in code that it run on workers. For more information, see SPARK-5063."
     ]
   },
   "CONTEXT_UNAVAILABLE_FOR_REMOTE_CLIENT" : {
