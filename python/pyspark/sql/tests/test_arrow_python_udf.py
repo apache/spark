@@ -73,7 +73,7 @@ class PythonUDFArrowTests(BaseUDFTestsMixin, ReusedSQLTestCase):
         )
 
         # The input is NumPy array when the optimization is on.
-        self.assertEquals(row[0], "[1 2 3]")
+        self.assertEquals(row[0], "[1, 2, 3]")
         self.assertEquals(row[1], "{'a': 'b'}")
 
     def test_use_arrow(self):
@@ -102,7 +102,7 @@ class PythonUDFArrowTests(BaseUDFTestsMixin, ReusedSQLTestCase):
         )
 
         # The input is a NumPy array when the Arrow optimization is on.
-        self.assertEquals(row_true[0], row_none[0])  # "[1 2 3]"
+        self.assertEquals(row_true[0], row_none[0])  # "[1, 2, 3]"
 
         # useArrow=False
         row_false = (
