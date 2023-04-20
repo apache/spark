@@ -86,14 +86,14 @@ from l
 -- !query schema
 struct<a:int,b:decimal(2,1),scalarsubquery(a):boolean>
 -- !query output
-1	2.0	NULL
-1	2.0	NULL
+1	2.0	false
+1	2.0	false
 2	1.0	false
 2	1.0	false
 3	3.0	false
 6	NULL	false
-NULL	5.0	NULL
-NULL	NULL	NULL
+NULL	5.0	false
+NULL	NULL	false
 
 
 -- !query
@@ -106,14 +106,14 @@ from l
 -- !query schema
 struct<a:int,b:decimal(2,1),scalarsubquery(a):boolean>
 -- !query output
-1	2.0	NULL
-1	2.0	NULL
+1	2.0	false
+1	2.0	false
 2	1.0	false
 2	1.0	false
 3	3.0	false
 6	NULL	false
-NULL	5.0	NULL
-NULL	NULL	NULL
+NULL	5.0	false
+NULL	NULL	false
 
 
 -- !query

@@ -1928,6 +1928,12 @@ class SubquerySuite extends QueryTest
     checkAnswer(df, Nil)
   }
 
+  test("SPARK-43156: scalar subquery with Literal result like `COUNT(1) is null`") {
+    checkAnswer(
+      sql("select a, (select (count(1)) is null from r where a = c) from l where a < 4"),
+      Row(1, false) :: Row(1, false) :: Row(2, false) :: Row(2, false) :: Row(3, false) :: Nil)
+  }
+
   test("SPARK-32290: SingleColumn Null Aware Anti Join Optimize") {
     Seq(true, false).foreach { enableNAAJ =>
       Seq(true, false).foreach { enableAQE =>

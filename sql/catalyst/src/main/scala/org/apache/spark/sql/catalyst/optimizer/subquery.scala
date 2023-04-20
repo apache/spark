@@ -21,7 +21,7 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
-import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.{Alias, _}
 import org.apache.spark.sql.catalyst.expressions.ScalarSubquery._
 import org.apache.spark.sql.catalyst.expressions.SubExprUtils._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
@@ -459,7 +459,7 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] with AliasHelpe
       case alias @ Alias(_: AttributeReference, _) =>
         (alias.exprId, Literal.create(null, alias.dataType))
       case alias @ Alias(l: Literal, _) =>
-        (alias.exprId, l.copy(value = null))
+        (alias.exprId, l.copy(value = l.value))
       case ne => (ne.exprId, evalAggExprOnZeroTups(ne))
     }.toMap
   }
@@ -599,10 +599,32 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] with AliasHelpe
         if (Utils.isTesting) {
           assert(mayHaveCountBug.isDefined)
         }
+
+        def queryOutputFoldable(list: Seq[NamedExpression]): Boolean = {
+          trimAliases(list.filter(p => p.exprId.equals(query.output.head.exprId)).head).foldable
+        }
+
+        lazy val resultFoldable = {
+          query match {
+            case Project(expressions, _) =>
+              queryOutputFoldable(expressions)
+            case Aggregate(_, expressions, _) =>
+              queryOutputFoldable(expressions)
+            case _ =>
+              false
+          }
+        }
+
         if (resultWithZeroTups.isEmpty) {
           // CASE 1: Subquery guaranteed not to have the COUNT bug because it evaluates to NULL
           // with zero tuples.
           planWithoutCountBug
+        } else if (resultFoldable) {
+          val alias = Alias(resultWithZeroTups.get, origOutput.name)()
+          subqueryAttrMapping += (origOutput -> alias.toAttribute)
+          Project(
+            currentChild.output :+ alias,
+            Join(currentChild, query, LeftOuter, conditions.reduceOption(And), joinHint))
         } else if (!mayHaveCountBug.getOrElse(true) &&
           !conf.getConf(SQLConf.DECORRELATE_SUBQUERY_LEGACY_INCORRECT_COUNT_HANDLING_ENABLED)) {
           // Subquery guaranteed not to have the COUNT bug because it had non-empty GROUP BY clause
