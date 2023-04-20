@@ -22,6 +22,7 @@ import org.apache.hadoop.fs._
 import org.apache.hadoop.io.compress.{CompressionCodecFactory, SplittableCompressionCodec}
 import org.apache.hadoop.mapreduce.Job
 
+import org.apache.spark.paths.SparkPath
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
@@ -30,7 +31,6 @@ import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.UTF8String
 
 
 /**
@@ -203,6 +203,21 @@ trait FileFormat {
    * method. Technically, a file format could choose suppress them, but that is not recommended.
    */
   def metadataSchemaFields: Seq[StructField] = FileFormat.BASE_METADATA_FIELDS
+
+  /**
+   * The extractors to use when deriving file-constant metadata columns for this file format.
+   *
+   * A scanner must derive each file-constant metadata field's value from each [[PartitionedFile]]
+   * it processes. By default, the value is obtained by a direct lookup of the column's name on
+   * [[PartitionedFile.otherConstantMetadataColumnValues]] (see
+   * [[FileFormat.getFileConstantMetadataColumnValue]]). However, implementations can override this
+   * method in order to provide more sophisticated lazy extractors (e.g. in case the column value is
+   * complicated or expensive to compute).
+   *
+   * NOTE: A given extractor is only invoked if its column is actually selected at runtime.
+   */
+  def fileConstantMetadataExtractors: Map[String, PartitionedFile => Any] =
+    FileFormat.BASE_METADATA_EXTRACTORS
 }
 
 object FileFormat {
@@ -241,47 +256,74 @@ object FileFormat {
     FileSourceConstantMetadataStructField(FILE_BLOCK_LENGTH, LongType, nullable = false),
     FileSourceConstantMetadataStructField(FILE_MODIFICATION_TIME, TimestampType, nullable = false))
 
+  /**
+   * All [[BASE_METADATA_FIELDS]] require custom extractors because they are derived directly from
+   * fields of the [[PartitionedFile]], and do have entries in the file's metadata map.
+   */
+  val BASE_METADATA_EXTRACTORS: Map[String, PartitionedFile => Any] = Map(
+    FILE_PATH -> { pf: PartitionedFile => pf.toPath.toString },
+    FILE_NAME -> { pf: PartitionedFile => pf.toPath.getName },
+    FILE_SIZE -> { pf: PartitionedFile => pf.fileSize },
+    FILE_BLOCK_START -> { pf: PartitionedFile => pf.start },
+    FILE_BLOCK_LENGTH -> { pf: PartitionedFile => pf.length },
+    // The modificationTime from the file has millisecond granularity, but the TimestampType for
+    // `file_modification_time` has microsecond granularity.
+    FILE_MODIFICATION_TIME -> { pf: PartitionedFile => pf.modificationTime * 1000 }
+  )
+
+  /**
+   * Extracts the [[Literal]] value of a file-constant metadata column from a [[PartitionedFile]].
+   *
+   * If an extractor is available, use it. Otherwise, attempt to fetch the value directly from the
+   * file's metadata map, returning null if not found.
+   *
+   * Raw values (including null) are automatically converted to literals as a courtesy.
+   */
+  def getFileConstantMetadataColumnValue(
+      name: String,
+      file: PartitionedFile,
+      metadataExtractors: Map[String, PartitionedFile => Any]): Literal = {
+    val extractor = metadataExtractors.get(name).getOrElse {
+      (_: PartitionedFile).otherConstantMetadataColumnValues.get(name).orNull
+    }
+    Literal(extractor.apply(file))
+  }
+
   // create an internal row given required metadata fields and file information
   def createMetadataInternalRow(
+      partitionValues: InternalRow,
       fieldNames: Seq[String],
-      filePath: Path,
+      filePath: SparkPath,
       fileSize: Long,
       fileModificationTime: Long): InternalRow = {
-    // We are not aware of `FILE_BLOCK_START` and `FILE_BLOCK_LENGTH` before splitting files
-    assert(!fieldNames.contains(FILE_BLOCK_START) && !fieldNames.contains(FILE_BLOCK_LENGTH))
-    updateMetadataInternalRow(new GenericInternalRow(fieldNames.length), fieldNames,
-      filePath, fileSize, 0L, fileSize, fileModificationTime, Map.empty)
+    // When scanning files directly from the filesystem, we only support file-constant metadata
+    // fields whose values can be derived from a file status. In particular, we don't have accurate
+    // file split information yet, nor do we have a way to provide custom metadata column values.
+    val validFieldNames = Set(FILE_PATH, FILE_NAME, FILE_SIZE, FILE_MODIFICATION_TIME)
+    val extractors = FileFormat.BASE_METADATA_EXTRACTORS.filterKeys(validFieldNames.contains).toMap
+    assert(fieldNames.forall(validFieldNames.contains))
+    val pf = PartitionedFile(
+      partitionValues = partitionValues,
+      filePath = filePath,
+      start = 0L,
+      length = fileSize,
+      locations = Array.empty,
+      modificationTime = fileModificationTime,
+      fileSize = fileSize,
+      otherConstantMetadataColumnValues = Map.empty)
+    updateMetadataInternalRow(new GenericInternalRow(fieldNames.length), fieldNames, pf, extractors)
   }
 
   // update an internal row given required metadata fields and file information
   def updateMetadataInternalRow(
       row: InternalRow,
       fieldNames: Seq[String],
-      filePath: Path,
-      fileSize: Long,
-      fileBlockStart: Long,
-      fileBlockLength: Long,
-      fileModificationTime: Long,
-      otherConstantMetadataColumnValues: Map[String, Any]): InternalRow = {
+      file: PartitionedFile,
+      metadataExtractors: Map[String, PartitionedFile => Any]): InternalRow = {
     fieldNames.zipWithIndex.foreach { case (name, i) =>
-      name match {
-        // NOTE: The base metadata fields are hard-wired here and cannot be overridden.
-        case FILE_PATH => row.update(i, UTF8String.fromString(filePath.toString))
-        case FILE_NAME => row.update(i, UTF8String.fromString(filePath.getName))
-        case FILE_SIZE => row.update(i, fileSize)
-        case FILE_BLOCK_START => row.update(i, fileBlockStart)
-        case FILE_BLOCK_LENGTH => row.update(i, fileBlockLength)
-        case FILE_MODIFICATION_TIME =>
-          // the modificationTime from the file is in millisecond,
-          // while internally, the TimestampType `file_modification_time` is stored in microsecond
-          row.update(i, fileModificationTime * 1000L)
-        case other =>
-          // Other metadata columns use the file-provided value (if any). Automatically convert raw
-          // values (including nulls) to literals as a courtesy.
-          Literal(otherConstantMetadataColumnValues.get(other).orNull) match {
-            case Literal(null, _) => row.setNullAt(i)
-            case literal => row.update(i, literal.value)
-          }
+      getFileConstantMetadataColumnValue(name, file, metadataExtractors) match {
+        case Literal(null, _) => row.setNullAt(i)
+        case literal => row.update(i, literal.value)
       }
     }
     row

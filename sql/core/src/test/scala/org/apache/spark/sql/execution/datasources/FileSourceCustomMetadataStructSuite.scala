@@ -134,6 +134,39 @@ class FileSourceCustomMetadataStructSuite extends QueryTest with SharedSparkSess
     }
   }
 
+  test("extra constant metadata fields with extractors") {
+    withTempData("parquet", FILE_SCHEMA) { (_, f0, f1) =>
+      val format = new TestFileFormat(extraConstantMetadataFields) {
+        val extractPartitionNumber: PartitionedFile => Any = {
+          _.toPath.toString.split("/").collectFirst {
+            case "f0" => 9990
+            case "f1" => 9991
+          }.orNull
+        }
+        val extractPartitionName: PartitionedFile => Any = {
+          _.toPath.toString.split("/").collectFirst {
+            case "f0" => "f0f"
+            case "f1" => "f1f"
+          }.orNull
+        }
+        override def fileConstantMetadataExtractors: Map[String, PartitionedFile => Any] = {
+          super.fileConstantMetadataExtractors ++ Map(
+            "foo" -> extractPartitionNumber, "bar" -> extractPartitionName)
+        }
+      }
+      val files = Seq(FileStatusWithMetadata(f0), FileStatusWithMetadata(f1))
+      val df = createDF(format, files)
+
+      checkAnswer(
+        df.select("fileNum", "x", "_metadata.row_index", "_metadata.foo", "_metadata.bar"),
+        Seq(
+          Row(0, 101L, 0L, 9990, "f0f"),
+          Row(0, 102L, 1L, 9990, "f0f"),
+          Row(1, 111L, 0L, 9991, "f1f"),
+          Row(1, 112L, 1L, 9991, "f1f")))
+    }
+  }
+
   test("filters and projections on extra constant metadata fields") {
     withTempData("parquet", FILE_SCHEMA) { (_, f0, f1) =>
       val format = new TestFileFormat(extraConstantMetadataFields)
@@ -302,7 +335,7 @@ class FileSourceCustomMetadataStructSuite extends QueryTest with SharedSparkSess
     }
   }
 
-  test("cannot override base metadata fields") {
+  test("generated columns and extractors take precedence over metadata map values") {
     withTempData("parquet", FILE_SCHEMA) { (_, f0, f1) =>
       import FileFormat.{FILE_NAME, FILE_SIZE}
       import ParquetFileFormat.ROW_INDEX
