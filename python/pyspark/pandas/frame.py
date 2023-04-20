@@ -1530,7 +1530,7 @@ class DataFrame(Frame, Generic[T]):
         # |  A|  B|   C|
         # +---+---+----+
         # |  1|  2| 3.0|
-        # |  4|  1|null|
+        # |  4|  1|NULL|
         # +---+---+----+
 
         pair_scols: List[GenericColumn] = []
@@ -1560,10 +1560,10 @@ class DataFrame(Frame, Generic[T]):
         # |                  2|                  2|                3.0|                3.0|
         # |                  0|                  0|                4.0|                4.0|
         # |                  0|                  1|                4.0|                1.0|
-        # |                  0|                  2|               null|               null|
+        # |                  0|                  2|               NULL|               NULL|
         # |                  1|                  1|                1.0|                1.0|
-        # |                  1|                  2|               null|               null|
-        # |                  2|                  2|               null|               null|
+        # |                  1|                  2|               NULL|               NULL|
+        # |                  2|                  2|               NULL|               NULL|
         # +-------------------+-------------------+-------------------+-------------------+
         sdf = sdf.select(F.inline(F.array(*pair_scols)))  # type: ignore[arg-type]
 
@@ -1586,15 +1586,15 @@ class DataFrame(Frame, Generic[T]):
         # +-------------------+-------------------+----------------+
         # |__tmp_index_1_col__|__tmp_index_2_col__|__tmp_corr_col__|
         # +-------------------+-------------------+----------------+
-        # |                  2|                  2|            null|
-        # |                  1|                  2|            null|
-        # |                  2|                  1|            null|
+        # |                  2|                  2|            NULL|
+        # |                  1|                  2|            NULL|
+        # |                  2|                  1|            NULL|
         # |                  1|                  1|             1.0|
         # |                  0|                  0|             1.0|
         # |                  0|                  1|            -1.0|
         # |                  1|                  0|            -1.0|
-        # |                  0|                  2|            null|
-        # |                  2|                  0|            null|
+        # |                  0|                  2|            NULL|
+        # |                  2|                  0|            NULL|
         # +-------------------+-------------------+----------------+
 
         auxiliary_col_name = verify_temp_column_name(sdf, "__corr_auxiliary_temp_column__")
@@ -8915,15 +8915,19 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             if len(index_scols) != other._internal.index_level:
                 raise ValueError("Both DataFrames have to have the same number of index levels")
 
-            if verify_integrity and len(index_scols) > 0:
-                if (
+            if (
+                verify_integrity
+                and len(index_scols) > 0
+                and (
                     self._internal.spark_frame.select(index_scols)
                     .intersect(
                         other._internal.spark_frame.select(other._internal.index_spark_columns)
                     )
                     .count()
-                ) > 0:
-                    raise ValueError("Indices have overlapping values")
+                )
+                > 0
+            ):
+                raise ValueError("Indices have overlapping values")
 
         # Lazy import to avoid circular dependency issues
         from pyspark.pandas.namespace import concat
@@ -11581,9 +11585,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
             index_columns = psdf._internal.index_spark_column_names
             num_indices = len(index_columns)
-            if level:
-                if level < 0 or level >= num_indices:
-                    raise ValueError("level should be an integer between [0, %s)" % num_indices)
+            if level is not None and (level < 0 or level >= num_indices):
+                raise ValueError("level should be an integer between [0, %s)" % num_indices)
 
             @pandas_udf(returnType=index_mapper_ret_stype)  # type: ignore[call-overload]
             def index_mapper_udf(s: pd.Series) -> pd.Series:
@@ -12929,7 +12932,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         # |species|legs|wings|
         # +-------+----+-----+
         # |   bird|   2|  0.0|
-        # |   null|null|  2.0|
+        # |   NULL|NULL|  2.0|
         # +-------+----+-----+
         sdf = (
             sdf.select(F.arrays_zip(*[F.col(name) for name in mode_col_names]).alias(zip_col_name))

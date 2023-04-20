@@ -35,3 +35,13 @@ message StorageLevel {
   // (Required) The number of replicas.
   int32 replication = 5;
 }
+
+
+// ResourceInformation to hold information about a type of Resource.
+// The corresponding class is 'org.apache.spark.resource.ResourceInformation'
+message ResourceInformation {
+  // (Required) The name of the resource
+  string name = 1;
+  // (Required) An array of strings describing the addresses of the resource.
+  repeated string addresses = 2;
+}

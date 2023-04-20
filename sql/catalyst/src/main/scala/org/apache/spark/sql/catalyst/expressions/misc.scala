@@ -313,7 +313,7 @@ case class CurrentUser() extends LeafExpression with Unevaluable {
 @ExpressionDescription(
   usage = """
     _FUNC_(expr, key[, mode[, padding]]) - Returns an encrypted value of `expr` using AES in given `mode` with the specified `padding`.
-      Key lengths of 16, 24 and 32 bits are supported. Supported combinations of (`mode`, `padding`) are ('ECB', 'PKCS') and ('GCM', 'NONE').
+      Key lengths of 16, 24 and 32 bits are supported. Supported combinations of (`mode`, `padding`) are ('ECB', 'PKCS'), ('GCM', 'NONE') and ('CBC', 'PKCS').
       The default mode is GCM.
   """,
   arguments = """
@@ -321,9 +321,9 @@ case class CurrentUser() extends LeafExpression with Unevaluable {
       * expr - The binary value to encrypt.
       * key - The passphrase to use to encrypt the data.
       * mode - Specifies which block cipher mode should be used to encrypt messages.
-               Valid modes: ECB, GCM.
+               Valid modes: ECB, GCM, CBC.
       * padding - Specifies how to pad messages whose length is not a multiple of the block size.
-                  Valid values: PKCS, NONE, DEFAULT. The DEFAULT padding means PKCS for ECB and NONE for GCM.
+                  Valid values: PKCS, NONE, DEFAULT. The DEFAULT padding means PKCS for ECB, NONE for GCM and PKCS for CBC.
   """,
   examples = """
     Examples:
@@ -333,6 +333,8 @@ case class CurrentUser() extends LeafExpression with Unevaluable {
        6E7CA17BBB468D3084B5744BCA729FB7B2B7BCB8E4472847D02670489D95FA97DBBA7D3210
       > SELECT base64(_FUNC_('Spark SQL', '1234567890abcdef', 'ECB', 'PKCS'));
        3lmwu+Mw0H3fi5NDvcu9lg==
+      > SELECT base64(_FUNC_('Apache Spark', '1234567890abcdef', 'CBC', 'DEFAULT'));
+       U2FsdGVkX18JQ84pfRUwonUrFzpWQ46vKu4+MkJVFGM=
   """,
   since = "3.3.0",
   group = "misc_funcs")
@@ -377,7 +379,7 @@ case class AesEncrypt(
 @ExpressionDescription(
   usage = """
     _FUNC_(expr, key[, mode[, padding]]) - Returns a decrypted value of `expr` using AES in `mode` with `padding`.
-      Key lengths of 16, 24 and 32 bits are supported. Supported combinations of (`mode`, `padding`) are ('ECB', 'PKCS') and ('GCM', 'NONE').
+      Key lengths of 16, 24 and 32 bits are supported. Supported combinations of (`mode`, `padding`) are ('ECB', 'PKCS'), ('GCM', 'NONE') and ('CBC', 'PKCS').
       The default mode is GCM.
   """,
   arguments = """
@@ -385,9 +387,9 @@ case class AesEncrypt(
       * expr - The binary value to decrypt.
       * key - The passphrase to use to decrypt the data.
       * mode - Specifies which block cipher mode should be used to decrypt messages.
-               Valid modes: ECB, GCM.
+               Valid modes: ECB, GCM, CBC.
       * padding - Specifies how to pad messages whose length is not a multiple of the block size.
-                  Valid values: PKCS, NONE, DEFAULT. The DEFAULT padding means PKCS for ECB and NONE for GCM.
+                  Valid values: PKCS, NONE, DEFAULT. The DEFAULT padding means PKCS for ECB, NONE for GCM and PKCS for CBC.
   """,
   examples = """
     Examples:
@@ -397,6 +399,8 @@ case class AesEncrypt(
        Spark SQL
       > SELECT _FUNC_(unbase64('3lmwu+Mw0H3fi5NDvcu9lg=='), '1234567890abcdef', 'ECB', 'PKCS');
        Spark SQL
+      > SELECT _FUNC_(unbase64('U2FsdGVkX18JQ84pfRUwonUrFzpWQ46vKu4+MkJVFGM='), '1234567890abcdef', 'CBC');
+       Apache Spark
   """,
   since = "3.3.0",
   group = "misc_funcs")

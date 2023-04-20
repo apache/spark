@@ -294,6 +294,25 @@ private[spark] class SparkRuntimeException(
 }
 
 /**
+ * No such element exception thrown from Spark with an error class.
+ */
+private[spark] class SparkNoSuchElementException(
+    errorClass: String,
+    messageParameters: Map[String, String],
+    context: Array[QueryContext] = Array.empty,
+    summary: String = "")
+    extends NoSuchElementException(
+      SparkThrowableHelper.getMessage(errorClass, messageParameters, summary))
+    with SparkThrowable {
+
+  override def getMessageParameters: java.util.Map[String, String] = messageParameters.asJava
+
+  override def getErrorClass: String = errorClass
+
+  override def getQueryContext: Array[QueryContext] = context
+}
+
+/**
  * Security exception thrown from Spark with an error class.
  */
 private[spark] class SparkSecurityException(
