@@ -159,6 +159,14 @@ class RemoteStreamingQuery(
     executeQueryCmd(_.setStatus(true)).getStatus.getIsActive
   }
 
+  override def awaitTermination(): Unit = {
+    streamingQuery.awaitTermination()
+  }
+
+  override def awaitTermination(timeoutMs: Long): Boolean = {
+    streamingQuery.awaitTermination(timeoutMs)
+  }
+
   override def status: StreamingQueryStatus = {
     val statusResp = executeQueryCmd(_.setStatus(true)).getStatus
     new StreamingQueryStatus(
