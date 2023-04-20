@@ -328,7 +328,6 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
       resolver: Resolver = _ == _,
       context: Origin = Origin()): Option[(Seq[String], StructField)] = {
 
-    @scala.annotation.tailrec
     def findField(
         struct: StructType,
         searchPath: Seq[String],
@@ -341,50 +340,40 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
       } else if (found.isEmpty) {
         None
       } else {
-        val field = found.head
-        val currentPath = normalizedPath :+ field.name
-        val newSearchPath = searchPath.tail
-        if (newSearchPath.isEmpty) {
-          Some(normalizedPath -> field)
-        } else {
-          (newSearchPath, field.dataType) match {
-            case (_, s: StructType) =>
-              findField(s, newSearchPath, currentPath)
-
-            case _ if !includeCollections =>
-              throw QueryCompilationErrors.invalidFieldName(fieldNames, currentPath, context)
-
-            case (Seq("key", rest @ _*), MapType(keyType, _, _)) =>
-              findFieldInCollection(keyType, false, rest, currentPath, "key")
-
-            case (Seq("value", rest @ _*), MapType(_, valueType, isNullable)) =>
-              findFieldInCollection(valueType, isNullable, rest, currentPath, "value")
-
-            case (Seq("element", rest @ _*), ArrayType(elementType, isNullable)) =>
-              findFieldInCollection(elementType, isNullable, rest, currentPath, "element")
-
-            case _ =>
-              throw QueryCompilationErrors.invalidFieldName(fieldNames, currentPath, context)
-          }
-        }
+        findFieldInCollection(
+          parent = found.head,
+          searchPath = searchPath.tail,
+          normalizedPath)
       }
     }
 
+    @scala.annotation.tailrec
     def findFieldInCollection(
-        dt: DataType,
-        nullable: Boolean,
+        parent: StructField,
         searchPath: Seq[String],
-        normalizedPath: Seq[String],
-        collectionFieldName: String): Option[(Seq[String], StructField)] = {
+        normalizedPath: Seq[String]): Option[(Seq[String], StructField)] = {
       if (searchPath.isEmpty) {
-        Some(normalizedPath -> StructField(collectionFieldName, dt, nullable))
+        Some(normalizedPath -> parent)
       } else {
-        val newPath = normalizedPath :+ collectionFieldName
-        dt match {
-          case s: StructType =>
-            findField(s, searchPath, newPath)
+        val currentPath = normalizedPath :+ parent.name
+        (searchPath, parent.dataType) match {
+          case (_, s: StructType) =>
+            findField(s, searchPath, currentPath)
+
+          case _ if !includeCollections =>
+            throw QueryCompilationErrors.invalidFieldName(fieldNames, currentPath, context)
+
+          case (Seq("key", rest @ _*), MapType(keyType, _, _)) =>
+            findFieldInCollection(StructField("key", keyType, nullable = false), rest, currentPath)
+
+          case (Seq("value", rest @ _*), MapType(_, valueType, isNullable)) =>
+            findFieldInCollection(StructField("value", valueType, isNullable), rest, currentPath)
+
+          case (Seq("element", rest @ _*), ArrayType(elementType, isNullable)) =>
+            findFieldInCollection(
+              StructField("element", elementType, isNullable), rest, currentPath)
           case _ =>
-            throw QueryCompilationErrors.invalidFieldName(fieldNames, newPath, context)
+            throw QueryCompilationErrors.invalidFieldName(fieldNames, currentPath, context)
         }
       }
     }
