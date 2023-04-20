@@ -139,13 +139,13 @@ private[sql] object CatalogV2Implicits {
     def asTableIdentifier: TableIdentifier = ident.namespace match {
       case ns if ns.isEmpty => TableIdentifier(ident.name)
       case Array(dbName) => TableIdentifier(ident.name, Some(dbName))
-      case _ => throw QueryCompilationErrors.identifierTooManyNamePartsError(original)
+      case _ => throw QueryCompilationErrors.identifierTooManyNamePartsError(original, 2)
     }
 
     def asFunctionIdentifier: FunctionIdentifier = ident.namespace() match {
       case ns if ns.isEmpty => FunctionIdentifier(ident.name())
       case Array(dbName) => FunctionIdentifier(ident.name(), Some(dbName))
-      case _ => throw QueryCompilationErrors.identifierTooManyNamePartsError(original)
+      case _ => throw QueryCompilationErrors.identifierTooManyNamePartsError(original, 2)
     }
   }
 
@@ -159,13 +159,13 @@ private[sql] object CatalogV2Implicits {
     def asTableIdentifier: TableIdentifier = parts match {
       case Seq(tblName) => TableIdentifier(tblName)
       case Seq(dbName, tblName) => TableIdentifier(tblName, Some(dbName))
-      case _ => throw QueryCompilationErrors.identifierTooManyNamePartsError(original)
+      case _ => throw QueryCompilationErrors.identifierTooManyNamePartsError(original, 2)
     }
 
     def asFunctionIdentifier: FunctionIdentifier = parts match {
       case Seq(funcName) => FunctionIdentifier(funcName)
       case Seq(dbName, funcName) => FunctionIdentifier(funcName, Some(dbName))
-      case _ => throw QueryCompilationErrors.identifierTooManyNamePartsError(original)
+      case _ => throw QueryCompilationErrors.identifierTooManyNamePartsError(original, 2)
     }
 
     def quoted: String = parts.map(quoteIfNeeded).mkString(".")

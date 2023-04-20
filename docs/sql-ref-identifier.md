@@ -52,6 +52,10 @@ An identifier is a string used to identify a database object such as a table, vi
 
     Any character from the character set. Use <code>`</code> to escape special characters (e.g., <code>`</code>).
 
+### Notes
+
+To convert a `STRING` literal into an identifier use the [`IDENTIFIER clause`](sql-ref-identifier-clause.html).
+
 ### Examples
 
 ```sql

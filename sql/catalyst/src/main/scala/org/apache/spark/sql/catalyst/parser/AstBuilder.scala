@@ -40,12 +40,12 @@ import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin
-import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, DateTimeUtils, GeneratedColumn, IntervalUtils, ResolveDefaultColumns}
+import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, CharVarcharUtils, DateTimeUtils, GeneratedColumn, IntervalUtils, ResolveDefaultColumns}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{convertSpecialDate, convertSpecialTimestamp, convertSpecialTimestampNTZ, getZoneId, stringToDate, stringToTimestamp, stringToTimestampWithoutTimeZone}
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, SupportsNamespaces, TableCatalog}
 import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition
 import org.apache.spark.sql.connector.expressions.{ApplyTransform, BucketTransform, DaysTransform, Expression => V2Expression, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, Transform, YearsTransform}
-import org.apache.spark.sql.errors.QueryParsingErrors
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryParsingErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
@@ -199,7 +199,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
       (columnAliases, plan) =>
         UnresolvedSubqueryColumnAliases(visitIdentifierList(columnAliases), plan)
     )
-    SubqueryAlias(ctx.name.getText, subQuery)
+    SubqueryAlias(visitErrorCapturingSingleIdentifierWithTemplate(ctx.name), subQuery)
   }
 
   /**
@@ -1013,7 +1013,8 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
     // Collect all window specifications defined in the WINDOW clause.
     val baseWindowTuples = ctx.namedWindow.asScala.map {
       wCtx =>
-        (wCtx.name.getText, typedVisit[WindowSpec](wCtx.windowSpec))
+        (visitErrorCapturingSingleIdentifierWithTemplate(wCtx.name),
+          typedVisit[WindowSpec](wCtx.windowSpec))
     }
     baseWindowTuples.groupBy(_._1).foreach { kv =>
       if (kv._2.size > 1) {
@@ -1599,7 +1600,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
    * Create a Sequence of Strings for an identifier list.
    */
   override def visitIdentifierSeq(ctx: IdentifierSeqContext): Seq[String] = withOrigin(ctx) {
-    ctx.ident.asScala.map(_.getText).toSeq
+    ctx.ident.asScala.map(visitErrorCapturingSingleIdentifierWithTemplate(_)).toSeq
   }
 
   /* ********************************************************************************************
@@ -1626,8 +1627,84 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
    */
   override def visitMultipartIdentifier(ctx: MultipartIdentifierContext): Seq[String] =
     withOrigin(ctx) {
-      ctx.parts.asScala.map(_.getText).toSeq
+      ctx.parts.asScala.map(visitErrorCapturingIdentifierWithTemplate(_)).toSeq.flatten
     }
+
+  /**
+   * Create a [[Seq[String]]] from an identifier or IDENTIFIER(stringLit)
+   * The result is a sequence of strings because stringLit may parse as a qualified name.
+   */
+  override def visitErrorCapturingIdentifierWithTemplate
+  (ctx: ErrorCapturingIdentifierWithTemplateContext): Seq[String] =
+    withOrigin(ctx) {
+      if (ctx.ident != null) {
+        Seq(ctx.ident.getText)
+      } else {
+        visitIdentifierClause(ctx.identifierClause)
+      }
+    }
+
+  /**
+   * Create a [[String]] from an identifier or IDENTIFIER(stringLit)
+   * Enforce that the identifier clause produced an unqualified name.
+   */
+  override def visitErrorCapturingSingleIdentifierWithTemplate
+  (ctx: ErrorCapturingSingleIdentifierWithTemplateContext): String =
+    withOrigin(ctx) {
+      if (ctx.ident != null) {
+        ctx.ident.getText
+      } else {
+        val ident = visitIdentifierClause(ctx.identifierClause)
+        if (ident.length > 1) {
+          throw QueryCompilationErrors.identifierTooManyNamePartsError(ident.mkString("."), 1)
+        }
+        ident.mkString
+      }
+    }
+
+  /**
+   * Create a [[String]] from an identifier or IDENTIFIER(stringLit)
+   * Enforce that the identifier clause produced an unqualified name.
+   */
+  override def visitSingleIdentifierWithTemplate
+  (ctx: SingleIdentifierWithTemplateContext): String =
+    withOrigin(ctx) {
+      if (ctx.ident != null) {
+        ctx.ident.getText
+      } else {
+        val ident = visitIdentifierClause(ctx.identifierClause)
+        if (ident.length > 1) {
+          throw QueryCompilationErrors.identifierTooManyNamePartsError(ident.mkString("."), 1)
+        }
+        ident.mkString
+      }
+    }
+
+  /**
+   * Create a [[Seq[String]]] from an identifier or IDENTIFIER(stringLit)
+   * The result is a sequence of strings because stringLit may parse as a qualified name.
+   */
+  override def visitIdentifierWithTemplate(ctx: IdentifierWithTemplateContext): Seq[String] =
+    withOrigin(ctx) {
+      if (ctx.ident != null) {
+        Seq(ctx.ident.getText)
+      } else {
+        visitIdentifierClause(ctx.identifierClause)
+      }
+    }
+
+  /**
+   * Create a [[Seq[String]]] from a name or IDENTIFIER(stringLit)
+   * The result is a sequence of strings because stringLit may parse as a qualified name.
+   */
+  override def visitIdentifierClause(ctx: IdentifierClauseContext): Seq[String] = {
+    val stringLit = if (conf.escapedStringLiterals) {
+      ctx.stringLit.asScala.map(x => stringWithoutUnescape(visitStringLit(x))).mkString
+    } else {
+      ctx.stringLit.asScala.map(x => string(visitStringLit(x))).mkString
+    }
+    UnresolvedAttribute.parseAttributeName(stringLit)
+  }
 
   /* ********************************************************************************************
    * Expression parsing
@@ -1650,7 +1727,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
    * Both un-targeted (global) and targeted aliases are supported.
    */
   override def visitStar(ctx: StarContext): Expression = withOrigin(ctx) {
-    UnresolvedStar(Option(ctx.qualifiedName()).map(_.identifier.asScala.map(_.getText).toSeq))
+    UnresolvedStar(Option(ctx.qualifiedName()).map(visitQualifiedName))
   }
 
   /**
@@ -2147,7 +2224,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
    * Create a function database (optional) and name pair.
    */
   protected def visitFunctionName(ctx: QualifiedNameContext): FunctionIdentifier = {
-    visitFunctionName(ctx, ctx.identifier().asScala.map(_.getText).toSeq)
+    visitFunctionName(ctx, visitQualifiedName(ctx))
   }
 
   /**
@@ -2164,7 +2241,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
 
   protected def getFunctionMultiparts(ctx: FunctionNameContext): Seq[String] = {
     if (ctx.qualifiedName != null) {
-      ctx.qualifiedName().identifier().asScala.map(_.getText).toSeq
+      visitQualifiedName(ctx.qualifiedName())
     } else {
       Seq(ctx.getText)
     }
@@ -2187,7 +2264,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
    * Create a reference to a window frame, i.e. [[WindowSpecReference]].
    */
   override def visitWindowRef(ctx: WindowRefContext): WindowSpecReference = withOrigin(ctx) {
-    WindowSpecReference(ctx.name.getText)
+    WindowSpecReference(visitErrorCapturingSingleIdentifierWithTemplate(ctx.name))
   }
 
   /**
@@ -2321,7 +2398,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
    * it can be [[UnresolvedExtractValue]].
    */
   override def visitDereference(ctx: DereferenceContext): Expression = withOrigin(ctx) {
-    val attr = ctx.fieldName.getText
+    val attr = visitSingleIdentifierWithTemplate(ctx.fieldName)
     expression(ctx.base) match {
       case unresolved_attr @ UnresolvedAttribute(nameParts) =>
         ctx.fieldName.getStart.getText match {
@@ -2352,6 +2429,17 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
         UnresolvedAttribute.quoted(ctx.getText)
     }
 
+  }
+
+  /**
+   * Create an [[UnresolvedAttribute]] expression or a [[UnresolvedRegex]] if it is a regex
+   * quoted in ``
+   */
+  override def visitIdentifierClauseReference(ctx: IdentifierClauseReferenceContext): Expression
+  = withOrigin(ctx) {
+    val ident = visitIdentifierClause(ctx.identifierClause())
+    val attr = UnresolvedAttribute(ident)
+    attr
   }
 
   /**
@@ -2988,7 +3076,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
     }
 
     StructField(
-      name = colName.getText,
+      name = visitErrorCapturingSingleIdentifierWithTemplate(colName),
       dataType = typedVisit[DataType](ctx.dataType),
       nullable = NULL == null,
       metadata = builder.build())
@@ -3066,7 +3154,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
       builder.putString(GeneratedColumn.GENERATION_EXPRESSION_METADATA_KEY, field)
     }
 
-    val name: String = colName.getText
+    val name = visitErrorCapturingSingleIdentifierWithTemplate(colName)
 
     StructField(
       name = name,
@@ -3296,7 +3384,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
     if (temporary && ifNotExists) {
       operationNotAllowed("CREATE TEMPORARY TABLE ... IF NOT EXISTS", ctx)
     }
-    val multipartIdentifier = ctx.multipartIdentifier.parts.asScala.map(_.getText).toSeq
+    val multipartIdentifier = visitMultipartIdentifier(ctx.multipartIdentifier)
     (multipartIdentifier, temporary, ifNotExists, ctx.EXTERNAL != null)
   }
 
@@ -3304,7 +3392,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
    * Parse a qualified name to a multipart name.
    */
   override def visitQualifiedName(ctx: QualifiedNameContext): Seq[String] = withOrigin(ctx) {
-    ctx.identifier.asScala.map(_.getText).toSeq
+     ctx.parts.asScala.map(visitIdentifierWithTemplate(_)).toSeq.flatten
   }
 
   /**
@@ -3827,7 +3915,8 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
 
     val columns = Option(ctx.createOrReplaceTableColTypeList())
       .map(visitCreateOrReplaceTableColTypeList).getOrElse(Nil)
-    val provider = Option(ctx.tableProvider).map(_.multipartIdentifier.getText)
+    val provider = Option(ctx.tableProvider).map(p =>
+      visitMultipartIdentifier(p.multipartIdentifier).map(quoteIfNeeded).mkString("."))
     val (partTransforms, partCols, bucketSpec, properties, options, location, comment, serdeInfo) =
       visitCreateTableClauses(ctx.createTableClauses())
 
@@ -4007,7 +4096,8 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
   override def visitColPosition(ctx: ColPositionContext): ColumnPosition = {
     ctx.position.getType match {
       case SqlBaseParser.FIRST => ColumnPosition.first()
-      case SqlBaseParser.AFTER => ColumnPosition.after(ctx.afterCol.getText)
+      case SqlBaseParser.AFTER =>
+        ColumnPosition.after(visitErrorCapturingSingleIdentifierWithTemplate(ctx.afterCol))
     }
   }
 
@@ -4104,7 +4194,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
     RenameColumn(
       createUnresolvedTable(ctx.table, "ALTER TABLE ... RENAME COLUMN"),
       UnresolvedFieldName(typedVisit[Seq[String]](ctx.from)),
-      ctx.to.getText)
+      visitErrorCapturingSingleIdentifierWithTemplate(ctx.to))
   }
 
   /**

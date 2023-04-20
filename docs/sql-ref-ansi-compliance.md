@@ -473,6 +473,7 @@ Below is a list of all the keywords in Spark SQL.
 |HAVING|reserved|non-reserved|reserved|
 |HOUR|non-reserved|non-reserved|non-reserved|
 |HOURS|non-reserved|non-reserved|non-reserved|
+|IDENTIFIER|non-reserved|non-reserved|non-reserved|
 |IF|non-reserved|non-reserved|not a keyword|
 |IGNORE|non-reserved|non-reserved|non-reserved|
 |IMPORT|non-reserved|non-reserved|non-reserved|

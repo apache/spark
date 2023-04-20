@@ -113,7 +113,7 @@ statement
         LEFT_PAREN columns=qualifiedColTypeWithPositionList RIGHT_PAREN #addTableColumns
     | ALTER TABLE table=multipartIdentifier
         RENAME COLUMN
-        from=multipartIdentifier TO to=errorCapturingIdentifier        #renameTableColumn
+        from=multipartIdentifier TO to=errorCapturingSingleIdentifierWithTemplate        #renameTableColumn
     | ALTER TABLE multipartIdentifier
         DROP (COLUMN | COLUMNS) (IF EXISTS)?
         LEFT_PAREN columns=multipartIdentifierList RIGHT_PAREN         #dropTableColumns
@@ -366,7 +366,7 @@ ctes
     ;
 
 namedQuery
-    : name=errorCapturingIdentifier (columnAliases=identifierList)? AS? LEFT_PAREN query RIGHT_PAREN
+    : name=errorCapturingSingleIdentifierWithTemplate (columnAliases=identifierList)? AS? LEFT_PAREN query RIGHT_PAREN
     ;
 
 tableProvider
@@ -743,7 +743,7 @@ identifierList
     ;
 
 identifierSeq
-    : ident+=errorCapturingIdentifier (COMMA ident+=errorCapturingIdentifier)*
+    : ident+=errorCapturingSingleIdentifierWithTemplate (COMMA ident+=errorCapturingSingleIdentifierWithTemplate)*
     ;
 
 orderedIdentifierList
@@ -751,7 +751,7 @@ orderedIdentifierList
     ;
 
 orderedIdentifier
-    : ident=errorCapturingIdentifier ordering=(ASC | DESC)?
+    : ident=errorCapturingSingleIdentifierWithTemplate ordering=(ASC | DESC)?
     ;
 
 identifierCommentList
@@ -759,7 +759,7 @@ identifierCommentList
     ;
 
 identifierComment
-    : identifier commentSpec?
+    : singleIdentifierWithTemplate commentSpec?
     ;
 
 relationPrimary
@@ -798,8 +798,18 @@ multipartIdentifierList
     ;
 
 multipartIdentifier
-    : parts+=errorCapturingIdentifier (DOT parts+=errorCapturingIdentifier)*
+    : parts+=errorCapturingIdentifierWithTemplate (DOT parts+=errorCapturingIdentifierWithTemplate)*
     ;
+
+errorCapturingIdentifierWithTemplate
+   : identifierClause
+   | ident = errorCapturingIdentifier
+   ;
+
+errorCapturingSingleIdentifierWithTemplate
+   : identifierClause
+   | ident = errorCapturingIdentifier
+   ;
 
 multipartIdentifierPropertyList
     : multipartIdentifierProperty (COMMA multipartIdentifierProperty)*
@@ -907,6 +917,7 @@ primaryExpression
     | qualifiedName DOT ASTERISK                                                               #star
     | LEFT_PAREN namedExpression (COMMA namedExpression)+ RIGHT_PAREN                          #rowConstructor
     | LEFT_PAREN query RIGHT_PAREN                                                             #subqueryExpression
+    | identifierClause                                                                         #identifierClauseReference
     | functionName LEFT_PAREN (setQuantifier? argument+=expression (COMMA argument+=expression)*)? RIGHT_PAREN
        (FILTER LEFT_PAREN WHERE where=booleanExpression RIGHT_PAREN)?
        (nullsOption=(IGNORE | RESPECT) NULLS)? ( OVER windowSpec)?                             #functionCall
@@ -914,7 +925,7 @@ primaryExpression
     | LEFT_PAREN identifier (COMMA identifier)+ RIGHT_PAREN ARROW expression                   #lambda
     | value=primaryExpression LEFT_BRACKET index=valueExpression RIGHT_BRACKET                 #subscript
     | identifier                                                                               #columnReference
-    | base=primaryExpression DOT fieldName=identifier                                          #dereference
+    | base=primaryExpression DOT fieldName=singleIdentifierWithTemplate                        #dereference
     | LEFT_PAREN expression RIGHT_PAREN                                                        #parenthesizedExpression
     | EXTRACT LEFT_PAREN field=identifier FROM source=valueExpression RIGHT_PAREN              #extract
     | (SUBSTR | SUBSTRING) LEFT_PAREN str=valueExpression (FROM | COMMA) pos=valueExpression
@@ -998,7 +1009,7 @@ unitInUnitToUnit
     ;
 
 colPosition
-    : position=FIRST | position=AFTER afterCol=errorCapturingIdentifier
+    : position=FIRST | position=AFTER afterCol=errorCapturingSingleIdentifierWithTemplate
     ;
 
 type
@@ -1057,7 +1068,7 @@ colTypeList
     ;
 
 colType
-    : colName=errorCapturingIdentifier dataType (NOT NULL)? commentSpec?
+    : colName=errorCapturingSingleIdentifierWithTemplate dataType (NOT NULL)? commentSpec?
     ;
 
 createOrReplaceTableColTypeList
@@ -1065,7 +1076,7 @@ createOrReplaceTableColTypeList
     ;
 
 createOrReplaceTableColType
-    : colName=errorCapturingIdentifier dataType colDefinitionOption*
+    : colName=errorCapturingSingleIdentifierWithTemplate dataType colDefinitionOption*
     ;
 
 colDefinitionOption
@@ -1096,12 +1107,12 @@ windowClause
     ;
 
 namedWindow
-    : name=errorCapturingIdentifier AS windowSpec
+    : name=errorCapturingSingleIdentifierWithTemplate AS windowSpec
     ;
 
 windowSpec
-    : name=errorCapturingIdentifier                         #windowRef
-    | LEFT_PAREN name=errorCapturingIdentifier RIGHT_PAREN  #windowRef
+    : name=errorCapturingSingleIdentifierWithTemplate                         #windowRef
+    | LEFT_PAREN name=errorCapturingSingleIdentifierWithTemplate RIGHT_PAREN  #windowRef
     | LEFT_PAREN
       ( CLUSTER BY partition+=expression (COMMA partition+=expression)*
       | ((PARTITION | DISTRIBUTE) BY partition+=expression (COMMA partition+=expression)*)?
@@ -1135,8 +1146,22 @@ functionName
     ;
 
 qualifiedName
-    : identifier (DOT identifier)*
+    : parts+=identifierWithTemplate (DOT parts+=identifierWithTemplate)*
     ;
+
+identifierWithTemplate
+   : identifierClause
+   | ident = identifier
+   ;
+
+singleIdentifierWithTemplate
+   : identifierClause
+   | ident = identifier
+   ;
+
+identifierClause
+   : IDENTIFIER_KW LEFT_PAREN stringLit+ RIGHT_PAREN
+   ;
 
 // this rule is used for explicitly capturing wrong identifiers such as test-table, which should actually be `test-table`
 // replace identifier with errorCapturingIdentifier where the immediate follow symbol is not an expression, otherwise
@@ -1311,6 +1336,7 @@ ansiNonReserved
     | GROUPING
     | HOUR
     | HOURS
+    | IDENTIFIER_KW
     | IF
     | IGNORE
     | IMPORT
@@ -1624,6 +1650,7 @@ nonReserved
     | HAVING
     | HOUR
     | HOURS
+    | IDENTIFIER_KW
     | IF
     | IGNORE
     | IMPORT

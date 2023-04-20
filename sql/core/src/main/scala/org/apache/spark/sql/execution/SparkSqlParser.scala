@@ -466,7 +466,8 @@ class SparkSqlAstBuilder extends AstBuilder {
 
     val userSpecifiedColumns = Option(ctx.identifierCommentList).toSeq.flatMap { icl =>
       icl.identifierComment.asScala.map { ic =>
-        ic.identifier.getText -> Option(ic.commentSpec()).map(visitCommentSpec)
+        visitSingleIdentifierWithTemplate(ic.singleIdentifierWithTemplate())->
+          Option(ic.commentSpec()).map(visitCommentSpec)
       }
     }
 

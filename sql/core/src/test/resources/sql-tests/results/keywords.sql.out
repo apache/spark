@@ -126,6 +126,7 @@ GROUPING	false
 HAVING	false
 HOUR	false
 HOURS	false
+IDENTIFIER	false
 IF	false
 IGNORE	false
 ILIKE	false

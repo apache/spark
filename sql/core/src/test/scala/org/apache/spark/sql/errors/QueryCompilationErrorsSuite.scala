@@ -692,7 +692,8 @@ class QueryCompilationErrorsSuite
       },
       errorClass = "IDENTIFIER_TOO_MANY_NAME_PARTS",
       sqlState = "42601",
-      parameters = Map("identifier" -> "`db_name`.`schema_name`.`view_name`")
+      parameters = Map("identifier" -> "`db_name`.`schema_name`.`view_name`",
+      "limitParts" -> "2")
     )
   }
 
@@ -713,7 +714,8 @@ class QueryCompilationErrorsSuite
         },
         errorClass = "IDENTIFIER_TOO_MANY_NAME_PARTS",
         sqlState = "42601",
-        parameters = Map("identifier" -> "`db_name`.`schema_name`.`new_table_name`")
+        parameters = Map("identifier" -> "`db_name`.`schema_name`.`new_table_name`",
+          "limitParts" -> "2")
       )
     }
   }

@@ -1902,10 +1902,11 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
         "ability" -> ability))
   }
 
-  def identifierTooManyNamePartsError(originalIdentifier: String): Throwable = {
+  def identifierTooManyNamePartsError(originalIdentifier: String, limitParts: Int): Throwable = {
     new AnalysisException(
       errorClass = "IDENTIFIER_TOO_MANY_NAME_PARTS",
-      messageParameters = Map("identifier" -> toSQLId(originalIdentifier)))
+      messageParameters = Map("identifier" -> toSQLId(originalIdentifier),
+      "limitParts" -> limitParts.toString))
   }
 
   def emptyMultipartIdentifierError(): Throwable = {
