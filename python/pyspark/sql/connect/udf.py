@@ -23,6 +23,7 @@ check_dependencies(__name__)
 
 import sys
 import functools
+import warnings
 from inspect import getfullargspec
 from typing import cast, Callable, Any, TYPE_CHECKING, Optional, Union
 
@@ -77,8 +78,14 @@ def _create_py_udf(
         and not isinstance(return_type, MapType)
         and not isinstance(return_type, ArrayType)
     )
-    if is_arrow_enabled and is_output_atomic_type and is_func_with_args:
-        return _create_arrow_py_udf(regular_udf)
+    if is_arrow_enabled:
+        if is_output_atomic_type and is_func_with_args:
+            return _create_arrow_py_udf(regular_udf)
+        else:
+            warnings.warn(
+                "Arrow optimization for Python UDFs cannot be enabled.",
+                UserWarning,
+            )
     else:
         return regular_udf
 
