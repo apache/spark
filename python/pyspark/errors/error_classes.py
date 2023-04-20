@@ -69,6 +69,11 @@ ERROR_CLASSES_JSON = """
       "Function `<func_name>` should return Column, got <return_type>."
     ]
   },
+  "INVALID_CALL_ON_UNRESOLVED_OBJECT": {
+    "message": [
+      "Invalid call to `<func_name>` on unresolved object."
+    ]
+  },
   "INVALID_ITEM_FOR_CONTAINER": {
     "message": [
       "All items in `<arg_name>` should be in <allowed_types>, got <item_type>."
