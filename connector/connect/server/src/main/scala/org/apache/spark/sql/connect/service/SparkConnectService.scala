@@ -125,14 +125,7 @@ class SparkConnectService(debug: Boolean)
       SparkConnectService
         .getOrCreateIsolatedSession(userId, sessionId)
         .session
-    val stackTraceEnabled =
-      try {
-        session.conf.get(PYSPARK_JVM_STACKTRACE_ENABLED.key).toBoolean
-      } catch {
-        case NonFatal(e) =>
-          logWarning(s"Failed to get Spark conf `PYSPARK_JVM_STACKTRACE_ENABLED`: $e")
-          true
-      }
+    val stackTraceEnabled = session.conf.get(PYSPARK_JVM_STACKTRACE_ENABLED.key, "true").toBoolean
 
     {
       case se: SparkException if isPythonExecutionException(se) =>
