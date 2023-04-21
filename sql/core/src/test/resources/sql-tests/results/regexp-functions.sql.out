@@ -66,9 +66,14 @@ SELECT regexp_extract('1a 2b 14m', '\\d+', -1)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.SparkIllegalArgumentException
+org.apache.spark.SparkRuntimeException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2006"
+  "errorClass" : "INVALID_PARAMETER_VALUE.NEGATIVE_REGEX_GROUP_INDEX",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "functionName" : "`regexp_extract`",
+    "parameter" : "`idx`"
+  }
 }
 
 
@@ -143,9 +148,14 @@ SELECT regexp_extract('1a 2b 14m', '(\\d+)([a-z]+)', -1)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.SparkIllegalArgumentException
+org.apache.spark.SparkRuntimeException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2006"
+  "errorClass" : "INVALID_PARAMETER_VALUE.NEGATIVE_REGEX_GROUP_INDEX",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "functionName" : "`regexp_extract`",
+    "parameter" : "`idx`"
+  }
 }
 
 
@@ -249,9 +259,14 @@ SELECT regexp_extract_all('1a 2b 14m', '\\d+', -1)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.SparkIllegalArgumentException
+org.apache.spark.SparkRuntimeException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2006"
+  "errorClass" : "INVALID_PARAMETER_VALUE.NEGATIVE_REGEX_GROUP_INDEX",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "functionName" : "`regexp_extract_all`",
+    "parameter" : "`idx`"
+  }
 }
 
 
@@ -326,9 +341,14 @@ SELECT regexp_extract_all('1a 2b 14m', '(\\d+)([a-z]+)', -1)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.SparkIllegalArgumentException
+org.apache.spark.SparkRuntimeException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2006"
+  "errorClass" : "INVALID_PARAMETER_VALUE.NEGATIVE_REGEX_GROUP_INDEX",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "functionName" : "`regexp_extract_all`",
+    "parameter" : "`idx`"
+  }
 }
 
 
