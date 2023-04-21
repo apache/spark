@@ -490,7 +490,6 @@ To use a custom metrics.properties for the application master and executors, upd
   <td><code>spark.yarn.am.tokenConfRegex</code></td>
   <td>(none)</td>
   <td>
-    This config is only supported when Hadoop version is 2.9+ or 3.x (e.g., when using the Hadoop 3.x profile).
     The value of this config is a regex expression used to grep a list of config entries from the job's configuration file (e.g., hdfs-site.xml)
     and send to RM, which uses them when renewing delegation tokens. A typical use case of this feature is to support delegation
     tokens in an environment where a YARN cluster needs to talk to multiple downstream HDFS clusters, where the YARN RM may not have configs
