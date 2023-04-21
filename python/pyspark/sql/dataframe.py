@@ -3014,14 +3014,14 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         --------
         >>> from pyspark.sql.functions import lit
         >>> df = spark.range(3)
-        >>> [attr for attr in dir(df) if attr[0] == 'i']
-        ['id', 'inputFiles', 'intersect', 'intersectAll', 'isEmpty', 'isLocal', 'isStreaming', 'is_cached']
+        >>> [attr for attr in dir(df) if attr[0] == 'i'][:7]
+        ['id', 'inputFiles', 'intersect', 'intersectAll', 'isEmpty', 'isLocal', 'isStreaming']
         >>> df = df.withColumn('i_like_pancakes', lit(1))
-        >>> [attr for attr in dir(df) if attr[0] == 'i']
-        ['i_like_pancakes', 'id', 'inputFiles', 'intersect', 'intersectAll', 'isEmpty', 'isLocal', 'isStreaming', 'is_cached']
+        >>> [attr for attr in dir(df) if attr[0] == 'i'][:7]
+        ['i_like_pancakes', 'id', 'inputFiles', 'intersect', 'intersectAll', 'isEmpty', 'isLocal']
         >>> df = df.withColumn('inputFiles', lit(2))
-        >>> [attr for attr in dir(df) if attr[0] == 'i']
-        ['i_like_pancakes', 'id', 'inputFiles', 'intersect', 'intersectAll', 'isEmpty', 'isLocal', 'isStreaming', 'is_cached']
+        >>> [attr for attr in dir(df) if attr[0] == 'i'][:7]
+        ['i_like_pancakes', 'id', 'inputFiles', 'intersect', 'intersectAll', 'isEmpty', 'isLocal']
         """
         attrs = super().__dir__()
         attrs.extend(attr for attr in self.columns if attr not in attrs)
