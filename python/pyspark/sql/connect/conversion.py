@@ -49,7 +49,6 @@ import pyspark.sql.connect.proto as pb2
 from typing import (
     Any,
     Callable,
-    Dict,
     Sequence,
     List,
 )
