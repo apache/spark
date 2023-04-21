@@ -20,7 +20,6 @@ import java.util.Arrays
 
 import io.grpc.StatusRuntimeException
 
-import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders._
 import org.apache.spark.sql.connect.client.util.RemoteSparkSession
 
 /**
@@ -30,68 +29,80 @@ import org.apache.spark.sql.connect.client.util.RemoteSparkSession
 class KeyValueGroupedDatasetE2ETestSuite extends RemoteSparkSession {
 
   test("mapGroups") {
+    val session: SparkSession = spark
+    import session.implicits._
     val values = spark
       .range(10)
-      .groupByKey(v => v % 2)(PrimitiveLongEncoder)
-      .mapGroups((_, it) => it.toSeq.size)(PrimitiveIntEncoder)
+      .groupByKey(v => v % 2)
+      .mapGroups((_, it) => it.toSeq.size)
       .collectAsList()
     assert(values == Arrays.asList[Int](5, 5))
   }
 
   test("flatGroupMap") {
+    val session: SparkSession = spark
+    import session.implicits._
     val values = spark
       .range(10)
-      .groupByKey(v => v % 2)(PrimitiveLongEncoder)
-      .flatMapGroups((_, it) => Seq(it.toSeq.size))(PrimitiveIntEncoder)
+      .groupByKey(v => v % 2)
+      .flatMapGroups((_, it) => Seq(it.toSeq.size))
       .collectAsList()
     assert(values == Arrays.asList[Int](5, 5))
   }
 
   test("keys") {
+    val session: SparkSession = spark
+    import session.implicits._
     val values = spark
       .range(10)
-      .groupByKey(v => v % 2)(PrimitiveLongEncoder)
+      .groupByKey(v => v % 2)
       .keys
       .collectAsList()
     assert(values == Arrays.asList[Long](0, 1))
   }
 
   test("keyAs - keys") {
-    // Cannot up cast value e.g. It is okay to cast from Long to Double, but not Long to Int.
+    // It is okay to cast from Long to Double, but not Long to Int.
+    val session: SparkSession = spark
+    import session.implicits._
     val values = spark
       .range(10)
-      .groupByKey(v => v % 2)(PrimitiveLongEncoder)
-      .keyAs[Double](PrimitiveDoubleEncoder)
+      .groupByKey(v => v % 2)
+      .keyAs[Double]
       .keys
       .collectAsList()
     assert(values == Arrays.asList[Double](0, 1))
   }
 
   test("keyAs - flatGroupMap") {
+    val session: SparkSession = spark
+    import session.implicits._
     val values = spark
       .range(10)
-      .groupByKey(v => v % 2)(PrimitiveLongEncoder)
-      .keyAs[Double](PrimitiveDoubleEncoder)
-      .flatMapGroups((_, it) => Seq(it.toSeq.size))(PrimitiveIntEncoder)
+      .groupByKey(v => v % 2)
+      .keyAs[Double]
+      .flatMapGroups((_, it) => Seq(it.toSeq.size))
       .collectAsList()
     assert(values == Arrays.asList[Int](5, 5))
   }
 
   test("keyAs mapValues - cogroup") {
+    val session: SparkSession = spark
+    import session.implicits._
     val grouped = spark
       .range(10)
-      .groupByKey(v => v % 2)(PrimitiveLongEncoder)
-      .keyAs[Double](PrimitiveDoubleEncoder)
-      .mapValues(v => v * 2)(PrimitiveLongEncoder)
+      .groupByKey(v => v % 2)
+      .keyAs[Double]
+      .mapValues(v => v * 2)
     val otherGrouped = spark
       .range(10)
-      .groupByKey(v => v / 2)(PrimitiveLongEncoder)
-      .keyAs[Double](PrimitiveDoubleEncoder)
-      .mapValues(v => v * 2)(PrimitiveLongEncoder)
+      .groupByKey(v => v / 2)
+      .keyAs[Double]
+      .mapValues(v => v * 2)
     val values = grouped
       .cogroup(otherGrouped) { (k, it, otherIt) =>
         Iterator(String.valueOf(k), it.mkString(",") + ";" + otherIt.mkString(","))
-      }(StringEncoder)
+      }
       .collectAsList()
 
     assert(
@@ -109,33 +120,39 @@ class KeyValueGroupedDatasetE2ETestSuite extends RemoteSparkSession {
   }
 
   test("mapValues - flatGroupMap") {
+    val session: SparkSession = spark
+    import session.implicits._
     val values = spark
       .range(10)
-      .groupByKey(v => v % 2)(PrimitiveLongEncoder)
-      .mapValues(v => v * 2)(PrimitiveLongEncoder)
-      .flatMapGroups((_, it) => Seq(it.toSeq.sum))(PrimitiveLongEncoder)
+      .groupByKey(v => v % 2)
+      .mapValues(v => v * 2)
+      .flatMapGroups((_, it) => Seq(it.toSeq.sum))
       .collectAsList()
     assert(values == Arrays.asList[Long](40, 50))
   }
 
   test("mapValues - keys") {
+    val session: SparkSession = spark
+    import session.implicits._
     val values = spark
       .range(10)
-      .groupByKey(v => v % 2)(PrimitiveLongEncoder)
-      .mapValues(v => v * 2)(PrimitiveLongEncoder)
+      .groupByKey(v => v % 2)
+      .mapValues(v => v * 2)
       .keys
       .collectAsList()
     assert(values == Arrays.asList[Long](0, 1))
   }
 
   test("flatMapSortedGroups") {
+    val session: SparkSession = spark
+    import session.implicits._
     val grouped = spark
       .range(10)
-      .groupByKey(v => v % 2)(PrimitiveLongEncoder)
+      .groupByKey(v => v % 2)
     val values = grouped
       .flatMapSortedGroups(functions.desc("id")) { (g, iter) =>
         Iterator(String.valueOf(g), iter.mkString(","))
-      }(StringEncoder)
+      }
       .collectAsList()
 
     assert(values == Arrays.asList[String]("0", "8,6,4,2,0", "1", "9,7,5,3,1"))
@@ -145,40 +162,44 @@ class KeyValueGroupedDatasetE2ETestSuite extends RemoteSparkSession {
       grouped
         .flatMapSortedGroups(functions.col("*")) { (g, iter) =>
           Iterator(String.valueOf(g), iter.mkString(","))
-        }(StringEncoder)
+        }
         .collectAsList()
     }.getMessage
     assert(message.contains("Invalid usage of '*' in MapGroups"))
   }
 
   test("cogroup") {
+    val session: SparkSession = spark
+    import session.implicits._
     val grouped = spark
       .range(10)
-      .groupByKey(v => v % 2)(PrimitiveLongEncoder)
+      .groupByKey(v => v % 2)
     val otherGrouped = spark
       .range(10)
-      .groupByKey(v => v / 2)(PrimitiveLongEncoder)
+      .groupByKey(v => v / 2)
     val values = grouped
       .cogroup(otherGrouped) { (k, it, otherIt) =>
         Seq(it.toSeq.size + otherIt.seq.size)
-      }(PrimitiveIntEncoder)
+      }
       .collectAsList()
 
     assert(values == Arrays.asList[Int](7, 7, 2, 2, 2))
   }
 
   test("cogroupSorted") {
+    val session: SparkSession = spark
+    import session.implicits._
     val grouped = spark
       .range(10)
-      .groupByKey(v => v % 2)(PrimitiveLongEncoder)
+      .groupByKey(v => v % 2)
     val otherGrouped = spark
       .range(10)
-      .groupByKey(v => v / 2)(PrimitiveLongEncoder)
+      .groupByKey(v => v / 2)
     val values = grouped
       .cogroupSorted(otherGrouped)(functions.desc("id"))(functions.desc("id")) {
         (k, it, otherIt) =>
           Iterator(String.valueOf(k), it.mkString(",") + ";" + otherIt.mkString(","))
-      }(StringEncoder)
+      }
       .collectAsList()
 
     assert(

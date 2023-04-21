@@ -357,15 +357,15 @@ private class KeyValueGroupedDatasetImpl[K, V, IK, IV](
 
   override def keys: Dataset[K] = {
     ds.map(groupingFunc)(ikEncoder)
-      .dropDuplicates()
       .as(kEncoder)
+      .dropDuplicates()
   }
 
   override def flatMapSortedGroups[U: Encoder](sortExprs: Column*)(
       f: (K, Iterator[V]) => TraversableOnce[U]): Dataset[U] = {
     // Apply mapValues changes to the udf
-    val nf: (K, Iterator[IV]) => TraversableOnce[U] =
-      UdfUtils.mapValuesAdaptor(f, valueMapFunc)
+    val nf =
+      if (valueMapFunc == UdfUtils.identical()) f else UdfUtils.mapValuesAdaptor(f, valueMapFunc)
     val outputEncoder = encoderFor[U]
     sparkSession.newDataset[U](outputEncoder) { builder =>
       builder.getGroupMapBuilder
