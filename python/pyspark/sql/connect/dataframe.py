@@ -1718,8 +1718,7 @@ class DataFrame:
         Parameters
         ----------
         num : int
-            Number of records to return. Will return this number of records
-            or all records if the DataFrame contains less than this number of records.
+            Number of records to skip.
 
         Returns
         -------
