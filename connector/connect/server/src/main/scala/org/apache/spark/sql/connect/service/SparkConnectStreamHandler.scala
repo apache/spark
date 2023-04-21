@@ -55,7 +55,7 @@ class SparkConnectStreamHandler(responseObserver: StreamObserver[ExecutePlanResp
     session.withActive {
       // todo handle unset
       val jobGroupId =
-        s"User_${v.getUserContext.getUserId}_Session_${v.getSessionId}_Request_${v.getRequestId}"
+        s"User_${v.getUserContext.getUserId}_Session_${v.getSessionId}_Request_${v.getOperationId}"
       log.error(s"Job groupp id is $jobGroupId")
       // todo: save to set set interruptOnCancel=true?
       session.sparkContext.setJobGroup(jobGroupId, "NO DESCRIPTION", interruptOnCancel = true)

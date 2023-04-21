@@ -69,7 +69,7 @@ private[sql] class SparkConnectClient(
       .setPlan(plan)
       .setUserContext(userContext)
       .setSessionId(sessionId)
-      .setRequestId(requestId)
+      .setOperationId(requestId)
       .setClientType(userAgent)
       .build()
     stub.executePlan(request)
@@ -80,7 +80,7 @@ private[sql] class SparkConnectClient(
       .newBuilder()
       .setUserContext(userContext)
       .setSessionId(sessionId)
-      .setRequestId(requestId)
+      .setOperationId(requestId)
       .build()
     stub.interruptExecute(request)
   }

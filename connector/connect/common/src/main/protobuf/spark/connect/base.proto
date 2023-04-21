@@ -271,7 +271,9 @@ message ExecutePlanRequest {
   // collate streaming responses from different queries within the dedicated session.
   string session_id = 1;
 
-  optional string request_id = 5;
+  // (Optional)
+  // Provide an id for this request. It is needed if the request should be retryable.
+  optional string operation_id = 5;
 
   // (Required) User context
   //
@@ -279,8 +281,20 @@ message ExecutePlanRequest {
   // server side.
   UserContext user_context = 2;
 
-  // (Required) The logical plan to be executed / analyzed.
+  // The logical plan to be executed / analyzed.
+  // If the query has already been submitted, and this is a retry request, the plan is ignored.
   Plan plan = 3;
+
+  // (Optional)
+  // Specify if the request should be reattachable after e.g. a broken connection.
+  // If this is set to true, the client should call ReleaseRequest after it is done to let the
+  // server release resources; otherwise resources would be released only after a timeout.
+  optional bool reattachable = 6;
+
+  // (Optional)
+  // If specified, start streaming the query results from a given row offset.
+  // (Useful when this is a reattach request).
+  optional int64 start_offset = 7;
 
   // Provides optional information about the client sending the request. This field
   // can be used for language or version specific information and is only intended for
@@ -292,6 +306,7 @@ message ExecutePlanRequest {
 // same input query, carry the same `session_id`.
 message ExecutePlanResponse {
   string session_id = 1;
+  string operation_id = 11;
 
   // Union type for the different response messages.
   oneof response_type {
@@ -333,6 +348,8 @@ message ExecutePlanResponse {
   message ArrowBatch {
     int64 row_count = 1;
     bytes data = 2;
+    // Offset of this ArrowBatch in query results.
+    int64 offset = 3;
   }
 
   message Metrics {
@@ -442,7 +459,7 @@ message ConfigResponse {
   // (Optional) The result key-value pairs.
   //
   // Available when the operation is 'Get', 'GetWithDefault', 'GetOption', 'GetAll'.
-  // Also available for the operation 'IsModifiable' with boolean string "true" and "false".
+  // Also available for the operation 'IsModifiable' with bool string "true" and "false".
   repeated KeyValue pairs = 2;
 
   // (Optional)
@@ -558,11 +575,119 @@ message InterruptRequest {
     optional string client_type = 3;
 
     // (Required) The operation request id to be interrupted.
-    string request_id = 4;
+    string operation_id = 4;
 }
 
+// TODO - depracated by ReleaseOperationRequest becomes reudndant
 message InterruptResponse {
-  // empty?
+  string session_id = 1;
+  string operation_id = 2;
+}
+
+message ReleaseOperationRequest {
+  // (Required)
+  //
+  // The session_id specifies a spark session for a user id (which is specified
+  // by user_context.user_id). The session_id is set by the client to be able to
+  // collate streaming responses from different queries within the dedicated session.
+  string session_id = 1;
+
+  // (Required) User context
+  UserContext user_context = 2;
+
+  // Provides optional information about the client sending the request. This field
+  // can be used for language or version specific information and is only intended for
+  // logging purposes and will not be interpreted by the server.
+  optional string client_type = 3;
+
+  // (Required) The operation request id to be interrupted.
+  string operation_id = 4;
+
+  // When true, all data about the operation can be fully released from the server,
+  // and any executing operation can be interrupted.
+  bool remove = 5;
+
+  // (Optional) If remove is false, this can be used to instruct the server to interrupt the
+  // operation execution.
+  optional bool interrupt = 6;
+
+  // (Optional) If remove is false, this can be used to instruct the server that query
+  // below this offset (exclusive) will no longer be requested by the client.
+  optional int64 free_query_results_below_offset = 7;
+}
+
+message ReleaseOperationResponse {
+  string session_id = 1;
+  string operation_id = 2;
+
+  // When true, the operation has been fully released from the server.
+  bool removed = 3;
+
+  // When true, the operation successfully finished executing,
+  // so any effects of the operation have been committed.
+  bool executed = 4;
+}
+
+message ReleaseSessionRequest {
+  // (Required)
+  //
+  // The session_id specifies a spark session for a user id (which is specified
+  // by user_context.user_id). The session_id is set by the client to be able to
+  // collate streaming responses from different queries within the dedicated session.
+  string session_id = 1;
+
+  // (Required) User context
+  UserContext user_context = 2;
+
+  // Provides optional information about the client sending the request. This field
+  // can be used for language or version specific information and is only intended for
+  // logging purposes and will not be interpreted by the server.
+  optional string client_type = 3;
+
+  // When true, release all server state of this session (interrupting all executions).
+  bool remove = 4;
+
+  // This leaves place for extensions of this request, where with remove=false, clients
+  // can request
+  // E.g. release all operations that finished executing.
+}
+
+message ReleaseSessionResponse {
+  string session_id = 1;
+  bool removed = 2;
+}
+
+message PingRequest {
+  // (Required)
+  //
+  // The session_id specifies a spark session for a user id (which is specified
+  // by user_context.user_id). The session_id is set by the client to be able to
+  // collate streaming responses from different queries within the dedicated session.
+  string session_id = 1;
+
+  // (Required) User context
+  UserContext user_context = 2;
+
+  // Provides optional information about the client sending the request. This field
+  // can be used for language or version specific information and is only intended for
+  // logging purposes and will not be interpreted by the server.
+  optional string client_type = 3;
+
+  // Timeout in seconds between ping heartbeats.
+  // If the client did not send any request (Ping or other) for more than this time, the server
+  // can assume the client is dead and release all resources held by the session and interrupt all
+  // executions.
+  // Note: the server may override this timeout in the response.
+  int64 heartbeat_timeout = 4;
+}
+
+message PingResponse {
+  string session_id = 1;
+
+  // Timeount in seconds between heartbeats.
+  // Server may return a different timeout than requested by the client, and client is bound by
+  // the timeout set by the server.
+  int64 heartbeat_timeout = 2;
 }
 
 // Main interface for the SparkConnect service.
@@ -583,6 +708,13 @@ service SparkConnectService {
   // the added artifacts.
   rpc AddArtifacts(stream AddArtifactsRequest) returns (AddArtifactsResponse) {}
 
+  // todo - depracated
   rpc InterruptExecute(InterruptRequest) returns (InterruptResponse) {}
+
+  rpc ReleaseOperation(ReleaseOperationRequest) returns (ReleaseOperationResponse) {}
+
+  rpc ReleaseSession(ReleaseSessionRequest) returns (ReleaseSessionResponse) {}
+
+  rpc Ping(PingRequest) returns (PingResponse) {}
 }
 

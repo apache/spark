@@ -17,28 +17,6 @@
 
 package org.apache.spark.sql.connect.service
 
-import io.grpc.stub.StreamObserver
+class ExecutePlanHolder {
 
-import org.apache.spark.connect.proto
-import org.apache.spark.internal.Logging
-
-class SparkConnectInterruptHandler(responseObserver: StreamObserver[proto.InterruptResponse])
-  extends Logging {
-
-  def handle(v: proto.InterruptRequest): Unit = {
-    val session =
-      SparkConnectService
-        .getOrCreateIsolatedSession(v.getUserContext.getUserId, v.getSessionId)
-        .session
-
-    // todo handle unset
-    val jobGroupId =
-      s"User_${v.getUserContext.getUserId}_Session_${v.getSessionId}_Request_${v.getOperationId}"
-
-    session.sparkContext.cancelJobGroup(jobGroupId)
-
-    val builder = proto.InterruptResponse.newBuilder()
-    responseObserver.onNext(builder.build())
-    responseObserver.onCompleted()
-  }
 }
