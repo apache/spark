@@ -207,14 +207,14 @@ trait FileFormat {
   /**
    * The extractors to use when deriving file-constant metadata columns for this file format.
    *
-   * A scanner must derive each file-constant metadata field's value from each [[PartitionedFile]]
-   * it processes. By default, the value is obtained by a direct lookup of the column's name on
-   * [[PartitionedFile.otherConstantMetadataColumnValues]] (see
-   * [[FileFormat.getFileConstantMetadataColumnValue]]). However, implementations can override this
-   * method in order to provide more sophisticated lazy extractors (e.g. in case the column value is
-   * complicated or expensive to compute).
+   * By default, the value of a file-constant metadata column is obtained by looking up the column's
+   * name in the file's metadata column value map. However, implementations can override this method
+   * in order to provide an extractor that has access to the entire [[PartitionedFile]] when
+   * deriving the column's value.
    *
-   * NOTE: A given extractor is only invoked if its column is actually selected at runtime.
+   * NOTE: Extractors are lazy, invoked only if the query actually selects their column at runtime.
+   *
+   * See also [[FileFormat.getFileConstantMetadataColumnValue]].
    */
   def fileConstantMetadataExtractors: Map[String, PartitionedFile => Any] =
     FileFormat.BASE_METADATA_EXTRACTORS
@@ -274,8 +274,8 @@ object FileFormat {
   /**
    * Extracts the [[Literal]] value of a file-constant metadata column from a [[PartitionedFile]].
    *
-   * If an extractor is available, use it. Otherwise, attempt to fetch the value directly from the
-   * file's metadata map, returning null if not found.
+   * If an extractor is available, apply it. Otherwise, look up the column's name in the file's
+   * column value map and return the result (or null, if not found).
    *
    * Raw values (including null) are automatically converted to literals as a courtesy.
    */
@@ -284,7 +284,7 @@ object FileFormat {
       file: PartitionedFile,
       metadataExtractors: Map[String, PartitionedFile => Any]): Literal = {
     val extractor = metadataExtractors.get(name).getOrElse {
-      (_: PartitionedFile).otherConstantMetadataColumnValues.get(name).orNull
+      pf: PartitionedFile => pf.otherConstantMetadataColumnValues.get(name).orNull
     }
     Literal(extractor.apply(file))
   }
