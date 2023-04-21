@@ -54,6 +54,8 @@ import org.apache.commons.lang3.SystemUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, FileUtil, Path}
 import org.apache.hadoop.io.compress.{CompressionCodecFactory, SplittableCompressionCodec}
+import org.apache.hadoop.ipc.{CallerContext => HadoopCallerContext}
+import org.apache.hadoop.ipc.CallerContext.{Builder => HadoopCallerContextBuilder}
 import org.apache.hadoop.security.UserGroupInformation
 import org.apache.hadoop.util.{RunJar, StringUtils}
 import org.apache.hadoop.yarn.conf.YarnConfiguration
@@ -3358,11 +3360,11 @@ private[spark] class CallerContext(
 
   /**
    * Set up the caller context [[context]] by invoking Hadoop CallerContext API of
-   * [[org.apache.hadoop.ipc.CallerContext]].
+   * [[HadoopCallerContext]].
    */
   def setCurrentContext(): Unit = if (CallerContext.callerContextEnabled) {
-    val hdfsContext = new org.apache.hadoop.ipc.CallerContext.Builder(context).build()
-    org.apache.hadoop.ipc.CallerContext.setCurrent(hdfsContext)
+    val hdfsContext = new HadoopCallerContextBuilder(context).build()
+    HadoopCallerContext.setCurrent(hdfsContext)
   }
 }
 
