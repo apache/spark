@@ -649,10 +649,10 @@ abstract class FileStreamSinkSuite extends StreamTest {
       }
     }
   }
-  test("SPARK-43152: Support parametrisable output metadata path (_spark_metadata)") {
+  test("SPARK-43152: Support user-defined output metadata path (_spark_metadata)") {
     val outputDir = "/absolute/path/output"
     val testCustomOutputMetadataDir = "/absolute/path/metadata"
-    withSQLConf(SQLConf.CUSTOM_OUTPUT_METADATA_PATH.key -> testCustomOutputMetadataDir) {
+    withSQLConf(SQLConf.OUTPUT_METADATA_PATH.key -> testCustomOutputMetadataDir) {
       val outputDirPath = new Path(outputDir)
       val hadoopConf = spark.sessionState.newHadoopConf()
       val resultMetadataPath = FileStreamSink.getMetadataLogPath(hadoopConf, outputDirPath, conf)

@@ -1864,12 +1864,11 @@ object SQLConf {
       .checkValue(v => Set(1, 2).contains(v), "Valid versions are 1 and 2")
       .createWithDefault(2)
 
-  val CUSTOM_OUTPUT_METADATA_PATH = buildConf("spark.sql.streaming.metadata.output.path")
-      .doc("The place where _spark_metadata folder will be created " +
-        "and used for storing output checkpoints of streaming job.")
-      .version("3.5.0")
-      .stringConf
-      .createOptional
+  val OUTPUT_METADATA_PATH = buildConf("spark.sql.execution.outputMetadataPath")
+    .doc("Directory for _spark_metadata folder to store output checkpoints of a SQL query.")
+    .version("3.5.0")
+    .stringConf
+    .createOptional
 
   val CHECKPOINT_LOCATION = buildConf("spark.sql.streaming.checkpointLocation")
     .doc("The default location for storing checkpoint data for streaming queries.")
@@ -4392,7 +4391,7 @@ class SQLConf extends Serializable with Logging {
   def stateStoreSkipNullsForStreamStreamJoins: Boolean =
     getConf(STATE_STORE_SKIP_NULLS_FOR_STREAM_STREAM_JOINS)
 
-  def streamingMetadataOutputPath: Option[String] = getConf(SQLConf.CUSTOM_OUTPUT_METADATA_PATH)
+  def outputMetadataPath: Option[String] = getConf(SQLConf.OUTPUT_METADATA_PATH)
 
   def checkpointLocation: Option[String] = getConf(CHECKPOINT_LOCATION)
 

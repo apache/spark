@@ -72,7 +72,7 @@ object FileStreamSink extends Logging {
       hadoopConfiguration: Configuration,
       path: Path,
       sqlConf: SQLConf): Path = {
-    val metadataDir = sqlConf.streamingMetadataOutputPath match {
+    val metadataDir = sqlConf.outputMetadataPath match {
       case Some(customPath) => new Path(customPath, FileStreamSink.metadataDir)
       case None => new Path(path, FileStreamSink.metadataDir)
     }
