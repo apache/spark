@@ -46,21 +46,24 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils {
   }
 
   protected def processInsert(
-      tableName: String,
-      input: DataFrame,
-      cols: Seq[String] = Nil,
-      partitionExprs: Seq[String] = Nil,
-      overwrite: Boolean): Unit = {
+                               tableName: String,
+                               input: DataFrame,
+                               cols: Seq[String] = Nil,
+                               partitionExprs: Seq[String] = Nil,
+                               overwrite: Boolean,
+                               byName: Boolean = false): Unit = {
     val tmpView = "tmp_view"
-    val columnList = if (cols.nonEmpty) cols.mkString("(", ",", ")") else ""
     val partitionList = if (partitionExprs.nonEmpty) {
       partitionExprs.mkString("PARTITION (", ",", ")")
     } else ""
     withTempView(tmpView) {
       input.createOrReplaceTempView(tmpView)
       val overwriteStr = if (overwrite) "OVERWRITE" else "INTO"
+      val columnList = if (cols.nonEmpty && !byName) cols.mkString("(", ",", ")") else ""
+      val byNameStr = if (byName) "BY NAME" else ""
       sql(
-        s"INSERT $overwriteStr TABLE $tableName $partitionList $columnList SELECT * FROM $tmpView")
+        s"INSERT $overwriteStr TABLE $tableName $partitionList $byNameStr " +
+          s"$columnList SELECT * FROM $tmpView")
     }
   }
 
@@ -119,6 +122,16 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils {
         processInsert("t1", df, cols.reverse, overwrite = m)
         verifyTable("t1", df.selectExpr(cols.reverse: _*))
       }
+    }
+  }
+
+  test("insert with column list - by name") {
+    withTable("t1") {
+      val cols = Seq("c1", "c2", "c3")
+      val df = Seq((3, 2, 1)).toDF(cols.reverse: _*)
+      createTable("t1", cols, Seq("int", "int", "int"))
+      processInsert("t1", df, overwrite = false, byName = true)
+      verifyTable("t1", df.selectExpr(cols: _*))
     }
   }
 

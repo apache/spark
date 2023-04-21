@@ -151,8 +151,8 @@ object DataSourceAnalysis extends Rule[LogicalPlan] {
         if query.resolved && DDLUtils.isDatasourceTable(tableDesc) =>
       CreateDataSourceTableAsSelectCommand(tableDesc, mode, query, query.output.map(_.name))
 
-    case InsertIntoStatement(l @ LogicalRelation(_: InsertableRelation, _, _, _),
-        parts, _, query, overwrite, false) if parts.isEmpty =>
+    case InsertIntoStatement(l@LogicalRelation(_: InsertableRelation, _, _, _),
+    parts, _, query, overwrite, false, _) if parts.isEmpty =>
       InsertIntoDataSourceCommand(l, query, overwrite)
 
     case InsertIntoDir(_, storage, provider, query, overwrite)
@@ -163,8 +163,8 @@ object DataSourceAnalysis extends Rule[LogicalPlan] {
 
       InsertIntoDataSourceDirCommand(storage, provider.get, query, overwrite)
 
-    case i @ InsertIntoStatement(
-        l @ LogicalRelation(t: HadoopFsRelation, _, table, _), parts, _, query, overwrite, _) =>
+    case i@InsertIntoStatement(
+    l@LogicalRelation(t: HadoopFsRelation, _, table, _), parts, _, query, overwrite, _, _) =>
       // If the InsertIntoTable command is for a partitioned HadoopFsRelation and
       // the user has specified static partitions, we add a Project operator on top of the query
       // to include those constant column values in the query result.
@@ -273,15 +273,16 @@ class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] 
 
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-    case i @ InsertIntoStatement(UnresolvedCatalogRelation(tableMeta, options, false),
-        _, _, _, _, _) if DDLUtils.isDatasourceTable(tableMeta) =>
+    case i@InsertIntoStatement(UnresolvedCatalogRelation(tableMeta, options, false),
+    _, _, _, _, _, _) if DDLUtils.isDatasourceTable(tableMeta) =>
       i.copy(table = readDataSourceTable(tableMeta, options))
 
-    case i @ InsertIntoStatement(UnresolvedCatalogRelation(tableMeta, _, false), _, _, _, _, _) =>
+    case i@InsertIntoStatement(UnresolvedCatalogRelation(tableMeta, _, false),
+    _, _, _, _, _, _) =>
       i.copy(table = DDLUtils.readHiveTable(tableMeta))
 
     case UnresolvedCatalogRelation(tableMeta, options, false)
-        if DDLUtils.isDatasourceTable(tableMeta) =>
+      if DDLUtils.isDatasourceTable(tableMeta) =>
       readDataSourceTable(tableMeta, options)
 
     case UnresolvedCatalogRelation(tableMeta, _, false) =>

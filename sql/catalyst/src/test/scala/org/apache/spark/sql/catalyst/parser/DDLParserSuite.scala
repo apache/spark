@@ -1669,6 +1669,21 @@ class DDLParserSuite extends AnalysisTest {
         stop = 69))
   }
 
+  test("insert table: by name") {
+    Seq(
+      "INSERT INTO TABLE testcat.ns1.ns2.tbl BY NAME SELECT * FROM source",
+      "INSERT INTO testcat.ns1.ns2.tbl BY NAME SELECT * FROM source"
+    ).foreach { sql =>
+      parseCompare(sql,
+        InsertIntoStatement(
+          UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl")),
+          Map.empty,
+          Nil,
+          Project(Seq(UnresolvedStar(None)), UnresolvedRelation(Seq("source"))),
+          overwrite = false, ifPartitionNotExists = false, byName = true))
+    }
+  }
+
   test("delete from table: delete all") {
     parseCompare("DELETE FROM testcat.ns1.ns2.tbl",
       DeleteFromTable(

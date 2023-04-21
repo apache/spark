@@ -246,9 +246,10 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
 
   /**
    * Parameters used for writing query to a table:
-   *   (UnresolvedRelation, tableColumnList, partitionKeys, ifPartitionNotExists).
+   * (UnresolvedRelation, tableColumnList, partitionKeys, ifPartitionNotExists, byName).
    */
-  type InsertTableParams = (UnresolvedRelation, Seq[String], Map[String, Option[String]], Boolean)
+  type InsertTableParams = (UnresolvedRelation, Seq[String],
+    Map[String, Option[String]], Boolean, Boolean)
 
   /**
    * Parameters used for writing query to a directory: (isLocal, CatalogStorageFormat, provider).
@@ -259,7 +260,7 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
    * Add an
    * {{{
    *   INSERT OVERWRITE TABLE tableIdentifier [partitionSpec [IF NOT EXISTS]]? [identifierList]
-   *   INSERT INTO [TABLE] tableIdentifier [partitionSpec]  [identifierList]
+   *   INSERT INTO [TABLE] tableIdentifier [partitionSpec] [BY NAME] [identifierList]
    *   INSERT INTO [TABLE] tableIdentifier REPLACE whereClause
    *   INSERT OVERWRITE [LOCAL] DIRECTORY STRING [rowFormat] [createFileFormat]
    *   INSERT OVERWRITE [LOCAL] DIRECTORY [STRING] tableProvider [OPTIONS tablePropertyList]
@@ -271,16 +272,19 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
       query: LogicalPlan): LogicalPlan = withOrigin(ctx) {
     ctx match {
       case table: InsertIntoTableContext =>
-        val (relation, cols, partition, ifPartitionNotExists) = visitInsertIntoTable(table)
+        val (relation, cols, partition, ifPartitionNotExists, byName)
+        = visitInsertIntoTable(table)
         InsertIntoStatement(
           relation,
           partition,
           cols,
           query,
           overwrite = false,
-          ifPartitionNotExists)
+          ifPartitionNotExists,
+          byName)
       case table: InsertOverwriteTableContext =>
-        val (relation, cols, partition, ifPartitionNotExists) = visitInsertOverwriteTable(table)
+        val (relation, cols, partition, ifPartitionNotExists, _)
+        = visitInsertOverwriteTable(table)
         InsertIntoStatement(
           relation,
           partition,
@@ -316,7 +320,8 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
       operationNotAllowed("INSERT INTO ... IF NOT EXISTS", ctx)
     }
 
-    (createUnresolvedRelation(ctx.multipartIdentifier), cols, partitionKeys, false)
+    (createUnresolvedRelation(ctx.multipartIdentifier), cols,
+      partitionKeys, false, ctx.NAME() != null)
   }
 
   /**
@@ -334,7 +339,8 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
         dynamicPartitionKeys.keys.mkString(", "), ctx)
     }
 
-    (createUnresolvedRelation(ctx.multipartIdentifier), cols, partitionKeys, ctx.EXISTS() != null)
+    (createUnresolvedRelation(ctx.multipartIdentifier), cols,
+      partitionKeys, ctx.EXISTS() != null, false)
   }
 
   /**
