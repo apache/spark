@@ -24,6 +24,7 @@ from pyspark.sql import Row
 from pyspark.sql.functions import lit
 from pyspark.sql.types import StructType, StructField, IntegerType, StringType
 from pyspark.testing.sqlutils import ReusedSQLTestCase
+from pyspark.errors.exceptions.connect import SparkConnectException
 
 
 class StreamingTestsMixin:
@@ -39,9 +40,8 @@ class StreamingTestsMixin:
             self.assertTrue(isinstance(query.id, str))
             self.assertTrue(isinstance(query.runId, str))
             self.assertTrue(query.isActive)
-            # TODO: Will be uncommented with [SPARK-42960]
-            # self.assertEqual(query.exception(), None)
-            # self.assertFalse(query.awaitTermination(1))
+            self.assertEqual(query.exception(), None)
+            self.assertFalse(query.awaitTermination(1))
             query.processAllAvailable()
             recentProgress = query.recentProgress
             lastProgress = query.lastProgress
@@ -253,8 +253,13 @@ class StreamingTestsMixin:
             duration = time.time() - now
             self.assertTrue(duration >= 2)
             self.assertFalse(res)
-        finally:
+
             q.processAllAvailable()
+            q.stop()
+            # Sanity check when no parameter is set
+            q.awaitTermination()
+            self.assertFalse(q.isActive)
+        finally:
             q.stop()
             shutil.rmtree(tmpPath)
 
@@ -285,11 +290,24 @@ class StreamingTestsMixin:
             # This is expected
             self._assert_exception_tree_contains_msg(e, "ZeroDivisionError")
         finally:
+            exception = sq.exception()
             sq.stop()
-        self.assertIsInstance(sq.exception(), StreamingQueryException)
-        self._assert_exception_tree_contains_msg(sq.exception(), "ZeroDivisionError")
+        self.assertIsInstance(exception, StreamingQueryException)
+        self._assert_exception_tree_contains_msg(exception, "ZeroDivisionError")
 
     def _assert_exception_tree_contains_msg(self, exception, msg):
+        if isinstance(exception, SparkConnectException):
+            self._assert_exception_tree_contains_msg_connect(exception, msg)
+        else:
+            self._assert_exception_tree_contains_msg_default(exception, msg)
+
+    def _assert_exception_tree_contains_msg_connect(self, exception, msg):
+        self.assertTrue(
+            msg in exception.message,
+            "Exception tree doesn't contain the expected message: %s" % msg,
+        )
+
+    def _assert_exception_tree_contains_msg_default(self, exception, msg):
         e = exception
         contains = msg in e.desc
         while e.cause is not None and not contains:
