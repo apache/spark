@@ -209,6 +209,8 @@ message WriteStreamOperationStart {
     string path = 11;
     string table_name = 12;
   }
+
+  CommonInlineUserDefinedFunction for_each_batch = 13;
 }
 
 message WriteStreamOperationStartResult {

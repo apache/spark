@@ -98,6 +98,7 @@ class Relation(google.protobuf.message.Message):
     APPLY_IN_PANDAS_WITH_STATE_FIELD_NUMBER: builtins.int
     HTML_STRING_FIELD_NUMBER: builtins.int
     CACHED_LOCAL_RELATION_FIELD_NUMBER: builtins.int
+    DATAFRAME_REF_FIELD_NUMBER: builtins.int
     FILL_NA_FIELD_NUMBER: builtins.int
     DROP_NA_FIELD_NUMBER: builtins.int
     REPLACE_FIELD_NUMBER: builtins.int
@@ -184,6 +185,7 @@ class Relation(google.protobuf.message.Message):
     def html_string(self) -> global___HtmlString: ...
     @property
     def cached_local_relation(self) -> global___CachedLocalRelation: ...
+    def dataframe_ref(self) -> global___DataFrameRef: ...
     @property
     def fill_na(self) -> global___NAFill:
         """NA functions"""
@@ -257,6 +259,7 @@ class Relation(google.protobuf.message.Message):
         apply_in_pandas_with_state: global___ApplyInPandasWithState | None = ...,
         html_string: global___HtmlString | None = ...,
         cached_local_relation: global___CachedLocalRelation | None = ...,
+        dataframe_ref: global___DataFrameRef | None = ...,
         fill_na: global___NAFill | None = ...,
         drop_na: global___NADrop | None = ...,
         replace: global___NAReplace | None = ...,
@@ -297,6 +300,8 @@ class Relation(google.protobuf.message.Message):
             b"cov",
             "crosstab",
             b"crosstab",
+            "dataframe_ref",
+            b"dataframe_ref",
             "deduplicate",
             b"deduplicate",
             "describe",
@@ -404,6 +409,8 @@ class Relation(google.protobuf.message.Message):
             b"cov",
             "crosstab",
             b"crosstab",
+            "dataframe_ref",
+            b"dataframe_ref",
             "deduplicate",
             b"deduplicate",
             "describe",
@@ -524,6 +531,7 @@ class Relation(google.protobuf.message.Message):
         "apply_in_pandas_with_state",
         "html_string",
         "cached_local_relation",
+        "dataframe_ref",
         "fill_na",
         "drop_na",
         "replace",
@@ -3209,6 +3217,20 @@ class ApplyInPandasWithState(google.protobuf.message.Message):
     ) -> None: ...
 
 global___ApplyInPandasWithState = ApplyInPandasWithState
+
+class DataFrameRef(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    REF_ID_FIELD_NUMBER: builtins.int
+    ref_id: builtins.str
+    def __init__(
+        self,
+        *,
+        ref_id: builtins.str = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing_extensions.Literal["ref_id", b"ref_id"]) -> None: ...
+
+global___DataFrameRef = DataFrameRef
 
 class CollectMetrics(google.protobuf.message.Message):
     """Collect arbitrary (named) metrics from a dataset."""

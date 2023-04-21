@@ -517,6 +517,17 @@ class WithWatermark(LogicalPlan):
         return plan
 
 
+class DataFrameRef(LogicalPlan):
+    def __init__(self, ref_id: str):
+        super().__init__(None)
+        self._ref_id = ref_id
+
+    def plan(self, session: "SparkConnectClient") -> proto.Relation:
+        plan = self._create_proto_relation()
+        plan.dataframe_ref.ref_id = self._ref_id
+        return plan
+
+
 class Hint(LogicalPlan):
     """Logical plan object for a Hint operation."""
 

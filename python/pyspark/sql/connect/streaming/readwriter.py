@@ -14,12 +14,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-
+from pyspark.rdd import PythonEvalType
 from pyspark.sql.connect.utils import check_dependencies
 
 check_dependencies(__name__)
 
-from typing import cast, overload, Callable, Dict, List, Optional, TYPE_CHECKING, Union
+from typing import cast, overload, Callable, Dict, List, Optional, TYPE_CHECKING, Union, Any
 
 from pyspark.sql.connect.plan import DataSource, LogicalPlan, Read, WriteStreamOperation
 import pyspark.sql.connect.proto as pb2
@@ -29,7 +29,7 @@ from pyspark.sql.streaming.readwriter import (
     DataStreamReader as PySparkDataStreamReader,
     DataStreamWriter as PySparkDataStreamWriter,
 )
-from pyspark.sql.types import Row, StructType
+from pyspark.sql.types import Row, StructType, StringType
 from pyspark.errors import PySparkTypeError, PySparkValueError, PySparkNotImplementedError
 
 if TYPE_CHECKING:
@@ -489,12 +489,19 @@ class DataStreamWriter:
 
     # TODO (SPARK-42944): Implement and uncomment the doc
     def foreachBatch(self, func: Callable[["DataFrame", int], None]) -> "DataStreamWriter":
-        raise PySparkNotImplementedError(
-            error_class="NOT_IMPLEMENTED",
-            message_parameters={"feature": "foreachBatch()"},
-        )
+        from pyspark.sql.connect.udf import UserDefinedFunction
 
-    # foreachBatch.__doc__ = PySparkDataStreamWriter.foreachBatch.__doc__
+        udf_obj = UserDefinedFunction(
+            func,
+            returnType=StringType(),
+            evalType=PythonEvalType.SQL_BATCHED_UDF,
+        )
+        udf_proto = udf_obj._build_common_inline_user_defined_function().to_plan_udf(self._session.client)
+        self._write_proto.for_each_batch.CopyFrom(udf_proto)
+
+        return self
+
+    foreachBatch.__doc__ = PySparkDataStreamWriter.foreachBatch.__doc__
 
     def _start_internal(
         self,

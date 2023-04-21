@@ -698,6 +698,7 @@ class WriteStreamOperationStart(google.protobuf.message.Message):
     QUERY_NAME_FIELD_NUMBER: builtins.int
     PATH_FIELD_NUMBER: builtins.int
     TABLE_NAME_FIELD_NUMBER: builtins.int
+    FOR_EACH_BATCH_FIELD_NUMBER: builtins.int
     @property
     def input(self) -> pyspark.sql.connect.proto.relations_pb2.Relation:
         """(Required) The output of the `input` streaming relation will be written."""
@@ -721,6 +722,10 @@ class WriteStreamOperationStart(google.protobuf.message.Message):
     query_name: builtins.str
     path: builtins.str
     table_name: builtins.str
+    @property
+    def for_each_batch(
+        self,
+    ) -> pyspark.sql.connect.proto.expressions_pb2.CommonInlineUserDefinedFunction: ...
     def __init__(
         self,
         *,
@@ -736,6 +741,8 @@ class WriteStreamOperationStart(google.protobuf.message.Message):
         query_name: builtins.str = ...,
         path: builtins.str = ...,
         table_name: builtins.str = ...,
+        for_each_batch: pyspark.sql.connect.proto.expressions_pb2.CommonInlineUserDefinedFunction
+        | None = ...,
     ) -> None: ...
     def HasField(
         self,
@@ -744,6 +751,8 @@ class WriteStreamOperationStart(google.protobuf.message.Message):
             b"available_now",
             "continuous_checkpoint_interval",
             b"continuous_checkpoint_interval",
+            "for_each_batch",
+            b"for_each_batch",
             "input",
             b"input",
             "once",
@@ -767,6 +776,8 @@ class WriteStreamOperationStart(google.protobuf.message.Message):
             b"available_now",
             "continuous_checkpoint_interval",
             b"continuous_checkpoint_interval",
+            "for_each_batch",
+            b"for_each_batch",
             "format",
             b"format",
             "input",

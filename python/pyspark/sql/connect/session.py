@@ -50,7 +50,7 @@ from pyspark import SparkContext, SparkConf, __version__
 from pyspark.sql.connect.client import SparkConnectClient, ChannelBuilder
 from pyspark.sql.connect.conf import RuntimeConf
 from pyspark.sql.connect.dataframe import DataFrame
-from pyspark.sql.connect.plan import SQL, Range, LocalRelation, CachedRelation
+from pyspark.sql.connect.plan import SQL, Range, LocalRelation, CachedRelation, DataFrameRef
 from pyspark.sql.connect.readwriter import DataFrameReader
 from pyspark.sql.connect.streaming import DataStreamReader, StreamingQueryManager
 from pyspark.sql.pandas.serializers import ArrowStreamPandasSerializer
@@ -430,6 +430,9 @@ class SparkSession:
         return df
 
     createDataFrame.__doc__ = PySparkSession.createDataFrame.__doc__
+
+    def createRefDataFrame(self, ref_id: str) -> "DataFrame":
+        return DataFrame.withPlan(DataFrameRef(ref_id), self)
 
     def sql(self, sqlQuery: str, args: Optional[Dict[str, Any]] = None) -> "DataFrame":
         cmd = SQL(sqlQuery, args)

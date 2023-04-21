@@ -69,6 +69,7 @@ message Relation {
     ApplyInPandasWithState apply_in_pandas_with_state = 34;
     HtmlString html_string = 35;
     CachedLocalRelation cached_local_relation = 36;
+    DataFrameRef dataframe_ref = 37;
 
     // NA functions
     NAFill fill_na = 90;
@@ -902,6 +903,10 @@ message ApplyInPandasWithState {
 
   // (Required) Timeout configuration for groups that do not receive data for a while.
   string timeout_conf = 7;
+}
+
+message DataFrameRef {
+  string ref_id = 1;
 }
 
 // Collect arbitrary (named) metrics from a dataset.

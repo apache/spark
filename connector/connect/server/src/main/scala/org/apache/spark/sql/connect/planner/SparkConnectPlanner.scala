@@ -19,17 +19,19 @@ package org.apache.spark.sql.connect.planner
 
 import java.nio.ByteBuffer
 import java.nio.charset.StandardCharsets
+import java.util.{Base64, UUID}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.io.Source
 
 import com.google.common.collect.{Lists, Maps}
-import com.google.protobuf.{Any => ProtoAny, ByteString}
+import com.google.protobuf.{ByteString, Any => ProtoAny}
 import io.grpc.stub.StreamObserver
 import org.apache.commons.lang3.exception.ExceptionUtils
-
 import org.apache.spark.{Partition, SparkEnv, TaskContext}
-import org.apache.spark.api.python.{PythonEvalType, SimplePythonFunction}
+
+import org.apache.spark.api.python.{PythonEvalType, PythonUtils, SimplePythonFunction}
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.{ExecutePlanResponse, SqlCommand, StreamingQueryCommand, StreamingQueryCommandResult, StreamingQueryInstanceId, WriteStreamOperationStart, WriteStreamOperationStartResult}
 import org.apache.spark.connect.proto.ExecutePlanResponse.SqlCommandResult
@@ -147,6 +149,7 @@ class SparkConnectPlanner(val session: SparkSession) {
         transformCoGroupMap(rel.getCoGroupMap)
       case proto.Relation.RelTypeCase.APPLY_IN_PANDAS_WITH_STATE =>
         transformApplyInPandasWithState(rel.getApplyInPandasWithState)
+      case proto.Relation.RelTypeCase.DATAFRAME_REF => transformDataFrameRef(rel.getDataframeRef)
       case proto.Relation.RelTypeCase.COLLECT_METRICS =>
         transformCollectMetrics(rel.getCollectMetrics)
       case proto.Relation.RelTypeCase.PARSE => transformParse(rel.getParse)
@@ -751,6 +754,11 @@ class SparkConnectPlanner(val session: SparkSession) {
         rel.getOutputMode,
         rel.getTimeoutConf)
       .logicalPlan
+  }
+
+  private def transformDataFrameRef(rel: proto.DataFrameRef): LogicalPlan = {
+    val refId = rel.getRefId
+    DataFrameMap.dataFrames(refId).logicalPlan
   }
 
   private def transformWithColumnsRenamed(rel: proto.WithColumnsRenamed): LogicalPlan = {
@@ -2297,6 +2305,91 @@ class SparkConnectPlanner(val session: SparkSession) {
       writer.queryName(writeOp.getQueryName)
     }
 
+    val forEachBatchFunc: (Dataset[_], Long, PythonUDF) => Unit = {
+      (ds: Dataset[_], batchId: Long, udf: PythonUDF) => {
+        // Cache the dataframe so that it can be retrieved when calling from spark connect
+        val dfRefId = UUID.randomUUID.toString
+        DataFrameMap.dataFrames(dfRefId) = ds
+
+        // Start a process to run foreachbatch python func
+        // TODO: Reuse some functions from PythonRunner.scala
+        // TODO: Handle process better: reuse process; release process; monitor process
+        val pythonExec = udf.func.pythonExec
+        val envVars = udf.func.envVars.asScala.toMap
+
+        val pb = new ProcessBuilder()
+        val pbEnv = pb.environment()
+        val pythonPath = PythonUtils.mergePythonPaths(
+          PythonUtils.sparkPythonPath,
+          envVars.getOrElse("PYTHONPATH", ""),
+          sys.env.getOrElse("PYTHONPATH", ""))
+        pbEnv.put("PYTHONPATH", pythonPath)
+        pbEnv.putAll(envVars.asJava)
+
+        pb.command(pythonExec)
+
+        // Encode serialized func as string so that it can be passed into the process through
+        // arguments
+        val forEachBatchBytes = udf.func.command.toArray
+        val forEachBatchStr = Base64.getEncoder().encodeToString(forEachBatchBytes)
+
+        // The python functions to be run. Foreachbatch() will be deserialized and execute.
+        // TODO: move the python code to pyspark. Pass in params using bytes through socket.
+        val pythonScript = s"""print('###### Start running foreachbatch')
+                         |from pyspark.sql import SparkSession
+                         |from pyspark.serializers import CloudPickleSerializer
+                         |import sys
+                         |import base64
+                         |
+                         |dfRefId = '$dfRefId'
+                         |batchId = '${batchId.toString}'
+                         |forEachBatchStr = '$forEachBatchStr'
+                         |sessionId = '$sessionId'
+                         |print("##### dfRefId is", dfRefId)
+                         |print("##### batchId is", batchId)
+                         |print("##### sessionId is", sessionId)
+                         |
+                         |sparkConnectSession = SparkSession.builder.remote("sc://localhost:15002").getOrCreate()
+                         |sparkConnectSession._client._session_id = sessionId
+                         |batchDf = sparkConnectSession.createRefDataFrame(dfRefId)
+                         |
+                         |print('##### start load pickled foreachbatch')
+                         |forEachBatchBytes = base64.b64decode(forEachBatchStr)
+                         |unpickledCode = CloudPickleSerializer().loads(forEachBatchBytes)
+                         |forEachBatchFunc = unpickledCode[0]
+                         |forEachBatchFunc(batchDf, int(batchId))
+                         |
+                         |print('##### Finish running foreachbatch')
+                         |exit()""".stripMargin
+
+        // pb.command(pythonExec, "-c", pythonScript, dfRefId, batchId.toString, forEachBatchStr)
+        pb.command(pythonExec, "-c", pythonScript)
+        val process = pb.start()
+
+        // Output for debug for now.
+        // TODO: redirect the output stream
+        // TODO: handle error
+        val is = process.getInputStream()
+        val out = Source.fromInputStream(is).mkString
+        println(s"##### Python out for batchId=$batchId out=$out")
+
+        val es = process.getErrorStream
+        val errorOut = Source.fromInputStream(es).mkString
+        println(s"##### Python error for batchId=$batchId error=$errorOut")
+
+        val exitCode = process.waitFor()
+        println(s"##### End processing forEachBatch for batchId=$batchId exitCode=$exitCode")
+      }
+    }
+
+    if (writeOp.hasForEachBatch) {
+      println("##### write stream has ForEachBatch")
+      val forEachBatchUDF = transformPythonUDF(writeOp.getForEachBatch)
+      val func = forEachBatchFunc(_, _, forEachBatchUDF)
+
+      writer.foreachBatch(func)
+    }
+
     val query = writeOp.getPath match {
       case "" if writeOp.hasTableName => writer.toTable(writeOp.getTableName)
       case "" => writer.start()
@@ -2793,4 +2886,8 @@ class SparkConnectPlanner(val session: SparkSession) {
   private def transformListCatalogs(getListCatalogs: proto.ListCatalogs): LogicalPlan = {
     session.catalog.listCatalogs().logicalPlan
   }
+}
+
+object DataFrameMap {
+  var dataFrames = scala.collection.mutable.Map[String, Dataset[_]]()
 }
