@@ -1852,7 +1852,7 @@ class SparkConnectPlanner(val session: SparkSession) {
         .build())
 
     // Send Metrics
-    SparkConnectStreamHandler.sendMetricsToResponse(sessionId, df)
+    responseObserver.onNext(SparkConnectStreamHandler.createMetricsToResponse(sessionId, df))
   }
 
   private def handleRegisterUserDefinedFunction(
