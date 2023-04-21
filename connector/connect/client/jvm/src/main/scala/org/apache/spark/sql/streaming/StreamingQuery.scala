@@ -80,7 +80,7 @@ trait StreamingQuery {
 
   /**
    * Returns the [[StreamingQueryException]] if the query was terminated by an exception.
-   * @since 2.0.0
+   * @since 3.5.0
    */
   def exception: Option[StreamingQueryException]
 
