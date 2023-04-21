@@ -494,7 +494,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
   @VisibleForTesting
   void removeAppAttemptPathInfoFromDB(String appId, int attemptId) {
     AppAttemptId appAttemptId = new AppAttemptId(appId, attemptId);
-    if (db != null) {
+    if (db != null && AppsWithRecoveryDisabled.isRecoveryEnabledForApp(appId)) {
       try {
         byte[] key = getDbAppAttemptPathsKey(appAttemptId);
         db.delete(key);
@@ -967,7 +967,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
    * Write the application attempt's local path information to the DB
    */
   private void writeAppPathsInfoToDb(String appId, int attemptId, AppPathsInfo appPathsInfo) {
-    if (db != null) {
+    if (db != null && AppsWithRecoveryDisabled.isRecoveryEnabledForApp(appId)) {
       AppAttemptId appAttemptId = new AppAttemptId(appId, attemptId);
       try {
         byte[] key = getDbAppAttemptPathsKey(appAttemptId);
@@ -985,7 +985,8 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
    */
   private void writeAppAttemptShuffleMergeInfoToDB(
       AppAttemptShuffleMergeId appAttemptShuffleMergeId) {
-    if (db != null) {
+    if (db != null && AppsWithRecoveryDisabled.isRecoveryEnabledForApp(
+        appAttemptShuffleMergeId.appId)) {
       // Write AppAttemptShuffleMergeId into LevelDB for finalized shuffles
       try{
         byte[] dbKey = getDbAppAttemptShufflePartitionKey(appAttemptShuffleMergeId);
