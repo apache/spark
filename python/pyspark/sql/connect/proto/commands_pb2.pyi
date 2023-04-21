@@ -53,7 +53,6 @@ else:
 
 DESCRIPTOR: google.protobuf.descriptor.FileDescriptor
 
-@typing_extensions.final
 class Command(google.protobuf.message.Message):
     """A [[Command]] is an operation that is executed by the server that does not directly consume or
     produce a relational result.
@@ -173,7 +172,6 @@ class Command(google.protobuf.message.Message):
 
 global___Command = Command
 
-@typing_extensions.final
 class SqlCommand(google.protobuf.message.Message):
     """A SQL Command is used to trigger the eager evaluation of SQL commands in Spark.
 
@@ -185,7 +183,6 @@ class SqlCommand(google.protobuf.message.Message):
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-    @typing_extensions.final
     class ArgsEntry(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -233,7 +230,6 @@ class SqlCommand(google.protobuf.message.Message):
 
 global___SqlCommand = SqlCommand
 
-@typing_extensions.final
 class CreateDataFrameViewCommand(google.protobuf.message.Message):
     """A command that can create DataFrame global temp view or local temp view."""
 
@@ -276,7 +272,6 @@ class CreateDataFrameViewCommand(google.protobuf.message.Message):
 
 global___CreateDataFrameViewCommand = CreateDataFrameViewCommand
 
-@typing_extensions.final
 class WriteOperation(google.protobuf.message.Message):
     """As writes are not directly handled during analysis and planning, they are modeled as commands."""
 
@@ -306,7 +301,6 @@ class WriteOperation(google.protobuf.message.Message):
     SAVE_MODE_ERROR_IF_EXISTS: WriteOperation.SaveMode.ValueType  # 3
     SAVE_MODE_IGNORE: WriteOperation.SaveMode.ValueType  # 4
 
-    @typing_extensions.final
     class OptionsEntry(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -324,7 +318,6 @@ class WriteOperation(google.protobuf.message.Message):
             self, field_name: typing_extensions.Literal["key", b"key", "value", b"value"]
         ) -> None: ...
 
-    @typing_extensions.final
     class SaveTable(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -367,7 +360,6 @@ class WriteOperation(google.protobuf.message.Message):
             ],
         ) -> None: ...
 
-    @typing_extensions.final
     class BucketBy(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -498,7 +490,6 @@ class WriteOperation(google.protobuf.message.Message):
 
 global___WriteOperation = WriteOperation
 
-@typing_extensions.final
 class WriteOperationV2(google.protobuf.message.Message):
     """As writes are not directly handled during analysis and planning, they are modeled as commands."""
 
@@ -532,7 +523,6 @@ class WriteOperationV2(google.protobuf.message.Message):
     MODE_REPLACE: WriteOperationV2.Mode.ValueType  # 5
     MODE_CREATE_OR_REPLACE: WriteOperationV2.Mode.ValueType  # 6
 
-    @typing_extensions.final
     class OptionsEntry(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -550,7 +540,6 @@ class WriteOperationV2(google.protobuf.message.Message):
             self, field_name: typing_extensions.Literal["key", b"key", "value", b"value"]
         ) -> None: ...
 
-    @typing_extensions.final
     class TablePropertiesEntry(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -664,7 +653,6 @@ class WriteOperationV2(google.protobuf.message.Message):
 
 global___WriteOperationV2 = WriteOperationV2
 
-@typing_extensions.final
 class WriteStreamOperationStart(google.protobuf.message.Message):
     """Starts write stream operation as streaming query. Query ID and Run ID of the streaming
     query are returned.
@@ -672,7 +660,6 @@ class WriteStreamOperationStart(google.protobuf.message.Message):
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-    @typing_extensions.final
     class OptionsEntry(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -810,7 +797,6 @@ class WriteStreamOperationStart(google.protobuf.message.Message):
 
 global___WriteStreamOperationStart = WriteStreamOperationStart
 
-@typing_extensions.final
 class WriteStreamOperationStartResult(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -836,7 +822,6 @@ class WriteStreamOperationStartResult(google.protobuf.message.Message):
 
 global___WriteStreamOperationStartResult = WriteStreamOperationStartResult
 
-@typing_extensions.final
 class StreamingQueryInstanceId(google.protobuf.message.Message):
     """A tuple that uniquely identifies an instance of streaming query run. It consists of `id` that
     persists across the streaming runs and `run_id` that changes between each run of the
@@ -869,13 +854,11 @@ class StreamingQueryInstanceId(google.protobuf.message.Message):
 
 global___StreamingQueryInstanceId = StreamingQueryInstanceId
 
-@typing_extensions.final
 class StreamingQueryCommand(google.protobuf.message.Message):
     """Commands for a streaming query."""
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-    @typing_extensions.final
     class ExplainCommand(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -893,6 +876,32 @@ class StreamingQueryCommand(google.protobuf.message.Message):
             self, field_name: typing_extensions.Literal["extended", b"extended"]
         ) -> None: ...
 
+    class AwaitTerminationCommand(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        TIMEOUT_MS_FIELD_NUMBER: builtins.int
+        timeout_ms: builtins.int
+        def __init__(
+            self,
+            *,
+            timeout_ms: builtins.int | None = ...,
+        ) -> None: ...
+        def HasField(
+            self,
+            field_name: typing_extensions.Literal[
+                "_timeout_ms", b"_timeout_ms", "timeout_ms", b"timeout_ms"
+            ],
+        ) -> builtins.bool: ...
+        def ClearField(
+            self,
+            field_name: typing_extensions.Literal[
+                "_timeout_ms", b"_timeout_ms", "timeout_ms", b"timeout_ms"
+            ],
+        ) -> None: ...
+        def WhichOneof(
+            self, oneof_group: typing_extensions.Literal["_timeout_ms", b"_timeout_ms"]
+        ) -> typing_extensions.Literal["timeout_ms"] | None: ...
+
     QUERY_ID_FIELD_NUMBER: builtins.int
     STATUS_FIELD_NUMBER: builtins.int
     LAST_PROGRESS_FIELD_NUMBER: builtins.int
@@ -900,6 +909,8 @@ class StreamingQueryCommand(google.protobuf.message.Message):
     STOP_FIELD_NUMBER: builtins.int
     PROCESS_ALL_AVAILABLE_FIELD_NUMBER: builtins.int
     EXPLAIN_FIELD_NUMBER: builtins.int
+    EXCEPTION_FIELD_NUMBER: builtins.int
+    AWAIT_TERMINATION_FIELD_NUMBER: builtins.int
     @property
     def query_id(self) -> global___StreamingQueryInstanceId:
         """(Required) Query instance. See `StreamingQueryInstanceId`."""
@@ -916,6 +927,11 @@ class StreamingQueryCommand(google.protobuf.message.Message):
     @property
     def explain(self) -> global___StreamingQueryCommand.ExplainCommand:
         """explain() API. Returns logical and physical plans."""
+    exception: builtins.bool
+    """exception() API. Returns the exception in the query if any."""
+    @property
+    def await_termination(self) -> global___StreamingQueryCommand.AwaitTerminationCommand:
+        """awaitTermination() API. Waits for the termination of the query."""
     def __init__(
         self,
         *,
@@ -926,12 +942,18 @@ class StreamingQueryCommand(google.protobuf.message.Message):
         stop: builtins.bool = ...,
         process_all_available: builtins.bool = ...,
         explain: global___StreamingQueryCommand.ExplainCommand | None = ...,
+        exception: builtins.bool = ...,
+        await_termination: global___StreamingQueryCommand.AwaitTerminationCommand | None = ...,
     ) -> None: ...
     def HasField(
         self,
         field_name: typing_extensions.Literal[
+            "await_termination",
+            b"await_termination",
             "command",
             b"command",
+            "exception",
+            b"exception",
             "explain",
             b"explain",
             "last_progress",
@@ -951,8 +973,12 @@ class StreamingQueryCommand(google.protobuf.message.Message):
     def ClearField(
         self,
         field_name: typing_extensions.Literal[
+            "await_termination",
+            b"await_termination",
             "command",
             b"command",
+            "exception",
+            b"exception",
             "explain",
             b"explain",
             "last_progress",
@@ -972,18 +998,23 @@ class StreamingQueryCommand(google.protobuf.message.Message):
     def WhichOneof(
         self, oneof_group: typing_extensions.Literal["command", b"command"]
     ) -> typing_extensions.Literal[
-        "status", "last_progress", "recent_progress", "stop", "process_all_available", "explain"
+        "status",
+        "last_progress",
+        "recent_progress",
+        "stop",
+        "process_all_available",
+        "explain",
+        "exception",
+        "await_termination",
     ] | None: ...
 
 global___StreamingQueryCommand = StreamingQueryCommand
 
-@typing_extensions.final
 class StreamingQueryCommandResult(google.protobuf.message.Message):
     """Response for commands on a streaming query."""
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-    @typing_extensions.final
     class StatusResult(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -1018,7 +1049,6 @@ class StreamingQueryCommandResult(google.protobuf.message.Message):
             ],
         ) -> None: ...
 
-    @typing_extensions.final
     class RecentProgressResult(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -1038,7 +1068,6 @@ class StreamingQueryCommandResult(google.protobuf.message.Message):
             field_name: typing_extensions.Literal["recent_progress_json", b"recent_progress_json"],
         ) -> None: ...
 
-    @typing_extensions.final
     class ExplainResult(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -1054,10 +1083,60 @@ class StreamingQueryCommandResult(google.protobuf.message.Message):
             self, field_name: typing_extensions.Literal["result", b"result"]
         ) -> None: ...
 
+    class ExceptionResult(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        EXCEPTION_MESSAGE_FIELD_NUMBER: builtins.int
+        exception_message: builtins.str
+        """Exception message as string"""
+        def __init__(
+            self,
+            *,
+            exception_message: builtins.str | None = ...,
+        ) -> None: ...
+        def HasField(
+            self,
+            field_name: typing_extensions.Literal[
+                "_exception_message",
+                b"_exception_message",
+                "exception_message",
+                b"exception_message",
+            ],
+        ) -> builtins.bool: ...
+        def ClearField(
+            self,
+            field_name: typing_extensions.Literal[
+                "_exception_message",
+                b"_exception_message",
+                "exception_message",
+                b"exception_message",
+            ],
+        ) -> None: ...
+        def WhichOneof(
+            self,
+            oneof_group: typing_extensions.Literal["_exception_message", b"_exception_message"],
+        ) -> typing_extensions.Literal["exception_message"] | None: ...
+
+    class AwaitTerminationResult(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        TERMINATED_FIELD_NUMBER: builtins.int
+        terminated: builtins.bool
+        def __init__(
+            self,
+            *,
+            terminated: builtins.bool = ...,
+        ) -> None: ...
+        def ClearField(
+            self, field_name: typing_extensions.Literal["terminated", b"terminated"]
+        ) -> None: ...
+
     QUERY_ID_FIELD_NUMBER: builtins.int
     STATUS_FIELD_NUMBER: builtins.int
     RECENT_PROGRESS_FIELD_NUMBER: builtins.int
     EXPLAIN_FIELD_NUMBER: builtins.int
+    EXCEPTION_FIELD_NUMBER: builtins.int
+    AWAIT_TERMINATION_FIELD_NUMBER: builtins.int
     @property
     def query_id(self) -> global___StreamingQueryInstanceId:
         """(Required) Query instance id. See `StreamingQueryInstanceId`."""
@@ -1067,6 +1146,10 @@ class StreamingQueryCommandResult(google.protobuf.message.Message):
     def recent_progress(self) -> global___StreamingQueryCommandResult.RecentProgressResult: ...
     @property
     def explain(self) -> global___StreamingQueryCommandResult.ExplainResult: ...
+    @property
+    def exception(self) -> global___StreamingQueryCommandResult.ExceptionResult: ...
+    @property
+    def await_termination(self) -> global___StreamingQueryCommandResult.AwaitTerminationResult: ...
     def __init__(
         self,
         *,
@@ -1074,10 +1157,16 @@ class StreamingQueryCommandResult(google.protobuf.message.Message):
         status: global___StreamingQueryCommandResult.StatusResult | None = ...,
         recent_progress: global___StreamingQueryCommandResult.RecentProgressResult | None = ...,
         explain: global___StreamingQueryCommandResult.ExplainResult | None = ...,
+        exception: global___StreamingQueryCommandResult.ExceptionResult | None = ...,
+        await_termination: global___StreamingQueryCommandResult.AwaitTerminationResult | None = ...,
     ) -> None: ...
     def HasField(
         self,
         field_name: typing_extensions.Literal[
+            "await_termination",
+            b"await_termination",
+            "exception",
+            b"exception",
             "explain",
             b"explain",
             "query_id",
@@ -1093,6 +1182,10 @@ class StreamingQueryCommandResult(google.protobuf.message.Message):
     def ClearField(
         self,
         field_name: typing_extensions.Literal[
+            "await_termination",
+            b"await_termination",
+            "exception",
+            b"exception",
             "explain",
             b"explain",
             "query_id",
@@ -1107,11 +1200,12 @@ class StreamingQueryCommandResult(google.protobuf.message.Message):
     ) -> None: ...
     def WhichOneof(
         self, oneof_group: typing_extensions.Literal["result_type", b"result_type"]
-    ) -> typing_extensions.Literal["status", "recent_progress", "explain"] | None: ...
+    ) -> typing_extensions.Literal[
+        "status", "recent_progress", "explain", "exception", "await_termination"
+    ] | None: ...
 
 global___StreamingQueryCommandResult = StreamingQueryCommandResult
 
-@typing_extensions.final
 class GetResourcesCommand(google.protobuf.message.Message):
     """Command to get the output of 'SparkContext.resources'"""
 
@@ -1123,13 +1217,11 @@ class GetResourcesCommand(google.protobuf.message.Message):
 
 global___GetResourcesCommand = GetResourcesCommand
 
-@typing_extensions.final
 class GetResourcesCommandResult(google.protobuf.message.Message):
     """Response for command 'GetResourcesCommand'."""
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-    @typing_extensions.final
     class ResourcesEntry(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 

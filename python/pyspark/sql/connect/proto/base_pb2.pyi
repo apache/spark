@@ -55,7 +55,6 @@ else:
 
 DESCRIPTOR: google.protobuf.descriptor.FileDescriptor
 
-@typing_extensions.final
 class Plan(google.protobuf.message.Message):
     """A [[Plan]] is the structure that carries the runtime information for the execution from the
     client to the server. A [[Plan]] can either be of the type [[Relation]] which is a reference
@@ -95,7 +94,6 @@ class Plan(google.protobuf.message.Message):
 
 global___Plan = Plan
 
-@typing_extensions.final
 class UserContext(google.protobuf.message.Message):
     """User Context is used to refer to one particular user session that is executing
     queries in the backend.
@@ -135,13 +133,11 @@ class UserContext(google.protobuf.message.Message):
 
 global___UserContext = UserContext
 
-@typing_extensions.final
 class AnalyzePlanRequest(google.protobuf.message.Message):
     """Request to perform plan analyze, optionally to explain the plan."""
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-    @typing_extensions.final
     class Schema(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -159,7 +155,6 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
         ) -> builtins.bool: ...
         def ClearField(self, field_name: typing_extensions.Literal["plan", b"plan"]) -> None: ...
 
-    @typing_extensions.final
     class Explain(google.protobuf.message.Message):
         """Explains the input plan based on a configurable mode."""
 
@@ -234,7 +229,6 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
             field_name: typing_extensions.Literal["explain_mode", b"explain_mode", "plan", b"plan"],
         ) -> None: ...
 
-    @typing_extensions.final
     class TreeString(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -252,7 +246,6 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
         ) -> builtins.bool: ...
         def ClearField(self, field_name: typing_extensions.Literal["plan", b"plan"]) -> None: ...
 
-    @typing_extensions.final
     class IsLocal(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -270,7 +263,6 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
         ) -> builtins.bool: ...
         def ClearField(self, field_name: typing_extensions.Literal["plan", b"plan"]) -> None: ...
 
-    @typing_extensions.final
     class IsStreaming(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -288,7 +280,6 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
         ) -> builtins.bool: ...
         def ClearField(self, field_name: typing_extensions.Literal["plan", b"plan"]) -> None: ...
 
-    @typing_extensions.final
     class InputFiles(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -306,7 +297,6 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
         ) -> builtins.bool: ...
         def ClearField(self, field_name: typing_extensions.Literal["plan", b"plan"]) -> None: ...
 
-    @typing_extensions.final
     class SparkVersion(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -314,7 +304,6 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
             self,
         ) -> None: ...
 
-    @typing_extensions.final
     class DDLParse(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -330,7 +319,6 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
             self, field_name: typing_extensions.Literal["ddl_string", b"ddl_string"]
         ) -> None: ...
 
-    @typing_extensions.final
     class SameSemantics(google.protobuf.message.Message):
         """Returns `true` when the logical query plans  are equal and therefore return same results."""
 
@@ -363,7 +351,6 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
             ],
         ) -> None: ...
 
-    @typing_extensions.final
     class SemanticHash(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -381,7 +368,6 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
         ) -> builtins.bool: ...
         def ClearField(self, field_name: typing_extensions.Literal["plan", b"plan"]) -> None: ...
 
-    @typing_extensions.final
     class Persist(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -425,7 +411,6 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
             self, oneof_group: typing_extensions.Literal["_storage_level", b"_storage_level"]
         ) -> typing_extensions.Literal["storage_level"] | None: ...
 
-    @typing_extensions.final
     class Unpersist(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -458,7 +443,6 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
             self, oneof_group: typing_extensions.Literal["_blocking", b"_blocking"]
         ) -> typing_extensions.Literal["blocking"] | None: ...
 
-    @typing_extensions.final
     class GetStorageLevel(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -660,7 +644,6 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
 
 global___AnalyzePlanRequest = AnalyzePlanRequest
 
-@typing_extensions.final
 class AnalyzePlanResponse(google.protobuf.message.Message):
     """Response to performing analysis of the query. Contains relevant metadata to be able to
     reason about the performance.
@@ -668,7 +651,6 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-    @typing_extensions.final
     class Schema(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -687,7 +669,6 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
             self, field_name: typing_extensions.Literal["schema", b"schema"]
         ) -> None: ...
 
-    @typing_extensions.final
     class Explain(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -702,7 +683,6 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
             self, field_name: typing_extensions.Literal["explain_string", b"explain_string"]
         ) -> None: ...
 
-    @typing_extensions.final
     class TreeString(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -717,7 +697,6 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
             self, field_name: typing_extensions.Literal["tree_string", b"tree_string"]
         ) -> None: ...
 
-    @typing_extensions.final
     class IsLocal(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -732,7 +711,6 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
             self, field_name: typing_extensions.Literal["is_local", b"is_local"]
         ) -> None: ...
 
-    @typing_extensions.final
     class IsStreaming(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -747,7 +725,6 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
             self, field_name: typing_extensions.Literal["is_streaming", b"is_streaming"]
         ) -> None: ...
 
-    @typing_extensions.final
     class InputFiles(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -764,7 +741,6 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
         ) -> None: ...
         def ClearField(self, field_name: typing_extensions.Literal["files", b"files"]) -> None: ...
 
-    @typing_extensions.final
     class SparkVersion(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -779,7 +755,6 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
             self, field_name: typing_extensions.Literal["version", b"version"]
         ) -> None: ...
 
-    @typing_extensions.final
     class DDLParse(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -798,7 +773,6 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
             self, field_name: typing_extensions.Literal["parsed", b"parsed"]
         ) -> None: ...
 
-    @typing_extensions.final
     class SameSemantics(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -813,7 +787,6 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
             self, field_name: typing_extensions.Literal["result", b"result"]
         ) -> None: ...
 
-    @typing_extensions.final
     class SemanticHash(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -828,7 +801,6 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
             self, field_name: typing_extensions.Literal["result", b"result"]
         ) -> None: ...
 
-    @typing_extensions.final
     class Persist(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -836,7 +808,6 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
             self,
         ) -> None: ...
 
-    @typing_extensions.final
     class Unpersist(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -844,7 +815,6 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
             self,
         ) -> None: ...
 
-    @typing_extensions.final
     class GetStorageLevel(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -1011,7 +981,6 @@ class AnalyzePlanResponse(google.protobuf.message.Message):
 
 global___AnalyzePlanResponse = AnalyzePlanResponse
 
-@typing_extensions.final
 class ExecutePlanRequest(google.protobuf.message.Message):
     """A request to be executed by the service."""
 
@@ -1085,7 +1054,6 @@ class ExecutePlanRequest(google.protobuf.message.Message):
 
 global___ExecutePlanRequest = ExecutePlanRequest
 
-@typing_extensions.final
 class ExecutePlanResponse(google.protobuf.message.Message):
     """The response of a query, can be one or more for each request. Responses belonging to the
     same input query, carry the same `session_id`.
@@ -1093,7 +1061,6 @@ class ExecutePlanResponse(google.protobuf.message.Message):
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-    @typing_extensions.final
     class SqlCommandResult(google.protobuf.message.Message):
         """A SQL command returns an opaque Relation that can be directly used as input for the next
         call.
@@ -1116,7 +1083,6 @@ class ExecutePlanResponse(google.protobuf.message.Message):
             self, field_name: typing_extensions.Literal["relation", b"relation"]
         ) -> None: ...
 
-    @typing_extensions.final
     class ArrowBatch(google.protobuf.message.Message):
         """Batch results of metrics."""
 
@@ -1136,15 +1102,12 @@ class ExecutePlanResponse(google.protobuf.message.Message):
             self, field_name: typing_extensions.Literal["data", b"data", "row_count", b"row_count"]
         ) -> None: ...
 
-    @typing_extensions.final
     class Metrics(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-        @typing_extensions.final
         class MetricObject(google.protobuf.message.Message):
             DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-            @typing_extensions.final
             class ExecutionMetricsEntry(google.protobuf.message.Message):
                 DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -1204,7 +1167,6 @@ class ExecutePlanResponse(google.protobuf.message.Message):
                 ],
             ) -> None: ...
 
-        @typing_extensions.final
         class MetricValue(google.protobuf.message.Message):
             DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -1245,7 +1207,6 @@ class ExecutePlanResponse(google.protobuf.message.Message):
             self, field_name: typing_extensions.Literal["metrics", b"metrics"]
         ) -> None: ...
 
-    @typing_extensions.final
     class ObservedMetrics(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -1401,7 +1362,6 @@ class ExecutePlanResponse(google.protobuf.message.Message):
 
 global___ExecutePlanResponse = ExecutePlanResponse
 
-@typing_extensions.final
 class KeyValue(google.protobuf.message.Message):
     """The key-value pair for the config request and response."""
 
@@ -1434,13 +1394,11 @@ class KeyValue(google.protobuf.message.Message):
 
 global___KeyValue = KeyValue
 
-@typing_extensions.final
 class ConfigRequest(google.protobuf.message.Message):
     """Request to update or fetch the configurations."""
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-    @typing_extensions.final
     class Operation(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -1524,7 +1482,6 @@ class ConfigRequest(google.protobuf.message.Message):
             "set", "get", "get_with_default", "get_option", "get_all", "unset", "is_modifiable"
         ] | None: ...
 
-    @typing_extensions.final
     class Set(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -1541,7 +1498,6 @@ class ConfigRequest(google.protobuf.message.Message):
         ) -> None: ...
         def ClearField(self, field_name: typing_extensions.Literal["pairs", b"pairs"]) -> None: ...
 
-    @typing_extensions.final
     class Get(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -1558,7 +1514,6 @@ class ConfigRequest(google.protobuf.message.Message):
         ) -> None: ...
         def ClearField(self, field_name: typing_extensions.Literal["keys", b"keys"]) -> None: ...
 
-    @typing_extensions.final
     class GetWithDefault(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -1575,7 +1530,6 @@ class ConfigRequest(google.protobuf.message.Message):
         ) -> None: ...
         def ClearField(self, field_name: typing_extensions.Literal["pairs", b"pairs"]) -> None: ...
 
-    @typing_extensions.final
     class GetOption(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -1592,7 +1546,6 @@ class ConfigRequest(google.protobuf.message.Message):
         ) -> None: ...
         def ClearField(self, field_name: typing_extensions.Literal["keys", b"keys"]) -> None: ...
 
-    @typing_extensions.final
     class GetAll(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -1614,7 +1567,6 @@ class ConfigRequest(google.protobuf.message.Message):
             self, oneof_group: typing_extensions.Literal["_prefix", b"_prefix"]
         ) -> typing_extensions.Literal["prefix"] | None: ...
 
-    @typing_extensions.final
     class Unset(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -1631,7 +1583,6 @@ class ConfigRequest(google.protobuf.message.Message):
         ) -> None: ...
         def ClearField(self, field_name: typing_extensions.Literal["keys", b"keys"]) -> None: ...
 
-    @typing_extensions.final
     class IsModifiable(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -1712,7 +1663,6 @@ class ConfigRequest(google.protobuf.message.Message):
 
 global___ConfigRequest = ConfigRequest
 
-@typing_extensions.final
 class ConfigResponse(google.protobuf.message.Message):
     """Response to the config request."""
 
@@ -1755,13 +1705,11 @@ class ConfigResponse(google.protobuf.message.Message):
 
 global___ConfigResponse = ConfigResponse
 
-@typing_extensions.final
 class AddArtifactsRequest(google.protobuf.message.Message):
     """Request to transfer client-local artifacts."""
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-    @typing_extensions.final
     class ArtifactChunk(google.protobuf.message.Message):
         """A chunk of an Artifact."""
 
@@ -1783,7 +1731,6 @@ class AddArtifactsRequest(google.protobuf.message.Message):
             self, field_name: typing_extensions.Literal["crc", b"crc", "data", b"data"]
         ) -> None: ...
 
-    @typing_extensions.final
     class SingleChunkArtifact(google.protobuf.message.Message):
         """An artifact that is contained in a single `ArtifactChunk`.
         Generally, this message represents tiny artifacts such as REPL-generated class files.
@@ -1817,7 +1764,6 @@ class AddArtifactsRequest(google.protobuf.message.Message):
             self, field_name: typing_extensions.Literal["data", b"data", "name", b"name"]
         ) -> None: ...
 
-    @typing_extensions.final
     class Batch(google.protobuf.message.Message):
         """A number of `SingleChunkArtifact` batched into a single RPC."""
 
@@ -1840,7 +1786,6 @@ class AddArtifactsRequest(google.protobuf.message.Message):
             self, field_name: typing_extensions.Literal["artifacts", b"artifacts"]
         ) -> None: ...
 
-    @typing_extensions.final
     class BeginChunkedArtifact(google.protobuf.message.Message):
         """Signals the beginning/start of a chunked artifact.
         A large artifact is transferred through a payload of `BeginChunkedArtifact` followed by a
@@ -1986,7 +1931,6 @@ class AddArtifactsRequest(google.protobuf.message.Message):
 
 global___AddArtifactsRequest = AddArtifactsRequest
 
-@typing_extensions.final
 class AddArtifactsResponse(google.protobuf.message.Message):
     """Response to adding an artifact. Contains relevant metadata to verify successful transfer of
     artifact(s).
@@ -1994,7 +1938,6 @@ class AddArtifactsResponse(google.protobuf.message.Message):
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-    @typing_extensions.final
     class ArtifactSummary(google.protobuf.message.Message):
         """Metadata of an artifact."""
 
