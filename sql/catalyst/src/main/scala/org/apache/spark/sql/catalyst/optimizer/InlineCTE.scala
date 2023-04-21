@@ -69,6 +69,19 @@ case class InlineCTE(alwaysInline: Boolean = false) extends Rule[LogicalPlan] {
       cteDef.child.exists(_.expressions.exists(_.isInstanceOf[OuterReference]))
   }
 
+  /**
+   * Accumulates all the CTEs from a plan into a special map.
+   *
+   * @param plan The plan to collect the CTEs from
+   * @param cteMap A mutable map that accumulates the CTEs and their reference information by CTE
+   *               ids. The value of the map is tuple whose elements are:
+   *               - The CTE definition
+   *               - The number of incoming references to the CTE. This includes references from
+   *                 outer CTEs and regular places.
+   *               - A mutable inner map that tracks outgoing references (counts) to other CTEs.
+   * @param outerCTEId While collecting the map we use this optional CTE id to identify the
+   *                   current outer CTE.
+   */
   def buildCTEMap(
       plan: LogicalPlan,
       cteMap: mutable.Map[Long, (CTERelationDef, Int, mutable.Map[Long, Int])],
@@ -109,15 +122,22 @@ case class InlineCTE(alwaysInline: Boolean = false) extends Rule[LogicalPlan] {
     }
   }
 
+  /**
+   * Cleans the CTE map by removing those CTEs that are not referenced at all and corrects those
+   * CTE's reference counts where the removed CTE referred to.
+   *
+   * @param cteMap A mutable map that accumulates the CTEs and their reference information by CTE
+   *               ids. Needs to be sorted to speed up cleaning.
+   */
   private def cleanCTEMap(
-      cteRefMap: mutable.SortedMap[Long, (CTERelationDef, Int, mutable.Map[Long, Int])]
+      cteMap: mutable.SortedMap[Long, (CTERelationDef, Int, mutable.Map[Long, Int])]
     ) = {
-    cteRefMap.keys.toSeq.reverse.foreach { currentCTEId =>
-      val (_, currentRefCount, refMap) = cteRefMap(currentCTEId)
+    cteMap.keys.toSeq.reverse.foreach { currentCTEId =>
+      val (_, currentRefCount, refMap) = cteMap(currentCTEId)
       if (currentRefCount == 0) {
         refMap.foreach { case (referencedCTEId, uselessRefCount) =>
-          val (cteDef, refCount, refMap) = cteRefMap(referencedCTEId)
-          cteRefMap(referencedCTEId) = (cteDef, refCount - uselessRefCount, refMap)
+          val (cteDef, refCount, refMap) = cteMap(referencedCTEId)
+          cteMap(referencedCTEId) = (cteDef, refCount - uselessRefCount, refMap)
         }
       }
     }
