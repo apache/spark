@@ -3009,8 +3009,22 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         return Column(jc)
 
     def __dir__(self):
+        """
+        Examples
+        --------
+        >>> from pyspark.sql.functions import lit
+        >>> df = spark.range(3)
+        >>> [attr for attr in dir(df) if attr[0] == 'i']
+        ['id', 'inputFiles', 'intersect', 'intersectAll', 'isEmpty', 'isLocal', 'isStreaming', 'is_cached']
+        >>> df = df.withColumn('i_like_pancakes', lit(1))
+        >>> [attr for attr in dir(df) if attr[0] == 'i']
+        ['i_like_pancakes', 'id', 'inputFiles', 'intersect', 'intersectAll', 'isEmpty', 'isLocal', 'isStreaming', 'is_cached']
+        >>> df = df.withColumn('inputFiles', lit(2))
+        >>> [attr for attr in dir(df) if attr[0] == 'i']
+        ['i_like_pancakes', 'id', 'inputFiles', 'intersect', 'intersectAll', 'isEmpty', 'isLocal', 'isStreaming', 'is_cached']
+        """
         attrs = super().__dir__()
-        attrs.extend(self.columns)
+        attrs.extend(attr for attr in self.columns if attr not in attrs)
         return attrs
 
     @overload
