@@ -34,7 +34,7 @@ import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, StorageLevel
 import org.apache.spark.sql.expressions.ScalarUserDefinedFunction
 import org.apache.spark.sql.functions.{struct, to_json}
 import org.apache.spark.sql.streaming.DataStreamWriter
-import org.apache.spark.sql.types.{Metadata, StructType}
+import org.apache.spark.sql.types.{Metadata, StructField, StructType}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.Utils
 
@@ -568,7 +568,7 @@ class Dataset[T] private[sql] (
     }
   }
 
-  private def toJoinType(name: String): proto.Join.JoinType = {
+  private def toJoinType(name: String, skipSemiAnti: Boolean = false): proto.Join.JoinType = {
     name.trim.toLowerCase(Locale.ROOT) match {
       case "inner" =>
         proto.Join.JoinType.JOIN_TYPE_INNER
@@ -580,12 +580,12 @@ class Dataset[T] private[sql] (
         proto.Join.JoinType.JOIN_TYPE_LEFT_OUTER
       case "right" | "rightouter" | "right_outer" =>
         proto.Join.JoinType.JOIN_TYPE_RIGHT_OUTER
-      case "semi" | "leftsemi" | "left_semi" =>
+      case "semi" | "leftsemi" | "left_semi" if !skipSemiAnti =>
         proto.Join.JoinType.JOIN_TYPE_LEFT_SEMI
-      case "anti" | "leftanti" | "left_anti" =>
+      case "anti" | "leftanti" | "left_anti" if !skipSemiAnti =>
         proto.Join.JoinType.JOIN_TYPE_LEFT_ANTI
-      case _ =>
-        throw new IllegalArgumentException(s"Unsupported join type `joinType`.")
+      case e =>
+        throw new IllegalArgumentException(s"Unsupported join type '$e'.")
     }
   }
 
@@ -833,6 +833,79 @@ class Dataset[T] private[sql] (
         .setIsGlobal(global)
         .addAllOrder(sortExprs.map(_.sortOrder).asJava)
     }
+  }
+
+  /**
+   * Joins this Dataset returning a `Tuple2` for each pair where `condition` evaluates to true.
+   *
+   * This is similar to the relation `join` function with one important difference in the result
+   * schema. Since `joinWith` preserves objects present on either side of the join, the result
+   * schema is similarly nested into a tuple under the column names `_1` and `_2`.
+   *
+   * This type of join can be useful both for preserving type-safety with the original object
+   * types as well as working with relational data where either side of the join has column names
+   * in common.
+   *
+   * @param other
+   *   Right side of the join.
+   * @param condition
+   *   Join expression.
+   * @param joinType
+   *   Type of join to perform. Default `inner`. Must be one of: `inner`, `cross`, `outer`,
+   *   `full`, `fullouter`,`full_outer`, `left`, `leftouter`, `left_outer`, `right`, `rightouter`,
+   *   `right_outer`.
+   *
+   * @group typedrel
+   * @since 3.5.0
+   */
+  def joinWith[U](other: Dataset[U], condition: Column, joinType: String): Dataset[(T, U)] = {
+    val joinTypeValue = toJoinType(joinType, skipSemiAnti = true)
+    val joinedNullables = joinTypeValue match {
+      case proto.Join.JoinType.JOIN_TYPE_INNER | proto.Join.JoinType.JOIN_TYPE_CROSS =>
+        Seq(false, false)
+      case proto.Join.JoinType.JOIN_TYPE_FULL_OUTER =>
+        Seq(true, true)
+      case proto.Join.JoinType.JOIN_TYPE_LEFT_OUTER =>
+        Seq(false, true)
+      case proto.Join.JoinType.JOIN_TYPE_RIGHT_OUTER =>
+        Seq(true, false)
+      case e =>
+        throw new IllegalArgumentException(s"Unsupported join type '$e'.")
+    }
+
+    val leftRightAsStruct: StructType = StructType(
+      StructField("left", this.encoder.dataType, this.encoder.nullable) ::
+        StructField("right", other.encoder.dataType, other.encoder.nullable) :: Nil)
+
+    val tupleEncoder = ProductEncoder
+      .tuple(Seq(this.encoder, other.encoder), Some(joinedNullables))
+      .asInstanceOf[AgnosticEncoder[(T, U)]]
+
+    sparkSession.newDataset(tupleEncoder) { builder =>
+      val joinBuilder = builder.getJoinBuilder
+      joinBuilder
+        .setLeft(plan.getRoot)
+        .setRight(other.plan.getRoot)
+        .setJoinType(joinTypeValue)
+        .setJoinCondition(condition.expr)
+        .setLeftRightAsStruct(DataTypeProtoConverter.toConnectProtoType(leftRightAsStruct))
+    }
+  }
+
+  /**
+   * Using inner equi-join to join this Dataset returning a `Tuple2` for each pair where
+   * `condition` evaluates to true.
+   *
+   * @param other
+   *   Right side of the join.
+   * @param condition
+   *   Join expression.
+   *
+   * @group typedrel
+   * @since 3.5.0
+   */
+  def joinWith[U](other: Dataset[U], condition: Column): Dataset[(T, U)] = {
+    joinWith(other, condition, "inner")
   }
 
   /**

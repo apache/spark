@@ -88,6 +88,7 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
   }
 
   test("read and write") {
+    assume(IntegrationTestUtils.isSparkHiveJarAvailable)
     val testDataPath = java.nio.file.Paths
       .get(
         IntegrationTestUtils.sparkHome,
@@ -158,6 +159,7 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
   }
 
   test("textFile") {
+    assume(IntegrationTestUtils.isSparkHiveJarAvailable)
     val testDataPath = java.nio.file.Paths
       .get(
         IntegrationTestUtils.sparkHome,
@@ -178,6 +180,7 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
   }
 
   test("write table") {
+    assume(IntegrationTestUtils.isSparkHiveJarAvailable)
     withTable("myTable") {
       val df = spark.range(10).limit(3)
       df.write.mode(SaveMode.Overwrite).saveAsTable("myTable")
@@ -221,6 +224,7 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
   }
 
   test("write without table or path") {
+    assume(IntegrationTestUtils.isSparkHiveJarAvailable)
     // Should receive no error to write noop
     spark.range(10).write.format("noop").mode("append").save()
   }
@@ -970,7 +974,88 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
     val result2 = spark.sql("select :c0 limit :l0", Map("l0" -> 1, "c0" -> "abc")).collect()
     assert(result2.length == 1 && result2(0).getString(0) === "abc")
   }
+
+  test("joinWith, flat schema") {
+    val session: SparkSession = spark
+    import session.implicits._
+    val ds1 = Seq(1, 2, 3).toDS().as("a")
+    val ds2 = Seq(1, 2).toDS().as("b")
+
+    val joined = ds1.joinWith(ds2, $"a.value" === $"b.value", "inner")
+
+    val expectedSchema = StructType(
+      Seq(
+        StructField("_1", IntegerType, nullable = false),
+        StructField("_2", IntegerType, nullable = false)))
+
+    assert(joined.schema === expectedSchema)
+
+    val expected = Seq((1, 1), (2, 2))
+    checkSameResult(expected, joined)
+  }
+
+  test("joinWith tuple with primitive, expression") {
+    val session: SparkSession = spark
+    import session.implicits._
+    val ds1 = Seq(1, 1, 2).toDS()
+    val ds2 = Seq(("a", 1), ("b", 2)).toDS()
+
+    val joined = ds1.joinWith(ds2, $"value" === $"_2")
+
+    // This is an inner join, so both outputs fields are non-nullable
+    val expectedSchema = StructType(
+      Seq(
+        StructField("_1", IntegerType, nullable = false),
+        StructField(
+          "_2",
+          StructType(
+            Seq(StructField("_1", StringType), StructField("_2", IntegerType, nullable = false))),
+          nullable = false)))
+    assert(joined.schema === expectedSchema)
+
+    checkSameResult(Seq((1, ("a", 1)), (1, ("a", 1)), (2, ("b", 2))), joined)
+  }
+
+  test("joinWith tuple with primitive, rows") {
+    val session: SparkSession = spark
+    import session.implicits._
+    val ds1 = Seq(1, 1, 2).toDF()
+    val ds2 = Seq(("a", 1), ("b", 2)).toDF()
+
+    val joined = ds1.joinWith(ds2, $"value" === $"_2")
+
+    checkSameResult(
+      Seq((Row(1), Row("a", 1)), (Row(1), Row("a", 1)), (Row(2), Row("b", 2))),
+      joined)
+  }
+
+  test("joinWith class with primitive, toDF") {
+    val session: SparkSession = spark
+    import session.implicits._
+    val ds1 = Seq(1, 1, 2).toDS()
+    val ds2 = Seq(ClassData("a", 1), ClassData("b", 2)).toDS()
+
+    val df = ds1
+      .joinWith(ds2, $"value" === $"b")
+      .toDF()
+      .select($"_1", $"_2.a", $"_2.b")
+    checkSameResult(Seq(Row(1, "a", 1), Row(1, "a", 1), Row(2, "b", 2)), df)
+  }
+
+  test("multi-level joinWith") {
+    val session: SparkSession = spark
+    import session.implicits._
+    val ds1 = Seq(("a", 1), ("b", 2)).toDS().as("a")
+    val ds2 = Seq(("a", 1), ("b", 2)).toDS().as("b")
+    val ds3 = Seq(("a", 1), ("b", 2)).toDS().as("c")
+
+    checkSameResult(
+      Seq(((("a", 1), ("a", 1)), ("a", 1)), ((("b", 2), ("b", 2)), ("b", 2))),
+      ds1.joinWith(ds2, $"a._2" === $"b._2").as("ab").joinWith(ds3, $"ab._1._2" === $"c._2"))
+  }
 }
+
+private[sql] case class ClassData(a: String, b: Int)
 
 private[sql] case class MyType(id: Long, a: Double, b: Double)
 private[sql] case class KV(key: String, value: Int)

@@ -101,7 +101,7 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
       case proto.Relation.RelTypeCase.LIMIT => transformLimit(rel.getLimit)
       case proto.Relation.RelTypeCase.OFFSET => transformOffset(rel.getOffset)
       case proto.Relation.RelTypeCase.TAIL => transformTail(rel.getTail)
-      case proto.Relation.RelTypeCase.JOIN => transformJoin(rel.getJoin)
+      case proto.Relation.RelTypeCase.JOIN => transformJoinOrJoinWith(rel.getJoin)
       case proto.Relation.RelTypeCase.DEDUPLICATE => transformDeduplicate(rel.getDeduplicate)
       case proto.Relation.RelTypeCase.SET_OP => transformSetOperation(rel.getSetOp)
       case proto.Relation.RelTypeCase.SORT => transformSort(rel.getSort)
@@ -2063,6 +2063,42 @@ class SparkConnectPlanner(val sessionHolder: SessionHolder) extends Logging {
 
       case _ =>
         throw InvalidPlanInput(s"Unsupported set operation ${u.getSetOpTypeValue}")
+    }
+  }
+
+  private def transformJoinWith(rel: proto.Join): LogicalPlan = {
+    val joined =
+      session.sessionState.executePlan(transformJoin(rel)).analyzed.asInstanceOf[logical.Join]
+
+    // Return if the left & right dataType is a struct
+    def isLeftRightStruct(struct: DataType): (Boolean, Boolean) = {
+      assert(struct.isInstanceOf[StructType])
+      val schema = struct.asInstanceOf[StructType]
+      // assert left & right
+      assert(schema.fields.length == 2)
+      assert(schema.fields(0).name == "left")
+      assert(schema.fields(1).name == "right")
+      (
+        schema.fields(0).dataType.isInstanceOf[StructType],
+        schema.fields(1).dataType.isInstanceOf[StructType])
+    }
+
+    val (isLeftEncStruct, isRightEncStruct) = isLeftRightStruct(
+      transformDataType(rel.getLeftRightAsStruct))
+
+    JoinWith.typedJoinWith(
+      joined,
+      session.sqlContext.conf.dataFrameSelfJoinAutoResolveAmbiguity,
+      session.sessionState.analyzer.resolver,
+      isLeftEncStruct,
+      isRightEncStruct)
+  }
+
+  private def transformJoinOrJoinWith(rel: proto.Join): LogicalPlan = {
+    if (rel.hasLeftRightAsStruct) {
+      transformJoinWith(rel)
+    } else {
+      transformJoin(rel)
     }
   }
 

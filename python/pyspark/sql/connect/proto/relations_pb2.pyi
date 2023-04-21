@@ -969,6 +969,7 @@ class Join(google.protobuf.message.Message):
     JOIN_CONDITION_FIELD_NUMBER: builtins.int
     JOIN_TYPE_FIELD_NUMBER: builtins.int
     USING_COLUMNS_FIELD_NUMBER: builtins.int
+    LEFT_RIGHT_AS_STRUCT_FIELD_NUMBER: builtins.int
     @property
     def left(self) -> global___Relation:
         """(Required) Left input relation for a Join."""
@@ -993,6 +994,11 @@ class Join(google.protobuf.message.Message):
 
         This field does not co-exist with join_condition.
         """
+    @property
+    def left_right_as_struct(self) -> pyspark.sql.connect.proto.types_pb2.DataType:
+        """Optional. Only provide the join left and right data types in a new struct when using joinWith
+        where the result is a Dataset.
+        """
     def __init__(
         self,
         *,
@@ -1001,28 +1007,46 @@ class Join(google.protobuf.message.Message):
         join_condition: pyspark.sql.connect.proto.expressions_pb2.Expression | None = ...,
         join_type: global___Join.JoinType.ValueType = ...,
         using_columns: collections.abc.Iterable[builtins.str] | None = ...,
+        left_right_as_struct: pyspark.sql.connect.proto.types_pb2.DataType | None = ...,
     ) -> None: ...
     def HasField(
         self,
         field_name: typing_extensions.Literal[
-            "join_condition", b"join_condition", "left", b"left", "right", b"right"
+            "_left_right_as_struct",
+            b"_left_right_as_struct",
+            "join_condition",
+            b"join_condition",
+            "left",
+            b"left",
+            "left_right_as_struct",
+            b"left_right_as_struct",
+            "right",
+            b"right",
         ],
     ) -> builtins.bool: ...
     def ClearField(
         self,
         field_name: typing_extensions.Literal[
+            "_left_right_as_struct",
+            b"_left_right_as_struct",
             "join_condition",
             b"join_condition",
             "join_type",
             b"join_type",
             "left",
             b"left",
+            "left_right_as_struct",
+            b"left_right_as_struct",
             "right",
             b"right",
             "using_columns",
             b"using_columns",
         ],
     ) -> None: ...
+    def WhichOneof(
+        self,
+        oneof_group: typing_extensions.Literal["_left_right_as_struct", b"_left_right_as_struct"],
+    ) -> typing_extensions.Literal["left_right_as_struct"] | None: ...
 
 global___Join = Join
 

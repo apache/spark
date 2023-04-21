@@ -111,9 +111,16 @@ object AgnosticEncoders {
 
   object ProductEncoder {
     val cachedCls = new ConcurrentHashMap[Int, Class[_]]
-    def tuple(encoders: Seq[AgnosticEncoder[_]]): AgnosticEncoder[_] = {
+    def tuple(
+        encoders: Seq[AgnosticEncoder[_]],
+        fieldNullables: Option[Seq[Boolean]] = None): AgnosticEncoder[_] = {
       val fields = encoders.zipWithIndex.map {
-        case (e, id) => EncoderField(s"_${id + 1}", e, e.nullable, Metadata.empty)
+        case (e, id) =>
+          EncoderField(
+            s"_${id + 1}",
+            e,
+            fieldNullables.map(nullables => nullables(id)).getOrElse(e.nullable),
+            Metadata.empty)
       }
       val cls = cachedCls.computeIfAbsent(encoders.size,
         _ => Utils.getContextOrSparkClassLoader.loadClass(s"scala.Tuple${encoders.size}"))

@@ -28,7 +28,7 @@ import org.apache.arrow.vector.ipc.ArrowStreamReader
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, ExpressionEncoder, RowEncoder}
-import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.UnboundRowEncoder
+import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{ProductEncoder, UnboundRowEncoder}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder.Deserializer
 import org.apache.spark.sql.connect.client.util.{AutoCloseables, Cleanable}
 import org.apache.spark.sql.connect.common.DataTypeProtoConverter
@@ -54,7 +54,25 @@ private[sql] class SparkResult[T](
       // Create a row encoder based on the schema.
       RowEncoder.encoderFor(schema).asInstanceOf[AgnosticEncoder[T]]
     } else {
-      encoder
+      encoder match {
+        case ProductEncoder(clsTag, fields) if fields.exists(f => f.enc == UnboundRowEncoder) =>
+          assert(fields.length == schema.fields.length)
+          val updatedFields = fields.zipWithIndex.map { case (f, id) =>
+            // If the product encoder is the row encoder, then it need to be replaced with the
+            // encoder inferred from the schema.
+            f.enc match {
+              case UnboundRowEncoder =>
+                // There must be a corresponding struct for the row in the schema
+                val rowSchema = schema.fields(id).dataType.asInstanceOf[StructType]
+                f.copy(enc = RowEncoder.encoderFor(rowSchema).asInstanceOf[AgnosticEncoder[T]])
+              case _ =>
+                f
+            }
+          }
+          ProductEncoder[T](clsTag, updatedFields)
+        case _ =>
+          encoder
+      }
     }
     ExpressionEncoder(agnosticEncoder)
   }
