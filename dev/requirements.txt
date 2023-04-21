@@ -20,8 +20,8 @@ openpyxl
 coverage
 
 # Linter
-mypy==0.920
-pytest-mypy-plugins==1.9.3
+mypy==1.2.0
+pytest-mypy-plugins==1.10.1
 flake8==3.9.0
 # See SPARK-38680.
 pandas-stubs<1.2.0.54
