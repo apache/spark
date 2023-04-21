@@ -925,7 +925,7 @@ class Analyzer(override val catalogManager: CatalogManager)
         if (metaCols.isEmpty) {
           node
         } else {
-          val newNode = addMetadataCol(node)
+          val newNode = node.mapChildren(addMetadataCol(_, metaCols.map(_.exprId).toSet))
           // We should not change the output schema of the plan. We should project away the extra
           // metadata columns if necessary.
           if (newNode.sameOutput(node)) {
@@ -959,16 +959,20 @@ class Analyzer(override val catalogManager: CatalogManager)
       })
     }
 
-    private def addMetadataCol(plan: LogicalPlan): LogicalPlan = plan match {
-      case s: ExposesMetadataColumns => s.withMetadataColumns()
-      case p: Project =>
+    private def addMetadataCol(
+        plan: LogicalPlan,
+        requiredAttrIds: Set[ExprId]): LogicalPlan = plan match {
+      case s: ExposesMetadataColumns if s.metadataOutput.exists(a =>
+        requiredAttrIds.contains(a.exprId)) =>
+        s.withMetadataColumns()
+      case p: Project if p.metadataOutput.exists(a => requiredAttrIds.contains(a.exprId)) =>
         val newProj = p.copy(
           // Do not leak the qualified-access-only restriction to normal plan outputs.
           projectList = p.projectList ++ p.metadataOutput.map(_.markAsAllowAnyAccess()),
-          child = addMetadataCol(p.child))
+          child = addMetadataCol(p.child, requiredAttrIds))
         newProj.copyTagsFrom(p)
         newProj
-      case _ => plan.withNewChildren(plan.children.map(addMetadataCol))
+      case _ => plan.withNewChildren(plan.children.map(addMetadataCol(_, requiredAttrIds)))
     }
   }
 
