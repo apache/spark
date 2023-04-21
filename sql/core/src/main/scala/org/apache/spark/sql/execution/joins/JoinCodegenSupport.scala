@@ -42,6 +42,10 @@ trait JoinCodegenSupport extends CodegenSupport with BaseJoinExec {
       buildRow: Option[String] = None): (String, String, Seq[ExprCode]) = {
     val buildSideRow = buildRow.getOrElse(ctx.freshName("buildRow"))
     val buildVars = genOneSideJoinVars(ctx, buildSideRow, buildPlan, setDefaultValue = false)
+    // We want to evaluate the passed streamVars. However, evaluation modifies the contained
+    // ExprCode instances, which may surprise the caller to this method (in particular,
+    // full outer join will want to evaluate streamVars in a different scope than the
+    // condition check). Because of this, we first make a copy.
     val streamVars2 = streamVars.map(_.copy())
     val checkCondition = if (condition.isDefined) {
       val expr = condition.get
