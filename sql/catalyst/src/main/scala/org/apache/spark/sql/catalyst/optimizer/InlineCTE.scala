@@ -77,7 +77,7 @@ case class InlineCTE(alwaysInline: Boolean = false) extends Rule[LogicalPlan] {
    *               ids. The value of the map is tuple whose elements are:
    *               - The CTE definition
    *               - The number of incoming references to the CTE. This includes references from
-   *                 outer CTEs and regular places.
+   *                 other CTEs and regular places.
    *               - A mutable inner map that tracks outgoing references (counts) to other CTEs.
    * @param outerCTEId While collecting the map we use this optional CTE id to identify the
    *                   current outer CTE.
