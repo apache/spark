@@ -275,7 +275,7 @@ class ChannelBuilder:
             raise SparkConnectException(
                 f"'user_agent' parameter should not exceed 2048 characters, found {len} characters."
             )
-        return self.params.get(ChannelBuilder.PARAM_USER_AGENT, "_SPARK_CONNECT_PYTHON")
+        return user_agent
 
     def get(self, key: str) -> Any:
         """
