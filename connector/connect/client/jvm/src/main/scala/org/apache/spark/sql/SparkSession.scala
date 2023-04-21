@@ -478,7 +478,7 @@ class SparkSession private[sql] (
         .newBuilder()
         .setData(localRelation.getData)
         .build()
-      response.setArrowBatch(batch).setIsLocalBuilt(true)
+      response.setArrowBatch(batch)
       Seq[proto.ExecutePlanResponse](response.build()).iterator.asJava
     } else {
       client.execute(plan)

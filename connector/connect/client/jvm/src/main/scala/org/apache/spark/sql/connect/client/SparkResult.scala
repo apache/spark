@@ -81,7 +81,7 @@ private[sql] class SparkResult[T](
           while (reader.loadNextBatch()) {
             val rowCount = root.getRowCount
             assert(
-              response.getIsLocalBuilt ||
+              !response.getArrowBatch.hasRowCount ||
                 root.getRowCount == response.getArrowBatch.getRowCount
             ) // HUH!
             if (rowCount > 0) {

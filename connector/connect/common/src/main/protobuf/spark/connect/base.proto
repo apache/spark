@@ -339,9 +339,6 @@ message ExecutePlanResponse {
   // (Optional) The Spark schema. This field is available when `collect` is called.
   DataType schema = 7;
 
-  // (Optional) Whether the ExecutePlanRequest is locally built.
-  optional bool is_local_built = 11;
-
   // A SQL command returns an opaque Relation that can be directly used as input for the next
   // call.
   message SqlCommandResult {
@@ -350,7 +347,7 @@ message ExecutePlanResponse {
 
   // Batch results of metrics.
   message ArrowBatch {
-    int64 row_count = 1;
+    optional int64 row_count = 1;
     bytes data = 2;
   }
 
