@@ -74,7 +74,6 @@ class SparkConnectService(debug: Boolean)
   }
 
   private def buildStatusFromThrowable(st: Throwable): RPCStatus = {
-    val message = StringUtils.abbreviate(st.getMessage, 2048)
     RPCStatus
       .newBuilder()
       .setCode(RPCCode.INTERNAL_VALUE)
@@ -86,7 +85,7 @@ class SparkConnectService(debug: Boolean)
             .setDomain("org.apache.spark")
             .putMetadata("classes", compact(render(allClasses(st.getClass).map(_.getName))))
             .build()))
-      .setMessage(if (message != null) message else "")
+      .setMessage(SparkConnectService.extractErrorMessage(st))
       .build()
   }
 
@@ -293,6 +292,15 @@ object SparkConnectService {
       } else {
         server.shutdownNow()
       }
+    }
+  }
+
+  def extractErrorMessage(st: Throwable): String = {
+    val message = StringUtils.abbreviate(st.getMessage, 2048)
+    if (message != null) {
+      message
+    } else {
+      ""
     }
   }
 }

@@ -52,7 +52,7 @@ import org.apache.spark.sql.connect.artifact.SparkConnectArtifactManager
 import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, InvalidPlanInput, LiteralValueProtoConverter, StorageLevelProtoConverter, UdfPacket}
 import org.apache.spark.sql.connect.config.Connect.CONNECT_GRPC_ARROW_MAX_BATCH_SIZE
 import org.apache.spark.sql.connect.plugin.SparkConnectPluginRegistry
-import org.apache.spark.sql.connect.service.SparkConnectStreamHandler
+import org.apache.spark.sql.connect.service.{SparkConnectService, SparkConnectStreamHandler}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.arrow.ArrowConverters
@@ -2205,6 +2205,23 @@ class SparkConnectPlanner(val session: SparkSession) {
           .setResult(result)
           .build()
         respBuilder.setExplain(explain)
+
+      case StreamingQueryCommand.CommandCase.EXCEPTION =>
+        val result = query.exception
+        result.foreach(e =>
+          respBuilder.getExceptionBuilder
+            .setExceptionMessage(SparkConnectService.extractErrorMessage(e)))
+
+      case StreamingQueryCommand.CommandCase.AWAIT_TERMINATION =>
+        if (command.getAwaitTermination.hasTimeoutMs) {
+          val terminated = query.awaitTermination(command.getAwaitTermination.getTimeoutMs)
+          respBuilder.getAwaitTerminationBuilder
+            .setTerminated(terminated)
+        } else {
+          query.awaitTermination()
+          respBuilder.getAwaitTerminationBuilder
+            .setTerminated(true)
+        }
 
       case StreamingQueryCommand.CommandCase.COMMAND_NOT_SET =>
         throw new IllegalArgumentException("Missing command in StreamingQueryCommand")
