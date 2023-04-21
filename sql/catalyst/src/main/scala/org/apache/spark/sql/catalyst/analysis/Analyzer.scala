@@ -1818,7 +1818,10 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
             "sqlExpr" -> a.sql,
             "cols" -> cols))
       }
-      resolved
+      resolved match {
+        case Alias(child: ExtractValue, _) => child
+        case other => other
+      }
     }
 
     // Expand the star expression using the input plan first. If failed, try resolve
