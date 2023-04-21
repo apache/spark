@@ -6,7 +6,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkIllegalArgumentException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2007",
+  "errorClass" : "REGEX_GROUP_INDEX_EXCEED_REGEX_GROUP_COUNT",
   "messageParameters" : {
     "groupCount" : "0",
     "groupIndex" : "1"
@@ -29,7 +29,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkIllegalArgumentException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2007",
+  "errorClass" : "REGEX_GROUP_INDEX_EXCEED_REGEX_GROUP_COUNT",
   "messageParameters" : {
     "groupCount" : "0",
     "groupIndex" : "1"
@@ -44,7 +44,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkIllegalArgumentException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2007",
+  "errorClass" : "REGEX_GROUP_INDEX_EXCEED_REGEX_GROUP_COUNT",
   "messageParameters" : {
     "groupCount" : "0",
     "groupIndex" : "2"
@@ -118,7 +118,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkIllegalArgumentException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2007",
+  "errorClass" : "REGEX_GROUP_INDEX_EXCEED_REGEX_GROUP_COUNT",
   "messageParameters" : {
     "groupCount" : "2",
     "groupIndex" : "3"
@@ -177,7 +177,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkIllegalArgumentException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2007",
+  "errorClass" : "REGEX_GROUP_INDEX_EXCEED_REGEX_GROUP_COUNT",
   "messageParameters" : {
     "groupCount" : "0",
     "groupIndex" : "1"
@@ -200,7 +200,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkIllegalArgumentException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2007",
+  "errorClass" : "REGEX_GROUP_INDEX_EXCEED_REGEX_GROUP_COUNT",
   "messageParameters" : {
     "groupCount" : "0",
     "groupIndex" : "1"
@@ -215,7 +215,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkIllegalArgumentException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2007",
+  "errorClass" : "REGEX_GROUP_INDEX_EXCEED_REGEX_GROUP_COUNT",
   "messageParameters" : {
     "groupCount" : "0",
     "groupIndex" : "2"
@@ -289,7 +289,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkIllegalArgumentException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2007",
+  "errorClass" : "REGEX_GROUP_INDEX_EXCEED_REGEX_GROUP_COUNT",
   "messageParameters" : {
     "groupCount" : "2",
     "groupIndex" : "3"

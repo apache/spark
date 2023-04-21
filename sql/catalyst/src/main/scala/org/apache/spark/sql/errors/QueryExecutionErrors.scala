@@ -366,7 +366,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
   def regexGroupIndexExceedGroupCountError(
       groupCount: Int, groupIndex: Int): SparkIllegalArgumentException = {
     new SparkIllegalArgumentException(
-      errorClass = "_LEGACY_ERROR_TEMP_2007",
+      errorClass = "REGEX_GROUP_INDEX_EXCEED_REGEX_GROUP_COUNT",
       messageParameters = Map(
         "groupCount" -> groupCount.toString(),
         "groupIndex" -> groupIndex.toString()))
