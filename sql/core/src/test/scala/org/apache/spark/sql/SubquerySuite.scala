@@ -1932,6 +1932,9 @@ class SubquerySuite extends QueryTest
     checkAnswer(
       sql("select a, (select (count(1)) is null from r where a = c) from l where a < 4"),
       Row(1, false) :: Row(1, false) :: Row(2, false) :: Row(2, false) :: Row(3, false) :: Nil)
+    checkAnswer(
+      sql("select a, (select (count(1)) is null from r where a = c group by c) from l where a < 4"),
+      Row(1, null) :: Row(1, null) :: Row(2, false) :: Row(2, false) :: Row(3, false) :: Nil)
   }
 
   test("SPARK-32290: SingleColumn Null Aware Anti Join Optimize") {

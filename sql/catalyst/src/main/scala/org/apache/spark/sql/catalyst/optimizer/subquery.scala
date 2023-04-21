@@ -620,7 +620,7 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] with AliasHelpe
           // CASE 1: Subquery guaranteed not to have the COUNT bug because it evaluates to NULL
           // with zero tuples.
           planWithoutCountBug
-        } else if (resultFoldable) {
+        } else if (mayHaveCountBug.getOrElse(false) && resultFoldable) {
           val alias = Alias(resultWithZeroTups.get, origOutput.name)()
           subqueryAttrMapping += (origOutput -> alias.toAttribute)
           Project(
