@@ -18,6 +18,7 @@
 package org.apache.spark.sql.connector
 
 import org.apache.spark.sql.{AnalysisException, Row}
+import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.functions.struct
 
 class MetadataColumnSuite extends DatasourceV2SQLBase {
@@ -230,6 +231,22 @@ class MetadataColumnSuite extends DatasourceV2SQLBase {
         spark.table(tbl).select("id", "index", "_partition"),
         Seq(Row(3, 0, "3"), Row(2, 0, "2"), Row(1, 0, "1"))
       )
+    }
+  }
+
+  test("SPARK-41660: only propagate metadata columns if they are used") {
+    withTable(tbl) {
+      prepareTable()
+      val df = sql(s"SELECT t2.id FROM $tbl t1 JOIN $tbl t2 USING (id)")
+      val scans = df.logicalPlan.collect {
+        case d: DataSourceV2Relation => d
+      }
+      assert(scans.length == 2)
+      scans.foreach { scan =>
+        // The query only access join hidden columns, and scan nodes should not expose its metadata
+        // columns.
+        assert(scan.output.map(_.name) == Seq("id", "data"))
+      }
     }
   }
 }
