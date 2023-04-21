@@ -43,14 +43,15 @@ import sun.misc.{Signal, SignalHandler}
 import org.apache.spark.{ErrorMessageFormat, SparkConf, SparkThrowable, SparkThrowableHelper}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{AnalysisException, SQLContext}
+import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.util.SQLKeywordUtils
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.client.HiveClientImpl
 import org.apache.spark.sql.hive.security.HiveDelegationTokenProvider
 import org.apache.spark.sql.hive.thriftserver.SparkSQLCLIDriver.closeHiveSessionStateIfStarted
-import org.apache.spark.sql.internal.SharedState
+import org.apache.spark.sql.internal.{SharedState, SQLConf}
 import org.apache.spark.sql.internal.SQLConf.LEGACY_EMPTY_CURRENT_DB_IN_CLI
 import org.apache.spark.util.ShutdownHookManager
 import org.apache.spark.util.SparkExitCode._
@@ -237,7 +238,7 @@ private[hive] object SparkSQLCLIDriver extends Logging {
     reader.setBellEnabled(false)
     reader.setExpandEvents(false)
     // reader.setDebug(new PrintWriter(new FileWriter("writer.debug", true)))
-    getCommandCompleter(SparkSQLEnv.sqlContext).foreach(reader.addCompleter)
+    getCommandCompleter.foreach(reader.addCompleter)
 
     val historyDirectory = System.getProperty("user.home")
 
@@ -339,14 +340,14 @@ private[hive] object SparkSQLCLIDriver extends Logging {
     }
   }
 
-  private def getCommandCompleter(context: SQLContext): Array[Completer] = {
+  private def getCommandCompleter(): Array[Completer] = {
     // StringsCompleter matches against a pre-defined wordlist
     // We start with an empty wordlist and build it up
     val candidateStrings = new JArrayList[String]
     // We add Spark SQL function names
     // For functions that aren't infix operators, we add an open
     // parenthesis at the end.
-    context.sessionState.functionRegistry.listFunction().map(_.funcName).foreach { s =>
+    FunctionRegistry.builtin.listFunction().map(_.funcName).foreach { s =>
       if (s.matches("[a-z_]+")) {
         candidateStrings.add(s + "(")
       } else {
@@ -393,7 +394,7 @@ private[hive] object SparkSQLCLIDriver extends Logging {
       }
     }
 
-    val confCompleter = new StringsCompleter(context.conf.getAllDefinedConfs.map(_._1).asJava) {
+    val confCompleter = new StringsCompleter(SQLConf.get.getAllDefinedConfs.map(_._1).asJava) {
       override def complete(buffer: String, cursor: Int, clist: JList[CharSequence]): Int = {
         super.complete(buffer, cursor, clist)
       }
