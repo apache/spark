@@ -36,6 +36,7 @@ import org.apache.commons.lang3.{JavaVersion, SystemUtils}
 import org.apache.commons.math3.stat.inference.ChiSquareTest
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
+import org.apache.hadoop.ipc.{CallerContext => HadoopCallerContext}
 import org.apache.logging.log4j.Level
 
 import org.apache.spark.{SparkConf, SparkException, SparkFunSuite, TaskContext}
@@ -958,7 +959,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
     val context = "test"
     new CallerContext(context).setCurrentContext()
     if (CallerContext.callerContextEnabled) {
-      assert(s"SPARK_$context" === org.apache.hadoop.ipc.CallerContext.getCurrent.toString)
+      assert(s"SPARK_$context" === HadoopCallerContext.getCurrent.toString)
     }
   }
 
