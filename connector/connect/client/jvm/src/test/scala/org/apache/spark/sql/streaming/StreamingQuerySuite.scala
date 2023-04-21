@@ -85,34 +85,32 @@ class StreamingQuerySuite extends RemoteSparkSession with SQLHelper {
     ) {
       spark.sql("DROP TABLE IF EXISTS my_table")
 
-      withTempPath {
-        ckpt =>
-          val q1 = spark.readStream
-            .format("rate")
-            .load()
-            .writeStream
-            .option("checkpointLocation", ckpt.getCanonicalPath)
-            .toTable("my_table")
+      withTempPath { ckpt =>
+        val q1 = spark.readStream
+          .format("rate")
+          .load()
+          .writeStream
+          .option("checkpointLocation", ckpt.getCanonicalPath)
+          .toTable("my_table")
 
-          val q2 = spark.readStream
-            .table("my_table")
-            .writeStream
-            .format("memory")
-            .queryName("my_sink")
-            .start()
+        val q2 = spark.readStream
+          .table("my_table")
+          .writeStream
+          .format("memory")
+          .queryName("my_sink")
+          .start()
 
-          try {
-            q1.processAllAvailable()
-            q2.processAllAvailable()
-            eventually(timeout(10.seconds)) {
-              assert(spark.table("my_sink").count() > 0)
-            }
+        try {
+          q1.processAllAvailable()
+          q2.processAllAvailable()
+          eventually(timeout(10.seconds)) {
+            assert(spark.table("my_sink").count() > 0)
           }
-          finally {
-            q1.stop()
-            q2.stop()
-            spark.sql("DROP TABLE my_table")
-          }
+        } finally {
+          q1.stop()
+          q2.stop()
+          spark.sql("DROP TABLE my_table")
+        }
       }
     }
   }

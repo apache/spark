@@ -122,6 +122,11 @@ class ProtoToParsedPlanTestSuite
       new StructType().add("id", "long"),
       Array.empty[Transform],
       emptyProps)
+    inMemoryCatalog.createTable(
+      Identifier.of(Array("tempdb"), "myStreamingTable"),
+      new StructType().add("id", "long"),
+      Array.empty[Transform],
+      emptyProps)
 
     val catalogManager = new CatalogManager(
       inMemoryCatalog,
