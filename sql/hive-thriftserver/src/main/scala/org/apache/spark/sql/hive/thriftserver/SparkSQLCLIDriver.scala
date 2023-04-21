@@ -399,9 +399,9 @@ private[hive] object SparkSQLCLIDriver extends Logging {
       }
     }
 
-    val setCompleter = new StringsCompleter("set") {
+    val setCompleter = new StringsCompleter("set", "Set", "SET") {
       override def complete(buffer: String, cursor: Int, clist: JList[CharSequence]): Int = {
-        if (buffer != null && buffer.equals("set")) {
+        if (buffer != null && buffer.equalsIgnoreCase("set")) {
           super.complete(buffer, cursor, clist)
         } else {
           -1
