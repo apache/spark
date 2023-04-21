@@ -144,59 +144,23 @@ object DataTypeProtoConverter {
 
   def toConnectProtoType(t: DataType): proto.DataType = {
     t match {
-      case NullType =>
-        proto.DataType
-          .newBuilder()
-          .setNull(proto.DataType.NULL.getDefaultInstance)
-          .build()
+      case NullType => ProtoDataTypes.NullType
 
-      case BooleanType =>
-        proto.DataType
-          .newBuilder()
-          .setBoolean(proto.DataType.Boolean.getDefaultInstance)
-          .build()
+      case BooleanType => ProtoDataTypes.BooleanType
 
-      case BinaryType =>
-        proto.DataType
-          .newBuilder()
-          .setBinary(proto.DataType.Binary.getDefaultInstance)
-          .build()
+      case BinaryType => ProtoDataTypes.BinaryType
 
-      case ByteType =>
-        proto.DataType
-          .newBuilder()
-          .setByte(proto.DataType.Byte.getDefaultInstance)
-          .build()
+      case ByteType => ProtoDataTypes.ByteType
 
-      case ShortType =>
-        proto.DataType
-          .newBuilder()
-          .setShort(proto.DataType.Short.getDefaultInstance)
-          .build()
+      case ShortType => ProtoDataTypes.ShortType
 
-      case IntegerType =>
-        proto.DataType
-          .newBuilder()
-          .setInteger(proto.DataType.Integer.getDefaultInstance)
-          .build()
+      case IntegerType => ProtoDataTypes.IntegerType
 
-      case LongType =>
-        proto.DataType
-          .newBuilder()
-          .setLong(proto.DataType.Long.getDefaultInstance)
-          .build()
+      case LongType => ProtoDataTypes.LongType
 
-      case FloatType =>
-        proto.DataType
-          .newBuilder()
-          .setFloat(proto.DataType.Float.getDefaultInstance)
-          .build()
+      case FloatType => ProtoDataTypes.FloatType
 
-      case DoubleType =>
-        proto.DataType
-          .newBuilder()
-          .setDouble(proto.DataType.Double.getDefaultInstance)
-          .build()
+      case DoubleType => ProtoDataTypes.DoubleType
 
       case DecimalType.Fixed(precision, scale) =>
         proto.DataType
@@ -205,11 +169,7 @@ object DataTypeProtoConverter {
             proto.DataType.Decimal.newBuilder().setPrecision(precision).setScale(scale).build())
           .build()
 
-      case StringType =>
-        proto.DataType
-          .newBuilder()
-          .setString(proto.DataType.String.getDefaultInstance)
-          .build()
+      case StringType => ProtoDataTypes.StringType
 
       case CharType(length) =>
         proto.DataType
@@ -223,29 +183,13 @@ object DataTypeProtoConverter {
           .setVarChar(proto.DataType.VarChar.newBuilder().setLength(length).build())
           .build()
 
-      case DateType =>
-        proto.DataType
-          .newBuilder()
-          .setDate(proto.DataType.Date.getDefaultInstance)
-          .build()
+      case DateType => ProtoDataTypes.DateType
 
-      case TimestampType =>
-        proto.DataType
-          .newBuilder()
-          .setTimestamp(proto.DataType.Timestamp.getDefaultInstance)
-          .build()
+      case TimestampType => ProtoDataTypes.TimestampType
 
-      case TimestampNTZType =>
-        proto.DataType
-          .newBuilder()
-          .setTimestampNtz(proto.DataType.TimestampNTZ.getDefaultInstance)
-          .build()
+      case TimestampNTZType => ProtoDataTypes.TimestampNTZType
 
-      case CalendarIntervalType =>
-        proto.DataType
-          .newBuilder()
-          .setCalendarInterval(proto.DataType.CalendarInterval.getDefaultInstance)
-          .build()
+      case CalendarIntervalType => ProtoDataTypes.CalendarIntervalType
 
       case YearMonthIntervalType(startField, endField) =>
         proto.DataType

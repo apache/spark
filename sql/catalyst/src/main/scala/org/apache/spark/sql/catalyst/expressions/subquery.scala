@@ -254,13 +254,20 @@ object SubExprUtils extends PredicateHelper {
  * scalar subquery during planning.
  *
  * Note: `exprId` is used to have a unique name in explain string output.
+ *
+ * `mayHaveCountBug` is whether it's possible for the subquery to evaluate to non-null on
+ * empty input (zero tuples). It is false if the subquery has a GROUP BY clause, because in that
+ * case the subquery yields no row at all on empty input to the GROUP BY, which evaluates to NULL.
+ * It is set in PullupCorrelatedPredicates to true/false, before it is set its value is None.
+ * See constructLeftJoins in RewriteCorrelatedScalarSubquery for more details.
  */
 case class ScalarSubquery(
     plan: LogicalPlan,
     outerAttrs: Seq[Expression] = Seq.empty,
     exprId: ExprId = NamedExpression.newExprId,
     joinCond: Seq[Expression] = Seq.empty,
-    hint: Option[HintInfo] = None)
+    hint: Option[HintInfo] = None,
+    mayHaveCountBug: Option[Boolean] = None)
   extends SubqueryExpression(plan, outerAttrs, exprId, joinCond, hint) with Unevaluable {
   override def dataType: DataType = {
     assert(plan.schema.fields.nonEmpty, "Scalar subquery should have only one column")
@@ -347,16 +354,19 @@ case class ListQuery(
     plan: LogicalPlan,
     outerAttrs: Seq[Expression] = Seq.empty,
     exprId: ExprId = NamedExpression.newExprId,
-    childOutputs: Seq[Attribute] = Seq.empty,
+    // The plan of list query may have more columns after de-correlation, and we need to track the
+    // number of the columns of the original plan, to report the data type properly.
+    numCols: Int = -1,
     joinCond: Seq[Expression] = Seq.empty,
     hint: Option[HintInfo] = None)
   extends SubqueryExpression(plan, outerAttrs, exprId, joinCond, hint) with Unevaluable {
-  override def dataType: DataType = if (childOutputs.length > 1) {
+  def childOutputs: Seq[Attribute] = plan.output.take(numCols)
+  override def dataType: DataType = if (numCols > 1) {
     childOutputs.toStructType
   } else {
-    childOutputs.head.dataType
+    plan.output.head.dataType
   }
-  override lazy val resolved: Boolean = childrenResolved && plan.resolved && childOutputs.nonEmpty
+  override lazy val resolved: Boolean = childrenResolved && plan.resolved && numCols != -1
   override def nullable: Boolean = false
   override def withNewPlan(plan: LogicalPlan): ListQuery = copy(plan = plan)
   override def withNewHint(hint: Option[HintInfo]): ListQuery = copy(hint = hint)
@@ -366,7 +376,7 @@ case class ListQuery(
       plan.canonicalized,
       outerAttrs.map(_.canonicalized),
       ExprId(0),
-      childOutputs.map(_.canonicalized.asInstanceOf[Attribute]),
+      numCols,
       joinCond.map(_.canonicalized))
   }
 

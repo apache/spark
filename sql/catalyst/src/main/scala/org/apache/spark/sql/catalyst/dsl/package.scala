@@ -190,7 +190,7 @@ package object dsl {
       // Note that if we make ExpressionConversions an object rather than a trait, we can
       // then make this a value class to avoid the small penalty of runtime instantiation.
       def $(args: Any*): analysis.UnresolvedAttribute = {
-        analysis.UnresolvedAttribute(sc.s(args : _*))
+        analysis.UnresolvedAttribute(Seq(sc.s(args : _*)))
       }
     }
 
@@ -269,16 +269,19 @@ package object dsl {
     // TODO more implicit class for literal?
     implicit class DslString(val s: String) extends ImplicitOperators {
       override def expr: Expression = Literal(s)
-      def attr: UnresolvedAttribute = analysis.UnresolvedAttribute(s)
+      def attr: UnresolvedAttribute = analysis.UnresolvedAttribute(Seq(s))
     }
-    implicit class DslAttr(attr: UnresolvedAttribute) extends ImplicitAttribute {
-      def s: String = attr.name
+    implicit class DslAttr(override val attr: UnresolvedAttribute) extends ImplicitAttribute {
+      def s: String = {
+        assert(attr.nameParts.length == 1, "attribute must have single name part")
+        attr.nameParts.head
+      }
     }
 
     abstract class ImplicitAttribute extends ImplicitOperators {
       def s: String
       def expr: UnresolvedAttribute = attr
-      def attr: UnresolvedAttribute = analysis.UnresolvedAttribute(s)
+      def attr: UnresolvedAttribute = analysis.UnresolvedAttribute(Seq(s))
 
       /** Creates a new AttributeReference of type boolean */
       def boolean: AttributeReference = AttributeReference(s, BooleanType, nullable = true)()

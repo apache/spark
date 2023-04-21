@@ -361,11 +361,11 @@ abstract class TypeCoercionBase {
 
       // Handle type casting required between value expression and subquery output
       // in IN subquery.
-      case i @ InSubquery(lhs, ListQuery(sub, children, exprId, _, conditions, _))
-          if !i.resolved && lhs.length == sub.output.length =>
+      case i @ InSubquery(lhs, l: ListQuery)
+          if !i.resolved && lhs.length == l.plan.output.length =>
         // LHS is the value expressions of IN subquery.
         // RHS is the subquery output.
-        val rhs = sub.output
+        val rhs = l.plan.output
 
         val commonTypes = lhs.zip(rhs).flatMap { case (l, r) =>
           findWiderTypeForTwo(l.dataType, r.dataType)
@@ -383,8 +383,7 @@ abstract class TypeCoercionBase {
             case (e, _) => e
           }
 
-          val newSub = Project(castedRhs, sub)
-          InSubquery(newLhs, ListQuery(newSub, children, exprId, newSub.output, conditions))
+          InSubquery(newLhs, l.withNewPlan(Project(castedRhs, l.plan)))
         } else {
           i
         }

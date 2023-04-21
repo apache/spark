@@ -25,7 +25,7 @@ import pyspark.pandas as ps
 from pyspark.testing.pandasutils import PandasOnSparkTestCase, TestUtils
 
 
-class DatetimeIndexTest(PandasOnSparkTestCase, TestUtils):
+class DatetimeIndexTestsMixin:
     @property
     def fixed_freqs(self):
         return [
@@ -247,6 +247,10 @@ class DatetimeIndexTest(PandasOnSparkTestCase, TestUtils):
 
         mapper_pser = pd.Series([1, 2, 3], index=pidx)
         self.assert_eq(psidx.map(mapper_pser), pidx.map(mapper_pser))
+
+
+class DatetimeIndexTests(DatetimeIndexTestsMixin, PandasOnSparkTestCase, TestUtils):
+    pass
 
 
 if __name__ == "__main__":

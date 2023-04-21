@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.util
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.{Expression, RowOrdering}
+import org.apache.spark.sql.catalyst.types.{PhysicalDataType, PhysicalNumericType}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
 import org.apache.spark.sql.types._
 
@@ -85,19 +86,17 @@ object TypeUtils extends QueryErrorsBase {
 
   def getNumeric(t: DataType, exactNumericRequired: Boolean = false): Numeric[Any] = {
     if (exactNumericRequired) {
-      t.asInstanceOf[NumericType].exactNumeric.asInstanceOf[Numeric[Any]]
+      PhysicalNumericType.exactNumeric(t.asInstanceOf[NumericType])
     } else {
-      t.asInstanceOf[NumericType].numeric.asInstanceOf[Numeric[Any]]
+      PhysicalNumericType.numeric(t.asInstanceOf[NumericType])
     }
   }
 
   @scala.annotation.tailrec
   def getInterpretedOrdering(t: DataType): Ordering[Any] = {
     t match {
-      case i: AtomicType => i.ordering.asInstanceOf[Ordering[Any]]
-      case a: ArrayType => a.interpretedOrdering.asInstanceOf[Ordering[Any]]
-      case s: StructType => s.interpretedOrdering.asInstanceOf[Ordering[Any]]
       case udt: UserDefinedType[_] => getInterpretedOrdering(udt.sqlType)
+      case other => PhysicalDataType.ordering(other)
     }
   }
 

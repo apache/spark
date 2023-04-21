@@ -204,17 +204,6 @@
 
   <profiles>
     <profile>
-      <id>hadoop-2</id>
-      <dependencies>
-        <dependency>
-          <groupId>com.amazonaws</groupId>
-          <artifactId>aws-java-sdk</artifactId>
-          <version>1.7.4</version>
-          <scope>test</scope>
-        </dependency>
-      </dependencies>
-    </profile>
-    <profile>
       <id>hadoop-3</id>
       <activation>
         <activeByDefault>true</activeByDefault>

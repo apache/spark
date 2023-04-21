@@ -43,6 +43,7 @@ from pyspark.sql.types import (
     BinaryType,
     StructField,
     ArrayType,
+    MapType,
     NullType,
     DayTimeIntervalType,
 )
@@ -532,8 +533,10 @@ class ArrowTestsMixin:
             self.check_createDataFrame_with_single_data_type()
 
     def check_createDataFrame_with_single_data_type(self):
-        with self.assertRaisesRegex(ValueError, ".*IntegerType.*not supported.*"):
-            self.spark.createDataFrame(pd.DataFrame({"a": [1]}), schema="int").collect()
+        for schema in ["int", IntegerType()]:
+            with self.subTest(schema=schema):
+                with self.assertRaisesRegex(ValueError, ".*IntegerType.*not supported.*"):
+                    self.spark.createDataFrame(pd.DataFrame({"a": [1]}), schema=schema).collect()
 
     def test_createDataFrame_does_not_modify_input(self):
         # Some series get converted for Spark to consume, this makes sure input is unchanged
@@ -567,14 +570,16 @@ class ArrowTestsMixin:
         )
         arrs = self.create_np_arrs
 
-        for arr, dtypes in zip(arrs, expected_dtypes):
-            with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": arrow_enabled}):
+        with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": arrow_enabled}):
+            for arr, dtypes in zip(arrs, expected_dtypes):
                 df = self.spark.createDataFrame(arr)
-            self.assertEqual(df.dtypes, dtypes)
-            np.array_equal(np.array(df.collect()), arr)
+                self.assertEqual(df.dtypes, dtypes)
+                np.array_equal(np.array(df.collect()), arr)
 
-        with self.assertRaisesRegex(ValueError, "NumPy array input should be of 1 or 2 dimensions"):
-            self.spark.createDataFrame(np.array(0))
+            with self.assertRaisesRegex(
+                ValueError, "NumPy array input should be of 1 or 2 dimensions"
+            ):
+                self.spark.createDataFrame(np.array(0))
 
     def test_createDataFrame_with_array_type(self):
         for arrow_enabled in [True, False]:
@@ -618,20 +623,23 @@ class ArrowTestsMixin:
         map_data = [{"a": 1}, {"b": 2, "c": 3}, {}, None, {"d": None}]
 
         pdf = pd.DataFrame({"id": [0, 1, 2, 3, 4], "m": map_data})
-        schema = "id long, m map<string, long>"
+        for schema in (
+            "id long, m map<string, long>",
+            StructType().add("id", LongType()).add("m", MapType(StringType(), LongType())),
+        ):
+            with self.subTest(schema=schema):
+                with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": arrow_enabled}):
+                    if arrow_enabled and LooseVersion(pa.__version__) < LooseVersion("2.0.0"):
+                        with self.assertRaisesRegex(Exception, "MapType.*only.*pyarrow 2.0.0"):
+                            self.spark.createDataFrame(pdf, schema=schema).collect()
+                    else:
+                        df = self.spark.createDataFrame(pdf, schema=schema)
 
-        with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": arrow_enabled}):
-            if arrow_enabled and LooseVersion(pa.__version__) < LooseVersion("2.0.0"):
-                with self.assertRaisesRegex(Exception, "MapType.*only.*pyarrow 2.0.0"):
-                    self.spark.createDataFrame(pdf, schema=schema).collect()
-            else:
-                df = self.spark.createDataFrame(pdf, schema=schema)
+                        result = df.collect()
 
-                result = df.collect()
-
-                for row in result:
-                    i, m = row
-                    self.assertEqual(m, map_data[i])
+                        for row in result:
+                            i, m = row
+                            self.assertEqual(m, map_data[i])
 
     def test_createDataFrame_with_string_dtype(self):
         # SPARK-34521: spark.createDataFrame does not support Pandas StringDtype extension type
@@ -665,16 +673,20 @@ class ArrowTestsMixin:
             {"id": [0, 1, 2, 3], "m": [{}, {"a": 1}, {"a": 1, "b": 2}, {"a": 1, "b": 2, "c": 3}]}
         )
 
-        with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": False}):
-            df = self.spark.createDataFrame(origin, schema="id long, m map<string, long>")
+        for schema in [
+            "id long, m map<string, long>",
+            StructType().add("id", LongType()).add("m", MapType(StringType(), LongType())),
+        ]:
+            with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": False}):
+                df = self.spark.createDataFrame(origin, schema=schema)
 
-        with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": arrow_enabled}):
-            if arrow_enabled and LooseVersion(pa.__version__) < LooseVersion("2.0.0"):
-                with self.assertRaisesRegex(Exception, "MapType.*only.*pyarrow 2.0.0"):
-                    df.toPandas()
-            else:
-                pdf = df.toPandas()
-                assert_frame_equal(origin, pdf)
+            with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": arrow_enabled}):
+                if arrow_enabled and LooseVersion(pa.__version__) < LooseVersion("2.0.0"):
+                    with self.assertRaisesRegex(Exception, "MapType.*only.*pyarrow 2.0.0"):
+                        df.toPandas()
+                else:
+                    pdf = df.toPandas()
+                    assert_frame_equal(origin, pdf)
 
     def test_toPandas_with_map_type_nulls(self):
         with QuietTest(self.sc):
@@ -687,16 +699,20 @@ class ArrowTestsMixin:
             {"id": [0, 1, 2, 3, 4], "m": [{"a": 1}, {"b": 2, "c": 3}, {}, None, {"d": None}]}
         )
 
-        with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": False}):
-            df = self.spark.createDataFrame(origin, schema="id long, m map<string, long>")
+        for schema in [
+            "id long, m map<string, long>",
+            StructType().add("id", LongType()).add("m", MapType(StringType(), LongType())),
+        ]:
+            with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": False}):
+                df = self.spark.createDataFrame(origin, schema=schema)
 
-        with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": arrow_enabled}):
-            if arrow_enabled and LooseVersion(pa.__version__) < LooseVersion("2.0.0"):
-                with self.assertRaisesRegex(Exception, "MapType.*only.*pyarrow 2.0.0"):
-                    df.toPandas()
-            else:
-                pdf = df.toPandas()
-                assert_frame_equal(origin, pdf)
+            with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": arrow_enabled}):
+                if arrow_enabled and LooseVersion(pa.__version__) < LooseVersion("2.0.0"):
+                    with self.assertRaisesRegex(Exception, "MapType.*only.*pyarrow 2.0.0"):
+                        df.toPandas()
+                else:
+                    pdf = df.toPandas()
+                    assert_frame_equal(origin, pdf)
 
     def test_createDataFrame_with_int_col_names(self):
         for arrow_enabled in [True, False]:
@@ -795,7 +811,7 @@ class ArrowTestsMixin:
         for case in cases:
             run_test(*case)
 
-    def test_createDateFrame_with_category_type(self):
+    def test_createDataFrame_with_category_type(self):
         pdf = pd.DataFrame({"A": ["a", "b", "c", "a"]})
         pdf["B"] = pdf["A"].astype("category")
         category_first_element = dict(enumerate(pdf["B"].cat.categories))[0]

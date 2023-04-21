@@ -1628,7 +1628,7 @@ object CodeGenerator extends Logging {
     dataType match {
       case udt: UserDefinedType[_] => getValue(input, udt.sqlType, ordinal)
       case _ if isPrimitiveType(jt) => s"$input.get${primitiveTypeName(jt)}($ordinal)"
-      case _ => dataType.physicalDataType match {
+      case _ => PhysicalDataType(dataType) match {
         case _: PhysicalArrayType => s"$input.getArray($ordinal)"
         case PhysicalBinaryType => s"$input.getBinary($ordinal)"
         case PhysicalCalendarIntervalType => s"$input.getInterval($ordinal)"
@@ -1909,7 +1909,7 @@ object CodeGenerator extends Logging {
     case udt: UserDefinedType[_] => javaType(udt.sqlType)
     case ObjectType(cls) if cls.isArray => s"${javaType(ObjectType(cls.getComponentType))}[]"
     case ObjectType(cls) => cls.getName
-    case _ => dt.physicalDataType match {
+    case _ => PhysicalDataType(dt) match {
       case _: PhysicalArrayType => "ArrayData"
       case PhysicalBinaryType => "byte[]"
       case PhysicalBooleanType => JAVA_BOOLEAN

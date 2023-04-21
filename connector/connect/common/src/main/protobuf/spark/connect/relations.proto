@@ -65,6 +65,9 @@ message Relation {
     Parse parse = 30;
     GroupMap group_map = 31;
     CoGroupMap co_group_map = 32;
+    WithWatermark with_watermark = 33;
+    ApplyInPandasWithState apply_in_pandas_with_state = 34;
+    HtmlString html_string = 35;
 
     // NA functions
     NAFill fill_na = 90;
@@ -108,11 +111,8 @@ message SQL {
   // (Required) The SQL query.
   string query = 1;
 
-  // (Optional) A map of parameter names to string values that are parsed as
-  // SQL literal expressions. For example, map keys: "rank", "name", "birthdate";
-  // map values: "1", "'Steven'", "DATE'2023-03-21'". The fragments of string values
-  // belonged to SQL comments are skipped while parsing.
-  map<string, string> args = 2;
+  // (Optional) A map of parameter names to literal expressions.
+  map<string, Expression.Literal> args = 2;
 }
 
 // Relation that reads from a file / table or other data source. Does not have additional
@@ -122,6 +122,9 @@ message Read {
     NamedTable named_table = 1;
     DataSource data_source = 2;
   }
+
+  // (Optional) Indicates if this is a streaming read.
+  bool is_streaming = 3;
 
   message NamedTable {
     // (Required) Unparsed identifier for the table.
@@ -455,6 +458,20 @@ message ShowString {
   bool vertical = 4;
 }
 
+// Compose the string representing rows for output.
+// It will invoke 'Dataset.htmlString' to compute the results.
+message HtmlString {
+  // (Required) The input relation.
+  Relation input = 1;
+
+  // (Required) Number of rows to show.
+  int32 num_rows = 2;
+
+  // (Required) If set to more than 0, truncates strings to
+  // `truncate` characters and all cells will be aligned right.
+  int32 truncate = 3;
+}
+
 // Computes specified statistics for numeric and string columns.
 // It will invoke 'Dataset.summary' (same as 'StatFunctions.summary')
 // to compute the results.
@@ -729,6 +746,18 @@ message WithColumns {
   repeated Expression.Alias aliases = 2;
 }
 
+message WithWatermark {
+
+  // (Required) The input relation
+  Relation input = 1;
+
+  // (Required) Name of the column containing event time.
+  string event_time = 2;
+
+  // (Required)
+  string delay_threshold = 3;
+}
+
 // Specify a hint over a relation. Hint should have a name and optional parameters.
 message Hint {
   // (Required) The input relation.
@@ -825,6 +854,29 @@ message CoGroupMap {
 
   // (Required) Input user-defined function.
   CommonInlineUserDefinedFunction func = 5;
+}
+
+message ApplyInPandasWithState {
+  // (Required) Input relation for applyInPandasWithState.
+  Relation input = 1;
+
+  // (Required) Expressions for grouping keys.
+  repeated Expression grouping_expressions = 2;
+
+  // (Required) Input user-defined function.
+  CommonInlineUserDefinedFunction func = 3;
+
+  // (Required) Schema for the output DataFrame.
+  string output_schema = 4;
+
+  // (Required) Schema for the state.
+  string state_schema = 5;
+
+  // (Required) The output mode of the function.
+  string output_mode = 6;
+
+  // (Required) Timeout configuration for groups that do not receive data for a while.
+  string timeout_conf = 7;
 }
 
 // Collect arbitrary (named) metrics from a dataset.

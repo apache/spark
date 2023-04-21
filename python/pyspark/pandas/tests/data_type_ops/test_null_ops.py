@@ -22,7 +22,7 @@ import pyspark.pandas as ps
 from pyspark.pandas.tests.data_type_ops.testing_utils import OpsTestBase
 
 
-class NullOpsTest(OpsTestBase):
+class NullOpsTestsMixin:
     @property
     def pser(self):
         return pd.Series([None, None, None])
@@ -158,6 +158,10 @@ class NullOpsTest(OpsTestBase):
     def test_ge(self):
         pser, psser = self.pser, self.psser
         self.assert_eq(pser >= pser, psser >= psser)
+
+
+class NullOpsTests(NullOpsTestsMixin, OpsTestBase):
+    pass
 
 
 if __name__ == "__main__":

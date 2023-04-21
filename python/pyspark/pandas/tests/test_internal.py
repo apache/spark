@@ -27,7 +27,7 @@ from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
 
 
-class InternalFrameTest(PandasOnSparkTestCase, SQLTestUtils):
+class InternalFrameTestsMixin:
     def test_from_pandas(self):
         pdf = pd.DataFrame({"a": [1, 2, 3], "b": [4, 5, 6]})
 
@@ -105,6 +105,10 @@ class InternalFrameTest(PandasOnSparkTestCase, SQLTestUtils):
         self.assertTrue(spark_column_equals(internal.spark_column_for(("x", "b")), sdf["(x, b)"]))
 
         self.assert_eq(internal.to_pandas_frame, pdf)
+
+
+class InternalFrameTests(InternalFrameTestsMixin, PandasOnSparkTestCase, SQLTestUtils):
+    pass
 
 
 if __name__ == "__main__":

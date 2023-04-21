@@ -82,17 +82,6 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper {
     assert(result(2) == 2)
   }
 
-  ignore("SPARK-42665: Ignore simple udf test until the udf is fully implemented.") {
-    def dummyUdf(x: Int): Int = x + 5
-    val myUdf = udf(dummyUdf _)
-    val df = spark.range(5).select(myUdf(Column("id")))
-    val result = df.collect()
-    assert(result.length == 5)
-    result.zipWithIndex.foreach { case (v, idx) =>
-      assert(v.getInt(0) == idx + 5)
-    }
-  }
-
   test("read and write") {
     val testDataPath = java.nio.file.Paths
       .get(
@@ -204,6 +193,7 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper {
   }
 
   test("write jdbc") {
+    assume(IntegrationTestUtils.isSparkHiveJarAvailable)
     if (SystemUtils.isJavaVersionAtLeast(JavaVersion.JAVA_9)) {
       val url = "jdbc:derby:memory:1234"
       val table = "t1"
@@ -673,10 +663,6 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper {
     }
   }
 
-  test("version") {
-    assert(spark.version == SPARK_VERSION)
-  }
-
   test("time") {
     val timeFragments = Seq("Time taken: ", " ms")
     testCapturedStdOut(spark.time(spark.sql("select 1").collect()), timeFragments: _*)
@@ -702,7 +688,8 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper {
   }
 
   test("SparkVersion") {
-    assert(!spark.version.isEmpty)
+    assert(spark.version.nonEmpty)
+    assert(spark.version == SPARK_VERSION)
   }
 
   private def checkSameResult[E](expected: scala.collection.Seq[E], dataset: Dataset[E]): Unit = {

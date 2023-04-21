@@ -24,7 +24,7 @@ from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
 
 
-class SeriesStringTest(PandasOnSparkTestCase, SQLTestUtils):
+class SeriesStringTestsMixin:
     @property
     def pser(self):
         return pd.Series(
@@ -329,6 +329,10 @@ class SeriesStringTest(PandasOnSparkTestCase, SQLTestUtils):
     def test_string_get_dummies(self):
         with self.assertRaises(NotImplementedError):
             self.check_func(lambda x: x.str.get_dummies())
+
+
+class SeriesStringTests(SeriesStringTestsMixin, PandasOnSparkTestCase, SQLTestUtils):
+    pass
 
 
 if __name__ == "__main__":
