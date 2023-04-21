@@ -24,7 +24,7 @@ class StreamingQueryProgressSuite extends RemoteSparkSession with SQLHelper {
 
   test("test from json") {
     val jsonString =
-    """{
+      """{
       |    "id": "52de8a4e-1af7-4358-83e1-74d5d44bbc1b",
       |    "runId": "46680bd2-bb67-4828-90d6-3f76f43acd70",
       |    "name": "myName",

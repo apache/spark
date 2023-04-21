@@ -36,9 +36,9 @@ import org.apache.spark.sql.streaming.SafeJsonSerializer.{safeDoubleToJValue, sa
 import org.apache.spark.sql.streaming.SinkProgress.DEFAULT_NUM_OUTPUT_ROWS
 
 /**
- * Information about progress made in the execution of a [[StreamingQuery]] during
- * a trigger.
- * @param json A json string that contains entire streaming query progress.
+ * Information about progress made in the execution of a [[StreamingQuery]] during a trigger.
+ * @param json
+ *   A json string that contains entire streaming query progress.
  */
 @Evolving
 class StreamingQueryProgress private[sql] (val json: String) {
@@ -54,7 +54,7 @@ class StreamingQueryProgress private[sql] (val json: String) {
  * Information about updates made to stateful operators in a [[StreamingQuery]] during a trigger.
  */
 @Evolving
-class StateOperatorProgress private[spark](
+class StateOperatorProgress private[spark] (
     val operatorName: String,
     val numRowsTotal: Long,
     val numRowsUpdated: Long,
@@ -66,8 +66,8 @@ class StateOperatorProgress private[spark](
     val numRowsDroppedByWatermark: Long,
     val numShufflePartitions: Long,
     val numStateStoreInstances: Long,
-    val customMetrics: ju.Map[String, JLong] = new ju.HashMap()
-  ) extends Serializable {
+    val customMetrics: ju.Map[String, JLong] = new ju.HashMap())
+    extends Serializable {
 
   /** The compact JSON representation of this progress. */
   def json: String = compact(render(jsonValue))
@@ -90,7 +90,7 @@ class StateOperatorProgress private[spark](
       ("customMetrics" -> {
         if (!customMetrics.isEmpty) {
           val keys = customMetrics.keySet.asScala.toSeq.sorted
-          keys.map { k => k -> JInt(customMetrics.get(k).toLong) : JObject }.reduce(_ ~ _)
+          keys.map { k => k -> JInt(customMetrics.get(k).toLong): JObject }.reduce(_ ~ _)
         } else {
           JNothing
         }
@@ -101,38 +101,49 @@ class StateOperatorProgress private[spark](
 }
 
 /**
- * Information about progress made in the execution of a [[StreamingQuery]] during
- * a trigger. Each event relates to processing done for a single trigger of the streaming
- * query. Events are emitted even when no new data is available to be processed.
+ * Information about progress made in the execution of a [[StreamingQuery]] during a trigger. Each
+ * event relates to processing done for a single trigger of the streaming query. Events are
+ * emitted even when no new data is available to be processed.
  *
- * @param id A unique query id that persists across restarts. See `StreamingQuery.id()`.
- * @param runId A query id that is unique for every start/restart. See `StreamingQuery.runId()`.
- * @param name User-specified name of the query, null if not specified.
- * @param timestamp Beginning time of the trigger in ISO8601 format, i.e. UTC timestamps.
- * @param batchId A unique id for the current batch of data being processed.  Note that in the
- *                case of retries after a failure a given batchId my be executed more than once.
- *                Similarly, when there is no data to be processed, the batchId will not be
- *                incremented.
- * @param numInputRows The total number of records read from all the sources.
- * @param inputRowsPerSecond The total rate at which data is arriving from all the sources.
- * @param processedRowsPerSecond The total rate at which data from all the sources is being
- *                               processed by Spark.
- * @param batchDuration The process duration of each batch.
- * @param durationMs The amount of time taken to perform various operations in milliseconds.
- * @param eventTime Statistics of event time seen in this batch. It may contain the following keys:
- *                 {{{
+ * @param id
+ *   A unique query id that persists across restarts. See `StreamingQuery.id()`.
+ * @param runId
+ *   A query id that is unique for every start/restart. See `StreamingQuery.runId()`.
+ * @param name
+ *   User-specified name of the query, null if not specified.
+ * @param timestamp
+ *   Beginning time of the trigger in ISO8601 format, i.e. UTC timestamps.
+ * @param batchId
+ *   A unique id for the current batch of data being processed. Note that in the case of retries
+ *   after a failure a given batchId my be executed more than once. Similarly, when there is no
+ *   data to be processed, the batchId will not be incremented.
+ * @param numInputRows
+ *   The total number of records read from all the sources.
+ * @param inputRowsPerSecond
+ *   The total rate at which data is arriving from all the sources.
+ * @param processedRowsPerSecond
+ *   The total rate at which data from all the sources is being processed by Spark.
+ * @param batchDuration
+ *   The process duration of each batch.
+ * @param durationMs
+ *   The amount of time taken to perform various operations in milliseconds.
+ * @param eventTime
+ *   Statistics of event time seen in this batch. It may contain the following keys:
+ *   {{{
  *                   "max" -> "2016-12-05T20:54:20.827Z"  // maximum event time seen in this trigger
  *                   "min" -> "2016-12-05T20:54:20.827Z"  // minimum event time seen in this trigger
  *                   "avg" -> "2016-12-05T20:54:20.827Z"  // average event time seen in this trigger
  *                   "watermark" -> "2016-12-05T20:54:20.827Z"  // watermark used in this trigger
- *                 }}}
- *                 All timestamps are in ISO8601 format, i.e. UTC timestamps.
- * @param stateOperators Information about operators in the query that store state.
- * @param sources detailed statistics on data being read from each of the streaming sources.
+ *   }}}
+ *   All timestamps are in ISO8601 format, i.e. UTC timestamps.
+ * @param stateOperators
+ *   Information about operators in the query that store state.
+ * @param sources
+ *   detailed statistics on data being read from each of the streaming sources.
  * @since 2.1.0
  */
 @Evolving
-class LegacyStreamingQueryProgress private[spark](
+class LegacyStreamingQueryProgress private[spark] (
     val id: UUID,
     val runId: UUID,
     val name: String,
@@ -146,7 +157,8 @@ class LegacyStreamingQueryProgress private[spark](
     val eventTime: ju.Map[String, String],
     val stateOperators: Array[StateOperatorProgress],
     val sources: Array[SourceProgress],
-    val sink: SinkProgress) extends Serializable {
+    val sink: SinkProgress)
+    extends Serializable {
 
   /** The compact JSON representation of this progress. */
   def json: String = compact(render(jsonValue))
@@ -174,21 +186,27 @@ class LegacyStreamingQueryProgress private[spark](
 }
 
 /**
- * Information about progress made for a source in the execution of a [[StreamingQuery]]
- * during a trigger. See [[StreamingQueryProgress]] for more information.
+ * Information about progress made for a source in the execution of a [[StreamingQuery]] during a
+ * trigger. See [[StreamingQueryProgress]] for more information.
  *
- * @param description            Description of the source.
- * @param startOffset            The starting offset for data being read.
- * @param endOffset              The ending offset for data being read.
- * @param latestOffset           The latest offset from this source.
- * @param numInputRows           The number of records read from this source.
- * @param inputRowsPerSecond     The rate at which data is arriving from this source.
- * @param processedRowsPerSecond The rate at which data from this source is being processed by
- *                               Spark.
+ * @param description
+ *   Description of the source.
+ * @param startOffset
+ *   The starting offset for data being read.
+ * @param endOffset
+ *   The ending offset for data being read.
+ * @param latestOffset
+ *   The latest offset from this source.
+ * @param numInputRows
+ *   The number of records read from this source.
+ * @param inputRowsPerSecond
+ *   The rate at which data is arriving from this source.
+ * @param processedRowsPerSecond
+ *   The rate at which data from this source is being processed by Spark.
  * @since 2.1.0
  */
 @Evolving
-class SourceProgress protected[spark](
+class SourceProgress protected[spark] (
     val description: String,
     val startOffset: String,
     val endOffset: String,
@@ -196,7 +214,8 @@ class SourceProgress protected[spark](
     val numInputRows: Long,
     val inputRowsPerSecond: Double,
     val processedRowsPerSecond: Double,
-    val metrics: ju.Map[String, String] = Map[String, String]().asJava) extends Serializable {
+    val metrics: ju.Map[String, String] = Map[String, String]().asJava)
+    extends Serializable {
 
   /** The compact JSON representation of this progress. */
   def json: String = compact(render(jsonValue))
@@ -225,19 +244,22 @@ class SourceProgress protected[spark](
 }
 
 /**
- * Information about progress made for a sink in the execution of a [[StreamingQuery]]
- * during a trigger. See [[StreamingQueryProgress]] for more information.
+ * Information about progress made for a sink in the execution of a [[StreamingQuery]] during a
+ * trigger. See [[StreamingQueryProgress]] for more information.
  *
- * @param description Description of the source corresponding to this status.
- * @param numOutputRows Number of rows written to the sink or -1 for Continuous Mode (temporarily)
- * or Sink V1 (until decommissioned).
+ * @param description
+ *   Description of the source corresponding to this status.
+ * @param numOutputRows
+ *   Number of rows written to the sink or -1 for Continuous Mode (temporarily) or Sink V1 (until
+ *   decommissioned).
  * @since 2.1.0
  */
 @Evolving
-class SinkProgress protected[spark](
+class SinkProgress protected[spark] (
     val description: String,
     val numOutputRows: Long,
-    val metrics: ju.Map[String, String] = Map[String, String]().asJava) extends Serializable {
+    val metrics: ju.Map[String, String] = Map[String, String]().asJava)
+    extends Serializable {
 
   /** SinkProgress without custom metrics. */
   protected[sql] def this(description: String) = {
@@ -262,8 +284,10 @@ class SinkProgress protected[spark](
 private[sql] object SinkProgress {
   val DEFAULT_NUM_OUTPUT_ROWS: Long = -1L
 
-  def apply(description: String, numOutputRows: Option[Long],
-            metrics: ju.Map[String, String] = Map[String, String]().asJava): SinkProgress =
+  def apply(
+      description: String,
+      numOutputRows: Option[Long],
+      metrics: ju.Map[String, String] = Map[String, String]().asJava): SinkProgress =
     new SinkProgress(description, numOutputRows.getOrElse(DEFAULT_NUM_OUTPUT_ROWS), metrics)
 }
 
@@ -276,6 +300,6 @@ private object SafeJsonSerializer {
   def safeMapToJValue[T](map: ju.Map[String, T], valueToJValue: T => JValue): JValue = {
     if (map.isEmpty) return JNothing
     val keys = map.asScala.keySet.toSeq.sorted
-    keys.map { k => k -> valueToJValue(map.get(k)) : JObject }.reduce(_ ~ _)
+    keys.map { k => k -> valueToJValue(map.get(k)): JObject }.reduce(_ ~ _)
   }
 }
