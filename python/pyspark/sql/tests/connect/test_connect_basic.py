@@ -3130,38 +3130,27 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         )
 
 
-class SparkConnectSessionTests(ReusedConnectTestCase):
-    def setUp(self) -> None:
-        self.spark = (
-            PySparkSession.builder.config(conf=self.conf())
-            .appName(self.__class__.__name__)
-            .remote("local[4]")
-            .getOrCreate()
-        )
-
-    def tearDown(self):
-        self.spark.stop()
-
+class SparkConnectSessionTests(SparkConnectSQLTestCase):
     def _check_no_active_session_error(self, e: PySparkException):
         self.check_error(exception=e, error_class="NO_ACTIVE_SESSION", message_parameters=dict())
 
     def test_stop_session(self):
-        df = self.spark.sql("select 1 as a, 2 as b")
-        catalog = self.spark.catalog
-        self.spark.stop()
+        df = self.connect.sql("select 1 as a, 2 as b")
+        catalog = self.connect.catalog
+        self.connect.stop()
 
         # _execute_and_fetch
         with self.assertRaises(SparkConnectException) as e:
-            self.spark.sql("select 1")
+            self.connect.sql("select 1")
         self._check_no_active_session_error(e.exception)
 
         with self.assertRaises(SparkConnectException) as e:
-            catalog.tableExists("table")
+            catalog.tableExists(self.tbl_name)
         self._check_no_active_session_error(e.exception)
 
         # _execute
         with self.assertRaises(SparkConnectException) as e:
-            self.spark.udf.register("test_func", lambda x: x + 1)
+            self.connect.udf.register("test_func", lambda x: x + 1)
         self._check_no_active_session_error(e.exception)
 
         # _analyze
@@ -3171,42 +3160,8 @@ class SparkConnectSessionTests(ReusedConnectTestCase):
 
         # Config
         with self.assertRaises(SparkConnectException) as e:
-            self.spark.conf.get("some.conf")
+            self.connect.conf.get("some.conf")
         self._check_no_active_session_error(e.exception)
-
-    def test_error_stack_trace(self):
-        with self.sql_conf({"spark.sql.pyspark.jvmStacktrace.enabled": True}):
-            with self.assertRaises(AnalysisException) as e:
-                self.spark.sql("select x").collect()
-            self.assertTrue("JVM stacktrace" in e.exception.message)
-            self.assertTrue(
-                "at org.apache.spark.sql.catalyst.analysis.CheckAnalysis" in e.exception.message
-            )
-
-        with self.sql_conf({"spark.sql.pyspark.jvmStacktrace.enabled": False}):
-            with self.assertRaises(AnalysisException) as e:
-                self.spark.sql("select x").collect()
-            self.assertFalse("JVM stacktrace" in e.exception.message)
-            self.assertFalse(
-                "at org.apache.spark.sql.catalyst.analysis.CheckAnalysis" in e.exception.message
-            )
-
-        # Create a new session with a different stack trace size.
-        self.spark.stop()
-        spark = (
-            PySparkSession.builder.config(conf=self.conf())
-            .config("spark.connect.jvmStacktrace.maxSize", 128)
-            .remote("local[4]")
-            .getOrCreate()
-        )
-        spark.conf.set("spark.sql.pyspark.jvmStacktrace.enabled", "true")
-        with self.assertRaises(AnalysisException) as e:
-            spark.sql("select x").collect()
-        self.assertTrue("JVM stacktrace" in e.exception.message)
-        self.assertFalse(
-            "at org.apache.spark.sql.catalyst.analysis.CheckAnalysis" in e.exception.message
-        )
-        spark.stop()
 
 
 @unittest.skipIf(not should_test_connect, connect_requirement_message)

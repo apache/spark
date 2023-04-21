@@ -510,10 +510,6 @@ private[serializer] object KryoSerializer {
   // SQL / ML / MLlib classes once and then re-use that filtered list in newInstance() calls.
   private lazy val loadableSparkClasses: Seq[Class[_]] = {
     Seq(
-      "org.apache.spark.util.HadoopFSUtils$SerializableBlockLocation",
-      "[Lorg.apache.spark.util.HadoopFSUtils$SerializableBlockLocation;",
-      "org.apache.spark.util.HadoopFSUtils$SerializableFileStatus",
-
       "org.apache.spark.sql.catalyst.expressions.BoundReference",
       "org.apache.spark.sql.catalyst.expressions.SortOrder",
       "[Lorg.apache.spark.sql.catalyst.expressions.SortOrder;",
