@@ -3008,6 +3008,11 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         jc = self._jdf.apply(name)
         return Column(jc)
 
+    def __dir__(self):
+        attrs = super().__dir__()
+        attrs.extend(self.columns)
+        return attrs
+
     @overload
     def select(self, *cols: "ColumnOrName") -> "DataFrame":
         ...
