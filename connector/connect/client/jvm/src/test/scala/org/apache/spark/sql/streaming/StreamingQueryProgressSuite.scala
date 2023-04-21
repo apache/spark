@@ -121,6 +121,9 @@ class StreamingQueryProgressSuite extends ConnectFunSuite {
          |}
       """.stripMargin.trim
 
+    // scalastyle:off
+    println(jsonStringFromServerSide)
+
     val result = StreamingQueryProgress.fromJson(jsonStringFromServerSide)
     assert(result.id.toString === "33ac26f4-1c39-46ce-b798-f3d2a21211d4")
     assert(result.runId.toString === "849c2c9a-b9f8-446f-9180-259a60fd888c")
@@ -138,8 +141,7 @@ class StreamingQueryProgressSuite extends ConnectFunSuite {
       .add("max_q", "string")
     val observedMetrics = Map[String, Row](
       "event1" -> new GenericRowWithSchema(Array(1L, 3.0d), schema1),
-      "event2" -> new GenericRowWithSchema(Array(1L, "hello", "world"), schema2)
-    ).asJava
+      "event2" -> new GenericRowWithSchema(Array(1L, "hello", "world"), schema2)).asJava
     assert(result.observedMetrics.size() == 2)
     assert(result.observedMetrics == observedMetrics)
 

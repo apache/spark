@@ -99,7 +99,6 @@ class StateOperatorProgress private[spark](
   override def toString: String = prettyJson
 }
 
-
 /**
  * Information about progress made in the execution of a [[StreamingQuery]] during
  * a trigger. Each event relates to processing done for a single trigger of the streaming
