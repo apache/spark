@@ -192,7 +192,7 @@ class StreamingQueryManager:
         cmd = pb2.StreamingQueryManagerCommand()
         cmd.get_query.id = id
         query = self._execute_streaming_query_manager_cmd(cmd).query
-        return StreamingQuery(self._session, query.id, query.run_id, query.name) # TODO: name none?
+        return StreamingQuery(self._session, query.id, query.run_id, query.name)  # TODO: name none?
 
     get.__doc__ = PySparkStreamingQueryManager.get.__doc__
 
@@ -202,10 +202,14 @@ class StreamingQueryManager:
             if not isinstance(timeout, (int, float)) or timeout <= 0:
                 raise ValueError("timeout must be a positive integer or float. Got %s" % timeout)
             cmd.await_any_termination.timeout_ms = int(timeout * 1000)
-            terminated = self._execute_streaming_query_manager_cmd(cmd).await_any_termination.terminated
+            terminated = self._execute_streaming_query_manager_cmd(
+                cmd
+            ).await_any_termination.terminated
             return terminated
         else:
-            await_any_termination_cmd = pb2.StreamingQueryManagerCommand.AwaitAnyTerminationCommand()
+            await_any_termination_cmd = (
+                pb2.StreamingQueryManagerCommand.AwaitAnyTerminationCommand()
+            )
             cmd.await_any_termination.CopyFrom(await_any_termination_cmd)
             self._execute_streaming_query_manager_cmd(cmd)
             return None
@@ -240,7 +244,11 @@ class StreamingQueryManager:
         exec_cmd = pb2.Command()
         exec_cmd.streaming_query_manager_command.CopyFrom(cmd)
         (_, properties) = self._session.client.execute_command(exec_cmd)
-        return cast(pb2.StreamingQueryManagerCommandResult, properties["streaming_query_manager_command_result"])
+        return cast(
+            pb2.StreamingQueryManagerCommandResult,
+            properties["streaming_query_manager_command_result"],
+        )
+
 
 def _test() -> None:
     import doctest
