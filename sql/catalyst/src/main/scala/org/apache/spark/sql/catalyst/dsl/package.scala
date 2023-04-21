@@ -269,7 +269,7 @@ package object dsl {
     // TODO more implicit class for literal?
     implicit class DslString(val s: String) extends ImplicitOperators {
       override def expr: Expression = Literal(s)
-      def attr: UnresolvedAttribute = analysis.UnresolvedAttribute(s)
+      def attr: UnresolvedAttribute = analysis.UnresolvedAttribute(Seq(s))
     }
     implicit class DslAttr(override val attr: UnresolvedAttribute) extends ImplicitAttribute {
       def s: String = {
