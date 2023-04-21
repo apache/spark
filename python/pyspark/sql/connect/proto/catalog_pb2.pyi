@@ -284,37 +284,34 @@ class Catalog(google.protobuf.message.Message):
     ) -> None: ...
     def WhichOneof(
         self, oneof_group: typing_extensions.Literal["cat_type", b"cat_type"]
-    ) -> (
-        typing_extensions.Literal[
-            "current_database",
-            "set_current_database",
-            "list_databases",
-            "list_tables",
-            "list_functions",
-            "list_columns",
-            "get_database",
-            "get_table",
-            "get_function",
-            "database_exists",
-            "table_exists",
-            "function_exists",
-            "create_external_table",
-            "create_table",
-            "drop_temp_view",
-            "drop_global_temp_view",
-            "recover_partitions",
-            "is_cached",
-            "cache_table",
-            "uncache_table",
-            "clear_cache",
-            "refresh_table",
-            "refresh_by_path",
-            "current_catalog",
-            "set_current_catalog",
-            "list_catalogs",
-        ]
-        | None
-    ): ...
+    ) -> typing_extensions.Literal[
+        "current_database",
+        "set_current_database",
+        "list_databases",
+        "list_tables",
+        "list_functions",
+        "list_columns",
+        "get_database",
+        "get_table",
+        "get_function",
+        "database_exists",
+        "table_exists",
+        "function_exists",
+        "create_external_table",
+        "create_table",
+        "drop_temp_view",
+        "drop_global_temp_view",
+        "recover_partitions",
+        "is_cached",
+        "cache_table",
+        "uncache_table",
+        "clear_cache",
+        "refresh_table",
+        "refresh_by_path",
+        "current_catalog",
+        "set_current_catalog",
+        "list_catalogs",
+    ] | None: ...
 
 global___Catalog = Catalog
 

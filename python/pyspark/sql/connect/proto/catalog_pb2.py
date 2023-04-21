@@ -385,6 +385,7 @@ ListCatalogs = _reflection.GeneratedProtocolMessageType(
 _sym_db.RegisterMessage(ListCatalogs)
 
 if _descriptor._USE_C_DESCRIPTORS == False:
+
     DESCRIPTOR._options = None
     DESCRIPTOR._serialized_options = b"\n\036org.apache.spark.connect.protoP\001"
     _CREATEEXTERNALTABLE_OPTIONSENTRY._options = None

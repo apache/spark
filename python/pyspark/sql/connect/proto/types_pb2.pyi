@@ -976,34 +976,31 @@ class DataType(google.protobuf.message.Message):
     ) -> None: ...
     def WhichOneof(
         self, oneof_group: typing_extensions.Literal["kind", b"kind"]
-    ) -> (
-        typing_extensions.Literal[
-            "null",
-            "binary",
-            "boolean",
-            "byte",
-            "short",
-            "integer",
-            "long",
-            "float",
-            "double",
-            "decimal",
-            "string",
-            "char",
-            "var_char",
-            "date",
-            "timestamp",
-            "timestamp_ntz",
-            "calendar_interval",
-            "year_month_interval",
-            "day_time_interval",
-            "array",
-            "struct",
-            "map",
-            "udt",
-            "unparsed",
-        ]
-        | None
-    ): ...
+    ) -> typing_extensions.Literal[
+        "null",
+        "binary",
+        "boolean",
+        "byte",
+        "short",
+        "integer",
+        "long",
+        "float",
+        "double",
+        "decimal",
+        "string",
+        "char",
+        "var_char",
+        "date",
+        "timestamp",
+        "timestamp_ntz",
+        "calendar_interval",
+        "year_month_interval",
+        "day_time_interval",
+        "array",
+        "struct",
+        "map",
+        "udt",
+        "unparsed",
+    ] | None: ...
 
 global___DataType = DataType

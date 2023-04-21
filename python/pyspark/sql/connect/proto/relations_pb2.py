@@ -744,6 +744,7 @@ _sym_db.RegisterMessage(Parse)
 _sym_db.RegisterMessage(Parse.OptionsEntry)
 
 if _descriptor._USE_C_DESCRIPTORS == False:
+
     DESCRIPTOR._options = None
     DESCRIPTOR._serialized_options = b"\n\036org.apache.spark.connect.protoP\001"
     _SQL_ARGSENTRY._options = None

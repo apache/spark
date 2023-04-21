@@ -632,29 +632,26 @@ class Expression(google.protobuf.message.Message):
         ) -> None: ...
         def WhichOneof(
             self, oneof_group: typing_extensions.Literal["literal_type", b"literal_type"]
-        ) -> (
-            typing_extensions.Literal[
-                "null",
-                "binary",
-                "boolean",
-                "byte",
-                "short",
-                "integer",
-                "long",
-                "float",
-                "double",
-                "decimal",
-                "string",
-                "date",
-                "timestamp",
-                "timestamp_ntz",
-                "calendar_interval",
-                "year_month_interval",
-                "day_time_interval",
-                "array",
-            ]
-            | None
-        ): ...
+        ) -> typing_extensions.Literal[
+            "null",
+            "binary",
+            "boolean",
+            "byte",
+            "short",
+            "integer",
+            "long",
+            "float",
+            "double",
+            "decimal",
+            "string",
+            "date",
+            "timestamp",
+            "timestamp_ntz",
+            "calendar_interval",
+            "year_month_interval",
+            "day_time_interval",
+            "array",
+        ] | None: ...
 
     @typing_extensions.final
     class UnresolvedAttribute(google.protobuf.message.Message):
@@ -1165,27 +1162,24 @@ class Expression(google.protobuf.message.Message):
     ) -> None: ...
     def WhichOneof(
         self, oneof_group: typing_extensions.Literal["expr_type", b"expr_type"]
-    ) -> (
-        typing_extensions.Literal[
-            "literal",
-            "unresolved_attribute",
-            "unresolved_function",
-            "expression_string",
-            "unresolved_star",
-            "alias",
-            "cast",
-            "unresolved_regex",
-            "sort_order",
-            "lambda_function",
-            "window",
-            "unresolved_extract_value",
-            "update_fields",
-            "unresolved_named_lambda_variable",
-            "common_inline_user_defined_function",
-            "extension",
-        ]
-        | None
-    ): ...
+    ) -> typing_extensions.Literal[
+        "literal",
+        "unresolved_attribute",
+        "unresolved_function",
+        "expression_string",
+        "unresolved_star",
+        "alias",
+        "cast",
+        "unresolved_regex",
+        "sort_order",
+        "lambda_function",
+        "window",
+        "unresolved_extract_value",
+        "update_fields",
+        "unresolved_named_lambda_variable",
+        "common_inline_user_defined_function",
+        "extension",
+    ] | None: ...
 
 global___Expression = Expression
 

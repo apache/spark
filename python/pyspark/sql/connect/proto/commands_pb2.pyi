@@ -159,20 +159,17 @@ class Command(google.protobuf.message.Message):
     ) -> None: ...
     def WhichOneof(
         self, oneof_group: typing_extensions.Literal["command_type", b"command_type"]
-    ) -> (
-        typing_extensions.Literal[
-            "register_function",
-            "write_operation",
-            "create_dataframe_view",
-            "write_operation_v2",
-            "sql_command",
-            "write_stream_operation_start",
-            "streaming_query_command",
-            "get_resources_command",
-            "extension",
-        ]
-        | None
-    ): ...
+    ) -> typing_extensions.Literal[
+        "register_function",
+        "write_operation",
+        "create_dataframe_view",
+        "write_operation_v2",
+        "sql_command",
+        "write_stream_operation_start",
+        "streaming_query_command",
+        "get_resources_command",
+        "extension",
+    ] | None: ...
 
 global___Command = Command
 
@@ -807,12 +804,9 @@ class WriteStreamOperationStart(google.protobuf.message.Message):
     @typing.overload
     def WhichOneof(
         self, oneof_group: typing_extensions.Literal["trigger", b"trigger"]
-    ) -> (
-        typing_extensions.Literal[
-            "processing_time_interval", "available_now", "once", "continuous_checkpoint_interval"
-        ]
-        | None
-    ): ...
+    ) -> typing_extensions.Literal[
+        "processing_time_interval", "available_now", "once", "continuous_checkpoint_interval"
+    ] | None: ...
 
 global___WriteStreamOperationStart = WriteStreamOperationStart
 
@@ -977,12 +971,9 @@ class StreamingQueryCommand(google.protobuf.message.Message):
     ) -> None: ...
     def WhichOneof(
         self, oneof_group: typing_extensions.Literal["command", b"command"]
-    ) -> (
-        typing_extensions.Literal[
-            "status", "last_progress", "recent_progress", "stop", "process_all_available", "explain"
-        ]
-        | None
-    ): ...
+    ) -> typing_extensions.Literal[
+        "status", "last_progress", "recent_progress", "stop", "process_all_available", "explain"
+    ] | None: ...
 
 global___StreamingQueryCommand = StreamingQueryCommand
 

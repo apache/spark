@@ -59,6 +59,7 @@ ResourceInformation = _reflection.GeneratedProtocolMessageType(
 _sym_db.RegisterMessage(ResourceInformation)
 
 if _descriptor._USE_C_DESCRIPTORS == False:
+
     DESCRIPTOR._options = None
     DESCRIPTOR._serialized_options = b"\n\036org.apache.spark.connect.protoP\001"
     _STORAGELEVEL._serialized_start = 46
