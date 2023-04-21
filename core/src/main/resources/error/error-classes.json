@@ -1396,6 +1396,12 @@
     ],
     "sqlState" : "42883"
   },
+  "RULE_ID_NOT_FOUND" : {
+    "message" : [
+      "Rule id not found for <ruleName>. Please modify RuleIdCollection.scala if you are adding a new rule."
+    ],
+    "sqlState": "22023"
+  },
   "SCALAR_SUBQUERY_TOO_MANY_ROWS" : {
     "message" : [
       "More than one row returned by a subquery used as an expression."
@@ -4460,11 +4466,6 @@
     "message" : [
       "Once strategy's idempotence is broken for batch <batchName>",
       "<plan>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2175" : {
-    "message" : [
-      "Rule id not found for <ruleName>. Please modify RuleIdCollection.scala if you are adding a new rule."
     ]
   },
   "_LEGACY_ERROR_TEMP_2176" : {

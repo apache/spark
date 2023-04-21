@@ -1743,7 +1743,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
 
   def ruleIdNotFoundForRuleError(ruleName: String): Throwable = {
     new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_2175",
+      errorClass = "RULE_ID_NOT_FOUND",
       messageParameters = Map(
         "ruleName" -> ruleName),
       cause = null)
