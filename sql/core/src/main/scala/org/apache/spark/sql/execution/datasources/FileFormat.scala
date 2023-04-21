@@ -190,27 +190,31 @@ trait FileFormat {
   /**
    * All fields the file format's _metadata struct defines.
    *
-   * Each field's metadata should define [[METADATA_COL_ATTR_KEY]],
-   * [[FILE_SOURCE_METADATA_COL_ATTR_KEY]], and either
-   * [[FILE_SOURCE_CONSTANT_METADATA_COL_ATTR_KEY]] or
-   * [[FILE_SOURCE_GENERATED_METADATA_COL_ATTR_KEY]] as appropriate.
+   * Each metadata struct field is either "constant" or "generated" (respectively defined/matched by
+   * [[FileSourceConstantMetadataStructField]] or [[FileSourceGeneratedMetadataAttribute]]).
    *
-   * Constant attributes will be extracted automatically from
-   * [[PartitionedFile.extraConstantMetadataColumnValues]], while generated metadata columns always
-   * map to some hidden/internal column the underslying reader provides.
+   * Constant metadata columns are derived from the [[PartitionedFile]] instances a scan's
+   * [[FileIndex]] provides. Thus, a custom [[FileFormat]] that defines constant metadata columns
+   * will generally pair with a a custom [[FileIndex]] that populates [[PartitionedFile]] with
+   * appropriate metadata values. By default, constant attribute values are obtained by a simple
+   * name-based lookup in [[PartitionedFile.extraConstantMetadataColumnValues]], but implementations
+   * can override [[fileConstantMetadataExtractors]] to define custom extractors that have access to
+   * the entire [[PartitionedFile]] when deriving the column's value.
    *
-   * NOTE: It is not possible to change the semantics of the base metadata fields by overriding this
-   * method. Technically, a file format could choose suppress them, but that is not recommended.
+   * Generated metadata columns map to a hidden/internal column the underlying reader provides, and
+   * so will often pair with a custom reader that can populate those columns. For example,
+   * [[ParquetFileFormat]] defines a "_metadata.row_index" column that relies on
+   * [[VectorizedParquetRecordReader]] to extract the actual row index values from the parquet scan.
    */
   def metadataSchemaFields: Seq[StructField] = FileFormat.BASE_METADATA_FIELDS
 
   /**
    * The extractors to use when deriving file-constant metadata columns for this file format.
    *
-   * By default, the value of a file-constant metadata column is obtained by looking up the column's
-   * name in the file's metadata column value map. However, implementations can override this method
-   * in order to provide an extractor that has access to the entire [[PartitionedFile]] when
-   * deriving the column's value.
+   * Implementations that define custom constant metadata columns can override this method to
+   * associate a custom extractor with a given metadata column name, when a simple name-based lookup
+   * in [[PartitionedFile.extraConstantMetadataColumnValues]] is not expressive enough; extractors
+   * have access to the entire [[PartitionedFile]] and can perform arbitrary computations.
    *
    * NOTE: Extractors are lazy, invoked only if the query actually selects their column at runtime.
    *
