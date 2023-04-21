@@ -907,3 +907,19 @@ object SPARK_34772 {
     }
   }
 }
+
+object SPARK_43145 {
+  def main(args: Array[String]): Unit = {
+    val spark = SparkSession.builder()
+      .config(UI_ENABLED.key, "false")
+      .enableHiveSupport()
+      .getOrCreate()
+    try {
+      spark.sql("CREATE TABLE t (c int)")
+      spark.sql("ALTER TABLE t SET TBLPROPERTIES('storage_handler'='not_a_real_storage') ")
+      spark.sql("DESC t").collect()
+    } finally {
+      spark.sql("DROP TABLE IF EXISTS t")
+    }
+  }
+}
