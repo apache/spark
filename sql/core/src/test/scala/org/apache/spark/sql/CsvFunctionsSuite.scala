@@ -24,7 +24,6 @@ import java.util.Locale
 import scala.collection.JavaConverters._
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.catalyst.expressions.{CreateStruct, ExpressionEvalHelper, Literal, StructsToCsv}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -32,7 +31,7 @@ import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.DayTimeIntervalType.{DAY, HOUR, MINUTE, SECOND}
 import org.apache.spark.sql.types.YearMonthIntervalType.{MONTH, YEAR}
 
-class CsvFunctionsSuite extends QueryTest with SharedSparkSession with ExpressionEvalHelper {
+class CsvFunctionsSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
   test("from_csv with empty options") {
@@ -577,12 +576,5 @@ class CsvFunctionsSuite extends QueryTest with SharedSparkSession with Expressio
     val actual = df.select(from_csv(
       $"csv", schema_of_csv("1,2\n2"), Map.empty[String, String].asJava))
     checkAnswer(actual, Row(Row(1, "2\n2")))
-  }
-
-  test("StructsToCsv should not generate codes beyond 64KB") {
-    val range = Range.inclusive(1, 5000)
-    val struct = CreateStruct.create(range.map(Literal.apply))
-    val expected = range.mkString(",")
-    checkEvaluation(StructsToCsv(Map.empty, struct), expected)
   }
 }
