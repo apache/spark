@@ -80,7 +80,7 @@ class StorageLevel:
             and self.useMemory == other.useMemory
             and self.useDisk == other.useDisk
             and self.useOffHeap == other.useOffHeap
-            and self.deserialized == self.deserialized
+            and self.deserialized == other.deserialized
             and self.replication == other.replication
         )
 

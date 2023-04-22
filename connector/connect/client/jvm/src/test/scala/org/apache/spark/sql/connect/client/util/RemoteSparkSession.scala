@@ -28,7 +28,6 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connect.client.SparkConnectClient
 import org.apache.spark.sql.connect.client.util.IntegrationTestUtils._
 import org.apache.spark.sql.connect.common.config.ConnectCommon
-import org.apache.spark.util.Utils
 
 /**
  * An util class to start a local spark connect server in a different process for local E2E tests.
@@ -58,10 +57,12 @@ object SparkConnectServerUtils {
 
   private lazy val sparkConnect: Process = {
     debug("Starting the Spark Connect Server...")
-    val jar = findJar(
+    val connectJar = findJar(
       "connector/connect/server",
       "spark-connect-assembly",
       "spark-connect").getCanonicalPath
+    val driverClassPath = connectJar + ":" +
+      findJar("sql/catalyst", "spark-catalyst", "spark-catalyst", test = true).getCanonicalPath
     val catalogImplementation = if (IntegrationTestUtils.isSparkHiveJarAvailable) {
       "hive"
     } else {
@@ -78,16 +79,16 @@ object SparkConnectServerUtils {
       Seq(
         "bin/spark-submit",
         "--driver-class-path",
-        jar,
+        driverClassPath,
         "--conf",
         s"spark.connect.grpc.binding.port=$port",
         "--conf",
-        "spark.sql.catalog.testcat=org.apache.spark.sql.connect.catalog.InMemoryTableCatalog",
+        "spark.sql.catalog.testcat=org.apache.spark.sql.connector.catalog.InMemoryTableCatalog",
         "--conf",
-        s"spark.sql.catalogImplementation=$catalogImplementation",
+        s"spark.sql.catalogImplementation=$catalogImplementation") ++ debugConfig ++ Seq(
         "--class",
         "org.apache.spark.sql.connect.SimpleSparkConnectService",
-        jar),
+        connectJar),
       new File(sparkHome))
 
     val io = new ProcessIO(
@@ -128,17 +129,19 @@ object SparkConnectServerUtils {
 trait RemoteSparkSession extends ConnectFunSuite with BeforeAndAfterAll {
   import SparkConnectServerUtils._
   var spark: SparkSession = _
+  protected lazy val serverPort: Int = port
 
   override def beforeAll(): Unit = {
     super.beforeAll()
     SparkConnectServerUtils.start()
-    spark = SparkSession.builder().client(SparkConnectClient.builder().port(port).build()).build()
+    spark =
+      SparkSession.builder().client(SparkConnectClient.builder().port(serverPort).build()).build()
 
     // Retry and wait for the server to start
     val stop = System.nanoTime() + TimeUnit.MINUTES.toNanos(1) // ~1 min
     var sleepInternalMs = TimeUnit.SECONDS.toMillis(1) // 1s with * 2 backoff
     var success = false
-    val error = new RuntimeException(s"Failed to start the test server on port $port.")
+    val error = new RuntimeException(s"Failed to start the test server on port $serverPort.")
 
     while (!success && System.nanoTime() < stop) {
       try {
@@ -173,16 +176,5 @@ trait RemoteSparkSession extends ConnectFunSuite with BeforeAndAfterAll {
     }
     spark = null
     super.afterAll()
-  }
-
-  /**
-   * Drops table `tableName` after calling `f`.
-   */
-  protected def withTable(tableNames: String*)(f: => Unit): Unit = {
-    Utils.tryWithSafeFinally(f) {
-      tableNames.foreach { name =>
-        spark.sql(s"DROP TABLE IF EXISTS $name").collect()
-      }
-    }
   }
 }

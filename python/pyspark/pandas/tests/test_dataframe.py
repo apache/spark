@@ -42,7 +42,7 @@ from pyspark.testing.sqlutils import SQLTestUtils
 from pyspark.pandas.utils import name_like_string, is_testing
 
 
-class DataFrameTest(ComparisonTestBase, SQLTestUtils):
+class DataFrameTestsMixin:
     @property
     def pdf(self):
         return pd.DataFrame(
@@ -4509,6 +4509,10 @@ class DataFrameTest(ComparisonTestBase, SQLTestUtils):
             NotImplementedError, 'axis should be either 0 or "index" currently.'
         ):
             psdf.any(axis=1)
+
+
+class DataFrameTests(DataFrameTestsMixin, ComparisonTestBase, SQLTestUtils):
+    pass
 
 
 if __name__ == "__main__":

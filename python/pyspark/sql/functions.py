@@ -1749,7 +1749,7 @@ def asc_nulls_first(col: "ColumnOrName") -> Column:
     +---+-----+
     |age| name|
     +---+-----+
-    |  0| null|
+    |  0| NULL|
     |  2|Alice|
     |  1|  Bob|
     +---+-----+
@@ -1794,7 +1794,7 @@ def asc_nulls_last(col: "ColumnOrName") -> Column:
     +---+-----+
     |  2|Alice|
     |  1|  Bob|
-    |  0| null|
+    |  0| NULL|
     +---+-----+
 
     """
@@ -1833,7 +1833,7 @@ def desc_nulls_first(col: "ColumnOrName") -> Column:
     +---+-----+
     |age| name|
     +---+-----+
-    |  0| null|
+    |  0| NULL|
     |  1|  Bob|
     |  2|Alice|
     +---+-----+
@@ -1878,7 +1878,7 @@ def desc_nulls_last(col: "ColumnOrName") -> Column:
     +---+-----+
     |  1|  Bob|
     |  2|Alice|
-    |  0| null|
+    |  0| NULL|
     +---+-----+
 
     """
@@ -2712,16 +2712,16 @@ def coalesce(*cols: "ColumnOrName") -> Column:
     +----+----+
     |   a|   b|
     +----+----+
-    |null|null|
-    |   1|null|
-    |null|   2|
+    |NULL|NULL|
+    |   1|NULL|
+    |NULL|   2|
     +----+----+
 
     >>> cDf.select(coalesce(cDf["a"], cDf["b"])).show()
     +--------------+
     |coalesce(a, b)|
     +--------------+
-    |          null|
+    |          NULL|
     |             1|
     |             2|
     +--------------+
@@ -2730,9 +2730,9 @@ def coalesce(*cols: "ColumnOrName") -> Column:
     +----+----+----------------+
     |   a|   b|coalesce(a, 0.0)|
     +----+----+----------------+
-    |null|null|             0.0|
-    |   1|null|             1.0|
-    |null|   2|             0.0|
+    |NULL|NULL|             0.0|
+    |   1|NULL|             1.0|
+    |NULL|   2|             0.0|
     +----+----+----------------+
     """
     return _invoke_function_over_seq_of_columns("coalesce", cols)
@@ -2939,7 +2939,7 @@ def first(col: "ColumnOrName", ignorenulls: bool = False) -> Column:
     +-----+----------+
     | name|first(age)|
     +-----+----------+
-    |Alice|      null|
+    |Alice|      NULL|
     |  Bob|         5|
     +-----+----------+
 
@@ -2984,7 +2984,7 @@ def grouping(col: "ColumnOrName") -> Column:
     +-----+--------------+--------+
     | name|grouping(name)|sum(age)|
     +-----+--------------+--------+
-    | null|             1|       7|
+    | NULL|             1|       7|
     |Alice|             0|       2|
     |  Bob|             0|       5|
     +-----+--------------+--------+
@@ -3028,12 +3028,12 @@ def grouping_id(*cols: "ColumnOrName") -> Column:
     +----+----+-------------+-------+
     |  c2|  c3|grouping_id()|sum(c1)|
     +----+----+-------------+-------+
-    |null|null|            3|      8|
-    |null|   a|            2|      4|
-    |null|   c|            2|      4|
-    |   a|null|            1|      4|
+    |NULL|NULL|            3|      8|
+    |NULL|   a|            2|      4|
+    |NULL|   c|            2|      4|
+    |   a|NULL|            1|      4|
     |   a|   a|            0|      4|
-    |   b|null|            1|      4|
+    |   b|NULL|            1|      4|
     |   b|   c|            0|      4|
     +----+----+-------------+-------+
     """
@@ -3125,8 +3125,8 @@ def isnull(col: "ColumnOrName") -> Column:
     +----+----+-----+-----+
     |   a|   b|   r1|   r2|
     +----+----+-----+-----+
-    |   1|null|false| true|
-    |null|   2| true|false|
+    |   1|NULL|false| true|
+    |NULL|   2| true|false|
     +----+----+-----+-----+
     """
     return _invoke_function_over_columns("isnull", col)
@@ -3169,7 +3169,7 @@ def last(col: "ColumnOrName", ignorenulls: bool = False) -> Column:
     +-----+---------+
     | name|last(age)|
     +-----+---------+
-    |Alice|     null|
+    |Alice|     NULL|
     |  Bob|        5|
     +-----+---------+
 
@@ -3824,8 +3824,8 @@ def when(condition: Column, value: Any) -> Column:
     +----+
     | age|
     +----+
-    |null|
-    |null|
+    |NULL|
+    |NULL|
     |   3|
     +----+
     """
@@ -4050,10 +4050,10 @@ def lag(col: "ColumnOrName", offset: int = 1, default: Optional[Any] = None) -> 
     +---+---+-------------+
     | c1| c2|previos_value|
     +---+---+-------------+
-    |  a|  1|         null|
+    |  a|  1|         NULL|
     |  a|  2|            1|
     |  a|  3|            2|
-    |  b|  2|         null|
+    |  b|  2|         NULL|
     |  b|  8|            2|
     +---+---+-------------+
     >>> df.withColumn("previos_value", lag("c2", 1, 0).over(w)).show()
@@ -4133,9 +4133,9 @@ def lead(col: "ColumnOrName", offset: int = 1, default: Optional[Any] = None) ->
     +---+---+----------+
     |  a|  1|         2|
     |  a|  2|         3|
-    |  a|  3|      null|
+    |  a|  3|      NULL|
     |  b|  2|         8|
-    |  b|  8|      null|
+    |  b|  8|      NULL|
     +---+---+----------+
     >>> df.withColumn("next_value", lead("c2", 1, 0).over(w)).show()
     +---+---+----------+
@@ -4225,10 +4225,10 @@ def nth_value(col: "ColumnOrName", offset: int, ignoreNulls: Optional[bool] = Fa
     +---+---+---------+
     | c1| c2|nth_value|
     +---+---+---------+
-    |  a|  1|     null|
+    |  a|  1|     NULL|
     |  a|  2|        2|
     |  a|  3|        2|
-    |  b|  2|     null|
+    |  b|  2|     NULL|
     |  b|  8|        8|
     +---+---+---------+
     """
@@ -7602,14 +7602,14 @@ def get(col: "ColumnOrName", index: Union["ColumnOrName", int]) -> Column:
     +-------------+
     |get(data, -1)|
     +-------------+
-    |         null|
+    |         NULL|
     +-------------+
 
     >>> df.select(get(df.data, 3)).show()
     +------------+
     |get(data, 3)|
     +------------+
-    |        null|
+    |        NULL|
     +------------+
 
     >>> df.select(get(df.data, "index")).show()
@@ -8085,8 +8085,8 @@ def explode_outer(col: "ColumnOrName") -> Column:
     | id|  an_array| key|value|
     +---+----------+----+-----+
     |  1|[foo, bar]|   x|  1.0|
-    |  2|        []|null| null|
-    |  3|      null|null| null|
+    |  2|        []|NULL| NULL|
+    |  3|      NULL|NULL| NULL|
     +---+----------+----+-----+
 
     >>> df.select("id", "a_map", explode_outer("an_array")).show()
@@ -8095,8 +8095,8 @@ def explode_outer(col: "ColumnOrName") -> Column:
     +---+----------+----+
     |  1|{x -> 1.0}| foo|
     |  1|{x -> 1.0}| bar|
-    |  2|        {}|null|
-    |  3|      null|null|
+    |  2|        {}|NULL|
+    |  3|      NULL|NULL|
     +---+----------+----+
     """
     return _invoke_function_over_columns("explode_outer", col)
@@ -8136,8 +8136,8 @@ def posexplode_outer(col: "ColumnOrName") -> Column:
     | id|  an_array| pos| key|value|
     +---+----------+----+----+-----+
     |  1|[foo, bar]|   0|   x|  1.0|
-    |  2|        []|null|null| null|
-    |  3|      null|null|null| null|
+    |  2|        []|NULL|NULL| NULL|
+    |  3|      NULL|NULL|NULL| NULL|
     +---+----------+----+----+-----+
     >>> df.select("id", "a_map", posexplode_outer("an_array")).show()
     +---+----------+----+----+
@@ -8145,8 +8145,8 @@ def posexplode_outer(col: "ColumnOrName") -> Column:
     +---+----------+----+----+
     |  1|{x -> 1.0}|   0| foo|
     |  1|{x -> 1.0}|   1| bar|
-    |  2|        {}|null|null|
-    |  3|      null|null|null|
+    |  2|        {}|NULL|NULL|
+    |  3|      NULL|NULL|NULL|
     +---+----------+----+----+
     """
     return _invoke_function_over_columns("posexplode_outer", col)
@@ -8191,7 +8191,7 @@ def inline_outer(col: "ColumnOrName") -> Column:
     +---+----+----+
     |  1|   1|   2|
     |  1|   3|   4|
-    |  2|null|null|
+    |  2|NULL|NULL|
     +---+----+----+
     """
     return _invoke_function_over_columns("inline_outer", col)
@@ -8796,14 +8796,14 @@ def flatten(col: "ColumnOrName") -> Column:
     |data                    |
     +------------------------+
     |[[1, 2, 3], [4, 5], [6]]|
-    |[null, [4, 5]]          |
+    |[NULL, [4, 5]]          |
     +------------------------+
     >>> df.select(flatten(df.data).alias('r')).show()
     +------------------+
     |                 r|
     +------------------+
     |[1, 2, 3, 4, 5, 6]|
-    |              null|
+    |              NULL|
     +------------------+
     """
     return _invoke_function_over_columns("flatten", col)
@@ -9059,7 +9059,7 @@ def arrays_zip(*cols: "ColumnOrName") -> Column:
     +------------------------------------+
     |zipped                              |
     +------------------------------------+
-    |[{1, 2, 3}, {2, 4, 6}, {3, 6, null}]|
+    |[{1, 2, 3}, {2, 4, 6}, {3, 6, NULL}]|
     +------------------------------------+
     >>> df.printSchema()
     root

@@ -838,47 +838,6 @@ class UDFTests(BaseUDFTestsMixin, ReusedSQLTestCase):
         cls.spark.conf.set("spark.sql.execution.pythonUDF.arrow.enabled", "false")
 
 
-def test_use_arrow(self):
-    # useArrow=True
-    row_true = (
-        self.spark.range(1)
-        .selectExpr(
-            "array(1, 2, 3) as array",
-        )
-        .select(
-            udf(lambda x: str(x), useArrow=True)("array"),
-        )
-        .first()
-    )
-    # The input is a NumPy array when the Arrow optimization is on.
-    self.assertEquals(row_true[0], "[1 2 3]")
-
-    # useArrow=None
-    row_none = (
-        self.spark.range(1)
-        .selectExpr(
-            "array(1, 2, 3) as array",
-        )
-        .select(
-            udf(lambda x: str(x), useArrow=None)("array"),
-        )
-        .first()
-    )
-
-    # useArrow=False
-    row_false = (
-        self.spark.range(1)
-        .selectExpr(
-            "array(1, 2, 3) as array",
-        )
-        .select(
-            udf(lambda x: str(x), useArrow=False)("array"),
-        )
-        .first()
-    )
-    self.assertEquals(row_false[0], row_none[0])  # "[1, 2, 3]"
-
-
 class UDFInitializationTests(unittest.TestCase):
     def tearDown(self):
         if SparkSession._instantiatedSession is not None:

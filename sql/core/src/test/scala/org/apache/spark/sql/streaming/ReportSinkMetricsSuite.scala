@@ -52,6 +52,8 @@ class ReportSinkMetricsSuite extends StreamTest {
           metricsMap = event.progress.sink.metrics
         }
 
+        override def onQueryIdle(event: StreamingQueryListener.QueryIdleEvent): Unit = {}
+
         override def onQueryTerminated(
           event: StreamingQueryListener.QueryTerminatedEvent): Unit = {}
       }

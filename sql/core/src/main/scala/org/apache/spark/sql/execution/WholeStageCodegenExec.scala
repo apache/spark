@@ -750,37 +750,29 @@ case class WholeStageCodegenExec(child: SparkPlan)(val codegenStageId: Int)
     // but the output must be rows.
     val rdds = child.asInstanceOf[CodegenSupport].inputRDDs()
     assert(rdds.size <= 2, "Up to two input RDDs can be supported")
+    val evaluatorFactory = new WholeStageCodegenEvaluatorFactory(
+      cleanedSource, durationMs, references)
     if (rdds.length == 1) {
-      rdds.head.mapPartitionsWithIndex { (index, iter) =>
-        val (clazz, _) = CodeGenerator.compile(cleanedSource)
-        val buffer = clazz.generate(references).asInstanceOf[BufferedRowIterator]
-        buffer.init(index, Array(iter))
-        new Iterator[InternalRow] {
-          override def hasNext: Boolean = {
-            val v = buffer.hasNext
-            if (!v) durationMs += buffer.durationMs()
-            v
-          }
-          override def next: InternalRow = buffer.next()
+      if (conf.usePartitionEvaluator) {
+        rdds.head.mapPartitionsWithEvaluator(evaluatorFactory)
+      } else {
+        rdds.head.mapPartitionsWithIndex { (index, iter) =>
+          val evaluator = evaluatorFactory.createEvaluator()
+          evaluator.eval(index, iter)
         }
       }
     } else {
       // Right now, we support up to two input RDDs.
-      rdds.head.zipPartitions(rdds(1)) { (leftIter, rightIter) =>
-        Iterator((leftIter, rightIter))
-        // a small hack to obtain the correct partition index
-      }.mapPartitionsWithIndex { (index, zippedIter) =>
-        val (leftIter, rightIter) = zippedIter.next()
-        val (clazz, _) = CodeGenerator.compile(cleanedSource)
-        val buffer = clazz.generate(references).asInstanceOf[BufferedRowIterator]
-        buffer.init(index, Array(leftIter, rightIter))
-        new Iterator[InternalRow] {
-          override def hasNext: Boolean = {
-            val v = buffer.hasNext
-            if (!v) durationMs += buffer.durationMs()
-            v
-          }
-          override def next: InternalRow = buffer.next()
+      if (conf.usePartitionEvaluator) {
+        rdds.head.zipPartitionsWithEvaluator(rdds(1), evaluatorFactory)
+      } else {
+        rdds.head.zipPartitions(rdds(1)) { (leftIter, rightIter) =>
+          Iterator((leftIter, rightIter))
+          // a small hack to obtain the correct partition index
+        }.mapPartitionsWithIndex { (index, zippedIter) =>
+          val (leftIter, rightIter) = zippedIter.next()
+          val evaluator = evaluatorFactory.createEvaluator()
+          evaluator.eval(index, leftIter, rightIter)
         }
       }
     }

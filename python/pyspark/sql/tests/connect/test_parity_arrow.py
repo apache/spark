@@ -37,19 +37,14 @@ class ArrowParityTests(ArrowTestsMixin, ReusedConnectTestCase):
     def test_createDataFrame_with_incorrect_schema(self):
         self.check_createDataFrame_with_incorrect_schema()
 
-    # TODO(SPARK-42969): Fix the comparison the result with Arrow optimization enabled/disabled.
-    @unittest.skip("Fails in Spark Connect, should enable.")
     def test_createDataFrame_with_map_type(self):
-        super().test_createDataFrame_with_map_type()
+        self.check_createDataFrame_with_map_type(True)
 
-    # TODO(SPARK-42969): Fix the comparison the result with Arrow optimization enabled/disabled.
-    @unittest.skip("Fails in Spark Connect, should enable.")
     def test_createDataFrame_with_ndarray(self):
-        super().test_createDataFrame_with_ndarray()
+        self.check_createDataFrame_with_ndarray(True)
 
-    @unittest.skip("Fails in Spark Connect, should enable.")
     def test_createDataFrame_with_single_data_type(self):
-        super().test_createDataFrame_with_single_data_type()
+        self.check_createDataFrame_with_single_data_type()
 
     @unittest.skip("Spark Connect does not support RDD but the tests depend on them.")
     def test_no_partition_frame(self):
@@ -70,9 +65,20 @@ class ArrowParityTests(ArrowTestsMixin, ReusedConnectTestCase):
     def test_toPandas_batch_order(self):
         super().test_toPandas_batch_order()
 
-    @unittest.skip("Spark Connect does not support Spark Context but the test depends on that.")
     def test_toPandas_empty_df_arrow_enabled(self):
-        super().test_toPandas_empty_df_arrow_enabled()
+        self.check_toPandas_empty_df_arrow_enabled(True)
+
+    def test_create_data_frame_to_pandas_timestamp_ntz(self):
+        self.check_create_data_frame_to_pandas_timestamp_ntz(True)
+
+    def test_create_data_frame_to_pandas_day_time_internal(self):
+        self.check_create_data_frame_to_pandas_day_time_internal(True)
+
+    def test_toPandas_respect_session_timezone(self):
+        self.check_toPandas_respect_session_timezone(True)
+
+    def test_toPandas_with_array_type(self):
+        self.check_toPandas_with_array_type(True)
 
     @unittest.skip("Spark Connect does not support fallback.")
     def test_toPandas_fallback_disabled(self):
@@ -82,20 +88,20 @@ class ArrowParityTests(ArrowTestsMixin, ReusedConnectTestCase):
     def test_toPandas_fallback_enabled(self):
         super().test_toPandas_fallback_enabled()
 
-    # TODO(SPARK-42969): Fix the comparison the result with Arrow optimization enabled/disabled.
-    @unittest.skip("Fails in Spark Connect, should enable.")
     def test_toPandas_with_map_type(self):
-        super().test_toPandas_with_map_type()
+        self.check_toPandas_with_map_type(True)
 
-    # TODO(SPARK-42969): Fix the comparison the result with Arrow optimization enabled/disabled.
-    @unittest.skip("Fails in Spark Connect, should enable.")
     def test_toPandas_with_map_type_nulls(self):
-        super().test_toPandas_with_map_type_nulls()
+        self.check_toPandas_with_map_type_nulls(True)
 
-    # TODO(SPARK-42969): Fix the comparison the result with Arrow optimization enabled/disabled.
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_createDataFrame_respect_session_timezone(self):
-        super().test_createDataFrame_respect_session_timezone()
+    def test_createDataFrame_with_array_type(self):
+        self.check_createDataFrame_with_array_type(True)
+
+    def test_createDataFrame_with_int_col_names(self):
+        self.check_createDataFrame_with_int_col_names(True)
+
+    def test_timestamp_nat(self):
+        self.check_timestamp_nat(True)
 
 
 if __name__ == "__main__":
