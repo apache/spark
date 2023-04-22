@@ -21,8 +21,11 @@ import java.nio.ByteBuffer
 import java.util.Collections
 
 import scala.collection.JavaConverters._
+import scala.collection.mutable
 import scala.collection.mutable.{HashMap, ListBuffer}
 
+import com.fasterxml.jackson.databind.ObjectMapper
+import com.fasterxml.jackson.module.scala.DefaultScalaModule
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.io.DataOutputBuffer
 import org.apache.hadoop.security.UserGroupInformation
@@ -105,17 +108,7 @@ private[yarn] class ExecutorRunnable(
     // started on the NodeManager and, if authentication is enabled, provide it with our secret
     // key for fetching shuffle files later
     if (sparkConf.get(SHUFFLE_SERVICE_ENABLED)) {
-      val secretString = securityMgr.getSecretKey()
-      val secretBytes =
-        if (secretString != null) {
-          // This conversion must match how the YarnShuffleService decodes our secret
-          JavaUtils.stringToBytes(secretString)
-        } else {
-          // Authentication is not enabled, so just provide dummy metadata
-          ByteBuffer.allocate(0)
-        }
-      val serviceName = sparkConf.get(SHUFFLE_SERVICE_NAME)
-      ctx.setServiceData(Collections.singletonMap(serviceName, secretBytes))
+      configureServiceData(ctx)
     }
 
     // Send the start request to the ContainerManager
@@ -125,6 +118,33 @@ private[yarn] class ExecutorRunnable(
       case ex: Exception =>
         throw new SparkException(s"Exception while starting container ${container.get.getId}" +
           s" on host $hostname", ex)
+    }
+  }
+
+  private[yarn] def configureServiceData(ctx: ContainerLaunchContext): Unit = {
+    val secretString = securityMgr.getSecretKey()
+
+    val serviceName = sparkConf.get(SHUFFLE_SERVICE_NAME)
+    if (!sparkConf.get(SHUFFLE_SERVER_RECOVERY_DISABLED)) {
+      val secretBytes =
+        if (secretString != null) {
+          // This conversion must match how the YarnShuffleService decodes our secret
+          JavaUtils.stringToBytes(secretString)
+        } else {
+          // Authentication is not enabled, so just provide dummy metadata
+          ByteBuffer.allocate(0)
+        }
+      ctx.setServiceData(Collections.singletonMap(serviceName, secretBytes))
+    } else {
+      val payload = new mutable.HashMap[String, Object]()
+      payload.put(SHUFFLE_SERVER_RECOVERY_DISABLED.key, java.lang.Boolean.TRUE)
+      if (secretString != null) {
+        payload.put(ExecutorRunnable.SECRET_KEY, secretString)
+      }
+      val mapper = new ObjectMapper()
+      mapper.registerModule(DefaultScalaModule)
+      val jsonString = mapper.writeValueAsString(payload)
+      ctx.setServiceData(Collections.singletonMap(serviceName, JavaUtils.stringToBytes(jsonString)))
     }
   }
 
@@ -201,4 +221,8 @@ private[yarn] class ExecutorRunnable(
 
     env
   }
+}
+
+private[yarn] object ExecutorRunnable {
+  private[yarn] val SECRET_KEY = "secret"
 }
