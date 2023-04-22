@@ -90,6 +90,6 @@ class RowLevelOperationRuntimeGroupFiltering(optimizeSubqueries: Rule[LogicalPla
 
     val buildQuery = Aggregate(buildKeys, buildKeys, matchingRowsPlan)
     DynamicPruningExpression(
-      InSubquery(pruningKeys, ListQuery(buildQuery, childOutputs = buildQuery.output)))
+      InSubquery(pruningKeys, ListQuery(buildQuery, numCols = buildQuery.output.length)))
   }
 }

@@ -25,10 +25,8 @@ import org.apache.parquet.column.page.PageReadStore
 import org.apache.parquet.hadoop.ParquetRecordReader
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.execution.datasources.{FileFormat, RowIndexUtil}
-import org.apache.spark.sql.execution.datasources.RowIndexUtil.findRowIndexColumnIndexInSchema
 import org.apache.spark.sql.execution.vectorized.WritableColumnVector
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{LongType, StructField, StructType}
 
 
 object ParquetRowIndexUtil {
@@ -106,7 +104,7 @@ object ParquetRowIndexUtil {
   def addRowIndexToRecordReaderIfNeeded(
       reader: ParquetRecordReader[InternalRow],
       sparkSchema: StructType): RecordReader[Void, InternalRow] = {
-    val rowIndexColumnIdx = RowIndexUtil.findRowIndexColumnIndexInSchema(sparkSchema)
+    val rowIndexColumnIdx = findRowIndexColumnIndexInSchema(sparkSchema)
     if (rowIndexColumnIdx >= 0) {
       new RecordReaderWithRowIndexes(reader, rowIndexColumnIdx)
     } else {
@@ -114,7 +112,25 @@ object ParquetRowIndexUtil {
     }
   }
 
+  def findRowIndexColumnIndexInSchema(sparkSchema: StructType): Int = {
+    sparkSchema.fields.zipWithIndex.find { case (field: StructField, _: Int) =>
+      field.name == ParquetFileFormat.ROW_INDEX_TEMPORARY_COLUMN_NAME
+    } match {
+      case Some((field: StructField, idx: Int)) =>
+        if (field.dataType != LongType) {
+          throw new RuntimeException(s"${ParquetFileFormat.ROW_INDEX_TEMPORARY_COLUMN_NAME} " +
+            "must be of LongType")
+        }
+        idx
+      case _ => -1
+    }
+  }
+
+  def isNeededForSchema(sparkSchema: StructType): Boolean = {
+    findRowIndexColumnIndexInSchema(sparkSchema) >= 0
+  }
+
   def isRowIndexColumn(column: ParquetColumn): Boolean = {
-    column.path.length == 1 && column.path.last == FileFormat.ROW_INDEX_TEMPORARY_COLUMN_NAME
+    column.path.length == 1 && column.path.last == ParquetFileFormat.ROW_INDEX_TEMPORARY_COLUMN_NAME
   }
 }
