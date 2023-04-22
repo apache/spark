@@ -810,6 +810,11 @@ class JsonProtocolSuite extends SparkFunSuite {
     assert(exceptionFailure.description == null)
   }
 
+  test("SPARK-43237: Handle null exception message in event log") {
+    val exception = new Exception()
+    testException(exception)
+  }
+
   test("SPARK-43052: Handle stackTrace with null file name") {
     val stackTrace = Seq(new StackTraceElement("class", "method", null, -1)).toArray
     testStackTrace(stackTrace)
@@ -932,6 +937,12 @@ private[spark] object JsonProtocolSuite extends Assertions {
     val newValue = JsonProtocol.accumValueFromJson(name, json)
     val expectedValue = if (name.exists(_.startsWith(METRICS_PREFIX))) value else value.toString
     assert(newValue === expectedValue)
+  }
+
+  private def testException(exception: Exception): Unit = {
+    val newException = JsonProtocol.exceptionFromJson(
+      toJsonString(JsonProtocol.exceptionToJson(exception, _)))
+    assertEquals(exception, newException)
   }
 
   /** -------------------------------- *
