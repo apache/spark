@@ -309,8 +309,8 @@ package object dsl {
         AttributeReference(attr.nameParts.last, DoubleType)(qualifier = attr.nameParts.init)
 
       /** Creates a new AttributeReference of type string */
-      def string: AttributeReference = AttributeReference(attr.nameParts.last, StringType)(
-        qualifier = attr.nameParts.init)
+      def string: AttributeReference =
+        AttributeReference(attr.nameParts.last, StringType)(qualifier = attr.nameParts.init)
 
       /** Creates a new AttributeReference of type date */
       def date: AttributeReference =
