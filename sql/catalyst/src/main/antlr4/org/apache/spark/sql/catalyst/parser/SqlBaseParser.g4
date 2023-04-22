@@ -1352,6 +1352,7 @@ ansiNonReserved
     | MONTH
     | MONTHS
     | MSCK
+    | NAME
     | NAMESPACE
     | NAMESPACES
     | NANOSECOND
@@ -1670,6 +1671,7 @@ nonReserved
     | MONTH
     | MONTHS
     | MSCK
+    | NAME
     | NAMESPACE
     | NAMESPACES
     | NANOSECOND

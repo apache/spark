@@ -182,7 +182,7 @@ case class InsertIntoStatement(
     "IF NOT EXISTS is only valid in INSERT OVERWRITE")
   require(partitionSpec.values.forall(_.nonEmpty) || !ifPartitionNotExists,
     "IF NOT EXISTS is only valid with static partitions")
-  require(byName && userSpecifiedCols.isEmpty,
+  require(userSpecifiedCols.isEmpty || !byName,
     "BY NAME is only valid without specified cols")
 
   override def child: LogicalPlan = query

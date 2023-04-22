@@ -350,7 +350,7 @@ By default, both `spark.sql.ansi.enabled` and `spark.sql.ansi.enforceReservedKey
 Below is a list of all the keywords in Spark SQL.
 
 |Keyword|Spark SQL<br/>ANSI Mode|Spark SQL<br/>Default Mode|SQL-2016|
-|-------|----------------------|-------------------------|--------|
+|------|----------------------|-------------------------|--------|
 |ADD|non-reserved|non-reserved|non-reserved|
 |AFTER|non-reserved|non-reserved|non-reserved|
 |ALL|reserved|non-reserved|reserved|
@@ -524,6 +524,7 @@ Below is a list of all the keywords in Spark SQL.
 |MONTH|non-reserved|non-reserved|non-reserved|
 |MONTHS|non-reserved|non-reserved|non-reserved|
 |MSCK|non-reserved|non-reserved|non-reserved|
+|NAME|non-reserved|non-reserved|non-reserved|
 |NAMESPACE|non-reserved|non-reserved|non-reserved|
 |NAMESPACES|non-reserved|non-reserved|non-reserved|
 |NANOSECOND|non-reserved|non-reserved|non-reserved|

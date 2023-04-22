@@ -19,6 +19,7 @@ package org.apache.spark.sql
 
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.catalyst.expressions.Hex
+import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.connector.catalog.InMemoryPartitionTableCatalog
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
@@ -134,6 +135,61 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils {
       verifyTable("t1", df.selectExpr(cols: _*))
     }
   }
+
+  test("insert with column list - by name + partitioned table") {
+    val cols = Seq("c1", "c2", "c3", "c4")
+    val df = Seq((4, 3, 2, 1)).toDF(cols.reverse: _*)
+    withTable("t1") {
+      createTable("t1", cols, Seq("int", "int", "int", "int"), cols.takeRight(2))
+      processInsert("t1", df, overwrite = false, byName = true)
+      verifyTable("t1", df.selectExpr(cols: _*))
+    }
+
+    withTable("t1") {
+      createTable("t1", cols, Seq("int", "int", "int", "int"), cols.takeRight(2))
+      processInsert("t1", df.selectExpr("c2", "c1", "c4"),
+        partitionExprs = Seq("c3=3", "c4"), overwrite = false, byName = true)
+      verifyTable("t1", df.selectExpr(cols: _*))
+    }
+
+    withTable("t1") {
+      createTable("t1", cols, Seq("int", "int", "int", "int"), cols.takeRight(2))
+      processInsert("t1", df.selectExpr("c2", "c1"),
+        partitionExprs = Seq("c3=3", "c4=4"), overwrite = false, byName = true)
+      verifyTable("t1", df.selectExpr(cols: _*))
+    }
+  }
+
+  test("insert with column list - by name unsupported case") {
+    withTable("t1") {
+      withView("tmp_view") {
+        val cols = Seq("c1", "c2", "c3")
+        Seq((3, 2, 1)).toDF(cols.reverse: _*).createTempView("tmp_view")
+        createTable("t1", cols, Seq("int", "int", "int"))
+        checkError(
+          exception = intercept[ParseException](
+            sql("INSERT OVERWRITE TABLE t1 BY NAME SELECT * FROM tmp_view")
+          ),
+          errorClass = "PARSE_SYNTAX_ERROR",
+          parameters = Map(
+            "error" -> "'BY'",
+            "hint" -> "")
+        )
+      }
+    }
+
+    withTable("t1") {
+      withView("tmp_view") {
+        val cols = Seq("c1", "c2", "c3")
+        Seq((3, 2, 1)).toDF(cols.reverse: _*).createTempView("tmp_view")
+        createTable("t1", cols, Seq("int", "int", "int"))
+        assertThrows[IllegalArgumentException] {
+          sql("INSERT INTO TABLE t1 BY NAME (c1,c2) SELECT * FROM tmp_view")
+        }
+      }
+    }
+  }
+
 
   test("insert with column list - table output reorder + partitioned table") {
     val cols = Seq("c1", "c2", "c3", "c4")
