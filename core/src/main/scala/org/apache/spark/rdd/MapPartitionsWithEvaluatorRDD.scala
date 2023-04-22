@@ -14,27 +14,28 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.execution.datasources
 
-import org.apache.spark.sql.types.{LongType, StructField, StructType}
+package org.apache.spark.rdd
 
+import scala.reflect.ClassTag
 
-object RowIndexUtil {
-  def findRowIndexColumnIndexInSchema(sparkSchema: StructType): Int = {
-    sparkSchema.fields.zipWithIndex.find { case (field: StructField, _: Int) =>
-      field.name == FileFormat.ROW_INDEX_TEMPORARY_COLUMN_NAME
-    } match {
-      case Some((field: StructField, idx: Int)) =>
-        if (field.dataType != LongType) {
-          throw new RuntimeException(s"${FileFormat.ROW_INDEX_TEMPORARY_COLUMN_NAME} must be of " +
-            "LongType")
-        }
-        idx
-      case _ => -1
-    }
+import org.apache.spark.{Partition, PartitionEvaluatorFactory, TaskContext}
+
+private[spark] class MapPartitionsWithEvaluatorRDD[T : ClassTag, U : ClassTag](
+    var prev: RDD[T],
+    evaluatorFactory: PartitionEvaluatorFactory[T, U])
+  extends RDD[U](prev) {
+
+  override def getPartitions: Array[Partition] = firstParent[T].partitions
+
+  override def compute(split: Partition, context: TaskContext): Iterator[U] = {
+    val evaluator = evaluatorFactory.createEvaluator()
+    val input = firstParent[T].iterator(split, context)
+    evaluator.eval(split.index, input)
   }
 
-  def isNeededForSchema(sparkSchema: StructType): Boolean = {
-    findRowIndexColumnIndexInSchema(sparkSchema) >= 0
+  override def clearDependencies(): Unit = {
+    super.clearDependencies()
+    prev = null
   }
 }

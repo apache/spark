@@ -16,7 +16,6 @@
 #
 
 import json
-import sys
 from typing import Any, Dict, List, Optional
 
 from py4j.java_gateway import JavaObject, java_import
@@ -36,6 +35,9 @@ class StreamingQuery:
     All these methods are thread-safe.
 
     .. versionadded:: 2.0.0
+
+    .. versionchanged:: 3.5.0
+        Supports Spark Connect.
 
     Notes
     -----
@@ -68,7 +70,7 @@ class StreamingQuery:
 
         Get the unique id of this query that persists across restarts from checkpoint data
 
-        >>> sq.id # doctest: +ELLIPSIS
+        >>> sq.id
         '...'
 
         >>> sq.stop()
@@ -95,7 +97,7 @@ class StreamingQuery:
 
         Get the unique id of this query that does not persist across restarts
 
-        >>> sq.runId # doctest: +ELLIPSIS
+        >>> sq.runId
         '...'
 
         >>> sq.stop()
@@ -194,7 +196,7 @@ class StreamingQuery:
         >>> sq.stop()
         """
         if timeout is not None:
-            if not isinstance(timeout, (int, float)) or timeout < 0:
+            if not isinstance(timeout, (int, float)) or timeout <= 0:
                 raise ValueError("timeout must be a positive integer or float. Got %s" % timeout)
             return self._jsq.awaitTermination(int(timeout * 1000))
         else:
@@ -219,7 +221,7 @@ class StreamingQuery:
 
         Get the current status of the query
 
-        >>> sq.status # doctest: +ELLIPSIS
+        >>> sq.status
         {'message': '...', 'isDataAvailable': ..., 'isTriggerActive': ...}
 
         >>> sq.stop()
@@ -248,7 +250,7 @@ class StreamingQuery:
 
         Get an array of the most recent query progress updates for this query
 
-        >>> sq.recentProgress # doctest: +ELLIPSIS
+        >>> sq.recentProgress
         [...]
 
         >>> sq.stop()
@@ -330,6 +332,7 @@ class StreamingQuery:
         Stop streaming query
 
         >>> sq.stop()
+
         >>> sq.isActive
         False
         """
@@ -570,6 +573,9 @@ class StreamingQueryManager:
         ...     def onQueryProgress(self, event):
         ...         pass
         ...
+        ...     def onQueryIdle(self, event):
+        ...         pass
+        ...
         ...     def onQueryTerminated(self, event):
         ...         pass
         >>> test_listener = TestListener()
@@ -614,6 +620,9 @@ class StreamingQueryManager:
         ...     def onQueryProgress(self, event):
         ...         pass
         ...
+        ...     def onQueryIdle(self, event):
+        ...         pass
+        ...
         ...     def onQueryTerminated(self, event):
         ...         pass
         >>> test_listener = TestListener()
@@ -632,6 +641,7 @@ class StreamingQueryManager:
 def _test() -> None:
     import doctest
     import os
+    import sys
     from pyspark.sql import SparkSession
     import pyspark.sql.streaming.query
     from py4j.protocol import Py4JError

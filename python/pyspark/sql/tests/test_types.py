@@ -288,11 +288,21 @@ class TypesTestsMixin:
                 NestedRow([{"payment": 100.5, "name": "B"}], [2, 3]),
             ]
 
-            nestedRdd = self.sc.parallelize(data)
-            df = self.spark.createDataFrame(nestedRdd)
+            df = self.spark.createDataFrame(data)
             self.assertEqual(Row(f1=[Row(payment=200.5, name="A")], f2=[1, 2]), df.first())
 
-            df = self.spark.createDataFrame(data)
+    def test_infer_nested_dict_as_struct_with_rdd(self):
+        # SPARK-35929: Test inferring nested dict as a struct type.
+        NestedRow = Row("f1", "f2")
+
+        with self.sql_conf({"spark.sql.pyspark.inferNestedDictAsStruct.enabled": True}):
+            data = [
+                NestedRow([{"payment": 200.5, "name": "A"}], [1, 2]),
+                NestedRow([{"payment": 100.5, "name": "B"}], [2, 3]),
+            ]
+
+            nestedRdd = self.sc.parallelize(data)
+            df = self.spark.createDataFrame(nestedRdd)
             self.assertEqual(Row(f1=[Row(payment=200.5, name="A")], f2=[1, 2]), df.first())
 
     def test_infer_array_merge_element_types(self):
@@ -300,10 +310,6 @@ class TypesTestsMixin:
         ArrayRow = Row("f1", "f2")
 
         data = [ArrayRow([1, None], [None, 2])]
-
-        rdd = self.sc.parallelize(data)
-        df = self.spark.createDataFrame(rdd)
-        self.assertEqual(Row(f1=[1, None], f2=[None, 2]), df.first())
 
         df = self.spark.createDataFrame(data)
         self.assertEqual(Row(f1=[1, None], f2=[None, 2]), df.first())
@@ -328,6 +334,16 @@ class TypesTestsMixin:
         data4 = [ArrayRow([1, "1"], [None])]
         with self.assertRaisesRegex(ValueError, "types cannot be determined after inferring"):
             self.spark.createDataFrame(data4)
+
+    def test_infer_array_merge_element_types_with_rdd(self):
+        # SPARK-39168: Test inferring array element type from all values in array
+        ArrayRow = Row("f1", "f2")
+
+        data = [ArrayRow([1, None], [None, 2])]
+
+        rdd = self.sc.parallelize(data)
+        df = self.spark.createDataFrame(rdd)
+        self.assertEqual(Row(f1=[1, None], f2=[None, 2]), df.first())
 
     def test_infer_array_element_type_empty(self):
         # SPARK-39168: Test inferring array element type from all rows

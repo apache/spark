@@ -30,6 +30,7 @@ on:
         description: Branch to run the build against
         required: false
         type: string
+        # Change 'master' to 'branch-3.5' in branch-3.5 branch after cutting it.
         default: master
       hadoop:
         description: Hadoop version to run with. HADOOP_PROFILE environment variable should accept it.
@@ -101,6 +102,7 @@ jobs:
               \"java-11-17\": \"true\",
               \"lint\" : \"true\",
               \"k8s-integration-tests\" : \"true\",
+              \"breaking-changes-buf\" : \"true\",
             }"
           echo $precondition # For debugging
           # Remove `\n` to avoid "Invalid format" error
@@ -247,7 +249,10 @@ jobs:
     # Run the tests.
     - name: Run tests
       env: ${{ fromJSON(inputs.envs) }}
+      shell: 'script -q -e -c "bash {0}"'
       run: |
+        # Fix for TTY related issues when launching the Ammonite REPL in tests.
+        export TERM=vt100 && script -qfc 'echo exit | amm -s' && rm typescript
         # Hive "other tests" test needs larger metaspace size based on experiment.
         if [[ "$MODULES_TO_TEST" == "hive" ]] && [[ "$EXCLUDED_TAGS" == "org.apache.spark.tags.SlowHiveTest" ]]; then export METASPACE_SIZE=2g; fi
         export SERIAL_SBT_TESTS=1
@@ -337,6 +342,8 @@ jobs:
             pyspark-pandas-slow
           - >-
             pyspark-connect, pyspark-errors
+          - >-
+            pyspark-pandas-connect
     env:
       MODULES_TO_TEST: ${{ matrix.modules }}
       HADOOP_PROFILE: ${{ inputs.hadoop }}
@@ -493,6 +500,36 @@ jobs:
         name: test-results-sparkr--8-${{ inputs.hadoop }}-hive2.3
         path: "**/target/test-reports/*.xml"
 
+  breaking-changes-buf:
+    needs: [precondition]
+    if: always() && fromJson(needs.precondition.outputs.required).breaking-changes-buf == 'true'
+    # Change 'branch-3.4' to 'branch-3.5' in master branch after cutting branch-3.5 branch.
+    name: Breaking change detection with Buf (branch-3.4)
+    runs-on: ubuntu-22.04
+    steps:
+    - name: Checkout Spark repository
+      uses: actions/checkout@v3
+      with:
+        fetch-depth: 0
+        repository: apache/spark
+        ref: ${{ inputs.branch }}
+    - name: Sync the current branch with the latest in Apache Spark
+      if: github.repository != 'apache/spark'
+      run: |
+        git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF#refs/heads/}
+        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
+        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
+    - name: Install Buf
+      uses: bufbuild/buf-setup-action@v1
+      with:
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+    - name: Detect breaking changes
+      uses: bufbuild/buf-breaking-action@v1
+      with:
+        input: connector/connect/common/src/main
+        against: 'https://github.com/apache/spark.git#branch=branch-3.4,subdir=connector/connect/common/src/main'
+
+
   # Static analysis, and documentation build
   lint:
     needs: [precondition, infra-image]
@@ -580,7 +617,7 @@ jobs:
     - name: Install dependencies for Python code generation check
       run: |
         # See more in "Installation" https://docs.buf.build/installation#tarball
-        curl -LO https://github.com/bufbuild/buf/releases/download/v1.16.0/buf-Linux-x86_64.tar.gz
+        curl -LO https://github.com/bufbuild/buf/releases/download/v1.17.0/buf-Linux-x86_64.tar.gz
         mkdir -p $HOME/buf
         tar -xvzf buf-Linux-x86_64.tar.gz -C $HOME/buf --strip-components 1
         python3.9 -m pip install 'protobuf==3.19.5' 'mypy-protobuf==3.3.0'
