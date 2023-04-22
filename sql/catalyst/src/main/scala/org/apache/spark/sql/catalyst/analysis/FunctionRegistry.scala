@@ -994,7 +994,8 @@ object TableFunctionRegistry {
     generator[JsonTuple]("json_tuple"),
     generator[PosExplode]("posexplode"),
     generator[PosExplode]("posexplode_outer", outer = true),
-    generator[Stack]("stack")
+    generator[Stack]("stack"),
+    generator[SQLKeywords]("sql_keywords")
   )
 
   val builtin: SimpleTableFunctionRegistry = {

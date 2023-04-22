@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.streaming
 
-import java.io.{InterruptedIOException, IOException, UncheckedIOException}
+import java.io.{InterruptedIOException, UncheckedIOException}
 import java.nio.channels.ClosedByInterruptException
 import java.util.UUID
 import java.util.concurrent.{CountDownLatch, ExecutionException, TimeoutException, TimeUnit}
@@ -312,12 +312,6 @@ abstract class StreamExecution(
     } catch {
       case e if isInterruptedByStop(e, sparkSession.sparkContext) =>
         // interrupted by stop()
-        updateStatusMessage("Stopped")
-      case e: IOException if e.getMessage != null
-        && e.getMessage.startsWith(classOf[InterruptedException].getName)
-        && state.get == TERMINATED =>
-        // This is a workaround for HADOOP-12074: `Shell.runCommand` converts `InterruptedException`
-        // to `new IOException(ie.toString())` before Hadoop 2.8.
         updateStatusMessage("Stopped")
       case e: Throwable =>
         val message = if (e.getMessage == null) "" else e.getMessage
