@@ -40,7 +40,7 @@ import org.apache.spark.connect.proto.StreamingQueryManagerCommandResult.Streami
 import org.apache.spark.connect.proto.WriteStreamOperationStart
 import org.apache.spark.connect.proto.WriteStreamOperationStart.TriggerCase
 import org.apache.spark.ml.{functions => MLFunctions}
-import org.apache.spark.sql.{Column, Dataset, Encoders, SparkSession, TypedColumn}
+import org.apache.spark.sql.{Column, Dataset, Encoders, RelationalGroupedDataset, SparkSession, TypedColumn}
 import org.apache.spark.sql.avro.{AvroDataToCatalyst, CatalystDataToAvro}
 import org.apache.spark.sql.catalyst.{expressions, AliasIdentifier, FunctionIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{GlobalTempView, LocalTempView, MultiAlias, ParameterizedQuery, UnresolvedAlias, UnresolvedAttribute, UnresolvedDeserializer, UnresolvedExtractValue, UnresolvedFunction, UnresolvedRegex, UnresolvedRelation, UnresolvedStar}
@@ -660,7 +660,53 @@ class SparkConnectPlanner(val session: SparkSession) {
         input: proto.Relation,
         groupingExprs: java.util.List[proto.Expression],
         sortingExprs: java.util.List[proto.Expression]): UntypedKeyValueGroupedDataset = {
-      val logicalPlan = transformRelation(input)
+      apply(transformRelation(input), groupingExprs, sortingExprs)
+    }
+
+    private def apply(
+        logicalPlan: LogicalPlan,
+        groupingExprs: java.util.List[proto.Expression],
+        sortingExprs: java.util.List[proto.Expression]): UntypedKeyValueGroupedDataset = {
+      if (groupingExprs.size() == 1) {
+        createFromGroupByKeyFunc(logicalPlan, groupingExprs, sortingExprs)
+      } else if (groupingExprs.size() > 1) {
+        createFromRelationalDataset(logicalPlan, groupingExprs, sortingExprs)
+      } else {
+        throw InvalidPlanInput(
+          "The grouping expression cannot be absent for KeyValueGroupedDataset")
+      }
+    }
+
+    private def createFromRelationalDataset(
+        logicalPlan: LogicalPlan,
+        groupingExprs: java.util.List[proto.Expression],
+        sortingExprs: java.util.List[proto.Expression]): UntypedKeyValueGroupedDataset = {
+      assert(groupingExprs.size() >= 1)
+      val dummyFunc = unpackUdf(groupingExprs.get(0).getCommonInlineUserDefinedFunction)
+      val groupExprs = groupingExprs.asScala.toSeq.drop(1).map(expr => transformExpression(expr))
+
+      val vEnc = ExpressionEncoder(dummyFunc.inputEncoders.head)
+      val kEnc = ExpressionEncoder(dummyFunc.outputEncoder)
+
+      val (qe, aliasedGroupings) =
+        RelationalGroupedDataset.toKeyValueGroupedDataset(logicalPlan, session, groupExprs)
+
+      val dataAttributes = logicalPlan.output
+      val valueDeserializer = UnresolvedDeserializer(vEnc.deserializer, dataAttributes)
+      UntypedKeyValueGroupedDataset(
+        kEnc,
+        vEnc,
+        valueDeserializer,
+        qe.analyzed,
+        dataAttributes,
+        aliasedGroupings,
+        Seq.empty)
+    }
+
+    private def createFromGroupByKeyFunc(
+        logicalPlan: LogicalPlan,
+        groupingExprs: java.util.List[proto.Expression],
+        sortingExprs: java.util.List[proto.Expression]): UntypedKeyValueGroupedDataset = {
       assert(groupingExprs.size() == 1)
       val groupFunc = groupingExprs.asScala.toSeq
         .map(expr => unpackUdf(expr.getCommonInlineUserDefinedFunction))

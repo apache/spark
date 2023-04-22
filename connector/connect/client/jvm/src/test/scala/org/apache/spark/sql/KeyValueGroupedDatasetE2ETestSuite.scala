@@ -237,4 +237,32 @@ class KeyValueGroupedDatasetE2ETestSuite extends RemoteSparkSession {
 
     assert(values == Arrays.asList[(Int, String)]((3, "abcxyz"), (5, "hello")))
   }
+
+  test("groupby") {
+    val session: SparkSession = spark
+    import session.implicits._
+    val ds = Seq(("a", 1, 10), ("a", 2, 20), ("b", 2, 1), ("b", 1, 2), ("c", 1, 1))
+      .toDF("key", "seq", "value")
+    val grouped = ds.groupBy($"key").as[String, (String, Int, Int)]
+    val aggregated = grouped.flatMapSortedGroups(
+      $"seq", functions.expr("length(key)"), $"value") {
+      (g, iter) => Iterator(g, iter.mkString(", "))
+    }.collectAsList()
+
+    assert(aggregated == Arrays.asList[String](
+      "a", "(a,1,10), (a,2,20)",
+      "b", "(b,2,1), (b,1,2)",
+      "c", "(c,1,1)"))
+  }
+
+  test("groupby - keyAs, keys") {
+    val session: SparkSession = spark
+    import session.implicits._
+    val ds = Seq(("a", 1, 10), ("a", 2, 20), ("b", 2, 1), ("b", 1, 2), ("c", 1, 1))
+      .toDF("key", "seq", "value")
+    val grouped = ds.groupBy($"value").as[String, (String, Int, Int)]
+    val keys = grouped.keyAs[String].keys.collectAsList()
+
+    assert(keys == Arrays.asList[String]("10", "20", "1", "2"))
+  }
 }
