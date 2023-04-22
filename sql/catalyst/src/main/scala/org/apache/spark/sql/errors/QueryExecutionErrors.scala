@@ -2351,7 +2351,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       e: SparkException): Throwable = {
     new SparkException(
       errorClass = "CANNOT_MERGE_SCHEMAS",
-      messageParameters = Map("left" -> leftSchema.treeString, "right" -> rightSchema.treeString),
+      messageParameters = Map("left" -> toSQLType(leftSchema), "right" -> toSQLType(rightSchema)),
       cause = e)
   }
 

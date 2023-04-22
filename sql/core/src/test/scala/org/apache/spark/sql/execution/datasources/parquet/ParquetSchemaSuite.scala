@@ -28,6 +28,7 @@ import org.apache.parquet.schema.Type._
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.ScalaReflection
+import org.apache.spark.sql.catalyst.expressions.Cast.toSQLType
 import org.apache.spark.sql.execution.datasources.SchemaColumnConvertNotSupportedException
 import org.apache.spark.sql.functions.desc
 import org.apache.spark.sql.internal.SQLConf
@@ -996,8 +997,8 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
         errorClass = "CANNOT_MERGE_SCHEMAS",
         sqlState = "42KD9",
         parameters = Map(
-          "left" -> df1.schema.treeString,
-          "right" -> df2.schema.treeString))
+          "left" -> toSQLType(df1.schema),
+          "right" -> toSQLType(df2.schema)))
     }
   }
 
