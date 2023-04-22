@@ -38,7 +38,7 @@ from pyspark.sql.types import (
     TimestampNTZType,
     DayTimeIntervalType,
 )
-from pyspark.errors import AnalysisException
+from pyspark.errors import AnalysisException, PySparkTypeError
 from pyspark.testing.sqlutils import ReusedSQLTestCase, test_compiled, test_not_compiled_message
 from pyspark.testing.utils import QuietTest
 
@@ -109,10 +109,17 @@ class BaseUDFTestsMixin(object):
             self.check_udf_registration_return_type_not_none()
 
     def check_udf_registration_return_type_not_none(self):
-        with self.assertRaisesRegex(TypeError, "Invalid return type"):
+        # negative test for incorrect type
+        with self.assertRaises(PySparkTypeError) as pe:
             self.spark.catalog.registerFunction(
                 "f", UserDefinedFunction(lambda x, y: len(x) + y, StringType()), StringType()
             )
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="CANNOT_SPECIFY_RETURN_TYPE_FOR_UDF",
+            message_parameters={"arg_name": "f", "return_type": "StringType()"},
+        )
 
     def test_nondeterministic_udf(self):
         # Test that nondeterministic UDFs are evaluated only once in chained UDF evaluations
