@@ -2435,7 +2435,7 @@ object SQLConf {
   val STREAMING_NO_DATA_PROGRESS_EVENT_INTERVAL =
     buildConf("spark.sql.streaming.noDataProgressEventInterval")
       .internal()
-      .doc("How long to wait between two progress events when there is no data")
+      .doc("How long to wait before providing query idle event when there is no data")
       .version("2.1.1")
       .timeConf(TimeUnit.MILLISECONDS)
       .createWithDefault(10000L)
