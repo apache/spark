@@ -1436,6 +1436,7 @@ class Deduplicate(google.protobuf.message.Message):
     INPUT_FIELD_NUMBER: builtins.int
     COLUMN_NAMES_FIELD_NUMBER: builtins.int
     ALL_COLUMNS_AS_KEYS_FIELD_NUMBER: builtins.int
+    WITHIN_WATERMARK_FIELD_NUMBER: builtins.int
     @property
     def input(self) -> global___Relation:
         """(Required) Input relation for a Deduplicate."""
@@ -1452,22 +1453,29 @@ class Deduplicate(google.protobuf.message.Message):
 
     This field does not co-use with `column_names`.
     """
+    within_watermark: builtins.bool
+    """(Optional) Deduplicate within the time range of watermark."""
     def __init__(
         self,
         *,
         input: global___Relation | None = ...,
         column_names: collections.abc.Iterable[builtins.str] | None = ...,
         all_columns_as_keys: builtins.bool | None = ...,
+        within_watermark: builtins.bool | None = ...,
     ) -> None: ...
     def HasField(
         self,
         field_name: typing_extensions.Literal[
             "_all_columns_as_keys",
             b"_all_columns_as_keys",
+            "_within_watermark",
+            b"_within_watermark",
             "all_columns_as_keys",
             b"all_columns_as_keys",
             "input",
             b"input",
+            "within_watermark",
+            b"within_watermark",
         ],
     ) -> builtins.bool: ...
     def ClearField(
@@ -1475,18 +1483,27 @@ class Deduplicate(google.protobuf.message.Message):
         field_name: typing_extensions.Literal[
             "_all_columns_as_keys",
             b"_all_columns_as_keys",
+            "_within_watermark",
+            b"_within_watermark",
             "all_columns_as_keys",
             b"all_columns_as_keys",
             "column_names",
             b"column_names",
             "input",
             b"input",
+            "within_watermark",
+            b"within_watermark",
         ],
     ) -> None: ...
+    @typing.overload
     def WhichOneof(
         self,
         oneof_group: typing_extensions.Literal["_all_columns_as_keys", b"_all_columns_as_keys"],
     ) -> typing_extensions.Literal["all_columns_as_keys"] | None: ...
+    @typing.overload
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["_within_watermark", b"_within_watermark"]
+    ) -> typing_extensions.Literal["within_watermark"] | None: ...
 
 global___Deduplicate = Deduplicate
 

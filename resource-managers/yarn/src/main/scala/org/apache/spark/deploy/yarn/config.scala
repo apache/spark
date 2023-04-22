@@ -80,8 +80,7 @@ package object config extends Logging {
 
   private[spark] val AM_TOKEN_CONF_REGEX =
     ConfigBuilder("spark.yarn.am.tokenConfRegex")
-      .doc("This config is only supported when Hadoop version is 2.9+ or 3.x (e.g., when using " +
-        "the Hadoop 3.x profile). The value of this config is a regex expression used to grep a " +
+      .doc("The value of this config is a regex expression used to grep a " +
         "list of config entries from the job's configuration file (e.g., hdfs-site.xml) and send " +
         "to RM, which uses them when renewing delegation tokens. A typical use case of this " +
         "feature is to support delegation tokens in an environment where a YARN cluster needs to " +
