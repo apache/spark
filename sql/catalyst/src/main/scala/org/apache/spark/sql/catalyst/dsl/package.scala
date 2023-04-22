@@ -31,7 +31,6 @@ import org.apache.spark.sql.catalyst.expressions.objects.Invoke
 import org.apache.spark.sql.catalyst.plans.{Inner, JoinType}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
-import org.apache.spark.sql.catalyst.util.quoteIfNeeded
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -266,16 +265,12 @@ package object dsl {
     def windowExpr(windowFunc: Expression, windowSpec: WindowSpecDefinition): WindowExpression =
       WindowExpression(windowFunc, windowSpec)
 
-    implicit class DslSymbol(sym: Symbol) extends ImplicitAttribute {
-      def s: String = quoteIfNeeded(sym.name)
-    }
-
+    implicit class DslSymbol(sym: Symbol) extends ImplicitAttribute { def s: String = sym.name }
     // TODO more implicit class for literal?
     implicit class DslString(val s: String) extends ImplicitOperators {
       override def expr: Expression = Literal(s)
       def attr: UnresolvedAttribute = analysis.UnresolvedAttribute(s)
     }
-
     implicit class DslAttr(attr: UnresolvedAttribute) extends ImplicitAttribute {
       def s: String = attr.sql
     }
