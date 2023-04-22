@@ -65,17 +65,23 @@ class DateOpsTestsMixin:
         self.assertRaises(TypeError, lambda: self.psser - "x")
         self.assertRaises(TypeError, lambda: self.psser - 1)
         self.assert_eq(
-            (self.pser - self.some_date).dt.days,
+            pd.to_timedelta(self.pser - self.some_date).dt.days.astype("int64"),
             self.psser - self.some_date,
         )
         pdf, psdf = self.pdf, self.psdf
         for col in self.df_cols:
             if col == "date":
-                self.assert_eq((pdf["date"] - pdf[col]).dt.days, psdf["date"] - psdf[col])
+                self.assert_eq(
+                    pd.to_timedelta(pdf["date"] - pdf[col]).dt.days.astype("int64"),
+                    psdf["date"] - psdf[col],
+                )
             else:
                 self.assertRaises(TypeError, lambda: psdf["date"] - psdf[col])
         pdf, psdf = self.date_pdf, self.date_psdf
-        self.assert_eq((pdf["this"] - pdf["that"]).dt.days, psdf["this"] - psdf["that"])
+        self.assert_eq(
+            pd.to_timedelta(pdf["this"] - pdf["that"]).dt.days.astype("int64"),
+            psdf["this"] - psdf["that"],
+        )
 
     def test_mul(self):
         self.assertRaises(TypeError, lambda: self.psser * "x")
@@ -126,7 +132,7 @@ class DateOpsTestsMixin:
         self.assertRaises(TypeError, lambda: "x" - self.psser)
         self.assertRaises(TypeError, lambda: 1 - self.psser)
         self.assert_eq(
-            (self.some_date - self.pser).dt.days,
+            pd.to_timedelta(self.some_date - self.pser).dt.days.astype("int64"),
             self.some_date - self.psser,
         )
 
