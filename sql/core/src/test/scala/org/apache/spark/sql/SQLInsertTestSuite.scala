@@ -46,12 +46,12 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils {
   }
 
   protected def processInsert(
-                               tableName: String,
-                               input: DataFrame,
-                               cols: Seq[String] = Nil,
-                               partitionExprs: Seq[String] = Nil,
-                               overwrite: Boolean,
-                               byName: Boolean = false): Unit = {
+       tableName: String,
+       input: DataFrame,
+       cols: Seq[String] = Nil,
+       partitionExprs: Seq[String] = Nil,
+       overwrite: Boolean,
+       byName: Boolean = false): Unit = {
     val tmpView = "tmp_view"
     val partitionList = if (partitionExprs.nonEmpty) {
       partitionExprs.mkString("PARTITION (", ",", ")")
