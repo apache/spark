@@ -199,7 +199,7 @@ class StreamingQuery:
             if not isinstance(timeout, (int, float)) or timeout < 0:
                 raise PySparkValueError(
                     error_class="VALUE_NOT_POSITIVE",
-                    message_parameters={"arg_name": "timeout", "arg_type": type(timeout).__name__},
+                    message_parameters={"arg_name": "timeout", "arg_value": type(timeout).__name__},
                 )
             return self._jsq.awaitTermination(int(timeout * 1000))
         else:
@@ -537,7 +537,7 @@ class StreamingQueryManager:
             if not isinstance(timeout, (int, float)) or timeout < 0:
                 raise PySparkValueError(
                     error_class="VALUE_NOT_POSITIVE",
-                    message_parameters={"arg_name": "timeout", "arg_type": type(timeout).__name__},
+                    message_parameters={"arg_name": "timeout", "arg_value": type(timeout).__name__},
                 )
             return self._jsqm.awaitAnyTermination(int(timeout * 1000))
         else:
