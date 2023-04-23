@@ -109,7 +109,7 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
       return filterApplicationSidePlan
     }
     val filter = InSubquery(Seq(mayWrapWithHash(filterApplicationSideExp)),
-      ListQuery(aggregate, childOutputs = aggregate.output))
+      ListQuery(aggregate, numCols = aggregate.output.length))
     Filter(filter, filterApplicationSidePlan)
   }
 
