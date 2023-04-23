@@ -939,6 +939,9 @@ class DataFrameTestsMixin:
                 nonlocal observed_metrics
                 observed_metrics = event.progress.observedMetrics
 
+            def onQueryIdle(self, event):
+                pass
+
             def onQueryTerminated(self, event):
                 pass
 
@@ -1707,7 +1710,10 @@ class DataFrameTestsMixin:
         )
 
     def test_duplicate_field_names(self):
-        data = [Row(Row("a", 1), Row(2, 3, "b", 4, "c")), Row(Row("x", 6), Row(7, 8, "y", 9, "z"))]
+        data = [
+            Row(Row("a", 1), Row(2, 3, "b", 4, "c", "d")),
+            Row(Row("w", 6), Row(7, 8, "x", 9, "y", "z")),
+        ]
         schema = (
             StructType()
             .add("struct", StructType().add("x", StringType()).add("x", IntegerType()))
@@ -1718,7 +1724,8 @@ class DataFrameTestsMixin:
                 .add("x", IntegerType())
                 .add("x", StringType())
                 .add("y", IntegerType())
-                .add("y", StringType()),
+                .add("y", StringType())
+                .add("x", StringType()),
             )
         )
         df = self.spark.createDataFrame(data, schema=schema)
