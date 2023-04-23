@@ -21,7 +21,7 @@ import org.apache.spark.{SparkException, SparkFunSuite}
 
 class RuleIdCollectionSuite extends SparkFunSuite {
 
-    test("rule id not found") {
+    test("SPARK-42330: rule id not found") {
         checkError(
             exception = intercept[SparkException] {
                 RuleIdCollection.getRuleId("incorrect")
