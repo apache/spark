@@ -575,7 +575,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
                 )
         return self._schema
 
-    def printSchema(self) -> None:
+    def printSchema(self, level: Optional[int] = None) -> None:
         """Prints out the schema in the tree format.
 
         .. versionadded:: 1.3.0
@@ -592,7 +592,10 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
          |-- age: long (nullable = true)
          |-- name: string (nullable = true)
         """
-        print(self._jdf.schema().treeString())
+        if level:
+            print(self._jdf.schema().treeString(level))
+        else:
+            print(self._jdf.schema().treeString())
 
     def explain(
         self, extended: Optional[Union[bool, str]] = None, mode: Optional[str] = None
