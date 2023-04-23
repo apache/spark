@@ -101,7 +101,7 @@ ERROR_CLASSES_JSON = """
   },
   "NEGATIVE_VALUE" : {
     "message" : [
-      "Value for `<arg_name>` must be >= 0, got '<arg_value>'."
+      "Value for `<arg_name>` must be greater than or equal to 0, got '<arg_value>'."
     ]
   },
   "NOT_BOOL" : {

@@ -1450,7 +1450,7 @@ class DataFrame:
                 },
             )
         if relativeError < 0:
-            raise PySparkTypeError(
+            raise PySparkValueError(
                 error_class="NEGATIVE_VALUE",
                 message_parameters={
                     "arg_name": "relativeError",
