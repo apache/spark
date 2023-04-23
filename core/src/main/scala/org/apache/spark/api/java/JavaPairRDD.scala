@@ -577,7 +577,7 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])(
    * (k, (None, w)) if no elements in `this` have key k. Uses the given Partitioner to partition
    * the output RDD.
    */
-  def rightOuterJoin[W: ClassTag](
+  def rightOuterJoin[W](
       other: JavaPairRDD[K, W],
       partitioner: Partitioner): JavaPairRDD[K, (Optional[V], W)] = {
     val joinResult = rdd.rightOuterJoin(other, partitioner)
