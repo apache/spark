@@ -112,23 +112,15 @@ class ObjectAggregationIterator(
     }
   }
 
-  // Creates a new aggregation buffer and initializes buffer values. This function should only be
-  // called under two cases:
-  //
-  //  - when creating aggregation buffer for a new group in the hash map, and
-  //  - when creating the re-used buffer for sort-based aggregation
-  private def createNewAggregationBuffer(): SpecificInternalRow = {
-    val bufferFieldTypes = aggregateFunctions.flatMap(_.aggBufferAttributes.map(_.dataType))
-    val buffer = new SpecificInternalRow(bufferFieldTypes)
-    initAggregationBuffer(buffer)
-    buffer
-  }
+  private lazy val bufferFieldTypes =
+    aggregateFunctions.flatMap(_.aggBufferAttributes.map(_.dataType))
 
-  private def initAggregationBuffer(buffer: SpecificInternalRow): Unit = {
-    // Initializes declarative aggregates' buffer values
-    expressionAggInitialProjection.target(buffer)(EmptyRow)
-    // Initializes imperative aggregates' buffer values
-    aggregateFunctions.collect { case f: ImperativeAggregate => f }.foreach(_.initialize(buffer))
+  // Creates a new aggregation buffer and initializes buffer values. This function should only be
+  // called when creating aggregation buffer for a new group in the hash map.
+  private def createNewAggregationBuffer(): SpecificInternalRow = {
+    val buffer = new SpecificInternalRow(bufferFieldTypes)
+    initializeBuffer(buffer)
+    buffer
   }
 
   private def getAggregationBufferByKey(
@@ -145,8 +137,7 @@ class ObjectAggregationIterator(
 
   // This function is used to read and process input rows. When processing input rows, it first uses
   // hash-based aggregation by putting groups and their buffers in `hashMap`. If `hashMap` grows too
-  // large, it sorts the contents, spills them to disk, and creates a new map. At last, all sorted
-  // spills are merged together for sort-based aggregation.
+  // large, it destroys the `hashMap` and falls back to sort-based aggregation.
   private def processInputs(): Unit = {
     // In-memory map to store aggregation buffer for hash-based aggregation.
     val hashMap = new ObjectAggregationMap()
@@ -194,7 +185,8 @@ class ObjectAggregationIterator(
           DataTypeUtils.fromAttributes(groupingAttributes),
           processRow,
           mergeAggregationBuffers,
-          createNewAggregationBuffer())
+          bufferFieldTypes.length,
+          initializeBuffer)
 
         while (inputRows.hasNext) {
           // NOTE: The input row is always UnsafeRow
@@ -222,7 +214,8 @@ class ObjectAggregationIterator(
  * @param processRow  Function to update the aggregation buffer with input rows
  * @param mergeAggregationBuffers Function used to merge the input aggregation buffers into existing
  *                                aggregation buffers
- * @param makeEmptyAggregationBuffer Creates an empty aggregation buffer
+ * @param aggregationBufferSize The number of aggregation buffer size
+ * @param initializeBuffer Function to initialize aggregation buffer
  *
  * @todo Try to eliminate this class by refactor and reuse code paths in [[SortAggregateExec]].
  */
@@ -232,11 +225,15 @@ class SortBasedAggregator(
     groupingSchema: StructType,
     processRow: (InternalRow, InternalRow) => Unit,
     mergeAggregationBuffers: (InternalRow, InternalRow) => Unit,
-    makeEmptyAggregationBuffer: => InternalRow) {
+    aggregationBufferSize: Int,
+    initializeBuffer: InternalRow => Unit) {
 
   // external sorter to sort the input (grouping key + input row) with grouping key.
   private val inputSorter = createExternalSorterForInput()
   private val groupingKeyOrdering: BaseOrdering = GenerateOrdering.create(groupingSchema)
+  // A reused aggregation buffer which should be initialized when finding a new grouping key
+  private val sortBasedAggregationBuffer: InternalRow =
+    new GenericInternalRow(aggregationBufferSize)
 
   def addInput(groupingKey: UnsafeRow, inputRow: UnsafeRow): Unit = {
     inputSorter.insertKV(groupingKey, inputRow)
@@ -253,6 +250,7 @@ class SortBasedAggregator(
       var hasNextAggBuffer: Boolean = initialAggBufferIterator.next()
       private var result: AggregationBufferEntry = _
       private var groupingKey: UnsafeRow = _
+      private var aggregateMode: Int = _
 
       override def hasNext(): Boolean = {
         result != null || findNextSortedGroup()
@@ -269,20 +267,24 @@ class SortBasedAggregator(
         if (hasNextInput || hasNextAggBuffer) {
           // Find smaller key of the initialAggBufferIterator and initialAggBufferIterator
           groupingKey = findGroupingKey()
-          result = new AggregationBufferEntry(groupingKey, makeEmptyAggregationBuffer)
+          initializeBuffer(sortBasedAggregationBuffer)
+          result = new AggregationBufferEntry(groupingKey, sortBasedAggregationBuffer)
 
           // Firstly, update the aggregation buffer with input rows.
-          while (hasNextInput &&
-            groupingKeyOrdering.compare(inputIterator.getKey, groupingKey) == 0) {
-            processRow(result.aggregationBuffer, inputIterator.getValue)
-            hasNextInput = inputIterator.next()
+          if (aggregateMode != 1) {
+            var findNextPartition = false
+            while (hasNextInput && !findNextPartition) {
+              processRow(result.aggregationBuffer, inputIterator.getValue)
+              hasNextInput = inputIterator.next()
+              findNextPartition = inputIterator.getKey != groupingKey
+            }
           }
 
           // Secondly, merge the aggregation buffer with existing aggregation buffers.
-          // NOTE: the ordering of these two while-block matter, mergeAggregationBuffer() should
+          // NOTE: the ordering of these two block matter, mergeAggregationBuffer() should
           // be called after calling processRow.
-          while (hasNextAggBuffer &&
-            groupingKeyOrdering.compare(initialAggBufferIterator.getKey, groupingKey) == 0) {
+          if (aggregateMode != 0) {
+            // No need a while-block here, the key in `initialAggBufferIterator` is unique.
             mergeAggregationBuffers(result.aggregationBuffer, initialAggBufferIterator.getValue)
             hasNextAggBuffer = initialAggBufferIterator.next()
           }
@@ -293,19 +295,35 @@ class SortBasedAggregator(
         }
       }
 
+      /**
+       * This function has a side effect that updates `aggregateMode` to represent:
+       * 0: the grouping key belongs to input rows, and we should update it to aggregation buffer
+       * 1: the grouping key belongs to input aggregation buffer, and we should merge it to
+       *    aggregation buffer
+       * 2: the grouping key exists in both input rows and aggregation buffer, and we should first
+       *    update then merge it
+       */
       private def findGroupingKey(): UnsafeRow = {
         var newGroupingKey: UnsafeRow = null
         if (!hasNextInput) {
           newGroupingKey = initialAggBufferIterator.getKey
+          aggregateMode = 1
         } else if (!hasNextAggBuffer) {
           newGroupingKey = inputIterator.getKey
+          aggregateMode = 0
         } else {
           val compareResult =
             groupingKeyOrdering.compare(inputIterator.getKey, initialAggBufferIterator.getKey)
-          if (compareResult <= 0) {
+          if (compareResult < 0) {
             newGroupingKey = inputIterator.getKey
-          } else {
+            aggregateMode = 0
+          } else if (compareResult > 0) {
             newGroupingKey = initialAggBufferIterator.getKey
+            aggregateMode = 1
+          } else {
+            // the grouping key exists in both `inputIterator` and `initialAggBufferIterator`
+            newGroupingKey = inputIterator.getKey
+            aggregateMode = 2
           }
         }
 

@@ -106,6 +106,50 @@ object ObjectHashAggregateExecBenchmark extends SqlBasedBenchmark {
     benchmark.run()
   }
 
+  private def objectHashAggregateVsSortAggregateWithHighCardinality(N: Int): Unit = {
+    import org.apache.spark.sql.functions._
+    val benchmark = new Benchmark("object agg v.s. sort agg with high cardinality",
+      valuesPerIteration = N, minNumIters = 3, output = output)
+
+    val df = spark.range(N)
+      .selectExpr(
+        s"concat('XXXXXXXXXX', id % ($N/5)) as key1", s"id % ($N/5) as key2",
+        "id % 3 as value")
+
+    benchmark.addCase("sort agg") { _ =>
+      withSQLConf(SQLConf.USE_OBJECT_HASH_AGG.key -> "false") {
+        df.groupBy("key1", "key2")
+          .agg(sum($"value"), count($"value"), avg($"value"),
+            collect_set($"value"))
+          .noop()
+      }
+    }
+
+    benchmark.addCase("object agg w/o fallback") { _ =>
+      withSQLConf(
+        SQLConf.USE_OBJECT_HASH_AGG.key -> "true",
+        SQLConf.OBJECT_AGG_SORT_BASED_FALLBACK_THRESHOLD.key -> Int.MaxValue.toString) {
+        df.groupBy("key1", "key2")
+          .agg(sum($"value"), count($"value"), avg($"value"), max($"value"), min($"value"),
+            collect_set($"value"))
+          .noop()
+      }
+    }
+
+    benchmark.addCase("object agg w/ fallback") { _ =>
+      withSQLConf(
+        SQLConf.USE_OBJECT_HASH_AGG.key -> "true",
+        SQLConf.OBJECT_AGG_SORT_BASED_FALLBACK_THRESHOLD.key -> "128") {
+        df.groupBy("key1", "key2")
+          .agg(sum($"value"), count($"value"), avg($"value"), max($"value"), min($"value"),
+            collect_set($"value"))
+          .noop()
+      }
+    }
+
+    benchmark.run()
+  }
+
   private def objectHashAggregateExecVsSortAggregateExecUsingTypedCount(N: Int): Unit = {
     val benchmark = new Benchmark(
       name = "object agg v.s. sort agg",
@@ -214,6 +258,10 @@ object ObjectHashAggregateExecBenchmark extends SqlBasedBenchmark {
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
     runBenchmark("Hive UDAF vs Spark AF") {
       hiveUDAFvsSparkAF(2 << 15)
+    }
+
+    runBenchmark("ObjectHashAggregateExec vs SortAggregateExec - high cardinality") {
+      objectHashAggregateVsSortAggregateWithHighCardinality(10 * 1000 * 1000)
     }
 
     runBenchmark("ObjectHashAggregateExec vs SortAggregateExec - typed_count") {

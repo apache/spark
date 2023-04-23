@@ -218,6 +218,17 @@ final class SpecificInternalRow(val values: Array[MutableValue]) extends BaseGen
     }
   }
 
+  // avoid scala implicit conversion from `Array` to `Seq`
+  def this(dataTypes: Array[DataType]) = {
+    this(new Array[MutableValue](dataTypes.length))
+    val length = values.length
+    var i = 0
+    while (i < length) {
+      values(i) = dataTypeToMutableValue(dataTypes(i))
+      i += 1
+    }
+  }
+
   def this() = this(Seq.empty)
 
   def this(schema: StructType) = {
