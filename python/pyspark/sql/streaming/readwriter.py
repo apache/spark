@@ -1256,7 +1256,7 @@ class DataStreamWriter:
             if not callable(getattr(f, "process")):
                 raise PySparkTypeError(
                     error_class="ATTRIBUTE_NOT_CALLABLE",
-                    message_parameters={"attr_name": "process", "obj": "f"},
+                    message_parameters={"attr_name": "process", "obj_name": "f"},
                 )
 
             def doesMethodExist(method_name: str) -> bool:
@@ -1264,7 +1264,7 @@ class DataStreamWriter:
                 if exists and not callable(getattr(f, method_name)):
                     raise PySparkTypeError(
                         error_class="ATTRIBUTE_NOT_CALLABLE",
-                        message_parameters={"attr_name": method_name, "obj": "f"},
+                        message_parameters={"attr_name": method_name, "obj_name": "f"},
                     )
                 return exists
 
