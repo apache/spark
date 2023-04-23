@@ -50,6 +50,10 @@ class StreamingQueryListener(ABC):
     ...        # Do something with event.
     ...        pass
     ...
+    ...    def onQueryIdle(self, event: QueryIdleEvent) -> None:
+    ...        # Do something with event.
+    ...        pass
+    ...
     ...    def onQueryTerminated(self, event: QueryTerminatedEvent) -> None:
     ...        # Do something with event.
     ...        pass
@@ -88,6 +92,13 @@ class StreamingQueryListener(ABC):
         pass
 
     @abstractmethod
+    def onQueryIdle(self, event: "QueryIdleEvent") -> None:
+        """
+        Called when the query is idle and waiting for new data to process.
+        """
+        pass
+
+    @abstractmethod
     def onQueryTerminated(self, event: "QueryTerminatedEvent") -> None:
         """
         Called when a query is stopped, with or without error.
@@ -122,6 +133,9 @@ class JStreamingQueryListener:
 
     def onQueryProgress(self, jevent: JavaObject) -> None:
         self.pylistener.onQueryProgress(QueryProgressEvent(jevent))
+
+    def onQueryIdle(self, jevent: JavaObject) -> None:
+        self.pylistener.onQueryIdle(QueryIdleEvent(jevent))
 
     def onQueryTerminated(self, jevent: JavaObject) -> None:
         self.pylistener.onQueryTerminated(QueryTerminatedEvent(jevent))
@@ -198,6 +212,38 @@ class QueryProgressEvent:
         The query progress updates.
         """
         return self._progress
+
+
+class QueryIdleEvent:
+    """
+    Event representing that query is idle and waiting for new data to process.
+
+    .. versionadded:: 3.5.0
+
+    Notes
+    -----
+    This API is evolving.
+    """
+
+    def __init__(self, jevent: JavaObject) -> None:
+        self._id: uuid.UUID = uuid.UUID(jevent.id().toString())
+        self._runId: uuid.UUID = uuid.UUID(jevent.runId().toString())
+
+    @property
+    def id(self) -> uuid.UUID:
+        """
+        A unique query id that persists across restarts. See
+        py:meth:`~pyspark.sql.streaming.StreamingQuery.id`.
+        """
+        return self._id
+
+    @property
+    def runId(self) -> uuid.UUID:
+        """
+        A query id that is unique for every start/restart. See
+        py:meth:`~pyspark.sql.streaming.StreamingQuery.runId`.
+        """
+        return self._runId
 
 
 class QueryTerminatedEvent:

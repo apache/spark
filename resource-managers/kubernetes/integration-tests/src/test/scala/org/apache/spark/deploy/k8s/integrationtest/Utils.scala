@@ -29,7 +29,6 @@ import org.apache.commons.compress.archivers.tar.{TarArchiveEntry, TarArchiveOut
 import org.apache.commons.compress.compressors.gzip.GzipCompressorOutputStream
 import org.apache.commons.compress.utils.IOUtils
 import org.apache.commons.io.output.ByteArrayOutputStream
-import org.apache.hadoop.util.VersionInfo
 
 import org.apache.spark.{SPARK_VERSION, SparkException}
 import org.apache.spark.internal.Logging
@@ -134,10 +133,6 @@ object Utils extends Logging {
       case _ => throw new SparkException(s"No valid $fileName file was found " +
         s"under spark home test dir ${sparkHomeDir.toAbsolutePath}!")
     }
-  }
-
-  def isHadoop3(): Boolean = {
-    VersionInfo.getVersion.startsWith("3")
   }
 
   def createZipFile(inFile: String, outFile: String): Unit = {
