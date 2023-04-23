@@ -227,6 +227,9 @@ class PandasConversionMixin:
                 and field.nullable
                 and pandas_col.isnull().any()
             ):
+                # From pandas 2.0.0, casting to unit-less dtype 'datetime64' is not supported.
+                if pandas_type is np.datetime64:
+                    pandas_type = "datetime64[ns]"
                 corrected_dtypes[index] = pandas_type
             # Ensure we fall back to nullable numpy types.
             if isinstance(field.dataType, IntegralType) and pandas_col.isnull().any():
