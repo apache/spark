@@ -577,11 +577,20 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
     def printSchema(self, level: Optional[int] = None) -> None:
         """Prints out the schema in the tree format.
+        Optionally allows to specify how many levels to print if schema is nested.
 
         .. versionadded:: 1.3.0
 
         .. versionchanged:: 3.4.0
             Supports Spark Connect.
+
+        .. versionchanged:: 3.5.0
+            Added Level parameter.
+
+        Parameters
+        ----------
+        level : int, optional, default None
+            How many levels to print for nested schemas.
 
         Examples
         --------
@@ -591,6 +600,19 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         root
          |-- age: long (nullable = true)
          |-- name: string (nullable = true)
+
+        >>> df = spark.createDataFrame([(1, (2,2))], ["a", "b"])
+        >>> df.printSchema(1)
+        root
+         |-- a: long (nullable = true)
+         |-- b: struct (nullable = true)
+
+        >>> df.printSchema(2)
+        root
+         |-- a: long (nullable = true)
+         |-- b: struct (nullable = true)
+         |    |-- _1: long (nullable = true)
+         |    |-- _2: long (nullable = true)
         """
         if level:
             print(self._jdf.schema().treeString(level))
