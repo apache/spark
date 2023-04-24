@@ -310,6 +310,7 @@ message StreamingQueryCommandResult {
   message ExceptionResult {
     // Exception message as string
     optional string exception_message = 1;
+    optional string exception_stack_trace = 2;
   }
 
   message AwaitTerminationResult {
