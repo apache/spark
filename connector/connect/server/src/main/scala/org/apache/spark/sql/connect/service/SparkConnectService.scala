@@ -76,7 +76,6 @@ class SparkConnectService(debug: Boolean)
   }
 
   private def buildStatusFromThrowable(st: Throwable, stackTraceEnabled: Boolean): RPCStatus = {
-    val message = StringUtils.abbreviate(st.getMessage, 2048)
     val errorInfo = ErrorInfo
       .newBuilder()
       .setReason(st.getClass.getName)
@@ -95,7 +94,7 @@ class SparkConnectService(debug: Boolean)
       .newBuilder()
       .setCode(RPCCode.INTERNAL_VALUE)
       .addDetails(ProtoAny.pack(withStackTrace.build()))
-      .setMessage(if (message != null) message else "")
+      .setMessage(SparkConnectService.extractErrorMessage(st))
       .build()
   }
 
@@ -126,14 +125,7 @@ class SparkConnectService(debug: Boolean)
       SparkConnectService
         .getOrCreateIsolatedSession(userId, sessionId)
         .session
-    val stackTraceEnabled =
-      try {
-        session.conf.get(PYSPARK_JVM_STACKTRACE_ENABLED.key).toBoolean
-      } catch {
-        case NonFatal(e) =>
-          logWarning(s"Failed to get Spark conf `PYSPARK_JVM_STACKTRACE_ENABLED`: $e")
-          true
-      }
+    val stackTraceEnabled = session.conf.get(PYSPARK_JVM_STACKTRACE_ENABLED.key, "true").toBoolean
 
     {
       case se: SparkException if isPythonExecutionException(se) =>
@@ -339,6 +331,15 @@ object SparkConnectService {
       } else {
         server.shutdownNow()
       }
+    }
+  }
+
+  def extractErrorMessage(st: Throwable): String = {
+    val message = StringUtils.abbreviate(st.getMessage, 2048)
+    if (message != null) {
+      message
+    } else {
+      ""
     }
   }
 }
