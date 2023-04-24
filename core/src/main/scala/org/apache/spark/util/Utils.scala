@@ -54,6 +54,8 @@ import org.apache.commons.lang3.SystemUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, FileUtil, Path}
 import org.apache.hadoop.io.compress.{CompressionCodecFactory, SplittableCompressionCodec}
+import org.apache.hadoop.ipc.{CallerContext => HadoopCallerContext}
+import org.apache.hadoop.ipc.CallerContext.{Builder => HadoopCallerContextBuilder}
 import org.apache.hadoop.security.UserGroupInformation
 import org.apache.hadoop.util.{RunJar, StringUtils}
 import org.apache.hadoop.yarn.conf.YarnConfiguration
@@ -3297,21 +3299,8 @@ private[spark] object Utils extends Logging {
 }
 
 private[util] object CallerContext extends Logging {
-  val callerContextSupported: Boolean = {
-    SparkHadoopUtil.get.conf.getBoolean("hadoop.caller.context.enabled", false) && {
-      try {
-        Utils.classForName("org.apache.hadoop.ipc.CallerContext")
-        Utils.classForName("org.apache.hadoop.ipc.CallerContext$Builder")
-        true
-      } catch {
-        case _: ClassNotFoundException =>
-          false
-        case NonFatal(e) =>
-          logWarning("Fail to load the CallerContext class", e)
-          false
-      }
-    }
-  }
+  val callerContextEnabled: Boolean =
+    SparkHadoopUtil.get.conf.getBoolean("hadoop.caller.context.enabled", false)
 }
 
 /**
@@ -3371,22 +3360,11 @@ private[spark] class CallerContext(
 
   /**
    * Set up the caller context [[context]] by invoking Hadoop CallerContext API of
-   * [[org.apache.hadoop.ipc.CallerContext]], which was added in hadoop 2.8.
+   * [[HadoopCallerContext]].
    */
-  def setCurrentContext(): Unit = {
-    if (CallerContext.callerContextSupported) {
-      try {
-        val callerContext = Utils.classForName("org.apache.hadoop.ipc.CallerContext")
-        val builder: Class[AnyRef] =
-          Utils.classForName("org.apache.hadoop.ipc.CallerContext$Builder")
-        val builderInst = builder.getConstructor(classOf[String]).newInstance(context)
-        val hdfsContext = builder.getMethod("build").invoke(builderInst)
-        callerContext.getMethod("setCurrent", callerContext).invoke(null, hdfsContext)
-      } catch {
-        case NonFatal(e) =>
-          logWarning("Fail to set Spark caller context", e)
-      }
-    }
+  def setCurrentContext(): Unit = if (CallerContext.callerContextEnabled) {
+    val hdfsContext = new HadoopCallerContextBuilder(context).build()
+    HadoopCallerContext.setCurrent(hdfsContext)
   }
 }
 

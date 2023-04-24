@@ -1273,6 +1273,41 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         jdf = self._jdf.limit(num)
         return DataFrame(jdf, self.sparkSession)
 
+    def offset(self, num: int) -> "DataFrame":
+        """Returns a new :class: `DataFrame` by skipping the first `n` rows.
+
+        .. versionadded:: 3.5.0
+
+        Parameters
+        ----------
+        num : int
+            Number of records to skip.
+
+        Returns
+        -------
+        :class:`DataFrame`
+            Subset of the records
+
+        Examples
+        --------
+        >>> df = spark.createDataFrame(
+        ...     [(14, "Tom"), (23, "Alice"), (16, "Bob")], ["age", "name"])
+        >>> df.offset(1).show()
+        +---+-----+
+        |age| name|
+        +---+-----+
+        | 23|Alice|
+        | 16|  Bob|
+        +---+-----+
+        >>> df.offset(10).show()
+        +---+----+
+        |age|name|
+        +---+----+
+        +---+----+
+        """
+        jdf = self._jdf.offset(num)
+        return DataFrame(jdf, self.sparkSession)
+
     def take(self, num: int) -> List[Row]:
         """Returns the first ``num`` rows as a :class:`list` of :class:`Row`.
 
@@ -3576,6 +3611,9 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         ...        if ratio > 0.05:
         ...            # Trigger alert
         ...            pass
+        ...
+        ...    def onQueryIdle(self, event):
+        ...        pass
         ...
         ...    def onQueryTerminated(self, event):
         ...        pass

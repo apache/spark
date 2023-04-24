@@ -1397,7 +1397,6 @@ case class ArrayContains(left: Expression, right: Expression)
     copy(left = newLeft, right = newRight)
 }
 
-// scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = """
       _FUNC_(array, element) - Add the element at the beginning of the array passed as first
@@ -1416,101 +1415,26 @@ case class ArrayContains(left: Expression, right: Expression)
   """,
   group = "array_funcs",
   since = "3.5.0")
-case class ArrayPrepend(left: Expression, right: Expression)
-  extends BinaryExpression
-    with ImplicitCastInputTypes
-    with ComplexTypeMergingExpression
-    with QueryErrorsBase {
+case class ArrayPrepend(left: Expression, right: Expression) extends RuntimeReplaceable
+  with ImplicitCastInputTypes with BinaryLike[Expression] with QueryErrorsBase {
 
-  override def nullable: Boolean = left.nullable
+  override lazy val replacement: Expression = ArrayInsert(left, Literal(1), right)
 
-  @transient protected lazy val elementType: DataType =
-    inputTypes.head.asInstanceOf[ArrayType].elementType
-
-  override def eval(input: InternalRow): Any = {
-    val value1 = left.eval(input)
-    if (value1 == null) {
-      null
-    } else {
-      val value2 = right.eval(input)
-      nullSafeEval(value1, value2)
+  override def inputTypes: Seq[AbstractDataType] = {
+    (left.dataType, right.dataType) match {
+      case (ArrayType(e1, hasNull), e2) =>
+        TypeCoercion.findTightestCommonType(e1, e2) match {
+          case Some(dt) => Seq(ArrayType(dt, hasNull), dt)
+          case _ => Seq.empty
+        }
+      case _ => Seq.empty
     }
   }
-  override def nullSafeEval(arr: Any, elementData: Any): Any = {
-    val arrayData = arr.asInstanceOf[ArrayData]
-    val numberOfElements = arrayData.numElements() + 1
-    if (numberOfElements > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
-      throw QueryExecutionErrors.concatArraysWithElementsExceedLimitError(numberOfElements)
-    }
-    val finalData = new Array[Any](numberOfElements)
-    finalData.update(0, elementData)
-    arrayData.foreach(elementType, (i: Int, v: Any) => finalData.update(i + 1, v))
-    new GenericArrayData(finalData)
-  }
-  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val leftGen = left.genCode(ctx)
-    val rightGen = right.genCode(ctx)
-    val f = (arr: String, value: String) => {
-      val newArraySize = s"$arr.numElements() + 1"
-      val newArray = ctx.freshName("newArray")
-      val i = ctx.freshName("i")
-      val iPlus1 = s"$i+1"
-      val zero = "0"
-      val allocation = CodeGenerator.createArrayData(
-        newArray,
-        elementType,
-        newArraySize,
-        s" $prettyName failed.")
-      val assignment =
-        CodeGenerator.createArrayAssignment(newArray, elementType, arr, iPlus1, i, false)
-      val newElemAssignment =
-        CodeGenerator.setArrayElement(newArray, elementType, zero, value, Some(rightGen.isNull))
-      s"""
-         |$allocation
-         |$newElemAssignment
-         |for (int $i = 0; $i < $arr.numElements(); $i ++) {
-         |  $assignment
-         |}
-         |${ev.value} = $newArray;
-         |""".stripMargin
-    }
-    val resultCode = f(leftGen.value, rightGen.value)
-    if(nullable) {
-      val nullSafeEval = leftGen.code + rightGen.code + ctx.nullSafeExec(nullable, leftGen.isNull) {
-        s"""
-           |${ev.isNull} = false;
-           |${resultCode}
-           |""".stripMargin
-      }
-      ev.copy(code =
-        code"""
-          |boolean ${ev.isNull} = true;
-          |${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
-          |$nullSafeEval
-        """.stripMargin
-      )
-    } else {
-      ev.copy(code =
-        code"""
-          |${leftGen.code}
-          |${rightGen.code}
-          |${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
-          |$resultCode
-        """.stripMargin, isNull = FalseLiteral)
-    }
-  }
-
-  override def prettyName: String = "array_prepend"
-
-  override protected def withNewChildrenInternal(
-      newLeft: Expression, newRight: Expression): ArrayPrepend =
-    copy(left = newLeft, right = newRight)
-
-  override def dataType: DataType = if (right.nullable) left.dataType.asNullable else left.dataType
 
   override def checkInputDataTypes(): TypeCheckResult = {
     (left.dataType, right.dataType) match {
-      case (ArrayType(e1, _), e2) if DataTypeUtils.sameType(e1, e2) => TypeCheckResult.TypeCheckSuccess
+      case (ArrayType(e1, _), e2) if DataTypeUtils.sameType(e1, e2) =>
+        TypeCheckResult.TypeCheckSuccess
       case (ArrayType(e1, _), e2) => DataTypeMismatch(
         errorSubClass = "ARRAY_FUNCTION_DIFF_TYPES",
         messageParameters = Map(
@@ -1531,16 +1455,12 @@ case class ArrayPrepend(left: Expression, right: Expression)
         )
     }
   }
-  override def inputTypes: Seq[AbstractDataType] = {
-    (left.dataType, right.dataType) match {
-      case (ArrayType(e1, hasNull), e2) =>
-        TypeCoercion.findTightestCommonType(e1, e2) match {
-          case Some(dt) => Seq(ArrayType(dt, hasNull), dt)
-          case _ => Seq.empty
-        }
-      case _ => Seq.empty
-    }
-  }
+
+  override def prettyName: String = "array_prepend"
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): ArrayPrepend =
+    copy(left = newLeft, right = newRight)
 }
 
 /**
@@ -4806,6 +4726,17 @@ case class ArrayInsert(srcArrayExpr: Expression, posExpr: Expression, itemExpr: 
     }
   }
 
+  private lazy val positivePos = if (second.foldable) {
+    val pos = second.eval().asInstanceOf[Int]
+    if (pos > 0) {
+      Some(pos)
+    } else {
+      None
+    }
+  } else {
+    None
+  }
+
   override def eval(input: InternalRow): Any = {
     val value1 = first.eval(input)
     if (value1 != null) {
@@ -4819,21 +4750,9 @@ case class ArrayInsert(srcArrayExpr: Expression, posExpr: Expression, itemExpr: 
   }
 
   override def nullSafeEval(arr: Any, pos: Any, item: Any): Any = {
-    var posInt = pos.asInstanceOf[Int]
-    if (posInt == 0) {
-      throw QueryExecutionErrors.invalidIndexOfZeroError(getContextOrNull())
-    }
     val baseArr = arr.asInstanceOf[ArrayData]
-    val arrayElementType = dataType.asInstanceOf[ArrayType].elementType
-
-    val newPosExtendsArrayLeft = (posInt < 0) && (-posInt > baseArr.numElements())
-
-    if (newPosExtendsArrayLeft) {
-      // special case- if the new position is negative but larger than the current array size
-      // place the new item at start of array, place the current array contents at the end
-      // and fill the newly created array elements inbetween with a null
-
-      val newArrayLength = -posInt + 1
+    if (positivePos.isDefined) {
+      val newArrayLength = math.max(baseArr.numElements() + 1, positivePos.get)
 
       if (newArrayLength > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
         throw QueryExecutionErrors.concatArraysWithElementsExceedLimitError(newArrayLength)
@@ -4841,31 +4760,8 @@ case class ArrayInsert(srcArrayExpr: Expression, posExpr: Expression, itemExpr: 
 
       val newArray = new Array[Any](newArrayLength)
 
-      baseArr.foreach(arrayElementType, (i, v) => {
-        // current position, offset by new item + new null array elements
-        val elementPosition = i + 1 + math.abs(posInt + baseArr.numElements())
-        newArray(elementPosition) = v
-      })
-
-      newArray(0) = item
-
-      return new GenericArrayData(newArray)
-    } else {
-      if (posInt < 0) {
-        posInt = posInt + baseArr.numElements()
-      } else if (posInt > 0) {
-        posInt = posInt - 1
-      }
-
-      val newArrayLength = math.max(baseArr.numElements() + 1, posInt + 1)
-
-      if (newArrayLength > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
-        throw QueryExecutionErrors.concatArraysWithElementsExceedLimitError(newArrayLength)
-      }
-
-      val newArray = new Array[Any](newArrayLength)
-
-      baseArr.foreach(arrayElementType, (i, v) => {
+      val posInt = positivePos.get - 1
+      baseArr.foreach(elementType, (i, v) => {
         if (i >= posInt) {
           newArray(i + 1) = v
         } else {
@@ -4875,14 +4771,70 @@ case class ArrayInsert(srcArrayExpr: Expression, posExpr: Expression, itemExpr: 
 
       newArray(posInt) = item
 
-      return new GenericArrayData(newArray)
+      new GenericArrayData(newArray)
+    } else {
+      var posInt = pos.asInstanceOf[Int]
+      if (posInt == 0) {
+        throw QueryExecutionErrors.invalidIndexOfZeroError(getContextOrNull())
+      }
+
+      val newPosExtendsArrayLeft = (posInt < 0) && (-posInt > baseArr.numElements())
+
+      if (newPosExtendsArrayLeft) {
+        // special case- if the new position is negative but larger than the current array size
+        // place the new item at start of array, place the current array contents at the end
+        // and fill the newly created array elements inbetween with a null
+
+        val newArrayLength = -posInt + 1
+
+        if (newArrayLength > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
+          throw QueryExecutionErrors.concatArraysWithElementsExceedLimitError(newArrayLength)
+        }
+
+        val newArray = new Array[Any](newArrayLength)
+
+        baseArr.foreach(elementType, (i, v) => {
+          // current position, offset by new item + new null array elements
+          val elementPosition = i + 1 + math.abs(posInt + baseArr.numElements())
+          newArray(elementPosition) = v
+        })
+
+        newArray(0) = item
+
+        new GenericArrayData(newArray)
+      } else {
+        if (posInt < 0) {
+          posInt = posInt + baseArr.numElements()
+        } else if (posInt > 0) {
+          posInt = posInt - 1
+        }
+
+        val newArrayLength = math.max(baseArr.numElements() + 1, posInt + 1)
+
+        if (newArrayLength > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
+          throw QueryExecutionErrors.concatArraysWithElementsExceedLimitError(newArrayLength)
+        }
+
+        val newArray = new Array[Any](newArrayLength)
+
+        baseArr.foreach(elementType, (i, v) => {
+          if (i >= posInt) {
+            newArray(i + 1) = v
+          } else {
+            newArray(i) = v
+          }
+        })
+
+        newArray(posInt) = item
+
+        new GenericArrayData(newArray)
+      }
     }
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val f = (arrExpr: ExprCode, posExpr: ExprCode, itemExpr: ExprCode) => {
       val arr = arrExpr.value
-      val pos = posExpr.value
       val item = itemExpr.value
 
       val itemInsertionIndex = ctx.freshName("itemInsertionIndex")
@@ -4898,69 +4850,99 @@ case class ArrayInsert(srcArrayExpr: Expression, posExpr: Expression, itemExpr: 
       val assignment = CodeGenerator.createArrayAssignment(values, elementType, arr,
         adjustedAllocIdx, i, first.dataType.asInstanceOf[ArrayType].containsNull)
       val errorContext = getContextOrNullCode(ctx)
-
-      s"""
-         |int $itemInsertionIndex = 0;
-         |int $resLength = 0;
-         |int $adjustedAllocIdx = 0;
-         |boolean $insertedItemIsNull = ${itemExpr.isNull};
-         |
-         |if ($pos == 0) {
-         |  throw QueryExecutionErrors.invalidIndexOfZeroError($errorContext);
-         |}
-         |
-         |if ($pos < 0 && (java.lang.Math.abs($pos) > $arr.numElements())) {
-         |
-         |  $resLength = java.lang.Math.abs($pos) + 1;
-         |  if ($resLength > ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}) {
-         |    throw QueryExecutionErrors.createArrayWithElementsExceedLimitError($resLength);
-         |  }
-         |
-         |  $allocation
-         |  for (int $i = 0; $i < $arr.numElements(); $i ++) {
-         |    $adjustedAllocIdx = $i + 1 + java.lang.Math.abs($pos + $arr.numElements());
-         |    $assignment
-         |  }
-         |  ${CodeGenerator.setArrayElement(
+      if (positivePos.isDefined) {
+        s"""
+           |int $itemInsertionIndex = ${positivePos.get - 1};
+           |int $adjustedAllocIdx = 0;
+           |boolean $insertedItemIsNull = ${itemExpr.isNull};
+           |
+           |final int $resLength = java.lang.Math.max($arr.numElements() + 1, ${positivePos.get});
+           |if ($resLength > ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}) {
+           |  throw QueryExecutionErrors.createArrayWithElementsExceedLimitError($resLength);
+           |}
+           |
+           |$allocation
+           |for (int $i = 0; $i < $arr.numElements(); $i ++) {
+           |  $adjustedAllocIdx = $i;
+           |  if ($i >= $itemInsertionIndex) {
+           |    $adjustedAllocIdx = $adjustedAllocIdx + 1;
+           |  }
+           |  $assignment
+           |}
+           |${CodeGenerator.setArrayElement(
               values, elementType, itemInsertionIndex, item, Some(insertedItemIsNull))}
-         |
-         |  for (int $j = $pos + $arr.numElements(); $j < 0; $j ++) {
-         |    $values.setNullAt($j + 1 + java.lang.Math.abs($pos + $arr.numElements()));
-         |  }
-         |
-         |  ${ev.value} = $values;
-         |} else {
-         |
-         |  $itemInsertionIndex = 0;
-         |  if ($pos < 0) {
-         |    $itemInsertionIndex = $pos + $arr.numElements();
-         |  } else if ($pos > 0) {
-         |    $itemInsertionIndex = $pos - 1;
-         |  }
-         |
-         |  $resLength = java.lang.Math.max($arr.numElements() + 1, $itemInsertionIndex + 1);
-         |  if ($resLength > ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}) {
-         |    throw QueryExecutionErrors.createArrayWithElementsExceedLimitError($resLength);
-         |  }
-         |
-         |  $allocation
-         |  for (int $i = 0; $i < $arr.numElements(); $i ++) {
-         |    $adjustedAllocIdx = $i;
-         |    if ($i >= $itemInsertionIndex) {
-         |      $adjustedAllocIdx = $adjustedAllocIdx + 1;
-         |    }
-         |    $assignment
-         |  }
-         |  ${CodeGenerator.setArrayElement(
-              values, elementType, itemInsertionIndex, item, Some(insertedItemIsNull))}
-         |
-         |  for (int $j = $arr.numElements(); $j < $resLength - 1; $j ++) {
-         |    $values.setNullAt($j);
-         |  }
-         |
-         |  ${ev.value} = $values;
-         |}
-      """.stripMargin
+           |
+           |for (int $j = $arr.numElements(); $j < $resLength - 1; $j ++) {
+           |  $values.setNullAt($j);
+           |}
+           |
+           |${ev.value} = $values;
+           |""".stripMargin
+      } else {
+        val pos = posExpr.value
+        s"""
+           |int $itemInsertionIndex = 0;
+           |int $resLength = 0;
+           |int $adjustedAllocIdx = 0;
+           |boolean $insertedItemIsNull = ${itemExpr.isNull};
+           |
+           |if ($pos == 0) {
+           |  throw QueryExecutionErrors.invalidIndexOfZeroError($errorContext);
+           |}
+           |
+           |if ($pos < 0 && (java.lang.Math.abs($pos) > $arr.numElements())) {
+           |
+           |  $resLength = java.lang.Math.abs($pos) + 1;
+           |  if ($resLength > ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}) {
+           |    throw QueryExecutionErrors.createArrayWithElementsExceedLimitError($resLength);
+           |  }
+           |
+           |  $allocation
+           |  for (int $i = 0; $i < $arr.numElements(); $i ++) {
+           |    $adjustedAllocIdx = $i + 1 + java.lang.Math.abs($pos + $arr.numElements());
+           |    $assignment
+           |  }
+           |  ${CodeGenerator.setArrayElement(
+             values, elementType, itemInsertionIndex, item, Some(insertedItemIsNull))}
+           |
+           |  for (int $j = $pos + $arr.numElements(); $j < 0; $j ++) {
+           |    $values.setNullAt($j + 1 + java.lang.Math.abs($pos + $arr.numElements()));
+           |  }
+           |
+           |  ${ev.value} = $values;
+           |} else {
+           |
+           |  $itemInsertionIndex = 0;
+           |  if ($pos < 0) {
+           |    $itemInsertionIndex = $pos + $arr.numElements();
+           |  } else if ($pos > 0) {
+           |    $itemInsertionIndex = $pos - 1;
+           |  }
+           |
+           |  $resLength = java.lang.Math.max($arr.numElements() + 1, $itemInsertionIndex + 1);
+           |  if ($resLength > ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}) {
+           |    throw QueryExecutionErrors.createArrayWithElementsExceedLimitError($resLength);
+           |  }
+           |
+           |  $allocation
+           |  for (int $i = 0; $i < $arr.numElements(); $i ++) {
+           |    $adjustedAllocIdx = $i;
+           |    if ($i >= $itemInsertionIndex) {
+           |      $adjustedAllocIdx = $adjustedAllocIdx + 1;
+           |    }
+           |    $assignment
+           |  }
+           |  ${CodeGenerator.setArrayElement(
+             values, elementType, itemInsertionIndex, item, Some(insertedItemIsNull))}
+           |
+           |  for (int $j = $arr.numElements(); $j < $resLength - 1; $j ++) {
+           |    $values.setNullAt($j);
+           |  }
+           |
+           |  ${ev.value} = $values;
+           |}
+           |""".stripMargin
+      }
     }
 
     val leftGen = first.genCode(ctx)
