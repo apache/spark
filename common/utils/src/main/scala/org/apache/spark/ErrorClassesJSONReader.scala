@@ -20,7 +20,6 @@ package org.apache.spark
 import java.net.URL
 
 import scala.collection.JavaConverters._
-import scala.collection.immutable.Map
 
 import com.fasterxml.jackson.annotation.JsonIgnore
 import com.fasterxml.jackson.core.`type`.TypeReference
@@ -29,6 +28,7 @@ import com.fasterxml.jackson.module.scala.DefaultScalaModule
 import org.apache.commons.text.StringSubstitutor
 
 import org.apache.spark.annotation.DeveloperApi
+
 
 /**
  * A reader to load error information from one or more JSON files. Note that, if one error appears

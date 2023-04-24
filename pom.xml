@@ -81,6 +81,7 @@
     <module>common/network-common</module>
     <module>common/network-shuffle</module>
     <module>common/unsafe</module>
+    <module>common/utils</module>
     <module>common/tags</module>
     <module>core</module>
     <module>graphx</module>

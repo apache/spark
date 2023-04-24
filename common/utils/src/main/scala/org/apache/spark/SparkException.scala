@@ -18,13 +18,12 @@
 package org.apache.spark
 
 import java.io.FileNotFoundException
+import java.nio.file.FileAlreadyExistsException
 import java.sql.{SQLException, SQLFeatureNotSupportedException}
 import java.time.DateTimeException
 import java.util.ConcurrentModificationException
 
 import scala.collection.JavaConverters._
-
-import org.apache.hadoop.fs.FileAlreadyExistsException
 
 class SparkException(
     message: String,
