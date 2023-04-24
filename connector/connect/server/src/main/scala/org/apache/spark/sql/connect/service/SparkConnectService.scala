@@ -39,7 +39,7 @@ import org.json4s.jackson.JsonMethods.{compact, render}
 import org.apache.spark.{SparkEnv, SparkException, SparkThrowable}
 import org.apache.spark.api.python.PythonException
 import org.apache.spark.connect.proto
-import org.apache.spark.connect.proto.{AddArtifactsRequest, AddArtifactsResponse, ArtifactStatusesRequest, ArtifactStatusesResponse}
+import org.apache.spark.connect.proto.{AddArtifactsRequest, AddArtifactsResponse}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connect.config.Connect.{CONNECT_GRPC_BINDING_PORT, CONNECT_GRPC_MAX_INBOUND_MESSAGE_SIZE}
@@ -194,8 +194,8 @@ class SparkConnectService(debug: Boolean)
   /**
    * This is the entry point for all calls of getting artifact statuses. */
   override def artifactStatus(
-      request: ArtifactStatusesRequest,
-      responseObserver: StreamObserver[ArtifactStatusesResponse]): Unit = {
+      request: proto.ArtifactStatusesRequest,
+      responseObserver: StreamObserver[proto.ArtifactStatusesResponse]): Unit = {
     try {
       new SparkConnectArtifactStatusesHandler(responseObserver).handle(request)
     } catch handleError("artifactStatus", observer = responseObserver)
