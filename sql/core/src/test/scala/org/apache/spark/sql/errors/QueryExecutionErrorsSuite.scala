@@ -392,8 +392,7 @@ class QueryExecutionErrorsSuite
   test("FAILED_EXECUTE_UDF: execute user defined function") {
     val luckyCharOfWord = udf { (word: String, index: Int) => {
       word.substring(index, index + 1)
-    }
-    }
+    }}
     val e1 = intercept[SparkException] {
       val words = Seq(("Jacek", 5), ("Agata", 5), ("Sweet", 6)).toDF("word", "index")
       words.select(luckyCharOfWord($"word", $"index")).collect()
