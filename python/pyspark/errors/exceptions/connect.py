@@ -49,6 +49,10 @@ def convert_exception(info: "ErrorInfo", message: str) -> SparkConnectException:
     if "classes" in info.metadata:
         classes = json.loads(info.metadata["classes"])
 
+    if "stackTrace" in info.metadata:
+        stackTrace = info.metadata["stackTrace"]
+        message += f"\n\nJVM stacktrace:\n{stackTrace}"
+
     if "org.apache.spark.sql.catalyst.parser.ParseException" in classes:
         return ParseException(message)
     # Order matters. ParseException inherits AnalysisException.
