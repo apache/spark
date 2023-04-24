@@ -503,6 +503,10 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
     df.filter(Column(predicate))
   }
 
+  private[sql] def fillValue(value: Any, cols: Option[Seq[String]]): DataFrame = {
+    fillValue(value, cols.map(toAttributes).getOrElse(outputAttributes))
+  }
+
   /**
    * Returns a new `DataFrame` that replaces null or NaN values in the specified
    * columns. If a specified column is not a numeric, string or boolean column,
