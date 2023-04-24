@@ -27,6 +27,7 @@ from pyspark.errors import (
     PySparkAttributeError,
     PySparkTypeError,
     PySparkException,
+    PySparkValueError,
 )
 from pyspark.sql import SparkSession as PySparkSession, Row
 from pyspark.sql.types import (
@@ -1704,10 +1705,23 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         values = list(map(lambda metric: metric.long, observed_metrics[0].metrics))
         self.assert_eq(values, [4, 99, 4944])
 
-        with self.assertRaisesRegex(ValueError, "'exprs' should not be empty"):
+        with self.assertRaises(PySparkValueError) as pe:
             self.connect.read.table(self.tbl_name).observe(observation_name)
-        with self.assertRaisesRegex(ValueError, "all 'exprs' should be Column"):
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="CANNOT_BE_EMPTY",
+            message_parameters={"item": "exprs"},
+        )
+
+        with self.assertRaises(PySparkTypeError) as pe:
             self.connect.read.table(self.tbl_name).observe(observation_name, CF.lit(1), "id")
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_LIST_OF_COLUMN",
+            message_parameters={"arg_name": "exprs"},
+        )
 
     def test_with_columns(self):
         # SPARK-41256: test withColumn(s).
@@ -1944,12 +1958,16 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
                 "arg_type": "float",
             },
         )
-        with self.assertRaisesRegex(
-            ValueError, "probabilities should be numerical \\(float, int\\) in \\[0,1\\]"
-        ):
+        with self.assertRaises(PySparkTypeError) as pe:
             self.connect.read.table(self.tbl_name2).stat.approxQuantile(
                 ["col1", "col3"], [-0.1], 0.1
             )
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_LIST_OF_FLOAT_OR_INT",
+            message_parameters={"arg_name": "probabilities", "arg_type": "float"},
+        )
         with self.assertRaises(PySparkTypeError) as pe:
             self.connect.read.table(self.tbl_name2).stat.approxQuantile(
                 ["col1", "col3"], [0.1, 0.5, 0.9], "str"
@@ -1963,10 +1981,19 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
                 "arg_type": "str",
             },
         )
-        with self.assertRaisesRegex(ValueError, "relativeError should be >= 0."):
+        with self.assertRaises(PySparkValueError) as pe:
             self.connect.read.table(self.tbl_name2).stat.approxQuantile(
                 ["col1", "col3"], [0.1, 0.5, 0.9], -0.1
             )
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="NEGATIVE_VALUE",
+            message_parameters={
+                "arg_name": "relativeError",
+                "arg_value": "-0.1",
+            },
+        )
 
     def test_stat_freq_items(self):
         # SPARK-41065: Test the stat.freqItems method

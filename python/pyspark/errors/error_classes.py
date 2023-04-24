@@ -79,6 +79,11 @@ ERROR_CLASSES_JSON = """
       "Broadcast can only be destroyed in driver."
     ]
   },
+  "CANNOT_INFER_ARRAY_TYPE": {
+    "message": [
+      "Can not infer Array Type from an list with None as the first element."
+    ]
+  },
   "CANNOT_OPEN_SOCKET": {
     "message": [
       "Can not open socket: <errors>."
@@ -87,6 +92,11 @@ ERROR_CLASSES_JSON = """
   "CANNOT_PARSE_DATATYPE": {
     "message": [
       "Unable to parse datatype from schema. <error>."
+    ]
+  },
+  "CANNOT_PROVIDE_METADATA": {
+    "message": [
+      "metadata can only be provided for a single column."
     ]
   },
   "CANNOT_REDUCE_BROADCAST": {
@@ -190,6 +200,11 @@ ERROR_CLASSES_JSON = """
       "Install the 'memory_profiler' library in the cluster to enable memory profiling."
     ]
   },
+  "MISSING_VALID_PLAN" : {
+    "message" : [
+      "Argument to <operator> does not contain a valid plan."
+    ]
+  },
   "MIXED_TYPE_REPLACEMENT" : {
     "message" : [
       "Mixed type replacements are not supported."
@@ -197,7 +212,7 @@ ERROR_CLASSES_JSON = """
   },
   "NEGATIVE_VALUE" : {
     "message" : [
-      "Value for `<arg_name>` must be >= 0, got '<arg_value>'."
+      "Value for `<arg_name>` must be greater than or equal to 0, got '<arg_value>'."
     ]
   },
   "NOT_BOOL" : {
@@ -466,6 +481,16 @@ ERROR_CLASSES_JSON = """
       "Unexpected response from iterator server."
     ]
   },
+  "UNSUPPORTED_DATA_TYPE" : {
+    "message" : [
+      "Unsupported DataType `<data_type>`."
+    ]
+  },
+  "UNSUPPORTED_LITERAL" : {
+    "message" : [
+      "Unsupported Literal '<literal>'."
+    ]
+  },
   "UNSUPPORTED_NUMPY_ARRAY_SCALAR" : {
     "message" : [
       "The type of array scalar '<dtype>' is not supported."
@@ -504,6 +529,11 @@ ERROR_CLASSES_JSON = """
   "VALUE_NOT_TRUE" : {
     "message" : [
       "Value for `<arg_name>` must be True, got '<arg_value>'."
+    ]
+  },
+  "VALUE_OUT_OF_BOUND" : {
+    "message" : [
+      "Value for `<arg_name>` must be between <min> and <max>."
     ]
   },
   "WRONG_NUM_ARGS_FOR_HIGHER_ORDER_FUNCTION" : {
