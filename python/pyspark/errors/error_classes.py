@@ -24,6 +24,11 @@ ERROR_CLASSES_JSON = """
       "Argument `<arg_name>` is required when <condition>."
     ]
   },
+  "ATTRIBUTE_NOT_CALLABLE" : {
+    "message" : [
+      "Attribute `<attr_name>` in provided object `<obj_name>` is not callable."
+    ]
+  },
   "CANNOT_ACCESS_TO_DUNDER": {
     "message": [
       "Dunder(double underscore) attribute is for internal use only."
@@ -37,6 +42,11 @@ ERROR_CLASSES_JSON = """
   "CANNOT_BE_EMPTY": {
     "message": [
       "At least one <item> must be specified."
+    ]
+  },
+  "CANNOT_BE_NONE": {
+    "message": [
+      "Argument `<arg_name>` can not be None."
     ]
   },
   "CANNOT_CONVERT_COLUMN_INTO_BOOL": {
@@ -72,6 +82,11 @@ ERROR_CLASSES_JSON = """
   "INVALID_ITEM_FOR_CONTAINER": {
     "message": [
       "All items in `<arg_name>` should be in <allowed_types>, got <item_type>."
+    ]
+  },
+  "INVALID_TIMEOUT_TIMESTAMP" : {
+    "message" : [
+      "Timeout timestamp (<timestamp>) cannot be earlier than the current watermark (<watermark>)."
     ]
   },
   "INVALID_WHEN_USAGE": {
@@ -137,6 +152,11 @@ ERROR_CLASSES_JSON = """
   "NOT_BOOL_OR_STR" : {
     "message" : [
       "Argument `<arg_name>` should be a bool or str, got <arg_type>."
+    ]
+  },
+  "NOT_CALLABLE" : {
+    "message" : [
+      "Argument `<arg_name>` should be a callable, got <arg_type>."
     ]
   },
   "NOT_COLUMN" : {
@@ -279,9 +299,19 @@ ERROR_CLASSES_JSON = """
       "Argument `<arg_name>` can only be provided for a single column."
     ]
   },
+  "ONLY_ALLOW_SINGLE_TRIGGER" : {
+    "message" : [
+      "Only a single trigger is allowed."
+    ]
+  },
   "SLICE_WITH_STEP" : {
     "message" : [
       "Slice with step is not supported."
+    ]
+  },
+  "STATE_NOT_EXISTS" : {
+    "message" : [
+      "State is either not defined or has already been removed."
     ]
   },
   "UNSUPPORTED_NUMPY_ARRAY_SCALAR" : {
@@ -299,6 +329,11 @@ ERROR_CLASSES_JSON = """
       "Value for `<arg_name>` must be 'any' or 'all', got '<arg_value>'."
     ]
   },
+  "VALUE_NOT_NON_EMPTY_STR" : {
+    "message" : [
+      "Value for `<arg_name>` must be a non empty string, got '<arg_value>'."
+    ]
+  },
   "VALUE_NOT_PEARSON" : {
     "message" : [
       "Value for `<arg_name>` only supports the 'pearson', got '<arg_value>'."
@@ -307,6 +342,11 @@ ERROR_CLASSES_JSON = """
   "VALUE_NOT_POSITIVE" : {
     "message" : [
       "Value for `<arg_name>` must be positive, got '<arg_value>'."
+    ]
+  },
+  "VALUE_NOT_TRUE" : {
+    "message" : [
+      "Value for `<arg_name>` must be True, got '<arg_value>'."
     ]
   },
   "WRONG_NUM_ARGS_FOR_HIGHER_ORDER_FUNCTION" : {
