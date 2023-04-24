@@ -165,7 +165,8 @@ class ProtoToParsedPlanTestSuite
       val planner = new SparkConnectPlanner(spark)
       val catalystPlan =
         analyzer.executeAndCheck(planner.transformRelation(relation), new QueryPlanningTracker)
-      val actual = normalizeExprIds(ReplaceExpressions(catalystPlan)).treeString
+      val actual = removeMemoryAddress(
+        normalizeExprIds(ReplaceExpressions(catalystPlan)).treeString)
       val goldenFile = goldenFilePath.resolve(relativePath).getParent.resolve(name + ".explain")
       Try(readGoldenFile(goldenFile)) match {
         case Success(expected) if expected == actual => // Test passes.
@@ -193,6 +194,10 @@ class ProtoToParsedPlanTestSuite
     }
   }
 
+  private def removeMemoryAddress(expr: String): String = {
+    expr.replaceAll("@[0-9a-f]+,", ",")
+  }
+
   private def readRelation(path: Path): proto.Relation = {
     val input = Files.newInputStream(path)
     try proto.Relation.parseFrom(input)
@@ -202,7 +207,7 @@ class ProtoToParsedPlanTestSuite
   }
 
   private def readGoldenFile(path: Path): String = {
-    new String(Files.readAllBytes(path), StandardCharsets.UTF_8)
+    removeMemoryAddress(new String(Files.readAllBytes(path), StandardCharsets.UTF_8))
   }
 
   private def writeGoldenFile(path: Path, value: String): Unit = {
