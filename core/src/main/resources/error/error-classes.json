@@ -1129,13 +1129,13 @@
     ]
   },
   "MALFORMED_RECORD_IN_PARSING" : {
-    "message": [
+    "message" : [
       "Malformed records are detected in record parsing: <badRecord>.",
       "Parse Mode: <failFastMode>. To process malformed records as null result, try setting the option 'mode' as 'PERMISSIVE'."
     ],
-    "subClass": {
-      "CANNOT_PARSE_JSON_ARRAYS_AS_STRUCTS": {
-        "message": [
+    "subClass" : {
+      "CANNOT_PARSE_JSON_ARRAYS_AS_STRUCTS" : {
+        "message" : [
           "Parsing JSON arrays as structs is forbidden."
         ]
       }

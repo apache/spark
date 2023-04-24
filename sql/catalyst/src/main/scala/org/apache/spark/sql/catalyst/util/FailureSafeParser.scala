@@ -65,6 +65,9 @@ class FailureSafeParser[IN](
         case DropMalformedMode =>
           Iterator.empty
         case FailFastMode =>
+          if (e.getCause.getMessage.startsWith("[MALFORMED_RECORD_IN_PARSING")) {
+            throw e.getCause
+          }
           throw QueryExecutionErrors.malformedRecordsDetectedInRecordParsingError(
             toResultRow(e.partialResult(), e.record).toString, e)
       }
