@@ -288,7 +288,7 @@ object StatFunctions extends Logging {
     }
 
     // If there is no selected columns, we don't need to run this aggregate, so make it a lazy val.
-    lazy val aggResult = ds.select(aggExprs: _*).queryExecution.toRdd.collect().head
+    lazy val aggResult = ds.select(aggExprs: _*).queryExecution.toRdd.map(_.copy()).collect().head
 
     // We will have one row for each selected statistic in the result.
     val result = Array.fill[InternalRow](selectedStatistics.length) {
