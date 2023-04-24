@@ -158,13 +158,8 @@ case class PrettyPythonUDF(
   override def toString: String = s"$name(${children.mkString(", ")})"
 
   override def sql(isDistinct: Boolean): String = {
-    val prettyChildren = children.map(_.transform {
-      case a: Attribute => new PrettyAttribute(a)
-      case a: Alias => PrettyAttribute(a.sql, a.dataType)
-      case p: PythonFuncExpression => PrettyPythonUDF(p.name, p.dataType, p.children)
-    })
     val distinct = if (isDistinct) "DISTINCT " else ""
-    s"$name($distinct${prettyChildren.mkString(", ")})"
+    s"$name($distinct${children.mkString(", ")})"
   }
 
   override def nullable: Boolean = true
