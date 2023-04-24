@@ -280,109 +280,83 @@ package object dsl {
       def expr: UnresolvedAttribute = attr
       def attr: UnresolvedAttribute = analysis.UnresolvedAttribute(s)
 
+      private def attrRef(dataType: DataType): AttributeReference =
+        AttributeReference(attr.nameParts.last, dataType)(qualifier = attr.nameParts.init)
+
       /** Creates a new AttributeReference of type boolean */
-      def boolean: AttributeReference =
-        AttributeReference(attr.nameParts.last, BooleanType)(qualifier = attr.nameParts.init)
+      def boolean: AttributeReference = attrRef(BooleanType)
 
       /** Creates a new AttributeReference of type byte */
-      def byte: AttributeReference =
-        AttributeReference(attr.nameParts.last, ByteType)(qualifier = attr.nameParts.init)
+      def byte: AttributeReference = attrRef(ByteType)
 
       /** Creates a new AttributeReference of type short */
-      def short: AttributeReference =
-        AttributeReference(attr.nameParts.last, ShortType)(qualifier = attr.nameParts.init)
+      def short: AttributeReference = attrRef(ShortType)
 
       /** Creates a new AttributeReference of type int */
-      def int: AttributeReference =
-        AttributeReference(attr.nameParts.last, IntegerType)(qualifier = attr.nameParts.init)
+      def int: AttributeReference = attrRef(IntegerType)
 
       /** Creates a new AttributeReference of type long */
-      def long: AttributeReference =
-        AttributeReference(attr.nameParts.last, LongType)(qualifier = attr.nameParts.init)
+      def long: AttributeReference = attrRef(LongType)
 
       /** Creates a new AttributeReference of type float */
-      def float: AttributeReference =
-        AttributeReference(attr.nameParts.last, FloatType)(qualifier = attr.nameParts.init)
+      def float: AttributeReference = attrRef(FloatType)
 
       /** Creates a new AttributeReference of type double */
-      def double: AttributeReference =
-        AttributeReference(attr.nameParts.last, DoubleType)(qualifier = attr.nameParts.init)
+      def double: AttributeReference = attrRef(DoubleType)
 
       /** Creates a new AttributeReference of type string */
-      def string: AttributeReference =
-        AttributeReference(attr.nameParts.last, StringType)(qualifier = attr.nameParts.init)
+      def string: AttributeReference = attrRef(StringType)
 
       /** Creates a new AttributeReference of type date */
-      def date: AttributeReference =
-        AttributeReference(attr.nameParts.last, DateType)(qualifier = attr.nameParts.init)
+      def date: AttributeReference = attrRef(DateType)
 
       /** Creates a new AttributeReference of type decimal */
-      def decimal: AttributeReference =
-        AttributeReference(attr.nameParts.last, DecimalType.SYSTEM_DEFAULT)(
-          qualifier = attr.nameParts.init)
+      def decimal: AttributeReference = attrRef(DecimalType.SYSTEM_DEFAULT)
 
       /** Creates a new AttributeReference of type decimal */
       def decimal(precision: Int, scale: Int): AttributeReference =
-        AttributeReference(attr.nameParts.last, DecimalType(precision, scale))(
-          qualifier = attr.nameParts.init)
+        attrRef(DecimalType(precision, scale))
 
       /** Creates a new AttributeReference of type timestamp */
-      def timestamp: AttributeReference =
-        AttributeReference(attr.nameParts.last, TimestampType)(qualifier = attr.nameParts.init)
+      def timestamp: AttributeReference = attrRef(TimestampType)
 
       /** Creates a new AttributeReference of type timestamp without time zone */
-      def timestampNTZ: AttributeReference =
-        AttributeReference(attr.nameParts.last, TimestampNTZType)(qualifier = attr.nameParts.init)
+      def timestampNTZ: AttributeReference = attrRef(TimestampNTZType)
 
       /** Creates a new AttributeReference of the day-time interval type */
       def dayTimeInterval(startField: Byte, endField: Byte): AttributeReference =
-        AttributeReference(attr.nameParts.last, DayTimeIntervalType(startField, endField))(
-          qualifier = attr.nameParts.init)
+        attrRef(DayTimeIntervalType(startField, endField))
 
-      def dayTimeInterval(): AttributeReference = {
-        AttributeReference(attr.nameParts.last, DayTimeIntervalType())(
-          qualifier = attr.nameParts.init)
-      }
+      def dayTimeInterval(): AttributeReference = attrRef(DayTimeIntervalType())
 
       /** Creates a new AttributeReference of the year-month interval type */
-      def yearMonthInterval(startField: Byte, endField: Byte): AttributeReference = {
-        AttributeReference(attr.nameParts.last, YearMonthIntervalType(startField, endField))(
-          qualifier = attr.nameParts.init)
-      }
+      def yearMonthInterval(startField: Byte, endField: Byte): AttributeReference =
+        attrRef(YearMonthIntervalType(startField, endField))
 
-      def yearMonthInterval(): AttributeReference =
-        AttributeReference(attr.nameParts.last, YearMonthIntervalType())(
-          qualifier = attr.nameParts.init)
+      def yearMonthInterval(): AttributeReference = attrRef(YearMonthIntervalType())
 
       /** Creates a new AttributeReference of type binary */
-      def binary: AttributeReference =
-        AttributeReference(attr.nameParts.last, BinaryType)(qualifier = attr.nameParts.init)
+      def binary: AttributeReference = attrRef(BinaryType)
 
       /** Creates a new AttributeReference of type array */
-      def array(dataType: DataType): AttributeReference =
-        AttributeReference(attr.nameParts.last, ArrayType(dataType))(
-          qualifier = attr.nameParts.init)
+      def array(dataType: DataType): AttributeReference = attrRef(ArrayType(dataType))
 
-      def array(arrayType: ArrayType): AttributeReference =
-        AttributeReference(attr.nameParts.last, arrayType)(qualifier = attr.nameParts.init)
+      def array(arrayType: ArrayType): AttributeReference = attrRef(arrayType)
 
       /** Creates a new AttributeReference of type map */
       def map(keyType: DataType, valueType: DataType): AttributeReference =
         map(MapType(keyType, valueType))
 
-      def map(mapType: MapType): AttributeReference =
-        AttributeReference(attr.nameParts.last, mapType)(qualifier = attr.nameParts.init)
+      def map(mapType: MapType): AttributeReference = attrRef(mapType)
 
       /** Creates a new AttributeReference of type struct */
-      def struct(structType: StructType): AttributeReference =
-        AttributeReference(attr.nameParts.last, structType)(qualifier = attr.nameParts.init)
+      def struct(structType: StructType): AttributeReference = attrRef(structType)
 
       def struct(attrs: AttributeReference*): AttributeReference =
         struct(StructType.fromAttributes(attrs))
 
       /** Creates a new AttributeReference of object type */
-      def obj(cls: Class[_]): AttributeReference =
-        AttributeReference(attr.nameParts.last, ObjectType(cls))(qualifier = attr.nameParts.init)
+      def obj(cls: Class[_]): AttributeReference = attrRef(ObjectType(cls))
 
       /** Create a function. */
       def function(exprs: Expression*): UnresolvedFunction =
