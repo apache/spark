@@ -187,15 +187,15 @@ case class LikeJoni(left: Expression, right: Expression, escapeChar: Char)
         """)
       }
     } else {
-      // val pattern = ctx.freshName("pattern")
+      val pattern = ctx.freshName("pattern")
       // val rightStr = ctx.freshName("rightStr")
       // We need to escape the escapeChar to make sure the generated code is valid.
       // Otherwise we'll hit org.codehaus.commons.compiler.CompileException.
       val escapedEscapeChar = StringEscapeUtils.escapeJava(escapeChar.toString)
       nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
         s"""
-          byte[] pattern = $escapeFunc(${eval2}.getBytes(), '${escapedEscapeChar}');
-          ${regexClass} $regex = new ${regexClass}(pattern, 0, pattern.length, $optionClass.NONE,
+          byte[] $pattern = $escapeFunc(${eval2}.getBytes(), '${escapedEscapeChar}');
+          ${regexClass} $regex = new ${regexClass}($pattern, 0, $pattern.length, $optionClass.NONE,
           ${encodingClass}.INSTANCE, ${syntaxClass}.Java);
           byte[] input = ${eval1}.getBytes();
           ${ev.value} =
@@ -461,10 +461,11 @@ case class RLikeJoni(left: Expression, right: Expression) extends StringRegexExp
         """)
       }
     } else {
+      val pattern = ctx.freshName("pattern")
       nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
         s"""
-          byte[] pattern = ${eval2}.getBytes();
-          ${regexClass} $regex = new ${regexClass}(pattern, 0, pattern.length, $optionClass.NONE,
+          byte[] $pattern = ${eval2}.getBytes();
+          ${regexClass} $regex = new ${regexClass}($pattern, 0, $pattern.length, $optionClass.NONE,
           ${encodingClass}.INSTANCE, ${syntaxClass}.Java);
           byte[] input = ${eval1}.getBytes();
           ${ev.value} =
