@@ -3013,12 +3013,21 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         Examples
         --------
         >>> from pyspark.sql.functions import lit
+
+        Create a dataframe with a column named 'id'.
+
         >>> df = spark.range(3)
         >>> [attr for attr in dir(df) if attr[0] == 'i'][:7] # Includes column id
         ['id', 'inputFiles', 'intersect', 'intersectAll', 'isEmpty', 'isLocal', 'isStreaming']
+
+        Add a column named 'i_like_pancakes'.
+
         >>> df = df.withColumn('i_like_pancakes', lit(1))
         >>> [attr for attr in dir(df) if attr[0] == 'i'][:7] # Includes columns i_like_pancakes, id
         ['i_like_pancakes', 'id', 'inputFiles', 'intersect', 'intersectAll', 'isEmpty', 'isLocal']
+
+        Try to add an existed column 'inputFiles'.
+
         >>> df = df.withColumn('inputFiles', lit(2))
         >>> [attr for attr in dir(df) if attr[0] == 'i'][:7] # Doesn't duplicate inputFiles
         ['i_like_pancakes', 'id', 'inputFiles', 'intersect', 'intersectAll', 'isEmpty', 'isLocal']
