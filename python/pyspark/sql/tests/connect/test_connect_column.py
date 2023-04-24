@@ -513,17 +513,24 @@ class SparkConnectColumnTests(SparkConnectSQLTestCase):
         self.assertEqual(cdf1.schema, sdf1.schema)
         self.assert_eq(cdf1.toPandas(), sdf1.toPandas())
 
-        with self.assertRaisesRegex(
-            ValueError,
-            "integer 9223372036854775808 out of bounds",
-        ):
+        # negative test for incorrect type
+        with self.assertRaises(PySparkValueError) as pe:
             cdf.select(CF.lit(JVM_LONG_MAX + 1)).show()
 
-        with self.assertRaisesRegex(
-            ValueError,
-            "integer -9223372036854775809 out of bounds",
-        ):
+        self.check_error(
+            exception=pe.exception,
+            error_class="VALUE_OUT_OF_BOUND",
+            message_parameters={"arg_name": "value", "min": "-9223372036854775808", "max": "32767"},
+        )
+
+        with self.assertRaises(PySparkValueError) as pe:
             cdf.select(CF.lit(JVM_LONG_MIN - 1)).show()
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="VALUE_OUT_OF_BOUND",
+            message_parameters={"arg_name": "value", "min": "-9223372036854775808", "max": "32767"},
+        )
 
     def test_cast(self):
         # SPARK-41412: test basic Column.cast
