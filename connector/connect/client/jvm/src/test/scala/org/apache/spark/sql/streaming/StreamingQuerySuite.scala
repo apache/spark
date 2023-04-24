@@ -75,6 +75,10 @@ class StreamingQuerySuite extends RemoteSparkSession with SQLHelper {
       } finally {
         // Don't wait for any processed data. Otherwise the test could take multiple seconds.
         query.stop()
+
+        // The query should still be accessible after stopped.
+        assert(!query.isActive)
+        assert(query.recentProgress.nonEmpty)
       }
     }
   }
