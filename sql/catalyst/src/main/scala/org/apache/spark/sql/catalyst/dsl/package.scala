@@ -271,7 +271,7 @@ package object dsl {
       override def expr: Expression = Literal(s)
       def attr: UnresolvedAttribute = analysis.UnresolvedAttribute(s)
     }
-    implicit class DslAttr(attr: UnresolvedAttribute) extends ImplicitAttribute {
+    implicit class DslAttr(override val attr: UnresolvedAttribute) extends ImplicitAttribute {
       def s: String = attr.sql
     }
 
