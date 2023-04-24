@@ -29,6 +29,11 @@ ERROR_CLASSES_JSON = """
       "Attribute `<attr_name>` in provided object `<obj_name>` is not callable."
     ]
   },
+  "CANNOT_ACCEPT_OBJECT_IN_TYPE": {
+    "message": [
+      "`<data_type>` can not accept object `<obj_name>` in type `<obj_type>`."
+    ]
+  },
   "CANNOT_ACCESS_TO_DUNDER": {
     "message": [
       "Dunder(double underscore) attribute is for internal use only."
@@ -49,6 +54,11 @@ ERROR_CLASSES_JSON = """
       "Argument `<arg_name>` can not be None."
     ]
   },
+  "CANNOT_CONVERT": {
+    "message": [
+      "Cannot convert <from_type> into <to_type>."
+    ]
+  },
   "CANNOT_CONVERT_COLUMN_INTO_BOOL": {
     "message": [
       "Cannot convert column into bool: please use '&' for 'and', '|' for 'or', '~' for 'not' when building DataFrame boolean expressions."
@@ -57,6 +67,21 @@ ERROR_CLASSES_JSON = """
   "CANNOT_INFER_ARRAY_TYPE": {
     "message": [
       "Can not infer Array Type from an list with None as the first element."
+    ]
+  },
+  "CANNOT_INFER_SCHEMA_FOR_TYPE": {
+    "message": [
+      "Can not infer schema for type: `<data_type>`."
+    ]
+  },
+  "CANNOT_INFER_TYPE_FOR_FIELD": {
+    "message": [
+      "Unable to infer the type of the field `<field_name>`."
+    ]
+  },
+  "CANNOT_MERGE_TYPE": {
+    "message": [
+      "Can not merge type `<data_type1>` and `<data_type2>`."
     ]
   },
   "CANNOT_PARSE_DATATYPE": {
@@ -112,6 +137,11 @@ ERROR_CLASSES_JSON = """
   "INVALID_TIMEOUT_TIMESTAMP" : {
     "message" : [
       "Timeout timestamp (<timestamp>) cannot be earlier than the current watermark (<watermark>)."
+    ]
+  },
+  "INVALID_TYPENAME_CALL" : {
+    "message" : [
+      "StructField does not have typeName. Use typeName on its type explicitly instead."
     ]
   },
   "INVALID_UDF_EVAL_TYPE" : {
@@ -262,6 +292,11 @@ ERROR_CLASSES_JSON = """
   "NOT_INT" : {
     "message" : [
       "Argument `<arg_name>` should be an int, got <arg_type>."
+    ]
+  },
+  "NOT_INT_OR_SLICE_OR_STR" : {
+    "message" : [
+      "Argument `<arg_name>` should be an int, slice or str, got <arg_type>."
     ]
   },
   "NOT_ITERABLE" : {
