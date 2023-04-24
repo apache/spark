@@ -32,6 +32,17 @@ else
   JAVA_CMD=java
 fi
 
+TOOLS_CLASSPATH="$(build/sbt -DcopyDependencies=false "export tools/fullClasspath" | grep jar | tail -n1)"
+ASSEMBLY_CLASSPATH="$(build/sbt -DcopyDependencies=false "export assembly/fullClasspath" | grep jar | tail -n1)"
+
+rm -f .generated-mima*
+
+$JAVA_CMD \
+  -Xmx2g \
+  -XX:+IgnoreUnrecognizedVMOptions --add-opens=java.base/java.util.jar=ALL-UNNAMED \
+  -cp "$TOOLS_CLASSPATH:$ASSEMBLY_CLASSPATH" \
+  org.apache.spark.tools.GenerateMIMAIgnore
+
 rm -f .connect-mima-check-result
 
 echo "Build sql module, connect-client-jvm module and connect-client-jvm test jar..."
@@ -60,6 +71,8 @@ if [[ $RESULT_SIZE -eq "0" ]]; then
 else
   ERRORS=$(grep ERROR .connect-mima-check-result | tail -n1)
 fi
+
+rm -f .generated-mima*
 
 if test ! -z "$ERRORS"; then
   cat .connect-mima-check-result

@@ -22,9 +22,10 @@ import java.nio.charset.StandardCharsets
 import java.nio.file.{Files, Paths}
 import java.util.regex.Pattern
 
+import scala.collection.JavaConverters._
 import scala.reflect.runtime.universe.runtimeMirror
 
-import com.typesafe.tools.mima.core.{Problem, ProblemFilter, ProblemFilters}
+import com.typesafe.tools.mima.core.{IncompatibleFieldTypeProblem, IncompatibleMethTypeProblem, IncompatibleResultTypeProblem, MissingClassProblem, MissingFieldProblem, MissingMethodProblem, MissingTypesProblem, Problem, ProblemFilter, ProblemFilters}
 import com.typesafe.tools.mima.lib.MiMaLib
 
 import org.apache.spark.sql.connect.client.util.IntegrationTestUtils._
@@ -94,6 +95,47 @@ object CheckConnectJvmClientCompatibility {
     }
   }
 
+  private lazy val defaultExcludeRules = {
+
+    def excludeMember(fullName: String) = Seq(
+      ProblemFilters.exclude[MissingMethodProblem](fullName),
+      // Sometimes excluded methods have default arguments and
+      // they are translated into public methods/fields($default$) in generated
+      // bytecode. It is not possible to exhaustively list everything.
+      // But this should be okay.
+      ProblemFilters.exclude[MissingMethodProblem](fullName + "$default$2"),
+      ProblemFilters.exclude[MissingMethodProblem](fullName + "$default$1"),
+      ProblemFilters.exclude[MissingFieldProblem](fullName),
+      ProblemFilters.exclude[IncompatibleResultTypeProblem](fullName),
+      ProblemFilters.exclude[IncompatibleMethTypeProblem](fullName),
+      ProblemFilters.exclude[IncompatibleFieldTypeProblem](fullName))
+
+    def excludeClass(className: String) = Seq(
+      ProblemFilters.exclude[Problem](className + ".*"),
+      ProblemFilters.exclude[MissingClassProblem](className),
+      ProblemFilters.exclude[MissingTypesProblem](className))
+
+    // Read package-private excludes from file
+    val classExcludeFilePath = Paths.get(s"$sparkHome/.generated-mima-class-excludes")
+    val memberExcludeFilePath = Paths.get(s"$sparkHome/.generated-mima-member-excludes")
+
+    val ignoredClasses: Seq[String] =
+      if (!classExcludeFilePath.toFile.exists()) {
+        Seq.empty[String]
+      } else {
+        Files.readAllLines(classExcludeFilePath).asScala
+      }
+
+    val ignoredMembers: Seq[String] =
+      if (!memberExcludeFilePath.toFile.exists()) {
+        Seq()
+      } else {
+        Files.readAllLines(memberExcludeFilePath).asScala
+      }
+
+    ignoredClasses.flatMap(excludeClass) ++ ignoredMembers.flatMap(excludeMember)
+  }
+
   /**
    * MiMa takes an old jar (sql jar) and a new jar (client jar) as inputs and then reports all
    * incompatibilities found in the new jar. The incompatibility result is then filtered using
@@ -145,7 +187,6 @@ object CheckConnectJvmClientCompatibility {
 
       // DataFrameNaFunctions
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.DataFrameNaFunctions.this"),
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.DataFrameNaFunctions.fillValue"),
 
       // DataFrameStatFunctions
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.DataFrameStatFunctions.bloomFilter"),
@@ -240,7 +281,8 @@ object CheckConnectJvmClientCompatibility {
       // SQLImplicits
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SQLImplicits.this"),
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.SQLImplicits.rddToDatasetHolder"),
-      ProblemFilters.exclude[Problem]("org.apache.spark.sql.SQLImplicits._sqlContext"))
+      ProblemFilters.exclude[Problem](
+        "org.apache.spark.sql.SQLImplicits._sqlContext")) ++ defaultExcludeRules
     val problems = allProblems
       .filter { p =>
         includedRules.exists(rule => rule(p))
