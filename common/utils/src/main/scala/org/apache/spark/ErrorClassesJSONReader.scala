@@ -29,7 +29,6 @@ import org.apache.commons.text.StringSubstitutor
 
 import org.apache.spark.annotation.DeveloperApi
 
-
 /**
  * A reader to load error information from one or more JSON files. Note that, if one error appears
  * in more than one JSON files, the latter wins. Please read core/src/main/resources/error/README.md
