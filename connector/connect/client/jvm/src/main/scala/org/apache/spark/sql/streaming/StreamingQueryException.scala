@@ -23,33 +23,38 @@ import org.apache.spark.{SparkThrowable, SparkThrowableHelper}
 import org.apache.spark.annotation.Evolving
 
 /**
- * Exception that stopped a [[StreamingQuery]]. Use `cause` get the actual exception
- * that caused the failure.
- * @param message     Message of this exception
- * @param cause       Internal cause of this exception
- * @param startOffset Starting offset in json of the range of data in which exception occurred
- * @param endOffset   Ending offset in json of the range of data in exception occurred
+ * Exception that stopped a [[StreamingQuery]]. Use `cause` get the actual exception that caused
+ * the failure.
+ * @param message
+ *   Message of this exception
+ * @param cause
+ *   Internal cause of this exception
+ * @param startOffset
+ *   Starting offset in json of the range of data in which exception occurred
+ * @param endOffset
+ *   Ending offset in json of the range of data in exception occurred
  * @since 3.5.0
  */
 @Evolving
-class StreamingQueryException private[sql](
-  private val queryDebugString: String,
-  val message: String,
-  val cause: Throwable,
-  val startOffset: String,
-  val endOffset: String,
-  errorClass: String,
-  messageParameters: Map[String, String])
-  extends Exception(message, cause) with SparkThrowable {
+class StreamingQueryException private[sql] (
+    private val queryDebugString: String,
+    val message: String,
+    val cause: Throwable,
+    val startOffset: String,
+    val endOffset: String,
+    errorClass: String,
+    messageParameters: Map[String, String])
+    extends Exception(message, cause)
+    with SparkThrowable {
   // This is a copy of the same class in sql/core/.../streaming/StreamingQueryStatus.scala
 
   def this(
-    queryDebugString: String,
-    cause: Throwable,
-    startOffset: String,
-    endOffset: String,
-    errorClass: String,
-    messageParameters: Map[String, String]) = {
+      queryDebugString: String,
+      cause: Throwable,
+      startOffset: String,
+      endOffset: String,
+      errorClass: String,
+      messageParameters: Map[String, String]) = {
     this(
       queryDebugString,
       message = SparkThrowableHelper.getMessage(errorClass, messageParameters),

@@ -209,16 +209,17 @@ class RemoteStreamingQuery(
     val exception = executeQueryCmd(_.setException(true)).getException
     if (exception.hasExceptionMessage) {
       // TODO(SPARK-43206): Add more information to StreamingQueryException.
-      Some(new StreamingQueryException(
-        "",
-        cause = null,
-        "",
-        "",
-        errorClass = "STREAM_FAILED",
-        messageParameters = Map(
-          "id" -> id.toString,
-          "runId" -> runId.toString,
-          "message" -> exception.getExceptionMessage)))
+      Some(
+        new StreamingQueryException(
+          "",
+          cause = null,
+          "",
+          "",
+          errorClass = "STREAM_FAILED",
+          messageParameters = Map(
+            "id" -> id.toString,
+            "runId" -> runId.toString,
+            "message" -> exception.getExceptionMessage)))
     } else {
       None
     }
