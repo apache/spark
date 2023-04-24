@@ -81,8 +81,6 @@ class DatetimeIndexTestsMixin:
             self.assert_eq(psidx.minute, pidx.minute)
             self.assert_eq(psidx.second, pidx.second)
             self.assert_eq(psidx.microsecond, pidx.microsecond)
-            self.assert_eq(psidx.week, pidx.week)
-            self.assert_eq(psidx.weekofyear, pidx.weekofyear)
             self.assert_eq(psidx.dayofweek, pidx.dayofweek)
             self.assert_eq(psidx.weekday, pidx.weekday)
             self.assert_eq(psidx.dayofyear, pidx.dayofyear)
@@ -100,6 +98,28 @@ class DatetimeIndexTestsMixin:
             if LooseVersion(pd.__version__) >= LooseVersion("1.2.0"):
                 self.assert_eq(psidx.day_of_year, pidx.day_of_year)
                 self.assert_eq(psidx.day_of_week, pidx.day_of_week)
+
+        if LooseVersion(pd.__version__) >= LooseVersion("2.0.0"):
+            # TODO(SPARK-42617): Support isocalendar.week and replace it.
+            expected_results = [
+                ps.Index([1]),
+                ps.Index([1, 1, 13]),
+                ps.Index([52, 52, 1]),
+                ps.Index([52, 52, 52]),
+                ps.Index([52, 52, 52]),
+                ps.Index([52, 52, 52]),
+                ps.Index([52, 52, 52]),
+                ps.Index([52, 52, 52]),
+                ps.Index([52, 1, 2]),
+                ps.Index([13, 26, 39]),
+            ]
+            for psidx, expected_result in zip(self.psidxs, expected_results):
+                self.assert_eq(psidx.week, expected_result)
+                self.assert_eq(psidx.weekofyear, expected_result)
+        else:
+            for psidx, pidx in self.idx_pairs:
+                self.assert_eq(psidx.week, pidx.week)
+                self.assert_eq(psidx.weekofyear, pidx.weekofyear)
 
     def test_ceil(self):
         for psidx, pidx in self.idx_pairs:

@@ -229,8 +229,8 @@ class CategoricalTestsMixin:
         self.assert_eq(kcodes.tolist(), pcodes.tolist())
         self.assert_eq(kuniques, puniques)
 
-        pcodes, puniques = pser.factorize(na_sentinel=-2)
-        kcodes, kuniques = psser.factorize(na_sentinel=-2)
+        pcodes, puniques = pser.factorize(use_na_sentinel=-2)
+        kcodes, kuniques = psser.factorize(use_na_sentinel=-2)
 
         self.assert_eq(kcodes.tolist(), pcodes.tolist())
         self.assert_eq(kuniques, puniques)

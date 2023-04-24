@@ -2857,27 +2857,27 @@ class SeriesTestsMixin:
         pser = pd.Series(["a", "b", "a", np.nan, None])
         psser = ps.from_pandas(pser)
 
-        pcodes, puniques = pser.factorize(sort=True, na_sentinel=-2)
-        kcodes, kuniques = psser.factorize(na_sentinel=-2)
+        pcodes, puniques = pser.factorize(sort=True, use_na_sentinel=-2)
+        kcodes, kuniques = psser.factorize(use_na_sentinel=-2)
         self.assert_eq(pcodes.tolist(), kcodes.to_list())
         self.assert_eq(puniques, kuniques)
 
-        pcodes, puniques = pser.factorize(sort=True, na_sentinel=2)
-        kcodes, kuniques = psser.factorize(na_sentinel=2)
+        pcodes, puniques = pser.factorize(sort=True, use_na_sentinel=2)
+        kcodes, kuniques = psser.factorize(use_na_sentinel=2)
         self.assert_eq(pcodes.tolist(), kcodes.to_list())
         self.assert_eq(puniques, kuniques)
 
         if not pd_below_1_1_2:
-            pcodes, puniques = pser.factorize(sort=True, na_sentinel=None)
-            kcodes, kuniques = psser.factorize(na_sentinel=None)
+            pcodes, puniques = pser.factorize(sort=True, use_na_sentinel=None)
+            kcodes, kuniques = psser.factorize(use_na_sentinel=None)
             self.assert_eq(pcodes.tolist(), kcodes.to_list())
             # puniques is Index(['a', 'b', nan], dtype='object')
             self.assert_eq(ps.Index(["a", "b", None]), kuniques)
 
             psser = ps.Series([1, 2, np.nan, 4, 5])  # Arrow takes np.nan as null
             psser.loc[3] = np.nan  # Spark takes np.nan as NaN
-            kcodes, kuniques = psser.factorize(na_sentinel=None)
-            pcodes, puniques = psser._to_pandas().factorize(sort=True, na_sentinel=None)
+            kcodes, kuniques = psser.factorize(use_na_sentinel=None)
+            pcodes, puniques = psser._to_pandas().factorize(sort=True, use_na_sentinel=None)
             self.assert_eq(pcodes.tolist(), kcodes.to_list())
             self.assert_eq(puniques, kuniques)
 

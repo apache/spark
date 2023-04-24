@@ -87,20 +87,10 @@ class CategoricalIndexTestsMixin:
         pidx = pdf.index
         psidx = psdf.index
 
-        pidx.categories = ["z", "y", "x"]
-        psidx.categories = ["z", "y", "x"]
-        # Pandas deprecated all the in-place category-setting behaviors, dtypes also not be
-        # refreshed in categories.setter since Pandas 1.4+, we should also consider to clean up
-        # this test when in-place category-setting removed:
-        # https://github.com/pandas-dev/pandas/issues/46820
-        if LooseVersion("1.4") >= LooseVersion(pd.__version__) >= LooseVersion("1.1"):
-            self.assert_eq(pidx, psidx)
-            self.assert_eq(pdf, psdf)
-        else:
-            pidx = pidx.set_categories(pidx.categories)
-            pdf.index = pidx
-            self.assert_eq(pidx, psidx)
-            self.assert_eq(pdf, psdf)
+        pidx = pidx.rename_categories(["z", "y", "x"])
+        psidx = psidx.rename_categories(["z", "y", "x"])
+        self.assert_eq(pidx, psidx)
+        self.assert_eq(pdf, psdf)
 
         with self.assertRaises(ValueError):
             psidx.categories = [1, 2, 3, 4]
@@ -211,8 +201,8 @@ class CategoricalIndexTestsMixin:
         self.assert_eq(kcodes.tolist(), pcodes.tolist())
         self.assert_eq(kuniques, puniques)
 
-        pcodes, puniques = pidx.factorize(na_sentinel=-2)
-        kcodes, kuniques = psidx.factorize(na_sentinel=-2)
+        pcodes, puniques = pidx.factorize(use_na_sentinel=-2)
+        kcodes, kuniques = psidx.factorize(use_na_sentinel=-2)
 
         self.assert_eq(kcodes.tolist(), pcodes.tolist())
         self.assert_eq(kuniques, puniques)

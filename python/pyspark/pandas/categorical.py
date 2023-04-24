@@ -441,8 +441,13 @@ class CategoricalAccessor:
         if len(categories) == 0:
             return self._data.copy()
         else:
+            data = [cat for cat in self.categories.sort_values() if cat not in categories]
+            if len(data) == 0:
+                # We should keep original dtype when even removing all categories.
+                data = pd.Index(data, dtype=self.categories.dtype)  # type: ignore[assignment]
             dtype = CategoricalDtype(
-                [cat for cat in self.categories if cat not in categories], ordered=self.ordered
+                categories=data,
+                ordered=self.ordered,
             )
             return self._data.astype(dtype)
 

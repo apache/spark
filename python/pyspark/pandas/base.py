@@ -1608,7 +1608,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
             return cast(IndexOpsLike, self._psdf.iloc[indices].index)
 
     def factorize(
-        self: IndexOpsLike, sort: bool = True, na_sentinel: Optional[int] = -1
+        self: IndexOpsLike, sort: bool = True, use_na_sentinel: bool = True
     ) -> Tuple[IndexOpsLike, pd.Index]:
         """
         Encode the object as an enumerated type or categorical variable.
@@ -1619,11 +1619,12 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         Parameters
         ----------
         sort : bool, default True
-        na_sentinel : int or None, default -1
-            Value to mark "not found". If None, will not drop the NaN
-            from the uniques of the values.
+        use_na_sentinel : bool, default True
+            If True, the sentinel -1 will be used for NaN values. If False,
+            NaN values will be encoded as non-negative integers and will not drop the
+            NaN from the uniques of the values.
 
-            .. deprecated:: 3.4.0
+            .. versionadded:: 3.5.0
 
         Returns
         -------
@@ -1652,7 +1653,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         >>> uniques
         Index(['a', 'b', 'c'], dtype='object')
 
-        >>> codes, uniques = psser.factorize(na_sentinel=None)
+        >>> codes, uniques = psser.factorize(use_na_sentinel=False)
         >>> codes
         0    1
         1    3
@@ -1663,30 +1664,19 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         >>> uniques
         Index(['a', 'b', 'c', None], dtype='object')
 
-        >>> codes, uniques = psser.factorize(na_sentinel=-2)
-        >>> codes
-        0    1
-        1   -2
-        2    0
-        3    2
-        4    1
-        dtype: int32
-        >>> uniques
-        Index(['a', 'b', 'c'], dtype='object')
-
         For Index:
 
         >>> psidx = ps.Index(['b', None, 'a', 'c', 'b'])
         >>> codes, uniques = psidx.factorize()
         >>> codes
-        Int64Index([1, -1, 0, 2, 1], dtype='int64')
+        Index([1, -1, 0, 2, 1], dtype='int32')
         >>> uniques
         Index(['a', 'b', 'c'], dtype='object')
         """
         from pyspark.pandas.series import first_series
 
-        assert (na_sentinel is None) or isinstance(na_sentinel, int)
         assert sort is True
+        use_na_sentinel = -1 if use_na_sentinel else False  # type: ignore[assignment]
 
         if isinstance(self.dtype, CategoricalDtype):
             categories = self.dtype.categories
@@ -1705,7 +1695,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
                 scol = map_scol[self.spark.column]
             codes, uniques = self._with_new_scol(
                 scol.alias(self._internal.data_spark_column_names[0])
-            ).factorize(na_sentinel=na_sentinel)
+            ).factorize(use_na_sentinel=use_na_sentinel)
             return codes, uniques.astype(self.dtype)
 
         uniq_sdf = self._internal.spark_frame.select(self.spark.column).distinct()
@@ -1732,13 +1722,13 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
 
         # Constructs `unique_to_code` mapping non-na unique to code
         unique_to_code = {}
-        if na_sentinel is not None:
-            na_sentinel_code = na_sentinel
+        if use_na_sentinel:
+            na_sentinel_code = use_na_sentinel
         code = 0
         for unique in uniques_list:
             if pd.isna(unique):
-                if na_sentinel is None:
-                    na_sentinel_code = code
+                if not use_na_sentinel:
+                    na_sentinel_code = code  # type: ignore[assignment]
             else:
                 unique_to_code[unique] = code
             code += 1
@@ -1756,7 +1746,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
 
         codes = self._with_new_scol(new_scol.alias(self._internal.data_spark_column_names[0]))
 
-        if na_sentinel is not None:
+        if use_na_sentinel:
             # Drops the NaN from the uniques of the values
             uniques_list = [x for x in uniques_list if not pd.isna(x)]
 

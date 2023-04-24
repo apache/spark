@@ -683,7 +683,15 @@ class DatetimeIndex(Index):
         """
 
         def pandas_between_time(pdf) -> ps.DataFrame[int]:  # type: ignore[no-untyped-def]
-            return pdf.between_time(start_time, end_time, include_start, include_end)
+            if include_start and include_end:
+                inclusive = "both"
+            elif not include_start and not include_end:
+                inclusive = "neither"
+            elif include_start and not include_end:
+                inclusive = "left"
+            elif not include_start and include_end:
+                inclusive = "right"
+            return pdf.between_time(start_time, end_time, inclusive=inclusive)
 
         psdf = self.to_frame()[[]]
         id_column_name = verify_temp_column_name(psdf, "__id_column__")

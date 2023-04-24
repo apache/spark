@@ -181,6 +181,12 @@ class PandasConversionMixin:
                             pandas_type = PandasConversionMixin._to_corrected_pandas_type(
                                 field.dataType
                             )
+                            # From pandas 2.0.0, casting to unit-less dtype 'datetime64'
+                            # and 'timedelta64' is not supported.
+                            if pandas_type is np.datetime64:
+                                pandas_type = "datetime64[ns]"  # type: ignore[assignment]
+                            if pandas_type is np.timedelta64:
+                                pandas_type = "timedelta64[ns]"  # type: ignore[assignment]
                             corrected_panda_types[tmp_column_names[index]] = (
                                 object if pandas_type is None else pandas_type
                             )
@@ -227,9 +233,6 @@ class PandasConversionMixin:
                 and field.nullable
                 and pandas_col.isnull().any()
             ):
-                # From pandas 2.0.0, casting to unit-less dtype 'datetime64' is not supported.
-                if pandas_type is np.datetime64:
-                    pandas_type = "datetime64[ns]"
                 corrected_dtypes[index] = pandas_type
             # Ensure we fall back to nullable numpy types.
             if isinstance(field.dataType, IntegralType) and pandas_col.isnull().any():
@@ -251,6 +254,12 @@ class PandasConversionMixin:
             should_check_timedelta = is_timedelta64_dtype(t) and len(pdf) == 0
 
             if (t is not None and not is_timedelta64_dtype(t)) or should_check_timedelta:
+                # From pandas 2.0.0, casting to unit-less dtype 'datetime64'
+                # and 'timedelta64' is not supported.
+                if t is np.datetime64:
+                    t = "datetime64[ns]"  # type: ignore[assignment]
+                if t is np.timedelta64:
+                    t = "timedelta64[ns]"  # type: ignore[assignment]
                 series = series.astype(t, copy=False)
 
             with catch_warnings():
