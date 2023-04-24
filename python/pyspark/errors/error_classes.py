@@ -74,6 +74,11 @@ ERROR_CLASSES_JSON = """
       "<arg_list> should not be set together."
     ]
   },
+  "CANNOT_SPECIFY_RETURN_TYPE_FOR_UDF": {
+    "message": [
+      "returnType can not be specified when `<arg_name>` is a user-defined function, but got <return_type>."
+    ]
+  },
   "COLUMN_IN_LIST": {
     "message": [
       "`<func_name>` does not allow a Column in a list."
@@ -99,9 +104,19 @@ ERROR_CLASSES_JSON = """
       "All items in `<arg_name>` should be in <allowed_types>, got <item_type>."
     ]
   },
+  "INVALID_RETURN_TYPE_FOR_PANDAS_UDF": {
+    "message": [
+      "Pandas UDF should return StructType for <eval_type>, got <return_type>."
+    ]
+  },
   "INVALID_TIMEOUT_TIMESTAMP" : {
     "message" : [
       "Timeout timestamp (<timestamp>) cannot be earlier than the current watermark (<watermark>)."
+    ]
+  },
+  "INVALID_UDF_EVAL_TYPE" : {
+    "message" : [
+      "Eval type for UDF must be SQL_BATCHED_UDF, SQL_SCALAR_PANDAS_UDF, SQL_SCALAR_PANDAS_ITER_UDF or SQL_GROUPED_AGG_PANDAS_UDF."
     ]
   },
   "INVALID_WHEN_USAGE": {
