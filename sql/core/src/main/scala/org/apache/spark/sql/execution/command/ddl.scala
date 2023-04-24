@@ -789,7 +789,7 @@ case class RepairTableCommand(
     if (partitionSpecsAndLocs.length > threshold) {
       val hadoopConf = spark.sessionState.newHadoopConf()
       val serializableConfiguration = new SerializableConfiguration(hadoopConf)
-      val locations = partitionSpecsAndLocs.map(_._2).toArray
+      val locations = partitionSpecsAndLocs.map(_._2)
 
       // Set the number of parallelism to prevent following file listing from generating many tasks
       // in case of large #defaultParallelism.
