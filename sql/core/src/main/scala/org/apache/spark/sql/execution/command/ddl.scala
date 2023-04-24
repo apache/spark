@@ -710,7 +710,7 @@ case class RepairTableCommand(
       val partitionStats = if (spark.sqlContext.conf.gatherFastStats) {
         gatherPartitionStats(spark, partitionSpecsAndLocs, fs, pathFilter, threshold)
       } else {
-        Map.empty[String, PartitionStatistics]
+        Map.empty[Path, PartitionStatistics]
       }
       logInfo(s"Finished to gather the fast stats for all $total partitions.")
 
@@ -785,7 +785,7 @@ case class RepairTableCommand(
       partitionSpecsAndLocs: Seq[(TablePartitionSpec, Path)],
       fs: FileSystem,
       pathFilter: PathFilter,
-      threshold: Int): Map[String, PartitionStatistics] = {
+      threshold: Int): Map[Path, PartitionStatistics] = {
     val partitionNum = partitionSpecsAndLocs.length
     if (partitionNum > threshold) {
       val hadoopConf = spark.sessionState.newHadoopConf()
@@ -805,13 +805,13 @@ case class RepairTableCommand(
           locationsEachPartition.map { location =>
             val fs = location.getFileSystem(serializableConfiguration.value)
             val statuses = fs.listStatus(location, pathFilter)
-            (location.toString, PartitionStatistics(statuses.length, statuses.map(_.getLen).sum))
+            (location, PartitionStatistics(statuses.length, statuses.map(_.getLen).sum))
           }
         }.collectAsMap().toMap
     } else {
       partitionSpecsAndLocs.map { case (_, location) =>
         val statuses = fs.listStatus(location, pathFilter)
-        (location.toString, PartitionStatistics(statuses.length, statuses.map(_.getLen).sum))
+        (location, PartitionStatistics(statuses.length, statuses.map(_.getLen).sum))
       }.toMap
     }
   }
@@ -820,7 +820,7 @@ case class RepairTableCommand(
       spark: SparkSession,
       table: CatalogTable,
       partitionSpecsAndLocs: Seq[(TablePartitionSpec, Path)],
-      partitionStats: Map[String, PartitionStatistics]): Unit = {
+      partitionStats: Map[Path, PartitionStatistics]): Unit = {
     val total = partitionSpecsAndLocs.length
     var done = 0L
     // Hive metastore may not have enough memory to handle millions of partitions in single RPC,
@@ -830,7 +830,7 @@ case class RepairTableCommand(
     partitionSpecsAndLocs.iterator.grouped(batchSize).foreach { batch =>
       val now = MILLISECONDS.toSeconds(System.currentTimeMillis())
       val parts = batch.map { case (spec, location) =>
-        val params = partitionStats.get(location.toString).map {
+        val params = partitionStats.get(location).map {
           case PartitionStatistics(numFiles, totalSize) =>
             // This two fast stat could prevent Hive metastore to list the files again.
             Map(NUM_FILES -> numFiles.toString,
