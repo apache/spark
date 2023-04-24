@@ -40,12 +40,13 @@ private[kafka010] object KafkaBatchReaderFactory extends PartitionReaderFactory 
   override def createReader(partition: InputPartition): PartitionReader[InternalRow] = {
     val p = partition.asInstanceOf[KafkaBatchInputPartition]
 
-    val queryId = TaskContext.get().getLocalProperty(StreamExecution.QUERY_ID_KEY)
-    val batchId = TaskContext.get().getLocalProperty(MicroBatchExecution.BATCH_ID_KEY)
-    logInfo(s"Creating Kafka reader partitionId=${TaskContext.get().partitionId()} " +
-      s"topicPartition=${p.offsetRange.topicPartition} " +
-      s"fromOffset=${p.offsetRange.fromOffset} untilOffset=${p.offsetRange.untilOffset} " +
-      s"queryId=$queryId batchId=$batchId taskId=${TaskContext.get().taskAttemptId()}")
+    val taskCtx = TaskContext.get()
+    val queryId = taskCtx.getLocalProperty(StreamExecution.QUERY_ID_KEY)
+    val batchId = taskCtx.getLocalProperty(MicroBatchExecution.BATCH_ID_KEY)
+    logInfo(s"Creating Kafka reader topicPartition=${p.offsetRange.topicPartition} " +
+      s"fromOffset=${p.offsetRange.fromOffset} untilOffset=${p.offsetRange.untilOffset}, " +
+      s"for query queryId=$queryId batchId=$batchId taskId=${TaskContext.get().taskAttemptId()} " +
+      s"partitionId=${TaskContext.get().partitionId()}")
 
     KafkaBatchPartitionReader(p.offsetRange, p.executorKafkaParams, p.pollTimeoutMs,
       p.failOnDataLoss, p.includeHeaders)
