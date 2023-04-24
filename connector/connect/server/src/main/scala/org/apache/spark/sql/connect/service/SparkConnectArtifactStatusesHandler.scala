@@ -25,7 +25,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.storage.CacheId
 
 class SparkConnectArtifactStatusesHandler(
-    responseObserver: StreamObserver[proto.ArtifactStatusesResponse])
+    val responseObserver: StreamObserver[proto.ArtifactStatusesResponse])
     extends Logging {
 
   def handle(request: proto.ArtifactStatusesRequest): Unit = {

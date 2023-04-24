@@ -1,0 +1,87 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package org.apache.spark.sql.connect.service
+
+import scala.collection.JavaConverters._
+import scala.concurrent.Promise
+import scala.concurrent.duration._
+
+import io.grpc.stub.StreamObserver
+
+import org.apache.spark.connect.proto
+import org.apache.spark.connect.proto.{ArtifactStatusesRequest, ArtifactStatusesResponse}
+import org.apache.spark.sql.connect.ResourceHelper
+import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.util.ThreadUtils
+
+private class DummyStreamObserver(p: Promise[ArtifactStatusesResponse])
+    extends StreamObserver[ArtifactStatusesResponse] {
+  override def onNext(v: ArtifactStatusesResponse): Unit = p.success(v)
+  override def onError(throwable: Throwable): Unit = throw throwable
+  override def onCompleted(): Unit = {}
+}
+
+class ArtifactStatusesHandlerSuite extends SharedSparkSession with ResourceHelper {
+  def getStatuses(names: Seq[String], exist: Set[String]): ArtifactStatusesResponse = {
+    val promise = Promise[ArtifactStatusesResponse]
+    val handler = new SparkConnectArtifactStatusesHandler(new DummyStreamObserver(promise)) {
+      override def handle(request: ArtifactStatusesRequest): Unit = {
+        val builder = proto.ArtifactStatusesResponse.newBuilder()
+        request.getNameList().iterator().asScala.foreach { name =>
+          val status = proto.ArtifactStatusesResponse.ArtifactStatus.newBuilder()
+          val exists = exist.contains(name)
+          builder.putStatuses(name, status.setExists(exists).build())
+        }
+        responseObserver.onNext(builder.build())
+        responseObserver.onCompleted()
+      }
+    }
+    val context = proto.UserContext
+      .newBuilder()
+      .setUserId("user1")
+      .build()
+    val request = proto.ArtifactStatusesRequest
+      .newBuilder()
+      .setUserContext(context)
+      .setSessionId("abc")
+      .addAllName(names.asJava)
+      .build()
+    handler.handle(request)
+    ThreadUtils.awaitResult(promise.future, 5.seconds)
+  }
+
+  test("non-existent artifact") {
+    val response = getStatuses(names = Seq("name1"), exist = Set.empty)
+    assert(response.getStatusesCount === 1)
+    assert(response.getStatusesMap.get("name1").getExists === false)
+  }
+
+  test("single artifact") {
+    val response = getStatuses(names = Seq("name1"), exist = Set("name1"))
+    assert(response.getStatusesCount === 1)
+    assert(response.getStatusesMap.get("name1").getExists)
+  }
+
+  test("multiple artifacts") {
+    val response =
+      getStatuses(names = Seq("name1", "name2", "name3"), exist = Set("name2", "name3"))
+    assert(response.getStatusesCount === 3)
+    assert(!response.getStatusesMap.get("name1").getExists)
+    assert(response.getStatusesMap.get("name2").getExists)
+    assert(response.getStatusesMap.get("name3").getExists)
+  }
+}
