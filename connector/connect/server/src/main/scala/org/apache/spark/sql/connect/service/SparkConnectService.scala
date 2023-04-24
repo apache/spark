@@ -231,13 +231,19 @@ class SparkConnectService(debug: Boolean)
     responseObserver)
 
   /**
-   * This is the entry point for all calls of getting artifact statuses. */
+   * This is the entry point for all calls of getting artifact statuses.
+   */
   override def artifactStatus(
       request: proto.ArtifactStatusesRequest,
       responseObserver: StreamObserver[proto.ArtifactStatusesResponse]): Unit = {
     try {
       new SparkConnectArtifactStatusesHandler(responseObserver).handle(request)
-    } catch handleError("artifactStatus", observer = responseObserver)
+    } catch
+      handleError(
+        "artifactStatus",
+        observer = responseObserver,
+        userId = request.getUserContext.getUserId,
+        sessionId = request.getSessionId)
   }
 }
 

@@ -26,7 +26,7 @@ import org.apache.spark.storage.CacheId
 
 class SparkConnectArtifactStatusesHandler(
     responseObserver: StreamObserver[proto.ArtifactStatusesResponse])
-  extends Logging {
+    extends Logging {
 
   def handle(request: proto.ArtifactStatusesRequest): Unit = {
     val session =
