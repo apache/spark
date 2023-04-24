@@ -119,6 +119,11 @@ ERROR_CLASSES_JSON = """
       "<arg1> and <arg2> should be of the same length, got <arg1_length> and <arg2_length>."
     ]
   },
+  "MISSING_VALID_PLAN" : {
+    "message" : [
+      "Argument to <operator> does not contain a valid plan."
+    ]
+  },
   "MIXED_TYPE_REPLACEMENT" : {
     "message" : [
       "Mixed type replacements are not supported."
@@ -126,7 +131,7 @@ ERROR_CLASSES_JSON = """
   },
   "NEGATIVE_VALUE" : {
     "message" : [
-      "Value for `<arg_name>` must be >= 0, got '<arg_value>'."
+      "Value for `<arg_name>` must be greater than or equal to 0, got '<arg_value>'."
     ]
   },
   "NOT_BOOL" : {
