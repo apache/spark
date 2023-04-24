@@ -328,7 +328,7 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
       resolver: Resolver = _ == _,
       context: Origin = Origin()): Option[(Seq[String], StructField)] = {
 
-    def findField(
+    def findFieldInStruct(
         struct: StructType,
         searchPath: Seq[String],
         normalizedPath: Seq[String]): Option[(Seq[String], StructField)] = {
@@ -340,7 +340,7 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
       } else if (found.isEmpty) {
         None
       } else {
-        findFieldInCollection(
+        findField(
           parent = found.head,
           searchPath = searchPath.tail,
           normalizedPath)
@@ -348,7 +348,7 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
     }
 
     @scala.annotation.tailrec
-    def findFieldInCollection(
+    def findField(
         parent: StructField,
         searchPath: Seq[String],
         normalizedPath: Seq[String]): Option[(Seq[String], StructField)] = {
@@ -358,27 +358,27 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
         val currentPath = normalizedPath :+ parent.name
         (searchPath, parent.dataType) match {
           case (_, s: StructType) =>
-            findField(s, searchPath, currentPath)
+            findFieldInStruct(s, searchPath, currentPath)
 
           case _ if !includeCollections =>
             throw QueryCompilationErrors.invalidFieldName(fieldNames, currentPath, context)
 
           case (Seq("key", rest @ _*), MapType(keyType, _, _)) =>
-            findFieldInCollection(StructField("key", keyType, nullable = false), rest, currentPath)
+            findField(StructField("key", keyType, nullable = false), rest, currentPath)
 
           case (Seq("value", rest @ _*), MapType(_, valueType, isNullable)) =>
-            findFieldInCollection(StructField("value", valueType, isNullable), rest, currentPath)
+            findField(StructField("value", valueType, isNullable), rest, currentPath)
 
           case (Seq("element", rest @ _*), ArrayType(elementType, isNullable)) =>
-            findFieldInCollection(
-              StructField("element", elementType, isNullable), rest, currentPath)
+            findField(StructField("element", elementType, isNullable), rest, currentPath)
+
           case _ =>
             throw QueryCompilationErrors.invalidFieldName(fieldNames, currentPath, context)
         }
       }
     }
 
-    findField(this, fieldNames, Nil)
+    findFieldInStruct(this, fieldNames, Nil)
   }
 
   protected[sql] def toAttributes: Seq[AttributeReference] = map(field => field.toAttribute)
