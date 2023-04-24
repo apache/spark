@@ -25,9 +25,10 @@ import scala.util.control.NonFatal
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.api.java.function._
 import org.apache.spark.connect.proto
-import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
+import org.apache.spark.sql.catalyst.encoders.{encoderFor, AgnosticEncoder}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders._
 import org.apache.spark.sql.catalyst.expressions.RowOrdering
+import org.apache.spark.sql.catalyst.plans.logical.AppendColumns
 import org.apache.spark.sql.connect.client.{SparkResult, UdfUtils}
 import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, StorageLevelProtoConverter}
 import org.apache.spark.sql.expressions.ScalarUserDefinedFunction
@@ -1273,6 +1274,24 @@ class Dataset[T] private[sql] (
       toDF(),
       colNames.map(colName => Column(colName).expr),
       proto.Aggregate.GroupType.GROUP_TYPE_GROUPBY)
+  }
+
+  /**
+   * (Scala-specific)
+   * Returns a [[KeyValueGroupedDataset]] where the data is grouped by the given key `func`.
+   *
+   * @group typedrel
+   * @since 2.0.0
+   */
+  def groupByKey[K: Encoder](func: T => K): KeyValueGroupedDataset[K, T] = {
+
+    new KeyValueGroupedDataset(
+      encoderFor[K],
+      encoderFor[T],
+      sparkSession,
+      plan,
+      Seq.empty,
+      Seq.empty)
   }
 
   /**

@@ -68,6 +68,7 @@ message Relation {
     WithWatermark with_watermark = 33;
     ApplyInPandasWithState apply_in_pandas_with_state = 34;
     HtmlString html_string = 35;
+    FlatMapGroupsWithState flat_map_groups_with_state = 36;
 
     // NA functions
     NAFill fill_na = 90;
@@ -892,6 +893,23 @@ message CollectMetrics {
 
   // (Required) The metric sequence.
   repeated Expression metrics = 3;
+}
+
+message FlatMapGroupsWithState {
+  // (Required) Input relation for a mapPartitions-equivalent API: mapInPandas, mapInArrow.
+  Relation input = 1;
+
+  // (Required) Input user-defined function.
+  CommonInlineUserDefinedFunction func = 2;
+
+  // (Optional) Whether to use barrier mode execution or not.
+  optional bool is_map_groups_with_state = 3;
+
+  // (Optional) The output mode of the function.
+  optional string output_mode = 4;
+
+  // (Optional) Timeout configuration for groups that do not receive data for a while.
+  optional string timeout_conf = 5;
 }
 
 message Parse {

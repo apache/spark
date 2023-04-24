@@ -21,10 +21,10 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable
 
 import com.google.common.collect.{Lists, Maps}
-import com.google.protobuf.{Any => ProtoAny, ByteString}
+import com.google.protobuf.{ByteString, Any => ProtoAny}
 import io.grpc.stub.StreamObserver
-
 import org.apache.spark.{Partition, SparkEnv, TaskContext}
+
 import org.apache.spark.api.python.{PythonEvalType, SimplePythonFunction}
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.{ExecutePlanResponse, SqlCommand}
@@ -46,7 +46,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException, ParserUtils}
 import org.apache.spark.sql.catalyst.plans.{Cross, FullOuter, Inner, JoinType, LeftAnti, LeftOuter, LeftSemi, RightOuter, UsingJoin}
 import org.apache.spark.sql.catalyst.plans.logical
-import org.apache.spark.sql.catalyst.plans.logical.{CollectMetrics, CommandResult, Deduplicate, DeduplicateWithinWatermark, DeserializeToObject, Except, Intersect, LocalRelation, LogicalPlan, MapPartitions, Project, Sample, SerializeFromObject, Sort, SubqueryAlias, TypedFilter, Union, Unpivot, UnresolvedHint}
+import org.apache.spark.sql.catalyst.plans.logical.{AppendColumns, CollectMetrics, CommandResult, Deduplicate, DeduplicateWithinWatermark, DeserializeToObject, Except, FlatMapGroupsWithState, Intersect, LocalRelation, LogicalGroupState, LogicalPlan, MapPartitions, Project, Sample, SerializeFromObject, Sort, SubqueryAlias, TypedFilter, Union, Unpivot, UnresolvedHint}
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CharVarcharUtils}
 import org.apache.spark.sql.connect.artifact.SparkConnectArtifactManager
 import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, InvalidPlanInput, LiteralValueProtoConverter, StorageLevelProtoConverter, UdfPacket}
@@ -62,7 +62,7 @@ import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JDBCPartiti
 import org.apache.spark.sql.execution.python.UserDefinedPythonFunction
 import org.apache.spark.sql.execution.streaming.StreamingQueryWrapper
 import org.apache.spark.sql.internal.CatalogImpl
-import org.apache.spark.sql.streaming.Trigger
+import org.apache.spark.sql.streaming.{GroupStateTimeout, OutputMode, Trigger}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.Utils
@@ -136,6 +136,8 @@ class SparkConnectPlanner(val session: SparkSession) {
         transformCoGroupMap(rel.getCoGroupMap)
       case proto.Relation.RelTypeCase.APPLY_IN_PANDAS_WITH_STATE =>
         transformApplyInPandasWithState(rel.getApplyInPandasWithState)
+      case proto.Relation.RelTypeCase.FLAT_MAP_GROUPS_WITH_STATE =>
+        transformFlatMapGroupsWithState(rel.getFlatMapGroupsWithState)
       case proto.Relation.RelTypeCase.COLLECT_METRICS =>
         transformCollectMetrics(rel.getCollectMetrics)
       case proto.Relation.RelTypeCase.PARSE => transformParse(rel.getParse)
@@ -614,6 +616,38 @@ class SparkConnectPlanner(val session: SparkSession) {
         rel.getOutputMode,
         rel.getTimeoutConf)
       .logicalPlan
+  }
+
+  private def transformFlatMapGroupsWithState(rel: proto.FlatMapGroupsWithState): LogicalPlan = {
+    val baseRel = transformRelation(rel.getInput)
+    val udf = rel.getFunc.getScalarScalaUdf
+    val udfPacket =
+      Utils.deserialize[UdfPacket](
+        udf.getPayload.toByteArray,
+        SparkConnectArtifactManager.classLoaderWithArtifacts)
+    assert(udfPacket.inputEncoders.size == 1)
+    val iEnc = ExpressionEncoder(udfPacket.inputEncoders.head)
+    val rEnc = ExpressionEncoder(udfPacket.outputEncoder)
+
+    val deserializer = UnresolvedDeserializer(iEnc.deserializer)
+    val deserialized = DeserializeToObject(deserializer, generateObjAttr(iEnc), baseRel)
+
+    val logicalPlan = deserialized.child
+    val dataAttributes = logicalPlan.output
+
+    val groupingAttributes = AppendColumns(udfPacket.function.asInstanceOf[Any => Any], logicalPlan)
+      .newColumns
+    val flatMapGroupsWithStateObject = FlatMapGroupsWithState(
+      udfPacket.function.asInstanceOf[(Any, Iterator[Any], LogicalGroupState[Any]) =>
+        Iterator[Any]],
+      groupingAttributes,
+      dataAttributes,
+      OutputMode.Update,
+      isMapGroupsWithState = true,
+      GroupStateTimeout.NoTimeout(),
+      logicalPlan
+    )
+    SerializeFromObject(rEnc.namedExpressions, flatMapGroupsWithStateObject)
   }
 
   private def transformWithColumnsRenamed(rel: proto.WithColumnsRenamed): LogicalPlan = {
