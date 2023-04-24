@@ -539,6 +539,43 @@ message AddArtifactsResponse {
   repeated ArtifactSummary artifacts = 1;
 }
 
+// Request to get current statuses of artifacts at the server side.
+message ArtifactStatusesRequest {
+  // (Required)
+  //
+  // The session_id specifies a spark session for a user id (which is specified
+  // by user_context.user_id). The session_id is set by the client to be able to
+  // collate streaming responses from different queries within the dedicated session.
+  string session_id = 1;
+
+  // User context
+  UserContext user_context = 2;
+
+  // Provides optional information about the client sending the request. This field
+  // can be used for language or version specific information and is only intended for
+  // logging purposes and will not be interpreted by the server.
+  optional string client_type = 3;
+
+  // The name of the artifact is expected in the form of a "Relative Path" that is made up of a
+  // sequence of directories and the final file element.
+  // Examples of "Relative Path"s: "jars/test.jar", "classes/xyz.class", "abc.xyz", "a/b/X.jar".
+  // The server is expected to maintain the hierarchy of files as defined by their name. (i.e
+  // The relative path of the file on the server's filesystem will be the same as the name of
+  // the provided artifact)
+  repeated string name = 4;
+}
+
+// Response to checking artifact statuses.
+message ArtifactStatusesResponse {
+  message ArtifactStatus {
+    // Exists or not particular artifact at the server.
+    bool exists = 1;
+  }
+
+  // A map of artifact names to their statuses.
+  map<string, ArtifactStatus> statuses = 1;
+}
+
 // Main interface for the SparkConnect service.
 service SparkConnectService {
 
@@ -556,5 +593,8 @@ service SparkConnectService {
   // Add artifacts to the session and returns a [[AddArtifactsResponse]] containing metadata about
   // the added artifacts.
   rpc AddArtifacts(stream AddArtifactsRequest) returns (AddArtifactsResponse) {}
+
+  // Check statuses of artifacts in the session and returns them in a [[ArtifactStatusesResponse]]
+  rpc ArtifactStatus(ArtifactStatusesRequest) returns (ArtifactStatusesResponse) {}
 }
 
