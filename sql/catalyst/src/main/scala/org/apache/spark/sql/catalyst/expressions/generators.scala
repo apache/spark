@@ -28,9 +28,11 @@ import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.trees.TreePattern.{GENERATOR, TreePattern}
 import org.apache.spark.sql.catalyst.util.{ArrayData, MapData}
+import org.apache.spark.sql.catalyst.util.SQLKeywordUtils._
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * An expression that produces zero or more rows given a single input row.
@@ -517,4 +519,29 @@ case class Inline(child: Expression) extends UnaryExpression with CollectionGene
   }
 
   override protected def withNewChildInternal(newChild: Expression): Inline = copy(child = newChild)
+}
+
+@ExpressionDescription(
+  usage = """_FUNC_() - Get Spark SQL keywords""",
+  examples = """
+    Examples:
+      > SELECT * FROM _FUNC_() LIMIT 2;
+       ADD  false
+       AFTER  false
+  """,
+  since = "3.5.0",
+  group = "generator_funcs")
+case class SQLKeywords() extends LeafExpression with Generator with CodegenFallback {
+  override def elementSchema: StructType = new StructType()
+    .add("keyword", StringType, nullable = false)
+    .add("reserved", BooleanType, nullable = false)
+
+  override def eval(input: InternalRow): TraversableOnce[InternalRow] = {
+    val reservedList = getReservedList()
+    keywords.zip(reservedList).map { case (keyword, isReserved) =>
+      InternalRow(UTF8String.fromString(keyword), isReserved)
+    }
+  }
+
+  override def prettyName: String = "sql_keywords"
 }

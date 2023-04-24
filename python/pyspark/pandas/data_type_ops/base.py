@@ -18,13 +18,13 @@
 import numbers
 from abc import ABCMeta
 from itertools import chain
-from typing import Any, Optional, Union
+from typing import cast, Callable, Any, Optional, Union
 
 import numpy as np
 import pandas as pd
 from pandas.api.types import CategoricalDtype
 
-from pyspark.sql import functions as F, Column
+from pyspark.sql import functions as F, Column as PySparkColumn
 from pyspark.sql.types import (
     ArrayType,
     BinaryType,
@@ -44,7 +44,7 @@ from pyspark.sql.types import (
     TimestampNTZType,
     UserDefinedType,
 )
-from pyspark.pandas._typing import Dtype, IndexOpsLike, SeriesOrIndex
+from pyspark.pandas._typing import Dtype, IndexOpsLike, SeriesOrIndex, GenericColumn
 from pyspark.pandas.typedef import extension_dtypes
 from pyspark.pandas.typedef.typehints import (
     extension_dtypes_available,
@@ -52,6 +52,10 @@ from pyspark.pandas.typedef.typehints import (
     extension_object_dtypes_available,
     spark_type_to_pandas_dtype,
 )
+
+# For supporting Spark Connect
+from pyspark.sql.connect.column import Column as ConnectColumn
+from pyspark.sql.utils import is_remote
 
 if extension_dtypes_available:
     from pandas import Int8Dtype, Int16Dtype, Int32Dtype, Int64Dtype
@@ -470,14 +474,16 @@ class DataTypeOps(object, metaclass=ABCMeta):
         else:
             from pyspark.pandas.base import column_op
 
-            return column_op(Column.__eq__)(left, right)
+            Column = ConnectColumn if is_remote() else PySparkColumn
+            return column_op(cast(Callable[..., GenericColumn], Column.__eq__))(left, right)
 
     def ne(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         from pyspark.pandas.base import column_op
 
         _sanitize_list_like(right)
 
-        return column_op(Column.__ne__)(left, right)
+        Column = ConnectColumn if is_remote() else PySparkColumn
+        return column_op(cast(Callable[..., GenericColumn], Column.__ne__))(left, right)
 
     def invert(self, operand: IndexOpsLike) -> IndexOpsLike:
         raise TypeError("Unary ~ can not be applied to %s." % self.pretty_name)

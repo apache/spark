@@ -28,15 +28,17 @@ import org.apache.arrow.memory.RootAllocator
 
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.connect.proto
+import org.apache.spark.connect.proto.ExecutePlanResponse
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalog.Catalog
 import org.apache.spark.sql.catalyst.{JavaTypeInference, ScalaReflection}
 import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, RowEncoder}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{BoxedLongEncoder, UnboundRowEncoder}
-import org.apache.spark.sql.connect.client.{SparkConnectClient, SparkResult}
+import org.apache.spark.sql.connect.client.{ClassFinder, SparkConnectClient, SparkResult}
 import org.apache.spark.sql.connect.client.util.{Cleaner, ConvertToArrow}
 import org.apache.spark.sql.connect.common.LiteralValueProtoConverter.toLiteralProto
 import org.apache.spark.sql.internal.CatalogImpl
+import org.apache.spark.sql.streaming.DataStreamReader
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -291,6 +293,17 @@ class SparkSession private[sql] (
   def read: DataFrameReader = new DataFrameReader(this)
 
   /**
+   * Returns a `DataStreamReader` that can be used to read streaming data in as a `DataFrame`.
+   * {{{
+   *   sparkSession.readStream.parquet("/path/to/directory/of/parquet/files")
+   *   sparkSession.readStream.schema(schema).json("/path/to/directory/of/json/files")
+   * }}}
+   *
+   * @since 3.5.0
+   */
+  def readStream: DataStreamReader = new DataStreamReader(this)
+
+  /**
    * Interface through which the user may create, drop, alter or query underlying databases,
    * tables, functions etc.
    *
@@ -456,9 +469,9 @@ class SparkSession private[sql] (
     client.execute(plan).asScala.foreach(_ => ())
   }
 
-  private[sql] def execute(command: proto.Command): Unit = {
+  private[sql] def execute(command: proto.Command): Seq[ExecutePlanResponse] = {
     val plan = proto.Plan.newBuilder().setCommand(command).build()
-    client.execute(plan).asScala.foreach(_ => ())
+    client.execute(plan).asScala.toSeq
   }
 
   @DeveloperApi
@@ -497,6 +510,14 @@ class SparkSession private[sql] (
   @Experimental
   @scala.annotation.varargs
   def addArtifacts(uri: URI*): Unit = client.addArtifacts(uri)
+
+  /**
+   * Register a [[ClassFinder]] for dynamically generated classes.
+   *
+   * @since 3.5.0
+   */
+  @Experimental
+  def registerClassFinder(finder: ClassFinder): Unit = client.registerClassFinder(finder)
 
   /**
    * This resets the plan id generator so we can produce plans that are comparable.

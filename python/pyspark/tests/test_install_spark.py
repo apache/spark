@@ -51,18 +51,6 @@ class SparkInstallationTestCase(unittest.TestCase):
             "spark-3.0.0-bin-hadoop3.2", checked_package_name("spark-3.0.0", "hadoop3.2", "hive2.3")
         )
 
-        spark_version, hadoop_version, hive_version = checked_versions("3.2.0", "2", "2.3")
-        self.assertEqual(
-            "spark-3.2.0-bin-hadoop2.7",
-            checked_package_name(spark_version, hadoop_version, hive_version),
-        )
-
-        spark_version, hadoop_version, hive_version = checked_versions("3.3.0", "2", "2.3")
-        self.assertEqual(
-            "spark-3.3.0-bin-hadoop2",
-            checked_package_name(spark_version, hadoop_version, hive_version),
-        )
-
         spark_version, hadoop_version, hive_version = checked_versions("3.2.0", "3", "2.3")
         self.assertEqual(
             "spark-3.2.0-bin-hadoop3.2",
@@ -80,15 +68,6 @@ class SparkInstallationTestCase(unittest.TestCase):
 
         # Positive test cases
         self.assertEqual(
-            ("spark-3.0.0", "hadoop2.7", "hive2.3"),
-            checked_versions("spark-3.0.0", "hadoop2", "hive2.3"),
-        )
-
-        self.assertEqual(
-            ("spark-3.0.0", "hadoop2.7", "hive2.3"), checked_versions("3.0.0", "2", "2.3")
-        )
-
-        self.assertEqual(
             ("spark-2.4.1", "without-hadoop", "hive2.3"),
             checked_versions("2.4.1", "without", "2.3"),
         )
@@ -101,11 +80,6 @@ class SparkInstallationTestCase(unittest.TestCase):
         self.assertEqual(
             ("spark-3.3.0", "hadoop3", "hive2.3"),
             checked_versions("spark-3.3.0", "hadoop3", "hive2.3"),
-        )
-
-        self.assertEqual(
-            ("spark-3.3.0", "hadoop2", "hive2.3"),
-            checked_versions("spark-3.3.0", "hadoop2", "hive2.3"),
         )
 
         # Negative test cases

@@ -52,7 +52,7 @@ from pyspark.sql.dataframe import (
     DataFrameStatFunctions as PySparkDataFrameStatFunctions,
 )
 
-from pyspark.errors import PySparkTypeError, PySparkAttributeError, PySparkException
+from pyspark.errors import PySparkTypeError, PySparkAttributeError, PySparkException, PySparkValueError
 from pyspark.errors.exceptions.connect import SparkConnectException
 from pyspark.rdd import PythonEvalType
 from pyspark.storagelevel import StorageLevel
@@ -198,17 +198,13 @@ class DataFrame:
             raise Exception("Cannot cartesian join when self._plan is empty.")
         if other._plan is None:
             raise Exception("Cannot cartesian join when other._plan is empty.")
-        self.checkSameSparkSession(other)
+
         return DataFrame.withPlan(
             plan.Join(left=self._plan, right=other._plan, on=None, how="cross"),
             session=self._session,
         )
 
     crossJoin.__doc__ = PySparkDataFrame.crossJoin.__doc__
-
-    def checkSameSparkSession(self, other: "DataFrame") -> None:
-        if self._session.session_id != other._session.session_id:
-            raise PySparkException("Both Datasets must belong to the same SparkSession")
 
     def coalesce(self, numPartitions: int) -> "DataFrame":
         if not numPartitions > 0:
@@ -465,7 +461,7 @@ class DataFrame:
             raise Exception("Cannot join when other._plan is empty.")
         if how is not None and isinstance(how, str):
             how = how.lower().replace("_", "")
-        self.checkSameSparkSession(other)
+
         return DataFrame.withPlan(
             plan.Join(left=self._plan, right=other._plan, on=on, how=how),
             session=self._session,
@@ -887,7 +883,6 @@ class DataFrame:
     def unionAll(self, other: "DataFrame") -> "DataFrame":
         if other._plan is None:
             raise ValueError("Argument to Union does not contain a valid plan.")
-        self.checkSameSparkSession(other)
         return DataFrame.withPlan(
             plan.SetOperation(self._plan, other._plan, "union", is_all=True), session=self._session
         )
@@ -897,7 +892,6 @@ class DataFrame:
     def unionByName(self, other: "DataFrame", allowMissingColumns: bool = False) -> "DataFrame":
         if other._plan is None:
             raise ValueError("Argument to UnionByName does not contain a valid plan.")
-        self.checkSameSparkSession(other)
         return DataFrame.withPlan(
             plan.SetOperation(
                 self._plan,

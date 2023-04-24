@@ -95,6 +95,8 @@ class Relation(google.protobuf.message.Message):
     GROUP_MAP_FIELD_NUMBER: builtins.int
     CO_GROUP_MAP_FIELD_NUMBER: builtins.int
     WITH_WATERMARK_FIELD_NUMBER: builtins.int
+    APPLY_IN_PANDAS_WITH_STATE_FIELD_NUMBER: builtins.int
+    HTML_STRING_FIELD_NUMBER: builtins.int
     FILL_NA_FIELD_NUMBER: builtins.int
     DROP_NA_FIELD_NUMBER: builtins.int
     REPLACE_FIELD_NUMBER: builtins.int
@@ -176,6 +178,10 @@ class Relation(google.protobuf.message.Message):
     @property
     def with_watermark(self) -> global___WithWatermark: ...
     @property
+    def apply_in_pandas_with_state(self) -> global___ApplyInPandasWithState: ...
+    @property
+    def html_string(self) -> global___HtmlString: ...
+    @property
     def fill_na(self) -> global___NAFill:
         """NA functions"""
     @property
@@ -245,6 +251,8 @@ class Relation(google.protobuf.message.Message):
         group_map: global___GroupMap | None = ...,
         co_group_map: global___CoGroupMap | None = ...,
         with_watermark: global___WithWatermark | None = ...,
+        apply_in_pandas_with_state: global___ApplyInPandasWithState | None = ...,
+        html_string: global___HtmlString | None = ...,
         fill_na: global___NAFill | None = ...,
         drop_na: global___NADrop | None = ...,
         replace: global___NAReplace | None = ...,
@@ -265,6 +273,8 @@ class Relation(google.protobuf.message.Message):
         field_name: typing_extensions.Literal[
             "aggregate",
             b"aggregate",
+            "apply_in_pandas_with_state",
+            b"apply_in_pandas_with_state",
             "approx_quantile",
             b"approx_quantile",
             "catalog",
@@ -301,6 +311,8 @@ class Relation(google.protobuf.message.Message):
             b"group_map",
             "hint",
             b"hint",
+            "html_string",
+            b"html_string",
             "join",
             b"join",
             "limit",
@@ -366,6 +378,8 @@ class Relation(google.protobuf.message.Message):
         field_name: typing_extensions.Literal[
             "aggregate",
             b"aggregate",
+            "apply_in_pandas_with_state",
+            b"apply_in_pandas_with_state",
             "approx_quantile",
             b"approx_quantile",
             "catalog",
@@ -402,6 +416,8 @@ class Relation(google.protobuf.message.Message):
             b"group_map",
             "hint",
             b"hint",
+            "html_string",
+            b"html_string",
             "join",
             b"join",
             "limit",
@@ -497,6 +513,8 @@ class Relation(google.protobuf.message.Message):
         "group_map",
         "co_group_map",
         "with_watermark",
+        "apply_in_pandas_with_state",
+        "html_string",
         "fill_na",
         "drop_na",
         "replace",
@@ -1418,6 +1436,7 @@ class Deduplicate(google.protobuf.message.Message):
     INPUT_FIELD_NUMBER: builtins.int
     COLUMN_NAMES_FIELD_NUMBER: builtins.int
     ALL_COLUMNS_AS_KEYS_FIELD_NUMBER: builtins.int
+    WITHIN_WATERMARK_FIELD_NUMBER: builtins.int
     @property
     def input(self) -> global___Relation:
         """(Required) Input relation for a Deduplicate."""
@@ -1434,22 +1453,29 @@ class Deduplicate(google.protobuf.message.Message):
 
     This field does not co-use with `column_names`.
     """
+    within_watermark: builtins.bool
+    """(Optional) Deduplicate within the time range of watermark."""
     def __init__(
         self,
         *,
         input: global___Relation | None = ...,
         column_names: collections.abc.Iterable[builtins.str] | None = ...,
         all_columns_as_keys: builtins.bool | None = ...,
+        within_watermark: builtins.bool | None = ...,
     ) -> None: ...
     def HasField(
         self,
         field_name: typing_extensions.Literal[
             "_all_columns_as_keys",
             b"_all_columns_as_keys",
+            "_within_watermark",
+            b"_within_watermark",
             "all_columns_as_keys",
             b"all_columns_as_keys",
             "input",
             b"input",
+            "within_watermark",
+            b"within_watermark",
         ],
     ) -> builtins.bool: ...
     def ClearField(
@@ -1457,18 +1483,27 @@ class Deduplicate(google.protobuf.message.Message):
         field_name: typing_extensions.Literal[
             "_all_columns_as_keys",
             b"_all_columns_as_keys",
+            "_within_watermark",
+            b"_within_watermark",
             "all_columns_as_keys",
             b"all_columns_as_keys",
             "column_names",
             b"column_names",
             "input",
             b"input",
+            "within_watermark",
+            b"within_watermark",
         ],
     ) -> None: ...
+    @typing.overload
     def WhichOneof(
         self,
         oneof_group: typing_extensions.Literal["_all_columns_as_keys", b"_all_columns_as_keys"],
     ) -> typing_extensions.Literal["all_columns_as_keys"] | None: ...
+    @typing.overload
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["_within_watermark", b"_within_watermark"]
+    ) -> typing_extensions.Literal["within_watermark"] | None: ...
 
 global___Deduplicate = Deduplicate
 
@@ -1803,6 +1838,44 @@ class ShowString(google.protobuf.message.Message):
     ) -> None: ...
 
 global___ShowString = ShowString
+
+class HtmlString(google.protobuf.message.Message):
+    """Compose the string representing rows for output.
+    It will invoke 'Dataset.htmlString' to compute the results.
+    """
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    INPUT_FIELD_NUMBER: builtins.int
+    NUM_ROWS_FIELD_NUMBER: builtins.int
+    TRUNCATE_FIELD_NUMBER: builtins.int
+    @property
+    def input(self) -> global___Relation:
+        """(Required) The input relation."""
+    num_rows: builtins.int
+    """(Required) Number of rows to show."""
+    truncate: builtins.int
+    """(Required) If set to more than 0, truncates strings to
+    `truncate` characters and all cells will be aligned right.
+    """
+    def __init__(
+        self,
+        *,
+        input: global___Relation | None = ...,
+        num_rows: builtins.int = ...,
+        truncate: builtins.int = ...,
+    ) -> None: ...
+    def HasField(
+        self, field_name: typing_extensions.Literal["input", b"input"]
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "input", b"input", "num_rows", b"num_rows", "truncate", b"truncate"
+        ],
+    ) -> None: ...
+
+global___HtmlString = HtmlString
 
 class StatSummary(google.protobuf.message.Message):
     """Computes specified statistics for numeric and string columns.
@@ -2979,6 +3052,77 @@ class CoGroupMap(google.protobuf.message.Message):
     ) -> None: ...
 
 global___CoGroupMap = CoGroupMap
+
+class ApplyInPandasWithState(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    INPUT_FIELD_NUMBER: builtins.int
+    GROUPING_EXPRESSIONS_FIELD_NUMBER: builtins.int
+    FUNC_FIELD_NUMBER: builtins.int
+    OUTPUT_SCHEMA_FIELD_NUMBER: builtins.int
+    STATE_SCHEMA_FIELD_NUMBER: builtins.int
+    OUTPUT_MODE_FIELD_NUMBER: builtins.int
+    TIMEOUT_CONF_FIELD_NUMBER: builtins.int
+    @property
+    def input(self) -> global___Relation:
+        """(Required) Input relation for applyInPandasWithState."""
+    @property
+    def grouping_expressions(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+        pyspark.sql.connect.proto.expressions_pb2.Expression
+    ]:
+        """(Required) Expressions for grouping keys."""
+    @property
+    def func(self) -> pyspark.sql.connect.proto.expressions_pb2.CommonInlineUserDefinedFunction:
+        """(Required) Input user-defined function."""
+    output_schema: builtins.str
+    """(Required) Schema for the output DataFrame."""
+    state_schema: builtins.str
+    """(Required) Schema for the state."""
+    output_mode: builtins.str
+    """(Required) The output mode of the function."""
+    timeout_conf: builtins.str
+    """(Required) Timeout configuration for groups that do not receive data for a while."""
+    def __init__(
+        self,
+        *,
+        input: global___Relation | None = ...,
+        grouping_expressions: collections.abc.Iterable[
+            pyspark.sql.connect.proto.expressions_pb2.Expression
+        ]
+        | None = ...,
+        func: pyspark.sql.connect.proto.expressions_pb2.CommonInlineUserDefinedFunction
+        | None = ...,
+        output_schema: builtins.str = ...,
+        state_schema: builtins.str = ...,
+        output_mode: builtins.str = ...,
+        timeout_conf: builtins.str = ...,
+    ) -> None: ...
+    def HasField(
+        self, field_name: typing_extensions.Literal["func", b"func", "input", b"input"]
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "func",
+            b"func",
+            "grouping_expressions",
+            b"grouping_expressions",
+            "input",
+            b"input",
+            "output_mode",
+            b"output_mode",
+            "output_schema",
+            b"output_schema",
+            "state_schema",
+            b"state_schema",
+            "timeout_conf",
+            b"timeout_conf",
+        ],
+    ) -> None: ...
+
+global___ApplyInPandasWithState = ApplyInPandasWithState
 
 class CollectMetrics(google.protobuf.message.Message):
     """Collect arbitrary (named) metrics from a dataset."""

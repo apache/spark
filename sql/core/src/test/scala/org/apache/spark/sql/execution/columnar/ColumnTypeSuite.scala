@@ -25,15 +25,16 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeProjection}
+import org.apache.spark.sql.catalyst.types.{PhysicalArrayType, PhysicalDataType, PhysicalMapType, PhysicalStructType}
 import org.apache.spark.sql.execution.columnar.ColumnarTestUtils._
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
 
 class ColumnTypeSuite extends SparkFunSuite {
   private val DEFAULT_BUFFER_SIZE = 512
-  private val MAP_TYPE = MAP(MapType(IntegerType, StringType))
-  private val ARRAY_TYPE = ARRAY(ArrayType(IntegerType))
-  private val STRUCT_TYPE = STRUCT(StructType(StructField("a", StringType) :: Nil))
+  private val MAP_TYPE = MAP(PhysicalMapType(IntegerType, StringType, true))
+  private val ARRAY_TYPE = ARRAY(PhysicalArrayType(IntegerType, true))
+  private val STRUCT_TYPE = STRUCT(PhysicalStructType(Array(StructField("a", StringType))))
 
   test("defaultSize") {
     val checks = Map(
@@ -58,7 +59,8 @@ class ColumnTypeSuite extends SparkFunSuite {
       assertResult(expected, s"Wrong actualSize for $columnType") {
         val row = new GenericInternalRow(1)
         row.update(0, CatalystTypeConverters.convertToCatalyst(value))
-        val proj = UnsafeProjection.create(Array[DataType](columnType.dataType))
+        val proj = UnsafeProjection.create(
+          Array[DataType](ColumnarDataTypeUtils.toLogicalDataType(columnType.dataType)))
         columnType.actualSize(proj(row), 0)
       }
     }
@@ -101,14 +103,16 @@ class ColumnTypeSuite extends SparkFunSuite {
   testColumnType(MAP_TYPE)
   testColumnType(CALENDAR_INTERVAL)
 
-  def testNativeColumnType[T <: AtomicType](columnType: NativeColumnType[T]): Unit = {
+  def testNativeColumnType[T <: PhysicalDataType](columnType: NativeColumnType[T]): Unit = {
     testColumnType[T#InternalType](columnType)
   }
 
   def testColumnType[JvmType](columnType: ColumnType[JvmType]): Unit = {
 
-    val proj = UnsafeProjection.create(Array[DataType](columnType.dataType))
-    val converter = CatalystTypeConverters.createToScalaConverter(columnType.dataType)
+    val proj = UnsafeProjection.create(
+      Array[DataType](ColumnarDataTypeUtils.toLogicalDataType(columnType.dataType)))
+    val converter = CatalystTypeConverters.createToScalaConverter(
+      ColumnarDataTypeUtils.toLogicalDataType(columnType.dataType))
     val seq = (0 until 4).map(_ => proj(makeRandomRow(columnType)).copy())
     val totalSize = seq.map(_.getSizeInBytes).sum
     val bufferSize = Math.max(DEFAULT_BUFFER_SIZE, totalSize)
@@ -120,7 +124,8 @@ class ColumnTypeSuite extends SparkFunSuite {
       buffer.rewind()
       seq.foreach { row =>
         logInfo("buffer = " + buffer + ", expected = " + row)
-        val expected = converter(row.get(0, columnType.dataType))
+        val expected = converter(row.get(0,
+          ColumnarDataTypeUtils.toLogicalDataType(columnType.dataType)))
         val extracted = converter(columnType.extract(buffer))
         assert(expected === extracted,
           s"Extracted value didn't equal to the original one. $expected != $extracted, buffer =" +

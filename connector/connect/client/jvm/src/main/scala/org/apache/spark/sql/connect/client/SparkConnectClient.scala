@@ -58,10 +58,13 @@ private[sql] class SparkConnectClient(
    * @return
    *   A [[proto.AnalyzePlanResponse]] from the Spark Connect server.
    */
-  def analyze(request: proto.AnalyzePlanRequest): proto.AnalyzePlanResponse =
+  def analyze(request: proto.AnalyzePlanRequest): proto.AnalyzePlanResponse = {
+    artifactManager.uploadAllClassFileArtifacts()
     stub.analyzePlan(request)
+  }
 
   def execute(plan: proto.Plan): java.util.Iterator[proto.ExecutePlanResponse] = {
+    artifactManager.uploadAllClassFileArtifacts()
     val request = proto.ExecutePlanRequest
       .newBuilder()
       .setPlan(plan)
@@ -200,6 +203,11 @@ private[sql] class SparkConnectClient(
    * Currently only local files with extensions .jar and .class are supported.
    */
   def addArtifacts(uri: Seq[URI]): Unit = artifactManager.addArtifacts(uri)
+
+  /**
+   * Register a [[ClassFinder]] for dynamically generated classes.
+   */
+  def registerClassFinder(finder: ClassFinder): Unit = artifactManager.registerClassFinder(finder)
 
   /**
    * Shutdown the client's connection to the server.
