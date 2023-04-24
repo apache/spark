@@ -584,13 +584,13 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         .. versionchanged:: 3.4.0
             Supports Spark Connect.
 
-        .. versionchanged:: 3.5.0
-            Added Level parameter.
-
         Parameters
         ----------
         level : int, optional, default None
             How many levels to print for nested schemas.
+
+        .. versionchanged:: 3.5.0
+            Added Level parameter.
 
         Examples
         --------
