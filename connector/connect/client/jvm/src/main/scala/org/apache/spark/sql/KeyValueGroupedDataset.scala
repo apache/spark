@@ -357,8 +357,8 @@ private class KeyValueGroupedDatasetImpl[K, V, IK, IV](
 
   override def keys: Dataset[K] = {
     ds.map(groupingFunc)(ikEncoder)
-      .as(kEncoder)
       .dropDuplicates()
+      .as(kEncoder)
   }
 
   override def flatMapSortedGroups[U: Encoder](sortExprs: Column*)(

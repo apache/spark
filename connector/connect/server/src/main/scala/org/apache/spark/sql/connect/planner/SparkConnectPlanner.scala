@@ -666,19 +666,17 @@ class SparkConnectPlanner(val session: SparkSession) {
         kEnc.namedExpressions,
         logicalPlan)
 
-      // Compute sort order
-      val sortExprs =
-        sortingExprs.asScala.toSeq.map(expr => transformExpression(expr))
-      val sortOrder: Seq[SortOrder] = sortExprs.map {
-        case expr: SortOrder => expr
-        case expr: Expression => SortOrder(expr, Ascending)
-      }
-
       // The input logical plan of KeyValueGroupedDataset need to be executed and analyzed
       val analyzed = session.sessionState.executePlan(withGroupingKey).analyzed
       val dataAttributes = logicalPlan.output
       val groupingAttributes = withGroupingKey.newColumns
       val valueDeserializer = UnresolvedDeserializer(vEnc.deserializer, dataAttributes)
+
+      // Compute sort order
+      val sortExprs =
+        sortingExprs.asScala.toSeq.map(expr => transformExpression(expr))
+      val sortOrder: Seq[SortOrder] = MapGroups.sortOrder(sortExprs)
+
       UntypedKeyValueGroupedDataset(
         kEnc,
         vEnc,
