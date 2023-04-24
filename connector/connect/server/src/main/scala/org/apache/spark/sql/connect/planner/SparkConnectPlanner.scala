@@ -323,34 +323,9 @@ class SparkConnectPlanner(val session: SparkSession) {
     val cols = rel.getColsList.asScala.toArray
     val values = rel.getValuesList.asScala.toArray
     if (values.length == 1) {
-      val value = values.head
-      value.getLiteralTypeCase match {
-        case proto.Expression.Literal.LiteralTypeCase.BOOLEAN =>
-          if (cols.nonEmpty) {
-            dataset.na.fill(value = value.getBoolean, cols = cols).logicalPlan
-          } else {
-            dataset.na.fill(value = value.getBoolean).logicalPlan
-          }
-        case proto.Expression.Literal.LiteralTypeCase.LONG =>
-          if (cols.nonEmpty) {
-            dataset.na.fill(value = value.getLong, cols = cols).logicalPlan
-          } else {
-            dataset.na.fill(value = value.getLong).logicalPlan
-          }
-        case proto.Expression.Literal.LiteralTypeCase.DOUBLE =>
-          if (cols.nonEmpty) {
-            dataset.na.fill(value = value.getDouble, cols = cols).logicalPlan
-          } else {
-            dataset.na.fill(value = value.getDouble).logicalPlan
-          }
-        case proto.Expression.Literal.LiteralTypeCase.STRING =>
-          if (cols.nonEmpty) {
-            dataset.na.fill(value = value.getString, cols = cols).logicalPlan
-          } else {
-            dataset.na.fill(value = value.getString).logicalPlan
-          }
-        case other => throw InvalidPlanInput(s"Unsupported value type: $other")
-      }
+      val value = LiteralValueProtoConverter.toCatalystValue(values.head)
+      val columns = if (cols.nonEmpty) Some(cols.toSeq) else None
+      dataset.na.fillValue(value, columns).logicalPlan
     } else {
       val valueMap = mutable.Map.empty[String, Any]
       cols.zip(values).foreach { case (col, value) =>
