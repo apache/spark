@@ -280,13 +280,7 @@ class Dataset[T] private[sql](
       case _ => toDF()
     }
     val castCols = newDf.logicalPlan.output.map { col =>
-      // Since binary types in top-level schema fields have a specific format to print,
-      // so we do not cast them to strings here.
-      if (col.dataType == BinaryType) {
-        Column(col)
-      } else {
-        Column(col).cast(StringType)
-      }
+      Column(ToPrettyString(col))
     }
     val data = newDf.select(castCols: _*).take(numRows + 1)
 
@@ -295,13 +289,8 @@ class Dataset[T] private[sql](
     // first `truncate-3` and "..."
     schema.fieldNames.map(SchemaUtils.escapeMetaCharacters).toSeq +: data.map { row =>
       row.toSeq.map { cell =>
-        val str = cell match {
-          case null => "NULL"
-          case binary: Array[Byte] => binary.map("%02X".format(_)).mkString("[", " ", "]")
-          case _ =>
-            // Escapes meta-characters not to break the `showString` format
-            SchemaUtils.escapeMetaCharacters(cell.toString)
-        }
+        // Escapes meta-characters not to break the `showString` format
+        val str = SchemaUtils.escapeMetaCharacters(cell.toString)
         if (truncate > 0 && str.length > truncate) {
           // do not show ellipses for strings shorter than 4 characters.
           if (truncate < 4) str.substring(0, truncate)

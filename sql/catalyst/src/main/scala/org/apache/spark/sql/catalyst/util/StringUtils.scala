@@ -67,6 +67,8 @@ object StringUtils extends Logging {
     "(?s)" + out.result() // (?s) enables dotall mode, causing "." to match new lines
   }
 
+  def getHexString(bytes: Array[Byte]): String = bytes.map("%02X".format(_)).mkString("[", " ", "]")
+
   private[this] val trueStrings =
     Set("t", "true", "y", "yes", "1").map(UTF8String.fromString)
 
