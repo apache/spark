@@ -25,6 +25,7 @@ from pyspark.testing.connectutils import (
     should_test_connect,
     connect_requirement_message,
 )
+from pyspark.errors import PySparkValueError
 
 if should_test_connect:
     import pyspark.sql.connect.proto as proto
@@ -637,13 +638,23 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
         plan2 = df.repartition(20)._plan.to_proto(self.connect)
         self.assertTrue(plan2.root.repartition.shuffle)
 
-        with self.assertRaises(ValueError) as context:
+        with self.assertRaises(PySparkValueError) as pe:
             df.coalesce(-1)._plan.to_proto(self.connect)
-        self.assertTrue("numPartitions must be positive" in str(context.exception))
 
-        with self.assertRaises(ValueError) as context:
+        self.check_error(
+            exception=pe.exception,
+            error_class="VALUE_NOT_POSITIVE",
+            message_parameters={"arg_name": "numPartitions", "arg_value": "-1"},
+        )
+
+        with self.assertRaises(PySparkValueError) as pe:
             df.repartition(-1)._plan.to_proto(self.connect)
-        self.assertTrue("numPartitions must be positive" in str(context.exception))
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="VALUE_NOT_POSITIVE",
+            message_parameters={"arg_name": "numPartitions", "arg_value": "-1"},
+        )
 
     def test_repartition_by_expression(self):
         # SPARK-41354: test dataframe.repartition(expressions)
