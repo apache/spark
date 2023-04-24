@@ -194,30 +194,39 @@ trait FileFormat {
    * [[FILE_SOURCE_METADATA_COL_ATTR_KEY]], and either
    * [[FILE_SOURCE_CONSTANT_METADATA_COL_ATTR_KEY]] or
    * [[FILE_SOURCE_GENERATED_METADATA_COL_ATTR_KEY]] as appropriate.
-   *
-   * Constant attributes will be extracted automatically from
-   * [[PartitionedFile.extraConstantMetadataColumnValues]], while generated metadata columns always
-   * map to some hidden/internal column the underslying reader provides.
-   *
-   * NOTE: It is not possible to change the semantics of the base metadata fields by overriding this
-   * method. Technically, a file format could choose suppress them, but that is not recommended.
    */
-  def metadataSchemaFields: Seq[StructField] = FileFormat.BASE_METADATA_FIELDS
+  final lazy val metadataSchemaFields: Seq[StructField] = {
+    constantMetadataSchemaFields.map(_._1) ++ generatedMetadataSchemaFields
+  }
+
+  /** The extractors to use when deriving file-constant metadata columns for this file format. */
+  final lazy val fileConstantMetadataExtractors: Map[String, PartitionedFile => Any] = {
+    constantMetadataSchemaFields
+      .map { case (field, extractor) => field.name -> extractor }
+      .toMap
+  }
 
   /**
-   * The extractors to use when deriving file-constant metadata columns for this file format.
+   * All file-constant fields the file format's _metadata struct defines.
    *
-   * By default, the value of a file-constant metadata column is obtained by looking up the column's
-   * name in the file's metadata column value map. However, implementations can override this method
-   * in order to provide an extractor that has access to the entire [[PartitionedFile]] when
-   * deriving the column's value.
+   * Each field's metadata should define [[METADATA_COL_ATTR_KEY]],
+   * [[FILE_SOURCE_METADATA_COL_ATTR_KEY]], and [[FILE_SOURCE_CONSTANT_METADATA_COL_ATTR_KEY]].
    *
-   * NOTE: Extractors are lazy, invoked only if the query actually selects their column at runtime.
-   *
-   * See also [[FileFormat.getFileConstantMetadataColumnValue]].
+   * Constant attributes are extracted automatically from each [[PartitionedFile]].
    */
-  def fileConstantMetadataExtractors: Map[String, PartitionedFile => Any] =
-    FileFormat.BASE_METADATA_EXTRACTORS
+  protected def constantMetadataSchemaFields: Seq[(StructField, PartitionedFile => Any)] =
+    FileFormat.BASE_CONSTANT_METADATA_FIELDS
+
+  /**
+   * All file-generated fields the file format's _metadata struct defines.
+   *
+   * Each field's metadata should define [[METADATA_COL_ATTR_KEY]],
+   * [[FILE_SOURCE_METADATA_COL_ATTR_KEY]], and [[FILE_SOURCE_GENERATED_METADATA_COL_ATTR_KEY]].
+   *
+   * Generated metadata columns always map to some hidden/internal column the underlying reader
+   * provides.
+   */
+  protected def generatedMetadataSchemaFields: Seq[StructField] = Nil
 }
 
 object FileFormat {
@@ -245,37 +254,39 @@ object FileFormat {
   val OPTION_RETURNING_BATCH = "returning_batch"
 
   /**
-   * Schema of metadata struct that can be produced by every file format,
-   * metadata fields for every file format must be *not* nullable.
+   * File-constant metadata struct fields, which can be produced by every file format.
+   *
+   * These metadata fields for every file format must be *not* nullable.
    */
-  val BASE_METADATA_FIELDS: Seq[StructField] = Seq(
-    FileSourceConstantMetadataStructField(FILE_PATH, StringType, nullable = false),
-    FileSourceConstantMetadataStructField(FILE_NAME, StringType, nullable = false),
-    FileSourceConstantMetadataStructField(FILE_SIZE, LongType, nullable = false),
-    FileSourceConstantMetadataStructField(FILE_BLOCK_START, LongType, nullable = false),
-    FileSourceConstantMetadataStructField(FILE_BLOCK_LENGTH, LongType, nullable = false),
-    FileSourceConstantMetadataStructField(FILE_MODIFICATION_TIME, TimestampType, nullable = false))
+  val BASE_CONSTANT_METADATA_FIELDS: Seq[(StructField, PartitionedFile => Any)] = Seq(
+    FileSourceConstantMetadataStructField(FILE_PATH, StringType, nullable = false) ->
+      { pf: PartitionedFile => pf.toPath.toString },
+    FileSourceConstantMetadataStructField(FILE_NAME, StringType, nullable = false) ->
+      { pf: PartitionedFile => pf.toPath.getName },
+    FileSourceConstantMetadataStructField(FILE_SIZE, LongType, nullable = false) ->
+      { pf: PartitionedFile => pf.fileSize },
+    FileSourceConstantMetadataStructField(FILE_BLOCK_START, LongType, nullable = false) ->
+      { pf: PartitionedFile => pf.start },
+    FileSourceConstantMetadataStructField(FILE_BLOCK_LENGTH, LongType, nullable = false) ->
+      { pf: PartitionedFile => pf.length },
+    FileSourceConstantMetadataStructField(
+      FILE_MODIFICATION_TIME, TimestampType, nullable = false) ->
+      // The modificationTime from the file has millisecond granularity, but the TimestampType for
+      // `file_modification_time` has microsecond granularity.
+      { pf: PartitionedFile => pf.modificationTime * 1000 })
 
   /**
-   * All [[BASE_METADATA_FIELDS]] require custom extractors because they are derived directly from
-   * fields of the [[PartitionedFile]], and do have entries in the file's metadata map.
+   * Creates an extractor whose value is obtained by looking up `name` in the file's constant
+   * metadata column values map.
    */
-  val BASE_METADATA_EXTRACTORS: Map[String, PartitionedFile => Any] = Map(
-    FILE_PATH -> { pf: PartitionedFile => pf.toPath.toString },
-    FILE_NAME -> { pf: PartitionedFile => pf.toPath.getName },
-    FILE_SIZE -> { pf: PartitionedFile => pf.fileSize },
-    FILE_BLOCK_START -> { pf: PartitionedFile => pf.start },
-    FILE_BLOCK_LENGTH -> { pf: PartitionedFile => pf.length },
-    // The modificationTime from the file has millisecond granularity, but the TimestampType for
-    // `file_modification_time` has microsecond granularity.
-    FILE_MODIFICATION_TIME -> { pf: PartitionedFile => pf.modificationTime * 1000 }
-  )
+  def mapEntryConstantMetadataExtractor(name: String): PartitionedFile => Any = {
+    pf: PartitionedFile => pf.otherConstantMetadataColumnValues.get(name).orNull
+  }
 
   /**
    * Extracts the [[Literal]] value of a file-constant metadata column from a [[PartitionedFile]].
    *
-   * If an extractor is available, apply it. Otherwise, look up the column's name in the file's
-   * column value map and return the result (or null, if not found).
+   * If an extractor is available, apply it. Otherwise, return null.
    *
    * Raw values (including null) are automatically converted to literals as a courtesy.
    */
@@ -283,10 +294,10 @@ object FileFormat {
       name: String,
       file: PartitionedFile,
       metadataExtractors: Map[String, PartitionedFile => Any]): Literal = {
-    val extractor = metadataExtractors.get(name).getOrElse {
-      pf: PartitionedFile => pf.otherConstantMetadataColumnValues.get(name).orNull
+    metadataExtractors.get(name) match {
+      case Some(extractor) => Literal(extractor.apply(file))
+      case None => Literal(null)
     }
-    Literal(extractor.apply(file))
   }
 
   // create an internal row given required metadata fields and file information
@@ -300,7 +311,9 @@ object FileFormat {
     // fields whose values can be derived from a file status. In particular, we don't have accurate
     // file split information yet, nor do we have a way to provide custom metadata column values.
     val validFieldNames = Set(FILE_PATH, FILE_NAME, FILE_SIZE, FILE_MODIFICATION_TIME)
-    val extractors = FileFormat.BASE_METADATA_EXTRACTORS.filterKeys(validFieldNames.contains).toMap
+    val extractors = FileFormat.BASE_CONSTANT_METADATA_FIELDS.collect {
+      case (field, extractor) if validFieldNames.contains(field.name) => field.name -> extractor
+    }.toMap
     assert(fieldNames.forall(validFieldNames.contains))
     val pf = PartitionedFile(
       partitionValues = partitionValues,

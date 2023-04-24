@@ -359,8 +359,8 @@ class ParquetFileFormat
     case _ => false
   }
 
-  override def metadataSchemaFields: Seq[StructField] = {
-    super.metadataSchemaFields :+ ParquetFileFormat.ROW_INDEX_FIELD
+  override protected def generatedMetadataSchemaFields: Seq[StructField] = {
+    super.generatedMetadataSchemaFields :+ ParquetFileFormat.ROW_INDEX_FIELD
   }
 }
 

@@ -35,8 +35,10 @@ class FileSourceCustomMetadataStructSuite extends QueryTest with SharedSparkSess
   import FileSourceCustomMetadataStructSuite._
 
   val extraConstantMetadataFields = Seq(
-    FileSourceConstantMetadataStructField("foo", IntegerType),
-    FileSourceConstantMetadataStructField("bar", StringType))
+    FileSourceConstantMetadataStructField("foo", IntegerType) ->
+      FileFormat.mapEntryConstantMetadataExtractor("foo"),
+    FileSourceConstantMetadataStructField("bar", StringType) ->
+      FileFormat.mapEntryConstantMetadataExtractor("bar"))
 
   // Shamelessly recycle the parquet row index generated field.
   val extraGeneratedMetadataFields = Seq(ParquetFileFormat.ROW_INDEX_FIELD.copy(name = "baz"))
@@ -95,7 +97,7 @@ class FileSourceCustomMetadataStructSuite extends QueryTest with SharedSparkSess
 
   test("extra constant metadata fields") {
     withTempData("parquet", FILE_SCHEMA) { (_, f0, f1) =>
-      val format = new TestFileFormat(extraConstantMetadataFields)
+      val format = new TestFileFormat(extraConstantMetadataFields = extraConstantMetadataFields)
       val files = Seq(
         // NOTE: The implementation accepts both raw values and literals for any field, and
         // StringType fields can be String or UTF8String.
@@ -136,24 +138,26 @@ class FileSourceCustomMetadataStructSuite extends QueryTest with SharedSparkSess
 
   test("[SPARK-43226] extra constant metadata fields with extractors") {
     withTempData("parquet", FILE_SCHEMA) { (_, f0, f1) =>
-      val format = new TestFileFormat(extraConstantMetadataFields) {
-        val extractPartitionNumber: PartitionedFile => Any = {
-          _.toPath.toString.split("/").collectFirst {
-            case "f0" => 9990
-            case "f1" => 9991
-          }.get
-        }
-        val extractPartitionName: PartitionedFile => Any = {
-          _.toPath.toString.split("/").collectFirst {
-            case "f0" => "f0f"
-            case "f1" => "f1f"
-          }.get
-        }
-        override def fileConstantMetadataExtractors: Map[String, PartitionedFile => Any] = {
-          super.fileConstantMetadataExtractors ++ Map(
-            "foo" -> extractPartitionNumber, "bar" -> extractPartitionName)
-        }
+      val extraConstantMetadataFieldsWithCustomExtractors = extraConstantMetadataFields.collect {
+        case (field, _) if field.name == "foo" =>
+          val extractPartitionNumber = { pf: PartitionedFile =>
+            pf.toPath.toString.split("/").collectFirst {
+              case "f0" => 9990
+              case "f1" => 9991
+            }.get
+          }
+          field -> extractPartitionNumber
+        case (field, _) if field.name == "bar" =>
+          val extractPartitionName = { pf: PartitionedFile =>
+            pf.toPath.toString.split("/").collectFirst {
+              case "f0" => "f0f"
+              case "f1" => "f1f"
+            }.get
+          }
+          field -> extractPartitionName
       }
+      val format = new TestFileFormat(
+        extraConstantMetadataFields = extraConstantMetadataFieldsWithCustomExtractors)
       val files = Seq(FileStatusWithMetadata(f0), FileStatusWithMetadata(f1))
       val df = createDF(format, files)
 
@@ -169,7 +173,7 @@ class FileSourceCustomMetadataStructSuite extends QueryTest with SharedSparkSess
 
   test("filters and projections on extra constant metadata fields") {
     withTempData("parquet", FILE_SCHEMA) { (_, f0, f1) =>
-      val format = new TestFileFormat(extraConstantMetadataFields)
+      val format = new TestFileFormat(extraConstantMetadataFields = extraConstantMetadataFields)
       val files = Seq(
         FileStatusWithMetadata(f0, Map("foo" -> 0, "bar" -> "000")),
         FileStatusWithMetadata(f1, Map("foo" -> 1, "bar" -> "111")))
@@ -208,7 +212,7 @@ class FileSourceCustomMetadataStructSuite extends QueryTest with SharedSparkSess
 
   test("nullable extra constant metadata fields") {
     withTempData("parquet", FILE_SCHEMA) { (_, f0, f1) =>
-      val format = new TestFileFormat(extraConstantMetadataFields)
+      val format = new TestFileFormat(extraConstantMetadataFields = extraConstantMetadataFields)
       val files = Seq(
         FileStatusWithMetadata(f0, Map("foo" -> 0)), // no entry for bar
         FileStatusWithMetadata(f1, Map("foo" -> null, "bar" -> "111"))) // set foo null
@@ -247,7 +251,7 @@ class FileSourceCustomMetadataStructSuite extends QueryTest with SharedSparkSess
 
   test("extra generated metadata field") {
     withTempData("parquet", FILE_SCHEMA) { (_, f0, f1) =>
-      val format = new TestFileFormat(extraGeneratedMetadataFields)
+      val format = new TestFileFormat(extraGeneratedMetadataFields = extraGeneratedMetadataFields)
       val files = Seq(
         // NOTE: The generated column should ignore this mapping
         FileStatusWithMetadata(f0, Map("baz" -> 1001L)),
@@ -272,7 +276,7 @@ class FileSourceCustomMetadataStructSuite extends QueryTest with SharedSparkSess
       val extraGeneratedMetadataFields =
         Seq(FileSourceGeneratedMetadataStructField("baz", "y", IntegerType))
 
-      val format = new TestFileFormat(extraGeneratedMetadataFields)
+      val format = new TestFileFormat(extraGeneratedMetadataFields = extraGeneratedMetadataFields)
       val files = Seq(
         // NOTE: The generated column should ignore this mapping
         FileStatusWithMetadata(f0, Map("baz" -> 0)),
@@ -292,7 +296,7 @@ class FileSourceCustomMetadataStructSuite extends QueryTest with SharedSparkSess
 
   test("filter and projection on extra generated metadata field") {
     withTempData("parquet", FILE_SCHEMA) { (_, f0, f1) =>
-      val format = new TestFileFormat(extraGeneratedMetadataFields)
+      val format = new TestFileFormat(extraGeneratedMetadataFields = extraGeneratedMetadataFields)
       val files = Seq(
         // NOTE: The generated column should ignore this mapping
         FileStatusWithMetadata(f0, Map("baz" -> 1001L)),
@@ -319,7 +323,7 @@ class FileSourceCustomMetadataStructSuite extends QueryTest with SharedSparkSess
 
   test("mix of extra constant and generated metadata fields") {
     withTempData("parquet", FILE_SCHEMA) { (_, f0, f1) =>
-      val format = new TestFileFormat(extraGeneratedMetadataFields ++ extraConstantMetadataFields)
+      val format = new TestFileFormat(extraConstantMetadataFields, extraGeneratedMetadataFields)
       val files = Seq(
         FileStatusWithMetadata(f0, Map("foo" -> 0, "bar" -> "000")),
         FileStatusWithMetadata(f1, Map("foo" -> 1, "bar" -> "111")))
@@ -340,7 +344,7 @@ class FileSourceCustomMetadataStructSuite extends QueryTest with SharedSparkSess
       import FileFormat.{FILE_NAME, FILE_SIZE}
       import ParquetFileFormat.ROW_INDEX
 
-      val format = new TestFileFormat(extraConstantMetadataFields)
+      val format = new TestFileFormat(extraConstantMetadataFields = extraConstantMetadataFields)
       val files = Seq(
         FileStatusWithMetadata(f0, Map(FILE_SIZE -> 0L, FILE_NAME -> "000")),
         FileStatusWithMetadata(f1, Map(ROW_INDEX -> 17L, FILE_NAME -> "111")))
@@ -378,9 +382,15 @@ object FileSourceCustomMetadataStructSuite {
     override def partitionSchema: StructType = new StructType()
   }
 
-  class TestFileFormat(extraMetadataFields: Seq[StructField]) extends ParquetFileFormat {
-    override def metadataSchemaFields: Seq[StructField] = {
-      super.metadataSchemaFields ++ extraMetadataFields
+  class TestFileFormat(
+      extraConstantMetadataFields: Seq[(StructField, PartitionedFile => Any)] = Nil,
+      extraGeneratedMetadataFields: Seq[StructField] = Nil) extends ParquetFileFormat {
+    override protected def constantMetadataSchemaFields
+        : Seq[(StructField, PartitionedFile => Any)] = {
+      super.constantMetadataSchemaFields ++ extraConstantMetadataFields
+    }
+    override protected def generatedMetadataSchemaFields: Seq[StructField] = {
+      super.generatedMetadataSchemaFields ++ extraGeneratedMetadataFields
     }
   }
 
