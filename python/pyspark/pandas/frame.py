@@ -59,6 +59,8 @@ from pandas.api.types import (  # type: ignore[attr-defined]
 )
 from pandas.tseries.frequencies import DateOffset, to_offset
 
+from pyspark.errors import PySparkValueError
+
 if TYPE_CHECKING:
     from pandas.io.formats.style import Styler
 
@@ -3522,6 +3524,9 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             End time as a time filter limit.
         inclusive : {"both", "neither", "left", "right"}, default "both"
             Include boundaries; whether to set each bound as closed or open.
+
+            .. versionadded:: 4.0.0
+
         axis : {0 or 'index', 1 or 'columns'}, default 0
             Determine range time on index or columns value.
 
@@ -3575,9 +3580,12 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         if not isinstance(self.index, ps.DatetimeIndex):
             raise TypeError("Index must be DatetimeIndex")
 
-        if inclusive not in ["left", "right", "both", "neither"]:
-            msg = "Inclusive has to be either 'both', 'neither', 'left' or 'right'"
-            raise ValueError(msg)
+        allowed_inclusive_values = ["left", "right", "both", "neither"]
+        if inclusive not in allowed_inclusive_values:
+            raise PySparkValueError(
+                error_class="VALUE_NOT_ALLOWED",
+                message_parameters={"arg_name": "inclusive", "allowed_values": str(allowed_inclusive_values)},
+            )
 
         psdf = self.copy()
         psdf.index.name = verify_temp_column_name(psdf, "__index_name__")
