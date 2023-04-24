@@ -87,7 +87,7 @@ class MockRemoteSession:
 
 
 @unittest.skipIf(not should_test_connect, connect_requirement_message)
-class PlanOnlyTestFixture(unittest.TestCase):
+class PlanOnlyTestFixture(unittest.TestCase, PySparkErrorTestUtils):
     @classmethod
     def _read_table(cls, table_name):
         return DataFrame.withPlan(Read(table_name), cls.connect)
