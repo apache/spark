@@ -20,7 +20,6 @@ package org.apache.spark
 import java.net.URL
 
 import scala.collection.JavaConverters._
-import scala.collection.immutable.Map
 
 import com.fasterxml.jackson.annotation.JsonIgnore
 import com.fasterxml.jackson.core.`type`.TypeReference
