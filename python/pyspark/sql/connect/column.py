@@ -251,11 +251,6 @@ class Column:
             start_expr = startPos._expr
         elif isinstance(startPos, int):
             start_expr = LiteralExpression._from_value(startPos)
-        else:
-            raise PySparkTypeError(
-                error_class="NOT_COLUMN_OR_INT",
-                message_parameters={"arg_name": "startPos", "arg_type": type(startPos).__name__},
-            )
 
         return Column(UnresolvedFunction("substring", [self._expr, start_expr, length_expr]))
 
