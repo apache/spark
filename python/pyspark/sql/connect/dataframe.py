@@ -379,7 +379,26 @@ class DataFrame:
     drop_duplicates = dropDuplicates
 
     def dropDuplicatesWithinWatermark(self, subset: Optional[List[str]] = None) -> "DataFrame":
-        raise NotImplementedError("dropDuplicatesWithinWatermark() is not implemented.")
+        if subset is not None and not isinstance(subset, (list, tuple)):
+            raise PySparkTypeError(
+                error_class="NOT_LIST_OR_TUPLE",
+                message_parameters={"arg_name": "subset", "arg_type": type(subset).__name__},
+            )
+
+        if subset is None:
+            return DataFrame.withPlan(
+                plan.Deduplicate(child=self._plan, all_columns_as_keys=True, within_watermark=True),
+                session=self._session,
+            )
+        else:
+            return DataFrame.withPlan(
+                plan.Deduplicate(child=self._plan, column_names=subset, within_watermark=True),
+                session=self._session,
+            )
+
+    dropDuplicatesWithinWatermark.__doc__ = PySparkDataFrame.dropDuplicatesWithinWatermark.__doc__
+
+    drop_duplicates_within_watermark = dropDuplicatesWithinWatermark
 
     def distinct(self) -> "DataFrame":
         return DataFrame.withPlan(
@@ -595,7 +614,6 @@ class DataFrame:
         fraction: Optional[Union[int, float]] = None,
         seed: Optional[int] = None,
     ) -> "DataFrame":
-
         # For the cases below:
         #   sample(True, 0.5 [, seed])
         #   sample(True, fraction=0.5 [, seed])
@@ -1907,8 +1925,7 @@ class DataFrame:
         Parameters
         ----------
         num : int
-            Number of records to return. Will return this number of records
-            or all records if the DataFrame contains less than this number of records.
+            Number of records to skip.
 
         Returns
         -------

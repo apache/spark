@@ -359,11 +359,7 @@ private[spark] trait DepsTestsSuite { k8sSuite: KubernetesSuite =>
       conf: SparkAppConf,
       minioUrlStr: String): Unit = {
     val (minioHost, minioPort) = getServiceHostAndPort(minioUrlStr)
-    val packages = if (Utils.isHadoop3) {
-      s"org.apache.hadoop:hadoop-aws:${VersionInfo.getVersion}"
-    } else {
-      "com.amazonaws:aws-java-sdk:1.7.4,org.apache.hadoop:hadoop-aws:2.7.6"
-    }
+    val packages = s"org.apache.hadoop:hadoop-aws:${VersionInfo.getVersion}"
     conf.set("spark.hadoop.fs.s3a.access.key", ACCESS_KEY)
       .set("spark.hadoop.fs.s3a.secret.key", SECRET_KEY)
       .set("spark.hadoop.fs.s3a.connection.ssl.enabled", "false")

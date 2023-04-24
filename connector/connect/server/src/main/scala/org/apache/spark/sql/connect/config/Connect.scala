@@ -99,5 +99,5 @@ object Connect {
           |""".stripMargin)
       .version("3.5.0")
       .intConf
-      .createWithDefault(4096)
+      .createWithDefault(2048)
 }
