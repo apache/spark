@@ -50,6 +50,7 @@ from pyspark.sql.types import (
     NullType,
     UserDefinedType,
 )
+from pyspark.errors import PySparkAssertionError
 
 import pyspark.sql.connect.proto as pb2
 
@@ -109,16 +110,28 @@ class UnparsedDataType(DataType):
         return "UnparsedDataType(%s)" % repr(self.data_type_string)
 
     def jsonValue(self) -> Dict[str, Any]:
-        raise AssertionError("Invalid call to jsonValue on unresolved object")
+        raise PySparkAssertionError(
+            error_class="INVALID_CALL_ON_UNRESOLVED_OBJECT",
+            message_parameters={"func_name": "jsonValue"},
+        )
 
     def needConversion(self) -> bool:
-        raise AssertionError("Invalid call to needConversion on unresolved object")
+        raise PySparkAssertionError(
+            error_class="INVALID_CALL_ON_UNRESOLVED_OBJECT",
+            message_parameters={"func_name": "needConversion"},
+        )
 
     def toInternal(self, obj: Any) -> Any:
-        raise AssertionError("Invalid call to toInternal on unresolved object")
+        raise PySparkAssertionError(
+            error_class="INVALID_CALL_ON_UNRESOLVED_OBJECT",
+            message_parameters={"func_name": "toInternal"},
+        )
 
     def fromInternal(self, obj: Any) -> Any:
-        raise AssertionError("Invalid call to fromInternal on unresolved object")
+        raise PySparkAssertionError(
+            error_class="INVALID_CALL_ON_UNRESOLVED_OBJECT",
+            message_parameters={"func_name": "fromInternal"},
+        )
 
 
 def pyspark_types_to_proto_types(data_type: DataType) -> pb2.DataType:

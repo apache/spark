@@ -346,10 +346,10 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
       case Exists(sub, children, exprId, conditions, hint) if children.nonEmpty =>
         val (newPlan, newCond) = pullOutCorrelatedPredicates(sub, plan)
         Exists(newPlan, children, exprId, getJoinCondition(newCond, conditions), hint)
-      case ListQuery(sub, children, exprId, childOutputs, conditions, hint) if children.nonEmpty =>
+      case ListQuery(sub, children, exprId, numCols, conditions, hint) if children.nonEmpty =>
         val (newPlan, newCond) = pullOutCorrelatedPredicates(sub, plan)
         val joinCond = getJoinCondition(newCond, conditions)
-        ListQuery(newPlan, children, exprId, childOutputs, joinCond, hint)
+        ListQuery(newPlan, children, exprId, numCols, joinCond, hint)
       case LateralSubquery(sub, children, exprId, conditions, hint) if children.nonEmpty =>
         val (newPlan, newCond) = decorrelate(sub, plan, handleCountBug = true)
         LateralSubquery(newPlan, children, exprId, getJoinCondition(newCond, conditions), hint)

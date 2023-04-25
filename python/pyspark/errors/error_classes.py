@@ -24,6 +24,11 @@ ERROR_CLASSES_JSON = """
       "Argument `<arg_name>` is required when <condition>."
     ]
   },
+  "ATTRIBUTE_NOT_CALLABLE" : {
+    "message" : [
+      "Attribute `<attr_name>` in provided object `<obj_name>` is not callable."
+    ]
+  },
   "CANNOT_ACCESS_TO_DUNDER": {
     "message": [
       "Dunder(double underscore) attribute is for internal use only."
@@ -39,9 +44,19 @@ ERROR_CLASSES_JSON = """
       "At least one <item> must be specified."
     ]
   },
+  "CANNOT_BE_NONE": {
+    "message": [
+      "Argument `<arg_name>` can not be None."
+    ]
+  },
   "CANNOT_CONVERT_COLUMN_INTO_BOOL": {
     "message": [
       "Cannot convert column into bool: please use '&' for 'and', '|' for 'or', '~' for 'not' when building DataFrame boolean expressions."
+    ]
+  },
+  "CANNOT_INFER_ARRAY_TYPE": {
+    "message": [
+      "Can not infer Array Type from an list with None as the first element."
     ]
   },
   "CANNOT_PARSE_DATATYPE": {
@@ -49,9 +64,19 @@ ERROR_CLASSES_JSON = """
       "Unable to parse datatype from schema. <error>."
     ]
   },
+  "CANNOT_PROVIDE_METADATA": {
+    "message": [
+      "metadata can only be provided for a single column."
+    ]
+  },
   "CANNOT_SET_TOGETHER": {
     "message": [
       "<arg_list> should not be set together."
+    ]
+  },
+  "CANNOT_SPECIFY_RETURN_TYPE_FOR_UDF": {
+    "message": [
+      "returnType can not be specified when `<arg_name>` is a user-defined function, but got <return_type>."
     ]
   },
   "COLUMN_IN_LIST": {
@@ -69,9 +94,29 @@ ERROR_CLASSES_JSON = """
       "Function `<func_name>` should return Column, got <return_type>."
     ]
   },
+  "INVALID_CALL_ON_UNRESOLVED_OBJECT": {
+    "message": [
+      "Invalid call to `<func_name>` on unresolved object."
+    ]
+  },
   "INVALID_ITEM_FOR_CONTAINER": {
     "message": [
       "All items in `<arg_name>` should be in <allowed_types>, got <item_type>."
+    ]
+  },
+  "INVALID_RETURN_TYPE_FOR_PANDAS_UDF": {
+    "message": [
+      "Pandas UDF should return StructType for <eval_type>, got <return_type>."
+    ]
+  },
+  "INVALID_TIMEOUT_TIMESTAMP" : {
+    "message" : [
+      "Timeout timestamp (<timestamp>) cannot be earlier than the current watermark (<watermark>)."
+    ]
+  },
+  "INVALID_UDF_EVAL_TYPE" : {
+    "message" : [
+      "Eval type for UDF must be SQL_BATCHED_UDF, SQL_SCALAR_PANDAS_UDF, SQL_SCALAR_PANDAS_ITER_UDF or SQL_GROUPED_AGG_PANDAS_UDF."
     ]
   },
   "INVALID_WHEN_USAGE": {
@@ -89,6 +134,11 @@ ERROR_CLASSES_JSON = """
       "<arg1> and <arg2> should be of the same length, got <arg1_length> and <arg2_length>."
     ]
   },
+  "MISSING_VALID_PLAN" : {
+    "message" : [
+      "Argument to <operator> does not contain a valid plan."
+    ]
+  },
   "MIXED_TYPE_REPLACEMENT" : {
     "message" : [
       "Mixed type replacements are not supported."
@@ -96,7 +146,7 @@ ERROR_CLASSES_JSON = """
   },
   "NEGATIVE_VALUE" : {
     "message" : [
-      "Value for `<arg_name>` must be >= 0, got '<arg_value>'."
+      "Value for `<arg_name>` must be greater than or equal to 0, got '<arg_value>'."
     ]
   },
   "NOT_BOOL" : {
@@ -137,6 +187,11 @@ ERROR_CLASSES_JSON = """
   "NOT_BOOL_OR_STR" : {
     "message" : [
       "Argument `<arg_name>` should be a bool or str, got <arg_type>."
+    ]
+  },
+  "NOT_CALLABLE" : {
+    "message" : [
+      "Argument `<arg_name>` should be a callable, got <arg_type>."
     ]
   },
   "NOT_COLUMN" : {
@@ -279,9 +334,29 @@ ERROR_CLASSES_JSON = """
       "Argument `<arg_name>` can only be provided for a single column."
     ]
   },
+  "ONLY_ALLOW_SINGLE_TRIGGER" : {
+    "message" : [
+      "Only a single trigger is allowed."
+    ]
+  },
   "SLICE_WITH_STEP" : {
     "message" : [
       "Slice with step is not supported."
+    ]
+  },
+  "STATE_NOT_EXISTS" : {
+    "message" : [
+      "State is either not defined or has already been removed."
+    ]
+  },
+  "UNSUPPORTED_DATA_TYPE" : {
+    "message" : [
+      "Unsupported DataType `<data_type>`."
+    ]
+  },
+  "UNSUPPORTED_LITERAL" : {
+    "message" : [
+      "Unsupported Literal '<literal>'."
     ]
   },
   "UNSUPPORTED_NUMPY_ARRAY_SCALAR" : {
@@ -299,6 +374,11 @@ ERROR_CLASSES_JSON = """
       "Value for `<arg_name>` must be 'any' or 'all', got '<arg_value>'."
     ]
   },
+  "VALUE_NOT_NON_EMPTY_STR" : {
+    "message" : [
+      "Value for `<arg_name>` must be a non empty string, got '<arg_value>'."
+    ]
+  },
   "VALUE_NOT_PEARSON" : {
     "message" : [
       "Value for `<arg_name>` only supports the 'pearson', got '<arg_value>'."
@@ -307,6 +387,16 @@ ERROR_CLASSES_JSON = """
   "VALUE_NOT_POSITIVE" : {
     "message" : [
       "Value for `<arg_name>` must be positive, got '<arg_value>'."
+    ]
+  },
+  "VALUE_NOT_TRUE" : {
+    "message" : [
+      "Value for `<arg_name>` must be True, got '<arg_value>'."
+    ]
+  },
+  "VALUE_OUT_OF_BOUND" : {
+    "message" : [
+      "Value for `<arg_name>` must be between <min> and <max>."
     ]
   },
   "WRONG_NUM_ARGS_FOR_HIGHER_ORDER_FUNCTION" : {

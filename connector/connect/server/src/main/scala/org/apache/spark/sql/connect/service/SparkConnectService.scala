@@ -33,6 +33,7 @@ import io.grpc.protobuf.StatusProto
 import io.grpc.protobuf.services.ProtoReflectionService
 import io.grpc.stub.StreamObserver
 import org.apache.commons.lang3.StringUtils
+import org.apache.commons.lang3.exception.ExceptionUtils
 
 import org.apache.spark.{SparkEnv, SparkException, SparkThrowable}
 import org.apache.spark.api.python.PythonException
@@ -40,7 +41,8 @@ import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.{AddArtifactsRequest, AddArtifactsResponse}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.connect.config.Connect.{CONNECT_GRPC_BINDING_PORT, CONNECT_GRPC_MAX_INBOUND_MESSAGE_SIZE}
+import org.apache.spark.sql.connect.config.Connect.{CONNECT_GRPC_BINDING_PORT, CONNECT_GRPC_MAX_INBOUND_MESSAGE_SIZE, CONNECT_JVM_STACK_TRACE_MAX_SIZE}
+import org.apache.spark.sql.internal.SQLConf.PYSPARK_JVM_STACKTRACE_ENABLED
 import org.apache.spark.util.JacksonUtils
 
 /**
@@ -72,22 +74,27 @@ class SparkConnectService(debug: Boolean)
     classes.toSeq
   }
 
-  private def buildStatusFromThrowable(st: Throwable): RPCStatus = {
-    val message = StringUtils.abbreviate(st.getMessage, 2048)
+  private def buildStatusFromThrowable(st: Throwable, stackTraceEnabled: Boolean): RPCStatus = {
+    val errorInfo = ErrorInfo
+      .newBuilder()
+      .setReason(st.getClass.getName)
+      .setDomain("org.apache.spark")
+      .putMetadata("classes",
+        JacksonUtils.writeValueAsString(allClasses(st.getClass).map(_.getName)))
+
+    lazy val stackTrace = Option(ExceptionUtils.getStackTrace(st))
+    val withStackTrace = if (stackTraceEnabled && stackTrace.nonEmpty) {
+      val maxSize = SparkEnv.get.conf.get(CONNECT_JVM_STACK_TRACE_MAX_SIZE)
+      errorInfo.putMetadata("stackTrace", StringUtils.abbreviate(stackTrace.get, maxSize))
+    } else {
+      errorInfo
+    }
+
     RPCStatus
       .newBuilder()
       .setCode(RPCCode.INTERNAL_VALUE)
-      .addDetails(
-        ProtoAny.pack(
-          ErrorInfo
-            .newBuilder()
-            .setReason(st.getClass.getName)
-            .setDomain("org.apache.spark")
-            .putMetadata(
-              "classes",
-              JacksonUtils.writeValueAsString(allClasses(st.getClass).map(_.getName)))
-            .build()))
-      .setMessage(if (message != null) message else "")
+      .addDetails(ProtoAny.pack(withStackTrace.build()))
+      .setMessage(SparkConnectService.extractErrorMessage(st))
       .build()
   }
 
@@ -111,23 +118,35 @@ class SparkConnectService(debug: Boolean)
    */
   private def handleError[V](
       opType: String,
-      observer: StreamObserver[V]): PartialFunction[Throwable, Unit] = {
-    case se: SparkException if isPythonExecutionException(se) =>
-      logError(s"Error during: $opType", se)
-      observer.onError(
-        StatusProto.toStatusRuntimeException(buildStatusFromThrowable(se.getCause)))
+      observer: StreamObserver[V],
+      userId: String,
+      sessionId: String): PartialFunction[Throwable, Unit] = {
+    val session =
+      SparkConnectService
+        .getOrCreateIsolatedSession(userId, sessionId)
+        .session
+    val stackTraceEnabled = session.conf.get(PYSPARK_JVM_STACKTRACE_ENABLED.key, "true").toBoolean
 
-    case e: Throwable if e.isInstanceOf[SparkThrowable] || NonFatal.apply(e) =>
-      logError(s"Error during: $opType", e)
-      observer.onError(StatusProto.toStatusRuntimeException(buildStatusFromThrowable(e)))
+    {
+      case se: SparkException if isPythonExecutionException(se) =>
+        logError(s"Error during: $opType", se)
+        observer.onError(
+          StatusProto.toStatusRuntimeException(
+            buildStatusFromThrowable(se.getCause, stackTraceEnabled)))
 
-    case e: Throwable =>
-      logError(s"Error during: $opType", e)
-      observer.onError(
-        Status.UNKNOWN
-          .withCause(e)
-          .withDescription(StringUtils.abbreviate(e.getMessage, 2048))
-          .asRuntimeException())
+      case e: Throwable if e.isInstanceOf[SparkThrowable] || NonFatal.apply(e) =>
+        logError(s"Error during: $opType", e)
+        observer.onError(
+          StatusProto.toStatusRuntimeException(buildStatusFromThrowable(e, stackTraceEnabled)))
+
+      case e: Throwable =>
+        logError(s"Error during: $opType", e)
+        observer.onError(
+          Status.UNKNOWN
+            .withCause(e)
+            .withDescription(StringUtils.abbreviate(e.getMessage, 2048))
+            .asRuntimeException())
+    }
   }
 
   /**
@@ -145,7 +164,13 @@ class SparkConnectService(debug: Boolean)
       responseObserver: StreamObserver[proto.ExecutePlanResponse]): Unit = {
     try {
       new SparkConnectStreamHandler(responseObserver).handle(request)
-    } catch handleError("execute", observer = responseObserver)
+    } catch {
+      handleError(
+        "execute",
+        observer = responseObserver,
+        userId = request.getUserContext.getUserId,
+        sessionId = request.getSessionId)
+    }
   }
 
   /**
@@ -165,7 +190,13 @@ class SparkConnectService(debug: Boolean)
       responseObserver: StreamObserver[proto.AnalyzePlanResponse]): Unit = {
     try {
       new SparkConnectAnalyzeHandler(responseObserver).handle(request)
-    } catch handleError("analyze", observer = responseObserver)
+    } catch {
+      handleError(
+        "analyze",
+        observer = responseObserver,
+        userId = request.getUserContext.getUserId,
+        sessionId = request.getSessionId)
+    }
   }
 
   /**
@@ -180,7 +211,13 @@ class SparkConnectService(debug: Boolean)
       responseObserver: StreamObserver[proto.ConfigResponse]): Unit = {
     try {
       new SparkConnectConfigHandler(responseObserver).handle(request)
-    } catch handleError("config", observer = responseObserver)
+    } catch {
+      handleError(
+        "config",
+        observer = responseObserver,
+        userId = request.getUserContext.getUserId,
+        sessionId = request.getSessionId)
+    }
   }
 
   /**
@@ -294,6 +331,15 @@ object SparkConnectService {
       } else {
         server.shutdownNow()
       }
+    }
+  }
+
+  def extractErrorMessage(st: Throwable): String = {
+    val message = StringUtils.abbreviate(st.getMessage, 2048)
+    if (message != null) {
+      message
+    } else {
+      ""
     }
   }
 }

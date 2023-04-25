@@ -20,7 +20,7 @@ from typing import Any, Dict, List, Optional
 
 from py4j.java_gateway import JavaObject, java_import
 
-from pyspark.errors import StreamingQueryException
+from pyspark.errors import StreamingQueryException, PySparkValueError
 from pyspark.errors.exceptions.captured import (
     StreamingQueryException as CapturedStreamingQueryException,
 )
@@ -196,8 +196,11 @@ class StreamingQuery:
         >>> sq.stop()
         """
         if timeout is not None:
-            if not isinstance(timeout, (int, float)) or timeout < 0:
-                raise ValueError("timeout must be a positive integer or float. Got %s" % timeout)
+            if not isinstance(timeout, (int, float)) or timeout <= 0:
+                raise PySparkValueError(
+                    error_class="VALUE_NOT_POSITIVE",
+                    message_parameters={"arg_name": "timeout", "arg_value": type(timeout).__name__},
+                )
             return self._jsq.awaitTermination(int(timeout * 1000))
         else:
             return self._jsq.awaitTermination()
@@ -532,7 +535,10 @@ class StreamingQueryManager:
         """
         if timeout is not None:
             if not isinstance(timeout, (int, float)) or timeout < 0:
-                raise ValueError("timeout must be a positive integer or float. Got %s" % timeout)
+                raise PySparkValueError(
+                    error_class="VALUE_NOT_POSITIVE",
+                    message_parameters={"arg_name": "timeout", "arg_value": type(timeout).__name__},
+                )
             return self._jsqm.awaitAnyTermination(int(timeout * 1000))
         else:
             return self._jsqm.awaitAnyTermination()
@@ -571,6 +577,9 @@ class StreamingQueryManager:
         ...         pass
         ...
         ...     def onQueryProgress(self, event):
+        ...         pass
+        ...
+        ...     def onQueryIdle(self, event):
         ...         pass
         ...
         ...     def onQueryTerminated(self, event):
@@ -615,6 +624,9 @@ class StreamingQueryManager:
         ...         pass
         ...
         ...     def onQueryProgress(self, event):
+        ...         pass
+        ...
+        ...     def onQueryIdle(self, event):
         ...         pass
         ...
         ...     def onQueryTerminated(self, event):

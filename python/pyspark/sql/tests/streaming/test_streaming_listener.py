@@ -99,6 +99,9 @@ class StreamingListenerTests(ReusedSQLTestCase):
                 nonlocal progress_event
                 progress_event = event
 
+            def onQueryIdle(self, event):
+                pass
+
             def onQueryTerminated(self, event):
                 nonlocal terminated_event
                 terminated_event = event
@@ -279,6 +282,9 @@ class StreamingListenerTests(ReusedSQLTestCase):
                 pass
 
             def onQueryProgress(self, event):
+                pass
+
+            def onQueryIdle(self, event):
                 pass
 
             def onQueryTerminated(self, event):
