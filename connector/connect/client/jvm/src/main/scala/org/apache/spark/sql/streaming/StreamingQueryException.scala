@@ -46,7 +46,7 @@ class StreamingQueryException private[sql] (
     messageParameters: Map[String, String])
     extends Exception(message, cause)
     with SparkThrowable {
-  // This is a copy of the same class in sql/core/.../streaming/StreamingQueryStatus.scala
+  // This is a copy of the same class in sql/core/.../streaming/StreamingQueryException.scala
 
   def this(
       queryDebugString: String,
