@@ -92,6 +92,19 @@ case class PythonUDF(
     copy(children = newChildren)
 }
 
+abstract class UnevaluableAggregateFunc extends AggregateFunction {
+  override def aggBufferSchema: StructType = throw internalError(
+    "UnevaluableAggregateFunc.aggBufferSchema should not be called.")
+  override def aggBufferAttributes: Seq[AttributeReference] = throw internalError(
+    "UnevaluableAggregateFunc.aggBufferAttributes should not be called.")
+  override def inputAggBufferAttributes: Seq[AttributeReference] = throw internalError(
+    "UnevaluableAggregateFunc.inputAggBufferAttributes should not be called.")
+  final override def eval(input: InternalRow = null): Any =
+    throw QueryExecutionErrors.cannotEvaluateExpressionError(this)
+  final override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode =
+    throw QueryExecutionErrors.cannotGenerateCodeForExpressionError(this)
+}
+
 /**
  * A serialized version of a Python lambda function for aggregation. This is a special expression,
  * which needs a dedicated physical operator to execute it, instead of the normal Aggregate
@@ -104,18 +117,7 @@ case class PythonUDAF(
     children: Seq[Expression],
     udfDeterministic: Boolean,
     resultId: ExprId = NamedExpression.newExprId)
-  extends AggregateFunction with PythonFuncExpression {
-
-  override def aggBufferSchema: StructType = throw internalError(
-    "PythonUDAF.aggBufferSchema should not be called.")
-  override def aggBufferAttributes: Seq[AttributeReference] = throw internalError(
-    "PythonUDAF.aggBufferAttributes should not be called.")
-  override def inputAggBufferAttributes: Seq[AttributeReference] = throw internalError(
-    "PythonUDAF.inputAggBufferAttributes should not be called.")
-  final override def eval(input: InternalRow = null): Any =
-    throw QueryExecutionErrors.cannotEvaluateExpressionError(this)
-  final override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode =
-    throw QueryExecutionErrors.cannotGenerateCodeForExpressionError(this)
+  extends UnevaluableAggregateFunc with PythonFuncExpression {
 
   override def sql(isDistinct: Boolean): String = {
     val distinct = if (isDistinct) "DISTINCT " else ""
@@ -142,24 +144,18 @@ case class PrettyPythonUDF(
     name: String,
     dataType: DataType,
     children: Seq[Expression])
-  extends AggregateFunction with NonSQLExpression {
-
-  override def aggBufferSchema: StructType = throw internalError(
-    "PrettyPythonUDF.aggBufferSchema should not be called.")
-  override def aggBufferAttributes: Seq[AttributeReference] = throw internalError(
-    "PrettyPythonUDF.aggBufferAttributes should not be called.")
-  override def inputAggBufferAttributes: Seq[AttributeReference] = throw internalError(
-    "PrettyPythonUDF.inputAggBufferAttributes should not be called.")
-  final override def eval(input: InternalRow = null): Any =
-    throw QueryExecutionErrors.cannotEvaluateExpressionError(this)
-  final override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode =
-    throw QueryExecutionErrors.cannotGenerateCodeForExpressionError(this)
+  extends UnevaluableAggregateFunc with NonSQLExpression {
 
   override def toString: String = s"$name(${children.mkString(", ")})"
 
   override def sql(isDistinct: Boolean): String = {
     val distinct = if (isDistinct) "DISTINCT " else ""
     s"$name($distinct${children.mkString(", ")})"
+  }
+
+  override def toAggString(isDistinct: Boolean): String = {
+    val start = if (isDistinct) "(distinct " else "("
+    name + children.mkString(start, ", ", ")")
   }
 
   override def nullable: Boolean = true
