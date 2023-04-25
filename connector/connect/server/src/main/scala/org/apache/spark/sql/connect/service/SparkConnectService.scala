@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.connect.service
 
-import java.util.concurrent.TimeUnit
+import java.util.concurrent.{ConcurrentMap, TimeUnit}
 
 import scala.annotation.tailrec
 import scala.collection.mutable.ArrayBuffer
@@ -229,15 +229,19 @@ class SparkConnectService(debug: Boolean)
   override def addArtifacts(responseObserver: StreamObserver[AddArtifactsResponse])
       : StreamObserver[AddArtifactsRequest] = new SparkConnectAddArtifactsHandler(
     responseObserver)
-}
 
-/**
- * Object used for referring to SparkSessions in the SessionCache.
- *
- * @param userId
- * @param session
- */
-case class SessionHolder(userId: String, sessionId: String, session: SparkSession)
+  override def interruptExecute(
+    request: proto.InterruptRequest,
+    responseObserver: StreamObserver[proto.InterruptResponse]): Unit = {
+    try {
+      new SparkConnectInterruptHandler(responseObserver).handle(request)
+    } catch handleError(
+        "interrupt",
+        observer = responseObserver,
+        userId = request.getUserContext.getUserId,
+        sessionId = request.getSessionId)
+  }
+}
 
 /**
  * Static instance of the SparkConnectService.
