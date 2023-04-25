@@ -1,4 +1,5 @@
-#!/bin/bash
+#!/usr/bin/env bash
+
 #
 # Licensed to the Apache Software Foundation (ASF) under one or more
 # contributor license agreements.  See the NOTICE file distributed with
@@ -15,22 +16,26 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-if [[ $# -gt 0 ]]; then
+
+if [[ $# -gt 1 ]]; then
   echo "Illegal number of parameters."
-  echo "Usage: ./connector/connect/dev/detect_breaking_changes.sh"
+  echo "Usage: ./dev/protobuf-breaking-changes-check.sh [branch]"
+  echo "the default branch is 'master', available options are 'master', 'branch-3.4', etc"
   exit -1
 fi
 
-
-SPARK_HOME="$(cd "`dirname $0`"/../../..; pwd)"
+SPARK_HOME="$(cd "`dirname $0`"/..; pwd)"
 cd "$SPARK_HOME"
 
-pushd connector/connect/common/src/main
+BRANCH="master"
+if [[ $# -eq 1 ]]; then
+  BRANCH=$1
+fi
 
-buf breaking --against "https://github.com/apache/spark/archive/master.zip#strip_components=1,subdir=connector/connect/common/src/main"
+pushd connector/connect/common/src/main && echo "Start checking against $BRANCH" && buf breaking --against "https://github.com/apache/spark.git#branch=$BRANCH,subdir=connector/connect/common/src/main"
 if [[ $? -ne -0 ]]; then
   echo "Buf detected breaking changes for your Pull Request. Please verify."
-  echo "Please make sure your branch is current against spark/master."
+  echo "Please make sure your branch is current against spark/$BRANCH."
   exit 1
 fi
 
