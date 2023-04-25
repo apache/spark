@@ -623,15 +623,13 @@ private[spark] object SparkHadoopUtil extends Logging {
       fs.create(path)
     } else {
       try {
-        // Use reflection as this uses APIs only available in Hadoop 3
-        val builderMethod = fs.getClass().getMethod("createFile", classOf[Path])
         // the builder api does not resolve relative paths, nor does it create parent dirs, while
         // the old api does.
         if (!fs.mkdirs(path.getParent())) {
           throw new IOException(s"Failed to create parents of $path")
         }
         val qualifiedPath = fs.makeQualified(path)
-        val builder = builderMethod.invoke(fs, qualifiedPath)
+        val builder = fs.createFile(qualifiedPath)
         val builderCls = builder.getClass()
         // this may throw a NoSuchMethodException if the path is not on hdfs
         val replicateMethod = builderCls.getMethod("replicate")
