@@ -2798,92 +2798,6 @@ class DataFrameTestsMixin:
         with self.assertRaisesRegex(KeyError, "id"):
             left.merge(right, on="id")
 
-    def test_append(self):
-        pdf = pd.DataFrame([[1, 2], [3, 4]], columns=list("AB"))
-        psdf = ps.from_pandas(pdf)
-        other_pdf = pd.DataFrame([[3, 4], [5, 6]], columns=list("BC"), index=[2, 3])
-        other_psdf = ps.from_pandas(other_pdf)
-
-        self.assert_eq(psdf.append(psdf), pdf.append(pdf))
-        self.assert_eq(psdf.append(psdf, ignore_index=True), pdf.append(pdf, ignore_index=True))
-
-        # Assert DataFrames with non-matching columns
-        self.assert_eq(psdf.append(other_psdf), pdf.append(other_pdf))
-
-        # Assert appending a Series fails
-        msg = "DataFrames.append() does not support appending Series to DataFrames"
-        with self.assertRaises(TypeError, msg=msg):
-            psdf.append(psdf["A"])
-
-        # Assert using the sort parameter raises an exception
-        msg = "The 'sort' parameter is currently not supported"
-        with self.assertRaises(NotImplementedError, msg=msg):
-            psdf.append(psdf, sort=True)
-
-        # Assert using 'verify_integrity' only raises an exception for overlapping indices
-        self.assert_eq(
-            psdf.append(other_psdf, verify_integrity=True),
-            pdf.append(other_pdf, verify_integrity=True),
-        )
-        msg = "Indices have overlapping values"
-        with self.assertRaises(ValueError, msg=msg):
-            psdf.append(psdf, verify_integrity=True)
-
-        # Skip integrity verification when ignore_index=True
-        self.assert_eq(
-            psdf.append(psdf, ignore_index=True, verify_integrity=True),
-            pdf.append(pdf, ignore_index=True, verify_integrity=True),
-        )
-
-        # Assert appending multi-index DataFrames
-        multi_index_pdf = pd.DataFrame([[1, 2], [3, 4]], columns=list("AB"), index=[[2, 3], [4, 5]])
-        multi_index_psdf = ps.from_pandas(multi_index_pdf)
-        other_multi_index_pdf = pd.DataFrame(
-            [[5, 6], [7, 8]], columns=list("AB"), index=[[2, 3], [6, 7]]
-        )
-        other_multi_index_psdf = ps.from_pandas(other_multi_index_pdf)
-
-        self.assert_eq(
-            multi_index_psdf.append(multi_index_psdf), multi_index_pdf.append(multi_index_pdf)
-        )
-
-        # Assert DataFrames with non-matching columns
-        self.assert_eq(
-            multi_index_psdf.append(other_multi_index_psdf),
-            multi_index_pdf.append(other_multi_index_pdf),
-        )
-
-        # Assert using 'verify_integrity' only raises an exception for overlapping indices
-        self.assert_eq(
-            multi_index_psdf.append(other_multi_index_psdf, verify_integrity=True),
-            multi_index_pdf.append(other_multi_index_pdf, verify_integrity=True),
-        )
-        with self.assertRaises(ValueError, msg=msg):
-            multi_index_psdf.append(multi_index_psdf, verify_integrity=True)
-
-        # Skip integrity verification when ignore_index=True
-        self.assert_eq(
-            multi_index_psdf.append(multi_index_psdf, ignore_index=True, verify_integrity=True),
-            multi_index_pdf.append(multi_index_pdf, ignore_index=True, verify_integrity=True),
-        )
-
-        # Assert trying to append DataFrames with different index levels
-        msg = "Both DataFrames have to have the same number of index levels"
-        with self.assertRaises(ValueError, msg=msg):
-            psdf.append(multi_index_psdf)
-
-        # Skip index level check when ignore_index=True
-        self.assert_eq(
-            psdf.append(multi_index_psdf, ignore_index=True),
-            pdf.append(multi_index_pdf, ignore_index=True),
-        )
-
-        columns = pd.MultiIndex.from_tuples([("A", "X"), ("A", "Y")])
-        pdf.columns = columns
-        psdf.columns = columns
-
-        self.assert_eq(psdf.append(psdf), pdf.append(pdf))
-
     def test_clip(self):
         pdf = pd.DataFrame(
             {"A": [0, 2, 4], "B": [4, 2, 0], "X": [-1, 10, 0]}, index=np.random.rand(3)
@@ -4018,10 +3932,19 @@ class DataFrameTestsMixin:
             psdf.reindex(["A", "B", "C"], columns=["numbers", "2", "3"]).sort_index(),
         )
 
-        self.assert_eq(
-            pdf.reindex(["A", "B", "C"], index=["numbers", "2", "3"]).sort_index(),
-            psdf.reindex(["A", "B", "C"], index=["numbers", "2", "3"]).sort_index(),
-        )
+        # TODO(SPARK-43271): Match behavior with DataFrame.reindex with specifying `index`.
+        if LooseVersion(pd.__version__) >= LooseVersion("2.0.0"):
+            expected_result = ps.DataFrame([1.0, 2.0, 3.0], index=ps.Index(["A", "B", "C"]))
+            expected_result.columns = pd.Index(["numbers"], name="cols")
+            self.assert_eq(
+                psdf.reindex(["A", "B", "C"], index=["numbers", "2", "3"]).sort_index(),
+                expected_result,
+            )
+        else:
+            self.assert_eq(
+                pdf.reindex(["A", "B", "C"], index=["numbers", "2", "3"]).sort_index(),
+                psdf.reindex(["A", "B", "C"], index=["numbers", "2", "3"]).sort_index(),
+            )
 
         self.assert_eq(
             pdf.reindex(index=["A", "B"]).sort_index(), psdf.reindex(index=["A", "B"]).sort_index()

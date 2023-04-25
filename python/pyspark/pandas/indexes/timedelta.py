@@ -19,6 +19,7 @@ from functools import partial
 
 import pandas as pd
 from pandas.api.types import is_hashable  # type: ignore[attr-defined]
+import numpy as np
 
 from pyspark import pandas as ps
 from pyspark._globals import _NoValue
@@ -137,7 +138,7 @@ class TimedeltaIndex(Index):
         Number of days for each element.
         """
 
-        def pandas_days(x) -> int:  # type: ignore[no-untyped-def]
+        def pandas_days(x) -> np.int32:  # type: ignore[no-untyped-def]
             return x.days
 
         return Index(self.to_series().transform(pandas_days))

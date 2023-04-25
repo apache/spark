@@ -15,7 +15,6 @@
 # limitations under the License.
 #
 from typing import Any, Callable, List, Optional, Union, TYPE_CHECKING, cast
-import warnings
 
 import pandas as pd
 from pandas.api.types import (  # type: ignore[attr-defined]
@@ -250,14 +249,11 @@ class CategoricalAccessor:
         )
         return DataFrame(internal)._psser_for(self._data._column_label).copy()
 
-    def _set_ordered(self, *, ordered: bool, inplace: bool) -> Optional["ps.Series"]:
+    def _set_ordered(self, *, ordered: bool) -> Optional["ps.Series"]:
         from pyspark.pandas.frame import DataFrame
 
         if self.ordered == ordered:
-            if inplace:
-                return None
-            else:
-                return self._data.copy()
+            return self._data.copy()
         else:
             internal = self._data._psdf._internal.with_new_spark_column(
                 self._data._column_label,
@@ -266,23 +262,11 @@ class CategoricalAccessor:
                     dtype=CategoricalDtype(categories=self.categories, ordered=ordered)
                 ),
             )
-            if inplace:
-                self._data._psdf._update_internal_frame(internal)
-                return None
-            else:
-                return DataFrame(internal)._psser_for(self._data._column_label).copy()
+            return DataFrame(internal)._psser_for(self._data._column_label).copy()
 
-    def as_ordered(self, inplace: bool = False) -> Optional["ps.Series"]:
+    def as_ordered(self) -> Optional["ps.Series"]:
         """
         Set the Categorical to be ordered.
-
-        Parameters
-        ----------
-        inplace : bool, default False
-           Whether or not to set the ordered attribute in-place or return
-           a copy of this categorical with ordered set to True.
-
-            .. deprecated:: 3.4.0
 
         Returns
         -------
@@ -312,25 +296,11 @@ class CategoricalAccessor:
         dtype: category
         Categories (3, object): ['a' < 'b' < 'c']
         """
-        if inplace:
-            warnings.warn(
-                "The `inplace` parameter in as_ordered is deprecated "
-                "and will be removed in a future version.",
-                FutureWarning,
-            )
-        return self._set_ordered(ordered=True, inplace=inplace)
+        return self._set_ordered(ordered=True)
 
-    def as_unordered(self, inplace: bool = False) -> Optional["ps.Series"]:
+    def as_unordered(self) -> Optional["ps.Series"]:
         """
         Set the Categorical to be unordered.
-
-        Parameters
-        ----------
-        inplace : bool, default False
-           Whether or not to set the ordered attribute in-place or return
-           a copy of this categorical with ordered set to False.
-
-            .. deprecated:: 3.4.0
 
         Returns
         -------
@@ -360,13 +330,7 @@ class CategoricalAccessor:
         dtype: category
         Categories (3, object): ['a', 'b', 'c']
         """
-        if inplace:
-            warnings.warn(
-                "The `inplace` parameter in as_unordered is deprecated "
-                "and will be removed in a future version.",
-                FutureWarning,
-            )
-        return self._set_ordered(ordered=False, inplace=inplace)
+        return self._set_ordered(ordered=False)
 
     def remove_categories(self, removals: Union[pd.Index, Any, List]) -> Optional["ps.Series"]:
         """
