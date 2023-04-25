@@ -26,7 +26,7 @@ import unittest
 
 from pyspark.sql import Row
 from pyspark.sql import functions as F
-from pyspark.errors import AnalysisException
+from pyspark.errors import AnalysisException, PySparkTypeError
 from pyspark.sql.types import (
     ByteType,
     ShortType,
@@ -906,8 +906,13 @@ class TypesTestsMixin:
         self.assertEqual(
             _merge_type(ArrayType(LongType()), ArrayType(LongType())), ArrayType(LongType())
         )
-        with self.assertRaisesRegex(TypeError, "element in array"):
+        with self.assertRaises(PySparkTypeError) as pe:
             _merge_type(ArrayType(LongType()), ArrayType(DoubleType()))
+        self.check_error(
+            exception=pe.exception,
+            error_class="CANNOT_MERGE_TYPE",
+            message_parameters={"data_type1": "LongType", "data_type2": "DoubleType"},
+        )
 
         self.assertEqual(
             _merge_type(MapType(StringType(), LongType()), MapType(StringType(), LongType())),
@@ -919,8 +924,13 @@ class TypesTestsMixin:
             MapType(StringType(), LongType()),
         )
 
-        with self.assertRaisesRegex(TypeError, "value of map"):
+        with self.assertRaises(PySparkTypeError) as pe:
             _merge_type(MapType(StringType(), LongType()), MapType(StringType(), DoubleType()))
+        self.check_error(
+            exception=pe.exception,
+            error_class="CANNOT_MERGE_TYPE",
+            message_parameters={"data_type1": "LongType", "data_type2": "DoubleType"},
+        )
 
         self.assertEqual(
             _merge_type(
@@ -929,11 +939,16 @@ class TypesTestsMixin:
             ),
             StructType([StructField("f1", LongType()), StructField("f2", StringType())]),
         )
-        with self.assertRaisesRegex(TypeError, "field f1"):
+        with self.assertRaises(PySparkTypeError) as pe:
             _merge_type(
                 StructType([StructField("f1", LongType()), StructField("f2", StringType())]),
                 StructType([StructField("f1", DoubleType()), StructField("f2", StringType())]),
             )
+        self.check_error(
+            exception=pe.exception,
+            error_class="CANNOT_MERGE_TYPE",
+            message_parameters={"data_type1": "LongType", "data_type2": "DoubleType"},
+        )
 
         self.assertEqual(
             _merge_type(
@@ -961,7 +976,7 @@ class TypesTestsMixin:
             ),
             StructType([StructField("f1", ArrayType(LongType())), StructField("f2", StringType())]),
         )
-        with self.assertRaisesRegex(TypeError, "element in array field f1"):
+        with self.assertRaises(PySparkTypeError) as pe:
             _merge_type(
                 StructType(
                     [StructField("f1", ArrayType(LongType())), StructField("f2", StringType())]
@@ -970,6 +985,11 @@ class TypesTestsMixin:
                     [StructField("f1", ArrayType(DoubleType())), StructField("f2", StringType())]
                 ),
             )
+        self.check_error(
+            exception=pe.exception,
+            error_class="CANNOT_MERGE_TYPE",
+            message_parameters={"data_type1": "LongType", "data_type2": "DoubleType"},
+        )
 
         self.assertEqual(
             _merge_type(
@@ -993,7 +1013,7 @@ class TypesTestsMixin:
                 ]
             ),
         )
-        with self.assertRaisesRegex(TypeError, "value of map field f1"):
+        with self.assertRaises(PySparkTypeError) as pe:
             _merge_type(
                 StructType(
                     [
@@ -1008,6 +1028,11 @@ class TypesTestsMixin:
                     ]
                 ),
             )
+        self.check_error(
+            exception=pe.exception,
+            error_class="CANNOT_MERGE_TYPE",
+            message_parameters={"data_type1": "LongType", "data_type2": "DoubleType"},
+        )
 
         self.assertEqual(
             _merge_type(
@@ -1110,9 +1135,15 @@ class TypesTestsMixin:
         unsupported_types = all_types - set(supported_types)
         # test unsupported types
         for t in unsupported_types:
-            with self.assertRaisesRegex(TypeError, "infer the type of the field myarray"):
+            with self.assertRaises(PySparkTypeError) as pe:
                 a = array.array(t)
                 self.spark.createDataFrame([Row(myarray=a)]).collect()
+
+            self.check_error(
+                exception=pe.exception,
+                error_class="CANNOT_INFER_TYPE_FOR_FIELD",
+                message_parameters={"field_name": "myarray"},
+            )
 
     def test_repr(self):
         instances = [

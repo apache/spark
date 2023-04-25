@@ -1655,9 +1655,9 @@ def _infer_schema(
                     True,
                 )
             )
-        except TypeError as e:
+        except TypeError:
             raise PySparkTypeError(
-                error_class="CANNOT_INFER_DATATYPE_FOR_FIELD",
+                error_class="CANNOT_INFER_TYPE_FOR_FIELD",
                 message_parameters={"field_name": k},
             )
     return StructType(fields)
