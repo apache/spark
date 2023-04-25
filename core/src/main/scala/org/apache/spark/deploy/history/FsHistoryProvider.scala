@@ -100,6 +100,8 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
   // Number of threads used to replay event logs.
   private val NUM_PROCESSING_THREADS = conf.get(History.NUM_REPLAY_THREADS)
 
+  private val HISTORY_LOG_USE_XATTR = conf.get(History.EVENT_LOG_XATTR_ENABLED)
+
   private val logDir = conf.get(History.HISTORY_LOG_DIR)
 
   private val historyUiAclsEnable = conf.get(History.HISTORY_SERVER_UI_ACLS_ENABLE)
@@ -550,11 +552,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
                   listing.delete(classOf[LogInfo], reader.rootPath.toString)
                   false
                 } else if (count < conf.get(UPDATE_BATCHSIZE)) {
-                  listing.write(LogInfo(reader.rootPath.toString(), newLastScanTime,
-                    LogType.EventLogs, None, None, reader.fileSizeForLastIndex, reader.lastIndex,
-                    None, reader.completed))
-                  count = count + 1
-                  reader.fileSizeForLastIndex > 0
+                  handleNewLogFile(reader, newLastScanTime)
                 } else {
                   false
                 }
@@ -578,7 +576,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 
       updated.foreach { entry =>
         submitLogProcessTask(entry.rootPath) { () =>
-          mergeApplicationListing(entry, newLastScanTime, true)
+          updateApplicationInfoFromLog(entry, newLastScanTime)
         }
       }
 
@@ -920,6 +918,23 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     }
   }
 
+  private def updateApplicationInfoFromLog(reader: EventLogFileReader, scanTime: Long): Unit = {
+    if (!HISTORY_LOG_USE_XATTR) {
+      mergeApplicationListing(reader, scanTime, true)
+    } else {
+      try {
+        val log = listing.read(classOf[LogInfo], reader.rootPath.toString)
+        if (log.logXAttrStatus != LogXAttrStatus.XATTR_DISABLED) {
+          updateAppInfoFromXAttrs(log, reader, scanTime)
+        } else {
+          mergeApplicationListing(reader, scanTime, true)
+        }
+      } catch {
+        case _: NoSuchElementException => None
+      }
+    }
+  }
+
   /**
    * Invalidate an existing UI for a given app attempt. See LoadedAppUI for a discussion on the
    * UI lifecycle.
@@ -1175,6 +1190,180 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 
   private def load(appId: String): ApplicationInfoWrapper = {
     listing.read(classOf[ApplicationInfoWrapper], appId)
+  }
+
+  private def updateAppInfoFromXAttrs(info: LogInfo, reader: EventLogFileReader,
+                                      scanTime: Long): Unit = {
+    var xAttrStatus: LogXAttrStatus.Value = info.logXAttrStatus
+    var appStartInfo: Option[Map[String, String]] = None
+    var envUpdateInfo: Option[String] = None
+    var appEndInfo: Option[String] = None
+    var appId = info.appId
+    var attemptId = info.attemptId
+
+    pendingReplayTasksCount.incrementAndGet()
+    /**
+     * XATTR_ENABLED means it is a newly detected file
+     * If we are able to successfully get the application start information,
+     * change the status to APP_STARTED
+    */
+    if (xAttrStatus == LogXAttrStatus.XATTR_ENABLED) {
+      appStartInfo = getXAttrs(reader.rootPath, EventLoggingListener.XATTRS_APPLICATION_START_LIST)
+      if(appStartInfo.isDefined) {
+        appId = Some(appStartInfo.get(EventLoggingListener.USER_APP_ID))
+        attemptId = Some(appStartInfo.get(EventLoggingListener.USER_ATTEMPT_ID))
+        xAttrStatus = LogXAttrStatus.APP_STARTED
+      }
+    }
+
+    /**
+     * Try to get application env update information
+     * If we are able to successfully get them, change the status to APP_ENV_UPDATED
+     */
+    if(xAttrStatus == LogXAttrStatus.APP_STARTED) {
+      envUpdateInfo = getXAttr(reader.rootPath, EventLoggingListener.USER_ATTEMPT_ACLS)
+      if(envUpdateInfo.isDefined) {
+        xAttrStatus = LogXAttrStatus.APP_ENV_UPDATED
+      }
+    }
+
+    /**
+     * Try to get the application attempt end time
+     * If we are able to successfully get them, change the status to APP_END
+     */
+    if (xAttrStatus == LogXAttrStatus.APP_ENV_UPDATED) {
+      appEndInfo = getXAttr(reader.rootPath, EventLoggingListener.USER_ATTEMPT_ENDTIME)
+      if (appEndInfo.isDefined) {
+        xAttrStatus = LogXAttrStatus.APP_END
+      }
+    }
+
+    // Check if status is updated
+    if(xAttrStatus != info.logXAttrStatus) {
+      val appListingFromXAttr = new AppListingEntryFromXAttr(reader, clock)
+      if (info.logXAttrStatus != LogXAttrStatus.XATTR_ENABLED && appId.isDefined &&
+        attemptId.isDefined) {
+        val oldApp: Option[ApplicationInfoWrapper] = try {
+          Some(listing.read(classOf[ApplicationInfoWrapper], appId.get))
+        } catch {
+          case _: NoSuchElementException => None
+        }
+        if (oldApp.isDefined) {
+          val oldAppAttemptList = oldApp.get.attempts.filter(_.info.attemptId == attemptId)
+          if (oldAppAttemptList.size == 1) {
+            appListingFromXAttr.applicationInfoFromDB(oldApp.get.info.id,
+              oldApp.get.info.name, oldAppAttemptList.last)
+          }
+        }
+      }
+      if (appStartInfo.isDefined) {
+        appListingFromXAttr.applicationStartFromXAttr(appStartInfo.get)
+      }
+      if (envUpdateInfo.isDefined) {
+        appListingFromXAttr.applicationEnvUpdateFromXAttr(envUpdateInfo.get)
+      }
+      if(appEndInfo.isDefined) {
+        appListingFromXAttr.applicationEndFromXAttr(appEndInfo.get)
+      }
+      appListingFromXAttr.applicationInfo match {
+        case Some(app) =>
+          invalidateUI(app.info.id, app.attempts.head.info.attemptId)
+          addListing(app)
+          listing.write(LogInfo(reader.rootPath.toString, scanTime, LogType.EventLogs,
+            Some(app.info.id), app.attempts.head.info.attemptId, reader.fileSizeForLastIndex,
+            reader.lastIndex, None, reader.completed, xAttrStatus))
+          if (isCompleted(reader.rootPath.toString)) {
+            removeInProgressEntry(reader.rootPath)
+          }
+        case _ =>
+          listing.write(LogInfo(reader.rootPath.toString, scanTime, LogType.EventLogs,
+            None, None, reader.fileSizeForLastIndex, reader.lastIndex, None,
+          reader.completed, xAttrStatus))
+      }
+    }
+    logInfo(s"Finished reading extended attributes for file : ${reader.rootPath}")
+    endProcessing(reader.rootPath)
+    pendingReplayTasksCount.decrementAndGet()
+  }
+
+  /**
+   * For a finished log, remove the corresponding "in progress" entry from the listing DB if
+   * the file is really gone.
+   * @param logPath in progress log file path to be removed
+   */
+  private def removeInProgressEntry(logPath: Path): Unit = {
+    if (isCompleted(logPath.getName())) {
+      val inProgressLog = logPath.toString() + EventLogFileWriter.IN_PROGRESS
+      try {
+        // Fetch the entry first to avoid an RPC when it's already removed.
+        listing.read(classOf[LogInfo], inProgressLog)
+        val fileStatus = fs.getFileStatus(new Path(inProgressLog))
+        if (!fileStatus.isFile) {
+          listing.delete(classOf[LogInfo], inProgressLog)
+        }
+      } catch {
+        case _: NoSuchElementException =>
+      }
+    }
+  }
+
+  /**
+   * @param name of the log file
+   * @return true if log file ends with inprogress
+   */
+  private def isCompleted(name: String): Boolean = {
+    !name.endsWith(EventLogFileWriter.IN_PROGRESS)
+  }
+
+  private def getXAttrs(path: Path, nameList: List[String]): Option[Map[String, String]] = {
+    try {
+      val valueMap = fs.getXAttrs(path, nameList.asJava)
+      if(valueMap != null) {
+        Some(valueMap.asScala.toMap.map(value => value._1 -> new String(value._2)))
+      } else {
+        None
+      }
+    } catch {
+      case _: IOException =>
+        logWarning(s"Unable to get extended attributes ${nameList}")
+        None
+    }
+  }
+
+  /**
+   * Get the value of a single attribute from HDFS
+   * @param path path to HDFS
+   * @param name Key of extended attribute
+   * @return Value of extended attribute
+   */
+  private def getXAttr(path: Path, name: String): Option[String] = {
+      val valueMap = getXAttrs(path, List(name))
+      if (!valueMap.isEmpty) {
+        Some(valueMap.get(name))
+      } else {
+        None
+      }
+  }
+
+  /**
+   * For a new file, update listing entry with whether extended attributes
+   * are enabled or disabled on this log file
+   *
+   * @param reader event log file reader
+   * @param scanTime current scan timestamp
+   * @return
+   */
+  private def handleNewLogFile(reader: EventLogFileReader, scanTime: Long): Boolean = {
+    var xAttrStatus = LogXAttrStatus.XATTR_DISABLED
+    if(HISTORY_LOG_USE_XATTR) {
+      val isXAttrEnabled = getXAttr(reader.rootPath, EventLoggingListener.USER_XATTR_ENABLED)
+      if (isXAttrEnabled.isDefined && new String(isXAttrEnabled.get) == "true") {
+        xAttrStatus = LogXAttrStatus.XATTR_ENABLED
+      }
+    }
+    listing.write(LogInfo(reader.rootPath.toString, scanTime, LogType.EventLogs, None, None,
+      reader.fileSizeForLastIndex, reader.lastIndex, None, reader.completed, xAttrStatus))
+    reader.fileSizeForLastIndex > 0
   }
 
   /**
@@ -1453,6 +1642,11 @@ private[history] object LogType extends Enumeration {
   val DriverLogs, EventLogs = Value
 }
 
+private[history] object LogXAttrStatus extends Enumeration {
+  val XATTR_DISABLED, XATTR_ENABLED, APP_STARTED, APP_ENV_UPDATED, APP_END = Value
+  type LogXAttrStatus = Value
+}
+
 /**
  * Tracking info for event logs detected in the configured log directory. Tracks both valid and
  * invalid logs (e.g. unparseable logs, recorded as logs with no app ID) so that the cleaner
@@ -1469,7 +1663,8 @@ private[history] case class LogInfo(
     lastIndex: Option[Long],
     @JsonDeserialize(contentAs = classOf[JLong])
     lastEvaluatedForCompaction: Option[Long],
-    isComplete: Boolean)
+    isComplete: Boolean,
+    logXAttrStatus: LogXAttrStatus.Value = LogXAttrStatus.XATTR_DISABLED)
 
 private[history] class AttemptInfoWrapper(
     val info: ApplicationAttemptInfo,
@@ -1499,6 +1694,77 @@ private[history] class ApplicationInfoWrapper(
 
 }
 
+/**
+ * Application listing information from extended attributes
+ * @param reader the event log file reader
+ * @param clock clock instance
+ */
+private[history] class AppListingEntryFromXAttr(reader: EventLogFileReader, clock: Clock) {
+  private val app = new MutableApplicationInfo()
+  private val attempt = new MutableAttemptInfo(reader.rootPath.toString,
+    reader.fileSizeForLastIndex)
+
+  /**
+   * Update application attempt information from DB data
+   * @param appId application ID
+   * @param appName application name
+   * @param attemptInfoWrapper application attempt information
+   */
+  def applicationInfoFromDB(appId: String, appName: String,
+    attemptInfoWrapper: AttemptInfoWrapper): Unit = {
+      app.id = Some(appId)
+      app.name = appName
+      attempt.attemptId = attemptInfoWrapper.info.attemptId
+      attempt.startTime = attemptInfoWrapper.info.startTime
+      attempt.sparkUser = attemptInfoWrapper.info.sparkUser
+      attempt.appSparkVersion = attemptInfoWrapper.info.appSparkVersion
+      attempt.viewAcls = attemptInfoWrapper.viewAcls
+      attempt.adminAcls = attemptInfoWrapper.adminAcls
+      attempt.adminAclsGroups = attemptInfoWrapper.adminAclsGroups
+  }
+
+  def applicationStartFromXAttr(xAttrMap: Map[String, String]): Unit = {
+    val xAttrNameList = EventLoggingListener.XATTRS_APPLICATION_START_LIST
+    val appId = xAttrMap.get(xAttrNameList(0))
+    app.id = if (appId.equals("None")) None else appId
+    app.name = xAttrMap.getOrElse(xAttrNameList(1), null)
+    val attemptId = xAttrMap.get(xAttrNameList(2))
+    attempt.attemptId = if (attemptId.equals("None")) None else attemptId
+    attempt.startTime = new Date(xAttrMap.get(xAttrNameList(3)).get.toLong)
+    attempt.lastUpdated = new Date(clock.getTimeMillis())
+    attempt.sparkUser = xAttrMap.get(xAttrNameList(4)).get
+    attempt.appSparkVersion = xAttrMap.get(xAttrNameList(5)).get
+  }
+
+  def applicationEnvUpdateFromXAttr(xAttrValue: String): Unit = {
+    attempt.lastUpdated = new Date(clock.getTimeMillis())
+    val allProperties = xAttrValue.split('|')
+    if(allProperties.length == 4) {
+      attempt.viewAcls = if (allProperties(0).equals("None")) None else Some(allProperties(0))
+      attempt.adminAcls = if (allProperties(1).equals("None")) None else Some(allProperties(1))
+      attempt.viewAclsGroups =
+        if (allProperties(2).equals("None")) None else Some(allProperties(2))
+      attempt.adminAclsGroups =
+        if (allProperties(3).equals("None")) None else Some(allProperties(3))
+    }
+  }
+
+  def applicationEndFromXAttr(xAttrValue: String): Unit = {
+    attempt.endTime = new Date(xAttrValue.toLong)
+    attempt.lastUpdated = new Date(clock.getTimeMillis())
+    attempt.duration = attempt.endTime.getTime - attempt.startTime.getTime
+    attempt.completed = true
+  }
+
+  def applicationInfo: Option[ApplicationInfoWrapper] = {
+    if (app.id != null) {
+      Some(app.toView(List(attempt.toView())))
+    } else {
+      None
+    }
+  }
+}
+
 private[history] class AppListingListener(
     reader: EventLogFileReader,
     clock: Clock,
@@ -1512,7 +1778,7 @@ private[history] class AppListingListener(
   private var halted = false
 
   override def onApplicationStart(event: SparkListenerApplicationStart): Unit = {
-    app.id = event.appId.orNull
+    app.id = event.appId
     app.name = event.appName
 
     attempt.attemptId = event.appAttemptId
@@ -1558,7 +1824,7 @@ private[history] class AppListingListener(
 
   def applicationInfo: Option[ApplicationInfoWrapper] = {
     if (app.id != null) {
-      Some(app.toView())
+      Some(app.toView(List(attempt.toView())))
     } else {
       None
     }
@@ -1575,53 +1841,53 @@ private[history] class AppListingListener(
     }
   }
 
-  private class MutableApplicationInfo {
-    var id: String = null
-    var name: String = null
+}
 
-    def toView(): ApplicationInfoWrapper = {
-      val apiInfo = ApplicationInfo(id, name, None, None, None, None, Nil)
-      new ApplicationInfoWrapper(apiInfo, List(attempt.toView()))
-    }
+private class MutableApplicationInfo {
+  var id: Option[String] = None
+  var name: String = null
 
+  def toView(attempts: List[AttemptInfoWrapper]): ApplicationInfoWrapper = {
+    val apiInfo = ApplicationInfo(id.get, name, None, None, None, None, Nil)
+    new ApplicationInfoWrapper(apiInfo, attempts)
   }
 
-  private class MutableAttemptInfo(logPath: String, fileSize: Long, lastIndex: Option[Long]) {
-    var attemptId: Option[String] = None
-    var startTime = new Date(-1)
-    var endTime = new Date(-1)
-    var lastUpdated = new Date(-1)
-    var duration = 0L
-    var sparkUser: String = null
-    var completed = false
-    var appSparkVersion = ""
+}
 
-    var adminAcls: Option[String] = None
-    var viewAcls: Option[String] = None
-    var adminAclsGroups: Option[String] = None
-    var viewAclsGroups: Option[String] = None
+private class MutableAttemptInfo(logPath: String, fileSize: Long, lastIndex: Option[Long] = None) {
+  var attemptId: Option[String] = None
+  var startTime = new Date(-1)
+  var endTime = new Date(-1)
+  var lastUpdated = new Date(-1)
+  var duration = 0L
+  var sparkUser: String = null
+  var completed = false
+  var appSparkVersion = ""
 
-    def toView(): AttemptInfoWrapper = {
-      val apiInfo = ApplicationAttemptInfo(
-        attemptId,
-        startTime,
-        endTime,
-        lastUpdated,
-        duration,
-        sparkUser,
-        completed,
-        appSparkVersion)
-      new AttemptInfoWrapper(
-        apiInfo,
-        logPath,
-        fileSize,
-        lastIndex,
-        adminAcls,
-        viewAcls,
-        adminAclsGroups,
-        viewAclsGroups)
-    }
+  var adminAcls: Option[String] = None
+  var viewAcls: Option[String] = None
+  var adminAclsGroups: Option[String] = None
+  var viewAclsGroups: Option[String] = None
 
+  def toView(): AttemptInfoWrapper = {
+    val apiInfo = ApplicationAttemptInfo(
+      attemptId,
+      startTime,
+      endTime,
+      lastUpdated,
+      duration,
+      sparkUser,
+      completed,
+      appSparkVersion)
+    new AttemptInfoWrapper(
+      apiInfo,
+      logPath,
+      fileSize,
+      lastIndex,
+      adminAcls,
+      viewAcls,
+      adminAclsGroups,
+      viewAclsGroups)
   }
 
 }

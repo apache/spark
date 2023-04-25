@@ -154,6 +154,9 @@ abstract class EventLogFileWriter(
   /** writes JSON format of event to file */
   def writeEvent(eventJson: String, flushLogger: Boolean = false): Unit
 
+  /** Writes key/value pair to HDFS Extended attribute */
+  def writeToXAttr(attrName: String, attrValue: String): Unit = {}
+
   /** stops writer - indicating the application has been completed */
   def stop(): Unit
 
@@ -227,6 +230,17 @@ class SingleEventLogFileWriter(
 
   override def writeEvent(eventJson: String, flushLogger: Boolean = false): Unit = {
     writeLine(eventJson, flushLogger)
+  }
+
+  override def writeToXAttr(attrName: String, attrValue: String): Unit = {
+    try {
+      fileSystem.setXAttr(new Path(inProgressPath), attrName, attrValue.getBytes())
+    } catch {
+      case _: IOException =>
+        logWarning(s"Failed to set extended attribute ${attrName}")
+      case _: UnsupportedOperationException =>
+        logWarning("setXAttr not supported by filesystem")
+    }
   }
 
   /**
