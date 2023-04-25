@@ -638,9 +638,7 @@ private[spark] object SparkHadoopUtil extends Logging {
         buildMethod.invoke(b2).asInstanceOf[FSDataOutputStream]
       } catch {
         case  _: NoSuchMethodException =>
-          // No createFile() method, we're using an older hdfs client, which doesn't give us control
-          // over EC vs. replication.  Older hdfs doesn't have EC anyway, so just create a file with
-          // old apis.
+          // No replicate() method, so just create a file with old apis.
           fs.create(path)
       }
     }
