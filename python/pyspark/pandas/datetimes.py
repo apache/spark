@@ -121,6 +121,8 @@ class DatetimeMethods:
         """
         Calculate year, week, and day according to the ISO 8601 standard.
 
+            .. versionadded:: 3.5.0
+
         Returns
         -------
         DataFrame
@@ -143,7 +145,7 @@ class DatetimeMethods:
         Name: week, dtype: int64
         """
 
-        return_types = [self._data.index.dtype] + [int, int, int]
+        return_types = [self._data.index.dtype, int, int, int]
 
         def pandas_isocalendar(  # type: ignore[no-untyped-def]
             pdf,
