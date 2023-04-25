@@ -53,7 +53,7 @@ trait MapInBatchExec extends UnaryExecNode with PythonSQLMetrics {
 
   protected override def doPrepare(): Unit = {
     PythonEnvSetupUtils.setupPythonEnvOnSparkDriverIfAvailable(
-      pythonFunction.pipDependencies, pythonFunction.pipConstraints
+      pythonFunction.pipDependencies.asScala, pythonFunction.pipConstraints.asScala
     )
   }
 

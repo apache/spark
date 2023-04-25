@@ -24,12 +24,15 @@ import scala.collection.JavaConverters._
 import scala.util.Using
 
 import org.apache.commons.codec.digest.DigestUtils
+import org.slf4j.LoggerFactory
 
-import org.apache.spark.SPARK_VERSION
+// import org.apache.spark.SPARK_VERSION
 import org.apache.spark.util.Utils
 
 
 object PythonEnvManager {
+
+  private val logger = LoggerFactory.getLogger(PythonEnvSetupUtils.getClass)
 
   val PIP_CACHE_DIR = "pip_cache_pkgs"
 
@@ -78,6 +81,7 @@ object PythonEnvManager {
           case e: Exception =>
             // Clean environment directory that is in some undefined status
             Utils.deleteRecursively(new File(envDir))
+            e.printStackTrace() // for debug
             throw new RuntimeException(
               s"Create python environment failed. Root cause: ${e.toString}", e
             )
@@ -94,8 +98,12 @@ object PythonEnvManager {
       pipDependencies: Seq[String],
       pipConstraints: Seq[String]
   ): Unit = {
+    logger.info(s"Start creating python environment in directory: $envDir")
 
-    val pb = new ProcessBuilder(java.util.Arrays.asList(pythonExec, "-m", "virtualenv", envDir))
+    val pb = new ProcessBuilder(
+      java.util.Arrays.asList(pythonExec, "-m", "virtualenv", envDir, "--system-site-packages")
+    )
+    pb.inheritIO()
     val proc = pb.start()
     val retCode = proc.waitFor()
 
@@ -104,6 +112,8 @@ object PythonEnvManager {
         s"Create python environment by virtualenv command failed (return code $retCode)."
       )
     }
+
+    val newPythonExec = Path.of(envDir, "bin", "python").toString
 
     val pipTempDir = Files.createTempDirectory("pip-temp-").toString
 
@@ -116,8 +126,7 @@ object PythonEnvManager {
           writer.print(req)
           writer.print(System.lineSeparator())
         }
-        writer.print(s"pyspark==$SPARK_VERSION")
-        writer.print(System.lineSeparator())
+
         writer.print(s"-c $pipConstraintsFilePath")
         writer.print(System.lineSeparator())
       }
@@ -129,12 +138,17 @@ object PythonEnvManager {
         }
       }
 
+      logger.info(
+        "Start installing dependencies into python environment, reqirement file is " +
+        s"$pipReqFilePath"
+      )
       val pipPb = new ProcessBuilder(
-        java.util.Arrays.asList(pythonExec, "-m", "pip", "install", "--quiet", "-r", pipReqFilePath)
+        java.util.Arrays.asList(newPythonExec, "-m", "pip", "install", "-r", pipReqFilePath)
       )
       pipPb.environment().putAll(
         getVirtualenvCommandExtraEnv(rootEnvDir).asJava
       )
+      pipPb.inheritIO()
       val pipProc = pipPb.start()
       val pipRetCode = pipProc.waitFor()
 
@@ -143,8 +157,10 @@ object PythonEnvManager {
           s"Create python environment by virtualenv command failed (return code is $pipRetCode)."
         )
       }
+
+      logger.info("Python environment is created successfully")
     } finally {
-      Files.deleteIfExists(Path.of(pipTempDir))
+      // Utils.deleteRecursively(new File(pipTempDir))
     }
   }
 }

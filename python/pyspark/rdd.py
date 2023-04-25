@@ -5248,6 +5248,8 @@ def _wrap_function(
         sc.pythonVer,
         broadcast_vars,
         sc._javaAccumulator,
+        [],
+        [],
     )
 
 

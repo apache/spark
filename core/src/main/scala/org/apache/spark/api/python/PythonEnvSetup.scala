@@ -19,9 +19,12 @@ package org.apache.spark.api.python
 
 import java.io.File
 
+import scala.collection.JavaConverters._
+
 import org.apache.spark.SparkContext
 import org.apache.spark.SparkFiles
 import org.apache.spark.internal.config.{PYSPARK_DRIVER_PYTHON, PYSPARK_PYTHON}
+
 
 
 object PythonEnvSetupUtils {
@@ -71,12 +74,14 @@ object PythonEnvSetupUtils {
         .orElse(sys.env.get("PYSPARK_PYTHON"))
         .getOrElse("python3")
 
-      PythonEnvManager.getOrCreatePythonEnvironment(
-        pythonExec,
-        allSparkNodesReadablePythonEnvRootDirOpt.get,
-        pipDependencies,
-        pipConstraints
-      )
+      if (!pipDependencies.isEmpty) {
+        PythonEnvManager.getOrCreatePythonEnvironment(
+          pythonExec,
+          allSparkNodesReadablePythonEnvRootDirOpt.get,
+          pipDependencies,
+          pipConstraints
+        )
+      }
     }
   }
 
@@ -100,7 +105,6 @@ object PythonEnvSetupUtils {
         }
       }
     }
-    (headPipDeps, headPipConstraints)
+    (headPipDeps.asScala, headPipConstraints.asScala)
   }
-
 }

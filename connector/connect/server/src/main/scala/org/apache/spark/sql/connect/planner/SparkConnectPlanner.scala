@@ -1207,8 +1207,8 @@ class SparkConnectPlanner(val session: SparkSession) {
       broadcastVars = Lists.newArrayList(),
       // Null accumulator
       accumulator = null,
-      pipDependencies = fun.getPipDependenciesList.asScala,
-      pipConstraints = fun.getPipConstraintsList.asScala
+      pipDependencies = fun.getPipDependenciesList,
+      pipConstraints = fun.getPipConstraintsList
     )
   }
 

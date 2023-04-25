@@ -474,6 +474,14 @@ def _create_pandas_udf(f, returnType, evalType, pip_dependencies, pip_constraint
     if is_remote():
         from pyspark.sql.connect.udf import _create_udf as _create_connect_udf
 
-        return _create_connect_udf(f, returnType, evalType, pip_dependencies, pip_constraints)
+        return _create_connect_udf(
+            f, returnType, evalType,
+            pip_dependencies=pip_dependencies,
+            pip_constraints=pip_constraints
+        )
     else:
-        return _create_udf(f, returnType, evalType, pip_dependencies, pip_constraints)
+        return _create_udf(
+            f, returnType, evalType,
+            pip_dependencies=pip_dependencies,
+            pip_constraints=pip_constraints
+        )
