@@ -1568,17 +1568,28 @@ class CachedLocalRelation(google.protobuf.message.Message):
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-    KEY_FIELD_NUMBER: builtins.int
-    key: builtins.str
-    """(Required) A key refers to a serialized local relation in a cache.
-    The serialized representation contains enough info to restore of a LocalRelation.
-    """
+    USERID_FIELD_NUMBER: builtins.int
+    SESSIONID_FIELD_NUMBER: builtins.int
+    HASH_FIELD_NUMBER: builtins.int
+    userId: builtins.str
+    """(Required) An identifier of the user which created the local relation"""
+    sessionId: builtins.str
+    """(Required) An identifier of the Spark SQL session in which the user created the local relation."""
+    hash: builtins.str
+    """(Required) A sha-256 hash of the serialized local relation."""
     def __init__(
         self,
         *,
-        key: builtins.str = ...,
+        userId: builtins.str = ...,
+        sessionId: builtins.str = ...,
+        hash: builtins.str = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing_extensions.Literal["key", b"key"]) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "hash", b"hash", "sessionId", b"sessionId", "userId", b"userId"
+        ],
+    ) -> None: ...
 
 global___CachedLocalRelation = CachedLocalRelation
 
