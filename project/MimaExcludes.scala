@@ -66,6 +66,12 @@ object MimaExcludes {
     ProblemFilters.exclude[Problem]("org.sparkproject.spark_core.protobuf.*"),
     ProblemFilters.exclude[Problem]("org.apache.spark.status.protobuf.StoreTypes*"),
 
+    // SPARK-43265: Move Error framework to a common utils module
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.QueryContext"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.SparkException"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.SparkException$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.SparkThrowable"),
+
     (problem: Problem) => problem match {
       case MissingClassProblem(cls) => !cls.fullName.startsWith("org.sparkproject.jpmml") &&
           !cls.fullName.startsWith("org.sparkproject.dmg.pmml")
