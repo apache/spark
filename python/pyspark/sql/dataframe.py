@@ -3032,7 +3032,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         >>> [attr for attr in dir(df) if attr[0] == 'i'][:7] # Doesn't duplicate inputFiles
         ['i_like_pancakes', 'id', 'inputFiles', 'intersect', 'intersectAll', 'isEmpty', 'isLocal']
         """
-        attrs = super().__dir__()
+        attrs = list(super().__dir__())
         attrs.extend(attr for attr in self.columns if attr not in attrs)
         return attrs
 
