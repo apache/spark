@@ -239,7 +239,7 @@ class Column:
 
         if isinstance(length, Column):
             length_expr = length._expr
-            start_expr = startPos._expr
+            start_expr = startPos._expr  # type: ignore[union-attr]
         elif isinstance(length, int):
             length_expr = LiteralExpression._from_value(length)
             start_expr = LiteralExpression._from_value(startPos)
