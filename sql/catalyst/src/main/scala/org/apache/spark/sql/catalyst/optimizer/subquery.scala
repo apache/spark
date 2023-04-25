@@ -605,7 +605,7 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] with AliasHelpe
         }
 
         // SPARK-43156: We can judge whether the column returned by subquery is
-        // foldable (already handle by NullPropagation). If it is, it means that
+        // foldable (already handle by [[NullPropagation]]). If it is, it means that
         // the result of this value has no substantial relationship with the data,
         // and the presence or absence of data will not affect this column. So in
         // this case, this column can be extracted from the JOIN to ensure that this
