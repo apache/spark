@@ -52,7 +52,8 @@ __all__ = ["UDFRegistration"]
 
 
 def _wrap_function(
-    sc: SparkContext, func: Callable[..., Any], returnType: "DataTypeOrString"
+    sc: SparkContext, func: Callable[..., Any], returnType: "DataTypeOrString",
+    pip_dependencies, pip_constraints
 ) -> JavaObject:
     command = (func, returnType)
     pickled_command, broadcast_vars, env, includes = _prepare_for_python_RDD(sc, command)
@@ -65,6 +66,8 @@ def _wrap_function(
         sc.pythonVer,
         broadcast_vars,
         sc._javaAccumulator,
+        pip_dependencies,
+        pip_constraints
     )
 
 
@@ -74,11 +77,15 @@ def _create_udf(
     evalType: int,
     name: Optional[str] = None,
     deterministic: bool = True,
+    pip_dependencies=[],
+    pip_constraints=[],
 ) -> "UserDefinedFunctionLike":
     """Create a regular(non-Arrow-optimized) Python UDF."""
     # Set the name of the UserDefinedFunction object to be the name of function f
     udf_obj = UserDefinedFunction(
-        f, returnType=returnType, name=name, evalType=evalType, deterministic=deterministic
+        f, returnType=returnType, name=name, evalType=evalType, deterministic=deterministic,
+        pip_dependencies=pip_dependencies,
+        pip_constraints=pip_constraints,
     )
     return udf_obj._wrapped()
 
@@ -216,6 +223,8 @@ class UserDefinedFunction:
         name: Optional[str] = None,
         evalType: int = PythonEvalType.SQL_BATCHED_UDF,
         deterministic: bool = True,
+        pip_dependencies=[],
+        pip_constraints=[],
     ):
         if not callable(func):
             raise TypeError(
@@ -244,6 +253,8 @@ class UserDefinedFunction:
         )
         self.evalType = evalType
         self.deterministic = deterministic
+        self.pip_dependencies = pip_dependencies
+        self.pip_constraints = pip_constraints
 
     @property
     def returnType(self) -> DataType:
@@ -346,7 +357,9 @@ class UserDefinedFunction:
         spark = SparkSession._getActiveSessionOrCreate()
         sc = spark.sparkContext
 
-        wrapped_func = _wrap_function(sc, func, self.returnType)
+        wrapped_func = _wrap_function(
+            sc, func, self.returnType, self.pip_dependencies, self.pip_constraints
+        )
         jdt = spark._jsparkSession.parseDataType(self.returnType.json())
         assert sc._jvm is not None
         judf = sc._jvm.org.apache.spark.sql.execution.python.UserDefinedPythonFunction(

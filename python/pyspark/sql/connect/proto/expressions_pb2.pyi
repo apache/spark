@@ -1242,6 +1242,8 @@ class PythonUDF(google.protobuf.message.Message):
     EVAL_TYPE_FIELD_NUMBER: builtins.int
     COMMAND_FIELD_NUMBER: builtins.int
     PYTHON_VER_FIELD_NUMBER: builtins.int
+    PIP_DEPENDENCIES_FIELD_NUMBER: builtins.int
+    PIP_CONSTRAINTS_FIELD_NUMBER: builtins.int
     @property
     def output_type(self) -> pyspark.sql.connect.proto.types_pb2.DataType:
         """(Required) Output type of the Python UDF"""
@@ -1251,6 +1253,16 @@ class PythonUDF(google.protobuf.message.Message):
     """(Required) The encoded commands of the Python UDF"""
     python_ver: builtins.str
     """(Required) Python version being used in the client."""
+    @property
+    def pip_dependencies(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
+        """(Optional) Python function pip dependencies"""
+    @property
+    def pip_constraints(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
+        """(Optional) Python function pip constraints"""
     def __init__(
         self,
         *,
@@ -1258,6 +1270,8 @@ class PythonUDF(google.protobuf.message.Message):
         eval_type: builtins.int = ...,
         command: builtins.bytes = ...,
         python_ver: builtins.str = ...,
+        pip_dependencies: collections.abc.Iterable[builtins.str] | None = ...,
+        pip_constraints: collections.abc.Iterable[builtins.str] | None = ...,
     ) -> None: ...
     def HasField(
         self, field_name: typing_extensions.Literal["output_type", b"output_type"]
@@ -1271,6 +1285,10 @@ class PythonUDF(google.protobuf.message.Message):
             b"eval_type",
             "output_type",
             b"output_type",
+            "pip_constraints",
+            b"pip_constraints",
+            "pip_dependencies",
+            b"pip_dependencies",
             "python_ver",
             b"python_ver",
         ],

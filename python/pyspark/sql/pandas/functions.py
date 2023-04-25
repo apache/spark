@@ -26,6 +26,7 @@ from pyspark.sql.pandas.utils import require_minimum_pandas_version, require_min
 from pyspark.sql.types import DataType
 from pyspark.sql.udf import _create_udf
 from pyspark.sql.utils import is_remote
+from pyspark.pythonenv.pip_req_parser import parse_pip_requirements
 
 
 class PandasUDFType:
@@ -40,7 +41,7 @@ class PandasUDFType:
     GROUPED_AGG = PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF
 
 
-def pandas_udf(f=None, returnType=None, functionType=None):
+def pandas_udf(f=None, returnType=None, functionType=None, pip_requirements=None):
     """
     Creates a pandas user defined function (a.k.a. vectorized user defined function).
 
@@ -66,7 +67,11 @@ def pandas_udf(f=None, returnType=None, functionType=None):
         an enum value in :class:`pyspark.sql.functions.PandasUDFType`.
         Default: SCALAR. This parameter exists for compatibility.
         Using Python type hints is encouraged.
-
+    pip_requirements: Either an iterable of pip requirement strings
+        (e.g. ``["scikit-learn", "-r /path/to/req2.txt", "-c /path/to/constraints.txt"]``)
+        or the string path to a pip requirements
+        file path on the local filesystem (e.g. ``"/path/to/requirements.txt"``) represents
+        the pip requirements for the python UDF.
     Examples
     --------
     In order to use this API, customarily the below are imported:
@@ -381,13 +386,26 @@ def pandas_udf(f=None, returnType=None, functionType=None):
             "Invalid function type: " "functionType must be one the values from PandasUDFType"
         )
 
+    pip_deps, pip_constraints = parse_pip_requirements(pip_requirements)
     if is_decorator:
-        return functools.partial(_create_pandas_udf, returnType=return_type, evalType=eval_type)
+        return functools.partial(
+            _create_pandas_udf,
+            returnType=return_type,
+            evalType=eval_type,
+            pip_dependencies=pip_deps,
+            pip_constraints=pip_constraints,
+        )
     else:
-        return _create_pandas_udf(f=f, returnType=return_type, evalType=eval_type)
+        return _create_pandas_udf(
+            f=f,
+            returnType=return_type,
+            evalType=eval_type,
+            pip_dependencies=pip_deps,
+            pip_constraints=pip_constraints,
+        )
 
 
-def _create_pandas_udf(f, returnType, evalType):
+def _create_pandas_udf(f, returnType, evalType, pip_dependencies, pip_constraints):
     argspec = getfullargspec(f)
 
     # pandas UDF by type hints.
@@ -456,6 +474,6 @@ def _create_pandas_udf(f, returnType, evalType):
     if is_remote():
         from pyspark.sql.connect.udf import _create_udf as _create_connect_udf
 
-        return _create_connect_udf(f, returnType, evalType)
+        return _create_connect_udf(f, returnType, evalType, pip_dependencies, pip_constraints)
     else:
-        return _create_udf(f, returnType, evalType)
+        return _create_udf(f, returnType, evalType, pip_dependencies, pip_constraints)

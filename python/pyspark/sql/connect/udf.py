@@ -97,10 +97,14 @@ def _create_udf(
     evalType: int,
     name: Optional[str] = None,
     deterministic: bool = True,
+    pip_dependencies=[],
+    pip_constraints=[],
 ) -> "UserDefinedFunctionLike":
     # Set the name of the UserDefinedFunction object to be the name of function f
     udf_obj = UserDefinedFunction(
-        f, returnType=returnType, name=name, evalType=evalType, deterministic=deterministic
+        f, returnType=returnType, name=name, evalType=evalType, deterministic=deterministic,
+        pip_dependencies=pip_dependencies,
+        pip_constraints=pip_constraints
     )
     return udf_obj._wrapped()
 
@@ -123,6 +127,8 @@ class UserDefinedFunction:
         name: Optional[str] = None,
         evalType: int = PythonEvalType.SQL_BATCHED_UDF,
         deterministic: bool = True,
+        pip_dependencies=[],
+        pip_constraints=[],
     ):
         if not callable(func):
             raise TypeError(
@@ -150,6 +156,8 @@ class UserDefinedFunction:
         )
         self.evalType = evalType
         self.deterministic = deterministic
+        self.pip_dependencies = pip_dependencies
+        self.pip_constraints = pip_constraints
 
     def _build_common_inline_user_defined_function(
         self, *cols: "ColumnOrName"
@@ -164,6 +172,8 @@ class UserDefinedFunction:
             eval_type=self.evalType,
             func=self.func,
             python_ver="%d.%d" % sys.version_info[:2],
+            pip_dependencies=self.pip_dependencies,
+            pip_constraints=self.pip_constraints
         )
         return CommonInlineUserDefinedFunction(
             function_name=self._name,

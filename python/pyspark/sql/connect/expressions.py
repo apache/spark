@@ -585,6 +585,8 @@ class PythonUDF:
         eval_type: int,
         func: Callable[..., Any],
         python_ver: str,
+        pip_dependencies=[],
+        pip_constraints=[]
     ) -> None:
         self._output_type: DataType = (
             UnparsedDataType(output_type) if isinstance(output_type, str) else output_type
@@ -592,6 +594,8 @@ class PythonUDF:
         self._eval_type = eval_type
         self._func = func
         self._python_ver = python_ver
+        self._pip_dependencies = pip_dependencies
+        self._pip_constraints = pip_constraints
 
     def to_plan(self, session: "SparkConnectClient") -> proto.PythonUDF:
         if isinstance(self._output_type, UnparsedDataType):
@@ -605,6 +609,8 @@ class PythonUDF:
         expr = proto.PythonUDF()
         expr.output_type.CopyFrom(pyspark_types_to_proto_types(output_type))
         expr.eval_type = self._eval_type
+        expr.pip_dependencies.extend(self._pip_dependencies)
+        expr.pip_constraints.extend(self._pip_constraints)
         expr.command = CloudPickleSerializer().dumps((self._func, output_type))
         expr.python_ver = self._python_ver
         return expr
