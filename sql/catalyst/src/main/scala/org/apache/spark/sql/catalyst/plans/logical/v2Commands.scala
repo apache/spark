@@ -708,6 +708,21 @@ case class MergeIntoTable(
     matchedActions: Seq[MergeAction],
     notMatchedActions: Seq[MergeAction],
     notMatchedBySourceActions: Seq[MergeAction]) extends BinaryCommand with SupportsSubquery {
+
+  lazy val aligned: Boolean = {
+    val actions = matchedActions ++ notMatchedActions ++ notMatchedBySourceActions
+    actions.forall {
+      case UpdateAction(_, assignments) =>
+        AssignmentUtils.aligned(targetTable.output, assignments)
+      case _: DeleteAction =>
+        true
+      case InsertAction(_, assignments) =>
+        AssignmentUtils.aligned(targetTable.output, assignments)
+      case _ =>
+        false
+    }
+  }
+
   def duplicateResolved: Boolean = targetTable.outputSet.intersect(sourceTable.outputSet).isEmpty
 
   def skipSchemaResolution: Boolean = targetTable match {

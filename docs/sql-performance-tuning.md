@@ -90,7 +90,7 @@ that these options will be deprecated in future release as more optimizations ar
     <td>Default Parallelism</td>
     <td>
       The suggested (not guaranteed) minimum number of split file partitions. If not set, the default
-      value is `spark.default.parallelism`. This configuration is effective only when using file-based
+      value is `spark.sql.leafNodeDefaultParallelism`. This configuration is effective only when using file-based
       sources such as Parquet, JSON and ORC.
     </td>
     <td>3.1.0</td>
