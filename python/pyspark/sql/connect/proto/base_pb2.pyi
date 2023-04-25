@@ -233,18 +233,33 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
         PLAN_FIELD_NUMBER: builtins.int
+        LEVEL_FIELD_NUMBER: builtins.int
         @property
         def plan(self) -> global___Plan:
             """(Required) The logical plan to be analyzed."""
+        level: builtins.int
+        """(Optional) Max level of the schema."""
         def __init__(
             self,
             *,
             plan: global___Plan | None = ...,
+            level: builtins.int | None = ...,
         ) -> None: ...
         def HasField(
-            self, field_name: typing_extensions.Literal["plan", b"plan"]
+            self,
+            field_name: typing_extensions.Literal[
+                "_level", b"_level", "level", b"level", "plan", b"plan"
+            ],
         ) -> builtins.bool: ...
-        def ClearField(self, field_name: typing_extensions.Literal["plan", b"plan"]) -> None: ...
+        def ClearField(
+            self,
+            field_name: typing_extensions.Literal[
+                "_level", b"_level", "level", b"level", "plan", b"plan"
+            ],
+        ) -> None: ...
+        def WhichOneof(
+            self, oneof_group: typing_extensions.Literal["_level", b"_level"]
+        ) -> typing_extensions.Literal["level"] | None: ...
 
     class IsLocal(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
@@ -1235,6 +1250,9 @@ class ExecutePlanResponse(google.protobuf.message.Message):
     SESSION_ID_FIELD_NUMBER: builtins.int
     ARROW_BATCH_FIELD_NUMBER: builtins.int
     SQL_COMMAND_RESULT_FIELD_NUMBER: builtins.int
+    WRITE_STREAM_OPERATION_START_RESULT_FIELD_NUMBER: builtins.int
+    STREAMING_QUERY_COMMAND_RESULT_FIELD_NUMBER: builtins.int
+    GET_RESOURCES_COMMAND_RESULT_FIELD_NUMBER: builtins.int
     EXTENSION_FIELD_NUMBER: builtins.int
     METRICS_FIELD_NUMBER: builtins.int
     OBSERVED_METRICS_FIELD_NUMBER: builtins.int
@@ -1245,6 +1263,21 @@ class ExecutePlanResponse(google.protobuf.message.Message):
     @property
     def sql_command_result(self) -> global___ExecutePlanResponse.SqlCommandResult:
         """Special case for executing SQL commands."""
+    @property
+    def write_stream_operation_start_result(
+        self,
+    ) -> pyspark.sql.connect.proto.commands_pb2.WriteStreamOperationStartResult:
+        """Response for a streaming query."""
+    @property
+    def streaming_query_command_result(
+        self,
+    ) -> pyspark.sql.connect.proto.commands_pb2.StreamingQueryCommandResult:
+        """Response for commands on a streaming query."""
+    @property
+    def get_resources_command_result(
+        self,
+    ) -> pyspark.sql.connect.proto.commands_pb2.GetResourcesCommandResult:
+        """Response for 'SparkContext.resources'."""
     @property
     def extension(self) -> google.protobuf.any_pb2.Any:
         """Support arbitrary result objects."""
@@ -1269,6 +1302,12 @@ class ExecutePlanResponse(google.protobuf.message.Message):
         session_id: builtins.str = ...,
         arrow_batch: global___ExecutePlanResponse.ArrowBatch | None = ...,
         sql_command_result: global___ExecutePlanResponse.SqlCommandResult | None = ...,
+        write_stream_operation_start_result: pyspark.sql.connect.proto.commands_pb2.WriteStreamOperationStartResult
+        | None = ...,
+        streaming_query_command_result: pyspark.sql.connect.proto.commands_pb2.StreamingQueryCommandResult
+        | None = ...,
+        get_resources_command_result: pyspark.sql.connect.proto.commands_pb2.GetResourcesCommandResult
+        | None = ...,
         extension: google.protobuf.any_pb2.Any | None = ...,
         metrics: global___ExecutePlanResponse.Metrics | None = ...,
         observed_metrics: collections.abc.Iterable[global___ExecutePlanResponse.ObservedMetrics]
@@ -1282,6 +1321,8 @@ class ExecutePlanResponse(google.protobuf.message.Message):
             b"arrow_batch",
             "extension",
             b"extension",
+            "get_resources_command_result",
+            b"get_resources_command_result",
             "metrics",
             b"metrics",
             "response_type",
@@ -1290,6 +1331,10 @@ class ExecutePlanResponse(google.protobuf.message.Message):
             b"schema",
             "sql_command_result",
             b"sql_command_result",
+            "streaming_query_command_result",
+            b"streaming_query_command_result",
+            "write_stream_operation_start_result",
+            b"write_stream_operation_start_result",
         ],
     ) -> builtins.bool: ...
     def ClearField(
@@ -1299,6 +1344,8 @@ class ExecutePlanResponse(google.protobuf.message.Message):
             b"arrow_batch",
             "extension",
             b"extension",
+            "get_resources_command_result",
+            b"get_resources_command_result",
             "metrics",
             b"metrics",
             "observed_metrics",
@@ -1311,11 +1358,22 @@ class ExecutePlanResponse(google.protobuf.message.Message):
             b"session_id",
             "sql_command_result",
             b"sql_command_result",
+            "streaming_query_command_result",
+            b"streaming_query_command_result",
+            "write_stream_operation_start_result",
+            b"write_stream_operation_start_result",
         ],
     ) -> None: ...
     def WhichOneof(
         self, oneof_group: typing_extensions.Literal["response_type", b"response_type"]
-    ) -> typing_extensions.Literal["arrow_batch", "sql_command_result", "extension"] | None: ...
+    ) -> typing_extensions.Literal[
+        "arrow_batch",
+        "sql_command_result",
+        "write_stream_operation_start_result",
+        "streaming_query_command_result",
+        "get_resources_command_result",
+        "extension",
+    ] | None: ...
 
 global___ExecutePlanResponse = ExecutePlanResponse
 

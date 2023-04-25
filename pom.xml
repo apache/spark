@@ -140,7 +140,7 @@
     <kafka.version>3.4.0</kafka.version>
     <!-- After 10.15.1.3, the minimum required version is JDK9 -->
     <derby.version>10.14.2.0</derby.version>
-    <parquet.version>1.12.3</parquet.version>
+    <parquet.version>1.13.0</parquet.version>
     <orc.version>1.8.3</orc.version>
     <orc.classifier>shaded-protobuf</orc.classifier>
     <jetty.version>9.4.51.v20230217</jetty.version>
@@ -188,7 +188,7 @@
     <snappy.version>1.1.9.1</snappy.version>
     <netlib.ludovic.dev.version>3.0.3</netlib.ludovic.dev.version>
     <commons-codec.version>1.15</commons-codec.version>
-    <commons-compress.version>1.22</commons-compress.version>
+    <commons-compress.version>1.23.0</commons-compress.version>
     <commons-io.version>2.11.0</commons-io.version>
     <!-- org.apache.commons/commons-lang/-->
     <commons-lang2.version>2.6</commons-lang2.version>
@@ -200,7 +200,7 @@
     <guava.version>14.0.1</guava.version>
     <janino.version>3.1.9</janino.version>
     <jersey.version>2.36</jersey.version>
-    <joda.version>2.12.2</joda.version>
+    <joda.version>2.12.5</joda.version>
     <jodd.version>3.5.2</jodd.version>
     <jsr305.version>3.0.0</jsr305.version>
     <libthrift.version>0.12.0</libthrift.version>
@@ -688,7 +688,7 @@
       <dependency>
         <groupId>org.rocksdb</groupId>
         <artifactId>rocksdbjni</artifactId>
-        <version>7.10.2</version>
+        <version>8.0.0</version>
       </dependency>
       <dependency>
         <groupId>${leveldbjni.group}</groupId>
@@ -808,7 +808,7 @@
       <dependency>
         <groupId>com.github.luben</groupId>
         <artifactId>zstd-jni</artifactId>
-        <version>1.5.4-2</version>
+        <version>1.5.5-1</version>
       </dependency>
       <dependency>
         <groupId>com.clearspring.analytics</groupId>
@@ -2361,7 +2361,7 @@
             <groupId>${hive.group}</groupId>
             <artifactId>hive-service-rpc</artifactId>
           </exclusion>
-          <!-- parquet-hadoop-bundle:1.8.1 conflict with 1.12.3 -->
+          <!-- parquet-hadoop-bundle:1.8.1 conflict with 1.13.0 -->
           <exclusion>
             <groupId>org.apache.parquet</groupId>
             <artifactId>parquet-hadoop-bundle</artifactId>
@@ -3439,7 +3439,7 @@
       <plugin>
         <groupId>org.cyclonedx</groupId>
         <artifactId>cyclonedx-maven-plugin</artifactId>
-        <version>2.7.3</version>
+        <version>2.7.6</version>
         <executions>
           <execution>
             <phase>package</phase>
@@ -3503,25 +3503,6 @@
     <!-- Hadoop-a.b.c dependencies can be found at
     http://hadoop.apache.org/docs/ra.b.c/hadoop-project-dist/hadoop-common/dependency-analysis.html
     -->
-
-    <profile>
-      <id>hadoop-2</id>
-      <properties>
-        <!-- make sure to update IsolatedClientLoader whenever this version is changed -->
-        <hadoop.version>2.7.4</hadoop.version>
-        <curator.version>2.7.1</curator.version>
-        <commons-io.version>2.4</commons-io.version>
-        <!--
-          the declaration site above of these variables explains why we need to re-assign them here
-        -->
-        <hadoop-client-api.artifact>hadoop-client</hadoop-client-api.artifact>
-        <hadoop-client-runtime.artifact>hadoop-yarn-api</hadoop-client-runtime.artifact>
-        <hadoop-client-minicluster.artifact>hadoop-client</hadoop-client-minicluster.artifact>
-        <gcs-connector.version>hadoop2-2.2.11</gcs-connector.version>
-        <!-- SPARK-36547: Please don't upgrade the version below, otherwise there will be an error on building Hadoop 2.7 package -->
-        <scala-maven-plugin.version>4.3.0</scala-maven-plugin.version>
-      </properties>
-    </profile>
 
     <profile>
       <id>hadoop-3</id>

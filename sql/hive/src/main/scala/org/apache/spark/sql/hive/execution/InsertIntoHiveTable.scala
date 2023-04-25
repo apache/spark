@@ -20,6 +20,7 @@ package org.apache.spark.sql.hive.execution
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.conf.HiveConf
+import org.apache.hadoop.hive.ql.plan.FileSinkDesc
 import org.apache.hadoop.hive.ql.plan.TableDesc
 
 import org.apache.spark.sql.{Row, SparkSession}
@@ -33,7 +34,6 @@ import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.command.CommandUtils
 import org.apache.spark.sql.execution.datasources.{FileFormat, V1WriteCommand, V1WritesUtils}
 import org.apache.spark.sql.hive.HiveExternalCatalog
-import org.apache.spark.sql.hive.HiveShim.{ShimFileSinkDesc => FileSinkDesc}
 import org.apache.spark.sql.hive.client.HiveClientImpl
 import org.apache.spark.sql.hive.client.hive._
 
@@ -313,7 +313,7 @@ object InsertIntoHiveTable extends V1WritesHiveUtils {
     val hadoopConf = sparkSession.sessionState.newHadoopConf()
     val tableLocation = hiveQlTable.getDataLocation
     val hiveTempPath = new HiveTempPath(sparkSession, hadoopConf, tableLocation)
-    val fileSinkConf = new FileSinkDesc(hiveTempPath.externalTempPath.toString, tableDesc, false)
+    val fileSinkConf = new FileSinkDesc(hiveTempPath.externalTempPath, tableDesc, false)
     setupHadoopConfForCompression(fileSinkConf, hadoopConf, sparkSession)
     val fileFormat: FileFormat = new HiveFileFormat(fileSinkConf)
 

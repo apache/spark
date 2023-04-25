@@ -2816,6 +2816,16 @@ class AdaptiveQueryExecSuite
       }.size == 1)
     }
   }
+
+  test("SPARK-43026: Apply AQE with non-exchange table cache") {
+    withSQLConf(SQLConf.CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING.key -> "true") {
+      val df = spark.range(0).cache()
+      df.collect()
+      assert(df.queryExecution.executedPlan.isInstanceOf[AdaptiveSparkPlanExec])
+      assert(df.queryExecution.executedPlan.asInstanceOf[AdaptiveSparkPlanExec]
+        .executedPlan.isInstanceOf[LocalTableScanExec])
+    }
+  }
 }
 
 /**

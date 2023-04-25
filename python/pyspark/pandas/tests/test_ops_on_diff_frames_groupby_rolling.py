@@ -23,7 +23,7 @@ from pyspark.pandas.config import set_option, reset_option
 from pyspark.testing.pandasutils import PandasOnSparkTestCase, TestUtils
 
 
-class OpsOnDiffFramesGroupByRollingTest(PandasOnSparkTestCase, TestUtils):
+class OpsOnDiffFramesGroupByRollingTestsMixin:
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
@@ -92,6 +92,12 @@ class OpsOnDiffFramesGroupByRollingTest(PandasOnSparkTestCase, TestUtils):
 
     def test_groupby_rolling_var(self):
         self._test_groupby_rolling_func("var")
+
+
+class OpsOnDiffFramesGroupByRollingTests(
+    OpsOnDiffFramesGroupByRollingTestsMixin, PandasOnSparkTestCase, TestUtils
+):
+    pass
 
 
 if __name__ == "__main__":

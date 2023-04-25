@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+from pyspark import StorageLevel
 from pyspark.errors import AnalysisException
 from pyspark.sql.types import StructType, StructField, IntegerType
 from pyspark.testing.sqlutils import ReusedSQLTestCase
@@ -342,14 +343,27 @@ class CatalogTestsMixin:
             spark.sql("CREATE DATABASE some_db")
             with self.table("tab1"):
                 spark.sql("CREATE TABLE some_db.tab1 (name STRING, age INT) USING parquet")
-                self.assertFalse(spark.catalog.isCached("some_db.tab1"))
-                self.assertFalse(spark.catalog.isCached("spark_catalog.some_db.tab1"))
+
+                def if_cached(x):
+                    return spark.catalog.isCached(x)
+
+                names = ["some_db.tab1", "spark_catalog.some_db.tab1"]
+
+                def assert_cached(c: bool):
+                    if c:
+                        self.assertTrue(all(map(if_cached, names)))
+                    else:
+                        self.assertFalse(any(map(if_cached, names)))
+
+                assert_cached(False)
                 spark.catalog.cacheTable("spark_catalog.some_db.tab1")
-                self.assertTrue(spark.catalog.isCached("some_db.tab1"))
-                self.assertTrue(spark.catalog.isCached("spark_catalog.some_db.tab1"))
+                assert_cached(True)
                 spark.catalog.uncacheTable("spark_catalog.some_db.tab1")
-                self.assertFalse(spark.catalog.isCached("some_db.tab1"))
-                self.assertFalse(spark.catalog.isCached("spark_catalog.some_db.tab1"))
+                assert_cached(False)
+                spark.catalog.cacheTable("spark_catalog.some_db.tab1", StorageLevel.MEMORY_ONLY)
+                assert_cached(True)
+                spark.catalog.clearCache()
+                assert_cached(False)
 
     def test_table_exists(self):
         # SPARK-36176: testing that table_exists returns correct boolean

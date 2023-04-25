@@ -172,7 +172,16 @@ class ParquetRowIndexSuite extends QueryTest with SharedSparkSession {
     test (s"$label - ${conf.desc}") {
       withSQLConf(conf.sqlConfs: _*) {
         withTempPath { path =>
-          val rowIndexColName = FileFormat.ROW_INDEX_TEMPORARY_COLUMN_NAME
+          // Read row index using _metadata.row_index if that is supported by the file format.
+          val rowIndexMetadataColumnSupported = conf.readFormat match {
+            case "parquet" => true
+            case _ => false
+          }
+          val rowIndexColName = if (rowIndexMetadataColumnSupported) {
+            s"${FileFormat.METADATA_NAME}.${ParquetFileFormat.ROW_INDEX}"
+          } else {
+            ParquetFileFormat.ROW_INDEX_TEMPORARY_COLUMN_NAME
+          }
           val numRecordsPerFile = conf.numRows / conf.numFiles
           val (skipCentileFirst, skipCentileMidLeft, skipCentileMidRight, skipCentileLast) =
             (0.2, 0.4, 0.6, 0.8)
@@ -181,8 +190,12 @@ class ParquetRowIndexSuite extends QueryTest with SharedSparkSession {
             .withColumn("dummy_col", ($"id" / 55).cast("int"))
             .withColumn(expectedRowIdxCol, ($"id" % numRecordsPerFile).cast("int"))
 
-          // With row index in schema.
-          val schemaWithRowIdx = df.schema.add(rowIndexColName, LongType, nullable = true)
+          // Add row index to schema if required.
+          val schemaWithRowIdx = if (rowIndexMetadataColumnSupported) {
+            df.schema
+          } else {
+            df.schema.add(rowIndexColName, LongType, nullable = true)
+          }
 
           df.write
             .format(conf.writeFormat)
@@ -293,7 +306,7 @@ class ParquetRowIndexSuite extends QueryTest with SharedSparkSession {
         withTempPath{ path =>
           val df = spark.range(0, 10, 1, 1).toDF("id")
           val schemaWithRowIdx = df.schema
-            .add(FileFormat.ROW_INDEX_TEMPORARY_COLUMN_NAME, StringType)
+            .add(ParquetFileFormat.ROW_INDEX_TEMPORARY_COLUMN_NAME, StringType)
 
           df.write
             .format(conf.writeFormat)
@@ -305,7 +318,7 @@ class ParquetRowIndexSuite extends QueryTest with SharedSparkSession {
             .load(path.getAbsolutePath)
 
           val exception = intercept[Exception](dfRead.collect())
-          assert(exception.getMessage.contains(FileFormat.ROW_INDEX_TEMPORARY_COLUMN_NAME))
+          assert(exception.getMessage.contains(ParquetFileFormat.ROW_INDEX_TEMPORARY_COLUMN_NAME))
         }
       }
     }
