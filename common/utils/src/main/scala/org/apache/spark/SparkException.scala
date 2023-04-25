@@ -18,7 +18,6 @@
 package org.apache.spark
 
 import java.io.FileNotFoundException
-import java.nio.file.FileAlreadyExistsException
 import java.sql.{SQLException, SQLFeatureNotSupportedException}
 import java.time.DateTimeException
 import java.util.ConcurrentModificationException
@@ -206,21 +205,6 @@ private[spark] class SparkDateTimeException(
 
   override def getErrorClass: String = errorClass
   override def getQueryContext: Array[QueryContext] = context
-}
-
-/**
- * Hadoop file already exists exception thrown from Spark with an error class.
- */
-private[spark] class SparkFileAlreadyExistsException(
-    errorClass: String,
-    messageParameters: Map[String, String])
-  extends FileAlreadyExistsException(
-    SparkThrowableHelper.getMessage(errorClass, messageParameters))
-  with SparkThrowable {
-
-  override def getMessageParameters: java.util.Map[String, String] = messageParameters.asJava
-
-  override def getErrorClass: String = errorClass
 }
 
 /**

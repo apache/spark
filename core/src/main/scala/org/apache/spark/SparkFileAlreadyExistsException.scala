@@ -17,25 +17,21 @@
 
 package org.apache.spark
 
-import java.io.ByteArrayOutputStream
-import java.nio.charset.StandardCharsets
+import scala.collection.JavaConverters._
 
-import com.fasterxml.jackson.core.{JsonEncoding, JsonGenerator}
-import com.fasterxml.jackson.databind.{DeserializationFeature, ObjectMapper}
-import com.fasterxml.jackson.module.scala.DefaultScalaModule
+import org.apache.hadoop.fs.FileAlreadyExistsException
 
+/**
+ * Hadoop file already exists exception thrown from Spark with an error class.
+ */
+private[spark] class SparkFileAlreadyExistsException(
+    errorClass: String,
+    messageParameters: Map[String, String])
+  extends FileAlreadyExistsException(
+    SparkThrowableHelper.getMessage(errorClass, messageParameters))
+    with SparkThrowable {
 
-private[spark] object JsonProtocolUtil {
+  override def getMessageParameters: java.util.Map[String, String] = messageParameters.asJava
 
-  private val mapper = new ObjectMapper().registerModule(DefaultScalaModule)
-    .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
-
-  def toJsonString(block: JsonGenerator => Unit): String = {
-    val baos = new ByteArrayOutputStream()
-    val generator = mapper.createGenerator(baos, JsonEncoding.UTF8)
-    block(generator)
-    generator.close()
-    baos.close()
-    new String(baos.toByteArray, StandardCharsets.UTF_8)
-  }
+  override def getErrorClass: String = errorClass
 }

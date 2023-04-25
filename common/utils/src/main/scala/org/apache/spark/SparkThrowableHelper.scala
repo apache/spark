@@ -21,7 +21,7 @@ import scala.collection.JavaConverters._
 
 import com.fasterxml.jackson.core.util.MinimalPrettyPrinter
 
-import org.apache.spark.JsonProtocolUtil.toJsonString
+import org.apache.spark.util.JsonUtils.toJsonString
 
 private[spark] object ErrorMessageFormat extends Enumeration {
   val PRETTY, MINIMAL, STANDARD = Value
