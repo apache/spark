@@ -21,9 +21,11 @@ import scala.concurrent.Promise
 import scala.concurrent.duration._
 
 import io.grpc.stub.StreamObserver
+import org.apache.commons.codec.digest.DigestUtils.sha256Hex
 
 import org.apache.spark.connect.proto
-import org.apache.spark.connect.proto.{ArtifactStatusesRequest, ArtifactStatusesResponse}
+import org.apache.spark.connect.proto.ArtifactStatusesResponse
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connect.ResourceHelper
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.util.ThreadUtils
@@ -39,15 +41,8 @@ class ArtifactStatusesHandlerSuite extends SharedSparkSession with ResourceHelpe
   def getStatuses(names: Seq[String], exist: Set[String]): ArtifactStatusesResponse = {
     val promise = Promise[ArtifactStatusesResponse]
     val handler = new SparkConnectArtifactStatusesHandler(new DummyStreamObserver(promise)) {
-      override def handle(request: ArtifactStatusesRequest): Unit = {
-        val builder = proto.ArtifactStatusesResponse.newBuilder()
-        request.getNameList().iterator().asScala.foreach { name =>
-          val status = proto.ArtifactStatusesResponse.ArtifactStatus.newBuilder()
-          val exists = exist.contains(name)
-          builder.putStatuses(name, status.setExists(exists).build())
-        }
-        responseObserver.onNext(builder.build())
-        responseObserver.onCompleted()
+      override protected def cacheExists(session: SparkSession, id: String): Boolean = {
+        exist.contains(id)
       }
     }
     val context = proto.UserContext
@@ -64,24 +59,27 @@ class ArtifactStatusesHandlerSuite extends SharedSparkSession with ResourceHelpe
     ThreadUtils.awaitResult(promise.future, 5.seconds)
   }
 
+  private def id(name: String): String = "cache/" + sha256Hex(name)
+
   test("non-existent artifact") {
-    val response = getStatuses(names = Seq("name1"), exist = Set.empty)
+    val response = getStatuses(names = Seq(id("name1")), exist = Set.empty)
     assert(response.getStatusesCount === 1)
-    assert(response.getStatusesMap.get("name1").getExists === false)
+    assert(response.getStatusesMap.get(id("name1")).getExists === false)
   }
 
   test("single artifact") {
-    val response = getStatuses(names = Seq("name1"), exist = Set("name1"))
+    val response = getStatuses(names = Seq(id("name1")), exist = Set(sha256Hex("name1")))
     assert(response.getStatusesCount === 1)
-    assert(response.getStatusesMap.get("name1").getExists)
+    assert(response.getStatusesMap.get(id("name1")).getExists)
   }
 
   test("multiple artifacts") {
-    val response =
-      getStatuses(names = Seq("name1", "name2", "name3"), exist = Set("name2", "name3"))
+    val response = getStatuses(
+      names = Seq("name1", "name2", "name3").map(id),
+      exist = Set("name2", "name3").map(sha256Hex))
     assert(response.getStatusesCount === 3)
-    assert(!response.getStatusesMap.get("name1").getExists)
-    assert(response.getStatusesMap.get("name2").getExists)
-    assert(response.getStatusesMap.get("name3").getExists)
+    assert(!response.getStatusesMap.get(id("name1")).getExists)
+    assert(response.getStatusesMap.get(id("name2")).getExists)
+    assert(response.getStatusesMap.get(id("name3")).getExists)
   }
 }
