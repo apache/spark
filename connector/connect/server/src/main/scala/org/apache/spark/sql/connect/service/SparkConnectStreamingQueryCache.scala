@@ -39,6 +39,22 @@ import org.apache.spark.util.SystemClock
  * runs a background thread to run a periodic task that does the following:
  *   - Check the status of the queries, and drops those that expired (1 hour after being stopped).
  *   - Keep the associated session active by invoking supplied function `sessionKeepAliveFn`.
+ *
+ * This class helps with supporting following semantics for streaming query sessions:
+ *   - Keep the session and session mapping at connect server alive as long as a streaming query
+ *     is active. Even if the client side has disconnected.
+ *     - This matches how streaming queries behave in Spark. The queries continue to run if
+ *       notebook or job session is lost.
+ *   - Once a query is stopped, the reference and mappings are maintained for 1 hour and will be
+ *     accessible from the client. This allows time for client to fetch status.
+ *     - During this time if the query is restarted (i.e. has a new run id), the reference to
+ *       previous run is dropped. As a result logical query has only the most recent query
+ *       reference cached. This policy can be revisited to cache multiple runs for a query.
+ *   - Note that these semantics are evolving and might change before being finalized in Connect.
+ *   - Future improvements:
+ *     - Provide an API for a users to access session even after they lose session id.
+ *       - Once a user is properly authenticated, the API could return list of sessions that are
+ *         still alive in the connect server for that user.
  */
 private[connect] class SparkConnectStreamingQueryCache(
     val sessionKeepAliveFn: (String, String) => Unit, // (userId, sessionId) => Unit.
@@ -125,7 +141,7 @@ private[connect] class SparkConnectStreamingQueryCache(
   }
 
   /**
-   * Periodic maintenance task to the following:
+   * Periodic maintenance task to do the following:
    *   - Update status of query if it is inactive. Sets an expiery time for such queries
    *   - Drop expired queries from the cache.
    *   - Poll sessions associated with the cached queries in order keep them alive in connect
@@ -141,7 +157,6 @@ private[connect] class SparkConnectStreamingQueryCache(
 
       for ((k, v) <- queryCache) {
         val id = k.queryId
-
         v.expiresAtMs match {
 
           case Some(ts) if nowMs >= ts => // Expired. Drop references.
