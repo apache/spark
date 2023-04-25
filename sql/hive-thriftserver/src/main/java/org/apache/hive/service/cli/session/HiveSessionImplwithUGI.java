@@ -54,7 +54,7 @@ public class HiveSessionImplwithUGI extends HiveSessionImpl {
     // create a new metastore connection for this particular user session
     Hive.set(null);
     try {
-      sessionHive = Hive.get(getHiveConf());
+      sessionHive = Hive.getWithoutRegisterFns(getHiveConf());
     } catch (HiveException e) {
       throw new HiveSQLException("Failed to setup metastore connection", e);
     }
@@ -140,7 +140,7 @@ public class HiveSessionImplwithUGI extends HiveSessionImpl {
   private void cancelDelegationToken() throws HiveSQLException {
     if (delegationTokenStr != null) {
       try {
-        Hive.get(getHiveConf()).cancelDelegationToken(delegationTokenStr);
+        Hive.getWithoutRegisterFns(getHiveConf()).cancelDelegationToken(delegationTokenStr);
       } catch (HiveException e) {
         throw new HiveSQLException("Couldn't cancel delegation token", e);
       }
