@@ -16,6 +16,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+set -ex
 
 if [[ $# -gt 1 ]]; then
   echo "Illegal number of parameters."
