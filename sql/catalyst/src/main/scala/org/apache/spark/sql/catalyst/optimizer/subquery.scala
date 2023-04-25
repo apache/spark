@@ -459,8 +459,7 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] with AliasHelpe
       case alias @ Alias(_: AttributeReference, _) =>
         (alias.exprId, Literal.create(null, alias.dataType))
       case alias @ Alias(l: Literal, _) =>
-        // SPARK-43156: copy value to get the correct value when extracting in constructLeftJoins
-        (alias.exprId, l.copy())
+        (alias.exprId, l)
       case ne => (ne.exprId, evalAggExprOnZeroTups(ne))
     }.toMap
   }
@@ -605,6 +604,12 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] with AliasHelpe
           trimAliases(list.filter(p => p.exprId.equals(query.output.head.exprId)).head).foldable
         }
 
+        // SPARK-43156: We can judge whether the column returned by subquery is
+        // foldable (already handle by NullPropagation). If it is, it means that
+        // the result of this value has no substantial relationship with the data,
+        // and the presence or absence of data will not affect this column. So in
+        // this case, this column can be extracted from the JOIN to ensure that this
+        // value can be obtained regardless of whether the data JOIN is successful or not.
         lazy val resultFoldable = {
           query match {
             case Project(expressions, _) =>
