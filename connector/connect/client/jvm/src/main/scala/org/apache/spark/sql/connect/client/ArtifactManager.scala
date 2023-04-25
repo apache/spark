@@ -51,6 +51,7 @@ class ArtifactManager(userContext: proto.UserContext, channel: ManagedChannel) {
   private val CHUNK_SIZE: Int = 32 * 1024
 
   private[this] val stub = proto.SparkConnectServiceGrpc.newStub(channel)
+  private[this] val bstub = proto.SparkConnectServiceGrpc.newBlockingStub(channel)
   private[this] val classFinders = new CopyOnWriteArrayList[ClassFinder]
 
   /**
@@ -101,13 +102,28 @@ class ArtifactManager(userContext: proto.UserContext, channel: ManagedChannel) {
    */
   def addArtifacts(uris: Seq[URI]): Unit = addArtifacts(uris.flatMap(parseArtifacts))
 
+  private def isCachedArtifact(sessionId: String, hash: String): Boolean = {
+    val artifactName = CACHE_PREFIX + "/" + hash
+    val request = proto.ArtifactStatusesRequest
+      .newBuilder()
+      .setSessionId(sessionId)
+      .addAllName((artifactName :: Nil).asJava)
+      .build()
+    val statuses = bstub.artifactStatus(request).getStatusesMap
+    if (statuses.containsKey(artifactName)) {
+      statuses.get(artifactName).getExists
+    } else false
+  }
+
   /**
    * Cache the give blob at the session.
    */
-  def cacheArtifact(blob: Array[Byte]): String = {
-    val id = sha256Hex(blob)
-    addArtifacts(newCacheArtifact(id, new InMemory(blob)) :: Nil)
-    id
+  def cacheArtifact(sessionId: String, blob: Array[Byte]): String = {
+    val hash = sha256Hex(blob)
+    if (!isCachedArtifact(sessionId, hash)) {
+      addArtifacts(newCacheArtifact(hash, new InMemory(blob)) :: Nil)
+    }
+    hash
   }
 
   /**

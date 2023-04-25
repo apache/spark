@@ -229,7 +229,7 @@ private[sql] class SparkConnectClient(
     locRel.putInt(size)
     locRel.put(locRelData)
     locRel.put(schemaBytes)
-    artifactManager.cacheArtifact(locRel.array())
+    artifactManager.cacheArtifact(sessionId, locRel.array())
   }
 }
 
