@@ -187,7 +187,7 @@ private[sql] class JSONOptions(
     parameters.get(WRITE_NON_ASCII_CHARACTER_AS_CODEPOINT).map(_.toBoolean).getOrElse(false)
 
   /** Build a Jackson [[JsonFactory]] using JSON options. */
-  def buildJsonFactory(maxNestingDepth: Int, maxNumLen: Int, maxStringLen: Int)): JsonFactory = {
+  def buildJsonFactory(maxNestingDepth: Int, maxNumLen: Int, maxStringLen: Int): JsonFactory = {
     val streamReadConstraints = StreamReadConstraints.builder()
       .maxNestingDepth(maxNestingDepth)
       .maxNumberLength(maxNumLen)
