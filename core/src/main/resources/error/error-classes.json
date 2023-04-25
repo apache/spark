@@ -1410,7 +1410,7 @@
     "message" : [
       "Rule id not found for <ruleName>. Please modify RuleIdCollection.scala if you are adding a new rule."
     ],
-    "sqlState": "22023"
+    "sqlState" : "22023"
   },
   "SCALAR_SUBQUERY_TOO_MANY_ROWS" : {
     "message" : [
