@@ -43,6 +43,18 @@ private[sql] class JSONOptions(
 
   import JSONOptions._
 
+  val maxNestingDepth: Int = parameters.get("maxNestingDepth")
+    .map(_.toInt)
+    .getOrElse(StreamReadConstraints.DEFAULT_MAX_DEPTH)
+
+  val maxNumLen: Int = parameters.get("maxNumLen")
+    .map(_.toInt)
+    .getOrElse(StreamReadConstraints.DEFAULT_MAX_NUM_LEN)
+
+  val maxStringLen: Int = parameters.get("maxStringLen")
+    .map(_.toInt)
+    .getOrElse(StreamReadConstraints.DEFAULT_MAX_STRING_LEN)
+
   def this(
     parameters: Map[String, String],
     defaultTimeZoneId: String,
@@ -186,6 +198,7 @@ private[sql] class JSONOptions(
         JsonReadFeature.ALLOW_BACKSLASH_ESCAPING_ANY_CHARACTER,
         allowBackslashEscapingAnyCharacter)
       .configure(JsonReadFeature.ALLOW_UNESCAPED_CONTROL_CHARS, allowUnquotedControlChars)
+      .streamReadConstraints(new StreamReadConstraints(maxNestingDepth, maxNumLen, maxStringLen))
       .build()
   }
 }
