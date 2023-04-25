@@ -109,7 +109,7 @@ private[spark] case class SimplePythonFunction(
       accumulator: PythonAccumulatorV2) = {
     this(
       command.toSeq, envVars, pythonIncludes, pythonExec, pythonVer, broadcastVars, accumulator,
-      null, null
+      Seq.empty[String], Seq.empty[String]
     )
   }
 

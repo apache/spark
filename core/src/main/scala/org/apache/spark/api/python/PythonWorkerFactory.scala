@@ -160,7 +160,7 @@ private[spark] class PythonWorkerFactory(
    * file path.
    */
   def getWorkerPythonExec(): String = {
-    if (pipDependencies != null) {
+    if (!pipDependencies.isEmpty) {
       PythonEnvManager.getOrCreatePythonEnvironment(
         pythonExec,
         rootPythonEvnDir,

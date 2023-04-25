@@ -39,7 +39,7 @@ object PythonEnvManager {
       // otherwise pip might prompt "yes or no" and ask stdin input
       "PIP_NO_INPUT" -> "1",
       // Specify pip cache dir
-      "PIP_CACHE_DIR" -> new File(envRootDir, PIP_CACHE_DIR).getAbsolutePath(),
+      "PIP_CACHE_DIR" -> new File(envRootDir, PIP_CACHE_DIR).getAbsolutePath()
     )
   }
 

@@ -706,7 +706,9 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
             logWarning(
               s"Detected deadlock while completing task $taskName: " +
                 "Attempting to kill Python Worker")
-            env.destroyPythonWorker(pythonExec, envVars.asScala.toMap, worker)
+            env.destroyPythonWorker(
+              pythonExec, envVars.asScala.toMap, pipDependencies, pipConstraints, worker
+            )
           } catch {
             case e: Exception =>
               logError("Exception when trying to kill worker", e)

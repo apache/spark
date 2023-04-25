@@ -333,6 +333,11 @@ message PythonUDF {
   bytes command = 3;
   // (Required) Python version being used in the client.
   string python_ver = 4;
+  // (Optional) Python function pip dependencies
+  repeated string pip_dependencies = 5;
+  // (Optional) Python function pip constraints
+  repeated string pip_constraints = 6;
+
 }
 
 message ScalarScalaUDF {
