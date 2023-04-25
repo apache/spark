@@ -17,12 +17,10 @@
 
 package org.apache.spark.sql.streaming
 
-import org.json4s._
-import org.json4s.JsonAST.JValue
-import org.json4s.JsonDSL._
-import org.json4s.jackson.JsonMethods._
+import com.fasterxml.jackson.databind.JsonNode
 
 import org.apache.spark.annotation.Evolving
+import org.apache.spark.util.JacksonUtils
 
 /**
  * Reports information about the instantaneous status of a streaming query.
@@ -47,10 +45,10 @@ class StreamingQueryStatus protected[sql] (
   // This is a copy of the same class in sql/core/.../streaming/StreamingQueryStatus.scala
 
   /** The compact JSON representation of this status. */
-  def json: String = compact(render(jsonValue))
+  def json: String = JacksonUtils.writeValueAsString(jsonNode)
 
   /** The pretty (i.e. indented) JSON representation of this status. */
-  def prettyJson: String = pretty(render(jsonValue))
+  def prettyJson: String = JacksonUtils.writeValuePrettyAsString(jsonNode)
 
   override def toString: String = prettyJson
 
@@ -64,9 +62,11 @@ class StreamingQueryStatus protected[sql] (
       isTriggerActive = isTriggerActive)
   }
 
-  private[sql] def jsonValue: JValue = {
-    ("message" -> JString(message)) ~
-      ("isDataAvailable" -> JBool(isDataAvailable)) ~
-      ("isTriggerActive" -> JBool(isTriggerActive))
+  private[sql] def jsonNode: JsonNode = {
+    val node = JacksonUtils.createObjectNode
+    node.put("message", message)
+    node.put("isDataAvailable", isDataAvailable)
+    node.put("isTriggerActive", isTriggerActive)
+    node
   }
 }
