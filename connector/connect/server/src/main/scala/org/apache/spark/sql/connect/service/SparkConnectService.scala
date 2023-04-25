@@ -79,7 +79,8 @@ class SparkConnectService(debug: Boolean)
       .newBuilder()
       .setReason(st.getClass.getName)
       .setDomain("org.apache.spark")
-      .putMetadata("classes",
+      .putMetadata(
+        "classes",
         JacksonUtils.writeValueAsString(allClasses(st.getClass).map(_.getName)))
 
     lazy val stackTrace = Option(ExceptionUtils.getStackTrace(st))
