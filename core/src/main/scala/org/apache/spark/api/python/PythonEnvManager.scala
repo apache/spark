@@ -20,8 +20,8 @@ package org.apache.spark.api.python
 import java.io.{File, PrintWriter}
 import java.nio.file.{Files, Path}
 
-import scala.util.Using
 import scala.collection.JavaConverters._
+import scala.util.Using
 
 import org.apache.commons.codec.digest.DigestUtils
 
@@ -47,8 +47,8 @@ object PythonEnvManager {
   }
 
   private def getPythonEnvironmentKey(
-                               pipDependencies: Array[String],
-                               pipConstraints: Array[String]
+                               pipDependencies: Seq[String],
+                               pipConstraints: Seq[String]
                              ): String = {
     val data = pipDependencies.mkString(",") + "\n" + pipConstraints.mkString(",")
     "python-" + DigestUtils.sha1Hex(data)
@@ -57,8 +57,8 @@ object PythonEnvManager {
   def getOrCreatePythonEnvironment(
                                     pythonExec: String,
                                     rootEnvDir: String,
-                                    pipDependencies: Array[String],
-                                    pipConstraints: Array[String]
+                                    pipDependencies: Seq[String],
+                                    pipConstraints: Seq[String]
                                   ): String = {
     // Adds a global lock when creating python environment,
     // to avoid race condition.
@@ -86,8 +86,8 @@ object PythonEnvManager {
       pythonExec: String,
       rootEnvDir: String,
       envDir: String,
-      pipDependencies: Array[String],
-      pipConstraints: Array[String]
+      pipDependencies: Seq[String],
+      pipConstraints: Seq[String]
   ): Unit = {
 
     val pb = new ProcessBuilder(java.util.Arrays.asList(pythonExec, "-m", "virtualenv", envDir))

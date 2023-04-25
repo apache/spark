@@ -33,7 +33,13 @@ import org.apache.spark.internal.config.Python._
 import org.apache.spark.security.SocketAuthHelper
 import org.apache.spark.util.{RedirectThread, Utils}
 
-private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String, String])
+private[spark] class PythonWorkerFactory(
+                                          pythonExec: String,
+                                          envVars: Map[String, String],
+                                          pipDependencies: Seq[String],
+                                          pipConstraints: Seq[String],
+                                          rootPythonEvnDir: String
+                                        )
   extends Logging { self =>
 
   import PythonWorkerFactory._
@@ -148,6 +154,25 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
   }
 
   /**
+   * If pip dependencies is not null, create a new python environment with required
+   * pip dependencies and constraints, and return the python executable file path of
+   * the new python environment, otherwise return the default python worker executable
+   * file path.
+   */
+  def getWorkerPythonExec(): String = {
+    if (pipDependencies != null) {
+      PythonEnvManager.getOrCreatePythonEnvironment(
+        pythonExec,
+        rootPythonEvnDir,
+        pipDependencies,
+        pipConstraints
+      )
+    } else {
+      pythonExec
+    }
+  }
+
+  /**
    * Launch a worker by executing worker.py (by default) directly and telling it to connect to us.
    */
   private def createSimpleWorker(): (Socket, Option[Int]) = {
@@ -156,7 +181,7 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
       serverSocket = new ServerSocket(0, 1, InetAddress.getLoopbackAddress())
 
       // Create and start the worker
-      val pb = new ProcessBuilder(Arrays.asList(pythonExec, "-m", workerModule))
+      val pb = new ProcessBuilder(Arrays.asList(getWorkerPythonExec(), "-m", workerModule))
       val workerEnv = pb.environment()
       workerEnv.putAll(envVars.asJava)
       workerEnv.put("PYTHONPATH", pythonPath)
@@ -208,7 +233,7 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
 
       try {
         // Create and start the daemon
-        val command = Arrays.asList(pythonExec, "-m", daemonModule)
+        val command = Arrays.asList(getWorkerPythonExec(), "-m", daemonModule)
         val pb = new ProcessBuilder(command)
         val workerEnv = pb.environment()
         workerEnv.putAll(envVars.asJava)

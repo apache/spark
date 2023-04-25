@@ -81,6 +81,8 @@ private[spark] trait PythonFunction {
   def pythonVer: String
   def broadcastVars: JList[Broadcast[PythonBroadcast]]
   def accumulator: PythonAccumulatorV2
+  def pipDependencies: Seq[String]
+  def pipConstraints: Seq[String]
 }
 
 /**
@@ -93,7 +95,9 @@ private[spark] case class SimplePythonFunction(
     pythonExec: String,
     pythonVer: String,
     broadcastVars: JList[Broadcast[PythonBroadcast]],
-    accumulator: PythonAccumulatorV2) extends PythonFunction {
+    accumulator: PythonAccumulatorV2,
+    pipDependencies: Seq[String],
+    pipConstraints: Seq[String]) extends PythonFunction {
 
   def this(
       command: Array[Byte],
@@ -103,7 +107,26 @@ private[spark] case class SimplePythonFunction(
       pythonVer: String,
       broadcastVars: JList[Broadcast[PythonBroadcast]],
       accumulator: PythonAccumulatorV2) = {
-    this(command.toSeq, envVars, pythonIncludes, pythonExec, pythonVer, broadcastVars, accumulator)
+    this(
+      command.toSeq, envVars, pythonIncludes, pythonExec, pythonVer, broadcastVars, accumulator,
+      null, null
+    )
+  }
+
+  def this(
+      command: Array[Byte],
+      envVars: JMap[String, String],
+      pythonIncludes: JList[String],
+      pythonExec: String,
+      pythonVer: String,
+      broadcastVars: JList[Broadcast[PythonBroadcast]],
+      accumulator: PythonAccumulatorV2,
+      pipDependencies: Array[String],
+      pipConstraints: Array[String]) = {
+    this(
+      command.toSeq, envVars, pythonIncludes, pythonExec, pythonVer, broadcastVars, accumulator,
+      pipDependencies.toSeq, pipConstraints.toSeq
+    )
   }
 }
 

@@ -105,6 +105,28 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
   protected val pythonExec: String = funcs.head.funcs.head.pythonExec
   protected val pythonVer: String = funcs.head.funcs.head.pythonVer
 
+  protected val (pipDependencies: Seq[String], pipConstraints: Seq[String]) = {
+    val headPipDeps = funcs.head.funcs.head.pipDependencies
+    val headPipConstraints = funcs.head.funcs.head.pipConstraints
+
+    for (chainedFunc <- funcs) {
+      for (simpleFunc <- chainedFunc.funcs) {
+        if (simpleFunc.pipDependencies != headPipDeps ||
+            simpleFunc.pipConstraints != headPipConstraints
+        ) {
+          // TODO: For this case, we should split current python runner
+          //  into multiple python runners.
+          throw new RuntimeException(
+            "We cannot support the case that a python runner contains functions with " +
+            "different python dependency requirements."
+          )
+        }
+      }
+    }
+
+    (headPipDeps, headPipConstraints)
+  }
+
   // TODO: support accumulator in multiple UDF
   protected val accumulator: PythonAccumulatorV2 = funcs.head.funcs.head.accumulator
 
@@ -160,8 +182,11 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
       envVars.put("PYTHON_FAULTHANDLER_DIR", BasePythonRunner.faultHandlerLogDir.toString)
     }
 
+    val rootPythonEvnDir = Option(context.getLocalProperty("pythonEnv.rootEnvDir")).getOrElse(
+      new File(SparkFiles.getRootDirectory(), "spark-udf-python-env-root").getPath
+    )
     val (worker: Socket, pid: Option[Int]) = env.createPythonWorker(
-      pythonExec, envVars.asScala.toMap)
+      pythonExec, envVars.asScala.toMap, pipDependencies, pipConstraints, rootPythonEvnDir)
     // Whether is the worker released into idle pool or closed. When any codes try to release or
     // close a worker, they should use `releasedOrClosed.compareAndSet` to flip the state to make
     // sure there is only one winner that is going to release or close the worker.

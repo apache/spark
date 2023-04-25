@@ -73,7 +73,10 @@ class SparkEnv (
     val conf: SparkConf) extends Logging {
 
   @volatile private[spark] var isStopped = false
-  private val pythonWorkers = mutable.HashMap[(String, Map[String, String]), PythonWorkerFactory]()
+  private val pythonWorkers = mutable.HashMap[
+    (String, Map[String, String], Seq[String], Seq[String]),
+    PythonWorkerFactory
+  ]()
 
   // A general, soft-reference map for metadata needed during HadoopRDD split computation
   // (e.g., HadoopFileRDD uses this to cache JobConfs and InputFormats).
@@ -118,27 +121,46 @@ class SparkEnv (
   private[spark]
   def createPythonWorker(
       pythonExec: String,
-      envVars: Map[String, String]): (java.net.Socket, Option[Int]) = {
+      envVars: Map[String, String],
+      pipDependencies: Seq[String],
+      pipConstraints: Seq[String],
+      rootPythonEvnDir: String
+    ): (java.net.Socket, Option[Int]) = {
     synchronized {
-      val key = (pythonExec, envVars)
-      pythonWorkers.getOrElseUpdate(key, new PythonWorkerFactory(pythonExec, envVars)).create()
+      val key = (pythonExec, envVars, pipDependencies, pipConstraints)
+      pythonWorkers.getOrElseUpdate(
+        key,
+        new PythonWorkerFactory(
+          pythonExec,
+          envVars,
+          pipDependencies,
+          pipConstraints,
+          rootPythonEvnDir
+        )
+      ).create()
     }
   }
 
   private[spark]
   def destroyPythonWorker(pythonExec: String,
-      envVars: Map[String, String], worker: Socket): Unit = {
+                          envVars: Map[String, String],
+                          pipDependencies: Seq[String],
+                          pipConstraints: Seq[String],
+                          worker: Socket): Unit = {
     synchronized {
-      val key = (pythonExec, envVars)
+      val key = (pythonExec, envVars, pipDependencies, pipConstraints)
       pythonWorkers.get(key).foreach(_.stopWorker(worker))
     }
   }
 
   private[spark]
   def releasePythonWorker(pythonExec: String,
-      envVars: Map[String, String], worker: Socket): Unit = {
+                          envVars: Map[String, String],
+                          pipDependencies: Seq[String],
+                          pipConstraints: Seq[String],
+                          worker: Socket): Unit = {
     synchronized {
-      val key = (pythonExec, envVars)
+      val key = (pythonExec, envVars, pipDependencies, pipConstraints)
       pythonWorkers.get(key).foreach(_.releaseWorker(worker))
     }
   }
