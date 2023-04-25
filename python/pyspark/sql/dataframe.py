@@ -589,8 +589,8 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         level : int, optional, default None
             How many levels to print for nested schemas.
 
-        .. versionchanged:: 3.5.0
-            Added Level parameter.
+            .. versionchanged:: 3.5.0
+                Added Level parameter.
 
         Examples
         --------
