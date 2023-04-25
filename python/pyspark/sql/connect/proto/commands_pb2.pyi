@@ -1087,35 +1087,25 @@ class StreamingQueryCommandResult(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
         EXCEPTION_MESSAGE_FIELD_NUMBER: builtins.int
+        ERROR_CLASS_FIELD_NUMBER: builtins.int
         exception_message: builtins.str
-        """Exception message as string"""
+        """(Optional) Exception message as string"""
+        error_class: builtins.str
+        """(Optional) Exception error class as string
+        TODO(SPARK-43206): Add stack trace
+        """
         def __init__(
             self,
             *,
-            exception_message: builtins.str | None = ...,
+            exception_message: builtins.str = ...,
+            error_class: builtins.str = ...,
         ) -> None: ...
-        def HasField(
-            self,
-            field_name: typing_extensions.Literal[
-                "_exception_message",
-                b"_exception_message",
-                "exception_message",
-                b"exception_message",
-            ],
-        ) -> builtins.bool: ...
         def ClearField(
             self,
             field_name: typing_extensions.Literal[
-                "_exception_message",
-                b"_exception_message",
-                "exception_message",
-                b"exception_message",
+                "error_class", b"error_class", "exception_message", b"exception_message"
             ],
         ) -> None: ...
-        def WhichOneof(
-            self,
-            oneof_group: typing_extensions.Literal["_exception_message", b"_exception_message"],
-        ) -> typing_extensions.Literal["exception_message"] | None: ...
 
     class AwaitTerminationResult(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor

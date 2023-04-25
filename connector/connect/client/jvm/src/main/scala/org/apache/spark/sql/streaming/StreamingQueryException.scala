@@ -17,62 +17,22 @@
 
 package org.apache.spark.sql.streaming
 
-import scala.collection.JavaConverters._
-
-import org.apache.spark.{SparkThrowable, SparkThrowableHelper}
+import org.apache.spark.SparkThrowable
 import org.apache.spark.annotation.Evolving
 
 /**
- * Exception that stopped a [[StreamingQuery]]. Use `cause` get the actual exception that caused
- * the failure.
+ * Exception that stopped a [[StreamingQuery]] in Spark Connect. Currently not all fields in the
+ * original StreamingQueryException are supported.
  * @param message
- *   Message of this exception
- * @param cause
- *   Internal cause of this exception
- * @param startOffset
- *   Starting offset in json of the range of data in which exception occurred
- * @param endOffset
- *   Ending offset in json of the range of data in exception occurred
+ *   Maps to return value of original StreamingQueryException's toString method
+ * @param errorClass
+ *   Error class of this exception
  * @since 3.5.0
  */
 @Evolving
-class StreamingQueryException private[sql] (
-    private val queryDebugString: String,
-    val message: String,
-    val cause: Throwable,
-    val startOffset: String,
-    val endOffset: String,
-    errorClass: String,
-    messageParameters: Map[String, String])
-    extends Exception(message, cause)
-    with SparkThrowable {
-  // This is a copy of the same class in sql/core/.../streaming/StreamingQueryException.scala
+class StreamingQueryException private[sql] (message: String, errorClass: String)
+    extends SparkThrowable {
 
-  def this(
-      queryDebugString: String,
-      cause: Throwable,
-      startOffset: String,
-      endOffset: String,
-      errorClass: String,
-      messageParameters: Map[String, String]) = {
-    this(
-      queryDebugString,
-      message = SparkThrowableHelper.getMessage(errorClass, messageParameters),
-      cause,
-      startOffset,
-      endOffset,
-      errorClass,
-      messageParameters)
-  }
-
-  /** Time when the exception occurred */
-  val time: Long = System.currentTimeMillis
-
-  override def toString(): String =
-    s"""${classOf[StreamingQueryException].getName}: ${cause.getMessage}
-       |$queryDebugString""".stripMargin
-
+  // TODO(SPARK-43206): Add stack trace
   override def getErrorClass: String = errorClass
-
-  override def getMessageParameters: java.util.Map[String, String] = messageParameters.asJava
 }

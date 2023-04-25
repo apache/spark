@@ -308,8 +308,11 @@ message StreamingQueryCommandResult {
   }
 
   message ExceptionResult {
-    // Exception message as string
-    optional string exception_message = 1;
+    // (Optional) Exception message as string
+    string exception_message = 1;
+    // (Optional) Exception error class as string
+    string error_class = 3;
+    // TODO(SPARK-43206): Add stack trace
   }
 
   message AwaitTerminationResult {
