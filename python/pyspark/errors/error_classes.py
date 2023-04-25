@@ -34,19 +34,14 @@ ERROR_CLASSES_JSON = """
       "Attribute `<attr_name>` in provided object `<obj_name>` is not callable."
     ]
   },
-  "BARRIER_TASK_CONTEXT_NOT_INITIALIZE": {
+  "CALL_BEFORE_INITIALIZE": {
     "message": [
-      "Not supported to call `<func_name>` before initialize BarrierTaskContext."
+      "Not supported to call `<func_name>` before initialize <object>."
     ]
   },
   "BROADCAST_VARIABLE_NOT_LOADED": {
     "message": [
       "Broadcast variable `<variable>` not loaded."
-    ]
-  },
-  "CALL_BEFORE_SESSION_INITIALIZE" : {
-    "message" : [
-      "`<func_name>` was called before SparkSession was initialized."
     ]
   },
   "CANNOT_ACCESS_TO_DUNDER": {
@@ -74,11 +69,6 @@ ERROR_CLASSES_JSON = """
       "Cannot convert column into bool: please use '&' for 'and', '|' for 'or', '~' for 'not' when building DataFrame boolean expressions."
     ]
   },
-  "CANNOT_DESTROY_BROADCAST": {
-    "message": [
-      "Broadcast can only be destroyed in driver."
-    ]
-  },
   "CANNOT_INFER_ARRAY_TYPE": {
     "message": [
       "Can not infer Array Type from an list with None as the first element."
@@ -99,11 +89,6 @@ ERROR_CLASSES_JSON = """
       "metadata can only be provided for a single column."
     ]
   },
-  "CANNOT_REDUCE_BROADCAST": {
-    "message": [
-      "Broadcast can only be serialized in driver."
-    ]
-  },
   "CANNOT_SET_TOGETHER": {
     "message": [
       "<arg_list> should not be set together."
@@ -112,11 +97,6 @@ ERROR_CLASSES_JSON = """
   "CANNOT_SPECIFY_RETURN_TYPE_FOR_UDF": {
     "message": [
       "returnType can not be specified when `<arg_name>` is a user-defined function, but got <return_type>."
-    ]
-  },
-  "CANNOT_UNPERSIST_BROADCAST": {
-    "message": [
-      "Broadcast can only be unpersisted in driver."
     ]
   },
   "COLUMN_IN_LIST": {
@@ -148,6 +128,11 @@ ERROR_CLASSES_JSON = """
     "message" : [
       "`spark.python.profile` or `spark.python.profile.memory` configuration",
       " must be set to `true` to enable Python profile."
+    ]
+  },
+  "INVALID_BROADCAST_OPERATION": {
+    "message": [
+      "Broadcast can only be <operation> in driver."
     ]
   },
   "INVALID_CALL_ON_UNRESOLVED_OBJECT": {

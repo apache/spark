@@ -5219,9 +5219,10 @@ class RDD(Generic[T_co]):
         self: "RDD[Any]", schema: Optional[Any] = None, sampleRatio: Optional[float] = None
     ) -> "DataFrame":
         raise PySparkRuntimeError(
-            error_class="CALL_BEFORE_SESSION_INITIALIZE",
+            error_class="CALL_BEFORE_INITIALIZE",
             message_parameters={
                 "func_name": "RDD.toDF",
+                "object": "SparkSession",
             },
         )
 
