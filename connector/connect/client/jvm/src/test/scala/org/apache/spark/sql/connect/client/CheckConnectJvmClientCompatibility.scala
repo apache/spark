@@ -123,14 +123,14 @@ object CheckConnectJvmClientCompatibility {
       if (!classExcludeFilePath.toFile.exists()) {
         Seq.empty[String]
       } else {
-        Files.readAllLines(classExcludeFilePath).asScala
+        Files.readAllLines(classExcludeFilePath).asScala.toSeq
       }
 
     val ignoredMembers: Seq[String] =
       if (!memberExcludeFilePath.toFile.exists()) {
         Seq()
       } else {
-        Files.readAllLines(memberExcludeFilePath).asScala
+        Files.readAllLines(memberExcludeFilePath).asScala.toSeq
       }
 
     ignoredClasses.flatMap(excludeClass) ++ ignoredMembers.flatMap(excludeMember)
