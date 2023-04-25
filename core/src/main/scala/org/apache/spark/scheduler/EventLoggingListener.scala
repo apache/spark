@@ -299,6 +299,17 @@ private[spark] class EventLoggingListener(
 
 private[spark] object EventLoggingListener extends Logging {
   val DEFAULT_LOG_DIR = "/tmp/spark-events"
+  val USER_XATTR_ENABLED = "user.xattr.enabled"
+  val USER_APP_ID = "user.app.id"
+  val USER_APP_NAME = "user.app.name"
+  val USER_ATTEMPT_ID = "user.attempt.id"
+  val USER_ATTEMPT_STARTTIME = "user.attempt.startTime"
+  val USER_ATTEMPT_SPARKUSER = "user.attempt.sparkUser"
+  val USER_ATTEMPT_APPSPARKVERSION = "user.attempt.appSparkVersion"
+  val USER_ATTEMPT_ENDTIME = "user.attempt.endTime"
+  val USER_ATTEMPT_ACLS = "user.attempt.acls"
+  val XATTRS_APPLICATION_START_LIST = List(USER_APP_ID, USER_APP_NAME, USER_ATTEMPT_ID,
+    USER_ATTEMPT_STARTTIME, USER_ATTEMPT_SPARKUSER, USER_ATTEMPT_APPSPARKVERSION)
   // Dummy stage key used by driver in executor metrics updates
   val DRIVER_STAGE_KEY = (-1, -1)
 
