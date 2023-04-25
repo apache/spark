@@ -43,9 +43,10 @@ import org.apache.spark.util.{ThreadUtils, Utils}
  * The Artifact Manager is responsible for handling and transferring artifacts from the local
  * client to the server (local/remote).
  * @param userContext
+ * @param sessionId An unique identifier of the session which the artifact manager belongs to.
  * @param channel
  */
-class ArtifactManager(userContext: proto.UserContext, channel: ManagedChannel) {
+class ArtifactManager(userContext: proto.UserContext, sessionId: String, channel: ManagedChannel) {
   // Using the midpoint recommendation of 32KiB for chunk size as specified in
   // https://github.com/grpc/grpc.github.io/issues/371.
   private val CHUNK_SIZE: Int = 32 * 1024
@@ -102,10 +103,11 @@ class ArtifactManager(userContext: proto.UserContext, channel: ManagedChannel) {
    */
   def addArtifacts(uris: Seq[URI]): Unit = addArtifacts(uris.flatMap(parseArtifacts))
 
-  private def isCachedArtifact(sessionId: String, hash: String): Boolean = {
+  private def isCachedArtifact(hash: String): Boolean = {
     val artifactName = CACHE_PREFIX + "/" + hash
     val request = proto.ArtifactStatusesRequest
       .newBuilder()
+      .setUserContext(userContext)
       .setSessionId(sessionId)
       .addAllName((artifactName :: Nil).asJava)
       .build()
@@ -118,9 +120,9 @@ class ArtifactManager(userContext: proto.UserContext, channel: ManagedChannel) {
   /**
    * Cache the give blob at the session.
    */
-  def cacheArtifact(sessionId: String, blob: Array[Byte]): String = {
+  def cacheArtifact(blob: Array[Byte]): String = {
     val hash = sha256Hex(blob)
-    if (!isCachedArtifact(sessionId, hash)) {
+    if (!isCachedArtifact(hash)) {
       addArtifacts(newCacheArtifact(hash, new InMemory(blob)) :: Nil)
     }
     hash
@@ -208,6 +210,7 @@ class ArtifactManager(userContext: proto.UserContext, channel: ManagedChannel) {
     val builder = proto.AddArtifactsRequest
       .newBuilder()
       .setUserContext(userContext)
+      .setSessionId(sessionId)
     artifacts.foreach { artifact =>
       val in = new CheckedInputStream(artifact.storage.asInstanceOf[LocalData].stream, new CRC32)
       try {
@@ -262,6 +265,7 @@ class ArtifactManager(userContext: proto.UserContext, channel: ManagedChannel) {
     val builder = proto.AddArtifactsRequest
       .newBuilder()
       .setUserContext(userContext)
+      .setSessionId(sessionId)
 
     val in = new CheckedInputStream(artifact.storage.asInstanceOf[LocalData].stream, new CRC32)
     try {

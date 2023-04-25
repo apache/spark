@@ -25,7 +25,7 @@ import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
 
 import org.apache.spark.{SparkContext, SparkEnv}
-import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.connect.service.SessionHolder
 import org.apache.spark.storage.{CacheId, StorageLevel}
 import org.apache.spark.util.Utils
 
@@ -89,15 +89,20 @@ class SparkConnectArtifactManager private[connect] {
    * @param serverLocalStagingPath
    */
   private[connect] def addArtifact(
-      session: SparkSession,
+      sessionHolder: SessionHolder,
       remoteRelativePath: Path,
       serverLocalStagingPath: Path): Unit = {
     require(!remoteRelativePath.isAbsolute)
     if (remoteRelativePath.startsWith("cache/")) {
       val tmpFile = serverLocalStagingPath.toFile
       Utils.tryWithSafeFinallyAndFailureCallbacks {
-        val updater = session.sparkContext.env.blockManager.TempFileBasedBlockStoreUpdater(
-          blockId = CacheId(remoteRelativePath.toString.stripPrefix("cache/")),
+        val blockManager = sessionHolder.session.sparkContext.env.blockManager
+        val blockId = CacheId(
+          userId = sessionHolder.userId,
+          sessionId = sessionHolder.sessionId,
+          hash = remoteRelativePath.toString.stripPrefix("cache/"))
+        val updater = blockManager.TempFileBasedBlockStoreUpdater(
+          blockId = blockId,
           level = StorageLevel.MEMORY_AND_DISK_SER,
           classTag = implicitly[ClassTag[Array[Byte]]],
           tmpFile = tmpFile,
@@ -123,7 +128,7 @@ class SparkConnectArtifactManager private[connect] {
       Files.move(serverLocalStagingPath, target)
       if (remoteRelativePath.startsWith("jars")) {
         // Adding Jars to the underlying spark context (visible to all users)
-        session.sessionState.resourceLoader.addJar(target.toString)
+        sessionHolder.session.sessionState.resourceLoader.addJar(target.toString)
         jarsList.add(target)
       }
     }

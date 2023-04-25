@@ -384,9 +384,14 @@ message LocalRelation {
 
 // A local relation that has been cached already.
 message CachedLocalRelation {
-  // (Required) A key refers to a serialized local relation in a cache.
-  // The serialized representation contains enough info to restore of a LocalRelation.
-  string key = 1;
+  // (Required) An identifier of the user which created the local relation
+  string userId = 1;
+
+  // (Required) An identifier of the Spark SQL session in which the user created the local relation.
+  string sessionId = 2;
+
+  // (Required) A sha-256 hash of the serialized local relation.
+  string hash = 3;
 }
 
 // Relation of type [[Sample]] that samples a fraction of the dataset.

@@ -23,7 +23,7 @@ import org.apache.commons.io.FileUtils
 
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.connect.ResourceHelper
-import org.apache.spark.sql.connect.service.SparkConnectService
+import org.apache.spark.sql.connect.service.{SessionHolder, SparkConnectService}
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.storage.CacheId
@@ -39,12 +39,16 @@ class ArtifactManagerSuite extends SharedSparkSession with ResourceHelper {
   private val artifactPath = commonResourcePath.resolve("artifact-tests")
   private lazy val artifactManager = SparkConnectArtifactManager.getOrCreateArtifactManager
 
+  private def sessionHolder(): SessionHolder = {
+    SessionHolder("test", spark.sessionUUID, spark)
+  }
+
   test("Jar artifacts are added to spark session") {
     val copyDir = Utils.createTempDir().toPath
     FileUtils.copyDirectory(artifactPath.toFile, copyDir.toFile)
     val stagingPath = copyDir.resolve("smallJar.jar")
     val remotePath = Paths.get("jars/smallJar.jar")
-    artifactManager.addArtifact(spark, remotePath, stagingPath)
+    artifactManager.addArtifact(sessionHolder, remotePath, stagingPath)
 
     val jarList = spark.sparkContext.listJars()
     assert(jarList.exists(_.contains(remotePath.toString)))
@@ -56,7 +60,7 @@ class ArtifactManagerSuite extends SharedSparkSession with ResourceHelper {
     val stagingPath = copyDir.resolve("smallClassFile.class")
     val remotePath = Paths.get("classes/smallClassFile.class")
     assert(stagingPath.toFile.exists())
-    artifactManager.addArtifact(spark, remotePath, stagingPath)
+    artifactManager.addArtifact(sessionHolder, remotePath, stagingPath)
 
     val classFileDirectory = artifactManager.classArtifactDir
     val movedClassFile = classFileDirectory.resolve("smallClassFile.class").toFile
@@ -69,7 +73,7 @@ class ArtifactManagerSuite extends SharedSparkSession with ResourceHelper {
     val stagingPath = copyDir.resolve("Hello.class")
     val remotePath = Paths.get("classes/Hello.class")
     assert(stagingPath.toFile.exists())
-    artifactManager.addArtifact(spark, remotePath, stagingPath)
+    artifactManager.addArtifact(sessionHolder, remotePath, stagingPath)
 
     val classFileDirectory = artifactManager.classArtifactDir
     val movedClassFile = classFileDirectory.resolve("Hello.class").toFile
@@ -92,7 +96,7 @@ class ArtifactManagerSuite extends SharedSparkSession with ResourceHelper {
     val stagingPath = copyDir.resolve("Hello.class")
     val remotePath = Paths.get("classes/Hello.class")
     assert(stagingPath.toFile.exists())
-    artifactManager.addArtifact(spark, remotePath, stagingPath)
+    artifactManager.addArtifact(sessionHolder, remotePath, stagingPath)
 
     val classFileDirectory = artifactManager.classArtifactDir
     val movedClassFile = classFileDirectory.resolve("Hello.class").toFile
@@ -115,8 +119,11 @@ class ArtifactManagerSuite extends SharedSparkSession with ResourceHelper {
       val stagingPath = path.toPath
       Files.write(path.toPath, "test".getBytes(StandardCharsets.UTF_8))
       val remotePath = Paths.get("cache/abc")
-      artifactManager.addArtifact(spark, remotePath, stagingPath)
-      val bytes = spark.sparkContext.env.blockManager.getLocalBytes(CacheId("abc"))
+      val session = sessionHolder()
+      artifactManager.addArtifact(session, remotePath, stagingPath)
+      val blockManager = spark.sparkContext.env.blockManager
+      val blockId = CacheId(session.userId, session.sessionId, "abc")
+      val bytes = blockManager.getLocalBytes(blockId)
       assert(bytes.isDefined)
       val readback = new String(bytes.get.toByteBuffer().array(), StandardCharsets.UTF_8)
       assert(readback === "test")

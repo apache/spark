@@ -42,19 +42,21 @@ private[sql] class SparkConnectClient(
 
   private[this] val stub = proto.SparkConnectServiceGrpc.newBlockingStub(channel)
 
-  private[client] val artifactManager: ArtifactManager = new ArtifactManager(userContext, channel)
-
   /**
    * Placeholder method.
    * @return
    *   User ID.
    */
-  private[client] def userId: String = userContext.getUserId()
+  private[sql] def userId: String = userContext.getUserId()
 
   // Generate a unique session ID for this client. This UUID must be unique to allow
   // concurrent Spark sessions of the same user. If the channel is closed, creating
   // a new client will create a new session ID.
-  private[client] val sessionId: String = UUID.randomUUID.toString
+  private[sql] val sessionId: String = UUID.randomUUID.toString
+
+  private[client] val artifactManager: ArtifactManager = {
+    new ArtifactManager(userContext, sessionId, channel)
+  }
 
   /**
    * Dispatch the [[proto.AnalyzePlanRequest]] to the Spark Connect server.
@@ -229,7 +231,7 @@ private[sql] class SparkConnectClient(
     locRel.putInt(size)
     locRel.put(locRelData)
     locRel.put(schemaBytes)
-    artifactManager.cacheArtifact(sessionId, locRel.array())
+    artifactManager.cacheArtifact(locRel.array())
   }
 }
 

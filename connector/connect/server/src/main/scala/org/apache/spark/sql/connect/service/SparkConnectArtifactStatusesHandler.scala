@@ -22,28 +22,29 @@ import io.grpc.stub.StreamObserver
 
 import org.apache.spark.connect.proto
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.SparkSession
 import org.apache.spark.storage.CacheId
 
 class SparkConnectArtifactStatusesHandler(
     val responseObserver: StreamObserver[proto.ArtifactStatusesResponse])
     extends Logging {
 
-  protected def cacheExists(session: SparkSession, id: String): Boolean = {
+  protected def cacheExists(userId: String, sessionId: String, hash: String): Boolean = {
+    val session = SparkConnectService
+      .getOrCreateIsolatedSession(userId, sessionId)
+      .session
     val blockManager = session.sparkContext.env.blockManager
-    blockManager.get(CacheId(id)).isDefined
+    blockManager.get(CacheId(userId, sessionId, hash)).isDefined
   }
 
   def handle(request: proto.ArtifactStatusesRequest): Unit = {
-    val session =
-      SparkConnectService
-        .getOrCreateIsolatedSession(request.getUserContext.getUserId, request.getSessionId)
-        .session
     val builder = proto.ArtifactStatusesResponse.newBuilder()
     request.getNameList().iterator().asScala.foreach { name =>
       val status = proto.ArtifactStatusesResponse.ArtifactStatus.newBuilder()
       val exists = if (name.startsWith("cache/")) {
-        cacheExists(session, name.stripPrefix("cache/"))
+        cacheExists(
+          userId = request.getUserContext.getUserId,
+          sessionId = request.getSessionId,
+          hash = name.stripPrefix("cache/"))
       } else false
       builder.putStatuses(name, status.setExists(exists).build())
     }

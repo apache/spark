@@ -25,7 +25,6 @@ import org.apache.commons.codec.digest.DigestUtils.sha256Hex
 
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.ArtifactStatusesResponse
-import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connect.ResourceHelper
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.util.ThreadUtils
@@ -41,8 +40,11 @@ class ArtifactStatusesHandlerSuite extends SharedSparkSession with ResourceHelpe
   def getStatuses(names: Seq[String], exist: Set[String]): ArtifactStatusesResponse = {
     val promise = Promise[ArtifactStatusesResponse]
     val handler = new SparkConnectArtifactStatusesHandler(new DummyStreamObserver(promise)) {
-      override protected def cacheExists(session: SparkSession, id: String): Boolean = {
-        exist.contains(id)
+      override protected def cacheExists(
+          userId: String,
+          sessionId: String,
+          hash: String): Boolean = {
+        exist.contains(hash)
       }
     }
     val context = proto.UserContext

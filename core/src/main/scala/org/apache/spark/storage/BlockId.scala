@@ -190,8 +190,8 @@ class UnrecognizedBlockId(name: String)
     extends SparkException(s"Failed to parse $name into a block ID")
 
 @DeveloperApi
-case class CacheId(hash: String) extends BlockId {
-  override def name: String = "cache_" + hash
+case class CacheId(userId: String, sessionId: String, hash: String) extends BlockId {
+  override def name: String = s"cache_${userId}_${sessionId}_$hash"
 }
 
 @DeveloperApi
