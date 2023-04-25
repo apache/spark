@@ -34,17 +34,17 @@ import org.apache.spark.util.Clock
 import org.apache.spark.util.SystemClock
 
 /**
- * Caches Spark-Connect streaming query references and their sessions. When a query is stopped
- * (i. e. no longer active), it is cached for 1 hour so that it is accessible from the
- * client side. It runs a background thread to run a periodic task that does the following:
+ * Caches Spark-Connect streaming query references and the sessions. When a query is stopped (i.e.
+ * no longer active), it is cached for 1 hour so that it is accessible from the client side. It
+ * runs a background thread to run a periodic task that does the following:
  *   - Check the status of the queries, and drops those that expired (1 hour after being stopped).
  *   - Keep the associated session active by invoking supplied function `sessionKeepAliveFn`.
  */
 private[connect] class SparkConnectStreamingQueryCache(
-  val sessionKeepAliveFn: (String, String) => Unit, // (userId, sessionId) => Unit.
-  val clock: Clock = new SystemClock(),
-  private val stoppedQueryCachePeriod: Duration = 1.hour,  // Configurable for testing.
-  private val sessionPollingPeriod: Duration = 1.minute, // Configurable for testing.
+    val sessionKeepAliveFn: (String, String) => Unit, // (userId, sessionId) => Unit.
+    val clock: Clock = new SystemClock(),
+    private val stoppedQueryCachePeriod: Duration = 1.hour, // Configurable for testing.
+    private val sessionPollingPeriod: Duration = 1.minute // Configurable for testing.
 ) extends Logging {
 
   import SparkConnectStreamingQueryCache._
@@ -56,15 +56,13 @@ private[connect] class SparkConnectStreamingQueryCache(
         sessionId = sessionHolder.sessionId,
         session = sessionHolder.session,
         query = query,
-        expiresAtMs = None
-      )
+        expiresAtMs = None)
 
       queryCache.put(QueryCacheKey(query.id.toString), value) match {
-        case Some(existing) =>  // Query is being replaced. Can happen when a query is restarted.
+        case Some(existing) => // Query is being replaced. Can happen when a query is restarted.
           log.info(
             s"Replacing existing query in the cache. Query Id: ${query.id}." +
-            s"Existing value $existing, new value $value."
-          )
+              s"Existing value $existing, new value $value.")
         case None =>
           log.info(s"Adding new query to the cache. Query Id ${query.id}, value $value.")
       }
@@ -74,8 +72,8 @@ private[connect] class SparkConnectStreamingQueryCache(
   }
 
   /**
-   * Returns [[StreamingQuery]] if it is cached and session matches the cached query.
-   * It ensures the the session associated with it matches the session passed into the call.
+   * Returns [[StreamingQuery]] if it is cached and session matches the cached query. It ensures
+   * the the session associated with it matches the session passed into the call.
    */
   def findCachedQuery(queryId: String, session: SparkSession): Option[StreamingQuery] = {
     queryCacheLock.synchronized {
@@ -106,7 +104,7 @@ private[connect] class SparkConnectStreamingQueryCache(
   @GuardedBy("queryCacheLock")
   private var scheduledExecutor: Option[ScheduledExecutorService] = None
 
-  /** Schedules periodic checks if it is not already scheduled  */
+  /** Schedules periodic checks if it is not already scheduled */
   private def schedulePeriodicChecks(): Unit = queryCacheLock.synchronized {
     scheduledExecutor match {
       case Some(_) => // Already running.
@@ -122,17 +120,16 @@ private[connect] class SparkConnectStreamingQueryCache(
           },
           sessionPollingPeriod.toMillis,
           sessionPollingPeriod.toMillis,
-          TimeUnit.MILLISECONDS
-        )
+          TimeUnit.MILLISECONDS)
     }
   }
 
   /**
    * Periodic maintenance task to the following:
-   *  - Update status of query if it is inactive. Sets an expiery time for such queries
-   *  - Drop expired queries from the cache.
-   *  - Poll sessions associated with the cached queries in order keep them alive in connect
-   *    service' mapping (by invoking `sessionKeepAliveFn`).
+   *   - Update status of query if it is inactive. Sets an expiery time for such queries
+   *   - Drop expired queries from the cache.
+   *   - Poll sessions associated with the cached queries in order keep them alive in connect
+   *     service' mapping (by invoking `sessionKeepAliveFn`).
    */
   private def periodicMaintenance(): Unit = {
 
@@ -182,10 +179,10 @@ private[connect] object SparkConnectStreamingQueryCache {
   case class QueryCacheKey(queryId: String)
 
   case class QueryCacheValue(
-    userId: String,
-    sessionId: String,
-    session: SparkSession, // Holds the reference to the session.
-    query: StreamingQuery, // Holds the reference to the query.
-    expiresAtMs: Option[Long] = None // Expiry time for a stopped query.
+      userId: String,
+      sessionId: String,
+      session: SparkSession, // Holds the reference to the session.
+      query: StreamingQuery, // Holds the reference to the query.
+      expiresAtMs: Option[Long] = None // Expiry time for a stopped query.
   )
 }

@@ -55,20 +55,14 @@ class SparkConnectStreamingQueryCacheSuite extends SparkFunSuite with MockitoSug
     val mockQuery = mock[StreamingQuery]
     val mockStreamingQueryManager = mock[StreamingQueryManager]
 
-    val sessionHolder = SessionHolder(
-      userId = "test_user_1",
-      sessionId = "test_session_1",
-      session = mockSession
-    )
+    val sessionHolder =
+      SessionHolder(userId = "test_user_1", sessionId = "test_session_1", session = mockSession)
 
-    val sessionMgr = createSessionManager(
-      keepAliveFn = {
-        case (userId, sessionId) =>
-          assert(userId == sessionHolder.userId)
-          assert(sessionId == sessionHolder.sessionId)
-          numKeepAliveCalls.incrementAndGet()
-      }
-    )
+    val sessionMgr = createSessionManager(keepAliveFn = { case (userId, sessionId) =>
+      assert(userId == sessionHolder.userId)
+      assert(sessionId == sessionHolder.sessionId)
+      numKeepAliveCalls.incrementAndGet()
+    })
 
     when(mockQuery.id).thenReturn(queryId)
     when(mockQuery.isActive).thenReturn(true) // Query is active.
@@ -84,7 +78,6 @@ class SparkConnectStreamingQueryCacheSuite extends SparkFunSuite with MockitoSug
       assert(numKeepAliveCalls.get() >= 5)
     }
 
-
     sessionMgr.cacheQueryValue(queryId.toString) match {
       case Some(v) =>
         assert(v.sessionId == sessionHolder.sessionId)
@@ -97,7 +90,6 @@ class SparkConnectStreamingQueryCacheSuite extends SparkFunSuite with MockitoSug
     assert(sessionMgr.findCachedQuery(queryId.toString, mock[SparkSession]).isEmpty)
     // Query is returned when correct session is used
     assert(sessionMgr.findCachedQuery(queryId.toString, mockSession).contains(mockQuery))
-
 
     // Stop the query.
     when(mockQuery.isActive).thenReturn(false)

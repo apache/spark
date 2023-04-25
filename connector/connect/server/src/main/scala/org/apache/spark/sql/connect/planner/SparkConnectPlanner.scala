@@ -2100,8 +2100,7 @@ class SparkConnectPlanner(val session: SparkSession) {
     // Register the new query so that the session and query references are cached.
     SparkConnectService.streamingSessionManager.registerNewStreamingQuery(
       sessionHolder = SessionHolder(userId = userId, sessionId = sessionId, session),
-      query = query
-    )
+      query = query)
 
     val result = WriteStreamOperationStartResult
       .newBuilder()
@@ -2135,8 +2134,7 @@ class SparkConnectPlanner(val session: SparkSession) {
       .setQueryId(command.getQueryId)
 
     // Find the query in connect service level cache, otherwise check session's active streams.
-    val query = SparkConnectService
-      .streamingSessionManager
+    val query = SparkConnectService.streamingSessionManager
       .findCachedQuery(id, session) // Common case: query is cached in connect session manager.
       .orElse { // Else try to find it in active streams. Mostly will not be found here.
         Option(session.streams.get(id))
