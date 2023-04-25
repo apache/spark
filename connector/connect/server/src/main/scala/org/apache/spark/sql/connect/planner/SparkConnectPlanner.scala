@@ -1171,7 +1171,10 @@ class SparkConnectPlanner(val session: SparkSession) {
       dataType = transformDataType(udf.getOutputType),
       pythonEvalType = udf.getEvalType,
       udfDeterministic = fun.getDeterministic
-    ).apply(fun.getArgumentsList.asScala.map(transformExpression).toSeq).expr
+    ).builder(fun.getArgumentsList.asScala.map(transformExpression).toSeq) match {
+      case udaf: PythonUDAF => udaf.toAggregateExpression()
+      case other => other
+    }
   }
 
   private def transformPythonFunction(fun: proto.PythonUDF): SimplePythonFunction = {
