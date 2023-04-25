@@ -29,8 +29,8 @@ class StreamingQueryProgressSuite extends ConnectFunSuite {
     val jsonStringFromServerSide =
       s"""
          |{
-         |  "id" : "33ac26f4-1c39-46ce-b798-f3d2a21211d4",
-         |  "runId" : "849c2c9a-b9f8-446f-9180-259a60fd888c",
+         |  "id" : "aa624dba-d302-4429-b75b-7e82e44cfb11",
+         |  "runId" : "5b8c40d3-4a7c-425c-b333-838f6b9c18bb",
          |  "name" : "myName",
          |  "timestamp" : "2016-12-05T20:54:20.827Z",
          |  "batchId" : 2,
@@ -69,6 +69,15 @@ class StreamingQueryProgressSuite extends ConnectFunSuite {
          |    "latestOffset" : "789",
          |    "numInputRows" : 678,
          |    "inputRowsPerSecond" : 10.0,
+         |    "processedRowsPerSecond" : "Infinity",
+         |    "metrics" : { }
+         |  }, {
+         |    "description" : "source",
+         |    "startOffset" : "234",
+         |    "endOffset" : "567",
+         |    "latestOffset" : "890",
+         |    "numInputRows" : 789,
+         |    "inputRowsPerSecond" : 12.0,
          |    "processedRowsPerSecond" : "Infinity",
          |    "metrics" : { }
          |  } ],
@@ -119,15 +128,13 @@ class StreamingQueryProgressSuite extends ConnectFunSuite {
          |    }
          |  }
          |}
+         |
       """.stripMargin.trim
 
-    // scalastyle:off
-    println(jsonStringFromServerSide)
-
     val result = StreamingQueryProgress.fromJson(jsonStringFromServerSide)
-    assert(result.id.toString === "33ac26f4-1c39-46ce-b798-f3d2a21211d4")
-    assert(result.runId.toString === "849c2c9a-b9f8-446f-9180-259a60fd888c")
-    assert(result.numInputRows === 678)
+    assert(result.id.toString === "aa624dba-d302-4429-b75b-7e82e44cfb11")
+    assert(result.runId.toString === "5b8c40d3-4a7c-425c-b333-838f6b9c18bb")
+    assert(result.numInputRows === 1467) // 678 + 789
     assert(result.stateOperators.head.operatorName === "op1")
     assert(result.sources.head.startOffset === "123")
 
@@ -149,13 +156,13 @@ class StreamingQueryProgressSuite extends ConnectFunSuite {
     val jsonString =
       """
         |{
-        |  "id" : "33ac26f4-1c39-46ce-b798-f3d2a21211d4",
-        |  "runId" : "849c2c9a-b9f8-446f-9180-259a60fd888c",
+        |  "id" : "aa624dba-d302-4429-b75b-7e82e44cfb11",
+        |  "runId" : "5b8c40d3-4a7c-425c-b333-838f6b9c18bb",
         |  "name" : "myName",
         |  "timestamp" : "2016-12-05T20:54:20.827Z",
         |  "batchId" : 2,
-        |  "numInputRows" : 678,
-        |  "inputRowsPerSecond" : 10.0,
+        |  "numInputRows" : 1467,
+        |  "inputRowsPerSecond" : 22.0,
         |  "durationMs" : {
         |    "total" : 0
         |  },
@@ -190,6 +197,13 @@ class StreamingQueryProgressSuite extends ConnectFunSuite {
         |    "latestOffset" : 789,
         |    "numInputRows" : 678,
         |    "inputRowsPerSecond" : 10.0
+        |  }, {
+        |    "description" : "source",
+        |    "startOffset" : 234,
+        |    "endOffset" : 567,
+        |    "latestOffset" : 890,
+        |    "numInputRows" : 789,
+        |    "inputRowsPerSecond" : 12.0
         |  } ],
         |  "sink" : {
         |    "description" : "sink",
@@ -207,7 +221,6 @@ class StreamingQueryProgressSuite extends ConnectFunSuite {
         |    }
         |  }
         |}
-        |
         |""".stripMargin.trim
     assert(result.prettyJson === jsonString)
   }

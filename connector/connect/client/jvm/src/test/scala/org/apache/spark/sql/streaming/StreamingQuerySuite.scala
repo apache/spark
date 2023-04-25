@@ -83,6 +83,7 @@ class StreamingQuerySuite extends RemoteSparkSession with SQLHelper {
             "stateOnCurrentVersionSizeBytes"))
         assert(lastProgress.sources.nonEmpty)
         assert(lastProgress.sink.description == "MemorySink")
+        assert(lastProgress.observedMetrics.isEmpty)
 
         query.recentProgress.foreach { p =>
           assert(p.id == lastProgress.id)
