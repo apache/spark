@@ -239,19 +239,15 @@ class Column:
 
         if isinstance(length, Column):
             length_expr = length._expr
+            start_expr = startPos._expr
         elif isinstance(length, int):
             length_expr = LiteralExpression._from_value(length)
+            start_expr = LiteralExpression._from_value(startPos)
         else:
             raise PySparkTypeError(
                 error_class="NOT_COLUMN_OR_INT",
                 message_parameters={"arg_name": "length", "arg_type": type(length).__name__},
             )
-
-        if isinstance(startPos, Column):
-            start_expr = startPos._expr
-        elif isinstance(startPos, int):
-            start_expr = LiteralExpression._from_value(startPos)
-
         return Column(UnresolvedFunction("substring", [self._expr, start_expr, length_expr]))
 
     substr.__doc__ = PySparkColumn.substr.__doc__
