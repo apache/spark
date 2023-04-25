@@ -147,10 +147,11 @@ class StreamingQuery:
         if not exception.HasField("exception_message"):
             return None
         else:
-            msg = exception.exception_message.split(": ", 1)[
-                1
-            ]  # Drop the Java StreamingQueryException type info
-            return CapturedStreamingQueryException(msg)
+            # Drop the Java StreamingQueryException type info
+            msg = exception.exception_message.split(": ", 1)[1]
+            if exception.HasField("stack_trace"):
+                msg += f"\n\nJVM stacktrace:\n{exception.stack_trace}"
+            return CapturedStreamingQueryException(msg, reason=exception.error_class)
 
     exception.__doc__ = PySparkStreamingQuery.exception.__doc__
 

@@ -208,11 +208,11 @@ class RemoteStreamingQuery(
   override def exception: Option[StreamingQueryException] = {
     val exception = executeQueryCmd(_.setException(true)).getException
     if (exception.hasExceptionMessage) {
-      // TODO(SPARK-43206): Add more information to StreamingQueryException.
       Some(
         new StreamingQueryException(
           message = exception.getExceptionMessage,
-          errorClass = exception.getErrorClass))
+          errorClass = exception.getErrorClass,
+          stackTrace = exception.getStackTrace))
     } else {
       None
     }

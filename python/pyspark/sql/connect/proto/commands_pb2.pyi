@@ -1088,24 +1088,67 @@ class StreamingQueryCommandResult(google.protobuf.message.Message):
 
         EXCEPTION_MESSAGE_FIELD_NUMBER: builtins.int
         ERROR_CLASS_FIELD_NUMBER: builtins.int
+        STACK_TRACE_FIELD_NUMBER: builtins.int
         exception_message: builtins.str
         """(Optional) Exception message as string"""
         error_class: builtins.str
-        """(Optional) Exception error class as string
-        TODO(SPARK-43206): Add stack trace
-        """
+        """(Optional) Exception error class as string"""
+        stack_trace: builtins.str
+        """(Optional) Exception stack trace as string"""
         def __init__(
             self,
             *,
-            exception_message: builtins.str = ...,
-            error_class: builtins.str = ...,
+            exception_message: builtins.str | None = ...,
+            error_class: builtins.str | None = ...,
+            stack_trace: builtins.str | None = ...,
         ) -> None: ...
+        def HasField(
+            self,
+            field_name: typing_extensions.Literal[
+                "_error_class",
+                b"_error_class",
+                "_exception_message",
+                b"_exception_message",
+                "_stack_trace",
+                b"_stack_trace",
+                "error_class",
+                b"error_class",
+                "exception_message",
+                b"exception_message",
+                "stack_trace",
+                b"stack_trace",
+            ],
+        ) -> builtins.bool: ...
         def ClearField(
             self,
             field_name: typing_extensions.Literal[
-                "error_class", b"error_class", "exception_message", b"exception_message"
+                "_error_class",
+                b"_error_class",
+                "_exception_message",
+                b"_exception_message",
+                "_stack_trace",
+                b"_stack_trace",
+                "error_class",
+                b"error_class",
+                "exception_message",
+                b"exception_message",
+                "stack_trace",
+                b"stack_trace",
             ],
         ) -> None: ...
+        @typing.overload
+        def WhichOneof(
+            self, oneof_group: typing_extensions.Literal["_error_class", b"_error_class"]
+        ) -> typing_extensions.Literal["error_class"] | None: ...
+        @typing.overload
+        def WhichOneof(
+            self,
+            oneof_group: typing_extensions.Literal["_exception_message", b"_exception_message"],
+        ) -> typing_extensions.Literal["exception_message"] | None: ...
+        @typing.overload
+        def WhichOneof(
+            self, oneof_group: typing_extensions.Literal["_stack_trace", b"_stack_trace"]
+        ) -> typing_extensions.Literal["stack_trace"] | None: ...
 
     class AwaitTerminationResult(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
