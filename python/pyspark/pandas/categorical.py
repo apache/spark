@@ -493,7 +493,7 @@ class CategoricalAccessor:
         """
         categories = set(self._data.drop_duplicates()._to_pandas())
         removals = [cat for cat in self.categories if cat not in categories]
-        categories = [cat for cat in removals if cat is not None]
+        categories = [cat for cat in removals if cat is not None]  # type: ignore[assignment]
         if len(categories) == 0:
             return self._data.copy()
         else:
