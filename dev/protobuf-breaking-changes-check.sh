@@ -32,7 +32,11 @@ if [[ $# -eq 1 ]]; then
   BRANCH=$1
 fi
 
-pushd connector/connect/common/src/main && echo "Start checking against $BRANCH" && buf breaking --against "https://github.com/apache/spark.git#branch=$BRANCH,subdir=connector/connect/common/src/main"
+pushd connector/connect/common/src/main &&
+echo "Start protobuf breaking changes checking against $BRANCH" &&
+buf breaking --against "https://github.com/apache/spark.git#branch=$BRANCH,subdir=connector/connect/common/src/main" &&
+echo "Finsh protobuf breaking changes checking: SUCCESS"
+
 if [[ $? -ne -0 ]]; then
   echo "Buf detected breaking changes for your Pull Request. Please verify."
   echo "Please make sure your branch is current against spark/$BRANCH."
