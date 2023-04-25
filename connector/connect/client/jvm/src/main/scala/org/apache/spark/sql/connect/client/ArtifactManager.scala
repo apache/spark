@@ -43,10 +43,14 @@ import org.apache.spark.util.{ThreadUtils, Utils}
  * The Artifact Manager is responsible for handling and transferring artifacts from the local
  * client to the server (local/remote).
  * @param userContext
- * @param sessionId An unique identifier of the session which the artifact manager belongs to.
+ * @param sessionId
+ *   An unique identifier of the session which the artifact manager belongs to.
  * @param channel
  */
-class ArtifactManager(userContext: proto.UserContext, sessionId: String, channel: ManagedChannel) {
+class ArtifactManager(
+    userContext: proto.UserContext,
+    sessionId: String,
+    channel: ManagedChannel) {
   // Using the midpoint recommendation of 32KiB for chunk size as specified in
   // https://github.com/grpc/grpc.github.io/issues/371.
   private val CHUNK_SIZE: Int = 32 * 1024

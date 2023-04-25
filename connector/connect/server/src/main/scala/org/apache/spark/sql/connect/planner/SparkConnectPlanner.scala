@@ -651,7 +651,7 @@ class SparkConnectPlanner(val session: SparkSession) {
       .getOrElse {
         throw InvalidPlanInput(
           s"Not found any cached local relation with the hash: ${blockId.hash} in " +
-          s"the session ${blockId.sessionId} for the user id ${blockId.userId}.")
+            s"the session ${blockId.sessionId} for the user id ${blockId.userId}.")
       }
   }
 
