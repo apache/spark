@@ -129,6 +129,9 @@ message AnalyzePlanRequest {
   message TreeString {
     // (Required) The logical plan to be analyzed.
     Plan plan = 1;
+
+    // (Optional) Max level of the schema.
+    optional int32 level = 2;
   }
 
   message IsLocal {
