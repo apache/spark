@@ -34,14 +34,14 @@ ERROR_CLASSES_JSON = """
       "Attribute `<attr_name>` in provided object `<obj_name>` is not callable."
     ]
   },
-  "CALL_BEFORE_INITIALIZE": {
-    "message": [
-      "Not supported to call `<func_name>` before initialize <object>."
-    ]
-  },
   "BROADCAST_VARIABLE_NOT_LOADED": {
     "message": [
       "Broadcast variable `<variable>` not loaded."
+    ]
+  },
+  "CALL_BEFORE_INITIALIZE": {
+    "message": [
+      "Not supported to call `<func_name>` before initialize <object>."
     ]
   },
   "CANNOT_ACCESS_TO_DUNDER": {
