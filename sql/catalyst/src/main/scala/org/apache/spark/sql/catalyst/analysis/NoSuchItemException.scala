@@ -66,7 +66,11 @@ class NoSuchNamespaceException private(
   }
 
   def this(message: String, cause: Option[Throwable] = None) = {
-    this(message, cause, errorClass = None, messageParameters = Map.empty[String, String])
+    this(
+      message,
+      cause,
+      errorClass = Some("SCHEMA_NOT_FOUND"),
+      messageParameters = Map.empty[String, String])
   }
 }
 
@@ -107,7 +111,11 @@ class NoSuchTableException private(
   }
 
   def this(message: String, cause: Option[Throwable] = None) = {
-    this(message, cause, errorClass = None, messageParameters = Map.empty[String, String])
+    this(
+      message,
+      cause,
+      errorClass = Some("TABLE_OR_VIEW_NOT_FOUND"),
+      messageParameters = Map.empty[String, String])
   }
 }
 
@@ -154,7 +162,10 @@ class NoSuchPartitionException private(
   }
 
   def this(message: String) = {
-    this(message, errorClass = None, messageParameters = Map.empty[String, String])
+    this(
+      message,
+      errorClass = Some("PARTITIONS_NOT_FOUND"),
+      messageParameters = Map.empty[String, String])
   }
 }
 
@@ -192,7 +203,11 @@ class NoSuchFunctionException private(
   }
 
   def this(message: String, cause: Option[Throwable] = None) = {
-    this(message, cause, errorClass = None, messageParameters = Map.empty[String, String])
+    this(
+      message,
+      cause,
+      errorClass = Some("ROUTINE_NOT_FOUND"),
+      messageParameters = Map.empty[String, String])
   }
 }
 
@@ -231,7 +246,10 @@ class NoSuchPartitionsException private(
   }
 
   def this(message: String) = {
-    this(message, errorClass = None, messageParameters = Map.empty[String, String])
+    this(
+      message,
+      errorClass = Some("PARTITIONS_NOT_FOUND"),
+      messageParameters = Map.empty[String, String])
   }
 }
 
@@ -266,6 +284,10 @@ class NoSuchIndexException private(
   }
 
   def this(message: String, cause: Option[Throwable] = None) = {
-    this(message, cause, errorClass = None, messageParameters = Map.empty[String, String])
+    this(
+      message,
+      cause,
+      errorClass = Some("INDEX_NOT_FOUND"),
+      messageParameters = Map.empty[String, String])
   }
 }

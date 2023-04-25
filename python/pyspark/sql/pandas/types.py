@@ -44,6 +44,7 @@ from pyspark.sql.types import (
     NullType,
     DataType,
 )
+from pyspark.errors import PySparkTypeError
 
 if TYPE_CHECKING:
     import pyarrow as pa
@@ -87,27 +88,43 @@ def to_arrow_type(dt: DataType) -> "pa.DataType":
         arrow_type = pa.duration("us")
     elif type(dt) == ArrayType:
         if type(dt.elementType) == TimestampType:
-            raise TypeError("Unsupported type in conversion to Arrow: " + str(dt))
+            raise PySparkTypeError(
+                error_class="UNSUPPORTED_DATA_TYPE",
+                message_parameters={"data_type": str(dt)},
+            )
         elif type(dt.elementType) == StructType:
             if LooseVersion(pa.__version__) < LooseVersion("2.0.0"):
-                raise TypeError(
-                    "Array of StructType is only supported with pyarrow 2.0.0 and above"
+                raise PySparkTypeError(
+                    error_class="UNSUPPORTED_DATA_TYPE_FOR_ARROW_VERSION",
+                    message_parameters={"data_type": "Array of StructType"},
                 )
             if any(type(field.dataType) == StructType for field in dt.elementType):
-                raise TypeError("Nested StructType not supported in conversion to Arrow")
+                raise PySparkTypeError(
+                    error_class="UNSUPPORTED_DATA_TYPE_FOR_ARROW_CONVERSION",
+                    message_parameters={"data_type": "Nested StructType"},
+                )
         arrow_type = pa.list_(to_arrow_type(dt.elementType))
     elif type(dt) == MapType:
         if LooseVersion(pa.__version__) < LooseVersion("2.0.0"):
-            raise TypeError("MapType is only supported with pyarrow 2.0.0 and above")
+            raise PySparkTypeError(
+                error_class="UNSUPPORTED_DATA_TYPE_FOR_ARROW_VERSION",
+                message_parameters={"data_type": "MapType"},
+            )
         if type(dt.keyType) in [StructType, TimestampType] or type(dt.valueType) in [
             StructType,
             TimestampType,
         ]:
-            raise TypeError("Unsupported type in conversion to Arrow: " + str(dt))
+            raise PySparkTypeError(
+                error_class="UNSUPPORTED_DATA_TYPE_FOR_ARROW_CONVERSION",
+                message_parameters={"data_type": str(dt)},
+            )
         arrow_type = pa.map_(to_arrow_type(dt.keyType), to_arrow_type(dt.valueType))
     elif type(dt) == StructType:
         if any(type(field.dataType) == StructType for field in dt):
-            raise TypeError("Nested StructType not supported in conversion to Arrow")
+            raise PySparkTypeError(
+                error_class="UNSUPPORTED_DATA_TYPE_FOR_ARROW_CONVERSION",
+                message_parameters={"data_type": "Nested StructType"},
+            )
         fields = [
             pa.field(field.name, to_arrow_type(field.dataType), nullable=field.nullable)
             for field in dt
@@ -116,7 +133,10 @@ def to_arrow_type(dt: DataType) -> "pa.DataType":
     elif type(dt) == NullType:
         arrow_type = pa.null()
     else:
-        raise TypeError("Unsupported type in conversion to Arrow: " + str(dt))
+        raise PySparkTypeError(
+            error_class="UNSUPPORTED_DATA_TYPE_FOR_ARROW_CONVERSION",
+            message_parameters={"data_type": str(dt)},
+        )
     return arrow_type
 
 
@@ -168,17 +188,29 @@ def from_arrow_type(at: "pa.DataType", prefer_timestamp_ntz: bool = False) -> Da
         spark_type = DayTimeIntervalType()
     elif types.is_list(at):
         if types.is_timestamp(at.value_type):
-            raise TypeError("Unsupported type in conversion from Arrow: " + str(at))
+            raise PySparkTypeError(
+                error_class="UNSUPPORTED_DATA_TYPE_FOR_ARROW_CONVERSION",
+                message_parameters={"data_type": str(at)},
+            )
         spark_type = ArrayType(from_arrow_type(at.value_type))
     elif types.is_map(at):
         if LooseVersion(pa.__version__) < LooseVersion("2.0.0"):
-            raise TypeError("MapType is only supported with pyarrow 2.0.0 and above")
+            raise PySparkTypeError(
+                error_class="UNSUPPORTED_DATA_TYPE_FOR_ARROW_VERSION",
+                message_parameters={"data_type": "MapType"},
+            )
         if types.is_timestamp(at.key_type) or types.is_timestamp(at.item_type):
-            raise TypeError("Unsupported type in conversion from Arrow: " + str(at))
+            raise PySparkTypeError(
+                error_class="UNSUPPORTED_DATA_TYPE_FOR_ARROW_CONVERSION",
+                message_parameters={"data_type": str(at)},
+            )
         spark_type = MapType(from_arrow_type(at.key_type), from_arrow_type(at.item_type))
     elif types.is_struct(at):
         if any(types.is_struct(field.type) for field in at):
-            raise TypeError("Nested StructType not supported in conversion from Arrow: " + str(at))
+            raise PySparkTypeError(
+                error_class="UNSUPPORTED_DATA_TYPE_FOR_ARROW_CONVERSION",
+                message_parameters={"data_type": "Nested StructType"},
+            )
         return StructType(
             [
                 StructField(field.name, from_arrow_type(field.type), nullable=field.nullable)
@@ -190,7 +222,10 @@ def from_arrow_type(at: "pa.DataType", prefer_timestamp_ntz: bool = False) -> Da
     elif types.is_null(at):
         spark_type = NullType()
     else:
-        raise TypeError("Unsupported type in conversion from Arrow: " + str(at))
+        raise PySparkTypeError(
+            error_class="UNSUPPORTED_DATA_TYPE_FOR_ARROW_CONVERSION",
+            message_parameters={"data_type": str(at)},
+        )
     return spark_type
 
 
