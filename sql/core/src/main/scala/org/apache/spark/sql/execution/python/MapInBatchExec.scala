@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.python
 import scala.collection.JavaConverters._
 
 import org.apache.spark.{ContextAwareIterator, TaskContext}
-import org.apache.spark.api.python.ChainedPythonFunctions
+import org.apache.spark.api.python.{ChainedPythonFunctions, PythonEnvSetupUtils}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
@@ -50,6 +50,12 @@ trait MapInBatchExec extends UnaryExecNode with PythonSQLMetrics {
   private val batchSize = conf.arrowMaxRecordsPerBatch
 
   override def outputPartitioning: Partitioning = child.outputPartitioning
+
+  protected override def doPrepare(): Unit = {
+    PythonEnvSetupUtils.setupPythonEnvOnSparkDriverIfAvailable(
+      pythonFunction.pipDependencies, pythonFunction.pipConstraints
+    )
+  }
 
   override protected def doExecute(): RDD[InternalRow] = {
     def mapper(inputIter: Iterator[InternalRow]): Iterator[InternalRow] = {

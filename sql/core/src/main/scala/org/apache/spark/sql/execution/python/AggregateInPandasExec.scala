@@ -22,7 +22,7 @@ import java.io.File
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.{SparkEnv, TaskContext}
-import org.apache.spark.api.python.{ChainedPythonFunctions, PythonEvalType}
+import org.apache.spark.api.python.{ChainedPythonFunctions, PythonEnvSetupUtils, PythonEvalType}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
@@ -91,6 +91,15 @@ case class AggregateInPandasExec(
         assert(children.forall(!_.exists(_.isInstanceOf[PythonUDF])))
         (ChainedPythonFunctions(Seq(udf.func)), udf.children)
     }
+  }
+
+  protected override def doPrepare(): Unit = {
+    val (pyFuncs, _) = udfExpressions.map(collectFunctions).unzip
+    val (pipDeps, pipConstraints) =
+      PythonEnvSetupUtils.getPipRequirementsFromChainedPythonFuncs(pyFuncs)
+    PythonEnvSetupUtils.setupPythonEnvOnSparkDriverIfAvailable(
+      pipDeps, pipConstraints
+    )
   }
 
   override protected def doExecute(): RDD[InternalRow] = {

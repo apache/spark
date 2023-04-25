@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.python
 
-import org.apache.spark.api.python.{ChainedPythonFunctions, PythonEvalType}
+import org.apache.spark.api.python.{ChainedPythonFunctions, PythonEnvSetupUtils, PythonEvalType}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
@@ -74,6 +74,14 @@ case class FlatMapCoGroupsInPandasExec(
   override def requiredChildOrdering: Seq[Seq[SortOrder]] = {
     leftGroup
       .map(SortOrder(_, Ascending)) :: rightGroup.map(SortOrder(_, Ascending)) :: Nil
+  }
+
+  protected override def doPrepare(): Unit = {
+    val (pipDeps, pipConstraints) =
+      PythonEnvSetupUtils.getPipRequirementsFromChainedPythonFuncs(chainedFunc)
+    PythonEnvSetupUtils.setupPythonEnvOnSparkDriverIfAvailable(
+      pipDeps, pipConstraints
+    )
   }
 
   override protected def doExecute(): RDD[InternalRow] = {

@@ -106,25 +106,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
   protected val pythonVer: String = funcs.head.funcs.head.pythonVer
 
   protected val (pipDependencies: Seq[String], pipConstraints: Seq[String]) = {
-    val headPipDeps = funcs.head.funcs.head.pipDependencies
-    val headPipConstraints = funcs.head.funcs.head.pipConstraints
-
-    for (chainedFunc <- funcs) {
-      for (simpleFunc <- chainedFunc.funcs) {
-        if (simpleFunc.pipDependencies != headPipDeps ||
-            simpleFunc.pipConstraints != headPipConstraints
-        ) {
-          // TODO: For this case, we should split current python runner
-          //  into multiple python runners.
-          throw new RuntimeException(
-            "We cannot support the case that a python runner contains functions with " +
-            "different python dependency requirements."
-          )
-        }
-      }
-    }
-
-    (headPipDeps, headPipConstraints)
+    PythonEnvSetupUtils.getPipRequirementsFromChainedPythonFuncs(funcs)
   }
 
   // TODO: support accumulator in multiple UDF
@@ -182,11 +164,20 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
       envVars.put("PYTHON_FAULTHANDLER_DIR", BasePythonRunner.faultHandlerLogDir.toString)
     }
 
-    val rootPythonEvnDir = Option(context.getLocalProperty("pythonEnv.rootEnvDir")).getOrElse(
-      new File(SparkFiles.getRootDirectory(), "spark-udf-python-env-root").getPath
-    )
+    // If local property "pythonEnv.allSparkNodesReadableRootEnvDir" is set,
+    // then driver side has initiated a python environment in this directory.
+    // `env.createPythonWorker` can reuse the python environment set up in driver side.
+    val rootPythonEvnDir = Option(
+      context.getLocalProperty("pythonEnv.allSparkNodesReadableRootEnvDir")
+    ).getOrElse {
+      // Create a root python env directory on spark worker node.
+      val rootDir = new File(SparkFiles.getRootDirectory(), "spark-udf-python-env-root")
+      rootDir.mkdirs()
+      rootDir.getPath
+    }
     val (worker: Socket, pid: Option[Int]) = env.createPythonWorker(
-      pythonExec, envVars.asScala.toMap, pipDependencies, pipConstraints, rootPythonEvnDir)
+      pythonExec, envVars.asScala.toMap, pipDependencies, pipConstraints, rootPythonEvnDir
+    )
     // Whether is the worker released into idle pool or closed. When any codes try to release or
     // close a worker, they should use `releasedOrClosed.compareAndSet` to flip the state to make
     // sure there is only one winner that is going to release or close the worker.
@@ -597,7 +588,9 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
       // Check whether the worker is ready to be re-used.
       if (stream.readInt() == SpecialLengths.END_OF_STREAM) {
         if (reuseWorker && releasedOrClosed.compareAndSet(false, true)) {
-          env.releasePythonWorker(pythonExec, envVars.asScala.toMap, worker)
+          env.releasePythonWorker(
+            pythonExec, envVars.asScala.toMap, pipDependencies, pipConstraints, worker
+          )
         }
       }
       eos = true
@@ -652,7 +645,9 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
             val taskName = s"${context.partitionId}.${context.attemptNumber} " +
               s"in stage ${context.stageId} (TID ${context.taskAttemptId})"
             logWarning(s"Incomplete task $taskName interrupted: Attempting to kill Python Worker")
-            env.destroyPythonWorker(pythonExec, envVars.asScala.toMap, worker)
+            env.destroyPythonWorker(
+              pythonExec, envVars.asScala.toMap, pipDependencies, pipConstraints, worker
+            )
           } catch {
             case e: Exception =>
               logError("Exception when trying to kill worker", e)

@@ -22,7 +22,7 @@ import java.io.File
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.{ContextAwareIterator, SparkEnv, TaskContext}
-import org.apache.spark.api.python.ChainedPythonFunctions
+import org.apache.spark.api.python.{ChainedPythonFunctions, PythonEnvSetupUtils}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
@@ -83,6 +83,15 @@ trait EvalPythonExec extends UnaryExecNode {
       iter: Iterator[InternalRow],
       schema: StructType,
       context: TaskContext): Iterator[InternalRow]
+
+  protected override def doPrepare(): Unit = {
+    val (pyFuncs, _) = udfs.map(collectFunctions).unzip
+    val (pipDeps, pipConstraints) =
+      PythonEnvSetupUtils.getPipRequirementsFromChainedPythonFuncs(pyFuncs)
+    PythonEnvSetupUtils.setupPythonEnvOnSparkDriverIfAvailable(
+      pipDeps, pipConstraints
+    )
+  }
 
   protected override def doExecute(): RDD[InternalRow] = {
     val inputRDD = child.execute().map(_.copy())

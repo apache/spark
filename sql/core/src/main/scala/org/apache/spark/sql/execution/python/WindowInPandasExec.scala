@@ -23,7 +23,7 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.{SparkEnv, TaskContext}
-import org.apache.spark.api.python.{ChainedPythonFunctions, PythonEvalType}
+import org.apache.spark.api.python.{ChainedPythonFunctions, PythonEnvSetupUtils, PythonEvalType}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
@@ -159,6 +159,25 @@ case class WindowInPandasExec(
     def upperBoundIndex(frameIndex: Int) = boundIndices(frameIndex)._2
 
     (requiredIndices.sum, lowerBoundIndex, upperBoundIndex, windowBoundTypes)
+  }
+
+  protected override def doPrepare(): Unit = {
+    // Unwrap the expressions and factories from the map.
+    val expressions = windowFrameExpressionFactoryPairs.map(_._1).flatten
+
+    // Extract window expressions and window functions
+    val windowExpressions = expressions.flatMap(_.collect { case e: WindowExpression => e })
+    val udfExpressions = windowExpressions.map(_.windowFunction.asInstanceOf[PythonUDF])
+
+    // We shouldn't be chaining anything here.
+    // All chained python functions should only contain one function.
+    val (pyFuncs, _) = udfExpressions.map(collectFunctions).unzip
+
+    val (pipDeps, pipConstraints) =
+      PythonEnvSetupUtils.getPipRequirementsFromChainedPythonFuncs(pyFuncs)
+    PythonEnvSetupUtils.setupPythonEnvOnSparkDriverIfAvailable(
+      pipDeps, pipConstraints
+    )
   }
 
   protected override def doExecute(): RDD[InternalRow] = {

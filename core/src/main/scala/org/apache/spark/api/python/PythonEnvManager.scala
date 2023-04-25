@@ -28,9 +28,6 @@ import org.apache.commons.codec.digest.DigestUtils
 import org.apache.spark.SPARK_VERSION
 import org.apache.spark.util.Utils
 
-class PythonEnvManager {
-
-}
 
 object PythonEnvManager {
 
@@ -54,6 +51,7 @@ object PythonEnvManager {
     "python-" + DigestUtils.sha1Hex(data)
   }
 
+  // TODO: Support creating python env with specified python version.
   def getOrCreatePythonEnvironment(
                                     pythonExec: String,
                                     rootEnvDir: String,
@@ -61,7 +59,14 @@ object PythonEnvManager {
                                     pipConstraints: Seq[String]
                                   ): String = {
     // Adds a global lock when creating python environment,
-    // to avoid race condition.
+    // to avoid race conditions.
+    // race conditions includes:
+    //  - python env under the same rootEnvDir shares the pip cache directory,
+    //    but concurrent pip installation causes race condition
+    //  - When creating environment failed, we need to clean the directory,
+    //    concurrent creation/deletion causes race condition
+    // TODO: use file lock instead to ensure safety, e.g. the case that multiple
+    //  spark executors running on the same machine.
     synchronized {
       val key = getPythonEnvironmentKey(pipDependencies, pipConstraints)
       val envDir = Path.of(rootEnvDir, key).toString

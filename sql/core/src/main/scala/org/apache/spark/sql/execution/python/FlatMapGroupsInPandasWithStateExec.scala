@@ -17,7 +17,7 @@
 package org.apache.spark.sql.execution.python
 
 import org.apache.spark.TaskContext
-import org.apache.spark.api.python.{ChainedPythonFunctions, PythonEvalType}
+import org.apache.spark.api.python.{ChainedPythonFunctions, PythonEnvSetupUtils, PythonEvalType}
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.{ExpressionEncoder, RowEncoder}
@@ -117,6 +117,14 @@ case class FlatMapGroupsInPandasWithStateExec(
 
   override protected def withNewChildInternal(
       newChild: SparkPlan): FlatMapGroupsInPandasWithStateExec = copy(child = newChild)
+
+  protected override def doPrepare(): Unit = {
+    val (pipDeps, pipConstraints) =
+      PythonEnvSetupUtils.getPipRequirementsFromChainedPythonFuncs(chainedFunc)
+    PythonEnvSetupUtils.setupPythonEnvOnSparkDriverIfAvailable(
+      pipDeps, pipConstraints
+    )
+  }
 
   override def createInputProcessor(
       store: StateStore): InputProcessor = new InputProcessor(store: StateStore) {
