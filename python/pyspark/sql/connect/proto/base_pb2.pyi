@@ -233,18 +233,33 @@ class AnalyzePlanRequest(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
         PLAN_FIELD_NUMBER: builtins.int
+        LEVEL_FIELD_NUMBER: builtins.int
         @property
         def plan(self) -> global___Plan:
             """(Required) The logical plan to be analyzed."""
+        level: builtins.int
+        """(Optional) Max level of the schema."""
         def __init__(
             self,
             *,
             plan: global___Plan | None = ...,
+            level: builtins.int | None = ...,
         ) -> None: ...
         def HasField(
-            self, field_name: typing_extensions.Literal["plan", b"plan"]
+            self,
+            field_name: typing_extensions.Literal[
+                "_level", b"_level", "level", b"level", "plan", b"plan"
+            ],
         ) -> builtins.bool: ...
-        def ClearField(self, field_name: typing_extensions.Literal["plan", b"plan"]) -> None: ...
+        def ClearField(
+            self,
+            field_name: typing_extensions.Literal[
+                "_level", b"_level", "level", b"level", "plan", b"plan"
+            ],
+        ) -> None: ...
+        def WhichOneof(
+            self, oneof_group: typing_extensions.Literal["_level", b"_level"]
+        ) -> typing_extensions.Literal["level"] | None: ...
 
     class IsLocal(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor

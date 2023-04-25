@@ -17,9 +17,10 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Cast}
+import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Cast}
 import org.apache.spark.sql.catalyst.expressions.objects.AssertNotNull
-import org.apache.spark.sql.catalyst.plans.logical.{Assignment, LogicalPlan, MergeIntoTable, UpdateTable}
+import org.apache.spark.sql.catalyst.plans.logical.{Assignment, DeleteAction, InsertAction, LogicalPlan, MergeAction, MergeIntoTable, UpdateAction, UpdateTable}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.COMMAND
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
@@ -42,17 +43,23 @@ object ResolveRowLevelCommandAssignments extends Rule[LogicalPlan] {
     case u: UpdateTable if !u.skipSchemaResolution && u.resolved &&
         supportsRowLevelOperations(u.table) && !u.aligned =>
       validateStoreAssignmentPolicy()
-      val newTable = u.table.transform {
-        case r: DataSourceV2Relation =>
-          r.copy(output = r.output.map(CharVarcharUtils.cleanAttrMetadata))
-      }
-      val newAssignments = AssignmentUtils.alignAssignments(u.table.output, u.assignments)
+      val newTable = cleanAttrMetadata(u.table)
+      val newAssignments = AssignmentUtils.alignUpdateAssignments(u.table.output, u.assignments)
       u.copy(table = newTable, assignments = newAssignments)
 
     case u: UpdateTable if !u.skipSchemaResolution && u.resolved && !u.aligned =>
       resolveAssignments(u)
 
-    case m: MergeIntoTable if !m.skipSchemaResolution && m.resolved =>
+    case m: MergeIntoTable if !m.skipSchemaResolution && m.resolved &&
+        supportsRowLevelOperations(m.targetTable) && !m.aligned =>
+      validateStoreAssignmentPolicy()
+      m.copy(
+        targetTable = cleanAttrMetadata(m.targetTable),
+        matchedActions = alignActions(m.targetTable.output, m.matchedActions),
+        notMatchedActions = alignActions(m.targetTable.output, m.notMatchedActions),
+        notMatchedBySourceActions = alignActions(m.targetTable.output, m.notMatchedBySourceActions))
+
+    case m: MergeIntoTable if !m.skipSchemaResolution && m.resolved && !m.aligned =>
       resolveAssignments(m)
   }
 
@@ -60,6 +67,13 @@ object ResolveRowLevelCommandAssignments extends Rule[LogicalPlan] {
     // SPARK-28730: LEGACY store assignment policy is disallowed in data source v2
     if (conf.storeAssignmentPolicy == StoreAssignmentPolicy.LEGACY) {
       throw QueryCompilationErrors.legacyStoreAssignmentPolicyError()
+    }
+  }
+
+  private def cleanAttrMetadata(table: LogicalPlan): LogicalPlan = {
+    table.transform {
+      case r: DataSourceV2Relation =>
+        r.copy(output = r.output.map(CharVarcharUtils.cleanAttrMetadata))
     }
   }
 
@@ -98,6 +112,21 @@ object ResolveRowLevelCommandAssignments extends Rule[LogicalPlan] {
           case a: AttributeReference => CharVarcharUtils.cleanAttrMetadata(a)
         }
         Assignment(cleanedKey, finalValue)
+    }
+  }
+
+  private def alignActions(
+      attrs: Seq[Attribute],
+      actions: Seq[MergeAction]): Seq[MergeAction] = {
+    actions.map {
+      case u @ UpdateAction(_, assignments) =>
+        u.copy(assignments = AssignmentUtils.alignUpdateAssignments(attrs, assignments))
+      case d: DeleteAction =>
+        d
+      case i @ InsertAction(_, assignments) =>
+        i.copy(assignments = AssignmentUtils.alignInsertAssignments(attrs, assignments))
+      case other =>
+        throw new AnalysisException(s"Unexpected resolved action: $other")
     }
   }
 }

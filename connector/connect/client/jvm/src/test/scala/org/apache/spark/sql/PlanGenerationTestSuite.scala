@@ -2170,6 +2170,11 @@ class PlanGenerationTestSuite
     session.read.options(Map("p1" -> "v1", "p2" -> "v2")).table("tempdb.myTable")
   }
 
+  /* Stream Reader API  */
+  test("streaming table API with options") {
+    session.readStream.options(Map("p1" -> "v1", "p2" -> "v2")).table("tempdb.myStreamingTable")
+  }
+
   /* Avro functions */
   test("from_avro with options") {
     binary.select(
