@@ -231,7 +231,7 @@ class SortBasedAggregator(
   // external sorter to sort the input (grouping key + input row) with grouping key.
   private val inputSorter = createExternalSorterForInput()
   private val groupingKeyOrdering: BaseOrdering = GenerateOrdering.create(groupingSchema)
-  // A reused aggregation buffer which should be initialized when finding a new grouping key
+  // A reused aggregation buffer which should be reset when finding a new grouping key
   private val sortBasedAggregationBuffer: InternalRow =
     new GenericInternalRow(aggregationBufferSize)
 
@@ -250,6 +250,21 @@ class SortBasedAggregator(
       var hasNextAggBuffer: Boolean = initialAggBufferIterator.next()
       private var result: AggregationBufferEntry = _
       private var groupingKey: UnsafeRow = _
+      /**
+       * A flag to represent how to process row for current grouping key:
+       *  0: update input row to aggregation buffer
+       *  1: merge input aggregation buffer to sort based aggregation buffer
+       *  2: first update input row to aggregation buffer then merge it to sort based
+       *     aggregation buffer
+       *
+       * The state transition is:
+       * - If `initialAggBufferIterator` has no more row, then it's 0
+       * - If `inputIterator` has no more row, then then it's 1
+       * - If the grouping key of `initialAggBufferIterator` is bigger, then it's 0
+       * - If the grouping key of `inputIterator` is bigger, then it's 1
+       * - If the grouping key of `initialAggBufferIterator` and `inputIterator` are equivalent,
+       *   then it's 2
+       */
       private var aggregateMode: Int = _
 
       override def hasNext(): Boolean = {
@@ -295,14 +310,6 @@ class SortBasedAggregator(
         }
       }
 
-      /**
-       * This function has a side effect that updates `aggregateMode` to represent:
-       * 0: the grouping key belongs to input rows, and we should update it to aggregation buffer
-       * 1: the grouping key belongs to input aggregation buffer, and we should merge it to
-       *    aggregation buffer
-       * 2: the grouping key exists in both input rows and aggregation buffer, and we should first
-       *    update then merge it
-       */
       private def findGroupingKey(): UnsafeRow = {
         var newGroupingKey: UnsafeRow = null
         if (!hasNextInput) {
