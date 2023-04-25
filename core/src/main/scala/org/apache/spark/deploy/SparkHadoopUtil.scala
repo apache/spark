@@ -27,6 +27,7 @@ import scala.collection.JavaConverters._
 import scala.collection.immutable.Map
 import scala.collection.mutable
 import scala.collection.mutable.HashMap
+import scala.language.existentials
 import scala.util.control.NonFatal
 
 import com.google.common.primitives.Longs
