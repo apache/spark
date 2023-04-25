@@ -1097,15 +1097,44 @@ class StreamingQueryCommandResult(google.protobuf.message.Message):
         def __init__(
             self,
             *,
-            exception_message: builtins.str = ...,
-            error_class: builtins.str = ...,
+            exception_message: builtins.str | None = ...,
+            error_class: builtins.str | None = ...,
         ) -> None: ...
+        def HasField(
+            self,
+            field_name: typing_extensions.Literal[
+                "_error_class",
+                b"_error_class",
+                "_exception_message",
+                b"_exception_message",
+                "error_class",
+                b"error_class",
+                "exception_message",
+                b"exception_message",
+            ],
+        ) -> builtins.bool: ...
         def ClearField(
             self,
             field_name: typing_extensions.Literal[
-                "error_class", b"error_class", "exception_message", b"exception_message"
+                "_error_class",
+                b"_error_class",
+                "_exception_message",
+                b"_exception_message",
+                "error_class",
+                b"error_class",
+                "exception_message",
+                b"exception_message",
             ],
         ) -> None: ...
+        @typing.overload
+        def WhichOneof(
+            self, oneof_group: typing_extensions.Literal["_error_class", b"_error_class"]
+        ) -> typing_extensions.Literal["error_class"] | None: ...
+        @typing.overload
+        def WhichOneof(
+            self,
+            oneof_group: typing_extensions.Literal["_exception_message", b"_exception_message"],
+        ) -> typing_extensions.Literal["exception_message"] | None: ...
 
     class AwaitTerminationResult(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
