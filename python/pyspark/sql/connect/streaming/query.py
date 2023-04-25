@@ -145,9 +145,8 @@ class StreamingQuery:
         cmd.exception = True
         exception = self._execute_streaming_query_cmd(cmd).exception
         if exception.HasField("exception_message"):
-            msg = exception.exception_message.split(": ", 1)[
-                1
-            ]  # Drop the Java StreamingQueryException type info
+            # Drop the Java StreamingQueryException type info
+            msg = exception.exception_message.split(": ", 1)[1]
             return CapturedStreamingQueryException(msg)
         else:
             return None
