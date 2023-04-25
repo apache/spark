@@ -577,6 +577,7 @@ public final class OnHeapColumnVector extends WritableColumnVector {
 
     BitSet newNulls = new BitSet(newCapacity);
     if (nulls != null) newNulls.or(nulls);
+    nulls = newNulls;
 
     capacity = newCapacity;
   }
