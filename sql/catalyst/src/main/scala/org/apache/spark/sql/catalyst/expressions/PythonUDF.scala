@@ -41,11 +41,10 @@ object PythonUDF {
     e.isInstanceOf[PythonUDF] && SCALAR_TYPES.contains(e.asInstanceOf[PythonUDF].evalType)
   }
 
-  def isWindowPandasUDF(e: Expression): Boolean = {
-    e.isInstanceOf[PythonUDF] &&
-      // This is currently SQL_GROUPED_AGG_PANDAS_UDF, but we might support new types in the future,
-      // e.g, N -> N transform.
-      e.asInstanceOf[PythonUDF].evalType == PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF
+  def isWindowPandasUDF(e: PythonFuncExpression): Boolean = {
+    // This is currently only `PythonUDAF` (which means SQL_GROUPED_AGG_PANDAS_UDF), but we might
+    // support new types in the future, e.g, N -> N transform.
+    e.isInstanceOf[PythonUDAF]
   }
 }
 

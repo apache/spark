@@ -377,7 +377,7 @@ object WindowFunctionType {
   def functionType(windowExpression: NamedExpression): WindowFunctionType = {
     val t = windowExpression.collectFirst {
       case _: WindowFunction | _: AggregateFunction => SQL
-      case udf: PythonUDF if PythonUDF.isWindowPandasUDF(udf) => Python
+      case udf: PythonFuncExpression if PythonUDF.isWindowPandasUDF(udf) => Python
     }
 
     // Normally a window expression would either have a SQL window function, a SQL

@@ -457,7 +457,7 @@ trait RuntimeReplaceableAggregate extends RuntimeReplaceable { self: AggregateFu
  */
 trait NonSQLExpression extends Expression {
   final override def sql: String = {
-    transformUp {
+    transform {
       case a: Attribute => new PrettyAttribute(a)
       case a: Alias => PrettyAttribute(a.sql, a.dataType)
       case p: PythonFuncExpression => PrettyPythonUDF(p.name, p.dataType, p.children)
