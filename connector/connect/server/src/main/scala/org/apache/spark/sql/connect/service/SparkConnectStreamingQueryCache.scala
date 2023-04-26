@@ -50,6 +50,7 @@ import org.apache.spark.util.SystemClock
  *     - During this time if the query is restarted (i.e. has a new run id), the reference to
  *       previous run is dropped. As a result logical query has only the most recent query
  *       reference cached. This policy can be revisited to cache multiple runs for a query.
+ *
  * Note that these semantics are evolving and might change before being finalized in Connect.
  */
 private[connect] class SparkConnectStreamingQueryCache(
