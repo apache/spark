@@ -266,7 +266,7 @@ object FileFormat {
    */
   val BASE_METADATA_EXTRACTORS: Map[String, PartitionedFile => Any] = Map(
     FILE_PATH -> { pf: PartitionedFile => pf.filePath.urlEncoded },
-    FILE_NAME -> { pf: PartitionedFile => new Path(pf.filePath.urlEncoded).getName },
+    FILE_NAME -> { pf: PartitionedFile => new Path(pf.filePath.toUri.getRawPath).getName },
     FILE_SIZE -> { pf: PartitionedFile => pf.fileSize },
     FILE_BLOCK_START -> { pf: PartitionedFile => pf.start },
     FILE_BLOCK_LENGTH -> { pf: PartitionedFile => pf.length },
