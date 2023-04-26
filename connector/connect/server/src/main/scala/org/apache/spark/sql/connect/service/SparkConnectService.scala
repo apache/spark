@@ -270,8 +270,8 @@ object SparkConnectService {
 
   private[connect] val streamingSessionManager =
     new SparkConnectStreamingQueryCache(sessionKeepAliveFn = { case (userId, sessionId) =>
+      // Use getIfPresent() rather than get() to prevent accidental loading.
       userSessionMapping.getIfPresent((userId, sessionId))
-    // getIfPresent() prevents accidental loading.
     })
 
   // Simple builder for creating the cache of Sessions.
