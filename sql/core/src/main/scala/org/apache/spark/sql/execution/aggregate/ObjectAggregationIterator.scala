@@ -254,8 +254,8 @@ class SortBasedAggregator(
        * A flag to represent how to process row for current grouping key:
        *  0: update input row to `sortBasedAggregationBuffer`
        *  1: merge input aggregation buffer to `sortBasedAggregationBuffer`
-       *  2: first update input row to aggregation buffer then merge it to
-       *     `sortBasedAggregationBuffer`
+       *  2: first update input row to `sortBasedAggregationBuffer` then merge
+       *     input aggregation buffer to `sortBasedAggregationBuffer`
        *
        * The state transition is:
        * - If `initialAggBufferIterator` has no more row, then it's 0
