@@ -618,7 +618,10 @@ class UDFRegistration:
             ]:
                 raise PySparkTypeError(
                     error_class="INVALID_UDF_EVAL_TYPE",
-                    message_parameters={},
+                    message_parameters={
+                        "eval_type": "SQL_BATCHED_UDF, SQL_SCALAR_PANDAS_UDF, "
+                        "SQL_SCALAR_PANDAS_ITER_UDF or SQL_GROUPED_AGG_PANDAS_UDF"
+                    },
                 )
             register_udf = _create_udf(
                 f.func,
