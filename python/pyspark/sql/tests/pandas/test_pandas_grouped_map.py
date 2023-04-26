@@ -596,7 +596,7 @@ class GroupedApplyInPandasTestsMixin:
             with QuietTest(self.sc):
                 with self.assertRaisesRegex(
                     PythonException,
-                    "RuntimeError: Column names of the returned pandas.DataFrame do not match "
+                    "Column names of the returned pandas.DataFrame do not match "
                     "specified schema. Missing: id. Unexpected: iid.\n",
                 ):
                     grouped_df.apply(column_name_typo).collect()
