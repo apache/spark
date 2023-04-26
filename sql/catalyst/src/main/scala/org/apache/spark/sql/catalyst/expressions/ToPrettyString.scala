@@ -55,7 +55,7 @@ case class ToPrettyString(child: Expression, timeZoneId: Option[String] = None)
 
   override def eval(input: InternalRow): Any = {
     val v = child.eval(input)
-    if (v == null) UTF8String.fromString("NULL") else castFunc(v)
+    if (v == null) UTF8String.fromString(nullString) else castFunc(v)
   }
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -66,7 +66,7 @@ case class ToPrettyString(child: Expression, timeZoneId: Option[String] = None)
          |${childCode.code}
          |UTF8String ${ev.value};
          |if (${childCode.isNull}) {
-         |  ${ev.value} = UTF8String.fromString("NULL");
+         |  ${ev.value} = UTF8String.fromString("$nullString");
          |} else {
          |  $toStringCode
          |}
