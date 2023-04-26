@@ -18,7 +18,7 @@
 package org.apache.spark.api.python
 
 import java.io.{File, PrintWriter}
-import java.nio.file.{Files, Path}
+import java.nio.file.Path
 
 import scala.collection.JavaConverters._
 import scala.util.Using
@@ -115,52 +115,46 @@ object PythonEnvManager {
 
     val newPythonExec = Path.of(envDir, "bin", "python").toString
 
-    val pipTempDir = Files.createTempDirectory("pip-temp-").toString
+    val pipReqFilePath = Path.of(envDir, "requirements.txt").toString
+    val pipConstraintsFilePath = Path.of(envDir, "constraints.txt").toString
 
-    try {
-      val pipReqFilePath = Path.of(pipTempDir, "requirements.txt").toString
-      val pipConstraintsFilePath = Path.of(pipTempDir, "constraints.txt").toString
-
-      Using(new PrintWriter(pipReqFilePath)) { writer =>
-        for (req <- pipDependencies) {
-          writer.print(req)
-          writer.print(System.lineSeparator())
-        }
-
-        writer.print(s"-c $pipConstraintsFilePath")
+    Using(new PrintWriter(pipReqFilePath)) { writer =>
+      for (req <- pipDependencies) {
+        writer.print(req)
         writer.print(System.lineSeparator())
       }
 
-      Using(new PrintWriter(pipConstraintsFilePath)) { writer =>
-        for (constraint <- pipConstraints) {
-          writer.print(constraint)
-          writer.print(System.lineSeparator())
-        }
-      }
-
-      logger.info(
-        "Start installing dependencies into python environment, reqirement file is " +
-        s"$pipReqFilePath"
-      )
-      val pipPb = new ProcessBuilder(
-        java.util.Arrays.asList(newPythonExec, "-m", "pip", "install", "-r", pipReqFilePath)
-      )
-      pipPb.environment().putAll(
-        getVirtualenvCommandExtraEnv(rootEnvDir).asJava
-      )
-      pipPb.inheritIO()
-      val pipProc = pipPb.start()
-      val pipRetCode = pipProc.waitFor()
-
-      if (pipRetCode != 0) {
-        throw new RuntimeException(
-          s"Create python environment by virtualenv command failed (return code is $pipRetCode)."
-        )
-      }
-
-      logger.info("Python environment is created successfully")
-    } finally {
-      // Utils.deleteRecursively(new File(pipTempDir))
+      writer.print(s"-c $pipConstraintsFilePath")
+      writer.print(System.lineSeparator())
     }
+
+    Using(new PrintWriter(pipConstraintsFilePath)) { writer =>
+      for (constraint <- pipConstraints) {
+        writer.print(constraint)
+        writer.print(System.lineSeparator())
+      }
+    }
+
+    logger.info(
+      "Start installing dependencies into python environment, reqirement file is " +
+      s"$pipReqFilePath"
+    )
+    val pipPb = new ProcessBuilder(
+      java.util.Arrays.asList(newPythonExec, "-m", "pip", "install", "-r", pipReqFilePath)
+    )
+    pipPb.environment().putAll(
+      getVirtualenvCommandExtraEnv(rootEnvDir).asJava
+    )
+    pipPb.inheritIO()
+    val pipProc = pipPb.start()
+    val pipRetCode = pipProc.waitFor()
+
+    if (pipRetCode != 0) {
+      throw new RuntimeException(
+        s"Create python environment by virtualenv command failed (return code is $pipRetCode)."
+      )
+    }
+
+    logger.info("Python environment is created successfully")
   }
 }
