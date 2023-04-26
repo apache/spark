@@ -115,11 +115,8 @@ trait StreamingQuery {
    * immediately (if the query was terminated by `stop()`), or throw the exception
    * immediately (if the query has terminated with exception).
    *
-   * @throws StreamingQueryException if the query has terminated with an exception.
-   *
    * @since 3.5.0
    */
-  @throws[StreamingQueryException]
   def awaitTermination(): Unit
 
   /**
@@ -132,11 +129,8 @@ trait StreamingQuery {
    * `true` immediately (if the query was terminated by `stop()`), or throw the exception
    * immediately (if the query has terminated with exception).
    *
-   * @throws StreamingQueryException if the query has terminated with an exception
-   *
    * @since 3.5.0
    */
-  @throws[StreamingQueryException]
   def awaitTermination(timeoutMs: Long): Boolean
 
 
