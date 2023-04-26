@@ -1089,7 +1089,9 @@ class StreamingQueryCommandResult(google.protobuf.message.Message):
         EXCEPTION_MESSAGE_FIELD_NUMBER: builtins.int
         ERROR_CLASS_FIELD_NUMBER: builtins.int
         exception_message: builtins.str
-        """(Optional) Exception message as string"""
+        """(Optional) Exception message as string, maps to the return value of original
+        StreamingQueryException's toString method
+        """
         error_class: builtins.str
         """(Optional) Exception error class as string
         TODO(SPARK-43206): Add stack trace
