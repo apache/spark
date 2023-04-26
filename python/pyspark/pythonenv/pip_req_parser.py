@@ -80,6 +80,21 @@ def _join_continued_lines(lines):
         yield "".join(continued_lines)
 
 
+_req_line_regex = re.compile(r'^([a-z-_][0-9a-z-_]*).*', re.IGNORECASE)
+
+
+def _verify_req_line(line):
+    match = _req_line_regex.match(line)
+    if match is None:
+        raise ValueError(f"This pip requirement line is invalid: '{line}'")
+    if match.group(1).lower() == "pyspark":
+        raise ValueError(
+            "pyspark dependency or constraint is disallowed to set for pyspark UDF, "
+            "pyspark UDF worker python environment always install pyspark package with "
+            "exactly the same version with server side spark."
+        )
+
+
 def _parse_requirements(requirements, is_constraint, base_dir=None):
     """
     A simplified version of `pip._internal.req.parse_requirements` which performs the following
@@ -128,6 +143,7 @@ def _parse_requirements(requirements, is_constraint, base_dir=None):
             abs_path = os.path.join(base_dir, req_file)
             yield from _parse_requirements(abs_path, is_constraint=True)
         else:
+            _verify_req_line(line)
             yield _Requirement(line, is_constraint)
 
 
