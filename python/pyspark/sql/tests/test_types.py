@@ -66,6 +66,7 @@ from pyspark.testing.sqlutils import (
     PythonOnlyPoint,
     MyObject,
 )
+from pyspark.testing.utils import PySparkErrorTestUtils
 
 
 class TypesTestsMixin:
@@ -1335,7 +1336,7 @@ class DataTypeTests(unittest.TestCase):
         self.assertRaises(ValueError, lambda: row_class(1, 2, 3))
 
 
-class DataTypeVerificationTests(unittest.TestCase):
+class DataTypeVerificationTests(unittest.TestCase, PySparkErrorTestUtils):
     def test_verify_type_exception_msg(self):
         self.assertRaisesRegex(
             ValueError,
@@ -1344,8 +1345,13 @@ class DataTypeVerificationTests(unittest.TestCase):
         )
 
         schema = StructType([StructField("a", StructType([StructField("b", IntegerType())]))])
-        self.assertRaisesRegex(
-            TypeError, "field b in field a", lambda: _make_type_verifier(schema)([["data"]])
+        with self.assertRaises(PySparkTypeError) as pe:
+            _make_type_verifier(schema)([["data"]])
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="CANNOT_ACCEPT_OBJECT_IN_TYPE",
+            message_parameters={"data_type": "IntegerType()", "obj_name": "data", "obj_type": "str"},
         )
 
     def test_verify_type_ok_nullable(self):

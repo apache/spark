@@ -69,14 +69,14 @@ ERROR_CLASSES_JSON = """
       "Argument `<arg_name>` can not be None."
     ]
   },
-  "CANNOT_CONVERT": {
-    "message": [
-      "Cannot convert <from_type> into <to_type>."
-    ]
-  },
   "CANNOT_CONVERT_COLUMN_INTO_BOOL": {
     "message": [
       "Cannot convert column into bool: please use '&' for 'and', '|' for 'or', '~' for 'not' when building DataFrame boolean expressions."
+    ]
+  },
+  "CANNOT_CONVERT_TYPE": {
+    "message": [
+      "Cannot convert <from_type> into <to_type>."
     ]
   },
   "CANNOT_INFER_ARRAY_TYPE": {

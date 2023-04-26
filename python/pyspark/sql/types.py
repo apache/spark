@@ -2217,7 +2217,7 @@ class Row(tuple):
         """
         if not hasattr(self, "__fields__"):
             raise PySparkTypeError(
-                error_class="CANNOT_CONVERT",
+                error_class="CANNOT_CONVERT_TYPE",
                 message_parameters={
                     "from_type": "Row",
                     "to_type": "dict",
