@@ -486,6 +486,16 @@ ERROR_CLASSES_JSON = """
       "Unsupported DataType `<data_type>`."
     ]
   },
+  "UNSUPPORTED_DATA_TYPE_FOR_ARROW_CONVERSION" : {
+    "message" : [
+      "<data_type> is not supported in conversion to Arrow."
+    ]
+  },
+  "UNSUPPORTED_DATA_TYPE_FOR_ARROW_VERSION" : {
+    "message" : [
+      "<data_type> is only supported with pyarrow 2.0.0 and above."
+    ]
+  },
   "UNSUPPORTED_LITERAL" : {
     "message" : [
       "Unsupported Literal '<literal>'."

@@ -398,6 +398,13 @@ object MapGroups {
       child)
     CatalystSerde.serialize[U](mapped)
   }
+
+  private[sql] def sortOrder(sortExprs: Seq[Expression]): Seq[SortOrder] = {
+    sortExprs.map {
+      case expr: SortOrder => expr
+      case expr: Expression => SortOrder(expr, Ascending)
+    }
+  }
 }
 
 /**
