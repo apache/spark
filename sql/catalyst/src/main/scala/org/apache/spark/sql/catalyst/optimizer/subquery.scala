@@ -459,6 +459,10 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] with AliasHelpe
       case alias @ Alias(_: AttributeReference, _) =>
         (alias.exprId, Literal.create(null, alias.dataType))
       case alias @ Alias(l: Literal, _) =>
+        // SPARK-43156: return literal real value, count bug does not apply to the count
+        // function only, but all expressions in Aggregate that return non-null value for
+        // empty input. So we return the real value of the literal here, then the literal
+        // can be used for aggregate query result.
         (alias.exprId, l)
       case ne => (ne.exprId, evalAggExprOnZeroTups(ne))
     }.toMap
