@@ -21,10 +21,11 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable
 
 import com.google.common.collect.{Lists, Maps}
-import com.google.protobuf.{Any => ProtoAny, ByteString}
+import com.google.protobuf.{ByteString, Any => ProtoAny}
 import io.grpc.stub.StreamObserver
-
+import java.util
 import org.apache.spark.{Partition, SparkEnv, TaskContext}
+
 import org.apache.spark.api.python.{PythonEvalType, SimplePythonFunction}
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.{ExecutePlanResponse, SqlCommand, StreamingQueryCommand, StreamingQueryCommandResult, StreamingQueryInstanceId, WriteStreamOperationStart, WriteStreamOperationStartResult}
@@ -41,7 +42,8 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException, ParserUtils}
 import org.apache.spark.sql.catalyst.plans.{Cross, FullOuter, Inner, JoinType, LeftAnti, LeftOuter, LeftSemi, RightOuter, UsingJoin}
 import org.apache.spark.sql.catalyst.plans.logical
-import org.apache.spark.sql.catalyst.plans.logical.{AppendColumns, CoGroup, CollectMetrics, CommandResult, Deduplicate, DeduplicateWithinWatermark, DeserializeToObject, Except, Intersect, LocalRelation, LogicalPlan, MapGroups, MapPartitions, Project, Sample, SerializeFromObject, Sort, SubqueryAlias, TypedFilter, Union, Unpivot, UnresolvedHint}
+import org.apache.spark.sql.catalyst.plans.logical.{AppendColumns, CoGroup, CollectMetrics, CommandResult, Deduplicate, DeduplicateWithinWatermark, DeserializeToObject, Except, FlatMapGroupsWithState, Intersect, LocalRelation, LogicalGroupState, LogicalPlan, MapGroups, MapPartitions, Project, Sample, SerializeFromObject, Sort, SubqueryAlias, TypedFilter, Union, Unpivot, UnresolvedHint}
+import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CharVarcharUtils}
 import org.apache.spark.sql.connect.artifact.SparkConnectArtifactManager
 import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, InvalidPlanInput, LiteralValueProtoConverter, StorageLevelProtoConverter, UdfPacket}
@@ -57,7 +59,7 @@ import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JDBCPartiti
 import org.apache.spark.sql.execution.python.UserDefinedPythonFunction
 import org.apache.spark.sql.execution.streaming.StreamingQueryWrapper
 import org.apache.spark.sql.internal.CatalogImpl
-import org.apache.spark.sql.streaming.Trigger
+import org.apache.spark.sql.streaming.{GroupStateTimeout, OutputMode, Trigger}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.Utils
@@ -131,6 +133,8 @@ class SparkConnectPlanner(val session: SparkSession) {
         transformCoGroupMap(rel.getCoGroupMap)
       case proto.Relation.RelTypeCase.APPLY_IN_PANDAS_WITH_STATE =>
         transformApplyInPandasWithState(rel.getApplyInPandasWithState)
+      case proto.Relation.RelTypeCase.FLAT_MAP_GROUPS_WITH_STATE =>
+        transformFlatMapGroupsWithState(rel.getFlatMapGroupsWithState)
       case proto.Relation.RelTypeCase.COLLECT_METRICS =>
         transformCollectMetrics(rel.getCollectMetrics)
       case proto.Relation.RelTypeCase.PARSE => transformParse(rel.getParse)
@@ -630,6 +634,52 @@ class SparkConnectPlanner(val session: SparkSession) {
       left.analyzed,
       right.analyzed)
     SerializeFromObject(udf.outputNamedExpression, mapped)
+  }
+
+  private def transformFlatMapGroupsWithState(rel: proto.FlatMapGroupsWithState): LogicalPlan = {
+    val commonUdf = rel.getFunc
+    val udf = ScalaUdf(commonUdf)
+    val ds = UntypedKeyValueGroupedDataset(
+      rel.getInput,
+      rel.getGroupingExpressionsList,
+      new util.ArrayList[proto.Expression]())
+
+    val initialDs = UntypedKeyValueGroupedDataset(
+      rel.getInput,
+      rel.getInitialGroupingExpressionsList,
+      new util.ArrayList[proto.Expression]())
+
+    val hasInitialState = !rel.getInitialGroupingExpressionsList.isEmpty
+    val timeoutConf = if (rel.getTimeoutConf.isEmpty) {
+      GroupStateTimeout.NoTimeout
+    } else {
+      org.apache.spark.sql.execution.streaming.GroupStateImpl
+        .groupStateTimeoutFromString(rel.getTimeoutConf)
+    }
+    val outputMode = if (rel.getOutputMode.isEmpty) {
+      OutputMode.Update
+    } else {
+      InternalOutputModes(rel.getOutputMode)
+    }
+
+    val flatMapGroupsWithState = new FlatMapGroupsWithState(
+      udf.function.asInstanceOf[(Any, Iterator[Any], LogicalGroupState[Any]) => Iterator[Any]],
+      udf.inputDeserializer(ds.groupingAttributes),
+      ds.valueDeserializer,
+      ds.groupingAttributes,
+      ds.dataAttributes,
+      udf.outputObjAttr,
+      ds.kEncoder.asInstanceOf[ExpressionEncoder[Any]],
+      outputMode,
+      rel.getIsMapGroupsWithState,
+      timeoutConf,
+      hasInitialState,
+      initialDs.groupingAttributes,
+      initialDs.dataAttributes,
+      initialDs.valueDeserializer,
+      initialDs.analyzed,
+      ds.analyzed)
+    SerializeFromObject(udf.outputNamedExpression, flatMapGroupsWithState)
   }
 
   /**

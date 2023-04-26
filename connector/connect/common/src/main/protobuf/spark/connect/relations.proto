@@ -68,6 +68,7 @@ message Relation {
     WithWatermark with_watermark = 33;
     ApplyInPandasWithState apply_in_pandas_with_state = 34;
     HtmlString html_string = 35;
+    FlatMapGroupsWithState flat_map_groups_with_state = 36;
 
     // NA functions
     NAFill fill_na = 90;
@@ -889,6 +890,29 @@ message ApplyInPandasWithState {
 
   // (Required) Timeout configuration for groups that do not receive data for a while.
   string timeout_conf = 7;
+}
+
+message FlatMapGroupsWithState {
+  // (Required) One input relation for CoGroup Map API - applyInPandas.
+  Relation input = 1;
+
+  // Expressions for grouping keys.
+  repeated Expression grouping_expressions = 2;
+
+  // Expressions for grouping keys of the initial input relation.
+  repeated Expression initial_grouping_expressions = 3;
+
+  // (Required) Input user-defined function.
+  CommonInlineUserDefinedFunction func = 4;
+
+  // (Required) Is MapGroupsWithState or not.
+  bool is_map_groups_with_state = 5;
+
+  // (Optional) The output mode of the function.
+  optional string output_mode = 6;
+
+  // (Optional) Timeout configuration for groups that do not receive data for a while.
+  optional string timeout_conf = 7;
 }
 
 // Collect arbitrary (named) metrics from a dataset.
