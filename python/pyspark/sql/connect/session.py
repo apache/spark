@@ -69,7 +69,13 @@ from pyspark.sql.types import (
     TimestampType,
 )
 from pyspark.sql.utils import to_str
-from pyspark.errors import PySparkAttributeError
+from pyspark.errors import (
+    PySparkAttributeError,
+    PySparkNotImplementedError,
+    PySparkRuntimeError,
+    PySparkValueError,
+    PySparkTypeError,
+)
 
 if TYPE_CHECKING:
     from pyspark.sql.connect._typing import OptionalPrimitiveType
@@ -124,7 +130,9 @@ class SparkSession:
             return self.config("spark.remote", location)
 
         def enableHiveSupport(self) -> "SparkSession.Builder":
-            raise NotImplementedError("enableHiveSupport not implemented for Spark Connect")
+            raise PySparkNotImplementedError(
+                error_class="NOT_IMPLEMENTED", message_parameters={"feature": "enableHiveSupport"}
+            )
 
         def getOrCreate(self) -> "SparkSession":
             global _active_spark_session
@@ -185,7 +193,10 @@ class SparkSession:
         Infer schema from list of Row, dict, or tuple.
         """
         if not data:
-            raise ValueError("can not infer schema from empty dataset")
+            raise PySparkValueError(
+                error_class="CANNOT_INFER_EMPTY_SCHEMA",
+                message_parameters={},
+            )
 
         (
             infer_dict_as_struct,
@@ -217,7 +228,10 @@ class SparkSession:
     ) -> "DataFrame":
         assert data is not None
         if isinstance(data, DataFrame):
-            raise TypeError("data is already a DataFrame")
+            raise PySparkTypeError(
+                error_class="SHOULD_NOT_DATAFRAME",
+                message_parameters={"arg_name": "data"},
+            )
 
         _schema: Optional[Union[AtomicType, StructType]] = None
         _cols: Optional[List[str]] = None
@@ -241,12 +255,18 @@ class SparkSession:
             _num_cols = len(_cols)
 
         if isinstance(data, np.ndarray) and data.ndim not in [1, 2]:
-            raise ValueError("NumPy array input should be of 1 or 2 dimensions.")
+            raise PySparkValueError(
+                error_class="INVALID_NDARRAY_DIMENSION",
+                message_parameters={"dimensions": "1 or 2"},
+            )
         elif isinstance(data, Sized) and len(data) == 0:
             if _schema is not None:
                 return DataFrame.withPlan(LocalRelation(table=None, schema=_schema.json()), self)
             else:
-                raise ValueError("can not infer schema from empty dataset")
+                raise PySparkValueError(
+                    error_class="CANNOT_INFER_EMPTY_SCHEMA",
+                    message_parameters={},
+                )
 
         _table: Optional[pa.Table] = None
 
@@ -269,7 +289,10 @@ class SparkSession:
                 arrow_types = [field.type for field in arrow_schema]
                 _cols = [str(x) if not isinstance(x, str) else x for x in schema.fieldNames()]
             elif isinstance(schema, DataType):
-                raise ValueError("Single data type %s is not supported with Arrow" % str(schema))
+                raise PySparkTypeError(
+                    error_class="UNSUPPORTED_DATA_TYPE_FOR_ARROW",
+                    message_parameters={"data_type": str(schema)},
+                )
             else:
                 # Any timestamps must be coerced to be compatible with Spark
                 arrow_types = [
@@ -306,17 +329,23 @@ class SparkSession:
 
             if data.ndim == 1:
                 if 1 != len(_cols):
-                    raise ValueError(
-                        f"Length mismatch: Expected axis has {len(_cols)} element, "
-                        "new values have 1 elements"
+                    raise PySparkValueError(
+                        error_class="AXIS_LENGTH_MISMATCH",
+                        message_parameters={
+                            "expected_length": str(len(_cols)),
+                            "actual_length": "1",
+                        },
                     )
 
                 _table = pa.Table.from_arrays([pa.array(data)], _cols)
             else:
                 if data.shape[1] != len(_cols):
-                    raise ValueError(
-                        f"Length mismatch: Expected axis has {len(_cols)} elements, "
-                        f"new values have {data.shape[1]} elements"
+                    raise PySparkValueError(
+                        error_class="AXIS_LENGTH_MISMATCH",
+                        message_parameters={
+                            "expected_length": str(len(_cols)),
+                            "actual_length": str(data.shape[1]),
+                        },
                     )
 
                 _table = pa.Table.from_arrays(
@@ -368,9 +397,12 @@ class SparkSession:
         # TODO: Beside the validation on number of columns, we should also check
         # whether the Arrow Schema is compatible with the user provided Schema.
         if _num_cols is not None and _num_cols != _table.shape[1]:
-            raise ValueError(
-                f"Length mismatch: Expected axis has {_num_cols} elements, "
-                f"new values have {_table.shape[1]} elements"
+            raise PySparkValueError(
+                error_class="AXIS_LENGTH_MISMATCH",
+                message_parameters={
+                    "expected_length": str(_num_cols),
+                    "actual_length": str(_table.shape[1]),
+                },
             )
 
         if _schema is not None:
@@ -465,10 +497,14 @@ class SparkSession:
 
     @classmethod
     def getActiveSession(cls) -> Any:
-        raise NotImplementedError("getActiveSession() is not implemented.")
+        raise PySparkNotImplementedError(
+            error_class="NOT_IMPLEMENTED", message_parameters={"feature": "getActiveSession()"}
+        )
 
     def newSession(self) -> Any:
-        raise NotImplementedError("newSession() is not implemented.")
+        raise PySparkNotImplementedError(
+            error_class="NOT_IMPLEMENTED", message_parameters={"feature": "newSession()"}
+        )
 
     @property
     def conf(self) -> RuntimeConf:
@@ -476,11 +512,15 @@ class SparkSession:
 
     @property
     def sparkContext(self) -> Any:
-        raise NotImplementedError("sparkContext() is not implemented.")
+        raise PySparkNotImplementedError(
+            error_class="NOT_IMPLEMENTED", message_parameters={"feature": "sparkContext()"}
+        )
 
     @property
     def streams(self) -> Any:
-        raise NotImplementedError("streams() is not implemented.")
+        raise PySparkNotImplementedError(
+            error_class="NOT_IMPLEMENTED", message_parameters={"feature": "streams()"}
+        )
 
     @property
     def _jsc(self) -> None:
@@ -645,7 +685,10 @@ class SparkSession:
                 if origin_remote is not None:
                     os.environ["SPARK_REMOTE"] = origin_remote
         else:
-            raise RuntimeError("There should not be an existing Spark Session or Spark Context.")
+            raise PySparkRuntimeError(
+                error_class="SESSION_OR_CONTEXT_EXISTS",
+                message_parameters={},
+            )
 
 
 SparkSession.__doc__ = PySparkSession.__doc__

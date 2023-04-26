@@ -54,6 +54,16 @@ ERROR_CLASSES_JSON = """
       "Cannot apply 'in' operator against a column: please use 'contains' in a string column or 'array_contains' function for an array column."
     ]
   },
+  "SHOULD_NOT_DATAFRAME": {
+    "message": [
+      "Argument `<arg_name>` should not be a DataFrame."
+    ]
+  },
+  "SHOULD_NOT_DATATYPE": {
+    "message": [
+      "Argument `<arg_name>` should not be a DataType."
+    ]
+  },
   "CANNOT_BE_EMPTY": {
     "message": [
       "At least one <item> must be specified."
@@ -72,6 +82,11 @@ ERROR_CLASSES_JSON = """
   "CANNOT_INFER_ARRAY_TYPE": {
     "message": [
       "Can not infer Array Type from an list with None as the first element."
+    ]
+  },
+  "CANNOT_INFER_EMPTY_SCHEMA": {
+    "message": [
+      "Can not infer schema from empty dataset."
     ]
   },
   "CANNOT_OPEN_SOCKET": {
@@ -145,6 +160,11 @@ ERROR_CLASSES_JSON = """
       "All items in `<arg_name>` should be in <allowed_types>, got <item_type>."
     ]
   },
+  "INVALID_NDARRAY_DIMENSION": {
+    "message": [
+      "NumPy array input should be of <dimensions> dimensions."
+    ]
+  },
   "INVALID_RETURN_TYPE_FOR_PANDAS_UDF": {
     "message": [
       "Pandas UDF should return StructType for <eval_type>, got <return_type>."
@@ -183,6 +203,11 @@ ERROR_CLASSES_JSON = """
   "KEY_VALUE_PAIR_REQUIRED" : {
     "message" : [
       "Key-value pair or a list of pairs is required."
+    ]
+  },
+  "AXIS_LENGTH_MISMATCH" : {
+    "message" : [
+      "Length mismatch: Expected axis has <expected_length> element, new values have <actual_length> elements."
     ]
   },
   "LENGTH_SHOULD_BE_THE_SAME" : {
@@ -330,6 +355,11 @@ ERROR_CLASSES_JSON = """
       "Argument `<arg_name>` should be a float, int, list or str, got <arg_type>."
     ]
   },
+  "NOT_IMPLEMENTED" : {
+    "message" : [
+      "<feature> is not implemented."
+    ]
+  },
   "NOT_INT" : {
     "message" : [
       "Argument `<arg_name>` should be an int, got <arg_type>."
@@ -471,6 +501,11 @@ ERROR_CLASSES_JSON = """
       "Result vector from pandas_udf was not the required length: expected <expected>, got <actual>."
     ]
   },
+  "SESSION_OR_CONTEXT_EXISTS" : {
+    "message" : [
+      "There should not be an existing Spark Session or Spark Context."
+    ]
+  },
   "SLICE_WITH_STEP" : {
     "message" : [
       "Slice with step is not supported."
@@ -499,6 +534,11 @@ ERROR_CLASSES_JSON = """
   "UNSUPPORTED_DATA_TYPE" : {
     "message" : [
       "Unsupported DataType `<data_type>`."
+    ]
+  },
+  "UNSUPPORTED_DATA_TYPE_FOR_ARROW" : {
+    "message" : [
+      "Single data type <data_type> is not supported with Arrow."
     ]
   },
   "UNSUPPORTED_DATA_TYPE_FOR_ARROW_CONVERSION" : {
