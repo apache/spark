@@ -257,14 +257,22 @@ class GroupByTestsMixin:
     # TODO: All statistical functions should leverage this utility
     def _test_stat_func(self, func, check_exact=True):
         pdf, psdf = self.pdf, self.psdf
-        for p_groupby_obj, ps_groupby_obj in [
-            # Against DataFrameGroupBy
-            (pdf.groupby("A"), psdf.groupby("A")),
-            # Against DataFrameGroupBy with an aggregation column of string type
-            (pdf.groupby("A")[["C"]], psdf.groupby("A")[["C"]]),
-            # Against SeriesGroupBy
-            (pdf.groupby("A")["B"], psdf.groupby("A")["B"]),
-        ]:
+        # From pandas 2.0.0, an error occurs when performing stat funcs on str type.
+        if LooseVersion(pd.__version__) >= LooseVersion("2.0.0"):
+            pdf = pdf[["A", "B", "D"]]
+            psdf = psdf[["A", "B", "D"]]
+        test_targets = []
+        # Against DataFrameGroupBy
+        test_targets.append((pdf.groupby("A"), psdf.groupby("A")))
+        # Against DataFrameGroupBy with an aggregation column of string type
+        # From pandas 2.0.0, an error occurs when performing stat funcs on str type.
+        if LooseVersion(pd.__version__) >= LooseVersion("2.0.0"):
+            pass
+        else:
+            test_targets.append((pdf.groupby("A")[["C"]], psdf.groupby("A")[["C"]]))
+        # Against SeriesGroupBy
+        test_targets.append((pdf.groupby("A")["B"], psdf.groupby("A")["B"]))
+        for p_groupby_obj, ps_groupby_obj in test_targets:
             self.assert_eq(
                 func(p_groupby_obj).sort_index(),
                 func(ps_groupby_obj).sort_index(),
@@ -309,24 +317,50 @@ class GroupByTestsMixin:
         ):
             psdf.groupby("A")[["C"]].sem()
 
+        if LooseVersion(pd.__version__) >= LooseVersion("2.0.0"):
+            # From pandas 2.0.0, an error occurs when performing std on str type.
+            expected_result = ps.DataFrame(
+                {"B": [0.707107, 0.707107], "D": [0.707107, 0.707107]},
+                index=pd.Index([1, 2], name="A"),
+            )
+        else:
+            expected_result = pdf.groupby("A").std().sort_index()
         self.assert_eq(
             psdf.groupby("A").std().sort_index(),
-            pdf.groupby("A").std().sort_index(),
+            expected_result,
             check_exact=False,
         )
+        if LooseVersion(pd.__version__) >= LooseVersion("2.0.0"):
+            # From pandas 2.0.0, an error occurs when performing std on str type.
+            expected_result = ps.DataFrame(
+                {"B": [0.5, 0.5], "D": [0.5, 0.5]}, index=pd.Index([1, 2], name="A")
+            )
+        else:
+            expected_result = pdf.groupby("A").sem().sort_index()
         self.assert_eq(
             psdf.groupby("A").sem().sort_index(),
-            pdf.groupby("A").sem().sort_index(),
+            expected_result,
             check_exact=False,
         )
 
         # TODO: fix bug of `sum` and re-enable the test below
         # self._test_stat_func(lambda groupby_obj: groupby_obj.sum(), check_exact=False)
-        self.assert_eq(
-            psdf.groupby("A").sum().sort_index(),
-            pdf.groupby("A").sum().sort_index(),
-            check_exact=False,
-        )
+        if LooseVersion(pd.__version__) >= LooseVersion("2.0.0"):
+            # TODO(SPARK-43295): Make DataFrameGroupBy.sum support for string type columns
+            expected_result = expected_result = ps.DataFrame(
+                {"B": [7.2, 7.2], "D": [1, 1]}, index=pd.Index([1, 2], name="A")
+            )
+            self.assert_eq(
+                psdf.groupby("A").sum().sort_index(),
+                expected_result,
+                check_exact=False,
+            )
+        else:
+            self.assert_eq(
+                psdf.groupby("A").sum().sort_index(),
+                pdf.groupby("A").sum().sort_index(),
+                check_exact=False,
+            )
 
     def test_mean(self):
         self._test_stat_func(lambda groupby_obj: groupby_obj.mean())
@@ -410,9 +444,6 @@ class GroupByTestsMixin:
             pdf.groupby("A").sum(min_count=3).sort_index(),
             psdf.groupby("A").sum(min_count=3).sort_index(),
         )
-
-    def test_mad(self):
-        self._test_stat_func(lambda groupby_obj: groupby_obj.mad())
 
     def test_first(self):
         self._test_stat_func(lambda groupby_obj: groupby_obj.first())

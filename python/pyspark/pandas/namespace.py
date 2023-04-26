@@ -1751,7 +1751,7 @@ def to_datetime(
     )
 
 
-# TODO(SPARK-42621): Add `inclusive` parameter and replace `closed`.
+# TODO(SPARK-42621): Add `inclusive` parameter.
 # See https://github.com/pandas-dev/pandas/issues/40245
 def date_range(
     start: Union[str, Any] = None,
@@ -1761,7 +1761,6 @@ def date_range(
     tz: Optional[Union[str, tzinfo]] = None,
     normalize: bool = False,
     name: Optional[str] = None,
-    closed: Optional[str] = None,
     **kwargs: Any,
 ) -> DatetimeIndex:
     """
@@ -1785,11 +1784,6 @@ def date_range(
         Normalize start/end dates to midnight before generating date range.
     name : str, default None
         Name of the resulting DatetimeIndex.
-    closed : {None, 'left', 'right'}, optional
-        Make the interval closed with respect to the given frequency to
-        the 'left', 'right', or both sides (None, the default).
-
-        .. deprecated:: 3.4.0
 
     **kwargs
         For compatibility. Has no effect on the result.
@@ -1874,29 +1868,6 @@ def date_range(
     DatetimeIndex(['2018-01-31', '2018-04-30', '2018-07-31', '2018-10-31',
                    '2019-01-31'],
                   dtype='datetime64[ns]', freq=None)
-
-    `closed` controls whether to include `start` and `end` that are on the
-    boundary. The default includes boundary points on either end.
-
-    >>> ps.date_range(
-    ...     start='2017-01-01', end='2017-01-04', closed=None
-    ... )  # doctest: +NORMALIZE_WHITESPACE
-    DatetimeIndex(['2017-01-01', '2017-01-02', '2017-01-03', '2017-01-04'],
-                   dtype='datetime64[ns]', freq=None)
-
-    Use ``closed='left'`` to exclude `end` if it falls on the boundary.
-
-    >>> ps.date_range(
-    ...     start='2017-01-01', end='2017-01-04', closed='left'
-    ... )  # doctest: +NORMALIZE_WHITESPACE
-    DatetimeIndex(['2017-01-01', '2017-01-02', '2017-01-03'], dtype='datetime64[ns]', freq=None)
-
-    Use ``closed='right'`` to exclude `start` if it falls on the boundary.
-
-    >>> ps.date_range(
-    ...     start='2017-01-01', end='2017-01-04', closed='right'
-    ... )  # doctest: +NORMALIZE_WHITESPACE
-    DatetimeIndex(['2017-01-02', '2017-01-03', '2017-01-04'], dtype='datetime64[ns]', freq=None)
     """
     assert freq not in ["N", "ns"], "nanoseconds is not supported"
     assert tz is None, "Localized DatetimeIndex is not supported"
@@ -1912,7 +1883,6 @@ def date_range(
                 tz=tz,
                 normalize=normalize,
                 name=name,
-                closed=closed,
                 **kwargs,
             )
         ),
