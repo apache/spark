@@ -224,6 +224,11 @@ ERROR_CLASSES_JSON = """
       "Argument `<arg_name>` should be a Column, int or str, got <arg_type>."
     ]
   },
+  "NOT_COLUMN_OR_LIST_OR_STR" : {
+    "message" : [
+      "Argument `<arg_name>` should be a Column, list or str, got <arg_type>."
+    ]
+  },
   "NOT_COLUMN_OR_STR" : {
     "message" : [
       "Argument `<arg_name>` should be a Column or str, got <arg_type>."
