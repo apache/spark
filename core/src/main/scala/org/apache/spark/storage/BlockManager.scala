@@ -2043,6 +2043,17 @@ private[spark] class BlockManager(
   }
 
   /**
+   * Remove cache blocks that might be related to cached local relations.
+   */
+  def removeCache(userId: String, sessionId: String): Unit = {
+    logDebug(s"Removing cache of user id = $userId in the session $sessionId")
+    blockInfoManager.entries.foreach {
+      case (cid @ CacheId(uid, sid, _), _) if uid == userId && sid == sessionId =>
+        removeBlock(cid)
+    }
+  }
+
+  /**
    * Remove a block from both memory and disk.
    */
   def removeBlock(blockId: BlockId, tellMaster: Boolean = true): Unit = {

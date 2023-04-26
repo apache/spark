@@ -24,7 +24,7 @@ import scala.collection.mutable.ArrayBuffer
 import scala.util.control.NonFatal
 
 import com.google.common.base.Ticker
-import com.google.common.cache.CacheBuilder
+import com.google.common.cache.{CacheBuilder, RemovalListener, RemovalNotification}
 import com.google.protobuf.{Any => ProtoAny}
 import com.google.rpc.{Code => RPCCode, ErrorInfo, Status => RPCStatus}
 import io.grpc.{Server, Status}
@@ -284,6 +284,15 @@ object SparkConnectService {
   private val userSessionMapping =
     cacheBuilder(CACHE_SIZE, CACHE_TIMEOUT_SECONDS).build[SessionCacheKey, SessionHolder]()
 
+  private class RemoveSessionListener extends RemovalListener[SessionCacheKey, SessionHolder] {
+    override def onRemoval(
+        notification: RemovalNotification[SessionCacheKey, SessionHolder]): Unit = {
+      val SessionHolder(userId, sessionId, session) = notification.getValue
+      val blockManager = session.sparkContext.env.blockManager
+      blockManager.removeCache(userId, sessionId)
+    }
+  }
+
   // Simple builder for creating the cache of Sessions.
   private def cacheBuilder(cacheSize: Int, timeoutSeconds: Int): CacheBuilder[Object, Object] = {
     var cacheBuilder = CacheBuilder.newBuilder().ticker(Ticker.systemTicker())
@@ -293,6 +302,7 @@ object SparkConnectService {
     if (timeoutSeconds >= 0) {
       cacheBuilder.expireAfterAccess(timeoutSeconds, TimeUnit.SECONDS)
     }
+    cacheBuilder.removalListener(new RemoveSessionListener)
     cacheBuilder
   }
 
@@ -348,6 +358,7 @@ object SparkConnectService {
         server.shutdownNow()
       }
     }
+    userSessionMapping.invalidateAll()
   }
 
   def extractErrorMessage(st: Throwable): String = {
