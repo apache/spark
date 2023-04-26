@@ -17,17 +17,14 @@
 
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
-
-import java.util.Locale
-
 import org.apache.datasketches.SketchesArgumentException
-import org.apache.datasketches.hll.{HllSketch, TgtHllType, Union}
+import org.apache.datasketches.hll.{HllSketch, Union}
 import org.apache.datasketches.memory.Memory
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{ExpectsInputTypes, Expression, ExpressionDescription, Literal}
-import org.apache.spark.sql.catalyst.trees.{BinaryLike, TernaryLike}
-import org.apache.spark.sql.types.{AbstractDataType, BinaryType, DataType, IntegerType, LongType, StringType, TypeCollection}
+import org.apache.spark.sql.catalyst.trees.BinaryLike
+import org.apache.spark.sql.types.{AbstractDataType, BinaryType, BooleanType, DataType, IntegerType, LongType, StringType, TypeCollection}
 import org.apache.spark.unsafe.types.UTF8String
 
 
@@ -40,16 +37,15 @@ import org.apache.spark.unsafe.types.UTF8String
  *
  * @param child child expression against which unique counting will occur
  * @param lgConfigK the log-base-2 of K, where K is the number of buckets or slots for the sketch
- * @param tgtHllType the target type of the HllSketch to be used (HLL_4, HLL_6, HLL_8)
  */
 @ExpressionDescription(
   usage = """
-    _FUNC_(expr, lgConfigK, tgtHllType) - Returns the HllSketch's compact binary representation.
-      `lgConfigK` (optional) the log-base-2 of K, with K = the number of buckets for the HllSketch.
-      `tgtHllType` (optional) the target type of the HllSketch (HLL_4, HLL_6, HLL_8). """,
+    _FUNC_(expr, lgConfigK) - Returns the HllSketch's updateable binary representation.
+      `lgConfigK` (optional) the log-base-2 of K, with K is the number of buckets or
+      slots for the HllSketch. """,
   examples = """
     Examples:
-      > SELECT hll_sketch_estimate(_FUNC_(col1, 12, 'HLL_4'))
+      > SELECT hll_sketch_estimate(_FUNC_(col1, 12))
       FROM VALUES (1), (1), (2), (2), (3) tab(col1);
        3
   """,
@@ -58,10 +54,9 @@ import org.apache.spark.unsafe.types.UTF8String
 case class HllSketchAgg(
     child: Expression,
     lgConfigKExpression: Expression,
-    tgtHllTypeExpression: Expression,
     mutableAggBufferOffset: Int = 0,
     inputAggBufferOffset: Int = 0)
-  extends TypedImperativeAggregate[HllSketch] with TernaryLike[Expression] with ExpectsInputTypes {
+  extends TypedImperativeAggregate[HllSketch] with BinaryLike[Expression] with ExpectsInputTypes {
 
   // Hllsketch config - mark as lazy so that they're not evaluated during tree transformation.
 
@@ -75,35 +70,18 @@ case class HllSketchAgg(
     }
   }
 
-  lazy val tgtHllType: TgtHllType = try {
-    TgtHllType.valueOf(
-      tgtHllTypeExpression.eval().asInstanceOf[UTF8String].toString.toUpperCase(Locale.ROOT)
-    )
-  } catch {
-    case _: IllegalArgumentException =>
-      throw new SketchesArgumentException("Invalid tgtHllType value")
-  }
-
   // Constructors
 
   def this(child: Expression) = {
-    this(child, Literal(HllSketch.DEFAULT_LG_K), Literal(HllSketch.DEFAULT_HLL_TYPE.toString), 0, 0)
+    this(child, Literal(HllSketch.DEFAULT_LG_K), 0, 0)
   }
 
   def this(child: Expression, lgConfigK: Expression) = {
-    this(child, lgConfigK, Literal(HllSketch.DEFAULT_HLL_TYPE.toString), 0, 0)
+    this(child, lgConfigK, 0, 0)
   }
 
   def this(child: Expression, lgConfigK: Int) = {
-    this(child, Literal(lgConfigK), Literal(HllSketch.DEFAULT_HLL_TYPE.toString), 0, 0)
-  }
-
-  def this(child: Expression, lgConfigK: Expression, tgtHllType: Expression) = {
-    this(child, lgConfigK, tgtHllType, 0, 0)
-  }
-
-  def this(child: Expression, lgConfigK: Int, tgtHllType: String) = {
-    this(child, Literal(lgConfigK), Literal(tgtHllType), 0, 0)
+    this(child, Literal(lgConfigK), 0, 0)
   }
 
   // Copy constructors required by ImperativeAggregate
@@ -114,37 +92,34 @@ case class HllSketchAgg(
   override def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): HllSketchAgg =
     copy(inputAggBufferOffset = newInputAggBufferOffset)
 
-  override protected def withNewChildrenInternal(newFirst: Expression,
-                                              newSecond: Expression,
-                                              newThird: Expression): HllSketchAgg =
-    copy(child = newFirst, lgConfigKExpression = newSecond, tgtHllTypeExpression = newThird)
+  override protected def withNewChildrenInternal(newLeft: Expression,
+                                                 newRight: Expression): HllSketchAgg =
+    copy(child = newLeft, lgConfigKExpression = newRight)
 
   // Overrides for TernaryLike
 
-  override def first: Expression = child
+  override def left: Expression = child
 
-  override def second: Expression = lgConfigKExpression
-
-  override def third: Expression = tgtHllTypeExpression
+  override def right: Expression = lgConfigKExpression
 
   // Overrides for TypedImperativeAggregate
 
   override def prettyName: String = "hll_sketch_agg"
 
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(TypeCollection(IntegerType, LongType, StringType, BinaryType), IntegerType, StringType)
+    Seq(TypeCollection(IntegerType, LongType, StringType, BinaryType), IntegerType)
 
   override def dataType: DataType = BinaryType
 
   override def nullable: Boolean = false
 
   /**
-   * Instantiate an HllSketch instance using the lgConfigK and tgtHllType params.
+   * Instantiate an HllSketch instance using the lgConfigK param.
    *
    * @return an HllSketch instance
    */
   override def createAggregationBuffer(): HllSketch = {
-    new HllSketch(lgConfigK, tgtHllType)
+    new HllSketch(lgConfigK)
   }
 
   /**
@@ -156,9 +131,9 @@ case class HllSketchAgg(
    * @param input  an input row
    */
   override def update(sketch: HllSketch, input: InternalRow): HllSketch = {
-    val v = first.eval(input)
+    val v = left.eval(input)
     if (v != null) {
-      first.dataType match {
+      left.dataType match {
         // Update implemented for a subset of types supported by HllSketch
         // Spark SQL doesn't have equivalent types for ByteBuffer or char[] so leave those out
         // Leaving out support for Array types, as unique counting these aren't a common use case
@@ -195,7 +170,7 @@ case class HllSketchAgg(
    * @return A binary sketch which can be evaluated or merged
    */
   override def eval(sketch: HllSketch): Any = {
-    sketch.toCompactByteArray
+    sketch.toUpdatableByteArray
   }
 
   /** Convert the underlying HllSketch into an updatable byte array  */
@@ -222,7 +197,8 @@ case class HllSketchAgg(
 @ExpressionDescription(
   usage = """
     _FUNC_(expr, lgMaxK) - Returns the estimated number of unique values.
-      `lgMaxK` (optional) The largest maximum size for lgConfigK for the union operation.""",
+      `allowDifferentLgConfigK` (optional) Allow sketches with different lgConfigK values
+       to be unioned (defaults to false).""",
   examples = """
     Examples:
       > SELECT hll_sketch_estimate(_FUNC_(sketch, 12))
@@ -236,36 +212,32 @@ case class HllSketchAgg(
   group = "agg_funcs",
   since = "3.5.0")
 case class HllUnionAgg(
-    child: Expression,
-    lgMaxKExpression: Expression,
+    left: Expression,
+    right: Expression,
     mutableAggBufferOffset: Int = 0,
     inputAggBufferOffset: Int = 0)
-  extends TypedImperativeAggregate[Union] with BinaryLike[Expression] with ExpectsInputTypes {
+  extends TypedImperativeAggregate[Option[Union]]
+    with BinaryLike[Expression]
+    with ExpectsInputTypes {
 
   // Union config - mark as lazy so that they're not evaluated during tree transformation.
 
-  lazy val lgMaxK: Int = {
-    val lgMaxK = lgMaxKExpression.eval().asInstanceOf[Int]
-    // can't use HllUtil.checkLgK so replicate the check
-    if (lgMaxK < 4 || lgMaxK > 21) {
-      throw new SketchesArgumentException("Invalid lgMaxK value")
-    } else {
-      lgMaxK
-    }
+  lazy val allowDifferentLgConfigK: Boolean = {
+    right.eval().asInstanceOf[Boolean]
   }
 
   // Constructors
 
   def this(child: Expression) = {
-    this(child, Literal(HllSketch.DEFAULT_LG_K), 0, 0)
+    this(child, Literal(false), 0, 0)
   }
 
-  def this(child: Expression, lgMaxK: Expression) = {
-    this(child, lgMaxK, 0, 0)
+  def this(child: Expression, allowDifferentLgConfigK: Expression) = {
+    this(child, allowDifferentLgConfigK, 0, 0)
   }
 
-  def this(child: Expression, lgMaxK: Int) = {
-    this(child, Literal(lgMaxK), 0, 0)
+  def this(child: Expression, allowDifferentLgConfigK: Boolean) = {
+    this(child, Literal(allowDifferentLgConfigK), 0, 0)
   }
 
   // Copy constructors required by ImperativeAggregate
@@ -277,31 +249,44 @@ case class HllUnionAgg(
     copy(inputAggBufferOffset = newInputAggBufferOffset)
 
   override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression):
-  HllUnionAgg = copy(child = newLeft, lgMaxKExpression = newRight)
-
-  // Overrides for BinaryLike
-
-  override def left: Expression = child
-
-  override def right: Expression = lgMaxKExpression
+  HllUnionAgg = copy(left = newLeft, right = newRight)
 
   // Overrides for TypedImperativeAggregate
 
   override def prettyName: String = "hll_union_agg"
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(BinaryType, IntegerType)
+  override def inputTypes: Seq[AbstractDataType] = Seq(BinaryType, BooleanType)
 
   override def dataType: DataType = BinaryType
 
   override def nullable: Boolean = false
 
   /**
-   * Instantiate an Union instance using the lgMaxK param.
+   * Defer instantiation of the Union instance until we've deserialized
+   * our first hll sketch, and use that sketch's lgConfigK value
    *
-   * @return an Union instance
+   * @return None
    */
-  override def createAggregationBuffer(): Union = {
-    new Union(lgMaxK)
+  override def createAggregationBuffer(): Option[Union] = {
+    None
+  }
+
+  /**
+   * Helper method to compare lgConfigKs and throw an exception if
+   * allowDifferentLgConfigK isn't true and configs don't match
+   *
+   * @param left an lgConfigK value
+   * @param right an lgConfigK value
+   */
+  def compareLgConfigK(left: Int, right: Int): Unit = {
+    if (!allowDifferentLgConfigK) {
+      if (left != right) {
+        throw new UnsupportedOperationException(
+          s"Sketches have different lgConfigK values: $left and $right. " +
+            "Set allowDifferentLgConfigK to true to enable unions of " +
+            "different lgConfigK values.")
+      }
+    }
   }
 
   /**
@@ -310,17 +295,22 @@ case class HllUnionAgg(
    * @param union The Union instance.
    * @param input an input row
    */
-  override def update(union: Union, input: InternalRow): Union = {
-    val v = child.eval(input)
+  override def update(unionOption: Option[Union], input: InternalRow): Option[Union] = {
+    val v = left.eval(input)
     if (v != null) {
-      child.dataType match {
+      left.dataType match {
         case BinaryType =>
-          union.update(HllSketch.wrap(Memory.wrap(v.asInstanceOf[Array[Byte]])))
+          val sketch = HllSketch.wrap(Memory.wrap(v.asInstanceOf[Array[Byte]]))
+          val union = unionOption.getOrElse(new Union(sketch.getLgConfigK))
+          compareLgConfigK(union.getLgConfigK, sketch.getLgConfigK)
+          union.update(sketch)
+          Some(union)
         case _ => throw new UnsupportedOperationException(
           s"A Union instance can only be updated with a valid HllSketch byte array")
       }
+    } else {
+      unionOption
     }
-    union
   }
 
   /**
@@ -329,9 +319,20 @@ case class HllUnionAgg(
    * @param union the Union instance used to store the aggregation result.
    * @param input an input Union instance
    */
-  override def merge(union: Union, input: Union): Union = {
-    union.update(input.getResult)
-    union
+  override def merge(unionOption: Option[Union], inputOption: Option[Union]): Option[Union] = {
+    (unionOption, inputOption) match {
+      case (Some(union), Some(input)) =>
+        compareLgConfigK(union.getLgConfigK, input.getLgConfigK)
+        union.update(input.getResult)
+        Some(union)
+      // unclear if these scenarios can ever occur
+      case (Some(_), None) =>
+        unionOption
+      case (None, Some(_)) =>
+        inputOption
+      case (None, None) =>
+        unionOption
+    }
   }
 
   /**
@@ -340,17 +341,30 @@ case class HllUnionAgg(
    * @param union Union instance used as an aggregation buffer
    * @return A binary sketch which can be evaluated or merged
    */
-  override def eval(union: Union): Any = {
-    union.toCompactByteArray
+  override def eval(unionOption: Option[Union]): Any = {
+    unionOption match {
+      case Some(union) => union.toUpdatableByteArray
+      // unclear if these scenarios can ever occur
+      case None => new Union().toUpdatableByteArray
+    }
   }
 
   /** Convert the underlying Union into an updatable byte array  */
-  override def serialize(union: Union): Array[Byte] = {
-    union.toUpdatableByteArray
+  override def serialize(unionOption: Option[Union]): Array[Byte] = {
+    unionOption match {
+      case Some(union) => union.toUpdatableByteArray
+      // unclear if these scenarios can ever occur
+      case None => new Array[Byte](0)
+    }
   }
 
   /** De-serializes the updatable byte array into a Union instance */
-  override def deserialize(buffer: Array[Byte]): Union = {
-    Union.heapify(buffer)
+  override def deserialize(buffer: Array[Byte]): Option[Union] = {
+    if (buffer.length != 0) {
+      Some(Union.heapify(buffer))
+    // unclear if these scenarios can ever occur
+    } else {
+      None
+    }
   }
 }

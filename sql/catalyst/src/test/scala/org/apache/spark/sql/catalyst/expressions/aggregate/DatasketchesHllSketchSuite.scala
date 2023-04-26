@@ -100,7 +100,7 @@ class DatasketchesHllSketchSuite extends SparkFunSuite {
     sketch2.isCompact
     val binary2 = aggFunc2.eval(sketch2)
 
-    val aggFunc3 = new HllUnionAgg(BoundReference(0, BinaryType, nullable = true), 8)
+    val aggFunc3 = new HllUnionAgg(BoundReference(0, BinaryType, nullable = true), true)
     val union1 = aggFunc3.createAggregationBuffer()
     aggFunc3.update(union1, InternalRow(binary1))
     aggFunc3.update(union1, InternalRow(binary2))

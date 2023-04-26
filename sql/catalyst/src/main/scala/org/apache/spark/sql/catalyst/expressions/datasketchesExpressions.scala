@@ -21,7 +21,7 @@ import org.apache.datasketches.hll.{HllSketch, Union}
 import org.apache.datasketches.memory.Memory
 
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
-import org.apache.spark.sql.types.{AbstractDataType, BinaryType, DataType, LongType}
+import org.apache.spark.sql.types.{AbstractDataType, BinaryType, BooleanType, DataType, LongType}
 
 @ExpressionDescription(
   usage = """
@@ -58,9 +58,10 @@ case class HllSketchEstimate(child: Expression)
 
 @ExpressionDescription(
   usage = """
-    _FUNC_(left, right) - Merges two binary representations of Datasketches HllSketch objects,
-    using a Datasketches Union object configured with an lgMaxK equal to the min of the
-    HllSketch object's lgConfigK values """,
+    _FUNC_(first, second, allowDifferentLgConfigK) - Merges two binary representations of
+    Datasketches HllSketch objects, using a Datasketches Union object. Set
+    allowDifferentLgConfigK to true to allow unions of sketches with different
+    lgConfigK values (defaults to false). """,
   examples = """
     Examples:
       > SELECT hll_sketch_estimate(_FUNC_(hll_sketch_agg(col1), hll_sketch_agg(col1)))
@@ -69,24 +70,41 @@ case class HllSketchEstimate(child: Expression)
   """,
   group = "misc_funcs",
   since = "3.5.0")
-case class HllUnion(left: Expression, right: Expression)
-  extends BinaryExpression
+case class HllUnion(first: Expression, second: Expression, third: Expression)
+  extends TernaryExpression
     with CodegenFallback
     with ExpectsInputTypes
     with NullIntolerant {
 
-  override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression):
-  HllUnion = copy(left = newLeft, right = newRight)
+  def this(first: Expression, second: Expression) = {
+    this(first, second, Literal(false))
+  }
+
+  def this(first: Expression, second: Expression, third: Boolean) = {
+    this(first, second, Literal(third))
+  }
+
+  override protected def withNewChildrenInternal(
+    newFirst: Expression, newSecond: Expression, newThird: Expression):
+  HllUnion = copy(first = newFirst, second = newSecond, third = newThird)
 
   override def prettyName: String = "hll_union"
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(BinaryType, BinaryType)
+  override def inputTypes: Seq[AbstractDataType] = Seq(BinaryType, BinaryType, BooleanType)
 
   override def dataType: DataType = BinaryType
 
-  override def nullSafeEval(value1: Any, value2: Any): Any = {
+  override def nullSafeEval(value1: Any, value2: Any, value3: Any): Any = {
     val sketch1 = HllSketch.heapify(Memory.wrap(value1.asInstanceOf[Array[Byte]]))
     val sketch2 = HllSketch.heapify(Memory.wrap(value2.asInstanceOf[Array[Byte]]))
+    val allowDifferentLgConfigK = value3.asInstanceOf[Boolean]
+    if (!allowDifferentLgConfigK && sketch1.getLgConfigK != sketch2.getLgConfigK) {
+      throw new UnsupportedOperationException(
+        "Sketches have different lgConfigK values: " +
+        s"${sketch1.getLgConfigK} and ${sketch2.getLgConfigK}. " +
+        "Set allowDifferentLgConfigK to true to enable unions of " +
+        "different lgConfigK values.")
+    }
     val union = new Union(Math.min(sketch1.getLgConfigK, sketch2.getLgConfigK))
     union.update(sketch1)
     union.update(sketch2)
