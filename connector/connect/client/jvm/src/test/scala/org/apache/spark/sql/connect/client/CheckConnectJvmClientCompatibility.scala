@@ -248,9 +248,6 @@ object CheckConnectJvmClientCompatibility {
         "org.apache.spark.sql.streaming.StreamingQuery.awaitTermination" // TODO(SPARK-43143)
       ),
       ProblemFilters.exclude[Problem](
-        "org.apache.spark.sql.streaming.StreamingQuery.exception" // TODO(SPARK-43134)
-      ),
-      ProblemFilters.exclude[Problem](
         "org.apache.spark.sql.streaming.StreamingQueryProgress.*" // TODO(SPARK-43128)
       ),
 
