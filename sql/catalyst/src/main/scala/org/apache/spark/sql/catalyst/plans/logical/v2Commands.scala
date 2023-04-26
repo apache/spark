@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, EliminateSubqueryAliases, FieldName, NamedRelation, PartitionSpec, ResolvedIdentifier, UnresolvedException}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, AssignmentUtils, EliminateSubqueryAliases, FieldName, NamedRelation, PartitionSpec, ResolvedIdentifier, UnresolvedException}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.catalog.FunctionResource
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSet, Expression, MetadataAttribute, NamedExpression, Unevaluable, V2ExpressionUtils}
@@ -684,6 +684,9 @@ case class UpdateTable(
     table: LogicalPlan,
     assignments: Seq[Assignment],
     condition: Option[Expression]) extends UnaryCommand with SupportsSubquery {
+
+  lazy val aligned: Boolean = AssignmentUtils.aligned(table.output, assignments)
+
   override def child: LogicalPlan = table
   override protected def withNewChildInternal(newChild: LogicalPlan): UpdateTable =
     copy(table = newChild)
@@ -705,6 +708,21 @@ case class MergeIntoTable(
     matchedActions: Seq[MergeAction],
     notMatchedActions: Seq[MergeAction],
     notMatchedBySourceActions: Seq[MergeAction]) extends BinaryCommand with SupportsSubquery {
+
+  lazy val aligned: Boolean = {
+    val actions = matchedActions ++ notMatchedActions ++ notMatchedBySourceActions
+    actions.forall {
+      case UpdateAction(_, assignments) =>
+        AssignmentUtils.aligned(targetTable.output, assignments)
+      case _: DeleteAction =>
+        true
+      case InsertAction(_, assignments) =>
+        AssignmentUtils.aligned(targetTable.output, assignments)
+      case _ =>
+        false
+    }
+  }
+
   def duplicateResolved: Boolean = targetTable.outputSet.intersect(sourceTable.outputSet).isEmpty
 
   def skipSchemaResolution: Boolean = targetTable match {
@@ -778,6 +796,7 @@ case class Assignment(key: Expression, value: Expression) extends Expression
   override def dataType: DataType = throw new UnresolvedException("nullable")
   override def left: Expression = key
   override def right: Expression = value
+  override def sql: String = s"${key.sql} = ${value.sql}"
   override protected def withNewChildrenInternal(
     newLeft: Expression, newRight: Expression): Assignment = copy(key = newLeft, value = newRight)
 }

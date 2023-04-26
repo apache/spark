@@ -27,6 +27,7 @@ from pyspark.errors import (
     PySparkAttributeError,
     PySparkTypeError,
     PySparkException,
+    PySparkValueError,
 )
 from pyspark.sql import SparkSession as PySparkSession, Row
 from pyspark.sql.types import (
@@ -466,9 +467,6 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         )
 
     def test_collect_timestamp(self):
-        from pyspark.sql import functions as SF
-        from pyspark.sql.connect import functions as CF
-
         query = """
             SELECT * FROM VALUES
             (TIMESTAMP('2022-12-25 10:30:00'), 1),
@@ -652,10 +650,6 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
 
     def test_with_none_and_nan(self):
         # SPARK-41855: make createDataFrame support None and NaN
-
-        from pyspark.sql import functions as SF
-        from pyspark.sql.connect import functions as CF
-
         # SPARK-41814: test with eqNullSafe
         data1 = [Row(id=1, value=float("NaN")), Row(id=2, value=42.0), Row(id=3, value=None)]
         data2 = [Row(id=1, value=np.nan), Row(id=2, value=42.0), Row(id=3, value=None)]
@@ -1220,6 +1214,14 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             df.dropDuplicates(["name"]).toPandas(), df2.dropDuplicates(["name"]).toPandas()
         )
 
+    def test_deduplicate_within_watermark_in_batch(self):
+        df = self.connect.read.table(self.tbl_name)
+        with self.assertRaisesRegex(
+            AnalysisException,
+            "dropDuplicatesWithinWatermark is not supported with batch DataFrames/DataSets",
+        ):
+            df.dropDuplicatesWithinWatermark().toPandas()
+
     def test_first(self):
         # SPARK-41002: test `first` API in Python Client
         df = self.connect.read.table(self.tbl_name)
@@ -1662,9 +1664,6 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
 
     def test_observe(self):
         # SPARK-41527: test DataFrame.observe()
-        from pyspark.sql import functions as SF
-        from pyspark.sql.connect import functions as CF
-
         observation_name = "my_metric"
 
         self.assert_eq(
@@ -1706,10 +1705,23 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         values = list(map(lambda metric: metric.long, observed_metrics[0].metrics))
         self.assert_eq(values, [4, 99, 4944])
 
-        with self.assertRaisesRegex(ValueError, "'exprs' should not be empty"):
+        with self.assertRaises(PySparkValueError) as pe:
             self.connect.read.table(self.tbl_name).observe(observation_name)
-        with self.assertRaisesRegex(ValueError, "all 'exprs' should be Column"):
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="CANNOT_BE_EMPTY",
+            message_parameters={"item": "exprs"},
+        )
+
+        with self.assertRaises(PySparkTypeError) as pe:
             self.connect.read.table(self.tbl_name).observe(observation_name, CF.lit(1), "id")
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_LIST_OF_COLUMN",
+            message_parameters={"arg_name": "exprs"},
+        )
 
     def test_with_columns(self):
         # SPARK-41256: test withColumn(s).
@@ -1771,7 +1783,6 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             self.connect.read.table(self.tbl_name).hint("REPARTITION", "id", 3).toPandas()
 
     def test_join_hint(self):
-
         cdf1 = self.connect.createDataFrame([(2, "Alice"), (5, "Bob")], schema=["age", "name"])
         cdf2 = self.connect.createDataFrame(
             [Row(height=80, name="Tom"), Row(height=85, name="Bob")]
@@ -1947,12 +1958,16 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
                 "arg_type": "float",
             },
         )
-        with self.assertRaisesRegex(
-            ValueError, "probabilities should be numerical \\(float, int\\) in \\[0,1\\]"
-        ):
+        with self.assertRaises(PySparkTypeError) as pe:
             self.connect.read.table(self.tbl_name2).stat.approxQuantile(
                 ["col1", "col3"], [-0.1], 0.1
             )
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_LIST_OF_FLOAT_OR_INT",
+            message_parameters={"arg_name": "probabilities", "arg_type": "float"},
+        )
         with self.assertRaises(PySparkTypeError) as pe:
             self.connect.read.table(self.tbl_name2).stat.approxQuantile(
                 ["col1", "col3"], [0.1, 0.5, 0.9], "str"
@@ -1966,10 +1981,19 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
                 "arg_type": "str",
             },
         )
-        with self.assertRaisesRegex(ValueError, "relativeError should be >= 0."):
+        with self.assertRaises(PySparkValueError) as pe:
             self.connect.read.table(self.tbl_name2).stat.approxQuantile(
                 ["col1", "col3"], [0.1, 0.5, 0.9], -0.1
             )
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="NEGATIVE_VALUE",
+            message_parameters={
+                "arg_name": "relativeError",
+                "arg_value": "-0.1",
+            },
+        )
 
     def test_stat_freq_items(self):
         # SPARK-41065: Test the stat.freqItems method
@@ -2294,7 +2318,6 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         )
 
     def test_grouped_data(self):
-
         query = """
             SELECT * FROM VALUES
                 ('James', 'Sales', 3000, 2020),
@@ -2923,17 +2946,9 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             "foreachPartition",
             "checkpoint",
             "localCheckpoint",
-            "_repr_html_",
         ):
             with self.assertRaises(NotImplementedError):
                 getattr(df, f)()
-
-    def test_unsupported_group_functions(self):
-        # SPARK-41927: Disable unsupported functions.
-        cg = self.connect.read.table(self.tbl_name).groupBy("id")
-        for f in ("applyInPandasWithState",):
-            with self.assertRaises(NotImplementedError):
-                getattr(cg, f)()
 
     def test_unsupported_session_functions(self):
         # SPARK-41934: Disable unsupported functions.
@@ -3142,27 +3157,38 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         )
 
 
-class SparkConnectSessionTests(SparkConnectSQLTestCase):
+class SparkConnectSessionTests(ReusedConnectTestCase):
+    def setUp(self) -> None:
+        self.spark = (
+            PySparkSession.builder.config(conf=self.conf())
+            .appName(self.__class__.__name__)
+            .remote("local[4]")
+            .getOrCreate()
+        )
+
+    def tearDown(self):
+        self.spark.stop()
+
     def _check_no_active_session_error(self, e: PySparkException):
         self.check_error(exception=e, error_class="NO_ACTIVE_SESSION", message_parameters=dict())
 
     def test_stop_session(self):
-        df = self.connect.sql("select 1 as a, 2 as b")
-        catalog = self.connect.catalog
-        self.connect.stop()
+        df = self.spark.sql("select 1 as a, 2 as b")
+        catalog = self.spark.catalog
+        self.spark.stop()
 
         # _execute_and_fetch
         with self.assertRaises(SparkConnectException) as e:
-            self.connect.sql("select 1")
+            self.spark.sql("select 1")
         self._check_no_active_session_error(e.exception)
 
         with self.assertRaises(SparkConnectException) as e:
-            catalog.tableExists(self.tbl_name)
+            catalog.tableExists("table")
         self._check_no_active_session_error(e.exception)
 
         # _execute
         with self.assertRaises(SparkConnectException) as e:
-            self.connect.udf.register("test_func", lambda x: x + 1)
+            self.spark.udf.register("test_func", lambda x: x + 1)
         self._check_no_active_session_error(e.exception)
 
         # _analyze
@@ -3172,8 +3198,42 @@ class SparkConnectSessionTests(SparkConnectSQLTestCase):
 
         # Config
         with self.assertRaises(SparkConnectException) as e:
-            self.connect.conf.get("some.conf")
+            self.spark.conf.get("some.conf")
         self._check_no_active_session_error(e.exception)
+
+    def test_error_stack_trace(self):
+        with self.sql_conf({"spark.sql.pyspark.jvmStacktrace.enabled": True}):
+            with self.assertRaises(AnalysisException) as e:
+                self.spark.sql("select x").collect()
+            self.assertTrue("JVM stacktrace" in e.exception.message)
+            self.assertTrue(
+                "at org.apache.spark.sql.catalyst.analysis.CheckAnalysis" in e.exception.message
+            )
+
+        with self.sql_conf({"spark.sql.pyspark.jvmStacktrace.enabled": False}):
+            with self.assertRaises(AnalysisException) as e:
+                self.spark.sql("select x").collect()
+            self.assertFalse("JVM stacktrace" in e.exception.message)
+            self.assertFalse(
+                "at org.apache.spark.sql.catalyst.analysis.CheckAnalysis" in e.exception.message
+            )
+
+        # Create a new session with a different stack trace size.
+        self.spark.stop()
+        spark = (
+            PySparkSession.builder.config(conf=self.conf())
+            .config("spark.connect.jvmStacktrace.maxSize", 128)
+            .remote("local[4]")
+            .getOrCreate()
+        )
+        spark.conf.set("spark.sql.pyspark.jvmStacktrace.enabled", "true")
+        with self.assertRaises(AnalysisException) as e:
+            spark.sql("select x").collect()
+        self.assertTrue("JVM stacktrace" in e.exception.message)
+        self.assertFalse(
+            "at org.apache.spark.sql.catalyst.analysis.CheckAnalysis" in e.exception.message
+        )
+        spark.stop()
 
 
 @unittest.skipIf(not should_test_connect, connect_requirement_message)
@@ -3311,28 +3371,21 @@ class ChannelBuilderTests(unittest.TestCase):
         chan = ChannelBuilder("sc://host/;use_ssl=abcs")
         self.assertFalse(chan.secure, "Garbage in, false out")
 
-    def test_invalid_user_agent_charset(self):
-        # fmt: off
-        invalid_user_agents = [
-            "agent»",  # non standard symbol
-            "age nt",  # whitespace
-            "ägent",   # non-ascii alphabet
-        ]
-        # fmt: on
-        for user_agent in invalid_user_agents:
-            with self.subTest(user_agent=user_agent):
-                chan = ChannelBuilder(f"sc://host/;user_agent={user_agent}")
-                with self.assertRaises(SparkConnectException) as err:
-                    chan.userAgent
+    def test_user_agent(self):
+        chan = ChannelBuilder("sc://host/;user_agent=Agent123%20%2F3.4")
+        self.assertEqual("Agent123 /3.4", chan.userAgent)
 
-                self.assertRegex(err.exception.message, "alphanumeric and common punctuations")
-
-    def test_invalid_user_agent_len(self):
-        user_agent = "x" * 201
+    def test_user_agent_len(self):
+        user_agent = "x" * 2049
         chan = ChannelBuilder(f"sc://host/;user_agent={user_agent}")
         with self.assertRaises(SparkConnectException) as err:
             chan.userAgent
-        self.assertRegex(err.exception.message, "characters in length")
+        self.assertRegex(err.exception.message, "'user_agent' parameter should not exceed")
+
+        user_agent = "%C3%A4" * 341  # "%C3%A4" -> "ä"; (341 * 6 = 2046) < 2048
+        expected = "ä" * 341
+        chan = ChannelBuilder(f"sc://host/;user_agent={user_agent}")
+        self.assertEqual(expected, chan.userAgent)
 
     def test_valid_channel_creation(self):
         chan = ChannelBuilder("sc://host").toChannel()

@@ -32,6 +32,7 @@ import org.apache.spark.sql.connect.client.{SparkResult, UdfUtils}
 import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, StorageLevelProtoConverter}
 import org.apache.spark.sql.expressions.ScalarUserDefinedFunction
 import org.apache.spark.sql.functions.{struct, to_json}
+import org.apache.spark.sql.streaming.DataStreamWriter
 import org.apache.spark.sql.types.{Metadata, StructType}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.Utils
@@ -1273,6 +1274,35 @@ class Dataset[T] private[sql] (
       colNames.map(colName => Column(colName).expr),
       proto.Aggregate.GroupType.GROUP_TYPE_GROUPBY)
   }
+
+  /**
+   * (Scala-specific) Returns a [[KeyValueGroupedDataset]] where the data is grouped by the given
+   * key `func`.
+   *
+   * @group typedrel
+   * @since 3.5.0
+   */
+  def groupByKey[K: Encoder](func: T => K): KeyValueGroupedDataset[K, T] = {
+    val kEncoder = encoderFor[K]
+    new KeyValueGroupedDatasetImpl[K, T, K, T](
+      this,
+      sparkSession,
+      plan,
+      kEncoder,
+      kEncoder,
+      func,
+      UdfUtils.identical())
+  }
+
+  /**
+   * (Java-specific) Returns a [[KeyValueGroupedDataset]] where the data is grouped by the given
+   * key `func`.
+   *
+   * @group typedrel
+   * @since 3.5.0
+   */
+  def groupByKey[K](func: MapFunction[T, K], encoder: Encoder[K]): KeyValueGroupedDataset[K, T] =
+    groupByKey(UdfUtils.mapFunctionToScalaFunc(func))(encoder)
 
   /**
    * Create a multi-dimensional rollup for the current Dataset using the specified columns, so we
@@ -2936,6 +2966,16 @@ class Dataset[T] private[sql] (
   }
 
   /**
+   * Interface for saving the content of the streaming Dataset out into external storage.
+   *
+   * @group basic
+   * @since 3.5.0
+   */
+  def writeStream: DataStreamWriter[T] = {
+    new DataStreamWriter[T](this)
+  }
+
+  /**
    * Persist this Dataset with the default storage level (`MEMORY_AND_DISK`).
    *
    * @group basic
@@ -3017,8 +3057,37 @@ class Dataset[T] private[sql] (
         .getStorageLevel)
   }
 
+  /**
+   * Defines an event time watermark for this [[Dataset]]. A watermark tracks a point in time
+   * before which we assume no more late data is going to arrive.
+   *
+   * Spark will use this watermark for several purposes: <ul> <li>To know when a given time window
+   * aggregation can be finalized and thus can be emitted when using output modes that do not
+   * allow updates.</li> <li>To minimize the amount of state that we need to keep for on-going
+   * aggregations, `mapGroupsWithState` and `dropDuplicates` operators.</li> </ul> The current
+   * watermark is computed by looking at the `MAX(eventTime)` seen across all of the partitions in
+   * the query minus a user specified `delayThreshold`. Due to the cost of coordinating this value
+   * across partitions, the actual watermark used is only guaranteed to be at least
+   * `delayThreshold` behind the actual event time. In some cases we may still process records
+   * that arrive more than `delayThreshold` late.
+   *
+   * @param eventTime
+   *   the name of the column that contains the event time of the row.
+   * @param delayThreshold
+   *   the minimum delay to wait to data to arrive late, relative to the latest record that has
+   *   been processed in the form of an interval (e.g. "1 minute" or "5 hours"). NOTE: This should
+   *   not be negative.
+   *
+   * @group streaming
+   * @since 3.5.0
+   */
   def withWatermark(eventTime: String, delayThreshold: String): Dataset[T] = {
-    throw new UnsupportedOperationException("withWatermark is not implemented.")
+    sparkSession.newDataset(encoder) { builder =>
+      builder.getWithWatermarkBuilder
+        .setInput(plan.getRoot)
+        .setEventTime(eventTime)
+        .setDelayThreshold(delayThreshold)
+    }
   }
 
   def observe(name: String, expr: Column, exprs: Column*): Dataset[T] = {

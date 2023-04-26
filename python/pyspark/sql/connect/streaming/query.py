@@ -19,10 +19,13 @@ import json
 import sys
 from typing import TYPE_CHECKING, Any, cast, Dict, List, Optional
 
-from pyspark.errors import StreamingQueryException
+from pyspark.errors import StreamingQueryException, PySparkValueError
 import pyspark.sql.connect.proto as pb2
 from pyspark.sql.streaming.query import (
     StreamingQuery as PySparkStreamingQuery,
+)
+from pyspark.errors.exceptions.connect import (
+    StreamingQueryException as CapturedStreamingQueryException,
 )
 
 __all__ = [
@@ -66,11 +69,24 @@ class StreamingQuery:
 
     isActive.__doc__ = PySparkStreamingQuery.isActive.__doc__
 
-    # TODO (SPARK-42960): Implement and uncomment the doc
     def awaitTermination(self, timeout: Optional[int] = None) -> Optional[bool]:
-        raise NotImplementedError()
+        cmd = pb2.StreamingQueryCommand()
+        if timeout is not None:
+            if not isinstance(timeout, (int, float)) or timeout <= 0:
+                raise PySparkValueError(
+                    error_class="VALUE_NOT_POSITIVE",
+                    message_parameters={"arg_name": "timeout", "arg_value": type(timeout).__name__},
+                )
+            cmd.await_termination.timeout_ms = int(timeout * 1000)
+            terminated = self._execute_streaming_query_cmd(cmd).await_termination.terminated
+            return terminated
+        else:
+            await_termination_cmd = pb2.StreamingQueryCommand.AwaitTerminationCommand()
+            cmd.await_termination.CopyFrom(await_termination_cmd)
+            self._execute_streaming_query_cmd(cmd)
+            return None
 
-    # awaitTermination.__doc__ = PySparkStreamingQuery.awaitTermination.__doc__
+    awaitTermination.__doc__ = PySparkStreamingQuery.awaitTermination.__doc__
 
     @property
     def status(self) -> Dict[str, Any]:
@@ -127,9 +143,14 @@ class StreamingQuery:
 
     explain.__doc__ = PySparkStreamingQuery.explain.__doc__
 
-    # TODO (SPARK-42960): Implement and uncomment the doc
     def exception(self) -> Optional[StreamingQueryException]:
-        raise NotImplementedError()
+        cmd = pb2.StreamingQueryCommand()
+        cmd.exception = True
+        exception = self._execute_streaming_query_cmd(cmd).exception
+        if exception.HasField("exception_message"):
+            return CapturedStreamingQueryException(exception.exception_message)
+        else:
+            return None
 
     exception.__doc__ = PySparkStreamingQuery.exception.__doc__
 

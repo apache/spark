@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.types
 
-import scala.reflect.runtime.universe.TypeTag
-
 import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -121,10 +119,7 @@ protected[sql] object AnyDataType extends AbstractDataType with Serializable {
 /**
  * An internal type used to represent everything that is not null, UDTs, arrays, structs, and maps.
  */
-protected[sql] abstract class AtomicType extends DataType {
-  private[sql] type InternalType
-  private[sql] val tag: TypeTag[InternalType]
-}
+protected[sql] abstract class AtomicType extends DataType
 
 object AtomicType {
   /**

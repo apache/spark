@@ -1740,8 +1740,9 @@ object SQLConf {
 
   val FILES_MIN_PARTITION_NUM = buildConf("spark.sql.files.minPartitionNum")
     .doc("The suggested (not guaranteed) minimum number of split file partitions. " +
-      "If not set, the default value is `spark.default.parallelism`. This configuration is " +
-      "effective only when using file-based sources such as Parquet, JSON and ORC.")
+      s"If not set, the default value is `${LEAF_NODE_DEFAULT_PARALLELISM.key}`. " +
+      "This configuration is effective only when using file-based sources " +
+      "such as Parquet, JSON and ORC.")
     .version("3.1.0")
     .intConf
     .checkValue(v => v > 0, "The min partition number must be a positive integer.")
@@ -2435,7 +2436,7 @@ object SQLConf {
   val STREAMING_NO_DATA_PROGRESS_EVENT_INTERVAL =
     buildConf("spark.sql.streaming.noDataProgressEventInterval")
       .internal()
-      .doc("How long to wait between two progress events when there is no data")
+      .doc("How long to wait before providing query idle event when there is no data")
       .version("2.1.1")
       .timeConf(TimeUnit.MILLISECONDS)
       .createWithDefault(10000L)
@@ -3250,6 +3251,15 @@ object SQLConf {
       .version("3.4.0")
       .booleanConf
       .createWithDefault(true)
+
+  val DECORRELATE_SUBQUERY_LEGACY_INCORRECT_COUNT_HANDLING_ENABLED =
+    buildConf("spark.sql.optimizer.decorrelateSubqueryLegacyIncorrectCountHandling.enabled")
+      .internal()
+      .doc("If enabled, revert to legacy incorrect behavior for certain subqueries with COUNT or " +
+        "similar aggregates: see SPARK-43098.")
+      .version("3.5.0")
+      .booleanConf
+      .createWithDefault(false)
 
   val OPTIMIZE_ONE_ROW_RELATION_SUBQUERY =
     buildConf("spark.sql.optimizer.optimizeOneRowRelationSubquery")

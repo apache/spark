@@ -3550,15 +3550,14 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
             if isinstance(self, SeriesGroupBy):
                 raise TypeError("Only numeric aggregation column is accepted.")
 
-            if not numeric_only:
-                if has_non_numeric:
-                    warnings.warn(
-                        "Dropping invalid columns in DataFrameGroupBy.%s is deprecated. "
-                        "In a future version, a TypeError will be raised. "
-                        "Before calling .%s, select only columns which should be "
-                        "valid for the function." % (function_name, function_name),
-                        FutureWarning,
-                    )
+            if not numeric_only and has_non_numeric:
+                warnings.warn(
+                    "Dropping invalid columns in DataFrameGroupBy.%s is deprecated. "
+                    "In a future version, a TypeError will be raised. "
+                    "Before calling .%s, select only columns which should be "
+                    "valid for the function." % (function_name, function_name),
+                    FutureWarning,
+                )
 
     def _reduce_for_stat_function(
         self,

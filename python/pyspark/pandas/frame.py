@@ -8915,15 +8915,19 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             if len(index_scols) != other._internal.index_level:
                 raise ValueError("Both DataFrames have to have the same number of index levels")
 
-            if verify_integrity and len(index_scols) > 0:
-                if (
+            if (
+                verify_integrity
+                and len(index_scols) > 0
+                and (
                     self._internal.spark_frame.select(index_scols)
                     .intersect(
                         other._internal.spark_frame.select(other._internal.index_spark_columns)
                     )
                     .count()
-                ) > 0:
-                    raise ValueError("Indices have overlapping values")
+                )
+                > 0
+            ):
+                raise ValueError("Indices have overlapping values")
 
         # Lazy import to avoid circular dependency issues
         from pyspark.pandas.namespace import concat
@@ -11581,9 +11585,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
             index_columns = psdf._internal.index_spark_column_names
             num_indices = len(index_columns)
-            if level:
-                if level < 0 or level >= num_indices:
-                    raise ValueError("level should be an integer between [0, %s)" % num_indices)
+            if level is not None and (level < 0 or level >= num_indices):
+                raise ValueError("level should be an integer between [0, %s)" % num_indices)
 
             @pandas_udf(returnType=index_mapper_ret_stype)  # type: ignore[call-overload]
             def index_mapper_udf(s: pd.Series) -> pd.Series:
@@ -12054,7 +12057,6 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         verbose: Optional[bool] = None,
         buf: Optional[IO[str]] = None,
         max_cols: Optional[int] = None,
-        null_counts: Optional[bool] = None,
     ) -> None:
         """
         Print a concise summary of a DataFrame.
@@ -12167,7 +12169,6 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                     buf=buf,
                     max_cols=max_cols,
                     memory_usage=False,
-                    null_counts=null_counts,
                 )
             finally:
                 del self._data

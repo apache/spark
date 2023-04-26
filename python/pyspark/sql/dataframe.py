@@ -22,7 +22,6 @@ import random
 import warnings
 from collections.abc import Iterable
 from functools import reduce
-from html import escape as html_escape
 from typing import (
     Any,
     Callable,
@@ -576,13 +575,22 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
                 )
         return self._schema
 
-    def printSchema(self) -> None:
+    def printSchema(self, level: Optional[int] = None) -> None:
         """Prints out the schema in the tree format.
+        Optionally allows to specify how many levels to print if schema is nested.
 
         .. versionadded:: 1.3.0
 
         .. versionchanged:: 3.4.0
             Supports Spark Connect.
+
+        Parameters
+        ----------
+        level : int, optional, default None
+            How many levels to print for nested schemas.
+
+            .. versionchanged:: 3.5.0
+                Added Level parameter.
 
         Examples
         --------
@@ -592,8 +600,24 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         root
          |-- age: long (nullable = true)
          |-- name: string (nullable = true)
+
+        >>> df = spark.createDataFrame([(1, (2,2))], ["a", "b"])
+        >>> df.printSchema(1)
+        root
+         |-- a: long (nullable = true)
+         |-- b: struct (nullable = true)
+
+        >>> df.printSchema(2)
+        root
+         |-- a: long (nullable = true)
+         |-- b: struct (nullable = true)
+         |    |-- _1: long (nullable = true)
+         |    |-- _2: long (nullable = true)
         """
-        print(self._jdf.schema().treeString())
+        if level:
+            print(self._jdf.schema().treeString(level))
+        else:
+            print(self._jdf.schema().treeString())
 
     def explain(
         self, extended: Optional[Union[bool, str]] = None, mode: Optional[str] = None
@@ -936,32 +960,10 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         if not self._support_repr_html:
             self._support_repr_html = True
         if self.sparkSession._jconf.isReplEagerEvalEnabled():
-            max_num_rows = max(self.sparkSession._jconf.replEagerEvalMaxNumRows(), 0)
-            sock_info = self._jdf.getRowsToPython(
-                max_num_rows,
+            return self._jdf.htmlString(
+                self.sparkSession._jconf.replEagerEvalMaxNumRows(),
                 self.sparkSession._jconf.replEagerEvalTruncate(),
             )
-            rows = list(_load_from_socket(sock_info, BatchedSerializer(CPickleSerializer())))
-            head = rows[0]
-            row_data = rows[1:]
-            has_more_data = len(row_data) > max_num_rows
-            row_data = row_data[:max_num_rows]
-
-            html = "<table border='1'>\n"
-            # generate table head
-            html += "<tr><th>%s</th></tr>\n" % "</th><th>".join(map(lambda x: html_escape(x), head))
-            # generate table rows
-            for row in row_data:
-                html += "<tr><td>%s</td></tr>\n" % "</td><td>".join(
-                    map(lambda x: html_escape(x), row)
-                )
-            html += "</table>\n"
-            if has_more_data:
-                html += "only showing top %d %s\n" % (
-                    max_num_rows,
-                    "row" if max_num_rows == 1 else "rows",
-                )
-            return html
         else:
             return None
 
@@ -1294,6 +1296,41 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         +---+----+
         """
         jdf = self._jdf.limit(num)
+        return DataFrame(jdf, self.sparkSession)
+
+    def offset(self, num: int) -> "DataFrame":
+        """Returns a new :class: `DataFrame` by skipping the first `n` rows.
+
+        .. versionadded:: 3.5.0
+
+        Parameters
+        ----------
+        num : int
+            Number of records to skip.
+
+        Returns
+        -------
+        :class:`DataFrame`
+            Subset of the records
+
+        Examples
+        --------
+        >>> df = spark.createDataFrame(
+        ...     [(14, "Tom"), (23, "Alice"), (16, "Bob")], ["age", "name"])
+        >>> df.offset(1).show()
+        +---+-----+
+        |age| name|
+        +---+-----+
+        | 23|Alice|
+        | 16|  Bob|
+        +---+-----+
+        >>> df.offset(10).show()
+        +---+----+
+        |age|name|
+        +---+----+
+        +---+----+
+        """
+        jdf = self._jdf.offset(num)
         return DataFrame(jdf, self.sparkSession)
 
     def take(self, num: int) -> List[Row]:
@@ -3599,6 +3636,9 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         ...        if ratio > 0.05:
         ...            # Trigger alert
         ...            pass
+        ...
+        ...    def onQueryIdle(self, event):
+        ...        pass
         ...
         ...    def onQueryTerminated(self, event):
         ...        pass

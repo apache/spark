@@ -367,12 +367,12 @@ case class InSubquery(values: Seq[Expression], query: ListQuery)
   final override val nodePatterns: Seq[TreePattern] = Seq(IN_SUBQUERY)
 
   override def checkInputDataTypes(): TypeCheckResult = {
-    if (values.length != query.childOutputs.length) {
+    if (values.length != query.numCols) {
       DataTypeMismatch(
         errorSubClass = "IN_SUBQUERY_LENGTH_MISMATCH",
         messageParameters = Map(
           "leftLength" -> values.length.toString,
-          "rightLength" -> query.childOutputs.length.toString,
+          "rightLength" -> query.numCols.toString,
           "leftColumns" -> values.map(toSQLExpr(_)).mkString(", "),
           "rightColumns" -> query.childOutputs.map(toSQLExpr(_)).mkString(", ")
         )

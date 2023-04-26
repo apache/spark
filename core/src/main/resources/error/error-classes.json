@@ -94,6 +94,16 @@
     ],
     "sqlState" : "42825"
   },
+  "CANNOT_MERGE_SCHEMAS" : {
+    "message" : [
+      "Failed merging schemas:",
+      "Initial schema:",
+      "<left>",
+      "Schema that cannot be merged with the initial schema:",
+      "<right>."
+    ],
+    "sqlState" : "42KD9"
+  },
   "CANNOT_MODIFY_CONFIG" : {
     "message" : [
       "Cannot modify the value of the Spark config: <key>.",
@@ -351,6 +361,11 @@
       "INVALID_ORDERING_TYPE" : {
         "message" : [
           "The <functionName> does not support ordering on type <dataType>."
+        ]
+      },
+      "INVALID_ROW_LEVEL_OPERATION_ASSIGNMENTS" : {
+        "message" : [
+          "<errors>"
         ]
       },
       "IN_SUBQUERY_DATA_TYPE_MISMATCH" : {
@@ -4810,12 +4825,6 @@
   "_LEGACY_ERROR_TEMP_2246" : {
     "message" : [
       "Table does not support dynamic partition overwrite: <table>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2247" : {
-    "message" : [
-      "Failed merging schema:",
-      "<schema>."
     ]
   },
   "_LEGACY_ERROR_TEMP_2248" : {

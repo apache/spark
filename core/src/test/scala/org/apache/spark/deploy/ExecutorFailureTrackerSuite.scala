@@ -14,15 +14,17 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.deploy.yarn
+
+package org.apache.spark.deploy
 
 import org.scalatest.matchers.must.Matchers
 import org.scalatest.matchers.should.Matchers._
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.internal.config
 import org.apache.spark.util.ManualClock
 
-class FailureTrackerSuite extends SparkFunSuite with Matchers {
+class ExecutorFailureTrackerSuite extends SparkFunSuite with Matchers {
 
   override def beforeAll(): Unit = {
     super.beforeAll()
@@ -33,7 +35,7 @@ class FailureTrackerSuite extends SparkFunSuite with Matchers {
     sparkConf.set(config.EXECUTOR_ATTEMPT_FAILURE_VALIDITY_INTERVAL_MS, 100L)
 
     val clock = new ManualClock()
-    val failureTracker = new FailureTracker(sparkConf, clock)
+    val failureTracker = new ExecutorFailureTracker(sparkConf, clock)
 
     clock.setTime(0)
     failureTracker.registerFailureOnHost("host1")
@@ -70,7 +72,7 @@ class FailureTrackerSuite extends SparkFunSuite with Matchers {
     val sparkConf = new SparkConf()
 
     val clock = new ManualClock()
-    val failureTracker = new FailureTracker(sparkConf, clock)
+    val failureTracker = new ExecutorFailureTracker(sparkConf, clock)
 
     clock.setTime(0)
     failureTracker.registerFailureOnHost("host1")

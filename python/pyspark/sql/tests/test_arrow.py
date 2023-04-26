@@ -55,6 +55,7 @@ from pyspark.testing.sqlutils import (
     pyarrow_requirement_message,
 )
 from pyspark.testing.utils import QuietTest
+from pyspark.errors import PySparkTypeError
 
 if have_pandas:
     import pandas as pd
@@ -215,8 +216,14 @@ class ArrowTestsMixin:
         df = self.spark.createDataFrame([(None,)], schema=schema)
         with QuietTest(self.sc):
             with self.warnings_lock:
-                with self.assertRaisesRegex(Exception, "Unsupported type"):
+                with self.assertRaises(PySparkTypeError) as pe:
                     df.toPandas()
+
+                self.check_error(
+                    exception=pe.exception,
+                    error_class="UNSUPPORTED_DATA_TYPE",
+                    message_parameters={"data_type": "ArrayType(TimestampType(), True)"},
+                )
 
     def test_toPandas_empty_df_arrow_enabled(self):
         for arrow_enabled in [True, False]:
@@ -533,8 +540,10 @@ class ArrowTestsMixin:
             self.check_createDataFrame_with_single_data_type()
 
     def check_createDataFrame_with_single_data_type(self):
-        with self.assertRaisesRegex(ValueError, ".*IntegerType.*not supported.*"):
-            self.spark.createDataFrame(pd.DataFrame({"a": [1]}), schema="int").collect()
+        for schema in ["int", IntegerType()]:
+            with self.subTest(schema=schema):
+                with self.assertRaisesRegex(ValueError, ".*IntegerType.*not supported.*"):
+                    self.spark.createDataFrame(pd.DataFrame({"a": [1]}), schema=schema).collect()
 
     def test_createDataFrame_does_not_modify_input(self):
         # Some series get converted for Spark to consume, this makes sure input is unchanged
@@ -746,11 +755,17 @@ class ArrowTestsMixin:
 
     def test_createDataFrame_fallback_disabled(self):
         with QuietTest(self.sc):
-            with self.assertRaisesRegex(TypeError, "Unsupported type"):
+            with self.assertRaises(PySparkTypeError) as pe:
                 self.spark.createDataFrame(
                     pd.DataFrame({"a": [[datetime.datetime(2015, 11, 1, 0, 30)]]}),
                     "a: array<timestamp>",
                 )
+
+            self.check_error(
+                exception=pe.exception,
+                error_class="UNSUPPORTED_DATA_TYPE",
+                message_parameters={"data_type": "ArrayType(TimestampType(), True)"},
+            )
 
     # Regression test for SPARK-23314
     def test_timestamp_dst(self):
@@ -809,7 +824,7 @@ class ArrowTestsMixin:
         for case in cases:
             run_test(*case)
 
-    def test_createDateFrame_with_category_type(self):
+    def test_createDataFrame_with_category_type(self):
         pdf = pd.DataFrame({"A": ["a", "b", "c", "a"]})
         pdf["B"] = pdf["A"].astype("category")
         category_first_element = dict(enumerate(pdf["B"].cat.categories))[0]
