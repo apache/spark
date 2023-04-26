@@ -1903,9 +1903,9 @@ class DataFrame:
         from pyspark.pandas.frame import DataFrame as PandasOnSparkDataFrame
         from pyspark.pandas.internal import InternalFrame
 
-        index_spark_columns, index_names = _get_index_map(self, index_col)
+        index_spark_columns, index_names = _get_index_map(self, index_col)  # type: ignore[arg-type]
         internal = InternalFrame(
-            spark_frame=self,
+            spark_frame=self,  # type: ignore[arg-type]
             index_spark_columns=index_spark_columns,
             index_names=index_names,  # type: ignore[arg-type]
         )
