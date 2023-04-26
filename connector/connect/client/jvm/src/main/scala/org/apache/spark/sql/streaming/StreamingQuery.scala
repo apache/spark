@@ -211,6 +211,7 @@ class RemoteStreamingQuery(
       // TODO(SPARK-43206): Add more information to StreamingQueryException.
       Some(
         new StreamingQueryException(
+          // message maps to the return value of original StreamingQueryException's toString method
           message = exception.getExceptionMessage,
           errorClass = exception.getErrorClass))
     } else {

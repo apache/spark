@@ -308,7 +308,8 @@ message StreamingQueryCommandResult {
   }
 
   message ExceptionResult {
-    // (Optional) Exception message as string
+    // (Optional) Exception message as string, maps to the return value of original
+    // StreamingQueryException's toString method
     optional string exception_message = 1;
     // (Optional) Exception error class as string
     optional string error_class = 2;
