@@ -2050,6 +2050,7 @@ private[spark] class BlockManager(
     blockInfoManager.entries.foreach {
       case (cid @ CacheId(uid, sid, _), _) if uid == userId && sid == sessionId =>
         removeBlock(cid)
+      case _ =>
     }
   }
 
