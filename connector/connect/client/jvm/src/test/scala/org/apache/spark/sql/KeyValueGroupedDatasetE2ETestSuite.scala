@@ -23,8 +23,7 @@ import io.grpc.StatusRuntimeException
 import org.apache.spark.sql.connect.client.util.RemoteSparkSession
 
 /**
- * All tests in this class requires client UDF artifacts synced with the server. TODO: It means
- * these tests only works with SBT for now.
+ * All tests in this class requires client UDF artifacts synced with the server.
  */
 class KeyValueGroupedDatasetE2ETestSuite extends RemoteSparkSession {
 
@@ -62,9 +61,9 @@ class KeyValueGroupedDatasetE2ETestSuite extends RemoteSparkSession {
   }
 
   test("keyAs - keys") {
+    // It is okay to cast from Long to Double, but not Long to Int.
     val session: SparkSession = spark
     import session.implicits._
-    // It is okay to cast from Long to Double, but not Long to Int.
     val values = spark
       .range(10)
       .groupByKey(v => v % 2)
@@ -244,15 +243,15 @@ class KeyValueGroupedDatasetE2ETestSuite extends RemoteSparkSession {
     val ds = Seq(("a", 1, 10), ("a", 2, 20), ("b", 2, 1), ("b", 1, 2), ("c", 1, 1))
       .toDF("key", "seq", "value")
     val grouped = ds.groupBy($"key").as[String, (String, Int, Int)]
-    val aggregated = grouped.flatMapSortedGroups(
-      $"seq", functions.expr("length(key)"), $"value") {
-      (g, iter) => Iterator(g, iter.mkString(", "))
-    }.collectAsList()
+    val aggregated = grouped
+      .flatMapSortedGroups($"seq", functions.expr("length(key)"), $"value") { (g, iter) =>
+        Iterator(g, iter.mkString(", "))
+      }
+      .collectAsList()
 
-    assert(aggregated == Arrays.asList[String](
-      "a", "(a,1,10), (a,2,20)",
-      "b", "(b,2,1), (b,1,2)",
-      "c", "(c,1,1)"))
+    assert(
+      aggregated == Arrays
+        .asList[String]("a", "(a,1,10), (a,2,20)", "b", "(b,2,1), (b,1,2)", "c", "(c,1,1)"))
   }
 
   test("groupby - keyAs, keys") {
@@ -261,8 +260,8 @@ class KeyValueGroupedDatasetE2ETestSuite extends RemoteSparkSession {
     val ds = Seq(("a", 1, 10), ("a", 2, 20), ("b", 2, 1), ("b", 1, 2), ("c", 1, 1))
       .toDF("key", "seq", "value")
     val grouped = ds.groupBy($"value").as[String, (String, Int, Int)]
-    val keys = grouped.keyAs[String].keys.collectAsList()
+    val keys = grouped.keyAs[String].keys.sort($"value").collectAsList()
 
-    assert(keys == Arrays.asList[String]("10", "20", "1", "2"))
+    assert(keys == Arrays.asList[String]("1", "2", "10", "20"))
   }
 }

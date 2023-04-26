@@ -689,7 +689,7 @@ class SparkConnectPlanner(val session: SparkSession) {
       val kEnc = ExpressionEncoder(dummyFunc.outputEncoder)
 
       val (qe, aliasedGroupings) =
-        RelationalGroupedDataset.toKeyValueGroupedDataset(logicalPlan, session, groupExprs)
+        RelationalGroupedDataset.handleGroupingExpression(logicalPlan, session, groupExprs)
 
       val dataAttributes = logicalPlan.output
       val valueDeserializer = UnresolvedDeserializer(vEnc.deserializer, dataAttributes)

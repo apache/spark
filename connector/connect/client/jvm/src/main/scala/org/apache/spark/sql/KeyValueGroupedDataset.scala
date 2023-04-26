@@ -26,8 +26,8 @@ import org.apache.spark.api.java.function._
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.Plan
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
-import org.apache.spark.sql.connect.common.UdfUtils
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.ProductEncoder
+import org.apache.spark.sql.connect.common.UdfUtils
 import org.apache.spark.sql.expressions.ScalarUserDefinedFunction
 import org.apache.spark.sql.functions.col
 
@@ -596,8 +596,14 @@ private object KeyValueGroupedDatasetImpl {
       inputEncoders = ds.encoder :: Nil, // Using the original value and key encoders
       outputEncoder = kEncoder)
     new KeyValueGroupedDatasetImpl(
-      sparkSession, plan, kEncoder, kEncoder, ds.encoder, ds.encoder,
-      Arrays.asList(gf.apply(col("*")).expr), UdfUtils.identical(),
+      sparkSession,
+      plan,
+      kEncoder,
+      kEncoder,
+      ds.encoder,
+      ds.encoder,
+      Arrays.asList(gf.apply(col("*")).expr),
+      UdfUtils.identical(),
       () => ds.map(groupingFunc)(kEncoder))
   }
 
@@ -615,8 +621,14 @@ private object KeyValueGroupedDatasetImpl {
       outputEncoder = kEncoder).apply(col("*"))
 
     new KeyValueGroupedDatasetImpl(
-      sparkSession, plan, kEncoder, kEncoder, vEncoder, vEncoder,
-      (Seq(dummyGroupingFunc) ++ groupingExprs).map(_.expr).asJava, UdfUtils.identical(),
+      sparkSession,
+      plan,
+      kEncoder,
+      kEncoder,
+      vEncoder,
+      vEncoder,
+      (Seq(dummyGroupingFunc) ++ groupingExprs).map(_.expr).asJava,
+      UdfUtils.identical(),
       () => df.select(groupingExprs: _*).as(kEncoder))
   }
 }

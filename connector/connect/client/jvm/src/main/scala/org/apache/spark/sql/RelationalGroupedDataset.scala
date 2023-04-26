@@ -66,8 +66,8 @@ class RelationalGroupedDataset private[sql] (
   }
 
   /**
-   * Returns a `KeyValueGroupedDataset` where the data is grouped by the grouping expressions
-   * of current `RelationalGroupedDataset`.
+   * Returns a `KeyValueGroupedDataset` where the data is grouped by the grouping expressions of
+   * current `RelationalGroupedDataset`.
    *
    * @since 3.5.0
    */

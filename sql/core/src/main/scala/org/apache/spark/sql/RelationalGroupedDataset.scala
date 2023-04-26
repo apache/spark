@@ -138,7 +138,7 @@ class RelationalGroupedDataset protected[sql](
     val valueEncoder = encoderFor[T]
 
     val (qe, groupingAttributes) =
-      toKeyValueGroupedDataset(df.logicalPlan, df.sparkSession, groupingExprs)
+      handleGroupingExpression(df.logicalPlan, df.sparkSession, groupingExprs)
 
     new KeyValueGroupedDataset(
       keyEncoder,
@@ -684,7 +684,7 @@ private[sql] object RelationalGroupedDataset {
     new RelationalGroupedDataset(df, groupingExprs, groupType: GroupType)
   }
 
-  private[sql] def toKeyValueGroupedDataset(
+  private[sql] def handleGroupingExpression(
       logicalPlan: LogicalPlan,
       sparkSession: SparkSession,
       groupingExprs: Seq[Expression]): (QueryExecution, Seq[Attribute]) = {
