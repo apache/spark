@@ -17,12 +17,11 @@
 
 package org.apache.spark.streaming.kinesis
 
-import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 
-import com.amazonaws.services.kinesis.clientlibrary.lib.worker.{InitialPositionInStream, KinesisClientLibConfiguration}
-import com.amazonaws.services.kinesis.metrics.interfaces.MetricsLevel
-import com.amazonaws.services.kinesis.model.Record
+import software.amazon.kinesis.common.InitialPositionInStream
+import software.amazon.kinesis.metrics.{MetricsLevel, MetricsUtil}
+import software.amazon.kinesis.retrieval.KinesisClientRecord
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.{BlockId, StorageLevel}
@@ -42,7 +41,7 @@ private[kinesis] class KinesisInputDStream[T: ClassTag](
     val checkpointAppName: String,
     val checkpointInterval: Duration,
     val _storageLevel: StorageLevel,
-    val messageHandler: Record => T,
+    val messageHandler: KinesisClientRecord => T,
     val kinesisCreds: SparkAWSCredentials,
     val dynamoDBCreds: Option[SparkAWSCredentials],
     val cloudWatchCreds: Option[SparkAWSCredentials],
@@ -275,7 +274,7 @@ object KinesisInputDStream {
 
     /**
      * Sets the CloudWatch metrics level. Defaults to
-     * [[KinesisClientLibConfiguration.DEFAULT_METRICS_LEVEL]] if no custom value is specified.
+     * [[DEFAULT_METRICS_LEVEL]] if no custom value is specified.
      *
      * @param metricsLevel [[MetricsLevel]] to specify the CloudWatch metrics level
      * @return Reference to this [[KinesisInputDStream.Builder]]
@@ -289,7 +288,7 @@ object KinesisInputDStream {
 
     /**
      * Sets the enabled CloudWatch metrics dimensions. Defaults to
-     * [[KinesisClientLibConfiguration.DEFAULT_METRICS_ENABLED_DIMENSIONS]]
+     * [[DEFAULT_METRICS_ENABLED_DIMENSIONS]]
      * if no custom value is specified.
      *
      * @param metricsEnabledDimensions Set[String] to specify which CloudWatch metrics dimensions
@@ -307,11 +306,12 @@ object KinesisInputDStream {
      * Create a new instance of [[KinesisInputDStream]] with configured parameters and the provided
      * message handler.
      *
-     * @param handler Function converting [[Record]] instances read by the KCL to DStream type [[T]]
+     * @param handler Function converting [[KinesisClientRecord]] instances read by the KCL to
+     *                DStream type [[T]]
      * @return Instance of [[KinesisInputDStream]] constructed with configured parameters
      */
     def buildWithMessageHandler[T: ClassTag](
-        handler: Record => T): KinesisInputDStream[T] = {
+        handler: KinesisClientRecord => T): KinesisInputDStream[T] = {
       val ssc = getRequiredParam(streamingContext, "streamingContext")
       new KinesisInputDStream(
         ssc,
@@ -351,9 +351,9 @@ object KinesisInputDStream {
    */
   def builder: Builder = new Builder
 
-  private[kinesis] def defaultMessageHandler(record: Record): Array[Byte] = {
+  private[kinesis] def defaultMessageHandler(record: KinesisClientRecord): Array[Byte] = {
     if (record == null) return null
-    val byteBuffer = record.getData()
+    val byteBuffer = record.data
     val byteArray = new Array[Byte](byteBuffer.remaining())
     byteBuffer.get(byteArray)
     byteArray
@@ -365,7 +365,7 @@ object KinesisInputDStream {
   private[kinesis] val DEFAULT_INITIAL_POSITION: KinesisInitialPosition = new Latest()
   private[kinesis] val DEFAULT_STORAGE_LEVEL: StorageLevel = StorageLevel.MEMORY_AND_DISK_2
   private[kinesis] val DEFAULT_METRICS_LEVEL: MetricsLevel =
-    KinesisClientLibConfiguration.DEFAULT_METRICS_LEVEL
+    MetricsLevel.DETAILED
   private[kinesis] val DEFAULT_METRICS_ENABLED_DIMENSIONS: Set[String] =
-    KinesisClientLibConfiguration.DEFAULT_METRICS_ENABLED_DIMENSIONS.asScala.toSet
+    Set(MetricsUtil.OPERATION_DIMENSION_NAME, MetricsUtil.SHARD_ID_DIMENSION_NAME)
 }

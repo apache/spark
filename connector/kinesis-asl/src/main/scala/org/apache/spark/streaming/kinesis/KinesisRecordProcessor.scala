@@ -16,15 +16,12 @@
  */
 package org.apache.spark.streaming.kinesis
 
-import java.util.List
-
 import scala.util.Random
 import scala.util.control.NonFatal
 
-import com.amazonaws.services.kinesis.clientlibrary.exceptions.{InvalidStateException, KinesisClientLibDependencyException, ShutdownException, ThrottlingException}
-import com.amazonaws.services.kinesis.clientlibrary.interfaces.{IRecordProcessor, IRecordProcessorCheckpointer}
-import com.amazonaws.services.kinesis.clientlibrary.lib.worker.ShutdownReason
-import com.amazonaws.services.kinesis.model.Record
+import software.amazon.kinesis.exceptions.{InvalidStateException, KinesisClientLibDependencyException, ShutdownException, ThrottlingException}
+import software.amazon.kinesis.lifecycle.events.{InitializationInput, LeaseLostInput, ProcessRecordsInput, ShardEndedInput, ShutdownRequestedInput}
+import software.amazon.kinesis.processor.ShardRecordProcessor
 
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys.{REASON, RETRY_INTERVAL, SHARD_ID, WORKER_URL}
@@ -32,16 +29,16 @@ import org.apache.spark.internal.LogKeys.{REASON, RETRY_INTERVAL, SHARD_ID, WORK
 /**
  * Kinesis-specific implementation of the Kinesis Client Library (KCL) IRecordProcessor.
  * This implementation operates on the Array[Byte] from the KinesisReceiver.
- * The Kinesis Worker creates an instance of this KinesisRecordProcessor for each
+ * The Kinesis scheduler creates an instance of this KinesisRecordProcessor for each
  * shard in the Kinesis stream upon startup.  This is normally done in separate threads,
  * but the KCLs within the KinesisReceivers will balance themselves out if you create
  * multiple Receivers.
  *
  * @param receiver Kinesis receiver
- * @param workerId for logging purposes
+ * @param schedulerId for logging purposes
  */
-private[kinesis] class KinesisRecordProcessor[T](receiver: KinesisReceiver[T], workerId: String)
-  extends IRecordProcessor with Logging {
+private[kinesis] class KinesisRecordProcessor[T](receiver: KinesisReceiver[T], schedulerId: String)
+  extends ShardRecordProcessor with Logging {
 
   // shardId populated during initialize()
   @volatile
@@ -52,35 +49,27 @@ private[kinesis] class KinesisRecordProcessor[T](receiver: KinesisReceiver[T], w
    *
    * @param shardId assigned by the KCL to this particular RecordProcessor.
    */
-  override def initialize(shardId: String): Unit = {
-    this.shardId = shardId
-    logInfo(log"Initialized workerId ${MDC(WORKER_URL, workerId)} " +
+  override def initialize(initializationInput: InitializationInput): Unit = {
+    this.shardId = initializationInput.shardId
+    logInfo(log"Initialized schedulerId ${MDC(WORKER_URL, schedulerId)} " +
       log"with shardId ${MDC(SHARD_ID, shardId)}")
   }
 
-  /**
-   * This method is called by the KCL when a batch of records is pulled from the Kinesis stream.
-   * This is the record-processing bridge between the KCL's IRecordProcessor.processRecords()
-   * and Spark Streaming's Receiver.store().
-   *
-   * @param batch list of records from the Kinesis stream shard
-   * @param checkpointer used to update Kinesis when this batch has been processed/stored
-   *   in the DStream
-   */
-  override def processRecords(batch: List[Record],
-      checkpointer: IRecordProcessorCheckpointer): Unit = {
+  override def processRecords(processRecordsInput: ProcessRecordsInput): Unit = {
+    val batch = processRecordsInput.records
+    val checkpointer = processRecordsInput.checkpointer
     if (!receiver.isStopped()) {
       try {
         // Limit the number of processed records from Kinesis stream. This is because the KCL cannot
         // control the number of aggregated records to be fetched even if we set `MaxRecords`
-        // in `KinesisClientLibConfiguration`. For example, if we set 10 to the number of max
-        // records in a worker and a producer aggregates two records into one message, the worker
+        // in `PollingConfig`. For example, if we set 10 to the number of max records
+        // in a scheduler and a producer aggregates two records into one message, the scheduler
         // possibly 20 records every callback function called.
         val maxRecords = receiver.getCurrentLimit
         for (start <- 0 until batch.size by maxRecords) {
           val miniBatch = batch.subList(start, math.min(start + maxRecords, batch.size))
           receiver.addRecords(shardId, miniBatch)
-          logDebug(s"Stored: Worker $workerId stored ${miniBatch.size} records " +
+          logDebug(s"Stored: Scheduler $schedulerId stored ${miniBatch.size} records " +
             s"for shardId $shardId")
         }
         receiver.setCheckpointer(shardId, checkpointer)
@@ -91,56 +80,40 @@ private[kinesis] class KinesisRecordProcessor[T](receiver: KinesisReceiver[T], w
            *  This will potentially cause records since the last checkpoint to be processed
            *     more than once.
            */
-          logError(log"Exception: WorkerId ${MDC(WORKER_URL, workerId)} encountered and " +
-            log"exception while storing or checkpointing a batch for workerId " +
-            log"${MDC(WORKER_URL, workerId)} and shardId ${MDC(SHARD_ID, shardId)}.", e)
+          logError(log"Exception: SchedulerId ${MDC(WORKER_URL, schedulerId)} encountered and " +
+            log"exception while storing or checkpointing a batch for schedulerId " +
+            log"${MDC(WORKER_URL, schedulerId)} and shardId ${MDC(SHARD_ID, shardId)}.", e)
 
-          /* Rethrow the exception to the Kinesis Worker that is managing this RecordProcessor. */
+          /* Rethrow the exception to the Kinesis scheduler that is managing
+           this RecordProcessor. */
           throw e
       }
     } else {
       /* RecordProcessor has been stopped. */
-      logInfo(log"Stopped: KinesisReceiver has stopped for workerId ${MDC(WORKER_URL, workerId)}" +
+      logInfo(log"Stopped: KinesisReceiver has stopped for schedulerId ${MDC(WORKER_URL, schedulerId)}" +
           log" and shardId ${MDC(SHARD_ID, shardId)}. No more records will be processed.")
     }
   }
 
-  /**
-   * Kinesis Client Library is shutting down this Worker for 1 of 2 reasons:
-   * 1) the stream is resharding by splitting or merging adjacent shards
-   *     (ShutdownReason.TERMINATE)
-   * 2) the failed or latent Worker has stopped sending heartbeats for whatever reason
-   *     (ShutdownReason.ZOMBIE)
-   *
-   * @param checkpointer used to perform a Kinesis checkpoint for ShutdownReason.TERMINATE
-   * @param reason for shutdown (ShutdownReason.TERMINATE or ShutdownReason.ZOMBIE)
-   */
-  override def shutdown(
-      checkpointer: IRecordProcessorCheckpointer,
-      reason: ShutdownReason): Unit = {
-    logInfo(log"Shutdown: Shutting down workerId ${MDC(WORKER_URL, workerId)} " +
-      log"with reason ${MDC(REASON, reason)}")
-    // null if not initialized before shutdown:
-    if (shardId == null) {
-      logWarning(log"No shardId for workerId ${MDC(WORKER_URL, workerId)}?")
-    } else {
-      reason match {
-        /*
-         * TERMINATE Use Case.  Checkpoint.
-         * Checkpoint to indicate that all records from the shard have been drained and processed.
-         * It's now OK to read from the new shards that resulted from a resharding event.
-         */
-        case ShutdownReason.TERMINATE => receiver.removeCheckpointer(shardId, checkpointer)
+  override def leaseLost(leaseLostInput: LeaseLostInput): Unit = {
+    logInfo(log"The lease for shardId: $shardId is lost.")
+  }
 
-        /*
-         * ZOMBIE Use Case or Unknown reason.  NoOp.
-         * No checkpoint because other workers may have taken over and already started processing
-         *    the same records.
-         * This may lead to records being processed more than once.
-         * Return null so that we don't checkpoint
-         */
-        case _ => receiver.removeCheckpointer(shardId, null)
-      }
+  override def shardEnded(shardEndedInput: ShardEndedInput): Unit = {
+    log.info(s"Reached shard end. Checkpointing for shardId: $shardId")
+    if (shardId == null) {
+      logWarning("shardId is not initialized for this record processor.")
+    } else {
+      receiver.removeCheckpointer(shardId, shardEndedInput.checkpointer)
+    }
+  }
+
+  override def shutdownRequested(shutdownRequestedInput: ShutdownRequestedInput): Unit = {
+    logInfo(log"Shutdown: Shutting down schedulerId: ${MDC(WORKER_URL, schedulerId)} ")
+    if (shardId == null) {
+      logWarning(log"No shardId for schedulerId ${MDC(WORKER_URL, schedulerId)}?")
+    } else {
+      receiver.removeCheckpointer(shardId, shutdownRequestedInput.checkpointer)
     }
   }
 }

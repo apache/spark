@@ -16,8 +16,8 @@
  */
 package org.apache.spark.streaming.kinesis
 
-import com.amazonaws.services.kinesis.clientlibrary.lib.worker.InitialPositionInStream
-import com.amazonaws.services.kinesis.metrics.interfaces.MetricsLevel
+import software.amazon.kinesis.common.InitialPositionInStream
+import software.amazon.kinesis.metrics.MetricsLevel
 
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.Duration

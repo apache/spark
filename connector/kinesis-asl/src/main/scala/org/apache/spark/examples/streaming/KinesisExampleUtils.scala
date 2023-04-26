@@ -19,16 +19,16 @@ package org.apache.spark.examples.streaming
 
 import scala.jdk.CollectionConverters._
 
-import com.amazonaws.regions.RegionUtils
-import com.amazonaws.services.kinesis.AmazonKinesis
+import software.amazon.awssdk.regions.servicemetadata.KinesisServiceMetadata
 
 private[streaming] object KinesisExampleUtils {
   def getRegionNameByEndpoint(endpoint: String): String = {
     val uri = new java.net.URI(endpoint)
-    RegionUtils.getRegionsForService(AmazonKinesis.ENDPOINT_PREFIX)
+    val kinesisServiceMetadata = new KinesisServiceMetadata()
+    kinesisServiceMetadata.regions
       .asScala
-      .find(_.getAvailableEndpoints.asScala.toSeq.contains(uri.getHost))
-      .map(_.getName)
+      .find(r => kinesisServiceMetadata.endpointFor(r).toString.equals(uri.getHost))
+      .map(_.id)
       .getOrElse(
         throw new IllegalArgumentException(s"Could not resolve region for endpoint: $endpoint"))
   }

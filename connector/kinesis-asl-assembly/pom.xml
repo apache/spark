@@ -55,6 +55,12 @@
       <scope>provided</scope>
     </dependency>
     <dependency>
+      <groupId>com.google.guava</groupId>
+      <artifactId>guava</artifactId>
+      <version>${aws.kinesis.client.guava.version}</version>
+      <scope>compile</scope>
+    </dependency>
+    <dependency>
       <groupId>org.glassfish.jersey.core</groupId>
       <artifactId>jersey-client</artifactId>
       <scope>provided</scope>
@@ -158,6 +164,16 @@
             <include>*:*</include>
           </includes>
         </artifactSet>
+        <relocations>
+          <relocation>
+            <pattern>com.google.common</pattern>
+            <shadedPattern>${spark.shade.packageName}.kinesis.guava</shadedPattern>
+          </relocation>
+          <relocation>
+            <pattern>software.amazon.awssdk</pattern>
+            <shadedPattern>${spark.shade.packageName}.software.amazon.awssdk</shadedPattern>
+          </relocation>
+        </relocations>
         <filters>
           <filter>
             <artifact>*:*</artifact>

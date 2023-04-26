@@ -20,7 +20,7 @@ import java.util.concurrent._
 
 import scala.util.control.NonFatal
 
-import com.amazonaws.services.kinesis.clientlibrary.interfaces.IRecordProcessorCheckpointer
+import software.amazon.kinesis.processor.RecordProcessorCheckpointer
 
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys.{SHARD_ID, WORKER_URL}
@@ -33,24 +33,24 @@ import org.apache.spark.util.{Clock, SystemClock}
  *
  * @param receiver The receiver that keeps track of which sequence numbers we can checkpoint
  * @param checkpointInterval How frequently we will checkpoint to DynamoDB
- * @param workerId Worker Id of KCL worker for logging purposes
+ * @param schedulerId Scheduler Id of KCL scheduler for logging purposes
  * @param clock In order to use ManualClocks for the purpose of testing
  */
 private[kinesis] class KinesisCheckpointer(
     receiver: KinesisReceiver[_],
     checkpointInterval: Duration,
-    workerId: String,
+    schedulerId: String,
     clock: Clock = new SystemClock) extends Logging {
 
   // a map from shardId's to checkpointers
-  private val checkpointers = new ConcurrentHashMap[String, IRecordProcessorCheckpointer]()
+  private val checkpointers = new ConcurrentHashMap[String, RecordProcessorCheckpointer]()
 
   private val lastCheckpointedSeqNums = new ConcurrentHashMap[String, String]()
 
   private val checkpointerThread: RecurringTimer = startCheckpointerThread()
 
   /** Update the checkpointer instance to the most recent one for the given shardId. */
-  def setCheckpointer(shardId: String, checkpointer: IRecordProcessorCheckpointer): Unit = {
+  def setCheckpointer(shardId: String, checkpointer: RecordProcessorCheckpointer): Unit = {
     checkpointers.put(shardId, checkpointer)
   }
 
@@ -61,7 +61,7 @@ private[kinesis] class KinesisCheckpointer(
    * we will use that to make the final checkpoint. If `null` is provided, we will not make the
    * checkpoint, e.g. in case of [[ShutdownReason.ZOMBIE]].
    */
-  def removeCheckpointer(shardId: String, checkpointer: IRecordProcessorCheckpointer): Unit = {
+  def removeCheckpointer(shardId: String, checkpointer: RecordProcessorCheckpointer): Unit = {
     synchronized {
       checkpointers.remove(shardId)
     }
@@ -73,7 +73,7 @@ private[kinesis] class KinesisCheckpointer(
         KinesisRecordProcessor.retryRandom(checkpointer.checkpoint(), 4, 100)
       } catch {
         case NonFatal(e) =>
-          logError(log"Exception: WorkerId ${MDC(WORKER_URL, workerId)} encountered an " +
+          logError(log"Exception: SchedulerId ${MDC(WORKER_URL, schedulerId)} encountered an " +
             log"exception while checkpointing to finish reading a shard of " +
             log"${MDC(SHARD_ID, shardId)}.", e)
           // Rethrow the exception to the Kinesis Worker that is managing this RecordProcessor
@@ -83,7 +83,7 @@ private[kinesis] class KinesisCheckpointer(
   }
 
   /** Perform the checkpoint. */
-  private def checkpoint(shardId: String, checkpointer: IRecordProcessorCheckpointer): Unit = {
+  private def checkpoint(shardId: String, checkpointer: RecordProcessorCheckpointer): Unit = {
     try {
       if (checkpointer != null) {
         receiver.getLatestSeqNumToCheckpoint(shardId).foreach { latestSeqNum =>
@@ -93,8 +93,8 @@ private[kinesis] class KinesisCheckpointer(
           if (lastSeqNum == null || latestSeqNum > lastSeqNum) {
             /* Perform the checkpoint */
             KinesisRecordProcessor.retryRandom(checkpointer.checkpoint(latestSeqNum), 4, 100)
-            logDebug(s"Checkpoint:  WorkerId $workerId completed checkpoint at sequence number" +
-              s" $latestSeqNum for shardId $shardId")
+            logDebug(s"Checkpoint:  schedulerId $schedulerId completed checkpoint at sequence " +
+              s" number $latestSeqNum for shardId $shardId")
             lastCheckpointedSeqNums.put(shardId, latestSeqNum)
           }
         }
@@ -127,7 +127,7 @@ private[kinesis] class KinesisCheckpointer(
    */
   private def startCheckpointerThread(): RecurringTimer = {
     val period = checkpointInterval.milliseconds
-    val threadName = s"Kinesis Checkpointer - Worker $workerId"
+    val threadName = s"Kinesis Checkpointer - scheduler $schedulerId"
     val timer = new RecurringTimer(clock, period, _ => checkpointAll(), threadName)
     timer.start()
     logDebug(s"Started checkpointer thread: $threadName")

@@ -21,10 +21,10 @@ import scala.collection.mutable
 import scala.concurrent.duration._
 import scala.util.Random
 
-import com.amazonaws.services.kinesis.model.Record
 import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll}
 import org.scalatest.concurrent.Eventually
 import org.scalatest.matchers.should.Matchers._
+import software.amazon.kinesis.retrieval.KinesisClientRecord
 
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.network.util.JavaUtils
@@ -195,7 +195,7 @@ abstract class KinesisStreamTests(aggregateTestData: Boolean) extends KinesisFun
   }
 
   testIfEnabled("custom message handling") {
-    def addFive(r: Record): Int = JavaUtils.bytesToString(r.getData).toInt + 5
+    def addFive(r: KinesisClientRecord): Int = JavaUtils.bytesToString(r.data).toInt + 5
 
     val stream = KinesisInputDStream.builder.streamingContext(ssc)
       .checkpointAppName(appName)
@@ -305,17 +305,17 @@ abstract class KinesisStreamTests(aggregateTestData: Boolean) extends KinesisFun
       val testData2 = 11 to 20
       val testData3 = 21 to 30
 
-      eventually(timeout(1.minute), interval(10.seconds)) {
+      eventually(timeout(2.minute), interval(10.seconds)) {
         localTestUtils.pushData(testData1, aggregateTestData)
         collected.synchronized {
           assert(collected === testData1.toSet, "\nData received does not match data sent")
         }
       }
 
-      val shardToSplit = localTestUtils.getShards().head
-      localTestUtils.splitShard(shardToSplit.getShardId)
-      val (splitOpenShards, splitCloseShards) = localTestUtils.getShards().partition { shard =>
-        shard.getSequenceNumberRange.getEndingSequenceNumber == null
+      val shardToSplit = localTestUtils.getShards.head
+      localTestUtils.splitShard(shardToSplit.shardId)
+      val (splitOpenShards, splitCloseShards) = localTestUtils.getShards.partition { shard =>
+        shard.sequenceNumberRange.endingSequenceNumber == null
       }
 
       // We should have one closed shard and two open shards
@@ -331,9 +331,9 @@ abstract class KinesisStreamTests(aggregateTestData: Boolean) extends KinesisFun
       }
 
       val Seq(shardToMerge, adjShard) = splitOpenShards
-      localTestUtils.mergeShard(shardToMerge.getShardId, adjShard.getShardId)
-      val (mergedOpenShards, mergedCloseShards) = localTestUtils.getShards().partition { shard =>
-        shard.getSequenceNumberRange.getEndingSequenceNumber == null
+      localTestUtils.mergeShard(shardToMerge.shardId, adjShard.shardId)
+      val (mergedOpenShards, mergedCloseShards) = localTestUtils.getShards.partition { shard =>
+        shard.sequenceNumberRange.endingSequenceNumber == null
       }
 
       // We should have three closed shards and one open shard

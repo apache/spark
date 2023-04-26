@@ -54,14 +54,34 @@
       <scope>test</scope>
     </dependency>
     <dependency>
-      <groupId>com.amazonaws</groupId>
+      <groupId>software.amazon.kinesis</groupId>
       <artifactId>amazon-kinesis-client</artifactId>
       <version>${aws.kinesis.client.version}</version>
+      <exclusions>
+        <exclusion>
+          <groupId>com.kjetland</groupId>
+          <artifactId>mbknor-jackson-jsonschema_2.12</artifactId>
+        </exclusion>
+      </exclusions>
+    </dependency>
+    <!-- The Kinesis-client-library depends on glue-schema-registry which depends on 
+    mbknor-jackson-jsonschema_2.12. As Spark 4.0 dropped support for Scala 2.12, we have to 
+    explicitly import mbknor-jackson-jsonschema_2.13 here until glue-schema-registry is updated 
+    to depend on mbknor-jackson-jsonschema_2.13 -->
+    <dependency>
+      <groupId>com.kjetland</groupId>
+      <artifactId>mbknor-jackson-jsonschema_2.13</artifactId>
+      <version>${mbknor.jsonschema.version}</version>
     </dependency>
     <dependency>
-      <groupId>com.amazonaws</groupId>
-      <artifactId>aws-java-sdk-sts</artifactId>
-      <version>${aws.java.sdk.version}</version>
+      <groupId>software.amazon.awssdk</groupId>
+      <artifactId>sts</artifactId>
+      <version>${aws.java.sdk.v2.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>software.amazon.awssdk</groupId>
+      <artifactId>apache-client</artifactId>
+      <version>${aws.java.sdk.v2.version}</version>
     </dependency>
     <dependency>
       <groupId>com.amazonaws</groupId>
@@ -89,6 +109,11 @@
     <dependency>
       <groupId>org.apache.spark</groupId>
       <artifactId>spark-tags_${scala.binary.version}</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>com.google.guava</groupId>
+      <artifactId>guava</artifactId>
+      <version>${aws.kinesis.client.guava.version}</version>
     </dependency>
 
     <!--

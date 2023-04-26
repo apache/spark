@@ -16,6 +16,7 @@
  */
 package org.apache.spark.streaming.kinesis
 
+import java.net.URI
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 
@@ -23,10 +24,15 @@ import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
-import com.amazonaws.services.kinesis.clientlibrary.interfaces.{IRecordProcessor, IRecordProcessorCheckpointer, IRecordProcessorFactory}
-import com.amazonaws.services.kinesis.clientlibrary.lib.worker.{KinesisClientLibConfiguration, Worker}
-import com.amazonaws.services.kinesis.metrics.interfaces.MetricsLevel
-import com.amazonaws.services.kinesis.model.Record
+import software.amazon.awssdk.regions.Region
+import software.amazon.awssdk.services.cloudwatch.CloudWatchAsyncClient
+import software.amazon.awssdk.services.dynamodb.DynamoDbAsyncClient
+import software.amazon.awssdk.services.kinesis.KinesisAsyncClient
+import software.amazon.kinesis.common.{ConfigsBuilder, InitialPositionInStreamExtended, KinesisClientUtil}
+import software.amazon.kinesis.coordinator.Scheduler
+import software.amazon.kinesis.metrics.{MetricsConfig, MetricsLevel}
+import software.amazon.kinesis.processor.{RecordProcessorCheckpointer, ShardRecordProcessor, ShardRecordProcessorFactory}
+import software.amazon.kinesis.retrieval.KinesisClientRecord
 
 import org.apache.spark.internal.{Logging, MDC}
 import org.apache.spark.internal.LogKeys.WORKER_URL
@@ -39,12 +45,12 @@ import org.apache.spark.util.Utils
 
 /**
  * Custom AWS Kinesis-specific implementation of Spark Streaming's Receiver.
- * This implementation relies on the Kinesis Client Library (KCL) Worker as described here:
+ * This implementation relies on the Kinesis Client Library (KCL) Scheduler as described here:
  * https://github.com/awslabs/amazon-kinesis-client
  *
  * The way this Receiver works is as follows:
  *
- *  - The receiver starts a KCL Worker, which is essentially runs a threadpool of multiple
+ *  - The receiver starts a KCL Scheduler, which is essentially runs a threadpool of multiple
  *    KinesisRecordProcessor
  *  - Each KinesisRecordProcessor receives data from a Kinesis shard in batches. Each batch is
  *    inserted into a Block Generator, and the corresponding range of sequence numbers is recorded.
@@ -62,7 +68,7 @@ import org.apache.spark.util.Utils
  *                    DynamoDB (lease coordination and checkpointing) and CloudWatch (metrics)
  * @param initialPosition  Instance of [[KinesisInitialPosition]]
  *                         In the absence of Kinesis checkpoint info, this is the
- *                         worker's initial starting position in the stream.
+ *                         scheduler's initial starting position in the stream.
  *                         The values are either the beginning of the stream
  *                         per Kinesis' limit of 24 hours
  *                         ([[KinesisInitialPositions.TrimHorizon]]) or
@@ -92,7 +98,7 @@ private[kinesis] class KinesisReceiver[T](
     checkpointAppName: String,
     checkpointInterval: Duration,
     storageLevel: StorageLevel,
-    messageHandler: Record => T,
+    messageHandler: KinesisClientRecord => T,
     kinesisCreds: SparkAWSCredentials,
     dynamoDBCreds: Option[SparkAWSCredentials],
     cloudWatchCreds: Option[SparkAWSCredentials],
@@ -108,19 +114,19 @@ private[kinesis] class KinesisReceiver[T](
    */
 
   /**
-   * workerId is used by the KCL should be based on the ip address of the actual Spark Worker
+   * schedulerId is used by the KCL should be based on the ip address of the actual Spark Worker
    * where this code runs (not the driver's IP address.)
    */
-  @volatile private var workerId: String = null
+  @volatile private var schedulerId: String = null
 
   /**
-   * Worker is the core client abstraction from the Kinesis Client Library (KCL).
-   * A worker can process more than one shards from the given stream.
-   * Each shard is assigned its own IRecordProcessor and the worker run multiple such
+   * Scheduler is the core client abstraction from the Kinesis Client Library (KCL).
+   * A Scheduler can process more than one shards from the given stream.
+   * Each shard is assigned its own ShardRecordProcessor and the scheduler run multiple such
    * processors.
    */
-  @volatile private var worker: Worker = null
-  @volatile private var workerThread: Thread = null
+  @volatile private var scheduler: Scheduler = null
+  @volatile private var schedulerThread: Thread = null
 
   /** BlockGenerator used to generates blocks out of Kinesis data */
   @volatile private var blockGenerator: BlockGenerator = null
@@ -146,59 +152,66 @@ private[kinesis] class KinesisReceiver[T](
 
   /**
    * This is called when the KinesisReceiver starts and must be non-blocking.
-   * The KCL creates and manages the receiving/processing thread pool through Worker.run().
+   * The KCL creates and manages the receiving/processing thread pool through Scheduler.run().
    */
   override def onStart(): Unit = {
     blockGenerator = supervisor.createBlockGenerator(new GeneratedBlockHandler)
 
-    workerId = Utils.localHostName() + ":" + UUID.randomUUID()
+    schedulerId = Utils.localHostName() + ":" + UUID.randomUUID()
 
-    kinesisCheckpointer = new KinesisCheckpointer(receiver, checkpointInterval, workerId)
+    kinesisCheckpointer = new KinesisCheckpointer(receiver, checkpointInterval, schedulerId)
     val kinesisProvider = kinesisCreds.provider
 
-    val kinesisClientLibConfiguration = {
-      val baseClientLibConfiguration = new KinesisClientLibConfiguration(
-        checkpointAppName,
-        streamName,
-        kinesisProvider,
-        dynamoDBCreds.map(_.provider).getOrElse(kinesisProvider),
-        cloudWatchCreds.map(_.provider).getOrElse(kinesisProvider),
-        workerId)
-        .withKinesisEndpoint(endpointUrl)
-        .withTaskBackoffTimeMillis(500)
-        .withRegionName(regionName)
-        .withMetricsLevel(metricsLevel)
-        .withMetricsEnabledDimensions(metricsEnabledDimensions.asJava)
-
-      // Update the Kinesis client lib config with timestamp
-      // if InitialPositionInStream.AT_TIMESTAMP is passed
-      initialPosition match {
-        case ts: AtTimestamp =>
-          baseClientLibConfiguration.withTimestampAtInitialPositionInStream(ts.getTimestamp)
-        case _ =>
-          baseClientLibConfiguration.withInitialPositionInStream(initialPosition.getPosition)
+    val kinesisClient = KinesisClientUtil.createKinesisAsyncClient(
+      KinesisAsyncClient.builder
+        .region(Region.of(regionName))
+        .credentialsProvider(kinesisProvider)
+        .endpointOverride(URI.create(endpointUrl)))
+    val dynamoClient = DynamoDbAsyncClient.builder
+      .region(Region.of(regionName))
+      .credentialsProvider(dynamoDBCreds.map(_.provider).getOrElse(kinesisProvider))
+      .build
+    val cloudWatchClient = CloudWatchAsyncClient.builder
+      .region(Region.of(regionName))
+      .credentialsProvider(cloudWatchCreds.map(_.provider).getOrElse(kinesisProvider))
+      .build
+    val recordProcessorFactory = new ShardRecordProcessorFactory {
+      override def shardRecordProcessor(): ShardRecordProcessor = {
+        new KinesisRecordProcessor(receiver, schedulerId)
       }
     }
 
-   /*
-    *  RecordProcessorFactory creates impls of IRecordProcessor.
-    *  IRecordProcessor adapts the KCL to our Spark KinesisReceiver via the
-    *  IRecordProcessor.processRecords() method.
-    *  We're using our custom KinesisRecordProcessor in this case.
-    */
-    val recordProcessorFactory = new IRecordProcessorFactory {
-      override def createProcessor: IRecordProcessor =
-        new KinesisRecordProcessor(receiver, workerId)
+    val configsBuilder = new ConfigsBuilder(streamName, checkpointAppName, kinesisClient,
+      dynamoClient, cloudWatchClient, schedulerId, recordProcessorFactory)
+    val metricsConfig = new MetricsConfig(cloudWatchClient, checkpointAppName)
+      .metricsLevel(metricsLevel)
+      .metricsEnabledDimensions(metricsEnabledDimensions.asJava)
+
+    val initialPositionInStreamExtended = initialPosition match {
+      case ts: AtTimestamp =>
+        InitialPositionInStreamExtended.newInitialPositionAtTimestamp(ts.getTimestamp)
+      case _ =>
+        InitialPositionInStreamExtended.newInitialPosition(initialPosition.getPosition)
     }
 
-    worker = new Worker(recordProcessorFactory, kinesisClientLibConfiguration)
-    workerThread = new Thread() {
+    scheduler = new Scheduler(
+      configsBuilder.checkpointConfig(),
+      configsBuilder.coordinatorConfig(),
+      configsBuilder.leaseManagementConfig(),
+      configsBuilder.lifecycleConfig(),
+      metricsConfig,
+      configsBuilder.processorConfig(),
+      configsBuilder.retrievalConfig()
+        .initialPositionInStreamExtended(initialPositionInStreamExtended)
+    )
+
+    schedulerThread = new Thread() {
       override def run(): Unit = {
         try {
-          worker.run()
+          scheduler.run()
         } catch {
           case NonFatal(e) =>
-            restart("Error running the KCL worker in Receiver", e)
+            restart("Error running the KCL scheduler in Receiver", e)
         }
       }
     }
@@ -206,29 +219,29 @@ private[kinesis] class KinesisReceiver[T](
     blockIdToSeqNumRanges.clear()
     blockGenerator.start()
 
-    workerThread.setName(s"Kinesis Receiver ${streamId}")
-    workerThread.setDaemon(true)
-    workerThread.start()
+    schedulerThread.setName(s"Kinesis Receiver ${streamId}")
+    schedulerThread.setDaemon(true)
+    schedulerThread.start()
 
-    logInfo(log"Started receiver with workerId ${MDC(WORKER_URL, workerId)}")
+    logInfo(log"Started receiver with schedulerId ${MDC(WORKER_URL, schedulerId)}")
   }
 
   /**
    * This is called when the KinesisReceiver stops.
-   * The KCL worker.shutdown() method stops the receiving/processing threads.
+   * The KCL scheduler.shutdown() method stops the receiving/processing threads.
    * The KCL will do its best to drain and checkpoint any in-flight records upon shutdown.
    */
   override def onStop(): Unit = {
-    if (workerThread != null) {
-      if (worker != null) {
-        worker.shutdown()
-        worker = null
+    if (schedulerThread != null) {
+      if (scheduler != null) {
+        scheduler.shutdown()
+        scheduler = null
       }
       workerThread.join()
       workerThread = null
-      logInfo(log"Stopped receiver for workerId ${MDC(WORKER_URL, workerId)}")
+      logInfo(log"Stopped receiver for schedulerId ${MDC(WORKER_URL, schedulerId)}")
     }
-    workerId = null
+    schedulerId = null
     if (kinesisCheckpointer != null) {
       kinesisCheckpointer.shutdown()
       kinesisCheckpointer = null
@@ -236,11 +249,12 @@ private[kinesis] class KinesisReceiver[T](
   }
 
   /** Add records of the given shard to the current block being generated */
-  private[kinesis] def addRecords(shardId: String, records: java.util.List[Record]): Unit = {
+  private[kinesis] def addRecords(shardId: String, records: java.util.List[KinesisClientRecord]):
+  Unit = {
     if (records.size > 0) {
       val dataIterator = records.iterator().asScala.map(messageHandler)
       val metadata = SequenceNumberRange(streamName, shardId,
-        records.get(0).getSequenceNumber(), records.get(records.size() - 1).getSequenceNumber(),
+        records.get(0).sequenceNumber, records.get(records.size - 1).sequenceNumber,
         records.size())
       blockGenerator.addMultipleDataWithCallback(dataIterator, metadata)
     }
@@ -261,7 +275,7 @@ private[kinesis] class KinesisReceiver[T](
    * Set the checkpointer that will be used to checkpoint sequence numbers to DynamoDB for the
    * given shardId.
    */
-  def setCheckpointer(shardId: String, checkpointer: IRecordProcessorCheckpointer): Unit = {
+  def setCheckpointer(shardId: String, checkpointer: RecordProcessorCheckpointer): Unit = {
     assert(kinesisCheckpointer != null, "Kinesis Checkpointer not initialized!")
     kinesisCheckpointer.setCheckpointer(shardId, checkpointer)
   }
@@ -271,7 +285,7 @@ private[kinesis] class KinesisReceiver[T](
    * checkpoint one last time for the given shard. If `checkpointer` is `null`, then we will not
    * checkpoint.
    */
-  def removeCheckpointer(shardId: String, checkpointer: IRecordProcessorCheckpointer): Unit = {
+  def removeCheckpointer(shardId: String, checkpointer: RecordProcessorCheckpointer): Unit = {
     assert(kinesisCheckpointer != null, "Kinesis Checkpointer not initialized!")
     kinesisCheckpointer.removeCheckpointer(shardId, checkpointer)
   }
