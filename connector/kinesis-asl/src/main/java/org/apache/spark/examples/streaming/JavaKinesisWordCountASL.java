@@ -16,6 +16,7 @@
  */
 package org.apache.spark.examples.streaming;
 
+import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -38,8 +39,10 @@ import org.apache.spark.streaming.kinesis.KinesisInputDStream;
 import scala.Tuple2;
 import scala.reflect.ClassTag$;
 
-import com.amazonaws.auth.DefaultAWSCredentialsProviderChain;
-import com.amazonaws.services.kinesis.AmazonKinesisClient;
+import software.amazon.awssdk.auth.credentials.DefaultCredentialsProvider;
+import software.amazon.awssdk.http.apache.ApacheHttpClient;
+import software.amazon.awssdk.services.kinesis.KinesisClient;
+import software.amazon.awssdk.services.kinesis.model.DescribeStreamRequest;
 
 /**
  * Consumes messages from a Amazon Kinesis streams and does wordcount.
@@ -66,7 +69,7 @@ import com.amazonaws.services.kinesis.AmazonKinesisClient;
  * There is a companion helper class called KinesisWordProducerASL which puts dummy data
  * onto the Kinesis stream.
  *
- * This code uses the DefaultAWSCredentialsProviderChain to find credentials
+ * This code uses the DefaultCredentialsProvider to find credentials
  * in the following order:
  *    Environment Variables - AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY
  *    Java System Properties - aws.accessKeyId and aws.secretKey
@@ -106,11 +109,18 @@ public final class JavaKinesisWordCountASL { // needs to be public for access fr
     String endpointUrl = args[2];
 
     // Create a Kinesis client in order to determine the number of shards for the given stream
-    AmazonKinesisClient kinesisClient =
-        new AmazonKinesisClient(new DefaultAWSCredentialsProviderChain());
-    kinesisClient.setEndpoint(endpointUrl);
+    KinesisClient kinesisClient =
+         KinesisClient.builder()
+                 .credentialsProvider(DefaultCredentialsProvider.create())
+                 .endpointOverride(URI.create(endpointUrl))
+                 .httpClientBuilder(ApacheHttpClient.builder())
+                 .build();
+
+    DescribeStreamRequest describeStreamRequest = DescribeStreamRequest.builder()
+            .streamName(streamName)
+            .build();
     int numShards =
-        kinesisClient.describeStream(streamName).getStreamDescription().getShards().size();
+        kinesisClient.describeStream(describeStreamRequest).streamDescription().shards().size();
 
 
     // In this example, we're going to create 1 Kinesis Receiver/input DStream for each shard.

@@ -20,7 +20,7 @@ import java.util.concurrent._
 
 import scala.util.control.NonFatal
 
-import com.amazonaws.services.kinesis.clientlibrary.interfaces.IRecordProcessorCheckpointer
+import software.amazon.kinesis.processor.RecordProcessorCheckpointer
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.streaming.Duration
@@ -42,14 +42,14 @@ private[kinesis] class KinesisCheckpointer(
     clock: Clock = new SystemClock) extends Logging {
 
   // a map from shardId's to checkpointers
-  private val checkpointers = new ConcurrentHashMap[String, IRecordProcessorCheckpointer]()
+  private val checkpointers = new ConcurrentHashMap[String, RecordProcessorCheckpointer]()
 
   private val lastCheckpointedSeqNums = new ConcurrentHashMap[String, String]()
 
   private val checkpointerThread: RecurringTimer = startCheckpointerThread()
 
   /** Update the checkpointer instance to the most recent one for the given shardId. */
-  def setCheckpointer(shardId: String, checkpointer: IRecordProcessorCheckpointer): Unit = {
+  def setCheckpointer(shardId: String, checkpointer: RecordProcessorCheckpointer): Unit = {
     checkpointers.put(shardId, checkpointer)
   }
 
@@ -60,7 +60,7 @@ private[kinesis] class KinesisCheckpointer(
    * we will use that to make the final checkpoint. If `null` is provided, we will not make the
    * checkpoint, e.g. in case of [[ShutdownReason.ZOMBIE]].
    */
-  def removeCheckpointer(shardId: String, checkpointer: IRecordProcessorCheckpointer): Unit = {
+  def removeCheckpointer(shardId: String, checkpointer: RecordProcessorCheckpointer): Unit = {
     synchronized {
       checkpointers.remove(shardId)
     }
@@ -81,7 +81,7 @@ private[kinesis] class KinesisCheckpointer(
   }
 
   /** Perform the checkpoint. */
-  private def checkpoint(shardId: String, checkpointer: IRecordProcessorCheckpointer): Unit = {
+  private def checkpoint(shardId: String, checkpointer: RecordProcessorCheckpointer): Unit = {
     try {
       if (checkpointer != null) {
         receiver.getLatestSeqNumToCheckpoint(shardId).foreach { latestSeqNum =>
