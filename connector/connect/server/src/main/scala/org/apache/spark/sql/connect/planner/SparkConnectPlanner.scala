@@ -30,15 +30,10 @@ import io.grpc.stub.StreamObserver
 import org.apache.spark.{Partition, SparkEnv, TaskContext}
 import org.apache.spark.api.python.{PythonEvalType, SimplePythonFunction}
 import org.apache.spark.connect.proto
-import org.apache.spark.connect.proto.{ExecutePlanResponse, SqlCommand}
+import org.apache.spark.connect.proto.{ExecutePlanResponse, SqlCommand, StreamingQueryCommand, StreamingQueryCommandResult, StreamingQueryInstanceId, WriteStreamOperationStart, WriteStreamOperationStartResult}
 import org.apache.spark.connect.proto.ExecutePlanResponse.SqlCommandResult
 import org.apache.spark.connect.proto.Parse.ParseFormat
-import org.apache.spark.connect.proto.StreamingQueryCommand
-import org.apache.spark.connect.proto.StreamingQueryCommandResult
-import org.apache.spark.connect.proto.StreamingQueryInstanceId
-import org.apache.spark.connect.proto.WriteStreamOperationStart
 import org.apache.spark.connect.proto.WriteStreamOperationStart.TriggerCase
-import org.apache.spark.connect.proto.WriteStreamOperationStartResult
 import org.apache.spark.ml.{functions => MLFunctions}
 import org.apache.spark.sql.{Column, Dataset, Encoders, SparkSession}
 import org.apache.spark.sql.avro.{AvroDataToCatalyst, CatalystDataToAvro}
@@ -49,7 +44,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException, ParserUtils}
 import org.apache.spark.sql.catalyst.plans.{Cross, FullOuter, Inner, JoinType, LeftAnti, LeftOuter, LeftSemi, RightOuter, UsingJoin}
 import org.apache.spark.sql.catalyst.plans.logical
-import org.apache.spark.sql.catalyst.plans.logical.{CollectMetrics, CommandResult, Deduplicate, DeduplicateWithinWatermark, DeserializeToObject, Except, Intersect, LocalRelation, LogicalPlan, MapPartitions, Project, Sample, SerializeFromObject, Sort, SubqueryAlias, TypedFilter, Union, Unpivot, UnresolvedHint}
+import org.apache.spark.sql.catalyst.plans.logical.{AppendColumns, CoGroup, CollectMetrics, CommandResult, Deduplicate, DeduplicateWithinWatermark, DeserializeToObject, Except, Intersect, LocalRelation, LogicalPlan, MapGroups, MapPartitions, Project, Sample, SerializeFromObject, Sort, SubqueryAlias, TypedFilter, Union, Unpivot, UnresolvedHint}
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CharVarcharUtils}
 import org.apache.spark.sql.connect.artifact.SparkConnectArtifactManager
 import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, InvalidPlanInput, LiteralValueProtoConverter, StorageLevelProtoConverter, UdfPacket}
@@ -526,54 +521,205 @@ class SparkConnectPlanner(val session: SparkSession) {
   private def transformTypedMapPartitions(
       fun: proto.CommonInlineUserDefinedFunction,
       child: LogicalPlan): LogicalPlan = {
-    val udf = fun.getScalarScalaUdf
-    val udfPacket =
-      Utils.deserialize[UdfPacket](
-        udf.getPayload.toByteArray,
-        SparkConnectArtifactManager.classLoaderWithArtifacts)
-    assert(udfPacket.inputEncoders.size == 1)
-    val iEnc = ExpressionEncoder(udfPacket.inputEncoders.head)
-    val rEnc = ExpressionEncoder(udfPacket.outputEncoder)
-
-    val deserializer = UnresolvedDeserializer(iEnc.deserializer)
-    val deserialized = DeserializeToObject(deserializer, generateObjAttr(iEnc), child)
+    val udf = ScalaUdf(fun)
+    val deserialized = DeserializeToObject(udf.inputDeserializer(), udf.inputObjAttr, child)
     val mapped = MapPartitions(
-      udfPacket.function.asInstanceOf[Iterator[Any] => Iterator[Any]],
-      generateObjAttr(rEnc),
+      udf.function.asInstanceOf[Iterator[Any] => Iterator[Any]],
+      udf.outputObjAttr,
       deserialized)
-    SerializeFromObject(rEnc.namedExpressions, mapped)
+    SerializeFromObject(udf.outputNamedExpression, mapped)
   }
 
   private def transformGroupMap(rel: proto.GroupMap): LogicalPlan = {
-    val pythonUdf = transformPythonUDF(rel.getFunc)
-    val cols =
-      rel.getGroupingExpressionsList.asScala.toSeq.map(expr => Column(transformExpression(expr)))
+    val commonUdf = rel.getFunc
+    commonUdf.getFunctionCase match {
+      case proto.CommonInlineUserDefinedFunction.FunctionCase.SCALAR_SCALA_UDF =>
+        transformTypedGroupMap(rel, commonUdf)
 
-    Dataset
-      .ofRows(session, transformRelation(rel.getInput))
-      .groupBy(cols: _*)
-      .flatMapGroupsInPandas(pythonUdf)
-      .logicalPlan
+      case proto.CommonInlineUserDefinedFunction.FunctionCase.PYTHON_UDF =>
+        val pythonUdf = transformPythonUDF(commonUdf)
+        val cols =
+          rel.getGroupingExpressionsList.asScala.toSeq.map(expr =>
+            Column(transformExpression(expr)))
+
+        Dataset
+          .ofRows(session, transformRelation(rel.getInput))
+          .groupBy(cols: _*)
+          .flatMapGroupsInPandas(pythonUdf)
+          .logicalPlan
+
+      case _ =>
+        throw InvalidPlanInput(
+          s"Function with ID: ${commonUdf.getFunctionCase.getNumber} is not supported")
+    }
+  }
+
+  private def transformTypedGroupMap(
+      rel: proto.GroupMap,
+      commonUdf: proto.CommonInlineUserDefinedFunction): LogicalPlan = {
+    val udf = ScalaUdf(commonUdf)
+    val ds = UntypedKeyValueGroupedDataset(
+      rel.getInput,
+      rel.getGroupingExpressionsList,
+      rel.getSortingExpressionsList)
+
+    val mapped = new MapGroups(
+      udf.function.asInstanceOf[(Any, Iterator[Any]) => TraversableOnce[Any]],
+      udf.inputDeserializer(ds.groupingAttributes),
+      ds.valueDeserializer,
+      ds.groupingAttributes,
+      ds.dataAttributes,
+      ds.sortOrder,
+      udf.outputObjAttr,
+      ds.analyzed)
+    SerializeFromObject(udf.outputNamedExpression, mapped)
   }
 
   private def transformCoGroupMap(rel: proto.CoGroupMap): LogicalPlan = {
-    val pythonUdf = transformPythonUDF(rel.getFunc)
+    val commonUdf = rel.getFunc
+    commonUdf.getFunctionCase match {
+      case proto.CommonInlineUserDefinedFunction.FunctionCase.SCALAR_SCALA_UDF =>
+        transformTypedCoGroupMap(rel, commonUdf)
 
-    val inputCols =
-      rel.getInputGroupingExpressionsList.asScala.toSeq.map(expr =>
-        Column(transformExpression(expr)))
-    val otherCols =
-      rel.getOtherGroupingExpressionsList.asScala.toSeq.map(expr =>
-        Column(transformExpression(expr)))
+      case proto.CommonInlineUserDefinedFunction.FunctionCase.PYTHON_UDF =>
+        val pythonUdf = transformPythonUDF(commonUdf)
 
-    val input = Dataset
-      .ofRows(session, transformRelation(rel.getInput))
-      .groupBy(inputCols: _*)
-    val other = Dataset
-      .ofRows(session, transformRelation(rel.getOther))
-      .groupBy(otherCols: _*)
+        val inputCols =
+          rel.getInputGroupingExpressionsList.asScala.toSeq.map(expr =>
+            Column(transformExpression(expr)))
+        val otherCols =
+          rel.getOtherGroupingExpressionsList.asScala.toSeq.map(expr =>
+            Column(transformExpression(expr)))
 
-    input.flatMapCoGroupsInPandas(other, pythonUdf).logicalPlan
+        val input = Dataset
+          .ofRows(session, transformRelation(rel.getInput))
+          .groupBy(inputCols: _*)
+        val other = Dataset
+          .ofRows(session, transformRelation(rel.getOther))
+          .groupBy(otherCols: _*)
+
+        input.flatMapCoGroupsInPandas(other, pythonUdf).logicalPlan
+
+      case _ =>
+        throw InvalidPlanInput(
+          s"Function with ID: ${commonUdf.getFunctionCase.getNumber} is not supported")
+    }
+  }
+
+  private def transformTypedCoGroupMap(
+      rel: proto.CoGroupMap,
+      commonUdf: proto.CommonInlineUserDefinedFunction): LogicalPlan = {
+    val udf = ScalaUdf(commonUdf)
+    val left = UntypedKeyValueGroupedDataset(
+      rel.getInput,
+      rel.getInputGroupingExpressionsList,
+      rel.getInputSortingExpressionsList)
+    val right = UntypedKeyValueGroupedDataset(
+      rel.getOther,
+      rel.getOtherGroupingExpressionsList,
+      rel.getOtherSortingExpressionsList)
+
+    val mapped = CoGroup(
+      udf.function.asInstanceOf[(Any, Iterator[Any], Iterator[Any]) => TraversableOnce[Any]],
+      // The `leftGroup` and `rightGroup` are guaranteed te be of same schema, so it's safe to
+      // resolve the `keyDeserializer` based on either of them, here we pick the left one.
+      udf.inputDeserializer(left.groupingAttributes),
+      left.valueDeserializer,
+      right.valueDeserializer,
+      left.groupingAttributes,
+      right.groupingAttributes,
+      left.dataAttributes,
+      right.dataAttributes,
+      left.sortOrder,
+      right.sortOrder,
+      udf.outputObjAttr,
+      left.analyzed,
+      right.analyzed)
+    SerializeFromObject(udf.outputNamedExpression, mapped)
+  }
+
+  /**
+   * This is the untyped version of [[KeyValueGroupedDataset]].
+   */
+  private case class UntypedKeyValueGroupedDataset(
+      kEncoder: ExpressionEncoder[_],
+      vEncoder: ExpressionEncoder[_],
+      valueDeserializer: Expression,
+      analyzed: LogicalPlan,
+      dataAttributes: Seq[Attribute],
+      groupingAttributes: Seq[Attribute],
+      sortOrder: Seq[SortOrder])
+  private object UntypedKeyValueGroupedDataset {
+    def apply(
+        input: proto.Relation,
+        groupingExprs: java.util.List[proto.Expression],
+        sortingExprs: java.util.List[proto.Expression]): UntypedKeyValueGroupedDataset = {
+      val logicalPlan = transformRelation(input)
+      assert(groupingExprs.size() == 1)
+      val groupFunc = groupingExprs.asScala.toSeq
+        .map(expr => unpackUdf(expr.getCommonInlineUserDefinedFunction))
+        .head
+
+      assert(groupFunc.inputEncoders.size == 1)
+      val vEnc = ExpressionEncoder(groupFunc.inputEncoders.head)
+      val kEnc = ExpressionEncoder(groupFunc.outputEncoder)
+
+      val withGroupingKey = new AppendColumns(
+        groupFunc.function.asInstanceOf[Any => Any],
+        vEnc.clsTag.runtimeClass,
+        vEnc.schema,
+        UnresolvedDeserializer(vEnc.deserializer),
+        kEnc.namedExpressions,
+        logicalPlan)
+
+      // The input logical plan of KeyValueGroupedDataset need to be executed and analyzed
+      val analyzed = session.sessionState.executePlan(withGroupingKey).analyzed
+      val dataAttributes = logicalPlan.output
+      val groupingAttributes = withGroupingKey.newColumns
+      val valueDeserializer = UnresolvedDeserializer(vEnc.deserializer, dataAttributes)
+
+      // Compute sort order
+      val sortExprs =
+        sortingExprs.asScala.toSeq.map(expr => transformExpression(expr))
+      val sortOrder: Seq[SortOrder] = MapGroups.sortOrder(sortExprs)
+
+      UntypedKeyValueGroupedDataset(
+        kEnc,
+        vEnc,
+        valueDeserializer,
+        analyzed,
+        dataAttributes,
+        groupingAttributes,
+        sortOrder)
+    }
+  }
+
+  /**
+   * The UDF used in typed APIs, where the input column is absent.
+   */
+  private case class ScalaUdf(
+      function: AnyRef,
+      outEnc: ExpressionEncoder[_],
+      outputObjAttr: Attribute,
+      inEnc: ExpressionEncoder[_],
+      inputObjAttr: Attribute) {
+    val outputNamedExpression: Seq[NamedExpression] = outEnc.namedExpressions
+    def inputDeserializer(inputAttributes: Seq[Attribute] = Nil): Expression = {
+      UnresolvedDeserializer(inEnc.deserializer, inputAttributes)
+    }
+  }
+  private object ScalaUdf {
+    def apply(commonUdf: proto.CommonInlineUserDefinedFunction): ScalaUdf = {
+      val udf = unpackUdf(commonUdf)
+      val outEnc = ExpressionEncoder(udf.outputEncoder)
+      // There might be more than one inputs, but we only interested in the first one.
+      // Most typed API takes one UDF input.
+      // For the few that takes more than one inputs, e.g. grouping function mapping UDFs,
+      // we only interested in the first input which is the key of the grouping function.
+      assert(udf.inputEncoders.nonEmpty)
+      val inEnc = ExpressionEncoder(udf.inputEncoders.head) // single input encoder or key encoder
+      ScalaUdf(udf.function, outEnc, generateObjAttr(outEnc), inEnc, generateObjAttr(inEnc))
+    }
   }
 
   private def transformApplyInPandasWithState(rel: proto.ApplyInPandasWithState): LogicalPlan = {
@@ -992,14 +1138,8 @@ class SparkConnectPlanner(val session: SparkSession) {
   private def transformTypedFilter(
       fun: proto.CommonInlineUserDefinedFunction,
       child: LogicalPlan): TypedFilter = {
-    val udf = fun.getScalarScalaUdf
-    val udfPacket =
-      Utils.deserialize[UdfPacket](
-        udf.getPayload.toByteArray,
-        SparkConnectArtifactManager.classLoaderWithArtifacts)
-    assert(udfPacket.inputEncoders.size == 1)
-    val iEnc = ExpressionEncoder(udfPacket.inputEncoders.head)
-    TypedFilter(udfPacket.function, child)(iEnc)
+    val udf = ScalaUdf(fun)
+    TypedFilter(udf.function, child)(udf.inEnc)
   }
 
   private def transformProject(rel: proto.Project): LogicalPlan = {
@@ -1161,6 +1301,12 @@ class SparkConnectPlanner(val session: SparkSession) {
     }
   }
 
+  private def unpackUdf(fun: proto.CommonInlineUserDefinedFunction): UdfPacket = {
+    Utils.deserialize[UdfPacket](
+      fun.getScalarScalaUdf.getPayload.toByteArray,
+      SparkConnectArtifactManager.classLoaderWithArtifacts)
+  }
+
   /**
    * Translates a Scalar Scala user-defined function from proto to the Catalyst expression.
    *
@@ -1171,10 +1317,7 @@ class SparkConnectPlanner(val session: SparkSession) {
    */
   private def transformScalarScalaUDF(fun: proto.CommonInlineUserDefinedFunction): ScalaUDF = {
     val udf = fun.getScalarScalaUdf
-    val udfPacket =
-      Utils.deserialize[UdfPacket](
-        udf.getPayload.toByteArray,
-        SparkConnectArtifactManager.classLoaderWithArtifacts)
+    val udfPacket = unpackUdf(fun)
     ScalaUDF(
       function = udfPacket.function,
       dataType = transformDataType(udf.getOutputType),
