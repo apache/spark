@@ -137,7 +137,7 @@ class ObjectAggregationIterator(
 
   // This function is used to read and process input rows. When processing input rows, it first uses
   // hash-based aggregation by putting groups and their buffers in `hashMap`. If `hashMap` grows too
-  // large, it destroys the `hashMap` and falls back to sort-based aggregation.
+  // large, it destroys and sorts the `hashMap` and falls back to sort-based aggregation.
   private def processInputs(): Unit = {
     // In-memory map to store aggregation buffer for hash-based aggregation.
     val hashMap = new ObjectAggregationMap()
@@ -252,14 +252,14 @@ class SortBasedAggregator(
       private var groupingKey: UnsafeRow = _
       /**
        * A flag to represent how to process row for current grouping key:
-       *  0: update input row to aggregation buffer
-       *  1: merge input aggregation buffer to sort based aggregation buffer
-       *  2: first update input row to aggregation buffer then merge it to sort based
-       *     aggregation buffer
+       *  0: update input row to `sortBasedAggregationBuffer`
+       *  1: merge input aggregation buffer to `sortBasedAggregationBuffer`
+       *  2: first update input row to aggregation buffer then merge it to
+       *     `sortBasedAggregationBuffer`
        *
        * The state transition is:
        * - If `initialAggBufferIterator` has no more row, then it's 0
-       * - If `inputIterator` has no more row, then then it's 1
+       * - If `inputIterator` has no more row, then it's 1
        * - If the grouping key of `initialAggBufferIterator` is bigger, then it's 0
        * - If the grouping key of `inputIterator` is bigger, then it's 1
        * - If the grouping key of `initialAggBufferIterator` and `inputIterator` are equivalent,
