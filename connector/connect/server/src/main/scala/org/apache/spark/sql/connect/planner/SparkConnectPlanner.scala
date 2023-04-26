@@ -1195,6 +1195,7 @@ class SparkConnectPlanner(val session: SparkSession) {
   }
 
   private def transformPythonFunction(fun: proto.PythonUDF): SimplePythonFunction = {
+
     SimplePythonFunction(
       command = fun.getCommand.toByteArray,
       // Empty environment variables
@@ -1207,8 +1208,8 @@ class SparkConnectPlanner(val session: SparkSession) {
       broadcastVars = Lists.newArrayList(),
       // Null accumulator
       accumulator = null,
-      pipDependencies = fun.getPipDependenciesList,
-      pipConstraints = fun.getPipConstraintsList
+      pipDependencies = new java.util.ArrayList[String](fun.getPipDependenciesList),
+      pipConstraints = new java.util.ArrayList[String](fun.getPipConstraintsList)
     )
   }
 
