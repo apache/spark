@@ -93,13 +93,15 @@ private object PostgresDialect extends JdbcDialect with SQLConfHelper {
     case "numeric" | "decimal" if precision > 0 => Some(DecimalType.bounded(precision, scale))
     case "numeric" | "decimal" =>
       // SPARK-26538: handle numeric without explicit precision and scale.
-      Some(DecimalType. SYSTEM_DEFAULT)
+      Some(DecimalType.SYSTEM_DEFAULT)
     case "money" =>
       // money[] type seems to be broken and difficult to handle.
       // So this method returns None for now.
       // See SPARK-34333 and https://github.com/pgjdbc/pgjdbc/issues/1405
       None
-    case _ => None
+    case _ =>
+      // SPARK-43267: handle unknown types in array as string, because there are user-defined types
+      Some(StringType)
   }
 
   override def getJDBCType(dt: DataType): Option[JdbcType] = dt match {
