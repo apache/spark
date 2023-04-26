@@ -2441,9 +2441,7 @@ def sha2(col: "ColumnOrName", numBits: int) -> Column:
 sha2.__doc__ = pysparkfuncs.sha2.__doc__
 
 
-def hll_sketch_agg(
-    col: "ColumnOrName", lgConfigK: Optional[int] = None
-) -> Column:
+def hll_sketch_agg(col: "ColumnOrName", lgConfigK: Optional[int] = None) -> Column:
     if lgConfigK is not None:
         return _invoke_function("hll_sketch_agg", _to_col(col), lit(lgConfigK))
     else:
@@ -2470,9 +2468,13 @@ def hll_sketch_estimate(col: "ColumnOrName") -> Column:
 hll_sketch_estimate.__doc__ = pysparkfuncs.hll_sketch_estimate.__doc__
 
 
-def hll_union(col1: "ColumnOrName", col2: "ColumnOrName", allowDifferentLgConfigK: Optional[bool] = None) -> Column:
+def hll_union(
+    col1: "ColumnOrName", col2: "ColumnOrName", allowDifferentLgConfigK: Optional[bool] = None
+) -> Column:
     if allowDifferentLgConfigK is not None:
-        return _invoke_function("hll_union", _to_col(col1), _to_col(col2), lit(allowDifferentLgConfigK))
+        return _invoke_function(
+            "hll_union", _to_col(col1), _to_col(col2), lit(allowDifferentLgConfigK)
+        )
     else:
         return _invoke_function("hll_union", _to_col(col1), _to_col(col2))
 

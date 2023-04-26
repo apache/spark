@@ -10114,9 +10114,7 @@ def unwrap_udt(col: "ColumnOrName") -> Column:
 
 
 @try_remote_functions
-def hll_sketch_agg(
-    col: "ColumnOrName", lgConfigK: Optional[int] = None
-) -> Column:
+def hll_sketch_agg(col: "ColumnOrName", lgConfigK: Optional[int] = None) -> Column:
     """
     Aggregate function: returns the updatable binary representation of the Datasketches
     HllSketch configured with lgConfigK arg.
@@ -10224,7 +10222,9 @@ def hll_sketch_estimate(col: "ColumnOrName") -> Column:
 
 
 @try_remote_functions
-def hll_union(col1: "ColumnOrName", col2: "ColumnOrName", allowDifferentLgConfigK: Optional[bool] = None) -> Column:
+def hll_union(
+    col1: "ColumnOrName", col2: "ColumnOrName", allowDifferentLgConfigK: Optional[bool] = None
+) -> Column:
     """
     Merges two binary representations of Datasketches HllSketch objects, using a
     Datasketches Union object.  Throws an exception if sketches have different
@@ -10257,7 +10257,9 @@ def hll_union(col1: "ColumnOrName", col2: "ColumnOrName", allowDifferentLgConfig
     +------------+
     """
     if allowDifferentLgConfigK is not None:
-        return _invoke_function("hll_union", _to_java_column(col1), _to_java_column(col2), allowDifferentLgConfigK)
+        return _invoke_function(
+            "hll_union", _to_java_column(col1), _to_java_column(col2), allowDifferentLgConfigK
+        )
     else:
         return _invoke_function("hll_union", _to_java_column(col1), _to_java_column(col2))
 
