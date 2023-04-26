@@ -2066,17 +2066,6 @@ class DataFrame(Frame, Generic[T]):
             ):
                 yield tuple(([k] if index else []) + list(v))
 
-    def iteritems(self) -> Iterator[Tuple[Name, "Series"]]:
-        """
-        This is an alias of ``items``.
-
-        .. deprecated:: 3.4.0
-            iteritems is deprecated and will be removed in a future version.
-            Use .items instead.
-        """
-        warnings.warn("Deprecated in 3.4.0, Use DataFrame.items instead.", FutureWarning)
-        return self.items()
-
     def to_clipboard(self, excel: bool = True, sep: Optional[str] = None, **kwargs: Any) -> None:
         """
         Copy object to the system clipboard.
@@ -12635,109 +12624,6 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         internal = psdf._internal.with_new_sdf(sdf, data_fields=data_fields)
         result_df: DataFrame = DataFrame(internal)
         return result_df.reset_index(drop=True) if ignore_index else result_df
-
-    def mad(self, axis: Axis = 0) -> "Series":
-        """
-        Return the mean absolute deviation of values.
-
-        .. deprecated:: 3.4.0
-
-        Parameters
-        ----------
-        axis : {index (0), columns (1)}
-            Axis for the function to be applied on.
-
-        Examples
-        --------
-        >>> df = ps.DataFrame({'a': [1, 2, 3, np.nan], 'b': [0.1, 0.2, 0.3, np.nan]},
-        ...                   columns=['a', 'b'])
-
-        >>> df.mad()
-        a    0.666667
-        b    0.066667
-        dtype: float64
-
-        >>> df.mad(axis=1)
-        0    0.45
-        1    0.90
-        2    1.35
-        3     NaN
-        dtype: float64
-        """
-        warnings.warn(
-            "The 'mad' method is deprecated and will be removed in a future version. "
-            "To compute the same result, you may do `(df - df.mean()).abs().mean()`.",
-            FutureWarning,
-        )
-        from pyspark.pandas.series import first_series
-
-        axis = validate_axis(axis)
-
-        if axis == 0:
-
-            def get_spark_column(psdf: DataFrame, label: Label) -> GenericColumn:
-                scol = psdf._internal.spark_column_for(label)
-                col_type = psdf._internal.spark_type_for(label)
-
-                if isinstance(col_type, BooleanType):
-                    scol = scol.cast("integer")
-
-                return scol
-
-            new_column_labels: List[Label] = []
-            for label in self._internal.column_labels:
-                # Filtering out only columns of numeric and boolean type column.
-                dtype = self._psser_for(label).spark.data_type
-                if isinstance(dtype, (NumericType, BooleanType)):
-                    new_column_labels.append(label)
-
-            new_columns = [
-                F.avg(get_spark_column(self, label)).alias(  # type: ignore[arg-type]
-                    name_like_string(label)
-                )
-                for label in new_column_labels
-            ]
-
-            mean_data = self._internal.spark_frame.select(*new_columns).first()
-
-            new_columns = [
-                F.avg(
-                    F.abs(get_spark_column(self, label) - mean_data[name_like_string(label)])
-                ).alias(name_like_string(label))
-                for label in new_column_labels
-            ]
-
-            sdf = self._internal.spark_frame.select(
-                *[F.lit(None).cast(StringType()).alias(SPARK_DEFAULT_INDEX_NAME)], *new_columns
-            )
-
-            # The data is expected to be small so it's fine to transpose/use the default index.
-            with ps.option_context("compute.max_rows", 1):
-                internal = InternalFrame(
-                    spark_frame=sdf,
-                    index_spark_columns=[scol_for(sdf, SPARK_DEFAULT_INDEX_NAME)],
-                    column_labels=new_column_labels,
-                    column_label_names=self._internal.column_label_names,
-                )
-                return first_series(DataFrame(internal).transpose())
-
-        else:
-
-            @pandas_udf(returnType=DoubleType())  # type: ignore[call-overload]
-            def calculate_columns_axis(*cols: pd.Series) -> pd.Series:
-                return pd.concat(cols, axis=1).mad(axis=1)
-
-            internal = self._internal.copy(
-                column_labels=[None],
-                data_spark_columns=[
-                    calculate_columns_axis(*self._internal.data_spark_columns).alias(
-                        SPARK_DEFAULT_SERIES_NAME
-                    )
-                ],
-                data_fields=[None],
-                column_label_names=None,
-            )
-            return first_series(DataFrame(internal))
 
     def mode(self, axis: Axis = 0, numeric_only: bool = False, dropna: bool = True) -> "DataFrame":
         """

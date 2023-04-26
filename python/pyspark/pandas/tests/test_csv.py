@@ -253,20 +253,6 @@ class CsvTestsMixin:
             actual = ps.read_csv(fn, sep="\t")
             self.assert_eq(expected, actual, almost=True)
 
-    def test_read_csv_with_squeeze(self):
-        with self.csv_file(self.csv_text) as fn:
-            expected = pd.read_csv(fn, squeeze=True, usecols=["name"])
-            actual = ps.read_csv(fn, squeeze=True, usecols=["name"])
-            self.assert_eq(expected, actual, almost=True)
-
-            expected = pd.read_csv(fn, squeeze=True, usecols=["name", "amount"])
-            actual = ps.read_csv(fn, squeeze=True, usecols=["name", "amount"])
-            self.assert_eq(expected, actual, almost=True)
-
-            expected = pd.read_csv(fn, squeeze=True, usecols=["name", "amount"], index_col=["name"])
-            actual = ps.read_csv(fn, squeeze=True, usecols=["name", "amount"], index_col=["name"])
-            self.assert_eq(expected, actual, almost=True)
-
     def test_read_csv_with_mangle_dupe_cols(self):
         self.assertRaisesRegex(
             ValueError, "mangle_dupe_cols", lambda: ps.read_csv("path", mangle_dupe_cols=False)

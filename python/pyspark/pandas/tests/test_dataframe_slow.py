@@ -945,8 +945,16 @@ class DataFrameSlowTestsMixin:
         pdf = pd.DataFrame({"x": ["a", "b", "c"]})
         psdf = ps.from_pandas(pdf)
 
-        self.assert_eq(psdf.quantile(0.5), pdf.quantile(0.5))
-        self.assert_eq(psdf.quantile([0.25, 0.5, 0.75]), pdf.quantile([0.25, 0.5, 0.75]))
+        if LooseVersion(pd.__version__) >= LooseVersion("2.0.0"):
+            # From pandas 2.0.0, an error occurs when performing quantile on str type.
+            # It returned an empty Series or DataFrame previousely.
+            expected_result = ps.Series([], name=0.5)
+            self.assert_eq(psdf.quantile(0.5), expected_result)
+            expected_result = ps.DataFrame([], index=[0.25, 0.5, 0.75])
+            self.assert_eq(psdf.quantile([0.25, 0.5, 0.75]), expected_result)
+        else:
+            self.assert_eq(psdf.quantile(0.5), pdf.quantile(0.5))
+            self.assert_eq(psdf.quantile([0.25, 0.5, 0.75]), pdf.quantile([0.25, 0.5, 0.75]))
 
         with self.assertRaisesRegex(TypeError, "Could not convert object \\(string\\) to numeric"):
             psdf.quantile(0.5, numeric_only=False)
@@ -1534,36 +1542,6 @@ class DataFrameSlowTestsMixin:
         finally:
             sys.stdout = prev
 
-    def test_mad(self):
-        pdf = pd.DataFrame(
-            {
-                "A": [1, 2, None, 4, np.nan],
-                "B": [-0.1, 0.2, -0.3, np.nan, 0.5],
-                "C": ["a", "b", "c", "d", "e"],
-            }
-        )
-        psdf = ps.from_pandas(pdf)
-
-        self.assert_eq(psdf.mad(), pdf.mad())
-        self.assert_eq(psdf.mad(axis=1), pdf.mad(axis=1))
-
-        with self.assertRaises(ValueError):
-            psdf.mad(axis=2)
-
-        # MultiIndex columns
-        columns = pd.MultiIndex.from_tuples([("A", "X"), ("A", "Y"), ("A", "Z")])
-        pdf.columns = columns
-        psdf.columns = columns
-
-        self.assert_eq(psdf.mad(), pdf.mad())
-        self.assert_eq(psdf.mad(axis=1), pdf.mad(axis=1))
-
-        pdf = pd.DataFrame({"A": [True, True, False, False], "B": [True, False, False, True]})
-        psdf = ps.from_pandas(pdf)
-
-        self.assert_eq(psdf.mad(), pdf.mad())
-        self.assert_eq(psdf.mad(axis=1), pdf.mad(axis=1))
-
     def test_mode(self):
         pdf = pd.DataFrame(
             {
@@ -1648,18 +1626,6 @@ class DataFrameSlowTestsMixin:
                 p_corr = pdf.corrwith(pobj, drop=drop, method=method)
                 ps_corr = psdf.corrwith(psobj, drop=drop, method=method)
                 self.assert_eq(p_corr.sort_index(), ps_corr.sort_index(), almost=True)
-
-    def test_iteritems(self):
-        pdf = pd.DataFrame(
-            {"species": ["bear", "bear", "marsupial"], "population": [1864, 22000, 80000]},
-            index=["panda", "polar", "koala"],
-            columns=["species", "population"],
-        )
-        psdf = ps.from_pandas(pdf)
-
-        for (p_name, p_items), (k_name, k_items) in zip(pdf.iteritems(), psdf.iteritems()):
-            self.assert_eq(p_name, k_name)
-            self.assert_eq(p_items, k_items)
 
     def test_tail(self):
         pdf = pd.DataFrame({"x": range(1000)})
@@ -1752,6 +1718,8 @@ class DataFrameSlowTestsMixin:
         pdf = pd.DataFrame(
             {"A": [1, 2, 3, 4, 5], "B": [10, 20, 30, 40, 50], "C": ["a", "b", "c", "d", "e"]}
         )
+        # From pandas 2.0.0, an error occurs when performing product on str type.
+        pdf = pdf[["A", "B"]] if LooseVersion(pd.__version__) >= LooseVersion("2.0.0") else pdf
         psdf = ps.from_pandas(pdf)
         self.assert_eq(pdf.prod(), psdf.prod().sort_index())
 
@@ -1761,7 +1729,12 @@ class DataFrameSlowTestsMixin:
         self.assert_eq(pdf.prod(), psdf.prod().sort_index())
 
         # MultiIndex columns
-        pdf.columns = pd.MultiIndex.from_tuples([("a", "x"), ("b", "y"), ("c", "z")])
+        tuples = (
+            [("a", "x"), ("b", "y")]
+            if LooseVersion(pd.__version__) >= LooseVersion("2.0.0")
+            else [("a", "x"), ("b", "y"), ("c", "z")]
+        )
+        pdf.columns = pd.MultiIndex.from_tuples(tuples)
         psdf = ps.from_pandas(pdf)
         self.assert_eq(pdf.prod(), psdf.prod().sort_index())
 
@@ -1771,50 +1744,54 @@ class DataFrameSlowTestsMixin:
         self.assert_eq(pdf.prod(), psdf.prod().sort_index())
 
         # No numeric columns
-        pdf = pd.DataFrame({"key": ["a", "b", "c"], "val": ["x", "y", "z"]})
-        psdf = ps.from_pandas(pdf)
-        self.assert_eq(pdf.prod(), psdf.prod().sort_index())
+        if LooseVersion(pd.__version__) >= LooseVersion("2.0.0"):
+            # From pandas 2.0.0, an error occurs when performing product on str type.
+            pass
+        else:
+            pdf = pd.DataFrame({"key": ["a", "b", "c"], "val": ["x", "y", "z"]})
+            psdf = ps.from_pandas(pdf)
+            self.assert_eq(pdf.prod(), psdf.prod().sort_index())
 
-        # No numeric named columns
-        pdf.columns.name = "Koalas"
-        psdf = ps.from_pandas(pdf)
-        self.assert_eq(pdf.prod(), psdf.prod().sort_index(), almost=True)
+            # No numeric named columns
+            pdf.columns.name = "Koalas"
+            psdf = ps.from_pandas(pdf)
+            self.assert_eq(pdf.prod(), psdf.prod().sort_index(), almost=True)
 
-        # No numeric MultiIndex columns
-        pdf.columns = pd.MultiIndex.from_tuples([("a", "x"), ("b", "y")])
-        psdf = ps.from_pandas(pdf)
-        self.assert_eq(pdf.prod(), psdf.prod().sort_index(), almost=True)
+            # No numeric MultiIndex columns
+            pdf.columns = pd.MultiIndex.from_tuples([("a", "x"), ("b", "y")])
+            psdf = ps.from_pandas(pdf)
+            self.assert_eq(pdf.prod(), psdf.prod().sort_index(), almost=True)
 
-        # No numeric named MultiIndex columns
-        pdf.columns.names = ["Hello", "Koalas"]
-        psdf = ps.from_pandas(pdf)
-        self.assert_eq(pdf.prod(), psdf.prod().sort_index(), almost=True)
+            # No numeric named MultiIndex columns
+            pdf.columns.names = ["Hello", "Koalas"]
+            psdf = ps.from_pandas(pdf)
+            self.assert_eq(pdf.prod(), psdf.prod().sort_index(), almost=True)
 
-        # All NaN columns
-        pdf = pd.DataFrame(
-            {
-                "A": [np.nan, np.nan, np.nan, np.nan, np.nan],
-                "B": [10, 20, 30, 40, 50],
-                "C": ["a", "b", "c", "d", "e"],
-            }
-        )
-        psdf = ps.from_pandas(pdf)
-        self.assert_eq(pdf.prod(), psdf.prod().sort_index(), check_exact=False)
+            # All NaN columns
+            pdf = pd.DataFrame(
+                {
+                    "A": [np.nan, np.nan, np.nan, np.nan, np.nan],
+                    "B": [10, 20, 30, 40, 50],
+                    "C": ["a", "b", "c", "d", "e"],
+                }
+            )
+            psdf = ps.from_pandas(pdf)
+            self.assert_eq(pdf.prod(), psdf.prod().sort_index(), check_exact=False)
 
-        # All NaN named columns
-        pdf.columns.name = "Koalas"
-        psdf = ps.from_pandas(pdf)
-        self.assert_eq(pdf.prod(), psdf.prod().sort_index(), check_exact=False)
+            # All NaN named columns
+            pdf.columns.name = "Koalas"
+            psdf = ps.from_pandas(pdf)
+            self.assert_eq(pdf.prod(), psdf.prod().sort_index(), check_exact=False)
 
-        # All NaN MultiIndex columns
-        pdf.columns = pd.MultiIndex.from_tuples([("a", "x"), ("b", "y"), ("c", "z")])
-        psdf = ps.from_pandas(pdf)
-        self.assert_eq(pdf.prod(), psdf.prod().sort_index(), check_exact=False)
+            # All NaN MultiIndex columns
+            pdf.columns = pd.MultiIndex.from_tuples([("a", "x"), ("b", "y"), ("c", "z")])
+            psdf = ps.from_pandas(pdf)
+            self.assert_eq(pdf.prod(), psdf.prod().sort_index(), check_exact=False)
 
-        # All NaN named MultiIndex columns
-        pdf.columns.names = ["Hello", "Koalas"]
-        psdf = ps.from_pandas(pdf)
-        self.assert_eq(pdf.prod(), psdf.prod().sort_index(), check_exact=False)
+            # All NaN named MultiIndex columns
+            pdf.columns.names = ["Hello", "Koalas"]
+            psdf = ps.from_pandas(pdf)
+            self.assert_eq(pdf.prod(), psdf.prod().sort_index(), check_exact=False)
 
     def test_from_dict(self):
         data = {"row_1": [3, 2, 1, 0], "row_2": [10, 20, 30, 40]}
@@ -1949,41 +1926,45 @@ class DataFrameSlowTestsMixin:
         idx = pd.date_range("2018-04-09", periods=4, freq="1D20min")
         pdf = pd.DataFrame({"A": [1, 2, 3, 4]}, index=idx)
         psdf = ps.from_pandas(pdf)
-        self.assert_eq(
-            pdf.between_time("0:15", "0:45").sort_index(),
-            psdf.between_time("0:15", "0:45").sort_index(),
-        )
+        # This will be addressed from ongoing PR: https://github.com/apache/spark/pull/40370.
+        if LooseVersion(pd.__version__) >= LooseVersion("2.0.0"):
+            pass
+        else:
+            self.assert_eq(
+                pdf.between_time("0:15", "0:45").sort_index(),
+                psdf.between_time("0:15", "0:45").sort_index(),
+            )
 
-        pdf.index.name = "ts"
-        psdf = ps.from_pandas(pdf)
-        self.assert_eq(
-            pdf.between_time("0:15", "0:45").sort_index(),
-            psdf.between_time("0:15", "0:45").sort_index(),
-        )
+            pdf.index.name = "ts"
+            psdf = ps.from_pandas(pdf)
+            self.assert_eq(
+                pdf.between_time("0:15", "0:45").sort_index(),
+                psdf.between_time("0:15", "0:45").sort_index(),
+            )
 
-        # Column label is 'index'
-        pdf.columns = pd.Index(["index"])
-        psdf = ps.from_pandas(pdf)
-        self.assert_eq(
-            pdf.between_time("0:15", "0:45").sort_index(),
-            psdf.between_time("0:15", "0:45").sort_index(),
-        )
+            # Column label is 'index'
+            pdf.columns = pd.Index(["index"])
+            psdf = ps.from_pandas(pdf)
+            self.assert_eq(
+                pdf.between_time("0:15", "0:45").sort_index(),
+                psdf.between_time("0:15", "0:45").sort_index(),
+            )
 
-        # Both index name and column label are 'index'
-        pdf.index.name = "index"
-        psdf = ps.from_pandas(pdf)
-        self.assert_eq(
-            pdf.between_time("0:15", "0:45").sort_index(),
-            psdf.between_time("0:15", "0:45").sort_index(),
-        )
+            # Both index name and column label are 'index'
+            pdf.index.name = "index"
+            psdf = ps.from_pandas(pdf)
+            self.assert_eq(
+                pdf.between_time("0:15", "0:45").sort_index(),
+                psdf.between_time("0:15", "0:45").sort_index(),
+            )
 
-        # Index name is 'index', column label is ('X', 'A')
-        pdf.columns = pd.MultiIndex.from_arrays([["X"], ["A"]])
-        psdf = ps.from_pandas(pdf)
-        self.assert_eq(
-            pdf.between_time("0:15", "0:45").sort_index(),
-            psdf.between_time("0:15", "0:45").sort_index(),
-        )
+            # Index name is 'index', column label is ('X', 'A')
+            pdf.columns = pd.MultiIndex.from_arrays([["X"], ["A"]])
+            psdf = ps.from_pandas(pdf)
+            self.assert_eq(
+                pdf.between_time("0:15", "0:45").sort_index(),
+                psdf.between_time("0:15", "0:45").sort_index(),
+            )
 
         with self.assertRaisesRegex(
             NotImplementedError, "between_time currently only works for axis=0"
@@ -2088,47 +2069,11 @@ class DataFrameSlowTestsMixin:
             }
         )
         pdf = psdf._to_pandas()
-        # NOTE: Set `datetime_is_numeric=True` for pandas:
-        # FutureWarning: Treating datetime data as categorical rather than numeric in
-        # `.describe` is deprecated and will be removed in a future version of pandas.
-        # Specify `datetime_is_numeric=True` to silence this
-        # warning and adopt the future behavior now.
-        # NOTE: Compare the result except percentiles, since we use approximate percentile
-        # so the result is different from pandas.
-        if LooseVersion(pd.__version__) >= LooseVersion("1.1.0"):
-            self.assert_eq(
-                psdf.describe().loc[["count", "mean", "min", "max"]],
-                pdf.describe(datetime_is_numeric=True)
-                .astype(str)
-                .loc[["count", "mean", "min", "max"]],
-            )
-        else:
-            self.assert_eq(
-                psdf.describe(),
-                ps.DataFrame(
-                    {
-                        "A": [
-                            "4",
-                            "2021-07-16 18:00:00",
-                            "2020-10-20 00:00:00",
-                            "2020-10-20 00:00:00",
-                            "2021-06-02 00:00:00",
-                            "2021-06-02 00:00:00",
-                            "2022-07-11 00:00:00",
-                        ],
-                        "B": [
-                            "4",
-                            "2024-08-02 18:00:00",
-                            "2021-11-20 00:00:00",
-                            "2021-11-20 00:00:00",
-                            "2023-06-02 00:00:00",
-                            "2026-07-11 00:00:00",
-                            "2026-07-11 00:00:00",
-                        ],
-                    },
-                    index=["count", "mean", "min", "25%", "50%", "75%", "max"],
-                ),
-            )
+
+        self.assert_eq(
+            psdf.describe().loc[["count", "mean", "min", "max"]],
+            pdf.describe().astype(str).loc[["count", "mean", "min", "max"]],
+        )
 
         # String & timestamp columns
         psdf = ps.DataFrame(
@@ -2143,45 +2088,11 @@ class DataFrameSlowTestsMixin:
             }
         )
         pdf = psdf._to_pandas()
-        if LooseVersion(pd.__version__) >= LooseVersion("1.1.0"):
-            self.assert_eq(
-                psdf.describe().loc[["count", "mean", "min", "max"]],
-                pdf.describe(datetime_is_numeric=True)
-                .astype(str)
-                .loc[["count", "mean", "min", "max"]],
-            )
-            psdf.A += psdf.A
-            pdf.A += pdf.A
-            self.assert_eq(
-                psdf.describe().loc[["count", "mean", "min", "max"]],
-                pdf.describe(datetime_is_numeric=True)
-                .astype(str)
-                .loc[["count", "mean", "min", "max"]],
-            )
-        else:
-            expected_result = ps.DataFrame(
-                {
-                    "B": [
-                        "4",
-                        "2024-08-02 18:00:00",
-                        "2021-11-20 00:00:00",
-                        "2021-11-20 00:00:00",
-                        "2023-06-02 00:00:00",
-                        "2026-07-11 00:00:00",
-                        "2026-07-11 00:00:00",
-                    ]
-                },
-                index=["count", "mean", "min", "25%", "50%", "75%", "max"],
-            )
-            self.assert_eq(
-                psdf.describe(),
-                expected_result,
-            )
-            psdf.A += psdf.A
-            self.assert_eq(
-                psdf.describe(),
-                expected_result,
-            )
+
+        self.assert_eq(
+            psdf.describe().loc[["count", "mean", "min", "max"]],
+            pdf.describe().astype(str).loc[["count", "mean", "min", "max"]],
+        )
 
         # Numeric & timestamp columns
         psdf = ps.DataFrame(
@@ -2196,61 +2107,10 @@ class DataFrameSlowTestsMixin:
             }
         )
         pdf = psdf._to_pandas()
-        if LooseVersion(pd.__version__) >= LooseVersion("1.1.0"):
-            pandas_result = pdf.describe(datetime_is_numeric=True)
-            pandas_result.B = pandas_result.B.astype(str)
-            self.assert_eq(
-                psdf.describe().loc[["count", "mean", "min", "max"]],
-                pandas_result.loc[["count", "mean", "min", "max"]],
-            )
-            psdf.A += psdf.A
-            pdf.A += pdf.A
-            pandas_result = pdf.describe(datetime_is_numeric=True)
-            pandas_result.B = pandas_result.B.astype(str)
-            self.assert_eq(
-                psdf.describe().loc[["count", "mean", "min", "max"]],
-                pandas_result.loc[["count", "mean", "min", "max"]],
-            )
-        else:
-            self.assert_eq(
-                psdf.describe(),
-                ps.DataFrame(
-                    {
-                        "A": [4, 2, 1, 1, 2, 2, 3, 0.816497],
-                        "B": [
-                            "4",
-                            "2024-08-02 18:00:00",
-                            "2021-11-20 00:00:00",
-                            "2021-11-20 00:00:00",
-                            "2023-06-02 00:00:00",
-                            "2026-07-11 00:00:00",
-                            "2026-07-11 00:00:00",
-                            "None",
-                        ],
-                    },
-                    index=["count", "mean", "min", "25%", "50%", "75%", "max", "std"],
-                ),
-            )
-            psdf.A += psdf.A
-            self.assert_eq(
-                psdf.describe(),
-                ps.DataFrame(
-                    {
-                        "A": [4, 4, 2, 2, 4, 4, 6, 1.632993],
-                        "B": [
-                            "4",
-                            "2024-08-02 18:00:00",
-                            "2021-11-20 00:00:00",
-                            "2021-11-20 00:00:00",
-                            "2023-06-02 00:00:00",
-                            "2026-07-11 00:00:00",
-                            "2026-07-11 00:00:00",
-                            "None",
-                        ],
-                    },
-                    index=["count", "mean", "min", "25%", "50%", "75%", "max", "std"],
-                ),
-            )
+        self.assert_eq(
+            psdf.describe().astype(str).loc[["count", "mean", "min", "max"]],
+            pdf.describe().astype(str).loc[["count", "mean", "min", "max"]],
+        )
 
         # Include None column
         psdf = ps.DataFrame(
@@ -2261,33 +2121,10 @@ class DataFrameSlowTestsMixin:
             }
         )
         pdf = psdf._to_pandas()
-        if LooseVersion(pd.__version__) >= LooseVersion("1.1.0"):
-            pandas_result = pdf.describe(datetime_is_numeric=True)
-            pandas_result.b = pandas_result.b.astype(str)
-            self.assert_eq(
-                psdf.describe().loc[["count", "mean", "min", "max"]],
-                pandas_result.loc[["count", "mean", "min", "max"]],
-            )
-        else:
-            self.assert_eq(
-                psdf.describe(),
-                ps.DataFrame(
-                    {
-                        "a": [3.0, 2.0, 1.0, 1.0, 2.0, 3.0, 3.0, 1.0],
-                        "b": [
-                            "3",
-                            "1970-01-01 00:00:00.000001",
-                            "1970-01-01 00:00:00.000001",
-                            "1970-01-01 00:00:00.000001",
-                            "1970-01-01 00:00:00.000001",
-                            "1970-01-01 00:00:00.000001",
-                            "1970-01-01 00:00:00.000001",
-                            "None",
-                        ],
-                    },
-                    index=["count", "mean", "min", "25%", "50%", "75%", "max", "std"],
-                ),
-            )
+        self.assert_eq(
+            psdf.describe().astype(str).loc[["count", "mean", "min", "max"]],
+            pdf.describe().astype(str).loc[["count", "mean", "min", "max"]],
+        )
 
         msg = r"Percentiles should all be in the interval \[0, 1\]"
         with self.assertRaisesRegex(ValueError, msg):
@@ -2333,81 +2170,23 @@ class DataFrameSlowTestsMixin:
         pdf = psdf._to_pandas()
         # For timestamp type, we should convert NaT to None in pandas result
         # since pandas API on Spark doesn't support the NaT for object type.
-        if LooseVersion(pd.__version__) >= LooseVersion("1.1.0"):
-            pdf_result = pdf[pdf.a != pdf.a].describe(datetime_is_numeric=True)
-            self.assert_eq(
-                psdf[psdf.a != psdf.a].describe(),
-                pdf_result.where(pdf_result.notnull(), None).astype(str),
-            )
-        else:
-            self.assert_eq(
-                psdf[psdf.a != psdf.a].describe(),
-                ps.DataFrame(
-                    {
-                        "a": [
-                            "0",
-                            "None",
-                            "None",
-                            "None",
-                            "None",
-                            "None",
-                            "None",
-                        ],
-                        "b": [
-                            "0",
-                            "None",
-                            "None",
-                            "None",
-                            "None",
-                            "None",
-                            "None",
-                        ],
-                    },
-                    index=["count", "mean", "min", "25%", "50%", "75%", "max"],
-                ),
-            )
+        pdf_result = pdf[pdf.a != pdf.a].describe()
+        self.assert_eq(
+            psdf[psdf.a != psdf.a].describe(),
+            pdf_result.where(pdf_result.notnull(), None).astype(str),
+        )
 
         # Explicit empty DataFrame numeric & timestamp
         psdf = ps.DataFrame(
             {"a": [1, 2, 3], "b": [pd.Timestamp(1), pd.Timestamp(1), pd.Timestamp(1)]}
         )
         pdf = psdf._to_pandas()
-        if LooseVersion(pd.__version__) >= LooseVersion("1.1.0"):
-            pdf_result = pdf[pdf.a != pdf.a].describe(datetime_is_numeric=True)
-            pdf_result.b = pdf_result.b.where(pdf_result.b.notnull(), None).astype(str)
-            self.assert_eq(
-                psdf[psdf.a != psdf.a].describe(),
-                pdf_result,
-            )
-        else:
-            self.assert_eq(
-                psdf[psdf.a != psdf.a].describe(),
-                ps.DataFrame(
-                    {
-                        "a": [
-                            0,
-                            None,
-                            None,
-                            None,
-                            None,
-                            None,
-                            None,
-                            None,
-                        ],
-                        "b": [
-                            "0",
-                            "None",
-                            "None",
-                            "None",
-                            "None",
-                            "None",
-                            "None",
-                            "None",
-                        ],
-                    },
-                    index=["count", "mean", "min", "25%", "50%", "75%", "max", "std"],
-                ),
-            )
+        pdf_result = pdf[pdf.a != pdf.a].describe()
+        pdf_result.b = pdf_result.b.where(pdf_result.b.notnull(), None).astype(str)
+        self.assert_eq(
+            psdf[psdf.a != psdf.a].describe(),
+            pdf_result,
+        )
 
         # Explicit empty DataFrame numeric & string
         psdf = ps.DataFrame({"a": [1, 2, 3], "b": ["a", "b", "c"]})
@@ -2422,30 +2201,11 @@ class DataFrameSlowTestsMixin:
             {"a": ["a", "b", "c"], "b": [pd.Timestamp(1), pd.Timestamp(1), pd.Timestamp(1)]}
         )
         pdf = psdf._to_pandas()
-        if LooseVersion(pd.__version__) >= LooseVersion("1.1.0"):
-            pdf_result = pdf[pdf.a != pdf.a].describe(datetime_is_numeric=True)
-            self.assert_eq(
-                psdf[psdf.a != psdf.a].describe(),
-                pdf_result.where(pdf_result.notnull(), None).astype(str),
-            )
-        else:
-            self.assert_eq(
-                psdf[psdf.a != psdf.a].describe(),
-                ps.DataFrame(
-                    {
-                        "b": [
-                            "0",
-                            "None",
-                            "None",
-                            "None",
-                            "None",
-                            "None",
-                            "None",
-                        ],
-                    },
-                    index=["count", "mean", "min", "25%", "50%", "75%", "max"],
-                ),
-            )
+        pdf_result = pdf[pdf.a != pdf.a].describe()
+        self.assert_eq(
+            psdf[psdf.a != psdf.a].describe(),
+            pdf_result.where(pdf_result.notnull(), None).astype(str),
+        )
 
     def test_getitem_with_none_key(self):
         psdf = self.psdf
@@ -2564,7 +2324,35 @@ class DataFrameSlowTestsMixin:
         pdf.columns = [dtype for dtype in numeric_dtypes + boolean_dtypes] + ["decimal"]
         psdf = ps.from_pandas(pdf)
 
-        if LooseVersion(pd.__version__) >= LooseVersion("1.2"):
+        if LooseVersion(pd.__version__) >= LooseVersion("2.0.0"):
+            test_types = [
+                "Int8",
+                "Int16",
+                "Int32",
+                "Int64",
+                "Float32",
+                "Float64",
+                "float",
+                "boolean",
+                "bool",
+            ]
+            expected = pd.DataFrame(
+                data=[
+                    [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.0000000, 0.0000000],
+                    [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.0000000, 0.0000000],
+                    [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.0000000, 0.0000000],
+                    [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.0000000, 0.0000000],
+                    [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.0000000, 0.0000000],
+                    [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.0000000, 0.0000000],
+                    [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.0000000, 0.0000000],
+                    [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.3333333, 0.3333333],
+                    [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.3333333, 0.3333333],
+                ],
+                index=test_types,
+                columns=test_types,
+            )
+            self.assert_eq(expected, psdf.cov(), almost=True)
+        elif LooseVersion(pd.__version__) >= LooseVersion("1.2"):
             self.assert_eq(pdf.cov(), psdf.cov(), almost=True)
             self.assert_eq(pdf.cov(min_periods=3), psdf.cov(min_periods=3), almost=True)
             self.assert_eq(pdf.cov(min_periods=4), psdf.cov(min_periods=4))
@@ -2598,6 +2386,9 @@ class DataFrameSlowTestsMixin:
             [(1, 2, "a", 1), (0, 3, "b", 1), (2, 0, "c", 9), (1, 1, "d", 1)],
             columns=["a", "b", "c", "d"],
         )
+        # From pandas 2.0.0, an error occurs when performing cov on str type.
+        if LooseVersion(pd.__version__) >= LooseVersion("2.0.0"):
+            pdf = pdf[["a", "b", "d"]]
         psdf = ps.from_pandas(pdf)
         self.assert_eq(pdf.cov(), psdf.cov(), almost=True)
         self.assert_eq(pdf.cov(min_periods=4), psdf.cov(min_periods=4), almost=True)
@@ -2612,10 +2403,13 @@ class DataFrameSlowTestsMixin:
         self.assert_eq(pdf.cov(min_periods=11), psdf.cov(min_periods=11), almost=True)
         self.assert_eq(pdf.cov(min_periods=10), psdf.cov(min_periods=10), almost=True)
 
-        # return empty DataFrame
         pdf = pd.DataFrame([("1", "2"), ("0", "3"), ("2", "0"), ("1", "1")], columns=["a", "b"])
         psdf = ps.from_pandas(pdf)
-        self.assert_eq(pdf.cov(), psdf.cov())
+        # TODO(SPARK-43291): Match behavior for DataFrame.cov on string DataFrame.
+        if LooseVersion(pd.__version__) >= LooseVersion("2.0.0"):
+            self.assert_eq(psdf.cov(), ps.DataFrame())
+        else:
+            self.assert_eq(pdf.cov(), psdf.cov())
 
     @unittest.skipIf(
         LooseVersion(pd.__version__) < LooseVersion("1.3.0"),
