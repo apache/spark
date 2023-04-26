@@ -210,6 +210,12 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         c
       }
 
+    case CreateTableLike(ResolvedV1Identifier(ident), ResolvedTable(_, sourceIdent, _, _),
+        provider, location, serdeInfo, properties, ifNotExists)
+        if !provider.exists(isV2Provider(_)) =>
+      CreateTableLikeCommand(ident, sourceIdent.asTableIdentifier,
+        toStorageFormat(location, serdeInfo), provider, properties, ifNotExists)
+
     case DropTable(ResolvedV1Identifier(ident), ifExists, purge) =>
       DropTableCommand(ident, ifExists, isView = false, purge = purge)
 
@@ -546,6 +552,35 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
       bucketSpec = maybeBucketSpec,
       properties = properties,
       comment = comment)
+  }
+
+  private def toStorageFormat(
+      location: Option[String],
+      maybeSerdeInfo: Option[SerdeInfo]): CatalogStorageFormat = maybeSerdeInfo match {
+    case Some(serdeInfo) =>
+      serdeInfo.storedAs match {
+        case Some(storedAs) =>
+          HiveSerDe.sourceToSerDe(storedAs) match {
+            case Some(hiveSerde) =>
+              CatalogStorageFormat.empty.copy(
+                locationUri = location.map(CatalogUtils.stringToURI),
+                inputFormat = hiveSerde.inputFormat,
+                outputFormat = hiveSerde.outputFormat,
+                serde = serdeInfo.serde.orElse(hiveSerde.serde),
+                properties = serdeInfo.serdeProperties)
+            case _ =>
+              throw QueryCompilationErrors.invalidFileFormatForStoredAsError(serdeInfo)
+          }
+        case None =>
+          CatalogStorageFormat.empty.copy(
+            locationUri = location.map(CatalogUtils.stringToURI),
+            inputFormat = serdeInfo.formatClasses.map(_.input),
+            outputFormat = serdeInfo.formatClasses.map(_.output),
+            serde = serdeInfo.serde,
+            properties = serdeInfo.serdeProperties)
+      }
+    case None =>
+      CatalogStorageFormat.empty.copy(locationUri = location.map(CatalogUtils.stringToURI))
   }
 
   object ResolvedViewIdentifier {

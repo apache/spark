@@ -645,58 +645,6 @@ class SparkSqlAstBuilder extends AstBuilder {
   }
 
   /**
-   * Create a [[CreateTableLikeCommand]] command.
-   *
-   * For example:
-   * {{{
-   *   CREATE TABLE [IF NOT EXISTS] [db_name.]table_name
-   *   LIKE [other_db_name.]existing_table_name
-   *   [USING provider |
-   *    [
-   *     [ROW FORMAT row_format]
-   *     [STORED AS file_format] [WITH SERDEPROPERTIES (...)]
-   *    ]
-   *   ]
-   *   [locationSpec]
-   *   [TBLPROPERTIES (property_name=property_value, ...)]
-   * }}}
-   */
-  override def visitCreateTableLike(ctx: CreateTableLikeContext): LogicalPlan = withOrigin(ctx) {
-    val targetTable = visitTableIdentifier(ctx.target)
-    val sourceTable = visitTableIdentifier(ctx.source)
-    checkDuplicateClauses(ctx.tableProvider, "PROVIDER", ctx)
-    checkDuplicateClauses(ctx.createFileFormat, "STORED AS/BY", ctx)
-    checkDuplicateClauses(ctx.rowFormat, "ROW FORMAT", ctx)
-    checkDuplicateClauses(ctx.locationSpec, "LOCATION", ctx)
-    checkDuplicateClauses(ctx.TBLPROPERTIES, "TBLPROPERTIES", ctx)
-    val provider = ctx.tableProvider.asScala.headOption.map(_.multipartIdentifier.getText)
-    val location = visitLocationSpecList(ctx.locationSpec())
-    val serdeInfo = getSerdeInfo(
-      ctx.rowFormat.asScala.toSeq, ctx.createFileFormat.asScala.toSeq, ctx)
-    if (provider.isDefined && serdeInfo.isDefined) {
-      operationNotAllowed(s"CREATE TABLE LIKE ... USING ... ${serdeInfo.get.describe}", ctx)
-    }
-
-    // For "CREATE TABLE dst LIKE src ROW FORMAT SERDE xxx" which doesn't specify the file format,
-    // it's a bit weird to use the default file format, but it's also weird to get file format
-    // from the source table while the serde class is user-specified.
-    // Here we require both serde and format to be specified, to avoid confusion.
-    serdeInfo match {
-      case Some(SerdeInfo(storedAs, formatClasses, serde, _)) =>
-        if (storedAs.isEmpty && formatClasses.isEmpty && serde.isDefined) {
-          throw QueryParsingErrors.rowFormatNotUsedWithStoredAsError(ctx)
-        }
-      case _ =>
-    }
-
-    val storage = toStorageFormat(location, serdeInfo, ctx)
-    val properties = Option(ctx.tableProps).map(visitPropertyKeyValues).getOrElse(Map.empty)
-    val cleanedProperties = cleanTableProperties(ctx, properties)
-    CreateTableLikeCommand(
-      targetTable, sourceTable, storage, provider, cleanedProperties, ctx.EXISTS != null)
-  }
-
-  /**
    * Create a [[ScriptInputOutputSchema]].
    */
   override protected def withScriptIOSchema(

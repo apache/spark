@@ -91,8 +91,8 @@ statement
     | createTableHeader (LEFT_PAREN createOrReplaceTableColTypeList RIGHT_PAREN)? tableProvider?
         createTableClauses
         (AS? query)?                                                   #createTable
-    | CREATE TABLE (IF NOT EXISTS)? target=tableIdentifier
-        LIKE source=tableIdentifier
+    | CREATE TABLE (IF NOT EXISTS)? target=multipartIdentifier
+        LIKE source=multipartIdentifier
         (tableProvider |
         rowFormat |
         createFileFormat |

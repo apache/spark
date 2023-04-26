@@ -2557,6 +2557,56 @@ class DataSourceV2SQLSuiteV1Filter
     }
   }
 
+  test("CREATE TABLE LIKE: copy table") {
+    withTable("t") {
+      sql("CREATE TABLE testcat.t (id BIGINT, data STRING) USING foo PARTITIONED BY (id)")
+      val t = catalog("testcat").asTableCatalog.loadTable(Identifier.of(Array(), "t"))
+
+      withTable("t2") {
+        sql("CREATE TABLE testcat.t2 LIKE testcat.t")
+
+        val t2 = catalog("testcat").asTableCatalog.loadTable(Identifier.of(Array(), "t2"))
+        assert(t.schema === t2.schema)
+        assert(t.partitioning === t2.partitioning)
+        assert(t.properties === t2.properties)
+      }
+    }
+  }
+
+  test("CREATE TABLE LIKE: custom location") {
+    withTable("t") {
+      sql("CREATE TABLE testcat.t (id BIGINT, data STRING) USING foo PARTITIONED BY (id)")
+      val t = catalog("testcat").asTableCatalog.loadTable(Identifier.of(Array(), "t"))
+
+      withTable("t2") {
+        sql("CREATE TABLE testcat.t2 LIKE testcat.t LOCATION '/tmp/testcat/t2'")
+
+        val t2 = catalog("testcat").asTableCatalog.loadTable(Identifier.of(Array(), "t2"))
+        assert(t.schema === t2.schema)
+        assert(t.partitioning === t2.partitioning)
+        val expectedProperties = t.properties.asScala + ("location" -> "/tmp/testcat/t2")
+        assert(expectedProperties === t2.properties.asScala)
+      }
+    }
+  }
+
+  test("CREATE TABLE LIKE: custom provider") {
+    withTable("t") {
+      sql("CREATE TABLE testcat.t (id BIGINT, data STRING) USING foo PARTITIONED BY (id)")
+      val t = catalog("testcat").asTableCatalog.loadTable(Identifier.of(Array(), "t"))
+
+      withTable("t2") {
+        sql("CREATE TABLE testcat.t2 LIKE testcat.t USING parquet")
+
+        val t2 = catalog("testcat").asTableCatalog.loadTable(Identifier.of(Array(), "t2"))
+        assert(t.schema === t2.schema)
+        assert(t.partitioning === t2.partitioning)
+        val expectedProperties = t.properties.asScala + ("provider" -> "parquet")
+        assert(expectedProperties === t2.properties.asScala)
+      }
+    }
+  }
+
   private def checkTableComment(tableName: String, comment: String): Unit = {
     sql(s"COMMENT ON TABLE $tableName IS " + Option(comment).map("'" + _ + "'").getOrElse("NULL"))
     val expectedComment = Option(comment).getOrElse("")

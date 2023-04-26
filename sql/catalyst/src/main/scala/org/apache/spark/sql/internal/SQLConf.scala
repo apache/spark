@@ -4212,6 +4212,11 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val EXCLUDED_SOURCE_TABLE_PROPERTIES = buildConf("spark.sql.excludedSourceTableProperties")
+    .doc("A comma-separated list of table properties that should not copied in CREATE TABLE LIKE.")
+    .stringConf
+    .createWithDefault("")
+
   /**
    * Holds information about keys that have been deprecated.
    *
@@ -5046,6 +5051,10 @@ class SQLConf extends Serializable with Logging {
     getConf(SQLConf.ALLOW_TEMP_VIEW_CREATION_WITH_MULTIPLE_NAME_PARTS)
 
   def usePartitionEvaluator: Boolean = getConf(SQLConf.USE_PARTITION_EVALUATOR)
+
+  def excludedSourceTableProperties: Seq[String] = getConf(SQLConf.EXCLUDED_SOURCE_TABLE_PROPERTIES)
+      .split(",")
+      .map(_.trim)
 
   /** ********************** SQLConf functionality methods ************ */
 

@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
+import scala.collection.JavaConverters._
 import scala.collection.mutable
 
 import org.apache.commons.lang3.StringUtils
@@ -44,6 +45,7 @@ import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors
 import org.apache.spark.sql.execution.{FilterExec, InSubqueryExec, LeafExecNode, LocalTableScanExec, ProjectExec, RowDataSourceScanExec, SparkPlan}
 import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, LogicalRelation, PushableColumnAndNestedColumn}
 import org.apache.spark.sql.execution.streaming.continuous.{WriteToContinuousDataSource, WriteToContinuousDataSourceExec}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.WAREHOUSE_PATH
 import org.apache.spark.sql.sources.{BaseRelation, TableScan}
 import org.apache.spark.sql.types.StructType
@@ -194,6 +196,16 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
           CreateTableAsSelectExec(catalog.asTableCatalog, ident, parts, query,
             qualifyLocInTableSpec(tableSpec), options, ifNotExists) :: Nil
       }
+
+    case CreateTableLike(ResolvedIdentifier(catalog, ident), ResolvedTable(_, _, sourceTable, _),
+        provider, location, serdeInfo, properties, ifNotExists) =>
+      val sourceProperties = sourceTable.properties.asScala.toMap
+          .filterNot { case (k, _) => SQLConf.get.excludedSourceTableProperties.contains(k) }
+      val targetProperties = sourceProperties ++ properties
+      val tableSpec =
+        TableSpec(targetProperties, provider, Map.empty, location, None, serdeInfo, false)
+      CreateTableExec(catalog.asTableCatalog, ident, sourceTable.columns,
+        sourceTable.partitioning, tableSpec, ifNotExists) :: Nil
 
     case RefreshTable(r: ResolvedTable) =>
       RefreshTableExec(r.catalog, r.identifier, recacheTable(r)) :: Nil

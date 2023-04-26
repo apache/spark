@@ -538,6 +538,26 @@ case class ReplaceTableAsSelect(
 }
 
 /**
+ * Create a table based on another table.
+ *
+ * Note: this does not use V2CreateTablePlan because it doesn't set partitioning.
+ */
+case class CreateTableLike(
+    targetTable: LogicalPlan,
+    sourceTable: LogicalPlan,
+    provider: Option[String],
+    location: Option[String],
+    serdeInfo: Option[SerdeInfo],
+    properties: Map[String, String],
+    ignoreIfExists: Boolean) extends BinaryCommand {
+  override def left: LogicalPlan = targetTable
+  override def right: LogicalPlan = sourceTable
+  override protected def withNewChildrenInternal(
+      newLeft: LogicalPlan, newRight: LogicalPlan): CreateTableLike =
+    copy(targetTable = newLeft, sourceTable = newRight)
+}
+
+/**
  * The logical plan of the CREATE NAMESPACE command.
  */
 case class CreateNamespace(

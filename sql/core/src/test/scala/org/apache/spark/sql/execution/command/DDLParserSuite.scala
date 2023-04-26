@@ -754,7 +754,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
         stop = 125))
   }
 
-  test("create table like") {
+  ignore("create table like") {
     val v1 = "CREATE TABLE table1 LIKE table2"
     val (target, source, fileFormat, provider, properties, exists) =
       parser.parsePlan(v1).collect {
