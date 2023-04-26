@@ -22,13 +22,13 @@ import java.util.concurrent.TimeoutException
 import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.concurrent.duration._
 
-import com.amazonaws.services.kinesis.clientlibrary.interfaces.IRecordProcessorCheckpointer
 import org.mockito.ArgumentMatchers._
 import org.mockito.Mockito._
 import org.mockito.invocation.InvocationOnMock
 import org.scalatest.{BeforeAndAfterEach, PrivateMethodTester}
 import org.scalatest.concurrent.Eventually
 import org.scalatestplus.mockito.MockitoSugar
+import software.amazon.kinesis.processor.RecordProcessorCheckpointer
 
 import org.apache.spark.streaming.{Duration, TestSuiteBase}
 import org.apache.spark.util.ManualClock
@@ -48,7 +48,7 @@ class KinesisCheckpointerSuite extends TestSuiteBase
   private val someOtherSeqNum = Some(otherSeqNum)
 
   private var receiverMock: KinesisReceiver[Array[Byte]] = _
-  private var checkpointerMock: IRecordProcessorCheckpointer = _
+  private var checkpointerMock: RecordProcessorCheckpointer = _
   private var kinesisCheckpointer: KinesisCheckpointer = _
   private var clock: ManualClock = _
 
@@ -56,7 +56,7 @@ class KinesisCheckpointerSuite extends TestSuiteBase
 
   override def beforeEach(): Unit = {
     receiverMock = mock[KinesisReceiver[Array[Byte]]]
-    checkpointerMock = mock[IRecordProcessorCheckpointer]
+    checkpointerMock = mock[RecordProcessorCheckpointer]
     clock = new ManualClock()
     kinesisCheckpointer = new KinesisCheckpointer(receiverMock, checkpointInterval, workerId, clock)
   }

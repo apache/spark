@@ -156,8 +156,10 @@
     <!-- Should be consistent with SparkBuild.scala and docs -->
     <avro.version>1.11.1</avro.version>
     <aws.kinesis.client.version>1.12.0</aws.kinesis.client.version>
+    <aws.kinesis.client.v2.version>2.4.3</aws.kinesis.client.v2.version>
     <!-- Should be consistent with Kinesis client dependency -->
-    <aws.java.sdk.version>1.11.655</aws.java.sdk.version>
+    <aws.java.sdk.version>1.12.447</aws.java.sdk.version>
+    <aws.java.sdk.v2.version>2.17.268</aws.java.sdk.v2.version>
     <!-- the producer is used in tests -->
     <aws.kinesis.producer.version>0.12.8</aws.kinesis.producer.version>
     <gcs-connector.version>hadoop3-2.2.14</gcs-connector.version>

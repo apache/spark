@@ -181,6 +181,10 @@
               <include>com.google.protobuf.**</include>
             </includes>
           </relocation>
+          <relocation>
+            <pattern>com.google.common</pattern>
+            <shadedPattern>${spark.shade.packageName}.kinesis.guava</shadedPattern>
+          </relocation>
         </relocations>
         <filters>
           <filter>

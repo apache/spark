@@ -117,8 +117,7 @@ A Kinesis stream can be set up at one of the valid Kinesis endpoints with 1 or m
                 import org.apache.spark.streaming.kinesis.KinesisInputDStream
                 import org.apache.spark.streaming.{Seconds, StreamingContext}
                 import org.apache.spark.streaming.kinesis.KinesisInitialPositions
-                import com.amazonaws.services.kinesis.clientlibrary.lib.worker.KinesisClientLibConfiguration
-                import com.amazonaws.services.kinesis.metrics.interfaces.MetricsLevel
+                import software.amazon.kinesis.metrics.MetricsLevel
 
                 val kinesisStream = KinesisInputDStream.builder
                     .streamingContext(streamingContext)
@@ -130,7 +129,7 @@ A Kinesis stream can be set up at one of the valid Kinesis endpoints with 1 or m
                     .checkpointInterval([checkpoint interval])
                     .storageLevel(StorageLevel.MEMORY_AND_DISK_2)
                     .metricsLevel(MetricsLevel.DETAILED)
-                    .metricsEnabledDimensions(KinesisClientLibConfiguration.DEFAULT_METRICS_ENABLED_DIMENSIONS.asScala.toSet)
+                    .metricsEnabledDimensions(KinesisInputDStream.DEFAULT_METRICS_ENABLED_DIMENSIONS.asScala.toSet)
                     .buildWithMessageHandler([message handler])
 
 	</div>
@@ -140,8 +139,7 @@ A Kinesis stream can be set up at one of the valid Kinesis endpoints with 1 or m
                 import org.apache.spark.streaming.Seconds;
                 import org.apache.spark.streaming.StreamingContext;
                 import org.apache.spark.streaming.kinesis.KinesisInitialPositions;
-                import com.amazonaws.services.kinesis.clientlibrary.lib.worker.KinesisClientLibConfiguration;
-                import com.amazonaws.services.kinesis.metrics.interfaces.MetricsLevel;
+                import software.amazon.kinesis.metrics.MetricsLevel;
                 import scala.collection.JavaConverters;
 
                 KinesisInputDStream<byte[]> kinesisStream = KinesisInputDStream.builder()
@@ -154,7 +152,7 @@ A Kinesis stream can be set up at one of the valid Kinesis endpoints with 1 or m
                     .checkpointInterval([checkpoint interval])
                     .storageLevel(StorageLevel.MEMORY_AND_DISK_2)
                     .metricsLevel(MetricsLevel.DETAILED)
-                    .metricsEnabledDimensions(JavaConverters.asScalaSetConverter(KinesisClientLibConfiguration.DEFAULT_METRICS_ENABLED_DIMENSIONS).asScala().toSet())
+                    .metricsEnabledDimensions(JavaConverters.asScalaSetConverter(KinesisInputDStream.DEFAULT_METRICS_ENABLED_DIMENSIONS).asScala().toSet())
                     .buildWithMessageHandler([message handler]);
 
 	</div>

@@ -17,22 +17,25 @@
 package org.apache.spark.deploy.k8s.integrationtest
 
 import java.io.File
-import java.net.URL
+import java.net.{URI, URL}
 import java.nio.file.Files
 
 import scala.collection.JavaConverters._
 
-import com.amazonaws.auth.BasicAWSCredentials
-import com.amazonaws.services.s3.AmazonS3Client
 import io.fabric8.kubernetes.api.model._
 import io.fabric8.kubernetes.api.model.apps.StatefulSetBuilder
 import org.apache.hadoop.util.VersionInfo
 import org.scalatest.concurrent.{Eventually, PatienceConfiguration}
 import org.scalatest.time.{Minutes, Span}
+import software.amazon.awssdk.auth.credentials.{AwsBasicCredentials, StaticCredentialsProvider}
+import software.amazon.awssdk.core.sync.RequestBody
+import software.amazon.awssdk.regions.Region
+import software.amazon.awssdk.services.s3.S3Client
+import software.amazon.awssdk.services.s3.model.{CreateBucketRequest, PutObjectRequest}
 
 import org.apache.spark.SparkException
 import org.apache.spark.deploy.k8s.integrationtest.DepsTestsSuite.{DEPS_TIMEOUT, FILE_CONTENTS, HOST_PATH}
-import org.apache.spark.deploy.k8s.integrationtest.KubernetesSuite.{INTERVAL, MinikubeTag, SPARK_PI_MAIN_CLASS, TIMEOUT}
+import org.apache.spark.deploy.k8s.integrationtest.KubernetesSuite._
 import org.apache.spark.deploy.k8s.integrationtest.Utils.getExamplesJarName
 import org.apache.spark.deploy.k8s.integrationtest.backend.minikube.Minikube
 import org.apache.spark.internal.config.{ARCHIVES, PYSPARK_DRIVER_PYTHON, PYSPARK_PYTHON}
@@ -45,6 +48,7 @@ private[spark] trait DepsTestsSuite { k8sSuite: KubernetesSuite =>
   val BUCKET = "spark"
   val ACCESS_KEY = "minio"
   val SECRET_KEY = "miniostorage"
+  val REGION = "us-west-2"
 
   private def getMinioContainer(): Container = {
     val envVars = Map (
@@ -302,10 +306,13 @@ private[spark] trait DepsTestsSuite { k8sSuite: KubernetesSuite =>
   private def getS3Client(
       endPoint: String,
       accessKey: String = ACCESS_KEY,
-      secretKey: String = SECRET_KEY): AmazonS3Client = {
-    val credentials = new BasicAWSCredentials(accessKey, secretKey)
-    val s3client = new AmazonS3Client(credentials)
-    s3client.setEndpoint(endPoint)
+      secretKey: String = SECRET_KEY): S3Client = {
+    val credentials = AwsBasicCredentials.create(accessKey, secretKey)
+    val s3client = S3Client.builder()
+      .credentialsProvider(StaticCredentialsProvider.create(credentials))
+      .endpointOverride(URI.create(endPoint))
+      .region(Region.of(REGION))
+      .build()
     s3client
   }
 
@@ -313,9 +320,13 @@ private[spark] trait DepsTestsSuite { k8sSuite: KubernetesSuite =>
     Eventually.eventually(TIMEOUT, INTERVAL) {
       try {
         val s3client = getS3Client(endPoint, accessKey, secretKey)
-        s3client.createBucket(BUCKET)
+        val createBucketRequest = CreateBucketRequest.builder()
+          .bucket(BUCKET)
+          .build()
+        s3client.createBucket(createBucketRequest)
       } catch {
         case e: Exception =>
+          logError(s"Failed to create bucket $BUCKET", e)
           throw new SparkException(s"Failed to create bucket $BUCKET.", e)
       }
     }
@@ -328,7 +339,11 @@ private[spark] trait DepsTestsSuite { k8sSuite: KubernetesSuite =>
     Eventually.eventually(TIMEOUT, INTERVAL) {
       try {
         val s3client = getS3Client(endPoint)
-        s3client.putObject(BUCKET, objectKey, objectContent)
+        val putObjectRequest = PutObjectRequest.builder()
+          .bucket(BUCKET)
+          .key(objectKey)
+          .build()
+        s3client.putObject(putObjectRequest, RequestBody.fromString(objectContent))
       } catch {
         case e: Exception =>
           throw new SparkException(s"Failed to create object $BUCKET/$objectKey.", e)

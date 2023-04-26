@@ -16,15 +16,12 @@
  */
 package org.apache.spark.streaming.kinesis
 
-import java.util.List
-
 import scala.util.Random
 import scala.util.control.NonFatal
 
-import com.amazonaws.services.kinesis.clientlibrary.exceptions.{InvalidStateException, KinesisClientLibDependencyException, ShutdownException, ThrottlingException}
-import com.amazonaws.services.kinesis.clientlibrary.interfaces.{IRecordProcessor, IRecordProcessorCheckpointer}
-import com.amazonaws.services.kinesis.clientlibrary.lib.worker.ShutdownReason
-import com.amazonaws.services.kinesis.model.Record
+import software.amazon.kinesis.exceptions.{InvalidStateException, KinesisClientLibDependencyException, ShutdownException, ThrottlingException}
+import software.amazon.kinesis.lifecycle.events.{InitializationInput, LeaseLostInput, ProcessRecordsInput, ShardEndedInput, ShutdownRequestedInput}
+import software.amazon.kinesis.processor.ShardRecordProcessor
 
 import org.apache.spark.internal.Logging
 
@@ -40,7 +37,7 @@ import org.apache.spark.internal.Logging
  * @param workerId for logging purposes
  */
 private[kinesis] class KinesisRecordProcessor[T](receiver: KinesisReceiver[T], workerId: String)
-  extends IRecordProcessor with Logging {
+  extends ShardRecordProcessor with Logging {
 
   // shardId populated during initialize()
   @volatile
@@ -51,22 +48,19 @@ private[kinesis] class KinesisRecordProcessor[T](receiver: KinesisReceiver[T], w
    *
    * @param shardId assigned by the KCL to this particular RecordProcessor.
    */
-  override def initialize(shardId: String): Unit = {
+  def initialize(shardId: String): Unit = {
     this.shardId = shardId
     logInfo(s"Initialized workerId $workerId with shardId $shardId")
   }
 
-  /**
-   * This method is called by the KCL when a batch of records is pulled from the Kinesis stream.
-   * This is the record-processing bridge between the KCL's IRecordProcessor.processRecords()
-   * and Spark Streaming's Receiver.store().
-   *
-   * @param batch list of records from the Kinesis stream shard
-   * @param checkpointer used to update Kinesis when this batch has been processed/stored
-   *   in the DStream
-   */
-  override def processRecords(batch: List[Record],
-      checkpointer: IRecordProcessorCheckpointer): Unit = {
+  override def initialize(initializationInput: InitializationInput): Unit = {
+    this.shardId = initializationInput.shardId()
+    logInfo(s"Initialized workerId $workerId with shardId $shardId")
+  }
+
+  override def processRecords(processRecordsInput: ProcessRecordsInput): Unit = {
+    val batch = processRecordsInput.records()
+    val checkpointer = processRecordsInput.checkpointer()
     if (!receiver.isStopped()) {
       try {
         // Limit the number of processed records from Kinesis stream. This is because the KCL cannot
@@ -90,7 +84,7 @@ private[kinesis] class KinesisRecordProcessor[T](receiver: KinesisReceiver[T], w
            *     more than once.
            */
           logError(s"Exception:  WorkerId $workerId encountered and exception while storing " +
-              s" or checkpointing a batch for workerId $workerId and shardId $shardId.", e)
+            s" or checkpointing a batch for workerId $workerId and shardId $shardId.", e)
 
           /* Rethrow the exception to the Kinesis Worker that is managing this RecordProcessor. */
           throw e
@@ -98,45 +92,30 @@ private[kinesis] class KinesisRecordProcessor[T](receiver: KinesisReceiver[T], w
     } else {
       /* RecordProcessor has been stopped. */
       logInfo(s"Stopped:  KinesisReceiver has stopped for workerId $workerId" +
-          s" and shardId $shardId.  No more records will be processed.")
+        s" and shardId $shardId.  No more records will be processed.")
     }
   }
 
-  /**
-   * Kinesis Client Library is shutting down this Worker for 1 of 2 reasons:
-   * 1) the stream is resharding by splitting or merging adjacent shards
-   *     (ShutdownReason.TERMINATE)
-   * 2) the failed or latent Worker has stopped sending heartbeats for whatever reason
-   *     (ShutdownReason.ZOMBIE)
-   *
-   * @param checkpointer used to perform a Kinesis checkpoint for ShutdownReason.TERMINATE
-   * @param reason for shutdown (ShutdownReason.TERMINATE or ShutdownReason.ZOMBIE)
-   */
-  override def shutdown(
-      checkpointer: IRecordProcessorCheckpointer,
-      reason: ShutdownReason): Unit = {
-    logInfo(s"Shutdown:  Shutting down workerId $workerId with reason $reason")
-    // null if not initialized before shutdown:
-    if (shardId == null) {
-      logWarning(s"No shardId for workerId $workerId?")
-    } else {
-      reason match {
-        /*
-         * TERMINATE Use Case.  Checkpoint.
-         * Checkpoint to indicate that all records from the shard have been drained and processed.
-         * It's now OK to read from the new shards that resulted from a resharding event.
-         */
-        case ShutdownReason.TERMINATE => receiver.removeCheckpointer(shardId, checkpointer)
+  override def leaseLost(leaseLostInput: LeaseLostInput): Unit = {
+  }
 
-        /*
-         * ZOMBIE Use Case or Unknown reason.  NoOp.
-         * No checkpoint because other workers may have taken over and already started processing
-         *    the same records.
-         * This may lead to records being processed more than once.
-         * Return null so that we don't checkpoint
-         */
-        case _ => receiver.removeCheckpointer(shardId, null)
-      }
+  override def shardEnded(shardEndedInput: ShardEndedInput): Unit = {
+    try {
+      log.info("Reached shard end checkpointing. shardId: {}", shardId)
+      shardEndedInput.checkpointer.checkpoint()
+    } catch {
+      case e @ (_: ShutdownException | _: InvalidStateException) =>
+        log.error(s"Exception while checkpointing at shard end. Giving up. shardId: $shardId", e)
+    }
+  }
+
+  override def shutdownRequested(shutdownRequestedInput: ShutdownRequestedInput): Unit = {
+    try {
+      log.info("Scheduler is shutting down, checkpointing.")
+      shutdownRequestedInput.checkpointer.checkpoint()
+    } catch {
+      case e @ (_: ShutdownException | _: InvalidStateException) =>
+        log.error("Exception while checkpointing at requested shutdown. Giving up.", e)
     }
   }
 }
