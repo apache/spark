@@ -2136,7 +2136,7 @@ class SparkConnectPlanner(val session: SparkSession) {
     // Find the query in connect service level cache, otherwise check session's active streams.
     val query = SparkConnectService.streamingSessionManager
       .findCachedQuery(id, session) // Common case: query is cached in connect session manager.
-      .orElse { // Else try to find it in active streams. Mostly will not be found here.
+      .orElse { // Else try to find it in active streams. Mostly will not be found here either.
         Option(session.streams.get(id))
       } match {
       case Some(query) if query.runId.toString == runId =>
