@@ -18,15 +18,18 @@
 // scalastyle:off println
 package org.apache.spark.examples.streaming
 
+import java.net.URI
 import java.nio.ByteBuffer
 
 import scala.util.Random
 
-import com.amazonaws.auth.DefaultAWSCredentialsProviderChain
-import com.amazonaws.services.kinesis.AmazonKinesisClient
-import com.amazonaws.services.kinesis.model.PutRecordRequest
 import org.apache.logging.log4j.Level
 import org.apache.logging.log4j.core.config.Configurator
+import software.amazon.awssdk.auth.credentials.DefaultCredentialsProvider
+import software.amazon.awssdk.core.SdkBytes
+import software.amazon.awssdk.http.apache.ApacheHttpClient
+import software.amazon.awssdk.services.kinesis.KinesisClient
+import software.amazon.awssdk.services.kinesis.model.{DescribeStreamRequest, PutRecordRequest}
 
 import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
@@ -101,13 +104,22 @@ object KinesisWordCountASL extends Logging {
 
     // Determine the number of shards from the stream using the low-level Kinesis Client
     // from the AWS Java SDK.
-    val credentials = new DefaultAWSCredentialsProviderChain().getCredentials()
-    require(credentials != null,
+    val credentialsProvider = DefaultCredentialsProvider.create
+    require(credentialsProvider.resolveCredentials() != null,
       "No AWS credentials found. Please specify credentials using one of the methods specified " +
-        "in http://docs.aws.amazon.com/AWSSdkDocsJava/latest/DeveloperGuide/credentials.html")
-    val kinesisClient = new AmazonKinesisClient(credentials)
-    kinesisClient.setEndpoint(endpointUrl)
-    val numShards = kinesisClient.describeStream(streamName).getStreamDescription().getShards().size
+        "in https://docs.aws.amazon.com/sdk-for-java/latest/developer-guide/credentials.html")
+    val kinesisClient = KinesisClient.builder()
+      .credentialsProvider(credentialsProvider)
+      .endpointOverride(URI.create(endpointUrl))
+      .httpClientBuilder(ApacheHttpClient.builder())
+      .build()
+    val describeStreamRequest = DescribeStreamRequest.builder()
+      .streamName(streamName)
+      .build()
+    val numShards = kinesisClient.describeStream(describeStreamRequest)
+      .streamDescription
+      .shards
+      .size
 
 
     // In this example, we're going to create 1 Kinesis Receiver/input DStream for each shard.
@@ -221,8 +233,11 @@ object KinesisWordProducerASL {
     val totals = scala.collection.mutable.Map[String, Int]()
 
     // Create the low-level Kinesis Client from the AWS Java SDK.
-    val kinesisClient = new AmazonKinesisClient(new DefaultAWSCredentialsProviderChain())
-    kinesisClient.setEndpoint(endpoint)
+    val kinesisClient = KinesisClient.builder()
+      .credentialsProvider(DefaultCredentialsProvider.create())
+      .endpointOverride(URI.create(endpoint))
+      .httpClientBuilder(ApacheHttpClient.builder())
+      .build()
 
     println(s"Putting records onto stream $stream and endpoint $endpoint at a rate of" +
         s" $recordsPerSecond records per second and $wordsPerRecord words per record")
@@ -247,12 +262,14 @@ object KinesisWordProducerASL {
         val partitionKey = s"partitionKey-$recordNum"
 
         // Create a PutRecordRequest with an Array[Byte] version of the data
-        val putRecordRequest = new PutRecordRequest().withStreamName(stream)
-            .withPartitionKey(partitionKey)
-            .withData(ByteBuffer.wrap(data.getBytes()))
+        val putRecordRequest = PutRecordRequest.builder()
+          .streamName(stream)
+          .partitionKey(partitionKey)
+          .data(SdkBytes.fromByteBuffer(ByteBuffer.wrap(data.getBytes())))
+          .build()
 
         // Put the record onto the stream and capture the PutRecordResult
-        val putRecordResult = kinesisClient.putRecord(putRecordRequest)
+        kinesisClient.putRecord(putRecordRequest)
       }
 
       // Sleep for a second
