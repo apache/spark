@@ -79,6 +79,12 @@ trait StreamingQuery {
   def isActive: Boolean
 
   /**
+   * Returns the [[StreamingQueryException]] if the query was terminated by an exception.
+   * @since 3.5.0
+   */
+  def exception: Option[StreamingQueryException]
+
+  /**
    * Returns the current status of the query.
    *
    * @since 3.5.0
@@ -197,6 +203,20 @@ class RemoteStreamingQuery(
     // scalastyle:off println
     println(explain)
     // scalastyle:on println
+  }
+
+  override def exception: Option[StreamingQueryException] = {
+    val exception = executeQueryCmd(_.setException(true)).getException
+    if (exception.hasExceptionMessage) {
+      // TODO(SPARK-43206): Add more information to StreamingQueryException.
+      Some(
+        new StreamingQueryException(
+          // message maps to the return value of original StreamingQueryException's toString method
+          message = exception.getExceptionMessage,
+          errorClass = exception.getErrorClass))
+    } else {
+      None
+    }
   }
 
   private def executeQueryCmd(

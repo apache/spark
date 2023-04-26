@@ -199,12 +199,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
   def flatMapSortedGroups[U : Encoder](
       sortExprs: Column*)(
       f: (K, Iterator[V]) => TraversableOnce[U]): Dataset[U] = {
-    val sortOrder: Seq[SortOrder] = sortExprs.map { col =>
-      col.expr match {
-        case expr: SortOrder => expr
-        case expr: Expression => SortOrder(expr, Ascending)
-      }
-    }
+    val sortOrder: Seq[SortOrder] = MapGroups.sortOrder(sortExprs.map(_.expr))
 
     Dataset[U](
       sparkSession,

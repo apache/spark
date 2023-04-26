@@ -1660,16 +1660,18 @@ class DataFrame:
 
     isStreaming.__doc__ = PySparkDataFrame.isStreaming.__doc__
 
-    def _tree_string(self) -> str:
+    def _tree_string(self, level: Optional[int] = None) -> str:
         if self._plan is None:
             raise Exception("Cannot analyze on empty plan.")
         query = self._plan.to_proto(self._session.client)
-        result = self._session.client._analyze(method="tree_string", plan=query).tree_string
+        result = self._session.client._analyze(
+            method="tree_string", plan=query, level=level
+        ).tree_string
         assert result is not None
         return result
 
-    def printSchema(self) -> None:
-        print(self._tree_string())
+    def printSchema(self, level: Optional[int] = None) -> None:
+        print(self._tree_string(level))
 
     printSchema.__doc__ = PySparkDataFrame.printSchema.__doc__
 
@@ -1901,9 +1903,9 @@ class DataFrame:
         from pyspark.pandas.frame import DataFrame as PandasOnSparkDataFrame
         from pyspark.pandas.internal import InternalFrame
 
-        index_spark_columns, index_names = _get_index_map(self, index_col)
+        index_spark_columns, index_names = _get_index_map(self, index_col)  # type: ignore[arg-type]
         internal = InternalFrame(
-            spark_frame=self,
+            spark_frame=self,  # type: ignore[arg-type]
             index_spark_columns=index_spark_columns,
             index_names=index_names,  # type: ignore[arg-type]
         )
