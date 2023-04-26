@@ -550,3 +550,12 @@ struct<c1:int,c2:int,scalarsubquery(c1):boolean>
 -- !query output
 0	1	false
 1	2	false
+
+
+-- !query
+select (select f from (select false as f, max(c2) from t1 where t1.c1 = t1.c1)) from t2
+-- !query schema
+struct<scalarsubquery():boolean>
+-- !query output
+false
+false

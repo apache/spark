@@ -987,3 +987,21 @@ Project [c1#x, c2#x, scalar-subquery#x [c1#x] AS scalarsubquery(c1)#x]
    +- View (`t1`, [c1#x,c2#x])
       +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
          +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+select (select f from (select false as f, max(c2) from t1 where t1.c1 = t1.c1)) from t2
+-- !query analysis
+Project [scalar-subquery#x [] AS scalarsubquery()#x]
+:  +- Project [f#x]
+:     +- SubqueryAlias __auto_generated_subquery_name
+:        +- Aggregate [false AS f#x, max(c2#x) AS max(c2)#x]
+:           +- Filter (c1#x = c1#x)
+:              +- SubqueryAlias t1
+:                 +- View (`t1`, [c1#x,c2#x])
+:                    +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
+:                       +- LocalRelation [col1#x, col2#x]
++- SubqueryAlias t2
+   +- View (`t2`, [c1#x,c2#x])
+      +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
+         +- LocalRelation [col1#x, col2#x]
