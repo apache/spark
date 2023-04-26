@@ -106,6 +106,6 @@ class DatasketchesHllSketchSuite extends SparkFunSuite {
     aggFunc3.update(union1, InternalRow(binary2))
     val binary3 = aggFunc3.eval(union1)
 
-    assert(HllSketch.heapify(Memory.wrap(binary3.asInstanceOf[Array[Byte]])).getLgConfigK == 8)
+    assert(HllSketch.heapify(Memory.wrap(binary3.asInstanceOf[Array[Byte]])).getLgConfigK == 12)
   }
 }
