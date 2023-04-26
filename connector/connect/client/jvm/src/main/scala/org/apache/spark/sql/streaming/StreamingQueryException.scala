@@ -36,4 +36,8 @@ class StreamingQueryException private[sql] (message: String, errorClass: String,
   extends SparkThrowable {
 
   override def getErrorClass: String = errorClass
+
+  override def toString: String = s"""$message
+    |JVM stacktrace: $stackTrace
+    |""".stripMargin
 }
