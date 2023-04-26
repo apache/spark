@@ -378,17 +378,12 @@ object JdbcUtils extends Logging with SQLConfHelper {
    * Creates `JDBCValueGetter`s according to [[StructType]], which can set
    * each value from `ResultSet` to each field of [[InternalRow]] correctly.
    */
-<<<<<<< HEAD
   private def makeGetters(
       dialect: JdbcDialect,
-      schema: StructType): Array[JDBCValueGetter] =
-    schema.fields.map(sf => makeGetter(sf.dataType, dialect, sf.metadata))
-=======
-  private def makeGetters(schema: StructType): Array[JDBCValueGetter] = {
+      schema: StructType): Array[JDBCValueGetter] = {
     val replaced = CharVarcharUtils.replaceCharVarcharWithStringInSchema(schema)
-    replaced.fields.map(sf => makeGetter(sf.dataType, sf.metadata))
+    replaced.fields.map(sf => makeGetter(sf.dataType, dialect, sf.metadata))
   }
->>>>>>> c73c7003c6f3a8caa1fe3c2de34b745227aa2f45
 
   private def makeGetter(
       dt: DataType,
