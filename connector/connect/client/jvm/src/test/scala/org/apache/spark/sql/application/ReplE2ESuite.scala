@@ -20,13 +20,14 @@ import java.io.{PipedInputStream, PipedOutputStream}
 import java.util.concurrent.{Executors, Semaphore, TimeUnit}
 
 import org.apache.commons.io.output.ByteArrayOutputStream
+import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.sql.connect.client.util.RemoteSparkSession
 
-class ReplE2ESuite extends RemoteSparkSession {
+class ReplE2ESuite extends RemoteSparkSession with BeforeAndAfterEach {
 
   private val executorService = Executors.newSingleThreadExecutor()
-  private val TIMEOUT_SECONDS = 10
+  private val TIMEOUT_SECONDS = 30
 
   private var testSuiteOut: PipedOutputStream = _
   private var ammoniteOut: ByteArrayOutputStream = _
@@ -66,6 +67,10 @@ class ReplE2ESuite extends RemoteSparkSession {
   override def afterAll(): Unit = {
     executorService.shutdownNow()
     super.afterAll()
+  }
+
+  override def afterEach(): Unit = {
+    semaphore.drainPermits()
   }
 
   def runCommandsInShell(input: String): String = {

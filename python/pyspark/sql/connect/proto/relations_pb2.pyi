@@ -1436,6 +1436,7 @@ class Deduplicate(google.protobuf.message.Message):
     INPUT_FIELD_NUMBER: builtins.int
     COLUMN_NAMES_FIELD_NUMBER: builtins.int
     ALL_COLUMNS_AS_KEYS_FIELD_NUMBER: builtins.int
+    WITHIN_WATERMARK_FIELD_NUMBER: builtins.int
     @property
     def input(self) -> global___Relation:
         """(Required) Input relation for a Deduplicate."""
@@ -1452,22 +1453,29 @@ class Deduplicate(google.protobuf.message.Message):
 
     This field does not co-use with `column_names`.
     """
+    within_watermark: builtins.bool
+    """(Optional) Deduplicate within the time range of watermark."""
     def __init__(
         self,
         *,
         input: global___Relation | None = ...,
         column_names: collections.abc.Iterable[builtins.str] | None = ...,
         all_columns_as_keys: builtins.bool | None = ...,
+        within_watermark: builtins.bool | None = ...,
     ) -> None: ...
     def HasField(
         self,
         field_name: typing_extensions.Literal[
             "_all_columns_as_keys",
             b"_all_columns_as_keys",
+            "_within_watermark",
+            b"_within_watermark",
             "all_columns_as_keys",
             b"all_columns_as_keys",
             "input",
             b"input",
+            "within_watermark",
+            b"within_watermark",
         ],
     ) -> builtins.bool: ...
     def ClearField(
@@ -1475,18 +1483,27 @@ class Deduplicate(google.protobuf.message.Message):
         field_name: typing_extensions.Literal[
             "_all_columns_as_keys",
             b"_all_columns_as_keys",
+            "_within_watermark",
+            b"_within_watermark",
             "all_columns_as_keys",
             b"all_columns_as_keys",
             "column_names",
             b"column_names",
             "input",
             b"input",
+            "within_watermark",
+            b"within_watermark",
         ],
     ) -> None: ...
+    @typing.overload
     def WhichOneof(
         self,
         oneof_group: typing_extensions.Literal["_all_columns_as_keys", b"_all_columns_as_keys"],
     ) -> typing_extensions.Literal["all_columns_as_keys"] | None: ...
+    @typing.overload
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["_within_watermark", b"_within_watermark"]
+    ) -> typing_extensions.Literal["within_watermark"] | None: ...
 
 global___Deduplicate = Deduplicate
 
@@ -2929,6 +2946,7 @@ class GroupMap(google.protobuf.message.Message):
     INPUT_FIELD_NUMBER: builtins.int
     GROUPING_EXPRESSIONS_FIELD_NUMBER: builtins.int
     FUNC_FIELD_NUMBER: builtins.int
+    SORTING_EXPRESSIONS_FIELD_NUMBER: builtins.int
     @property
     def input(self) -> global___Relation:
         """(Required) Input relation for Group Map API: apply, applyInPandas."""
@@ -2942,6 +2960,13 @@ class GroupMap(google.protobuf.message.Message):
     @property
     def func(self) -> pyspark.sql.connect.proto.expressions_pb2.CommonInlineUserDefinedFunction:
         """(Required) Input user-defined function."""
+    @property
+    def sorting_expressions(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+        pyspark.sql.connect.proto.expressions_pb2.Expression
+    ]:
+        """(Optional) Expressions for sorting. Only used by Scala Sorted Group Map API."""
     def __init__(
         self,
         *,
@@ -2952,6 +2977,10 @@ class GroupMap(google.protobuf.message.Message):
         | None = ...,
         func: pyspark.sql.connect.proto.expressions_pb2.CommonInlineUserDefinedFunction
         | None = ...,
+        sorting_expressions: collections.abc.Iterable[
+            pyspark.sql.connect.proto.expressions_pb2.Expression
+        ]
+        | None = ...,
     ) -> None: ...
     def HasField(
         self, field_name: typing_extensions.Literal["func", b"func", "input", b"input"]
@@ -2959,7 +2988,14 @@ class GroupMap(google.protobuf.message.Message):
     def ClearField(
         self,
         field_name: typing_extensions.Literal[
-            "func", b"func", "grouping_expressions", b"grouping_expressions", "input", b"input"
+            "func",
+            b"func",
+            "grouping_expressions",
+            b"grouping_expressions",
+            "input",
+            b"input",
+            "sorting_expressions",
+            b"sorting_expressions",
         ],
     ) -> None: ...
 
@@ -2973,6 +3009,8 @@ class CoGroupMap(google.protobuf.message.Message):
     OTHER_FIELD_NUMBER: builtins.int
     OTHER_GROUPING_EXPRESSIONS_FIELD_NUMBER: builtins.int
     FUNC_FIELD_NUMBER: builtins.int
+    INPUT_SORTING_EXPRESSIONS_FIELD_NUMBER: builtins.int
+    OTHER_SORTING_EXPRESSIONS_FIELD_NUMBER: builtins.int
     @property
     def input(self) -> global___Relation:
         """(Required) One input relation for CoGroup Map API - applyInPandas."""
@@ -2996,6 +3034,20 @@ class CoGroupMap(google.protobuf.message.Message):
     @property
     def func(self) -> pyspark.sql.connect.proto.expressions_pb2.CommonInlineUserDefinedFunction:
         """(Required) Input user-defined function."""
+    @property
+    def input_sorting_expressions(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+        pyspark.sql.connect.proto.expressions_pb2.Expression
+    ]:
+        """(Optional) Expressions for sorting. Only used by Scala Sorted CoGroup Map API."""
+    @property
+    def other_sorting_expressions(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+        pyspark.sql.connect.proto.expressions_pb2.Expression
+    ]:
+        """(Optional) Expressions for sorting. Only used by Scala Sorted CoGroup Map API."""
     def __init__(
         self,
         *,
@@ -3010,6 +3062,14 @@ class CoGroupMap(google.protobuf.message.Message):
         ]
         | None = ...,
         func: pyspark.sql.connect.proto.expressions_pb2.CommonInlineUserDefinedFunction
+        | None = ...,
+        input_sorting_expressions: collections.abc.Iterable[
+            pyspark.sql.connect.proto.expressions_pb2.Expression
+        ]
+        | None = ...,
+        other_sorting_expressions: collections.abc.Iterable[
+            pyspark.sql.connect.proto.expressions_pb2.Expression
+        ]
         | None = ...,
     ) -> None: ...
     def HasField(
@@ -3027,10 +3087,14 @@ class CoGroupMap(google.protobuf.message.Message):
             b"input",
             "input_grouping_expressions",
             b"input_grouping_expressions",
+            "input_sorting_expressions",
+            b"input_sorting_expressions",
             "other",
             b"other",
             "other_grouping_expressions",
             b"other_grouping_expressions",
+            "other_sorting_expressions",
+            b"other_sorting_expressions",
         ],
     ) -> None: ...
 
