@@ -2332,15 +2332,14 @@ class SparkConnectPlanner(val session: SparkSession) {
           val e = result.get
           val exception_builder = StreamingQueryCommandResult.ExceptionResult
             .newBuilder()
-          exception_builder.setExceptionMessage(
-            SparkConnectService.abbreviateErrorMessage(e.toString))
+          exception_builder
+            .setExceptionMessage(SparkConnectService.abbreviateErrorMessage(e.toString))
             .setErrorClass(e.getErrorClass)
 
           val maxSize = SparkEnv.get.conf.get(CONNECT_JVM_STACK_TRACE_MAX_SIZE)
           val stackTrace = Option(ExceptionUtils.getStackTrace(e))
           stackTrace.foreach { s =>
-            exception_builder.setStackTrace(
-              StringUtils.abbreviate(s, maxSize))
+            exception_builder.setStackTrace(StringUtils.abbreviate(s, maxSize))
           }
           respBuilder.setException(exception_builder.build())
         }

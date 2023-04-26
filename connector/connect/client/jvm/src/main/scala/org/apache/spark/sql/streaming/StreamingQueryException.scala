@@ -32,8 +32,11 @@ import org.apache.spark.annotation.Evolving
  * @since 3.5.0
  */
 @Evolving
-class StreamingQueryException private[sql] (message: String, errorClass: String, stackTrace: String)
-  extends SparkThrowable {
+class StreamingQueryException private[sql] (
+    message: String,
+    errorClass: String,
+    stackTrace: String)
+    extends SparkThrowable {
 
   override def getErrorClass: String = errorClass
 
