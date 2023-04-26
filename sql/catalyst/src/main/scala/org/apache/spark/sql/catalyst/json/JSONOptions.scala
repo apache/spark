@@ -21,8 +21,8 @@ import java.nio.charset.{Charset, StandardCharsets}
 import java.time.ZoneId
 import java.util.Locale
 
-import com.fasterxml.jackson.core.{JsonFactory, JsonFactoryBuilder}
-import com.fasterxml.jackson.core.json.{JsonReadFeature, StreamReadConstraints}
+import com.fasterxml.jackson.core.{JsonFactory, JsonFactoryBuilder, StreamReadConstraints}
+import com.fasterxml.jackson.core.json.JsonReadFeature
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.{DataSourceOptions, FileSourceOptions}
