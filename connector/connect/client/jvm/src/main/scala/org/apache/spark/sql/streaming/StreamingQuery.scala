@@ -213,7 +213,8 @@ class RemoteStreamingQuery(
         new StreamingQueryException(
           // message maps to the return value of original StreamingQueryException's toString method
           message = exception.getExceptionMessage,
-          errorClass = exception.getErrorClass))
+          errorClass = exception.getErrorClass,
+          stackTrace = exception.getStackTrace))
     } else {
       None
     }

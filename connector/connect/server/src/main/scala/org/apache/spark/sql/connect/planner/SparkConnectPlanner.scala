@@ -2326,10 +2326,22 @@ class SparkConnectPlanner(val session: SparkSession) {
 
       case StreamingQueryCommand.CommandCase.EXCEPTION =>
         val result = query.exception
-        result.foreach(e =>
-          respBuilder.getExceptionBuilder
-            .setExceptionMessage(SparkConnectService.abbreviateErrorMessage(e.toString))
-            .setErrorClass(e.getErrorClass))
+        if (result.isDefined) {
+          val e = result.get
+          val exception_builder = StreamingQueryCommandResult.ExceptionResult
+            .newBuilder()
+          exception_builder.setExceptionMessage(
+            SparkConnectService.abbreviateErrorMessage(e.toString))
+            .setErrorClass(e.getErrorClass)
+
+          val maxSize = SparkEnv.get.conf.get(CONNECT_JVM_STACK_TRACE_MAX_SIZE)
+          val stackTrace = Option(ExceptionUtils.getStackTrace(e))
+          stackTrace.foreach { s =>
+            exception_builder.setStackTrace(
+              StringUtils.abbreviate(s, maxSize))
+          }
+          respBuilder.setException(exception_builder.build())
+        }
 
       case StreamingQueryCommand.CommandCase.AWAIT_TERMINATION =>
         if (command.getAwaitTermination.hasTimeoutMs) {
