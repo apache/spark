@@ -116,7 +116,7 @@ ERROR_CLASSES_JSON = """
   },
   "INVALID_UDF_EVAL_TYPE" : {
     "message" : [
-      "Eval type for UDF must be SQL_BATCHED_UDF, SQL_SCALAR_PANDAS_UDF, SQL_SCALAR_PANDAS_ITER_UDF or SQL_GROUPED_AGG_PANDAS_UDF."
+      "Eval type for UDF must be <eval_type>."
     ]
   },
   "INVALID_WHEN_USAGE": {
@@ -274,6 +274,11 @@ ERROR_CLASSES_JSON = """
       "<objectName> is not iterable."
     ]
   },
+  "NOT_LIST" : {
+    "message" : [
+      "Argument `<arg_name>` should be a list, got <arg_type>."
+    ]
+  },
   "NOT_LIST_OF_COLUMN" : {
     "message" : [
       "Argument `<arg_name>` should be a list[Column]."
@@ -297,6 +302,11 @@ ERROR_CLASSES_JSON = """
   "NOT_LIST_OR_TUPLE" : {
     "message" : [
       "Argument `<arg_name>` should be a list or tuple, got <arg_type>."
+    ]
+  },
+  "NOT_NUMERIC_COLUMNS" : {
+    "message" : [
+      "Numeric aggregation function can only be applied on numeric columns, got <invalid_columns>."
     ]
   },
   "NOT_OBSERVATION_OR_STR" : {
@@ -377,6 +387,11 @@ ERROR_CLASSES_JSON = """
   "UNSUPPORTED_NUMPY_ARRAY_SCALAR" : {
     "message" : [
       "The type of array scalar '<dtype>' is not supported."
+    ]
+  },
+  "UNSUPPORTED_OPERATION" : {
+    "message" : [
+      "<operation> is not supported."
     ]
   },
   "UNSUPPORTED_PARAM_TYPE_FOR_HIGHER_ORDER_FUNCTION" : {
