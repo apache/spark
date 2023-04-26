@@ -2408,8 +2408,8 @@ class NumpyArrayConverter:
             jtpe = self._from_numpy_type_to_java_type(obj.dtype, gateway)
             if jtpe is None:
                 raise PySparkTypeError(
-                    error_class="UNSUPPORTED_DATA_TYPE",
-                    message_parameters={"data_type": str(obj.dtype)},
+                    error_class="UNSUPPORTED_NUMPY_ARRAY_SCALAR",
+                    message_parameters={"dtype": str(obj.dtype)},
                 )
         jarr = gateway.new_array(jtpe, len(obj))
         for i in range(len(plist)):

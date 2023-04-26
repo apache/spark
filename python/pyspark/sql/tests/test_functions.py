@@ -1141,9 +1141,9 @@ class FunctionsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="UNSUPPORTED_DATA_TYPE",
+            error_class="UNSUPPORTED_NUMPY_ARRAY_SCALAR",
             message_parameters={
-                "data_type": "uint64",
+                "dtype": "uint64",
             },
         )
 
