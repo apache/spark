@@ -4648,6 +4648,17 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       sql("SELECT /*+ hash(t2) */ * FROM t1 join t2 on c1 = c2")
     }
   }
+
+  test("SPARK-43199: InlineCTE is idempotent") {
+    sql(
+      """
+        |WITH
+        |  x(r) AS (SELECT random()),
+        |  y(r) AS (SELECT * FROM x),
+        |  z(r) AS (SELECT * FROM x)
+        |SELECT * FROM z
+        |""".stripMargin).collect()
+  }
 }
 
 case class Foo(bar: Option[String])

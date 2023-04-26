@@ -145,9 +145,9 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
 
   def checkAnalysis(plan: LogicalPlan): Unit = {
     val inlineCTE = InlineCTE(alwaysInline = true)
-    val cteMap = mutable.HashMap.empty[Long, (CTERelationDef, Int)]
+    val cteMap = mutable.HashMap.empty[Long, (CTERelationDef, Int, mutable.Map[Long, Int])]
     inlineCTE.buildCTEMap(plan, cteMap)
-    cteMap.values.foreach { case (relation, refCount) =>
+    cteMap.values.foreach { case (relation, refCount, _) =>
       // If a CTE relation is never used, it will disappear after inline. Here we explicitly check
       // analysis for it, to make sure the entire query plan is valid.
       if (refCount == 0) checkAnalysis0(relation.child)

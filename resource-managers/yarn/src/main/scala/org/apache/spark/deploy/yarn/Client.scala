@@ -22,7 +22,7 @@ import java.net.{InetAddress, UnknownHostException, URI, URL}
 import java.nio.ByteBuffer
 import java.nio.charset.StandardCharsets
 import java.nio.file.{Files, Paths}
-import java.util.{Locale, Properties, UUID}
+import java.util.{Collections, Locale, Properties, UUID}
 import java.util.zip.{ZipEntry, ZipOutputStream}
 
 import scala.collection.JavaConverters._
@@ -289,7 +289,7 @@ private[spark] class Client(
     }
 
     val capability = Records.newRecord(classOf[Resource])
-    capability.setMemory(amMemory + amMemoryOverhead)
+    capability.setMemorySize(amMemory + amMemoryOverhead)
     capability.setVirtualCores(amCores)
     if (amResources.nonEmpty) {
       ResourceRequestHelper.setResourceRequests(amResources, capability)
@@ -304,7 +304,7 @@ private[spark] class Client(
         amRequest.setCapability(capability)
         amRequest.setNumContainers(1)
         amRequest.setNodeLabelExpression(expr)
-        appContext.setAMContainerResourceRequest(amRequest)
+        appContext.setAMContainerResourceRequests(Collections.singletonList(amRequest))
       case None =>
         appContext.setResource(capability)
     }
@@ -389,7 +389,7 @@ private[spark] class Client(
    * Fail fast if we have requested more resources per container than is available in the cluster.
    */
   private def verifyClusterResources(newAppResponse: GetNewApplicationResponse): Unit = {
-    val maxMem = newAppResponse.getMaximumResourceCapability().getMemory()
+    val maxMem = newAppResponse.getMaximumResourceCapability.getMemorySize
     logInfo("Verifying our application has not requested more than the maximum " +
       s"memory capability of the cluster ($maxMem MB per container)")
     val executorMem =
