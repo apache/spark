@@ -237,7 +237,7 @@ SELECT c, (
 ) FROM (VALUES (6)) t2(c);
 
 -- SPARK-43156: scalar subquery with Literal result like `COUNT(1) is null`
-SELECT *, (SELECT count(1) is null FROM t2 WHERE  .c1 = t2.c1) FROM t1;
+SELECT *, (SELECT count(1) is null FROM t2 WHERE t1.c1 = t2.c1) FROM t1;
 
 select (select f from (select false as f, max(c2) from t1 where t1.c1 = t1.c1)) from t2;
 
