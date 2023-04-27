@@ -123,6 +123,11 @@ case class PythonUDAF(
     s"$name($distinct${children.mkString(", ")})"
   }
 
+  override def toAggString(isDistinct: Boolean): String = {
+    val start = if (isDistinct) "(distinct " else "("
+    name + children.mkString(start, ", ", ")") + s"#${resultId.id}$typeSuffix"
+  }
+
   final override val nodePatterns: Seq[TreePattern] = Seq(PYTHON_UDAF)
 
   override lazy val canonicalized: Expression = {

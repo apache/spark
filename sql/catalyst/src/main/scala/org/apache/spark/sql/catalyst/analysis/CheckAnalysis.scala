@@ -330,7 +330,6 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with QueryErrorsB
                   messageParameters = Map("aggFunc" -> agg.aggregateFunction.prettyName))
               case _: AggregateExpression | _: FrameLessOffsetWindowFunction |
                   _: AggregateWindowFunction => // OK
-              case f: PythonFuncExpression if PythonUDF.isWindowPandasUDF(f) => // OK
               case other =>
                 other.failAnalysis(
                   errorClass = "UNSUPPORTED_EXPR_FOR_WINDOW",
