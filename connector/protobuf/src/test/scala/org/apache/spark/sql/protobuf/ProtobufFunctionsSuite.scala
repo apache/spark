@@ -19,12 +19,13 @@ package org.apache.spark.sql.protobuf
 import java.sql.Timestamp
 import java.time.Duration
 
- import scala.collection.JavaConverters._
+import scala.collection.JavaConverters._
 
 import com.google.protobuf.{ByteString, DynamicMessage}
 
 import org.apache.spark.sql.{AnalysisException, Column, DataFrame, QueryTest, Row}
-import org.apache.spark.sql.functions.{lit, struct}
+import org.apache.spark.sql.functions.{lit, struct, typedLit}
+import org.apache.spark.sql.protobuf.protos.Proto2Messages.Proto2AllTypes
 import org.apache.spark.sql.protobuf.protos.SimpleMessageProtos._
 import org.apache.spark.sql.protobuf.protos.SimpleMessageProtos.SimpleMessageRepeated.NestedEnum
 import org.apache.spark.sql.protobuf.utils.ProtobufUtils
@@ -39,6 +40,9 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
   val testFileDesc = testFile("functions_suite.desc", "protobuf/functions_suite.desc")
   private val javaClassNamePrefix = "org.apache.spark.sql.protobuf.protos.SimpleMessageProtos$"
 
+  val proto2FileDesc = testFile("proto2_messages.desc", "protobuf/proto_messages.desc")
+  private val proto2JavaClassNamePrefix = "org.apache.spark.sql.protobuf.protos.Proto2Messages$"
+
   private def emptyBinaryDF = Seq(Array[Byte]()).toDF("binary")
 
   /**
@@ -52,6 +56,16 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
       withClue("(With Java class name)") {
         fn(s"$javaClassNamePrefix$messageName", None)
       }
+  }
+
+  private def checkWithProto2FileAndClassName(messageName: String)(
+    fn: (String, Option[String]) => Unit): Unit = {
+    withClue("(With descriptor file)") {
+      fn(messageName, Some(proto2FileDesc))
+    }
+    withClue("(With Java class name)") {
+      fn(s"$proto2JavaClassNamePrefix$messageName", None)
+    }
   }
 
   // A wrapper to invoke the right variable of from_protobuf() depending on arguments.
@@ -1103,6 +1117,150 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
         )
         // 'empty_recursive' field is dropped from the schema. Only "name" is present.
         assert(df.schema == structFromDDL("wrapper struct<name: string>"))
+    }
+  }
+
+  test("test explicitly set zero values - proto3") {
+    // All fields explicitly zero. Message, map, repeated, and oneof fields
+    // are left unset, as null is their zero value.
+    val explicitZero = spark.range(1).select(
+      lit(
+        Proto3AllTypes.newBuilder()
+          .setInt(0)
+          .setText("")
+          .setEnumVal(Proto3AllTypes.NestedEnum.NOTHING)
+          .setOptionalInt(0)
+          .setOptionalText("")
+          .setOptionalEnumVal(Proto3AllTypes.NestedEnum.NOTHING)
+          .setOptionA(0)
+          .build()
+          .toByteArray).as("raw_proto"))
+
+    // By default, we deserialize zero values for fields without
+    // field presence (i.e. most primitives in proto3) as null.
+    // For fields with field presence, (explicitly optional, oneof, etc)
+    // we're able to get the explicitly set zero value.
+    val expected = spark.range(1).select(
+      struct(
+        lit(null).as("int"),
+        lit(null).as("text"),
+        lit(null).as("enum_val"),
+        lit(null).as("message"),
+        lit(0).as("optional_int"),
+        lit("").as("optional_text"),
+        lit("NOTHING").as("optional_enum_val"),
+        lit(null).as("optional_message"),
+        lit(Array.emptyIntArray).as("repeated_num"),
+        lit(Array.emptyByteArray).as("repeated_message"),
+        lit(0).as("option_a"),
+        lit(null).as("option_b"),
+        typedLit(Map.empty[String, String]).as("map")
+      ).as("proto")
+    )
+
+    checkWithFileAndClassName("Proto3AllTypes") { case (name, descFilePathOpt) =>
+      checkAnswer(
+        explicitZero.select(
+          from_protobuf_wrapper($"raw_proto", name, descFilePathOpt).as("proto")),
+        expected)
+    }
+  }
+
+  test("test unset values - proto3") {
+    // Test how we deserialize fields not being present at all.
+    val empty = spark.range(1)
+      .select(lit(
+        Proto3AllTypes.newBuilder().build().toByteArray
+      ).as("raw_proto"))
+
+    val expected = spark.range(1).select(
+      struct(
+        lit(null).as("int"),
+        lit(null).as("text"),
+        lit(null).as("enum_val"),
+        lit(null).as("message"),
+        lit(null).as("optional_int"),
+        lit(null).as("optional_text"),
+        lit(null).as("optional_enum_val"),
+        lit(null).as("optional_message"),
+        lit(Array.emptyIntArray).as("repeated_num"),
+        lit(Array.emptyByteArray).as("repeated_message"),
+        lit(null).as("option_a"),
+        lit(null).as("option_b"),
+        typedLit(Map.empty[String, String]).as("map")
+      ).as("proto")
+    )
+
+    checkWithFileAndClassName("Proto3AllTypes") { case (name, descFilePathOpt) =>
+      checkAnswer(
+        empty.select(
+          from_protobuf_wrapper($"raw_proto", name, descFilePathOpt).as("proto")),
+        expected)
+    }
+  }
+
+  test("test explicitly set zero values - proto2") {
+    // All fields explicitly zero. Message, map, repeated, and oneof fields
+    // are left unset, as null is their zero value.
+    val explicitZero = spark.range(1).select(
+      lit(
+        Proto2AllTypes.newBuilder()
+          .setInt(0)
+          .setText("")
+          .setEnumVal(Proto2AllTypes.NestedEnum.NOTHING)
+          .setOptionA(0)
+          .build()
+          .toByteArray).as("raw_proto"))
+
+    // We are able to get the zero value back when deserializing since
+    // most proto2 fields have field presence information.
+    val expected = spark.range(1).select(
+      struct(
+        lit(0).as("int"),
+        lit("").as("text"),
+        lit("NOTHING").as("enum_val"),
+        lit(null).as("message"),
+        lit(Array.emptyIntArray).as("repeated_num"),
+        lit(Array.emptyByteArray).as("repeated_message"),
+        lit(0).as("option_a"),
+        lit(null).as("option_b"),
+        typedLit(Map.empty[String, String]).as("map")
+      ).as("proto")
+    )
+
+    checkWithProto2FileAndClassName("Proto2AllTypes") { case (name, descFilePathOpt) =>
+      checkAnswer(
+        explicitZero.select(
+          from_protobuf_wrapper($"raw_proto", name, descFilePathOpt).as("proto")),
+        expected)
+    }
+  }
+
+  test("test unset fields - proto2 types") {
+    // All fields explicitly zero. Message, map, repeated, and oneof fields
+    // have null, i.e. not set, as their empty versions.
+    val empty = spark.range(1).select(
+      lit(Proto2AllTypes.newBuilder().build().toByteArray).as("raw_proto"))
+
+    val expected = spark.range(1).select(
+      struct(
+        lit(null).as("int"),
+        lit(null).as("text"),
+        lit(null).as("enum_val"),
+        lit(null).as("message"),
+        lit(Array.emptyIntArray).as("repeated_num"),
+        lit(Array.emptyByteArray).as("repeated_message"),
+        lit(null).as("option_a"),
+        lit(null).as("option_b"),
+        typedLit(Map.empty[String, String]).as("map")
+      ).as("proto")
+    )
+
+    checkWithProto2FileAndClassName("Proto2AllTypes") { case (name, descFilePathOpt) =>
+      checkAnswer(
+        empty.select(
+          from_protobuf_wrapper($"raw_proto", name, descFilePathOpt).as("proto")),
+        expected)
     }
   }
 
