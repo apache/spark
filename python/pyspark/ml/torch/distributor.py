@@ -729,8 +729,8 @@ class TorchDistributor(Distributor):
                 if f.tell() == 0:
                     # Nothing is written to file, this partition is empty
                     raise ValueError(
-                        "Empty spark DataFrame partition is not allowed if you run "
-                        "`TorchDistributor.train_on_dataframe`."
+                        "Empty Spark partition is not allowed in "
+                        "TorchDistributor.train_on_dataframe."
                     )
 
             schema_file_path = os.path.join(save_dir, "schema.json")
@@ -753,7 +753,7 @@ class TorchDistributor(Distributor):
             TorchDistributor._run_training_on_pytorch_file(input_params, train_file_path)
             if not os.path.exists(output_file_path):
                 raise RuntimeError(
-                    "TorchDistributor failed during training. "
+                    "TorchDistributor failed during training."
                     "View stdout logs for detailed error message."
                 )
             try:
@@ -834,11 +834,11 @@ class TorchDistributor(Distributor):
             handled by argparse in that python file.
         kwargs :
             If train_object is a python function and not a path to a python file, kwargs need
-            to be the key-work input parameters to that function. It would look like
+            to be the key-word input parameters to that function. It would look like
 
             >>> model = distributor.run(train, tol=1e-3, max_iter=64)
 
-            where train is a function that has 2 arguments `tol` and `max_iter`.
+            where train is a function of 2 arguments `tol` and `max_iter`.
 
             If train_object is a python file, then you should not set kwargs arguments.
 
@@ -864,10 +864,10 @@ class TorchDistributor(Distributor):
 
     def train_on_dataframe(self, train_function, spark_dataframe, *args, **kwargs):
         """
-        Runs distributed training using provided spark DataFrame as input data.
-        You should ensure the input spark DataFrame have evenly divided partitions,
-        and this method starts a barrier spark job that each spark task in the job
-        process one partition of the input spark DataFrame.
+        Runs distributed training using provided Spark DataFrame as input data.
+        You should ensure the input Spark DataFrame have evenly distributed partitions,
+        and this method starts a barrier Spark job that each Spark task in the job
+        process one partition of the input Spark DataFrame.
 
         Parameters
         ----------
@@ -876,9 +876,9 @@ class TorchDistributor(Distributor):
             training. Note that inside the function, you can call
             `pyspark.ml.torch.distributor.get_spark_partition_data_loader` API to get a torch
             data loader, the data loader loads data from the corresponding partition of the
-            input spark DataFrame.
+            input Spark DataFrame.
         spark_dataframe :
-            An input spark DataFrame that can be used in PyTorch `train_function` function.
+            An input Spark DataFrame that can be used in PyTorch `train_function` function.
             See `train_function` argument doc for details.
         args :
             `args` need to be the input parameters to `train_function` function. It would look like
@@ -887,16 +887,16 @@ class TorchDistributor(Distributor):
 
             where train is a function and 1e-3 and 64 are regular numeric inputs to the function.
         kwargs :
-            `kwargs` need to be the key-work input parameters to `train_function` function.
+            `kwargs` need to be the key-word input parameters to `train_function` function.
             It would look like
 
             >>> model = distributor.run(train, tol=1e-3, max_iter=64)
 
-            where train is a function that has 2 arguments `tol` and `max_iter`.
+            where train is a function of 2 arguments `tol` and `max_iter`.
 
         Returns
         -------
-            Returns the output of `train_function` called with args inside spark rank 0 task.
+            Returns the output of `train_function` called with args inside Spark rank 0 task.
         """
 
         if self.local_mode:

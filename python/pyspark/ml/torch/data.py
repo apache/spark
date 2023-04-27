@@ -54,7 +54,7 @@ class SparkPartitionTorchDataset(torch.utils.data.IterableDataset):
         worker_info = torch.utils.data.get_worker_info()
         if worker_info is not None and worker_info.num_workers > 1:
             raise RuntimeError(
-                "`SparkPartitionTorchDataset` does not support multiple worker processes."
+                "SparkPartitionTorchDataset does not support multiple worker processes."
             )
 
         count = 0
