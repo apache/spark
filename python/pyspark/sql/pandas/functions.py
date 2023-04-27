@@ -26,6 +26,7 @@ from pyspark.sql.pandas.utils import require_minimum_pandas_version, require_min
 from pyspark.sql.types import DataType
 from pyspark.sql.udf import _create_udf
 from pyspark.sql.utils import is_remote
+from pyspark.errors import PySparkTypeError, PySparkValueError
 
 
 class PandasUDFType:
@@ -363,7 +364,10 @@ def pandas_udf(f=None, returnType=None, functionType=None):
             eval_type = None
 
     if return_type is None:
-        raise ValueError("Invalid return type: returnType can not be None")
+        raise PySparkTypeError(
+            error_class="CANNOT_BE_NONE",
+            message_parameters={"arg_name": "returnType"},
+        )
 
     if eval_type not in [
         PythonEvalType.SQL_SCALAR_PANDAS_UDF,
@@ -377,8 +381,12 @@ def pandas_udf(f=None, returnType=None, functionType=None):
         None,
     ]:  # None means it should infer the type from type hints.
 
-        raise ValueError(
-            "Invalid function type: " "functionType must be one the values from PandasUDFType"
+        raise PySparkTypeError(
+            error_class="INVALID_PANDAS_UDF_TYPE",
+            message_parameters={
+                "arg_name": "functionType",
+                "arg_type": str(eval_type),
+            },
         )
 
     if is_decorator:
@@ -434,23 +442,31 @@ def _create_pandas_udf(f, returnType, evalType):
         and len(argspec.args) == 0
         and argspec.varargs is None
     ):
-        raise ValueError(
-            "Invalid function: 0-arg pandas_udfs are not supported. "
-            "Instead, create a 1-arg pandas_udf and ignore the arg in your function."
+        raise PySparkValueError(
+            error_class="INVALID_PANDAS_UDF",
+            message_parameters={
+                "detail": "0-arg pandas_udfs are not supported. "
+                "Instead, create a 1-arg pandas_udf and ignore the arg in your function.",
+            },
         )
 
     if evalType == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF and len(argspec.args) not in (1, 2):
-        raise ValueError(
-            "Invalid function: pandas_udf with function type GROUPED_MAP or "
-            "the function in groupby.applyInPandas "
-            "must take either one argument (data) or two arguments (key, data)."
+        raise PySparkValueError(
+            error_class="INVALID_PANDAS_UDF",
+            message_parameters={
+                "detail": "pandas_udf with function type GROUPED_MAP or the function in "
+                "groupby.applyInPandas must take either one argument (data) or "
+                "two arguments (key, data).",
+            },
         )
 
     if evalType == PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF and len(argspec.args) not in (2, 3):
-        raise ValueError(
-            "Invalid function: the function in cogroup.applyInPandas "
-            "must take either two arguments (left, right) "
-            "or three arguments (key, left, right)."
+        raise PySparkValueError(
+            error_class="INVALID_PANDAS_UDF",
+            message_parameters={
+                "detail": "the function in cogroup.applyInPandas must take either two arguments "
+                "(left, right) or three arguments (key, left, right).",
+            },
         )
 
     if is_remote():

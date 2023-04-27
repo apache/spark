@@ -170,6 +170,16 @@ ERROR_CLASSES_JSON = """
       "All items in `<arg_name>` should be in <allowed_types>, got <item_type>."
     ]
   },
+  "INVALID_PANDAS_UDF" : {
+    "message" : [
+      "Invalid function: <detail>"
+    ]
+  },
+  "INVALID_PANDAS_UDF_TYPE" : {
+    "message" : [
+      "`<arg_name>` should be one the values from PandasUDFType, got <arg_type>"
+    ]
+  },
   "INVALID_RETURN_TYPE_FOR_PANDAS_UDF": {
     "message": [
       "Pandas UDF should return StructType for <eval_type>, got <return_type>."
