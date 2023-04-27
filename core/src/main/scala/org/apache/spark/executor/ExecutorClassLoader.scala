@@ -60,7 +60,7 @@ class ExecutorClassLoader(
   val parentLoader = new ParentClassLoader(parent)
 
   // Allows HTTP connect and read timeouts to be controlled for testing / debugging purposes
-  private[repl] var httpUrlConnectionTimeoutMillis: Int = -1
+  private[executor] var httpUrlConnectionTimeoutMillis: Int = -1
 
   private val fetchFn: (String) => InputStream = uri.getScheme() match {
     case "spark" => getClassFileInputStreamFromSparkRPC
