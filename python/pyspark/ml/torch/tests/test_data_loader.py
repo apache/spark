@@ -15,20 +15,8 @@
 # limitations under the License.
 #
 
-import contextlib
-import os
-import shutil
-from six import StringIO
-import stat
-import subprocess
-import sys
-import time
-import tempfile
-import threading
 import numpy as np
-from typing import Callable, Dict, Any
 import unittest
-from unittest.mock import patch
 
 have_torch = True
 try:
@@ -36,11 +24,8 @@ try:
 except ImportError:
     have_torch = False
 
-from pyspark import SparkConf, SparkContext
-from pyspark.ml.torch.distributor import TorchDistributor, get_gpus_owned, _get_spark_partition_data_loader
-from pyspark.ml.torch.torch_run_process_wrapper import clean_and_terminate, check_parent_alive
+from pyspark.ml.torch.distributor import _get_spark_partition_data_loader
 from pyspark.sql import SparkSession
-from pyspark.testing.utils import SPARK_HOME
 from pyspark.ml.linalg import Vectors
 
 
