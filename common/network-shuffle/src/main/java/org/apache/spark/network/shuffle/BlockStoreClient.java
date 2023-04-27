@@ -24,8 +24,14 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.function.Supplier;
 
 import com.codahale.metrics.MetricSet;
+import com.google.common.util.concurrent.Uninterruptibles;
+import org.apache.spark.network.util.NettyUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -43,6 +49,9 @@ import org.apache.spark.network.util.TransportConf;
  */
 public abstract class BlockStoreClient implements Closeable {
   protected final Logger logger = LoggerFactory.getLogger(this.getClass());
+
+  private static final ExecutorService executorService = Executors.newCachedThreadPool(
+          NettyUtils.createThreadFactory("Block Store Client Retry"));
 
   protected volatile TransportClientFactory clientFactory;
   protected String appId;
@@ -159,6 +168,21 @@ public abstract class BlockStoreClient implements Closeable {
       String[] execIds,
       CompletableFuture<Map<String, String[]>> hostLocalDirsCompletable) {
     checkInit();
+    int maxRetries = transportConf.maxIORetries();
+    int retryWaitTime = transportConf.ioRetryWaitTimeMs();
+    retry(0, maxRetries, retryWaitTime, () -> {
+      CompletableFuture<Map<String, String[]>> tempHostLocalDirsCompletable =
+              new CompletableFuture<>();
+      getHostLocalDirsInternal(host, port, execIds, tempHostLocalDirsCompletable);
+      return tempHostLocalDirsCompletable;
+    }, hostLocalDirsCompletable);
+  }
+
+  private void getHostLocalDirsInternal(
+      String host,
+      int port,
+      String[] execIds,
+      CompletableFuture<Map<String, String[]>> hostLocalDirsCompletable) {
     GetLocalDirsForExecutors getLocalDirsMessage = new GetLocalDirsForExecutors(appId, execIds);
     try {
       TransportClient client = clientFactory.createClient(host, port);
@@ -186,6 +210,31 @@ public abstract class BlockStoreClient implements Closeable {
     } catch (IOException | InterruptedException e) {
       hostLocalDirsCompletable.completeExceptionally(e);
     }
+  }
+
+  private <T> void retry(
+      int times,
+      final int maxRetries,
+      int delayMs,
+      Supplier<CompletableFuture<T>> action,
+      CompletableFuture<T> future) {
+    action.get()
+            .thenAccept(future::complete)
+            .exceptionally(e -> {
+              boolean isIOException = e instanceof IOException
+                      || (e.getCause() != null && e.getCause() instanceof IOException);
+              if (times >= maxRetries || isIOException) {
+                future.completeExceptionally(e);
+              } else {
+                executorService.execute(() -> {
+                  logger.info("Retrying ({}/{}) for getting host local dirs after {} ms",
+                          times, maxRetries, delayMs);
+                  Uninterruptibles.sleepUninterruptibly(delayMs, TimeUnit.MILLISECONDS);
+                  retry(times + 1, maxRetries, delayMs, action, future);
+                });
+              }
+              return null;
+            });
   }
 
   /**
