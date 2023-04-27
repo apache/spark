@@ -45,7 +45,7 @@ Different tools support different syntax for text substitution. For example a No
 
 ```sql
 -- Using a Hive variable in Databricks Runtime
-SET hivevar:tab = ‘T’;
+SET hivevar:tab = 'T';
 CREATE TABLE IDENTIFIER(${hivevar:tab}) (c1 INT);
 INSERT INTO IDENTIFIER(${hivevar:tab}) VALUES(1);
 SELECT * FROM IDENTIFIER(${hivevar:tab});
