@@ -46,7 +46,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.types._
-import org.apache.spark.util.{LongAccumulator, ParentClassLoader, Utils}
+import org.apache.spark.util.{LongAccumulator, NonFateSharingCache, ParentClassLoader, Utils}
 
 /**
  * Java source for evaluating an [[Expression]] given a [[InternalRow]] of input.
@@ -1577,7 +1577,7 @@ object CodeGenerator extends Logging {
    * automatically, in order to constrain its memory footprint.  Note that this cache does not use
    * weak keys/values and thus does not respond to memory pressure.
    */
-  private val cache = CacheBuilder.newBuilder()
+  private val cache = NonFateSharingCache(CacheBuilder.newBuilder()
     .maximumSize(SQLConf.get.codegenCacheMaxEntries)
     .build(
       new CacheLoader[CodeAndComment, (GeneratedClass, ByteCodeStats)]() {
@@ -1593,7 +1593,7 @@ object CodeGenerator extends Logging {
           _compileTime.add(duration)
           result
         }
-      })
+      }))
 
   /**
    * Name of Java primitive data type
