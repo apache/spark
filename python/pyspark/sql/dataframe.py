@@ -3031,10 +3031,16 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         >>> df = df.withColumn('inputFiles', lit(2))
         >>> [attr for attr in dir(df) if attr[0] == 'i'][:7] # Doesn't duplicate inputFiles
         ['i_like_pancakes', 'id', 'inputFiles', 'intersect', 'intersectAll', 'isEmpty', 'isLocal']
+
+        Try to add a column named 'id2'.
+        
+        >>> df = df.withColumn('id2', lit(3))
+        >>> [attr for attr in dir(df) if attr[0] == 'i'][:7] # result includes id2 and sorted
+        ['i_like_pancakes', 'id', 'id2', 'inputFiles', 'intersect', 'intersectAll', 'isEmpty']
         """
         attrs = list(super().__dir__())
         attrs.extend(attr for attr in self.columns if attr not in attrs)
-        return attrs
+        return sorted(attrs)
 
     @overload
     def select(self, *cols: "ColumnOrName") -> "DataFrame":
