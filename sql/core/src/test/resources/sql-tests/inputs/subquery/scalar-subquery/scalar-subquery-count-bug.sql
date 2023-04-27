@@ -29,7 +29,7 @@ select *, (select count(*) from r where l.a = r.c) from l;
 select *, (select count(*) from r where l.a = r.c group by c) from l;
 select *, (select count(*) from r where l.a = r.c group by 'constant') from l;
 
--- count bug, empty groups should evaluate to false - but this case is wrong due to bug SPARK-43156
+-- count bug, empty groups should evaluate to false
 select *, (
   select (count(*)) is null
   from r
