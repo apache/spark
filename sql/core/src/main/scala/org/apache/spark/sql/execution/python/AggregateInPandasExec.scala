@@ -84,14 +84,15 @@ case class AggregateInPandasExec(
     case None => Seq(groupingExpressions.map(SortOrder(_, Ascending)))
   }
 
-  private def collectFunctions(udf: PythonUDAF): (ChainedPythonFunctions, Seq[Expression]) = {
+  private def collectFunctions(
+      udf: PythonFuncExpression): (ChainedPythonFunctions, Seq[Expression]) = {
     udf.children match {
-      case Seq(u: PythonUDAF) =>
+      case Seq(u: PythonFuncExpression) =>
         val (chained, children) = collectFunctions(u)
         (ChainedPythonFunctions(chained.funcs ++ Seq(udf.func)), children)
       case children =>
         // There should not be any other UDFs, or the children can't be evaluated directly.
-        assert(children.forall(!_.exists(_.isInstanceOf[PythonUDAF])))
+        assert(children.forall(!_.exists(_.isInstanceOf[PythonFuncExpression])))
         (ChainedPythonFunctions(Seq(udf.func)), udf.children)
     }
   }
