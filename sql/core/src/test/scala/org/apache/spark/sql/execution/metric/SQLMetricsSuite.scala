@@ -37,6 +37,7 @@ import org.apache.spark.sql.execution.command.DataWritingCommandExec
 import org.apache.spark.sql.execution.datasources.{BasicWriteJobStatsTracker, InsertIntoHadoopFsRelationCommand, SQLHadoopMapReduceCommitProtocol, V1WriteCommand}
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, ShuffledHashJoinExec}
+import org.apache.spark.sql.execution.window.WindowGroupLimitExec
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -895,6 +896,16 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
           _.toString.matches(sizeMetricPattern)
         }))))
     )
+  }
+
+  test("SPARK-37099: Add numOutputRows metric for WindowGroupLimitExec") {
+    val data = Seq(("a", 1), ("a", 2), ("b", 1)).toDF("c1", "c2")
+    val w = Window.partitionBy("c1").orderBy("c2")
+    val df = data.select(row_number().over(w).as("r")).where("r = 1")
+    df.collect()
+    val windowGroupLimit = df.queryExecution.executedPlan.find(_.isInstanceOf[WindowGroupLimitExec])
+    assert(windowGroupLimit.isDefined)
+    assert(windowGroupLimit.get.metrics("numOutputRows").value == 2L)
   }
 }
 

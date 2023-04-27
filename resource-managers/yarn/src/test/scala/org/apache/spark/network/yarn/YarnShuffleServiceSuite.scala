@@ -25,9 +25,12 @@ import java.util.EnumSet
 
 import scala.annotation.tailrec
 import scala.collection.JavaConverters._
+import scala.collection.mutable
 import scala.concurrent.duration._
 
 import com.codahale.metrics.MetricSet
+import com.fasterxml.jackson.databind.ObjectMapper
+import com. fasterxml.jackson.module.scala.DefaultScalaModule
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.metrics2.impl.MetricsSystemImpl
 import org.apache.hadoop.metrics2.lib.DefaultMetricsSystem
@@ -49,6 +52,7 @@ import org.apache.spark.network.shuffle.{Constants, MergedShuffleFileManager, No
 import org.apache.spark.network.shuffle.RemoteBlockPushResolver._
 import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo
 import org.apache.spark.network.shuffledb.DBBackend
+import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.network.util.TransportConf
 import org.apache.spark.network.yarn.util.HadoopConfigProvider
 import org.apache.spark.tags.ExtendedLevelDBTest
@@ -1032,9 +1036,23 @@ abstract class YarnShuffleServiceSuite extends SparkFunSuite with Matchers {
     s2.stop()
   }
 
-  private def makeAppInfo(user: String, appId: ApplicationId): ApplicationInitializationContext = {
-    val secret = ByteBuffer.wrap(new Array[Byte](0))
-    new ApplicationInitializationContext(user, appId, secret)
+  private def makeAppInfo(user: String, appId: ApplicationId,
+      metadataStorageDisabled: Boolean = false,
+      authEnabled: Boolean = true): ApplicationInitializationContext = {
+    if (!metadataStorageDisabled) {
+      val secret = ByteBuffer.wrap(new Array[Byte](0))
+      new ApplicationInitializationContext(user, appId, secret)
+    } else {
+      val payload = new mutable.HashMap[String, Object]()
+      payload.put(YarnShuffleService.SPARK_SHUFFLE_SERVER_RECOVERY_DISABLED, java.lang.Boolean.TRUE)
+      if (authEnabled) {
+        payload.put(YarnShuffleService.SECRET_KEY, "")
+      }
+      val mapper = new ObjectMapper()
+      mapper.registerModule(DefaultScalaModule)
+      val jsonString = mapper.writeValueAsString(payload)
+      new ApplicationInitializationContext(user, appId, JavaUtils.stringToBytes(jsonString))
+    }
   }
 
   test("recovery db should not be created if NM recovery is not enabled") {
@@ -1108,6 +1126,129 @@ abstract class YarnShuffleServiceSuite extends SparkFunSuite with Matchers {
       "org.apache.spark.network.shuffle.NotExistent")
     val mergeMgr = YarnShuffleService.newMergedShuffleFileManagerInstance(mockConf, null)
     assert(mergeMgr.isInstanceOf[NoOpMergedShuffleFileManager])
+  }
+
+  test("secret of applications should not be stored in db if they want to be excluded") {
+    // set auth to true to test the secrets recovery
+    yarnConfig.setBoolean(SecurityManager.SPARK_AUTH_CONF, true)
+    s1 = createYarnShuffleService()
+    val app1Id = ApplicationId.newInstance(1681252509, 1)
+    val app1Data = makeAppInfo("user", app1Id, metadataStorageDisabled = true)
+    s1.initializeApplication(app1Data)
+    val app2Id = ApplicationId.newInstance(1681252509, 2)
+    val app2Data = makeAppInfo("user", app2Id)
+    s1.initializeApplication(app2Data)
+    assert(s1.secretManager.getSecretKey(app1Id.toString()) == "")
+    assert(s1.secretManager.getSecretKey(app2Id.toString()) == "")
+
+    val execShuffleInfo1 =
+      new ExecutorShuffleInfo(
+        Array(new File(tempDir, "foo/foo").getAbsolutePath,
+          new File(tempDir, "bar/bar").getAbsolutePath), 3,
+        SORT_MANAGER_WITH_MERGE_SHUFFLE_META_WithAttemptID1)
+    val execShuffleInfo2 =
+      new ExecutorShuffleInfo(Array(new File(tempDir, "bippy/bippy").getAbsolutePath),
+        3, SORT_MANAGER_WITH_MERGE_SHUFFLE_META_WithAttemptID1)
+
+    val blockHandler = s1.blockHandler
+    val blockResolver = ShuffleTestAccessor.getBlockResolver(blockHandler)
+    blockResolver.registerExecutor(app1Id.toString, "exec-1", execShuffleInfo1)
+    blockResolver.registerExecutor(app2Id.toString, "exec-2", execShuffleInfo2)
+    ShuffleTestAccessor.getExecutorInfo(app1Id, "exec-1", blockResolver) should
+      be(Some(execShuffleInfo1))
+    ShuffleTestAccessor.getExecutorInfo(app2Id, "exec-2", blockResolver) should
+      be(Some(execShuffleInfo2))
+
+    val mergeManager = s1.shuffleMergeManager.asInstanceOf[RemoteBlockPushResolver]
+    mergeManager.registerExecutor(app1Id.toString, execShuffleInfo1)
+    mergeManager.registerExecutor(app2Id.toString, execShuffleInfo2)
+    val localDirsApp1 = Array(new File(tempDir, "foo/merge_manager_1").getAbsolutePath,
+      new File(tempDir, "bar/merge_manager_1").getAbsolutePath)
+    val localDirsApp2 = Array(new File(tempDir, "bippy/merge_manager_1").getAbsolutePath)
+    val appPathsInfo1 = new AppPathsInfo(localDirsApp1, 3)
+    val appPathsInfo2 = new AppPathsInfo(localDirsApp2, 3)
+
+    ShuffleTestAccessor.getAppPathsInfo(app1Id.toString, mergeManager) should
+      be(Some(appPathsInfo1))
+    ShuffleTestAccessor.getAppPathsInfo(app2Id.toString, mergeManager) should
+      be(Some(appPathsInfo2))
+
+    val partitionIdApp1 = new AppAttemptShuffleMergeId(app1Id.toString, 1, 1, 1)
+    val partitionIdApp2 = new AppAttemptShuffleMergeId(app2Id.toString, 1, 2, 1)
+    prepareAppShufflePartition(mergeManager, partitionIdApp1, 1, "3")
+    prepareAppShufflePartition(mergeManager, partitionIdApp2, 2, "4")
+    ShuffleTestAccessor.finalizeShuffleMerge(mergeManager, partitionIdApp1)
+    ShuffleTestAccessor.finalizeShuffleMerge(mergeManager, partitionIdApp2)
+
+    val execStateFile = s1.registeredExecutorFile
+    assert(execStateFile.exists(), s"$execStateFile did not exist")
+    val mergeMgrFile = s1.mergeManagerFile
+    assert(mergeMgrFile.exists(), s"$mergeMgrFile did not exist")
+
+    // shuffle service goes down
+    s1.stop()
+    // Yarn Shuffle service comes back up without custom mergeManager
+    s2 = createYarnShuffleService()
+    // Since secret of app1 is not saved in the db, it isn't recovered
+    assert(s2.secretManager.getSecretKey(app1Id.toString()) == null)
+    assert(s2.secretManager.getSecretKey(app2Id.toString()) == "")
+
+    val resolver2 = ShuffleTestAccessor.getBlockResolver(s2.blockHandler)
+    val mergeManager2 = s2.shuffleMergeManager.asInstanceOf[RemoteBlockPushResolver]
+
+    // App1 executor information should not have been saved in the db.
+    ShuffleTestAccessor.getExecutorInfo(app1Id, "exec-1", resolver2) should be(None)
+    ShuffleTestAccessor.getExecutorInfo(app2Id, "exec-2", resolver2) should be(
+      Some(execShuffleInfo2))
+    // App1 should not have any merge related metadata stored in the db.
+    ShuffleTestAccessor
+      .getAppPathsInfo(app1Id.toString, mergeManager2) should be(None)
+    ShuffleTestAccessor.getAppPathsInfo(app2Id.toString, mergeManager2) should be(
+      Some(appPathsInfo2))
+
+    // Even though App1-partition1 was finalized before the restart, merge manager will recreate
+    // the partition since it didn't have any metadata saved for that app.
+    mergeManager2.registerExecutor(app1Id.toString, execShuffleInfo1)
+    prepareAppShufflePartition(mergeManager2, partitionIdApp1, 1, "3")
+    val dataFileApp1 =
+      ShuffleTestAccessor.getMergedShuffleDataFile(mergeManager2, partitionIdApp1, 1)
+    dataFileApp1.length() should be((4 * 5 + 1) * DUMMY_BLOCK_DATA.length)
+    // Since app2-partition2 was metadata was saved, it cannot be re-opened.
+    val error = intercept[BlockPushNonFatalFailure] {
+      ShuffleTestAccessor.getOrCreateAppShufflePartitionInfo(
+        mergeManager2, partitionIdApp2, 2, "3")
+    }
+    assert(error.getMessage.contains("is finalized"))
+
+    s2.stopApplication(new ApplicationTerminationContext(app1Id))
+    s2.stopApplication(new ApplicationTerminationContext(app2Id))
+    s2.stop()
+  }
+
+  test("executor info of apps should not be stored in db if they want to be excluded. " +
+    "Authentication is turned off") {
+    s1 = createYarnShuffleService()
+    val app1Id = ApplicationId.newInstance(1681252509, 1)
+    val app1Data = makeAppInfo("user", app1Id, metadataStorageDisabled = true, authEnabled = false)
+    s1.initializeApplication(app1Data)
+    val execShuffleInfo1 =
+      new ExecutorShuffleInfo(
+        Array(new File(tempDir, "foo/foo").getAbsolutePath,
+          new File(tempDir, "bar/bar").getAbsolutePath), 3, SORT_MANAGER)
+    val blockHandler = s1.blockHandler
+    val blockResolver = ShuffleTestAccessor.getBlockResolver(blockHandler)
+    blockResolver.registerExecutor(app1Id.toString, "exec-1", execShuffleInfo1)
+    ShuffleTestAccessor.getExecutorInfo(app1Id, "exec-1", blockResolver) should
+      be(Some(execShuffleInfo1))
+    // shuffle service goes down
+    s1.stop()
+    // Yarn Shuffle service comes back up without custom mergeManager
+    s2 = createYarnShuffleService()
+    val resolver2 = ShuffleTestAccessor.getBlockResolver(s2.blockHandler)
+    // App1 executor information should not have been saved in the db.
+    ShuffleTestAccessor.getExecutorInfo(app1Id, "exec-1", resolver2) should be(None)
+    s2.stopApplication(new ApplicationTerminationContext(app1Id))
+    s2.stop()
   }
 }
 

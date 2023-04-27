@@ -16,12 +16,16 @@
 #
 
 import json
+import sys
 from typing import TYPE_CHECKING, Any, cast, Dict, List, Optional
 
 from pyspark.errors import StreamingQueryException
 import pyspark.sql.connect.proto as pb2
 from pyspark.sql.streaming.query import (
     StreamingQuery as PySparkStreamingQuery,
+)
+from pyspark.errors.exceptions.connect import (
+    StreamingQueryException as CapturedStreamingQueryException,
 )
 
 __all__ = [
@@ -66,7 +70,18 @@ class StreamingQuery:
     isActive.__doc__ = PySparkStreamingQuery.isActive.__doc__
 
     def awaitTermination(self, timeout: Optional[int] = None) -> Optional[bool]:
-        raise NotImplementedError()
+        cmd = pb2.StreamingQueryCommand()
+        if timeout is not None:
+            if not isinstance(timeout, (int, float)) or timeout <= 0:
+                raise ValueError("timeout must be a positive integer or float. Got %s" % timeout)
+            cmd.await_termination.timeout_ms = int(timeout * 1000)
+            terminated = self._execute_streaming_query_cmd(cmd).await_termination.terminated
+            return terminated
+        else:
+            await_termination_cmd = pb2.StreamingQueryCommand.AwaitTerminationCommand()
+            cmd.await_termination.CopyFrom(await_termination_cmd)
+            self._execute_streaming_query_cmd(cmd)
+            return None
 
     awaitTermination.__doc__ = PySparkStreamingQuery.awaitTermination.__doc__
 
@@ -114,7 +129,8 @@ class StreamingQuery:
         cmd.stop = True
         self._execute_streaming_query_cmd(cmd)
 
-    stop.__doc__ = PySparkStreamingQuery.stop.__doc__
+    # TODO (SPARK-42962): uncomment below
+    # stop.__doc__ = PySparkStreamingQuery.stop.__doc__
 
     def explain(self, extended: bool = False) -> None:
         cmd = pb2.StreamingQueryCommand()
@@ -125,7 +141,13 @@ class StreamingQuery:
     explain.__doc__ = PySparkStreamingQuery.explain.__doc__
 
     def exception(self) -> Optional[StreamingQueryException]:
-        raise NotImplementedError()
+        cmd = pb2.StreamingQueryCommand()
+        cmd.exception = True
+        exception = self._execute_streaming_query_cmd(cmd).exception
+        if exception.HasField("exception_message"):
+            return CapturedStreamingQueryException(exception.exception_message)
+        else:
+            return None
 
     exception.__doc__ = PySparkStreamingQuery.exception.__doc__
 
@@ -149,10 +171,31 @@ class StreamingQuery:
 
 
 def _test() -> None:
-    # TODO(SPARK-43031): port _test() from legacy query.py.
-    pass
+    import doctest
+    import os
+    from pyspark.sql import SparkSession as PySparkSession
+    import pyspark.sql.connect.streaming.query
+
+    os.chdir(os.environ["SPARK_HOME"])
+
+    globs = pyspark.sql.connect.streaming.query.__dict__.copy()
+
+    globs["spark"] = (
+        PySparkSession.builder.appName("sql.connect.streaming.query tests")
+        .remote("local[4]")
+        .getOrCreate()
+    )
+
+    (failure_count, test_count) = doctest.testmod(
+        pyspark.sql.connect.streaming.query,
+        globs=globs,
+        optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE | doctest.REPORT_NDIFF,
+    )
+    globs["spark"].stop()
+
+    if failure_count:
+        sys.exit(-1)
 
 
 if __name__ == "__main__":
-    # TODO(SPARK-43031): Add this file dev/sparktestsupport/modules.py to enable testing in CI.
     _test()

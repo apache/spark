@@ -21,7 +21,7 @@ import org.apache.spark.connect.proto
 import org.apache.spark.storage.StorageLevel
 
 /**
- * Helper class for conversions between [[StrageLevel]] and [[proto.StorageLevel]].
+ * Helper class for conversions between [[StorageLevel]] and [[proto.StorageLevel]].
  */
 object StorageLevelProtoConverter {
   def toStorageLevel(sl: proto.StorageLevel): StorageLevel = {

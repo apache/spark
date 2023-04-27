@@ -495,6 +495,8 @@ pyspark_sql = Module(
         "pyspark.sql.tests.test_serde",
         "pyspark.sql.tests.test_session",
         "pyspark.sql.tests.streaming.test_streaming",
+        "pyspark.sql.tests.streaming.test_streaming_foreach",
+        "pyspark.sql.tests.streaming.test_streaming_foreachBatch",
         "pyspark.sql.tests.streaming.test_streaming_listener",
         "pyspark.sql.tests.test_types",
         "pyspark.sql.tests.test_udf",
@@ -603,7 +605,6 @@ pyspark_ml = Module(
         "pyspark.ml.tests.test_wrapper",
         "pyspark.ml.torch.tests.test_distributor",
         "pyspark.ml.torch.tests.test_log_communication",
-        "pyspark.ml.torch.tests.test_data_loader",
     ],
     excluded_python_implementations=[
         "PyPy"  # Skip these tests under PyPy since they require numpy and it isn't available there
@@ -750,6 +751,8 @@ pyspark_connect = Module(
         "pyspark.sql.connect.dataframe",
         "pyspark.sql.connect.functions",
         "pyspark.sql.connect.avro.functions",
+        "pyspark.sql.connect.streaming.readwriter",
+        "pyspark.sql.connect.streaming.query",
         # sql unittests
         "pyspark.sql.tests.connect.test_client",
         "pyspark.sql.tests.connect.test_connect_plan",
@@ -774,12 +777,29 @@ pyspark_connect = Module(
         "pyspark.sql.tests.connect.test_parity_arrow_map",
         "pyspark.sql.tests.connect.test_parity_pandas_grouped_map",
         "pyspark.sql.tests.connect.test_parity_pandas_cogrouped_map",
+        "pyspark.sql.tests.connect.streaming.test_parity_streaming",
+        "pyspark.sql.tests.connect.test_parity_pandas_grouped_map_with_state",
         # ml doctests
         "pyspark.ml.connect.functions",
         # ml unittests
         "pyspark.ml.tests.connect.test_connect_function",
         "pyspark.ml.tests.connect.test_parity_torch_distributor",
         "pyspark.ml.tests.connect.test_parity_torch_data_loader",
+    ],
+    excluded_python_implementations=[
+        "PyPy"  # Skip these tests under PyPy since they require numpy, pandas, and pyarrow and
+        # they aren't available there
+    ],
+)
+
+
+pyspark_pandas_connect = Module(
+    name="pyspark-pandas-connect",
+    dependencies=[pyspark_connect, pyspark_pandas],
+    source_file_regexes=[
+        "python/pyspark/pandas",
+    ],
+    python_test_goals=[
         # pandas-on-Spark unittests
         "pyspark.pandas.tests.connect.data_type_ops.test_parity_base",
         "pyspark.pandas.tests.connect.data_type_ops.test_parity_binary_ops",

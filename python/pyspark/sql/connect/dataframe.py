@@ -96,9 +96,56 @@ class DataFrame:
         self._schema = schema
         self._plan: Optional[plan.LogicalPlan] = None
         self._session: "SparkSession" = session
+        # Check whether _repr_html is supported or not, we use it to avoid calling RPC twice
+        # by __repr__ and _repr_html_ while eager evaluation opens.
+        self._support_repr_html = False
 
     def __repr__(self) -> str:
+        if not self._support_repr_html:
+            (
+                repl_eager_eval_enabled,
+                repl_eager_eval_max_num_rows,
+                repl_eager_eval_truncate,
+            ) = self._session._get_configs(
+                "spark.sql.repl.eagerEval.enabled",
+                "spark.sql.repl.eagerEval.maxNumRows",
+                "spark.sql.repl.eagerEval.truncate",
+            )
+            if repl_eager_eval_enabled == "true":
+                return self._show_string(
+                    n=int(cast(str, repl_eager_eval_max_num_rows)),
+                    truncate=int(cast(str, repl_eager_eval_truncate)),
+                    vertical=False,
+                )
         return "DataFrame[%s]" % (", ".join("%s: %s" % c for c in self.dtypes))
+
+    def _repr_html_(self) -> Optional[str]:
+        if not self._support_repr_html:
+            self._support_repr_html = True
+        (
+            repl_eager_eval_enabled,
+            repl_eager_eval_max_num_rows,
+            repl_eager_eval_truncate,
+        ) = self._session._get_configs(
+            "spark.sql.repl.eagerEval.enabled",
+            "spark.sql.repl.eagerEval.maxNumRows",
+            "spark.sql.repl.eagerEval.truncate",
+        )
+        if repl_eager_eval_enabled == "true":
+            pdf = DataFrame.withPlan(
+                plan.HtmlString(
+                    child=self._plan,
+                    num_rows=int(cast(str, repl_eager_eval_max_num_rows)),
+                    truncate=int(cast(str, repl_eager_eval_truncate)),
+                ),
+                session=self._session,
+            ).toPandas()
+            assert pdf is not None
+            return pdf["html_string"][0]
+        else:
+            return None
+
+    _repr_html_.__doc__ = PySparkDataFrame._repr_html_.__doc__
 
     @property
     def write(self) -> "DataFrameWriter":
@@ -332,7 +379,26 @@ class DataFrame:
     drop_duplicates = dropDuplicates
 
     def dropDuplicatesWithinWatermark(self, subset: Optional[List[str]] = None) -> "DataFrame":
-        raise NotImplementedError("dropDuplicatesWithinWatermark() is not implemented.")
+        if subset is not None and not isinstance(subset, (list, tuple)):
+            raise PySparkTypeError(
+                error_class="NOT_LIST_OR_TUPLE",
+                message_parameters={"arg_name": "subset", "arg_type": type(subset).__name__},
+            )
+
+        if subset is None:
+            return DataFrame.withPlan(
+                plan.Deduplicate(child=self._plan, all_columns_as_keys=True, within_watermark=True),
+                session=self._session,
+            )
+        else:
+            return DataFrame.withPlan(
+                plan.Deduplicate(child=self._plan, column_names=subset, within_watermark=True),
+                session=self._session,
+            )
+
+    dropDuplicatesWithinWatermark.__doc__ = PySparkDataFrame.dropDuplicatesWithinWatermark.__doc__
+
+    drop_duplicates_within_watermark = dropDuplicatesWithinWatermark
 
     def distinct(self) -> "DataFrame":
         return DataFrame.withPlan(
@@ -548,7 +614,6 @@ class DataFrame:
         fraction: Optional[Union[int, float]] = None,
         seed: Optional[int] = None,
     ) -> "DataFrame":
-
         # For the cases below:
         #   sample(True, 0.5 [, seed])
         #   sample(True, fraction=0.5 [, seed])
@@ -1827,9 +1892,6 @@ class DataFrame:
     def toJSON(self, *args: Any, **kwargs: Any) -> None:
         raise NotImplementedError("toJSON() is not implemented.")
 
-    def _repr_html_(self, *args: Any, **kwargs: Any) -> None:
-        raise NotImplementedError("_repr_html_() is not implemented.")
-
     def sameSemantics(self, other: "DataFrame") -> bool:
         assert self._plan is not None
         assert other._plan is not None
@@ -1863,8 +1925,7 @@ class DataFrame:
         Parameters
         ----------
         num : int
-            Number of records to return. Will return this number of records
-            or all records if the DataFrame contains less than this number of records.
+            Number of records to skip.
 
         Returns
         -------

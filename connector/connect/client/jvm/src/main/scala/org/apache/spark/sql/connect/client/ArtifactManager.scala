@@ -16,11 +16,13 @@
  */
 package org.apache.spark.sql.connect.client
 
-import java.io.InputStream
+import java.io.{ByteArrayInputStream, InputStream}
 import java.net.URI
 import java.nio.file.{Files, Path, Paths}
+import java.util.concurrent.CopyOnWriteArrayList
 import java.util.zip.{CheckedInputStream, CRC32}
 
+import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.concurrent.Promise
 import scala.concurrent.duration.Duration
@@ -48,6 +50,12 @@ class ArtifactManager(userContext: proto.UserContext, channel: ManagedChannel) {
   private val CHUNK_SIZE: Int = 32 * 1024
 
   private[this] val stub = proto.SparkConnectServiceGrpc.newStub(channel)
+  private[this] val classFinders = new CopyOnWriteArrayList[ClassFinder]
+
+  /**
+   * Register a [[ClassFinder]] for dynamically generated classes.
+   */
+  def registerClassFinder(finder: ClassFinder): Unit = classFinders.add(finder)
 
   /**
    * Add a single artifact to the session.
@@ -93,9 +101,22 @@ class ArtifactManager(userContext: proto.UserContext, channel: ManagedChannel) {
   def addArtifacts(uris: Seq[URI]): Unit = addArtifacts(uris.flatMap(parseArtifacts))
 
   /**
+   * Upload all class file artifacts from the local REPL(s) to the server.
+   *
+   * The registered [[ClassFinder]]s are traversed to retrieve the class file artifacts.
+   */
+  private[client] def uploadAllClassFileArtifacts(): Unit = {
+    addArtifacts(classFinders.asScala.flatMap(_.findClasses()))
+  }
+
+  /**
    * Add a number of artifacts to the session.
    */
   private def addArtifacts(artifacts: Iterable[Artifact]): Unit = {
+    if (artifacts.isEmpty) {
+      return
+    }
+
     val promise = Promise[Seq[ArtifactSummary]]
     val responseHandler = new StreamObserver[proto.AddArtifactsResponse] {
       private val summaries = mutable.Buffer.empty[ArtifactSummary]
@@ -302,4 +323,13 @@ object Artifact {
     override def size: Long = Files.size(path)
     override def stream: InputStream = Files.newInputStream(path)
   }
+
+  /**
+   * Payload stored in memory.
+   */
+  class InMemory(bytes: Array[Byte]) extends LocalData {
+    override def size: Long = bytes.length
+    override def stream: InputStream = new ByteArrayInputStream(bytes)
+  }
+
 }

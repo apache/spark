@@ -47,7 +47,7 @@ import org.apache.spark.resource.TestResourceIDs._
 import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.scheduler.SplitInfo
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.DecommissionExecutorsOnHost
-import org.apache.spark.util.{ManualClock, VersionUtils}
+import org.apache.spark.util.ManualClock
 
 class MockResolver extends SparkRackResolver(SparkHadoopUtil.get.conf) {
 
@@ -188,7 +188,6 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers {
   }
 
   test("single container allocated with ResourceProfile") {
-    assume(isYarnResourceTypesAvailable())
     val yarnResources = Seq(sparkConf.get(YARN_GPU_DEVICE))
     ResourceRequestTestHelper.initializeResourceTypes(yarnResources)
     // create default profile so we get a different id to test below
@@ -223,7 +222,6 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers {
   }
 
   test("multiple containers allocated with ResourceProfiles") {
-    assume(isYarnResourceTypesAvailable())
     val yarnResources = Seq(sparkConf.get(YARN_GPU_DEVICE), sparkConf.get(YARN_FPGA_DEVICE))
     ResourceRequestTestHelper.initializeResourceTypes(yarnResources)
     // create default profile so we get a different id to test below
@@ -275,7 +273,6 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers {
   }
 
   test("custom resource requested from yarn") {
-    assume(isYarnResourceTypesAvailable())
     ResourceRequestTestHelper.initializeResourceTypes(List("gpu"))
 
     val mockAmClient = mock(classOf[AMRMClient[ContainerRequest]])
@@ -299,7 +296,6 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers {
   }
 
   test("custom spark resource mapped to yarn resource configs") {
-    assume(isYarnResourceTypesAvailable())
     val yarnMadeupResource = "yarn.io/madeup"
     val yarnResources = Seq(sparkConf.get(YARN_GPU_DEVICE), sparkConf.get(YARN_FPGA_DEVICE),
       yarnMadeupResource)
@@ -314,8 +310,8 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers {
 
     handler.updateResourceRequests()
     val defaultResource = handler.rpIdToYarnResource.get(defaultRPId)
-    val yarnRInfo = ResourceRequestTestHelper.getResources(defaultResource)
-    val allResourceInfo = yarnRInfo.map( rInfo => (rInfo.name -> rInfo.value) ).toMap
+    val yarnRInfo = defaultResource.getResources
+    val allResourceInfo = yarnRInfo.map( rInfo => (rInfo.getName -> rInfo.getValue) ).toMap
     assert(allResourceInfo.get(sparkConf.get(YARN_GPU_DEVICE)).nonEmpty)
     assert(allResourceInfo.get(sparkConf.get(YARN_GPU_DEVICE)).get === 3)
     assert(allResourceInfo.get(sparkConf.get(YARN_FPGA_DEVICE)).nonEmpty)
@@ -325,7 +321,6 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers {
   }
 
   test("gpu/fpga spark resource mapped to custom yarn resource") {
-    assume(isYarnResourceTypesAvailable())
     val gpuCustomName = "custom/gpu"
     val fpgaCustomName = "custom/fpga"
     val originalGpu = sparkConf.get(YARN_GPU_DEVICE)
@@ -343,8 +338,8 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers {
 
       handler.updateResourceRequests()
       val defaultResource = handler.rpIdToYarnResource.get(defaultRPId)
-      val yarnRInfo = ResourceRequestTestHelper.getResources(defaultResource)
-      val allResourceInfo = yarnRInfo.map(rInfo => (rInfo.name -> rInfo.value)).toMap
+      val yarnRInfo = defaultResource.getResources
+      val allResourceInfo = yarnRInfo.map(rInfo => (rInfo.getName -> rInfo.getValue)).toMap
       assert(allResourceInfo.get(gpuCustomName).nonEmpty)
       assert(allResourceInfo.get(gpuCustomName).get === 3)
       assert(allResourceInfo.get(fpgaCustomName).nonEmpty)
@@ -767,7 +762,6 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers {
   }
 
   test("Test YARN container decommissioning") {
-    assume(VersionUtils.isHadoop3)
     val rmClient: AMRMClient[ContainerRequest] = AMRMClient.createAMRMClient()
     val rmClientSpy = spy(rmClient)
     val allocateResponse = mock(classOf[AllocateResponse])
@@ -816,7 +810,7 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers {
 
     // host1 is now in DECOMMISSIONING state
     val httpAddress1 = "host1:420"
-    when(nodeReport.getNodeState).thenReturn(NodeState.valueOf("DECOMMISSIONING"))
+    when(nodeReport.getNodeState).thenReturn(NodeState.DECOMMISSIONING)
     when(nodeReport.getNodeId).thenReturn(nodeId)
     when(nodeId.getHost).thenReturn("host1")
     when(allocateResponse.getUpdatedNodes).thenReturn(nodeReportList)

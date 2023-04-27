@@ -26,6 +26,7 @@ import scala.reflect.runtime.universe.TypeTag
 import scala.util.control.NonFatal
 
 import org.apache.commons.lang3.StringUtils
+import org.apache.commons.text.StringEscapeUtils
 
 import org.apache.spark.TaskContext
 import org.apache.spark.annotation.{DeveloperApi, Stable, Unstable}
@@ -271,7 +272,13 @@ class Dataset[T] private[sql](
   private[sql] def getRows(
       numRows: Int,
       truncate: Int): Seq[Seq[String]] = {
-    val newDf = toDF()
+    val newDf = logicalPlan match {
+      case c: CommandResult =>
+        // Convert to `LocalRelation` and let `ConvertToLocalRelation` do the casting locally to
+        // avoid triggering a job
+        Dataset.ofRows(sparkSession, LocalRelation(c.output, c.rows))
+      case _ => toDF()
+    }
     val castCols = newDf.logicalPlan.output.map { col =>
       // Since binary types in top-level schema fields have a specific format to print,
       // so we do not cast them to strings here.
@@ -289,7 +296,7 @@ class Dataset[T] private[sql](
     schema.fieldNames.map(SchemaUtils.escapeMetaCharacters).toSeq +: data.map { row =>
       row.toSeq.map { cell =>
         val str = cell match {
-          case null => "null"
+          case null => "NULL"
           case binary: Array[Byte] => binary.map("%02X".format(_)).mkString("[", " ", "]")
           case _ =>
             // Escapes meta-characters not to break the `showString` format
@@ -397,6 +404,43 @@ class Dataset[T] private[sql](
       // For Data that has more than "numRows" records
       val rowsString = if (numRows == 1) "row" else "rows"
       sb.append(s"only showing top $numRows $rowsString\n")
+    }
+
+    sb.toString()
+  }
+
+  /**
+   * Compose the HTML representing rows for output
+   *
+   * @param _numRows Number of rows to show
+   * @param truncate If set to more than 0, truncates strings to `truncate` characters and
+   *                   all cells will be aligned right.
+   */
+  private[sql] def htmlString(
+      _numRows: Int,
+      truncate: Int = 20): String = {
+    val numRows = _numRows.max(0).min(ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH - 1)
+    // Get rows represented by Seq[Seq[String]], we may get one more line if it has more data.
+    val tmpRows = getRows(numRows, truncate)
+
+    val hasMoreData = tmpRows.length - 1 > numRows
+    val rows = tmpRows.take(numRows + 1)
+
+    val sb = new StringBuilder
+
+    sb.append("<table border='1'>\n")
+
+    sb.append(rows.head.map(StringEscapeUtils.escapeHtml4)
+      .mkString("<tr><th>", "</th><th>", "</th></tr>\n"))
+    rows.tail.foreach { row =>
+      sb.append(row.map(StringEscapeUtils.escapeHtml4)
+        .mkString("<tr><td>", "</td><td>", "</td></tr>\n"))
+    }
+
+    sb.append("</table>\n")
+
+    if (hasMoreData) {
+      sb.append(s"only showing top $numRows ${if (numRows == 1) "row" else "rows"}\n")
     }
 
     sb.toString()
@@ -2392,8 +2436,8 @@ class Dataset[T] private[sql](
    *   // +----+----+----+----+
    *   // |col0|col1|col2|col3|
    *   // +----+----+----+----+
-   *   // |   1|   2|   3|null|
-   *   // |   5|   4|null|   6|
+   *   // |   1|   2|   3|NULL|
+   *   // |   5|   4|NULL|   6|
    *   // +----+----+----+----+
    *
    *   df2.unionByName(df1, true).show
@@ -2402,8 +2446,8 @@ class Dataset[T] private[sql](
    *   // +----+----+----+----+
    *   // |col1|col0|col3|col2|
    *   // +----+----+----+----+
-   *   // |   4|   5|   6|null|
-   *   // |   2|   1|null|   3|
+   *   // |   4|   5|   6|NULL|
+   *   // |   2|   1|NULL|   3|
    *   // +----+----+----+----+
    * }}}
    *
