@@ -37,8 +37,8 @@ import org.mockito.stubbing.Answer
 import org.scalatest.BeforeAndAfterAll
 import org.scalatestplus.mockito.MockitoSugar
 
-import org.apache.spark.TestUtils.JavaSourceFromString
 import org.apache.spark._
+import org.apache.spark.TestUtils.JavaSourceFromString
 import org.apache.spark.internal.Logging
 import org.apache.spark.rpc.RpcEnv
 import org.apache.spark.util.Utils
