@@ -37,7 +37,7 @@ IDENTIFIER ( str )
 ### Notes
 
 While constant string expressions are not supported you can combine multiple string literals into one by chaining them: ‘hello’ ‘world’ is equivalent to ‘helloworld’.
-This allows parameterization of partial strings such as ‘prefix_’ ${ hivevar:x } ‘_postfix’.
+This allows parameterization of partial strings such as 'prefix_' ${ hivevar:x } '_postfix'.
 
 Different tools support different syntax for text substitution. For example a Notebook may use { { parameter } }.
 
