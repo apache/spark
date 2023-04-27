@@ -21,6 +21,7 @@ import sys
 from typing import Dict, List, Optional, Tuple, cast, overload
 
 from py4j.java_gateway import JVMView, JavaObject
+from pyspark.errors import PySparkRuntimeError
 
 
 class SparkConf:
@@ -182,7 +183,10 @@ class SparkConf:
     ) -> "SparkConf":
         """Set an environment variable to be passed to executors."""
         if (key is not None and pairs is not None) or (key is None and pairs is None):
-            raise RuntimeError("Either pass one key-value pair or a list of pairs")
+            raise PySparkRuntimeError(
+                error_class="KEY_VALUE_PAIR_REQUIRED",
+                message_parameters={},
+            )
         elif key is not None:
             self.set("spark.executorEnv.{}".format(key), cast(str, value))
         elif pairs is not None:

@@ -19,7 +19,7 @@ import json
 import sys
 from typing import TYPE_CHECKING, Any, cast, Dict, List, Optional
 
-from pyspark.errors import StreamingQueryException
+from pyspark.errors import StreamingQueryException, PySparkValueError
 import pyspark.sql.connect.proto as pb2
 from pyspark.sql.streaming.query import (
     StreamingQuery as PySparkStreamingQuery,
@@ -73,7 +73,10 @@ class StreamingQuery:
         cmd = pb2.StreamingQueryCommand()
         if timeout is not None:
             if not isinstance(timeout, (int, float)) or timeout <= 0:
-                raise ValueError("timeout must be a positive integer or float. Got %s" % timeout)
+                raise PySparkValueError(
+                    error_class="VALUE_NOT_POSITIVE",
+                    message_parameters={"arg_name": "timeout", "arg_value": type(timeout).__name__},
+                )
             cmd.await_termination.timeout_ms = int(timeout * 1000)
             terminated = self._execute_streaming_query_cmd(cmd).await_termination.terminated
             return terminated
@@ -145,7 +148,11 @@ class StreamingQuery:
         cmd.exception = True
         exception = self._execute_streaming_query_cmd(cmd).exception
         if exception.HasField("exception_message"):
-            return CapturedStreamingQueryException(exception.exception_message)
+            # Drop the Java StreamingQueryException type info
+            # exception_message maps to the return value of original
+            # StreamingQueryException's toString method
+            msg = exception.exception_message.split(": ", 1)[1]
+            return CapturedStreamingQueryException(msg)
         else:
             return None
 

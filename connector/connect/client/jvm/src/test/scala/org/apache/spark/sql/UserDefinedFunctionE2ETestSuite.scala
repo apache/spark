@@ -30,8 +30,7 @@ import org.apache.spark.sql.connect.client.util.RemoteSparkSession
 import org.apache.spark.sql.functions.{col, udf}
 
 /**
- * All tests in this class requires client UDF artifacts synced with the server. TODO: It means
- * these tests only works with SBT for now.
+ * All tests in this class requires client UDF defined in this test class synced with the server.
  */
 class UserDefinedFunctionE2ETestSuite extends RemoteSparkSession {
   test("Dataset typed filter") {

@@ -809,6 +809,11 @@ class JsonProtocolSuite extends SparkFunSuite {
       JsonProtocol.taskEndReasonFromJson(exceptionFailureJson).asInstanceOf[ExceptionFailure]
     assert(exceptionFailure.description == null)
   }
+
+  test("SPARK-43052: Handle stackTrace with null file name") {
+    val stackTrace = Seq(new StackTraceElement("class", "method", null, -1)).toArray
+    testStackTrace(stackTrace)
+  }
 }
 
 
@@ -902,6 +907,12 @@ private[spark] object JsonProtocolSuite extends Assertions {
     val newReason = JsonProtocol.taskEndReasonFromJson(
       toJsonString(JsonProtocol.taskEndReasonToJson(reason, _)))
     assertEquals(reason, newReason)
+  }
+
+  private def testStackTrace(stackTrace: Array[StackTraceElement]): Unit = {
+    val newStackTrace = JsonProtocol.stackTraceFromJson(
+      toJsonString(JsonProtocol.stackTraceToJson(stackTrace, _)))
+    assertSeqEquals(stackTrace, newStackTrace, assertStackTraceElementEquals)
   }
 
   private def testBlockId(blockId: BlockId): Unit = {

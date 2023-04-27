@@ -25,7 +25,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
 import org.apache.hadoop.fs.permission.FsAction
 import org.apache.hadoop.yarn.api.records._
-import org.apache.hadoop.yarn.util.{ConverterUtils, Records}
+import org.apache.hadoop.yarn.util.Records
 
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.yarn.config._
@@ -73,7 +73,7 @@ private[spark] class ClientDistributedCacheManager() extends Logging {
     amJarRsrc.setType(resourceType)
     val visibility = getVisibility(conf, destPath.toUri(), statCache)
     amJarRsrc.setVisibility(visibility)
-    amJarRsrc.setResource(ConverterUtils.getYarnUrlFromPath(destPath))
+    amJarRsrc.setResource(URL.fromPath(destPath))
     amJarRsrc.setTimestamp(destStatus.getModificationTime())
     amJarRsrc.setSize(destStatus.getLen())
     require(link != null && link.nonEmpty, "You must specify a valid link name.")

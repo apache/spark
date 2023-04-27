@@ -848,6 +848,9 @@ class SparkConnectClient(object):
                 )
         elif method == "tree_string":
             req.tree_string.plan.CopyFrom(cast(pb2.Plan, kwargs.get("plan")))
+            level = kwargs.get("level")
+            if level and isinstance(level, int):
+                req.tree_string.level = level
         elif method == "is_local":
             req.is_local.plan.CopyFrom(cast(pb2.Plan, kwargs.get("plan")))
         elif method == "is_streaming":

@@ -21,8 +21,7 @@ import scala.collection.JavaConverters._
 
 import com.fasterxml.jackson.core.util.MinimalPrettyPrinter
 
-import org.apache.spark.util.JsonProtocol.toJsonString
-import org.apache.spark.util.Utils
+import org.apache.spark.util.JsonUtils.toJsonString
 
 private[spark] object ErrorMessageFormat extends Enumeration {
   val PRETTY, MINIMAL, STANDARD = Value
@@ -34,7 +33,7 @@ private[spark] object ErrorMessageFormat extends Enumeration {
  */
 private[spark] object SparkThrowableHelper {
   val errorReader = new ErrorClassesJsonReader(
-    Seq(Utils.getSparkClassLoader.getResource("error/error-classes.json")))
+    Seq(getClass.getClassLoader.getResource("error/error-classes.json")))
 
   def getMessage(
       errorClass: String,
