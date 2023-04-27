@@ -124,8 +124,8 @@ trait StreamingQuery {
    * the query has terminated with an exception, then the exception will be thrown. Otherwise, it
    * returns whether the query has terminated or not within the `timeoutMs` milliseconds.
    *
-   * If the query has terminated, then all subsequent calls to this method will return
-   * `true` immediately.
+   * If the query has terminated, then all subsequent calls to this method will return `true`
+   * immediately.
    *
    * @since 3.5.0
    */
@@ -186,18 +186,12 @@ class RemoteStreamingQuery(
   }
 
   override def awaitTermination(): Unit = {
-    val awaitTerminationCmd = StreamingQueryCommand.AwaitTerminationCommand
-      .newBuilder()
-      .build()
-    executeQueryCmd(_.setAwaitTermination(awaitTerminationCmd))
+    executeQueryCmd(_.getAwaitTerminationBuilder.build())
   }
 
   override def awaitTermination(timeoutMs: Long): Boolean = {
-    val awaitTerminationCmd = StreamingQueryCommand.AwaitTerminationCommand
-      .newBuilder()
-      .setTimeoutMs(timeoutMs)
-      .build()
-    executeQueryCmd(_.setAwaitTermination(awaitTerminationCmd)).getAwaitTermination.getTerminated
+    executeQueryCmd(
+      _.getAwaitTerminationBuilder.setTimeoutMs(timeoutMs)).getAwaitTermination.getTerminated
   }
 
   override def status: StreamingQueryStatus = {
