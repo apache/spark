@@ -47,7 +47,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{AppendColumns, CoGroup, Coll
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CharVarcharUtils}
 import org.apache.spark.sql.connect.artifact.SparkConnectArtifactManager
 import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, InvalidPlanInput, LiteralValueProtoConverter, StorageLevelProtoConverter, UdfPacket}
-import org.apache.spark.sql.connect.config.Connect.{CONNECT_GRPC_ARROW_MAX_BATCH_SIZE, CONNECT_JVM_STACK_TRACE_MAX_SIZE}
+import org.apache.spark.sql.connect.config.Connect.CONNECT_GRPC_ARROW_MAX_BATCH_SIZE
 import org.apache.spark.sql.connect.plugin.SparkConnectPluginRegistry
 import org.apache.spark.sql.connect.service.{SparkConnectService, SparkConnectStreamHandler}
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -2333,13 +2333,12 @@ class SparkConnectPlanner(val session: SparkSession) {
           val exception_builder = StreamingQueryCommandResult.ExceptionResult
             .newBuilder()
           exception_builder
-            .setExceptionMessage(SparkConnectService.abbreviateErrorMessage(e.toString))
+            .setExceptionMessage(e.toString)
             .setErrorClass(e.getErrorClass)
 
-          val maxSize = SparkEnv.get.conf.get(CONNECT_JVM_STACK_TRACE_MAX_SIZE)
           val stackTrace = Option(ExceptionUtils.getStackTrace(e))
           stackTrace.foreach { s =>
-            exception_builder.setStackTrace(StringUtils.abbreviate(s, maxSize))
+            exception_builder.setStackTrace(s)
           }
           respBuilder.setException(exception_builder.build())
         }

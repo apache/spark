@@ -334,10 +334,8 @@ object SparkConnectService {
     }
   }
 
-  def abbreviateErrorMessage(msg: String): String = StringUtils.abbreviate(msg, 2048)
-
   def extractErrorMessage(st: Throwable): String = {
-    val message = abbreviateErrorMessage(st.getMessage)
+    val message = StringUtils.abbreviate(st.getMessage, 2048)
     if (message != null) {
       message
     } else {
