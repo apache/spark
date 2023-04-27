@@ -3033,13 +3033,13 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         ['i_like_pancakes', 'id', 'inputFiles', 'intersect', 'intersectAll', 'isEmpty', 'isLocal']
 
         Try to add a column named 'id2'.
-        
+
         >>> df = df.withColumn('id2', lit(3))
         >>> [attr for attr in dir(df) if attr[0] == 'i'][:7] # result includes id2 and sorted
         ['i_like_pancakes', 'id', 'id2', 'inputFiles', 'intersect', 'intersectAll', 'isEmpty']
         """
-        attrs = list(super().__dir__())
-        attrs.extend(attr for attr in self.columns if attr not in attrs)
+        attrs = set(super().__dir__())
+        attrs.update(self.columns)
         return sorted(attrs)
 
     @overload
