@@ -158,7 +158,7 @@ class UserDefinedFunction:
         )
         self.evalType = evalType
         self.deterministic = deterministic
-        self.is_barrier = _is_barrier(func)
+        self._is_barrier = _is_barrier(func)
 
     def _build_common_inline_user_defined_function(
         self, *cols: "ColumnOrName"
@@ -173,7 +173,7 @@ class UserDefinedFunction:
             eval_type=self.evalType,
             func=self.func,
             python_ver="%d.%d" % sys.version_info[:2],
-            is_barrier=self.is_barrier,
+            is_barrier=self._is_barrier,
         )
         return CommonInlineUserDefinedFunction(
             function_name=self._name,
@@ -217,7 +217,7 @@ class UserDefinedFunction:
         wrapper.returnType = self.returnType  # type: ignore[attr-defined]
         wrapper.evalType = self.evalType  # type: ignore[attr-defined]
         wrapper.deterministic = self.deterministic  # type: ignore[attr-defined]
-        wrapper.is_barrier = self.is_barrier  # type: ignore[attr-defined]
+        wrapper._is_barrier = self._is_barrier  # type: ignore[attr-defined]
         wrapper.asNondeterministic = functools.wraps(  # type: ignore[attr-defined]
             self.asNondeterministic
         )(lambda: self.asNondeterministic()._wrapped())

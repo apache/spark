@@ -55,9 +55,9 @@ __all__ = ["UDFRegistration"]
 def _is_barrier(obj: Any) -> bool:
     return (
         obj is not None
-        and hasattr(obj, "is_barrier")
-        and isinstance(obj.is_barrier, bool)
-        and obj.is_barrier
+        and hasattr(obj, "_is_barrier")
+        and isinstance(obj._is_barrier, bool)
+        and obj._is_barrier
     )
 
 
@@ -202,7 +202,7 @@ def _create_arrow_py_udf(regular_udf):  # type: ignore
     pudf.func = f
     pudf.returnType = return_type
     pudf.evalType = regular_udf.evalType
-    pudf.is_barrier = _is_barrier(regular_udf)
+    pudf._is_barrier = _is_barrier(regular_udf)
     return pudf
 
 
@@ -258,7 +258,7 @@ class UserDefinedFunction:
         )
         self.evalType = evalType
         self.deterministic = deterministic
-        self.is_barrier = _is_barrier(func)
+        self._is_barrier = _is_barrier(func)
 
     @property
     def returnType(self) -> DataType:
@@ -489,7 +489,7 @@ class UserDefinedFunction:
         wrapper.returnType = self.returnType  # type: ignore[attr-defined]
         wrapper.evalType = self.evalType  # type: ignore[attr-defined]
         wrapper.deterministic = self.deterministic  # type: ignore[attr-defined]
-        wrapper.is_barrier = self.is_barrier  # type: ignore[attr-defined]
+        wrapper._is_barrier = self._is_barrier  # type: ignore[attr-defined]
         wrapper.asNondeterministic = functools.wraps(  # type: ignore[attr-defined]
             self.asNondeterministic
         )(lambda: self.asNondeterministic()._wrapped())
