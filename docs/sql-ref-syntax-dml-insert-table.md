@@ -26,8 +26,8 @@ The `INSERT` statement inserts new rows into a table or overwrites the existing 
 ### Syntax
 
 ```sql
-INSERT INTO [ TABLE ] table_identifier [ partition_spec ] [ ( column_list ) ]
-  { VALUES ( { value | NULL } [ , ... ] ) [ , ( ... ) ] | query }
+INSERT [ INTO | OVERWRITE ] [ TABLE ] table_identifier [ partition_spec ] [ ( column_list ) ]
+    { VALUES ( { value | NULL } [ , ... ] ) [ , ( ... ) ] | query }
 
 INSERT INTO [ TABLE ] table_identifier REPLACE WHERE boolean_expression query
 ```
