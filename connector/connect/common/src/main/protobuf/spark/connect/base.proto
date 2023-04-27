@@ -565,7 +565,7 @@ message ArtifactStatusesRequest {
   // The server is expected to maintain the hierarchy of files as defined by their name. (i.e
   // The relative path of the file on the server's filesystem will be the same as the name of
   // the provided artifact)
-  repeated string name = 4;
+  repeated string names = 4;
 }
 
 // Response to checking artifact statuses.

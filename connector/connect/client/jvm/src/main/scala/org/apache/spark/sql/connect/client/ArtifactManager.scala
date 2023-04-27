@@ -114,7 +114,7 @@ class ArtifactManager(
       .newBuilder()
       .setUserContext(userContext)
       .setSessionId(sessionId)
-      .addAllName(Arrays.asList(artifactName))
+      .addAllNames(Arrays.asList(artifactName))
       .build()
     val statuses = bstub.artifactStatus(request).getStatusesMap
     if (statuses.containsKey(artifactName)) {

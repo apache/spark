@@ -38,7 +38,7 @@ class SparkConnectArtifactStatusesHandler(
 
   def handle(request: proto.ArtifactStatusesRequest): Unit = {
     val builder = proto.ArtifactStatusesResponse.newBuilder()
-    request.getNameList().iterator().asScala.foreach { name =>
+    request.getNamesList().iterator().asScala.foreach { name =>
       val status = proto.ArtifactStatusesResponse.ArtifactStatus.newBuilder()
       val exists = if (name.startsWith("cache/")) {
         cacheExists(

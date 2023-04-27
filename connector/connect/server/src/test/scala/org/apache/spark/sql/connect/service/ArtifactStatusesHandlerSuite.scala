@@ -55,7 +55,7 @@ class ArtifactStatusesHandlerSuite extends SharedSparkSession with ResourceHelpe
       .newBuilder()
       .setUserContext(context)
       .setSessionId("abc")
-      .addAllName(names.asJava)
+      .addAllNames(names.asJava)
       .build()
     handler.handle(request)
     ThreadUtils.awaitResult(promise.future, 5.seconds)
