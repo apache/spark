@@ -24,7 +24,7 @@ try:
 except ImportError:
     have_torch = False
 
-from pyspark.ml.torch.distributor import _get_spark_partition_data_loader
+from pyspark.ml.torch.distributor import TorchDistributor, _get_spark_partition_data_loader
 from pyspark.sql import SparkSession
 from pyspark.ml.linalg import Vectors
 
