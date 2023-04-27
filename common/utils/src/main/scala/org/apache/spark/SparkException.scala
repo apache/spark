@@ -24,8 +24,6 @@ import java.util.ConcurrentModificationException
 
 import scala.collection.JavaConverters._
 
-import org.apache.hadoop.fs.FileAlreadyExistsException
-
 class SparkException(
     message: String,
     cause: Throwable,
@@ -207,21 +205,6 @@ private[spark] class SparkDateTimeException(
 
   override def getErrorClass: String = errorClass
   override def getQueryContext: Array[QueryContext] = context
-}
-
-/**
- * Hadoop file already exists exception thrown from Spark with an error class.
- */
-private[spark] class SparkFileAlreadyExistsException(
-    errorClass: String,
-    messageParameters: Map[String, String])
-  extends FileAlreadyExistsException(
-    SparkThrowableHelper.getMessage(errorClass, messageParameters))
-  with SparkThrowable {
-
-  override def getMessageParameters: java.util.Map[String, String] = messageParameters.asJava
-
-  override def getErrorClass: String = errorClass
 }
 
 /**
