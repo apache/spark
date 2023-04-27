@@ -25,7 +25,7 @@ import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.Random
 
-import org.apache.spark.{SparkConf, SparkFunSuite, SparkRuntimeException}
+import org.apache.spark.{SparkConf, SparkFunSuite, SparkRuntimeException, SparkUnsupportedOperationException}
 import org.apache.spark.serializer.{JavaSerializer, KryoSerializer}
 import org.apache.spark.sql.{RandomDataGenerator, Row}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, ScalaReflection, ScroogeLikeExample}
@@ -457,6 +457,19 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         checkEvaluationWithoutCodegen(lambda, internalRow.get(0, schema(0).dataType), internalRow)
       }
     }
+  }
+
+  test("UnresolvedMapObjects should support interpreted execution") {
+    val inputExpr = Literal(1)
+    val func = (expr: Expression) => expr
+    val customCls: Option[Class[_]] = None
+
+    checkError(
+      exception = intercept[SparkUnsupportedOperationException] {
+        UnresolvedMapObjects(func, inputExpr, customCls).dataType
+      },
+      errorClass = "UNRESOLVED_CUSTOM_CLASS")
+
   }
 
   implicit private def mapIntStrEncoder = ExpressionEncoder[Map[Int, String]]()
