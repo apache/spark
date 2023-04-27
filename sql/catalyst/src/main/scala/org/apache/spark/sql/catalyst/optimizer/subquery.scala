@@ -595,6 +595,26 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] with AliasHelpe
         // of a join hint
         val joinHint = JoinHint(None, subHint)
 
+        def queryOutputFoldable(list: Seq[NamedExpression]): Boolean = {
+          trimAliases(list.filter(p => p.exprId.equals(query.output.head.exprId)).head).foldable
+        }
+        // SPARK-43308: We can judge whether the column returned by subquery is
+        // foldable (already handle by [[NullPropagation]]). If it is, it means that
+        // the result of this value has no substantial relationship with the data,
+        // and the presence or absence of data will not affect this column. So in
+        // this case, this column can be extracted from the JOIN to ensure that this
+        // value can be obtained regardless of whether the data JOIN is successful or not.
+        lazy val resultFoldable = {
+          query match {
+            case Project(expressions, _) =>
+              queryOutputFoldable(expressions)
+            case Aggregate(_, expressions, _) =>
+              queryOutputFoldable(expressions)
+            case _ =>
+              false
+          }
+        }
+
         val resultWithZeroTups = evalSubqueryOnZeroTups(query)
         lazy val planWithoutCountBug = Project(
           currentChild.output :+ origOutput,
@@ -607,6 +627,13 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] with AliasHelpe
           // CASE 1: Subquery guaranteed not to have the COUNT bug because it evaluates to NULL
           // with zero tuples.
           planWithoutCountBug
+        } else if (mayHaveCountBug.getOrElse(false) && resultFoldable &&
+          !conf.getConf(SQLConf.DECORRELATE_SUBQUERY_LEGACY_INCORRECT_COUNT_HANDLING_ENABLED)) {
+          val alias = Alias(resultWithZeroTups.get, origOutput.name)()
+          subqueryAttrMapping += (origOutput -> alias.toAttribute)
+          Project(
+            currentChild.output :+ alias,
+            Join(currentChild, query, LeftOuter, conditions.reduceOption(And), joinHint))
         } else if (!mayHaveCountBug.getOrElse(true) &&
           !conf.getConf(SQLConf.DECORRELATE_SUBQUERY_LEGACY_INCORRECT_COUNT_HANDLING_ENABLED)) {
           // Subquery guaranteed not to have the COUNT bug because it had non-empty GROUP BY clause
