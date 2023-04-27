@@ -287,7 +287,7 @@ class ContextTests(unittest.TestCase):
             with self.assertRaises(Exception) as context:
                 sc.range(2).foreach(lambda _: SparkContext())
             self.assertIn(
-                "SparkContext should only be created and accessed on the driver.",
+                "CONTEXT_ONLY_VALID_ON_DRIVER",
                 str(context.exception),
             )
 

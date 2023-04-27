@@ -1087,18 +1087,30 @@ class StreamingQueryCommandResult(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
         EXCEPTION_MESSAGE_FIELD_NUMBER: builtins.int
+        ERROR_CLASS_FIELD_NUMBER: builtins.int
         exception_message: builtins.str
-        """Exception message as string"""
+        """(Optional) Exception message as string, maps to the return value of original
+        StreamingQueryException's toString method
+        """
+        error_class: builtins.str
+        """(Optional) Exception error class as string
+        TODO(SPARK-43206): Add stack trace
+        """
         def __init__(
             self,
             *,
             exception_message: builtins.str | None = ...,
+            error_class: builtins.str | None = ...,
         ) -> None: ...
         def HasField(
             self,
             field_name: typing_extensions.Literal[
+                "_error_class",
+                b"_error_class",
                 "_exception_message",
                 b"_exception_message",
+                "error_class",
+                b"error_class",
                 "exception_message",
                 b"exception_message",
             ],
@@ -1106,12 +1118,21 @@ class StreamingQueryCommandResult(google.protobuf.message.Message):
         def ClearField(
             self,
             field_name: typing_extensions.Literal[
+                "_error_class",
+                b"_error_class",
                 "_exception_message",
                 b"_exception_message",
+                "error_class",
+                b"error_class",
                 "exception_message",
                 b"exception_message",
             ],
         ) -> None: ...
+        @typing.overload
+        def WhichOneof(
+            self, oneof_group: typing_extensions.Literal["_error_class", b"_error_class"]
+        ) -> typing_extensions.Literal["error_class"] | None: ...
+        @typing.overload
         def WhichOneof(
             self,
             oneof_group: typing_extensions.Literal["_exception_message", b"_exception_message"],
