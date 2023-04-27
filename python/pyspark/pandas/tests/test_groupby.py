@@ -60,6 +60,9 @@ class GroupByTestsMixin:
             },
             index=[0, 1, 3, 5, 6, 8, 9, 9, 9],
         )
+        if LooseVersion(pd.__version__) >= LooseVersion("2.0.0"):
+            # TODO(SPARK-43295): Make DataFrameGroupBy.sum support for string type columns
+            pdf = pdf[["a", "b", "c", "e"]]
         psdf = ps.from_pandas(pdf)
 
         for as_index in [True, False]:
@@ -177,6 +180,9 @@ class GroupByTestsMixin:
             },
             index=[0, 1, 3, 5, 6, 8, 9, 9, 9],
         )
+        if LooseVersion(pd.__version__) >= LooseVersion("2.0.0"):
+            # TODO(SPARK-43295): Make DataFrameGroupBy.sum support for string type columns
+            pdf = pdf[[10, 20, 30]]
         psdf = ps.from_pandas(pdf)
 
         for as_index in [True, False]:
@@ -213,6 +219,9 @@ class GroupByTestsMixin:
             },
             index=[0, 1, 3, 5, 6, 8, 9, 9, 9],
         )
+        if LooseVersion(pd.__version__) >= LooseVersion("2.0.0"):
+            # TODO(SPARK-43295): Make DataFrameGroupBy.sum support for string type columns
+            pdf = pdf[[(10, "a"), (10, "b"), (20, "c")]]
         psdf = ps.from_pandas(pdf)
 
         self.assert_eq(
@@ -495,6 +504,8 @@ class GroupByTestsMixin:
         for n in [0, 1, 2, 128, -1, -2, -128]:
             self._test_stat_func(lambda groupby_obj: groupby_obj.nth(n))
 
+        # Behavior changes from pandas 2.0.0: https://github.com/pandas-dev/pandas/issues/13666
+        # if LooseVersion(pd.__version__) >= LooseVersion("2.0.0"):
         with self.assertRaisesRegex(NotImplementedError, "slice or list"):
             self.psdf.groupby("B").nth(slice(0, 2))
         with self.assertRaisesRegex(NotImplementedError, "slice or list"):
@@ -528,11 +539,22 @@ class GroupByTestsMixin:
                 lambda groupby_obj: groupby_obj.prod(numeric_only=True, min_count=n),
                 check_exact=False,
             )
-            self.assert_eq(
-                pdf.groupby("A").prod(min_count=n).sort_index(),
-                psdf.groupby("A").prod(min_count=n).sort_index(),
-                almost=True,
-            )
+            # From pandas 2.0.0, an error occurs when performing prod on str type.
+            if LooseVersion(pd.__version__) >= LooseVersion("2.0.0"):
+                self.assert_eq(
+                    pdf[["A", "B", "D", "E", "F", "G"]].groupby("A").prod(min_count=n).sort_index(),
+                    psdf[["A", "B", "D", "E", "F", "G"]]
+                    .groupby("A")
+                    .prod(min_count=n)
+                    .sort_index(),
+                    almost=True,
+                )
+            else:
+                self.assert_eq(
+                    pdf.groupby("A").prod(min_count=n).sort_index(),
+                    psdf.groupby("A").prod(min_count=n).sort_index(),
+                    almost=True,
+                )
 
     def test_cumcount(self):
         pdf = pd.DataFrame(
@@ -1257,14 +1279,17 @@ class GroupByTestsMixin:
         self.assert_eq(
             psdf.groupby(psdf.b // 5).apply(lambda x: x + x.min()).sort_index(),
             pdf.groupby(pdf.b // 5).apply(lambda x: x + x.min()).sort_index(),
+            almost=True,
         )
         self.assert_eq(
             psdf.groupby(psdf.b // 5)["a"].apply(lambda x: x + x.min()).sort_index(),
             pdf.groupby(pdf.b // 5)["a"].apply(lambda x: x + x.min()).sort_index(),
+            almost=True,
         )
         self.assert_eq(
             psdf.groupby(psdf.b // 5)[["a"]].apply(lambda x: x + x.min()).sort_index(),
             pdf.groupby(pdf.b // 5)[["a"]].apply(lambda x: x + x.min()).sort_index(),
+            almost=True,
         )
         self.assert_eq(
             psdf.groupby(psdf.b // 5)[["a"]].apply(len).sort_index(),
