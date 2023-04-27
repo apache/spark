@@ -3796,11 +3796,6 @@
       "Couldn't find a primary constructor on <cls>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2022" : {
-    "message" : [
-      "Unsupported natural join type <joinType>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2023" : {
     "message" : [
       "Unresolved encoder expected, but <attr> was found."
