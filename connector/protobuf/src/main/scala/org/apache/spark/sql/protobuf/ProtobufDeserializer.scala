@@ -69,9 +69,10 @@ private[sql] class ProtobufDeserializer(
 
   def deserialize(data: Message): Option[InternalRow] = converter(data)
 
-  // JsonFormatter with original field names and without extra whitespace.
+  // JsonFormatter use to convert Any fields (if the option is enabled)
+  // This keeps original field names and does not include any extra whitespace in JSON.
   // This is used to convert Any fields to json (if configured in Protobuf options).
-  // If the runtime type for Any field is not about in the registry, it throws an exception.
+  // If the runtime type for Any field is not found in the registry, it throws an exception.
   private val jsonPrinter = JsonFormat.printer
     .omittingInsignificantWhitespace()
     .preservingProtoFieldNames()
