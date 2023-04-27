@@ -15,10 +15,22 @@
 # limitations under the License.
 #
 import sys
-from collections import Counter
-from typing import List, Optional, Type, Union, no_type_check, overload, TYPE_CHECKING
-from warnings import catch_warnings, simplefilter, warn
+import itertools
+from typing import (
+    Any,
+    Callable,
+    List,
+    Optional,
+    Type,
+    Union,
+    cast,
+    no_type_check,
+    overload,
+    TYPE_CHECKING,
+)
+from warnings import warn
 
+from pyspark.errors import UnsupportedOperationException
 from pyspark.rdd import _load_from_socket
 from pyspark.sql.pandas.serializers import ArrowCollectSerializer
 from pyspark.sql.types import (
@@ -30,18 +42,23 @@ from pyspark.sql.types import (
     FloatType,
     DoubleType,
     BooleanType,
+    ArrayType,
     MapType,
     TimestampType,
     TimestampNTZType,
     DayTimeIntervalType,
+    StructField,
     StructType,
     DataType,
+    Row,
+    _create_row,
 )
 from pyspark.sql.utils import is_timestamp_ntz_preferred
 from pyspark.traceback_utils import SCCallSiteSync
 
 if TYPE_CHECKING:
     import numpy as np
+    import pandas as pd
     import pyarrow as pa
     from py4j.java_gateway import JavaObject
 
@@ -88,12 +105,11 @@ class PandasConversionMixin:
 
         require_minimum_pandas_version()
 
-        import numpy as np
         import pandas as pd
-        from pandas.core.dtypes.common import is_timedelta64_dtype
 
         jconf = self.sparkSession._jconf
         timezone = jconf.sessionLocalTimeZone()
+        struct_in_pandas_as = jconf.pandasStructHandlingMode()
 
         if jconf.arrowPySparkEnabled():
             use_arrow = True
@@ -131,10 +147,6 @@ class PandasConversionMixin:
             # of PyArrow is found, if 'spark.sql.execution.arrow.pyspark.enabled' is enabled.
             if use_arrow:
                 try:
-                    from pyspark.sql.pandas.types import (
-                        _check_series_localize_timestamps,
-                        _convert_map_items_to_dict,
-                    )
                     import pyarrow
 
                     self_destruct = jconf.arrowPySparkSelfDestructEnabled()
@@ -164,16 +176,27 @@ class PandasConversionMixin:
                         pdf = table.rename_columns(
                             [f"col_{i}" for i in range(table.num_columns)]
                         ).to_pandas(**pandas_options)
+
                         # Rename back to the original column names.
                         pdf.columns = self.columns
-                        for field in self.schema:
-                            if isinstance(field.dataType, TimestampType):
-                                pdf[field.name] = _check_series_localize_timestamps(
-                                    pdf[field.name], timezone
-                                )
-                            elif isinstance(field.dataType, MapType):
-                                pdf[field.name] = _convert_map_items_to_dict(pdf[field.name])
-                        return pdf
+
+                        error_on_duplicated_field_names = False
+                        if struct_in_pandas_as == "legacy":
+                            error_on_duplicated_field_names = True
+                            struct_in_pandas_as = "dict"
+
+                        return pd.concat(
+                            [
+                                PandasConversionMixin._create_converter(
+                                    field,
+                                    timezone=timezone,
+                                    struct_in_pandas=struct_in_pandas_as,
+                                    error_on_duplicated_field_names=error_on_duplicated_field_names,
+                                )(pser)
+                                for (_, pser), field in zip(pdf.items(), self.schema.fields)
+                            ],
+                            axis="columns",
+                        )
                     else:
                         tmp_column_names = ["col_{}".format(i) for i in range(len(self.columns))]
                         corrected_panda_types = {}
@@ -206,75 +229,21 @@ class PandasConversionMixin:
 
         # Below is toPandas without Arrow optimization.
         pdf = pd.DataFrame.from_records(self.collect(), columns=self.columns)
-        column_counter = Counter(self.columns)
 
-        corrected_dtypes: List[Optional[Type]] = [None] * len(self.schema)
-        for index, field in enumerate(self.schema):
-            # We use `iloc` to access columns with duplicate column names.
-            if column_counter[field.name] > 1:
-                pandas_col = pdf.iloc[:, index]
-            else:
-                pandas_col = pdf[field.name]
-
-            pandas_type = PandasConversionMixin._to_corrected_pandas_type(field.dataType)
-            # SPARK-21766: if an integer field is nullable and has null values, it can be
-            # inferred by pandas as a float column. If we convert the column with NaN back
-            # to integer type e.g., np.int16, we will hit an exception. So we use the
-            # pandas-inferred float type, rather than the corrected type from the schema
-            # in this case.
-            if pandas_type is not None and not (
-                isinstance(field.dataType, IntegralType)
-                and field.nullable
-                and pandas_col.isnull().any()
-            ):
-                corrected_dtypes[index] = pandas_type
-            # Ensure we fall back to nullable numpy types.
-            if isinstance(field.dataType, IntegralType) and pandas_col.isnull().any():
-                corrected_dtypes[index] = np.float64
-            if isinstance(field.dataType, BooleanType) and pandas_col.isnull().any():
-                corrected_dtypes[index] = object
-
-        df = pd.DataFrame()
-        for index, t in enumerate(corrected_dtypes):
-            column_name = self.schema[index].name
-
-            # We use `iloc` to access columns with duplicate column names.
-            if column_counter[column_name] > 1:
-                series = pdf.iloc[:, index]
-            else:
-                series = pdf[column_name]
-
-            # No need to cast for non-empty series for timedelta. The type is already correct.
-            should_check_timedelta = is_timedelta64_dtype(t) and len(pdf) == 0
-
-            if (t is not None and not is_timedelta64_dtype(t)) or should_check_timedelta:
-                series = series.astype(t, copy=False)
-
-            with catch_warnings():
-                from pandas.errors import PerformanceWarning
-
-                simplefilter(action="ignore", category=PerformanceWarning)
-                # `insert` API makes copy of data,
-                # we only do it for Series of duplicate column names.
-                # `pdf.iloc[:, index] = pdf.iloc[:, index]...` doesn't always work
-                # because `iloc` could return a view or a copy depending by context.
-                if column_counter[column_name] > 1:
-                    df.insert(index, column_name, series, allow_duplicates=True)
-                else:
-                    df[column_name] = series
-
-        if timezone is None:
-            return df
-        else:
-            from pyspark.sql.pandas.types import _check_series_convert_timestamps_local_tz
-
-            for field in self.schema:
-                # TODO: handle nested timestamps, such as ArrayType(TimestampType())?
-                if isinstance(field.dataType, TimestampType):
-                    df[field.name] = _check_series_convert_timestamps_local_tz(
-                        df[field.name], timezone
-                    )
-            return df
+        return pd.concat(
+            [
+                PandasConversionMixin._create_converter(
+                    field,
+                    timezone=timezone,
+                    struct_in_pandas=(
+                        "row" if struct_in_pandas_as == "legacy" else struct_in_pandas_as
+                    ),
+                    error_on_duplicated_field_names=False,
+                )(pser)
+                for (_, pser), field in zip(pdf.items(), self.schema.fields)
+            ],
+            axis="columns",
+        )
 
     @staticmethod
     def _to_corrected_pandas_type(dt: DataType) -> Optional[Type]:
@@ -366,6 +335,165 @@ class PandasConversionMixin:
 
         # Re-order the batch list using the correct order
         return [batches[i] for i in batch_order]
+
+    @staticmethod
+    def _create_converter(
+        field: StructField,
+        *,
+        timezone: Optional[str],
+        struct_in_pandas: str,
+        error_on_duplicated_field_names: bool,
+    ) -> Callable[["pd.Series"], "pd.Series"]:
+        import numpy as np
+        import pandas as pd
+        from pandas.core.dtypes.common import is_datetime64tz_dtype
+        from pyspark.sql.pandas.types import _check_series_convert_timestamps_local_tz
+
+        pandas_type = PandasConversionMixin._to_corrected_pandas_type(field.dataType)
+
+        if pandas_type is not None:
+            # SPARK-21766: if an integer field is nullable and has null values, it can be
+            # inferred by pandas as a float column. If we convert the column with NaN back
+            # to integer type e.g., np.int16, we will hit an exception. So we use the
+            # pandas-inferred float type, rather than the corrected type from the schema
+            # in this case.
+            if isinstance(field.dataType, IntegralType) and field.nullable:
+
+                def correct_dtype(pser: pd.Series) -> pd.Series:
+                    if pser.isnull().any():
+                        return pser.astype(np.float64, copy=False)
+                    else:
+                        return pser.astype(pandas_type, copy=False)
+
+            elif isinstance(field.dataType, BooleanType) and field.nullable:
+
+                def correct_dtype(pser: pd.Series) -> pd.Series:
+                    if pser.isnull().any():
+                        return pser.astype(object, copy=False)
+                    else:
+                        return pser.astype(pandas_type, copy=False)
+
+            elif isinstance(field.dataType, TimestampType):
+                assert timezone is not None
+
+                def correct_dtype(pser: pd.Series) -> pd.Series:
+                    if not is_datetime64tz_dtype(pser.dtype):
+                        pser = pser.astype(np.dtype("datetime64[ns]"), copy=False)
+                    return _check_series_convert_timestamps_local_tz(
+                        pser, timezone=cast(str, timezone)
+                    )
+
+            elif isinstance(field.dataType, TimestampNTZType):
+
+                def correct_dtype(pser: pd.Series) -> pd.Series:
+                    return pser.astype(np.dtype("datetime64[ns]"), copy=False)
+
+            elif isinstance(field.dataType, DayTimeIntervalType):
+
+                def correct_dtype(pser: pd.Series) -> pd.Series:
+                    return pser.astype(np.dtype("timedelta64[ns]"), copy=False)
+
+            else:
+
+                def correct_dtype(pser: pd.Series) -> pd.Series:
+                    return pser.astype(pandas_type, copy=False)
+
+            return correct_dtype
+
+        def _converter(dt: DataType) -> Optional[Callable[[Any], Any]]:
+
+            if isinstance(dt, ArrayType):
+                _element_conv = _converter(dt.elementType)
+                if _element_conv is None:
+                    return None
+
+                def convert_array(value: Any) -> Any:
+                    if value is None:
+                        return None
+                    elif isinstance(value, np.ndarray):
+                        return np.array([_element_conv(v) for v in value])  # type: ignore[misc]
+                    else:
+                        assert isinstance(value, list)
+                        return [_element_conv(v) for v in value]  # type: ignore[misc]
+
+                return convert_array
+
+            elif isinstance(dt, MapType):
+                _key_conv = _converter(dt.keyType) or (lambda x: x)
+                _value_conv = _converter(dt.valueType) or (lambda x: x)
+
+                def convert_map(value: Any) -> Any:
+                    if value is None:
+                        return None
+                    elif isinstance(value, list):
+                        return {_key_conv(k): _value_conv(v) for k, v in value}
+                    else:
+                        assert isinstance(value, dict)
+                        return {_key_conv(k): _value_conv(v) for k, v in value.items()}
+
+                return convert_map
+
+            elif isinstance(dt, StructType):
+
+                field_names = dt.names
+
+                if error_on_duplicated_field_names and len(set(field_names)) != len(field_names):
+                    raise UnsupportedOperationException(
+                        error_class="DUPLICATED_FIELD_NAME_IN_ARROW_STRUCT",
+                        message_parameters={"field_names": str(field_names)},
+                    )
+
+                dedup_field_names = _dedup_names(field_names)
+
+                field_convs = [_converter(f.dataType) or (lambda x: x) for f in dt.fields]
+
+                if struct_in_pandas == "row":
+
+                    def convert_struct_as_row(value: Any) -> Any:
+                        if value is None:
+                            return None
+                        elif isinstance(value, dict):
+                            _values = [
+                                field_convs[i](value.get(name, None))
+                                for i, name in enumerate(dedup_field_names)
+                            ]
+                            return _create_row(field_names, _values)
+                        else:
+                            assert isinstance(value, Row)
+                            _values = [field_convs[i](value[i]) for i, name in enumerate(value)]
+                            return _create_row(field_names, _values)
+
+                    return convert_struct_as_row
+
+                elif struct_in_pandas == "dict":
+
+                    def convert_struct_as_dict(value: Any) -> Any:
+                        if value is None:
+                            return None
+                        elif isinstance(value, dict):
+                            return {
+                                name: field_convs[i](value.get(name, None))
+                                for i, name in enumerate(dedup_field_names)
+                            }
+                        else:
+                            assert isinstance(value, Row)
+                            return {
+                                dedup_field_names[i]: field_convs[i](v) for i, v in enumerate(value)
+                            }
+
+                    return convert_struct_as_dict
+
+                else:
+                    raise ValueError(f"Unknown value for `struct_in_pandas`: {struct_in_pandas}")
+
+            else:
+                return None
+
+        conv = _converter(field.dataType)
+        if conv is not None:
+            return lambda pser: pser.apply(conv)  # type: ignore[return-value]
+        else:
+            return lambda pser: pser
 
 
 class SparkConversionMixin:
@@ -629,6 +757,25 @@ class SparkConversionMixin:
         df = DataFrame(jdf, self)
         df._schema = schema
         return df
+
+
+def _dedup_names(names: List[str]) -> List[str]:
+    if len(set(names)) == len(names):
+        return names
+    else:
+
+        def _gen_dedup(_name: str) -> Callable[[], str]:
+            _i = itertools.count()
+            return lambda: f"{_name}_{next(_i)}"
+
+        def _gen_identity(_name: str) -> Callable[[], str]:
+            return lambda: _name
+
+        gen_new_name = {
+            name: _gen_dedup(name) if len(list(group)) > 1 else _gen_identity(name)
+            for name, group in itertools.groupby(sorted(names))
+        }
+        return [gen_new_name[name]() for name in names]
 
 
 def _test() -> None:

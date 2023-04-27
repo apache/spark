@@ -893,20 +893,39 @@ class ArrowTestsMixin:
                 .add("y", StringType()),
             )
         )
-        if arrow_enabled:
-            expected = pd.DataFrame(
-                [
-                    [{"x_0": "a", "x_1": 1}, {"a": 2, "x_0": 3, "x_1": "b", "y_0": 4, "y_1": "c"}],
-                    [{"x_0": "x", "x_1": 6}, {"a": 7, "x_0": 8, "x_1": "y", "y_0": 9, "y_1": "z"}],
-                ],
-                columns=schema.names,
-            )
-        else:
-            expected = pd.DataFrame.from_records(data, columns=schema.names)
+        for struct_in_pandas in ["legacy", "row", "dict"]:
+            df = self.spark.createDataFrame(data, schema=schema)
 
-        df = self.spark.createDataFrame(data, schema=schema)
-        with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": arrow_enabled}):
-            assert_frame_equal(df.toPandas(), expected)
+            with self.subTest(struct_in_pandas=struct_in_pandas):
+                with self.sql_conf(
+                    {
+                        "spark.sql.execution.arrow.pyspark.enabled": arrow_enabled,
+                        "spark.sql.execution.pandas.structHandlingMode": struct_in_pandas,
+                    }
+                ):
+                    if arrow_enabled and struct_in_pandas == "legacy":
+                        with self.assertRaisesRegexp(
+                            Exception, "DUPLICATED_FIELD_NAME_IN_ARROW_STRUCT"
+                        ):
+                            df.toPandas()
+                    else:
+                        if struct_in_pandas == "dict":
+                            expected = pd.DataFrame(
+                                [
+                                    [
+                                        {"x_0": "a", "x_1": 1},
+                                        {"a": 2, "x_0": 3, "x_1": "b", "y_0": 4, "y_1": "c"},
+                                    ],
+                                    [
+                                        {"x_0": "x", "x_1": 6},
+                                        {"a": 7, "x_0": 8, "x_1": "y", "y_0": 9, "y_1": "z"},
+                                    ],
+                                ],
+                                columns=schema.names,
+                            )
+                        else:
+                            expected = pd.DataFrame.from_records(data, columns=schema.names)
+                        assert_frame_equal(df.toPandas(), expected)
 
 
 @unittest.skipIf(

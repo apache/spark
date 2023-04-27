@@ -40,8 +40,10 @@ private[sql] object ConvertToArrow {
       encoder: AgnosticEncoder[T],
       data: Iterator[T],
       timeZoneId: String,
+      errorOnDuplicatedFieldNames: Boolean,
       bufferAllocator: BufferAllocator): ByteString = {
-    val arrowSchema = ArrowUtils.toArrowSchema(encoder.schema, timeZoneId)
+    val arrowSchema =
+      ArrowUtils.toArrowSchema(encoder.schema, timeZoneId, errorOnDuplicatedFieldNames)
     val root = VectorSchemaRoot.create(arrowSchema, bufferAllocator)
     val writer: ArrowWriter = ArrowWriter.create(root)
     val unloader = new VectorUnloader(root)

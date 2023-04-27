@@ -1141,6 +1141,13 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       messageParameters = Map("typeName" -> toSQLType(typeName)))
   }
 
+  def duplicatedFieldNameInArrowStructError(
+      fieldNames: Seq[String]): SparkUnsupportedOperationException = {
+    new SparkUnsupportedOperationException(
+      errorClass = "DUPLICATED_FIELD_NAME_IN_ARROW_STRUCT",
+      messageParameters = Map("fieldNames" -> fieldNames.mkString("[", ", ", "]")))
+  }
+
   def notSupportTypeError(dataType: DataType): Throwable = {
     new SparkException(
       errorClass = "_LEGACY_ERROR_TEMP_2100",

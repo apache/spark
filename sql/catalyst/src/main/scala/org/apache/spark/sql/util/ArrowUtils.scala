@@ -137,9 +137,16 @@ private[sql] object ArrowUtils {
   }
 
   /** Maps schema from Spark to Arrow. NOTE: timeZoneId required for TimestampType in StructType */
-  def toArrowSchema(schema: StructType, timeZoneId: String): Schema = {
+  def toArrowSchema(
+      schema: StructType,
+      timeZoneId: String,
+      errorOnDuplicatedFieldNames: Boolean): Schema = {
     new Schema(schema.map { field =>
-      toArrowField(field.name, deduplicateFieldNames(field.dataType), field.nullable, timeZoneId)
+      toArrowField(
+        field.name,
+        deduplicateFieldNames(field.dataType, errorOnDuplicatedFieldNames),
+        field.nullable,
+        timeZoneId)
     }.asJava)
   }
 
@@ -160,12 +167,16 @@ private[sql] object ArrowUtils {
     Map(timeZoneConf ++ pandasColsByName ++ arrowSafeTypeCheck: _*)
   }
 
-  private def deduplicateFieldNames(dt: DataType): DataType = dt match {
-    case udt: UserDefinedType[_] => deduplicateFieldNames(udt.sqlType)
+  private def deduplicateFieldNames(
+      dt: DataType, errorOnDuplicatedFieldNames: Boolean): DataType = dt match {
+    case udt: UserDefinedType[_] => deduplicateFieldNames(udt.sqlType, errorOnDuplicatedFieldNames)
     case st @ StructType(fields) =>
       val newNames = if (st.names.toSet.size == st.names.length) {
         st.names
       } else {
+        if (errorOnDuplicatedFieldNames) {
+          throw QueryExecutionErrors.duplicatedFieldNameInArrowStructError(st.names)
+        }
         val genNawName = st.names.groupBy(identity).map {
           case (name, names) if names.length > 1 =>
             val i = new AtomicInteger()
@@ -176,15 +187,16 @@ private[sql] object ArrowUtils {
       }
       val newFields =
         fields.zip(newNames).map { case (StructField(_, dataType, nullable, metadata), name) =>
-          StructField(name, deduplicateFieldNames(dataType), nullable, metadata)
+          StructField(
+            name, deduplicateFieldNames(dataType, errorOnDuplicatedFieldNames), nullable, metadata)
         }
       StructType(newFields)
     case ArrayType(elementType, containsNull) =>
-      ArrayType(deduplicateFieldNames(elementType), containsNull)
+      ArrayType(deduplicateFieldNames(elementType, errorOnDuplicatedFieldNames), containsNull)
     case MapType(keyType, valueType, valueContainsNull) =>
       MapType(
-        deduplicateFieldNames(keyType),
-        deduplicateFieldNames(valueType),
+        deduplicateFieldNames(keyType, errorOnDuplicatedFieldNames),
+        deduplicateFieldNames(valueType, errorOnDuplicatedFieldNames),
         valueContainsNull)
     case _ => dt
   }

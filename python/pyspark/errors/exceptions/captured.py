@@ -26,6 +26,7 @@ from pyspark.errors.exceptions.base import (
     AnalysisException as BaseAnalysisException,
     IllegalArgumentException as BaseIllegalArgumentException,
     ArithmeticException as BaseArithmeticException,
+    UnsupportedOperationException as BaseUnsupportedOperationException,
     ArrayIndexOutOfBoundsException as BaseArrayIndexOutOfBoundsException,
     DateTimeException as BaseDateTimeException,
     NumberFormatException as BaseNumberFormatException,
@@ -141,6 +142,8 @@ def convert_exception(e: Py4JJavaError) -> CapturedException:
         return IllegalArgumentException(origin=e)
     elif is_instance_of(gw, e, "java.lang.ArithmeticException"):
         return ArithmeticException(origin=e)
+    elif is_instance_of(gw, e, "java.lang.UnsupportedOperationException"):
+        return UnsupportedOperationException(origin=e)
     elif is_instance_of(gw, e, "java.lang.ArrayIndexOutOfBoundsException"):
         return ArrayIndexOutOfBoundsException(origin=e)
     elif is_instance_of(gw, e, "java.time.DateTimeException"):
@@ -243,6 +246,12 @@ class PythonException(CapturedException, BasePythonException):
 class ArithmeticException(CapturedException, BaseArithmeticException):
     """
     Arithmetic exception.
+    """
+
+
+class UnsupportedOperationException(CapturedException, BaseUnsupportedOperationException):
+    """
+    Unsupported operation exception.
     """
 
 

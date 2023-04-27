@@ -123,7 +123,8 @@ class SparkSession private[sql] (
         .setSchema(encoder.schema.json)
       if (data.nonEmpty) {
         val timeZoneId = conf.get("spark.sql.session.timeZone")
-        val arrowData = ConvertToArrow(encoder, data, timeZoneId, allocator)
+        val arrowData =
+          ConvertToArrow(encoder, data, timeZoneId, errorOnDuplicatedFieldNames = true, allocator)
         localRelationBuilder.setData(arrowData)
       }
     }

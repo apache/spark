@@ -72,8 +72,8 @@ from pyspark.sql.connect.expressions import (
     CommonInlineUserDefinedFunction,
     JavaUDF,
 )
-from pyspark.sql.pandas.types import _check_series_localize_timestamps, _convert_map_items_to_dict
-from pyspark.sql.types import DataType, MapType, StructType, TimestampType
+from pyspark.sql.pandas.conversion import PandasConversionMixin
+from pyspark.sql.types import DataType, StructType
 from pyspark.rdd import PythonEvalType
 from pyspark.storagelevel import StorageLevel
 
@@ -668,7 +668,9 @@ class SparkConnectClient(object):
         assert table is not None
         return table, schema
 
-    def to_pandas(self, plan: pb2.Plan) -> "pd.DataFrame":
+    def to_pandas(
+        self, plan: pb2.Plan, *, timezone: Optional[str] = None, struct_in_pandas: str = "legacy"
+    ) -> "pd.DataFrame":
         """
         Return given plan as a pandas DataFrame.
         """
@@ -683,16 +685,25 @@ class SparkConnectClient(object):
 
         # Rename columns to avoid duplicated column names.
         pdf = table.rename_columns([f"col_{i}" for i in range(table.num_columns)]).to_pandas()
-        pdf.columns = schema.fieldNames()
+        pdf.columns = schema.names
 
-        for field, pa_field in zip(schema, table.schema):
-            if isinstance(field.dataType, TimestampType):
-                assert pa_field.type.tz is not None
-                pdf[field.name] = _check_series_localize_timestamps(
-                    pdf[field.name], pa_field.type.tz
-                )
-            elif isinstance(field.dataType, MapType):
-                pdf[field.name] = _convert_map_items_to_dict(pdf[field.name])
+        error_on_duplicated_field_names = False
+        if struct_in_pandas == "legacy":
+            error_on_duplicated_field_names = True
+            struct_in_pandas = "dict"
+
+        pdf = pd.concat(
+            [
+                PandasConversionMixin._create_converter(
+                    field,
+                    timezone=timezone,
+                    struct_in_pandas=struct_in_pandas,
+                    error_on_duplicated_field_names=error_on_duplicated_field_names,
+                )(pser)
+                for (_, pser), field, pa_field in zip(pdf.items(), schema.fields, table.schema)
+            ],
+            axis="columns",
+        )
 
         if len(metrics) > 0:
             pdf.attrs["metrics"] = metrics
