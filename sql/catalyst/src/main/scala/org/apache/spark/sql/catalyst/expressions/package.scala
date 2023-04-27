@@ -85,6 +85,15 @@ package object expressions  {
     override def apply(row: InternalRow): InternalRow = row
   }
 
+  object AttributeSeq {
+    def fromNormalOutput(attr: Seq[Attribute]): AttributeSeq = {
+      // Normal output attributes should never have the special flag that allows only qualified
+      // access. In case something goes wrong, like a scan relation from a custom data source,
+      // we explicitly remove that special flag to be safe.
+      new AttributeSeq(attr.map(_.markAsAllowAnyAccess()))
+    }
+  }
+
   /**
    * Helper functions for working with `Seq[Attribute]`.
    */
