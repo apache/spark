@@ -862,7 +862,7 @@ class TorchDistributor(Distributor):
             )
         return output
 
-    def train_on_dataframe(self, train_function, spark_dataframe, *args, **kwargs):
+    def _train_on_dataframe(self, train_function, spark_dataframe, *args, **kwargs):
         """
         Runs distributed training using provided Spark DataFrame as input data.
         You should ensure the input Spark DataFrame have evenly distributed partitions,
@@ -913,7 +913,7 @@ class TorchDistributor(Distributor):
         )
 
 
-def get_spark_partition_data_loader(num_samples, batch_size, prefetch=2):
+def _get_spark_partition_data_loader(num_samples, batch_size, prefetch=2):
     """
     This function must be called inside the `train_function` where `train_function`
     is the input argument of `TorchDistributor.train_on_dataframe`.

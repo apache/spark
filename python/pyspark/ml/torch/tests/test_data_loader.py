@@ -37,7 +37,7 @@ except ImportError:
     have_torch = False
 
 from pyspark import SparkConf, SparkContext
-from pyspark.ml.torch.distributor import TorchDistributor, get_gpus_owned, get_spark_partition_data_loader
+from pyspark.ml.torch.distributor import TorchDistributor, get_gpus_owned, _get_spark_partition_data_loader
 from pyspark.ml.torch.torch_run_process_wrapper import clean_and_terminate, check_parent_alive
 from pyspark.sql import SparkSession
 from pyspark.testing.utils import SPARK_HOME
@@ -76,10 +76,10 @@ class TorchDistributorDataLoaderUnitTests(unittest.TestCase):
         torch_distributor = TorchDistributor(local_mode=False, use_gpu=False)
 
         def train_function(num_samples, batch_size):
-            data_loader = get_spark_partition_data_loader(num_samples, batch_size)
+            data_loader = _get_spark_partition_data_loader(num_samples, batch_size)
             return list(data_loader)
 
-        result = torch_distributor.train_on_dataframe(
+        result = torch_distributor._train_on_dataframe(
             train_function, spark_df,
             num_samples=4,
             batch_size=2,
@@ -92,7 +92,7 @@ class TorchDistributorDataLoaderUnitTests(unittest.TestCase):
             ]
         )
 
-        result = torch_distributor.train_on_dataframe(
+        result = torch_distributor._train_on_dataframe(
             train_function, spark_df,
             num_samples=4,
             batch_size=3,
@@ -105,7 +105,7 @@ class TorchDistributorDataLoaderUnitTests(unittest.TestCase):
             ]
         )
 
-        result = torch_distributor.train_on_dataframe(
+        result = torch_distributor._train_on_dataframe(
             train_function, spark_df,
             num_samples=6,
             batch_size=3,
