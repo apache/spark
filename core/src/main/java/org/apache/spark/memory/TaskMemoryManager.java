@@ -475,6 +475,7 @@ public class TaskMemoryManager {
         }
       }
       Arrays.fill(pageTable, null);
+      allocatedPages.clear();
     }
 
     // release the memory that is not used by any consumer (acquired for pages in tungsten mode).
