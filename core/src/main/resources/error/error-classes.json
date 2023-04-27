@@ -1599,6 +1599,11 @@
     },
     "sqlState" : "42703"
   },
+  "UNRESOLVED_CUSTOM_CLASS": {
+    "message": [
+      "Could not resolve custom collection class. Please ensure that the class name is correct and that the class is available on the classpath."
+    ]
+  },
   "UNRESOLVED_FIELD" : {
     "message" : [
       "A field with name <fieldName> cannot be resolved with the struct-type column <columnPath>."
@@ -3774,11 +3779,6 @@
   "_LEGACY_ERROR_TEMP_2016" : {
     "message" : [
       "Can not interpolate <arg> into code block."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2017" : {
-    "message" : [
-      "not resolved."
     ]
   },
   "_LEGACY_ERROR_TEMP_2018" : {
