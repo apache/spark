@@ -236,6 +236,11 @@ SELECT c, (
     WHERE a + b = c
 ) FROM (VALUES (6)) t2(c);
 
+-- SPARK-43156: scalar subquery with Literal result like `COUNT(1) is null`
+SELECT *, (SELECT count(1) is null FROM t2 WHERE  .c1 = t2.c1) FROM t1;
+
+select (select f from (select false as f, max(c2) from t1 where t1.c1 = t1.c1)) from t2;
+
 -- Set operations in correlation path
 
 CREATE OR REPLACE TEMP VIEW t0(t0a, t0b) AS VALUES (1, 1), (2, 0);
