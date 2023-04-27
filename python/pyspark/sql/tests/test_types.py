@@ -1351,7 +1351,11 @@ class DataTypeVerificationTests(unittest.TestCase, PySparkErrorTestUtils):
         self.check_error(
             exception=pe.exception,
             error_class="CANNOT_ACCEPT_OBJECT_IN_TYPE",
-            message_parameters={"data_type": "IntegerType()", "obj_name": "data", "obj_type": "str"},
+            message_parameters={
+                "data_type": "IntegerType()",
+                "obj_name": "data",
+                "obj_type": "str",
+            },
         )
 
     def test_verify_type_ok_nullable(self):
