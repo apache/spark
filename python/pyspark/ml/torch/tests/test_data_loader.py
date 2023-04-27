@@ -33,8 +33,7 @@ from pyspark.ml.linalg import Vectors
 class TorchDistributorDataLoaderUnitTests(unittest.TestCase):
     def setUp(self) -> None:
         self.spark = (
-            SparkSession.builder
-            .master("local[1]")
+            SparkSession.builder.master("local[1]")
             .config("spark.default.parallelism", "1")
             .getOrCreate()
         )
@@ -51,12 +50,15 @@ class TorchDistributorDataLoaderUnitTests(unittest.TestCase):
                 np.testing.assert_almost_equal(res_field.numpy(), exp_field)
 
     def test_data_loader(self):
-        spark_df = self.spark.createDataFrame([
-            (Vectors.dense([1., 2., 3.5]), 0, 10.5),
-            (Vectors.sparse(3, [1, 2], [4.5, 5.5]), 3, 12.5),
-            (Vectors.dense([6., 7., 8.5]), 1, 1.5),
-            (Vectors.sparse(3, [0, 2], [-2.5, -6.5]), 2, 9.5),
-        ], schema=["features", "label", "weight"])
+        spark_df = self.spark.createDataFrame(
+            [
+                (Vectors.dense([1.0, 2.0, 3.5]), 0, 10.5),
+                (Vectors.sparse(3, [1, 2], [4.5, 5.5]), 3, 12.5),
+                (Vectors.dense([6.0, 7.0, 8.5]), 1, 1.5),
+                (Vectors.sparse(3, [0, 2], [-2.5, -6.5]), 2, 9.5),
+            ],
+            schema=["features", "label", "weight"],
+        )
 
         torch_distributor = TorchDistributor(local_mode=False, use_gpu=False)
 
@@ -65,42 +67,49 @@ class TorchDistributorDataLoaderUnitTests(unittest.TestCase):
             return list(data_loader)
 
         result = torch_distributor._train_on_dataframe(
-            train_function, spark_df,
+            train_function,
+            spark_df,
             num_samples=4,
             batch_size=2,
         )
         self._check_data_loader_result_correctness(
             result,
             [
-                [[[1., 2., 3.5], [0., 4.5, 5.5]], [0, 3], [10.5, 12.5]],
-                [[[6., 7., 8.5], [-2.5, 0., -6.5]], [1, 2], [1.5, 9.5]],
-            ]
+                [[[1.0, 2.0, 3.5], [0.0, 4.5, 5.5]], [0, 3], [10.5, 12.5]],
+                [[[6.0, 7.0, 8.5], [-2.5, 0.0, -6.5]], [1, 2], [1.5, 9.5]],
+            ],
         )
 
         result = torch_distributor._train_on_dataframe(
-            train_function, spark_df,
+            train_function,
+            spark_df,
             num_samples=4,
             batch_size=3,
         )
         self._check_data_loader_result_correctness(
             result,
             [
-                [[[1., 2., 3.5], [0., 4.5, 5.5], [6., 7., 8.5]], [0, 3, 1], [10.5, 12.5, 1.5]],
-                [[[-2.5, 0., -6.5]], [2], [9.5]],
-            ]
+                [[[1.0, 2.0, 3.5], [0.0, 4.5, 5.5], [6.0, 7.0, 8.5]], [0, 3, 1], [10.5, 12.5, 1.5]],
+                [[[-2.5, 0.0, -6.5]], [2], [9.5]],
+            ],
         )
 
         result = torch_distributor._train_on_dataframe(
-            train_function, spark_df,
+            train_function,
+            spark_df,
             num_samples=6,
             batch_size=3,
         )
         self._check_data_loader_result_correctness(
             result,
             [
-                [[[1., 2., 3.5], [0., 4.5, 5.5], [6., 7., 8.5]], [0, 3, 1], [10.5, 12.5, 1.5]],
-                [[[-2.5, 0., -6.5], [1., 2., 3.5], [0., 4.5, 5.5]], [2, 0, 3], [9.5, 10.5, 12.5]],
-            ]
+                [[[1.0, 2.0, 3.5], [0.0, 4.5, 5.5], [6.0, 7.0, 8.5]], [0, 3, 1], [10.5, 12.5, 1.5]],
+                [
+                    [[-2.5, 0.0, -6.5], [1.0, 2.0, 3.5], [0.0, 4.5, 5.5]],
+                    [2, 0, 3],
+                    [9.5, 10.5, 12.5],
+                ],
+            ],
         )
 
 

@@ -20,7 +20,6 @@ import numpy as np
 
 
 class SparkPartitionTorchDataset(torch.utils.data.IterableDataset):
-
     def __init__(self, arrow_file_path, schema, num_samples):
         self.arrow_file_path = arrow_file_path
         self.num_samples = num_samples
@@ -30,14 +29,14 @@ class SparkPartitionTorchDataset(torch.utils.data.IterableDataset):
     def _extract_field_value(value, field_type):
         # TODO: avoid checking field type for every row.
         if field_type == "vector":
-            if value['type'] == 1:
+            if value["type"] == 1:
                 # dense vector
-                return value['values']
-            if value['type'] == 0:
+                return value["values"]
+            if value["type"] == 0:
                 # sparse vector
-                size = int(value['size'])
+                size = int(value["size"])
                 sparse_array = np.zeros(size, dtype=np.float64)
-                sparse_array[value['indices']] = value['values']
+                sparse_array[value["indices"]] = value["values"]
                 return sparse_array
         if field_type in ["float", "double", "int", "bigint", "smallint"]:
             return value
@@ -49,6 +48,7 @@ class SparkPartitionTorchDataset(torch.utils.data.IterableDataset):
 
     def __iter__(self):
         from pyspark.sql.pandas.serializers import ArrowStreamSerializer
+
         serializer = ArrowStreamSerializer()
 
         worker_info = torch.utils.data.get_worker_info()

@@ -662,12 +662,13 @@ class TorchDistributor(Distributor):
         if spark_dataframe is not None:
             input_df = spark_dataframe
         else:
-            input_df = self.spark.range(start=0, end=self.num_tasks, step=1, numPartitions=self.num_tasks)
-        try:
-            rows = (
-                input_df.mapInArrow(func=spark_task_function, schema="chunk binary", barrier=True)
-                .collect()
+            input_df = self.spark.range(
+                start=0, end=self.num_tasks, step=1, numPartitions=self.num_tasks
             )
+        try:
+            rows = input_df.mapInArrow(
+                func=spark_task_function, schema="chunk binary", barrier=True
+            ).collect()
             output_bytes = b"".join([row.chunk for row in rows])
             result = cloudpickle.loads(output_bytes)
         finally:
@@ -693,9 +694,13 @@ class TorchDistributor(Distributor):
 
     @staticmethod
     @contextmanager
-    def _setup_files(train_fn: Callable, *args: Any, **kwargs) -> Generator[Tuple[str, str], None, None]:
+    def _setup_files(
+        train_fn: Callable, *args: Any, **kwargs
+    ) -> Generator[Tuple[str, str], None, None]:
         save_dir = TorchDistributor._create_save_dir()
-        pickle_file_path = TorchDistributor._save_pickled_function(save_dir, train_fn, *args, **kwargs)
+        pickle_file_path = TorchDistributor._save_pickled_function(
+            save_dir, train_fn, *args, **kwargs
+        )
         output_file_path = os.path.join(save_dir, TorchDistributor._PICKLED_OUTPUT_FILE)
         train_file_path = TorchDistributor._create_torchrun_train_file(
             save_dir, pickle_file_path, output_file_path
@@ -749,7 +754,10 @@ class TorchDistributor(Distributor):
     def _run_training_on_pytorch_function(
         input_params: Dict[str, Any], train_fn: Callable, *args: Any, **kwargs
     ) -> Any:
-        with TorchDistributor._setup_files(train_fn, *args, **kwargs) as (train_file_path, output_file_path):
+        with TorchDistributor._setup_files(train_fn, *args, **kwargs) as (
+            train_file_path,
+            output_file_path,
+        ):
             TorchDistributor._run_training_on_pytorch_file(input_params, train_file_path)
             if not os.path.exists(output_file_path):
                 raise RuntimeError(
@@ -775,7 +783,9 @@ class TorchDistributor(Distributor):
         shutil.rmtree(save_dir, ignore_errors=True)
 
     @staticmethod
-    def _save_pickled_function(save_dir: str, train_fn: Union[str, Callable], *args: Any, **kwargs) -> str:
+    def _save_pickled_function(
+        save_dir: str, train_fn: Union[str, Callable], *args: Any, **kwargs
+    ) -> str:
         saved_pickle_path = os.path.join(save_dir, TorchDistributor._PICKLED_FUNC_FILE)
         with open(saved_pickle_path, "wb") as f:
             cloudpickle.dump((train_fn, args, kwargs), f)
@@ -909,7 +919,7 @@ class TorchDistributor(Distributor):
             train_function,
             spark_dataframe,
             *args,
-            **kwargs
+            **kwargs,
         )
 
 
@@ -945,9 +955,4 @@ def _get_spark_partition_data_loader(num_samples, batch_size, prefetch=2):
 
     dataset = SparkPartitionTorchDataset(arrow_file, schema, num_samples)
 
-    return DataLoader(
-        dataset,
-        batch_size,
-        num_workers=1,
-        prefetch_factor=prefetch
-    )
+    return DataLoader(dataset, batch_size, num_workers=1, prefetch_factor=prefetch)
