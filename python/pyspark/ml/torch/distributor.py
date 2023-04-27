@@ -911,7 +911,8 @@ class TorchDistributor(Distributor):
 
         if self.local_mode:
             raise ValueError(
-                "`TorchDistributor.train_on_dataframe` requires setting `TorchDistributor.local_mode` to `False`."
+                "TorchDistributor.train_on_dataframe requires setting "
+                "TorchDistributor.local_mode to False."
             )
 
         return self._run_distributed_training(
