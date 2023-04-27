@@ -971,3 +971,37 @@ Project [c#x, scalar-subquery#x [c#x] AS scalarsubquery(c)#xL]
 +- SubqueryAlias t2
    +- Project [col1#x AS c#x]
       +- LocalRelation [col1#x]
+
+
+-- !query
+SELECT *, (SELECT count(1) is null FROM t2 WHERE t1.c1 = t2.c1) FROM t1
+-- !query analysis
+Project [c1#x, c2#x, scalar-subquery#x [c1#x] AS scalarsubquery(c1)#x]
+:  +- Aggregate [isnull(count(1)) AS (count(1) IS NULL)#x]
+:     +- Filter (outer(c1#x) = c1#x)
+:        +- SubqueryAlias t2
+:           +- View (`t2`, [c1#x,c2#x])
+:              +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
+:                 +- LocalRelation [col1#x, col2#x]
++- SubqueryAlias t1
+   +- View (`t1`, [c1#x,c2#x])
+      +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
+         +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+select (select f from (select false as f, max(c2) from t1 where t1.c1 = t1.c1)) from t2
+-- !query analysis
+Project [scalar-subquery#x [] AS scalarsubquery()#x]
+:  +- Project [f#x]
+:     +- SubqueryAlias __auto_generated_subquery_name
+:        +- Aggregate [false AS f#x, max(c2#x) AS max(c2)#x]
+:           +- Filter (c1#x = c1#x)
+:              +- SubqueryAlias t1
+:                 +- View (`t1`, [c1#x,c2#x])
+:                    +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
+:                       +- LocalRelation [col1#x, col2#x]
++- SubqueryAlias t2
+   +- View (`t2`, [c1#x,c2#x])
+      +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
+         +- LocalRelation [col1#x, col2#x]
