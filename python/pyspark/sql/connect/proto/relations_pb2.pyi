@@ -1231,6 +1231,7 @@ class Aggregate(google.protobuf.message.Message):
         GROUP_TYPE_ROLLUP: Aggregate._GroupType.ValueType  # 2
         GROUP_TYPE_CUBE: Aggregate._GroupType.ValueType  # 3
         GROUP_TYPE_PIVOT: Aggregate._GroupType.ValueType  # 4
+        GROUP_TYPE_GROUPBYKEY: Aggregate._GroupType.ValueType  # 5
 
     class GroupType(_GroupType, metaclass=_GroupTypeEnumTypeWrapper): ...
     GROUP_TYPE_UNSPECIFIED: Aggregate.GroupType.ValueType  # 0
@@ -1238,6 +1239,7 @@ class Aggregate(google.protobuf.message.Message):
     GROUP_TYPE_ROLLUP: Aggregate.GroupType.ValueType  # 2
     GROUP_TYPE_CUBE: Aggregate.GroupType.ValueType  # 3
     GROUP_TYPE_PIVOT: Aggregate.GroupType.ValueType  # 4
+    GROUP_TYPE_GROUPBYKEY: Aggregate.GroupType.ValueType  # 5
 
     class Pivot(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
