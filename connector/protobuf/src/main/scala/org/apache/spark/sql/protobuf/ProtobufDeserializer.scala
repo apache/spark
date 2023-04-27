@@ -21,6 +21,8 @@ import java.util.concurrent.TimeUnit
 import com.google.protobuf.{ByteString, DynamicMessage, Message}
 import com.google.protobuf.Descriptors._
 import com.google.protobuf.Descriptors.FieldDescriptor.JavaType._
+import com.google.protobuf.TypeRegistry
+import com.google.protobuf.util.JsonFormat
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{InternalRow, NoopFilters, StructFilters}
@@ -36,11 +38,8 @@ import org.apache.spark.unsafe.types.UTF8String
 private[sql] class ProtobufDeserializer(
     rootDescriptor: Descriptor,
     rootCatalystType: DataType,
-    filters: StructFilters) {
-
-  def this(rootDescriptor: Descriptor, rootCatalystType: DataType) = {
-    this(rootDescriptor, rootCatalystType, new NoopFilters)
-  }
+    filters: StructFilters = new NoopFilters,
+    typeRegistry: TypeRegistry = TypeRegistry.getEmptyTypeRegistry) {
 
   private val converter: Any => Option[InternalRow] =
     try {
@@ -69,6 +68,14 @@ private[sql] class ProtobufDeserializer(
     }
 
   def deserialize(data: Message): Option[InternalRow] = converter(data)
+
+  // JsonFormatter with original field names and without extra whitespace.
+  // This is used to convert Any fields to json (if configured in Protobuf options).
+  // If the runtime type for Any field is not about in the registry, it throws an exception.
+  private val jsonPrinter = JsonFormat.printer
+    .omittingInsignificantWhitespace()
+    .preservingProtoFieldNames()
+    .usingTypeRegistry(typeRegistry)
 
   private def newArrayWriter(
       protoField: FieldDescriptor,
@@ -223,6 +230,13 @@ private[sql] class ProtobufDeserializer(
           val nanoSeconds = message.getField(nanoSecondsField).asInstanceOf[Int]
           val micros = DateTimeUtils.millisToMicros(seconds * 1000)
           updater.setLong(ordinal, micros + TimeUnit.NANOSECONDS.toMicros(nanoSeconds))
+
+      case (MESSAGE, StringType)
+          if protoType.getMessageType.getFullName == "google.protobuf.Any" =>
+        (updater, ordinal, value) =>
+          // Convert 'Any' protobuf message to JSON string.
+          val jsonStr = jsonPrinter.print(value.asInstanceOf[DynamicMessage])
+          updater.set(ordinal, UTF8String.fromString(jsonStr))
 
       case (MESSAGE, st: StructType) =>
         val writeRecord = getRecordWriter(

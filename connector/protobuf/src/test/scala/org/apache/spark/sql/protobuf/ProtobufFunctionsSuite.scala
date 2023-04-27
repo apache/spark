@@ -19,9 +19,11 @@ package org.apache.spark.sql.protobuf
 import java.sql.Timestamp
 import java.time.Duration
 
- import scala.collection.JavaConverters._
+import scala.collection.JavaConverters._
 
-import com.google.protobuf.{ByteString, DynamicMessage}
+import com.google.protobuf.{ByteString, DynamicMessage, Any => AnyProto}
+import org.json4s.jackson.JsonMethods
+import org.json4s.StringInput
 
 import org.apache.spark.sql.{AnalysisException, Column, DataFrame, QueryTest, Row}
 import org.apache.spark.sql.functions.{lit, struct}
@@ -1103,6 +1105,131 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
         )
         // 'empty_recursive' field is dropped from the schema. Only "name" is present.
         assert(df.schema == structFromDDL("wrapper struct<name: string>"))
+    }
+  }
+
+  test("Converting Any fields to JSON") {
+    // Verifies schema and deserialization when 'convert.any.fields.to.json' is set.
+    checkWithFileAndClassName("ProtoWithAny") {
+      case (name, descFilePathOpt) =>
+
+        // proto: 'message { string event_name = 1; google.protobuf.Any details = 2 }'
+
+        val simpleProto = SimpleMessage // Json: {"id":10,"string_value":"galaxy"}
+          .newBuilder()
+          .setId(10)
+          .setStringValue("galaxy")
+          .build()
+
+        val protoWithAnyBytes = ProtoWithAny
+          .newBuilder()
+          .setEventName("click")
+          .setDetails(AnyProto.pack(simpleProto))
+          .build()
+          .toByteArray
+
+        val inputDF = Seq(protoWithAnyBytes).toDF("binary")
+
+        // Check schema with default options where Any field not converted to json.
+        val df = inputDF.select(
+          from_protobuf_wrapper($"binary", name, descFilePathOpt).as("proto")
+        )
+        // Default behavior: 'details' is a struct with 'type_url' and binary 'value'.
+        assert(df.schema.toDDL ==
+          "proto STRUCT<event_name: STRING, details: STRUCT<type_url: STRING, value: BINARY>>"
+        )
+
+        // Enable option to convert to json.
+        val dfJson = inputDF.select(from_protobuf_wrapper(
+          $"binary", name, descFilePathOpt, Map("convert.any.fields.to.json" -> "true")).as("proto")
+        )
+        // Now 'details' should be a string.
+        assert(dfJson.schema.toDDL == "proto STRUCT<event_name: STRING, details: STRING>")
+
+        // Verify Json value for details
+
+        val row = dfJson.collect()(0).getStruct(0)
+
+        val expectedJson = """{"@type":""" + // The json includes "@type" field as well.
+            """"type.googleapis.com/org.apache.spark.sql.protobuf.protos.SimpleMessage",""" +
+            """"id":"10","string_value":"galaxy"}"""
+
+        assert(row.getString(0) == "click")
+        assert(row.getString(1) == expectedJson)
+    }
+  }
+
+  test("Converting nested Any fields to JSON") {
+    // This is a more involved version of the previous test with nested Any field inside an array.
+
+    // Takes json string and return a json with all the extra whitespace removed.
+    def compactJson(json: String): String = {
+      val jsonValue = JsonMethods.parse(StringInput(json))
+      JsonMethods.compact(jsonValue)
+    }
+
+    checkWithFileAndClassName("ProtoWithAnyArray") { case (name, descFilePathOpt) =>
+
+      // proto: message { string description = 1; repeated google.protobuf.Any items = 2;
+
+      // Use two different types of protos for 'items'. One with an Any field, and one without.
+
+      val simpleProto = SimpleMessage.newBuilder() // Json: {"id":10,"string_value":"galaxy"}
+        .setId(10)
+        .setStringValue("galaxy")
+        .build()
+
+      val protoWithAny = ProtoWithAny.newBuilder()
+        .setEventName("click")
+        .setDetails(AnyProto.pack(simpleProto))
+        .build()
+
+      val protoWithAnyArrayBytes = ProtoWithAnyArray.newBuilder()
+        .setDescription("nested any demo")
+        .addItems(AnyProto.pack(simpleProto)) // A simple proto
+        .addItems(AnyProto.pack(protoWithAny)) // A proto with any field inside it.
+        .build()
+        .toByteArray
+
+      val inputDF = Seq(protoWithAnyArrayBytes).toDF("binary")
+
+      // check default schema
+      val df = inputDF.select(
+        from_protobuf_wrapper($"binary", name, descFilePathOpt).as("proto")
+      )
+      // Default behavior: 'details' is a struct with 'type_url' and binary 'value'.
+      assert(df.schema.toDDL == "proto STRUCT<description: STRING, " +
+        "items: ARRAY<STRUCT<type_url: STRING, value: BINARY>>>"
+      )
+
+      // String for items with 'convert.to.json' option enabled.
+
+      val dfJson = inputDF.select(from_protobuf_wrapper(
+        $"binary", name, descFilePathOpt, Map("convert.any.fields.to.json" -> "true")).as("proto")
+      )
+      // Now 'details' should be a string.
+      assert(dfJson.schema.toDDL == "proto STRUCT<description: STRING, items: ARRAY<STRING>>")
+
+      val row = dfJson.collect()(0).getStruct(0)
+      val items = row.getList[String](1)
+
+      assert(row.getString(0) == "nested any demo")
+      assert(items.get(0) == compactJson("""
+          | {
+          |   "@type":"type.googleapis.com/org.apache.spark.sql.protobuf.protos.SimpleMessage",
+          |   "id":"10",
+          |   "string_value":"galaxy"
+          | }""".stripMargin))
+      assert(items.get(1) == compactJson("""
+          | {
+          |   "@type":"type.googleapis.com/org.apache.spark.sql.protobuf.protos.ProtoWithAny",
+          |   "event_name":"click",
+          |   "details": {
+          |     "@type":"type.googleapis.com/org.apache.spark.sql.protobuf.protos.SimpleMessage",
+          |     "id":"10",
+          |     "string_value":"galaxy"
+          |   }
+          | }""".stripMargin))
     }
   }
 

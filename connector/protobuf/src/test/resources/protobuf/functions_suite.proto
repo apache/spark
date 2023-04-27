@@ -26,6 +26,7 @@ package org.apache.spark.sql.protobuf.protos;
 import "timestamp.proto";
 import "duration.proto";
 import "basicmessage.proto";
+import "google/protobuf/any.proto";
 
 option java_outer_classname = "SimpleMessageProtos";
 
@@ -282,4 +283,17 @@ message Status {
   int32 id = 1;
   Timestamp trade_time = 2;
   Status status = 3;
+}
+
+
+// Messages for testing Any fields
+
+message ProtoWithAny {
+  string event_name = 1;
+  google.protobuf.Any details = 3;
+}
+
+message ProtoWithAnyArray { // A container of Any fields
+  string description = 1;
+  repeated google.protobuf.Any items = 2;
 }

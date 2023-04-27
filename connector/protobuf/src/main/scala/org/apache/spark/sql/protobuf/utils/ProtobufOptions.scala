@@ -39,13 +39,67 @@ private[sql] class ProtobufOptions(
   val parseMode: ParseMode =
     parameters.get("mode").map(ParseMode.fromString).getOrElse(FailFastMode)
 
-  // Setting the `recursive.fields.max.depth` to 1 allows it to be recurse once,
-  // and 2 allows it to be recursed twice and so on. A value of `recursive.fields.max.depth`
-  // greater than 10 is not permitted. If it is not  specified, the default value is -1;
-  // A value of 0 or below disallows any recursive fields. If a protobuf
-  // record has more depth than the allowed value for recursive fields, it will be truncated
-  // and corresponding fields are ignored (dropped).
+  /**
+   * Adds support for recursive fields. If this option is is not specified, recursive fields are
+   * not permitted. Setting it to 0 drops the recursive fields, 1 allows it to be recursed once,
+   * and 2 allows it to be recursed twice and so on, up to 10. Values larger than 10 are not
+   * allowed in order avoid inadvertently creating very large schemas. If a Protobuf message
+   * has depth beyond this limit, the Spark struct returned is truncated after the recursion limit.
+   *
+   * Examples. Consider a Protobuf with a recursive field:
+   *   `message Person { string name = 1; Person friend = 2; }`
+   * The following lists the schema with different values for this setting.
+   *  1:  struct<name: string>
+   *  2:  struct<name string, friend: struct<name: string>>
+   *  3:  struct<name string, friend: struct<name string, friend: struct<name: string>>>
+   * and so on.
+   */
   val recursiveFieldMaxDepth: Int = parameters.getOrElse("recursive.fields.max.depth", "-1").toInt
+
+  /**
+   * This option enables converting Protobuf 'Any' fields to JSON. At runtime such 'Any' fields
+   * can contain arbitrary protobuf message serialized as binary data.
+   *
+   * By default when this option is not enabled, such field behaves like normal protobuf message
+   * with two fields (`STRUCT<type_url: STRING, value: BINARY>`). The binary `value` field is not
+   * interpreted. This might not be convenient in practice.
+   *
+   * One option is to deserialize it into actual protobuf message and convert it to Spark STRUCT.
+   * But this is not feasible since the schema for `from_protobuf()` is needed at query compile
+   * time and can not change at run time. As a result this is not feasible.
+   *
+   * Another option is parse the binary and deserialize the protobuf message into JSON string.
+   * This this lot more readable than the binary data. This configuration option enables
+   * converting Any feilds to JSON. The example blow clarifies futher.
+   *
+   *  Consider two Protobuf types defined as follows:
+   *    message ProtoWithAny {
+   *       string event_name = 1;
+   *       google.protobuf.Any details = 2;
+   *    }
+   *
+   *    message Person {
+   *      string name = 1;
+   *      int32 id = 2;
+   *   }
+   *
+   * With this option enabled, schema for `from_protobuf("col", messageName = "ProtoWithAny")`
+   * would be : `STRUCT<event_name: STRING, details: STRING>`.
+   * At run time, if `details` field contains `Person` Protobuf message, the returned value looks
+   * like this with JSON string for `details`:
+   *   ('click', '{"@type":"type.googleapis.com/...ProtoWithAny","name":"Mario","id":100}')
+   *
+   * Requirements:
+   *  - The definitions for all the possible Protobuf types that are used in Any fields should be
+   *    available in the Protobuf descriptor file passed to `from_protobuf()`. If any Protobuf
+   *    is not found, it will result in error for that record.
+   *  - This feature is supported with Java classes as well. But only the Protobuf types defined
+   *    in the same `proto` file as the primary Java class might be visible.
+   *    E.g. if `ProtoWithAny` and `Person` in above example are in different proto files,
+   *    definition for `Person` may not be found.
+   */
+  val convertAnyFieldsToJson: Boolean =
+    parameters.getOrElse("convert.any.fields.to.json", "false").toBoolean
 }
 
 private[sql] object ProtobufOptions {
