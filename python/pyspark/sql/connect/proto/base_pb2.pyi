@@ -2007,7 +2007,7 @@ class ArtifactStatusesRequest(google.protobuf.message.Message):
     SESSION_ID_FIELD_NUMBER: builtins.int
     USER_CONTEXT_FIELD_NUMBER: builtins.int
     CLIENT_TYPE_FIELD_NUMBER: builtins.int
-    NAME_FIELD_NUMBER: builtins.int
+    NAMES_FIELD_NUMBER: builtins.int
     session_id: builtins.str
     """(Required)
 
@@ -2024,7 +2024,7 @@ class ArtifactStatusesRequest(google.protobuf.message.Message):
     logging purposes and will not be interpreted by the server.
     """
     @property
-    def name(
+    def names(
         self,
     ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
         """The name of the artifact is expected in the form of a "Relative Path" that is made up of a
@@ -2040,7 +2040,7 @@ class ArtifactStatusesRequest(google.protobuf.message.Message):
         session_id: builtins.str = ...,
         user_context: global___UserContext | None = ...,
         client_type: builtins.str | None = ...,
-        name: collections.abc.Iterable[builtins.str] | None = ...,
+        names: collections.abc.Iterable[builtins.str] | None = ...,
     ) -> None: ...
     def HasField(
         self,
@@ -2060,8 +2060,8 @@ class ArtifactStatusesRequest(google.protobuf.message.Message):
             b"_client_type",
             "client_type",
             b"client_type",
-            "name",
-            b"name",
+            "names",
+            b"names",
             "session_id",
             b"session_id",
             "user_context",
