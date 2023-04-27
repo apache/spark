@@ -58,19 +58,19 @@ private[sql] class ProtobufOptions(
 
   /**
    * This option enables converting Protobuf 'Any' fields to JSON. At runtime such 'Any' fields
-   * can contain arbitrary protobuf message serialized as binary data.
+   * can contain arbitrary Protobuf message serialized as binary data.
    *
-   * By default when this option is not enabled, such field behaves like normal protobuf message
+   * By default when this option is not enabled, such field behaves like normal Protobuf message
    * with two fields (`STRUCT<type_url: STRING, value: BINARY>`). The binary `value` field is not
    * interpreted. This might not be convenient in practice.
    *
-   * One option is to deserialize it into actual protobuf message and convert it to Spark STRUCT.
+   * One option is to deserialize it into actual Protobuf message and convert it to Spark STRUCT.
    * But this is not feasible since the schema for `from_protobuf()` is needed at query compile
    * time and can not change at run time. As a result this is not feasible.
    *
-   * Another option is parse the binary and deserialize the protobuf message into JSON string.
+   * Another option is parse the binary and deserialize the Protobuf message into JSON string.
    * This this lot more readable than the binary data. This configuration option enables
-   * converting Any feilds to JSON. The example blow clarifies futher.
+   * converting Any fields to JSON. The example blow clarifies further.
    *
    *  Consider two Protobuf types defined as follows:
    *    message ProtoWithAny {
