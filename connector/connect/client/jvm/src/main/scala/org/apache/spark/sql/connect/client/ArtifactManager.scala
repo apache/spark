@@ -19,6 +19,7 @@ package org.apache.spark.sql.connect.client
 import java.io.{ByteArrayInputStream, InputStream}
 import java.net.URI
 import java.nio.file.{Files, Path, Paths}
+import java.util.Arrays
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.zip.{CheckedInputStream, CRC32}
 
@@ -113,7 +114,7 @@ class ArtifactManager(
       .newBuilder()
       .setUserContext(userContext)
       .setSessionId(sessionId)
-      .addAllName((artifactName :: Nil).asJava)
+      .addAllName(Arrays.asList(artifactName))
       .build()
     val statuses = bstub.artifactStatus(request).getStatusesMap
     if (statuses.containsKey(artifactName)) {
