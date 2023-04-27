@@ -39,7 +39,7 @@ private[sql] class JSONOptions(
     @transient val parameters: CaseInsensitiveMap[String],
     defaultTimeZoneId: String,
     defaultColumnNameOfCorruptRecord: String)
-  extends FileSourceOptions(parameters) with Logging {
+  extends FileSourceOptions(parameters) with Logging  {
 
   import JSONOptions._
 
