@@ -96,11 +96,11 @@ abstract class LogicalPlan
     }
   }
 
-  private[this] lazy val childAttributes = AttributeSeq(children.flatMap(_.output))
+  private[this] lazy val childAttributes = AttributeSeq.fromNormalOutput(children.flatMap(_.output))
 
   private[this] lazy val childMetadataAttributes = AttributeSeq(children.flatMap(_.metadataOutput))
 
-  private[this] lazy val outputAttributes = AttributeSeq(output)
+  private[this] lazy val outputAttributes = AttributeSeq.fromNormalOutput(output)
 
   private[this] lazy val outputMetadataAttributes = AttributeSeq(metadataOutput)
 
