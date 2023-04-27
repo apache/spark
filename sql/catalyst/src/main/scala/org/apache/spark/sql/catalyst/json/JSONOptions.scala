@@ -39,7 +39,7 @@ private[sql] class JSONOptions(
     @transient val parameters: CaseInsensitiveMap[String],
     defaultTimeZoneId: String,
     defaultColumnNameOfCorruptRecord: String)
-    extends FileSourceOptions(parameters) with Logging {
+  extends FileSourceOptions(parameters) with Logging {
 
   import JSONOptions._
 
@@ -59,13 +59,13 @@ private[sql] class JSONOptions(
     .getOrElse(StreamReadConstraints.DEFAULT_MAX_STRING_LEN)
 
   def this(
-      parameters: Map[String, String],
-      defaultTimeZoneId: String,
-      defaultColumnNameOfCorruptRecord: String = "") = {
-        this(
-          CaseInsensitiveMap(parameters),
-          defaultTimeZoneId,
-          defaultColumnNameOfCorruptRecord)
+    parameters: Map[String, String],
+    defaultTimeZoneId: String,
+    defaultColumnNameOfCorruptRecord: String = "") = {
+      this(
+        CaseInsensitiveMap(parameters),
+        defaultTimeZoneId,
+        defaultColumnNameOfCorruptRecord)
   }
 
   val samplingRatio =
@@ -236,7 +236,7 @@ private[sql] class JSONOptionsInRead(
          |denylist: ${JSONOptionsInRead.denyList.mkString(", ")}""".stripMargin)
 
     val isLineSepRequired =
-       multiLine || Charset.forName(enc) == StandardCharsets.UTF_8 || lineSeparator.nonEmpty
+        multiLine || Charset.forName(enc) == StandardCharsets.UTF_8 || lineSeparator.nonEmpty
     require(isLineSepRequired, s"The lineSep option must be specified for the $enc encoding")
 
     enc
