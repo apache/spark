@@ -85,11 +85,13 @@ private[connect] class SparkConnectStreamingQueryCache(
   /**
    * Returns [[StreamingQuery]] if it is cached and session matches the cached query. It ensures
    * the the session associated with it matches the session passed into the call. If the query is
-   * inactive (i.e. it has a cache expiry time set), this access extends its expiry time. So
-   * if a client keeps accessing a query, it stays in the cache.
+   * inactive (i.e. it has a cache expiry time set), this access extends its expiry time. So if a
+   * client keeps accessing a query, it stays in the cache.
    */
-  def getCachedQuery(queryId: String, runId: String, session: SparkSession):
-  Option[StreamingQuery] = {
+  def getCachedQuery(
+      queryId: String,
+      runId: String,
+      session: SparkSession): Option[StreamingQuery] = {
     val key = QueryCacheKey(queryId, runId)
     queryCacheLock.synchronized {
       queryCache.get(key).flatMap { v =>
@@ -100,8 +102,7 @@ private[connect] class SparkConnectStreamingQueryCache(
             queryCache.put(key, v.copy(expiresAtMs = Some(expiresAtMs)))
           }
           Some(v.query)
-        }
-        else None // This should be rare, may be client is trying access from a different session.
+        } else None // Should be rare, may be client is trying access from a different session.
       }
     }
   }
@@ -179,8 +180,8 @@ private[connect] class SparkConnectStreamingQueryCache(
 
             if (!isActive) {
               log.info(s"Marking query $id in session ${v.sessionId} inactive.")
-              val newV = v.copy(expiresAtMs = Some(nowMs + stoppedQueryInactivityTimeout.toMillis))
-              queryCache.put(k, newV)
+              val expiresAtMs = nowMs + stoppedQueryInactivityTimeout.toMillis
+              queryCache.put(k, v.copy(expiresAtMs = Some(expiresAtMs)))
             }
         }
       }
