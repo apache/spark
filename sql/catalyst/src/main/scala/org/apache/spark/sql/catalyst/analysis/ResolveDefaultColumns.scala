@@ -233,7 +233,7 @@ case class ResolveDefaultColumns(
       }.getOrElse(action)
     }
     val newNotMatchedActions: Seq[MergeAction] = m.notMatchedActions.map { action: MergeAction =>
-      val expanded = addMissingDefaultValuesForMergeAction(action, m, columnsWithDefaults)
+      val expanded = addMissingDefaultValuesForMergeAction(action, m, columnsWithDefaults.toSeq)
       replaceExplicitDefaultValuesInMergeAction(expanded, columnNamesToExpressions).map { r =>
         replaced = true
         r
