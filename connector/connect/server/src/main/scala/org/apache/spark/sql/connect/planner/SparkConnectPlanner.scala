@@ -783,9 +783,9 @@ class SparkConnectPlanner(val session: SparkSession) {
   private def transformCachedLocalRelation(rel: proto.CachedLocalRelation): LogicalPlan = {
     val blockManager = session.sparkContext.env.blockManager
     val blockId = CacheId(rel.getUserId, rel.getSessionId, rel.getHash)
-    blockManager
-      .getLocalBytes(blockId)
-      .map { blockData =>
+    val bytes = blockManager.getLocalBytes(blockId)
+    bytes.map { blockData =>
+      try {
         val blob = blockData.toByteBuffer().array()
         val blobSize = blockData.size.toInt
         val size = ByteBuffer.wrap(blob).getInt
@@ -793,12 +793,15 @@ class SparkConnectPlanner(val session: SparkSession) {
         val data = blob.slice(intSize, intSize + size)
         val schema = new String(blob.slice(intSize + size, blobSize), StandardCharsets.UTF_8)
         transformLocalRelation(Option(schema), Option(data))
+      } finally {
+        blockManager.releaseLock(blockId)
       }
-      .getOrElse {
-        throw InvalidPlanInput(
-          s"Not found any cached local relation with the hash: ${blockId.hash} in " +
-            s"the session ${blockId.sessionId} for the user id ${blockId.userId}.")
-      }
+    }
+    .getOrElse {
+      throw InvalidPlanInput(
+        s"Not found any cached local relation with the hash: ${blockId.hash} in " +
+          s"the session ${blockId.sessionId} for the user id ${blockId.userId}.")
+    }
   }
 
   private def transformHint(rel: proto.Hint): LogicalPlan = {
