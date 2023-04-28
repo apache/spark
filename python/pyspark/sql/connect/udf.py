@@ -248,6 +248,9 @@ class UDFRegistration:
         f: Union[Callable[..., Any], "UserDefinedFunctionLike"],
         returnType: Optional["DataTypeOrString"] = None,
     ) -> "UserDefinedFunctionLike":
+        if _is_barrier(f):
+            raise ValueError("Invalid f: Can not register a barrier UDF.")
+
         # This is to check whether the input function is from a user-defined function or
         # Python function.
         if hasattr(f, "asNondeterministic"):

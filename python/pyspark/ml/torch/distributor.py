@@ -680,9 +680,7 @@ class TorchDistributor(Distributor):
                 start=0, end=self.num_tasks, step=1, numPartitions=self.num_tasks
             )
         try:
-            rows = input_df.mapInArrow(
-                func=spark_task_function, schema="chunk binary", barrier=True
-            ).collect()
+            rows = input_df.mapInArrow(func=spark_task_function, schema="chunk binary").collect()
             output_bytes = b"".join([row.chunk for row in rows])
             result = cloudpickle.loads(output_bytes)
         finally:

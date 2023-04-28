@@ -1359,7 +1359,7 @@ class SparkConnectPlanner(val session: SparkSession) {
       dataType = transformDataType(udf.getOutputType),
       pythonEvalType = udf.getEvalType,
       udfDeterministic = fun.getDeterministic,
-      isBarrier = udf.hasIsBarrier && udf.getIsBarrier))
+      isBarrier = udf.hasIsBarrier && udf.getIsBarrier)
       .builder(fun.getArgumentsList.asScala.map(transformExpression).toSeq) match {
       case udaf: PythonUDAF => udaf.toAggregateExpression()
       case other => other

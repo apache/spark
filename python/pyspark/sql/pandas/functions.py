@@ -24,7 +24,7 @@ from pyspark.rdd import PythonEvalType
 from pyspark.sql.pandas.typehints import infer_eval_type
 from pyspark.sql.pandas.utils import require_minimum_pandas_version, require_minimum_pyarrow_version
 from pyspark.sql.types import DataType
-from pyspark.sql.udf import _create_udf
+from pyspark.sql.udf import _create_udf, _is_barrier
 from pyspark.sql.utils import is_remote
 from pyspark.errors import PySparkTypeError, PySparkValueError
 
@@ -467,6 +467,16 @@ def _create_pandas_udf(f, returnType, evalType):
                 "detail": "the function in cogroup.applyInPandas must take either two arguments "
                 "(left, right) or three arguments (key, left, right).",
             },
+        )
+
+    if (
+        _is_barrier(f)
+        and evalType != PythonEvalType.SQL_MAP_PANDAS_ITER_UDF
+        and evalType != PythonEvalType.SQL_MAP_ARROW_ITER_UDF
+    ):
+        raise ValueError(
+            "Barrier PythonUDF is only allowed in MapInPandas and MapInArrow, "
+            f"but got unsupported evalType {evalType}"
         )
 
     if is_remote():
