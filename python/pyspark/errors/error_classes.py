@@ -543,7 +543,7 @@ ERROR_CLASSES_JSON = """
   },
   "UNKNOWN_EXPLAIN_MODE" : {
     "message" : [
-      "Unknown explain mode: <explain_mode>. Accepted explain modes are 'simple', 'extended', 'codegen', 'cost', 'formatted'."
+      "Unknown explain mode: '<explain_mode>'. Accepted explain modes are 'simple', 'extended', 'codegen', 'cost', 'formatted'."
     ]
   },
   "UNKNOWN_RESPONSE" : {
