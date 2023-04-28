@@ -221,15 +221,15 @@ object ResolveDefaultColumns {
     } else {
       // If the provided default value is a literal of a wider type than the target column, but the
       // literal value fits within the narrower type, just coerce it for convenience.
-      val result = if (analyzed.isInstanceOf[Literal]) {
+      val result = if (analyzed.isInstanceOf[Literal] && analyzed.dataType != BooleanType) {
         try {
-          Cast(analyzed, dataType, evalMode = EvalMode.TRY).eval()
+          Some(Literal(Cast(analyzed, dataType, evalMode = EvalMode.TRY).eval()))
         } catch {
-          case _: SparkThrowable => null
+          case _: SparkThrowable | _: RuntimeException => None
         }
-      } else null
-      if (result != null) {
-        Literal(result)
+      } else None
+      if (result.isDefined) {
+        result.get
       } else {
         throw new AnalysisException(
           s"Failed to execute $statementType command because the destination table column " +
