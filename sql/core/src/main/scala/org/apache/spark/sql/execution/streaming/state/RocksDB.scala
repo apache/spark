@@ -256,6 +256,11 @@ class RocksDB(
     val iter = db.newIterator()
     iter.seek(prefix)
 
+    // Attempt to close this iterator if there is a task failure, or a task interruption.
+    Option(TaskContext.get()).foreach { tc =>
+      tc.addTaskCompletionListener[Unit] { _ => iter.close() }
+    }
+
     new NextIterator[ByteArrayPair] {
       override protected def getNext(): ByteArrayPair = {
         if (iter.isValid && iter.key().take(prefix.length).sameElements(prefix)) {
@@ -264,11 +269,12 @@ class RocksDB(
           byteArrayPair
         } else {
           finished = true
+          iter.close()
           null
         }
       }
 
-      override protected def close(): Unit = {}
+      override protected def close(): Unit = { iter.close() }
     }
   }
 
