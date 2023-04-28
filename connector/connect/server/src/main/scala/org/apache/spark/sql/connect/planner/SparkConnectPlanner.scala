@@ -1256,7 +1256,7 @@ class SparkConnectPlanner(val session: SparkSession) {
       fun: proto.CommonInlineUserDefinedFunction): Expression = {
     fun.getFunctionCase match {
       case proto.CommonInlineUserDefinedFunction.FunctionCase.PYTHON_UDF =>
-        transformPythonUDF(fun)
+        transformPythonFuncExpression(fun)
       case proto.CommonInlineUserDefinedFunction.FunctionCase.SCALAR_SCALA_UDF =>
         transformScalarScalaUDF(fun)
       case _ =>
@@ -1302,14 +1302,22 @@ class SparkConnectPlanner(val session: SparkSession) {
    *   PythonUDF.
    */
   private def transformPythonUDF(fun: proto.CommonInlineUserDefinedFunction): PythonUDF = {
+    transformPythonFuncExpression(fun).asInstanceOf[PythonUDF]
+  }
+
+  private def transformPythonFuncExpression(
+      fun: proto.CommonInlineUserDefinedFunction): Expression = {
     val udf = fun.getPythonUdf
-    PythonUDF(
+    UserDefinedPythonFunction(
       name = fun.getFunctionName,
       func = transformPythonFunction(udf),
       dataType = transformDataType(udf.getOutputType),
-      children = fun.getArgumentsList.asScala.map(transformExpression).toSeq,
-      evalType = udf.getEvalType,
+      pythonEvalType = udf.getEvalType,
       udfDeterministic = fun.getDeterministic)
+      .builder(fun.getArgumentsList.asScala.map(transformExpression).toSeq) match {
+      case udaf: PythonUDAF => udaf.toAggregateExpression()
+      case other => other
+    }
   }
 
   private def transformPythonFunction(fun: proto.PythonUDF): SimplePythonFunction = {
