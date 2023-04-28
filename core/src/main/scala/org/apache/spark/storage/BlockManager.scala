@@ -2044,14 +2044,16 @@ private[spark] class BlockManager(
 
   /**
    * Remove cache blocks that might be related to cached local relations.
+   *
+   * @return The number of blocks removed.
    */
-  def removeCache(userId: String, sessionId: String): Unit = {
+  def removeCache(userId: String, sessionId: String): Int = {
     logDebug(s"Removing cache of user id = $userId in the session $sessionId")
-    blockInfoManager.entries.foreach {
-      case (cid @ CacheId(uid, sid, _), _) if uid == userId && sid == sessionId =>
-        removeBlock(cid)
-      case _ =>
+    val blocksToRemove = blockInfoManager.entries.map(_._1).collect {
+      case cid: CacheId if cid.userId == userId && cid.sessionId == sessionId => cid
     }
+    blocksToRemove.foreach { blockId => removeBlock(blockId) }
+    blocksToRemove.size
   }
 
   /**
