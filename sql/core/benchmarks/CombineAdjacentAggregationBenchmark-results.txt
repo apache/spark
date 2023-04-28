@@ -1,0 +1,26 @@
+================================================================================================
+Combine adjacent aggregation high cardinality
+================================================================================================
+
+OpenJDK 64-Bit Server VM 1.8.0_362-b09 on Linux 5.15.0-1036-azure
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+Combine adjacent aggregation cardinality: 5:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+---------------------------------------------------------------------------------------------------------------------------
+no adjacent aggregation                              16383          16539         228          1.2         819.1       1.0X
+combine adjacent aggregation - disable               11224          11345         187          1.8         561.2       1.5X
+combine adjacent aggregation - enable                 9769           9836          82          2.0         488.4       1.7X
+
+
+================================================================================================
+Combine adjacent aggregation low cardinality
+================================================================================================
+
+OpenJDK 64-Bit Server VM 1.8.0_362-b09 on Linux 5.15.0-1036-azure
+Intel(R) Xeon(R) Platinum 8272CL CPU @ 2.60GHz
+Combine adjacent aggregation cardinality: 50:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+----------------------------------------------------------------------------------------------------------------------------
+no adjacent aggregation                                5197           5295         116          3.8         259.8       1.0X
+combine adjacent aggregation - disable                 8514           8811         258          2.3         425.7       0.6X
+combine adjacent aggregation - enable                  8500           8542          38          2.4         425.0       0.6X
+
+
