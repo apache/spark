@@ -79,6 +79,11 @@ ERROR_CLASSES_JSON = """
       "Cannot convert <from_type> into <to_type>."
     ]
   },
+  "CANNOT_GET_BATCH_ID": {
+    "message": [
+      "Could not get batch id from <obj_name>."
+    ]
+  },
   "CANNOT_INFER_ARRAY_TYPE": {
     "message": [
       "Can not infer Array Type from an list with None as the first element."
