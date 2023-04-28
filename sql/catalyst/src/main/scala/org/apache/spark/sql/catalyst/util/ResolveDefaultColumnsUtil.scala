@@ -358,10 +358,11 @@ object ResolveDefaultColumns {
       v1Catalog.isPersistentFunction(ident.asFunctionIdentifier)
     }
   }
+
+  trait CustomInsertSchema {
+    // Represents a table with a custom schema to use for resolving DEFAULT column references when
+    // inserting into the table. For example, this can be useful for excluding hidden pseudocolumns.
+    def customInsertSchema: StructType
+  }
 }
 
-trait CustomInsertSchema {
-  // Represents a table with a custom schema to use for resolving DEFAULT column references when
-  // inserting into the table. For example, this can be useful for excluding hidden pseudocolumns.
-  def customInsertSchema: StructType
-}
