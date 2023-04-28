@@ -108,7 +108,7 @@ private[connect] class SparkConnectStreamingQueryCache(
   }
 
   // Visible for testing
-  private[service] def cacheQueryValue(queryId: String, runId: String): Option[QueryCacheValue] =
+  private[service] def getCachedValue(queryId: String, runId: String): Option[QueryCacheValue] =
     queryCache.get(QueryCacheKey(queryId, runId))
 
   // Visible for testing.

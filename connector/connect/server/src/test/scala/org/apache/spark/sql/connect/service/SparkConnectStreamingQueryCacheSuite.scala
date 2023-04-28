@@ -82,7 +82,7 @@ class SparkConnectStreamingQueryCacheSuite extends SparkFunSuite with MockitoSug
       assert(numKeepAliveCalls.get() >= 5)
     }
 
-    sessionMgr.cacheQueryValue(queryId, runId) match {
+    sessionMgr.getCachedValue(queryId, runId) match {
       case Some(v) =>
         assert(v.sessionId == sessionHolder.sessionId)
         assert(v.expiresAtMs.isEmpty, "No expiry time should be set for active query")
@@ -102,18 +102,18 @@ class SparkConnectStreamingQueryCacheSuite extends SparkFunSuite with MockitoSug
 
     // The query should have 'expiresAtMs' set now.
     eventually(timeout(1.minute)) {
-      val expiresAtOpt = sessionMgr.cacheQueryValue(queryId, runId).flatMap(_.expiresAtMs)
+      val expiresAtOpt = sessionMgr.getCachedValue(queryId, runId).flatMap(_.expiresAtMs)
       assert(expiresAtOpt.contains(expectedExpiryTimeMs))
     }
 
     // Verify that expiry time gets extended when the query is accessed.
-    val prevExpiryTimeMs = sessionMgr.cacheQueryValue(queryId, runId).get.expiresAtMs.get
+    val prevExpiryTimeMs = sessionMgr.getCachedValue(queryId, runId).get.expiresAtMs.get
 
     clock.advance(30.seconds.toMillis)
 
     // Access the query. This should advance expiry time by 30 seconds.
     assert(sessionMgr.getCachedQuery(queryId, runId, mockSession).contains(mockQuery))
-    val expiresAtMs = sessionMgr.cacheQueryValue(queryId, runId).get.expiresAtMs.get
+    val expiresAtMs = sessionMgr.getCachedValue(queryId, runId).get.expiresAtMs.get
     assert(expiresAtMs == prevExpiryTimeMs + 30.seconds.toMillis)
 
     // During this time ensure that query can be restarted with a new runId.
@@ -128,26 +128,26 @@ class SparkConnectStreamingQueryCacheSuite extends SparkFunSuite with MockitoSug
     sessionMgr.registerNewStreamingQuery(sessionHolder, restartedQuery)
 
     // Both queries should existing in the cache.
-    assert(sessionMgr.cacheQueryValue(queryId, runId).map(_.query).contains(mockQuery))
+    assert(sessionMgr.getCachedValue(queryId, runId).map(_.query).contains(mockQuery))
     assert(
-      sessionMgr.cacheQueryValue(queryId, restartedRunId).map(_.query).contains(restartedQuery))
+      sessionMgr.getCachedValue(queryId, restartedRunId).map(_.query).contains(restartedQuery))
 
     // Advance time by 1 minute and verify the first query is dropped from the cache.
     clock.advance(1.minute.toMillis)
     eventually(timeout(1.minute)) {
-      assert(sessionMgr.cacheQueryValue(queryId, runId).isEmpty)
+      assert(sessionMgr.getCachedValue(queryId, runId).isEmpty)
     }
 
     // Stop the restarted query and verify gets dropped from the cache too.
     when(restartedQuery.isActive).thenReturn(false)
     eventually(timeout(1.minute)) {
-      assert(sessionMgr.cacheQueryValue(queryId, restartedRunId).flatMap(_.expiresAtMs).nonEmpty)
+      assert(sessionMgr.getCachedValue(queryId, restartedRunId).flatMap(_.expiresAtMs).nonEmpty)
     }
 
     // Advance time by one more minute and restarted query should be dropped.
     clock.advance(1.minute.toMillis)
     eventually(timeout(1.minute)) {
-      assert(sessionMgr.cacheQueryValue(queryId, restartedRunId).isEmpty)
+      assert(sessionMgr.getCachedValue(queryId, restartedRunId).isEmpty)
     }
 
     sessionMgr.shutdown()
