@@ -576,6 +576,11 @@ ERROR_CLASSES_JSON = """
       "Function `<func_name>` should use only POSITIONAL or POSITIONAL OR KEYWORD arguments."
     ]
   },
+  "UNSUPPORTED_SIGNATURE" : {
+    "message" : [
+      "Unsupported signature: <signature>."
+    ]
+  },
   "UNSUPPORTED_WITH_ARROW_OPTIMIZATION" : {
     "message" : [
       "<feature> is not supported with Arrow optimization enabled in Python UDFs. Disable 'spark.sql.execution.pythonUDF.arrow.enabled' to workaround.."

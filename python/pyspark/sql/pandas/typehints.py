@@ -134,8 +134,8 @@ def infer_eval_type(
         return PandasUDFType.GROUPED_AGG
     else:
         raise PySparkNotImplementedError(
-            error_class="NOT_IMPLEMENTED",
-            message_parameters={"feature": str(sig)},
+            error_class="UNSUPPORTED_SIGNATURE",
+            message_parameters={"signature": str(sig)},
         )
 
 
