@@ -71,9 +71,7 @@ class _SparkPartitionTorchDataset(torch.utils.data.IterableDataset):
                     batch_pdf = batch.to_pandas()
                     for row in batch_pdf.itertuples(index=False):
                         yield [
-                            _SparkPartitionTorchDataset._extract_field_value(
-                                value, field_type
-                            )
+                            _SparkPartitionTorchDataset._extract_field_value(value, field_type)
                             for value, field_type in zip(row, self.field_types)
                         ]
                         count += 1

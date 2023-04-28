@@ -222,9 +222,7 @@ class Distributor:
                 key = "spark.task.resource.gpu.amount"
                 task_gpu_amount = int(_get_conf(self.spark, key, "0"))
                 if task_gpu_amount < 1:
-                    raise RuntimeError(
-                        f"'{key}' was unset, so gpu usage is unavailable."
-                    )
+                    raise RuntimeError(f"'{key}' was unset, so gpu usage is unavailable.")
                 # TODO(SPARK-41916): Address situation when spark.task.resource.gpu.amount > 1
                 return math.ceil(self.num_processes / task_gpu_amount)
             else:
@@ -233,9 +231,7 @@ class Distributor:
                     raise RuntimeError("GPUs were unable to be found on the driver.")
                 num_available_gpus = int(_get_conf(self.spark, key, "0"))
                 if num_available_gpus == 0:
-                    raise RuntimeError(
-                        "GPU resources were not configured properly on the driver."
-                    )
+                    raise RuntimeError("GPU resources were not configured properly on the driver.")
                 if self.num_processes > num_available_gpus:
                     self.logger.warning(
                         "'num_processes' cannot be set to a value greater than the number of "
@@ -507,20 +503,12 @@ class TorchDistributor(Distributor):
             if self.use_gpu and not self.is_remote:
                 gpus_owned = _get_gpus_owned(self.spark)
                 random.seed(hash(train_object))
-                selected_gpus = [
-                    str(e) for e in random.sample(gpus_owned, self.num_processes)
-                ]
+                selected_gpus = [str(e) for e in random.sample(gpus_owned, self.num_processes)]
                 os.environ[CUDA_VISIBLE_DEVICES] = ",".join(selected_gpus)
 
-            self.logger.info(
-                f"Started local training with {self.num_processes} processes"
-            )
-            output = framework_wrapper_fn(
-                self.input_params, train_object, *args, **kwargs
-            )
-            self.logger.info(
-                f"Finished local training with {self.num_processes} processes"
-            )
+            self.logger.info(f"Started local training with {self.num_processes} processes")
+            output = framework_wrapper_fn(self.input_params, train_object, *args, **kwargs)
+            self.logger.info(f"Finished local training with {self.num_processes} processes")
 
         finally:
             if cuda_state_was_set:
@@ -591,9 +579,7 @@ class TorchDistributor(Distributor):
                         pass
                 available_port = context.allGather(str(port))[0]
                 if not available_port:
-                    raise RuntimeError(
-                        "Failed to find free port for distributed training."
-                    )
+                    raise RuntimeError("Failed to find free port for distributed training.")
                 return int(available_port)
 
             def set_torch_config(context: "BarrierTaskContext") -> None:
@@ -631,17 +617,11 @@ class TorchDistributor(Distributor):
                 os.environ[CUDA_VISIBLE_DEVICES] = ""
             set_torch_config(context)
 
-            log_streaming_client = LogStreamingClient(
-                driver_address, log_streaming_server_port
-            )
+            log_streaming_client = LogStreamingClient(driver_address, log_streaming_server_port)
             input_params["log_streaming_client"] = log_streaming_client
             try:
-                with TorchDistributor._setup_spark_partition_data(
-                    iterator, schema_json
-                ):
-                    output = framework_wrapper_fn(
-                        input_params, train_object, *args, **kwargs
-                    )
+                with TorchDistributor._setup_spark_partition_data(iterator, schema_json):
+                    output = framework_wrapper_fn(input_params, train_object, *args, **kwargs)
             finally:
                 try:
                     LogStreamingClient._destroy()
@@ -663,9 +643,7 @@ class TorchDistributor(Distributor):
                     chunks.append(output_bytes[index : index + chunk_size])
                     index += chunk_size
 
-                yield pyarrow.RecordBatch.from_pandas(
-                    pd.DataFrame(data={"chunk": chunks})
-                )
+                yield pyarrow.RecordBatch.from_pandas(pd.DataFrame(data={"chunk": chunks}))
 
         return wrapped_train_fn
 
@@ -718,9 +696,7 @@ class TorchDistributor(Distributor):
         input_params: Dict[str, Any], train_path: str, *args: Any, **kwargs: Any
     ) -> None:
         if kwargs:
-            raise ValueError(
-                "Running pytorch file does not support key-word type arguments."
-            )
+            raise ValueError("Running pytorch file does not support key-word type arguments.")
         log_streaming_client = input_params.get("log_streaming_client", None)
         training_command = TorchDistributor._create_torchrun_command(
             input_params, train_path, *args
@@ -763,9 +739,7 @@ class TorchDistributor(Distributor):
         # We need to temporarily write partition data into a temp dir,
         # partition data might be huge, so we need to write it under
         # configured `SPARK_LOCAL_DIRS`.
-        save_dir = TorchDistributor._create_save_dir(
-            root_dir=SparkFiles.getRootDirectory()
-        )
+        save_dir = TorchDistributor._create_save_dir(root_dir=SparkFiles.getRootDirectory())
 
         try:
             serializer = ArrowStreamSerializer()
@@ -799,9 +773,7 @@ class TorchDistributor(Distributor):
             train_file_path,
             output_file_path,
         ):
-            TorchDistributor._run_training_on_pytorch_file(
-                input_params, train_file_path
-            )
+            TorchDistributor._run_training_on_pytorch_file(input_params, train_file_path)
             if not os.path.exists(output_file_path):
                 raise RuntimeError(
                     "TorchDistributor failed during training."
@@ -862,9 +834,7 @@ class TorchDistributor(Distributor):
             output = cloudpickle.load(f)
         return output
 
-    def run(
-        self, train_object: Union[Callable, str], *args: Any, **kwargs: Any
-    ) -> Optional[Any]:
+    def run(self, train_object: Union[Callable, str], *args: Any, **kwargs: Any) -> Optional[Any]:
         """Runs distributed training.
 
         Parameters
@@ -910,9 +880,7 @@ class TorchDistributor(Distributor):
                 TorchDistributor._run_training_on_pytorch_function  # type: ignore
             )
         if self.local_mode:
-            output = self._run_local_training(
-                framework_wrapper_fn, train_object, *args, **kwargs
-            )
+            output = self._run_local_training(framework_wrapper_fn, train_object, *args, **kwargs)
         else:
             output = self._run_distributed_training(
                 framework_wrapper_fn, train_object, None, *args, **kwargs
