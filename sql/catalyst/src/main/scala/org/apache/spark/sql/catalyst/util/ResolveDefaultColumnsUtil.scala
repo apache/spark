@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.util
 
 import scala.collection.mutable.ArrayBuffer
 
+import org.apache.spark.SparkThrowable
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis._
@@ -218,10 +219,23 @@ object ResolveDefaultColumns {
     } else if (Cast.canUpCast(analyzed.dataType, dataType)) {
       Cast(analyzed, dataType)
     } else {
-      throw new AnalysisException(
-        s"Failed to execute $statementType command because the destination table column " +
-          s"$colName has a DEFAULT value with type $dataType, but the " +
-          s"statement provided a value of incompatible type ${analyzed.dataType}")
+      // If the provided default value is a literal of a wider type than the target column, but the
+      // literal value fits within the narrower type, just coerce it for convenience.
+      val result = if (analyzed.isInstanceOf[Literal]) {
+        try {
+          Cast(analyzed, dataType, evalMode = EvalMode.TRY).eval()
+        } catch {
+          case _: SparkThrowable => null
+        }
+      } else null
+      if (result != null) {
+        Literal(result)
+      } else {
+        throw new AnalysisException(
+          s"Failed to execute $statementType command because the destination table column " +
+            s"$colName has a DEFAULT value with type $dataType, but the " +
+            s"statement provided a value of incompatible type ${analyzed.dataType}")
+      }
     }
   }
   /**
@@ -343,4 +357,14 @@ object ResolveDefaultColumns {
       v1Catalog.isPersistentFunction(ident.asFunctionIdentifier)
     }
   }
+}
+
+/**
+ * Represents a table with an underlying raw schema to use for resolving DEFAULT column references.
+ * The 'ignoreColumnsForInserts' field represents a set of column names to exclude from
+ * consideration when performing INSERT INTO commands, if any.
+ */
+trait TableWithRawSchemaForColumnDefaults {
+  def rawSchema: Option[StructType]
+  def ignoreColumnsForInserts: Set[String]
 }

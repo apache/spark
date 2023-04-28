@@ -18,13 +18,14 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import scala.collection.mutable
+import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.catalyst.catalog.UnresolvedCatalogRelation
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
-import org.apache.spark.sql.connector.catalog.CatalogV2Util
+import org.apache.spark.sql.catalyst.util.TableWithRawSchemaForColumnDefaults
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.SQLConf
@@ -182,7 +183,7 @@ case class ResolveDefaultColumns(
         throw QueryCompilationErrors.defaultReferencesNotAllowedInUpdateWhereClause()
       }
     }
-    val schemaForTargetTable: Option[StructType] = getSchemaForTargetTable(u.table)
+    val schemaForTargetTable: Option[StructType] = getSchemaForTargetTable(u.table).map(_.schema)
     schemaForTargetTable.map { schema =>
       val defaultExpressions: Seq[Expression] = schema.fields.map {
         case f if f.metadata.contains(CURRENT_DEFAULT_COLUMN_METADATA_KEY) => analyze(f, "UPDATE")
@@ -206,7 +207,8 @@ case class ResolveDefaultColumns(
    * Resolves DEFAULT column references for a MERGE INTO command.
    */
   private def resolveDefaultColumnsForMerge(m: MergeIntoTable): LogicalPlan = {
-    val schema: StructType = getSchemaForTargetTable(m.targetTable).getOrElse(return m)
+    val schema: StructType = getSchemaForTargetTable(m.targetTable)
+      .map(_.schema).getOrElse(return m)
     // Return a more descriptive error message if the user tries to use a DEFAULT column reference
     // inside an UPDATE command's WHERE clause; this is not allowed.
     m.mergeCondition.foreach { c: Expression =>
@@ -214,8 +216,11 @@ case class ResolveDefaultColumns(
         throw QueryCompilationErrors.defaultReferencesNotAllowedInMergeCondition()
       }
     }
+    val columnsWithDefaults = ArrayBuffer.empty[String]
     val defaultExpressions: Seq[Expression] = schema.fields.map {
-      case f if f.metadata.contains(CURRENT_DEFAULT_COLUMN_METADATA_KEY) => analyze(f, "MERGE")
+      case f if f.metadata.contains(CURRENT_DEFAULT_COLUMN_METADATA_KEY) =>
+        columnsWithDefaults.append(normalizeFieldName(f.name))
+        analyze(f, "MERGE")
       case _ => Literal(null)
     }
     val columnNamesToExpressions: Map[String, Expression] =
@@ -228,7 +233,8 @@ case class ResolveDefaultColumns(
       }.getOrElse(action)
     }
     val newNotMatchedActions: Seq[MergeAction] = m.notMatchedActions.map { action: MergeAction =>
-      replaceExplicitDefaultValuesInMergeAction(action, columnNamesToExpressions).map { r =>
+      val expanded = addMissingDefaultValuesForMergeAction(action, m, columnsWithDefaults)
+      replaceExplicitDefaultValuesInMergeAction(expanded, columnNamesToExpressions).map { r =>
         replaced = true
         r
       }.getOrElse(action)
@@ -246,6 +252,38 @@ case class ResolveDefaultColumns(
         notMatchedBySourceActions = newNotMatchedBySourceActions)
     } else {
       m
+    }
+  }
+
+  /** Adds a new expressions to a merge action to generate missing default column values. */
+  def addMissingDefaultValuesForMergeAction(
+      action: MergeAction,
+      m: MergeIntoTable,
+      columnNamesWithDefaults: Seq[String]): MergeAction = {
+    action match {
+      case i: InsertAction =>
+        val targetColumns: Set[String] = i.assignments.map(_.key).flatMap { expr =>
+          expr match {
+            case a: AttributeReference => Seq(normalizeFieldName(a.name))
+            case u: UnresolvedAttribute => Seq(u.nameParts.map(normalizeFieldName).mkString("."))
+            case _ => Seq()
+          }
+        }.toSet
+        val targetTable: String = m.targetTable match {
+          case SubqueryAlias(id, _) => id.name
+          case d: DataSourceV2Relation => d.name
+        }
+        val missingColumnNamesWithDefaults = columnNamesWithDefaults.filter { name =>
+          !targetColumns.contains(normalizeFieldName(name)) &&
+            !targetColumns.contains(
+              s"${normalizeFieldName(targetTable)}.${normalizeFieldName(name)}")
+        }
+        val newAssignments: Seq[Assignment] = missingColumnNamesWithDefaults.map { key =>
+          Assignment(UnresolvedAttribute(key), UnresolvedAttribute(CURRENT_DEFAULT_COLUMN_NAME))
+        }
+        i.copy(assignments = i.assignments ++ newAssignments)
+      case _ =>
+        action
     }
   }
 
@@ -533,8 +571,15 @@ case class ResolveDefaultColumns(
    */
   private def getInsertTableSchemaWithoutPartitionColumns(
       enclosingInsert: InsertIntoStatement): Option[StructType] = {
-    val target: StructType = getSchemaForTargetTable(enclosingInsert.table).getOrElse(return None)
-    val schema: StructType = StructType(target.fields.dropRight(enclosingInsert.partitionSpec.size))
+    val target: SchemaForTargetTable =
+      getSchemaForTargetTable(enclosingInsert.table).getOrElse(return None)
+    val schema: StructType =
+      StructType(target.schema.fields.dropRight(enclosingInsert.partitionSpec.size)
+        // Some target tables support columns into which values may not be explicitly inserted.
+        // Exclude these from consideration when constructing the insert schema.
+        .filterNot { col =>
+          target.ignoreColumnsForInserts.exists(col.metadata.contains)
+        })
     // Rearrange the columns in the result schema to match the order of the explicit column list,
     // if any.
     val userSpecifiedCols: Seq[String] = enclosingInsert.userSpecifiedCols
@@ -547,9 +592,14 @@ case class ResolveDefaultColumns(
         name: String => colNamesToFields.getOrElse(normalizeFieldName(name), return None)
       }
     val userSpecifiedColNames: Set[String] = userSpecifiedCols.toSet
+      .map(normalizeFieldName)
     val nonUserSpecifiedFields: Seq[StructField] =
       schema.fields.filter {
-        field => !userSpecifiedColNames.contains(field.name)
+        field => !userSpecifiedColNames.contains(
+          normalizeFieldName(
+            field.name
+          )
+        )
       }
     Some(StructType(userSpecifiedFields ++
       getStructFieldsForDefaultExpressions(nonUserSpecifiedFields)))
@@ -578,8 +628,12 @@ case class ResolveDefaultColumns(
 
   /**
    * Returns the schema for the target table of a DML command, looking into the catalog if needed.
+   * Includes a StructType representing the schema as well as a set of column names to exclude from
+   * consideration when performing INSERT INTO commands, if any.
    */
-  private def getSchemaForTargetTable(table: LogicalPlan): Option[StructType] = {
+  private case class SchemaForTargetTable(
+      schema: StructType, ignoreColumnsForInserts: Set[String] = Set.empty)
+  private def getSchemaForTargetTable(table: LogicalPlan): Option[SchemaForTargetTable] = {
     val resolved = table match {
       case r: UnresolvedRelation if !r.skipSchemaResolution && !r.isStreaming =>
         resolveRelation(r)
@@ -588,11 +642,15 @@ case class ResolveDefaultColumns(
     }
     resolved.collectFirst {
       case r: UnresolvedCatalogRelation =>
-        r.tableMeta.schema
-      case d: DataSourceV2Relation if !d.skipSchemaResolution && !d.isStreaming =>
-        CatalogV2Util.v2ColumnsToStructType(d.table.columns())
+        SchemaForTargetTable(r.tableMeta.schema)
+      case DataSourceV2Relation(table: TableWithRawSchemaForColumnDefaults, _, _, _, _) =>
+        table.rawSchema
+          .map(SchemaForTargetTable(_, table.ignoreColumnsForInserts))
+          .getOrElse(return None)
+      case r: NamedRelation if !r.skipSchemaResolution =>
+        SchemaForTargetTable(r.schema)
       case v: View if v.isTempViewStoringAnalyzedPlan =>
-        v.schema
+        SchemaForTargetTable(v.schema)
     }
   }
 

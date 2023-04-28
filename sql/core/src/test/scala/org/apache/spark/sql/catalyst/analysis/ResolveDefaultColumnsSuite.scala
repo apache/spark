@@ -17,11 +17,11 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.QueryTest
-import org.apache.spark.sql.catalyst.expressions.Literal
-import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
+import org.apache.spark.sql.{AnalysisException, QueryTest}
+import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{StructField, StructType, TimestampType}
+import org.apache.spark.sql.types.{IntegerType, StructField, StructType, TimestampType}
 
 class ResolveDefaultColumnsSuite extends QueryTest with SharedSparkSession {
   val rule = ResolveDefaultColumns(null)
@@ -91,6 +91,71 @@ class ResolveDefaultColumnsSuite extends QueryTest with SharedSparkSession {
         checkAnswer(spark.table("demos.test_ts"),
           sql("select null, timestamp'2023-01-01'"))
       }
+      withTable("demos.test_ts") {
+        // If the provided default value is a literal of a wider type than the target column, but
+        // the literal value fits within the narrower type, just coerce it for convenience.
+        sql("create table demos.test_ts (id int default 42L) using parquet")
+        sql("insert into demos.test_ts(id) values (default)")
+        checkAnswer(spark.table("demos.test_ts"),
+          sql("select 42"))
+        // If the provided default value is a literal of a completely different type than the target
+        // column such that no coercion is possible, throw an error.
+        assert(intercept[AnalysisException](
+          sql("create table demos.test_ts (id int default 'abc') using parquet"))
+          .getMessage.contains("statement provided a value of incompatible type"))
+      }
     }
+  }
+
+  test("SPARK-43313: Add missing default values for MERGE INSERT actions") {
+    val testRelation = SubqueryAlias(
+      "testRelation",
+      LocalRelation(
+        AttributeReference("a", IntegerType)(),
+        AttributeReference("b", IntegerType)(),
+        AttributeReference("c", IntegerType)()))
+    val testRelation2 =
+      SubqueryAlias(
+        "testRelation2",
+        LocalRelation(
+          AttributeReference("d", IntegerType)(),
+          AttributeReference("e", IntegerType)(),
+          AttributeReference("f", IntegerType)()))
+    val mergePlan = MergeIntoTable(
+      targetTable = testRelation,
+      sourceTable = testRelation2,
+      mergeCondition = EqualTo(testRelation.output.head, testRelation2.output.head),
+      matchedActions = Seq(DeleteAction(None)),
+      notMatchedActions = Seq(
+        InsertAction(
+          condition = None,
+          assignments = Seq(
+            Assignment(
+              key = UnresolvedAttribute("a"),
+              value = UnresolvedAttribute("DEFAULT")),
+            Assignment(
+              key = UnresolvedAttribute(Seq("testRelation", "b")),
+              value = Literal(42))))),
+      notMatchedBySourceActions = Seq(DeleteAction(None)))
+    // Run the 'addMissingDefaultValuesForMergeAction' method of the 'ResolveDefaultColumns' rule
+    // on an MERGE INSERT action with two assignments, one to the target table's column 'a' and
+    // another to the target table's column 'b'. The result should include a new assignment to
+    // the target column 'c' from the unresolved attribute named "DEFAULT", to be replaced later.
+    val columnNamesWithDefaults = Seq("a", "b", "c")
+    val actualMergeAction = rule.addMissingDefaultValuesForMergeAction(
+      mergePlan.notMatchedActions.head, mergePlan, columnNamesWithDefaults)
+    val expectedMergeAction =
+      InsertAction(
+        condition = None,
+        assignments = Seq(
+          Assignment(key = UnresolvedAttribute("a"), value = UnresolvedAttribute("DEFAULT")),
+          Assignment(key = UnresolvedAttribute(Seq("testRelation", "b")), value = Literal(42)),
+          Assignment(key = UnresolvedAttribute("c"), value = UnresolvedAttribute("DEFAULT"))))
+    assert(expectedMergeAction == actualMergeAction)
+    // Run the same method on another MERGE DELETE action. There is no change because this method
+    // only operates on MERGE INSERT actions.
+    assert(rule.addMissingDefaultValuesForMergeAction(
+      mergePlan.matchedActions.head, mergePlan, columnNamesWithDefaults) ==
+      mergePlan.matchedActions.head)
   }
 }
