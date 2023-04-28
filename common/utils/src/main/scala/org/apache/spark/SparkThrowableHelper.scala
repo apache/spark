@@ -62,7 +62,7 @@ private[spark] object SparkThrowableHelper {
   }
 
   def isInternalError(errorClass: String): Boolean = {
-    errorClass == "INTERNAL_ERROR"
+    errorClass.startsWith("INTERNAL_ERROR")
   }
 
   def getMessage(e: SparkThrowable with Throwable, format: ErrorMessageFormat.Value): String = {
