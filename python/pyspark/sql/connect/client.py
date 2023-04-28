@@ -76,6 +76,7 @@ from pyspark.sql.pandas.types import _check_series_localize_timestamps, _convert
 from pyspark.sql.types import DataType, MapType, StructType, TimestampType
 from pyspark.rdd import PythonEvalType
 from pyspark.storagelevel import StorageLevel
+from pyspark.errors import PySparkValueError, PySparkRuntimeError
 
 
 if TYPE_CHECKING:
@@ -820,11 +821,11 @@ class SparkConnectClient(object):
             req.explain.plan.CopyFrom(cast(pb2.Plan, kwargs.get("plan")))
             explain_mode = kwargs.get("explain_mode")
             if explain_mode not in ["simple", "extended", "codegen", "cost", "formatted"]:
-                raise ValueError(
-                    f"""
-                    Unknown explain mode: {explain_mode}. Accepted "
-                    "explain modes are 'simple', 'extended', 'codegen', 'cost', 'formatted'."
-                    """
+                raise PySparkValueError(
+                    error_class="UNKNOWN_EXPLAIN_MODE",
+                    message_parameters={
+                        "explain_mode": "explain_mode",
+                    },
                 )
             if explain_mode == "simple":
                 req.explain.explain_mode = (
@@ -878,7 +879,12 @@ class SparkConnectClient(object):
         elif method == "get_storage_level":
             req.get_storage_level.relation.CopyFrom(cast(pb2.Relation, kwargs.get("relation")))
         else:
-            raise ValueError(f"Unknown Analyze method: {method}")
+            raise PySparkValueError(
+                error_class="UNSUPPORTED_OPERATION",
+                message_parameters={
+                    "operation": method,
+                },
+            )
 
         try:
             for attempt in Retrying(
@@ -1015,7 +1021,12 @@ class SparkConnectClient(object):
             elif isinstance(response, dict):
                 properties.update(**response)
             else:
-                raise ValueError(f"Unknown response: {response}")
+                raise PySparkValueError(
+                    error_class="UNKNOWN_RESPONSE",
+                    message_parameters={
+                        "response": response,
+                    },
+                )
 
         if len(batches) > 0:
             table = pa.Table.from_batches(batches=batches)
@@ -1232,7 +1243,10 @@ class Retrying:
                 if e is not None:
                     raise e
                 else:
-                    raise ValueError("Retries exceeded but no exception caught.")
+                    raise PySparkRuntimeError(
+                        error_class="EXCEED_RETRY",
+                        message_parameters={},
+                    )
 
             # Do backoff
             if retry_state.count() > 0:
