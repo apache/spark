@@ -4416,9 +4416,11 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             and not isinstance(to_replace, dict)
         ):
             raise PySparkTypeError(
-                "If to_replace is not a dict, value should be "
-                "a bool, float, int, string, list, tuple or None. "
-                "Got {0}".format(type(value))
+                error_class="NOT_BOOL_OR_FLOAT_OR_INT_OR_LIST_OR_NONE_OR_STR_OR_TUPLE",
+                message_parameters={
+                    "arg_name": "value",
+                    "arg_type": type(value).__name__,
+                },
             )
 
         if isinstance(to_replace, (list, tuple)) and isinstance(value, (list, tuple)):
@@ -4611,7 +4613,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
                 },
             )
         if relativeError < 0:
-            raise PySparkTypeError(
+            raise PySparkValueError(
                 error_class="NEGATIVE_VALUE",
                 message_parameters={
                     "arg_name": "relativeError",
@@ -4672,7 +4674,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         if not method:
             method = "pearson"
         if not method == "pearson":
-            raise PySparkTypeError(
+            raise PySparkValueError(
                 error_class="VALUE_NOT_PEARSON",
                 message_parameters={"arg_name": "method", "arg_value": method},
             )

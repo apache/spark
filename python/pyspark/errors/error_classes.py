@@ -34,6 +34,11 @@ ERROR_CLASSES_JSON = """
       "Attribute `<attr_name>` in provided object `<obj_name>` is not callable."
     ]
   },
+  "AXIS_LENGTH_MISMATCH" : {
+    "message" : [
+      "Length mismatch: Expected axis has <expected_length> element, new values have <actual_length> elements."
+    ]
+  },
   "BROADCAST_VARIABLE_NOT_LOADED": {
     "message": [
       "Broadcast variable `<variable>` not loaded."
@@ -44,6 +49,11 @@ ERROR_CLASSES_JSON = """
       "Not supported to call `<func_name>` before initialize <object>."
     ]
   },
+  "CANNOT_ACCEPT_OBJECT_IN_TYPE": {
+    "message": [
+      "`<data_type>` can not accept object `<obj_name>` in type `<obj_type>`."
+    ]
+  },
   "CANNOT_ACCESS_TO_DUNDER": {
     "message": [
       "Dunder(double underscore) attribute is for internal use only."
@@ -52,16 +62,6 @@ ERROR_CLASSES_JSON = """
   "CANNOT_APPLY_IN_FOR_COLUMN": {
     "message": [
       "Cannot apply 'in' operator against a column: please use 'contains' in a string column or 'array_contains' function for an array column."
-    ]
-  },
-  "SHOULD_NOT_DATAFRAME": {
-    "message": [
-      "Argument `<arg_name>` should not be a DataFrame."
-    ]
-  },
-  "SHOULD_NOT_DATATYPE": {
-    "message": [
-      "Argument `<arg_name>` should not be a DataType."
     ]
   },
   "CANNOT_BE_EMPTY": {
@@ -79,6 +79,11 @@ ERROR_CLASSES_JSON = """
       "Cannot convert column into bool: please use '&' for 'and', '|' for 'or', '~' for 'not' when building DataFrame boolean expressions."
     ]
   },
+  "CANNOT_CONVERT_TYPE": {
+    "message": [
+      "Cannot convert <from_type> into <to_type>."
+    ]
+  },
   "CANNOT_INFER_ARRAY_TYPE": {
     "message": [
       "Can not infer Array Type from an list with None as the first element."
@@ -87,6 +92,21 @@ ERROR_CLASSES_JSON = """
   "CANNOT_INFER_EMPTY_SCHEMA": {
     "message": [
       "Can not infer schema from empty dataset."
+    ]
+  },
+  "CANNOT_INFER_SCHEMA_FOR_TYPE": {
+    "message": [
+      "Can not infer schema for type: `<data_type>`."
+    ]
+  },
+  "CANNOT_INFER_TYPE_FOR_FIELD": {
+    "message": [
+      "Unable to infer the type of the field `<field_name>`."
+    ]
+  },
+  "CANNOT_MERGE_TYPE": {
+    "message": [
+      "Can not merge type `<data_type1>` and `<data_type2>`."
     ]
   },
   "CANNOT_OPEN_SOCKET": {
@@ -175,6 +195,11 @@ ERROR_CLASSES_JSON = """
       "Timeout timestamp (<timestamp>) cannot be earlier than the current watermark (<watermark>)."
     ]
   },
+  "INVALID_TYPENAME_CALL" : {
+    "message" : [
+      "StructField does not have typeName. Use typeName on its type explicitly instead."
+    ]
+  },
   "INVALID_UDF_EVAL_TYPE" : {
     "message" : [
       "Eval type for UDF must be <eval_type>."
@@ -203,11 +228,6 @@ ERROR_CLASSES_JSON = """
   "KEY_VALUE_PAIR_REQUIRED" : {
     "message" : [
       "Key-value pair or a list of pairs is required."
-    ]
-  },
-  "AXIS_LENGTH_MISMATCH" : {
-    "message" : [
-      "Length mismatch: Expected axis has <expected_length> element, new values have <actual_length> elements."
     ]
   },
   "LENGTH_SHOULD_BE_THE_SAME" : {
@@ -365,6 +385,11 @@ ERROR_CLASSES_JSON = """
       "Argument `<arg_name>` should be an int, got <arg_type>."
     ]
   },
+  "NOT_INT_OR_SLICE_OR_STR" : {
+    "message" : [
+      "Argument `<arg_name>` should be an int, slice or str, got <arg_type>."
+    ]
+  },
   "NOT_IN_BARRIER_STAGE" : {
     "message" : [
       "It is not in a barrier stage."
@@ -504,6 +529,16 @@ ERROR_CLASSES_JSON = """
   "SESSION_OR_CONTEXT_EXISTS" : {
     "message" : [
       "There should not be an existing Spark Session or Spark Context."
+    ]
+  },
+  "SHOULD_NOT_DATAFRAME": {
+    "message": [
+      "Argument `<arg_name>` should not be a DataFrame."
+    ]
+  },
+  "SHOULD_NOT_DATATYPE": {
+    "message": [
+      "Argument `<arg_name>` should not be a DataType."
     ]
   },
   "SLICE_WITH_STEP" : {
