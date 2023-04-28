@@ -106,7 +106,8 @@ class SparkConnectArtifactManager private[connect] {
           level = StorageLevel.MEMORY_AND_DISK_SER,
           classTag = implicitly[ClassTag[Array[Byte]]],
           tmpFile = tmpFile,
-          blockSize = tmpFile.length())
+          blockSize = tmpFile.length(),
+          tellMaster = false)
         updater.save()
       }(catchBlock = { tmpFile.delete() })
     } else if (remoteRelativePath.startsWith("classes/")) {
