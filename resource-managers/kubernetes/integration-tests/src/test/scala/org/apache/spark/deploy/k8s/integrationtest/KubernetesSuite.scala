@@ -623,6 +623,7 @@ private[spark] object KubernetesSuite {
   val decomTestTag = Tag("decom")
   val rTestTag = Tag("r")
   val MinikubeTag = Tag("minikube")
+  val usernameTestTag = Tag("username")
   val SPARK_PI_MAIN_CLASS: String = "org.apache.spark.examples.SparkPi"
   val SPARK_DFS_READ_WRITE_TEST = "org.apache.spark.examples.DFSReadWriteTest"
   val SPARK_MINI_READ_WRITE_TEST = "org.apache.spark.examples.MiniReadWriteTest"

@@ -36,6 +36,8 @@ if [ -z "$uidentry" ] ; then
     fi
 fi
 
+echo "login user is `id -un`"
+
 if [ -z "$JAVA_HOME" ]; then
   JAVA_HOME=$(java -XshowSettings:properties -version 2>&1 > /dev/null | grep 'java.home' | awk '{print $3}')
 fi

@@ -24,7 +24,7 @@ import org.scalatest.matchers.should.Matchers._
 import org.scalatest.time.{Seconds, Span}
 
 import org.apache.spark.{SparkFunSuite, TestUtils}
-import org.apache.spark.deploy.k8s.integrationtest.KubernetesSuite.SPARK_PI_MAIN_CLASS
+import org.apache.spark.deploy.k8s.integrationtest.KubernetesSuite.{usernameTestTag, MinikubeTag, SPARK_PI_MAIN_CLASS}
 import org.apache.spark.launcher.SparkLauncher
 
 private[spark] trait BasicTestsSuite { k8sSuite: KubernetesSuite =>
@@ -167,6 +167,23 @@ private[spark] trait BasicTestsSuite { k8sSuite: KubernetesSuite =>
         executorPod.getSpec.getContainers.get(0).getEnv.asScala
           .exists(envVar => envVar.getName == "SPARK_DRIVER_POD_IP")
       })
+  }
+
+  test("SPARK-43171: Support custom Unix username in Pod",
+    k8sTestTag, usernameTestTag, MinikubeTag) {
+    sparkAppConf
+      .set("spark.kubernetes.driverEnv.SPARK_USER_NAME", "spark-kube")
+      .set("spark.executorEnv.SPARK_USER_NAME", "spark-kube")
+    runSparkApplicationAndVerifyCompletion(
+      containerLocalSparkDistroExamplesJar,
+      SPARK_PI_MAIN_CLASS,
+      Seq("login user is spark-kube", "Pi is roughly 3"),
+      Seq("login user is spark-kube"),
+      appArgs = Array.empty,
+      doBasicDriverPodCheck,
+      doBasicExecutorPodCheck,
+      isJVM = true
+    )
   }
 }
 
