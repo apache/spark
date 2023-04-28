@@ -675,17 +675,18 @@ class DatasetSuite extends QueryTest
       .groupByKey(id => K2(id % 2, id % 4))
       .keyAs[K1]
       .flatMapGroups((_, it) => Seq(it.toSeq.size))
-    checkDataset(ds, 3, 2, 3, 2)
+    checkDatasetUnorderly(ds, 3, 2, 3, 2)
   }
 
   test("groupByKey, keyAs, keys - duplicates") {
-    val ds = spark
+    val result = spark
       .range(10)
       .as[Long]
       .groupByKey(id => K2(id % 2, id % 4))
       .keyAs[K1]
       .keys
-    checkDataset(ds, K1(0), K1(1), K1(0), K1(1))
+      .collect()
+    assert(result.sortBy(_.a) === Seq(K1(0), K1(0), K1(1), K1(1)))
   }
 
   test("groupBy function, mapValues, flatMap") {

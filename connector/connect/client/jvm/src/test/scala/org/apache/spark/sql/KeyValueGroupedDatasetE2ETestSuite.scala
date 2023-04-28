@@ -88,8 +88,8 @@ class KeyValueGroupedDatasetE2ETestSuite extends QueryTest with SQLHelper {
       .groupByKey(id => K2(id % 2, id % 4))
       .keyAs[K1]
       .flatMapGroups((_, it) => Seq(it.toSeq.size))
-      .collectAsList()
-    assert(result == Arrays.asList[Int](3, 2, 3, 2))
+      .collect()
+    assert(result.sorted === Seq(2, 2, 3, 3))
   }
 
   test("groupByKey, keyAs, keys - duplicates") {
@@ -101,11 +101,8 @@ class KeyValueGroupedDatasetE2ETestSuite extends QueryTest with SQLHelper {
       .groupByKey(id => K2(id % 2, id % 4))
       .keyAs[K1]
       .keys
-      .collectAsList()
-    assert(result.size() == 4)
-    for (i <- 0 to 3) {
-      assert(result.get(i) == K1(i % 2))
-    }
+      .collect()
+    assert(result.sortBy(_.a) === Seq(K1(0), K1(0), K1(1), K1(1)))
   }
 
   test("keyAs - flatGroupMap") {
