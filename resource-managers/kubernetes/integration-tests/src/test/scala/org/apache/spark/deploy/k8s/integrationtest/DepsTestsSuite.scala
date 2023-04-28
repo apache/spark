@@ -32,7 +32,7 @@ import org.scalatest.time.{Minutes, Span}
 
 import org.apache.spark.SparkException
 import org.apache.spark.deploy.k8s.integrationtest.DepsTestsSuite.{DEPS_TIMEOUT, FILE_CONTENTS, HOST_PATH}
-import org.apache.spark.deploy.k8s.integrationtest.KubernetesSuite.{usernameTestTag, INTERVAL, MinikubeTag, SPARK_PI_MAIN_CLASS, TIMEOUT}
+import org.apache.spark.deploy.k8s.integrationtest.KubernetesSuite.{INTERVAL, MinikubeTag, SPARK_PI_MAIN_CLASS, TIMEOUT}
 import org.apache.spark.deploy.k8s.integrationtest.Utils.getExamplesJarName
 import org.apache.spark.deploy.k8s.integrationtest.backend.minikube.Minikube
 import org.apache.spark.internal.config.{ARCHIVES, PYSPARK_DRIVER_PYTHON, PYSPARK_PYTHON}
@@ -269,36 +269,15 @@ private[spark] trait DepsTestsSuite { k8sSuite: KubernetesSuite =>
           "Python runtime version check is: True",
           "Python environment version check is: True",
           "Python runtime version check for executor is: True"),
-        depsFile = Some(outDepsFile))
+        Some(outDepsFile))
     } finally {
       Files.delete(new File(outDepsFile).toPath)
     }
   }
 
-  test("SPARK-43171: Support custom Unix username in Pod",
-    k8sTestTag, usernameTestTag, MinikubeTag) {
-    val fileName = Utils.createTempFile(
-      """#!/usr/bin/env bash
-        |export IS_CUSTOM_PYTHON=1
-        |echo "login user is `id -un`"
-        |python3 "$@"
-      """.stripMargin, HOST_PATH)
-    Utils.createTarGzFile(s"$HOST_PATH/$fileName", s"$HOST_PATH/$fileName.tgz")
-    sparkAppConf
-      .set(ARCHIVES.key, s"$HOST_PATH/$fileName.tgz#test_env")
-      .set(PYSPARK_PYTHON.key, s"./test_env/$fileName")
-      .set("spark.kubernetes.driverEnv.SPARK_USER_NAME", "spark-kube")
-      .set("spark.executorEnv.SPARK_USER_NAME", "spark-kube")
-    val pySparkFiles = Utils.getTestFileAbsolutePath("python_executable_check.py", sparkHomeDir)
-    testPython(pySparkFiles,
-      expectedDriverLogs = Seq("login user is spark-kube"),
-      expectedExecutorLogs = Seq("login user is spark-kube"))
-  }
-
   private def testPython(
       pySparkFiles: String,
       expectedDriverLogs: Seq[String],
-      expectedExecutorLogs: Seq[String] = Seq.empty,
       depsFile: Option[String] = None,
       env: Map[String, String] = Map.empty[String, String]): Unit = {
     tryDepsTest {
@@ -307,7 +286,6 @@ private[spark] trait DepsTestsSuite { k8sSuite: KubernetesSuite =>
         appResource = pySparkFiles,
         mainClass = "",
         expectedDriverLogOnCompletion = expectedDriverLogs,
-        expectedExecutorLogOnCompletion = expectedExecutorLogs,
         appArgs = Array("python3"),
         driverPodChecker = doBasicDriverPyPodCheck,
         executorPodChecker = doBasicExecutorPyPodCheck,

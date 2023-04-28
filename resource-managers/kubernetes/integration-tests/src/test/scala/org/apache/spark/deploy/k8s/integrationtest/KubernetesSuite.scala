@@ -618,7 +618,6 @@ class KubernetesSuite extends SparkFunSuite
 
 private[spark] object KubernetesSuite {
   val k8sTestTag = Tag("k8s")
-  val usernameTestTag = Tag("username")
   val localTestTag = Tag("local")
   val schedulingTestTag = Tag("schedule")
   val decomTestTag = Tag("decom")
