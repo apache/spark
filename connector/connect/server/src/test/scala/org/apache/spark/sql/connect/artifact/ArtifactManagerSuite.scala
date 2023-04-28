@@ -16,7 +16,8 @@
  */
 package org.apache.spark.sql.connect.artifact
 
-import java.nio.file.Paths
+import java.nio.charset.StandardCharsets
+import java.nio.file.{Files, Paths}
 
 import org.apache.commons.io.FileUtils
 
@@ -25,6 +26,7 @@ import org.apache.spark.sql.connect.ResourceHelper
 import org.apache.spark.sql.connect.service.{SessionHolder, SparkConnectService}
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.storage.CacheId
 import org.apache.spark.util.Utils
 
 class ArtifactManagerSuite extends SharedSparkSession with ResourceHelper {
@@ -110,5 +112,21 @@ class ArtifactManagerSuite extends SharedSparkSession with ResourceHelper {
     val udf = org.apache.spark.sql.functions.udf(instance)
     val session = SparkConnectService.getOrCreateIsolatedSession("c1", "session").session
     session.range(10).select(udf(col("id").cast("string"))).collect()
+  }
+
+  test("add a cache artifact to the Block Manager") {
+    withTempPath { path =>
+      val stagingPath = path.toPath
+      Files.write(path.toPath, "test".getBytes(StandardCharsets.UTF_8))
+      val remotePath = Paths.get("cache/abc")
+      val session = sessionHolder()
+      artifactManager.addArtifact(session, remotePath, stagingPath)
+      val blockManager = spark.sparkContext.env.blockManager
+      val blockId = CacheId(session.userId, session.sessionId, "abc")
+      val bytes = blockManager.getLocalBytes(blockId)
+      assert(bytes.isDefined)
+      val readback = new String(bytes.get.toByteBuffer().array(), StandardCharsets.UTF_8)
+      assert(readback === "test")
+    }
   }
 }
