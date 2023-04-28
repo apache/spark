@@ -94,7 +94,7 @@ object ReplaceHashWithSortAgg extends Rule[SparkPlan] {
   /**
    * Check if `partialAgg` to be partial aggregate of `finalAgg`.
    */
-  private def isPartialAgg(partialAgg: BaseAggregateExec, finalAgg: BaseAggregateExec): Boolean = {
+  def isPartialAgg(partialAgg: BaseAggregateExec, finalAgg: BaseAggregateExec): Boolean = {
     if (partialAgg.aggregateExpressions.forall(_.mode == Partial) &&
         finalAgg.aggregateExpressions.forall(_.mode == Final)) {
       (finalAgg.logicalLink, partialAgg.logicalLink) match {

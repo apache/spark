@@ -432,6 +432,7 @@ object QueryExecution {
       // `ReplaceHashWithSortAgg` needs to be added after `EnsureRequirements` to guarantee the
       // sort order of each node is checked to be valid.
       ReplaceHashWithSortAgg,
+      CombineAdjacentAggregation,
       // `RemoveRedundantSorts` and `RemoveRedundantWindowGroupLimits` needs to be added after
       // `EnsureRequirements` to guarantee the same number of partitions when instantiating
       // PartitioningCollection.
