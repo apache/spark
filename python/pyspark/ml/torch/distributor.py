@@ -523,7 +523,7 @@ class TorchDistributor(Distributor):
         self,
         framework_wrapper_fn: Optional[Callable],
         train_object: Union[Callable, str],
-        input_dataframe,
+        input_dataframe: "DataFrame",
         *args: Any,
         **kwargs: Any,
     ) -> Callable:
@@ -651,7 +651,7 @@ class TorchDistributor(Distributor):
         self,
         framework_wrapper_fn: Callable,
         train_object: Union[Callable, str],
-        spark_dataframe,
+        spark_dataframe: "DataFrame",
         *args: Any,
         **kwargs: Any,
     ) -> Optional[Any]:
@@ -727,7 +727,7 @@ class TorchDistributor(Distributor):
     @contextmanager
     def _setup_spark_partition_data(
         partition_data_iterator: Iterator[Any], input_schema_json: Dict[str, Any]
-    ):
+    ) -> None:
         from pyspark.sql.pandas.serializers import ArrowStreamSerializer
         from pyspark.files import SparkFiles
         import json
@@ -754,8 +754,10 @@ class TorchDistributor(Distributor):
                     )
 
             schema_file_path = os.path.join(save_dir, "schema.json")
+            schema_json_string = json.dumps(input_schema_json)
+
             with open(schema_file_path, "w") as f:
-                json.dump(input_schema_json, f)
+                f.write(schema_json_string)
 
             os.environ[SPARK_PARTITION_ARROW_DATA_FILE] = arrow_file_path
             os.environ[SPARK_DATAFRAME_SCHEMA_FILE] = schema_file_path
@@ -893,7 +895,7 @@ class TorchDistributor(Distributor):
         spark_dataframe: "DataFrame",
         *args: Any,
         **kwargs: Any,
-    ):
+    ) -> Any:
         """
         Runs distributed training using provided Spark DataFrame as input data.
         You should ensure the input Spark DataFrame have evenly distributed partitions,
@@ -945,7 +947,7 @@ class TorchDistributor(Distributor):
         )
 
 
-def _get_spark_partition_data_loader(num_samples: int, batch_size: int, prefetch=2):
+def _get_spark_partition_data_loader(num_samples: int, batch_size: int, prefetch=2) -> Any:
     """
     This function must be called inside the `train_function` where `train_function`
     is the input argument of `TorchDistributor.train_on_dataframe`.

@@ -17,7 +17,7 @@
 
 import torch
 import numpy as np
-from typing import Any
+from typing import Any, Iterator
 from pyspark.sql.types import StructType
 
 
@@ -28,7 +28,7 @@ class _SparkPartitionTorchDataset(torch.utils.data.IterableDataset):
         self.field_types = [field.dataType.simpleString() for field in schema]
 
     @staticmethod
-    def _extract_field_value(value: Any, field_type: str):
+    def _extract_field_value(value: Any, field_type: str) -> Any:
         # TODO: avoid checking field type for every row.
         if field_type == "vector":
             if value["type"] == 1:
@@ -48,7 +48,7 @@ class _SparkPartitionTorchDataset(torch.utils.data.IterableDataset):
             f"type {field_type}."
         )
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator[Any]:
         from pyspark.sql.pandas.serializers import ArrowStreamSerializer
 
         serializer = ArrowStreamSerializer()
