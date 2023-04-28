@@ -128,7 +128,6 @@ object SparkConnectStreamHandler {
     val schema = dataframe.schema
     val maxRecordsPerBatch = spark.sessionState.conf.arrowMaxRecordsPerBatch
     val timeZoneId = spark.sessionState.conf.sessionLocalTimeZone
-    val errorOnDuplicatedFieldNames = spark.sessionState.conf.pandasStructHandlingMode == "legacy"
     // Conservatively sets it 70% because the size is not accurate but estimated.
     val maxBatchSize = (SparkEnv.get.conf.get(CONNECT_GRPC_ARROW_MAX_BATCH_SIZE) * 0.7).toLong
 
@@ -137,7 +136,7 @@ object SparkConnectStreamHandler {
       maxRecordsPerBatch,
       maxBatchSize,
       timeZoneId,
-      errorOnDuplicatedFieldNames)
+      errorOnDuplicatedFieldNames = false)
 
     var numSent = 0
     def sendBatch(bytes: Array[Byte], count: Long): Unit = {
@@ -234,7 +233,8 @@ object SparkConnectStreamHandler {
     // Make sure at least 1 batch will be sent.
     if (numSent == 0) {
       sendBatch(
-        ArrowConverters.createEmptyArrowBatch(schema, timeZoneId, errorOnDuplicatedFieldNames),
+        ArrowConverters.createEmptyArrowBatch(
+          schema, timeZoneId, errorOnDuplicatedFieldNames = false),
         0L)
     }
   }

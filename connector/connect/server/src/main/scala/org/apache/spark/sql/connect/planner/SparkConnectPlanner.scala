@@ -1925,12 +1925,10 @@ class SparkConnectPlanner(val session: SparkSession) {
     val maxRecordsPerBatch = session.sessionState.conf.arrowMaxRecordsPerBatch
     val maxBatchSize = (SparkEnv.get.conf.get(CONNECT_GRPC_ARROW_MAX_BATCH_SIZE) * 0.7).toLong
     val timeZoneId = session.sessionState.conf.sessionLocalTimeZone
-    val errorOnDuplicatedFieldNames =
-      session.sessionState.conf.pandasStructHandlingMode == "legacy"
 
     // Convert the data.
     val bytes = if (rows.isEmpty) {
-      ArrowConverters.createEmptyArrowBatch(schema, timeZoneId, errorOnDuplicatedFieldNames)
+      ArrowConverters.createEmptyArrowBatch(schema, timeZoneId, errorOnDuplicatedFieldNames = false)
     } else {
       val batches = ArrowConverters.toBatchWithSchemaIterator(
         rows.iterator,
@@ -1938,7 +1936,7 @@ class SparkConnectPlanner(val session: SparkSession) {
         maxRecordsPerBatch,
         maxBatchSize,
         timeZoneId,
-        errorOnDuplicatedFieldNames)
+        errorOnDuplicatedFieldNames = false)
       assert(batches.hasNext)
       val bytes = batches.next()
       assert(!batches.hasNext, s"remaining batches: ${batches.size}")
