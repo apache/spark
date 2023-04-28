@@ -523,7 +523,7 @@ class TorchDistributor(Distributor):
         self,
         framework_wrapper_fn: Optional[Callable],
         train_object: Union[Callable, str],
-        input_dataframe: "DataFrame",
+        input_dataframe: Optional["DataFrame"],
         *args: Any,
         **kwargs: Any,
     ) -> Callable:
@@ -651,7 +651,7 @@ class TorchDistributor(Distributor):
         self,
         framework_wrapper_fn: Callable,
         train_object: Union[Callable, str],
-        spark_dataframe: "DataFrame",
+        spark_dataframe: Optional["DataFrame"],
         *args: Any,
         **kwargs: Any,
     ) -> Optional[Any]:
@@ -727,7 +727,7 @@ class TorchDistributor(Distributor):
     @contextmanager
     def _setup_spark_partition_data(
         partition_data_iterator: Iterator[Any], input_schema_json: Dict[str, Any]
-    ) -> None:
+    ) -> Iterator[Any]:
         from pyspark.sql.pandas.serializers import ArrowStreamSerializer
         from pyspark.files import SparkFiles
         import json
@@ -756,8 +756,8 @@ class TorchDistributor(Distributor):
             schema_file_path = os.path.join(save_dir, "schema.json")
             schema_json_string = json.dumps(input_schema_json)
 
-            with open(schema_file_path, "w") as f:
-                f.write(schema_json_string)
+            with open(schema_file_path, "w") as f:  # type:ignore
+                f.write(schema_json_string)  # type:ignore
 
             os.environ[SPARK_PARTITION_ARROW_DATA_FILE] = arrow_file_path
             os.environ[SPARK_DATAFRAME_SCHEMA_FILE] = schema_file_path
@@ -947,7 +947,7 @@ class TorchDistributor(Distributor):
         )
 
 
-def _get_spark_partition_data_loader(num_samples: int, batch_size: int, prefetch=2) -> Any:
+def _get_spark_partition_data_loader(num_samples: int, batch_size: int, prefetch: int = 2) -> Any:
     """
     This function must be called inside the `train_function` where `train_function`
     is the input argument of `TorchDistributor.train_on_dataframe`.
