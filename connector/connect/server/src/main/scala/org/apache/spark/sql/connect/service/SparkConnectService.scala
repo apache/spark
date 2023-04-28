@@ -361,8 +361,10 @@ object SparkConnectService {
     userSessionMapping.invalidateAll()
   }
 
+  def abbreviateErrorMessage(msg: String): String = StringUtils.abbreviate(msg, 2048)
+
   def extractErrorMessage(st: Throwable): String = {
-    val message = StringUtils.abbreviate(st.getMessage, 2048)
+    val message = abbreviateErrorMessage(st.getMessage)
     if (message != null) {
       message
     } else {

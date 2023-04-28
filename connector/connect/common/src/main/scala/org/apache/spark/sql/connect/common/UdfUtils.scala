@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.connect.client
+package org.apache.spark.sql.connect.common
 
 import scala.collection.JavaConverters._
 
@@ -23,11 +23,12 @@ import org.apache.spark.sql.Row
 
 /**
  * Util functions to help convert input functions between typed filter, map, flatMap,
- * mapPartitions etc. These functions cannot be defined inside the client Dataset class as it will
- * cause Dataset sync conflicts when used together with UDFs. Thus we define them outside, in the
- * client package.
+ * mapPartitions etc. This class is shared between the client and the server so that when the
+ * methods are used in client UDFs, the server will be able to find them when actually executing
+ * the UDFs.
  */
-private[sql] object UdfUtils {
+@SerialVersionUID(8464839273647598302L)
+private[sql] object UdfUtils extends Serializable {
 
   def mapFuncToMapPartitionsAdaptor[T, U](f: T => U): Iterator[T] => Iterator[U] = _.map(f(_))
 
