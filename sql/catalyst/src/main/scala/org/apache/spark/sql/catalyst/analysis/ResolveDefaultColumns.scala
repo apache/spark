@@ -570,7 +570,7 @@ case class ResolveDefaultColumns(
    */
   private def getInsertTableSchemaWithoutPartitionColumns(
       enclosingInsert: InsertIntoStatement): Option[StructType] = {
-    val target = getSchemaForTargetTable(enclosingInsert.table).getOrElse(return None)
+    val target: StructType = getSchemaForTargetTable(enclosingInsert.table).getOrElse(return None)
     val schema: StructType = StructType(target.fields.dropRight(enclosingInsert.partitionSpec.size))
     // Rearrange the columns in the result schema to match the order of the explicit column list,
     // if any.
