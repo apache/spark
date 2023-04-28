@@ -360,6 +360,11 @@ ERROR_CLASSES_JSON = """
       "Argument `<arg_name>` should be a float, int, list or str, got <arg_type>."
     ]
   },
+  "NOT_INSTANCE_OF" : {
+    "message" : [
+      "<value> is not an instance of type <data_type>."
+    ]
+  },
   "NOT_INT" : {
     "message" : [
       "Argument `<arg_name>` should be an int, got <arg_type>."
@@ -368,11 +373,6 @@ ERROR_CLASSES_JSON = """
   "NOT_INT_OR_SLICE_OR_STR" : {
     "message" : [
       "Argument `<arg_name>` should be an int, slice or str, got <arg_type>."
-    ]
-  },
-  "NOT_INSTANCE_OF" : {
-    "message" : [
-      "<value> is not an instance of type <data_type>."
     ]
   },
   "NOT_IN_BARRIER_STAGE" : {
