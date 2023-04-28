@@ -842,7 +842,7 @@ class SparkConnectClient(object):
                 raise PySparkValueError(
                     error_class="UNKNOWN_EXPLAIN_MODE",
                     message_parameters={
-                        "explain_mode": explain_mode,
+                        "explain_mode": str(explain_mode),
                     },
                 )
             if explain_mode == "simple":
