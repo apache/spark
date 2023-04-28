@@ -620,8 +620,6 @@ case class ResolveDefaultColumns(
 
   /**
    * Returns the schema for the target table of a DML command, looking into the catalog if needed.
-   * Includes a StructType representing the schema as well as a set of column names to exclude from
-   * consideration when performing INSERT INTO commands, if any.
    */
   private def getSchemaForTargetTable(table: LogicalPlan): Option[StructType] = {
     val resolved = table match {
