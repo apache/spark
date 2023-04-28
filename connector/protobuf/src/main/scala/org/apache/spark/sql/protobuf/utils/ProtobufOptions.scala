@@ -49,9 +49,9 @@ private[sql] class ProtobufOptions(
    * Examples. Consider a Protobuf with a recursive field:
    *   `message Person { string name = 1; Person friend = 2; }`
    * The following lists the schema with different values for this setting.
-   *  1:  struct<name: string>
-   *  2:  struct<name string, friend: struct<name: string>>
-   *  3:  struct<name string, friend: struct<name string, friend: struct<name: string>>>
+   *  1:  `struct<name: string>`
+   *  2:  `struct<name string, friend: struct<name: string>>`
+   *  3:  `struct<name string, friend: struct<name string, friend: struct<name: string>>>`
    * and so on.
    */
   val recursiveFieldMaxDepth: Int = parameters.getOrElse("recursive.fields.max.depth", "-1").toInt
@@ -86,7 +86,7 @@ private[sql] class ProtobufOptions(
    * With this option enabled, schema for `from_protobuf("col", messageName = "ProtoWithAny")`
    * would be : `STRUCT<event_name: STRING, details: STRING>`.
    * At run time, if `details` field contains `Person` Protobuf message, the returned value looks
-   * like this with JSON string for `details`:
+   * like this:
    *   ('click', '{"@type":"type.googleapis.com/...ProtoWithAny","name":"Mario","id":100}')
    *
    * Requirements:
@@ -97,6 +97,9 @@ private[sql] class ProtobufOptions(
    *    in the same `proto` file as the primary Java class might be visible.
    *    E.g. if `ProtoWithAny` and `Person` in above example are in different proto files,
    *    definition for `Person` may not be found.
+   *
+   * This feature should be enabled carefully. JSON conversion and processing are inefficient.
+   * In addition schema safety is also reduced making downstream processing error prone.
    */
   val convertAnyFieldsToJson: Boolean =
     parameters.getOrElse("convert.any.fields.to.json", "false").toBoolean
