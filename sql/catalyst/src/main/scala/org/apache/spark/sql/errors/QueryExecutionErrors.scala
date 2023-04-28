@@ -364,10 +364,14 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
   }
 
   def regexGroupIndexExceedGroupCountError(
-      groupCount: Int, groupIndex: Int): SparkIllegalArgumentException = {
-    new SparkIllegalArgumentException(
-      errorClass = "REGEX_GROUP_INDEX_EXCEED_REGEX_GROUP_COUNT",
+      funcName: String,
+      groupCount: Int,
+      groupIndex: Int): RuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "INVALID_PARAMETER_VALUE.REGEX_GROUP_INDEX_EXCEED_REGEX_GROUP_COUNT",
       messageParameters = Map(
+        "parameter" -> toSQLId("idx"),
+        "functionName" -> toSQLId(funcName),
         "groupCount" -> groupCount.toString(),
         "groupIndex" -> groupIndex.toString()))
   }

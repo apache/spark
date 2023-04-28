@@ -1009,6 +1009,11 @@
           "<value>."
         ]
       },
+      "REGEX_GROUP_INDEX_EXCEED_REGEX_GROUP_COUNT" : {
+        "message" : [
+          "Regex group count is <groupCount>, but the specified group index is <groupIndex>."
+        ]
+      },
       "ZERO_INDEX" : {
         "message" : [
           "expects %1$, %2$ and so on, but got %0$."
@@ -1377,11 +1382,6 @@
   "RECURSIVE_PROTOBUF_SCHEMA" : {
     "message" : [
       "Found recursive reference in Protobuf schema, which can not be processed by Spark by default: <fieldDescriptor>. try setting the option `recursive.fields.max.depth` 0 to 10. Going beyond 10 levels of recursion is not allowed."
-    ]
-  },
-  "REGEX_GROUP_INDEX_EXCEED_REGEX_GROUP_COUNT" : {
-    "message" : [
-      "Regex group count is <groupCount>, but the specified group index is <groupIndex>."
     ]
   },
   "RENAME_SRC_PATH_NOT_FOUND" : {

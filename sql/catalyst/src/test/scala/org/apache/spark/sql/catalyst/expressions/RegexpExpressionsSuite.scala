@@ -391,11 +391,11 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val row11 = create_row("100-200", "(\\d+)-(\\d+)", -1)
     val row12 = create_row("100-200", "\\d+", -1)
 
-    checkExceptionInExpression[IllegalArgumentException](
+    checkExceptionInExpression[SparkRuntimeException](
       expr, row8, "Regex group count is 2, but the specified group index is 3")
-    checkExceptionInExpression[IllegalArgumentException](
+    checkExceptionInExpression[SparkRuntimeException](
       expr, row9, "Regex group count is 1, but the specified group index is 2")
-    checkExceptionInExpression[IllegalArgumentException](
+    checkExceptionInExpression[SparkRuntimeException](
       expr, row10, "Regex group count is 0, but the specified group index is 1")
     checkExceptionInExpression[IllegalArgumentException](
       expr, row11, "The specified group index cannot be less than zero")
@@ -445,11 +445,11 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val row12 = create_row("100-200,300-400,500-600", "(\\d+)-(\\d+)", -1)
     val row13 = create_row("100-200,300-400,500-600", "\\d+", -1)
 
-    checkExceptionInExpression[IllegalArgumentException](
+    checkExceptionInExpression[SparkRuntimeException](
       expr, row9, "Regex group count is 2, but the specified group index is 3")
-    checkExceptionInExpression[IllegalArgumentException](
+    checkExceptionInExpression[SparkRuntimeException](
       expr, row10, "Regex group count is 1, but the specified group index is 2")
-    checkExceptionInExpression[IllegalArgumentException](
+    checkExceptionInExpression[SparkRuntimeException](
       expr, row11, "Regex group count is 0, but the specified group index is 1")
     checkExceptionInExpression[IllegalArgumentException](
       expr, row12, "The specified group index cannot be less than zero")
