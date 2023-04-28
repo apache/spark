@@ -29,8 +29,7 @@ import org.apache.spark.sql.types.{AbstractDataType, BinaryType, BooleanType, Da
     of a Datasketches HllSketch. """,
   examples = """
     Examples:
-      > SELECT _FUNC_(hll_sketch_agg(col1))
-      FROM VALUES (1), (1), (2), (2), (3) tab(col1);
+      > SELECT _FUNC_(hll_sketch_agg(col)) FROM VALUES (1), (1), (2), (2), (3) tab(col);
        3
   """,
   group = "misc_funcs",
@@ -56,6 +55,7 @@ case class HllSketchEstimate(child: Expression)
   }
 }
 
+// scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = """
     _FUNC_(first, second, allowDifferentLgConfigK) - Merges two binary representations of
@@ -64,12 +64,12 @@ case class HllSketchEstimate(child: Expression)
     lgConfigK values (defaults to false). """,
   examples = """
     Examples:
-      > SELECT hll_sketch_estimate(_FUNC_(hll_sketch_agg(col1), hll_sketch_agg(col1)))
-      FROM VALUES (1, 4), (1, 4), (2, 5), (2, 5), (3, 6) tab(col1, col2);
+      > SELECT hll_sketch_estimate(_FUNC_(hll_sketch_agg(col1), hll_sketch_agg(col2))) FROM VALUES (1, 4), (1, 4), (2, 5), (2, 5), (3, 6) tab(col1, col2);
        6
   """,
   group = "misc_funcs",
   since = "3.5.0")
+// scalastyle:on line.size.limit
 case class HllUnion(first: Expression, second: Expression, third: Expression)
   extends TernaryExpression
     with CodegenFallback

@@ -38,6 +38,7 @@ import org.apache.spark.unsafe.types.UTF8String
  * @param child child expression against which unique counting will occur
  * @param lgConfigK the log-base-2 of K, where K is the number of buckets or slots for the sketch
  */
+// scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = """
     _FUNC_(expr, lgConfigK) - Returns the HllSketch's updateable binary representation.
@@ -45,12 +46,12 @@ import org.apache.spark.unsafe.types.UTF8String
       slots for the HllSketch. """,
   examples = """
     Examples:
-      > SELECT hll_sketch_estimate(_FUNC_(col1, 12))
-      FROM VALUES (1), (1), (2), (2), (3) tab(col1);
+      > SELECT hll_sketch_estimate(_FUNC_(col, 12)) FROM VALUES (1), (1), (2), (2), (3) tab(col);
        3
   """,
   group = "agg_funcs",
   since = "3.5.0")
+// scalastyle:on line.size.limit
 case class HllSketchAgg(
     child: Expression,
     lgConfigKExpression: Expression,
@@ -194,23 +195,20 @@ case class HllSketchAgg(
  * @param child child expression against which unique counting will occur
  * @param lgMaxK The largest maximum size for lgConfigK for the union operation.
  */
+// scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = """
-    _FUNC_(expr, lgMaxK) - Returns the estimated number of unique values.
+    _FUNC_(expr, allowDifferentLgConfigK) - Returns the estimated number of unique values.
       `allowDifferentLgConfigK` (optional) Allow sketches with different lgConfigK values
        to be unioned (defaults to false).""",
   examples = """
     Examples:
-      > SELECT hll_sketch_estimate(_FUNC_(sketch, 12))
-      FROM (
-        SELECT hll_sketch_agg(col1) as sketch FROMVALUES (1), (1), (2), (2), (3) tab(col1)
-        UNION ALL
-        SELECT hll_sketch_agg(col1) as sketch FROMVALUES (4), (4), (5), (5), (6) tab(col1)
-      );
-       3
+      > SELECT hll_sketch_estimate(_FUNC_(sketch, true)) FROM (SELECT hll_sketch_agg(col) as sketch FROM VALUES (1) tab(col) UNION ALL SELECT hll_sketch_agg(col, 20) as sketch FROM VALUES (1) tab(col));
+       1
   """,
   group = "agg_funcs",
   since = "3.5.0")
+// scalastyle:on line.size.limit
 case class HllUnionAgg(
     left: Expression,
     right: Expression,
