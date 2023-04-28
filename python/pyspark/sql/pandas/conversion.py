@@ -39,6 +39,7 @@ from pyspark.sql.types import (
 )
 from pyspark.sql.utils import is_timestamp_ntz_preferred
 from pyspark.traceback_utils import SCCallSiteSync
+from pyspark.errors import PySparkTypeError
 
 if TYPE_CHECKING:
     import numpy as np
@@ -588,7 +589,10 @@ class SparkConversionMixin:
         if isinstance(schema, StructType):
             arrow_types = [to_arrow_type(f.dataType) for f in schema.fields]
         elif isinstance(schema, DataType):
-            raise ValueError("Single data type %s is not supported with Arrow" % str(schema))
+            raise PySparkTypeError(
+                error_class="UNSUPPORTED_DATA_TYPE_FOR_ARROW",
+                message_parameters={"data_type": str(schema)},
+            )
         else:
             # Any timestamps must be coerced to be compatible with Spark
             arrow_types = [
