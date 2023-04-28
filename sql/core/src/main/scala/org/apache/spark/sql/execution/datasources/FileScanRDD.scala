@@ -211,7 +211,20 @@ class FileScanRDD(
         }
       }
 
+      def collectQueryMetrics() = {
+        if (currentIterator != null && currentIterator.isInstanceOf[RecordReaderIterator[Object]]) {
+          val queryMetrics = currentIterator.asInstanceOf[RecordReaderIterator[Object]]
+            .getParquetQueryMetrics()
+          if (queryMetrics.getTotalPagesCount > 0) {
+            inputMetrics.incTotalPagesCount(queryMetrics.getTotalPagesCount);
+            inputMetrics.incFilteredPagesCount(queryMetrics.getFilteredPagesCount);
+            inputMetrics.incAfterFilterPagesCount(queryMetrics.getAfterFilterPagesCount);
+          }
+        }
+      }
+
       override def close(): Unit = {
+        collectQueryMetrics()
         incTaskInputMetricsBytesRead()
         InputFileBlockHolder.unset()
       }

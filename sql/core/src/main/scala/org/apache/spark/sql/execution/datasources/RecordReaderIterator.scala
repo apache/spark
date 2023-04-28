@@ -20,8 +20,10 @@ package org.apache.spark.sql.execution.datasources
 import java.io.Closeable
 
 import org.apache.hadoop.mapreduce.RecordReader
+import org.apache.parquet.filter2.compat.QueryMetrics
 
 import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.execution.datasources.parquet.VectorizedParquetRecordReader
 
 /**
  * An adaptor from a Hadoop [[RecordReader]] to an [[Iterator]] over the values returned.
@@ -33,6 +35,7 @@ class RecordReaderIterator[T](
     private[this] var rowReader: RecordReader[_, T]) extends Iterator[T] with Closeable {
   private[this] var havePair = false
   private[this] var finished = false
+  private[this] var queryMetrics: QueryMetrics = _
 
   override def hasNext: Boolean = {
     if (!finished && !havePair) {
@@ -58,11 +61,25 @@ class RecordReaderIterator[T](
 
   override def close(): Unit = {
     if (rowReader != null) {
+      setParquetQueryMetrics()
       try {
         rowReader.close()
       } finally {
         rowReader = null
       }
     }
+  }
+
+  private def setParquetQueryMetrics(): Unit = {
+    if (rowReader.isInstanceOf[VectorizedParquetRecordReader]) {
+      queryMetrics = rowReader.asInstanceOf[VectorizedParquetRecordReader].getParquetQueryMetrics()
+    }
+  }
+
+  def getParquetQueryMetrics(): QueryMetrics = {
+    if (queryMetrics == null) {
+      queryMetrics = new QueryMetrics
+    }
+    queryMetrics
   }
 }

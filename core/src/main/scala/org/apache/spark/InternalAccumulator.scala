@@ -78,6 +78,9 @@ private[spark] object InternalAccumulator {
     val TOTAL_BLOOM_BLOCKS = INPUT_METRICS_PREFIX + "totalBloomBlocks"
     val FOOTER_READ_TIME = INPUT_METRICS_PREFIX + "footerReadTime"
     val FOOTER_READ_NUMBER = INPUT_METRICS_PREFIX + "footerReadNumber"
+    val TOTAL_PARQUET_PAGES = INPUT_METRICS_PREFIX + "totalPagesCount"
+    val FILTERED_PARQUET_PAGES = INPUT_METRICS_PREFIX + "filteredPagesCount"
+    val AFTER_FILTERED_PARQUET_PAGES = INPUT_METRICS_PREFIX + "afterFilterPagesCount"
   }
 
   // scalastyle:on

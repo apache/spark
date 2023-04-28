@@ -26,6 +26,7 @@ import org.apache.hadoop.mapreduce.InputSplit;
 import org.apache.hadoop.mapreduce.TaskAttemptContext;
 import org.apache.parquet.column.ColumnDescriptor;
 import org.apache.parquet.column.page.PageReadStore;
+import org.apache.parquet.filter2.compat.QueryMetrics;
 import org.apache.parquet.schema.Type;
 
 import org.apache.spark.memory.MemoryMode;
@@ -340,5 +341,12 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
         int96RebaseMode);
     }
     totalCountLoadedSoFar += pages.getRowCount();
+  }
+  public QueryMetrics getParquetQueryMetrics() {
+    if(reader != null){
+      return reader.queryMetrics;
+    }else {
+      return new QueryMetrics();
+    }
   }
 }
