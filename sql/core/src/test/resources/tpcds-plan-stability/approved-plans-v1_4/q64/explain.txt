@@ -1,187 +1,185 @@
 == Physical Plan ==
-* Sort (183)
-+- Exchange (182)
-   +- * Project (181)
-      +- * SortMergeJoin Inner (180)
-         :- * Sort (111)
-         :  +- Exchange (110)
-         :     +- * HashAggregate (109)
-         :        +- * HashAggregate (108)
-         :           +- * Project (107)
-         :              +- * BroadcastHashJoin Inner BuildRight (106)
-         :                 :- * Project (100)
-         :                 :  +- * BroadcastHashJoin Inner BuildRight (99)
-         :                 :     :- * Project (97)
-         :                 :     :  +- * BroadcastHashJoin Inner BuildRight (96)
-         :                 :     :     :- * Project (91)
-         :                 :     :     :  +- * BroadcastHashJoin Inner BuildRight (90)
-         :                 :     :     :     :- * Project (88)
-         :                 :     :     :     :  +- * BroadcastHashJoin Inner BuildRight (87)
-         :                 :     :     :     :     :- * Project (82)
-         :                 :     :     :     :     :  +- * BroadcastHashJoin Inner BuildRight (81)
-         :                 :     :     :     :     :     :- * Project (79)
-         :                 :     :     :     :     :     :  +- * BroadcastHashJoin Inner BuildRight (78)
-         :                 :     :     :     :     :     :     :- * Project (73)
-         :                 :     :     :     :     :     :     :  +- * BroadcastHashJoin Inner BuildRight (72)
-         :                 :     :     :     :     :     :     :     :- * Project (67)
-         :                 :     :     :     :     :     :     :     :  +- * BroadcastHashJoin Inner BuildRight (66)
-         :                 :     :     :     :     :     :     :     :     :- * Project (64)
-         :                 :     :     :     :     :     :     :     :     :  +- * BroadcastHashJoin Inner BuildRight (63)
-         :                 :     :     :     :     :     :     :     :     :     :- * Project (58)
-         :                 :     :     :     :     :     :     :     :     :     :  +- * BroadcastHashJoin Inner BuildRight (57)
-         :                 :     :     :     :     :     :     :     :     :     :     :- * Project (55)
-         :                 :     :     :     :     :     :     :     :     :     :     :  +- * BroadcastHashJoin Inner BuildRight (54)
-         :                 :     :     :     :     :     :     :     :     :     :     :     :- * Project (49)
-         :                 :     :     :     :     :     :     :     :     :     :     :     :  +- * BroadcastHashJoin Inner BuildRight (48)
-         :                 :     :     :     :     :     :     :     :     :     :     :     :     :- * Project (43)
-         :                 :     :     :     :     :     :     :     :     :     :     :     :     :  +- * BroadcastHashJoin Inner BuildRight (42)
-         :                 :     :     :     :     :     :     :     :     :     :     :     :     :     :- * Project (37)
-         :                 :     :     :     :     :     :     :     :     :     :     :     :     :     :  +- * BroadcastHashJoin Inner BuildRight (36)
-         :                 :     :     :     :     :     :     :     :     :     :     :     :     :     :     :- * Project (34)
-         :                 :     :     :     :     :     :     :     :     :     :     :     :     :     :     :  +- * SortMergeJoin Inner (33)
-         :                 :     :     :     :     :     :     :     :     :     :     :     :     :     :     :     :- * Sort (12)
-         :                 :     :     :     :     :     :     :     :     :     :     :     :     :     :     :     :  +- Exchange (11)
-         :                 :     :     :     :     :     :     :     :     :     :     :     :     :     :     :     :     +- * Project (10)
-         :                 :     :     :     :     :     :     :     :     :     :     :     :     :     :     :     :        +- * BroadcastHashJoin Inner BuildLeft (9)
-         :                 :     :     :     :     :     :     :     :     :     :     :     :     :     :     :     :           :- BroadcastExchange (4)
-         :                 :     :     :     :     :     :     :     :     :     :     :     :     :     :     :     :           :  +- * Filter (3)
-         :                 :     :     :     :     :     :     :     :     :     :     :     :     :     :     :     :           :     +- * ColumnarToRow (2)
-         :                 :     :     :     :     :     :     :     :     :     :     :     :     :     :     :     :           :        +- Scan parquet spark_catalog.default.store_sales (1)
-         :                 :     :     :     :     :     :     :     :     :     :     :     :     :     :     :     :           +- * Project (8)
-         :                 :     :     :     :     :     :     :     :     :     :     :     :     :     :     :     :              +- * Filter (7)
-         :                 :     :     :     :     :     :     :     :     :     :     :     :     :     :     :     :                 +- * ColumnarToRow (6)
-         :                 :     :     :     :     :     :     :     :     :     :     :     :     :     :     :     :                    +- Scan parquet spark_catalog.default.store_returns (5)
-         :                 :     :     :     :     :     :     :     :     :     :     :     :     :     :     :     +- * Sort (32)
-         :                 :     :     :     :     :     :     :     :     :     :     :     :     :     :     :        +- * Project (31)
-         :                 :     :     :     :     :     :     :     :     :     :     :     :     :     :     :           +- * Filter (30)
-         :                 :     :     :     :     :     :     :     :     :     :     :     :     :     :     :              +- * HashAggregate (29)
-         :                 :     :     :     :     :     :     :     :     :     :     :     :     :     :     :                 +- Exchange (28)
-         :                 :     :     :     :     :     :     :     :     :     :     :     :     :     :     :                    +- * HashAggregate (27)
-         :                 :     :     :     :     :     :     :     :     :     :     :     :     :     :     :                       +- * Project (26)
-         :                 :     :     :     :     :     :     :     :     :     :     :     :     :     :     :                          +- * SortMergeJoin Inner (25)
-         :                 :     :     :     :     :     :     :     :     :     :     :     :     :     :     :                             :- * Sort (18)
-         :                 :     :     :     :     :     :     :     :     :     :     :     :     :     :     :                             :  +- Exchange (17)
-         :                 :     :     :     :     :     :     :     :     :     :     :     :     :     :     :                             :     +- * Project (16)
-         :                 :     :     :     :     :     :     :     :     :     :     :     :     :     :     :                             :        +- * Filter (15)
-         :                 :     :     :     :     :     :     :     :     :     :     :     :     :     :     :                             :           +- * ColumnarToRow (14)
-         :                 :     :     :     :     :     :     :     :     :     :     :     :     :     :     :                             :              +- Scan parquet spark_catalog.default.catalog_sales (13)
-         :                 :     :     :     :     :     :     :     :     :     :     :     :     :     :     :                             +- * Sort (24)
-         :                 :     :     :     :     :     :     :     :     :     :     :     :     :     :     :                                +- Exchange (23)
-         :                 :     :     :     :     :     :     :     :     :     :     :     :     :     :     :                                   +- * Project (22)
-         :                 :     :     :     :     :     :     :     :     :     :     :     :     :     :     :                                      +- * Filter (21)
-         :                 :     :     :     :     :     :     :     :     :     :     :     :     :     :     :                                         +- * ColumnarToRow (20)
-         :                 :     :     :     :     :     :     :     :     :     :     :     :     :     :     :                                            +- Scan parquet spark_catalog.default.catalog_returns (19)
-         :                 :     :     :     :     :     :     :     :     :     :     :     :     :     :     +- ReusedExchange (35)
-         :                 :     :     :     :     :     :     :     :     :     :     :     :     :     +- BroadcastExchange (41)
-         :                 :     :     :     :     :     :     :     :     :     :     :     :     :        +- * Filter (40)
-         :                 :     :     :     :     :     :     :     :     :     :     :     :     :           +- * ColumnarToRow (39)
-         :                 :     :     :     :     :     :     :     :     :     :     :     :     :              +- Scan parquet spark_catalog.default.store (38)
-         :                 :     :     :     :     :     :     :     :     :     :     :     :     +- BroadcastExchange (47)
-         :                 :     :     :     :     :     :     :     :     :     :     :     :        +- * Filter (46)
-         :                 :     :     :     :     :     :     :     :     :     :     :     :           +- * ColumnarToRow (45)
-         :                 :     :     :     :     :     :     :     :     :     :     :     :              +- Scan parquet spark_catalog.default.customer (44)
-         :                 :     :     :     :     :     :     :     :     :     :     :     +- BroadcastExchange (53)
-         :                 :     :     :     :     :     :     :     :     :     :     :        +- * Filter (52)
-         :                 :     :     :     :     :     :     :     :     :     :     :           +- * ColumnarToRow (51)
-         :                 :     :     :     :     :     :     :     :     :     :     :              +- Scan parquet spark_catalog.default.date_dim (50)
-         :                 :     :     :     :     :     :     :     :     :     :     +- ReusedExchange (56)
-         :                 :     :     :     :     :     :     :     :     :     +- BroadcastExchange (62)
-         :                 :     :     :     :     :     :     :     :     :        +- * Filter (61)
-         :                 :     :     :     :     :     :     :     :     :           +- * ColumnarToRow (60)
-         :                 :     :     :     :     :     :     :     :     :              +- Scan parquet spark_catalog.default.customer_demographics (59)
-         :                 :     :     :     :     :     :     :     :     +- ReusedExchange (65)
-         :                 :     :     :     :     :     :     :     +- BroadcastExchange (71)
-         :                 :     :     :     :     :     :     :        +- * Filter (70)
-         :                 :     :     :     :     :     :     :           +- * ColumnarToRow (69)
-         :                 :     :     :     :     :     :     :              +- Scan parquet spark_catalog.default.promotion (68)
-         :                 :     :     :     :     :     :     +- BroadcastExchange (77)
-         :                 :     :     :     :     :     :        +- * Filter (76)
-         :                 :     :     :     :     :     :           +- * ColumnarToRow (75)
-         :                 :     :     :     :     :     :              +- Scan parquet spark_catalog.default.household_demographics (74)
-         :                 :     :     :     :     :     +- ReusedExchange (80)
-         :                 :     :     :     :     +- BroadcastExchange (86)
-         :                 :     :     :     :        +- * Filter (85)
-         :                 :     :     :     :           +- * ColumnarToRow (84)
-         :                 :     :     :     :              +- Scan parquet spark_catalog.default.customer_address (83)
-         :                 :     :     :     +- ReusedExchange (89)
-         :                 :     :     +- BroadcastExchange (95)
-         :                 :     :        +- * Filter (94)
-         :                 :     :           +- * ColumnarToRow (93)
-         :                 :     :              +- Scan parquet spark_catalog.default.income_band (92)
-         :                 :     +- ReusedExchange (98)
-         :                 +- BroadcastExchange (105)
-         :                    +- * Project (104)
-         :                       +- * Filter (103)
-         :                          +- * ColumnarToRow (102)
-         :                             +- Scan parquet spark_catalog.default.item (101)
-         +- * Sort (179)
-            +- Exchange (178)
-               +- * HashAggregate (177)
-                  +- * HashAggregate (176)
-                     +- * Project (175)
-                        +- * BroadcastHashJoin Inner BuildRight (174)
-                           :- * Project (172)
-                           :  +- * BroadcastHashJoin Inner BuildRight (171)
-                           :     :- * Project (169)
-                           :     :  +- * BroadcastHashJoin Inner BuildRight (168)
-                           :     :     :- * Project (166)
-                           :     :     :  +- * BroadcastHashJoin Inner BuildRight (165)
-                           :     :     :     :- * Project (163)
-                           :     :     :     :  +- * BroadcastHashJoin Inner BuildRight (162)
-                           :     :     :     :     :- * Project (160)
-                           :     :     :     :     :  +- * BroadcastHashJoin Inner BuildRight (159)
-                           :     :     :     :     :     :- * Project (157)
-                           :     :     :     :     :     :  +- * BroadcastHashJoin Inner BuildRight (156)
-                           :     :     :     :     :     :     :- * Project (154)
-                           :     :     :     :     :     :     :  +- * BroadcastHashJoin Inner BuildRight (153)
-                           :     :     :     :     :     :     :     :- * Project (151)
-                           :     :     :     :     :     :     :     :  +- * BroadcastHashJoin Inner BuildRight (150)
-                           :     :     :     :     :     :     :     :     :- * Project (148)
-                           :     :     :     :     :     :     :     :     :  +- * BroadcastHashJoin Inner BuildRight (147)
-                           :     :     :     :     :     :     :     :     :     :- * Project (145)
-                           :     :     :     :     :     :     :     :     :     :  +- * BroadcastHashJoin Inner BuildRight (144)
-                           :     :     :     :     :     :     :     :     :     :     :- * Project (142)
-                           :     :     :     :     :     :     :     :     :     :     :  +- * BroadcastHashJoin Inner BuildRight (141)
-                           :     :     :     :     :     :     :     :     :     :     :     :- * Project (139)
-                           :     :     :     :     :     :     :     :     :     :     :     :  +- * BroadcastHashJoin Inner BuildRight (138)
-                           :     :     :     :     :     :     :     :     :     :     :     :     :- * Project (136)
-                           :     :     :     :     :     :     :     :     :     :     :     :     :  +- * BroadcastHashJoin Inner BuildRight (135)
-                           :     :     :     :     :     :     :     :     :     :     :     :     :     :- * Project (133)
-                           :     :     :     :     :     :     :     :     :     :     :     :     :     :  +- * BroadcastHashJoin Inner BuildRight (132)
-                           :     :     :     :     :     :     :     :     :     :     :     :     :     :     :- * Project (130)
-                           :     :     :     :     :     :     :     :     :     :     :     :     :     :     :  +- * SortMergeJoin Inner (129)
-                           :     :     :     :     :     :     :     :     :     :     :     :     :     :     :     :- * Sort (123)
-                           :     :     :     :     :     :     :     :     :     :     :     :     :     :     :     :  +- Exchange (122)
-                           :     :     :     :     :     :     :     :     :     :     :     :     :     :     :     :     +- * Project (121)
-                           :     :     :     :     :     :     :     :     :     :     :     :     :     :     :     :        +- * BroadcastHashJoin Inner BuildLeft (120)
-                           :     :     :     :     :     :     :     :     :     :     :     :     :     :     :     :           :- BroadcastExchange (115)
-                           :     :     :     :     :     :     :     :     :     :     :     :     :     :     :     :           :  +- * Filter (114)
-                           :     :     :     :     :     :     :     :     :     :     :     :     :     :     :     :           :     +- * ColumnarToRow (113)
-                           :     :     :     :     :     :     :     :     :     :     :     :     :     :     :     :           :        +- Scan parquet spark_catalog.default.store_sales (112)
-                           :     :     :     :     :     :     :     :     :     :     :     :     :     :     :     :           +- * Project (119)
-                           :     :     :     :     :     :     :     :     :     :     :     :     :     :     :     :              +- * Filter (118)
-                           :     :     :     :     :     :     :     :     :     :     :     :     :     :     :     :                 +- * ColumnarToRow (117)
-                           :     :     :     :     :     :     :     :     :     :     :     :     :     :     :     :                    +- Scan parquet spark_catalog.default.store_returns (116)
-                           :     :     :     :     :     :     :     :     :     :     :     :     :     :     :     +- * Sort (128)
-                           :     :     :     :     :     :     :     :     :     :     :     :     :     :     :        +- * Project (127)
-                           :     :     :     :     :     :     :     :     :     :     :     :     :     :     :           +- * Filter (126)
-                           :     :     :     :     :     :     :     :     :     :     :     :     :     :     :              +- * HashAggregate (125)
-                           :     :     :     :     :     :     :     :     :     :     :     :     :     :     :                 +- ReusedExchange (124)
-                           :     :     :     :     :     :     :     :     :     :     :     :     :     :     +- ReusedExchange (131)
-                           :     :     :     :     :     :     :     :     :     :     :     :     :     +- ReusedExchange (134)
-                           :     :     :     :     :     :     :     :     :     :     :     :     +- ReusedExchange (137)
-                           :     :     :     :     :     :     :     :     :     :     :     +- ReusedExchange (140)
-                           :     :     :     :     :     :     :     :     :     :     +- ReusedExchange (143)
-                           :     :     :     :     :     :     :     :     :     +- ReusedExchange (146)
-                           :     :     :     :     :     :     :     :     +- ReusedExchange (149)
-                           :     :     :     :     :     :     :     +- ReusedExchange (152)
-                           :     :     :     :     :     :     +- ReusedExchange (155)
-                           :     :     :     :     :     +- ReusedExchange (158)
-                           :     :     :     :     +- ReusedExchange (161)
-                           :     :     :     +- ReusedExchange (164)
-                           :     :     +- ReusedExchange (167)
-                           :     +- ReusedExchange (170)
-                           +- ReusedExchange (173)
+* Sort (181)
++- Exchange (180)
+   +- * Project (179)
+      +- * SortMergeJoin Inner (178)
+         :- * Sort (110)
+         :  +- Exchange (109)
+         :     +- * HashAggregate (108)
+         :        +- * Project (107)
+         :           +- * BroadcastHashJoin Inner BuildRight (106)
+         :              :- * Project (100)
+         :              :  +- * BroadcastHashJoin Inner BuildRight (99)
+         :              :     :- * Project (97)
+         :              :     :  +- * BroadcastHashJoin Inner BuildRight (96)
+         :              :     :     :- * Project (91)
+         :              :     :     :  +- * BroadcastHashJoin Inner BuildRight (90)
+         :              :     :     :     :- * Project (88)
+         :              :     :     :     :  +- * BroadcastHashJoin Inner BuildRight (87)
+         :              :     :     :     :     :- * Project (82)
+         :              :     :     :     :     :  +- * BroadcastHashJoin Inner BuildRight (81)
+         :              :     :     :     :     :     :- * Project (79)
+         :              :     :     :     :     :     :  +- * BroadcastHashJoin Inner BuildRight (78)
+         :              :     :     :     :     :     :     :- * Project (73)
+         :              :     :     :     :     :     :     :  +- * BroadcastHashJoin Inner BuildRight (72)
+         :              :     :     :     :     :     :     :     :- * Project (67)
+         :              :     :     :     :     :     :     :     :  +- * BroadcastHashJoin Inner BuildRight (66)
+         :              :     :     :     :     :     :     :     :     :- * Project (64)
+         :              :     :     :     :     :     :     :     :     :  +- * BroadcastHashJoin Inner BuildRight (63)
+         :              :     :     :     :     :     :     :     :     :     :- * Project (58)
+         :              :     :     :     :     :     :     :     :     :     :  +- * BroadcastHashJoin Inner BuildRight (57)
+         :              :     :     :     :     :     :     :     :     :     :     :- * Project (55)
+         :              :     :     :     :     :     :     :     :     :     :     :  +- * BroadcastHashJoin Inner BuildRight (54)
+         :              :     :     :     :     :     :     :     :     :     :     :     :- * Project (49)
+         :              :     :     :     :     :     :     :     :     :     :     :     :  +- * BroadcastHashJoin Inner BuildRight (48)
+         :              :     :     :     :     :     :     :     :     :     :     :     :     :- * Project (43)
+         :              :     :     :     :     :     :     :     :     :     :     :     :     :  +- * BroadcastHashJoin Inner BuildRight (42)
+         :              :     :     :     :     :     :     :     :     :     :     :     :     :     :- * Project (37)
+         :              :     :     :     :     :     :     :     :     :     :     :     :     :     :  +- * BroadcastHashJoin Inner BuildRight (36)
+         :              :     :     :     :     :     :     :     :     :     :     :     :     :     :     :- * Project (34)
+         :              :     :     :     :     :     :     :     :     :     :     :     :     :     :     :  +- * SortMergeJoin Inner (33)
+         :              :     :     :     :     :     :     :     :     :     :     :     :     :     :     :     :- * Sort (12)
+         :              :     :     :     :     :     :     :     :     :     :     :     :     :     :     :     :  +- Exchange (11)
+         :              :     :     :     :     :     :     :     :     :     :     :     :     :     :     :     :     +- * Project (10)
+         :              :     :     :     :     :     :     :     :     :     :     :     :     :     :     :     :        +- * BroadcastHashJoin Inner BuildLeft (9)
+         :              :     :     :     :     :     :     :     :     :     :     :     :     :     :     :     :           :- BroadcastExchange (4)
+         :              :     :     :     :     :     :     :     :     :     :     :     :     :     :     :     :           :  +- * Filter (3)
+         :              :     :     :     :     :     :     :     :     :     :     :     :     :     :     :     :           :     +- * ColumnarToRow (2)
+         :              :     :     :     :     :     :     :     :     :     :     :     :     :     :     :     :           :        +- Scan parquet spark_catalog.default.store_sales (1)
+         :              :     :     :     :     :     :     :     :     :     :     :     :     :     :     :     :           +- * Project (8)
+         :              :     :     :     :     :     :     :     :     :     :     :     :     :     :     :     :              +- * Filter (7)
+         :              :     :     :     :     :     :     :     :     :     :     :     :     :     :     :     :                 +- * ColumnarToRow (6)
+         :              :     :     :     :     :     :     :     :     :     :     :     :     :     :     :     :                    +- Scan parquet spark_catalog.default.store_returns (5)
+         :              :     :     :     :     :     :     :     :     :     :     :     :     :     :     :     +- * Sort (32)
+         :              :     :     :     :     :     :     :     :     :     :     :     :     :     :     :        +- * Project (31)
+         :              :     :     :     :     :     :     :     :     :     :     :     :     :     :     :           +- * Filter (30)
+         :              :     :     :     :     :     :     :     :     :     :     :     :     :     :     :              +- * HashAggregate (29)
+         :              :     :     :     :     :     :     :     :     :     :     :     :     :     :     :                 +- Exchange (28)
+         :              :     :     :     :     :     :     :     :     :     :     :     :     :     :     :                    +- * HashAggregate (27)
+         :              :     :     :     :     :     :     :     :     :     :     :     :     :     :     :                       +- * Project (26)
+         :              :     :     :     :     :     :     :     :     :     :     :     :     :     :     :                          +- * SortMergeJoin Inner (25)
+         :              :     :     :     :     :     :     :     :     :     :     :     :     :     :     :                             :- * Sort (18)
+         :              :     :     :     :     :     :     :     :     :     :     :     :     :     :     :                             :  +- Exchange (17)
+         :              :     :     :     :     :     :     :     :     :     :     :     :     :     :     :                             :     +- * Project (16)
+         :              :     :     :     :     :     :     :     :     :     :     :     :     :     :     :                             :        +- * Filter (15)
+         :              :     :     :     :     :     :     :     :     :     :     :     :     :     :     :                             :           +- * ColumnarToRow (14)
+         :              :     :     :     :     :     :     :     :     :     :     :     :     :     :     :                             :              +- Scan parquet spark_catalog.default.catalog_sales (13)
+         :              :     :     :     :     :     :     :     :     :     :     :     :     :     :     :                             +- * Sort (24)
+         :              :     :     :     :     :     :     :     :     :     :     :     :     :     :     :                                +- Exchange (23)
+         :              :     :     :     :     :     :     :     :     :     :     :     :     :     :     :                                   +- * Project (22)
+         :              :     :     :     :     :     :     :     :     :     :     :     :     :     :     :                                      +- * Filter (21)
+         :              :     :     :     :     :     :     :     :     :     :     :     :     :     :     :                                         +- * ColumnarToRow (20)
+         :              :     :     :     :     :     :     :     :     :     :     :     :     :     :     :                                            +- Scan parquet spark_catalog.default.catalog_returns (19)
+         :              :     :     :     :     :     :     :     :     :     :     :     :     :     :     +- ReusedExchange (35)
+         :              :     :     :     :     :     :     :     :     :     :     :     :     :     +- BroadcastExchange (41)
+         :              :     :     :     :     :     :     :     :     :     :     :     :     :        +- * Filter (40)
+         :              :     :     :     :     :     :     :     :     :     :     :     :     :           +- * ColumnarToRow (39)
+         :              :     :     :     :     :     :     :     :     :     :     :     :     :              +- Scan parquet spark_catalog.default.store (38)
+         :              :     :     :     :     :     :     :     :     :     :     :     :     +- BroadcastExchange (47)
+         :              :     :     :     :     :     :     :     :     :     :     :     :        +- * Filter (46)
+         :              :     :     :     :     :     :     :     :     :     :     :     :           +- * ColumnarToRow (45)
+         :              :     :     :     :     :     :     :     :     :     :     :     :              +- Scan parquet spark_catalog.default.customer (44)
+         :              :     :     :     :     :     :     :     :     :     :     :     +- BroadcastExchange (53)
+         :              :     :     :     :     :     :     :     :     :     :     :        +- * Filter (52)
+         :              :     :     :     :     :     :     :     :     :     :     :           +- * ColumnarToRow (51)
+         :              :     :     :     :     :     :     :     :     :     :     :              +- Scan parquet spark_catalog.default.date_dim (50)
+         :              :     :     :     :     :     :     :     :     :     :     +- ReusedExchange (56)
+         :              :     :     :     :     :     :     :     :     :     +- BroadcastExchange (62)
+         :              :     :     :     :     :     :     :     :     :        +- * Filter (61)
+         :              :     :     :     :     :     :     :     :     :           +- * ColumnarToRow (60)
+         :              :     :     :     :     :     :     :     :     :              +- Scan parquet spark_catalog.default.customer_demographics (59)
+         :              :     :     :     :     :     :     :     :     +- ReusedExchange (65)
+         :              :     :     :     :     :     :     :     +- BroadcastExchange (71)
+         :              :     :     :     :     :     :     :        +- * Filter (70)
+         :              :     :     :     :     :     :     :           +- * ColumnarToRow (69)
+         :              :     :     :     :     :     :     :              +- Scan parquet spark_catalog.default.promotion (68)
+         :              :     :     :     :     :     :     +- BroadcastExchange (77)
+         :              :     :     :     :     :     :        +- * Filter (76)
+         :              :     :     :     :     :     :           +- * ColumnarToRow (75)
+         :              :     :     :     :     :     :              +- Scan parquet spark_catalog.default.household_demographics (74)
+         :              :     :     :     :     :     +- ReusedExchange (80)
+         :              :     :     :     :     +- BroadcastExchange (86)
+         :              :     :     :     :        +- * Filter (85)
+         :              :     :     :     :           +- * ColumnarToRow (84)
+         :              :     :     :     :              +- Scan parquet spark_catalog.default.customer_address (83)
+         :              :     :     :     +- ReusedExchange (89)
+         :              :     :     +- BroadcastExchange (95)
+         :              :     :        +- * Filter (94)
+         :              :     :           +- * ColumnarToRow (93)
+         :              :     :              +- Scan parquet spark_catalog.default.income_band (92)
+         :              :     +- ReusedExchange (98)
+         :              +- BroadcastExchange (105)
+         :                 +- * Project (104)
+         :                    +- * Filter (103)
+         :                       +- * ColumnarToRow (102)
+         :                          +- Scan parquet spark_catalog.default.item (101)
+         +- * Sort (177)
+            +- Exchange (176)
+               +- * HashAggregate (175)
+                  +- * Project (174)
+                     +- * BroadcastHashJoin Inner BuildRight (173)
+                        :- * Project (171)
+                        :  +- * BroadcastHashJoin Inner BuildRight (170)
+                        :     :- * Project (168)
+                        :     :  +- * BroadcastHashJoin Inner BuildRight (167)
+                        :     :     :- * Project (165)
+                        :     :     :  +- * BroadcastHashJoin Inner BuildRight (164)
+                        :     :     :     :- * Project (162)
+                        :     :     :     :  +- * BroadcastHashJoin Inner BuildRight (161)
+                        :     :     :     :     :- * Project (159)
+                        :     :     :     :     :  +- * BroadcastHashJoin Inner BuildRight (158)
+                        :     :     :     :     :     :- * Project (156)
+                        :     :     :     :     :     :  +- * BroadcastHashJoin Inner BuildRight (155)
+                        :     :     :     :     :     :     :- * Project (153)
+                        :     :     :     :     :     :     :  +- * BroadcastHashJoin Inner BuildRight (152)
+                        :     :     :     :     :     :     :     :- * Project (150)
+                        :     :     :     :     :     :     :     :  +- * BroadcastHashJoin Inner BuildRight (149)
+                        :     :     :     :     :     :     :     :     :- * Project (147)
+                        :     :     :     :     :     :     :     :     :  +- * BroadcastHashJoin Inner BuildRight (146)
+                        :     :     :     :     :     :     :     :     :     :- * Project (144)
+                        :     :     :     :     :     :     :     :     :     :  +- * BroadcastHashJoin Inner BuildRight (143)
+                        :     :     :     :     :     :     :     :     :     :     :- * Project (141)
+                        :     :     :     :     :     :     :     :     :     :     :  +- * BroadcastHashJoin Inner BuildRight (140)
+                        :     :     :     :     :     :     :     :     :     :     :     :- * Project (138)
+                        :     :     :     :     :     :     :     :     :     :     :     :  +- * BroadcastHashJoin Inner BuildRight (137)
+                        :     :     :     :     :     :     :     :     :     :     :     :     :- * Project (135)
+                        :     :     :     :     :     :     :     :     :     :     :     :     :  +- * BroadcastHashJoin Inner BuildRight (134)
+                        :     :     :     :     :     :     :     :     :     :     :     :     :     :- * Project (132)
+                        :     :     :     :     :     :     :     :     :     :     :     :     :     :  +- * BroadcastHashJoin Inner BuildRight (131)
+                        :     :     :     :     :     :     :     :     :     :     :     :     :     :     :- * Project (129)
+                        :     :     :     :     :     :     :     :     :     :     :     :     :     :     :  +- * SortMergeJoin Inner (128)
+                        :     :     :     :     :     :     :     :     :     :     :     :     :     :     :     :- * Sort (122)
+                        :     :     :     :     :     :     :     :     :     :     :     :     :     :     :     :  +- Exchange (121)
+                        :     :     :     :     :     :     :     :     :     :     :     :     :     :     :     :     +- * Project (120)
+                        :     :     :     :     :     :     :     :     :     :     :     :     :     :     :     :        +- * BroadcastHashJoin Inner BuildLeft (119)
+                        :     :     :     :     :     :     :     :     :     :     :     :     :     :     :     :           :- BroadcastExchange (114)
+                        :     :     :     :     :     :     :     :     :     :     :     :     :     :     :     :           :  +- * Filter (113)
+                        :     :     :     :     :     :     :     :     :     :     :     :     :     :     :     :           :     +- * ColumnarToRow (112)
+                        :     :     :     :     :     :     :     :     :     :     :     :     :     :     :     :           :        +- Scan parquet spark_catalog.default.store_sales (111)
+                        :     :     :     :     :     :     :     :     :     :     :     :     :     :     :     :           +- * Project (118)
+                        :     :     :     :     :     :     :     :     :     :     :     :     :     :     :     :              +- * Filter (117)
+                        :     :     :     :     :     :     :     :     :     :     :     :     :     :     :     :                 +- * ColumnarToRow (116)
+                        :     :     :     :     :     :     :     :     :     :     :     :     :     :     :     :                    +- Scan parquet spark_catalog.default.store_returns (115)
+                        :     :     :     :     :     :     :     :     :     :     :     :     :     :     :     +- * Sort (127)
+                        :     :     :     :     :     :     :     :     :     :     :     :     :     :     :        +- * Project (126)
+                        :     :     :     :     :     :     :     :     :     :     :     :     :     :     :           +- * Filter (125)
+                        :     :     :     :     :     :     :     :     :     :     :     :     :     :     :              +- * HashAggregate (124)
+                        :     :     :     :     :     :     :     :     :     :     :     :     :     :     :                 +- ReusedExchange (123)
+                        :     :     :     :     :     :     :     :     :     :     :     :     :     :     +- ReusedExchange (130)
+                        :     :     :     :     :     :     :     :     :     :     :     :     :     +- ReusedExchange (133)
+                        :     :     :     :     :     :     :     :     :     :     :     :     +- ReusedExchange (136)
+                        :     :     :     :     :     :     :     :     :     :     :     +- ReusedExchange (139)
+                        :     :     :     :     :     :     :     :     :     :     +- ReusedExchange (142)
+                        :     :     :     :     :     :     :     :     :     +- ReusedExchange (145)
+                        :     :     :     :     :     :     :     :     +- ReusedExchange (148)
+                        :     :     :     :     :     :     :     +- ReusedExchange (151)
+                        :     :     :     :     :     :     +- ReusedExchange (154)
+                        :     :     :     :     :     +- ReusedExchange (157)
+                        :     :     :     :     +- ReusedExchange (160)
+                        :     :     :     +- ReusedExchange (163)
+                        :     :     +- ReusedExchange (166)
+                        :     +- ReusedExchange (169)
+                        +- ReusedExchange (172)
 
 
 (1) Scan parquet spark_catalog.default.store_sales
@@ -341,7 +339,7 @@ Join condition: None
 Output [11]: [ss_item_sk#1, ss_customer_sk#2, ss_cdemo_sk#3, ss_hdemo_sk#4, ss_addr_sk#5, ss_store_sk#6, ss_promo_sk#7, ss_wholesale_cost#9, ss_list_price#10, ss_coupon_amt#11, ss_sold_date_sk#12]
 Input [12]: [ss_item_sk#1, ss_customer_sk#2, ss_cdemo_sk#3, ss_hdemo_sk#4, ss_addr_sk#5, ss_store_sk#6, ss_promo_sk#7, ss_wholesale_cost#9, ss_list_price#10, ss_coupon_amt#11, ss_sold_date_sk#12, cs_item_sk#17]
 
-(35) ReusedExchange [Reuses operator id: 187]
+(35) ReusedExchange [Reuses operator id: 185]
 Output [2]: [d_date_sk#37, d_year#38]
 
 (36) BroadcastHashJoin [codegen id : 25]
@@ -678,397 +676,383 @@ Input [19]: [ss_item_sk#1, ss_wholesale_cost#9, ss_list_price#10, ss_coupon_amt#
 (108) HashAggregate [codegen id : 25]
 Input [18]: [ss_wholesale_cost#9, ss_list_price#10, ss_coupon_amt#11, d_year#38, d_year#49, d_year#51, s_store_name#40, s_zip#41, ca_street_number#62, ca_street_name#63, ca_city#64, ca_zip#65, ca_street_number#67, ca_street_name#68, ca_city#69, ca_zip#70, i_item_sk#73, i_product_name#76]
 Keys [15]: [i_product_name#76, i_item_sk#73, s_store_name#40, s_zip#41, ca_street_number#62, ca_street_name#63, ca_city#64, ca_zip#65, ca_street_number#67, ca_street_name#68, ca_city#69, ca_zip#70, d_year#38, d_year#49, d_year#51]
-Functions [4]: [partial_count(1), partial_sum(UnscaledValue(ss_wholesale_cost#9)), partial_sum(UnscaledValue(ss_list_price#10)), partial_sum(UnscaledValue(ss_coupon_amt#11))]
-Aggregate Attributes [4]: [count#77, sum#78, sum#79, sum#80]
-Results [19]: [i_product_name#76, i_item_sk#73, s_store_name#40, s_zip#41, ca_street_number#62, ca_street_name#63, ca_city#64, ca_zip#65, ca_street_number#67, ca_street_name#68, ca_city#69, ca_zip#70, d_year#38, d_year#49, d_year#51, count#81, sum#82, sum#83, sum#84]
-
-(109) HashAggregate [codegen id : 25]
-Input [19]: [i_product_name#76, i_item_sk#73, s_store_name#40, s_zip#41, ca_street_number#62, ca_street_name#63, ca_city#64, ca_zip#65, ca_street_number#67, ca_street_name#68, ca_city#69, ca_zip#70, d_year#38, d_year#49, d_year#51, count#81, sum#82, sum#83, sum#84]
-Keys [15]: [i_product_name#76, i_item_sk#73, s_store_name#40, s_zip#41, ca_street_number#62, ca_street_name#63, ca_city#64, ca_zip#65, ca_street_number#67, ca_street_name#68, ca_city#69, ca_zip#70, d_year#38, d_year#49, d_year#51]
 Functions [4]: [count(1), sum(UnscaledValue(ss_wholesale_cost#9)), sum(UnscaledValue(ss_list_price#10)), sum(UnscaledValue(ss_coupon_amt#11))]
-Aggregate Attributes [4]: [count(1)#85, sum(UnscaledValue(ss_wholesale_cost#9))#86, sum(UnscaledValue(ss_list_price#10))#87, sum(UnscaledValue(ss_coupon_amt#11))#88]
-Results [17]: [i_product_name#76 AS product_name#89, i_item_sk#73 AS item_sk#90, s_store_name#40 AS store_name#91, s_zip#41 AS store_zip#92, ca_street_number#62 AS b_street_number#93, ca_street_name#63 AS b_streen_name#94, ca_city#64 AS b_city#95, ca_zip#65 AS b_zip#96, ca_street_number#67 AS c_street_number#97, ca_street_name#68 AS c_street_name#98, ca_city#69 AS c_city#99, ca_zip#70 AS c_zip#100, d_year#38 AS syear#101, count(1)#85 AS cnt#102, MakeDecimal(sum(UnscaledValue(ss_wholesale_cost#9))#86,17,2) AS s1#103, MakeDecimal(sum(UnscaledValue(ss_list_price#10))#87,17,2) AS s2#104, MakeDecimal(sum(UnscaledValue(ss_coupon_amt#11))#88,17,2) AS s3#105]
+Aggregate Attributes [4]: [count(1)#77, sum(UnscaledValue(ss_wholesale_cost#9))#78, sum(UnscaledValue(ss_list_price#10))#79, sum(UnscaledValue(ss_coupon_amt#11))#80]
+Results [17]: [i_product_name#76 AS product_name#81, i_item_sk#73 AS item_sk#82, s_store_name#40 AS store_name#83, s_zip#41 AS store_zip#84, ca_street_number#62 AS b_street_number#85, ca_street_name#63 AS b_streen_name#86, ca_city#64 AS b_city#87, ca_zip#65 AS b_zip#88, ca_street_number#67 AS c_street_number#89, ca_street_name#68 AS c_street_name#90, ca_city#69 AS c_city#91, ca_zip#70 AS c_zip#92, d_year#38 AS syear#93, count(1)#77 AS cnt#94, MakeDecimal(sum(UnscaledValue(ss_wholesale_cost#9))#78,17,2) AS s1#95, MakeDecimal(sum(UnscaledValue(ss_list_price#10))#79,17,2) AS s2#96, MakeDecimal(sum(UnscaledValue(ss_coupon_amt#11))#80,17,2) AS s3#97]
 
-(110) Exchange
-Input [17]: [product_name#89, item_sk#90, store_name#91, store_zip#92, b_street_number#93, b_streen_name#94, b_city#95, b_zip#96, c_street_number#97, c_street_name#98, c_city#99, c_zip#100, syear#101, cnt#102, s1#103, s2#104, s3#105]
-Arguments: hashpartitioning(item_sk#90, store_name#91, store_zip#92, 5), ENSURE_REQUIREMENTS, [plan_id=15]
+(109) Exchange
+Input [17]: [product_name#81, item_sk#82, store_name#83, store_zip#84, b_street_number#85, b_streen_name#86, b_city#87, b_zip#88, c_street_number#89, c_street_name#90, c_city#91, c_zip#92, syear#93, cnt#94, s1#95, s2#96, s3#97]
+Arguments: hashpartitioning(item_sk#82, store_name#83, store_zip#84, 5), ENSURE_REQUIREMENTS, [plan_id=15]
 
-(111) Sort [codegen id : 26]
-Input [17]: [product_name#89, item_sk#90, store_name#91, store_zip#92, b_street_number#93, b_streen_name#94, b_city#95, b_zip#96, c_street_number#97, c_street_name#98, c_city#99, c_zip#100, syear#101, cnt#102, s1#103, s2#104, s3#105]
-Arguments: [item_sk#90 ASC NULLS FIRST, store_name#91 ASC NULLS FIRST, store_zip#92 ASC NULLS FIRST], false, 0
+(110) Sort [codegen id : 26]
+Input [17]: [product_name#81, item_sk#82, store_name#83, store_zip#84, b_street_number#85, b_streen_name#86, b_city#87, b_zip#88, c_street_number#89, c_street_name#90, c_city#91, c_zip#92, syear#93, cnt#94, s1#95, s2#96, s3#97]
+Arguments: [item_sk#82 ASC NULLS FIRST, store_name#83 ASC NULLS FIRST, store_zip#84 ASC NULLS FIRST], false, 0
 
-(112) Scan parquet spark_catalog.default.store_sales
-Output [12]: [ss_item_sk#106, ss_customer_sk#107, ss_cdemo_sk#108, ss_hdemo_sk#109, ss_addr_sk#110, ss_store_sk#111, ss_promo_sk#112, ss_ticket_number#113, ss_wholesale_cost#114, ss_list_price#115, ss_coupon_amt#116, ss_sold_date_sk#117]
+(111) Scan parquet spark_catalog.default.store_sales
+Output [12]: [ss_item_sk#98, ss_customer_sk#99, ss_cdemo_sk#100, ss_hdemo_sk#101, ss_addr_sk#102, ss_store_sk#103, ss_promo_sk#104, ss_ticket_number#105, ss_wholesale_cost#106, ss_list_price#107, ss_coupon_amt#108, ss_sold_date_sk#109]
 Batched: true
 Location: InMemoryFileIndex []
-PartitionFilters: [isnotnull(ss_sold_date_sk#117), dynamicpruningexpression(ss_sold_date_sk#117 IN dynamicpruning#118)]
+PartitionFilters: [isnotnull(ss_sold_date_sk#109), dynamicpruningexpression(ss_sold_date_sk#109 IN dynamicpruning#110)]
 PushedFilters: [IsNotNull(ss_item_sk), IsNotNull(ss_ticket_number), IsNotNull(ss_store_sk), IsNotNull(ss_customer_sk), IsNotNull(ss_cdemo_sk), IsNotNull(ss_promo_sk), IsNotNull(ss_hdemo_sk), IsNotNull(ss_addr_sk)]
 ReadSchema: struct<ss_item_sk:int,ss_customer_sk:int,ss_cdemo_sk:int,ss_hdemo_sk:int,ss_addr_sk:int,ss_store_sk:int,ss_promo_sk:int,ss_ticket_number:int,ss_wholesale_cost:decimal(7,2),ss_list_price:decimal(7,2),ss_coupon_amt:decimal(7,2)>
 
-(113) ColumnarToRow [codegen id : 27]
-Input [12]: [ss_item_sk#106, ss_customer_sk#107, ss_cdemo_sk#108, ss_hdemo_sk#109, ss_addr_sk#110, ss_store_sk#111, ss_promo_sk#112, ss_ticket_number#113, ss_wholesale_cost#114, ss_list_price#115, ss_coupon_amt#116, ss_sold_date_sk#117]
+(112) ColumnarToRow [codegen id : 27]
+Input [12]: [ss_item_sk#98, ss_customer_sk#99, ss_cdemo_sk#100, ss_hdemo_sk#101, ss_addr_sk#102, ss_store_sk#103, ss_promo_sk#104, ss_ticket_number#105, ss_wholesale_cost#106, ss_list_price#107, ss_coupon_amt#108, ss_sold_date_sk#109]
 
-(114) Filter [codegen id : 27]
-Input [12]: [ss_item_sk#106, ss_customer_sk#107, ss_cdemo_sk#108, ss_hdemo_sk#109, ss_addr_sk#110, ss_store_sk#111, ss_promo_sk#112, ss_ticket_number#113, ss_wholesale_cost#114, ss_list_price#115, ss_coupon_amt#116, ss_sold_date_sk#117]
-Condition : (((((((isnotnull(ss_item_sk#106) AND isnotnull(ss_ticket_number#113)) AND isnotnull(ss_store_sk#111)) AND isnotnull(ss_customer_sk#107)) AND isnotnull(ss_cdemo_sk#108)) AND isnotnull(ss_promo_sk#112)) AND isnotnull(ss_hdemo_sk#109)) AND isnotnull(ss_addr_sk#110))
+(113) Filter [codegen id : 27]
+Input [12]: [ss_item_sk#98, ss_customer_sk#99, ss_cdemo_sk#100, ss_hdemo_sk#101, ss_addr_sk#102, ss_store_sk#103, ss_promo_sk#104, ss_ticket_number#105, ss_wholesale_cost#106, ss_list_price#107, ss_coupon_amt#108, ss_sold_date_sk#109]
+Condition : (((((((isnotnull(ss_item_sk#98) AND isnotnull(ss_ticket_number#105)) AND isnotnull(ss_store_sk#103)) AND isnotnull(ss_customer_sk#99)) AND isnotnull(ss_cdemo_sk#100)) AND isnotnull(ss_promo_sk#104)) AND isnotnull(ss_hdemo_sk#101)) AND isnotnull(ss_addr_sk#102))
 
-(115) BroadcastExchange
-Input [12]: [ss_item_sk#106, ss_customer_sk#107, ss_cdemo_sk#108, ss_hdemo_sk#109, ss_addr_sk#110, ss_store_sk#111, ss_promo_sk#112, ss_ticket_number#113, ss_wholesale_cost#114, ss_list_price#115, ss_coupon_amt#116, ss_sold_date_sk#117]
+(114) BroadcastExchange
+Input [12]: [ss_item_sk#98, ss_customer_sk#99, ss_cdemo_sk#100, ss_hdemo_sk#101, ss_addr_sk#102, ss_store_sk#103, ss_promo_sk#104, ss_ticket_number#105, ss_wholesale_cost#106, ss_list_price#107, ss_coupon_amt#108, ss_sold_date_sk#109]
 Arguments: HashedRelationBroadcastMode(List((shiftleft(cast(input[0, int, false] as bigint), 32) | (cast(input[7, int, false] as bigint) & 4294967295))),false), [plan_id=16]
 
-(116) Scan parquet spark_catalog.default.store_returns
-Output [3]: [sr_item_sk#119, sr_ticket_number#120, sr_returned_date_sk#121]
+(115) Scan parquet spark_catalog.default.store_returns
+Output [3]: [sr_item_sk#111, sr_ticket_number#112, sr_returned_date_sk#113]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store_returns]
 PushedFilters: [IsNotNull(sr_item_sk), IsNotNull(sr_ticket_number)]
 ReadSchema: struct<sr_item_sk:int,sr_ticket_number:int>
 
-(117) ColumnarToRow
-Input [3]: [sr_item_sk#119, sr_ticket_number#120, sr_returned_date_sk#121]
+(116) ColumnarToRow
+Input [3]: [sr_item_sk#111, sr_ticket_number#112, sr_returned_date_sk#113]
 
-(118) Filter
-Input [3]: [sr_item_sk#119, sr_ticket_number#120, sr_returned_date_sk#121]
-Condition : (isnotnull(sr_item_sk#119) AND isnotnull(sr_ticket_number#120))
+(117) Filter
+Input [3]: [sr_item_sk#111, sr_ticket_number#112, sr_returned_date_sk#113]
+Condition : (isnotnull(sr_item_sk#111) AND isnotnull(sr_ticket_number#112))
 
-(119) Project
-Output [2]: [sr_item_sk#119, sr_ticket_number#120]
-Input [3]: [sr_item_sk#119, sr_ticket_number#120, sr_returned_date_sk#121]
+(118) Project
+Output [2]: [sr_item_sk#111, sr_ticket_number#112]
+Input [3]: [sr_item_sk#111, sr_ticket_number#112, sr_returned_date_sk#113]
 
-(120) BroadcastHashJoin [codegen id : 28]
-Left keys [2]: [ss_item_sk#106, ss_ticket_number#113]
-Right keys [2]: [sr_item_sk#119, sr_ticket_number#120]
+(119) BroadcastHashJoin [codegen id : 28]
+Left keys [2]: [ss_item_sk#98, ss_ticket_number#105]
+Right keys [2]: [sr_item_sk#111, sr_ticket_number#112]
 Join type: Inner
 Join condition: None
 
-(121) Project [codegen id : 28]
-Output [11]: [ss_item_sk#106, ss_customer_sk#107, ss_cdemo_sk#108, ss_hdemo_sk#109, ss_addr_sk#110, ss_store_sk#111, ss_promo_sk#112, ss_wholesale_cost#114, ss_list_price#115, ss_coupon_amt#116, ss_sold_date_sk#117]
-Input [14]: [ss_item_sk#106, ss_customer_sk#107, ss_cdemo_sk#108, ss_hdemo_sk#109, ss_addr_sk#110, ss_store_sk#111, ss_promo_sk#112, ss_ticket_number#113, ss_wholesale_cost#114, ss_list_price#115, ss_coupon_amt#116, ss_sold_date_sk#117, sr_item_sk#119, sr_ticket_number#120]
+(120) Project [codegen id : 28]
+Output [11]: [ss_item_sk#98, ss_customer_sk#99, ss_cdemo_sk#100, ss_hdemo_sk#101, ss_addr_sk#102, ss_store_sk#103, ss_promo_sk#104, ss_wholesale_cost#106, ss_list_price#107, ss_coupon_amt#108, ss_sold_date_sk#109]
+Input [14]: [ss_item_sk#98, ss_customer_sk#99, ss_cdemo_sk#100, ss_hdemo_sk#101, ss_addr_sk#102, ss_store_sk#103, ss_promo_sk#104, ss_ticket_number#105, ss_wholesale_cost#106, ss_list_price#107, ss_coupon_amt#108, ss_sold_date_sk#109, sr_item_sk#111, sr_ticket_number#112]
 
-(122) Exchange
-Input [11]: [ss_item_sk#106, ss_customer_sk#107, ss_cdemo_sk#108, ss_hdemo_sk#109, ss_addr_sk#110, ss_store_sk#111, ss_promo_sk#112, ss_wholesale_cost#114, ss_list_price#115, ss_coupon_amt#116, ss_sold_date_sk#117]
-Arguments: hashpartitioning(ss_item_sk#106, 5), ENSURE_REQUIREMENTS, [plan_id=17]
+(121) Exchange
+Input [11]: [ss_item_sk#98, ss_customer_sk#99, ss_cdemo_sk#100, ss_hdemo_sk#101, ss_addr_sk#102, ss_store_sk#103, ss_promo_sk#104, ss_wholesale_cost#106, ss_list_price#107, ss_coupon_amt#108, ss_sold_date_sk#109]
+Arguments: hashpartitioning(ss_item_sk#98, 5), ENSURE_REQUIREMENTS, [plan_id=17]
 
-(123) Sort [codegen id : 29]
-Input [11]: [ss_item_sk#106, ss_customer_sk#107, ss_cdemo_sk#108, ss_hdemo_sk#109, ss_addr_sk#110, ss_store_sk#111, ss_promo_sk#112, ss_wholesale_cost#114, ss_list_price#115, ss_coupon_amt#116, ss_sold_date_sk#117]
-Arguments: [ss_item_sk#106 ASC NULLS FIRST], false, 0
+(122) Sort [codegen id : 29]
+Input [11]: [ss_item_sk#98, ss_customer_sk#99, ss_cdemo_sk#100, ss_hdemo_sk#101, ss_addr_sk#102, ss_store_sk#103, ss_promo_sk#104, ss_wholesale_cost#106, ss_list_price#107, ss_coupon_amt#108, ss_sold_date_sk#109]
+Arguments: [ss_item_sk#98 ASC NULLS FIRST], false, 0
 
-(124) ReusedExchange [Reuses operator id: 28]
-Output [4]: [cs_item_sk#122, sum#123, sum#124, isEmpty#125]
+(123) ReusedExchange [Reuses operator id: 28]
+Output [4]: [cs_item_sk#114, sum#115, sum#116, isEmpty#117]
 
-(125) HashAggregate [codegen id : 35]
-Input [4]: [cs_item_sk#122, sum#123, sum#124, isEmpty#125]
-Keys [1]: [cs_item_sk#122]
-Functions [2]: [sum(UnscaledValue(cs_ext_list_price#126)), sum(((cr_refunded_cash#127 + cr_reversed_charge#128) + cr_store_credit#129))]
-Aggregate Attributes [2]: [sum(UnscaledValue(cs_ext_list_price#126))#33, sum(((cr_refunded_cash#127 + cr_reversed_charge#128) + cr_store_credit#129))#34]
-Results [3]: [cs_item_sk#122, MakeDecimal(sum(UnscaledValue(cs_ext_list_price#126))#33,17,2) AS sale#35, sum(((cr_refunded_cash#127 + cr_reversed_charge#128) + cr_store_credit#129))#34 AS refund#36]
+(124) HashAggregate [codegen id : 35]
+Input [4]: [cs_item_sk#114, sum#115, sum#116, isEmpty#117]
+Keys [1]: [cs_item_sk#114]
+Functions [2]: [sum(UnscaledValue(cs_ext_list_price#118)), sum(((cr_refunded_cash#119 + cr_reversed_charge#120) + cr_store_credit#121))]
+Aggregate Attributes [2]: [sum(UnscaledValue(cs_ext_list_price#118))#33, sum(((cr_refunded_cash#119 + cr_reversed_charge#120) + cr_store_credit#121))#34]
+Results [3]: [cs_item_sk#114, MakeDecimal(sum(UnscaledValue(cs_ext_list_price#118))#33,17,2) AS sale#35, sum(((cr_refunded_cash#119 + cr_reversed_charge#120) + cr_store_credit#121))#34 AS refund#36]
 
-(126) Filter [codegen id : 35]
-Input [3]: [cs_item_sk#122, sale#35, refund#36]
+(125) Filter [codegen id : 35]
+Input [3]: [cs_item_sk#114, sale#35, refund#36]
 Condition : ((isnotnull(sale#35) AND isnotnull(refund#36)) AND (cast(sale#35 as decimal(21,2)) > (2 * refund#36)))
 
-(127) Project [codegen id : 35]
-Output [1]: [cs_item_sk#122]
-Input [3]: [cs_item_sk#122, sale#35, refund#36]
+(126) Project [codegen id : 35]
+Output [1]: [cs_item_sk#114]
+Input [3]: [cs_item_sk#114, sale#35, refund#36]
 
-(128) Sort [codegen id : 35]
-Input [1]: [cs_item_sk#122]
-Arguments: [cs_item_sk#122 ASC NULLS FIRST], false, 0
+(127) Sort [codegen id : 35]
+Input [1]: [cs_item_sk#114]
+Arguments: [cs_item_sk#114 ASC NULLS FIRST], false, 0
 
-(129) SortMergeJoin [codegen id : 51]
-Left keys [1]: [ss_item_sk#106]
-Right keys [1]: [cs_item_sk#122]
+(128) SortMergeJoin [codegen id : 51]
+Left keys [1]: [ss_item_sk#98]
+Right keys [1]: [cs_item_sk#114]
 Join type: Inner
 Join condition: None
 
-(130) Project [codegen id : 51]
-Output [11]: [ss_item_sk#106, ss_customer_sk#107, ss_cdemo_sk#108, ss_hdemo_sk#109, ss_addr_sk#110, ss_store_sk#111, ss_promo_sk#112, ss_wholesale_cost#114, ss_list_price#115, ss_coupon_amt#116, ss_sold_date_sk#117]
-Input [12]: [ss_item_sk#106, ss_customer_sk#107, ss_cdemo_sk#108, ss_hdemo_sk#109, ss_addr_sk#110, ss_store_sk#111, ss_promo_sk#112, ss_wholesale_cost#114, ss_list_price#115, ss_coupon_amt#116, ss_sold_date_sk#117, cs_item_sk#122]
+(129) Project [codegen id : 51]
+Output [11]: [ss_item_sk#98, ss_customer_sk#99, ss_cdemo_sk#100, ss_hdemo_sk#101, ss_addr_sk#102, ss_store_sk#103, ss_promo_sk#104, ss_wholesale_cost#106, ss_list_price#107, ss_coupon_amt#108, ss_sold_date_sk#109]
+Input [12]: [ss_item_sk#98, ss_customer_sk#99, ss_cdemo_sk#100, ss_hdemo_sk#101, ss_addr_sk#102, ss_store_sk#103, ss_promo_sk#104, ss_wholesale_cost#106, ss_list_price#107, ss_coupon_amt#108, ss_sold_date_sk#109, cs_item_sk#114]
 
-(131) ReusedExchange [Reuses operator id: 191]
-Output [2]: [d_date_sk#130, d_year#131]
+(130) ReusedExchange [Reuses operator id: 189]
+Output [2]: [d_date_sk#122, d_year#123]
 
-(132) BroadcastHashJoin [codegen id : 51]
-Left keys [1]: [ss_sold_date_sk#117]
-Right keys [1]: [d_date_sk#130]
+(131) BroadcastHashJoin [codegen id : 51]
+Left keys [1]: [ss_sold_date_sk#109]
+Right keys [1]: [d_date_sk#122]
 Join type: Inner
 Join condition: None
 
-(133) Project [codegen id : 51]
-Output [11]: [ss_item_sk#106, ss_customer_sk#107, ss_cdemo_sk#108, ss_hdemo_sk#109, ss_addr_sk#110, ss_store_sk#111, ss_promo_sk#112, ss_wholesale_cost#114, ss_list_price#115, ss_coupon_amt#116, d_year#131]
-Input [13]: [ss_item_sk#106, ss_customer_sk#107, ss_cdemo_sk#108, ss_hdemo_sk#109, ss_addr_sk#110, ss_store_sk#111, ss_promo_sk#112, ss_wholesale_cost#114, ss_list_price#115, ss_coupon_amt#116, ss_sold_date_sk#117, d_date_sk#130, d_year#131]
+(132) Project [codegen id : 51]
+Output [11]: [ss_item_sk#98, ss_customer_sk#99, ss_cdemo_sk#100, ss_hdemo_sk#101, ss_addr_sk#102, ss_store_sk#103, ss_promo_sk#104, ss_wholesale_cost#106, ss_list_price#107, ss_coupon_amt#108, d_year#123]
+Input [13]: [ss_item_sk#98, ss_customer_sk#99, ss_cdemo_sk#100, ss_hdemo_sk#101, ss_addr_sk#102, ss_store_sk#103, ss_promo_sk#104, ss_wholesale_cost#106, ss_list_price#107, ss_coupon_amt#108, ss_sold_date_sk#109, d_date_sk#122, d_year#123]
 
-(134) ReusedExchange [Reuses operator id: 41]
-Output [3]: [s_store_sk#132, s_store_name#133, s_zip#134]
+(133) ReusedExchange [Reuses operator id: 41]
+Output [3]: [s_store_sk#124, s_store_name#125, s_zip#126]
 
-(135) BroadcastHashJoin [codegen id : 51]
-Left keys [1]: [ss_store_sk#111]
-Right keys [1]: [s_store_sk#132]
+(134) BroadcastHashJoin [codegen id : 51]
+Left keys [1]: [ss_store_sk#103]
+Right keys [1]: [s_store_sk#124]
 Join type: Inner
 Join condition: None
 
-(136) Project [codegen id : 51]
-Output [12]: [ss_item_sk#106, ss_customer_sk#107, ss_cdemo_sk#108, ss_hdemo_sk#109, ss_addr_sk#110, ss_promo_sk#112, ss_wholesale_cost#114, ss_list_price#115, ss_coupon_amt#116, d_year#131, s_store_name#133, s_zip#134]
-Input [14]: [ss_item_sk#106, ss_customer_sk#107, ss_cdemo_sk#108, ss_hdemo_sk#109, ss_addr_sk#110, ss_store_sk#111, ss_promo_sk#112, ss_wholesale_cost#114, ss_list_price#115, ss_coupon_amt#116, d_year#131, s_store_sk#132, s_store_name#133, s_zip#134]
+(135) Project [codegen id : 51]
+Output [12]: [ss_item_sk#98, ss_customer_sk#99, ss_cdemo_sk#100, ss_hdemo_sk#101, ss_addr_sk#102, ss_promo_sk#104, ss_wholesale_cost#106, ss_list_price#107, ss_coupon_amt#108, d_year#123, s_store_name#125, s_zip#126]
+Input [14]: [ss_item_sk#98, ss_customer_sk#99, ss_cdemo_sk#100, ss_hdemo_sk#101, ss_addr_sk#102, ss_store_sk#103, ss_promo_sk#104, ss_wholesale_cost#106, ss_list_price#107, ss_coupon_amt#108, d_year#123, s_store_sk#124, s_store_name#125, s_zip#126]
 
-(137) ReusedExchange [Reuses operator id: 47]
-Output [6]: [c_customer_sk#135, c_current_cdemo_sk#136, c_current_hdemo_sk#137, c_current_addr_sk#138, c_first_shipto_date_sk#139, c_first_sales_date_sk#140]
+(136) ReusedExchange [Reuses operator id: 47]
+Output [6]: [c_customer_sk#127, c_current_cdemo_sk#128, c_current_hdemo_sk#129, c_current_addr_sk#130, c_first_shipto_date_sk#131, c_first_sales_date_sk#132]
 
-(138) BroadcastHashJoin [codegen id : 51]
-Left keys [1]: [ss_customer_sk#107]
-Right keys [1]: [c_customer_sk#135]
+(137) BroadcastHashJoin [codegen id : 51]
+Left keys [1]: [ss_customer_sk#99]
+Right keys [1]: [c_customer_sk#127]
 Join type: Inner
 Join condition: None
 
-(139) Project [codegen id : 51]
-Output [16]: [ss_item_sk#106, ss_cdemo_sk#108, ss_hdemo_sk#109, ss_addr_sk#110, ss_promo_sk#112, ss_wholesale_cost#114, ss_list_price#115, ss_coupon_amt#116, d_year#131, s_store_name#133, s_zip#134, c_current_cdemo_sk#136, c_current_hdemo_sk#137, c_current_addr_sk#138, c_first_shipto_date_sk#139, c_first_sales_date_sk#140]
-Input [18]: [ss_item_sk#106, ss_customer_sk#107, ss_cdemo_sk#108, ss_hdemo_sk#109, ss_addr_sk#110, ss_promo_sk#112, ss_wholesale_cost#114, ss_list_price#115, ss_coupon_amt#116, d_year#131, s_store_name#133, s_zip#134, c_customer_sk#135, c_current_cdemo_sk#136, c_current_hdemo_sk#137, c_current_addr_sk#138, c_first_shipto_date_sk#139, c_first_sales_date_sk#140]
+(138) Project [codegen id : 51]
+Output [16]: [ss_item_sk#98, ss_cdemo_sk#100, ss_hdemo_sk#101, ss_addr_sk#102, ss_promo_sk#104, ss_wholesale_cost#106, ss_list_price#107, ss_coupon_amt#108, d_year#123, s_store_name#125, s_zip#126, c_current_cdemo_sk#128, c_current_hdemo_sk#129, c_current_addr_sk#130, c_first_shipto_date_sk#131, c_first_sales_date_sk#132]
+Input [18]: [ss_item_sk#98, ss_customer_sk#99, ss_cdemo_sk#100, ss_hdemo_sk#101, ss_addr_sk#102, ss_promo_sk#104, ss_wholesale_cost#106, ss_list_price#107, ss_coupon_amt#108, d_year#123, s_store_name#125, s_zip#126, c_customer_sk#127, c_current_cdemo_sk#128, c_current_hdemo_sk#129, c_current_addr_sk#130, c_first_shipto_date_sk#131, c_first_sales_date_sk#132]
 
-(140) ReusedExchange [Reuses operator id: 53]
-Output [2]: [d_date_sk#141, d_year#142]
+(139) ReusedExchange [Reuses operator id: 53]
+Output [2]: [d_date_sk#133, d_year#134]
 
-(141) BroadcastHashJoin [codegen id : 51]
-Left keys [1]: [c_first_sales_date_sk#140]
-Right keys [1]: [d_date_sk#141]
+(140) BroadcastHashJoin [codegen id : 51]
+Left keys [1]: [c_first_sales_date_sk#132]
+Right keys [1]: [d_date_sk#133]
 Join type: Inner
 Join condition: None
 
-(142) Project [codegen id : 51]
-Output [16]: [ss_item_sk#106, ss_cdemo_sk#108, ss_hdemo_sk#109, ss_addr_sk#110, ss_promo_sk#112, ss_wholesale_cost#114, ss_list_price#115, ss_coupon_amt#116, d_year#131, s_store_name#133, s_zip#134, c_current_cdemo_sk#136, c_current_hdemo_sk#137, c_current_addr_sk#138, c_first_shipto_date_sk#139, d_year#142]
-Input [18]: [ss_item_sk#106, ss_cdemo_sk#108, ss_hdemo_sk#109, ss_addr_sk#110, ss_promo_sk#112, ss_wholesale_cost#114, ss_list_price#115, ss_coupon_amt#116, d_year#131, s_store_name#133, s_zip#134, c_current_cdemo_sk#136, c_current_hdemo_sk#137, c_current_addr_sk#138, c_first_shipto_date_sk#139, c_first_sales_date_sk#140, d_date_sk#141, d_year#142]
+(141) Project [codegen id : 51]
+Output [16]: [ss_item_sk#98, ss_cdemo_sk#100, ss_hdemo_sk#101, ss_addr_sk#102, ss_promo_sk#104, ss_wholesale_cost#106, ss_list_price#107, ss_coupon_amt#108, d_year#123, s_store_name#125, s_zip#126, c_current_cdemo_sk#128, c_current_hdemo_sk#129, c_current_addr_sk#130, c_first_shipto_date_sk#131, d_year#134]
+Input [18]: [ss_item_sk#98, ss_cdemo_sk#100, ss_hdemo_sk#101, ss_addr_sk#102, ss_promo_sk#104, ss_wholesale_cost#106, ss_list_price#107, ss_coupon_amt#108, d_year#123, s_store_name#125, s_zip#126, c_current_cdemo_sk#128, c_current_hdemo_sk#129, c_current_addr_sk#130, c_first_shipto_date_sk#131, c_first_sales_date_sk#132, d_date_sk#133, d_year#134]
 
-(143) ReusedExchange [Reuses operator id: 53]
-Output [2]: [d_date_sk#143, d_year#144]
+(142) ReusedExchange [Reuses operator id: 53]
+Output [2]: [d_date_sk#135, d_year#136]
 
-(144) BroadcastHashJoin [codegen id : 51]
-Left keys [1]: [c_first_shipto_date_sk#139]
-Right keys [1]: [d_date_sk#143]
+(143) BroadcastHashJoin [codegen id : 51]
+Left keys [1]: [c_first_shipto_date_sk#131]
+Right keys [1]: [d_date_sk#135]
 Join type: Inner
 Join condition: None
 
-(145) Project [codegen id : 51]
-Output [16]: [ss_item_sk#106, ss_cdemo_sk#108, ss_hdemo_sk#109, ss_addr_sk#110, ss_promo_sk#112, ss_wholesale_cost#114, ss_list_price#115, ss_coupon_amt#116, d_year#131, s_store_name#133, s_zip#134, c_current_cdemo_sk#136, c_current_hdemo_sk#137, c_current_addr_sk#138, d_year#142, d_year#144]
-Input [18]: [ss_item_sk#106, ss_cdemo_sk#108, ss_hdemo_sk#109, ss_addr_sk#110, ss_promo_sk#112, ss_wholesale_cost#114, ss_list_price#115, ss_coupon_amt#116, d_year#131, s_store_name#133, s_zip#134, c_current_cdemo_sk#136, c_current_hdemo_sk#137, c_current_addr_sk#138, c_first_shipto_date_sk#139, d_year#142, d_date_sk#143, d_year#144]
+(144) Project [codegen id : 51]
+Output [16]: [ss_item_sk#98, ss_cdemo_sk#100, ss_hdemo_sk#101, ss_addr_sk#102, ss_promo_sk#104, ss_wholesale_cost#106, ss_list_price#107, ss_coupon_amt#108, d_year#123, s_store_name#125, s_zip#126, c_current_cdemo_sk#128, c_current_hdemo_sk#129, c_current_addr_sk#130, d_year#134, d_year#136]
+Input [18]: [ss_item_sk#98, ss_cdemo_sk#100, ss_hdemo_sk#101, ss_addr_sk#102, ss_promo_sk#104, ss_wholesale_cost#106, ss_list_price#107, ss_coupon_amt#108, d_year#123, s_store_name#125, s_zip#126, c_current_cdemo_sk#128, c_current_hdemo_sk#129, c_current_addr_sk#130, c_first_shipto_date_sk#131, d_year#134, d_date_sk#135, d_year#136]
 
-(146) ReusedExchange [Reuses operator id: 62]
-Output [2]: [cd_demo_sk#145, cd_marital_status#146]
+(145) ReusedExchange [Reuses operator id: 62]
+Output [2]: [cd_demo_sk#137, cd_marital_status#138]
 
-(147) BroadcastHashJoin [codegen id : 51]
-Left keys [1]: [ss_cdemo_sk#108]
-Right keys [1]: [cd_demo_sk#145]
+(146) BroadcastHashJoin [codegen id : 51]
+Left keys [1]: [ss_cdemo_sk#100]
+Right keys [1]: [cd_demo_sk#137]
 Join type: Inner
 Join condition: None
 
-(148) Project [codegen id : 51]
-Output [16]: [ss_item_sk#106, ss_hdemo_sk#109, ss_addr_sk#110, ss_promo_sk#112, ss_wholesale_cost#114, ss_list_price#115, ss_coupon_amt#116, d_year#131, s_store_name#133, s_zip#134, c_current_cdemo_sk#136, c_current_hdemo_sk#137, c_current_addr_sk#138, d_year#142, d_year#144, cd_marital_status#146]
-Input [18]: [ss_item_sk#106, ss_cdemo_sk#108, ss_hdemo_sk#109, ss_addr_sk#110, ss_promo_sk#112, ss_wholesale_cost#114, ss_list_price#115, ss_coupon_amt#116, d_year#131, s_store_name#133, s_zip#134, c_current_cdemo_sk#136, c_current_hdemo_sk#137, c_current_addr_sk#138, d_year#142, d_year#144, cd_demo_sk#145, cd_marital_status#146]
+(147) Project [codegen id : 51]
+Output [16]: [ss_item_sk#98, ss_hdemo_sk#101, ss_addr_sk#102, ss_promo_sk#104, ss_wholesale_cost#106, ss_list_price#107, ss_coupon_amt#108, d_year#123, s_store_name#125, s_zip#126, c_current_cdemo_sk#128, c_current_hdemo_sk#129, c_current_addr_sk#130, d_year#134, d_year#136, cd_marital_status#138]
+Input [18]: [ss_item_sk#98, ss_cdemo_sk#100, ss_hdemo_sk#101, ss_addr_sk#102, ss_promo_sk#104, ss_wholesale_cost#106, ss_list_price#107, ss_coupon_amt#108, d_year#123, s_store_name#125, s_zip#126, c_current_cdemo_sk#128, c_current_hdemo_sk#129, c_current_addr_sk#130, d_year#134, d_year#136, cd_demo_sk#137, cd_marital_status#138]
 
-(149) ReusedExchange [Reuses operator id: 62]
-Output [2]: [cd_demo_sk#147, cd_marital_status#148]
+(148) ReusedExchange [Reuses operator id: 62]
+Output [2]: [cd_demo_sk#139, cd_marital_status#140]
 
-(150) BroadcastHashJoin [codegen id : 51]
-Left keys [1]: [c_current_cdemo_sk#136]
-Right keys [1]: [cd_demo_sk#147]
+(149) BroadcastHashJoin [codegen id : 51]
+Left keys [1]: [c_current_cdemo_sk#128]
+Right keys [1]: [cd_demo_sk#139]
 Join type: Inner
-Join condition: NOT (cd_marital_status#146 = cd_marital_status#148)
+Join condition: NOT (cd_marital_status#138 = cd_marital_status#140)
 
-(151) Project [codegen id : 51]
-Output [14]: [ss_item_sk#106, ss_hdemo_sk#109, ss_addr_sk#110, ss_promo_sk#112, ss_wholesale_cost#114, ss_list_price#115, ss_coupon_amt#116, d_year#131, s_store_name#133, s_zip#134, c_current_hdemo_sk#137, c_current_addr_sk#138, d_year#142, d_year#144]
-Input [18]: [ss_item_sk#106, ss_hdemo_sk#109, ss_addr_sk#110, ss_promo_sk#112, ss_wholesale_cost#114, ss_list_price#115, ss_coupon_amt#116, d_year#131, s_store_name#133, s_zip#134, c_current_cdemo_sk#136, c_current_hdemo_sk#137, c_current_addr_sk#138, d_year#142, d_year#144, cd_marital_status#146, cd_demo_sk#147, cd_marital_status#148]
+(150) Project [codegen id : 51]
+Output [14]: [ss_item_sk#98, ss_hdemo_sk#101, ss_addr_sk#102, ss_promo_sk#104, ss_wholesale_cost#106, ss_list_price#107, ss_coupon_amt#108, d_year#123, s_store_name#125, s_zip#126, c_current_hdemo_sk#129, c_current_addr_sk#130, d_year#134, d_year#136]
+Input [18]: [ss_item_sk#98, ss_hdemo_sk#101, ss_addr_sk#102, ss_promo_sk#104, ss_wholesale_cost#106, ss_list_price#107, ss_coupon_amt#108, d_year#123, s_store_name#125, s_zip#126, c_current_cdemo_sk#128, c_current_hdemo_sk#129, c_current_addr_sk#130, d_year#134, d_year#136, cd_marital_status#138, cd_demo_sk#139, cd_marital_status#140]
 
-(152) ReusedExchange [Reuses operator id: 71]
-Output [1]: [p_promo_sk#149]
+(151) ReusedExchange [Reuses operator id: 71]
+Output [1]: [p_promo_sk#141]
 
-(153) BroadcastHashJoin [codegen id : 51]
-Left keys [1]: [ss_promo_sk#112]
-Right keys [1]: [p_promo_sk#149]
-Join type: Inner
-Join condition: None
-
-(154) Project [codegen id : 51]
-Output [13]: [ss_item_sk#106, ss_hdemo_sk#109, ss_addr_sk#110, ss_wholesale_cost#114, ss_list_price#115, ss_coupon_amt#116, d_year#131, s_store_name#133, s_zip#134, c_current_hdemo_sk#137, c_current_addr_sk#138, d_year#142, d_year#144]
-Input [15]: [ss_item_sk#106, ss_hdemo_sk#109, ss_addr_sk#110, ss_promo_sk#112, ss_wholesale_cost#114, ss_list_price#115, ss_coupon_amt#116, d_year#131, s_store_name#133, s_zip#134, c_current_hdemo_sk#137, c_current_addr_sk#138, d_year#142, d_year#144, p_promo_sk#149]
-
-(155) ReusedExchange [Reuses operator id: 77]
-Output [2]: [hd_demo_sk#150, hd_income_band_sk#151]
-
-(156) BroadcastHashJoin [codegen id : 51]
-Left keys [1]: [ss_hdemo_sk#109]
-Right keys [1]: [hd_demo_sk#150]
+(152) BroadcastHashJoin [codegen id : 51]
+Left keys [1]: [ss_promo_sk#104]
+Right keys [1]: [p_promo_sk#141]
 Join type: Inner
 Join condition: None
 
-(157) Project [codegen id : 51]
-Output [13]: [ss_item_sk#106, ss_addr_sk#110, ss_wholesale_cost#114, ss_list_price#115, ss_coupon_amt#116, d_year#131, s_store_name#133, s_zip#134, c_current_hdemo_sk#137, c_current_addr_sk#138, d_year#142, d_year#144, hd_income_band_sk#151]
-Input [15]: [ss_item_sk#106, ss_hdemo_sk#109, ss_addr_sk#110, ss_wholesale_cost#114, ss_list_price#115, ss_coupon_amt#116, d_year#131, s_store_name#133, s_zip#134, c_current_hdemo_sk#137, c_current_addr_sk#138, d_year#142, d_year#144, hd_demo_sk#150, hd_income_band_sk#151]
+(153) Project [codegen id : 51]
+Output [13]: [ss_item_sk#98, ss_hdemo_sk#101, ss_addr_sk#102, ss_wholesale_cost#106, ss_list_price#107, ss_coupon_amt#108, d_year#123, s_store_name#125, s_zip#126, c_current_hdemo_sk#129, c_current_addr_sk#130, d_year#134, d_year#136]
+Input [15]: [ss_item_sk#98, ss_hdemo_sk#101, ss_addr_sk#102, ss_promo_sk#104, ss_wholesale_cost#106, ss_list_price#107, ss_coupon_amt#108, d_year#123, s_store_name#125, s_zip#126, c_current_hdemo_sk#129, c_current_addr_sk#130, d_year#134, d_year#136, p_promo_sk#141]
 
-(158) ReusedExchange [Reuses operator id: 77]
-Output [2]: [hd_demo_sk#152, hd_income_band_sk#153]
+(154) ReusedExchange [Reuses operator id: 77]
+Output [2]: [hd_demo_sk#142, hd_income_band_sk#143]
 
-(159) BroadcastHashJoin [codegen id : 51]
-Left keys [1]: [c_current_hdemo_sk#137]
-Right keys [1]: [hd_demo_sk#152]
+(155) BroadcastHashJoin [codegen id : 51]
+Left keys [1]: [ss_hdemo_sk#101]
+Right keys [1]: [hd_demo_sk#142]
 Join type: Inner
 Join condition: None
 
-(160) Project [codegen id : 51]
-Output [13]: [ss_item_sk#106, ss_addr_sk#110, ss_wholesale_cost#114, ss_list_price#115, ss_coupon_amt#116, d_year#131, s_store_name#133, s_zip#134, c_current_addr_sk#138, d_year#142, d_year#144, hd_income_band_sk#151, hd_income_band_sk#153]
-Input [15]: [ss_item_sk#106, ss_addr_sk#110, ss_wholesale_cost#114, ss_list_price#115, ss_coupon_amt#116, d_year#131, s_store_name#133, s_zip#134, c_current_hdemo_sk#137, c_current_addr_sk#138, d_year#142, d_year#144, hd_income_band_sk#151, hd_demo_sk#152, hd_income_band_sk#153]
+(156) Project [codegen id : 51]
+Output [13]: [ss_item_sk#98, ss_addr_sk#102, ss_wholesale_cost#106, ss_list_price#107, ss_coupon_amt#108, d_year#123, s_store_name#125, s_zip#126, c_current_hdemo_sk#129, c_current_addr_sk#130, d_year#134, d_year#136, hd_income_band_sk#143]
+Input [15]: [ss_item_sk#98, ss_hdemo_sk#101, ss_addr_sk#102, ss_wholesale_cost#106, ss_list_price#107, ss_coupon_amt#108, d_year#123, s_store_name#125, s_zip#126, c_current_hdemo_sk#129, c_current_addr_sk#130, d_year#134, d_year#136, hd_demo_sk#142, hd_income_band_sk#143]
 
-(161) ReusedExchange [Reuses operator id: 86]
-Output [5]: [ca_address_sk#154, ca_street_number#155, ca_street_name#156, ca_city#157, ca_zip#158]
+(157) ReusedExchange [Reuses operator id: 77]
+Output [2]: [hd_demo_sk#144, hd_income_band_sk#145]
 
-(162) BroadcastHashJoin [codegen id : 51]
-Left keys [1]: [ss_addr_sk#110]
-Right keys [1]: [ca_address_sk#154]
+(158) BroadcastHashJoin [codegen id : 51]
+Left keys [1]: [c_current_hdemo_sk#129]
+Right keys [1]: [hd_demo_sk#144]
 Join type: Inner
 Join condition: None
 
-(163) Project [codegen id : 51]
-Output [16]: [ss_item_sk#106, ss_wholesale_cost#114, ss_list_price#115, ss_coupon_amt#116, d_year#131, s_store_name#133, s_zip#134, c_current_addr_sk#138, d_year#142, d_year#144, hd_income_band_sk#151, hd_income_band_sk#153, ca_street_number#155, ca_street_name#156, ca_city#157, ca_zip#158]
-Input [18]: [ss_item_sk#106, ss_addr_sk#110, ss_wholesale_cost#114, ss_list_price#115, ss_coupon_amt#116, d_year#131, s_store_name#133, s_zip#134, c_current_addr_sk#138, d_year#142, d_year#144, hd_income_band_sk#151, hd_income_band_sk#153, ca_address_sk#154, ca_street_number#155, ca_street_name#156, ca_city#157, ca_zip#158]
+(159) Project [codegen id : 51]
+Output [13]: [ss_item_sk#98, ss_addr_sk#102, ss_wholesale_cost#106, ss_list_price#107, ss_coupon_amt#108, d_year#123, s_store_name#125, s_zip#126, c_current_addr_sk#130, d_year#134, d_year#136, hd_income_band_sk#143, hd_income_band_sk#145]
+Input [15]: [ss_item_sk#98, ss_addr_sk#102, ss_wholesale_cost#106, ss_list_price#107, ss_coupon_amt#108, d_year#123, s_store_name#125, s_zip#126, c_current_hdemo_sk#129, c_current_addr_sk#130, d_year#134, d_year#136, hd_income_band_sk#143, hd_demo_sk#144, hd_income_band_sk#145]
 
-(164) ReusedExchange [Reuses operator id: 86]
-Output [5]: [ca_address_sk#159, ca_street_number#160, ca_street_name#161, ca_city#162, ca_zip#163]
+(160) ReusedExchange [Reuses operator id: 86]
+Output [5]: [ca_address_sk#146, ca_street_number#147, ca_street_name#148, ca_city#149, ca_zip#150]
 
-(165) BroadcastHashJoin [codegen id : 51]
-Left keys [1]: [c_current_addr_sk#138]
-Right keys [1]: [ca_address_sk#159]
+(161) BroadcastHashJoin [codegen id : 51]
+Left keys [1]: [ss_addr_sk#102]
+Right keys [1]: [ca_address_sk#146]
 Join type: Inner
 Join condition: None
 
-(166) Project [codegen id : 51]
-Output [19]: [ss_item_sk#106, ss_wholesale_cost#114, ss_list_price#115, ss_coupon_amt#116, d_year#131, s_store_name#133, s_zip#134, d_year#142, d_year#144, hd_income_band_sk#151, hd_income_band_sk#153, ca_street_number#155, ca_street_name#156, ca_city#157, ca_zip#158, ca_street_number#160, ca_street_name#161, ca_city#162, ca_zip#163]
-Input [21]: [ss_item_sk#106, ss_wholesale_cost#114, ss_list_price#115, ss_coupon_amt#116, d_year#131, s_store_name#133, s_zip#134, c_current_addr_sk#138, d_year#142, d_year#144, hd_income_band_sk#151, hd_income_band_sk#153, ca_street_number#155, ca_street_name#156, ca_city#157, ca_zip#158, ca_address_sk#159, ca_street_number#160, ca_street_name#161, ca_city#162, ca_zip#163]
+(162) Project [codegen id : 51]
+Output [16]: [ss_item_sk#98, ss_wholesale_cost#106, ss_list_price#107, ss_coupon_amt#108, d_year#123, s_store_name#125, s_zip#126, c_current_addr_sk#130, d_year#134, d_year#136, hd_income_band_sk#143, hd_income_band_sk#145, ca_street_number#147, ca_street_name#148, ca_city#149, ca_zip#150]
+Input [18]: [ss_item_sk#98, ss_addr_sk#102, ss_wholesale_cost#106, ss_list_price#107, ss_coupon_amt#108, d_year#123, s_store_name#125, s_zip#126, c_current_addr_sk#130, d_year#134, d_year#136, hd_income_band_sk#143, hd_income_band_sk#145, ca_address_sk#146, ca_street_number#147, ca_street_name#148, ca_city#149, ca_zip#150]
 
-(167) ReusedExchange [Reuses operator id: 95]
-Output [1]: [ib_income_band_sk#164]
+(163) ReusedExchange [Reuses operator id: 86]
+Output [5]: [ca_address_sk#151, ca_street_number#152, ca_street_name#153, ca_city#154, ca_zip#155]
 
-(168) BroadcastHashJoin [codegen id : 51]
-Left keys [1]: [hd_income_band_sk#151]
-Right keys [1]: [ib_income_band_sk#164]
+(164) BroadcastHashJoin [codegen id : 51]
+Left keys [1]: [c_current_addr_sk#130]
+Right keys [1]: [ca_address_sk#151]
 Join type: Inner
 Join condition: None
 
-(169) Project [codegen id : 51]
-Output [18]: [ss_item_sk#106, ss_wholesale_cost#114, ss_list_price#115, ss_coupon_amt#116, d_year#131, s_store_name#133, s_zip#134, d_year#142, d_year#144, hd_income_band_sk#153, ca_street_number#155, ca_street_name#156, ca_city#157, ca_zip#158, ca_street_number#160, ca_street_name#161, ca_city#162, ca_zip#163]
-Input [20]: [ss_item_sk#106, ss_wholesale_cost#114, ss_list_price#115, ss_coupon_amt#116, d_year#131, s_store_name#133, s_zip#134, d_year#142, d_year#144, hd_income_band_sk#151, hd_income_band_sk#153, ca_street_number#155, ca_street_name#156, ca_city#157, ca_zip#158, ca_street_number#160, ca_street_name#161, ca_city#162, ca_zip#163, ib_income_band_sk#164]
+(165) Project [codegen id : 51]
+Output [19]: [ss_item_sk#98, ss_wholesale_cost#106, ss_list_price#107, ss_coupon_amt#108, d_year#123, s_store_name#125, s_zip#126, d_year#134, d_year#136, hd_income_band_sk#143, hd_income_band_sk#145, ca_street_number#147, ca_street_name#148, ca_city#149, ca_zip#150, ca_street_number#152, ca_street_name#153, ca_city#154, ca_zip#155]
+Input [21]: [ss_item_sk#98, ss_wholesale_cost#106, ss_list_price#107, ss_coupon_amt#108, d_year#123, s_store_name#125, s_zip#126, c_current_addr_sk#130, d_year#134, d_year#136, hd_income_band_sk#143, hd_income_band_sk#145, ca_street_number#147, ca_street_name#148, ca_city#149, ca_zip#150, ca_address_sk#151, ca_street_number#152, ca_street_name#153, ca_city#154, ca_zip#155]
 
-(170) ReusedExchange [Reuses operator id: 95]
-Output [1]: [ib_income_band_sk#165]
+(166) ReusedExchange [Reuses operator id: 95]
+Output [1]: [ib_income_band_sk#156]
 
-(171) BroadcastHashJoin [codegen id : 51]
-Left keys [1]: [hd_income_band_sk#153]
-Right keys [1]: [ib_income_band_sk#165]
+(167) BroadcastHashJoin [codegen id : 51]
+Left keys [1]: [hd_income_band_sk#143]
+Right keys [1]: [ib_income_band_sk#156]
 Join type: Inner
 Join condition: None
 
-(172) Project [codegen id : 51]
-Output [17]: [ss_item_sk#106, ss_wholesale_cost#114, ss_list_price#115, ss_coupon_amt#116, d_year#131, s_store_name#133, s_zip#134, d_year#142, d_year#144, ca_street_number#155, ca_street_name#156, ca_city#157, ca_zip#158, ca_street_number#160, ca_street_name#161, ca_city#162, ca_zip#163]
-Input [19]: [ss_item_sk#106, ss_wholesale_cost#114, ss_list_price#115, ss_coupon_amt#116, d_year#131, s_store_name#133, s_zip#134, d_year#142, d_year#144, hd_income_band_sk#153, ca_street_number#155, ca_street_name#156, ca_city#157, ca_zip#158, ca_street_number#160, ca_street_name#161, ca_city#162, ca_zip#163, ib_income_band_sk#165]
+(168) Project [codegen id : 51]
+Output [18]: [ss_item_sk#98, ss_wholesale_cost#106, ss_list_price#107, ss_coupon_amt#108, d_year#123, s_store_name#125, s_zip#126, d_year#134, d_year#136, hd_income_band_sk#145, ca_street_number#147, ca_street_name#148, ca_city#149, ca_zip#150, ca_street_number#152, ca_street_name#153, ca_city#154, ca_zip#155]
+Input [20]: [ss_item_sk#98, ss_wholesale_cost#106, ss_list_price#107, ss_coupon_amt#108, d_year#123, s_store_name#125, s_zip#126, d_year#134, d_year#136, hd_income_band_sk#143, hd_income_band_sk#145, ca_street_number#147, ca_street_name#148, ca_city#149, ca_zip#150, ca_street_number#152, ca_street_name#153, ca_city#154, ca_zip#155, ib_income_band_sk#156]
 
-(173) ReusedExchange [Reuses operator id: 105]
-Output [2]: [i_item_sk#166, i_product_name#167]
+(169) ReusedExchange [Reuses operator id: 95]
+Output [1]: [ib_income_band_sk#157]
 
-(174) BroadcastHashJoin [codegen id : 51]
-Left keys [1]: [ss_item_sk#106]
-Right keys [1]: [i_item_sk#166]
+(170) BroadcastHashJoin [codegen id : 51]
+Left keys [1]: [hd_income_band_sk#145]
+Right keys [1]: [ib_income_band_sk#157]
 Join type: Inner
 Join condition: None
 
-(175) Project [codegen id : 51]
-Output [18]: [ss_wholesale_cost#114, ss_list_price#115, ss_coupon_amt#116, d_year#131, d_year#142, d_year#144, s_store_name#133, s_zip#134, ca_street_number#155, ca_street_name#156, ca_city#157, ca_zip#158, ca_street_number#160, ca_street_name#161, ca_city#162, ca_zip#163, i_item_sk#166, i_product_name#167]
-Input [19]: [ss_item_sk#106, ss_wholesale_cost#114, ss_list_price#115, ss_coupon_amt#116, d_year#131, s_store_name#133, s_zip#134, d_year#142, d_year#144, ca_street_number#155, ca_street_name#156, ca_city#157, ca_zip#158, ca_street_number#160, ca_street_name#161, ca_city#162, ca_zip#163, i_item_sk#166, i_product_name#167]
+(171) Project [codegen id : 51]
+Output [17]: [ss_item_sk#98, ss_wholesale_cost#106, ss_list_price#107, ss_coupon_amt#108, d_year#123, s_store_name#125, s_zip#126, d_year#134, d_year#136, ca_street_number#147, ca_street_name#148, ca_city#149, ca_zip#150, ca_street_number#152, ca_street_name#153, ca_city#154, ca_zip#155]
+Input [19]: [ss_item_sk#98, ss_wholesale_cost#106, ss_list_price#107, ss_coupon_amt#108, d_year#123, s_store_name#125, s_zip#126, d_year#134, d_year#136, hd_income_band_sk#145, ca_street_number#147, ca_street_name#148, ca_city#149, ca_zip#150, ca_street_number#152, ca_street_name#153, ca_city#154, ca_zip#155, ib_income_band_sk#157]
 
-(176) HashAggregate [codegen id : 51]
-Input [18]: [ss_wholesale_cost#114, ss_list_price#115, ss_coupon_amt#116, d_year#131, d_year#142, d_year#144, s_store_name#133, s_zip#134, ca_street_number#155, ca_street_name#156, ca_city#157, ca_zip#158, ca_street_number#160, ca_street_name#161, ca_city#162, ca_zip#163, i_item_sk#166, i_product_name#167]
-Keys [15]: [i_product_name#167, i_item_sk#166, s_store_name#133, s_zip#134, ca_street_number#155, ca_street_name#156, ca_city#157, ca_zip#158, ca_street_number#160, ca_street_name#161, ca_city#162, ca_zip#163, d_year#131, d_year#142, d_year#144]
-Functions [4]: [partial_count(1), partial_sum(UnscaledValue(ss_wholesale_cost#114)), partial_sum(UnscaledValue(ss_list_price#115)), partial_sum(UnscaledValue(ss_coupon_amt#116))]
-Aggregate Attributes [4]: [count#77, sum#168, sum#169, sum#170]
-Results [19]: [i_product_name#167, i_item_sk#166, s_store_name#133, s_zip#134, ca_street_number#155, ca_street_name#156, ca_city#157, ca_zip#158, ca_street_number#160, ca_street_name#161, ca_city#162, ca_zip#163, d_year#131, d_year#142, d_year#144, count#81, sum#171, sum#172, sum#173]
+(172) ReusedExchange [Reuses operator id: 105]
+Output [2]: [i_item_sk#158, i_product_name#159]
 
-(177) HashAggregate [codegen id : 51]
-Input [19]: [i_product_name#167, i_item_sk#166, s_store_name#133, s_zip#134, ca_street_number#155, ca_street_name#156, ca_city#157, ca_zip#158, ca_street_number#160, ca_street_name#161, ca_city#162, ca_zip#163, d_year#131, d_year#142, d_year#144, count#81, sum#171, sum#172, sum#173]
-Keys [15]: [i_product_name#167, i_item_sk#166, s_store_name#133, s_zip#134, ca_street_number#155, ca_street_name#156, ca_city#157, ca_zip#158, ca_street_number#160, ca_street_name#161, ca_city#162, ca_zip#163, d_year#131, d_year#142, d_year#144]
-Functions [4]: [count(1), sum(UnscaledValue(ss_wholesale_cost#114)), sum(UnscaledValue(ss_list_price#115)), sum(UnscaledValue(ss_coupon_amt#116))]
-Aggregate Attributes [4]: [count(1)#85, sum(UnscaledValue(ss_wholesale_cost#114))#86, sum(UnscaledValue(ss_list_price#115))#87, sum(UnscaledValue(ss_coupon_amt#116))#88]
-Results [8]: [i_item_sk#166 AS item_sk#174, s_store_name#133 AS store_name#175, s_zip#134 AS store_zip#176, d_year#131 AS syear#177, count(1)#85 AS cnt#178, MakeDecimal(sum(UnscaledValue(ss_wholesale_cost#114))#86,17,2) AS s1#179, MakeDecimal(sum(UnscaledValue(ss_list_price#115))#87,17,2) AS s2#180, MakeDecimal(sum(UnscaledValue(ss_coupon_amt#116))#88,17,2) AS s3#181]
-
-(178) Exchange
-Input [8]: [item_sk#174, store_name#175, store_zip#176, syear#177, cnt#178, s1#179, s2#180, s3#181]
-Arguments: hashpartitioning(item_sk#174, store_name#175, store_zip#176, 5), ENSURE_REQUIREMENTS, [plan_id=18]
-
-(179) Sort [codegen id : 52]
-Input [8]: [item_sk#174, store_name#175, store_zip#176, syear#177, cnt#178, s1#179, s2#180, s3#181]
-Arguments: [item_sk#174 ASC NULLS FIRST, store_name#175 ASC NULLS FIRST, store_zip#176 ASC NULLS FIRST], false, 0
-
-(180) SortMergeJoin [codegen id : 53]
-Left keys [3]: [item_sk#90, store_name#91, store_zip#92]
-Right keys [3]: [item_sk#174, store_name#175, store_zip#176]
+(173) BroadcastHashJoin [codegen id : 51]
+Left keys [1]: [ss_item_sk#98]
+Right keys [1]: [i_item_sk#158]
 Join type: Inner
-Join condition: (cnt#178 <= cnt#102)
+Join condition: None
 
-(181) Project [codegen id : 53]
-Output [21]: [product_name#89, store_name#91, store_zip#92, b_street_number#93, b_streen_name#94, b_city#95, b_zip#96, c_street_number#97, c_street_name#98, c_city#99, c_zip#100, syear#101, cnt#102, s1#103, s2#104, s3#105, s1#179, s2#180, s3#181, syear#177, cnt#178]
-Input [25]: [product_name#89, item_sk#90, store_name#91, store_zip#92, b_street_number#93, b_streen_name#94, b_city#95, b_zip#96, c_street_number#97, c_street_name#98, c_city#99, c_zip#100, syear#101, cnt#102, s1#103, s2#104, s3#105, item_sk#174, store_name#175, store_zip#176, syear#177, cnt#178, s1#179, s2#180, s3#181]
+(174) Project [codegen id : 51]
+Output [18]: [ss_wholesale_cost#106, ss_list_price#107, ss_coupon_amt#108, d_year#123, d_year#134, d_year#136, s_store_name#125, s_zip#126, ca_street_number#147, ca_street_name#148, ca_city#149, ca_zip#150, ca_street_number#152, ca_street_name#153, ca_city#154, ca_zip#155, i_item_sk#158, i_product_name#159]
+Input [19]: [ss_item_sk#98, ss_wholesale_cost#106, ss_list_price#107, ss_coupon_amt#108, d_year#123, s_store_name#125, s_zip#126, d_year#134, d_year#136, ca_street_number#147, ca_street_name#148, ca_city#149, ca_zip#150, ca_street_number#152, ca_street_name#153, ca_city#154, ca_zip#155, i_item_sk#158, i_product_name#159]
 
-(182) Exchange
-Input [21]: [product_name#89, store_name#91, store_zip#92, b_street_number#93, b_streen_name#94, b_city#95, b_zip#96, c_street_number#97, c_street_name#98, c_city#99, c_zip#100, syear#101, cnt#102, s1#103, s2#104, s3#105, s1#179, s2#180, s3#181, syear#177, cnt#178]
-Arguments: rangepartitioning(product_name#89 ASC NULLS FIRST, store_name#91 ASC NULLS FIRST, cnt#178 ASC NULLS FIRST, 5), ENSURE_REQUIREMENTS, [plan_id=19]
+(175) HashAggregate [codegen id : 51]
+Input [18]: [ss_wholesale_cost#106, ss_list_price#107, ss_coupon_amt#108, d_year#123, d_year#134, d_year#136, s_store_name#125, s_zip#126, ca_street_number#147, ca_street_name#148, ca_city#149, ca_zip#150, ca_street_number#152, ca_street_name#153, ca_city#154, ca_zip#155, i_item_sk#158, i_product_name#159]
+Keys [15]: [i_product_name#159, i_item_sk#158, s_store_name#125, s_zip#126, ca_street_number#147, ca_street_name#148, ca_city#149, ca_zip#150, ca_street_number#152, ca_street_name#153, ca_city#154, ca_zip#155, d_year#123, d_year#134, d_year#136]
+Functions [4]: [count(1), sum(UnscaledValue(ss_wholesale_cost#106)), sum(UnscaledValue(ss_list_price#107)), sum(UnscaledValue(ss_coupon_amt#108))]
+Aggregate Attributes [4]: [count(1)#77, sum(UnscaledValue(ss_wholesale_cost#106))#78, sum(UnscaledValue(ss_list_price#107))#79, sum(UnscaledValue(ss_coupon_amt#108))#80]
+Results [8]: [i_item_sk#158 AS item_sk#160, s_store_name#125 AS store_name#161, s_zip#126 AS store_zip#162, d_year#123 AS syear#163, count(1)#77 AS cnt#164, MakeDecimal(sum(UnscaledValue(ss_wholesale_cost#106))#78,17,2) AS s1#165, MakeDecimal(sum(UnscaledValue(ss_list_price#107))#79,17,2) AS s2#166, MakeDecimal(sum(UnscaledValue(ss_coupon_amt#108))#80,17,2) AS s3#167]
 
-(183) Sort [codegen id : 54]
-Input [21]: [product_name#89, store_name#91, store_zip#92, b_street_number#93, b_streen_name#94, b_city#95, b_zip#96, c_street_number#97, c_street_name#98, c_city#99, c_zip#100, syear#101, cnt#102, s1#103, s2#104, s3#105, s1#179, s2#180, s3#181, syear#177, cnt#178]
-Arguments: [product_name#89 ASC NULLS FIRST, store_name#91 ASC NULLS FIRST, cnt#178 ASC NULLS FIRST], true, 0
+(176) Exchange
+Input [8]: [item_sk#160, store_name#161, store_zip#162, syear#163, cnt#164, s1#165, s2#166, s3#167]
+Arguments: hashpartitioning(item_sk#160, store_name#161, store_zip#162, 5), ENSURE_REQUIREMENTS, [plan_id=18]
+
+(177) Sort [codegen id : 52]
+Input [8]: [item_sk#160, store_name#161, store_zip#162, syear#163, cnt#164, s1#165, s2#166, s3#167]
+Arguments: [item_sk#160 ASC NULLS FIRST, store_name#161 ASC NULLS FIRST, store_zip#162 ASC NULLS FIRST], false, 0
+
+(178) SortMergeJoin [codegen id : 53]
+Left keys [3]: [item_sk#82, store_name#83, store_zip#84]
+Right keys [3]: [item_sk#160, store_name#161, store_zip#162]
+Join type: Inner
+Join condition: (cnt#164 <= cnt#94)
+
+(179) Project [codegen id : 53]
+Output [21]: [product_name#81, store_name#83, store_zip#84, b_street_number#85, b_streen_name#86, b_city#87, b_zip#88, c_street_number#89, c_street_name#90, c_city#91, c_zip#92, syear#93, cnt#94, s1#95, s2#96, s3#97, s1#165, s2#166, s3#167, syear#163, cnt#164]
+Input [25]: [product_name#81, item_sk#82, store_name#83, store_zip#84, b_street_number#85, b_streen_name#86, b_city#87, b_zip#88, c_street_number#89, c_street_name#90, c_city#91, c_zip#92, syear#93, cnt#94, s1#95, s2#96, s3#97, item_sk#160, store_name#161, store_zip#162, syear#163, cnt#164, s1#165, s2#166, s3#167]
+
+(180) Exchange
+Input [21]: [product_name#81, store_name#83, store_zip#84, b_street_number#85, b_streen_name#86, b_city#87, b_zip#88, c_street_number#89, c_street_name#90, c_city#91, c_zip#92, syear#93, cnt#94, s1#95, s2#96, s3#97, s1#165, s2#166, s3#167, syear#163, cnt#164]
+Arguments: rangepartitioning(product_name#81 ASC NULLS FIRST, store_name#83 ASC NULLS FIRST, cnt#164 ASC NULLS FIRST, 5), ENSURE_REQUIREMENTS, [plan_id=19]
+
+(181) Sort [codegen id : 54]
+Input [21]: [product_name#81, store_name#83, store_zip#84, b_street_number#85, b_streen_name#86, b_city#87, b_zip#88, c_street_number#89, c_street_name#90, c_city#91, c_zip#92, syear#93, cnt#94, s1#95, s2#96, s3#97, s1#165, s2#166, s3#167, syear#163, cnt#164]
+Arguments: [product_name#81 ASC NULLS FIRST, store_name#83 ASC NULLS FIRST, cnt#164 ASC NULLS FIRST], true, 0
 
 ===== Subqueries =====
 
 Subquery:1 Hosting operator id = 1 Hosting Expression = ss_sold_date_sk#12 IN dynamicpruning#13
-BroadcastExchange (187)
-+- * Filter (186)
-   +- * ColumnarToRow (185)
-      +- Scan parquet spark_catalog.default.date_dim (184)
+BroadcastExchange (185)
++- * Filter (184)
+   +- * ColumnarToRow (183)
+      +- Scan parquet spark_catalog.default.date_dim (182)
 
 
-(184) Scan parquet spark_catalog.default.date_dim
+(182) Scan parquet spark_catalog.default.date_dim
 Output [2]: [d_date_sk#37, d_year#38]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
 PushedFilters: [IsNotNull(d_year), EqualTo(d_year,1999), IsNotNull(d_date_sk)]
 ReadSchema: struct<d_date_sk:int,d_year:int>
 
-(185) ColumnarToRow [codegen id : 1]
+(183) ColumnarToRow [codegen id : 1]
 Input [2]: [d_date_sk#37, d_year#38]
 
-(186) Filter [codegen id : 1]
+(184) Filter [codegen id : 1]
 Input [2]: [d_date_sk#37, d_year#38]
 Condition : ((isnotnull(d_year#38) AND (d_year#38 = 1999)) AND isnotnull(d_date_sk#37))
 
-(187) BroadcastExchange
+(185) BroadcastExchange
 Input [2]: [d_date_sk#37, d_year#38]
 Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [plan_id=20]
 
-Subquery:2 Hosting operator id = 112 Hosting Expression = ss_sold_date_sk#117 IN dynamicpruning#118
-BroadcastExchange (191)
-+- * Filter (190)
-   +- * ColumnarToRow (189)
-      +- Scan parquet spark_catalog.default.date_dim (188)
+Subquery:2 Hosting operator id = 111 Hosting Expression = ss_sold_date_sk#109 IN dynamicpruning#110
+BroadcastExchange (189)
++- * Filter (188)
+   +- * ColumnarToRow (187)
+      +- Scan parquet spark_catalog.default.date_dim (186)
 
 
-(188) Scan parquet spark_catalog.default.date_dim
-Output [2]: [d_date_sk#130, d_year#131]
+(186) Scan parquet spark_catalog.default.date_dim
+Output [2]: [d_date_sk#122, d_year#123]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
 PushedFilters: [IsNotNull(d_year), EqualTo(d_year,2000), IsNotNull(d_date_sk)]
 ReadSchema: struct<d_date_sk:int,d_year:int>
 
-(189) ColumnarToRow [codegen id : 1]
-Input [2]: [d_date_sk#130, d_year#131]
+(187) ColumnarToRow [codegen id : 1]
+Input [2]: [d_date_sk#122, d_year#123]
 
-(190) Filter [codegen id : 1]
-Input [2]: [d_date_sk#130, d_year#131]
-Condition : ((isnotnull(d_year#131) AND (d_year#131 = 2000)) AND isnotnull(d_date_sk#130))
+(188) Filter [codegen id : 1]
+Input [2]: [d_date_sk#122, d_year#123]
+Condition : ((isnotnull(d_year#123) AND (d_year#123 = 2000)) AND isnotnull(d_date_sk#122))
 
-(191) BroadcastExchange
-Input [2]: [d_date_sk#130, d_year#131]
+(189) BroadcastExchange
+Input [2]: [d_date_sk#122, d_year#123]
 Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [plan_id=21]
 
 
