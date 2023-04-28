@@ -3365,7 +3365,7 @@ class ChannelBuilderTests(unittest.TestCase):
             "sc://host/;parm1;param2",
         ]
         for i in invalid:
-            self.assertRaises(AttributeError, ChannelBuilder, i)
+            self.assertRaises(PySparkValueError, ChannelBuilder, i)
 
     def test_sensible_defaults(self):
         chan = ChannelBuilder("sc://host")
