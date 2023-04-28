@@ -736,7 +736,8 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
   }
 
   test("SPARK-25497: LIMIT within whole stage codegen should not consume all the inputs") {
-    withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true") {
+    withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
+        SQLConf.COMBINE_ADJACENT_AGGREGATION_ENABLED.key -> "false") {
       // A special query that only has one partition, so there is no shuffle and the entire query
       // can be whole-stage-codegened.
       val df = spark.range(0, 1500, 1, 1).limit(10).groupBy($"id")

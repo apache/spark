@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.adaptive
 
 import org.apache.spark.sql.catalyst.expressions.{Alias, BindReferences, DynamicPruningExpression, Literal}
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight}
-import org.apache.spark.sql.catalyst.plans.logical.Aggregate
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.execution._
@@ -68,7 +68,8 @@ case class PlanAdaptiveDynamicPruningFilters(
         } else {
           // we need to apply an aggregate on the buildPlan in order to be column pruned
           val alias = Alias(buildKeys(index), buildKeys(index).toString)()
-          val aggregate = Aggregate(Seq(alias), Seq(alias), buildPlan)
+          val project = Project(Seq(alias), buildPlan)
+          val aggregate = Aggregate(Seq(alias.toAttribute), Seq(alias.toAttribute), project)
 
           val session = adaptivePlan.context.session
           val sparkPlan = QueryExecution.prepareExecutedPlan(

@@ -95,8 +95,12 @@ object ReplaceHashWithSortAgg extends Rule[SparkPlan] {
    * Check if `partialAgg` to be partial aggregate of `finalAgg`.
    */
   def isPartialAgg(partialAgg: BaseAggregateExec, finalAgg: BaseAggregateExec): Boolean = {
+    // We should make sure the groupingExpressions of `partialAgg` and `finalAgg` are same
+    // to avoid final aggregate depends on the output of partial aggregate.
+    // For example: `Aggregate(Seq(Alias), Seq(Alias), ..)`.
     if (partialAgg.aggregateExpressions.forall(_.mode == Partial) &&
-        finalAgg.aggregateExpressions.forall(_.mode == Final)) {
+        finalAgg.aggregateExpressions.forall(_.mode == Final) &&
+        partialAgg.groupingExpressions == finalAgg.groupingExpressions) {
       (finalAgg.logicalLink, partialAgg.logicalLink) match {
         case (Some(agg1), Some(agg2)) => agg1.sameResult(agg2)
         case _ => false
