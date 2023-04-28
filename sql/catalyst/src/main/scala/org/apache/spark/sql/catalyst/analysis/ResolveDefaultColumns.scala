@@ -24,8 +24,8 @@ import org.apache.spark.sql.catalyst.catalog.UnresolvedCatalogRelation
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.util.CustomInsertSchema
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
-import org.apache.spark.sql.catalyst.util.TableWithRawSchemaForColumnDefaults
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.SQLConf
@@ -183,7 +183,7 @@ case class ResolveDefaultColumns(
         throw QueryCompilationErrors.defaultReferencesNotAllowedInUpdateWhereClause()
       }
     }
-    val schemaForTargetTable: Option[StructType] = getSchemaForTargetTable(u.table).map(_.schema)
+    val schemaForTargetTable: Option[StructType] = getSchemaForTargetTable(u.table)
     schemaForTargetTable.map { schema =>
       val defaultExpressions: Seq[Expression] = schema.fields.map {
         case f if f.metadata.contains(CURRENT_DEFAULT_COLUMN_METADATA_KEY) => analyze(f, "UPDATE")
@@ -207,8 +207,7 @@ case class ResolveDefaultColumns(
    * Resolves DEFAULT column references for a MERGE INTO command.
    */
   private def resolveDefaultColumnsForMerge(m: MergeIntoTable): LogicalPlan = {
-    val schema: StructType = getSchemaForTargetTable(m.targetTable)
-      .map(_.schema).getOrElse(return m)
+    val schema: StructType = getSchemaForTargetTable(m.targetTable).getOrElse(return m)
     // Return a more descriptive error message if the user tries to use a DEFAULT column reference
     // inside an UPDATE command's WHERE clause; this is not allowed.
     m.mergeCondition.foreach { c: Expression =>
@@ -571,15 +570,8 @@ case class ResolveDefaultColumns(
    */
   private def getInsertTableSchemaWithoutPartitionColumns(
       enclosingInsert: InsertIntoStatement): Option[StructType] = {
-    val target: SchemaForTargetTable =
-      getSchemaForTargetTable(enclosingInsert.table).getOrElse(return None)
-    val schema: StructType =
-      StructType(target.schema.fields.dropRight(enclosingInsert.partitionSpec.size)
-        // Some target tables support columns into which values may not be explicitly inserted.
-        // Exclude these from consideration when constructing the insert schema.
-        .filterNot { col =>
-          target.ignoreColumnsForInserts.exists(col.metadata.contains)
-        })
+    val target = getSchemaForTargetTable(enclosingInsert.table).getOrElse(return None)
+    val schema: StructType = StructType(target.fields.dropRight(enclosingInsert.partitionSpec.size))
     // Rearrange the columns in the result schema to match the order of the explicit column list,
     // if any.
     val userSpecifiedCols: Seq[String] = enclosingInsert.userSpecifiedCols
@@ -631,9 +623,7 @@ case class ResolveDefaultColumns(
    * Includes a StructType representing the schema as well as a set of column names to exclude from
    * consideration when performing INSERT INTO commands, if any.
    */
-  private case class SchemaForTargetTable(
-      schema: StructType, ignoreColumnsForInserts: Set[String] = Set.empty)
-  private def getSchemaForTargetTable(table: LogicalPlan): Option[SchemaForTargetTable] = {
+  private def getSchemaForTargetTable(table: LogicalPlan): Option[StructType] = {
     val resolved = table match {
       case r: UnresolvedRelation if !r.skipSchemaResolution && !r.isStreaming =>
         resolveRelation(r)
@@ -642,15 +632,13 @@ case class ResolveDefaultColumns(
     }
     resolved.collectFirst {
       case r: UnresolvedCatalogRelation =>
-        SchemaForTargetTable(r.tableMeta.schema)
-      case DataSourceV2Relation(table: TableWithRawSchemaForColumnDefaults, _, _, _, _) =>
-        table.rawSchema
-          .map(SchemaForTargetTable(_, table.ignoreColumnsForInserts))
-          .getOrElse(return None)
+        r.tableMeta.schema
+      case DataSourceV2Relation(table: CustomInsertSchema, _, _, _, _) =>
+        table.customInsertSchema
       case r: NamedRelation if !r.skipSchemaResolution =>
-        SchemaForTargetTable(r.schema)
+        r.schema
       case v: View if v.isTempViewStoringAnalyzedPlan =>
-        SchemaForTargetTable(v.schema)
+        v.schema
     }
   }
 

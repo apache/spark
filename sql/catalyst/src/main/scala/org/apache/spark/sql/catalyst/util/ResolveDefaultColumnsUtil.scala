@@ -221,7 +221,8 @@ object ResolveDefaultColumns {
     } else {
       // If the provided default value is a literal of a wider type than the target column, but the
       // literal value fits within the narrower type, just coerce it for convenience.
-      val result = if (analyzed.isInstanceOf[Literal] && analyzed.dataType != BooleanType) {
+      val result = if (analyzed.isInstanceOf[Literal] &&
+        !Seq(dataType, analyzed.dataType).exists(_ == BooleanType)) {
         try {
           Some(Literal(Cast(analyzed, dataType, evalMode = EvalMode.TRY).eval()))
         } catch {
@@ -359,12 +360,8 @@ object ResolveDefaultColumns {
   }
 }
 
-/**
- * Represents a table with an underlying raw schema to use for resolving DEFAULT column references.
- * The 'ignoreColumnsForInserts' field represents a set of column names to exclude from
- * consideration when performing INSERT INTO commands, if any.
- */
-trait TableWithRawSchemaForColumnDefaults {
-  def rawSchema: Option[StructType]
-  def ignoreColumnsForInserts: Set[String]
+trait CustomInsertSchema {
+  // Represents a table with a custom schema to use for resolving DEFAULT column references when
+  // inserting into the table. For example, this can be useful for excluding hidden pseudocolumns.
+  def customInsertSchema: StructType
 }
