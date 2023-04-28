@@ -170,6 +170,11 @@ ERROR_CLASSES_JSON = """
       "Invalid call to `<func_name>` on unresolved object."
     ]
   },
+  "INVALID_CONNECT_URL" : {
+    "message" : [
+      "Invalid URL for Spark Connect: <detail>"
+    ]
+  },
   "INVALID_ITEM_FOR_CONTAINER": {
     "message": [
       "All items in `<arg_name>` should be in <allowed_types>, got <item_type>."
