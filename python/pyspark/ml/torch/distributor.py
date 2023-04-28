@@ -28,11 +28,21 @@ import sys
 import tempfile
 import textwrap
 import time
-from typing import Union, Callable, List, Dict, Optional, Any, Tuple, Generator
+from typing import (
+    Union,
+    Callable,
+    List,
+    Dict,
+    Optional,
+    Any,
+    Tuple,
+    Generator,
+    Iterator,
+)
 
 from pyspark import cloudpickle
 from pyspark.resource.information import ResourceInformation
-from pyspark.sql import SparkSession
+from pyspark.sql import DataFrame, SparkSession
 from pyspark.taskcontext import BarrierTaskContext
 from pyspark.ml.torch.log_communication import (  # type: ignore
     LogStreamingClient,
@@ -212,7 +222,9 @@ class Distributor:
                 key = "spark.task.resource.gpu.amount"
                 task_gpu_amount = int(_get_conf(self.spark, key, "0"))
                 if task_gpu_amount < 1:
-                    raise RuntimeError(f"'{key}' was unset, so gpu usage is unavailable.")
+                    raise RuntimeError(
+                        f"'{key}' was unset, so gpu usage is unavailable."
+                    )
                 # TODO(SPARK-41916): Address situation when spark.task.resource.gpu.amount > 1
                 return math.ceil(self.num_processes / task_gpu_amount)
             else:
@@ -221,7 +233,9 @@ class Distributor:
                     raise RuntimeError("GPUs were unable to be found on the driver.")
                 num_available_gpus = int(_get_conf(self.spark, key, "0"))
                 if num_available_gpus == 0:
-                    raise RuntimeError("GPU resources were not configured properly on the driver.")
+                    raise RuntimeError(
+                        "GPU resources were not configured properly on the driver."
+                    )
                 if self.num_processes > num_available_gpus:
                     self.logger.warning(
                         "'num_processes' cannot be set to a value greater than the number of "
@@ -404,7 +418,10 @@ class TorchDistributor(Distributor):
             torchrun_args = ["--standalone", "--nnodes=1"]
             processes_per_node = num_processes
         else:
-            master_addr, master_port = os.environ["MASTER_ADDR"], os.environ["MASTER_PORT"]
+            master_addr, master_port = (
+                os.environ["MASTER_ADDR"],
+                os.environ["MASTER_PORT"],
+            )
             node_rank = os.environ["RANK"]
             torchrun_args = [
                 f"--nnodes={num_processes}",
@@ -478,7 +495,7 @@ class TorchDistributor(Distributor):
         framework_wrapper_fn: Callable,
         train_object: Union[Callable, str],
         *args: Any,
-        **kwargs,
+        **kwargs: Any,
     ) -> Optional[Any]:
         CUDA_VISIBLE_DEVICES = "CUDA_VISIBLE_DEVICES"
         cuda_state_was_set = CUDA_VISIBLE_DEVICES in os.environ
@@ -490,12 +507,20 @@ class TorchDistributor(Distributor):
             if self.use_gpu and not self.is_remote:
                 gpus_owned = _get_gpus_owned(self.spark)
                 random.seed(hash(train_object))
-                selected_gpus = [str(e) for e in random.sample(gpus_owned, self.num_processes)]
+                selected_gpus = [
+                    str(e) for e in random.sample(gpus_owned, self.num_processes)
+                ]
                 os.environ[CUDA_VISIBLE_DEVICES] = ",".join(selected_gpus)
 
-            self.logger.info(f"Started local training with {self.num_processes} processes")
-            output = framework_wrapper_fn(self.input_params, train_object, *args, **kwargs)
-            self.logger.info(f"Finished local training with {self.num_processes} processes")
+            self.logger.info(
+                f"Started local training with {self.num_processes} processes"
+            )
+            output = framework_wrapper_fn(
+                self.input_params, train_object, *args, **kwargs
+            )
+            self.logger.info(
+                f"Finished local training with {self.num_processes} processes"
+            )
 
         finally:
             if cuda_state_was_set:
@@ -512,7 +537,7 @@ class TorchDistributor(Distributor):
         train_object: Union[Callable, str],
         input_dataframe,
         *args: Any,
-        **kwargs,
+        **kwargs: Any,
     ) -> Callable:
         """Creates a spark task function that is used inside `mapPartitions`.
 
@@ -566,7 +591,9 @@ class TorchDistributor(Distributor):
                         pass
                 available_port = context.allGather(str(port))[0]
                 if not available_port:
-                    raise RuntimeError("Failed to find free port for distributed training.")
+                    raise RuntimeError(
+                        "Failed to find free port for distributed training."
+                    )
                 return int(available_port)
 
             def set_torch_config(context: "BarrierTaskContext") -> None:
@@ -604,11 +631,17 @@ class TorchDistributor(Distributor):
                 os.environ[CUDA_VISIBLE_DEVICES] = ""
             set_torch_config(context)
 
-            log_streaming_client = LogStreamingClient(driver_address, log_streaming_server_port)
+            log_streaming_client = LogStreamingClient(
+                driver_address, log_streaming_server_port
+            )
             input_params["log_streaming_client"] = log_streaming_client
             try:
-                with TorchDistributor._setup_spark_partition_data(iterator, schema_json):
-                    output = framework_wrapper_fn(input_params, train_object, *args, **kwargs)
+                with TorchDistributor._setup_spark_partition_data(
+                    iterator, schema_json
+                ):
+                    output = framework_wrapper_fn(
+                        input_params, train_object, *args, **kwargs
+                    )
             finally:
                 try:
                     LogStreamingClient._destroy()
@@ -630,7 +663,9 @@ class TorchDistributor(Distributor):
                     chunks.append(output_bytes[index : index + chunk_size])
                     index += chunk_size
 
-                yield pyarrow.RecordBatch.from_pandas(pd.DataFrame(data={"chunk": chunks}))
+                yield pyarrow.RecordBatch.from_pandas(
+                    pd.DataFrame(data={"chunk": chunks})
+                )
 
         return wrapped_train_fn
 
@@ -640,7 +675,7 @@ class TorchDistributor(Distributor):
         train_object: Union[Callable, str],
         spark_dataframe,
         *args: Any,
-        **kwargs,
+        **kwargs: Any,
     ) -> Optional[Any]:
         if not framework_wrapper_fn:
             raise RuntimeError("Unknown combination of parameters")
@@ -680,10 +715,12 @@ class TorchDistributor(Distributor):
 
     @staticmethod
     def _run_training_on_pytorch_file(
-        input_params: Dict[str, Any], train_path: str, *args: Any, **kwargs
+        input_params: Dict[str, Any], train_path: str, *args: Any, **kwargs: Any
     ) -> None:
         if kwargs:
-            raise ValueError("Running pytorch file does not support key-word type arguments.")
+            raise ValueError(
+                "Running pytorch file does not support key-word type arguments."
+            )
         log_streaming_client = input_params.get("log_streaming_client", None)
         training_command = TorchDistributor._create_torchrun_command(
             input_params, train_path, *args
@@ -695,7 +732,7 @@ class TorchDistributor(Distributor):
     @staticmethod
     @contextmanager
     def _setup_files(
-        train_fn: Callable, *args: Any, **kwargs
+        train_fn: Callable, *args: Any, **kwargs: Any
     ) -> Generator[Tuple[str, str], None, None]:
         save_dir = TorchDistributor._create_save_dir()
         pickle_file_path = TorchDistributor._save_pickled_function(
@@ -712,7 +749,9 @@ class TorchDistributor(Distributor):
 
     @staticmethod
     @contextmanager
-    def _setup_spark_partition_data(partition_data_iterator, input_schema_json):
+    def _setup_spark_partition_data(
+        partition_data_iterator: Iterator[Any], input_schema_json: Dict[str, Any]
+    ):
         from pyspark.sql.pandas.serializers import ArrowStreamSerializer
         from pyspark.files import SparkFiles
         import json
@@ -724,7 +763,9 @@ class TorchDistributor(Distributor):
         # We need to temporarily write partition data into a temp dir,
         # partition data might be huge, so we need to write it under
         # configured `SPARK_LOCAL_DIRS`.
-        save_dir = TorchDistributor._create_save_dir(root_dir=SparkFiles.getRootDirectory())
+        save_dir = TorchDistributor._create_save_dir(
+            root_dir=SparkFiles.getRootDirectory()
+        )
 
         try:
             serializer = ArrowStreamSerializer()
@@ -752,13 +793,15 @@ class TorchDistributor(Distributor):
 
     @staticmethod
     def _run_training_on_pytorch_function(
-        input_params: Dict[str, Any], train_fn: Callable, *args: Any, **kwargs
+        input_params: Dict[str, Any], train_fn: Callable, *args: Any, **kwargs: Any
     ) -> Any:
         with TorchDistributor._setup_files(train_fn, *args, **kwargs) as (
             train_file_path,
             output_file_path,
         ):
-            TorchDistributor._run_training_on_pytorch_file(input_params, train_file_path)
+            TorchDistributor._run_training_on_pytorch_file(
+                input_params, train_file_path
+            )
             if not os.path.exists(output_file_path):
                 raise RuntimeError(
                     "TorchDistributor failed during training."
@@ -774,7 +817,7 @@ class TorchDistributor(Distributor):
         return output
 
     @staticmethod
-    def _create_save_dir(root_dir=None) -> str:
+    def _create_save_dir(root_dir: Optional[str] = None) -> str:
         # TODO: need to do this in a safe way to avoid issues during concurrent runs
         return tempfile.mkdtemp(dir=root_dir)
 
@@ -784,7 +827,7 @@ class TorchDistributor(Distributor):
 
     @staticmethod
     def _save_pickled_function(
-        save_dir: str, train_fn: Union[str, Callable], *args: Any, **kwargs
+        save_dir: str, train_fn: Union[str, Callable], *args: Any, **kwargs: Any
     ) -> str:
         saved_pickle_path = os.path.join(save_dir, TorchDistributor._PICKLED_FUNC_FILE)
         with open(saved_pickle_path, "wb") as f:
@@ -819,7 +862,9 @@ class TorchDistributor(Distributor):
             output = cloudpickle.load(f)
         return output
 
-    def run(self, train_object: Union[Callable, str], *args: Any, **kwargs) -> Optional[Any]:
+    def run(
+        self, train_object: Union[Callable, str], *args: Any, **kwargs: Any
+    ) -> Optional[Any]:
         """Runs distributed training.
 
         Parameters
@@ -865,14 +910,22 @@ class TorchDistributor(Distributor):
                 TorchDistributor._run_training_on_pytorch_function  # type: ignore
             )
         if self.local_mode:
-            output = self._run_local_training(framework_wrapper_fn, train_object, *args, **kwargs)
+            output = self._run_local_training(
+                framework_wrapper_fn, train_object, *args, **kwargs
+            )
         else:
             output = self._run_distributed_training(
                 framework_wrapper_fn, train_object, None, *args, **kwargs
             )
         return output
 
-    def _train_on_dataframe(self, train_function, spark_dataframe, *args, **kwargs):
+    def _train_on_dataframe(
+        self,
+        train_function: Callable,
+        spark_dataframe: "DataFrame",
+        *args: Any,
+        **kwargs: Any,
+    ):
         """
         Runs distributed training using provided Spark DataFrame as input data.
         You should ensure the input Spark DataFrame have evenly distributed partitions,
@@ -924,7 +977,7 @@ class TorchDistributor(Distributor):
         )
 
 
-def _get_spark_partition_data_loader(num_samples, batch_size, prefetch=2):
+def _get_spark_partition_data_loader(num_samples: int, batch_size: int, prefetch=2):
     """
     This function must be called inside the `train_function` where `train_function`
     is the input argument of `TorchDistributor.train_on_dataframe`.
@@ -945,7 +998,7 @@ def _get_spark_partition_data_loader(num_samples, batch_size, prefetch=2):
         Number of batches loaded in advance.
     """
     from pyspark.sql.types import StructType
-    from pyspark.ml.torch.data import SparkPartitionTorchDataset
+    from pyspark.ml.torch.data import _SparkPartitionTorchDataset
     from torch.utils.data import DataLoader
 
     arrow_file = os.environ[SPARK_PARTITION_ARROW_DATA_FILE]
@@ -954,6 +1007,6 @@ def _get_spark_partition_data_loader(num_samples, batch_size, prefetch=2):
     with open(schema_file, "r") as fp:
         schema = StructType.fromJson(json.load(fp))
 
-    dataset = SparkPartitionTorchDataset(arrow_file, schema, num_samples)
+    dataset = _SparkPartitionTorchDataset(arrow_file, schema, num_samples)
 
     return DataLoader(dataset, batch_size, num_workers=1, prefetch_factor=prefetch)

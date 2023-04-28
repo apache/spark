@@ -17,16 +17,18 @@
 
 import torch
 import numpy as np
+from typing import Any
+from pyspark.sql.types import StructType
 
 
-class SparkPartitionTorchDataset(torch.utils.data.IterableDataset):
-    def __init__(self, arrow_file_path, schema, num_samples):
+class _SparkPartitionTorchDataset(torch.utils.data.IterableDataset):
+    def __init__(self, arrow_file_path: str, schema: "StructType", num_samples: int):
         self.arrow_file_path = arrow_file_path
         self.num_samples = num_samples
         self.field_types = [field.dataType.simpleString() for field in schema]
 
     @staticmethod
-    def _extract_field_value(value, field_type):
+    def _extract_field_value(value: Any, field_type: str):
         # TODO: avoid checking field type for every row.
         if field_type == "vector":
             if value["type"] == 1:
@@ -69,7 +71,9 @@ class SparkPartitionTorchDataset(torch.utils.data.IterableDataset):
                     batch_pdf = batch.to_pandas()
                     for row in batch_pdf.itertuples(index=False):
                         yield [
-                            SparkPartitionTorchDataset._extract_field_value(value, field_type)
+                            _SparkPartitionTorchDataset._extract_field_value(
+                                value, field_type
+                            )
                             for value, field_type in zip(row, self.field_types)
                         ]
                         count += 1

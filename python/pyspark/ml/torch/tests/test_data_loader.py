@@ -24,7 +24,10 @@ try:
 except ImportError:
     have_torch = False
 
-from pyspark.ml.torch.distributor import TorchDistributor, _get_spark_partition_data_loader
+from pyspark.ml.torch.distributor import (
+    TorchDistributor,
+    _get_spark_partition_data_loader,
+)
 from pyspark.sql import SparkSession
 from pyspark.ml.linalg import Vectors
 
@@ -89,7 +92,11 @@ class TorchDistributorDataLoaderUnitTests(unittest.TestCase):
         self._check_data_loader_result_correctness(
             result,
             [
-                [[[1.0, 2.0, 3.5], [0.0, 4.5, 5.5], [6.0, 7.0, 8.5]], [0, 3, 1], [10.5, 12.5, 1.5]],
+                [
+                    [[1.0, 2.0, 3.5], [0.0, 4.5, 5.5], [6.0, 7.0, 8.5]],
+                    [0, 3, 1],
+                    [10.5, 12.5, 1.5],
+                ],
                 [[[-2.5, 0.0, -6.5]], [2], [9.5]],
             ],
         )
@@ -103,7 +110,11 @@ class TorchDistributorDataLoaderUnitTests(unittest.TestCase):
         self._check_data_loader_result_correctness(
             result,
             [
-                [[[1.0, 2.0, 3.5], [0.0, 4.5, 5.5], [6.0, 7.0, 8.5]], [0, 3, 1], [10.5, 12.5, 1.5]],
+                [
+                    [[1.0, 2.0, 3.5], [0.0, 4.5, 5.5], [6.0, 7.0, 8.5]],
+                    [0, 3, 1],
+                    [10.5, 12.5, 1.5],
+                ],
                 [
                     [[-2.5, 0.0, -6.5], [1.0, 2.0, 3.5], [0.0, 4.5, 5.5]],
                     [2, 0, 3],
