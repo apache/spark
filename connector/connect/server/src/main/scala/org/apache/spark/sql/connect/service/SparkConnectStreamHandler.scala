@@ -234,7 +234,9 @@ object SparkConnectStreamHandler {
     if (numSent == 0) {
       sendBatch(
         ArrowConverters.createEmptyArrowBatch(
-          schema, timeZoneId, errorOnDuplicatedFieldNames = false),
+          schema,
+          timeZoneId,
+          errorOnDuplicatedFieldNames = false),
         0L)
     }
   }
