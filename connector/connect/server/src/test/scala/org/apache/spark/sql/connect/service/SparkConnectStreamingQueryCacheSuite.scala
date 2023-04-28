@@ -40,7 +40,7 @@ class SparkConnectStreamingQueryCacheSuite extends SparkFunSuite with MockitoSug
     new SparkConnectStreamingQueryCache(
       keepAliveFn,
       clock = new ManualClock(),
-      stoppedQueryCachePeriod = 1.minute, // This is on manual clock.
+      stoppedQueryInactivityTimeout = 1.minute, // This is on manual clock.
       sessionPollingPeriod = 20.milliseconds // This is real clock. Used for periodic task.
     )
   }
@@ -50,7 +50,8 @@ class SparkConnectStreamingQueryCacheSuite extends SparkFunSuite with MockitoSug
 
     val numKeepAliveCalls = new AtomicInteger(0)
 
-    val queryId = UUID.randomUUID()
+    val queryId = UUID.randomUUID().toString
+    val runId = UUID.randomUUID().toString
     val mockSession = mock[SparkSession]
     val mockQuery = mock[StreamingQuery]
     val mockStreamingQueryManager = mock[StreamingQueryManager]
@@ -64,21 +65,24 @@ class SparkConnectStreamingQueryCacheSuite extends SparkFunSuite with MockitoSug
       numKeepAliveCalls.incrementAndGet()
     })
 
-    when(mockQuery.id).thenReturn(queryId)
+    val clock = sessionMgr.clock.asInstanceOf[ManualClock]
+
+    when(mockQuery.id).thenReturn(UUID.fromString(queryId))
+    when(mockQuery.runId).thenReturn(UUID.fromString(runId))
     when(mockQuery.isActive).thenReturn(true) // Query is active.
     when(mockSession.streams).thenReturn(mockStreamingQueryManager)
-    when(mockStreamingQueryManager.get(queryId.toString)).thenReturn(mockQuery)
+    when(mockStreamingQueryManager.get(queryId)).thenReturn(mockQuery)
 
     // Register the query.
 
     sessionMgr.registerNewStreamingQuery(sessionHolder, mockQuery)
 
-    eventually(timeout(10.seconds)) {
+    eventually(timeout(1.minute)) {
       // Verify keep alive function is called a few times.
       assert(numKeepAliveCalls.get() >= 5)
     }
 
-    sessionMgr.cacheQueryValue(queryId.toString) match {
+    sessionMgr.cacheQueryValue(queryId, runId) match {
       case Some(v) =>
         assert(v.sessionId == sessionHolder.sessionId)
         assert(v.expiresAtMs.isEmpty, "No expiry time should be set for active query")
@@ -86,10 +90,10 @@ class SparkConnectStreamingQueryCacheSuite extends SparkFunSuite with MockitoSug
       case None => assert(false, "Query should be found")
     }
 
-    // Verify query is returned only with the correct session.
-    assert(sessionMgr.findCachedQuery(queryId.toString, mock[SparkSession]).isEmpty)
+    // Verify query is returned only with the correct session, not with a different session.
+    assert(sessionMgr.getCachedQuery(queryId, runId, mock[SparkSession]).isEmpty)
     // Query is returned when correct session is used
-    assert(sessionMgr.findCachedQuery(queryId.toString, mockSession).contains(mockQuery))
+    assert(sessionMgr.getCachedQuery(queryId, runId, mockSession).contains(mockQuery))
 
     // Stop the query.
     when(mockQuery.isActive).thenReturn(false)
@@ -97,15 +101,53 @@ class SparkConnectStreamingQueryCacheSuite extends SparkFunSuite with MockitoSug
     val expectedExpiryTimeMs = sessionMgr.clock.getTimeMillis() + 1.minute.toMillis
 
     // The query should have 'expiresAtMs' set now.
-    eventually(timeout(10.seconds)) {
-      val expiresAtOpt = sessionMgr.cacheQueryValue(queryId.toString).flatMap(_.expiresAtMs)
+    eventually(timeout(1.minute)) {
+      val expiresAtOpt = sessionMgr.cacheQueryValue(queryId, runId).flatMap(_.expiresAtMs)
       assert(expiresAtOpt.contains(expectedExpiryTimeMs))
     }
 
-    // Advance time by 1 minute so that the query is dropped from the cache.
-    sessionMgr.clock.asInstanceOf[ManualClock].advance(1.minute.toMillis)
-    eventually(timeout(10.seconds)) {
-      assert(sessionMgr.cacheQueryValue(queryId.toString).isEmpty)
+    // Verify that expiry time gets extended when the query is accessed.
+    val prevExpiryTimeMs = sessionMgr.cacheQueryValue(queryId, runId).get.expiresAtMs.get
+
+    clock.advance(30.seconds.toMillis)
+
+    // Access the query. This should advance expiry time by 30 seconds.
+    assert(sessionMgr.getCachedQuery(queryId, runId, mockSession).contains(mockQuery))
+    val expiresAtMs = sessionMgr.cacheQueryValue(queryId, runId).get.expiresAtMs.get
+    assert(expiresAtMs == prevExpiryTimeMs + 30.seconds.toMillis)
+
+    // During this time ensure that query can be restarted with a new runId.
+
+    val restartedRunId = UUID.randomUUID().toString
+    val restartedQuery = mock[StreamingQuery]
+    when(restartedQuery.id).thenReturn(UUID.fromString(queryId))
+    when(restartedQuery.runId).thenReturn(UUID.fromString(restartedRunId))
+    when(restartedQuery.isActive).thenReturn(true)
+    when(mockStreamingQueryManager.get(queryId)).thenReturn(restartedQuery)
+
+    sessionMgr.registerNewStreamingQuery(sessionHolder, restartedQuery)
+
+    // Both queries should existing in the cache.
+    assert(sessionMgr.cacheQueryValue(queryId, runId).map(_.query).contains(mockQuery))
+    assert(
+      sessionMgr.cacheQueryValue(queryId, restartedRunId).map(_.query).contains(restartedQuery))
+
+    // Advance time by 1 minute and verify the first query is dropped from the cache.
+    clock.advance(1.minute.toMillis)
+    eventually(timeout(1.minute)) {
+      assert(sessionMgr.cacheQueryValue(queryId, runId).isEmpty)
+    }
+
+    // Stop the restarted query and verify gets dropped from the cache too.
+    when(restartedQuery.isActive).thenReturn(false)
+    eventually(timeout(1.minute)) {
+      assert(sessionMgr.cacheQueryValue(queryId, restartedRunId).flatMap(_.expiresAtMs).nonEmpty)
+    }
+
+    // Advance time by one more minute and restarted query should be dropped.
+    clock.advance(1.minute.toMillis)
+    eventually(timeout(1.minute)) {
+      assert(sessionMgr.cacheQueryValue(queryId, restartedRunId).isEmpty)
     }
 
     sessionMgr.shutdown()

@@ -46,17 +46,15 @@ import org.apache.spark.util.SystemClock
  *     - This matches how streaming queries behave in Spark. The queries continue to run if
  *       notebook or job session is lost.
  *   - Once a query is stopped, the reference and mappings are maintained for 1 hour and will be
- *     accessible from the client. This allows time for client to fetch status.
- *     - During this time if the query is restarted (i.e. has a new run id), the reference to
- *       previous run is dropped. As a result logical query has only the most recent query
- *       reference cached. This policy can be revisited to cache multiple runs for a query.
+ *     accessible from the client. This allows time for client to fetch status. If the client
+ *     continues to access the query, it stays in the cache until 1 hour of inactivity.
  *
  * Note that these semantics are evolving and might change before being finalized in Connect.
  */
 private[connect] class SparkConnectStreamingQueryCache(
     val sessionKeepAliveFn: (String, String) => Unit, // (userId, sessionId) => Unit.
     val clock: Clock = new SystemClock(),
-    private val stoppedQueryCachePeriod: Duration = 1.hour, // Configurable for testing.
+    private val stoppedQueryInactivityTimeout: Duration = 1.hour, // Configurable for testing.
     private val sessionPollingPeriod: Duration = 1.minute // Configurable for testing.
 ) extends Logging {
 
@@ -71,10 +69,10 @@ private[connect] class SparkConnectStreamingQueryCache(
         query = query,
         expiresAtMs = None)
 
-      queryCache.put(QueryCacheKey(query.id.toString), value) match {
-        case Some(existing) => // Query is being replaced. Can happen when a query is restarted.
-          log.info(
-            s"Replacing existing query in the cache. Query Id: ${query.id}." +
+      queryCache.put(QueryCacheKey(query.id.toString, query.runId.toString), value) match {
+        case Some(existing) => // Query is being replace. Not really expected.
+          log.warn(
+            s"Replacing existing query in the cache (unexpected). Query Id: ${query.id}." +
               s"Existing value $existing, new value $value.")
         case None =>
           log.info(s"Adding new query to the cache. Query Id ${query.id}, value $value.")
@@ -86,20 +84,31 @@ private[connect] class SparkConnectStreamingQueryCache(
 
   /**
    * Returns [[StreamingQuery]] if it is cached and session matches the cached query. It ensures
-   * the the session associated with it matches the session passed into the call.
+   * the the session associated with it matches the session passed into the call. If the query is
+   * inactive (i.e. it has a cache expiry time set), this access extends its expiry time. So
+   * if a client keeps accessing a query, it stays in the cache.
    */
-  def findCachedQuery(queryId: String, session: SparkSession): Option[StreamingQuery] = {
+  def getCachedQuery(queryId: String, runId: String, session: SparkSession):
+  Option[StreamingQuery] = {
+    val key = QueryCacheKey(queryId, runId)
     queryCacheLock.synchronized {
-      cacheQueryValue(queryId).flatMap { v =>
-        if (v.session == session) Some(v.query)
-        else None // This should be rare. Likely the query is restarted on a different session.
+      queryCache.get(key).flatMap { v =>
+        if (v.session == session) {
+          v.expiresAtMs.foreach { _ =>
+            // Extend the expiry time as the client is accessing it.
+            val expiresAtMs = clock.getTimeMillis() + stoppedQueryInactivityTimeout.toMillis
+            queryCache.put(key, v.copy(expiresAtMs = Some(expiresAtMs)))
+          }
+          Some(v.query)
+        }
+        else None // This should be rare, may be client is trying access from a different session.
       }
     }
   }
 
   // Visible for testing
-  private[service] def cacheQueryValue(queryId: String): Option[QueryCacheValue] =
-    queryCache.get(QueryCacheKey(queryId))
+  private[service] def cacheQueryValue(queryId: String, runId: String): Option[QueryCacheValue] =
+    queryCache.get(QueryCacheKey(queryId, runId))
 
   // Visible for testing.
   private[service] def shutdown(): Unit = queryCacheLock.synchronized {
@@ -170,8 +179,8 @@ private[connect] class SparkConnectStreamingQueryCache(
 
             if (!isActive) {
               log.info(s"Marking query $id in session ${v.sessionId} inactive.")
-              val newVal = v.copy(expiresAtMs = Some(nowMs + stoppedQueryCachePeriod.toMillis))
-              queryCache.put(k, newVal)
+              val newV = v.copy(expiresAtMs = Some(nowMs + stoppedQueryInactivityTimeout.toMillis))
+              queryCache.put(k, newV)
             }
         }
       }
@@ -188,7 +197,7 @@ private[connect] object SparkConnectStreamingQueryCache {
   case class SessionCacheKey(userId: String, sessionId: String)
   case class SessionCacheValue(session: SparkSession)
 
-  case class QueryCacheKey(queryId: String)
+  case class QueryCacheKey(queryId: String, runId: String)
 
   case class QueryCacheValue(
       userId: String,
