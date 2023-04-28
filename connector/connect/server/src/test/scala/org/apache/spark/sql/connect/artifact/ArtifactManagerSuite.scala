@@ -120,13 +120,18 @@ class ArtifactManagerSuite extends SharedSparkSession with ResourceHelper {
       Files.write(path.toPath, "test".getBytes(StandardCharsets.UTF_8))
       val remotePath = Paths.get("cache/abc")
       val session = sessionHolder()
-      artifactManager.addArtifact(session, remotePath, stagingPath)
       val blockManager = spark.sparkContext.env.blockManager
       val blockId = CacheId(session.userId, session.sessionId, "abc")
-      val bytes = blockManager.getLocalBytes(blockId)
-      assert(bytes.isDefined)
-      val readback = new String(bytes.get.toByteBuffer().array(), StandardCharsets.UTF_8)
-      assert(readback === "test")
+      try {
+        artifactManager.addArtifact(session, remotePath, stagingPath)
+        val bytes = blockManager.getLocalBytes(blockId)
+        assert(bytes.isDefined)
+        val readback = new String(bytes.get.toByteBuffer().array(), StandardCharsets.UTF_8)
+        assert(readback === "test")
+      } finally {
+        blockManager.releaseLock(blockId)
+        blockManager.removeCache(session.userId, session.sessionId)
+      }
     }
   }
 }
