@@ -546,8 +546,7 @@ class DataStreamWriter:
             **options,
         )
 
-    # TODO (SPARK-42962): uncomment below
-    # start.__doc__ = PySparkDataStreamWriter.start.__doc__
+    start.__doc__ = PySparkDataStreamWriter.start.__doc__
 
     def toTable(
         self,

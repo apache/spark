@@ -30,7 +30,7 @@ from pyspark.errors.exceptions.connect import (
 )
 
 __all__ = [
-    "StreamingQuery",  # TODO(SPARK-43032): "StreamingQueryManager"
+    "StreamingQuery", "StreamingQueryManager"
 ]
 
 if TYPE_CHECKING:
@@ -82,7 +82,7 @@ class StreamingQuery:
             terminated = self._execute_streaming_query_cmd(cmd).await_termination.terminated
             return terminated
         else:
-            await_termination_cmd = pb2.StreamingQueryCommand.AwaitTerminationCommand()
+            await_termination_cmd StreamingQueryCommand.AwaitTerminationCommand()
             cmd.await_termination.CopyFrom(await_termination_cmd)
             self._execute_streaming_query_cmd(cmd)
             return None
@@ -133,8 +133,7 @@ class StreamingQuery:
         cmd.stop = True
         self._execute_streaming_query_cmd(cmd)
 
-    # TODO (SPARK-42962): uncomment below
-    # stop.__doc__ = PySparkStreamingQuery.stop.__doc__
+    stop.__doc__ = PySparkStreamingQuery.stop.__doc__
 
     def explain(self, extended: bool = False) -> None:
         cmd = pb2.StreamingQueryCommand()
@@ -192,7 +191,7 @@ class StreamingQueryManager:
         cmd = pb2.StreamingQueryManagerCommand()
         cmd.get_query.id = id
         query = self._execute_streaming_query_manager_cmd(cmd).query
-        return StreamingQuery(self._session, query.id, query.run_id, query.name)  # TODO: name none?
+        return StreamingQuery(self._session, query.id, query.run_id, query.name)
 
     get.__doc__ = PySparkStreamingQueryManager.get.__doc__
 
@@ -200,7 +199,10 @@ class StreamingQueryManager:
         cmd = pb2.StreamingQueryManagerCommand()
         if timeout is not None:
             if not isinstance(timeout, (int, float)) or timeout <= 0:
-                raise ValueError("timeout must be a positive integer or float. Got %s" % timeout)
+                raise PySparkValueError(
+                    error_class="VALUE_NOT_POSITIVE",
+                    message_parameters={"arg_name": "timeout", "arg_value": type(timeout).__name__},
+                )
             cmd.await_any_termination.timeout_ms = int(timeout * 1000)
             terminated = self._execute_streaming_query_manager_cmd(
                 cmd

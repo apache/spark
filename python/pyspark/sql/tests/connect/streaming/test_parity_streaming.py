@@ -22,17 +22,7 @@ from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
 class StreamingParityTests(StreamingTestsMixin, ReusedConnectTestCase):
-    @unittest.skip("Query manager API will be supported later with SPARK-43032.")
-    def test_stream_await_termination(self):
-        super().test_stream_await_termination()
-
-    @unittest.skip(
-        "Query immediately quits after throw, "
-        + "allowing access to supported queries will be added in SPARK-42962."
-    )
-    def test_stream_exception(self):
-        super().test_stream_exception()
-
+    pass
 
 if __name__ == "__main__":
     import unittest
