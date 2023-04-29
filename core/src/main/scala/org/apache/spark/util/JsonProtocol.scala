@@ -1565,7 +1565,8 @@ private[spark] object JsonProtocol {
   }
 
   def exceptionFromJson(json: JsonNode): Exception = {
-    val e = new Exception(json.get("Message").extractString)
+    val message = jsonOption(json.get("Message")).map(_.extractString).orNull
+    val e = new Exception(message)
     e.setStackTrace(stackTraceFromJson(json.get("Stack Trace")))
     e
   }
