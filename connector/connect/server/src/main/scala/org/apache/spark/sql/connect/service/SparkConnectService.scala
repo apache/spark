@@ -284,9 +284,15 @@ object SparkConnectService {
   private val userSessionMapping =
     cacheBuilder(CACHE_SIZE, CACHE_TIMEOUT_SECONDS).build[SessionCacheKey, SessionHolder]()
 
+  private[connect] val streamingSessionManager =
+    new SparkConnectStreamingQueryCache(sessionKeepAliveFn = { case (userId, sessionId) =>
+      // Use getIfPresent() rather than get() to prevent accidental loading.
+      userSessionMapping.getIfPresent((userId, sessionId))
+    })
+
   private class RemoveSessionListener extends RemovalListener[SessionCacheKey, SessionHolder] {
     override def onRemoval(
-        notification: RemovalNotification[SessionCacheKey, SessionHolder]): Unit = {
+      notification: RemovalNotification[SessionCacheKey, SessionHolder]): Unit = {
       val SessionHolder(userId, sessionId, session) = notification.getValue
       val blockManager = session.sparkContext.env.blockManager
       blockManager.removeCache(userId, sessionId)

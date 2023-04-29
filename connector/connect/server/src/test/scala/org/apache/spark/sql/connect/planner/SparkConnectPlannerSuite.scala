@@ -55,7 +55,7 @@ trait SparkConnectPlanTest extends SharedSparkSession {
   }
 
   def transform(cmd: proto.Command): Unit = {
-    new SparkConnectPlanner(spark).process(cmd, "clientId", new MockObserver())
+    new SparkConnectPlanner(spark).process(cmd, "clientId", "sessionId", new MockObserver())
   }
 
   def readRel: proto.Relation =
