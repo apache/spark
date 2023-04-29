@@ -208,6 +208,17 @@ message WriteStreamOperationStart {
     string path = 11;
     string table_name = 12;
   }
+
+  Foreach foreach = 13;
+}
+
+message Foreach {
+  // (Required) The encoded commands of the Python foreach function
+  bytes command = 1;
+  // (Required) Python version being used in the client.
+  string python_ver = 2;
+  // (Required) The row schema of the function input.
+  string schema = 3;
 }
 
 message WriteStreamOperationStartResult {

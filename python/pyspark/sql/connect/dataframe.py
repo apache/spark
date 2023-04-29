@@ -1967,7 +1967,7 @@ class DataFrame:
     @property
     def writeStream(self) -> DataStreamWriter:
         assert self._plan is not None
-        return DataStreamWriter(plan=self._plan, session=self._session)
+        return DataStreamWriter(plan=self._plan, schema=self._schema, session=self._session)
 
     writeStream.__doc__ = PySparkDataFrame.writeStream.__doc__
 

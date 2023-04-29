@@ -54,7 +54,7 @@ import org.apache.spark.sql.execution.arrow.ArrowConverters
 import org.apache.spark.sql.execution.command.CreateViewCommand
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JDBCPartition, JDBCRelation}
-import org.apache.spark.sql.execution.python.UserDefinedPythonFunction
+import org.apache.spark.sql.execution.python.{PythonForeachWriter, UserDefinedPythonFunction}
 import org.apache.spark.sql.execution.streaming.StreamingQueryWrapper
 import org.apache.spark.sql.internal.CatalogImpl
 import org.apache.spark.sql.streaming.Trigger
@@ -1327,6 +1327,21 @@ class SparkConnectPlanner(val session: SparkSession) {
       accumulator = null)
   }
 
+  private def transformPythonForeachFunction(fun: proto.Foreach): PythonForeachWriter = {
+    SimplePythonFunction(
+      command = fun.getCommand.toByteArray,
+      // Empty environment variables
+      envVars = Maps.newHashMap(),
+      // No imported Python libraries
+      pythonIncludes = Lists.newArrayList(),
+      pythonExec = pythonExec,
+      pythonVer = fun.getPythonVer,
+      // Empty broadcast variables
+      broadcastVars = Lists.newArrayList(),
+      // Null accumulator
+      accumulator = null)
+  }
+
   /**
    * Translates a LambdaFunction from proto to the Catalyst expression.
    */
@@ -2227,7 +2242,11 @@ class SparkConnectPlanner(val session: SparkSession) {
       writer.queryName(writeOp.getQueryName)
     }
 
-    // if foreach nonEmpty, writer.forEach(writerOp.getForeacH)
+    if (writeOp.getForeach.nonEmpty) {
+      val foreach = writeOp.getForeach
+      val pythonFcn = transformPythonForeachFunction(foreach)
+      writer.foreach(PythonForeachWriter(pythonFcn, parseSchema(foreach.getSchema)))
+    }
 
     val query = writeOp.getPath match {
       case "" if writeOp.hasTableName => writer.toTable(writeOp.getTableName)
