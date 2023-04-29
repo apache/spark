@@ -873,12 +873,12 @@ class ArrowTestsMixin:
         self.assertEqual([Row(c1=1, c2="string")], df.collect())
         self.assertGreater(self.spark.sparkContext.defaultParallelism, len(pdf))
 
-    def test_error(self):
+    def test_toPandas_error(self):
         for arrow_enabled in [True, False]:
             with self.subTest(arrow_enabled=arrow_enabled):
-                self.check_error(arrow_enabled)
+                self.check_toPandas_error(arrow_enabled)
 
-    def check_error(self, arrow_enabled):
+    def check_toPandas_error(self, arrow_enabled):
         with self.sql_conf(
             {
                 "spark.sql.ansi.enabled": True,

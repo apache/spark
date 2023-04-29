@@ -103,8 +103,8 @@ class ArrowParityTests(ArrowTestsMixin, ReusedConnectTestCase):
     def test_timestamp_nat(self):
         self.check_timestamp_nat(True)
 
-    def test_error(self):
-        self.check_error(True)
+    def test_toPandas_error(self):
+        self.check_toPandas_error(True)
 
 
 if __name__ == "__main__":

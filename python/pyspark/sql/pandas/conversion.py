@@ -19,6 +19,7 @@ from collections import Counter
 from typing import List, Optional, Type, Union, no_type_check, overload, TYPE_CHECKING
 from warnings import catch_warnings, simplefilter, warn
 
+from pyspark.errors.exceptions.captured import unwrap_spark_exception
 from pyspark.rdd import _load_from_socket
 from pyspark.sql.pandas.serializers import ArrowCollectSerializer
 from pyspark.sql.types import (
@@ -357,8 +358,6 @@ class PandasConversionMixin:
             else:
                 results = list(batch_stream)
         finally:
-            from pyspark.errors.exceptions.captured import unwrap_spark_exception
-
             with unwrap_spark_exception():
                 # Join serving thread and raise any exceptions from collectAsArrowToPython
                 jsocket_auth_server.getResult()
