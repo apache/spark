@@ -292,7 +292,7 @@ object SparkConnectService {
 
   private class RemoveSessionListener extends RemovalListener[SessionCacheKey, SessionHolder] {
     override def onRemoval(
-      notification: RemovalNotification[SessionCacheKey, SessionHolder]): Unit = {
+        notification: RemovalNotification[SessionCacheKey, SessionHolder]): Unit = {
       val SessionHolder(userId, sessionId, session) = notification.getValue
       val blockManager = session.sparkContext.env.blockManager
       blockManager.removeCache(userId, sessionId)
