@@ -357,8 +357,11 @@ class PandasConversionMixin:
             else:
                 results = list(batch_stream)
         finally:
-            # Join serving thread and raise any exceptions from collectAsArrowToPython
-            jsocket_auth_server.getResult()
+            from pyspark.errors.exceptions.captured import unwrap_spark_exception
+
+            with unwrap_spark_exception():
+                # Join serving thread and raise any exceptions from collectAsArrowToPython
+                jsocket_auth_server.getResult()
 
         # Separate RecordBatches from batch order indices in results
         batches = results[:-1]
