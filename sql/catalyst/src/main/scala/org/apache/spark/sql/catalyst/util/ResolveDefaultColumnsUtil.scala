@@ -224,7 +224,12 @@ object ResolveDefaultColumns {
       val result = if (analyzed.isInstanceOf[Literal] &&
         !Seq(dataType, analyzed.dataType).exists(_ == BooleanType)) {
         try {
-          Some(Literal(Cast(analyzed, dataType, evalMode = EvalMode.TRY).eval()))
+          val casted = Cast(analyzed, dataType, evalMode = EvalMode.TRY).eval()
+          if (casted != null) {
+            Some(Literal(casted))
+          } else {
+            None
+          }
         } catch {
           case _: SparkThrowable | _: RuntimeException => None
         }

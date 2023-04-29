@@ -101,8 +101,8 @@ class ResolveDefaultColumnsSuite extends QueryTest with SharedSparkSession {
         // If the provided default value is a literal of a completely different type than the target
         // column such that no coercion is possible, throw an error.
         assert(intercept[AnalysisException](
-          sql("create table demos.test_ts (id int default 'abc') using parquet"))
-          .getMessage.contains("statement provided a value of incompatible type"))
+          sql("create table demos.test_ts_other (id int default 'abc') using parquet"))
+        .getMessage.contains("statement provided a value of incompatible type"))
       }
     }
   }
