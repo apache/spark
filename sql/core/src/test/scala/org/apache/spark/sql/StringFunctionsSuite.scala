@@ -17,11 +17,14 @@
 
 package org.apache.spark.sql
 
+import scala.collection.mutable.ArrayBuffer
+
 import org.apache.spark.{SPARK_DOC_ROOT, SparkRuntimeException}
 import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
+
 
 class StringFunctionsSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
@@ -131,7 +134,7 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
     checkAnswer(df.selectExpr("levenshtein(l, r)"), Seq(Row(3), Row(1)))
   }
 
-  test("string regex_replace / regex_extract") {
+  test("string regex_replace / regex_extract / regex_extract_all") {
     val df = Seq(
       ("100-200", "(\\d+)-(\\d+)", "300"),
       ("100-200", "(\\d+)-(\\d+)", "400"),
@@ -144,6 +147,12 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
         regexp_extract($"a", "(\\d+)-(\\d+)", 1)),
       Row("num-num", "300", "100") :: Row("num-num", "400", "100") ::
         Row("num-num", "400-400", "100") :: Nil)
+
+    checkAnswer(
+      df.select(
+        regexp_extract_all($"a", "(\\d+)", 1)
+      ).limit(1),
+      Row(ArrayBuffer(100, 200)))
 
     // for testing the mutable state of the expression in code gen.
     // This is a hack way to enable the codegen, thus the codegen is enable by default,

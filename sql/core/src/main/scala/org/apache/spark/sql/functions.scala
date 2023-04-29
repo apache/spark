@@ -2837,6 +2837,20 @@ object functions {
   }
 
   /**
+   * Extracts the all strings in str that matches the regexp expression and corresponds
+   * to the regex group index.
+   * If the regex did not match, or the specified group did not match, an empty array is returned.
+   * if the specified group index exceeds the group count of regex, an IllegalArgumentException
+   * will be thrown.
+   *
+   * @group string_funcs
+   * @since 3.4.1
+   */
+  def regexp_extract_all(e: Column, exp: String, groupIdx: Int): Column = withExpr {
+    RegExpExtractAll(e.expr, lit(exp).expr, lit(groupIdx).expr)
+  }
+
+  /**
    * Replace all substrings of the specified string value that match regexp with rep.
    *
    * @group string_funcs

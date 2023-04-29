@@ -6842,6 +6842,36 @@ def regexp_extract(str: "ColumnOrName", pattern: str, idx: int) -> Column:
     """
     return _invoke_function("regexp_extract", _to_java_column(str), pattern, idx)
 
+@try_remote_functions
+def regexp_extract_all(str: "ColumnOrName", pattern: str, idx: int) -> Column:
+    r"""Extracts the all strings in str that matches the regexp expression and corresponds.
+    If the regex did not match, or the specified group did not match, an empty string is returned.
+
+    .. versionadded:: 3.4.1
+
+
+    Parameters
+    ----------
+    str : :class:`~pyspark.sql.Column` or str
+        target column to work on.
+    pattern : str
+        regex pattern to apply.
+    idx : int
+        matched group id.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        matched value specified by `idx` group id.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([('100-200',)], ['str'])
+    >>> df.select(regexp_extract_all('str', r'(\d+)', 1).alias('d')).collect()
+    [Row(d=['100', '200'])]
+    """
+    return _invoke_function("regexp_extract_all", _to_java_column(str), pattern, idx)
+
 
 @try_remote_functions
 def regexp_replace(
