@@ -44,7 +44,7 @@ from pyspark.sql.types import (
 from pyspark.storagelevel import StorageLevel
 from pyspark.sql.connect.types import to_arrow_schema
 import pyspark.sql.connect.proto as pb2
-from pyspark.sql.pandas.conversion import _dedup_names
+from pyspark.sql.pandas.types import _dedup_names
 
 from typing import (
     Any,

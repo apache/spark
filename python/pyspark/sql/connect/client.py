@@ -72,7 +72,7 @@ from pyspark.sql.connect.expressions import (
     CommonInlineUserDefinedFunction,
     JavaUDF,
 )
-from pyspark.sql.pandas.conversion import PandasConversionMixin
+from pyspark.sql.pandas.types import _create_converter_to_pandas
 from pyspark.sql.types import DataType, StructType
 from pyspark.rdd import PythonEvalType
 from pyspark.storagelevel import StorageLevel
@@ -694,7 +694,7 @@ class SparkConnectClient(object):
 
         pdf = pd.concat(
             [
-                PandasConversionMixin._create_converter(
+                _create_converter_to_pandas(
                     field,
                     timezone=timezone,
                     struct_in_pandas=struct_in_pandas,
