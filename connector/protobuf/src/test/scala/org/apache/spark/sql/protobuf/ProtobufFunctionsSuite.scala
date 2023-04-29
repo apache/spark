@@ -1158,11 +1158,38 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
       ).as("proto")
     )
 
+    // With the emit.default.values flag set, we'll fill in
+    // the fields without presence info.
+    val expectedWithFlag = spark.range(1).select(
+      struct(
+        lit(0).as("int"),
+        lit("").as("text"),
+        lit("NOTHING").as("enum_val"),
+        lit(null).as("message"),
+        lit(0).as("optional_int"),
+        lit("").as("optional_text"),
+        lit("NOTHING").as("optional_enum_val"),
+        lit(null).as("optional_message"),
+        lit(Array.emptyIntArray).as("repeated_num"),
+        lit(Array.emptyByteArray).as("repeated_message"),
+        lit(0).as("option_a"),
+        lit(null).as("option_b"),
+        typedLit(Map.empty[String, String]).as("map")
+      ).as("proto")
+    )
+
     checkWithFileAndClassName("Proto3AllTypes") { case (name, descFilePathOpt) =>
       checkAnswer(
         explicitZero.select(
           from_protobuf_wrapper($"raw_proto", name, descFilePathOpt).as("proto")),
         expected)
+      checkAnswer(
+        explicitZero.select(from_protobuf_wrapper(
+          $"raw_proto",
+          name,
+          descFilePathOpt,
+          Map("emit.default.values" -> "true")).as("proto")),
+        expectedWithFlag)
     }
   }
 
@@ -1191,11 +1218,38 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
       ).as("proto")
     )
 
+    // With the emit.default.values flag set, we'll fill in
+    // the fields without presence info.
+    val expectedWithFlag = spark.range(1).select(
+      struct(
+        lit(0).as("int"),
+        lit("").as("text"),
+        lit("NOTHING").as("enum_val"),
+        lit(null).as("message"),
+        lit(null).as("optional_int"),
+        lit(null).as("optional_text"),
+        lit(null).as("optional_enum_val"),
+        lit(null).as("optional_message"),
+        lit(Array.emptyIntArray).as("repeated_num"),
+        lit(Array.emptyByteArray).as("repeated_message"),
+        lit(null).as("option_a"),
+        lit(null).as("option_b"),
+        typedLit(Map.empty[String, String]).as("map")
+      ).as("proto")
+    )
+
     checkWithFileAndClassName("Proto3AllTypes") { case (name, descFilePathOpt) =>
       checkAnswer(
         empty.select(
           from_protobuf_wrapper($"raw_proto", name, descFilePathOpt).as("proto")),
         expected)
+      checkAnswer(
+        empty.select(from_protobuf_wrapper(
+          $"raw_proto",
+          name,
+          descFilePathOpt,
+          Map("emit.default.values" -> "true")).as("proto")),
+        expectedWithFlag)
     }
   }
 
@@ -1233,6 +1287,13 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
         explicitZero.select(
           from_protobuf_wrapper($"raw_proto", name, descFilePathOpt).as("proto")),
         expected)
+      checkAnswer(
+        explicitZero.select(from_protobuf_wrapper(
+          $"raw_proto",
+          name,
+          descFilePathOpt,
+          Map("emit.default.values" -> "true")).as("proto")),
+        expected)
     }
   }
 
@@ -1256,10 +1317,19 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
       ).as("proto")
     )
 
+    // emit.default.values will not materialize values for fields with presence
+    // info available, which is most fields within proto2.
     checkWithProto2FileAndClassName("Proto2AllTypes") { case (name, descFilePathOpt) =>
       checkAnswer(
         empty.select(
           from_protobuf_wrapper($"raw_proto", name, descFilePathOpt).as("proto")),
+        expected)
+      checkAnswer(
+        empty.select(from_protobuf_wrapper(
+          $"raw_proto",
+          name,
+          descFilePathOpt,
+          Map("emit.default.values" -> "true")).as("proto")),
         expected)
     }
   }
