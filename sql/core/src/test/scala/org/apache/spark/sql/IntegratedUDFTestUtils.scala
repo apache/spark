@@ -473,7 +473,7 @@ object IntegratedUDFTestUtils extends SQLHelper {
         broadcastVars = List.empty[Broadcast[PythonBroadcast]].asJava,
         accumulator = null),
       dataType = NullType,  // This is not respected.
-      pythonEvalType = PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF,
+      pythonEvalType = PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE,
       udfDeterministic = true)
 
     def apply(exprs: Column*): Column = udf(exprs: _*)
