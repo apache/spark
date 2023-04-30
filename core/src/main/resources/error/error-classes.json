@@ -235,6 +235,11 @@
     ],
     "sqlState" : "22018"
   },
+  "CORRUPTED_TABLE_PROPERTY" : {
+    "message" : [
+      "Cannot read table property <key> as it's corrupted.<details>"
+    ]
+  },
   "CREATE_TABLE_COLUMN_DESCRIPTOR_DUPLICATE" : {
     "message" : [
       "CREATE TABLE column <columnName> specifies descriptor \"<optionName>\" more than once, which is invalid."
@@ -2642,11 +2647,6 @@
   "_LEGACY_ERROR_TEMP_1090" : {
     "message" : [
       "Column statistics serialization is not supported for column <colName> of data type: <dataType>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1091" : {
-    "message" : [
-      "Cannot read table property '<key>' as it's corrupted.<details>."
     ]
   },
   "_LEGACY_ERROR_TEMP_1097" : {

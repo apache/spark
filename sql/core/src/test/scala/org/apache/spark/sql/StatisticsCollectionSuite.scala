@@ -25,11 +25,12 @@ import java.util.concurrent.TimeUnit
 import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.catalog.CatalogColumnStat
+import org.apache.spark.sql.catalyst.catalog.{CatalogColumnStat, CatalogTable}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, DateTimeUtils}
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{withDefaultTimeZone, PST, UTC}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{getZoneId, TimeZoneUTC}
+import org.apache.spark.sql.errors.QueryErrorsBase
 import org.apache.spark.sql.functions.timestamp_seconds
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -41,7 +42,9 @@ import org.apache.spark.util.Utils
 /**
  * End-to-end suite testing statistics collection and use on both entire table and columns.
  */
-class StatisticsCollectionSuite extends StatisticsCollectionTestBase with SharedSparkSession {
+class StatisticsCollectionSuite extends StatisticsCollectionTestBase
+  with SharedSparkSession
+  with QueryErrorsBase {
   import testImplicits._
 
   test("estimates the size of a limit 0 on outer join") {
@@ -187,17 +190,45 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
       s.zip(df.schema).foreach { case ((k, v), field) =>
         withClue(s"column $k with type ${field.dataType}") {
           val roundtrip = CatalogColumnStat.fromMap("table_is_foo", field.name, v.toMap(k))
-          assert(roundtrip == Some(v))
+          assert(roundtrip.contains(v))
         }
       }
     }
+  }
+
+  test("readLargeTableProp should throw an exception, when there is an invalid key") {
+    val testKey = "histogram"
+    checkError(
+      exception = intercept[AnalysisException] {
+        CatalogTable.readLargeTableProp(Map(s"${testKey}_invalid_key" -> ""), testKey)
+      },
+      errorClass = "CORRUPTED_TABLE_PROPERTY",
+      parameters = Map("key" -> toSQLId(testKey), "details" -> "")
+    )
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        CatalogTable.readLargeTableProp(
+          Map(
+            s"${testKey}_invalid_key" -> "",
+            s"$testKey.numParts" -> "3",
+            s"$testKey.part.0" -> "p0",
+            s"$testKey.part.1" -> "p1"
+          ),
+          testKey)
+      },
+      errorClass = "CORRUPTED_TABLE_PROPERTY",
+      parameters = Map(
+        "key" -> toSQLId(testKey),
+        "details" -> s" Missing part 2, 3 parts are expected.")
+    )
   }
 
   test("SPARK-33812: column stats round trip serialization with splitting histogram property") {
     withSQLConf(SQLConf.HIVE_TABLE_PROPERTY_LENGTH_THRESHOLD.key -> "10") {
       statsWithHgms.foreach { case (k, v) =>
         val roundtrip = CatalogColumnStat.fromMap("t", k, v.toMap(k))
-        assert(roundtrip == Some(v))
+        assert(roundtrip.contains(v))
       }
     }
   }

@@ -1033,10 +1033,12 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       messageParameters = Map("colName" -> colName, "dataType" -> dataType.toString))
   }
 
-  def cannotReadCorruptedTablePropertyError(key: String, details: String = ""): Throwable = {
+  def cannotReadCorruptedTablePropertyError(key: String,
+                                            details: Option[String] = None): Throwable = {
+    val detailsMessage = details.map(msg => s" $msg").getOrElse("")
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1091",
-      messageParameters = Map("key" -> key, "details" -> details))
+      errorClass = "CORRUPTED_TABLE_PROPERTY",
+      messageParameters = Map("key" -> toSQLId(key), "details" -> detailsMessage))
   }
 
   def schemaFailToParseError(schema: String, e: Throwable): Throwable = {
