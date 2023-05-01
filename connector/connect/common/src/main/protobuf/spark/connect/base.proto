@@ -582,6 +582,6 @@ service SparkConnectService {
   rpc AddArtifacts(stream AddArtifactsRequest) returns (AddArtifactsResponse) {}
 
   // Interrupts running executions
-  rpc InterruptExecute(InterruptRequest) returns (InterruptResponse) {}
+  rpc Interrupt(InterruptRequest) returns (InterruptResponse) {}
 }
 

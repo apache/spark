@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.connect.service
 
-import java.util.concurrent.{ConcurrentMap, TimeUnit}
+import java.util.concurrent.TimeUnit
 
 import scala.annotation.tailrec
 import scala.collection.mutable.ArrayBuffer
@@ -230,7 +230,7 @@ class SparkConnectService(debug: Boolean)
       : StreamObserver[AddArtifactsRequest] = new SparkConnectAddArtifactsHandler(
     responseObserver)
 
-  override def interruptExecute(
+  override def interrupt(
     request: proto.InterruptRequest,
     responseObserver: StreamObserver[proto.InterruptResponse]): Unit = {
     try {

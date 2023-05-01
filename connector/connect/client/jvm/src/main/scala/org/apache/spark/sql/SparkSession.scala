@@ -526,6 +526,19 @@ class SparkSession private[sql] (
   }
 
   /**
+   * Interrupt all operations of this session currently running on the connected server.
+   *
+   * TODO/WIP: Currently it will interrupt the Spark Jobs running on the server, triggered from
+   * ExecutePlan requests. If an operation is not running a Spark Job, it becomes an noop and the
+   * operation will continue afterwards, possibly with more Spark Jobs.
+   *
+   * @since 3.5.0
+   */
+  def interruptAll(): Unit = {
+    client.interruptAll()
+  }
+
+  /**
    * Synonym for `close()`.
    *
    * @since 3.4.0

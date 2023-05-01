@@ -66,7 +66,6 @@ class SparkConnectStreamHandler(responseObserver: StreamObserver[ExecutePlanResp
       session.sparkContext.setJobGroup(
         executeHolder.jobGroupId,
         s"Spark Connect - ${StringUtils.abbreviate(debugString, 128)}",
-        // TODO: safe to set set interruptOnCancel=true?
         interruptOnCancel = true)
 
       try {
