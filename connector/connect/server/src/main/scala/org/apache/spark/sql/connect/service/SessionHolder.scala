@@ -36,14 +36,13 @@ case class SessionHolder(
   val executePlanOperations: ConcurrentMap[String, ExecutePlanHolder] =
     new ConcurrentHashMap[String, ExecutePlanHolder]()
 
-  private[connect] def createExecutePlanOperation(
+  private[connect] def createExecutePlanHolder(
       request: proto.ExecutePlanRequest): ExecutePlanHolder = {
 
     val operationId = UUID.randomUUID().toString
-
-    executePlanOperations.put(
-      operationId,
-      ExecutePlanHolder(operationId, this, request))
+    val executePlanHolder = ExecutePlanHolder(operationId, this, request)
+    assert(executePlanOperations.putIfAbsent(operationId, executePlanHolder) == null)
+    executePlanHolder
   }
 
   private[connect] def removeExecutePlanHolder(operationId: String): Unit = {

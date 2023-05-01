@@ -62,7 +62,7 @@ class SparkConnectStreamHandler(responseObserver: StreamObserver[ExecutePlanResp
           "UNKNOWN"
       }
 
-      val executeHolder = sessionHolder.createExecutePlanOperation(v)
+      val executeHolder = sessionHolder.createExecutePlanHolder(v)
       session.sparkContext.setJobGroup(
         executeHolder.jobGroupId,
         s"Spark Connect - ${StringUtils.abbreviate(debugString, 128)}",
