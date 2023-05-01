@@ -1351,7 +1351,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
 
   private def notSupportedForV2TablesError(cmd: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1124",
+      errorClass = "NOT_SUPPORTED_OPERATION_FOR_V2_TABLE",
       messageParameters = Map("cmd" -> cmd))
   }
 
