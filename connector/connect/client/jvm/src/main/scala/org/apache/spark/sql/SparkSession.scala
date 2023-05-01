@@ -37,7 +37,7 @@ import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{BoxedLongEncoder
 import org.apache.spark.sql.connect.client.{ClassFinder, SparkConnectClient, SparkResult}
 import org.apache.spark.sql.connect.client.util.{Cleaner, ConvertToArrow}
 import org.apache.spark.sql.connect.common.LiteralValueProtoConverter.toLiteralProto
-import org.apache.spark.sql.internal.{CatalogImpl, SQLConf}
+import org.apache.spark.sql.internal.CatalogImpl
 import org.apache.spark.sql.streaming.DataStreamReader
 import org.apache.spark.sql.types.StructType
 
@@ -122,7 +122,7 @@ class SparkSession private[sql] (
       if (data.nonEmpty) {
         val timeZoneId = conf.get("spark.sql.session.timeZone")
         val (arrowData, arrowDataSize) = ConvertToArrow(encoder, data, timeZoneId, allocator)
-        if (arrowDataSize <= conf.get(SQLConf.LOCAL_RELATION_CACHE_THRESHOLD.key).toInt) {
+        if (arrowDataSize <= conf.get("spark.sql.session.localRelationCacheThreshold").toInt) {
           builder.getLocalRelationBuilder
             .setSchema(encoder.schema.json)
             .setData(arrowData)
