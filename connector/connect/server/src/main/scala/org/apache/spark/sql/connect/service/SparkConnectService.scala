@@ -268,6 +268,12 @@ object SparkConnectService {
   private val userSessionMapping =
     cacheBuilder(CACHE_SIZE, CACHE_TIMEOUT_SECONDS).build[SessionCacheKey, SessionHolder]()
 
+  private[connect] val streamingSessionManager =
+    new SparkConnectStreamingQueryCache(sessionKeepAliveFn = { case (userId, sessionId) =>
+      // Use getIfPresent() rather than get() to prevent accidental loading.
+      userSessionMapping.getIfPresent((userId, sessionId))
+    })
+
   // Simple builder for creating the cache of Sessions.
   private def cacheBuilder(cacheSize: Int, timeoutSeconds: Int): CacheBuilder[Object, Object] = {
     var cacheBuilder = CacheBuilder.newBuilder().ticker(Ticker.systemTicker())
@@ -334,10 +340,8 @@ object SparkConnectService {
     }
   }
 
-  def abbreviateErrorMessage(msg: String): String = StringUtils.abbreviate(msg, 2048)
-
   def extractErrorMessage(st: Throwable): String = {
-    val message = abbreviateErrorMessage(st.getMessage)
+    val message = StringUtils.abbreviate(st.getMessage, 2048)
     if (message != null) {
       message
     } else {
