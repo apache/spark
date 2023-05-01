@@ -24,6 +24,7 @@ from pyspark.testing.connectutils import ReusedConnectTestCase
 class StreamingParityTests(StreamingTestsMixin, ReusedConnectTestCase):
     pass
 
+
 if __name__ == "__main__":
     import unittest
     from pyspark.sql.tests.connect.streaming.test_parity_streaming import *  # noqa: F401

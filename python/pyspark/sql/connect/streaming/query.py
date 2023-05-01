@@ -29,9 +29,7 @@ from pyspark.errors.exceptions.connect import (
     StreamingQueryException as CapturedStreamingQueryException,
 )
 
-__all__ = [
-    "StreamingQuery", "StreamingQueryManager"
-]
+__all__ = ["StreamingQuery", "StreamingQueryManager"]
 
 if TYPE_CHECKING:
     from pyspark.sql.connect.session import SparkSession
@@ -82,7 +80,7 @@ class StreamingQuery:
             terminated = self._execute_streaming_query_cmd(cmd).await_termination.terminated
             return terminated
         else:
-            await_termination_cmd StreamingQueryCommand.AwaitTerminationCommand()
+            await_termination_cmd = pb2.StreamingQueryCommand.AwaitTerminationCommand()
             cmd.await_termination.CopyFrom(await_termination_cmd)
             self._execute_streaming_query_cmd(cmd)
             return None
