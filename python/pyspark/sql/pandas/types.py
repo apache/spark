@@ -502,7 +502,8 @@ def _to_corrected_pandas_type(dt: DataType) -> Optional[Any]:
 
 
 def _create_converter_to_pandas(
-    field: StructField,
+    data_type: DataType,
+    nullable: bool = True,
     *,
     timezone: Optional[str] = None,
     struct_in_pandas: Optional[str] = None,
@@ -514,8 +515,10 @@ def _create_converter_to_pandas(
 
     Parameters
     ----------
-    field : `StructField`
-        corresponding to the pandas Series to be converted.
+    data_type : :class:`DataType`
+        The data type corresponding to the pandas Series to be converted.
+    nullable : bool, optional
+        Whether the column is nullable or not. (default ``True``)
     timezone : str, optional
         The timezone to convert from. If there is a timestamp type, it's required.
     struct_in_pandas : str, optional
@@ -536,7 +539,7 @@ def _create_converter_to_pandas(
     import pandas as pd
     from pandas.core.dtypes.common import is_datetime64tz_dtype
 
-    pandas_type = _to_corrected_pandas_type(field.dataType)
+    pandas_type = _to_corrected_pandas_type(data_type)
 
     if pandas_type is not None:
         # SPARK-21766: if an integer field is nullable and has null values, it can be
@@ -544,7 +547,7 @@ def _create_converter_to_pandas(
         # to integer type e.g., np.int16, we will hit an exception. So we use the
         # pandas-inferred float type, rather than the corrected type from the schema
         # in this case.
-        if isinstance(field.dataType, IntegralType) and field.nullable:
+        if isinstance(data_type, IntegralType) and nullable:
 
             def correct_dtype(pser: pd.Series) -> pd.Series:
                 if pser.isnull().any():
@@ -552,7 +555,7 @@ def _create_converter_to_pandas(
                 else:
                     return pser.astype(pandas_type, copy=False)
 
-        elif isinstance(field.dataType, BooleanType) and field.nullable:
+        elif isinstance(data_type, BooleanType) and nullable:
 
             def correct_dtype(pser: pd.Series) -> pd.Series:
                 if pser.isnull().any():
@@ -560,7 +563,7 @@ def _create_converter_to_pandas(
                 else:
                     return pser.astype(pandas_type, copy=False)
 
-        elif isinstance(field.dataType, TimestampType):
+        elif isinstance(data_type, TimestampType):
             assert timezone is not None
 
             def correct_dtype(pser: pd.Series) -> pd.Series:
@@ -673,7 +676,7 @@ def _create_converter_to_pandas(
         else:
             return None
 
-    conv = _converter(field.dataType)
+    conv = _converter(data_type)
     if conv is not None:
         return lambda pser: pser.apply(conv)  # type: ignore[return-value]
     else:

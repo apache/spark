@@ -700,7 +700,8 @@ class SparkConnectClient(object):
         pdf = pd.concat(
             [
                 _create_converter_to_pandas(
-                    field,
+                    field.dataType,
+                    field.nullable,
                     timezone=timezone,
                     struct_in_pandas=struct_in_pandas,
                     error_on_duplicated_field_names=error_on_duplicated_field_names,

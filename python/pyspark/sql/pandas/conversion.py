@@ -165,7 +165,8 @@ class PandasConversionMixin:
                     return pd.concat(
                         [
                             _create_converter_to_pandas(
-                                field,
+                                field.dataType,
+                                field.nullable,
                                 timezone=timezone,
                                 struct_in_pandas=struct_in_pandas_as,
                                 error_on_duplicated_field_names=error_on_duplicated_field_names,
@@ -194,7 +195,8 @@ class PandasConversionMixin:
         return pd.concat(
             [
                 _create_converter_to_pandas(
-                    field,
+                    field.dataType,
+                    field.nullable,
                     timezone=timezone,
                     struct_in_pandas=(
                         "row" if struct_in_pandas_as == "legacy" else struct_in_pandas_as
