@@ -102,6 +102,9 @@ private[streaming] class ExecutorAllocationManager(
         logDebug("Killing executors")
         killExecutor()
       }
+      else {
+        logWarning("Cannot Kill Anymore Executors")
+      }
     }
     batchProcTimeSum = 0
     batchProcTimeCount = 0
