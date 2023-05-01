@@ -1236,6 +1236,11 @@
       "Cannot find <catalystFieldPath> in Protobuf schema."
     ]
   },
+  "NOT_SUPPORTED_OPERATION_IN_JDBC_CATALOG" : {
+    "message" : [
+      "<cmd> is not supported in JDBC catalog."
+    ]
+  },
   "NO_UDF_INTERFACE" : {
     "message" : [
       "UDF class <className> doesn't implement any UDF interface."
@@ -2714,11 +2719,6 @@
       "The streaming sources in a query do not have a common supported execution mode.",
       "Sources support micro-batch: <microBatchSources>.",
       "Sources support continuous: <continuousSources>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1119" : {
-    "message" : [
-      "<cmd> is not supported in JDBC catalog."
     ]
   },
   "_LEGACY_ERROR_TEMP_1120" : {

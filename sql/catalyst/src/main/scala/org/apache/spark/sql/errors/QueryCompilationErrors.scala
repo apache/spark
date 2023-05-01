@@ -1271,7 +1271,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
 
   private def notSupportedInJDBCCatalog(cmd: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1119",
+      errorClass = "NOT_SUPPORTED_OPERATION_IN_JDBC_CATALOG",
       messageParameters = Map("cmd" -> cmd))
   }
 

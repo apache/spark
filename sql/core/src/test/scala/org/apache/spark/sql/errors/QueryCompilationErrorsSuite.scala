@@ -21,11 +21,13 @@ import org.apache.spark.SPARK_DOC_ROOT
 import org.apache.spark.sql.{AnalysisException, ClassData, IntegratedUDFTestUtils, QueryTest, Row}
 import org.apache.spark.sql.api.java.{UDF1, UDF2, UDF23Test}
 import org.apache.spark.sql.catalyst.parser.ParseException
+import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
 import org.apache.spark.sql.expressions.SparkUserDefinedFunction
 import org.apache.spark.sql.functions.{array, from_json, grouping, grouping_id, lit, struct, sum, udf}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, MapType, StringType, StructField, StructType}
+import org.apache.spark.util.Utils
 
 case class StringLongClass(a: String, b: Long)
 
@@ -783,6 +785,24 @@ class QueryCompilationErrorsSuite
       errorClass = "INVALID_EXTRACT_FIELD_TYPE",
       sqlState = "42000",
       parameters = Map("extraction" -> "\"array(test)\""))
+  }
+
+  test("CREATE NAMESPACE with LOCATION for JDBC catalog should throw an error") {
+    withTempDir { tempDir =>
+      val url = s"jdbc:h2:${tempDir.getCanonicalPath};user=testUser;password=testPass"
+      Utils.classForName("org.h2.Driver")
+      withSQLConf(
+        "spark.sql.catalog.h2" -> classOf[JDBCTableCatalog].getName,
+        "spark.sql.catalog.h2.url" -> url,
+        "spark.sql.catalog.h2.driver" -> "org.h2.Driver") {
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql("CREATE NAMESPACE h2.test_namespace LOCATION './samplepath'")
+          },
+          errorClass = "NOT_SUPPORTED_OPERATION_IN_JDBC_CATALOG",
+          parameters = Map("cmd" -> "CREATE NAMESPACE ... LOCATION ..."))
+      }
+    }
   }
 }
 
