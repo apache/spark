@@ -140,7 +140,8 @@ object StreamingQueryListener {
   @Evolving
   class QueryIdleEvent private[sql](
       val id: UUID,
-      val runId: UUID) extends Event
+      val runId: UUID,
+      val timestamp: String) extends Event
 
   /**
    * Event representing that termination of a query.
