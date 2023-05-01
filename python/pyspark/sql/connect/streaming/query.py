@@ -187,7 +187,7 @@ class StreamingQueryManager:
 
     def get(self, id: str) -> StreamingQuery:
         cmd = pb2.StreamingQueryManagerCommand()
-        cmd.get_query.id = id
+        cmd.get = id
         query = self._execute_streaming_query_manager_cmd(cmd).query
         return StreamingQuery(self._session, query.id, query.run_id, query.name)
 

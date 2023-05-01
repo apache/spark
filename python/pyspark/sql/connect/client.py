@@ -968,8 +968,7 @@ class SparkConnectClient(object):
                             }
                         if b.HasField("streaming_query_manager_command_result"):
                             yield {
-                                "streaming_query_manager_command_result":
-                                    b.streaming_query_manager_command_result
+                                "streaming_query_manager_command_result": b.streaming_query_manager_command_result
                             }
                         if b.HasField("get_resources_command_result"):
                             resources = {}

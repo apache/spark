@@ -2408,8 +2408,8 @@ class SparkConnectPlanner(val session: SparkSession) {
             .toIterable
             .asJava)
 
-      case StreamingQueryManagerCommand.CommandCase.GET_QUERY =>
-        val query = session.streams.get(command.getGetQuery.getId)
+      case StreamingQueryManagerCommand.CommandCase.GET =>
+        val query = session.streams.get(command.getGet)
         respBuilder.getQueryBuilder
           .setId(query.id.toString)
           .setRunId(query.runId.toString)
