@@ -1226,6 +1226,11 @@
     },
     "sqlState" : "42000"
   },
+  "NOT_SUPPORTED_OPERATION_IN_JDBC_CATALOG" : {
+    "message" : [
+      "<cmd> is not supported in JDBC catalog."
+    ]
+  },
   "NO_HANDLER_FOR_UDAF" : {
     "message" : [
       "No handler for UDAF '<functionName>'. Use sparkSession.udf.register(...) instead."
@@ -1234,11 +1239,6 @@
   "NO_SQL_TYPE_IN_PROTOBUF_SCHEMA" : {
     "message" : [
       "Cannot find <catalystFieldPath> in Protobuf schema."
-    ]
-  },
-  "NOT_SUPPORTED_OPERATION_IN_JDBC_CATALOG" : {
-    "message" : [
-      "<cmd> is not supported in JDBC catalog."
     ]
   },
   "NO_UDF_INTERFACE" : {
