@@ -2444,11 +2444,17 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         ):
             cdf.groupBy("name").pivot("year").pivot("year").agg(CF.sum(cdf.salary))
 
-        with self.assertRaisesRegex(
-            TypeError,
-            "value should be a bool, float, int or str, but got bytes",
-        ):
+        with self.assertRaises(PySparkTypeError) as pe:
             cdf.groupBy("name").pivot("department", ["Sales", b"Marketing"]).agg(CF.sum(cdf.salary))
+
+        self.check_error(
+            exception=pe.exception,
+            error_class="NOT_BOOL_OR_FLOAT_OR_INT_OR_STR",
+            message_parameters={
+                "arg_name": "value",
+                "arg_type": "bytes",
+            },
+        )
 
     def test_numeric_aggregation(self):
         # SPARK-41737: test numeric aggregation
