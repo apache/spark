@@ -3234,12 +3234,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
       messageParameters = Map("columnPath" -> toSQLId(path)))
   }
 
-  def notNullConstraintViolationStructFieldError(path: Seq[String]): Throwable = {
-    new AnalysisException(
-      errorClass = "NOT_NULL_CONSTRAINT_VIOLATION.STRUCT_FIELD",
-      messageParameters = Map("columnPath" -> toSQLId(path)))
-  }
-
   def invalidColumnOrFieldDataTypeError(
       name: Seq[String],
       dt: DataType,

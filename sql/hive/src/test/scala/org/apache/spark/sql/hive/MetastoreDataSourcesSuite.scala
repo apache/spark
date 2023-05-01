@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
+import org.apache.spark.sql.errors.QueryErrorsBase
 import org.apache.spark.sql.execution.command.CreateTableCommand
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
 import org.apache.spark.sql.hive.HiveExternalCatalog._
@@ -42,7 +43,10 @@ import org.apache.spark.util.Utils
 /**
  * Tests for persisting tables created though the data sources API into the metastore.
  */
-class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
+class MetastoreDataSourcesSuite extends QueryTest
+  with SQLTestUtils
+  with TestHiveSingleton
+  with QueryErrorsBase {
   import hiveContext._
   import spark.implicits._
 
@@ -1335,8 +1339,8 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
 
   test("read table with corrupted schema") {
     try {
-      val schema = StructType(StructField("int", IntegerType, true) :: Nil)
-      val hiveTable = CatalogTable(
+      val schema = StructType(StructField("int", IntegerType) :: Nil)
+      val hiveTableWithoutNumPartsProp = CatalogTable(
         identifier = TableIdentifier("t", Some("default")),
         tableType = CatalogTableType.MANAGED,
         schema = HiveExternalCatalog.EMPTY_DATA_SCHEMA,
@@ -1344,23 +1348,54 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
         storage = CatalogStorageFormat.empty,
         properties = Map(
           DATASOURCE_PROVIDER -> "json",
-          // no DATASOURCE_SCHEMA_NUMPARTS
           DATASOURCE_SCHEMA_PART_PREFIX + 0 -> schema.json))
 
-      hiveClient.createTable(hiveTable, ignoreIfExists = false)
+      hiveClient.createTable(hiveTableWithoutNumPartsProp, ignoreIfExists = false)
 
-      val e = intercept[AnalysisException] {
-        sharedState.externalCatalog.getTable("default", "t")
-      }.getMessage
-      assert(e.contains("Cannot read table property 'spark.sql.sources.schema' as it's corrupted"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          sharedState.externalCatalog.getTable("default", "t")
+        },
+        errorClass = "CORRUPTED_TABLE_PROPERTY",
+        parameters = Map(
+          "key" -> toSQLId("spark.sql.sources.schema"),
+          "details" -> "")
+      )
+
+      val hiveTableWithNumPartsProp = CatalogTable(
+        identifier = TableIdentifier("t2", Some("default")),
+        tableType = CatalogTableType.MANAGED,
+        schema = HiveExternalCatalog.EMPTY_DATA_SCHEMA,
+        provider = Some("json"),
+        storage = CatalogStorageFormat.empty,
+        properties = Map(
+          DATASOURCE_PROVIDER -> "json",
+          DATASOURCE_SCHEMA_PREFIX + "numParts" -> "3",
+          DATASOURCE_SCHEMA_PART_PREFIX + 0 -> schema.json))
+
+      hiveClient.createTable(hiveTableWithNumPartsProp, ignoreIfExists = false)
+
+      checkError(
+        exception = intercept[AnalysisException] {
+          sharedState.externalCatalog.getTable("default", "t2")
+        },
+        errorClass = "CORRUPTED_TABLE_PROPERTY",
+        parameters = Map(
+          "key" -> toSQLId("spark.sql.sources.schema"),
+          "details" -> " Missing part 1, 3 parts are expected.")
+      )
 
       withDebugMode {
         val tableMeta = sharedState.externalCatalog.getTable("default", "t")
         assert(tableMeta.identifier == TableIdentifier("t", Some("default")))
         assert(tableMeta.properties(DATASOURCE_PROVIDER) == "json")
+        val tableMeta2 = sharedState.externalCatalog.getTable("default", "t2")
+        assert(tableMeta2.identifier == TableIdentifier("t2", Some("default")))
+        assert(tableMeta2.properties(DATASOURCE_PROVIDER) == "json")
       }
     } finally {
       hiveClient.dropTable("default", "t", ignoreIfNotExists = true, purge = true)
+      hiveClient.dropTable("default", "t2", ignoreIfNotExists = true, purge = true)
     }
   }
 
