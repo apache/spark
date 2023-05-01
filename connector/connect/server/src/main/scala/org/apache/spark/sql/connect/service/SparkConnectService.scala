@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.connect.service
 
-import java.util.concurrent.TimeUnit
+import java.util.concurrent.{ConcurrentMap, TimeUnit}
 
 import scala.annotation.tailrec
 import scala.collection.mutable.ArrayBuffer
