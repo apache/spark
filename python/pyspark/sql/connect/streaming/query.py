@@ -145,14 +145,16 @@ class StreamingQuery:
         cmd = pb2.StreamingQueryCommand()
         cmd.exception = True
         exception = self._execute_streaming_query_cmd(cmd).exception
-        if exception.HasField("exception_message"):
+        if not exception.HasField("exception_message"):
+            return None
+        else:
             # Drop the Java StreamingQueryException type info
             # exception_message maps to the return value of original
             # StreamingQueryException's toString method
             msg = exception.exception_message.split(": ", 1)[1]
-            return CapturedStreamingQueryException(msg)
-        else:
-            return None
+            if exception.HasField("stack_trace"):
+                msg += f"\n\nJVM stacktrace:\n{exception.stack_trace}"
+            return CapturedStreamingQueryException(msg, reason=exception.error_class)
 
     exception.__doc__ = PySparkStreamingQuery.exception.__doc__
 

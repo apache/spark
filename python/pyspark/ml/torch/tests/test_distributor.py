@@ -463,7 +463,7 @@ class TorchDistributorDistributedUnitTestsMixin:
                 )
                 self.assertEqual(
                     expected,
-                    dist._run_distributed_training(dist._run_training_on_pytorch_file, "..."),
+                    dist._run_distributed_training(dist._run_training_on_pytorch_file, "...", None),
                 )
 
     def test_get_num_tasks_distributed(self) -> None:

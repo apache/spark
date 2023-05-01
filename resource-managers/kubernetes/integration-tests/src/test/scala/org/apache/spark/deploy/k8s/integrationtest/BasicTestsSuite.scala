@@ -164,8 +164,10 @@ private[spark] trait BasicTestsSuite { k8sSuite: KubernetesSuite =>
     runSparkPiAndVerifyCompletion(
       executorPodChecker = (executorPod: Pod) => {
         doBasicExecutorPodCheck(executorPod)
-        executorPod.getSpec.getContainers.get(0).getEnv.asScala
-          .exists(envVar => envVar.getName == "SPARK_DRIVER_POD_IP")
+        assert {
+          executorPod.getSpec.getContainers.get(0).getEnv.asScala
+            .exists(envVar => envVar.getName == "SPARK_DRIVER_POD_IP")
+        }
       })
   }
 }
