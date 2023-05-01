@@ -2341,7 +2341,6 @@ class SparkConnectPlanner(val session: SparkSession) {
 
       case StreamingQueryCommand.CommandCase.PROCESS_ALL_AVAILABLE =>
         // This might take a long time, Spark-connect client keeps this connection alive.
-        // TODO(SPARK-42962): Improve this as part of session management.
         query.processAllAvailable()
 
       case StreamingQueryCommand.CommandCase.EXPLAIN =>
