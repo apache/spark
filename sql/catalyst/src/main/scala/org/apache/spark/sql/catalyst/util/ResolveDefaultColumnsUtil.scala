@@ -220,23 +220,24 @@ object ResolveDefaultColumns {
       Cast(analyzed, dataType)
     } else {
       // If the provided default value is a literal of a wider type than the target column, but the
-      // literal value fits within the narrower type, just coerce it for convenience.
+      // literal value fits within the narrower type, just coerce it for convenience. Exclude
+      // boolean types from consideration for this type coercion to avoid surprising behavior like
+      // interpreting "false" as integer zero.
       val result = if (analyzed.isInstanceOf[Literal] &&
         !Seq(dataType, analyzed.dataType).exists(_ == BooleanType)) {
         try {
           val casted = Cast(analyzed, dataType, evalMode = EvalMode.TRY).eval()
           if (casted != null) {
-            Some(Literal(casted))
+            Some(Literal(casted, dataType))
           } else {
             None
           }
         } catch {
-          case _: SparkThrowable | _: RuntimeException => None
+          case _: SparkThrowable | _: RuntimeException =>
+            None
         }
       } else None
-      if (result.isDefined) {
-        result.get
-      } else {
+      result.getOrElse {
         throw new AnalysisException(
           s"Failed to execute $statementType command because the destination table column " +
             s"$colName has a DEFAULT value with type $dataType, but the " +
@@ -362,12 +363,6 @@ object ResolveDefaultColumns {
     override def functionExists(ident: Identifier): Boolean = {
       v1Catalog.isPersistentFunction(ident.asFunctionIdentifier)
     }
-  }
-
-  trait CustomInsertSchema {
-    // Represents a table with a custom schema to use for resolving DEFAULT column references when
-    // inserting into the table. For example, this can be useful for excluding hidden pseudocolumns.
-    def customInsertSchema: StructType
   }
 }
 

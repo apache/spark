@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
+import org.apache.spark.sql.connector.write.SupportsCustomSchemaWrite
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.SQLConf
@@ -630,8 +631,8 @@ case class ResolveDefaultColumns(
     resolved.collectFirst {
       case r: UnresolvedCatalogRelation =>
         r.tableMeta.schema
-      case DataSourceV2Relation(table: CustomInsertSchema, _, _, _, _) =>
-        table.customInsertSchema
+      case DataSourceV2Relation(table: SupportsCustomSchemaWrite, _, _, _, _) =>
+        table.customSchemaForInserts
       case r: NamedRelation if !r.skipSchemaResolution =>
         r.schema
       case v: View if v.isTempViewStoringAnalyzedPlan =>
