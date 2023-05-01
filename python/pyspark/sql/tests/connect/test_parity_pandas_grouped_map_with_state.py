@@ -25,7 +25,9 @@ from pyspark.testing.connectutils import ReusedConnectTestCase
 class GroupedApplyInPandasWithStateTests(
     GroupedApplyInPandasWithStateTestsMixin, ReusedConnectTestCase
 ):
-    pass
+    @unittest.skip("Query manager API will be supported later with SPARK-43032.")
+    def test_apply_in_pandas_with_state_python_worker_random_failure(self):
+        super().test_apply_in_pandas_with_state_python_worker_random_failure()
 
 
 if __name__ == "__main__":

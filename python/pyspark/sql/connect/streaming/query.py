@@ -225,14 +225,16 @@ class StreamingQueryManager:
     resetTerminated.__doc__ = PySparkStreamingQueryManager.resetTerminated.__doc__
 
     def addListener(self, listener: Any) -> None:
-        # TODO(SPARK-42941): Change listener type to Connect StreamingQueryListener and implement below
+        # TODO(SPARK-42941): Change listener type to Connect StreamingQueryListener
+        # and implement below
         raise NotImplementedError("addListener() is not implemented.")
 
     # TODO(SPARK-42941): uncomment below
     # addListener.__doc__ = PySparkStreamingQueryManager.addListener.__doc__
 
     def removeListener(self, listener: Any) -> None:
-        # TODO(SPARK-42941): Change listener type to Connect StreamingQueryListener and implement below
+        # TODO(SPARK-42941): Change listener type to Connect StreamingQueryListener
+        # and implement below
         raise NotImplementedError("removeListener() is not implemented.")
 
     # TODO(SPARK-42941): uncomment below
