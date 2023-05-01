@@ -804,6 +804,36 @@ class QueryCompilationErrorsSuite
       }
     }
   }
+
+  test("ALTER NAMESPACE with property other than COMMENT " +
+    "for JDBC catalog should throw an exception") {
+    withTempDir { tempDir =>
+      val url = s"jdbc:h2:${tempDir.getCanonicalPath};user=testUser;password=testPass"
+      Utils.classForName("org.h2.Driver")
+      withSQLConf(
+        "spark.sql.catalog.h2" -> classOf[JDBCTableCatalog].getName,
+        "spark.sql.catalog.h2.url" -> url,
+        "spark.sql.catalog.h2.driver" -> "org.h2.Driver") {
+        val namespace = "h2.test_namespace"
+        withNamespace(namespace) {
+          sql(s"CREATE NAMESPACE $namespace")
+          checkError(
+            exception = intercept[AnalysisException] {
+              sql(s"ALTER NAMESPACE h2.test_namespace SET LOCATION '/tmp/loc_test_2'")
+            },
+            errorClass = "NOT_SUPPORTED_OPERATION_IN_JDBC_CATALOG",
+            parameters = Map("cmd" -> "SET NAMESPACE with property location"))
+
+          checkError(
+            exception = intercept[AnalysisException] {
+              sql(s"ALTER NAMESPACE h2.test_namespace SET PROPERTIES('a'='b')")
+            },
+            errorClass = "NOT_SUPPORTED_OPERATION_IN_JDBC_CATALOG",
+            parameters = Map("cmd" -> "SET NAMESPACE with property a"))
+        }
+      }
+    }
+  }
 }
 
 class MyCastToString extends SparkUserDefinedFunction(
