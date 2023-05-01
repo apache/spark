@@ -23,6 +23,7 @@ import scala.collection.mutable
 import com.google.common.collect.{Lists, Maps}
 import com.google.protobuf.{Any => ProtoAny, ByteString}
 import io.grpc.stub.StreamObserver
+import org.apache.commons.lang3.exception.ExceptionUtils
 
 import org.apache.spark.{Partition, SparkEnv, TaskContext}
 import org.apache.spark.api.python.{PythonEvalType, SimplePythonFunction}
@@ -2348,10 +2349,20 @@ class SparkConnectPlanner(val session: SparkSession) {
 
       case StreamingQueryCommand.CommandCase.EXCEPTION =>
         val result = query.exception
-        result.foreach(e =>
-          respBuilder.getExceptionBuilder
-            .setExceptionMessage(SparkConnectService.abbreviateErrorMessage(e.toString))
-            .setErrorClass(e.getErrorClass))
+        if (result.isDefined) {
+          val e = result.get
+          val exception_builder = StreamingQueryCommandResult.ExceptionResult
+            .newBuilder()
+          exception_builder
+            .setExceptionMessage(e.toString)
+            .setErrorClass(e.getErrorClass)
+
+          val stackTrace = Option(ExceptionUtils.getStackTrace(e))
+          stackTrace.foreach { s =>
+            exception_builder.setStackTrace(s)
+          }
+          respBuilder.setException(exception_builder.build())
+        }
 
       case StreamingQueryCommand.CommandCase.AWAIT_TERMINATION =>
         if (command.getAwaitTermination.hasTimeoutMs) {
