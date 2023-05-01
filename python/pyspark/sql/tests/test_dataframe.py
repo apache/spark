@@ -1010,7 +1010,7 @@ class DataFrameTestsMixin:
         # field types mismatch will cause exception at runtime.
         self.assertRaisesRegex(
             Exception,
-            "FloatType\\(\\) can not accept",
+            "CANNOT_ACCEPT_OBJECT_IN_TYPE",
             lambda: rdd.toDF("key: float, value: string").collect(),
         )
 
@@ -1023,6 +1023,23 @@ class DataFrameTestsMixin:
         df = rdd.map(lambda row: row.key).toDF(IntegerType())
         self.assertEqual(df.schema.simpleString(), "struct<value:int>")
         self.assertEqual(df.collect(), [Row(key=i) for i in range(100)])
+
+    def test_print_schema(self):
+        df = self.spark.createDataFrame([(1, (2, 2))], ["a", "b"])
+
+        with io.StringIO() as buf, redirect_stdout(buf):
+            df.printSchema(1)
+            self.assertEqual(1, buf.getvalue().count("long"))
+            self.assertEqual(0, buf.getvalue().count("_1"))
+            self.assertEqual(0, buf.getvalue().count("_2"))
+
+            buf.truncate(0)
+            buf.seek(0)
+
+            df.printSchema(2)
+            self.assertEqual(3, buf.getvalue().count("long"))
+            self.assertEqual(1, buf.getvalue().count("_1"))
+            self.assertEqual(1, buf.getvalue().count("_2"))
 
     def test_join_without_on(self):
         df1 = self.spark.range(1).toDF("a")

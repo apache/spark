@@ -18,7 +18,7 @@
 import numbers
 from abc import ABCMeta
 from itertools import chain
-from typing import cast, Callable, Any, Optional, Union
+from typing import Any, Optional, Union
 
 import numpy as np
 import pandas as pd
@@ -44,7 +44,7 @@ from pyspark.sql.types import (
     TimestampNTZType,
     UserDefinedType,
 )
-from pyspark.pandas._typing import Dtype, IndexOpsLike, SeriesOrIndex, GenericColumn
+from pyspark.pandas._typing import Dtype, IndexOpsLike, SeriesOrIndex
 from pyspark.pandas.typedef import extension_dtypes
 from pyspark.pandas.typedef.typehints import (
     extension_dtypes_available,
@@ -54,7 +54,6 @@ from pyspark.pandas.typedef.typehints import (
 )
 
 # For supporting Spark Connect
-from pyspark.sql.connect.column import Column as ConnectColumn
 from pyspark.sql.utils import is_remote
 
 if extension_dtypes_available:
@@ -474,16 +473,26 @@ class DataTypeOps(object, metaclass=ABCMeta):
         else:
             from pyspark.pandas.base import column_op
 
-            Column = ConnectColumn if is_remote() else PySparkColumn
-            return column_op(cast(Callable[..., GenericColumn], Column.__eq__))(left, right)
+            if is_remote():
+                from pyspark.sql.connect.column import Column as ConnectColumn
+
+                Column = ConnectColumn
+            else:
+                Column = PySparkColumn  # type: ignore[assignment]
+            return column_op(Column.__eq__)(left, right)  # type: ignore[arg-type]
 
     def ne(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         from pyspark.pandas.base import column_op
 
         _sanitize_list_like(right)
 
-        Column = ConnectColumn if is_remote() else PySparkColumn
-        return column_op(cast(Callable[..., GenericColumn], Column.__ne__))(left, right)
+        if is_remote():
+            from pyspark.sql.connect.column import Column as ConnectColumn
+
+            Column = ConnectColumn
+        else:
+            Column = PySparkColumn  # type: ignore[assignment]
+        return column_op(Column.__ne__)(left, right)  # type: ignore[arg-type]
 
     def invert(self, operand: IndexOpsLike) -> IndexOpsLike:
         raise TypeError("Unary ~ can not be applied to %s." % self.pretty_name)
