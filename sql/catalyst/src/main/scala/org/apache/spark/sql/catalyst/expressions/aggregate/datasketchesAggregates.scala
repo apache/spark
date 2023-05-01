@@ -30,13 +30,13 @@ import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * The HllSketchAgg function utilizes a Datasketches HllSketch instance to
- * probabilistically count the number of unique values in a given column, and
- * outputs the binary representation of the HllSketch.
+ * count a probabilistic approximation of the number of unique values in
+ * a given column, and outputs the binary representation of the HllSketch.
  *
  * See [[https://datasketches.apache.org/docs/HLL/HLL.html]] for more information
  *
- * @param child child expression against which unique counting will occur
- * @param lgConfigK the log-base-2 of K, where K is the number of buckets or slots for the sketch
+ * @param left child expression against which unique counting will occur
+ * @param right the log-base-2 of K, where K is the number of buckets or slots for the sketch
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
@@ -53,8 +53,8 @@ import org.apache.spark.unsafe.types.UTF8String
   since = "3.5.0")
 // scalastyle:on line.size.limit
 case class HllSketchAgg(
-    child: Expression,
-    lgConfigKExpression: Expression,
+    left: Expression,
+    right: Expression,
     mutableAggBufferOffset: Int = 0,
     inputAggBufferOffset: Int = 0)
   extends TypedImperativeAggregate[HllSketch] with BinaryLike[Expression] with ExpectsInputTypes {
@@ -62,13 +62,9 @@ case class HllSketchAgg(
   // Hllsketch config - mark as lazy so that they're not evaluated during tree transformation.
 
   lazy val lgConfigK: Int = {
-    val lgConfigK = lgConfigKExpression.eval().asInstanceOf[Int]
-    // can't use HllUtil.checkLgK so replicate the check
-    if (lgConfigK < 4 || lgConfigK > 21) {
-      throw new SketchesArgumentException("Invalid lgConfigK value")
-    } else {
-      lgConfigK
-    }
+    val lgConfigK = right.eval().asInstanceOf[Int]
+    HllSketchAgg.checkLgK(lgConfigK)
+    lgConfigK
   }
 
   // Constructors
@@ -95,13 +91,7 @@ case class HllSketchAgg(
 
   override protected def withNewChildrenInternal(newLeft: Expression,
                                                  newRight: Expression): HllSketchAgg =
-    copy(child = newLeft, lgConfigKExpression = newRight)
-
-  // Overrides for TernaryLike
-
-  override def left: Expression = child
-
-  override def right: Expression = lgConfigKExpression
+    copy(left = newLeft, right = newRight)
 
   // Overrides for TypedImperativeAggregate
 
@@ -186,14 +176,34 @@ case class HllSketchAgg(
 }
 
 /**
+ * Companion object to HllSketchAgg, meant to encapsulate static
+ * shared functions like checkLgK
+ */
+object HllSketchAgg {
+  // lgConfigK min/max values copied from Dataksketches HllUtil. These
+  // limits intended to to bound sketch error and size
+  // https://datasketches.apache.org/docs/HLL/HLL.html
+  private val minLgConfigK = 4
+  private val maxLgConfigK = 21
+
+  // Replicate Datasketche's HllUtil's checkLgK implementation, as we can't reference it directly
+  def checkLgK(lgConfigK: Int): Unit = {
+    if (lgConfigK < minLgConfigK || lgConfigK > maxLgConfigK) {
+      throw new SketchesArgumentException(
+        s"Log K must be between $minLgConfigK and $maxLgConfigK, inclusive: " + lgConfigK)
+    }
+  }
+}
+
+/**
  * The HllUnionAgg function ingests and merges Datasketches HllSketch
  * instances previously produced by the HllSketchBinary function, and
  * outputs the merged HllSketch.
  *
  * See [[https://datasketches.apache.org/docs/HLL/HLL.html]] for more information
  *
- * @param child child expression against which unique counting will occur
- * @param lgMaxK The largest maximum size for lgConfigK for the union operation.
+ * @param left Child expression against which unique counting will occur
+ * @param right Allow sketches with different lgConfigK values
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
@@ -273,8 +283,8 @@ case class HllUnionAgg(
    * Helper method to compare lgConfigKs and throw an exception if
    * allowDifferentLgConfigK isn't true and configs don't match
    *
-   * @param left an lgConfigK value
-   * @param right an lgConfigK value
+   * @param left An lgConfigK value
+   * @param right An lgConfigK value
    */
   def compareLgConfigK(left: Int, right: Int): Unit = {
     if (!allowDifferentLgConfigK) {
@@ -290,8 +300,8 @@ case class HllUnionAgg(
   /**
    * Update the Union instance with the HllSketch byte array obtained from the row.
    *
-   * @param union The Union instance.
-   * @param input an input row
+   * @param unionOption A previously initialized Union instance, or None
+   * @param input An input row
    */
   override def update(unionOption: Option[Union], input: InternalRow): Option[Union] = {
     val v = left.eval(input)
@@ -314,8 +324,8 @@ case class HllUnionAgg(
   /**
    * Merges an input Union into the union which is acting as the aggregation buffer.
    *
-   * @param union the Union instance used to store the aggregation result.
-   * @param input an input Union instance
+   * @param unionOption The Union instance used to store the aggregation result
+   * @param inputOption An input Union instance
    */
   override def merge(unionOption: Option[Union], inputOption: Option[Union]): Option[Union] = {
     (unionOption, inputOption) match {
@@ -336,7 +346,7 @@ case class HllUnionAgg(
   /**
    * Returns an HllSketch derived from the merged HllSketches
    *
-   * @param union Union instance used as an aggregation buffer
+   * @param unionOption Union instance used as an aggregation buffer
    * @return A binary sketch which can be evaluated or merged
    */
   override def eval(unionOption: Option[Union]): Any = {
