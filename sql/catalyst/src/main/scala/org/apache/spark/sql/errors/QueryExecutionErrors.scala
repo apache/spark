@@ -416,7 +416,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
   def addNewFunctionMismatchedWithFunctionError(funcName: String): Throwable = {
     SparkException.internalError(
       "Cannot add new function to generated class, " +
-        s"failed to match $funcName at addNewFunction")
+        s"failed to match ${toSQLId(funcName)} at `addNewFunction`.")
   }
 
   def cannotGenerateCodeForIncomparableTypeError(
