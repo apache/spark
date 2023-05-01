@@ -106,7 +106,7 @@ class DataFrame:
                 repl_eager_eval_enabled,
                 repl_eager_eval_max_num_rows,
                 repl_eager_eval_truncate,
-            ) = self._session._get_configs(
+            ) = self._session._client.get_configs(
                 "spark.sql.repl.eagerEval.enabled",
                 "spark.sql.repl.eagerEval.maxNumRows",
                 "spark.sql.repl.eagerEval.truncate",
@@ -126,7 +126,7 @@ class DataFrame:
             repl_eager_eval_enabled,
             repl_eager_eval_max_num_rows,
             repl_eager_eval_truncate,
-        ) = self._session._get_configs(
+        ) = self._session._client.get_configs(
             "spark.sql.repl.eagerEval.enabled",
             "spark.sql.repl.eagerEval.maxNumRows",
             "spark.sql.repl.eagerEval.truncate",
@@ -139,7 +139,7 @@ class DataFrame:
                     truncate=int(cast(str, repl_eager_eval_truncate)),
                 ),
                 session=self._session,
-            )._to_pandas()
+            ).toPandas()
             assert pdf is not None
             return pdf["html_string"][0]
         else:
@@ -239,7 +239,7 @@ class DataFrame:
     sparkSession.__doc__ = PySparkDataFrame.sparkSession.__doc__
 
     def count(self) -> int:
-        pdd = self.agg(_invoke_function("count", lit(1)))._to_pandas()
+        pdd = self.agg(_invoke_function("count", lit(1))).toPandas()
         return pdd.iloc[0, 0]
 
     count.__doc__ = PySparkDataFrame.count.__doc__
@@ -742,7 +742,7 @@ class DataFrame:
         pdf = DataFrame.withPlan(
             plan.ShowString(child=self._plan, num_rows=n, truncate=_truncate, vertical=vertical),
             session=self._session,
-        )._to_pandas()
+        ).toPandas()
         assert pdf is not None
         return pdf["show_string"][0]
 
@@ -1360,7 +1360,7 @@ class DataFrame:
         pdf = DataFrame.withPlan(
             plan.StatCov(child=self._plan, col1=col1, col2=col2),
             session=self._session,
-        )._to_pandas()
+        ).toPandas()
 
         assert pdf is not None
         return pdf["cov"][0]
@@ -1388,7 +1388,7 @@ class DataFrame:
         pdf = DataFrame.withPlan(
             plan.StatCorr(child=self._plan, col1=col1, col2=col2, method=method),
             session=self._session,
-        )._to_pandas()
+        ).toPandas()
 
         assert pdf is not None
         return pdf["corr"][0]
@@ -1466,7 +1466,7 @@ class DataFrame:
                 relativeError=relativeError,
             ),
             session=self._session,
-        )._to_pandas()
+        ).toPandas()
 
         assert pdf is not None
         jaq = pdf["approx_quantile"][0]
@@ -1617,26 +1617,13 @@ class DataFrame:
 
     collect.__doc__ = PySparkDataFrame.collect.__doc__
 
-    def _to_pandas(
-        self, *, timezone: Optional[str] = None, struct_in_pandas: str = "legacy"
-    ) -> "pandas.DataFrame":
-        assert self._plan is not None
-        query = self._plan.to_proto(self._session.client)
-        return self._session.client.to_pandas(
-            query, timezone=timezone, struct_in_pandas=struct_in_pandas
-        )
-
     def toPandas(self) -> "pandas.DataFrame":
         if self._plan is None:
             raise Exception("Cannot collect on empty plan.")
         if self._session is None:
             raise Exception("Cannot collect on empty session.")
-        timezone, struct_in_pandas = self._session._get_configs(
-            "spark.sql.session.timeZone", "spark.sql.execution.pandas.structHandlingMode"
-        )
-        assert timezone is not None
-        assert struct_in_pandas is not None
-        return self._to_pandas(timezone=timezone, struct_in_pandas=struct_in_pandas)
+        query = self._plan.to_proto(self._session.client)
+        return self._session.client.to_pandas(query)
 
     toPandas.__doc__ = PySparkDataFrame.toPandas.__doc__
 

@@ -73,7 +73,7 @@ from pyspark.sql.connect.expressions import (
     JavaUDF,
 )
 from pyspark.sql.pandas.types import _create_converter_to_pandas
-from pyspark.sql.types import DataType, StructType
+from pyspark.sql.types import DataType, StructType, TimestampType, _has_type
 from pyspark.rdd import PythonEvalType
 from pyspark.storagelevel import StorageLevel
 
@@ -668,9 +668,7 @@ class SparkConnectClient(object):
         assert table is not None
         return table, schema
 
-    def to_pandas(
-        self, plan: pb2.Plan, *, timezone: Optional[str] = None, struct_in_pandas: str = "legacy"
-    ) -> "pd.DataFrame":
+    def to_pandas(self, plan: pb2.Plan) -> "pd.DataFrame":
         """
         Return given plan as a pandas DataFrame.
         """
@@ -687,10 +685,17 @@ class SparkConnectClient(object):
         pdf = table.rename_columns([f"col_{i}" for i in range(table.num_columns)]).to_pandas()
         pdf.columns = schema.names
 
-        error_on_duplicated_field_names = False
-        if struct_in_pandas == "legacy":
-            error_on_duplicated_field_names = True
-            struct_in_pandas = "dict"
+        timezone: Optional[str] = None
+        struct_in_pandas: Optional[str] = None
+        error_on_duplicated_field_names: bool = False
+        if any(_has_type(f.dataType, (StructType, TimestampType)) for f in schema.fields):
+            timezone, struct_in_pandas = self.get_configs(
+                "spark.sql.session.timeZone", "spark.sql.execution.pandas.structHandlingMode"
+            )
+
+            if struct_in_pandas == "legacy":
+                error_on_duplicated_field_names = True
+                struct_in_pandas = "dict"
 
         pdf = pd.concat(
             [
@@ -1042,6 +1047,11 @@ class SparkConnectClient(object):
         if self._user_id:
             req.user_context.user_id = self._user_id
         return req
+
+    def get_configs(self, *keys: str) -> Tuple[Optional[str], ...]:
+        op = pb2.ConfigRequest.Operation(get=pb2.ConfigRequest.Get(keys=keys))
+        configs = dict(self.config(op).pairs)
+        return tuple(configs.get(key) for key in keys)
 
     def config(self, operation: pb2.ConfigRequest.Operation) -> ConfigResult:
         """

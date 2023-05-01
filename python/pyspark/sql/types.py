@@ -1675,6 +1675,20 @@ def _has_nulltype(dt: DataType) -> bool:
         return isinstance(dt, NullType)
 
 
+def _has_type(dt: DataType, dts: Union[type, Tuple[type, ...]]) -> bool:
+    """Return whether there are specified types"""
+    if isinstance(dt, dts):
+        return True
+    elif isinstance(dt, StructType):
+        return any(_has_type(f.dataType, dts) for f in dt.fields)
+    elif isinstance(dt, ArrayType):
+        return _has_type(dt.elementType, dts)
+    elif isinstance(dt, MapType):
+        return _has_type(dt.keyType, dts) or _has_type(dt.valueType, dts)
+    else:
+        return False
+
+
 @overload
 def _merge_type(a: StructType, b: StructType, name: Optional[str] = None) -> StructType:
     ...
