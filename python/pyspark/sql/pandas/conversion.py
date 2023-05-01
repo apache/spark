@@ -25,6 +25,7 @@ from typing import (
 )
 from warnings import warn
 
+from pyspark.errors.exceptions.captured import unwrap_spark_exception
 from pyspark.rdd import _load_from_socket
 from pyspark.sql.pandas.serializers import ArrowCollectSerializer
 from pyspark.sql.types import TimestampType, StructType, DataType
@@ -257,8 +258,9 @@ class PandasConversionMixin:
             else:
                 results = list(batch_stream)
         finally:
-            # Join serving thread and raise any exceptions from collectAsArrowToPython
-            jsocket_auth_server.getResult()
+            with unwrap_spark_exception():
+                # Join serving thread and raise any exceptions from collectAsArrowToPython
+                jsocket_auth_server.getResult()
 
         # Separate RecordBatches from batch order indices in results
         batches = results[:-1]

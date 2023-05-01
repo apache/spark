@@ -55,7 +55,7 @@ from pyspark.testing.sqlutils import (
     pyarrow_requirement_message,
 )
 from pyspark.testing.utils import QuietTest
-from pyspark.errors import PySparkTypeError
+from pyspark.errors import ArithmeticException, PySparkTypeError, UnsupportedOperationException
 
 if have_pandas:
     import pandas as pd
@@ -873,6 +873,21 @@ class ArrowTestsMixin:
         self.assertEqual([Row(c1=1, c2="string")], df.collect())
         self.assertGreater(self.spark.sparkContext.defaultParallelism, len(pdf))
 
+    def test_toPandas_error(self):
+        for arrow_enabled in [True, False]:
+            with self.subTest(arrow_enabled=arrow_enabled):
+                self.check_toPandas_error(arrow_enabled)
+
+    def check_toPandas_error(self, arrow_enabled):
+        with self.sql_conf(
+            {
+                "spark.sql.ansi.enabled": True,
+                "spark.sql.execution.arrow.pyspark.enabled": arrow_enabled,
+            }
+        ):
+            with self.assertRaises(ArithmeticException):
+                self.spark.sql("select 1/0").toPandas()
+
     def test_toPandas_duplicate_field_names(self):
         for arrow_enabled in [True, False]:
             with self.subTest(arrow_enabled=arrow_enabled):
@@ -905,7 +920,7 @@ class ArrowTestsMixin:
                 ):
                     if arrow_enabled and struct_in_pandas == "legacy":
                         with self.assertRaisesRegexp(
-                            Exception, "DUPLICATED_FIELD_NAME_IN_ARROW_STRUCT"
+                            UnsupportedOperationException, "DUPLICATED_FIELD_NAME_IN_ARROW_STRUCT"
                         ):
                             df.toPandas()
                     else:

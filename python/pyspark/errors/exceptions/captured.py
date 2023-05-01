@@ -14,8 +14,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-
-from typing import Any, Callable, Dict, Optional, cast
+from contextlib import contextmanager
+from typing import Any, Callable, Dict, Iterator, Optional, cast
 
 import py4j
 from py4j.protocol import Py4JJavaError
@@ -187,6 +187,22 @@ def capture_sql_exception(f: Callable[..., Any]) -> Callable[..., Any]:
                 raise
 
     return deco
+
+
+@contextmanager
+def unwrap_spark_exception() -> Iterator[Any]:
+    assert SparkContext._gateway is not None
+
+    gw = SparkContext._gateway
+    try:
+        yield
+    except Py4JJavaError as e:
+        je: Py4JJavaError = e.java_exception
+        if je is not None and is_instance_of(gw, je, "org.apache.spark.SparkException"):
+            converted = convert_exception(je.getCause())
+            if not isinstance(converted, UnknownException):
+                raise converted from None
+        raise
 
 
 def install_exception_handler() -> None:
