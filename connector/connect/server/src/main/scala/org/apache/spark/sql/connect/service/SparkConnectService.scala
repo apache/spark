@@ -268,6 +268,12 @@ object SparkConnectService {
   private val userSessionMapping =
     cacheBuilder(CACHE_SIZE, CACHE_TIMEOUT_SECONDS).build[SessionCacheKey, SessionHolder]()
 
+  private[connect] val streamingSessionManager =
+    new SparkConnectStreamingQueryCache(sessionKeepAliveFn = { case (userId, sessionId) =>
+      // Use getIfPresent() rather than get() to prevent accidental loading.
+      userSessionMapping.getIfPresent((userId, sessionId))
+    })
+
   // Simple builder for creating the cache of Sessions.
   private def cacheBuilder(cacheSize: Int, timeoutSeconds: Int): CacheBuilder[Object, Object] = {
     var cacheBuilder = CacheBuilder.newBuilder().ticker(Ticker.systemTicker())

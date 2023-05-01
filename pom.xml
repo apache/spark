@@ -81,6 +81,7 @@
     <module>common/network-common</module>
     <module>common/network-shuffle</module>
     <module>common/unsafe</module>
+    <module>common/utils</module>
     <module>common/tags</module>
     <module>core</module>
     <module>graphx</module>
@@ -183,8 +184,8 @@
     <scalafmt.validateOnly>true</scalafmt.validateOnly>
     <scalafmt.changedOnly>true</scalafmt.changedOnly>
     <codehaus.jackson.version>1.9.13</codehaus.jackson.version>
-    <fasterxml.jackson.version>2.14.2</fasterxml.jackson.version>
-    <fasterxml.jackson.databind.version>2.14.2</fasterxml.jackson.databind.version>
+    <fasterxml.jackson.version>2.15.0</fasterxml.jackson.version>
+    <fasterxml.jackson.databind.version>2.15.0</fasterxml.jackson.databind.version>
     <snappy.version>1.1.9.1</snappy.version>
     <netlib.ludovic.dev.version>3.0.3</netlib.ludovic.dev.version>
     <commons-codec.version>1.15</commons-codec.version>

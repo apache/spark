@@ -784,6 +784,12 @@
     ],
     "sqlState" : "XX000"
   },
+  "INTERNAL_ERROR_BROADCAST" : {
+    "message" : [
+      "<message>"
+    ],
+    "sqlState" : "XX000"
+  },
   "INTERVAL_ARITHMETIC_OVERFLOW" : {
     "message" : [
       "<message>.<alternative>"
@@ -3794,11 +3800,6 @@
   "_LEGACY_ERROR_TEMP_2021" : {
     "message" : [
       "Couldn't find a primary constructor on <cls>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2022" : {
-    "message" : [
-      "Unsupported natural join type <joinType>."
     ]
   },
   "_LEGACY_ERROR_TEMP_2023" : {

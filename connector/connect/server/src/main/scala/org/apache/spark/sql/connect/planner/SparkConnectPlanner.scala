@@ -48,6 +48,8 @@ import org.apache.spark.sql.connect.artifact.SparkConnectArtifactManager
 import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, InvalidPlanInput, LiteralValueProtoConverter, StorageLevelProtoConverter, UdfPacket}
 import org.apache.spark.sql.connect.config.Connect.CONNECT_GRPC_ARROW_MAX_BATCH_SIZE
 import org.apache.spark.sql.connect.plugin.SparkConnectPluginRegistry
+import org.apache.spark.sql.connect.service.SessionHolder
+import org.apache.spark.sql.connect.service.SparkConnectService
 import org.apache.spark.sql.connect.service.SparkConnectStreamHandler
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.QueryExecution
@@ -1257,7 +1259,7 @@ class SparkConnectPlanner(val session: SparkSession) {
       fun: proto.CommonInlineUserDefinedFunction): Expression = {
     fun.getFunctionCase match {
       case proto.CommonInlineUserDefinedFunction.FunctionCase.PYTHON_UDF =>
-        transformPythonUDF(fun)
+        transformPythonFuncExpression(fun)
       case proto.CommonInlineUserDefinedFunction.FunctionCase.SCALAR_SCALA_UDF =>
         transformScalarScalaUDF(fun)
       case _ =>
@@ -1303,14 +1305,22 @@ class SparkConnectPlanner(val session: SparkSession) {
    *   PythonUDF.
    */
   private def transformPythonUDF(fun: proto.CommonInlineUserDefinedFunction): PythonUDF = {
+    transformPythonFuncExpression(fun).asInstanceOf[PythonUDF]
+  }
+
+  private def transformPythonFuncExpression(
+      fun: proto.CommonInlineUserDefinedFunction): Expression = {
     val udf = fun.getPythonUdf
-    PythonUDF(
+    UserDefinedPythonFunction(
       name = fun.getFunctionName,
       func = transformPythonFunction(udf),
       dataType = transformDataType(udf.getOutputType),
-      children = fun.getArgumentsList.asScala.map(transformExpression).toSeq,
-      evalType = udf.getEvalType,
+      pythonEvalType = udf.getEvalType,
       udfDeterministic = fun.getDeterministic)
+      .builder(fun.getArgumentsList.asScala.map(transformExpression).toSeq) match {
+      case udaf: PythonUDAF => udaf.toAggregateExpression()
+      case other => other
+    }
   }
 
   private def transformPythonFunction(fun: proto.PythonUDF): SimplePythonFunction = {
@@ -1877,6 +1887,7 @@ class SparkConnectPlanner(val session: SparkSession) {
 
   def process(
       command: proto.Command,
+      userId: String,
       sessionId: String,
       responseObserver: StreamObserver[ExecutePlanResponse]): Unit = {
     command.getCommandTypeCase match {
@@ -1895,6 +1906,7 @@ class SparkConnectPlanner(val session: SparkSession) {
       case proto.Command.CommandTypeCase.WRITE_STREAM_OPERATION_START =>
         handleWriteStreamOperationStart(
           command.getWriteStreamOperationStart,
+          userId,
           sessionId,
           responseObserver)
       case proto.Command.CommandTypeCase.STREAMING_QUERY_COMMAND =>
@@ -2191,6 +2203,7 @@ class SparkConnectPlanner(val session: SparkSession) {
 
   def handleWriteStreamOperationStart(
       writeOp: WriteStreamOperationStart,
+      userId: String,
       sessionId: String,
       responseObserver: StreamObserver[ExecutePlanResponse]): Unit = {
     val plan = transformRelation(writeOp.getInput)
@@ -2234,6 +2247,11 @@ class SparkConnectPlanner(val session: SparkSession) {
       case path => writer.start(path)
     }
 
+    // Register the new query so that the session and query references are cached.
+    SparkConnectService.streamingSessionManager.registerNewStreamingQuery(
+      sessionHolder = SessionHolder(userId = userId, sessionId = sessionId, session),
+      query = query)
+
     val result = WriteStreamOperationStartResult
       .newBuilder()
       .setQueryId(
@@ -2265,7 +2283,12 @@ class SparkConnectPlanner(val session: SparkSession) {
       .newBuilder()
       .setQueryId(command.getQueryId)
 
-    val query = Option(session.streams.get(id)) match {
+    // Find the query in connect service level cache, otherwise check session's active streams.
+    val query = SparkConnectService.streamingSessionManager
+      .getCachedQuery(id, runId, session) // Common case: query is cached in the cache.
+      .orElse { // Else try to find it in active streams. Mostly will not be found here either.
+        Option(session.streams.get(id))
+      } match {
       case Some(query) if query.runId.toString == runId =>
         query
       case Some(query) =>
@@ -2274,7 +2297,6 @@ class SparkConnectPlanner(val session: SparkSession) {
             s"does not match one on the server ${query.runId}. The query might have restarted.")
       case None =>
         throw new IllegalArgumentException(s"Streaming query $id is not found")
-      // TODO(SPARK-42962): Handle this better. May be cache stopped queries for a few minutes.
     }
 
     command.getCommandCase match {
