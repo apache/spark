@@ -209,7 +209,7 @@ message WriteStreamOperationStart {
     string table_name = 12;
   }
 
-  Foreach foreach = 13;
+  optional Foreach foreach = 13;
 }
 
 message Foreach {

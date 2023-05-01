@@ -32,7 +32,7 @@ import org.apache.spark.connect.proto.ExecutePlanResponse.SqlCommandResult
 import org.apache.spark.connect.proto.Parse.ParseFormat
 import org.apache.spark.connect.proto.WriteStreamOperationStart.TriggerCase
 import org.apache.spark.ml.{functions => MLFunctions}
-import org.apache.spark.sql.{Column, Dataset, Encoders, SparkSession}
+import org.apache.spark.sql.{Column, Dataset, Encoders, ForeachWriter, Row, SparkSession}
 import org.apache.spark.sql.avro.{AvroDataToCatalyst, CatalystDataToAvro}
 import org.apache.spark.sql.catalyst.{expressions, AliasIdentifier, FunctionIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{GlobalTempView, LocalTempView, MultiAlias, ParameterizedQuery, UnresolvedAlias, UnresolvedAttribute, UnresolvedDeserializer, UnresolvedExtractValue, UnresolvedFunction, UnresolvedRegex, UnresolvedRelation, UnresolvedStar}
@@ -1327,7 +1327,7 @@ class SparkConnectPlanner(val session: SparkSession) {
       accumulator = null)
   }
 
-  private def transformPythonForeachFunction(fun: proto.Foreach): PythonForeachWriter = {
+  private def transformPythonForeachFunction(fun: proto.Foreach): SimplePythonFunction = {
     SimplePythonFunction(
       command = fun.getCommand.toByteArray,
       // Empty environment variables
@@ -1907,6 +1907,7 @@ class SparkConnectPlanner(val session: SparkSession) {
       case proto.Command.CommandTypeCase.SQL_COMMAND =>
         handleSqlCommand(command.getSqlCommand, sessionId, responseObserver)
       case proto.Command.CommandTypeCase.WRITE_STREAM_OPERATION_START =>
+      case proto.Command.CommandTypeCase.WRITE_STREAM_OPERATION_START =>
         handleWriteStreamOperationStart(
           command.getWriteStreamOperationStart,
           sessionId,
@@ -2242,10 +2243,10 @@ class SparkConnectPlanner(val session: SparkSession) {
       writer.queryName(writeOp.getQueryName)
     }
 
-    if (writeOp.getForeach.nonEmpty) {
+    if (writeOp.hasForeach) {
       val foreach = writeOp.getForeach
       val pythonFcn = transformPythonForeachFunction(foreach)
-      writer.foreach(PythonForeachWriter(pythonFcn, parseSchema(foreach.getSchema)))
+      writer.foreach(new PythonForeachWriter(pythonFcn, parseSchema(foreach.getSchema)))
     }
 
     val query = writeOp.getPath match {
