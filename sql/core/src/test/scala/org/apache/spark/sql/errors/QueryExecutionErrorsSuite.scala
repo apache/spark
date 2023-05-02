@@ -866,7 +866,8 @@ class QueryExecutionErrorsSuite
     checkError(
       exception = e,
       errorClass = "INTERNAL_ERROR",
-      parameters = Map("message" -> "Aggregate Window Functions do not support merging."),
+      parameters = Map(
+        "message" -> "The aggregate window function `row_number` does not support merging."),
       sqlState = "XX000")
   }
 }
