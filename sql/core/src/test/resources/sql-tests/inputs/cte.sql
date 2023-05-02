@@ -53,6 +53,299 @@ SELECT * FROM t;
 WITH t AS (SELECT 1 FROM non_existing_table)
 SELECT 2;
 
+-- The following tests are ported from Postgres
+-- Multiple uses are evaluated only once
+SELECT count(*) FROM (
+  WITH q1(x) AS (SELECT random() FROM range(1, 5))
+    SELECT * FROM q1
+  UNION
+    SELECT * FROM q1
+) ss;
+
+-- Deeply nested
+WITH w1(c1) AS
+ (WITH w2(c2) AS
+  (WITH w3(c3) AS
+   (WITH w4(c4) AS
+    (WITH w5(c5) AS
+     (WITH w6(c6) AS
+      (WITH w7(c7) AS
+       (WITH w8(c8) AS
+        (SELECT 1)
+        SELECT * FROM w8)
+       SELECT * FROM w7)
+      SELECT * FROM w6)
+     SELECT * FROM w5)
+    SELECT * FROM w4)
+   SELECT * FROM w3)
+  SELECT * FROM w2)
+SELECT * FROM w1;
+
+-- CTE referencing an outer-level variable, should fail
+SELECT ( WITH cte(foo) AS ( VALUES(id) )
+         SELECT (SELECT foo FROM cte) )
+FROM t;
+
+-- CTE name collision with subquery name
+WITH same_name AS (SELECT 42)
+SELECT * FROM same_name, (SELECT 10) AS same_name;
+
+-- CTE name collision with subquery name, should fail
+WITH same_name(x) AS (SELECT 42)
+SELECT same_name.x FROM (SELECT 10) AS same_name(x), same_name;
+
+-- Test behavior with an unknown-type literal in the WITH
+WITH q AS (SELECT 'foo' AS x)
+SELECT x, typeof(x) FROM q;
+
+-- The following tests are ported from ZetaSQL
+-- Alias inside the with hides the underlying column name, should fail
+with cte as (select id as id_alias from t)
+select id from cte;
+
+-- Reference of later WITH, should fail.
+with r1 as (select * from r2),
+     r2 as (select 1)
+select 2;
+
+-- WITH in a table subquery
+SELECT * FROM
+  (WITH q AS (select 1 x) SELECT x+1 AS y FROM q);
+
+-- WITH in an expression subquery
+select (with q as (select 1 x) select * from q);
+
+-- WITH in an IN subquery
+select 1 in (with q as (select 1) select * from q);
+
+-- WITH alias referenced outside its scope, should fail
+SELECT * FROM
+  (WITH q AS (select 1 x) SELECT x+1 AS y FROM q),
+  q;
+
+-- References to CTEs of the same name should be resolved properly
+WITH T1 as (select 1 a)
+select *
+from
+  T1 x,
+  (WITH T1 as (select 2 b) select * from T1) y,
+  T1 z;
+
+-- References to CTEs of the same name should be resolved properly
+WITH TTtt as (select 1 a),
+     `tTTt_2` as (select 2 a)
+select *
+from
+  (WITH TtTt as (select 3 c) select * from ttTT, `tttT_2`);
+
+-- Correlated CTE subquery
+select
+  (WITH q AS (select T.x) select * from q)
+from (select 1 x, 2 y) T;
+
+-- The main query inside WITH can be correlated.
+select
+  (WITH q AS (select 3 z) select x + t.y + z from q)
+from (select 1 x, 2 y) T;
+
+-- A WITH subquery alias is visible inside a WITH clause subquery.
+WITH q1 as (select 1 x)
+select * from
+  (with q2 as (select * from q1) select * from q2);
+
+-- A WITH subquery alias is visible inside a WITH clause subquery, and they have the same name.
+WITH q1 as (select 1 x)
+select * from
+  (with q1 as (select x+1 from q1) select * from q1);
+
+-- The following tests are ported from DuckDB
+-- Duplicate CTE alias, should fail
+with cte1 as (select 42), cte1 as (select 42) select * FROM cte1;
+
+-- Refer to CTE in subquery
+with cte1 as (Select id as j from t)
+select * from cte1 where j = (select max(j) from cte1 as cte2);
+
+-- Use CTE in a view definition
+create view va AS (with cte as (Select 1) select * from cte);
+select * from va;
+
+-- Nested CTE views that re-use CTE aliases
+with cte AS (SELECT * FROM va) SELECT * FROM cte;
+
+-- Self-refer to non-existent cte, should fail.
+with cte as (select * from cte) select * from cte;
+
+-- The following tests are `CREATE VIEW AS` and `select from view` version using the above queries.
+-- Multiple uses are evaluated only once
+DROP VIEW IF EXISTS cte_view;
+CREATE VIEW cte_view AS
+SELECT count(*) as cnt FROM (
+  WITH q1(x) AS (SELECT random() FROM range(1, 5))
+    SELECT * FROM q1
+  UNION
+    SELECT * FROM q1
+) ss;
+SELECT * FROM cte_view;
+DROP VIEW IF EXISTS cte_view;
+
+-- Deeply nested
+CREATE VIEW cte_view AS
+WITH w1(c1) AS
+ (WITH w2(c2) AS
+  (WITH w3(c3) AS
+   (WITH w4(c4) AS
+    (WITH w5(c5) AS
+     (WITH w6(c6) AS
+      (WITH w7(c7) AS
+       (WITH w8(c8) AS
+        (SELECT 1)
+        SELECT * FROM w8)
+       SELECT * FROM w7)
+      SELECT * FROM w6)
+     SELECT * FROM w5)
+    SELECT * FROM w4)
+   SELECT * FROM w3)
+  SELECT * FROM w2)
+SELECT * FROM w1;
+SELECT * FROM cte_view;
+DROP VIEW IF EXISTS cte_view;
+
+-- CTE attached to intermediate-level set operation
+CREATE VIEW cte_view AS
+WITH outermost(x) AS (
+  SELECT 1
+  UNION (WITH innermost as (SELECT 2)
+         SELECT * FROM innermost
+         UNION SELECT 3)
+)
+SELECT * FROM outermost ORDER BY 1;
+SELECT * FROM cte_view;
+DROP VIEW IF EXISTS cte_view;
+
+-- CTE name collision with subquery name
+CREATE VIEW cte_view AS
+WITH same_name AS (SELECT 42)
+SELECT * FROM same_name, (SELECT 10) AS same_name;
+SELECT * FROM cte_view;
+DROP VIEW IF EXISTS cte_view;
+
+-- Test behavior with an unknown-type literal in the WITH
+CREATE VIEW cte_view AS
+WITH q AS (SELECT 'foo' AS x)
+SELECT x, typeof(x) as type_x FROM q;
+SELECT * FROM cte_view;
+DROP VIEW IF EXISTS cte_view;
+
+-- WITH in a table subquery
+CREATE VIEW cte_view AS
+SELECT * FROM
+  (WITH q AS (select 1 x) SELECT x+1 AS y FROM q);
+SELECT * FROM cte_view;
+DROP VIEW IF EXISTS cte_view;
+
+-- WITH in an expression subquery
+CREATE VIEW cte_view AS
+select (with q as (select 1 x) select * from q) AS result;
+SELECT * FROM cte_view;
+DROP VIEW IF EXISTS cte_view;
+
+-- WITH in an IN subquery
+CREATE VIEW cte_view AS
+select 1 in (with q as (select 1) select * from q) AS result;
+SELECT * FROM cte_view;
+DROP VIEW IF EXISTS cte_view;
+
+-- A WITH subquery alias is visible inside a WITH clause subquery.
+CREATE VIEW cte_view AS
+WITH q1 as (select 1 x)
+select * from
+  (with q2 as (select * from q1) select * from q2) AS result;
+SELECT * FROM cte_view;
+DROP VIEW IF EXISTS cte_view;
+
+-- A WITH subquery alias is visible inside a WITH clause subquery, and they have the same name.
+CREATE VIEW cte_view AS
+WITH q1 as (select 1 x)
+select * from
+  (with q1 as (select x+1 as x from q1) select * from q1) AS result;
+SELECT * FROM cte_view;
+DROP VIEW IF EXISTS cte_view;
+
+-- References to CTEs of the same name should be resolved properly
+CREATE VIEW cte_view AS
+WITH T1 as (select 1 a)
+select *
+from
+  T1 x,
+  (WITH T1 as (select 2 b) select * from T1) y,
+  T1 z;
+SELECT * FROM cte_view;
+DROP VIEW IF EXISTS cte_view;
+
+-- Correlated CTE subquery
+CREATE VIEW cte_view AS
+select
+  (WITH q AS (select T.x) select * from q) AS result
+from (select 1 x, 2 y) T;
+SELECT * FROM cte_view;
+DROP VIEW IF EXISTS cte_view;
+
+-- Refer to CTE in subquery
+CREATE temporary VIEW cte_view AS
+with cte1 as (Select id as j from t)
+select * from cte1 where j = (select max(j) from cte1 as cte2);
+SELECT * FROM cte_view;
+DROP VIEW IF EXISTS cte_view;
+
+-- Nested CTE views that re-use CTE aliases
+CREATE VIEW cte_view AS
+with cte AS (SELECT * FROM va) SELECT * FROM cte;
+SELECT * FROM cte_view;
+DROP VIEW IF EXISTS cte_view;
+
+-- WITH clause should reference the base table
+CREATE temporary VIEW cte_view AS
+WITH t AS (SELECT 1 FROM t) SELECT * FROM t;
+SELECT * FROM cte_view;
+DROP VIEW IF EXISTS cte_view;
+
+-- WITH clause should reference the previous CTE
+CREATE temporary VIEW cte_view AS
+WITH t1 AS (SELECT * FROM t2), t2 AS (SELECT 2 FROM t1) SELECT * FROM t1 cross join t2;
+SELECT * FROM cte_view;
+DROP VIEW IF EXISTS cte_view;
+
+-- SPARK-18609 CTE with self-join
+CREATE temporary VIEW cte_view AS
+WITH CTE1 AS (
+  SELECT b.id AS id
+  FROM   T2 a
+         CROSS JOIN (SELECT id AS id FROM T2) b
+)
+SELECT t1.id AS c1,
+       t2.id AS c2
+FROM   CTE1 t1
+       CROSS JOIN CTE1 t2;
+SELECT * FROM cte_view;
+DROP VIEW IF EXISTS cte_view;
+
+-- CTE with column alias
+CREATE temporary VIEW cte_view AS
+WITH t(x) AS (SELECT 1)
+SELECT * FROM t WHERE x = 1;
+SELECT * FROM cte_view;
+DROP VIEW IF EXISTS cte_view;
+
+-- CTE with multiple column aliases
+CREATE temporary VIEW cte_view AS
+WITH t(x, y) AS (SELECT 1, 2)
+SELECT * FROM t WHERE x = 1 AND y = 2;
+SELECT * FROM cte_view;
+DROP VIEW IF EXISTS cte_view;
+
 -- Clean up
 DROP VIEW IF EXISTS t;
 DROP VIEW IF EXISTS t2;
+DROP TABLE IF EXISTS m;
+DROP VIEW IF EXISTS va;
