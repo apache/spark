@@ -21,7 +21,7 @@ user experience across all languages. Please follow the below guidelines:
 
 Python-specific development guidelines are located in [python/docs/source/development/testing.rst](https://github.com/apache/spark/blob/master/python/docs/source/development/testing.rst) that is published at [Development tab](https://spark.apache.org/docs/latest/api/python/development/index.html) in PySpark documentation.
 
-To generate the Python client code from the proto files,
+To generate the Python client code from the proto files:
 
 First, make sure to have a Python environment with the installed dependencies.
 Specifically, install `black` and dependencies from the "Spark Connect python proto generation plugin (optional)" section.
