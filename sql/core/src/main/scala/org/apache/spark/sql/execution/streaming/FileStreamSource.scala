@@ -69,12 +69,15 @@ class FileStreamSource(
   private val sourceCleaner: Option[FileStreamSourceCleaner] = FileStreamSourceCleaner(
     fs, qualifiedBasePath, sourceOptions, hadoopConf)
 
-  private val optionsWithPartitionBasePath = sourceOptions.optionMapWithoutPath ++ {
-    if (!SparkHadoopUtil.get.isGlobPath(new Path(path)) && options.contains("path")) {
-      Map("basePath" -> path)
-    } else {
-      Map()
-    }}
+  private val optionsForInnerDataSource = sourceOptions.optionMapWithoutPath ++ {
+    val pathOption =
+      if (!SparkHadoopUtil.get.isGlobPath(new Path(path)) && options.contains("path")) {
+        Map("basePath" -> path)
+      } else {
+        Map()
+      }
+    pathOption ++ Map (DataSource.GLOB_PATHS_KEY -> "false")
+  }
 
   private val metadataLog =
     new FileStreamSourceLog(FileStreamSourceLog.VERSION, sparkSession, metadataPath)
@@ -243,7 +246,7 @@ class FileStreamSource(
         userSpecifiedSchema = Some(schema),
         partitionColumns = partitionColumns,
         className = fileFormatClassName,
-        options = optionsWithPartitionBasePath)
+        options = optionsForInnerDataSource)
     Dataset.ofRows(sparkSession, LogicalRelation(newDataSource.resolveRelation(
       checkFilesExist = false), isStreaming = true))
   }
