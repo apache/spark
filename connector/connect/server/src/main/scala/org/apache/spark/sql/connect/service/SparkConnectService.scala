@@ -380,5 +380,3 @@ object SparkConnectService {
     }
   }
 }
-
-
