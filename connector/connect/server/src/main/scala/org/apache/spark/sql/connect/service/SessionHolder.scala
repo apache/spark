@@ -21,6 +21,7 @@ import java.util.UUID
 import java.util.concurrent.{ConcurrentHashMap, ConcurrentMap}
 
 import collection.JavaConverters._
+import scala.util.control.NonFatal
 
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.SparkSession
@@ -28,7 +29,8 @@ import org.apache.spark.sql.SparkSession
 /**
  * Object used to hold the Spark Connect session state.
  */
-case class SessionHolder(userId: String, sessionId: String, session: SparkSession) {
+case class SessionHolder(userId: String, sessionId: String, session: SparkSession)
+    extends Logging {
 
   val executePlanOperations: ConcurrentMap[String, ExecutePlanHolder] =
     new ConcurrentHashMap[String, ExecutePlanHolder]()
@@ -47,6 +49,14 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
   }
 
   private[connect] def interruptAll(): Unit = {
-    executePlanOperations.asScala.values.foreach(_.interrupt())
+    executePlanOperations.asScala.values.foreach { execute =>
+      // Eat exception while trying to interrupt a given execution and move forward.
+      try {
+        execute.interrupt()
+      } catch {
+        case NonFatal(e) =>
+          logWarning(s"Exception $e while trying to interrupt execution ${execute.operationId}")
+      }
+    }
   }
 }
