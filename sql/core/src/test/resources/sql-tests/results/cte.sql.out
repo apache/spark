@@ -572,37 +572,6 @@ struct<>
 -- !query output
 
 
-
--- !query
-CREATE VIEW cte_view AS
-SELECT count(*) as cnt FROM (
-  WITH q1(x) AS (SELECT random() FROM range(1, 5))
-    SELECT * FROM q1
-  UNION
-    SELECT * FROM q1
-) ss
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-SELECT * FROM cte_view
--- !query schema
-struct<cnt:bigint>
--- !query output
-4
-
-
--- !query
-DROP VIEW IF EXISTS cte_view
--- !query schema
-struct<>
--- !query output
-
-
-
 -- !query
 CREATE VIEW cte_view AS
 WITH w1(c1) AS

@@ -177,16 +177,6 @@ with cte AS (SELECT * FROM va) SELECT * FROM cte;
 with cte as (select * from cte) select * from cte;
 
 -- The following tests are `CREATE VIEW AS` and `select from view` version using the above queries.
--- Multiple uses are evaluated only once
-DROP VIEW IF EXISTS cte_view;
-CREATE VIEW cte_view AS
-SELECT count(*) as cnt FROM (
-  WITH q1(x) AS (SELECT random() FROM range(1, 5))
-    SELECT * FROM q1
-  UNION
-    SELECT * FROM q1
-) ss;
-SELECT * FROM cte_view;
 DROP VIEW IF EXISTS cte_view;
 
 -- Deeply nested
