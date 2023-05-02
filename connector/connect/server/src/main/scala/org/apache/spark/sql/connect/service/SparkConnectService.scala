@@ -254,7 +254,8 @@ class SparkConnectService(debug: Boolean)
       responseObserver: StreamObserver[proto.InterruptResponse]): Unit = {
     try {
       new SparkConnectInterruptHandler(responseObserver).handle(request)
-    } catch handleError(
+    } catch
+      handleError(
         "interrupt",
         observer = responseObserver,
         userId = request.getUserContext.getUserId,

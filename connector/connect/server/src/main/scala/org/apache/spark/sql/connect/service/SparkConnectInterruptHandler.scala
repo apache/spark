@@ -23,7 +23,7 @@ import org.apache.spark.connect.proto
 import org.apache.spark.internal.Logging
 
 class SparkConnectInterruptHandler(responseObserver: StreamObserver[proto.InterruptResponse])
-  extends Logging {
+    extends Logging {
 
   def handle(v: proto.InterruptRequest): Unit = {
     val sessionHolder =

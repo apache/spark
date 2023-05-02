@@ -28,10 +28,7 @@ import org.apache.spark.sql.SparkSession
 /**
  * Object used to hold the Spark Connect session state.
  */
-case class SessionHolder(
-  userId: String,
-  sessionId: String,
-  session: SparkSession) {
+case class SessionHolder(userId: String, sessionId: String, session: SparkSession) {
 
   val executePlanOperations: ConcurrentMap[String, ExecutePlanHolder] =
     new ConcurrentHashMap[String, ExecutePlanHolder]()

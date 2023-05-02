@@ -53,15 +53,16 @@ class SparkConnectStreamHandler(responseObserver: StreamObserver[ExecutePlanResp
     val session = sessionHolder.session
 
     session.withActive {
-      val debugString = try {
-        Utils.redact(
-          session.sessionState.conf.stringRedactionPattern,
-          ProtoUtils.abbreviate(v).toString)
-      } catch {
-        case NonFatal(e) =>
-          logWarning("Fail to extract debug information", e)
-          "UNKNOWN"
-      }
+      val debugString =
+        try {
+          Utils.redact(
+            session.sessionState.conf.stringRedactionPattern,
+            ProtoUtils.abbreviate(v).toString)
+        } catch {
+          case NonFatal(e) =>
+            logWarning("Fail to extract debug information", e)
+            "UNKNOWN"
+        }
 
       val executeHolder = sessionHolder.createExecutePlanHolder(v)
       session.sparkContext.setJobGroup(
