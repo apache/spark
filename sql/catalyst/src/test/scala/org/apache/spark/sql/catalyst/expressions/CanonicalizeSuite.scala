@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.plans.logical.Range
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.MULTI_COMMUTATIVE_OP_OPT_THRESHOLD
-import org.apache.spark.sql.types.{BooleanType, Decimal, DecimalType, IntegerType, LongType, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{BooleanType, Decimal, DecimalType, IntegerType, LongType, StringType, StructField, StructType, TimestampNTZType, TimestampType}
 
 class CanonicalizeSuite extends SparkFunSuite {
 
@@ -97,6 +97,18 @@ class CanonicalizeSuite extends SparkFunSuite {
     val cast = Cast(literal, LongType)
     val castWithTimeZoneId = Cast(literal, LongType, Some(TimeZone.getDefault.getID))
     assert(castWithTimeZoneId.semanticEquals(cast))
+  }
+
+  test("SPARK-43336: Canonicalize Cast between Timestamp and TimestampNTZ should consider " +
+    "timezone") {
+    val timestampLiteral = Literal.create(1L, TimestampType)
+    val timestampNTZLiteral = Literal.create(1L, TimestampNTZType)
+    Seq(
+      Cast(timestampLiteral, TimestampNTZType),
+      Cast(timestampNTZLiteral, TimestampType)
+    ).foreach { cast =>
+      assert(!cast.semanticEquals(cast.withTimeZone(TimeZone.getDefault.getID)))
+    }
   }
 
   test("SPARK-32927: Bitwise operations are commutative") {
