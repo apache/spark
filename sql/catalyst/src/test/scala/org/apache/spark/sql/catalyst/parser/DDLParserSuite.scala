@@ -321,7 +321,7 @@ class DDLParserSuite extends AnalysisTest {
         |Columns: p2 string""".stripMargin
     checkError(
       exception = parseException(createSql),
-      errorClass = "_LEGACY_ERROR_TEMP_0035",
+      errorClass = "OPERATION_NOT_ALLOWED",
       parameters = Map("message" -> value1),
       context = ExpectedContext(
         fragment = createSql,
@@ -331,7 +331,7 @@ class DDLParserSuite extends AnalysisTest {
     val replaceSql = createSql.replaceFirst("CREATE", "REPLACE")
     checkError(
       exception = parseException(replaceSql),
-      errorClass = "_LEGACY_ERROR_TEMP_0035",
+      errorClass = "OPERATION_NOT_ALLOWED",
       parameters = Map("message" -> value1),
       context = ExpectedContext(
         fragment = replaceSql,
@@ -346,7 +346,7 @@ class DDLParserSuite extends AnalysisTest {
         |Columns: p2 string""".stripMargin
     checkError(
       exception = parseException(createSqlWithExpr),
-      errorClass = "_LEGACY_ERROR_TEMP_0035",
+      errorClass = "OPERATION_NOT_ALLOWED",
       parameters = Map("message" -> value2),
       context = ExpectedContext(
         fragment = createSqlWithExpr,
@@ -356,7 +356,7 @@ class DDLParserSuite extends AnalysisTest {
     val replaceSqlWithExpr = createSqlWithExpr.replaceFirst("CREATE", "REPLACE")
     checkError(
       exception = parseException(replaceSqlWithExpr),
-      errorClass = "_LEGACY_ERROR_TEMP_0035",
+      errorClass = "OPERATION_NOT_ALLOWED",
       parameters = Map("message" -> value2),
       context = ExpectedContext(
         fragment = replaceSqlWithExpr,
@@ -423,7 +423,7 @@ class DDLParserSuite extends AnalysisTest {
       "which also specifies a serde"
     checkError(
       exception = parseException(createSql),
-      errorClass = "_LEGACY_ERROR_TEMP_0035",
+      errorClass = "OPERATION_NOT_ALLOWED",
       parameters = Map("message" -> value),
       context = ExpectedContext(
         fragment = createSql,
@@ -433,7 +433,7 @@ class DDLParserSuite extends AnalysisTest {
     val replaceSql = createSql.replaceFirst("CREATE", "REPLACE")
     checkError(
       exception = parseException(replaceSql),
-      errorClass = "_LEGACY_ERROR_TEMP_0035",
+      errorClass = "OPERATION_NOT_ALLOWED",
       parameters = Map("message" -> value),
       context = ExpectedContext(
         fragment = replaceSql,
@@ -479,7 +479,7 @@ class DDLParserSuite extends AnalysisTest {
     val value = "ROW FORMAT DELIMITED is only compatible with 'textfile', not 'otherformat'"
     checkError(
       exception = parseException(createFailSql),
-      errorClass = "_LEGACY_ERROR_TEMP_0035",
+      errorClass = "OPERATION_NOT_ALLOWED",
       parameters = Map("message" -> value),
       context = ExpectedContext(
         fragment = createFailSql,
@@ -489,7 +489,7 @@ class DDLParserSuite extends AnalysisTest {
     val replaceFailSql = createFailSql.replaceFirst("CREATE", "REPLACE")
     checkError(
       exception = parseException(replaceFailSql),
-      errorClass = "_LEGACY_ERROR_TEMP_0035",
+      errorClass = "OPERATION_NOT_ALLOWED",
       parameters = Map("message" -> value),
       context = ExpectedContext(
         fragment = replaceFailSql,
@@ -551,7 +551,7 @@ class DDLParserSuite extends AnalysisTest {
         |STORED AS parquet""".stripMargin
     checkError(
       exception = parseException(createSql),
-      errorClass = "_LEGACY_ERROR_TEMP_0035",
+      errorClass = "OPERATION_NOT_ALLOWED",
       parameters = Map("message" -> "CREATE TABLE ... USING ... STORED AS parquet "),
       context = ExpectedContext(
         fragment = createSql,
@@ -561,7 +561,7 @@ class DDLParserSuite extends AnalysisTest {
     val replaceSql = createSql.replaceFirst("CREATE", "REPLACE")
     checkError(
       exception = parseException(replaceSql),
-      errorClass = "_LEGACY_ERROR_TEMP_0035",
+      errorClass = "OPERATION_NOT_ALLOWED",
       parameters = Map("message" -> "REPLACE TABLE ... USING ... STORED AS parquet "),
       context = ExpectedContext(
         fragment = replaceSql,
@@ -576,7 +576,7 @@ class DDLParserSuite extends AnalysisTest {
         |ROW FORMAT SERDE 'customSerde'""".stripMargin
     checkError(
       exception = parseException(createSql),
-      errorClass = "_LEGACY_ERROR_TEMP_0035",
+      errorClass = "OPERATION_NOT_ALLOWED",
       parameters = Map("message" -> "CREATE TABLE ... USING ... ROW FORMAT SERDE customSerde"),
       context = ExpectedContext(
         fragment = createSql,
@@ -586,7 +586,7 @@ class DDLParserSuite extends AnalysisTest {
     val replaceSql = createSql.replaceFirst("CREATE", "REPLACE")
     checkError(
       exception = parseException(replaceSql),
-      errorClass = "_LEGACY_ERROR_TEMP_0035",
+      errorClass = "OPERATION_NOT_ALLOWED",
       parameters = Map("message" -> "REPLACE TABLE ... USING ... ROW FORMAT SERDE customSerde"),
       context = ExpectedContext(
         fragment = replaceSql,
@@ -601,7 +601,7 @@ class DDLParserSuite extends AnalysisTest {
         |ROW FORMAT DELIMITED FIELDS TERMINATED BY ','""".stripMargin
     checkError(
       exception = parseException(createSql),
-      errorClass = "_LEGACY_ERROR_TEMP_0035",
+      errorClass = "OPERATION_NOT_ALLOWED",
       parameters = Map("message" -> "CREATE TABLE ... USING ... ROW FORMAT DELIMITED"),
       context = ExpectedContext(
         fragment = createSql,
@@ -611,7 +611,7 @@ class DDLParserSuite extends AnalysisTest {
     val replaceSql = createSql.replaceFirst("CREATE", "REPLACE")
     checkError(
       exception = parseException(replaceSql),
-      errorClass = "_LEGACY_ERROR_TEMP_0035",
+      errorClass = "OPERATION_NOT_ALLOWED",
       parameters = Map("message" -> "REPLACE TABLE ... USING ... ROW FORMAT DELIMITED"),
       context = ExpectedContext(
         fragment = replaceSql,
@@ -626,7 +626,7 @@ class DDLParserSuite extends AnalysisTest {
     val fragment = "STORED BY 'handler'"
     checkError(
       exception = parseException(createSql),
-      errorClass = "_LEGACY_ERROR_TEMP_0035",
+      errorClass = "OPERATION_NOT_ALLOWED",
       parameters = Map("message" -> "STORED BY"),
       context = ExpectedContext(
         fragment = fragment,
@@ -636,7 +636,7 @@ class DDLParserSuite extends AnalysisTest {
     val replaceSql = createSql.replaceFirst("CREATE", "REPLACE")
     checkError(
       exception = parseException(replaceSql),
-      errorClass = "_LEGACY_ERROR_TEMP_0035",
+      errorClass = "OPERATION_NOT_ALLOWED",
       parameters = Map("message" -> "STORED BY"),
       context = ExpectedContext(
         fragment = fragment,
@@ -648,7 +648,7 @@ class DDLParserSuite extends AnalysisTest {
     val sql1 = "CREATE TABLE my_tab (id bigint) SKEWED BY (id) ON (1,2,3)"
     checkError(
       exception = parseException(sql1),
-      errorClass = "_LEGACY_ERROR_TEMP_0035",
+      errorClass = "OPERATION_NOT_ALLOWED",
       parameters = Map("message" -> "CREATE TABLE ... SKEWED BY"),
       context = ExpectedContext(
         fragment = sql1,
@@ -658,7 +658,7 @@ class DDLParserSuite extends AnalysisTest {
     val sql2 = "REPLACE TABLE my_tab (id bigint) SKEWED BY (id) ON (1,2,3)"
     checkError(
       exception = parseException(sql2),
-      errorClass = "_LEGACY_ERROR_TEMP_0035",
+      errorClass = "OPERATION_NOT_ALLOWED",
       parameters = Map("message" -> "CREATE TABLE ... SKEWED BY"),
       context = ExpectedContext(
         fragment = sql2,
@@ -678,7 +678,7 @@ class DDLParserSuite extends AnalysisTest {
     val sql1 = createTableHeader("TBLPROPERTIES('test' = 'test2')")
     checkError(
       exception = parseException(sql1),
-      errorClass = "_LEGACY_ERROR_TEMP_0041",
+      errorClass = "DUPLICATE_CLAUSES",
       parameters = Map("clauseName" -> "TBLPROPERTIES"),
       context = ExpectedContext(
         fragment = sql1,
@@ -688,7 +688,7 @@ class DDLParserSuite extends AnalysisTest {
     val sql2 = createTableHeader("LOCATION '/tmp/file'")
     checkError(
       exception = parseException(sql2),
-      errorClass = "_LEGACY_ERROR_TEMP_0041",
+      errorClass = "DUPLICATE_CLAUSES",
       parameters = Map("clauseName" -> "LOCATION"),
       context = ExpectedContext(
         fragment = sql2,
@@ -698,7 +698,7 @@ class DDLParserSuite extends AnalysisTest {
     val sql3 = createTableHeader("COMMENT 'a table'")
     checkError(
       exception = parseException(sql3),
-      errorClass = "_LEGACY_ERROR_TEMP_0041",
+      errorClass = "DUPLICATE_CLAUSES",
       parameters = Map("clauseName" -> "COMMENT"),
       context = ExpectedContext(
         fragment = sql3,
@@ -708,7 +708,7 @@ class DDLParserSuite extends AnalysisTest {
     val sql4 = createTableHeader("CLUSTERED BY(b) INTO 256 BUCKETS")
     checkError(
       exception = parseException(sql4),
-      errorClass = "_LEGACY_ERROR_TEMP_0041",
+      errorClass = "DUPLICATE_CLAUSES",
       parameters = Map("clauseName" -> "CLUSTERED BY"),
       context = ExpectedContext(
         fragment = sql4,
@@ -718,7 +718,7 @@ class DDLParserSuite extends AnalysisTest {
     val sql5 = createTableHeader("PARTITIONED BY (b)")
     checkError(
       exception = parseException(sql5),
-      errorClass = "_LEGACY_ERROR_TEMP_0041",
+      errorClass = "DUPLICATE_CLAUSES",
       parameters = Map("clauseName" -> "PARTITIONED BY"),
       context = ExpectedContext(
         fragment = sql5,
@@ -728,7 +728,7 @@ class DDLParserSuite extends AnalysisTest {
     val sql6 = createTableHeader("PARTITIONED BY (c int)")
     checkError(
       exception = parseException(sql6),
-      errorClass = "_LEGACY_ERROR_TEMP_0041",
+      errorClass = "DUPLICATE_CLAUSES",
       parameters = Map("clauseName" -> "PARTITIONED BY"),
       context = ExpectedContext(
         fragment = sql6,
@@ -738,7 +738,7 @@ class DDLParserSuite extends AnalysisTest {
     val sql7 = createTableHeader("STORED AS parquet")
     checkError(
       exception = parseException(sql7),
-      errorClass = "_LEGACY_ERROR_TEMP_0041",
+      errorClass = "DUPLICATE_CLAUSES",
       parameters = Map("clauseName" -> "STORED AS/BY"),
       context = ExpectedContext(
         fragment = sql7,
@@ -748,7 +748,7 @@ class DDLParserSuite extends AnalysisTest {
     val sql8 = createTableHeader("STORED AS INPUTFORMAT 'in' OUTPUTFORMAT 'out'")
     checkError(
       exception = parseException(sql8),
-      errorClass = "_LEGACY_ERROR_TEMP_0041",
+      errorClass = "DUPLICATE_CLAUSES",
       parameters = Map("clauseName" -> "STORED AS/BY"),
       context = ExpectedContext(
         fragment = sql8,
@@ -758,7 +758,7 @@ class DDLParserSuite extends AnalysisTest {
     val sql9 = createTableHeader("ROW FORMAT SERDE 'serde'")
     checkError(
       exception = parseException(sql9),
-      errorClass = "_LEGACY_ERROR_TEMP_0041",
+      errorClass = "DUPLICATE_CLAUSES",
       parameters = Map("clauseName" -> "ROW FORMAT"),
       context = ExpectedContext(
         fragment = sql9,
@@ -768,7 +768,7 @@ class DDLParserSuite extends AnalysisTest {
     val sql10 = replaceTableHeader("TBLPROPERTIES('test' = 'test2')")
     checkError(
       exception = parseException(sql10),
-      errorClass = "_LEGACY_ERROR_TEMP_0041",
+      errorClass = "DUPLICATE_CLAUSES",
       parameters = Map("clauseName" -> "TBLPROPERTIES"),
       context = ExpectedContext(
         fragment = sql10,
@@ -778,7 +778,7 @@ class DDLParserSuite extends AnalysisTest {
     val sql11 = replaceTableHeader("LOCATION '/tmp/file'")
     checkError(
       exception = parseException(sql11),
-      errorClass = "_LEGACY_ERROR_TEMP_0041",
+      errorClass = "DUPLICATE_CLAUSES",
       parameters = Map("clauseName" -> "LOCATION"),
       context = ExpectedContext(
         fragment = sql11,
@@ -788,7 +788,7 @@ class DDLParserSuite extends AnalysisTest {
     val sql12 = replaceTableHeader("COMMENT 'a table'")
     checkError(
       exception = parseException(sql12),
-      errorClass = "_LEGACY_ERROR_TEMP_0041",
+      errorClass = "DUPLICATE_CLAUSES",
       parameters = Map("clauseName" -> "COMMENT"),
       context = ExpectedContext(
         fragment = sql12,
@@ -798,7 +798,7 @@ class DDLParserSuite extends AnalysisTest {
     val sql13 = replaceTableHeader("CLUSTERED BY(b) INTO 256 BUCKETS")
     checkError(
       exception = parseException(sql13),
-      errorClass = "_LEGACY_ERROR_TEMP_0041",
+      errorClass = "DUPLICATE_CLAUSES",
       parameters = Map("clauseName" -> "CLUSTERED BY"),
       context = ExpectedContext(
         fragment = sql13,
@@ -808,7 +808,7 @@ class DDLParserSuite extends AnalysisTest {
     val sql14 = replaceTableHeader("PARTITIONED BY (b)")
     checkError(
       exception = parseException(sql14),
-      errorClass = "_LEGACY_ERROR_TEMP_0041",
+      errorClass = "DUPLICATE_CLAUSES",
       parameters = Map("clauseName" -> "PARTITIONED BY"),
       context = ExpectedContext(
         fragment = sql14,
@@ -818,7 +818,7 @@ class DDLParserSuite extends AnalysisTest {
     val sql15 = replaceTableHeader("PARTITIONED BY (c int)")
     checkError(
       exception = parseException(sql15),
-      errorClass = "_LEGACY_ERROR_TEMP_0041",
+      errorClass = "DUPLICATE_CLAUSES",
       parameters = Map("clauseName" -> "PARTITIONED BY"),
       context = ExpectedContext(
         fragment = sql15,
@@ -828,7 +828,7 @@ class DDLParserSuite extends AnalysisTest {
     val sql16 = replaceTableHeader("STORED AS parquet")
     checkError(
       exception = parseException(sql16),
-      errorClass = "_LEGACY_ERROR_TEMP_0041",
+      errorClass = "DUPLICATE_CLAUSES",
       parameters = Map("clauseName" -> "STORED AS/BY"),
       context = ExpectedContext(
         fragment = sql16,
@@ -838,7 +838,7 @@ class DDLParserSuite extends AnalysisTest {
     val sql17 = replaceTableHeader("STORED AS INPUTFORMAT 'in' OUTPUTFORMAT 'out'")
     checkError(
       exception = parseException(sql17),
-      errorClass = "_LEGACY_ERROR_TEMP_0041",
+      errorClass = "DUPLICATE_CLAUSES",
       parameters = Map("clauseName" -> "STORED AS/BY"),
       context = ExpectedContext(
         fragment = sql17,
@@ -848,7 +848,7 @@ class DDLParserSuite extends AnalysisTest {
     val sql18 = replaceTableHeader("ROW FORMAT SERDE 'serde'")
     checkError(
       exception = parseException(sql18),
-      errorClass = "_LEGACY_ERROR_TEMP_0041",
+      errorClass = "DUPLICATE_CLAUSES",
       parameters = Map("clauseName" -> "ROW FORMAT"),
       context = ExpectedContext(
         fragment = sql18,
@@ -1375,7 +1375,7 @@ class DDLParserSuite extends AnalysisTest {
     val sql5 = "ALTER TABLE table_name PARTITION (a='1') CHANGE COLUMN a.b.c c INT"
     checkError(
       exception = parseException(sql5),
-      errorClass = "_LEGACY_ERROR_TEMP_0035",
+      errorClass = "OPERATION_NOT_ALLOWED",
       parameters = Map("message" -> "ALTER TABLE table PARTITION partition_spec CHANGE COLUMN"),
       context = ExpectedContext(
         fragment = sql5,
@@ -1422,7 +1422,7 @@ class DDLParserSuite extends AnalysisTest {
     val sql5 = "ALTER TABLE table_name PARTITION (a='1') REPLACE COLUMNS (x string)"
     checkError(
       exception = parseException(sql5),
-      errorClass = "_LEGACY_ERROR_TEMP_0035",
+      errorClass = "OPERATION_NOT_ALLOWED",
       parameters = Map("message" -> "ALTER TABLE table PARTITION partition_spec REPLACE COLUMNS"),
       context = ExpectedContext(
         fragment = sql5,
@@ -1643,7 +1643,7 @@ class DDLParserSuite extends AnalysisTest {
         |PARTITION (p1 = 3, p2) IF NOT EXISTS""".stripMargin
     checkError(
       exception = parseException(sql),
-      errorClass = "_LEGACY_ERROR_TEMP_0035",
+      errorClass = "OPERATION_NOT_ALLOWED",
       parameters = Map("message" -> "IF NOT EXISTS with dynamic partitions: p2"),
       context = ExpectedContext(
         fragment = fragment,
@@ -1661,7 +1661,7 @@ class DDLParserSuite extends AnalysisTest {
         |PARTITION (p1 = 3) IF NOT EXISTS""".stripMargin
     checkError(
       exception = parseException(sql),
-      errorClass = "_LEGACY_ERROR_TEMP_0035",
+      errorClass = "OPERATION_NOT_ALLOWED",
       parameters = Map("message" -> "INSERT INTO ... IF NOT EXISTS"),
       context = ExpectedContext(
         fragment = fragment,
@@ -2355,7 +2355,7 @@ class DDLParserSuite extends AnalysisTest {
         |(dt='2009-09-09', country='uk')""".stripMargin
     checkError(
       exception = parseException(sql),
-      errorClass = "_LEGACY_ERROR_TEMP_0035",
+      errorClass = "OPERATION_NOT_ALLOWED",
       parameters = Map("message" -> "ALTER VIEW ... ADD PARTITION"),
       context = ExpectedContext(
         fragment = sql,

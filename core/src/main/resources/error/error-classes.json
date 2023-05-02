@@ -186,6 +186,11 @@
     ],
     "sqlState" : "42711"
   },
+  "COLUMN_NOT_DEFINED_IN_TABLE" : {
+    "message" : [
+      "<colType> column <colName> is not defined in table <tableName>, defined table columns are: <tableCols>."
+    ]
+  },
   "COLUMN_NOT_FOUND" : {
     "message" : [
       "The column <colName> cannot be found. Verify the spelling and correctness of the column name according to the SQL config <caseSensitiveConfig>."
@@ -544,6 +549,11 @@
       "Division by zero. Use `try_divide` to tolerate divisor being 0 and return NULL instead. If necessary set <config> to \"false\" to bypass this error."
     ],
     "sqlState" : "22012"
+  },
+  "DUPLICATE_CLAUSES" : {
+    "message" : [
+      "Found duplicate clauses: <clauseName>. Please, remove one of them."
+    ]
   },
   "DUPLICATED_MAP_KEY" : {
     "message" : [
@@ -1277,6 +1287,11 @@
       "<operator> can only be performed on inputs with the same number of columns, but the first input has <firstNumColumns> columns and the <invalidOrdinalNum> input has <invalidNumColumns> columns."
     ],
     "sqlState" : "42826"
+  },
+  "OPERATION_NOT_ALLOWED" : {
+    "message" : [
+      "Operation not allowed: <message>."
+    ]
   },
   "ORDER_BY_POS_OUT_OF_RANGE" : {
     "message" : [
@@ -2148,11 +2163,6 @@
       "<operation> is not supported in Hive-style <command><msg>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_0035" : {
-    "message" : [
-      "Operation not allowed: <message>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_0036" : {
     "message" : [
       "Expected `NOSCAN` instead of `<ctx>`."
@@ -2171,11 +2181,6 @@
   "_LEGACY_ERROR_TEMP_0039" : {
     "message" : [
       "Unsupported SQL statement."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_0041" : {
-    "message" : [
-      "Found duplicate clauses: <clauseName>."
     ]
   },
   "_LEGACY_ERROR_TEMP_0043" : {
@@ -3124,11 +3129,6 @@
   "_LEGACY_ERROR_TEMP_1205" : {
     "message" : [
       "Expected only partition pruning predicates: <nonPartitionPruningPredicates>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1206" : {
-    "message" : [
-      "<colType> column <colName> is not defined in table <tableName>, defined table columns are: <tableCols>."
     ]
   },
   "_LEGACY_ERROR_TEMP_1207" : {

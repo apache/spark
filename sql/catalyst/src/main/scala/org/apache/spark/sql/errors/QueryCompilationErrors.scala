@@ -2115,7 +2115,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
   def columnNotDefinedInTableError(
       colType: String, colName: String, tableName: String, tableCols: Seq[String]): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1206",
+      errorClass = "COLUMN_NOT_DEFINED_IN_TABLE",
       messageParameters = Map(
         "colType" -> colType,
         "colName" -> colName,
@@ -2125,7 +2125,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
 
   def invalidLiteralForWindowDurationError(): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1207",
+      errorClass = "COLUMN_NOT_DEFINED_IN_TABLE",
       messageParameters = Map.empty)
   }
 
