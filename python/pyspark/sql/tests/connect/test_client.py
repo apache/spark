@@ -58,6 +58,11 @@ class SparkConnectClientTestCase(unittest.TestCase):
         client = SparkConnectClient("sc://foo/")
         self.assertIsNone(client.token)
 
+    def test_interrupt_all(self):
+        client = SparkConnectClient("sc://foo/;token=bar")
+        client.interrupt_all()
+        self.assertIsNotNone(mock.req, "Interrupt API was not called when expected")
+
 
 class MockService:
     # Simplest mock of the SparkConnectService.
@@ -85,6 +90,12 @@ class MockService:
 
         buf = sink.getvalue()
         resp.arrow_batch.data = buf.to_pybytes()
+        return [resp]
+
+    def Interrupt(self, req: proto.InterruptRequest, metadata):
+        self.req = req
+        resp = proto.InterruptResponse()
+        resp.session_id = self.session_id
         return [resp]
 
 
