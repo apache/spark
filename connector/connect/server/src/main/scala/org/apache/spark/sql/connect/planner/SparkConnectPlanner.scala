@@ -36,10 +36,10 @@ import org.apache.spark.connect.proto.ExecutePlanResponse.SqlCommandResult
 import org.apache.spark.connect.proto.Parse.ParseFormat
 import org.apache.spark.connect.proto.StreamingQueryCommand
 import org.apache.spark.connect.proto.StreamingQueryCommandResult
-import org.apache.spark.connect.proto.StreamingQueryInstance
 import org.apache.spark.connect.proto.StreamingQueryInstanceId
 import org.apache.spark.connect.proto.StreamingQueryManagerCommand
 import org.apache.spark.connect.proto.StreamingQueryManagerCommandResult
+import org.apache.spark.connect.proto.StreamingQueryManagerCommandResult.StreamingQueryInstance
 import org.apache.spark.connect.proto.WriteStreamOperationStart
 import org.apache.spark.connect.proto.WriteStreamOperationStart.TriggerCase
 import org.apache.spark.ml.{functions => MLFunctions}
@@ -2459,7 +2459,7 @@ class SparkConnectPlanner(val session: SparkSession) {
                     .setId(query.id.toString)
                     .setRunId(query.runId.toString)
                     .build())
-                .setName(query.name)
+                .setName(SparkConnectService.convertNullString(query.name))
                 .build())
             .toIterable
             .asJava)
@@ -2473,7 +2473,7 @@ class SparkConnectPlanner(val session: SparkSession) {
               .setId(query.id.toString)
               .setRunId(query.runId.toString)
               .build())
-          .setName(query.name)
+          .setName(SparkConnectService.convertNullString(query.name))
 
       case StreamingQueryManagerCommand.CommandCase.AWAIT_ANY_TERMINATION =>
         if (command.getAwaitAnyTermination.hasTimeoutMs) {

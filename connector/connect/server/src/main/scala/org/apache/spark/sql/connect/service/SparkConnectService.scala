@@ -369,10 +369,16 @@ object SparkConnectService {
 
   def extractErrorMessage(st: Throwable): String = {
     val message = StringUtils.abbreviate(st.getMessage, 2048)
-    if (message != null) {
-      message
+    convertNullString(message)
+  }
+
+  def convertNullString(str: String): String = {
+    if (str != null) {
+      str
     } else {
       ""
     }
   }
 }
+
+

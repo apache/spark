@@ -239,13 +239,6 @@ message StreamingQueryInstanceId {
   string run_id = 2;
 }
 
-message StreamingQueryInstance {
-  // (Required) The id and runId of this query.
-  StreamingQueryInstanceId id = 1;
-  // (Optional) The name of this query.
-  optional string name = 2;
-}
-
 // Commands for a streaming query.
 message StreamingQueryCommand {
 
@@ -361,6 +354,13 @@ message StreamingQueryManagerCommandResult {
 
   message ActiveResult {
     repeated StreamingQueryInstance active_queries = 1;
+  }
+
+  message StreamingQueryInstance {
+    // (Required) The id and runId of this query.
+    StreamingQueryInstanceId id = 1;
+    // (Optional) The name of this query.
+    string name = 2;
   }
 
   message AwaitAnyTerminationResult {
