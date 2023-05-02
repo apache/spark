@@ -21,16 +21,27 @@ user experience across all languages. Please follow the below guidelines:
 
 Python-specific development guidelines are located in [python/docs/source/development/testing.rst](https://github.com/apache/spark/blob/master/python/docs/source/development/testing.rst) that is published at [Development tab](https://spark.apache.org/docs/latest/api/python/development/index.html) in PySpark documentation.
 
-When adding new proto messages, the python proto code need to be regenerated. To do it, use `dev/connect-gen-protos.sh` script.
-It depends on
-```
-brew install bufbuild/buf/buf
-```
-and python dependencies from
+To generate the Python client code from the proto files,
+
+First, make sure to have a Python environment with the installed dependencies.
+Specifically, install `black` and dependencies from the "Spark Connect python proto generation plugin (optional)" section.
+
+
 ```
 pip install -r dev/requirements.txt
 ```
-(specifically, install `black` and dependencies from "Spark Connect python proto generation plugin (optional)" section)
+
+Install [buf](https://github.com/bufbuild/buf)
+
+```
+brew install bufbuild/buf/buf
+```
+
+Generate the Python files by running:
+
+```
+dev/connect-gen-protos.sh
+```
 
 ### Build with user-defined `protoc` and `protoc-gen-grpc-java`
 
