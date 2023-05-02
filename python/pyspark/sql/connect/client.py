@@ -76,6 +76,7 @@ from pyspark.sql.pandas.types import _check_series_localize_timestamps, _convert
 from pyspark.sql.types import DataType, MapType, StructType, TimestampType
 from pyspark.rdd import PythonEvalType
 from pyspark.storagelevel import StorageLevel
+from pyspark.errors import PySparkValueError, PySparkRuntimeError
 
 
 if TYPE_CHECKING:
@@ -169,15 +170,24 @@ class ChannelBuilder:
         """
         # Explicitly check the scheme of the URL.
         if url[:5] != "sc://":
-            raise AttributeError("URL scheme must be set to `sc`.")
+            raise PySparkValueError(
+                error_class="INVALID_CONNECT_URL",
+                message_parameters={
+                    "detail": "URL scheme must be set to `sc`.",
+                },
+            )
         # Rewrite the URL to use http as the scheme so that we can leverage
         # Python's built-in parser.
         tmp_url = "http" + url[2:]
         self.url = urllib.parse.urlparse(tmp_url)
         self.params: Dict[str, str] = {}
         if len(self.url.path) > 0 and self.url.path != "/":
-            raise AttributeError(
-                f"Path component for connection URI must be empty: {self.url.path}"
+            raise PySparkValueError(
+                error_class="INVALID_CONNECT_URL",
+                message_parameters={
+                    "detail": f"Path component for connection URI `{self.url.path}` "
+                    f"must be empty.",
+                },
             )
         self._extract_attributes()
 
@@ -197,7 +207,12 @@ class ChannelBuilder:
             for p in parts:
                 kv = p.split("=")
                 if len(kv) != 2:
-                    raise AttributeError(f"Parameter '{p}' is not a valid parameter key-value pair")
+                    raise PySparkValueError(
+                        error_class="INVALID_CONNECT_URL",
+                        message_parameters={
+                            "detail": f"Parameter '{p}' is not a valid parameter key-value pair.",
+                        },
+                    )
                 self.params[kv[0]] = urllib.parse.unquote(kv[1])
 
         netloc = self.url.netloc.split(":")
@@ -208,8 +223,12 @@ class ChannelBuilder:
             self.host = netloc[0]
             self.port = int(netloc[1])
         else:
-            raise AttributeError(
-                f"Target destination {self.url.netloc} does not match '<host>:<port>' pattern"
+            raise PySparkValueError(
+                error_class="INVALID_CONNECT_URL",
+                message_parameters={
+                    "detail": f"Target destination {self.url.netloc} does not match "
+                    f"'<host>:<port>' pattern.",
+                },
             )
 
     def metadata(self) -> Iterable[Tuple[str, str]]:
@@ -820,11 +839,11 @@ class SparkConnectClient(object):
             req.explain.plan.CopyFrom(cast(pb2.Plan, kwargs.get("plan")))
             explain_mode = kwargs.get("explain_mode")
             if explain_mode not in ["simple", "extended", "codegen", "cost", "formatted"]:
-                raise ValueError(
-                    f"""
-                    Unknown explain mode: {explain_mode}. Accepted "
-                    "explain modes are 'simple', 'extended', 'codegen', 'cost', 'formatted'."
-                    """
+                raise PySparkValueError(
+                    error_class="UNKNOWN_EXPLAIN_MODE",
+                    message_parameters={
+                        "explain_mode": str(explain_mode),
+                    },
                 )
             if explain_mode == "simple":
                 req.explain.explain_mode = (
@@ -878,7 +897,12 @@ class SparkConnectClient(object):
         elif method == "get_storage_level":
             req.get_storage_level.relation.CopyFrom(cast(pb2.Relation, kwargs.get("relation")))
         else:
-            raise ValueError(f"Unknown Analyze method: {method}")
+            raise PySparkValueError(
+                error_class="UNSUPPORTED_OPERATION",
+                message_parameters={
+                    "operation": method,
+                },
+            )
 
         try:
             for attempt in Retrying(
@@ -1018,7 +1042,12 @@ class SparkConnectClient(object):
             elif isinstance(response, dict):
                 properties.update(**response)
             else:
-                raise ValueError(f"Unknown response: {response}")
+                raise PySparkValueError(
+                    error_class="UNKNOWN_RESPONSE",
+                    message_parameters={
+                        "response": response,
+                    },
+                )
 
         if len(batches) > 0:
             table = pa.Table.from_batches(batches=batches)
@@ -1235,7 +1264,10 @@ class Retrying:
                 if e is not None:
                     raise e
                 else:
-                    raise ValueError("Retries exceeded but no exception caught.")
+                    raise PySparkRuntimeError(
+                        error_class="EXCEED_RETRY",
+                        message_parameters={},
+                    )
 
             # Do backoff
             if retry_state.count() > 0:

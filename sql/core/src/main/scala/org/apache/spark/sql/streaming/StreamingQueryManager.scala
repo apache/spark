@@ -408,7 +408,7 @@ class StreamingQueryManager private[sql] (
       query.streamingQuery.start()
     } catch {
       case e: Throwable =>
-//        unregisterTerminatedStream(query)
+        unregisterTerminatedStream(query)
         throw e
     }
     query
@@ -416,7 +416,7 @@ class StreamingQueryManager private[sql] (
 
   /** Notify (by the StreamingQuery) that the query has been terminated */
   private[sql] def notifyQueryTermination(terminatedQuery: StreamingQuery): Unit = {
-//    unregisterTerminatedStream(terminatedQuery)
+    unregisterTerminatedStream(terminatedQuery)
     awaitTerminationLock.synchronized {
       if (lastTerminatedQueryException == null || terminatedQuery.exception.nonEmpty) {
         lastTerminatedQueryException = terminatedQuery.exception

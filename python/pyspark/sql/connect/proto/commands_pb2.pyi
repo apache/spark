@@ -863,6 +863,34 @@ class StreamingQueryInstanceId(google.protobuf.message.Message):
 
 global___StreamingQueryInstanceId = StreamingQueryInstanceId
 
+class StreamingQueryInstance(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    ID_FIELD_NUMBER: builtins.int
+    NAME_FIELD_NUMBER: builtins.int
+    @property
+    def id(self) -> global___StreamingQueryInstanceId:
+        """(Required) The id and runId of this query."""
+    name: builtins.str
+    """(Optional) The name of this query."""
+    def __init__(
+        self,
+        *,
+        id: global___StreamingQueryInstanceId | None = ...,
+        name: builtins.str | None = ...,
+    ) -> None: ...
+    def HasField(
+        self, field_name: typing_extensions.Literal["_name", b"_name", "id", b"id", "name", b"name"]
+    ) -> builtins.bool: ...
+    def ClearField(
+        self, field_name: typing_extensions.Literal["_name", b"_name", "id", b"id", "name", b"name"]
+    ) -> None: ...
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["_name", b"_name"]
+    ) -> typing_extensions.Literal["name"] | None: ...
+
+global___StreamingQueryInstance = StreamingQueryInstance
+
 class StreamingQueryCommand(google.protobuf.message.Message):
     """Commands for a streaming query."""
 
@@ -1357,47 +1385,16 @@ class StreamingQueryManagerCommandResult(google.protobuf.message.Message):
         def active_queries(
             self,
         ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
-            global___StreamingQueryManagerCommandResult.StreamingQueryInstance
+            global___StreamingQueryInstance
         ]: ...
         def __init__(
             self,
             *,
-            active_queries: collections.abc.Iterable[
-                global___StreamingQueryManagerCommandResult.StreamingQueryInstance
-            ]
-            | None = ...,
+            active_queries: collections.abc.Iterable[global___StreamingQueryInstance] | None = ...,
         ) -> None: ...
         def ClearField(
             self, field_name: typing_extensions.Literal["active_queries", b"active_queries"]
         ) -> None: ...
-
-    class StreamingQueryInstance(google.protobuf.message.Message):
-        DESCRIPTOR: google.protobuf.descriptor.Descriptor
-
-        ID_FIELD_NUMBER: builtins.int
-        NAME_FIELD_NUMBER: builtins.int
-        @property
-        def id(self) -> global___StreamingQueryInstanceId:
-            """(Required) The id and runId of this query."""
-        name: builtins.str
-        """(Optional) The name of this query."""
-        def __init__(
-            self,
-            *,
-            id: global___StreamingQueryInstanceId | None = ...,
-            name: builtins.str | None = ...,
-        ) -> None: ...
-        def HasField(
-            self,
-            field_name: typing_extensions.Literal["_name", b"_name", "id", b"id", "name", b"name"],
-        ) -> builtins.bool: ...
-        def ClearField(
-            self,
-            field_name: typing_extensions.Literal["_name", b"_name", "id", b"id", "name", b"name"],
-        ) -> None: ...
-        def WhichOneof(
-            self, oneof_group: typing_extensions.Literal["_name", b"_name"]
-        ) -> typing_extensions.Literal["name"] | None: ...
 
     class AwaitAnyTerminationResult(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
@@ -1420,7 +1417,7 @@ class StreamingQueryManagerCommandResult(google.protobuf.message.Message):
     @property
     def active(self) -> global___StreamingQueryManagerCommandResult.ActiveResult: ...
     @property
-    def query(self) -> global___StreamingQueryManagerCommandResult.StreamingQueryInstance: ...
+    def query(self) -> global___StreamingQueryInstance: ...
     @property
     def await_any_termination(
         self,
@@ -1430,7 +1427,7 @@ class StreamingQueryManagerCommandResult(google.protobuf.message.Message):
         self,
         *,
         active: global___StreamingQueryManagerCommandResult.ActiveResult | None = ...,
-        query: global___StreamingQueryManagerCommandResult.StreamingQueryInstance | None = ...,
+        query: global___StreamingQueryInstance | None = ...,
         await_any_termination: global___StreamingQueryManagerCommandResult.AwaitAnyTerminationResult
         | None = ...,
         reset_terminated: builtins.bool = ...,
