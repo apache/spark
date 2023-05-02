@@ -190,6 +190,7 @@ private[sql] class SparkConnectClient(
       .setUserContext(userContext)
       .setSessionId(sessionId)
       .setClientType(userAgent)
+      .setInterruptType(proto.InterruptRequest.InterruptType.INTERRUPT_TYPE_ALL)
       .build()
     stub.interrupt(request)
   }

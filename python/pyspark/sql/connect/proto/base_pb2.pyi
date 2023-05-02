@@ -2140,9 +2140,30 @@ global___ArtifactStatusesResponse = ArtifactStatusesResponse
 class InterruptRequest(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
+    class _InterruptType:
+        ValueType = typing.NewType("ValueType", builtins.int)
+        V: typing_extensions.TypeAlias = ValueType
+
+    class _InterruptTypeEnumTypeWrapper(
+        google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[
+            InterruptRequest._InterruptType.ValueType
+        ],
+        builtins.type,
+    ):  # noqa: F821
+        DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
+        INTERRUPT_TYPE_UNSPECIFIED: InterruptRequest._InterruptType.ValueType  # 0
+        INTERRUPT_TYPE_ALL: InterruptRequest._InterruptType.ValueType  # 1
+        """Interrupt all running executions within session with provided session_id."""
+
+    class InterruptType(_InterruptType, metaclass=_InterruptTypeEnumTypeWrapper): ...
+    INTERRUPT_TYPE_UNSPECIFIED: InterruptRequest.InterruptType.ValueType  # 0
+    INTERRUPT_TYPE_ALL: InterruptRequest.InterruptType.ValueType  # 1
+    """Interrupt all running executions within session with provided session_id."""
+
     SESSION_ID_FIELD_NUMBER: builtins.int
     USER_CONTEXT_FIELD_NUMBER: builtins.int
     CLIENT_TYPE_FIELD_NUMBER: builtins.int
+    INTERRUPT_TYPE_FIELD_NUMBER: builtins.int
     session_id: builtins.str
     """(Required)
 
@@ -2158,12 +2179,15 @@ class InterruptRequest(google.protobuf.message.Message):
     can be used for language or version specific information and is only intended for
     logging purposes and will not be interpreted by the server.
     """
+    interrupt_type: global___InterruptRequest.InterruptType.ValueType
+    """(Required) The type of interrupt to execute."""
     def __init__(
         self,
         *,
         session_id: builtins.str = ...,
         user_context: global___UserContext | None = ...,
         client_type: builtins.str | None = ...,
+        interrupt_type: global___InterruptRequest.InterruptType.ValueType = ...,
     ) -> None: ...
     def HasField(
         self,
@@ -2183,6 +2207,8 @@ class InterruptRequest(google.protobuf.message.Message):
             b"_client_type",
             "client_type",
             b"client_type",
+            "interrupt_type",
+            b"interrupt_type",
             "session_id",
             b"session_id",
             "user_context",

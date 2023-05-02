@@ -1091,10 +1091,11 @@ class SparkConnectClient(object):
         except Exception as error:
             self._handle_error(error)
 
-    def _interrupt_request(self) -> pb2.InterruptRequest:
+    def _interrupt_request(self, interrupt_type) -> pb2.InterruptRequest:
         req = pb2.InterruptRequest()
         req.session_id = self._session_id
         req.client_type = self._builder.userAgent
+        req.interrupt_type = interrupt_type
         if self._user_id:
             req.user_context.user_id = self._user_id
         return req
@@ -1107,7 +1108,7 @@ class SparkConnectClient(object):
         -------
         None
         """
-        req = self._interrupt_request(self)
+        req = self._interrupt_request(self, pb2.InterruptRequest.InterruptType.INTERRUPT_TYPE_ALL)
         try:
             for attempt in Retrying(
                 can_retry=SparkConnectClient.retry_exception, **self._retry_policy

@@ -30,7 +30,12 @@ class SparkConnectInterruptHandler(responseObserver: StreamObserver[proto.Interr
       SparkConnectService
         .getOrCreateIsolatedSession(v.getUserContext.getUserId, v.getSessionId)
 
-    sessionHolder.interruptAll()
+    v.getInterruptType match {
+      case proto.InterruptRequest.InterruptType.INTERRUPT_TYPE_ALL =>
+        sessionHolder.interruptAll()
+      case other =>
+        throw new UnsupportedOperationException(s"Unknown InterruptType $other!")
+    }
 
     val builder = proto.InterruptResponse.newBuilder().setSessionId(v.getSessionId)
 

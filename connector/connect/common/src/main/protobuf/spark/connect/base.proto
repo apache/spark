@@ -594,6 +594,16 @@ message InterruptRequest {
   // can be used for language or version specific information and is only intended for
   // logging purposes and will not be interpreted by the server.
   optional string client_type = 3;
+
+  // (Required) The type of interrupt to execute.
+  InterruptType interrupt_type = 4;
+
+  enum InterruptType {
+    INTERRUPT_TYPE_UNSPECIFIED = 0;
+
+    // Interrupt all running executions within session with provided session_id.
+    INTERRUPT_TYPE_ALL = 1;
+  }
 }
 
 message InterruptResponse {
