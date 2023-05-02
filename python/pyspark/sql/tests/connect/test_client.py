@@ -98,7 +98,7 @@ class MockService:
     def Interrupt(self, req: proto.InterruptRequest, metadata):
         self.req = req
         resp = proto.InterruptResponse()
-        resp.session_id = self.session_id
+        resp.session_id = self._session_id
         return [resp]
 
 

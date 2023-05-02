@@ -1094,7 +1094,9 @@ class SparkConnectClient(object):
         except Exception as error:
             self._handle_error(error)
 
-    def _interrupt_request(self, interrupt_type) -> pb2.InterruptRequest:
+    def _interrupt_request(
+        self, interrupt_type: pb2.InterruptRequest.InterruptType
+    ) -> pb2.InterruptRequest:
         req = pb2.InterruptRequest()
         req.session_id = self._session_id
         req.client_type = self._builder.userAgent
