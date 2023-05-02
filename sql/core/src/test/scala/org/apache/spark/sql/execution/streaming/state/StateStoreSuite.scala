@@ -1105,11 +1105,16 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
       put(store, "3", 33, 300)
       val itr3 = store.iterator()  // itr3 is created after all writes.
 
-      val expected = Set(("1", 11) -> 101, ("2", 22) -> 200, ("3", 33) -> 300)  // The final state.
+      val intermediateState = Set(("1", 11) -> 100, ("2", 22) -> 200) // The intermediate state.
+      val finalState = Set(("1", 11) -> 101, ("2", 22) -> 200, ("3", 33) -> 300) // The final state.
       // Itr1 does not see any updates - original state of the store (SPARK-38320)
       assert(rowPairsToDataSet(itr1) === Set.empty[Set[((String, Int), Int)]])
-      assert(rowPairsToDataSet(itr2) === expected)
-      assert(rowPairsToDataSet(itr3) === expected)
+      if (store.getClass.getName contains ROCKSDB_STATE_STORE) {
+        assert(rowPairsToDataSet(itr2) === intermediateState)
+      } else {
+        assert(rowPairsToDataSet(itr2) === finalState)
+      }
+      assert(rowPairsToDataSet(itr3) === finalState)
 
       version = store.commit()
     }
@@ -1127,6 +1132,9 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
       put(store, "5", 55, 500)
       val itr3 = store.iterator()  // itr3 is created after all writes.
 
+      // The intermediate state
+      val intermediate = Set(
+        ("1", 11) -> 101, ("2", 22) -> 200, ("3", 33) -> 301, ("4", 44) -> 400)
       // The final state.
       val expected = Set(
         ("1", 11) -> 101, ("2", 22) -> 200, ("3", 33) -> 301, ("4", 44) -> 401, ("5", 55) -> 500)
@@ -1137,7 +1145,13 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
       } else {
         assert(rowPairsToDataSet(itr1) === expected)
       }
-      assert(rowPairsToDataSet(itr2) === expected)
+
+      if (store.getClass.getName contains ROCKSDB_STATE_STORE) {
+        assert(rowPairsToDataSet(itr2) === intermediate)
+      } else {
+        assert(rowPairsToDataSet(itr2) === expected)
+      }
+
       assert(rowPairsToDataSet(itr3) === expected)
 
       version = store.commit()
