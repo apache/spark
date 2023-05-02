@@ -45,6 +45,7 @@ import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.scheduler.SparkListener
+import org.apache.spark.util.Utils.getQuantilesValue
 import org.apache.spark.util.io.ChunkedByteBufferInputStream
 
 class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
@@ -565,6 +566,16 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
       child3.setLastModified(System.currentTimeMillis - (1000 * 30))
       assert(!Utils.doesDirectoryContainAnyNewFiles(parent, 5))
     }
+  }
+
+  test("getQuantilesValue") {
+    val values = IndexedSeq(1.0, 2.0, 3.0, 4.0)
+    val quantiles = Array(0.0, 0.25, 0.5, 0.75, 1.0)
+    assert(getQuantilesValue(values, quantiles) == IndexedSeq(1.0, 2.0, 3.0, 4.0, 4.0))
+
+    // When values are empty
+    val emptyValue = IndexedSeq()
+    assert(getQuantilesValue(emptyValue, quantiles) == IndexedSeq(0.0, 0.0, 0.0, 0.0, 0.0))
   }
 
   test("resolveURI") {
