@@ -532,7 +532,7 @@ class SparkConnectClient(object):
 
     def __init__(
         self,
-        connectionString: str,
+        connection: Union[str, ChannelBuilder],
         userId: Optional[str] = None,
         channelOptions: Optional[List[Tuple[str, Any]]] = None,
         retryPolicy: Optional[Dict[str, Any]] = None,
@@ -542,9 +542,10 @@ class SparkConnectClient(object):
 
         Parameters
         ----------
-        connectionString: Optional[str]
+        connection: Union[str,ChannelBuilder]
             Connection string that is used to extract the connection parameters and configure
-            the GRPC connection. Defaults to `sc://localhost`.
+            the GRPC connection. Or instance of ChannelBuilder that creates GRPC connection.
+            Defaults to `sc://localhost`.
         userId : Optional[str]
             Optional unique user ID that is used to differentiate multiple users and
             isolate their Spark Sessions. If the `user_id` is not set, will default to
@@ -552,7 +553,11 @@ class SparkConnectClient(object):
             takes precedence.
         """
         # Parse the connection string.
-        self._builder = ChannelBuilder(connectionString, channelOptions)
+        self._builder = (
+            connection
+            if isinstance(connection, ChannelBuilder)
+            else ChannelBuilder(connection, channelOptions)
+        )
         self._user_id = None
         self._retry_policy = {
             "max_retries": 15,
