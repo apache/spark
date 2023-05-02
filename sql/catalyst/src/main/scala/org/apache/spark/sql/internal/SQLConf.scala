@@ -4229,6 +4229,15 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val LOCAL_RELATION_CACHE_THRESHOLD =
+    buildConf("spark.sql.session.localRelationCacheThreshold")
+      .doc("The threshold for the size in bytes of local relations to be cached at " +
+        "the driver side after serialization.")
+      .version("3.5.0")
+      .intConf
+      .checkValue(_ >= 0, "The threshold of cached local relations must not be negative")
+      .createWithDefault(64 * 1024 * 1024)
+
   /**
    * Holds information about keys that have been deprecated.
    *
