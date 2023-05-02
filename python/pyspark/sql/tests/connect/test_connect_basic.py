@@ -2073,9 +2073,13 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         self.assertTrue("Optimized Logical Plan" in plan_str)
         self.assertTrue("Physical Plan" in plan_str)
 
-        with self.assertRaises(ValueError) as context:
+        with self.assertRaises(PySparkValueError) as pe:
             self.connect.sql("SELECT 1")._explain_string(mode="unknown")
-        self.assertTrue("unknown" in str(context.exception))
+        self.check_error(
+            exception=pe.exception,
+            error_class="UNKNOWN_EXPLAIN_MODE",
+            message_parameters={"explain_mode": "unknown"},
+        )
 
     def test_simple_datasource_read(self) -> None:
         writeDf = self.df_text
@@ -3365,7 +3369,7 @@ class ChannelBuilderTests(unittest.TestCase):
             "sc://host/;parm1;param2",
         ]
         for i in invalid:
-            self.assertRaises(AttributeError, ChannelBuilder, i)
+            self.assertRaises(PySparkValueError, ChannelBuilder, i)
 
     def test_sensible_defaults(self):
         chan = ChannelBuilder("sc://host")
