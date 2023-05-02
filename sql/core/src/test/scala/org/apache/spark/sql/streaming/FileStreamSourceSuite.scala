@@ -481,7 +481,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
         val filtered = textStream.filter($"value" contains "keep")
 
         testStream(filtered)(
-          AddTextFileData("drop1\nkeep2\nkeep3", src, tmp, "text" + special_str + "text"),
+          AddTextFileData("drop1\nkeep2\nkeep3", src, tmp, s"text${special_str}text"),
           CheckAnswer("keep2", "keep3")
         )
       }
@@ -495,7 +495,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
     Seq(" ", "[", "[123]").foreach{ special_str =>
       withTable(testTableName) {
         withTempDirs { case (src, checkpoint) =>
-          val output = new File(src, "text" + special_str + "text")
+          val output = new File(src, s"text${special_str}text")
           val inputData = MemoryStream[String]
           val ds = inputData.toDS()
 
