@@ -144,6 +144,11 @@ ERROR_CLASSES_JSON = """
       "Argument `<arg_name>`(type: <arg_type>) should only contain a type in [<allowed_types>], got <return_type>"
     ]
   },
+  "EXCEED_RETRY" : {
+    "message" : [
+      "Retries exceeded but no exception caught."
+    ]
+  },
   "HIGHER_ORDER_FUNCTION_SHOULD_RETURN_COLUMN" : {
     "message" : [
       "Function `<func_name>` should return Column, got <return_type>."
@@ -163,6 +168,11 @@ ERROR_CLASSES_JSON = """
   "INVALID_CALL_ON_UNRESOLVED_OBJECT": {
     "message": [
       "Invalid call to `<func_name>` on unresolved object."
+    ]
+  },
+  "INVALID_CONNECT_URL" : {
+    "message" : [
+      "Invalid URL for Spark Connect: <detail>"
     ]
   },
   "INVALID_ITEM_FOR_CONTAINER": {
@@ -534,6 +544,16 @@ ERROR_CLASSES_JSON = """
   "UNEXPECTED_RESPONSE_FROM_SERVER" : {
     "message" : [
       "Unexpected response from iterator server."
+    ]
+  },
+  "UNKNOWN_EXPLAIN_MODE" : {
+    "message" : [
+      "Unknown explain mode: '<explain_mode>'. Accepted explain modes are 'simple', 'extended', 'codegen', 'cost', 'formatted'."
+    ]
+  },
+  "UNKNOWN_RESPONSE" : {
+    "message" : [
+      "Unknown response: <response>."
     ]
   },
   "UNSUPPORTED_DATA_TYPE" : {
