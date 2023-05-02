@@ -360,6 +360,11 @@ ERROR_CLASSES_JSON = """
       "Argument `<arg_name>` should be a float, int, list or str, got <arg_type>."
     ]
   },
+  "NOT_IMPLEMENTED" : {
+    "message" : [
+      "<feature> is not implemented."
+    ]
+  },
   "NOT_INT" : {
     "message" : [
       "Argument `<arg_name>` should be an int, got <arg_type>."
@@ -546,6 +551,11 @@ ERROR_CLASSES_JSON = """
       "<data_type> is only supported with pyarrow 2.0.0 and above."
     ]
   },
+  "UNSUPPORTED_JOIN_TYPE" : {
+    "message" : [
+      "Unsupported join type: <join_type>. Supported join types include: \\"inner\\", \\"outer\\", \\"full\\", \\"fullouter\\", \\"full_outer\\", \\"leftouter\\", \\"left\\", \\"left_outer\\", \\"rightouter\\", \\"right\\", \\"right_outer\\", \\"leftsemi\\", \\"left_semi\\", \\"semi\\", \\"leftanti\\", \\"left_anti\\", \\"anti\\", \\"cross\\"."
+    ]
+  },
   "UNSUPPORTED_LITERAL" : {
     "message" : [
       "Unsupported Literal '<literal>'."
@@ -564,6 +574,16 @@ ERROR_CLASSES_JSON = """
   "UNSUPPORTED_PARAM_TYPE_FOR_HIGHER_ORDER_FUNCTION" : {
     "message" : [
       "Function `<func_name>` should use only POSITIONAL or POSITIONAL OR KEYWORD arguments."
+    ]
+  },
+  "UNSUPPORTED_SIGNATURE" : {
+    "message" : [
+      "Unsupported signature: <signature>."
+    ]
+  },
+  "UNSUPPORTED_WITH_ARROW_OPTIMIZATION" : {
+    "message" : [
+      "<feature> is not supported with Arrow optimization enabled in Python UDFs. Disable 'spark.sql.execution.pythonUDF.arrow.enabled' to workaround.."
     ]
   },
   "VALUE_NOT_ACCESSIBLE": {
