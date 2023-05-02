@@ -19,6 +19,9 @@ package org.apache.spark.sql.connect.service
 
 import org.apache.spark.connect.proto
 
+/**
+ * Object used to hold the Spark Connect execution state.
+ */
 case class ExecutePlanHolder(
     operationId: String,
     sessionHolder: SessionHolder,
