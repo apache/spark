@@ -1391,4 +1391,11 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     assert(expr.sql == cast.sql)
     assert(expr.toString == cast.toString)
   }
+
+  test("SPARK-43336: Casting between Timestamp and TimestampNTZ requires timezone") {
+    val timestampLiteral = Literal.create(1L, TimestampType)
+    val timestampNTZLiteral = Literal.create(1L, TimestampNTZType)
+    assert(!Cast(timestampLiteral, TimestampNTZType).resolved)
+    assert(!Cast(timestampNTZLiteral, TimestampType).resolved)
+  }
 }
