@@ -119,12 +119,23 @@ class SparkSession private[sql] (
 
   private def createDataset[T](encoder: AgnosticEncoder[T], data: Iterator[T]): Dataset[T] = {
     newDataset(encoder) { builder =>
-      val localRelationBuilder = builder.getLocalRelationBuilder
-        .setSchema(encoder.schema.json)
       if (data.nonEmpty) {
         val timeZoneId = conf.get("spark.sql.session.timeZone")
-        val arrowData = ConvertToArrow(encoder, data, timeZoneId, allocator)
-        localRelationBuilder.setData(arrowData)
+        val (arrowData, arrowDataSize) = ConvertToArrow(encoder, data, timeZoneId, allocator)
+        if (arrowDataSize <= conf.get("spark.sql.session.localRelationCacheThreshold").toInt) {
+          builder.getLocalRelationBuilder
+            .setSchema(encoder.schema.json)
+            .setData(arrowData)
+        } else {
+          val hash = client.cacheLocalRelation(arrowDataSize, arrowData, encoder.schema.json)
+          builder.getCachedLocalRelationBuilder
+            .setUserId(client.userId)
+            .setSessionId(client.sessionId)
+            .setHash(hash)
+        }
+      } else {
+        builder.getLocalRelationBuilder
+          .setSchema(encoder.schema.json)
       }
     }
   }
