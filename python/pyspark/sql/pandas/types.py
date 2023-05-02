@@ -19,7 +19,9 @@
 Type-specific codes between pandas and PyArrow. Also contains some utils to correct
 pandas instances during the type conversion.
 """
-from typing import Optional, TYPE_CHECKING
+from typing import Any, Optional, TYPE_CHECKING
+
+import numpy as np
 
 from pyspark.sql.types import (
     cast,
@@ -451,7 +453,7 @@ def _convert_map_items_to_dict(s: "PandasSeriesLike") -> "PandasSeriesLike":
     :param s: pandas.Series of lists of (key, value) pairs
     :return: pandas.Series of dictionaries
     """
-    return cast("PandasSeriesLike", s.apply(lambda m: None if m is None else {k: v for k, v in m}))
+    return cast("PandasSeriesLike", s.apply(recursive_convert_inputs))
 
 
 def _convert_dict_to_map_items(s: "PandasSeriesLike") -> "PandasSeriesLike":
@@ -462,3 +464,19 @@ def _convert_dict_to_map_items(s: "PandasSeriesLike") -> "PandasSeriesLike":
     :return: pandas.Series of lists of (key, value) pairs
     """
     return cast("PandasSeriesLike", s.apply(lambda d: list(d.items()) if d is not None else None))
+
+
+def recursive_convert_inputs(v: Any) -> Any:
+    # Recursively convert input 'v':
+    # - from ndarray to list: Arrow converts a ArrayType value to a ndarray whereas a list is
+    # expected
+    # - from list to dict: Arrow converts a MapType value to a list whereas a dict is expected
+    if isinstance(v, np.ndarray):
+        return [recursive_convert_inputs(element) for element in v]
+    elif isinstance(v, list):
+        return {
+            recursive_convert_inputs(dict_key): recursive_convert_inputs(dict_value)
+            for dict_key, dict_value in v
+        }
+    else:
+        return v

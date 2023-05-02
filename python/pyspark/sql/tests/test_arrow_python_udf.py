@@ -94,9 +94,6 @@ class PythonUDFArrowTestsMixin(BaseUDFTestsMixin):
             .first()
         )
 
-        # The input is a NumPy array when the Arrow optimization is on.
-        self.assertEquals(row_true[0], row_none[0])  # "[1 2 3]"
-
         # useArrow=False
         row_false = (
             self.spark.range(1)
@@ -109,6 +106,8 @@ class PythonUDFArrowTestsMixin(BaseUDFTestsMixin):
             .first()
         )
         self.assertEquals(row_false[0], "[1, 2, 3]")
+        self.assertEquals(row_true[0], "[1, 2, 3]")
+        self.assertEquals(row_none[0], "[1, 2, 3]")
 
 
 class PythonUDFArrowTests(PythonUDFArrowTestsMixin, ReusedSQLTestCase):

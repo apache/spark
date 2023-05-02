@@ -41,7 +41,7 @@ from pyspark.sql.types import (
     _parse_datatype_string,
 )
 from pyspark.sql.utils import get_active_spark_context
-from pyspark.sql.pandas.types import to_arrow_type
+from pyspark.sql.pandas.types import recursive_convert_inputs, to_arrow_type
 from pyspark.sql.pandas.utils import require_minimum_pandas_version, require_minimum_pyarrow_version
 from pyspark.errors import PySparkTypeError, PySparkNotImplementedError
 
@@ -136,13 +136,11 @@ def _create_py_udf(
         is_func_with_args = len(getfullargspec(f).args) > 0
     except TypeError:
         is_func_with_args = False
-    is_output_atomic_type = (
-        not isinstance(return_type, StructType)
-        and not isinstance(return_type, MapType)
-        and not isinstance(return_type, ArrayType)
-    )
+
+    output_non_struct_type = not isinstance(return_type, StructType)
+
     if is_arrow_enabled:
-        if is_output_atomic_type and is_func_with_args:
+        if output_non_struct_type and is_func_with_args:
             return _create_arrow_py_udf(regular_udf)
         else:
             warnings.warn(
@@ -182,6 +180,7 @@ def _create_arrow_py_udf(regular_udf):  # type: ignore
                 error_class="UNSUPPORTED_WITH_ARROW_OPTIMIZATION",
                 message_parameters={"feature": "Struct input type"},
             )
+        args = [arg.map(recursive_convert_inputs) for arg in args]
         return pd.Series(result_func(f(*a)) for a in zip(*args))
 
     # Regular UDFs can take callable instances too.
