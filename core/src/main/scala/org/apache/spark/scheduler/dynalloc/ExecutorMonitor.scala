@@ -54,6 +54,7 @@ private[spark] class ExecutorMonitor(
     conf.get(SHUFFLE_SERVICE_FETCH_RDD_ENABLED)
   private val shuffleTrackingEnabled = !conf.get(SHUFFLE_SERVICE_ENABLED) &&
     conf.get(DYN_ALLOCATION_SHUFFLE_TRACKING_ENABLED)
+  private val decommissionMaxRatio = conf.get(DECOMMISSION_MAX_RATIO)
 
   private val executors = new ConcurrentHashMap[String, Tracker]()
   private val execResourceProfileCount = new ConcurrentHashMap[Int, Int]()
@@ -135,6 +136,17 @@ private[spark] class ExecutorMonitor(
       updateNextTimeout(newNextTimeout)
     }
     timedOutExecs.sortBy(_._1)
+  }
+
+  /** Return executors can be removed constrained by [[decommissionMaxRatio]] */
+  def executorsCanBeRemoved(): Seq[(String, Int)] = {
+    if (hasStorageDecommission()) {
+      val maxExecutorsCanBeRemoved = math.ceil(executorCount * decommissionMaxRatio
+        - decommissioningCount).toInt
+      timedOutExecutors().slice(0, maxExecutorsCanBeRemoved)
+    } else {
+      timedOutExecutors()
+    }
   }
 
   /**
@@ -528,6 +540,13 @@ private[spark] class ExecutorMonitor(
     executors.asScala.foreach { case (_, exec) =>
       exec.removeShuffle(id)
     }
+  }
+
+  // Whether storage decommission shuffle or rdd enabled
+  private def hasStorageDecommission(): Boolean = {
+    conf.get(DECOMMISSION_ENABLED) && conf.get(STORAGE_DECOMMISSION_ENABLED) &&
+      (conf.get(STORAGE_DECOMMISSION_SHUFFLE_BLOCKS_ENABLED) ||
+        conf.get(STORAGE_DECOMMISSION_RDD_BLOCKS_ENABLED))
   }
 
   private[scheduler] class Tracker(var resourceProfileId: Int) {

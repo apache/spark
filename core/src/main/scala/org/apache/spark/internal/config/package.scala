@@ -2576,4 +2576,16 @@ package object config {
       .stringConf
       .toSequence
       .createWithDefault("org.apache.spark.sql.connect.client" :: Nil)
+
+  private[spark] val DECOMMISSION_MAX_RATIO =
+    ConfigBuilder("spark.decommission.maxRatio")
+      .doc("Max ratio of decommissioning executor of running executors. Decommission too many " +
+        s"executors at the same time with shuffle or rdd migration enabled " +
+        s"could hurt performance of shuffle fetch " +
+        s"as shuffle or rdd migration compete network and disk IO with shuffle fetch. " +
+        s"This only affects decommission triggered by driver.")
+      .version("4.0.0")
+      .doubleConf
+      .checkValue(ratio => ratio > 0 && ratio <= 1, "Decommission max ratio should > 0 and <= 1")
+      .createWithDefault(1)
 }

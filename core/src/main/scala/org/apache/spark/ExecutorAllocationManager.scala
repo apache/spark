@@ -66,6 +66,10 @@ import org.apache.spark.util.{Clock, SystemClock, ThreadUtils, Utils}
  * the executor, then it is removed. Note that an executor caching any data
  * blocks will be removed if it has been idle for more than L seconds.
  *
+ * When storage decommission (shuffle or rdd) is enabled, the max number of decommissioning(removed)
+ * executors is limited by running executors * R.
+ * This only affects decommission triggered by driver.
+ *
  * There is no retry logic in either case because we make the assumption that the cluster manager
  * will eventually fulfill all requests it receives asynchronously.
  *
@@ -95,6 +99,9 @@ import org.apache.spark.util.{Clock, SystemClock, ThreadUtils, Utils}
  *   spark.dynamicAllocation.cachedExecutorIdleTimeout (L) -
  *     If an executor with caching data blocks has been idle for more than this duration,
  *     the executor will be removed
+ *
+ *   spark.decommission.maxRatio (R) -
+ *     Max ratio of executors being decommissioned when shuffle or rdd storage decommission enabled
  *
  */
 private[spark] class ExecutorAllocationManager(
@@ -334,7 +341,7 @@ private[spark] class ExecutorAllocationManager(
    * This is factored out into its own method for testing.
    */
   private def schedule(): Unit = synchronized {
-    val executorIdsToBeRemoved = executorMonitor.timedOutExecutors()
+    val executorIdsToBeRemoved = executorMonitor.executorsCanBeRemoved()
     if (executorIdsToBeRemoved.nonEmpty) {
       initializing = false
     }

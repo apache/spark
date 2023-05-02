@@ -28,8 +28,8 @@ import org.mockito.Mockito.{doAnswer, mock, when}
 import org.apache.spark._
 import org.apache.spark.executor.ExecutorMetrics
 import org.apache.spark.internal.config._
-import org.apache.spark.resource.ResourceProfile.{DEFAULT_RESOURCE_PROFILE_ID, UNKNOWN_RESOURCE_PROFILE_ID}
 import org.apache.spark.resource.ResourceProfile
+import org.apache.spark.resource.ResourceProfile.{DEFAULT_RESOURCE_PROFILE_ID, UNKNOWN_RESOURCE_PROFILE_ID}
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.ExecutorInfo
 import org.apache.spark.storage._
@@ -503,6 +503,28 @@ class ExecutorMonitorSuite extends SparkFunSuite {
         assert(monitor.timedOutExecutors(storageDeadline) == Seq("1"))
       }
     }
+  }
+
+  test("SPARK-43396: decommission max ratio should be considered when decommission executor") {
+    val maxDecommissionRatio = 0.5
+    conf
+      .set(DECOMMISSION_ENABLED, true)
+      .set(STORAGE_DECOMMISSION_ENABLED, true)
+      .set(STORAGE_DECOMMISSION_SHUFFLE_BLOCKS_ENABLED, true)
+      .set(DECOMMISSION_MAX_RATIO, maxDecommissionRatio)
+    monitor = new ExecutorMonitor(conf, client, null, clock, allocationManagerSource())
+
+    val executors = (1 to 10).map(_.toString)
+    knownExecs ++= executors
+
+    executors.foreach(e => {
+      monitor.onExecutorAdded(SparkListenerExecutorAdded(clock.getTimeMillis(), e, execInfo))
+      assert(monitor.isExecutorIdle(e))
+    })
+
+    clock.setTime(TimeUnit.SECONDS.toMillis(150))
+    assert(monitor.timedOutExecutors().size == executors.size)
+    assert(monitor.executorsCanBeRemoved().size == executors.size * maxDecommissionRatio)
   }
 
   private def idleDeadline: Long = clock.nanoTime() + idleTimeoutNs + 1
