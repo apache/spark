@@ -1108,7 +1108,7 @@ class SparkConnectClient(object):
         -------
         None
         """
-        req = self._interrupt_request(self, pb2.InterruptRequest.InterruptType.INTERRUPT_TYPE_ALL)
+        req = self._interrupt_request(pb2.InterruptRequest.InterruptType.INTERRUPT_TYPE_ALL)
         try:
             for attempt in Retrying(
                 can_retry=SparkConnectClient.retry_exception, **self._retry_policy
