@@ -18,7 +18,7 @@
 import unittest
 from typing import Optional
 
-from pyspark.sql.connect.client import SparkConnectClient
+from pyspark.sql.connect.client import SparkConnectClient, ChannelBuilder
 import pyspark.sql.connect.proto as proto
 from pyspark.testing.connectutils import should_test_connect
 
@@ -57,6 +57,16 @@ class SparkConnectClientTestCase(unittest.TestCase):
 
         client = SparkConnectClient("sc://foo/")
         self.assertIsNone(client.token)
+
+    def test_channel_builder(self):
+        class CustomChannelBuilder(ChannelBuilder):
+            @property
+            def userId(self) -> Optional[str]:
+                return "abc"
+
+        client = SparkConnectClient(CustomChannelBuilder("sc://foo/"))
+
+        self.assertEqual(client._user_id, "abc")
 
 
 class MockService:
