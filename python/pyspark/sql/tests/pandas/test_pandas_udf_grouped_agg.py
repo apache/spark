@@ -32,7 +32,7 @@ from pyspark.sql.functions import (
     PandasUDFType,
 )
 from pyspark.sql.types import ArrayType, TimestampType
-from pyspark.errors import AnalysisException
+from pyspark.errors import AnalysisException, PySparkNotImplementedError
 from pyspark.testing.sqlutils import (
     ReusedSQLTestCase,
     have_pandas,
@@ -177,24 +177,52 @@ class GroupedAggPandasUDFTests(ReusedSQLTestCase):
 
     def test_unsupported_types(self):
         with QuietTest(self.sc):
-            with self.assertRaisesRegex(NotImplementedError, "not supported"):
+            with self.assertRaises(PySparkNotImplementedError) as pe:
                 pandas_udf(
                     lambda x: x, ArrayType(ArrayType(TimestampType())), PandasUDFType.GROUPED_AGG
                 )
 
+            self.check_error(
+                exception=pe.exception,
+                error_class="NOT_IMPLEMENTED",
+                message_parameters={
+                    "feature": "Invalid return type with grouped aggregate Pandas UDFs: "
+                    "ArrayType(ArrayType(TimestampType(), True), True)"
+                },
+            )
+
         with QuietTest(self.sc):
-            with self.assertRaisesRegex(NotImplementedError, "not supported"):
+            with self.assertRaises(PySparkNotImplementedError) as pe:
 
                 @pandas_udf("mean double, std double", PandasUDFType.GROUPED_AGG)
                 def mean_and_std_udf(v):
                     return v.mean(), v.std()
 
+            self.check_error(
+                exception=pe.exception,
+                error_class="NOT_IMPLEMENTED",
+                message_parameters={
+                    "feature": "Invalid return type with grouped aggregate Pandas UDFs: "
+                    "StructType([StructField('mean', DoubleType(), True), "
+                    "StructField('std', DoubleType(), True)])"
+                },
+            )
+
         with QuietTest(self.sc):
-            with self.assertRaisesRegex(NotImplementedError, "not supported"):
+            with self.assertRaises(PySparkNotImplementedError) as pe:
 
                 @pandas_udf(ArrayType(TimestampType()), PandasUDFType.GROUPED_AGG)
                 def mean_and_std_udf(v):  # noqa: F811
                     return {v.mean(): v.std()}
+
+            self.check_error(
+                exception=pe.exception,
+                error_class="NOT_IMPLEMENTED",
+                message_parameters={
+                    "feature": "Invalid return type with grouped aggregate Pandas UDFs: "
+                    "ArrayType(TimestampType(), True)"
+                },
+            )
 
     def test_alias(self):
         df = self.data
