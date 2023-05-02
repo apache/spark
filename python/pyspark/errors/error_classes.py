@@ -149,6 +149,11 @@ ERROR_CLASSES_JSON = """
       "Duplicated field names in Arrow Struct are not allowed, got <field_names>"
     ]
   },
+  "EXCEED_RETRY" : {
+    "message" : [
+      "Retries exceeded but no exception caught."
+    ]
+  },
   "HIGHER_ORDER_FUNCTION_SHOULD_RETURN_COLUMN" : {
     "message" : [
       "Function `<func_name>` should return Column, got <return_type>."
@@ -170,9 +175,24 @@ ERROR_CLASSES_JSON = """
       "Invalid call to `<func_name>` on unresolved object."
     ]
   },
+  "INVALID_CONNECT_URL" : {
+    "message" : [
+      "Invalid URL for Spark Connect: <detail>"
+    ]
+  },
   "INVALID_ITEM_FOR_CONTAINER": {
     "message": [
       "All items in `<arg_name>` should be in <allowed_types>, got <item_type>."
+    ]
+  },
+  "INVALID_PANDAS_UDF" : {
+    "message" : [
+      "Invalid function: <detail>"
+    ]
+  },
+  "INVALID_PANDAS_UDF_TYPE" : {
+    "message" : [
+      "`<arg_name>` should be one the values from PandasUDFType, got <arg_type>"
     ]
   },
   "INVALID_RETURN_TYPE_FOR_PANDAS_UDF": {
@@ -365,6 +385,11 @@ ERROR_CLASSES_JSON = """
       "Argument `<arg_name>` should be a float, int, list or str, got <arg_type>."
     ]
   },
+  "NOT_IMPLEMENTED" : {
+    "message" : [
+      "<feature> is not implemented."
+    ]
+  },
   "NOT_INT" : {
     "message" : [
       "Argument `<arg_name>` should be an int, got <arg_type>."
@@ -536,6 +561,16 @@ ERROR_CLASSES_JSON = """
       "Unexpected response from iterator server."
     ]
   },
+  "UNKNOWN_EXPLAIN_MODE" : {
+    "message" : [
+      "Unknown explain mode: '<explain_mode>'. Accepted explain modes are 'simple', 'extended', 'codegen', 'cost', 'formatted'."
+    ]
+  },
+  "UNKNOWN_RESPONSE" : {
+    "message" : [
+      "Unknown response: <response>."
+    ]
+  },
   "UNSUPPORTED_DATA_TYPE" : {
     "message" : [
       "Unsupported DataType `<data_type>`."
@@ -549,6 +584,11 @@ ERROR_CLASSES_JSON = """
   "UNSUPPORTED_DATA_TYPE_FOR_ARROW_VERSION" : {
     "message" : [
       "<data_type> is only supported with pyarrow 2.0.0 and above."
+    ]
+  },
+  "UNSUPPORTED_JOIN_TYPE" : {
+    "message" : [
+      "Unsupported join type: <join_type>. Supported join types include: \\"inner\\", \\"outer\\", \\"full\\", \\"fullouter\\", \\"full_outer\\", \\"leftouter\\", \\"left\\", \\"left_outer\\", \\"rightouter\\", \\"right\\", \\"right_outer\\", \\"leftsemi\\", \\"left_semi\\", \\"semi\\", \\"leftanti\\", \\"left_anti\\", \\"anti\\", \\"cross\\"."
     ]
   },
   "UNSUPPORTED_LITERAL" : {
@@ -569,6 +609,16 @@ ERROR_CLASSES_JSON = """
   "UNSUPPORTED_PARAM_TYPE_FOR_HIGHER_ORDER_FUNCTION" : {
     "message" : [
       "Function `<func_name>` should use only POSITIONAL or POSITIONAL OR KEYWORD arguments."
+    ]
+  },
+  "UNSUPPORTED_SIGNATURE" : {
+    "message" : [
+      "Unsupported signature: <signature>."
+    ]
+  },
+  "UNSUPPORTED_WITH_ARROW_OPTIMIZATION" : {
+    "message" : [
+      "<feature> is not supported with Arrow optimization enabled in Python UDFs. Disable 'spark.sql.execution.pythonUDF.arrow.enabled' to workaround.."
     ]
   },
   "VALUE_NOT_ACCESSIBLE": {

@@ -68,7 +68,7 @@ from pyspark.sql.types import (
     TimestampType,
 )
 from pyspark.sql.utils import to_str
-from pyspark.errors import PySparkAttributeError
+from pyspark.errors import PySparkAttributeError, PySparkNotImplementedError
 
 if TYPE_CHECKING:
     from pyspark.sql.connect._typing import OptionalPrimitiveType
@@ -123,7 +123,10 @@ class SparkSession:
             return self.config("spark.remote", location)
 
         def enableHiveSupport(self) -> "SparkSession.Builder":
-            raise NotImplementedError("enableHiveSupport not implemented for Spark Connect")
+            raise PySparkNotImplementedError(
+                error_class="NOT_IMPLEMENTED",
+                message_parameters={"feature": "enableHiveSupport"},
+            )
 
         def getOrCreate(self) -> "SparkSession":
             global _active_spark_session
@@ -459,10 +462,16 @@ class SparkSession:
 
     @classmethod
     def getActiveSession(cls) -> Any:
-        raise NotImplementedError("getActiveSession() is not implemented.")
+        raise PySparkNotImplementedError(
+            error_class="NOT_IMPLEMENTED",
+            message_parameters={"feature": "getActiveSession()"},
+        )
 
     def newSession(self) -> Any:
-        raise NotImplementedError("newSession() is not implemented.")
+        raise PySparkNotImplementedError(
+            error_class="NOT_IMPLEMENTED",
+            message_parameters={"feature": "newSession()"},
+        )
 
     @property
     def conf(self) -> RuntimeConf:
@@ -470,11 +479,17 @@ class SparkSession:
 
     @property
     def sparkContext(self) -> Any:
-        raise NotImplementedError("sparkContext() is not implemented.")
+        raise PySparkNotImplementedError(
+            error_class="NOT_IMPLEMENTED",
+            message_parameters={"feature": "sparkContext()"},
+        )
 
     @property
     def streams(self) -> Any:
-        raise NotImplementedError("streams() is not implemented.")
+        raise PySparkNotImplementedError(
+            error_class="NOT_IMPLEMENTED",
+            message_parameters={"feature": "streams()"},
+        )
 
     @property
     def _jsc(self) -> None:
