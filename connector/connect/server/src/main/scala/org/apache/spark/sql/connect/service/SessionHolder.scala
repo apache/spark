@@ -24,6 +24,7 @@ import collection.JavaConverters._
 import scala.util.control.NonFatal
 
 import org.apache.spark.connect.proto
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 
 /**
