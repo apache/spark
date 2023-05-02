@@ -237,9 +237,13 @@ message StreamingQueryInstanceId {
   // will generate a unique run_id. Therefore, every time a query is restarted from
   // checkpoint, it will have the same `id` but different `run_id`s.
   string run_id = 2;
+}
 
+message StreamingQueryInstance {
+  // (Required) The id and runId of this query.
+  StreamingQueryInstanceId id = 1;
   // (Optional) The name of this query.
-  optional string name = 3;
+  optional string name = 2;
 }
 
 // Commands for a streaming query.
@@ -350,13 +354,13 @@ message StreamingQueryManagerCommand {
 message StreamingQueryManagerCommandResult {
   oneof result_type {
     ActiveResult active = 1;
-    StreamingQueryInstanceId query = 2;
+    StreamingQueryInstance query = 2;
     AwaitAnyTerminationResult await_any_termination = 3;
     bool reset_terminated = 4;
   }
 
   message ActiveResult {
-    repeated StreamingQueryInstanceId active_queries = 1;
+    repeated StreamingQueryInstance active_queries = 1;
   }
 
   message AwaitAnyTerminationResult {

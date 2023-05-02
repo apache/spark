@@ -33,6 +33,7 @@ import org.apache.spark.connect.proto.ExecutePlanResponse.SqlCommandResult
 import org.apache.spark.connect.proto.Parse.ParseFormat
 import org.apache.spark.connect.proto.StreamingQueryCommand
 import org.apache.spark.connect.proto.StreamingQueryCommandResult
+import org.apache.spark.connect.proto.StreamingQueryInstance
 import org.apache.spark.connect.proto.StreamingQueryInstanceId
 import org.apache.spark.connect.proto.StreamingQueryManagerCommand
 import org.apache.spark.connect.proto.StreamingQueryManagerCommandResult
@@ -2410,10 +2411,14 @@ class SparkConnectPlanner(val session: SparkSession) {
         respBuilder.getActiveBuilder.addAllActiveQueries(
           active_queries
             .map(query =>
-              StreamingQueryInstanceId
+              StreamingQueryInstance
                 .newBuilder()
-                .setId(query.id.toString)
-                .setRunId(query.runId.toString)
+                .setId(
+                  StreamingQueryInstanceId
+                    .newBuilder()
+                    .setId(query.id.toString)
+                    .setRunId(query.runId.toString)
+                    .build())
                 .setName(query.name)
                 .build())
             .toIterable
@@ -2422,8 +2427,12 @@ class SparkConnectPlanner(val session: SparkSession) {
       case StreamingQueryManagerCommand.CommandCase.GET =>
         val query = session.streams.get(command.getGet)
         respBuilder.getQueryBuilder
-          .setId(query.id.toString)
-          .setRunId(query.runId.toString)
+          .setId(
+            StreamingQueryInstanceId
+              .newBuilder()
+              .setId(query.id.toString)
+              .setRunId(query.runId.toString)
+              .build())
           .setName(query.name)
 
       case StreamingQueryManagerCommand.CommandCase.AWAIT_ANY_TERMINATION =>

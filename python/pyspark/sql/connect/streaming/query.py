@@ -183,7 +183,7 @@ class StreamingQueryManager:
         cmd = pb2.StreamingQueryManagerCommand()
         cmd.active = True
         queries = self._execute_streaming_query_manager_cmd(cmd).active.active_queries
-        return [StreamingQuery(self._session, q.id, q.run_id, q.name) for q in queries]
+        return [StreamingQuery(self._session, q.id.id, q.id.run_id, q.name) for q in queries]
 
     active.__doc__ = PySparkStreamingQueryManager.active.__doc__
 
@@ -191,7 +191,7 @@ class StreamingQueryManager:
         cmd = pb2.StreamingQueryManagerCommand()
         cmd.get = id
         query = self._execute_streaming_query_manager_cmd(cmd).query
-        return StreamingQuery(self._session, query.id, query.run_id, query.name)
+        return StreamingQuery(self._session, query.id.id, query.id.run_id, query.name)
 
     get.__doc__ = PySparkStreamingQueryManager.get.__doc__
 
