@@ -168,16 +168,18 @@ private class ShuffleStatus(
   }
 
   /**
+   * Get the map output that corresponding to a given mapId.
+   */
+  def getMapStatus(mapId: Long): Option[MapStatus] = withReadLock {
+    mapIdToMapIndex.get(mapId).map(mapStatuses(_))
+  }
+
+  /**
    * Update the map output location (e.g. during migration).
    */
   def updateMapOutput(mapId: Long, bmAddress: BlockManagerId): Unit = withWriteLock {
     try {
-      // OpenHashMap would return 0 if the key doesn't exist.
-      val mapIndex = if (mapIdToMapIndex.contains(mapId)) {
-        Some(mapIdToMapIndex(mapId))
-      } else {
-        None
-      }
+      val mapIndex = mapIdToMapIndex.get(mapId)
       val mapStatusOpt = mapIndex.map(mapStatuses(_))
       mapStatusOpt match {
         case Some(mapStatus) =>
@@ -185,7 +187,8 @@ private class ShuffleStatus(
           mapStatus.updateLocation(bmAddress)
           invalidateSerializedMapOutputStatusCache()
         case None =>
-          if (mapIndex.nonEmpty && mapStatuses(mapIndex.get) == null) {
+          if (mapIndex.nonEmpty && mapStatuses(mapIndex.get) == null &&
+              mapStatusesDeleted(mapIndex.get).mapId == mapId) {
             val index = mapIndex.get
             val mapStatus = mapStatusesDeleted(index)
             mapStatus.updateLocation(bmAddress)
@@ -1151,9 +1154,7 @@ private[spark] class MapOutputTrackerMaster(
    */
   def getMapOutputLocation(shuffleId: Int, mapId: Long): Option[BlockManagerId] = {
     shuffleStatuses.get(shuffleId).flatMap { shuffleStatus =>
-      shuffleStatus.withMapStatuses { mapStatues =>
-        mapStatues.filter(_ != null).find(_.mapId == mapId).map(_.location)
-      }
+      shuffleStatus.getMapStatus(mapId).map(_.location)
     }
   }
 
