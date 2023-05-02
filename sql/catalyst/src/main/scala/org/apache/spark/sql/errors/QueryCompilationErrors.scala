@@ -2404,12 +2404,14 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
         "config" -> SQLConf.ALLOW_NON_EMPTY_LOCATION_IN_CTAS.key))
   }
 
-  def unsetNonExistentPropertyError(property: String, table: TableIdentifier): Throwable = {
+  def unsetNonExistentPropertiesError(properties: Seq[String],
+                                      table: TableIdentifier): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1244",
+      errorClass = "UNSET_NONEXISTENT_PROPERTIES",
       messageParameters = Map(
-        "property" -> property,
-        "table" -> table.toString))
+        "properties" -> properties.map(toSQLId).mkString(", "),
+        "table" -> toSQLId(table.nameParts))
+    )
   }
 
   def alterTableChangeColumnNotSupportedForColumnTypeError(

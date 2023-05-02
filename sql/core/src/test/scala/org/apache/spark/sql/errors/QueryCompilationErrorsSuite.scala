@@ -834,6 +834,23 @@ class QueryCompilationErrorsSuite
       }
     }
   }
+
+  test("ALTER TABLE UNSET nonexistent property should throw an exception") {
+    val tableName = "test_table"
+    withTable(tableName) {
+      sql(s"CREATE TABLE $tableName (a STRING, b INT) USING parquet")
+
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"ALTER TABLE $tableName UNSET TBLPROPERTIES ('test_prop1', 'test_prop2', 'comment')")
+        },
+        errorClass = "UNSET_NONEXISTENT_PROPERTIES",
+        parameters = Map(
+          "properties" -> "`test_prop1`, `test_prop2`",
+          "table" -> "`spark_catalog`.`default`.`test_table`")
+      )
+    }
+  }
 }
 
 class MyCastToString extends SparkUserDefinedFunction(
