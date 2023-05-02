@@ -271,6 +271,8 @@ object Cast extends QueryErrorsBase {
     case (TimestampType | DateType, StringType) => true
     case (DateType, TimestampType) => true
     case (TimestampType, DateType) => true
+    case (TimestampType, TimestampNTZType) => true
+    case (TimestampNTZType, TimestampType) => true
     case (ArrayType(fromType, _), ArrayType(toType, _)) => needsTimeZone(fromType, toType)
     case (MapType(fromKey, fromValue, _), MapType(toKey, toValue, _)) =>
       needsTimeZone(fromKey, toKey) || needsTimeZone(fromValue, toValue)
