@@ -38,10 +38,10 @@ RUN apt update
 RUN $APT_INSTALL gfortran libopenblas-dev liblapack-dev
 RUN $APT_INSTALL build-essential
 
-RUN mkdir -p /usr/local/pypy/pypy3.7 && \
-    curl -sqL https://downloads.python.org/pypy/pypy3.7-v7.3.7-linux64.tar.bz2 | tar xjf - -C /usr/local/pypy/pypy3.7 --strip-components=1 && \
-    ln -sf /usr/local/pypy/pypy3.7/bin/pypy /usr/local/bin/pypy3.7 && \
-    ln -sf /usr/local/pypy/pypy3.7/bin/pypy /usr/local/bin/pypy3
+RUN mkdir -p /usr/local/pypy/pypy3.8 && \
+    curl -sqL https://downloads.python.org/pypy/pypy3.8-v7.3.11-linux64.tar.bz2 | tar xjf - -C /usr/local/pypy/pypy3.8 --strip-components=1 && \
+    ln -sf /usr/local/pypy/pypy3.8/bin/pypy /usr/local/bin/pypy3.8 && \
+    ln -sf /usr/local/pypy/pypy3.8/bin/pypy /usr/local/bin/pypy3
 
 RUN curl -sS https://bootstrap.pypa.io/get-pip.py | pypy3
 
