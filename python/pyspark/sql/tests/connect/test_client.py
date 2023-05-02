@@ -60,6 +60,9 @@ class SparkConnectClientTestCase(unittest.TestCase):
 
     def test_interrupt_all(self):
         client = SparkConnectClient("sc://foo/;token=bar")
+        mock = MockService(client._session_id)
+        client._stub = mock
+
         client.interrupt_all()
         self.assertIsNotNone(mock.req, "Interrupt API was not called when expected")
 
