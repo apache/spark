@@ -178,9 +178,12 @@ class SparkSession:
                 )
 
             if has_channel_builder:
+                assert self._channel_builder is not None
                 _active_spark_session = SparkSession(connection=self._channel_builder)
             else:
-                _active_spark_session = SparkSession(connection=self._options.get("spark.remote"))
+                spark_remote = to_str(self._options.get("spark.remote"))
+                assert spark_remote is not None
+                _active_spark_session = SparkSession(connection=spark_remote)
             return _active_spark_session
 
     _client: SparkConnectClient
