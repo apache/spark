@@ -129,18 +129,18 @@ class SparkConnectService(debug: Boolean)
 
     {
       case se: SparkException if isPythonExecutionException(se) =>
-        logError(s"Error during: $opType", se)
+        logError(s"Error during: $opType. UserId: $userId. SessionId: $sessionId.", se)
         observer.onError(
           StatusProto.toStatusRuntimeException(
             buildStatusFromThrowable(se.getCause, stackTraceEnabled)))
 
       case e: Throwable if e.isInstanceOf[SparkThrowable] || NonFatal.apply(e) =>
-        logError(s"Error during: $opType", e)
+        logError(s"Error during: $opType. UserId: $userId. SessionId: $sessionId.", e)
         observer.onError(
           StatusProto.toStatusRuntimeException(buildStatusFromThrowable(e, stackTraceEnabled)))
 
       case e: Throwable =>
-        logError(s"Error during: $opType", e)
+        logError(s"Error during: $opType. UserId: $userId. SessionId: $sessionId.", e)
         observer.onError(
           Status.UNKNOWN
             .withCause(e)
