@@ -107,7 +107,7 @@ class CanonicalizeSuite extends SparkFunSuite {
       Cast(timestampLiteral, TimestampNTZType),
       Cast(timestampNTZLiteral, TimestampType)
     ).foreach { cast =>
-      assert(!cast.semanticEquals(cast.withTimeZone(TimeZone.getDefault.getID)))
+      assert(!cast.semanticEquals(cast.withTimeZone(SQLConf.get.sessionLocalTimeZone)))
     }
   }
 
