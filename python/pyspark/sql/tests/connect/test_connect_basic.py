@@ -3248,6 +3248,13 @@ class SparkConnectSessionTests(ReusedConnectTestCase):
 
         same = PySparkSession.builder.remote("sc://other.remote:114/").getOrCreate()
         self.assertEquals(self.spark, same)
+        same.stop()
+
+        # Make sure the environment is clean.
+        self.spark.stop()
+        with self.assertRaises(RuntimeError) as e:
+            PySparkSession.builder.create()
+            self.assertIn("Create a new SparkSession is only supported with SparkConnect.", str(e))
 
 
 @unittest.skipIf(not should_test_connect, connect_requirement_message)
