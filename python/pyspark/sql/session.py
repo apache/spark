@@ -394,6 +394,32 @@ class SparkSession(SparkConversionMixin):
             """
             return self.config("spark.sql.catalogImplementation", "hive")
 
+        def create(self) -> "SparkSession":
+            """Creates a new SparkSession. Can only be used in the context of Spark Connect
+            and will throw an exception otherwise.
+
+            .. versionadded:: 3.5.0
+
+            Returns
+            -------
+            :class:`SparkSession`
+            """
+            opts = dict(self._options)
+            if "SPARK_REMOTE" in os.environ or "spark.remote" in opts:
+                from pyspark.sql.connect.session import SparkSession as RemoteSparkSession
+                url = opts.get("spark.remote", os.environ.get("SPARK_REMOTE"))
+
+                if url.startswith("local"):
+                    raise RuntimeError("Creating new SparkSessions with `local` connection string is not supported.")
+
+                # Mark this Spark Session as Spark Connect. This prevents that local PySpark is used in conjunction
+                # with Spark Connect mode.
+                os.environ["SPARK_ENABLE_CONNECT_MODE"] = "1"
+                opts["spark.remote"] = url
+                return RemoteSparkSession.builder.config(map=opts).create()
+            else:
+                raise RuntimeError("Create a new SparkSession is only supported with SparkConnect.")
+
         def getOrCreate(self) -> "SparkSession":
             """Gets an existing :class:`SparkSession` or, if there is no existing one, creates a
             new one based on the options set in this builder.
@@ -454,12 +480,12 @@ class SparkSession(SparkConversionMixin):
                                 RemoteSparkSession._start_connect_server(url, opts)
                                 url = "sc://localhost"
 
-                            os.environ["SPARK_REMOTE"] = url
+                            os.environ["SPARK_ENABLE_CONNECT_MODE"] = "1"
                             opts["spark.remote"] = url
                             return RemoteSparkSession.builder.config(map=opts).getOrCreate()
                         elif "SPARK_LOCAL_REMOTE" in os.environ:
                             url = "sc://localhost"
-                            os.environ["SPARK_REMOTE"] = url
+                            os.environ["SPARK_ENABLE_CONNECT_MODE"] = "1"
                             opts["spark.remote"] = url
                             return RemoteSparkSession.builder.config(map=opts).getOrCreate()
                         else:

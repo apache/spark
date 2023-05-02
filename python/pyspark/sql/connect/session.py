@@ -126,11 +126,14 @@ class SparkSession:
         def enableHiveSupport(self) -> "SparkSession.Builder":
             raise NotImplementedError("enableHiveSupport not implemented for Spark Connect")
 
+        def create(self) -> "SparkSession":
+            return SparkSession(connectionString=self._options["spark.remote"])
+
         def getOrCreate(self) -> "SparkSession":
             global _active_spark_session
             if _active_spark_session is not None:
                 return _active_spark_session
-            _active_spark_session = SparkSession(connectionString=self._options["spark.remote"])
+            _active_spark_session = self.create()
             return _active_spark_session
 
     _client: SparkConnectClient
@@ -459,7 +462,9 @@ class SparkSession:
                 active_session.stop()
             with SparkContext._lock:
                 del os.environ["SPARK_LOCAL_REMOTE"]
-                del os.environ["SPARK_REMOTE"]
+                del os.environ["SPARK_ENABLE_CONNECT_MODE"]
+                if "SPARK_REMOTE" in os.environ:
+                    del os.environ["SPARK_REMOTE"]
 
     stop.__doc__ = PySparkSession.stop.__doc__
 

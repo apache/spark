@@ -180,7 +180,7 @@ class SparkContext:
         udf_profiler_cls: Type[UDFBasicProfiler] = UDFBasicProfiler,
         memory_profiler_cls: Type[MemoryProfiler] = MemoryProfiler,
     ):
-        if "SPARK_REMOTE" in os.environ and "SPARK_LOCAL_REMOTE" not in os.environ:
+        if "SPARK_ENABLE_CONNECT_MODE" in os.environ and "SPARK_LOCAL_REMOTE" not in os.environ:
             raise PySparkRuntimeError(
                 error_class="CONTEXT_UNAVAILABLE_FOR_REMOTE_CLIENT",
                 message_parameters={},
