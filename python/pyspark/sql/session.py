@@ -407,10 +407,13 @@ class SparkSession(SparkConversionMixin):
             opts = dict(self._options)
             if "SPARK_REMOTE" in os.environ or "spark.remote" in opts:
                 from pyspark.sql.connect.session import SparkSession as RemoteSparkSession
+
                 url = opts.get("spark.remote", os.environ.get("SPARK_REMOTE"))
 
                 if url.startswith("local"):
-                    raise RuntimeError("Creating new SparkSessions with `local` connection string is not supported.")
+                    raise RuntimeError(
+                        "Creating new SparkSessions with `local` connection string is not supported."
+                    )
 
                 # Mark this Spark Session as Spark Connect. This prevents that local PySpark is used in conjunction
                 # with Spark Connect mode.
