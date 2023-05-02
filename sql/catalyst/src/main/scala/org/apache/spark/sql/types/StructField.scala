@@ -156,16 +156,22 @@ case class StructField(
    */
   private[sql] def sql = s"${quoteIfNeeded(name)}: ${dataType.sql}$getDDLComment"
 
+  private[sql] def toDDL(isNested: Boolean): String = {
+    val nullString = if (nullable) "" else " NOT NULL"
+    val dataTypeDDL = dataType match {
+      case s: StructType => s.toNestedDDL
+      case d: DataType => d.sql
+    }
+    s"${quoteIfNeeded(name)}${if (isNested) ":" else ""} ${dataTypeDDL}${nullString}$getDDLDefault$getDDLComment"
+  }
+
   /**
    * Returns a string containing a schema in DDL format. For example, the following value:
    * `StructField("eventId", IntegerType, false)` will be converted to `eventId` INT NOT NULL.
    * `StructField("eventId", IntegerType, true)` will be converted to `eventId` INT.
    * @since 2.4.0
    */
-  def toDDL: String = {
-    val nullString = if (nullable) "" else " NOT NULL"
-    s"${quoteIfNeeded(name)} ${dataType.sql}${nullString}$getDDLDefault$getDDLComment"
-  }
+  def toDDL: String = toDDL(isNested = false)
 
   private[sql] def toAttribute: AttributeReference =
     AttributeReference(name, dataType, nullable, metadata)()

@@ -86,19 +86,19 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
   private val nestedStruct = new StructType()
     .add(StructField("a", new StructType()
       .add(StructField("b", new StructType()
-        .add(StructField("c", StringType
+        .add(StructField("c", StringType, false
         ).withComment("Deep Nested comment"))
       ).withComment("Nested comment"))
     ).withComment("comment"))
 
   test("SPARK-33846: toDDL should output nested field's comment") {
-    val ddl = "a STRUCT<b: STRUCT<c: STRING COMMENT 'Deep Nested comment'> " +
+    val ddl = "a STRUCT<b: STRUCT<c: STRING NOT NULL COMMENT 'Deep Nested comment'> " +
       "COMMENT 'Nested comment'> COMMENT 'comment'"
     assert(nestedStruct.toDDL == ddl)
   }
 
   test("SPARK-33846: fromDDL should parse nested field's comment") {
-    val ddl = "`a` STRUCT<`b`: STRUCT<`c`: STRING COMMENT 'Deep Nested comment'> " +
+    val ddl = "`a` STRUCT<`b`: STRUCT<`c`: STRING NOT NULL COMMENT 'Deep Nested comment'> " +
       "COMMENT 'Nested comment'> COMMENT 'comment'"
     assert(StructType.fromDDL(ddl) == nestedStruct)
   }
@@ -108,7 +108,7 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
   }
 
   test("SPARK-35706: make the ':' in STRUCT data type definition optional") {
-    val ddl = "`a` STRUCT<`b` STRUCT<`c` STRING COMMENT 'Deep Nested comment'> " +
+    val ddl = "`a` STRUCT<`b` STRUCT<`c` STRING NOT NULL COMMENT 'Deep Nested comment'> " +
       "COMMENT 'Nested comment'> COMMENT 'comment'"
     assert(StructType.fromDDL(ddl) == nestedStruct)
   }
