@@ -2125,7 +2125,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase {
 
   def invalidLiteralForWindowDurationError(): Throwable = {
     new AnalysisException(
-      errorClass = "COLUMN_NOT_DEFINED_IN_TABLE",
+      errorClass = "_LEGACY_ERROR_TEMP_1207",
       messageParameters = Map.empty)
   }
 
