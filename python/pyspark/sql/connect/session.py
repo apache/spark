@@ -53,7 +53,7 @@ from pyspark.sql.connect.conf import RuntimeConf
 from pyspark.sql.connect.dataframe import DataFrame
 from pyspark.sql.connect.plan import SQL, Range, LocalRelation, CachedRelation
 from pyspark.sql.connect.readwriter import DataFrameReader
-from pyspark.sql.connect.streaming import DataStreamReader
+from pyspark.sql.connect.streaming import DataStreamReader, StreamingQueryManager
 from pyspark.sql.pandas.serializers import ArrowStreamPandasSerializer
 from pyspark.sql.pandas.types import to_arrow_schema, to_arrow_type
 from pyspark.sql.session import classproperty, SparkSession as PySparkSession
@@ -494,11 +494,8 @@ class SparkSession:
         )
 
     @property
-    def streams(self) -> Any:
-        raise PySparkNotImplementedError(
-            error_class="NOT_IMPLEMENTED",
-            message_parameters={"feature": "streams()"},
-        )
+    def streams(self) -> "StreamingQueryManager":
+        return StreamingQueryManager(self)
 
     @property
     def _jsc(self) -> None:
