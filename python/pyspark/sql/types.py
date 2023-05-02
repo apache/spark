@@ -50,7 +50,7 @@ from py4j.java_gateway import GatewayClient, JavaClass, JavaGateway, JavaObject,
 
 from pyspark.serializers import CloudPickleSerializer
 from pyspark.sql.utils import has_numpy, get_active_spark_context
-from pyspark.errors import PySparkTypeError, PySparkValueError
+from pyspark.errors import PySparkNotImplementedError, PySparkTypeError, PySparkValueError
 
 if has_numpy:
     import numpy as np
@@ -1107,14 +1107,20 @@ class UserDefinedType(DataType):
         """
         Underlying SQL storage type for this UDT.
         """
-        raise NotImplementedError("UDT must implement sqlType().")
+        raise PySparkNotImplementedError(
+            error_class="NOT_IMPLEMENTED",
+            message_parameters={"feature": "sqlType()"},
+        )
 
     @classmethod
     def module(cls) -> str:
         """
         The Python module of the UDT.
         """
-        raise NotImplementedError("UDT must implement module().")
+        raise PySparkNotImplementedError(
+            error_class="NOT_IMPLEMENTED",
+            message_parameters={"feature": "module()"},
+        )
 
     @classmethod
     def scalaUDT(cls) -> str:
@@ -1149,13 +1155,19 @@ class UserDefinedType(DataType):
         """
         Converts a user-type object into a SQL datum.
         """
-        raise NotImplementedError("UDT must implement toInternal().")
+        raise PySparkNotImplementedError(
+            error_class="NOT_IMPLEMENTED",
+            message_parameters={"feature": "toInternal()"},
+        )
 
     def deserialize(self, datum: Any) -> Any:
         """
         Converts a SQL datum into a user-type object.
         """
-        raise NotImplementedError("UDT must implement fromInternal().")
+        raise PySparkNotImplementedError(
+            error_class="NOT_IMPLEMENTED",
+            message_parameters={"feature": "fromInternal()"},
+        )
 
     def simpleString(self) -> str:
         return "udt"

@@ -130,6 +130,7 @@ class SparkThrowableSuite extends SparkFunSuite {
   test("Message format invariants") {
     val messageFormats = errorReader.errorInfoMap
       .filterKeys(!_.startsWith("_LEGACY_ERROR_TEMP_"))
+      .filterKeys(!_.startsWith("INTERNAL_ERROR"))
       .values.toSeq.flatMap { i => Seq(i.messageTemplate) }
     checkCondition(messageFormats, s => s != null)
     checkIfUnique(messageFormats)

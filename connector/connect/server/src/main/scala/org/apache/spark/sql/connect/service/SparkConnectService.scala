@@ -24,7 +24,7 @@ import scala.collection.mutable.ArrayBuffer
 import scala.util.control.NonFatal
 
 import com.google.common.base.Ticker
-import com.google.common.cache.CacheBuilder
+import com.google.common.cache.{CacheBuilder, RemovalListener, RemovalNotification}
 import com.google.protobuf.{Any => ProtoAny}
 import com.google.rpc.{Code => RPCCode, ErrorInfo, Status => RPCStatus}
 import io.grpc.{Server, Status}
@@ -129,18 +129,18 @@ class SparkConnectService(debug: Boolean)
 
     {
       case se: SparkException if isPythonExecutionException(se) =>
-        logError(s"Error during: $opType", se)
+        logError(s"Error during: $opType. UserId: $userId. SessionId: $sessionId.", se)
         observer.onError(
           StatusProto.toStatusRuntimeException(
             buildStatusFromThrowable(se.getCause, stackTraceEnabled)))
 
       case e: Throwable if e.isInstanceOf[SparkThrowable] || NonFatal.apply(e) =>
-        logError(s"Error during: $opType", e)
+        logError(s"Error during: $opType. UserId: $userId. SessionId: $sessionId.", e)
         observer.onError(
           StatusProto.toStatusRuntimeException(buildStatusFromThrowable(e, stackTraceEnabled)))
 
       case e: Throwable =>
-        logError(s"Error during: $opType", e)
+        logError(s"Error during: $opType. UserId: $userId. SessionId: $sessionId.", e)
         observer.onError(
           Status.UNKNOWN
             .withCause(e)
@@ -229,6 +229,22 @@ class SparkConnectService(debug: Boolean)
   override def addArtifacts(responseObserver: StreamObserver[AddArtifactsResponse])
       : StreamObserver[AddArtifactsRequest] = new SparkConnectAddArtifactsHandler(
     responseObserver)
+
+  /**
+   * This is the entry point for all calls of getting artifact statuses.
+   */
+  override def artifactStatus(
+      request: proto.ArtifactStatusesRequest,
+      responseObserver: StreamObserver[proto.ArtifactStatusesResponse]): Unit = {
+    try {
+      new SparkConnectArtifactStatusesHandler(responseObserver).handle(request)
+    } catch
+      handleError(
+        "artifactStatus",
+        observer = responseObserver,
+        userId = request.getUserContext.getUserId,
+        sessionId = request.getSessionId)
+  }
 }
 
 /**
@@ -268,6 +284,21 @@ object SparkConnectService {
   private val userSessionMapping =
     cacheBuilder(CACHE_SIZE, CACHE_TIMEOUT_SECONDS).build[SessionCacheKey, SessionHolder]()
 
+  private[connect] val streamingSessionManager =
+    new SparkConnectStreamingQueryCache(sessionKeepAliveFn = { case (userId, sessionId) =>
+      // Use getIfPresent() rather than get() to prevent accidental loading.
+      userSessionMapping.getIfPresent((userId, sessionId))
+    })
+
+  private class RemoveSessionListener extends RemovalListener[SessionCacheKey, SessionHolder] {
+    override def onRemoval(
+        notification: RemovalNotification[SessionCacheKey, SessionHolder]): Unit = {
+      val SessionHolder(userId, sessionId, session) = notification.getValue
+      val blockManager = session.sparkContext.env.blockManager
+      blockManager.removeCache(userId, sessionId)
+    }
+  }
+
   // Simple builder for creating the cache of Sessions.
   private def cacheBuilder(cacheSize: Int, timeoutSeconds: Int): CacheBuilder[Object, Object] = {
     var cacheBuilder = CacheBuilder.newBuilder().ticker(Ticker.systemTicker())
@@ -277,6 +308,7 @@ object SparkConnectService {
     if (timeoutSeconds >= 0) {
       cacheBuilder.expireAfterAccess(timeoutSeconds, TimeUnit.SECONDS)
     }
+    cacheBuilder.removalListener(new RemoveSessionListener)
     cacheBuilder
   }
 
@@ -332,14 +364,17 @@ object SparkConnectService {
         server.shutdownNow()
       }
     }
+    userSessionMapping.invalidateAll()
   }
 
-  def abbreviateErrorMessage(msg: String): String = StringUtils.abbreviate(msg, 2048)
-
   def extractErrorMessage(st: Throwable): String = {
-    val message = abbreviateErrorMessage(st.getMessage)
-    if (message != null) {
-      message
+    val message = StringUtils.abbreviate(st.getMessage, 2048)
+    convertNullString(message)
+  }
+
+  def convertNullString(str: String): String = {
+    if (str != null) {
+      str
     } else {
       ""
     }
