@@ -1122,6 +1122,48 @@ class SparkConnectClient(object):
         except Exception as error:
             self._handle_error(error)
 
+    def _interrupt_request(self, interrupt_type: str) -> pb2.InterruptRequest:
+        req = pb2.InterruptRequest()
+        req.session_id = self._session_id
+        req.client_type = self._builder.userAgent
+        if interrupt_type == "all":
+            req.interrupt_type = pb2.InterruptRequest.InterruptType.INTERRUPT_TYPE_ALL
+        else:
+            raise PySparkValueError(
+                error_class="UNKNOWN_INTERRUPT_TYPE",
+                message_parameters={
+                    "interrupt_type": str(interrupt_type),
+                },
+            )
+        if self._user_id:
+            req.user_context.user_id = self._user_id
+        return req
+
+    def interrupt_all(self) -> None:
+        """
+        Call the interrupt RPC of Spark Connect to interrupt all executions in this session.
+
+        Returns
+        -------
+        None
+        """
+        req = self._interrupt_request("all")
+        try:
+            for attempt in Retrying(
+                can_retry=SparkConnectClient.retry_exception, **self._retry_policy
+            ):
+                with attempt:
+                    resp = self._stub.Interrupt(req, metadata=self._builder.metadata())
+                    if resp.session_id != self._session_id:
+                        raise SparkConnectException(
+                            "Received incorrect session identifier for request:"
+                            f"{resp.session_id} != {self._session_id}"
+                        )
+                    return
+            raise SparkConnectException("Invalid state during retry exception handling.")
+        except Exception as error:
+            self._handle_error(error)
+
     def _handle_error(self, error: Exception) -> NoReturn:
         """
         Handle errors that occur during RPC calls.
