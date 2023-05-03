@@ -221,7 +221,7 @@ class StreamingQueryManager:
     def resetTerminated(self) -> None:
         cmd = pb2.StreamingQueryManagerCommand()
         cmd.reset_terminated = True
-        self._execute_streaming_query_manager_cmd(cmd).active.active_queries
+        self._execute_streaming_query_manager_cmd(cmd)
         return None
 
     resetTerminated.__doc__ = PySparkStreamingQueryManager.resetTerminated.__doc__

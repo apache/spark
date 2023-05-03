@@ -18,17 +18,14 @@
 package org.apache.spark.sql.streaming
 
 import java.util.UUID
-import java.util.concurrent.{TimeoutException, TimeUnit}
+import java.util.concurrent.{TimeUnit, TimeoutException}
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 
 import org.apache.spark.annotation.Evolving
-import org.apache.spark.connect.proto.Command
-import org.apache.spark.connect.proto.ExecutePlanResponse
-import org.apache.spark.connect.proto.StreamingQueryManagerCommand
-import org.apache.spark.connect.proto.StreamingQueryManagerCommandResult
+import org.apache.spark.connect.proto.{Command, ExecutePlanResponse, StreamingQueryCommand, StreamingQueryManagerCommand, StreamingQueryManagerCommandResult}
 import org.apache.spark.sql.SparkSession
 
 /**
@@ -37,17 +34,22 @@ import org.apache.spark.sql.SparkSession
  * @since 3.5.0
  */
 @Evolving
-class StreamingQueryManager private[sql] (
-  sparkSession: SparkSession) {
+class StreamingQueryManager private[sql] (sparkSession: SparkSession) {
 
   /**
    * Returns a list of active queries associated with this SQLContext
    *
    * @since 3.5.0
    */
-  def active: Array[StreamingQuery] = activeQueriesSharedLock.synchronized {
-
-  }
+  def active: Array[StreamingQuery] = {
+    executeManagerCmd(_.setActive(true)).getActive.getActiveQueries.map {
+      q => new RemoteStreamingQuery(
+        UUID.fromString(q.getId.getId),
+        UUID.fromString(q.getId.getRunId),
+        q.getName,
+        sparkSession)
+    }
+  } // TODO: null check, empty array check
 
   /**
    * Returns the query if there is an active query with the given id, or null.
@@ -62,7 +64,14 @@ class StreamingQueryManager private[sql] (
    * @since 3.5.0
    */
   def get(id: String): StreamingQuery = {
-
+    executeManagerCmd(_.setGet(id)).getQuery match {
+      case null => null // TODO: needed?
+      case q => new RemoteStreamingQuery(
+        UUID.fromString(q.getId.getId),
+        UUID.fromString(q.getId.getRunId),
+        q.getName,
+        sparkSession)
+    }
   }
 
   /**
@@ -75,9 +84,7 @@ class StreamingQueryManager private[sql] (
    * or throw the exception immediately (if the query was terminated with exception). Use
    * `resetTerminated()` to clear past terminations and wait for new terminations.
    *
-   * In the case where multiple queries have terminated since `resetTermination()` was called,
-   * if any query has terminated with exception, then `awaitAnyTermination()` will
-   * throw any of the exception. For correctly documenting exceptions across multiple queries,
+  *  For correctly documenting exceptions across multiple queries,
    * users need to stop all of them after any of them terminates with exception, and then check the
    * `query.exception()` for each query.
    *
@@ -86,6 +93,7 @@ class StreamingQueryManager private[sql] (
   // TODO(SPARK-43299): verity the behavior of this method after JVM client-side error-handling
   // framework is supported and modify the doc accordingly.
   def awaitAnyTermination(): Unit = {
+    executeManagerCmd(_.getAwaitAnyTerminationBuilder.build())
   }
 
   /**
@@ -99,9 +107,7 @@ class StreamingQueryManager private[sql] (
    * or throw the exception immediately (if the query was terminated with exception). Use
    * `resetTerminated()` to clear past terminations and wait for new terminations.
    *
-   * In the case where multiple queries have terminated since `resetTermination()` was called,
-   * if any query has terminated with exception, then `awaitAnyTermination()` will
-   * throw any of the exception. For correctly documenting exceptions across multiple queries,
+   * For correctly documenting exceptions across multiple queries,
    * users need to stop all of them after any of them terminates with exception, and then check the
    * `query.exception()` for each query.
    *
@@ -110,7 +116,9 @@ class StreamingQueryManager private[sql] (
   // TODO(SPARK-43299): verity the behavior of this method after JVM client-side error-handling
   // framework is supported and modify the doc accordingly.
   def awaitAnyTermination(timeoutMs: Long): Boolean = {
-
+    require(timeoutMs > 0, "Timeout has to be positive")
+    executeManagerCmd(
+      _.getAwaitAnyTerminationBuilder.setTimeoutMs(timeoutMs)).getAwaitAnyTermination.getTerminated
   }
 
   /**
@@ -120,5 +128,25 @@ class StreamingQueryManager private[sql] (
    * @since 3.5.0
    */
   def resetTerminated(): Unit = {
+    executeManagerCmd(_.setResetTerminated(true))
+  }
+
+  private def executeManagerCmd(
+    setCmdFn: StreamingQueryManagerCommand.Builder => Unit // Sets the command field, like stop().
+  ): StreamingQueryManagerCommandResult = {
+
+    val cmdBuilder = Command.newBuilder()
+    val managerCmdBuilder = cmdBuilder.getStreamingQueryManagerCommandBuilder
+
+    // Set command.
+    setCmdFn(managerCmdBuilder)
+
+    val resp = sparkSession.execute(cmdBuilder.build()).head
+
+    if (!resp.hasStreamingQueryManagerCommandResult) {
+      throw new RuntimeException("Unexpected missing response for streaming query manager command")
+    }
+
+    resp.getStreamingQueryManagerCommandResult
   }
 }
