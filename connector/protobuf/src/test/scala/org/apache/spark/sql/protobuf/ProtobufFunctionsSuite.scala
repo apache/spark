@@ -21,9 +21,9 @@ import java.time.Duration
 
 import scala.collection.JavaConverters._
 
-import com.google.protobuf.{ByteString, DynamicMessage, Any => AnyProto}
-import org.json4s.jackson.JsonMethods
+import com.google.protobuf.{Any => AnyProto, ByteString, DynamicMessage}
 import org.json4s.StringInput
+import org.json4s.jackson.JsonMethods
 
 import org.apache.spark.sql.{AnalysisException, Column, DataFrame, QueryTest, Row}
 import org.apache.spark.sql.functions.{lit, struct}
