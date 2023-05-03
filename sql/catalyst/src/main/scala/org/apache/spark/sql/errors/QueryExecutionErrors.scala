@@ -368,7 +368,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       groupCount: Int,
       groupIndex: Int): RuntimeException = {
     new SparkRuntimeException(
-      errorClass = "INVALID_PARAMETER_VALUE.REGEX_GROUP_INDEX_EXCEED_REGEX_GROUP_COUNT",
+      errorClass = "INVALID_PARAMETER_VALUE.REGEX_GROUP_INDEX",
       messageParameters = Map(
         "parameter" -> toSQLId("idx"),
         "functionName" -> toSQLId(funcName),

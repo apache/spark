@@ -1009,9 +1009,9 @@
           "<value>."
         ]
       },
-      "REGEX_GROUP_INDEX_EXCEED_REGEX_GROUP_COUNT" : {
+      "REGEX_GROUP_INDEX" : {
         "message" : [
-          "Regex group count is <groupCount>, but the specified group index is <groupIndex>."
+          "Expects group index between 0 and <groupCount>, but got <groupIndex>."
         ]
       },
       "ZERO_INDEX" : {
