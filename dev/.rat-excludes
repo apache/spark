@@ -143,3 +143,5 @@ empty.proto
 .*\.proto.bin
 LimitedInputStream.java
 TimSort.java
+go.sum
+go/generated/proto
