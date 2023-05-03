@@ -109,7 +109,7 @@ class MockService:
         self.req = req
         resp = proto.InterruptResponse()
         resp.session_id = self._session_id
-        return [resp]
+        return resp
 
 
 if __name__ == "__main__":
