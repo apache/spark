@@ -212,7 +212,7 @@ class SparkSession:
         self._client = SparkConnectClient(connection=connection, userId=userId)
         self._session_id = self._client._session_id
 
-def table(self, tableName: str) -> DataFrame:
+    def table(self, tableName: str) -> DataFrame:
         return self.read.table(tableName)
 
     table.__doc__ = PySparkSession.table.__doc__
@@ -709,6 +709,10 @@ def table(self, tableName: str) -> DataFrame:
                     os.environ["SPARK_REMOTE"] = origin_remote
         else:
             raise RuntimeError("There should not be an existing Spark Session or Spark Context.")
+
+    @property
+    def session_id(self) -> str:
+        return self._session_id
 
 
 SparkSession.__doc__ = PySparkSession.__doc__

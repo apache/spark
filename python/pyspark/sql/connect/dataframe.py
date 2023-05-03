@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+from pyspark.errors.exceptions.base import SessionNotSameException
 from pyspark.sql.connect.utils import check_dependencies
 
 check_dependencies(__name__)
@@ -265,7 +266,7 @@ class DataFrame:
 
     def checkSameSparkSession(self, other: "DataFrame") -> None:
         if self._session.session_id != other._session.session_id:
-            raise PySparkException("Both Datasets must belong to the same SparkSession")
+            raise SessionNotSameException("Both Datasets must belong to the same SparkSession")
 
     def coalesce(self, numPartitions: int) -> "DataFrame":
         if not numPartitions > 0:
