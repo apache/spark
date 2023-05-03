@@ -23,8 +23,8 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark.annotation.Evolving
 import org.apache.spark.connect.proto.Command
-import org.apache.spark.connect.proto.Command.StreamingQueryManagerCommand
-import org.apache.spark.connect.proto.Command.StreamingQueryManagerCommandResult
+import org.apache.spark.connect.proto.StreamingQueryManagerCommand
+import org.apache.spark.connect.proto.StreamingQueryManagerCommandResult
 import org.apache.spark.sql.SparkSession
 
 /**
@@ -41,10 +41,10 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) {
    * @since 3.5.0
    */
   def active: Array[StreamingQuery] = {
-    executeManagerCmd(_.setActive(true)).getActive.getActiveQueries.map {
+    executeManagerCmd(_.setActive(true)).getActive.getActiveQueriesList.asScala.map {
       q => RemoteStreamingQuery.fromStreamingQueryInstanceResponse(sparkSession, q)
-    }
-  } // TODO: null check, empty array check
+    }.toArray
+  }
 
   /**
    * Returns the query if there is an active query with the given id, or null.
@@ -59,9 +59,11 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) {
    * @since 3.5.0
    */
   def get(id: String): StreamingQuery = {
-    executeManagerCmd(_.setGet(id)).getQuery match {
-      case null => null // TODO: needed?
-      case q => RemoteStreamingQuery.fromStreamingQueryInstanceResponse(sparkSession, q)
+    val response = executeManagerCmd(_.setGet(id))
+    if (response.hasQuery) {
+      RemoteStreamingQuery.fromStreamingQueryInstanceResponse(sparkSession, response.getQuery)
+    } else {
+      null
     }
   }
 
