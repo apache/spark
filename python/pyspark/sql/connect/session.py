@@ -568,9 +568,7 @@ class SparkSession:
 
     @property
     def streams(self) -> "StreamingQueryManager":
-        raise PySparkNotImplementedError(
-            error_class="NOT_IMPLEMENTED", message_parameters={"feature": "streams()"}
-        )
+        raise StreamingQueryManager(self)
 
     @property
     def _jsc(self) -> None:
