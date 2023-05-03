@@ -17,12 +17,16 @@
 
 package org.apache.spark.sql.connect.planner
 
+import java.nio.ByteBuffer
+import java.nio.charset.StandardCharsets
+
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 
 import com.google.common.collect.{Lists, Maps}
 import com.google.protobuf.{Any => ProtoAny, ByteString}
 import io.grpc.stub.StreamObserver
+import org.apache.commons.lang3.exception.ExceptionUtils
 
 import org.apache.spark.{Partition, SparkEnv, TaskContext}
 import org.apache.spark.api.python.{PythonEvalType, SimplePythonFunction}
@@ -30,6 +34,13 @@ import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.{ExecutePlanResponse, SqlCommand, StreamingQueryCommand, StreamingQueryCommandResult, StreamingQueryInstanceId, WriteStreamOperationStart, WriteStreamOperationStartResult}
 import org.apache.spark.connect.proto.ExecutePlanResponse.SqlCommandResult
 import org.apache.spark.connect.proto.Parse.ParseFormat
+import org.apache.spark.connect.proto.StreamingQueryCommand
+import org.apache.spark.connect.proto.StreamingQueryCommandResult
+import org.apache.spark.connect.proto.StreamingQueryInstanceId
+import org.apache.spark.connect.proto.StreamingQueryManagerCommand
+import org.apache.spark.connect.proto.StreamingQueryManagerCommandResult
+import org.apache.spark.connect.proto.StreamingQueryManagerCommandResult.StreamingQueryInstance
+import org.apache.spark.connect.proto.WriteStreamOperationStart
 import org.apache.spark.connect.proto.WriteStreamOperationStart.TriggerCase
 import org.apache.spark.ml.{functions => MLFunctions}
 import org.apache.spark.sql.{Column, Dataset, Encoders, SparkSession}
@@ -47,7 +58,9 @@ import org.apache.spark.sql.connect.artifact.SparkConnectArtifactManager
 import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, InvalidPlanInput, LiteralValueProtoConverter, StorageLevelProtoConverter, UdfPacket}
 import org.apache.spark.sql.connect.config.Connect.CONNECT_GRPC_ARROW_MAX_BATCH_SIZE
 import org.apache.spark.sql.connect.plugin.SparkConnectPluginRegistry
-import org.apache.spark.sql.connect.service.{SparkConnectService, SparkConnectStreamHandler}
+import org.apache.spark.sql.connect.service.SessionHolder
+import org.apache.spark.sql.connect.service.SparkConnectService
+import org.apache.spark.sql.connect.service.SparkConnectStreamHandler
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.arrow.ArrowConverters
@@ -60,6 +73,7 @@ import org.apache.spark.sql.internal.CatalogImpl
 import org.apache.spark.sql.streaming.Trigger
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.storage.CacheId
 import org.apache.spark.util.Utils
 
 final case class InvalidCommandInput(
@@ -119,6 +133,8 @@ class SparkConnectPlanner(val session: SparkSession) {
       case proto.Relation.RelTypeCase.WITH_COLUMNS => transformWithColumns(rel.getWithColumns)
       case proto.Relation.RelTypeCase.WITH_WATERMARK =>
         transformWithWatermark(rel.getWithWatermark)
+      case proto.Relation.RelTypeCase.CACHED_LOCAL_RELATION =>
+        transformCachedLocalRelation(rel.getCachedLocalRelation)
       case proto.Relation.RelTypeCase.HINT => transformHint(rel.getHint)
       case proto.Relation.RelTypeCase.UNPIVOT => transformUnpivot(rel.getUnpivot)
       case proto.Relation.RelTypeCase.REPARTITION_BY_EXPRESSION =>
@@ -774,6 +790,31 @@ class SparkConnectPlanner(val session: SparkSession) {
       .logicalPlan
   }
 
+  private def transformCachedLocalRelation(rel: proto.CachedLocalRelation): LogicalPlan = {
+    val blockManager = session.sparkContext.env.blockManager
+    val blockId = CacheId(rel.getUserId, rel.getSessionId, rel.getHash)
+    val bytes = blockManager.getLocalBytes(blockId)
+    bytes
+      .map { blockData =>
+        try {
+          val blob = blockData.toByteBuffer().array()
+          val blobSize = blockData.size.toInt
+          val size = ByteBuffer.wrap(blob).getInt
+          val intSize = 4
+          val data = blob.slice(intSize, intSize + size)
+          val schema = new String(blob.slice(intSize + size, blobSize), StandardCharsets.UTF_8)
+          transformLocalRelation(Option(schema), Option(data))
+        } finally {
+          blockManager.releaseLock(blockId)
+        }
+      }
+      .getOrElse {
+        throw InvalidPlanInput(
+          s"Not found any cached local relation with the hash: ${blockId.hash} in " +
+            s"the session ${blockId.sessionId} for the user id ${blockId.userId}.")
+      }
+  }
+
   private def transformHint(rel: proto.Hint): LogicalPlan = {
 
     def extractValue(expr: Expression): Any = {
@@ -905,70 +946,79 @@ class SparkConnectPlanner(val session: SparkSession) {
     }
   }
 
-  private def transformLocalRelation(rel: proto.LocalRelation): LogicalPlan = {
-    var schema: StructType = null
-    if (rel.hasSchema) {
+  private def transformLocalRelation(
+      schema: Option[String],
+      data: Option[Array[Byte]]): LogicalPlan = {
+    val optStruct = schema.map { schemaStr =>
       val schemaType = DataType.parseTypeWithFallback(
-        rel.getSchema,
+        schemaStr,
         parseDatatypeString,
         fallbackParser = DataType.fromJson)
-      schema = schemaType match {
+      schemaType match {
         case s: StructType => s
         case d => StructType(Seq(StructField("value", d)))
       }
     }
-
-    if (rel.hasData) {
-      val (rows, structType) = ArrowConverters.fromBatchWithSchemaIterator(
-        Iterator(rel.getData.toByteArray),
-        TaskContext.get())
-      if (structType == null) {
-        throw InvalidPlanInput(s"Input data for LocalRelation does not produce a schema.")
-      }
-      val attributes = structType.toAttributes
-      val proj = UnsafeProjection.create(attributes, attributes)
-      val data = rows.map(proj)
-
-      if (schema == null) {
-        logical.LocalRelation(attributes, data.map(_.copy()).toSeq)
-      } else {
-        def normalize(dt: DataType): DataType = dt match {
-          case udt: UserDefinedType[_] => normalize(udt.sqlType)
-          case StructType(fields) =>
-            val newFields = fields.zipWithIndex.map {
-              case (StructField(_, dataType, nullable, metadata), i) =>
-                StructField(s"col_$i", normalize(dataType), nullable, metadata)
-            }
-            StructType(newFields)
-          case ArrayType(elementType, containsNull) =>
-            ArrayType(normalize(elementType), containsNull)
-          case MapType(keyType, valueType, valueContainsNull) =>
-            MapType(normalize(keyType), normalize(valueType), valueContainsNull)
-          case _ => dt
+    data
+      .map { dataBytes =>
+        val (rows, structType) =
+          ArrowConverters.fromBatchWithSchemaIterator(Iterator(dataBytes), TaskContext.get())
+        if (structType == null) {
+          throw InvalidPlanInput(s"Input data for LocalRelation does not produce a schema.")
         }
+        val attributes = structType.toAttributes
+        val proj = UnsafeProjection.create(attributes, attributes)
+        val data = rows.map(proj)
+        optStruct
+          .map { struct =>
+            def normalize(dt: DataType): DataType = dt match {
+              case udt: UserDefinedType[_] => normalize(udt.sqlType)
+              case StructType(fields) =>
+                val newFields = fields.zipWithIndex.map {
+                  case (StructField(_, dataType, nullable, metadata), i) =>
+                    StructField(s"col_$i", normalize(dataType), nullable, metadata)
+                }
+                StructType(newFields)
+              case ArrayType(elementType, containsNull) =>
+                ArrayType(normalize(elementType), containsNull)
+              case MapType(keyType, valueType, valueContainsNull) =>
+                MapType(normalize(keyType), normalize(valueType), valueContainsNull)
+              case _ => dt
+            }
+            val normalized = normalize(struct).asInstanceOf[StructType]
+            val project = Dataset
+              .ofRows(
+                session,
+                logicalPlan = logical.LocalRelation(
+                  normalize(structType).asInstanceOf[StructType].toAttributes))
+              .toDF(normalized.names: _*)
+              .to(normalized)
+              .logicalPlan
+              .asInstanceOf[Project]
 
-        val normalized = normalize(schema).asInstanceOf[StructType]
-
-        val project = Dataset
-          .ofRows(
-            session,
-            logicalPlan =
-              logical.LocalRelation(normalize(structType).asInstanceOf[StructType].toAttributes))
-          .toDF(normalized.names: _*)
-          .to(normalized)
-          .logicalPlan
-          .asInstanceOf[Project]
-
-        val proj = UnsafeProjection.create(project.projectList, project.child.output)
-        logical.LocalRelation(schema.toAttributes, data.map(proj).map(_.copy()).toSeq)
+            val proj = UnsafeProjection.create(project.projectList, project.child.output)
+            logical.LocalRelation(struct.toAttributes, data.map(proj).map(_.copy()).toSeq)
+          }
+          .getOrElse {
+            logical.LocalRelation(attributes, data.map(_.copy()).toSeq)
+          }
       }
-    } else {
-      if (schema == null) {
-        throw InvalidPlanInput(
-          s"Schema for LocalRelation is required when the input data is not provided.")
+      .getOrElse {
+        optStruct
+          .map { struct =>
+            LocalRelation(struct.toAttributes, data = Seq.empty)
+          }
+          .getOrElse {
+            throw InvalidPlanInput(
+              s"Schema for LocalRelation is required when the input data is not provided.")
+          }
       }
-      LocalRelation(schema.toAttributes, data = Seq.empty)
-    }
+  }
+
+  private def transformLocalRelation(rel: proto.LocalRelation): LogicalPlan = {
+    transformLocalRelation(
+      if (rel.hasSchema) Some(rel.getSchema) else None,
+      if (rel.hasData) Some(rel.getData.toByteArray) else None)
   }
 
   /** Parse as DDL, with a fallback to JSON. Throws an exception if if fails to parse. */
@@ -1256,7 +1306,7 @@ class SparkConnectPlanner(val session: SparkSession) {
       fun: proto.CommonInlineUserDefinedFunction): Expression = {
     fun.getFunctionCase match {
       case proto.CommonInlineUserDefinedFunction.FunctionCase.PYTHON_UDF =>
-        transformPythonUDF(fun)
+        transformPythonFuncExpression(fun)
       case proto.CommonInlineUserDefinedFunction.FunctionCase.SCALAR_SCALA_UDF =>
         transformScalarScalaUDF(fun)
       case _ =>
@@ -1302,14 +1352,22 @@ class SparkConnectPlanner(val session: SparkSession) {
    *   PythonUDF.
    */
   private def transformPythonUDF(fun: proto.CommonInlineUserDefinedFunction): PythonUDF = {
+    transformPythonFuncExpression(fun).asInstanceOf[PythonUDF]
+  }
+
+  private def transformPythonFuncExpression(
+      fun: proto.CommonInlineUserDefinedFunction): Expression = {
     val udf = fun.getPythonUdf
-    PythonUDF(
+    UserDefinedPythonFunction(
       name = fun.getFunctionName,
       func = transformPythonFunction(udf),
       dataType = transformDataType(udf.getOutputType),
-      children = fun.getArgumentsList.asScala.map(transformExpression).toSeq,
-      evalType = udf.getEvalType,
+      pythonEvalType = udf.getEvalType,
       udfDeterministic = fun.getDeterministic)
+      .builder(fun.getArgumentsList.asScala.map(transformExpression).toSeq) match {
+      case udaf: PythonUDAF => udaf.toAggregateExpression()
+      case other => other
+    }
   }
 
   private def transformPythonFunction(fun: proto.PythonUDF): SimplePythonFunction = {
@@ -1876,6 +1934,7 @@ class SparkConnectPlanner(val session: SparkSession) {
 
   def process(
       command: proto.Command,
+      userId: String,
       sessionId: String,
       responseObserver: StreamObserver[ExecutePlanResponse]): Unit = {
     command.getCommandTypeCase match {
@@ -1894,10 +1953,16 @@ class SparkConnectPlanner(val session: SparkSession) {
       case proto.Command.CommandTypeCase.WRITE_STREAM_OPERATION_START =>
         handleWriteStreamOperationStart(
           command.getWriteStreamOperationStart,
+          userId,
           sessionId,
           responseObserver)
       case proto.Command.CommandTypeCase.STREAMING_QUERY_COMMAND =>
         handleStreamingQueryCommand(command.getStreamingQueryCommand, sessionId, responseObserver)
+      case proto.Command.CommandTypeCase.STREAMING_QUERY_MANAGER_COMMAND =>
+        handleStreamingQueryManagerCommand(
+          command.getStreamingQueryManagerCommand,
+          sessionId,
+          responseObserver)
       case proto.Command.CommandTypeCase.GET_RESOURCES_COMMAND =>
         handleGetResourcesCommand(command.getGetResourcesCommand, sessionId, responseObserver)
       case _ => throw new UnsupportedOperationException(s"$command not supported.")
@@ -2190,6 +2255,7 @@ class SparkConnectPlanner(val session: SparkSession) {
 
   def handleWriteStreamOperationStart(
       writeOp: WriteStreamOperationStart,
+      userId: String,
       sessionId: String,
       responseObserver: StreamObserver[ExecutePlanResponse]): Unit = {
     val plan = transformRelation(writeOp.getInput)
@@ -2233,6 +2299,11 @@ class SparkConnectPlanner(val session: SparkSession) {
       case path => writer.start(path)
     }
 
+    // Register the new query so that the session and query references are cached.
+    SparkConnectService.streamingSessionManager.registerNewStreamingQuery(
+      sessionHolder = SessionHolder(userId = userId, sessionId = sessionId, session),
+      query = query)
+
     val result = WriteStreamOperationStartResult
       .newBuilder()
       .setQueryId(
@@ -2264,7 +2335,12 @@ class SparkConnectPlanner(val session: SparkSession) {
       .newBuilder()
       .setQueryId(command.getQueryId)
 
-    val query = Option(session.streams.get(id)) match {
+    // Find the query in connect service level cache, otherwise check session's active streams.
+    val query = SparkConnectService.streamingSessionManager
+      .getCachedQuery(id, runId, session) // Common case: query is cached in the cache.
+      .orElse { // Else try to find it in active streams. Mostly will not be found here either.
+        Option(session.streams.get(id))
+      } match {
       case Some(query) if query.runId.toString == runId =>
         query
       case Some(query) =>
@@ -2273,7 +2349,6 @@ class SparkConnectPlanner(val session: SparkSession) {
             s"does not match one on the server ${query.runId}. The query might have restarted.")
       case None =>
         throw new IllegalArgumentException(s"Streaming query $id is not found")
-      // TODO(SPARK-42962): Handle this better. May be cache stopped queries for a few minutes.
     }
 
     command.getCommandCase match {
@@ -2308,7 +2383,6 @@ class SparkConnectPlanner(val session: SparkSession) {
 
       case StreamingQueryCommand.CommandCase.PROCESS_ALL_AVAILABLE =>
         // This might take a long time, Spark-connect client keeps this connection alive.
-        // TODO(SPARK-42962): Improve this as part of session management.
         query.processAllAvailable()
 
       case StreamingQueryCommand.CommandCase.EXPLAIN =>
@@ -2326,10 +2400,20 @@ class SparkConnectPlanner(val session: SparkSession) {
 
       case StreamingQueryCommand.CommandCase.EXCEPTION =>
         val result = query.exception
-        result.foreach(e =>
-          respBuilder.getExceptionBuilder
-            .setExceptionMessage(SparkConnectService.abbreviateErrorMessage(e.toString))
-            .setErrorClass(e.getErrorClass))
+        if (result.isDefined) {
+          val e = result.get
+          val exception_builder = StreamingQueryCommandResult.ExceptionResult
+            .newBuilder()
+          exception_builder
+            .setExceptionMessage(e.toString)
+            .setErrorClass(e.getErrorClass)
+
+          val stackTrace = Option(ExceptionUtils.getStackTrace(e))
+          stackTrace.foreach { s =>
+            exception_builder.setStackTrace(s)
+          }
+          respBuilder.setException(exception_builder.build())
+        }
 
       case StreamingQueryCommand.CommandCase.AWAIT_TERMINATION =>
         if (command.getAwaitTermination.hasTimeoutMs) {
@@ -2351,6 +2435,69 @@ class SparkConnectPlanner(val session: SparkSession) {
         .newBuilder()
         .setSessionId(sessionId)
         .setStreamingQueryCommandResult(respBuilder.build())
+        .build())
+  }
+
+  def handleStreamingQueryManagerCommand(
+      command: StreamingQueryManagerCommand,
+      sessionId: String,
+      responseObserver: StreamObserver[ExecutePlanResponse]): Unit = {
+
+    val respBuilder = StreamingQueryManagerCommandResult.newBuilder()
+
+    command.getCommandCase match {
+      case StreamingQueryManagerCommand.CommandCase.ACTIVE =>
+        val active_queries = session.streams.active
+        respBuilder.getActiveBuilder.addAllActiveQueries(
+          active_queries
+            .map(query =>
+              StreamingQueryInstance
+                .newBuilder()
+                .setId(
+                  StreamingQueryInstanceId
+                    .newBuilder()
+                    .setId(query.id.toString)
+                    .setRunId(query.runId.toString)
+                    .build())
+                .setName(SparkConnectService.convertNullString(query.name))
+                .build())
+            .toIterable
+            .asJava)
+
+      case StreamingQueryManagerCommand.CommandCase.GET =>
+        val query = session.streams.get(command.getGet)
+        respBuilder.getQueryBuilder
+          .setId(
+            StreamingQueryInstanceId
+              .newBuilder()
+              .setId(query.id.toString)
+              .setRunId(query.runId.toString)
+              .build())
+          .setName(SparkConnectService.convertNullString(query.name))
+
+      case StreamingQueryManagerCommand.CommandCase.AWAIT_ANY_TERMINATION =>
+        if (command.getAwaitAnyTermination.hasTimeoutMs) {
+          val terminated =
+            session.streams.awaitAnyTermination(command.getAwaitAnyTermination.getTimeoutMs)
+          respBuilder.getAwaitAnyTerminationBuilder.setTerminated(terminated)
+        } else {
+          session.streams.awaitAnyTermination()
+          respBuilder.getAwaitAnyTerminationBuilder.setTerminated(true)
+        }
+
+      case StreamingQueryManagerCommand.CommandCase.RESET_TERMINATED =>
+        session.streams.resetTerminated()
+        respBuilder.setResetTerminated(true)
+
+      case StreamingQueryManagerCommand.CommandCase.COMMAND_NOT_SET =>
+        throw new IllegalArgumentException("Missing command in StreamingQueryManagerCommand")
+    }
+
+    responseObserver.onNext(
+      ExecutePlanResponse
+        .newBuilder()
+        .setSessionId(sessionId)
+        .setStreamingQueryManagerCommandResult(respBuilder.build())
         .build())
   }
 
