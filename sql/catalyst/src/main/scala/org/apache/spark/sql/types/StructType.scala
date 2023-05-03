@@ -455,7 +455,7 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
    */
   def toDDL: String = fields.map(_.toDDL).mkString(",")
 
-  private[sql] def toNestedDDL: String = 
+  private[sql] def toNestedDDL: String =
     s"STRUCT<${fields.map(_.toDDL(isNested = true)).mkString(",")}>"
 
   private[sql] override def simpleString(maxNumberFields: Int): String = {
