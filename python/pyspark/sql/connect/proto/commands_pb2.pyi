@@ -698,6 +698,7 @@ class WriteStreamOperationStart(google.protobuf.message.Message):
     QUERY_NAME_FIELD_NUMBER: builtins.int
     PATH_FIELD_NUMBER: builtins.int
     TABLE_NAME_FIELD_NUMBER: builtins.int
+    FOREACH_FIELD_NUMBER: builtins.int
     @property
     def input(self) -> pyspark.sql.connect.proto.relations_pb2.Relation:
         """(Required) The output of the `input` streaming relation will be written."""
@@ -721,6 +722,8 @@ class WriteStreamOperationStart(google.protobuf.message.Message):
     query_name: builtins.str
     path: builtins.str
     table_name: builtins.str
+    @property
+    def foreach(self) -> global___Foreach: ...
     def __init__(
         self,
         *,
@@ -736,14 +739,19 @@ class WriteStreamOperationStart(google.protobuf.message.Message):
         query_name: builtins.str = ...,
         path: builtins.str = ...,
         table_name: builtins.str = ...,
+        foreach: global___Foreach | None = ...,
     ) -> None: ...
     def HasField(
         self,
         field_name: typing_extensions.Literal[
+            "_foreach",
+            b"_foreach",
             "available_now",
             b"available_now",
             "continuous_checkpoint_interval",
             b"continuous_checkpoint_interval",
+            "foreach",
+            b"foreach",
             "input",
             b"input",
             "once",
@@ -763,10 +771,14 @@ class WriteStreamOperationStart(google.protobuf.message.Message):
     def ClearField(
         self,
         field_name: typing_extensions.Literal[
+            "_foreach",
+            b"_foreach",
             "available_now",
             b"available_now",
             "continuous_checkpoint_interval",
             b"continuous_checkpoint_interval",
+            "foreach",
+            b"foreach",
             "format",
             b"format",
             "input",
@@ -795,6 +807,10 @@ class WriteStreamOperationStart(google.protobuf.message.Message):
     ) -> None: ...
     @typing.overload
     def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["_foreach", b"_foreach"]
+    ) -> typing_extensions.Literal["foreach"] | None: ...
+    @typing.overload
+    def WhichOneof(
         self, oneof_group: typing_extensions.Literal["sink_destination", b"sink_destination"]
     ) -> typing_extensions.Literal["path", "table_name"] | None: ...
     @typing.overload
@@ -805,6 +821,34 @@ class WriteStreamOperationStart(google.protobuf.message.Message):
     ] | None: ...
 
 global___WriteStreamOperationStart = WriteStreamOperationStart
+
+class Foreach(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    COMMAND_FIELD_NUMBER: builtins.int
+    PYTHON_VER_FIELD_NUMBER: builtins.int
+    SCHEMA_FIELD_NUMBER: builtins.int
+    command: builtins.bytes
+    """(Required) The encoded commands of the Python foreach function"""
+    python_ver: builtins.str
+    """(Required) Python version being used in the client."""
+    schema: builtins.str
+    """(Required) The row schema of the function input."""
+    def __init__(
+        self,
+        *,
+        command: builtins.bytes = ...,
+        python_ver: builtins.str = ...,
+        schema: builtins.str = ...,
+    ) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "command", b"command", "python_ver", b"python_ver", "schema", b"schema"
+        ],
+    ) -> None: ...
+
+global___Foreach = Foreach
 
 class WriteStreamOperationStartResult(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor

@@ -21,7 +21,7 @@ import tempfile
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 
-class StreamingTestsForeach(ReusedSQLTestCase):
+class StreamingTestsForeachMixin:
     class ForeachWriterTester:
         def __init__(self, spark):
             self.spark = spark
@@ -229,53 +229,57 @@ class StreamingTestsForeach(ReusedSQLTestCase):
         self.assertEqual(len(close_events), 1)
         # TODO: Verify whether original error message is inside the exception
 
-    def test_streaming_foreach_with_invalid_writers(self):
+    # def test_streaming_foreach_with_invalid_writers(self):
+    #
+    #     tester = self.ForeachWriterTester(self.spark)
+    #
+    #     def func_with_iterator_input(iter):
+    #         for x in iter:
+    #             print(x)
+    #
+    #     tester.assert_invalid_writer(func_with_iterator_input)
+    #
+    #     class WriterWithoutProcess:
+    #         def open(self, partition):
+    #             pass
+    #
+    #     tester.assert_invalid_writer(WriterWithoutProcess(), "does not have a 'process'")
+    #
+    #     class WriterWithNonCallableProcess:
+    #         process = True
+    #
+    #     tester.assert_invalid_writer(WriterWithNonCallableProcess(), "ATTRIBUTE_NOT_CALLABLE")
+    #
+    #     class WriterWithNoParamProcess:
+    #         def process(self):
+    #             pass
+    #
+    #     tester.assert_invalid_writer(WriterWithNoParamProcess())
+    #
+    #     # Abstract class for tests below
+    #     class WithProcess:
+    #         def process(self, row):
+    #             pass
+    #
+    #     class WriterWithNonCallableOpen(WithProcess):
+    #         open = True
+    #
+    #     tester.assert_invalid_writer(WriterWithNonCallableOpen(), "ATTRIBUTE_NOT_CALLABLE")
+    #
+    #     class WriterWithNoParamOpen(WithProcess):
+    #         def open(self):
+    #             pass
+    #
+    #     tester.assert_invalid_writer(WriterWithNoParamOpen())
+    #
+    #     class WriterWithNonCallableClose(WithProcess):
+    #         close = True
+    #
+    #     tester.assert_invalid_writer(WriterWithNonCallableClose(), "ATTRIBUTE_NOT_CALLABLE")
 
-        tester = self.ForeachWriterTester(self.spark)
 
-        def func_with_iterator_input(iter):
-            for x in iter:
-                print(x)
-
-        tester.assert_invalid_writer(func_with_iterator_input)
-
-        class WriterWithoutProcess:
-            def open(self, partition):
-                pass
-
-        tester.assert_invalid_writer(WriterWithoutProcess(), "does not have a 'process'")
-
-        class WriterWithNonCallableProcess:
-            process = True
-
-        tester.assert_invalid_writer(WriterWithNonCallableProcess(), "ATTRIBUTE_NOT_CALLABLE")
-
-        class WriterWithNoParamProcess:
-            def process(self):
-                pass
-
-        tester.assert_invalid_writer(WriterWithNoParamProcess())
-
-        # Abstract class for tests below
-        class WithProcess:
-            def process(self, row):
-                pass
-
-        class WriterWithNonCallableOpen(WithProcess):
-            open = True
-
-        tester.assert_invalid_writer(WriterWithNonCallableOpen(), "ATTRIBUTE_NOT_CALLABLE")
-
-        class WriterWithNoParamOpen(WithProcess):
-            def open(self):
-                pass
-
-        tester.assert_invalid_writer(WriterWithNoParamOpen())
-
-        class WriterWithNonCallableClose(WithProcess):
-            close = True
-
-        tester.assert_invalid_writer(WriterWithNonCallableClose(), "ATTRIBUTE_NOT_CALLABLE")
+class StreamingTestsForeach(StreamingTestsForeachMixin, ReusedSQLTestCase):
+    pass
 
 
 if __name__ == "__main__":

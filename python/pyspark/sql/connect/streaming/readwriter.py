@@ -23,6 +23,7 @@ import sys
 from collections.abc import Iterator
 from typing import cast, overload, Any, Callable, Dict, List, Optional, TYPE_CHECKING, Union
 
+from pyspark.serializers import CloudPickleSerializer
 from pyspark.sql.connect.plan import DataSource, LogicalPlan, Read, WriteStreamOperation
 import pyspark.sql.connect.proto as pb2
 from pyspark.sql.connect.readwriter import OptionUtils, to_str
@@ -341,7 +342,9 @@ DataStreamReader.__doc__ = PySparkDataStreamReader.__doc__
 
 
 class DataStreamWriter:
-    def __init__(self, plan: "LogicalPlan", schema: Optional[StructType], session: "SparkSession") -> None:
+    def __init__(
+        self, plan: "LogicalPlan", schema: Optional[StructType], session: "SparkSession"
+    ) -> None:
         self._session = session
         self._schema = schema
         self._write_stream = WriteStreamOperation(plan)
@@ -482,6 +485,7 @@ class DataStreamWriter:
         ...
 
     def foreach(self, f: Union[Callable[[Row], None], "SupportsProcess"]) -> "DataStreamWriter":
+        from pyspark.serializers import CPickleSerializer, AutoBatchedSerializer
         from pyspark.taskcontext import TaskContext
 
         if callable(f):
@@ -552,9 +556,14 @@ class DataStreamWriter:
                 return iter([])
 
             func = func_with_open_process_close  # type: ignore[assignment]
-            self._write_proto.foreach.command = func
+            serializer = AutoBatchedSerializer(CPickleSerializer())
+            command = (func, None, serializer, serializer)
+            self._write_proto.foreach.command = CloudPickleSerializer().dumps(command)
             self._write_proto.foreach.python_ver = "%d.%d" % sys.version_info[:2]
-            self._write_proto.foreach.schema = self._schema.json() # TODO: null check?
+            self._write_proto.foreach.schema = (
+                self._schema.json() if self._schema is not None else ""
+            )
+            return self
 
     foreach.__doc__ = PySparkDataStreamWriter.foreach.__doc__
 
