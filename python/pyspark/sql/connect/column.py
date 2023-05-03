@@ -138,9 +138,9 @@ class Column:
 
     # container operators
     def __contains__(self, item: Any) -> None:
-        raise ValueError(
-            "Cannot apply 'in' operator against a column: please use 'contains' "
-            "in a string column or 'array_contains' function for an array column."
+        raise PySparkValueError(
+            error_class="CANNOT_APPLY_IN_FOR_COLUMN",
+            message_parameters={},
         )
 
     # bitwise operators
@@ -438,7 +438,9 @@ class Column:
                 error_class="JVM_ATTRIBUTE_NOT_SUPPORTED", message_parameters={"attr_name": "_jc"}
             )
         if item.startswith("__"):
-            raise AttributeError(item)
+            raise PySparkAttributeError(
+                error_class="ATTRIBUTE_NOT_SUPPORTED", message_parameters={"attr_name": item}
+            )
         return self[item]
 
     def __getitem__(self, k: Any) -> "Column":
