@@ -568,7 +568,7 @@ class SparkSession:
 
     @property
     def streams(self) -> "StreamingQueryManager":
-        raise StreamingQueryManager(self)
+        return StreamingQueryManager(self)
 
     @property
     def _jsc(self) -> None:
