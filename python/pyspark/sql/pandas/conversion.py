@@ -85,7 +85,7 @@ class PandasConversionMixin:
 
         jconf = self.sparkSession._jconf
         timezone = jconf.sessionLocalTimeZone()
-        struct_in_pandas_as = jconf.pandasStructHandlingMode()
+        struct_in_pandas = jconf.pandasStructHandlingMode()
 
         if jconf.arrowPySparkEnabled():
             use_arrow = True
@@ -159,9 +159,9 @@ class PandasConversionMixin:
                         pdf = pd.DataFrame(columns=self.columns)
 
                     error_on_duplicated_field_names = False
-                    if struct_in_pandas_as == "legacy":
+                    if struct_in_pandas == "legacy":
                         error_on_duplicated_field_names = True
-                        struct_in_pandas_as = "dict"
+                        struct_in_pandas = "dict"
 
                     return pd.concat(
                         [
@@ -169,7 +169,7 @@ class PandasConversionMixin:
                                 field.dataType,
                                 field.nullable,
                                 timezone=timezone,
-                                struct_in_pandas=struct_in_pandas_as,
+                                struct_in_pandas=struct_in_pandas,
                                 error_on_duplicated_field_names=error_on_duplicated_field_names,
                             )(pser)
                             for (_, pser), field in zip(pdf.items(), self.schema.fields)
@@ -199,9 +199,7 @@ class PandasConversionMixin:
                     field.dataType,
                     field.nullable,
                     timezone=timezone,
-                    struct_in_pandas=(
-                        "row" if struct_in_pandas_as == "legacy" else struct_in_pandas_as
-                    ),
+                    struct_in_pandas=("row" if struct_in_pandas == "legacy" else struct_in_pandas),
                     error_on_duplicated_field_names=False,
                 )(pser)
                 for (_, pser), field in zip(pdf.items(), self.schema.fields)
