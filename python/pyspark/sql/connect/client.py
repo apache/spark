@@ -1095,7 +1095,7 @@ class SparkConnectClient(object):
             self._handle_error(error)
 
     def _interrupt_request(
-        self, interrupt_type: pb2.InterruptRequest.InterruptType
+        self, interrupt_type: pb2.InterruptRequest.InterruptType.ValueType
     ) -> pb2.InterruptRequest:
         req = pb2.InterruptRequest()
         req.session_id = self._session_id
@@ -1120,12 +1120,12 @@ class SparkConnectClient(object):
             ):
                 with attempt:
                     resp = self._stub.Interrupt(req, metadata=self._builder.metadata())
-                if resp.session_id != self._session_id:
-                    raise SparkConnectException(
-                        "Received incorrect session identifier for request:"
-                        f"{resp.session_id} != {self._session_id}"
-                    )
-                return
+                    if resp.session_id != self._session_id:
+                        raise SparkConnectException(
+                            "Received incorrect session identifier for request:"
+                            f"{resp.session_id} != {self._session_id}"
+                        )
+                    return
             raise SparkConnectException("Invalid state during retry exception handling.")
         except Exception as error:
             self._handle_error(error)
