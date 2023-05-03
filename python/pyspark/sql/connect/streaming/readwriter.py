@@ -343,10 +343,9 @@ DataStreamReader.__doc__ = PySparkDataStreamReader.__doc__
 
 class DataStreamWriter:
     def __init__(
-        self, plan: "LogicalPlan", schema: Optional[StructType], session: "SparkSession"
+        self, plan: "LogicalPlan", session: "SparkSession"
     ) -> None:
         self._session = session
-        self._schema = schema
         self._write_stream = WriteStreamOperation(plan)
         self._write_proto = self._write_stream.write_op
 
@@ -556,13 +555,11 @@ class DataStreamWriter:
                 return iter([])
 
             func = func_with_open_process_close  # type: ignore[assignment]
+
         serializer = AutoBatchedSerializer(CPickleSerializer())
         command = (func, None, serializer, serializer)
         self._write_proto.foreach.command = CloudPickleSerializer().dumps(command)
         self._write_proto.foreach.python_ver = "%d.%d" % sys.version_info[:2]
-        self._write_proto.foreach.schema = (
-            self._schema.json() if self._schema is not None else ""
-        )
         return self
 
     foreach.__doc__ = PySparkDataStreamWriter.foreach.__doc__

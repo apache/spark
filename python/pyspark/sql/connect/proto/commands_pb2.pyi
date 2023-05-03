@@ -827,25 +827,19 @@ class Foreach(google.protobuf.message.Message):
 
     COMMAND_FIELD_NUMBER: builtins.int
     PYTHON_VER_FIELD_NUMBER: builtins.int
-    SCHEMA_FIELD_NUMBER: builtins.int
     command: builtins.bytes
     """(Required) The encoded commands of the Python foreach function"""
     python_ver: builtins.str
     """(Required) Python version being used in the client."""
-    schema: builtins.str
-    """(Required) The row schema of the function input."""
     def __init__(
         self,
         *,
         command: builtins.bytes = ...,
         python_ver: builtins.str = ...,
-        schema: builtins.str = ...,
     ) -> None: ...
     def ClearField(
         self,
-        field_name: typing_extensions.Literal[
-            "command", b"command", "python_ver", b"python_ver", "schema", b"schema"
-        ],
+        field_name: typing_extensions.Literal["command", b"command", "python_ver", b"python_ver"],
     ) -> None: ...
 
 global___Foreach = Foreach
