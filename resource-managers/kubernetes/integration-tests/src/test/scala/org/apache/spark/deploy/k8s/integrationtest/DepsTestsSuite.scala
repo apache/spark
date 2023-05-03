@@ -281,7 +281,7 @@ private[spark] trait DepsTestsSuite { k8sSuite: KubernetesSuite =>
       depsFile: Option[String] = None,
       env: Map[String, String] = Map.empty[String, String]): Unit = {
     tryDepsTest {
-      setPythonSparkConfProperties(sparkAppConf)
+      sparkAppConf.set("spark.kubernetes.container.image", pyImage)
       runSparkApplicationAndVerifyCompletion(
         appResource = pySparkFiles,
         mainClass = "",
@@ -368,10 +368,6 @@ private[spark] trait DepsTestsSuite { k8sSuite: KubernetesSuite =>
       .set("spark.hadoop.fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem")
       .set("spark.jars.packages", packages)
       .set("spark.driver.extraJavaOptions", "-Divy.cache.dir=/tmp -Divy.home=/tmp")
-  }
-
-  private def setPythonSparkConfProperties(conf: SparkAppConf): Unit = {
-    conf.set("spark.kubernetes.container.image", pyImage)
   }
 
   private def tryDepsTest(runTest: => Unit): Unit = {
