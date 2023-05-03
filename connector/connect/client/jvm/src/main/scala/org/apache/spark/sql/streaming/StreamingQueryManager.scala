@@ -18,14 +18,13 @@
 package org.apache.spark.sql.streaming
 
 import java.util.UUID
-import java.util.concurrent.{TimeUnit, TimeoutException}
-import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.JavaConverters._
-import scala.collection.mutable
 
 import org.apache.spark.annotation.Evolving
-import org.apache.spark.connect.proto.{Command, ExecutePlanResponse, StreamingQueryCommand, StreamingQueryManagerCommand, StreamingQueryManagerCommandResult}
+import org.apache.spark.connect.proto.Command
+import org.apache.spark.connect.proto.Command.StreamingQueryManagerCommand
+import org.apache.spark.connect.proto.Command.StreamingQueryManagerCommandResult
 import org.apache.spark.sql.SparkSession
 
 /**
@@ -43,11 +42,7 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) {
    */
   def active: Array[StreamingQuery] = {
     executeManagerCmd(_.setActive(true)).getActive.getActiveQueries.map {
-      q => new RemoteStreamingQuery(
-        UUID.fromString(q.getId.getId),
-        UUID.fromString(q.getId.getRunId),
-        q.getName,
-        sparkSession)
+      q => RemoteStreamingQuery.fromStreamingQueryInstanceResponse(sparkSession, q)
     }
   } // TODO: null check, empty array check
 
@@ -66,11 +61,7 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) {
   def get(id: String): StreamingQuery = {
     executeManagerCmd(_.setGet(id)).getQuery match {
       case null => null // TODO: needed?
-      case q => new RemoteStreamingQuery(
-        UUID.fromString(q.getId.getId),
-        UUID.fromString(q.getId.getRunId),
-        q.getName,
-        sparkSession)
+      case q => RemoteStreamingQuery.fromStreamingQueryInstanceResponse(sparkSession, q)
     }
   }
 
