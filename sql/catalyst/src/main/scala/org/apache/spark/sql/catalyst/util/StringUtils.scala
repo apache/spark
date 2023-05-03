@@ -24,6 +24,7 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.commons.text.similarity.LevenshteinDistance
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.unsafe.array.ByteArrayMethods
@@ -79,10 +80,24 @@ object StringUtils extends Logging {
   private[this] val falseStrings =
     Set("f", "false", "n", "no", "0").map(UTF8String.fromString)
 
-  private[spark] def orderStringsBySimilarity(
+  private[spark] def orderSuggestedAttributesBySimilarity(
       baseString: String,
       testStrings: Seq[String]): Seq[String] = {
-    testStrings.sortBy(LevenshteinDistance.getDefaultInstance.apply(_, baseString))
+    // This method is used to generate suggested list of candidates closest to `baseString` from the
+    // list of `testStrings`. Spark uses it to clarify error message in case a query refers to non
+    // existent column or attribute. The `baseString` could be unqualified (single part) or
+    // qualified (multi part) and this method will try to match suggestion. Detection of whether
+    // `baseString` represents qualified name is not fail-proof since it could represent
+    // non-qualified path to nested field. We assume that `testStrings` represent qualified names of
+    // resolvable attributes.
+    val maybeQualified = UnresolvedAttribute.parseAttributeName(baseString).size > 1
+    val newTestStrings = if (maybeQualified) {
+      testStrings
+    } else {
+      testStrings.map(UnresolvedAttribute.parseAttributeName(_).map(quoteIfNeeded).mkString("."))
+    }
+
+    newTestStrings.sortBy(LevenshteinDistance.getDefaultInstance.apply(_, baseString))
   }
 
   // scalastyle:off caselocale
