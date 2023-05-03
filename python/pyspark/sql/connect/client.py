@@ -1099,13 +1099,19 @@ class SparkConnectClient(object):
         except Exception as error:
             self._handle_error(error)
 
-    def _interrupt_request(
-        self, interrupt_type: pb2.InterruptRequest.InterruptType
-    ) -> pb2.InterruptRequest:
+    def _interrupt_request(self, interrupt_type: str) -> pb2.InterruptRequest:
         req = pb2.InterruptRequest()
         req.session_id = self._session_id
         req.client_type = self._builder.userAgent
-        req.interrupt_type = interrupt_type
+        if interrupt_type == "all":
+            req.interrupt_type = pb2.InterruptRequest.InterruptType.INTERRUPT_TYPE_ALL
+        else:
+            raise PySparkValueError(
+                error_class="UNKNOWN_INTERRUPT_TYPE",
+                message_parameters = {
+                    "interrupt_type": str(interrupt_type),
+                },
+            )
         if self._user_id:
             req.user_context.user_id = self._user_id
         return req
