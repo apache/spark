@@ -1108,7 +1108,7 @@ class SparkConnectClient(object):
         else:
             raise PySparkValueError(
                 error_class="UNKNOWN_INTERRUPT_TYPE",
-                message_parameters = {
+                message_parameters={
                     "interrupt_type": str(interrupt_type),
                 },
             )
