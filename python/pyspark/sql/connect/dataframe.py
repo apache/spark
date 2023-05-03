@@ -1599,6 +1599,13 @@ class DataFrame:
                 message_parameters={"arg_name": "item", "arg_type": type(item).__name__},
             )
 
+    def __dir__(self) -> List[str]:
+        attrs = set(super().__dir__())
+        attrs.update(self.columns)
+        return sorted(attrs)
+
+    __dir__.__doc__ = PySparkDataFrame.__dir__.__doc__
+
     def _print_plan(self) -> str:
         if self._plan:
             return self._plan.print()

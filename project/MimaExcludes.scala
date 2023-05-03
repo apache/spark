@@ -76,6 +76,8 @@ object MimaExcludes {
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.SparkException"),
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.SparkException$"),
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.SparkThrowable"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ErrorInfo$"),
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ErrorSubInfo$"),
 
     (problem: Problem) => problem match {
       case MissingClassProblem(cls) => !cls.fullName.startsWith("org.sparkproject.jpmml") &&
