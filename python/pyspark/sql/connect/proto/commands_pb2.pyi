@@ -53,6 +53,7 @@ else:
 
 DESCRIPTOR: google.protobuf.descriptor.FileDescriptor
 
+@typing_extensions.final
 class Command(google.protobuf.message.Message):
     """A [[Command]] is an operation that is executed by the server that does not directly consume or
     produce a relational result.
@@ -181,6 +182,7 @@ class Command(google.protobuf.message.Message):
 
 global___Command = Command
 
+@typing_extensions.final
 class SqlCommand(google.protobuf.message.Message):
     """A SQL Command is used to trigger the eager evaluation of SQL commands in Spark.
 
@@ -192,6 +194,7 @@ class SqlCommand(google.protobuf.message.Message):
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
+    @typing_extensions.final
     class ArgsEntry(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -239,6 +242,7 @@ class SqlCommand(google.protobuf.message.Message):
 
 global___SqlCommand = SqlCommand
 
+@typing_extensions.final
 class CreateDataFrameViewCommand(google.protobuf.message.Message):
     """A command that can create DataFrame global temp view or local temp view."""
 
@@ -281,6 +285,7 @@ class CreateDataFrameViewCommand(google.protobuf.message.Message):
 
 global___CreateDataFrameViewCommand = CreateDataFrameViewCommand
 
+@typing_extensions.final
 class WriteOperation(google.protobuf.message.Message):
     """As writes are not directly handled during analysis and planning, they are modeled as commands."""
 
@@ -310,6 +315,7 @@ class WriteOperation(google.protobuf.message.Message):
     SAVE_MODE_ERROR_IF_EXISTS: WriteOperation.SaveMode.ValueType  # 3
     SAVE_MODE_IGNORE: WriteOperation.SaveMode.ValueType  # 4
 
+    @typing_extensions.final
     class OptionsEntry(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -327,6 +333,7 @@ class WriteOperation(google.protobuf.message.Message):
             self, field_name: typing_extensions.Literal["key", b"key", "value", b"value"]
         ) -> None: ...
 
+    @typing_extensions.final
     class SaveTable(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -369,6 +376,7 @@ class WriteOperation(google.protobuf.message.Message):
             ],
         ) -> None: ...
 
+    @typing_extensions.final
     class BucketBy(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -499,6 +507,7 @@ class WriteOperation(google.protobuf.message.Message):
 
 global___WriteOperation = WriteOperation
 
+@typing_extensions.final
 class WriteOperationV2(google.protobuf.message.Message):
     """As writes are not directly handled during analysis and planning, they are modeled as commands."""
 
@@ -532,6 +541,7 @@ class WriteOperationV2(google.protobuf.message.Message):
     MODE_REPLACE: WriteOperationV2.Mode.ValueType  # 5
     MODE_CREATE_OR_REPLACE: WriteOperationV2.Mode.ValueType  # 6
 
+    @typing_extensions.final
     class OptionsEntry(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -549,6 +559,7 @@ class WriteOperationV2(google.protobuf.message.Message):
             self, field_name: typing_extensions.Literal["key", b"key", "value", b"value"]
         ) -> None: ...
 
+    @typing_extensions.final
     class TablePropertiesEntry(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -662,6 +673,7 @@ class WriteOperationV2(google.protobuf.message.Message):
 
 global___WriteOperationV2 = WriteOperationV2
 
+@typing_extensions.final
 class WriteStreamOperationStart(google.protobuf.message.Message):
     """Starts write stream operation as streaming query. Query ID and Run ID of the streaming
     query are returned.
@@ -669,6 +681,7 @@ class WriteStreamOperationStart(google.protobuf.message.Message):
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
+    @typing_extensions.final
     class OptionsEntry(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -806,6 +819,7 @@ class WriteStreamOperationStart(google.protobuf.message.Message):
 
 global___WriteStreamOperationStart = WriteStreamOperationStart
 
+@typing_extensions.final
 class WriteStreamOperationStartResult(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -831,6 +845,7 @@ class WriteStreamOperationStartResult(google.protobuf.message.Message):
 
 global___WriteStreamOperationStartResult = WriteStreamOperationStartResult
 
+@typing_extensions.final
 class StreamingQueryInstanceId(google.protobuf.message.Message):
     """A tuple that uniquely identifies an instance of streaming query run. It consists of `id` that
     persists across the streaming runs and `run_id` that changes between each run of the
@@ -863,11 +878,13 @@ class StreamingQueryInstanceId(google.protobuf.message.Message):
 
 global___StreamingQueryInstanceId = StreamingQueryInstanceId
 
+@typing_extensions.final
 class StreamingQueryCommand(google.protobuf.message.Message):
     """Commands for a streaming query."""
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
+    @typing_extensions.final
     class ExplainCommand(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -885,6 +902,7 @@ class StreamingQueryCommand(google.protobuf.message.Message):
             self, field_name: typing_extensions.Literal["extended", b"extended"]
         ) -> None: ...
 
+    @typing_extensions.final
     class AwaitTerminationCommand(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -1019,11 +1037,13 @@ class StreamingQueryCommand(google.protobuf.message.Message):
 
 global___StreamingQueryCommand = StreamingQueryCommand
 
+@typing_extensions.final
 class StreamingQueryCommandResult(google.protobuf.message.Message):
     """Response for commands on a streaming query."""
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
+    @typing_extensions.final
     class StatusResult(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -1058,6 +1078,7 @@ class StreamingQueryCommandResult(google.protobuf.message.Message):
             ],
         ) -> None: ...
 
+    @typing_extensions.final
     class RecentProgressResult(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -1077,6 +1098,7 @@ class StreamingQueryCommandResult(google.protobuf.message.Message):
             field_name: typing_extensions.Literal["recent_progress_json", b"recent_progress_json"],
         ) -> None: ...
 
+    @typing_extensions.final
     class ExplainResult(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -1092,6 +1114,7 @@ class StreamingQueryCommandResult(google.protobuf.message.Message):
             self, field_name: typing_extensions.Literal["result", b"result"]
         ) -> None: ...
 
+    @typing_extensions.final
     class ExceptionResult(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -1161,6 +1184,7 @@ class StreamingQueryCommandResult(google.protobuf.message.Message):
             self, oneof_group: typing_extensions.Literal["_stack_trace", b"_stack_trace"]
         ) -> typing_extensions.Literal["stack_trace"] | None: ...
 
+    @typing_extensions.final
     class AwaitTerminationResult(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -1250,11 +1274,13 @@ class StreamingQueryCommandResult(google.protobuf.message.Message):
 
 global___StreamingQueryCommandResult = StreamingQueryCommandResult
 
+@typing_extensions.final
 class StreamingQueryManagerCommand(google.protobuf.message.Message):
     """Commands for the streaming query manager."""
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
+    @typing_extensions.final
     class AwaitAnyTerminationCommand(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -1344,11 +1370,13 @@ class StreamingQueryManagerCommand(google.protobuf.message.Message):
 
 global___StreamingQueryManagerCommand = StreamingQueryManagerCommand
 
+@typing_extensions.final
 class StreamingQueryManagerCommandResult(google.protobuf.message.Message):
     """Response for commands on the streaming query manager."""
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
+    @typing_extensions.final
     class ActiveResult(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -1371,6 +1399,7 @@ class StreamingQueryManagerCommandResult(google.protobuf.message.Message):
             self, field_name: typing_extensions.Literal["active_queries", b"active_queries"]
         ) -> None: ...
 
+    @typing_extensions.final
     class StreamingQueryInstance(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -1392,6 +1421,7 @@ class StreamingQueryManagerCommandResult(google.protobuf.message.Message):
             self, field_name: typing_extensions.Literal["id", b"id", "name", b"name"]
         ) -> None: ...
 
+    @typing_extensions.final
     class AwaitAnyTerminationResult(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
@@ -1466,6 +1496,7 @@ class StreamingQueryManagerCommandResult(google.protobuf.message.Message):
 
 global___StreamingQueryManagerCommandResult = StreamingQueryManagerCommandResult
 
+@typing_extensions.final
 class GetResourcesCommand(google.protobuf.message.Message):
     """Command to get the output of 'SparkContext.resources'"""
 
@@ -1477,11 +1508,13 @@ class GetResourcesCommand(google.protobuf.message.Message):
 
 global___GetResourcesCommand = GetResourcesCommand
 
+@typing_extensions.final
 class GetResourcesCommandResult(google.protobuf.message.Message):
     """Response for command 'GetResourcesCommand'."""
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
+    @typing_extensions.final
     class ResourcesEntry(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
