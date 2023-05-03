@@ -3752,11 +3752,6 @@
       "Regex group count is <groupCount>, but the specified group index is <groupIndex>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2010" : {
-    "message" : [
-      "Window Functions do not support merging."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2011" : {
     "message" : [
       "Unexpected data type <dataType>."

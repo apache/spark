@@ -388,10 +388,9 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
     )
   }
 
-  def mergeUnsupportedByWindowFunctionError(): SparkUnsupportedOperationException = {
-    new SparkUnsupportedOperationException(
-      errorClass = "_LEGACY_ERROR_TEMP_2010",
-      messageParameters = Map.empty)
+  def mergeUnsupportedByWindowFunctionError(funcName: String): Throwable = {
+    SparkException.internalError(
+      s"The aggregate window function ${toSQLId(funcName)} does not support merging.")
   }
 
   def dataTypeUnexpectedError(dataType: DataType): SparkUnsupportedOperationException = {
