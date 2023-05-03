@@ -20,6 +20,7 @@ package org.apache.spark.sql.connect.service
 import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.JavaConverters._
+import scala.util.control.NonFatal
 
 import com.google.protobuf.ByteString
 import io.grpc.stub.StreamObserver
@@ -47,18 +48,30 @@ class SparkConnectStreamHandler(responseObserver: StreamObserver[ExecutePlanResp
     extends Logging {
 
   def handle(v: ExecutePlanRequest): Unit = SparkConnectArtifactManager.withArtifactClassLoader {
-    val session =
-      SparkConnectService
-        .getOrCreateIsolatedSession(v.getUserContext.getUserId, v.getSessionId)
-        .session
-    session.withActive {
+    val sessionHolder = SparkConnectService
+      .getOrCreateIsolatedSession(v.getUserContext.getUserId, v.getSessionId)
+    val session = sessionHolder.session
 
-      // Add debug information to the query execution so that the jobs are traceable.
-      try {
-        val debugString =
+    session.withActive {
+      val debugString =
+        try {
           Utils.redact(
             session.sessionState.conf.stringRedactionPattern,
             ProtoUtils.abbreviate(v).toString)
+        } catch {
+          case NonFatal(e) =>
+            logWarning("Fail to extract debug information", e)
+            "UNKNOWN"
+        }
+
+      val executeHolder = sessionHolder.createExecutePlanHolder(v)
+      session.sparkContext.setJobGroup(
+        executeHolder.jobGroupId,
+        s"Spark Connect - ${StringUtils.abbreviate(debugString, 128)}",
+        interruptOnCancel = true)
+
+      try {
+        // Add debug information to the query execution so that the jobs are traceable.
         session.sparkContext.setLocalProperty(
           "callSite.short",
           s"Spark Connect - ${StringUtils.abbreviate(debugString, 128)}")
@@ -66,15 +79,19 @@ class SparkConnectStreamHandler(responseObserver: StreamObserver[ExecutePlanResp
           "callSite.long",
           StringUtils.abbreviate(debugString, 2048))
       } catch {
-        case e: Throwable =>
-          logWarning("Fail to extract or attach the debug information", e)
+        case NonFatal(e) =>
+          logWarning("Fail to attach the debug information", e)
       }
 
-      v.getPlan.getOpTypeCase match {
-        case proto.Plan.OpTypeCase.COMMAND => handleCommand(session, v)
-        case proto.Plan.OpTypeCase.ROOT => handlePlan(session, v)
-        case _ =>
-          throw new UnsupportedOperationException(s"${v.getPlan.getOpTypeCase} not supported.")
+      try {
+        v.getPlan.getOpTypeCase match {
+          case proto.Plan.OpTypeCase.COMMAND => handleCommand(session, v)
+          case proto.Plan.OpTypeCase.ROOT => handlePlan(session, v)
+          case _ =>
+            throw new UnsupportedOperationException(s"${v.getPlan.getOpTypeCase} not supported.")
+        }
+      } finally {
+        sessionHolder.removeExecutePlanHolder(executeHolder.operationId)
       }
     }
   }
