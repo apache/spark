@@ -365,4 +365,3 @@ object ResolveDefaultColumns {
     }
   }
 }
-
