@@ -2708,7 +2708,7 @@ class HiveDDLSuite
          |AS SELECT 1 as a, "a" as b""".stripMargin
     checkError(
       exception = intercept[ParseException](sql(sql1)),
-      errorClass = "OPERATION_NOT_ALLOWED",
+      errorClass = "_LEGACY_ERROR_TEMP_0035",
       parameters = Map(
         "message" -> "Schema may not be specified in a Create Table As Select (CTAS) statement"),
       context = ExpectedContext(sql1, 0, 92))
@@ -2720,7 +2720,7 @@ class HiveDDLSuite
          |AS SELECT 1 as a, "a" as b""".stripMargin
     checkError(
       exception = intercept[ParseException](sql(sql2)),
-      errorClass = "OPERATION_NOT_ALLOWED",
+      errorClass = "_LEGACY_ERROR_TEMP_0035",
       parameters = Map(
         "message" ->
           "Partition column types may not be specified in Create Table As Select (CTAS)"),

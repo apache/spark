@@ -1288,11 +1288,6 @@
     ],
     "sqlState" : "42826"
   },
-  "OPERATION_NOT_ALLOWED" : {
-    "message" : [
-      "Operation not allowed: <message>."
-    ]
-  },
   "ORDER_BY_POS_OUT_OF_RANGE" : {
     "message" : [
       "ORDER BY position <index> is not in select list (valid range is [1, <size>])."
@@ -2161,6 +2156,11 @@
   "_LEGACY_ERROR_TEMP_0034" : {
     "message" : [
       "<operation> is not supported in Hive-style <command><msg>."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_0035" : {
+    "message" : [
+      "Operation not allowed: <message>."
     ]
   },
   "_LEGACY_ERROR_TEMP_0036" : {

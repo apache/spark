@@ -1774,7 +1774,7 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
               |AS SELECT 1 AS a, 2 AS b
             """.stripMargin)
         },
-        errorClass = "OPERATION_NOT_ALLOWED",
+        errorClass = "_LEGACY_ERROR_TEMP_0035",
         parameters = Map("message" -> "Column ordering must be ASC, was 'DESC'"),
         context = ExpectedContext(
           fragment = "CLUSTERED BY (a) SORTED BY (b DESC) INTO 2 BUCKETS",

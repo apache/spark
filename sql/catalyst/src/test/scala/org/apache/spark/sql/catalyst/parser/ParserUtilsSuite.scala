@@ -146,7 +146,7 @@ class ParserUtilsSuite extends SparkFunSuite {
       exception = intercept[ParseException] {
         operationNotAllowed(errorMessage, showFuncContext)
       },
-      errorClass = "OPERATION_NOT_ALLOWED",
+      errorClass = "_LEGACY_ERROR_TEMP_0035",
       parameters = Map("message" -> errorMessage))
   }
 

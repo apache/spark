@@ -360,7 +360,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         exception = intercept[ParseException] {
           sql(sqlText)
         },
-        errorClass = "OPERATION_NOT_ALLOWED",
+        errorClass = "_LEGACY_ERROR_TEMP_0035",
         parameters = Map("message" -> "TBLPROPERTIES can't coexist with CREATE TEMPORARY VIEW"),
         context = ExpectedContext(sqlText, 0, 77))
     }

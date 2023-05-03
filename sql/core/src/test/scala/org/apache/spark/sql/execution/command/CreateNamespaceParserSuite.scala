@@ -112,7 +112,7 @@ class CreateNamespaceParserSuite extends AnalysisTest with SharedSparkSession {
     val sql = "CREATE NAMESPACE a.b.c WITH PROPERTIES('key_without_value', 'key_with_value'='x')"
     checkError(
       exception = parseException(sql),
-      errorClass = "OPERATION_NOT_ALLOWED",
+      errorClass = "_LEGACY_ERROR_TEMP_0035",
       parameters = Map("message" -> "Values must be specified for key(s): [key_without_value]"),
       context = ExpectedContext(
         fragment = sql,
