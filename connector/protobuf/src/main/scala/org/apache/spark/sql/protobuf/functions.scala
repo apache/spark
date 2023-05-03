@@ -20,6 +20,7 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql.Column
+import org.apache.spark.sql.protobuf.utils.ProtobufUtils
 
 // scalastyle:off: object.name
 object functions {
@@ -44,11 +45,36 @@ object functions {
       messageName: String,
       descFilePath: String,
       options: java.util.Map[String, String]): Column = {
-    new Column(
-      ProtobufDataToCatalyst(data.expr, messageName, Some(descFilePath), options.asScala.toMap)
-    )
+    val fileContent = ProtobufUtils.readDescriptorFileContent(descFilePath)
+    from_protobuf(data, messageName, fileContent, options)
   }
 
+  /**
+   * Converts a binary column of Protobuf format into its corresponding catalyst value. The
+   * specified schema must match actual schema of the read data, otherwise the behavior is
+   * undefined: it may fail or return arbitrary result. To deserialize the data with a compatible
+   * and evolved schema, the expected Protobuf schema can be set via the option protoSchema.
+   *
+   * @param data
+   *   the binary column.
+   * @param messageName
+   *   the protobuf message name to look for in descriptorFile.
+   * @param fileDescriptorSetBytes
+   *   the protobuf descriptor in Message GeneratedMessageV3 format.
+   * @since 3.4.0
+   */
+  @Experimental
+  def from_protobuf(
+    data: Column,
+    messageName: String,
+    fileDescriptorSetBytes: Array[Byte],
+    options: java.util.Map[String, String]): Column = {
+    new Column(
+      ProtobufDataToCatalyst(
+        data.expr, messageName, Some(fileDescriptorSetBytes), options.asScala.toMap
+      )
+    )
+  }
   /**
    * Converts a binary column of Protobuf format into its corresponding catalyst value. The
    * Protobuf definition is provided through Protobuf <i>descriptor file</i>.
@@ -63,9 +89,26 @@ object functions {
    */
   @Experimental
   def from_protobuf(data: Column, messageName: String, descFilePath: String): Column = {
-    new Column(ProtobufDataToCatalyst(data.expr, messageName, descFilePath = Some(descFilePath)))
-    // TODO: Add an option for user to provide descriptor file content as a buffer. This
-    //       gives flexibility in how the content is fetched.
+    val fileContent = ProtobufUtils.readDescriptorFileContent(descFilePath)
+    new Column(ProtobufDataToCatalyst(data.expr, messageName, Some(fileContent)))
+  }
+
+  /**
+   * Converts a binary column of Protobuf format into its corresponding catalyst value. The
+   * Protobuf definition is provided through Protobuf <i>descriptor file</i>.
+   *
+   * @param data
+   *   the binary column.
+   * @param messageName
+   *   the protobuf MessageName to look for in descriptor file.
+   * @param fileDescriptorSetBytes
+   *   the protobuf descriptor in Message GeneratedMessageV3 format.
+   * @since 3.4.0
+   */
+  @Experimental
+  def from_protobuf(data: Column, messageName: String, fileDescriptorSetBytes: Array[Byte])
+  : Column = {
+    new Column(ProtobufDataToCatalyst(data.expr, messageName, Some(fileDescriptorSetBytes)))
   }
 
   /**
@@ -126,9 +169,19 @@ object functions {
    */
   @Experimental
   def to_protobuf(data: Column, messageName: String, descFilePath: String): Column = {
-    new Column(CatalystDataToProtobuf(data.expr, messageName, Some(descFilePath)))
+    to_protobuf(data, messageName, descFilePath, Map.empty[String, String].asJava)
   }
 
+  /**
+   * Converts a column into binary of protobuf format.
+   *
+   * @since 3.4.0
+   */
+  @Experimental
+  def to_protobuf(data: Column, messageName: String, fileDescriptorSetBytes: Array[Byte])
+  : Column = {
+    new Column(CatalystDataToProtobuf(data.expr, messageName, Some(fileDescriptorSetBytes)))
+  }
   /**
    * Converts a column into binary of protobuf format. The Protobuf definition is provided
    * through Protobuf <i>descriptor file</i>.
@@ -148,8 +201,9 @@ object functions {
     messageName: String,
     descFilePath: String,
     options: java.util.Map[String, String]): Column = {
+    val fileContent = ProtobufUtils.readDescriptorFileContent(descFilePath)
     new Column(
-      CatalystDataToProtobuf(data.expr, messageName, Some(descFilePath), options.asScala.toMap)
+      CatalystDataToProtobuf(data.expr, messageName, Some(fileContent), options.asScala.toMap)
     )
   }
 

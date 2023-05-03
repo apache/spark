@@ -36,10 +36,13 @@ class ProtobufSerdeSuite extends SharedSparkSession with ProtobufTestBase {
   import ProtoSerdeSuite._
   import ProtoSerdeSuite.MatchType._
 
-  val testFileDesc = testFile("serde_suite.desc", "protobuf/serde_suite.desc")
+  val testFileDescFile = testFile("serde_suite.desc", "protobuf/serde_suite.desc")
+  val testFileDesc = ProtobufUtils.readDescriptorFileContent(testFileDescFile)
+
   private val javaClassNamePrefix = "org.apache.spark.sql.protobuf.protos.SerdeSuiteProtos$"
 
-  val proto2Desc = testFile("proto2_messages.desc", "protobuf/proto2_messages.desc")
+  val proto2DescFile = testFile("proto2_messages.desc", "protobuf/proto2_messages.desc")
+  val proto2Desc = ProtobufUtils.readDescriptorFileContent(proto2Desc)
 
   test("Test basic conversion") {
     withFieldMatchType { fieldMatch =>
@@ -209,25 +212,33 @@ class ProtobufSerdeSuite extends SharedSparkSession with ProtobufTestBase {
 
   test("raise cannot parse and construct protobuf descriptor error") {
     // passing serde_suite.proto instead serde_suite.desc
-    var testFileDesc = testFile("serde_suite.proto", "protobuf/serde_suite.proto")
+    var fileDescFile = testFile("serde_suite.proto", "protobuf/serde_suite.proto")
+
     val e1 = intercept[AnalysisException] {
-      ProtobufUtils.buildDescriptor(testFileDesc, "SerdeBasicMessage")
+      ProtobufUtils.buildDescriptor(
+        ProtobufUtils.readDescriptorFileContent(fileDescFile),
+        "SerdeBasicMessage"
+      )
     }
 
     checkError(
       exception = e1,
       errorClass = "CANNOT_PARSE_PROTOBUF_DESCRIPTOR",
-      parameters = Map("descFilePath" -> testFileDesc))
+      parameters = Map("descFilePath" -> fileDescFile))
 
-    testFileDesc = testFile("basicmessage_noimports.desc", "protobuf/basicmessage_noimports.desc")
+    fileDescFile =
+      testFile("basicmessage_noimports.desc", "protobuf/basicmessage_noimports.desc")
+
     val e2 = intercept[AnalysisException] {
-      ProtobufUtils.buildDescriptor(testFileDesc, "SerdeBasicMessage")
+      ProtobufUtils.buildDescriptor(
+        ProtobufUtils.readDescriptorFileContent(fileDescFile),
+        "SerdeBasicMessage")
     }
 
     checkError(
       exception = e2,
       errorClass = "CANNOT_CONSTRUCT_PROTOBUF_DESCRIPTOR",
-      parameters = Map("descFilePath" -> testFileDesc))
+      parameters = Map("descFilePath" -> testFileDescFile))
   }
 
   /**

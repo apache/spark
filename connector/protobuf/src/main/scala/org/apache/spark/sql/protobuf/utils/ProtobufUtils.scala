@@ -17,14 +17,16 @@
 
 package org.apache.spark.sql.protobuf.utils
 
-import java.io.{BufferedInputStream, FileInputStream, IOException}
+import java.io.{File, IOException}
 import java.util.Locale
 
 import scala.collection.JavaConverters._
+import scala.util.control.NonFatal
 
 import com.google.protobuf.{DescriptorProtos, Descriptors, InvalidProtocolBufferException, Message}
 import com.google.protobuf.DescriptorProtos.{FileDescriptorProto, FileDescriptorSet}
 import com.google.protobuf.Descriptors.{Descriptor, FieldDescriptor}
+import org.apache.commons.io.FileUtils
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -144,9 +146,10 @@ private[sql] object ProtobufUtils extends Logging {
    *  the `messageName` is treated as Java class name.
    * @return
    */
-  def buildDescriptor(messageName: String, descFilePathOpt: Option[String]): Descriptor = {
-    descFilePathOpt match {
-      case Some(filePath) => buildDescriptor(descFilePath = filePath, messageName)
+  def buildDescriptor(messageName: String, fileDescriptorSetBytesOpt: Option[Array[Byte]])
+  : Descriptor = {
+    fileDescriptorSetBytesOpt match {
+      case Some(bytes) => buildDescriptor(bytes, messageName)
       case None => buildDescriptorFromJavaClass(messageName)
     }
   }
@@ -207,9 +210,9 @@ private[sql] object ProtobufUtils extends Logging {
       .asInstanceOf[Descriptor]
   }
 
-  def buildDescriptor(descFilePath: String, messageName: String): Descriptor = {
+  def buildDescriptor(fileDescriptorSetBytes: Array[Byte], messageName: String): Descriptor = {
     // Find the first message descriptor that matches the name.
-    val descriptorOpt = parseFileDescriptorSet(descFilePath)
+    val descriptorOpt = parseFileDescriptorSet(fileDescriptorSetBytes)
       .flatMap { fileDesc =>
         fileDesc.getMessageTypes.asScala.find { desc =>
           desc.getName == messageName || desc.getFullName == messageName
@@ -222,16 +225,23 @@ private[sql] object ProtobufUtils extends Logging {
     }
   }
 
-  private def parseFileDescriptorSet(descFilePath: String): List[Descriptors.FileDescriptor] = {
+  def readDescriptorFileContent(filePath: String): Array[Byte] = {
+    try {
+      FileUtils.readFileToByteArray(new File(filePath))
+    } catch {
+      case NonFatal(ex) => throw QueryCompilationErrors.cannotFindDescriptorFileError(filePath, ex)
+    }
+  }
+
+  private def parseFileDescriptorSet(bytes: Array[Byte]): List[Descriptors.FileDescriptor] = {
     var fileDescriptorSet: DescriptorProtos.FileDescriptorSet = null
     try {
-      val dscFile = new BufferedInputStream(new FileInputStream(descFilePath))
-      fileDescriptorSet = DescriptorProtos.FileDescriptorSet.parseFrom(dscFile)
+      fileDescriptorSet = DescriptorProtos.FileDescriptorSet.parseFrom(bytes)
     } catch {
       case ex: InvalidProtocolBufferException =>
-        throw QueryCompilationErrors.descriptorParseError(descFilePath, ex)
+        throw QueryCompilationErrors.descriptorParseError("Fix XXX", ex)
       case ex: IOException =>
-        throw QueryCompilationErrors.cannotFindDescriptorFileError(descFilePath, ex)
+        throw QueryCompilationErrors.cannotFindDescriptorFileError("Fix XXX", ex)
     }
     try {
       val fileDescriptorProtoIndex = createDescriptorProtoMap(fileDescriptorSet)
@@ -242,7 +252,7 @@ private[sql] object ProtobufUtils extends Logging {
       fileDescriptorList
     } catch {
       case e: Exception =>
-        throw QueryCompilationErrors.failedParsingDescriptorError(descFilePath, e)
+        throw QueryCompilationErrors.failedParsingDescriptorError("Fix", e)
     }
   }
 

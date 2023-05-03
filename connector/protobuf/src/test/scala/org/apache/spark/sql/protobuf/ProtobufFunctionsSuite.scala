@@ -36,7 +36,8 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
 
   import testImplicits._
 
-  val testFileDesc = testFile("functions_suite.desc", "protobuf/functions_suite.desc")
+  val testFileDescFile = testFile("functions_suite.desc", "protobuf/functions_suite.desc")
+  private val testFileDesc = ProtobufUtils.readDescriptorFileContent(testFileDescFile)
   private val javaClassNamePrefix = "org.apache.spark.sql.protobuf.protos.SimpleMessageProtos$"
 
   private def emptyBinaryDF = Seq(Array[Byte]()).toDF("binary")
@@ -45,7 +46,7 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
    * Runs the given closure twice. Once with descriptor file and second time with Java class name.
    */
   private def checkWithFileAndClassName(messageName: String)(
-    fn: (String, Option[String]) => Unit): Unit = {
+    fn: (String, Option[Array[Byte]]) => Unit): Unit = {
       withClue("(With descriptor file)") {
         fn(messageName, Some(testFileDesc))
       }
@@ -58,11 +59,11 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
   private def from_protobuf_wrapper(
     col: Column,
     messageName: String,
-    descFilePathOpt: Option[String],
+    descBytesOpt: Option[Array[Byte]],
     options: Map[String, String] = Map.empty): Column = {
-    descFilePathOpt match {
-      case Some(descFilePath) => functions.from_protobuf(
-        col, messageName, descFilePath, options.asJava
+    descBytesOpt match {
+      case Some(descBytes) => functions.from_protobuf(
+        col, messageName, descBytes, options.asJava
       )
       case None => functions.from_protobuf(col, messageName, options.asJava)
     }
@@ -70,9 +71,9 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
 
   // A wrapper to invoke the right variable of to_protobuf() depending on arguments.
   private def to_protobuf_wrapper(
-    col: Column, messageName: String, descFilePathOpt: Option[String]): Column = {
-    descFilePathOpt match {
-      case Some(descFilePath) => functions.to_protobuf(col, messageName, descFilePath)
+    col: Column, messageName: String, descBytesOpt: Option[Array[Byte]]): Column = {
+    descBytesOpt match {
+      case Some(descBytes) => functions.to_protobuf(col, messageName, descBytes)
       case None => functions.to_protobuf(col, messageName)
     }
   }
@@ -99,11 +100,11 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
         lit("0".getBytes).as("bytes_value")).as("SimpleMessage"))
 
     checkWithFileAndClassName("SimpleMessage") {
-      case (name, descFilePathOpt) =>
+      case (name, descBytesOpt) =>
         val protoStructDF = df.select(
-          to_protobuf_wrapper($"SimpleMessage", name, descFilePathOpt).as("proto"))
+          to_protobuf_wrapper($"SimpleMessage", name, descBytesOpt).as("proto"))
         val actualDf = protoStructDF.select(
-          from_protobuf_wrapper($"proto", name, descFilePathOpt).as("proto.*"))
+          from_protobuf_wrapper($"proto", name, descBytesOpt).as("proto.*"))
         checkAnswer(actualDf, df)
     }
   }
@@ -435,9 +436,11 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
   }
 
   test("Handle extra fields : oldProducer -> newConsumer") {
-    val testFileDesc = testFile("catalyst_types.desc", "protobuf/catalyst_types.desc")
-    val oldProducer = ProtobufUtils.buildDescriptor(testFileDesc, "oldProducer")
-    val newConsumer = ProtobufUtils.buildDescriptor(testFileDesc, "newConsumer")
+    val descBytes = ProtobufUtils.readDescriptorFileContent(
+      testFile("catalyst_types.desc", "protobuf/catalyst_types.desc")
+    )
+    val oldProducer = ProtobufUtils.buildDescriptor(descBytes, "oldProducer")
+    val newConsumer = ProtobufUtils.buildDescriptor(descBytes, "newConsumer")
 
     val oldProducerMessage = DynamicMessage
       .newBuilder(oldProducer)
@@ -447,7 +450,7 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
     val df = Seq(oldProducerMessage.toByteArray).toDF("oldProducerData")
     val fromProtoDf = df.select(
       functions
-        .from_protobuf($"oldProducerData", "newConsumer", testFileDesc)
+        .from_protobuf($"oldProducerData", "newConsumer", testFileDescFile)
         .as("fromProto"))
 
     val toProtoDf = fromProtoDf.select(
@@ -475,9 +478,11 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
   }
 
   test("Handle extra fields : newProducer -> oldConsumer") {
-    val testFileDesc = testFile("catalyst_types.desc", "protobuf/catalyst_types.desc")
-    val newProducer = ProtobufUtils.buildDescriptor(testFileDesc, "newProducer")
-    val oldConsumer = ProtobufUtils.buildDescriptor(testFileDesc, "oldConsumer")
+    val descBytes = ProtobufUtils.readDescriptorFileContent(
+      testFile("catalyst_types.desc", "protobuf/catalyst_types.desc")
+    )
+    val newProducer = ProtobufUtils.buildDescriptor(descBytes, "newProducer")
+    val oldConsumer = ProtobufUtils.buildDescriptor(descBytes, "oldConsumer")
 
     val newProducerMessage = DynamicMessage
       .newBuilder(newProducer)

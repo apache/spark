@@ -26,14 +26,14 @@ import org.apache.spark.sql.types.{BinaryType, DataType}
 private[protobuf] case class CatalystDataToProtobuf(
     child: Expression,
     messageName: String,
-    descFilePath: Option[String] = None,
+    fileDescriptorSetBytesOpt: Option[Array[Byte]] = None,
     options: Map[String, String] = Map.empty)
     extends UnaryExpression {
 
   override def dataType: DataType = BinaryType
 
   @transient private lazy val protoDescriptor =
-    ProtobufUtils.buildDescriptor(messageName, descFilePathOpt = descFilePath)
+    ProtobufUtils.buildDescriptor(messageName, fileDescriptorSetBytesOpt)
 
   @transient private lazy val serializer =
     new ProtobufSerializer(child.dataType, protoDescriptor, child.nullable)

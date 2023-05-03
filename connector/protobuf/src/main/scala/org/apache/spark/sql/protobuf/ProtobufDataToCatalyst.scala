@@ -31,7 +31,7 @@ import org.apache.spark.sql.types.{AbstractDataType, BinaryType, DataType, Struc
 private[protobuf] case class ProtobufDataToCatalyst(
     child: Expression,
     messageName: String,
-    descFilePath: Option[String] = None,
+    fileDescriptorSetBytesOpt: Option[Array[Byte]] = None,
     options: Map[String, String] = Map.empty)
     extends UnaryExpression
     with ExpectsInputTypes {
@@ -54,11 +54,7 @@ private[protobuf] case class ProtobufDataToCatalyst(
   private lazy val protobufOptions = ProtobufOptions(options)
 
   @transient private lazy val messageDescriptor =
-    ProtobufUtils.buildDescriptor(messageName, descFilePath)
-    // TODO: Avoid carrying the file name. Read the contents of descriptor file only once
-    //       at the start. Rest of the runs should reuse the buffer. Otherwise, it could
-    //       cause inconsistencies if the file contents are changed the user after a few days.
-    //       Same for the write side in [[CatalystDataToProtobuf]].
+    ProtobufUtils.buildDescriptor(messageName, fileDescriptorSetBytesOpt)
 
   @transient private lazy val fieldsNumbers =
     messageDescriptor.getFields.asScala.map(f => f.getNumber).toSet
