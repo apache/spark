@@ -118,4 +118,30 @@ class StreamingQuerySuite extends RemoteSparkSession with SQLHelper {
       }
     }
   }
+
+  test("awaitTermination") {
+    withSQLConf(
+      "spark.sql.shuffle.partitions" -> "1" // Avoid too many reducers.
+    ) {
+      val q = spark.readStream
+        .format("rate")
+        .load()
+        .writeStream
+        .format("memory")
+        .queryName("test")
+        .start()
+
+      val start = System.nanoTime
+      val terminated = q.awaitTermination(500)
+      val end = System.nanoTime
+      assert((end - start) / 1e6 >= 500)
+      assert(!terminated)
+
+      q.stop()
+      // TODO (SPARK-43032): uncomment below
+      // eventually(timeout(1.minute)) {
+      // q.awaitTermination()
+      // }
+    }
+  }
 }

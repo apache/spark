@@ -154,8 +154,9 @@ trait ProgressReporter extends Logging {
   }
 
   private def postIdleness(): Unit = {
-    postEvent(new QueryIdleEvent(id, runId))
-    logInfo("Streaming query has been idle and waiting for new data.")
+    postEvent(new QueryIdleEvent(id, runId, formatTimestamp(currentTriggerStartTimestamp)))
+    logInfo(s"Streaming query has been idle and waiting for new data more than " +
+      s"${noDataProgressEventInterval} ms.")
   }
 
   /**
