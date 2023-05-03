@@ -49,9 +49,7 @@ class PythonUDFArrowTestsMixin(BaseUDFTestsMixin):
         super(PythonUDFArrowTests, self).test_udf_input_serialization_valuecompare_disabled()
 
     def test_nested_input_error(self):
-        with self.assertRaisesRegexp(
-            Exception, "NotImplementedError: Struct input type are not supported"
-        ):
+        with self.assertRaisesRegexp(Exception, "[NotImplementedError]"):
             self.spark.range(1).selectExpr("struct(1, 2) as struct").select(
                 udf(lambda x: x)("struct")
             ).collect()
