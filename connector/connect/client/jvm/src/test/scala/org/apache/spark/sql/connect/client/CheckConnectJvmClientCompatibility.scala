@@ -226,7 +226,6 @@ object CheckConnectJvmClientCompatibility {
 
       // TypedColumn
       ProblemFilters.exclude[Problem]("org.apache.spark.sql.TypedColumn.this"),
-      
       // DataStreamWriter
       ProblemFilters.exclude[Problem](
         "org.apache.spark.sql.streaming.DataStreamWriter.foreachPython"
