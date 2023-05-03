@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
 import org.apache.datasketches.SketchesArgumentException
-import org.apache.datasketches.hll.{HllSketch, Union}
+import org.apache.datasketches.hll.{HllSketch, TgtHllType, Union}
 import org.apache.datasketches.memory.Memory
 
 import org.apache.spark.sql.catalyst.InternalRow
@@ -67,6 +67,9 @@ case class HllSketchAgg(
     lgConfigK
   }
 
+  // The default target type (register size) to use.
+  private val targetType = TgtHllType.HLL_8
+
   // Constructors
 
   def this(child: Expression) = {
@@ -110,7 +113,7 @@ case class HllSketchAgg(
    * @return an HllSketch instance
    */
   override def createAggregationBuffer(): HllSketch = {
-    new HllSketch(lgConfigK)
+    new HllSketch(lgConfigK, targetType)
   }
 
   /**
@@ -151,7 +154,7 @@ case class HllSketchAgg(
     val union = new Union(sketch.getLgConfigK)
     union.update(sketch)
     union.update(input)
-    union.getResult(sketch.getTgtHllType)
+    union.getResult(targetType)
   }
 
   /**
@@ -233,6 +236,9 @@ case class HllUnionAgg(
   lazy val allowDifferentLgConfigK: Boolean = {
     right.eval().asInstanceOf[Boolean]
   }
+
+  // The default target type (register size) to use.
+  private val targetType = TgtHllType.HLL_8
 
   // Constructors
 
@@ -331,7 +337,7 @@ case class HllUnionAgg(
     (unionOption, inputOption) match {
       case (Some(union), Some(input)) =>
         compareLgConfigK(union.getLgConfigK, input.getLgConfigK)
-        union.update(input.getResult)
+        union.update(input.getResult(targetType))
         Some(union)
       // unclear if these scenarios can ever occur
       case (Some(_), None) =>
