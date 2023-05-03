@@ -3762,11 +3762,6 @@
       "Negative values found in <frequencyExpression>"
     ]
   },
-  "_LEGACY_ERROR_TEMP_2014" : {
-    "message" : [
-      "<funcName> is not matched at addNewFunction."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2015" : {
     "message" : [
       "Cannot generate <codeType> code for incomparable type: <dataType>."
