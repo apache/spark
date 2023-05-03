@@ -550,16 +550,16 @@
     ],
     "sqlState" : "22012"
   },
-  "DUPLICATE_CLAUSES" : {
-    "message" : [
-      "Found duplicate clauses: <clauseName>. Please, remove one of them."
-    ]
-  },
   "DUPLICATED_MAP_KEY" : {
     "message" : [
       "Duplicate map key <key> was found, please check the input data. If you want to remove the duplicated keys, you can set <mapKeyDedupPolicy> to \"LAST_WIN\" so that the key inserted at last takes precedence."
     ],
     "sqlState" : "23505"
+  },
+  "DUPLICATE_CLAUSES" : {
+    "message" : [
+      "Found duplicate clauses: <clauseName>. Please, remove one of them."
+    ]
   },
   "DUPLICATE_KEY" : {
     "message" : [
