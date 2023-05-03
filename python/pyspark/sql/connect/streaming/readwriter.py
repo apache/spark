@@ -556,14 +556,14 @@ class DataStreamWriter:
                 return iter([])
 
             func = func_with_open_process_close  # type: ignore[assignment]
-            serializer = AutoBatchedSerializer(CPickleSerializer())
-            command = (func, None, serializer, serializer)
-            self._write_proto.foreach.command = CloudPickleSerializer().dumps(command)
-            self._write_proto.foreach.python_ver = "%d.%d" % sys.version_info[:2]
-            self._write_proto.foreach.schema = (
-                self._schema.json() if self._schema is not None else ""
-            )
-            return self
+        serializer = AutoBatchedSerializer(CPickleSerializer())
+        command = (func, None, serializer, serializer)
+        self._write_proto.foreach.command = CloudPickleSerializer().dumps(command)
+        self._write_proto.foreach.python_ver = "%d.%d" % sys.version_info[:2]
+        self._write_proto.foreach.schema = (
+            self._schema.json() if self._schema is not None else ""
+        )
+        return self
 
     foreach.__doc__ = PySparkDataStreamWriter.foreach.__doc__
 
