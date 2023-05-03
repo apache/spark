@@ -64,6 +64,7 @@ from pyspark.sql.types import (
 )
 from pyspark.errors.exceptions.captured import install_exception_handler
 from pyspark.sql.utils import is_timestamp_ntz_preferred, to_str
+from pyspark.errors import PySparkValueError, PySparkTypeError
 
 if TYPE_CHECKING:
     from pyspark.sql._typing import AtomicValue, RowLike, OptionalPrimitiveType
@@ -829,7 +830,10 @@ class SparkSession(SparkConversionMixin):
         :class:`pyspark.sql.types.StructType`
         """
         if not data:
-            raise ValueError("can not infer schema from empty dataset")
+            raise PySparkValueError(
+                error_class="CANNOT_INFER_EMPTY_SCHEMA",
+                message_parameters={},
+            )
         infer_dict_as_struct = self._jconf.inferDictAsStruct()
         infer_array_from_first_element = self._jconf.legacyInferArrayTypeFromFirstElement()
         prefer_timestamp_ntz = is_timestamp_ntz_preferred()
@@ -847,7 +851,10 @@ class SparkSession(SparkConversionMixin):
             ),
         )
         if _has_nulltype(schema):
-            raise ValueError("Some of types cannot be determined after inferring")
+            raise PySparkValueError(
+                error_class="CANNOT_DETERMINE_TYPE",
+                message_parameters={},
+            )
         return schema
 
     def _inferSchema(
@@ -873,7 +880,10 @@ class SparkSession(SparkConversionMixin):
         """
         first = rdd.first()
         if isinstance(first, Sized) and len(first) == 0:
-            raise ValueError("The first row in RDD is empty, can not infer schema")
+            raise PySparkValueError(
+                error_class="CANNOT_INFER_EMPTY_SCHEMA",
+                message_parameters={},
+            )
 
         infer_dict_as_struct = self._jconf.inferDictAsStruct()
         infer_array_from_first_element = self._jconf.legacyInferArrayTypeFromFirstElement()
@@ -900,9 +910,9 @@ class SparkSession(SparkConversionMixin):
                     if not _has_nulltype(schema):
                         break
                 else:
-                    raise ValueError(
-                        "Some of types cannot be determined by the "
-                        "first 100 rows, please try again with sampling"
+                    raise PySparkValueError(
+                        error_class="CANNOT_DETERMINE_TYPE",
+                        message_parameters={},
                     )
         else:
             if samplingRatio < 0.99:
@@ -941,7 +951,13 @@ class SparkSession(SparkConversionMixin):
             tupled_rdd = rdd
 
         else:
-            raise TypeError("schema should be StructType or list or None, but got: %s" % schema)
+            raise PySparkTypeError(
+                error_class="NOT_LIST_OR_NONE_OR_STRUCT",
+                message_parameters={
+                    "arg_name": "schema",
+                    "arg_type": type(schema).__name__,
+                },
+            )
 
         # convert python objects to sql data
         internal_rdd = tupled_rdd.map(struct.toInternal)
@@ -972,7 +988,13 @@ class SparkSession(SparkConversionMixin):
             tupled_data = data
 
         else:
-            raise TypeError("schema should be StructType or list or None, but got: %s" % schema)
+            raise PySparkTypeError(
+                error_class="NOT_LIST_OR_NONE_OR_STRUCT",
+                message_parameters={
+                    "arg_name": "schema",
+                    "arg_type": type(schema).__name__,
+                },
+            )
 
         # convert python objects to sql data
         internal_data = [struct.toInternal(row) for row in tupled_data]
@@ -1221,7 +1243,10 @@ class SparkSession(SparkConversionMixin):
         assert self._jvm is not None
         self._jvm.SparkSession.setActiveSession(self._jsparkSession)
         if isinstance(data, DataFrame):
-            raise TypeError("data is already a DataFrame")
+            raise PySparkTypeError(
+                error_class="SHOULD_NOT_DATAFRAME",
+                message_parameters={"arg_name": "data"},
+            )
 
         if isinstance(schema, str):
             schema = cast(Union[AtomicType, StructType, str], _parse_datatype_string(schema))
@@ -1250,7 +1275,10 @@ class SparkSession(SparkConversionMixin):
 
             require_minimum_pandas_version()
             if data.ndim not in [1, 2]:
-                raise ValueError("NumPy array input should be of 1 or 2 dimensions.")
+                raise PySparkValueError(
+                    error_class="INVALID_NDARRAY_DIMENSION",
+                    message_parameters={"dimensions": "1 or 2"},
+                )
 
             if data.ndim == 1 or data.shape[1] == 1:
                 column_names = ["value"]

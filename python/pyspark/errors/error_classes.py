@@ -79,9 +79,19 @@ ERROR_CLASSES_JSON = """
       "Cannot convert <from_type> into <to_type>."
     ]
   },
+  "CANNOT_DETERMINE_TYPE": {
+    "message": [
+      "Some of types cannot be determined after inferring."
+    ]
+  },
   "CANNOT_INFER_ARRAY_TYPE": {
     "message": [
       "Can not infer Array Type from an list with None as the first element."
+    ]
+  },
+  "CANNOT_INFER_EMPTY_SCHEMA": {
+    "message": [
+      "Can not infer schema from empty dataset."
     ]
   },
   "CANNOT_INFER_SCHEMA_FOR_TYPE": {
@@ -168,6 +178,11 @@ ERROR_CLASSES_JSON = """
   "INVALID_ITEM_FOR_CONTAINER": {
     "message": [
       "All items in `<arg_name>` should be in <allowed_types>, got <item_type>."
+    ]
+  },
+  "INVALID_NDARRAY_DIMENSION": {
+    "message": [
+      "NumPy array input should be of <dimensions> dimensions."
     ]
   },
   "INVALID_RETURN_TYPE_FOR_PANDAS_UDF": {
@@ -385,9 +400,14 @@ ERROR_CLASSES_JSON = """
       "Argument `<arg_name>` should be a list, got <arg_type>."
     ]
   },
-  "NOT_LIST_OF_COLUMN" : {
+  "NOT_LIST_OR_TUPLE" : {
     "message" : [
-      "Argument `<arg_name>` should be a list[Column]."
+      "Argument `<arg_name>` should be a list or tuple, got <arg_type>."
+    ]
+  },
+  "NOT_LIST_OR_NONE_OR_STRUCT" : {
+    "message" : [
+      "Argument `<arg_name>` should be a list, None or StructType, got <arg_type>."
     ]
   },
   "NOT_LIST_OF_FLOAT_OR_INT" : {
@@ -504,6 +524,16 @@ ERROR_CLASSES_JSON = """
   "SCHEMA_MISMATCH_FOR_PANDAS_UDF" : {
     "message" : [
       "Result vector from pandas_udf was not the required length: expected <expected>, got <actual>."
+    ]
+  },
+  "SESSION_ALREADY_EXIST" : {
+    "message" : [
+      "Cannot start a remote Spark session because there is a regular Spark session already running."
+    ]
+  },
+  "SHOULD_NOT_DATAFRAME": {
+    "message": [
+      "Argument `<arg_name>` should not be a DataFrame."
     ]
   },
   "SLICE_WITH_STEP" : {
