@@ -83,7 +83,7 @@ class SparkConnectAddArtifactsHandler(val responseObserver: StreamObserver[AddAr
   }
 
   protected def addStagedArtifactToArtifactManager(artifact: StagedArtifact): Unit = {
-    artifactManager.addArtifact(holder.session, artifact.path, artifact.stagedPath)
+    artifactManager.addArtifact(holder, artifact.path, artifact.stagedPath)
   }
 
   /**

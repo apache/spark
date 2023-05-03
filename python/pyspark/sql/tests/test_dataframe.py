@@ -1454,7 +1454,8 @@ class DataFrameTestsMixin:
                 os.environ["TZ"] = orig_env_tz
             time.tzset()
 
-    @unittest.skipIf(not have_pandas, pandas_requirement_message)  # type: ignore
+    # TODO(SPARK-43354): Re-enable test_create_dataframe_from_pandas_with_day_time_interval
+    @unittest.skip("Fails in PyPy Python 3.8, should enable.")
     def test_create_dataframe_from_pandas_with_day_time_interval(self):
         # SPARK-37277: Test DayTimeIntervalType in createDataFrame without Arrow.
         import pandas as pd
