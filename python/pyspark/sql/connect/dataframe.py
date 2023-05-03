@@ -57,7 +57,6 @@ from pyspark.errors import (
     PySparkTypeError,
     PySparkAttributeError,
     PySparkValueError,
-    PySparkException,
     PySparkNotImplementedError,
 )
 from pyspark.errors.exceptions.connect import SparkConnectException
