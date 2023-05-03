@@ -101,5 +101,5 @@ private[sql] object UdfUtils extends Serializable {
 
   def identical[T](): T => T = t => t
 
-  def as[V, K](): V => K = v => v.asInstanceOf[K]
+  def noOp[V, K](): V => K = _ => null.asInstanceOf[K]
 }

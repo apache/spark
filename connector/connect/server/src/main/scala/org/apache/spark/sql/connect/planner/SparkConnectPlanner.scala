@@ -40,7 +40,7 @@ import org.apache.spark.connect.proto.StreamingQueryManagerCommandResult.Streami
 import org.apache.spark.connect.proto.WriteStreamOperationStart
 import org.apache.spark.connect.proto.WriteStreamOperationStart.TriggerCase
 import org.apache.spark.ml.{functions => MLFunctions}
-import org.apache.spark.sql.{Column, Dataset, Encoders, RelationalGroupedDataset, SparkSession, TypedColumn}
+import org.apache.spark.sql.{Column, Dataset, Encoders, RelationalGroupedDataset, SparkSession}
 import org.apache.spark.sql.avro.{AvroDataToCatalyst, CatalystDataToAvro}
 import org.apache.spark.sql.catalyst.{expressions, AliasIdentifier, FunctionIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{GlobalTempView, LocalTempView, MultiAlias, ParameterizedQuery, UnresolvedAlias, UnresolvedAttribute, UnresolvedDeserializer, UnresolvedExtractValue, UnresolvedFunction, UnresolvedRegex, UnresolvedRelation, UnresolvedStar}
@@ -68,7 +68,7 @@ import org.apache.spark.sql.execution.python.UserDefinedPythonFunction
 import org.apache.spark.sql.execution.stat.StatFunctions
 import org.apache.spark.sql.execution.streaming.StreamingQueryWrapper
 import org.apache.spark.sql.expressions.ReduceAggregator
-import org.apache.spark.sql.internal.CatalogImpl
+import org.apache.spark.sql.internal.{CatalogImpl, TypedAggUtils}
 import org.apache.spark.sql.streaming.Trigger
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -1919,15 +1919,9 @@ class SparkConnectPlanner(val session: SparkSession) {
       rel.getGroupingExpressionsList,
       java.util.Collections.emptyList())
 
-    val namedColumns = rel.getAggregateExpressionsList.asScala.toSeq.map(expr => {
-      // Use any encoder as a placeholder to perform the TypedColumn#withInputType transformation
-      val any = ds.vEncoder
-      val newExpr = new TypedColumn(transformExpression(expr), any)
-        .withInputType(ds.vEncoder, ds.dataAttributes)
-        .expr
-      Column(newExpr).named
-    })
-    val keyColumn = logical.UntypedAggUtils.aggKeyColumn(ds.kEncoder, ds.groupingAttributes)
+    val namedColumns = rel.getAggregateExpressionsList.asScala.toSeq.map(expr =>
+      TypedAggUtils.namedWithInputType(transformExpression(expr), ds.vEncoder, ds.dataAttributes))
+    val keyColumn = TypedAggUtils.aggKeyColumn(ds.kEncoder, ds.groupingAttributes)
     logical.Aggregate(ds.groupingAttributes, keyColumn +: namedColumns, ds.analyzed)
   }
 

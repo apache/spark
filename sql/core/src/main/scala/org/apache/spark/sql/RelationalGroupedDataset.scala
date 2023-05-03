@@ -35,6 +35,7 @@ import org.apache.spark.sql.catalyst.util.toPrettySQL
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.aggregate.TypedAggregateExpression
+import org.apache.spark.sql.internal.TypedAggUtils
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.{NumericType, StructType}
 
@@ -242,7 +243,7 @@ class RelationalGroupedDataset protected[sql](
   def agg(expr: Column, exprs: Column*): DataFrame = {
     toDF((expr +: exprs).map {
       case typed: TypedColumn[_, _] =>
-        typed.withInputType(df.exprEnc, df.logicalPlan.output).expr
+        TypedAggUtils.withInputType(typed.expr, df.exprEnc, df.logicalPlan.output)
       case c => c.expr
     })
   }
@@ -697,9 +698,8 @@ private[sql] object RelationalGroupedDataset {
 
     // Adds the grouping expressions that are not in base DataFrame into outputs.
     val addedCols = aliasedGroupings.filter(g => !logicalPlan.outputSet.contains(g.toAttribute))
-    val qe = Dataset.ofRows(
-      sparkSession,
-      Project(logicalPlan.output ++ addedCols, logicalPlan)).queryExecution
+    val newPlan = Project(logicalPlan.output ++ addedCols, logicalPlan)
+    val qe = sparkSession.sessionState.executePlan(newPlan)
 
     (qe, aliasedGroupings.map(_.toAttribute))
   }

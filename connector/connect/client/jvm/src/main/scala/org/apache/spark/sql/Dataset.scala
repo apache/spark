@@ -1282,6 +1282,7 @@ class Dataset[T] private[sql] (
    * @since 3.5.0
    */
   def reduce(func: (T, T) => T): T = {
+    // TODO: avoid passing the groupByKey udf.
     val list = this
       .groupByKey(UdfUtils.groupAllUnderBoolTrue())(PrimitiveBooleanEncoder)
       .reduceGroups(func)
@@ -1307,8 +1308,7 @@ class Dataset[T] private[sql] (
    * @since 3.5.0
    */
   def groupByKey[K: Encoder](func: T => K): KeyValueGroupedDataset[K, T] = {
-    val kEncoder = encoderFor[K]
-    KeyValueGroupedDatasetImpl[K, T](this, sparkSession, plan, kEncoder, func)
+    KeyValueGroupedDatasetImpl[K, T](this, encoderFor[K], func)
   }
 
   /**

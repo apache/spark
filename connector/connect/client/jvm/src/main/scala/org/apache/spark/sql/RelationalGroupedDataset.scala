@@ -72,13 +72,7 @@ class RelationalGroupedDataset private[sql] (
    * @since 3.5.0
    */
   def as[K: Encoder, T: Encoder]: KeyValueGroupedDataset[K, T] = {
-    KeyValueGroupedDatasetImpl[K, T](
-      df,
-      df.sparkSession,
-      df.plan,
-      encoderFor[K],
-      encoderFor[T],
-      groupingExprs)
+    KeyValueGroupedDatasetImpl[K, T](df, encoderFor[K], encoderFor[T], groupingExprs)
   }
 
   /**

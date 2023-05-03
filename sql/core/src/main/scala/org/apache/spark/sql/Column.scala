@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.util.{toPrettySQL, CharVarcharUtils}
 import org.apache.spark.sql.execution.aggregate.TypedAggregateExpression
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions.lit
+import org.apache.spark.sql.internal.TypedAggUtils
 import org.apache.spark.sql.types._
 
 private[sql] object Column {
@@ -75,24 +76,13 @@ class TypedColumn[-T, U](
   extends Column(expr) {
 
   /**
-   * Inserts the specific input type and schema into any expressions that are expected to operate
-   * on a decoded object.
+   * Obtain the named expression ([[Column.named]]) with the specific input type and schema added
+   * for typed aggregate operations if any.
    */
-  private[sql] def withInputType(
+  private[sql] def namedWithInputType(
       inputEncoder: ExpressionEncoder[_],
-      inputAttributes: Seq[Attribute]): TypedColumn[T, U] = {
-    val unresolvedDeserializer = UnresolvedDeserializer(inputEncoder.deserializer, inputAttributes)
-
-    // This only inserts inputs into typed aggregate expressions. For untyped aggregate expressions,
-    // the resolving is handled in the analyzer directly.
-    val newExpr = expr transform {
-      case ta: TypedAggregateExpression if ta.inputDeserializer.isEmpty =>
-        ta.withInputInfo(
-          deser = unresolvedDeserializer,
-          cls = inputEncoder.clsTag.runtimeClass,
-          schema = inputEncoder.schema)
-    }
-    new TypedColumn[T, U](newExpr, encoder)
+      inputAttributes: Seq[Attribute]): NamedExpression = {
+    TypedAggUtils.namedWithInputType(expr, inputEncoder, inputAttributes)
   }
 
   /**

@@ -24,7 +24,6 @@ import scala.language.existentials
 
 import org.apache.spark.api.java.function._
 import org.apache.spark.connect.proto
-import org.apache.spark.connect.proto.Plan
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.ProductEncoder
 import org.apache.spark.sql.connect.common.UdfUtils
@@ -471,6 +470,7 @@ abstract class KeyValueGroupedDataset[K, V] private[sql] () extends Serializable
  * [[KeyValueGroupedDataset]] behaves on the server.
  */
 private class KeyValueGroupedDatasetImpl[K, V, IK, IV](
+    // TODO: passing ds directly and get rid of keysFunc
     private val sparkSession: SparkSession,
     private val plan: proto.Plan,
     private val ikEncoder: AgnosticEncoder[IK],
@@ -587,8 +587,6 @@ private class KeyValueGroupedDatasetImpl[K, V, IK, IV](
 private object KeyValueGroupedDatasetImpl {
   def apply[K, V](
       ds: Dataset[V],
-      sparkSession: SparkSession,
-      plan: Plan,
       kEncoder: AgnosticEncoder[K],
       groupingFunc: V => K): KeyValueGroupedDatasetImpl[K, V, K, V] = {
     val gf = ScalarUserDefinedFunction(
@@ -596,8 +594,8 @@ private object KeyValueGroupedDatasetImpl {
       inputEncoders = ds.encoder :: Nil, // Using the original value and key encoders
       outputEncoder = kEncoder)
     new KeyValueGroupedDatasetImpl(
-      sparkSession,
-      plan,
+      ds.sparkSession,
+      ds.plan,
       kEncoder,
       kEncoder,
       ds.encoder,
@@ -609,20 +607,18 @@ private object KeyValueGroupedDatasetImpl {
 
   def apply[K, V](
       df: DataFrame,
-      sparkSession: SparkSession,
-      plan: Plan,
       kEncoder: AgnosticEncoder[K],
       vEncoder: AgnosticEncoder[V],
       groupingExprs: Seq[Column]): KeyValueGroupedDatasetImpl[K, V, K, V] = {
     // Use a dummy udf to pass the K V encoders
     val dummyGroupingFunc = ScalarUserDefinedFunction(
-      function = UdfUtils.as[V, K](),
+      function = UdfUtils.noOp[V, K](),
       inputEncoders = vEncoder :: Nil,
       outputEncoder = kEncoder).apply(col("*"))
 
     new KeyValueGroupedDatasetImpl(
-      sparkSession,
-      plan,
+      df.sparkSession,
+      df.plan,
       kEncoder,
       kEncoder,
       vEncoder,
