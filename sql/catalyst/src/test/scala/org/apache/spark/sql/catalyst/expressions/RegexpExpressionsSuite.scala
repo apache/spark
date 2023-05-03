@@ -391,12 +391,36 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val row11 = create_row("100-200", "(\\d+)-(\\d+)", -1)
     val row12 = create_row("100-200", "\\d+", -1)
 
-    checkExceptionInExpression[SparkRuntimeException](
-      expr, row8, "Expects group index between 0 and 2, but got 3.")
-    checkExceptionInExpression[SparkRuntimeException](
-      expr, row9, "Expects group index between 0 and 1, but got 2.")
-    checkExceptionInExpression[SparkRuntimeException](
-      expr, row10, "Expects group index between 0 and 0, but got 1.")
+    checkErrorInExpression[SparkRuntimeException](
+      expr,
+      row8,
+      "INVALID_PARAMETER_VALUE.REGEX_GROUP_INDEX",
+      Map("parameter" -> "`idx`",
+        "functionName" -> "`regexp_extract`",
+        "groupCount" -> "2",
+        "groupIndex" -> "3"
+      )
+    )
+    checkErrorInExpression[SparkRuntimeException](
+      expr,
+      row9,
+      "INVALID_PARAMETER_VALUE.REGEX_GROUP_INDEX",
+      Map("parameter" -> "`idx`",
+        "functionName" -> "`regexp_extract`",
+        "groupCount" -> "1",
+        "groupIndex" -> "2"
+      )
+    )
+    checkErrorInExpression[SparkRuntimeException](
+      expr,
+      row10,
+      "INVALID_PARAMETER_VALUE.REGEX_GROUP_INDEX",
+      Map("parameter" -> "`idx`",
+        "functionName" -> "`regexp_extract`",
+        "groupCount" -> "0",
+        "groupIndex" -> "1"
+      )
+    )
     checkExceptionInExpression[IllegalArgumentException](
       expr, row11, "The specified group index cannot be less than zero")
     checkExceptionInExpression[IllegalArgumentException](
@@ -445,12 +469,36 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val row12 = create_row("100-200,300-400,500-600", "(\\d+)-(\\d+)", -1)
     val row13 = create_row("100-200,300-400,500-600", "\\d+", -1)
 
-    checkExceptionInExpression[SparkRuntimeException](
-      expr, row9, "Expects group index between 0 and 2, but got 3.")
-    checkExceptionInExpression[SparkRuntimeException](
-      expr, row10, "Expects group index between 0 and 1, but got 2.")
-    checkExceptionInExpression[SparkRuntimeException](
-      expr, row11, "Expects group index between 0 and 0, but got 1.")
+    checkErrorInExpression[SparkRuntimeException](
+      expr,
+      row9,
+      "INVALID_PARAMETER_VALUE.REGEX_GROUP_INDEX",
+      Map("parameter" -> "`idx`",
+        "functionName" -> "`regexp_extract_all`",
+        "groupCount" -> "2",
+        "groupIndex" -> "3"
+      )
+    )
+    checkErrorInExpression[SparkRuntimeException](
+      expr,
+      row10,
+      "INVALID_PARAMETER_VALUE.REGEX_GROUP_INDEX",
+      Map("parameter" -> "`idx`",
+        "functionName"-> "`regexp_extract_all`",
+        "groupCount" -> "1",
+        "groupIndex" -> "2"
+      )
+    )
+    checkErrorInExpression[SparkRuntimeException](
+      expr,
+      row11,
+      "INVALID_PARAMETER_VALUE.REGEX_GROUP_INDEX",
+      Map("parameter" -> "`idx`",
+        "functionName" -> "`regexp_extract_all`",
+        "groupCount" -> "0",
+        "groupIndex" -> "1"
+      )
+    )
     checkExceptionInExpression[IllegalArgumentException](
       expr, row12, "The specified group index cannot be less than zero")
     checkExceptionInExpression[IllegalArgumentException](
