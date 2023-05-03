@@ -1100,7 +1100,7 @@ class SparkConnectClient(object):
             self._handle_error(error)
 
     def _interrupt_request(
-        self, interrupt_type: pb2.InterruptRequest.InterruptType.ValueType
+        self, interrupt_type: pb2.InterruptRequest.InterruptType
     ) -> pb2.InterruptRequest:
         req = pb2.InterruptRequest()
         req.session_id = self._session_id
