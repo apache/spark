@@ -221,10 +221,13 @@ object ResolveDefaultColumns {
     } else {
       // If the provided default value is a literal of a wider type than the target column, but the
       // literal value fits within the narrower type, just coerce it for convenience. Exclude
-      // boolean types from consideration for this type coercion to avoid surprising behavior like
-      // interpreting "false" as integer zero.
+      // boolean/array/struct/map types from consideration for this type coercion to avoid
+      // surprising behavior like interpreting "false" as integer zero.
       val result = if (analyzed.isInstanceOf[Literal] &&
-        !Seq(dataType, analyzed.dataType).exists(_ == BooleanType)) {
+        !Seq(dataType, analyzed.dataType).exists(_ match {
+          case _: BooleanType | _: ArrayType | _: StructType | _: MapType => true
+          case _ => false
+        })) {
         try {
           val casted = Cast(analyzed, dataType, evalMode = EvalMode.TRY).eval()
           if (casted != null) {
