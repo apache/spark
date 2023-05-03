@@ -388,10 +388,9 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
     )
   }
 
-  def mergeUnsupportedByWindowFunctionError(): SparkUnsupportedOperationException = {
-    new SparkUnsupportedOperationException(
-      errorClass = "_LEGACY_ERROR_TEMP_2010",
-      messageParameters = Map.empty)
+  def mergeUnsupportedByWindowFunctionError(funcName: String): Throwable = {
+    SparkException.internalError(
+      s"The aggregate window function ${toSQLId(funcName)} does not support merging.")
   }
 
   def dataTypeUnexpectedError(dataType: DataType): SparkUnsupportedOperationException = {
@@ -469,10 +468,9 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       messageParameters = Map("cls" -> cls.toString()))
   }
 
-  def unsupportedNaturalJoinTypeError(joinType: JoinType): SparkRuntimeException = {
-    new SparkRuntimeException(
-      errorClass = "_LEGACY_ERROR_TEMP_2022",
-      messageParameters = Map("joinType" -> joinType.toString()))
+  def unsupportedNaturalJoinTypeError(joinType: JoinType): SparkException = {
+    SparkException.internalError(
+      s"Unsupported natural join type ${joinType.toString}")
   }
 
   def notExpectedUnresolvedEncoderError(attr: AttributeReference): SparkRuntimeException = {
@@ -2345,11 +2343,13 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       cause = null)
   }
 
-  def failedMergingSchemaError(schema: StructType, e: SparkException): Throwable = {
+  def failedMergingSchemaError(
+      leftSchema: StructType,
+      rightSchema: StructType,
+      e: SparkException): Throwable = {
     new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_2247",
-      messageParameters = Map(
-        "schema" -> schema.treeString),
+      errorClass = "CANNOT_MERGE_SCHEMAS",
+      messageParameters = Map("left" -> toSQLType(leftSchema), "right" -> toSQLType(rightSchema)),
       cause = e)
   }
 

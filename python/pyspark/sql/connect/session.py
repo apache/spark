@@ -48,12 +48,12 @@ from pandas.api.types import (  # type: ignore[attr-defined]
 
 from pyspark import SparkContext, SparkConf, __version__
 from pyspark.sql.connect import proto
-from pyspark.sql.connect.client import SparkConnectClient
+from pyspark.sql.connect.client import SparkConnectClient, ChannelBuilder
 from pyspark.sql.connect.conf import RuntimeConf
 from pyspark.sql.connect.dataframe import DataFrame
 from pyspark.sql.connect.plan import SQL, Range, LocalRelation, CachedRelation
 from pyspark.sql.connect.readwriter import DataFrameReader
-from pyspark.sql.connect.streaming import DataStreamReader
+from pyspark.sql.connect.streaming import DataStreamReader, StreamingQueryManager
 from pyspark.sql.pandas.serializers import ArrowStreamPandasSerializer
 from pyspark.sql.pandas.types import to_arrow_schema, to_arrow_type
 from pyspark.sql.session import classproperty, SparkSession as PySparkSession
@@ -69,7 +69,7 @@ from pyspark.sql.types import (
     TimestampType,
 )
 from pyspark.sql.utils import to_str
-from pyspark.errors import PySparkAttributeError
+from pyspark.errors import PySparkAttributeError, PySparkNotImplementedError
 
 if TYPE_CHECKING:
     from pyspark.sql.connect._typing import OptionalPrimitiveType
@@ -90,6 +90,7 @@ class SparkSession:
 
         def __init__(self) -> None:
             self._options: Dict[str, Any] = {}
+            self._channel_builder: Optional[ChannelBuilder] = None
 
         @overload
         def config(self, key: str, value: Any) -> "SparkSession.Builder":
@@ -123,14 +124,66 @@ class SparkSession:
         def remote(self, location: str = "sc://localhost") -> "SparkSession.Builder":
             return self.config("spark.remote", location)
 
+        def channelBuilder(self, channelBuilder: ChannelBuilder) -> "SparkSession.Builder":
+            """Uses custom :class:`ChannelBuilder` implementation, when there is a need
+            to customize the behavior for creation of GRPC connections.
+
+            .. versionadded:: 3.5.0
+
+            An example to use this class looks like this:
+
+            .. code-block:: python
+
+                from pyspark.sql.connect import SparkSession, ChannelBuilder
+
+                class CustomChannelBuilder(ChannelBuilder):
+                    ...
+
+                custom_channel_builder = CustomChannelBuilder(...)
+                spark = SparkSession.builder().channelBuilder(custom_channel_builder).getOrCreate()
+
+            Returns
+            -------
+            :class:`SparkSession.Builder`
+            """
+            with self._lock:
+                # self._channel_builder is a separate field, because it may hold the state
+                # and cannot be serialized with to_str()
+                self._channel_builder = channelBuilder
+                return self
+
         def enableHiveSupport(self) -> "SparkSession.Builder":
-            raise NotImplementedError("enableHiveSupport not implemented for Spark Connect")
+            raise PySparkNotImplementedError(
+                error_class="NOT_IMPLEMENTED",
+                message_parameters={"feature": "enableHiveSupport"},
+            )
 
         def getOrCreate(self) -> "SparkSession":
             global _active_spark_session
             if _active_spark_session is not None:
                 return _active_spark_session
-            _active_spark_session = SparkSession(connectionString=self._options["spark.remote"])
+
+            has_channel_builder = self._channel_builder is not None
+            has_spark_remote = "spark.remote" in self._options
+
+            if has_channel_builder and has_spark_remote:
+                raise ValueError(
+                    "Only one of connection string or channelBuilder "
+                    "can be used to create a new SparkSession."
+                )
+
+            if not has_channel_builder and not has_spark_remote:
+                raise ValueError(
+                    "Needs either connection string or channelBuilder to create a new SparkSession."
+                )
+
+            if has_channel_builder:
+                assert self._channel_builder is not None
+                _active_spark_session = SparkSession(connection=self._channel_builder)
+            else:
+                spark_remote = to_str(self._options.get("spark.remote"))
+                assert spark_remote is not None
+                _active_spark_session = SparkSession(connection=spark_remote)
             return _active_spark_session
 
     _client: SparkConnectClient
@@ -140,26 +193,26 @@ class SparkSession:
         """Creates a :class:`Builder` for constructing a :class:`SparkSession`."""
         return cls.Builder()
 
-    def __init__(self, connectionString: str, userId: Optional[str] = None):
+    def __init__(self, connection: Union[str, ChannelBuilder], userId: Optional[str] = None):
         """
         Creates a new SparkSession for the Spark Connect interface.
 
         Parameters
         ----------
-        connectionString: str, optional
+        connection: Union[str,ChannelBuilder]
             Connection string that is used to extract the connection parameters and configure
-            the GRPC connection. Defaults to `sc://localhost`.
+            the GRPC connection. Or instance of ChannelBuilder that creates GRPC connection.
+            Defaults to `sc://localhost`.
         userId : str, optional
             Optional unique user ID that is used to differentiate multiple users and
             isolate their Spark Sessions. If the `user_id` is not set, will default to
             the $USER environment. Defining the user ID as part of the connection string
             takes precedence.
         """
-        # Parse the connection string.
-        self._client = SparkConnectClient(connectionString)
+        self._client = SparkConnectClient(connection=connection, userId=userId)
         self._session_id = self._client._session_id
 
-    def table(self, tableName: str) -> DataFrame:
+def table(self, tableName: str) -> DataFrame:
         return self.read.table(tableName)
 
     table.__doc__ = PySparkSession.table.__doc__
@@ -466,10 +519,16 @@ class SparkSession:
 
     @classmethod
     def getActiveSession(cls) -> Any:
-        raise NotImplementedError("getActiveSession() is not implemented.")
+        raise PySparkNotImplementedError(
+            error_class="NOT_IMPLEMENTED",
+            message_parameters={"feature": "getActiveSession()"},
+        )
 
     def newSession(self) -> Any:
-        raise NotImplementedError("newSession() is not implemented.")
+        raise PySparkNotImplementedError(
+            error_class="NOT_IMPLEMENTED",
+            message_parameters={"feature": "newSession()"},
+        )
 
     @property
     def conf(self) -> RuntimeConf:
@@ -477,11 +536,14 @@ class SparkSession:
 
     @property
     def sparkContext(self) -> Any:
-        raise NotImplementedError("sparkContext() is not implemented.")
+        raise PySparkNotImplementedError(
+            error_class="NOT_IMPLEMENTED",
+            message_parameters={"feature": "sparkContext()"},
+        )
 
     @property
-    def streams(self) -> Any:
-        raise NotImplementedError("streams() is not implemented.")
+    def streams(self) -> "StreamingQueryManager":
+        return StreamingQueryManager(self)
 
     @property
     def _jsc(self) -> None:
@@ -647,10 +709,6 @@ class SparkSession:
                     os.environ["SPARK_REMOTE"] = origin_remote
         else:
             raise RuntimeError("There should not be an existing Spark Session or Spark Context.")
-
-    @property
-    def session_id(self) -> str:
-        return self._session_id
 
 
 SparkSession.__doc__ = PySparkSession.__doc__

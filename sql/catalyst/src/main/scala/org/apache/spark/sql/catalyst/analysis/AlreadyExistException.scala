@@ -56,7 +56,10 @@ class NamespaceAlreadyExistsException private(
   }
 
   def this(message: String) = {
-    this(message, errorClass = None, messageParameters = Map.empty[String, String])
+    this(
+      message,
+      errorClass = Some("SCHEMA_ALREADY_EXISTS"),
+      messageParameters = Map.empty[String, String])
   }
 }
 
@@ -107,7 +110,11 @@ class TableAlreadyExistsException private(
   }
 
   def this(message: String, cause: Option[Throwable] = None) = {
-    this(message, cause, errorClass = None, messageParameters = Map.empty[String, String])
+    this(
+      message,
+      cause,
+      errorClass = Some("TABLE_OR_VIEW_ALREADY_EXISTS"),
+      messageParameters = Map.empty[String, String])
   }
 }
 
@@ -163,7 +170,10 @@ class PartitionAlreadyExistsException private(
   }
 
   def this(message: String) = {
-    this(message, errorClass = None, messageParameters = Map.empty[String, String])
+    this(
+      message,
+      errorClass = Some("PARTITIONS_ALREADY_EXIST"),
+      messageParameters = Map.empty[String, String])
   }
 }
 
@@ -210,7 +220,10 @@ class PartitionsAlreadyExistException private(
     this(tableName, Seq(partitionIdent), partitionSchema)
 
   def this(message: String) = {
-    this(message, errorClass = None, messageParameters = Map.empty[String, String])
+    this(
+      message,
+      errorClass = Some("PARTITIONS_ALREADY_EXIST"),
+      messageParameters = Map.empty[String, String])
   }
 }
 
@@ -256,6 +269,10 @@ class IndexAlreadyExistsException private(
   }
 
   def this(message: String, cause: Option[Throwable] = None) = {
-    this(message, cause, errorClass = None, messageParameters = Map.empty[String, String])
+    this(
+      message,
+      cause,
+      errorClass = Some("INDEX_ALREADY_EXISTS"),
+      messageParameters = Map.empty[String, String])
   }
 }

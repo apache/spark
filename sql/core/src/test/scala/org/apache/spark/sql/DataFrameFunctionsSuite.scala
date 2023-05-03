@@ -2717,6 +2717,22 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     ).toDF("a", "b")
     checkAnswer(df2.selectExpr("array_prepend(a, b)"),
       Seq(Row(Seq("d", "a", "b", "c")), Row(null), Row(Seq(null, "x", "y", "z")), Row(null)))
+    val dataA = Seq[Array[Byte]](
+      Array[Byte](5, 6),
+      Array[Byte](1, 2),
+      Array[Byte](1, 2),
+      Array[Byte](5, 6))
+    val dataB = Seq[Array[Int]](Array[Int](1, 2), Array[Int](3, 4))
+    val df3 = Seq((dataA, dataB)).toDF("a", "b")
+    val dataToPrepend = Array[Byte](5, 6)
+    checkAnswer(
+      df3.select(array_prepend($"a", null), array_prepend($"a", dataToPrepend)),
+      Seq(Row(null +: dataA, dataToPrepend +: dataA)))
+    checkAnswer(
+      df3.select(array_prepend($"b", Array.empty[Int]), array_prepend($"b", Array[Int](5, 6))),
+      Seq(Row(
+        Seq(Seq.empty[Int], Seq[Int](1, 2), Seq[Int](3, 4)),
+        Seq(Seq[Int](5, 6), Seq[Int](1, 2), Seq[Int](3, 4)))))
   }
 
   test("array remove") {

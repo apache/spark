@@ -177,7 +177,7 @@ class ResourceRequestHelperSuite extends SparkFunSuite with Matchers {
 
   private def createResource(): Resource = {
     val resource = Records.newRecord(classOf[Resource])
-    resource.setMemory(512)
+    resource.setMemorySize(512)
     resource.setVirtualCores(2)
     resource
   }

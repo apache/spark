@@ -87,10 +87,14 @@ private[connect] class SparkConnectAnalyzeHandler(
             .build())
 
       case proto.AnalyzePlanRequest.AnalyzeCase.TREE_STRING =>
-        val treeString = Dataset
+        val schema = Dataset
           .ofRows(session, planner.transformRelation(request.getTreeString.getPlan.getRoot))
           .schema
-          .treeString
+        val treeString = if (request.getTreeString.hasLevel) {
+          schema.treeString(request.getTreeString.getLevel)
+        } else {
+          schema.treeString
+        }
         builder.setTreeString(
           proto.AnalyzePlanResponse.TreeString
             .newBuilder()

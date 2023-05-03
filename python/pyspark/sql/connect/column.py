@@ -138,9 +138,9 @@ class Column:
 
     # container operators
     def __contains__(self, item: Any) -> None:
-        raise ValueError(
-            "Cannot apply 'in' operator against a column: please use 'contains' "
-            "in a string column or 'array_contains' function for an array column."
+        raise PySparkValueError(
+            error_class="CANNOT_APPLY_IN_FOR_COLUMN",
+            message_parameters={},
         )
 
     # bitwise operators
@@ -239,24 +239,15 @@ class Column:
 
         if isinstance(length, Column):
             length_expr = length._expr
+            start_expr = startPos._expr  # type: ignore[union-attr]
         elif isinstance(length, int):
             length_expr = LiteralExpression._from_value(length)
+            start_expr = LiteralExpression._from_value(startPos)
         else:
             raise PySparkTypeError(
                 error_class="NOT_COLUMN_OR_INT",
                 message_parameters={"arg_name": "length", "arg_type": type(length).__name__},
             )
-
-        if isinstance(startPos, Column):
-            start_expr = startPos._expr
-        elif isinstance(startPos, int):
-            start_expr = LiteralExpression._from_value(startPos)
-        else:
-            raise PySparkTypeError(
-                error_class="NOT_COLUMN_OR_INT",
-                message_parameters={"arg_name": "startPos", "arg_type": type(startPos).__name__},
-            )
-
         return Column(UnresolvedFunction("substring", [self._expr, start_expr, length_expr]))
 
     substr.__doc__ = PySparkColumn.substr.__doc__
@@ -447,7 +438,9 @@ class Column:
                 error_class="JVM_ATTRIBUTE_NOT_SUPPORTED", message_parameters={"attr_name": "_jc"}
             )
         if item.startswith("__"):
-            raise AttributeError(item)
+            raise PySparkAttributeError(
+                error_class="ATTRIBUTE_NOT_SUPPORTED", message_parameters={"attr_name": item}
+            )
         return self[item]
 
     def __getitem__(self, k: Any) -> "Column":

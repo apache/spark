@@ -55,6 +55,7 @@ from pyspark.testing.sqlutils import (
     pyarrow_requirement_message,
 )
 from pyspark.testing.utils import QuietTest
+from pyspark.errors import ArithmeticException, PySparkTypeError
 
 if have_pandas:
     import pandas as pd
@@ -215,8 +216,14 @@ class ArrowTestsMixin:
         df = self.spark.createDataFrame([(None,)], schema=schema)
         with QuietTest(self.sc):
             with self.warnings_lock:
-                with self.assertRaisesRegex(Exception, "Unsupported type"):
+                with self.assertRaises(PySparkTypeError) as pe:
                     df.toPandas()
+
+                self.check_error(
+                    exception=pe.exception,
+                    error_class="UNSUPPORTED_DATA_TYPE",
+                    message_parameters={"data_type": "ArrayType(TimestampType(), True)"},
+                )
 
     def test_toPandas_empty_df_arrow_enabled(self):
         for arrow_enabled in [True, False]:
@@ -748,11 +755,17 @@ class ArrowTestsMixin:
 
     def test_createDataFrame_fallback_disabled(self):
         with QuietTest(self.sc):
-            with self.assertRaisesRegex(TypeError, "Unsupported type"):
+            with self.assertRaises(PySparkTypeError) as pe:
                 self.spark.createDataFrame(
                     pd.DataFrame({"a": [[datetime.datetime(2015, 11, 1, 0, 30)]]}),
                     "a: array<timestamp>",
                 )
+
+            self.check_error(
+                exception=pe.exception,
+                error_class="UNSUPPORTED_DATA_TYPE",
+                message_parameters={"data_type": "ArrayType(TimestampType(), True)"},
+            )
 
     # Regression test for SPARK-23314
     def test_timestamp_dst(self):
@@ -859,6 +872,21 @@ class ArrowTestsMixin:
         df = self.spark.createDataFrame(pdf)
         self.assertEqual([Row(c1=1, c2="string")], df.collect())
         self.assertGreater(self.spark.sparkContext.defaultParallelism, len(pdf))
+
+    def test_toPandas_error(self):
+        for arrow_enabled in [True, False]:
+            with self.subTest(arrow_enabled=arrow_enabled):
+                self.check_toPandas_error(arrow_enabled)
+
+    def check_toPandas_error(self, arrow_enabled):
+        with self.sql_conf(
+            {
+                "spark.sql.ansi.enabled": True,
+                "spark.sql.execution.arrow.pyspark.enabled": arrow_enabled,
+            }
+        ):
+            with self.assertRaises(ArithmeticException):
+                self.spark.sql("select 1/0").toPandas()
 
 
 @unittest.skipIf(

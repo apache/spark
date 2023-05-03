@@ -148,6 +148,8 @@ def get_local_mode_conf():
     return {
         "spark.test.home": SPARK_HOME,
         "spark.driver.resource.gpu.amount": "3",
+        "spark.driver.memory": "512M",
+        "spark.executor.memory": "512M",
     }
 
 
@@ -158,6 +160,8 @@ def get_distributed_mode_conf():
         "spark.task.cpus": "2",
         "spark.task.resource.gpu.amount": "1",
         "spark.executor.resource.gpu.amount": "1",
+        "spark.driver.memory": "512M",
+        "spark.executor.memory": "512M",
     }
 
 
@@ -412,7 +416,7 @@ class TorchDistributorLocalUnitTests(TorchDistributorLocalUnitTestsMixin, unitte
             "spark.driver.resource.gpu.discoveryScript", cls.gpu_discovery_script_file_name
         )
 
-        sc = SparkContext("local-cluster[2,2,1024]", cls.__name__, conf=conf)
+        sc = SparkContext("local-cluster[2,2,512]", cls.__name__, conf=conf)
         cls.spark = SparkSession(sc)
 
     @classmethod
@@ -459,7 +463,7 @@ class TorchDistributorDistributedUnitTestsMixin:
                 )
                 self.assertEqual(
                     expected,
-                    dist._run_distributed_training(dist._run_training_on_pytorch_file, "..."),
+                    dist._run_distributed_training(dist._run_training_on_pytorch_file, "...", None),
                 )
 
     def test_get_num_tasks_distributed(self) -> None:
@@ -502,7 +506,7 @@ class TorchDistributorDistributedUnitTests(
             "spark.worker.resource.gpu.discoveryScript", cls.gpu_discovery_script_file_name
         )
 
-        sc = SparkContext("local-cluster[2,2,1024]", cls.__name__, conf=conf)
+        sc = SparkContext("local-cluster[2,2,512]", cls.__name__, conf=conf)
         cls.spark = SparkSession(sc)
 
     @classmethod

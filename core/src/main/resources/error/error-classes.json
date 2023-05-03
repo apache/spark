@@ -94,6 +94,16 @@
     ],
     "sqlState" : "42825"
   },
+  "CANNOT_MERGE_SCHEMAS" : {
+    "message" : [
+      "Failed merging schemas:",
+      "Initial schema:",
+      "<left>",
+      "Schema that cannot be merged with the initial schema:",
+      "<right>."
+    ],
+    "sqlState" : "42KD9"
+  },
   "CANNOT_MODIFY_CONFIG" : {
     "message" : [
       "Cannot modify the value of the Spark config: <key>.",
@@ -769,6 +779,12 @@
     "sqlState" : "42704"
   },
   "INTERNAL_ERROR" : {
+    "message" : [
+      "<message>"
+    ],
+    "sqlState" : "XX000"
+  },
+  "INTERNAL_ERROR_BROADCAST" : {
     "message" : [
       "<message>"
     ],
@@ -3736,11 +3752,6 @@
       "Regex group count is <groupCount>, but the specified group index is <groupIndex>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2010" : {
-    "message" : [
-      "Window Functions do not support merging."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2011" : {
     "message" : [
       "Unexpected data type <dataType>."
@@ -3784,11 +3795,6 @@
   "_LEGACY_ERROR_TEMP_2021" : {
     "message" : [
       "Couldn't find a primary constructor on <cls>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2022" : {
-    "message" : [
-      "Unsupported natural join type <joinType>."
     ]
   },
   "_LEGACY_ERROR_TEMP_2023" : {
@@ -4815,12 +4821,6 @@
   "_LEGACY_ERROR_TEMP_2246" : {
     "message" : [
       "Table does not support dynamic partition overwrite: <table>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2247" : {
-    "message" : [
-      "Failed merging schema:",
-      "<schema>."
     ]
   },
   "_LEGACY_ERROR_TEMP_2248" : {

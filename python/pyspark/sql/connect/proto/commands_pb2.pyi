@@ -68,6 +68,7 @@ class Command(google.protobuf.message.Message):
     WRITE_STREAM_OPERATION_START_FIELD_NUMBER: builtins.int
     STREAMING_QUERY_COMMAND_FIELD_NUMBER: builtins.int
     GET_RESOURCES_COMMAND_FIELD_NUMBER: builtins.int
+    STREAMING_QUERY_MANAGER_COMMAND_FIELD_NUMBER: builtins.int
     EXTENSION_FIELD_NUMBER: builtins.int
     @property
     def register_function(
@@ -88,6 +89,8 @@ class Command(google.protobuf.message.Message):
     @property
     def get_resources_command(self) -> global___GetResourcesCommand: ...
     @property
+    def streaming_query_manager_command(self) -> global___StreamingQueryManagerCommand: ...
+    @property
     def extension(self) -> google.protobuf.any_pb2.Any:
         """This field is used to mark extensions to the protocol. When plugins generate arbitrary
         Commands they can add them here. During the planning the correct resolution is done.
@@ -104,6 +107,7 @@ class Command(google.protobuf.message.Message):
         write_stream_operation_start: global___WriteStreamOperationStart | None = ...,
         streaming_query_command: global___StreamingQueryCommand | None = ...,
         get_resources_command: global___GetResourcesCommand | None = ...,
+        streaming_query_manager_command: global___StreamingQueryManagerCommand | None = ...,
         extension: google.protobuf.any_pb2.Any | None = ...,
     ) -> None: ...
     def HasField(
@@ -123,6 +127,8 @@ class Command(google.protobuf.message.Message):
             b"sql_command",
             "streaming_query_command",
             b"streaming_query_command",
+            "streaming_query_manager_command",
+            b"streaming_query_manager_command",
             "write_operation",
             b"write_operation",
             "write_operation_v2",
@@ -148,6 +154,8 @@ class Command(google.protobuf.message.Message):
             b"sql_command",
             "streaming_query_command",
             b"streaming_query_command",
+            "streaming_query_manager_command",
+            b"streaming_query_manager_command",
             "write_operation",
             b"write_operation",
             "write_operation_v2",
@@ -167,6 +175,7 @@ class Command(google.protobuf.message.Message):
         "write_stream_operation_start",
         "streaming_query_command",
         "get_resources_command",
+        "streaming_query_manager_command",
         "extension",
     ] | None: ...
 
@@ -1087,35 +1096,70 @@ class StreamingQueryCommandResult(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
         EXCEPTION_MESSAGE_FIELD_NUMBER: builtins.int
+        ERROR_CLASS_FIELD_NUMBER: builtins.int
+        STACK_TRACE_FIELD_NUMBER: builtins.int
         exception_message: builtins.str
-        """Exception message as string"""
+        """(Optional) Exception message as string, maps to the return value of original
+        StreamingQueryException's toString method
+        """
+        error_class: builtins.str
+        """(Optional) Exception error class as string"""
+        stack_trace: builtins.str
+        """(Optional) Exception stack trace as string"""
         def __init__(
             self,
             *,
             exception_message: builtins.str | None = ...,
+            error_class: builtins.str | None = ...,
+            stack_trace: builtins.str | None = ...,
         ) -> None: ...
         def HasField(
             self,
             field_name: typing_extensions.Literal[
+                "_error_class",
+                b"_error_class",
                 "_exception_message",
                 b"_exception_message",
+                "_stack_trace",
+                b"_stack_trace",
+                "error_class",
+                b"error_class",
                 "exception_message",
                 b"exception_message",
+                "stack_trace",
+                b"stack_trace",
             ],
         ) -> builtins.bool: ...
         def ClearField(
             self,
             field_name: typing_extensions.Literal[
+                "_error_class",
+                b"_error_class",
                 "_exception_message",
                 b"_exception_message",
+                "_stack_trace",
+                b"_stack_trace",
+                "error_class",
+                b"error_class",
                 "exception_message",
                 b"exception_message",
+                "stack_trace",
+                b"stack_trace",
             ],
         ) -> None: ...
+        @typing.overload
+        def WhichOneof(
+            self, oneof_group: typing_extensions.Literal["_error_class", b"_error_class"]
+        ) -> typing_extensions.Literal["error_class"] | None: ...
+        @typing.overload
         def WhichOneof(
             self,
             oneof_group: typing_extensions.Literal["_exception_message", b"_exception_message"],
         ) -> typing_extensions.Literal["exception_message"] | None: ...
+        @typing.overload
+        def WhichOneof(
+            self, oneof_group: typing_extensions.Literal["_stack_trace", b"_stack_trace"]
+        ) -> typing_extensions.Literal["stack_trace"] | None: ...
 
     class AwaitTerminationResult(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
@@ -1205,6 +1249,222 @@ class StreamingQueryCommandResult(google.protobuf.message.Message):
     ] | None: ...
 
 global___StreamingQueryCommandResult = StreamingQueryCommandResult
+
+class StreamingQueryManagerCommand(google.protobuf.message.Message):
+    """Commands for the streaming query manager."""
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    class AwaitAnyTerminationCommand(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        TIMEOUT_MS_FIELD_NUMBER: builtins.int
+        timeout_ms: builtins.int
+        """(Optional) The waiting time in milliseconds to wait for any query to terminate."""
+        def __init__(
+            self,
+            *,
+            timeout_ms: builtins.int | None = ...,
+        ) -> None: ...
+        def HasField(
+            self,
+            field_name: typing_extensions.Literal[
+                "_timeout_ms", b"_timeout_ms", "timeout_ms", b"timeout_ms"
+            ],
+        ) -> builtins.bool: ...
+        def ClearField(
+            self,
+            field_name: typing_extensions.Literal[
+                "_timeout_ms", b"_timeout_ms", "timeout_ms", b"timeout_ms"
+            ],
+        ) -> None: ...
+        def WhichOneof(
+            self, oneof_group: typing_extensions.Literal["_timeout_ms", b"_timeout_ms"]
+        ) -> typing_extensions.Literal["timeout_ms"] | None: ...
+
+    ACTIVE_FIELD_NUMBER: builtins.int
+    GET_FIELD_NUMBER: builtins.int
+    AWAIT_ANY_TERMINATION_FIELD_NUMBER: builtins.int
+    RESET_TERMINATED_FIELD_NUMBER: builtins.int
+    active: builtins.bool
+    """active() API, returns a list of active queries."""
+    get: builtins.str
+    """get() API, returns the StreamingQuery identified by id."""
+    @property
+    def await_any_termination(
+        self,
+    ) -> global___StreamingQueryManagerCommand.AwaitAnyTerminationCommand:
+        """awaitAnyTermination() API, wait until any query terminates or timeout."""
+    reset_terminated: builtins.bool
+    """resetTerminated() API."""
+    def __init__(
+        self,
+        *,
+        active: builtins.bool = ...,
+        get: builtins.str = ...,
+        await_any_termination: global___StreamingQueryManagerCommand.AwaitAnyTerminationCommand
+        | None = ...,
+        reset_terminated: builtins.bool = ...,
+    ) -> None: ...
+    def HasField(
+        self,
+        field_name: typing_extensions.Literal[
+            "active",
+            b"active",
+            "await_any_termination",
+            b"await_any_termination",
+            "command",
+            b"command",
+            "get",
+            b"get",
+            "reset_terminated",
+            b"reset_terminated",
+        ],
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "active",
+            b"active",
+            "await_any_termination",
+            b"await_any_termination",
+            "command",
+            b"command",
+            "get",
+            b"get",
+            "reset_terminated",
+            b"reset_terminated",
+        ],
+    ) -> None: ...
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["command", b"command"]
+    ) -> typing_extensions.Literal[
+        "active", "get", "await_any_termination", "reset_terminated"
+    ] | None: ...
+
+global___StreamingQueryManagerCommand = StreamingQueryManagerCommand
+
+class StreamingQueryManagerCommandResult(google.protobuf.message.Message):
+    """Response for commands on the streaming query manager."""
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    class ActiveResult(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        ACTIVE_QUERIES_FIELD_NUMBER: builtins.int
+        @property
+        def active_queries(
+            self,
+        ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+            global___StreamingQueryManagerCommandResult.StreamingQueryInstance
+        ]: ...
+        def __init__(
+            self,
+            *,
+            active_queries: collections.abc.Iterable[
+                global___StreamingQueryManagerCommandResult.StreamingQueryInstance
+            ]
+            | None = ...,
+        ) -> None: ...
+        def ClearField(
+            self, field_name: typing_extensions.Literal["active_queries", b"active_queries"]
+        ) -> None: ...
+
+    class StreamingQueryInstance(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        ID_FIELD_NUMBER: builtins.int
+        NAME_FIELD_NUMBER: builtins.int
+        @property
+        def id(self) -> global___StreamingQueryInstanceId:
+            """(Required) The id and runId of this query."""
+        name: builtins.str
+        """(Optional) The name of this query."""
+        def __init__(
+            self,
+            *,
+            id: global___StreamingQueryInstanceId | None = ...,
+            name: builtins.str = ...,
+        ) -> None: ...
+        def HasField(self, field_name: typing_extensions.Literal["id", b"id"]) -> builtins.bool: ...
+        def ClearField(
+            self, field_name: typing_extensions.Literal["id", b"id", "name", b"name"]
+        ) -> None: ...
+
+    class AwaitAnyTerminationResult(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        TERMINATED_FIELD_NUMBER: builtins.int
+        terminated: builtins.bool
+        def __init__(
+            self,
+            *,
+            terminated: builtins.bool = ...,
+        ) -> None: ...
+        def ClearField(
+            self, field_name: typing_extensions.Literal["terminated", b"terminated"]
+        ) -> None: ...
+
+    ACTIVE_FIELD_NUMBER: builtins.int
+    QUERY_FIELD_NUMBER: builtins.int
+    AWAIT_ANY_TERMINATION_FIELD_NUMBER: builtins.int
+    RESET_TERMINATED_FIELD_NUMBER: builtins.int
+    @property
+    def active(self) -> global___StreamingQueryManagerCommandResult.ActiveResult: ...
+    @property
+    def query(self) -> global___StreamingQueryManagerCommandResult.StreamingQueryInstance: ...
+    @property
+    def await_any_termination(
+        self,
+    ) -> global___StreamingQueryManagerCommandResult.AwaitAnyTerminationResult: ...
+    reset_terminated: builtins.bool
+    def __init__(
+        self,
+        *,
+        active: global___StreamingQueryManagerCommandResult.ActiveResult | None = ...,
+        query: global___StreamingQueryManagerCommandResult.StreamingQueryInstance | None = ...,
+        await_any_termination: global___StreamingQueryManagerCommandResult.AwaitAnyTerminationResult
+        | None = ...,
+        reset_terminated: builtins.bool = ...,
+    ) -> None: ...
+    def HasField(
+        self,
+        field_name: typing_extensions.Literal[
+            "active",
+            b"active",
+            "await_any_termination",
+            b"await_any_termination",
+            "query",
+            b"query",
+            "reset_terminated",
+            b"reset_terminated",
+            "result_type",
+            b"result_type",
+        ],
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "active",
+            b"active",
+            "await_any_termination",
+            b"await_any_termination",
+            "query",
+            b"query",
+            "reset_terminated",
+            b"reset_terminated",
+            "result_type",
+            b"result_type",
+        ],
+    ) -> None: ...
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["result_type", b"result_type"]
+    ) -> typing_extensions.Literal[
+        "active", "query", "await_any_termination", "reset_terminated"
+    ] | None: ...
+
+global___StreamingQueryManagerCommandResult = StreamingQueryManagerCommandResult
 
 class GetResourcesCommand(google.protobuf.message.Message):
     """Command to get the output of 'SparkContext.resources'"""

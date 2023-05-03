@@ -87,7 +87,7 @@ class SparkConnectStreamHandler(responseObserver: StreamObserver[ExecutePlanResp
       SparkConnectStreamHandler.sendSchemaToResponse(request.getSessionId, dataframe.schema))
     processAsArrowBatches(request.getSessionId, dataframe, responseObserver)
     responseObserver.onNext(
-      SparkConnectStreamHandler.sendMetricsToResponse(request.getSessionId, dataframe))
+      SparkConnectStreamHandler.createMetricsResponse(request.getSessionId, dataframe))
     if (dataframe.queryExecution.observedMetrics.nonEmpty) {
       responseObserver.onNext(
         SparkConnectStreamHandler.sendObservedMetricsToResponse(request.getSessionId, dataframe))
@@ -98,7 +98,11 @@ class SparkConnectStreamHandler(responseObserver: StreamObserver[ExecutePlanResp
   private def handleCommand(session: SparkSession, request: ExecutePlanRequest): Unit = {
     val command = request.getPlan.getCommand
     val planner = new SparkConnectPlanner(session)
-    planner.process(command, request.getSessionId, responseObserver)
+    planner.process(
+      command = command,
+      userId = request.getUserContext.getUserId,
+      sessionId = request.getSessionId,
+      responseObserver = responseObserver)
     responseObserver.onCompleted()
   }
 }
@@ -271,7 +275,7 @@ object SparkConnectStreamHandler {
       .build()
   }
 
-  def sendMetricsToResponse(sessionId: String, rows: DataFrame): ExecutePlanResponse = {
+  def createMetricsResponse(sessionId: String, rows: DataFrame): ExecutePlanResponse = {
     // Send a last batch with the metrics
     ExecutePlanResponse
       .newBuilder()

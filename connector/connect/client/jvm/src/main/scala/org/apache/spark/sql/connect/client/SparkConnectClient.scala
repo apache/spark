@@ -17,8 +17,11 @@
 
 package org.apache.spark.sql.connect.client
 
+import com.google.protobuf.ByteString
 import io.grpc.{CallCredentials, CallOptions, Channel, ClientCall, ClientInterceptor, CompositeChannelCredentials, ForwardingClientCall, Grpc, InsecureChannelCredentials, ManagedChannel, ManagedChannelBuilder, Metadata, MethodDescriptor, Status, TlsChannelCredentials}
 import java.net.URI
+import java.nio.ByteBuffer
+import java.nio.charset.StandardCharsets
 import java.util.UUID
 import java.util.concurrent.Executor
 import scala.language.existentials
@@ -39,19 +42,21 @@ private[sql] class SparkConnectClient(
 
   private[this] val stub = proto.SparkConnectServiceGrpc.newBlockingStub(channel)
 
-  private[client] val artifactManager: ArtifactManager = new ArtifactManager(userContext, channel)
-
   /**
    * Placeholder method.
    * @return
    *   User ID.
    */
-  private[client] def userId: String = userContext.getUserId()
+  private[sql] def userId: String = userContext.getUserId()
 
   // Generate a unique session ID for this client. This UUID must be unique to allow
   // concurrent Spark sessions of the same user. If the channel is closed, creating
   // a new client will create a new session ID.
   private[sql] val sessionId: String = UUID.randomUUID.toString
+
+  private[client] val artifactManager: ArtifactManager = {
+    new ArtifactManager(userContext, sessionId, channel)
+  }
 
   /**
    * Dispatch the [[proto.AnalyzePlanRequest]] to the Spark Connect server.
@@ -214,6 +219,19 @@ private[sql] class SparkConnectClient(
    */
   def shutdown(): Unit = {
     channel.shutdownNow()
+  }
+
+  /**
+   * Cache the given local relation at the server, and return its key in the remote cache.
+   */
+  def cacheLocalRelation(size: Int, data: ByteString, schema: String): String = {
+    val schemaBytes = schema.getBytes(StandardCharsets.UTF_8)
+    val locRelData = data.toByteArray
+    val locRel = ByteBuffer.allocate(4 + locRelData.length + schemaBytes.length)
+    locRel.putInt(size)
+    locRel.put(locRelData)
+    locRel.put(schemaBytes)
+    artifactManager.cacheArtifact(locRel.array())
   }
 }
 

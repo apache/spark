@@ -16,13 +16,13 @@
 #
 
 import numbers
-from typing import cast, Callable, Any, Union
+from typing import Any, Union
 
 import pandas as pd
 from pandas.api.types import CategoricalDtype
 
 from pyspark.pandas.base import column_op, IndexOpsMixin
-from pyspark.pandas._typing import Dtype, IndexOpsLike, SeriesOrIndex, GenericColumn
+from pyspark.pandas._typing import Dtype, IndexOpsLike, SeriesOrIndex
 from pyspark.pandas.data_type_ops.base import (
     DataTypeOps,
     is_valid_operand_for_numeric_arithmetic,
@@ -36,11 +36,10 @@ from pyspark.pandas.data_type_ops.base import (
 )
 from pyspark.pandas.typedef.typehints import as_spark_type, extension_dtypes, pandas_on_spark_type
 from pyspark.sql import functions as F
-from pyspark.sql.column import Column
+from pyspark.sql.column import Column as PySparkColumn
 from pyspark.sql.types import BooleanType, StringType
-
-# For Supporting Spark Connect
-from pyspark.sql.connect.column import Column as ConnectColumn
+from pyspark.sql.utils import is_remote
+from pyspark.errors import PySparkValueError
 
 
 class BooleanOps(DataTypeOps):
@@ -241,12 +240,14 @@ class BooleanOps(DataTypeOps):
             return right.__and__(left)
         else:
 
-            def and_func(left: GenericColumn, right: Any) -> GenericColumn:
-                if not isinstance(right, GenericColumn.__args__):  # type: ignore[attr-defined]
-                    if pd.isna(right):
-                        right = F.lit(None)
-                    else:
-                        right = F.lit(right)
+            def and_func(left: PySparkColumn, right: Any) -> PySparkColumn:
+                try:
+                    is_null = pd.isna(right)
+                except PySparkValueError:
+                    # Complaining `PySparkValueError` means that `right` is a Column.
+                    is_null = False
+
+                right = F.lit(None) if is_null else F.lit(right)
                 scol = left & right
                 return F.when(scol.isNull(), False).otherwise(scol)
 
@@ -258,14 +259,16 @@ class BooleanOps(DataTypeOps):
             return right ^ left
         elif _is_valid_for_logical_operator(right):
 
-            def xor_func(left: GenericColumn, right: Any) -> GenericColumn:
-                if not isinstance(right, (Column, ConnectColumn)):
-                    if pd.isna(right):
-                        right = F.lit(None)
-                    else:
-                        right = F.lit(right)
+            def xor_func(left: PySparkColumn, right: Any) -> PySparkColumn:
+                try:
+                    is_null = pd.isna(right)
+                except PySparkValueError:
+                    # Complaining `PySparkValueError` means that `right` is a Column.
+                    is_null = False
+
+                right = F.lit(None) if is_null else F.lit(right)
                 scol = left.cast("integer").bitwiseXOR(right.cast("integer")).cast("boolean")
-                return F.when(scol.isNull(), False).otherwise(scol)  # type: ignore
+                return F.when(scol.isNull(), False).otherwise(scol)
 
             return column_op(xor_func)(left, right)
         else:
@@ -277,14 +280,18 @@ class BooleanOps(DataTypeOps):
             return right.__or__(left)
         else:
 
-            def or_func(left: GenericColumn, right: Any) -> GenericColumn:
-                if not isinstance(right, (Column, ConnectColumn)) and pd.isna(right):
+            def or_func(left: PySparkColumn, right: Any) -> PySparkColumn:
+                try:
+                    is_null = pd.isna(right)
+                except PySparkValueError:
+                    # Complaining `PySparkValueError` means that `right` is a Column.
+                    is_null = False
+
+                if is_null:
                     return F.lit(False)
                 else:
                     scol = left | F.lit(right)
-                    return F.when(left.isNull() | scol.isNull(), False).otherwise(  # type: ignore
-                        scol
-                    )
+                    return F.when(left.isNull() | scol.isNull(), False).otherwise(scol)
 
             return column_op(or_func)(left, right)
 
@@ -324,19 +331,43 @@ class BooleanOps(DataTypeOps):
 
     def lt(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         _sanitize_list_like(right)
-        return column_op(cast(Callable[..., GenericColumn], Column.__lt__))(left, right)
+        if is_remote():
+            from pyspark.sql.connect.column import Column as ConnectColumn
+
+            Column = ConnectColumn
+        else:
+            Column = PySparkColumn  # type: ignore[assignment]
+        return column_op(Column.__lt__)(left, right)  # type: ignore[arg-type]
 
     def le(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         _sanitize_list_like(right)
-        return column_op(cast(Callable[..., GenericColumn], Column.__le__))(left, right)
+        if is_remote():
+            from pyspark.sql.connect.column import Column as ConnectColumn
+
+            Column = ConnectColumn
+        else:
+            Column = PySparkColumn  # type: ignore[assignment]
+        return column_op(Column.__le__)(left, right)  # type: ignore[arg-type]
 
     def ge(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         _sanitize_list_like(right)
-        return column_op(cast(Callable[..., GenericColumn], Column.__ge__))(left, right)
+        if is_remote():
+            from pyspark.sql.connect.column import Column as ConnectColumn
+
+            Column = ConnectColumn
+        else:
+            Column = PySparkColumn  # type: ignore[assignment]
+        return column_op(Column.__ge__)(left, right)  # type: ignore[arg-type]
 
     def gt(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         _sanitize_list_like(right)
-        return column_op(cast(Callable[..., GenericColumn], Column.__gt__))(left, right)
+        if is_remote():
+            from pyspark.sql.connect.column import Column as ConnectColumn
+
+            Column = ConnectColumn
+        else:
+            Column = PySparkColumn  # type: ignore[assignment]
+        return column_op(Column.__gt__)(left, right)  # type: ignore[arg-type]
 
     def invert(self, operand: IndexOpsLike) -> IndexOpsLike:
         return operand._with_new_scol(~operand.spark.column, field=operand._internal.data_fields[0])
@@ -355,12 +386,14 @@ class BooleanExtensionOps(BooleanOps):
     def __and__(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         _sanitize_list_like(right)
 
-        def and_func(left: GenericColumn, right: Any) -> GenericColumn:
-            if not isinstance(right, (Column, ConnectColumn)):
-                if pd.isna(right):
-                    right = F.lit(None)
-                else:
-                    right = F.lit(right)
+        def and_func(left: PySparkColumn, right: Any) -> PySparkColumn:
+            try:
+                is_null = pd.isna(right)
+            except PySparkValueError:
+                # Complaining `PySparkValueError` means that `right` is a Column.
+                is_null = False
+
+            right = F.lit(None) if is_null else F.lit(right)
             return left & right
 
         return column_op(and_func)(left, right)
@@ -368,12 +401,14 @@ class BooleanExtensionOps(BooleanOps):
     def __or__(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         _sanitize_list_like(right)
 
-        def or_func(left: GenericColumn, right: Any) -> GenericColumn:
-            if not isinstance(right, (Column, ConnectColumn)):
-                if pd.isna(right):
-                    right = F.lit(None)
-                else:
-                    right = F.lit(right)
+        def or_func(left: PySparkColumn, right: Any) -> PySparkColumn:
+            try:
+                is_null = pd.isna(right)
+            except PySparkValueError:
+                # Complaining `PySparkValueError` means that `right` is a Column.
+                is_null = False
+
+            right = F.lit(None) if is_null else F.lit(right)
             return left | right
 
         return column_op(or_func)(left, right)
@@ -383,12 +418,14 @@ class BooleanExtensionOps(BooleanOps):
 
         if _is_boolean_type(right):
 
-            def xor_func(left: GenericColumn, right: Any) -> GenericColumn:
-                if not isinstance(right, (Column, ConnectColumn)):
-                    if pd.isna(right):
-                        right = F.lit(None)
-                    else:
-                        right = F.lit(right)
+            def xor_func(left: PySparkColumn, right: Any) -> PySparkColumn:
+                try:
+                    is_null = pd.isna(right)
+                except PySparkValueError:
+                    # Complaining `PySparkValueError` means that `right` is a Column.
+                    is_null = False
+
+                right = F.lit(None) if is_null else F.lit(right)
                 return left.cast("integer").bitwiseXOR(right.cast("integer")).cast("boolean")
 
             return column_op(xor_func)(left, right)

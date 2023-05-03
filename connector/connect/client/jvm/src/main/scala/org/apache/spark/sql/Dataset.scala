@@ -29,8 +29,8 @@ import org.apache.spark.connect.proto
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders._
 import org.apache.spark.sql.catalyst.expressions.RowOrdering
-import org.apache.spark.sql.connect.client.{SparkResult, UdfUtils}
-import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, StorageLevelProtoConverter}
+import org.apache.spark.sql.connect.client.SparkResult
+import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, StorageLevelProtoConverter, UdfUtils}
 import org.apache.spark.sql.expressions.ScalarUserDefinedFunction
 import org.apache.spark.sql.functions.{struct, to_json}
 import org.apache.spark.sql.streaming.DataStreamWriter
@@ -1276,6 +1276,35 @@ class Dataset[T] private[sql] (
       colNames.map(colName => Column(colName).expr),
       proto.Aggregate.GroupType.GROUP_TYPE_GROUPBY)
   }
+
+  /**
+   * (Scala-specific) Returns a [[KeyValueGroupedDataset]] where the data is grouped by the given
+   * key `func`.
+   *
+   * @group typedrel
+   * @since 3.5.0
+   */
+  def groupByKey[K: Encoder](func: T => K): KeyValueGroupedDataset[K, T] = {
+    val kEncoder = encoderFor[K]
+    new KeyValueGroupedDatasetImpl[K, T, K, T](
+      this,
+      sparkSession,
+      plan,
+      kEncoder,
+      kEncoder,
+      func,
+      UdfUtils.identical())
+  }
+
+  /**
+   * (Java-specific) Returns a [[KeyValueGroupedDataset]] where the data is grouped by the given
+   * key `func`.
+   *
+   * @group typedrel
+   * @since 3.5.0
+   */
+  def groupByKey[K](func: MapFunction[T, K], encoder: Encoder[K]): KeyValueGroupedDataset[K, T] =
+    groupByKey(UdfUtils.mapFunctionToScalaFunc(func))(encoder)
 
   /**
    * Create a multi-dimensional rollup for the current Dataset using the specified columns, so we

@@ -57,6 +57,7 @@ from pyspark.errors import (
     PySparkAttributeError,
     PySparkValueError,
     PySparkException,
+    PySparkNotImplementedError,
 )
 from pyspark.errors.exceptions.connect import SparkConnectException
 from pyspark.rdd import PythonEvalType
@@ -1605,6 +1606,13 @@ class DataFrame:
                 message_parameters={"arg_name": "item", "arg_type": type(item).__name__},
             )
 
+    def __dir__(self) -> List[str]:
+        attrs = set(super().__dir__())
+        attrs.update(self.columns)
+        return sorted(attrs)
+
+    __dir__.__doc__ = PySparkDataFrame.__dir__.__doc__
+
     def _print_plan(self) -> str:
         if self._plan:
             return self._plan.print()
@@ -1671,16 +1679,18 @@ class DataFrame:
 
     isStreaming.__doc__ = PySparkDataFrame.isStreaming.__doc__
 
-    def _tree_string(self) -> str:
+    def _tree_string(self, level: Optional[int] = None) -> str:
         if self._plan is None:
             raise Exception("Cannot analyze on empty plan.")
         query = self._plan.to_proto(self._session.client)
-        result = self._session.client._analyze(method="tree_string", plan=query).tree_string
+        result = self._session.client._analyze(
+            method="tree_string", plan=query, level=level
+        ).tree_string
         assert result is not None
         return result
 
-    def printSchema(self) -> None:
-        print(self._tree_string())
+    def printSchema(self, level: Optional[int] = None) -> None:
+        print(self._tree_string(level))
 
     printSchema.__doc__ = PySparkDataFrame.printSchema.__doc__
 
@@ -1810,7 +1820,10 @@ class DataFrame:
     createOrReplaceGlobalTempView.__doc__ = PySparkDataFrame.createOrReplaceGlobalTempView.__doc__
 
     def rdd(self, *args: Any, **kwargs: Any) -> None:
-        raise NotImplementedError("RDD Support for Spark Connect is not implemented.")
+        raise PySparkNotImplementedError(
+            error_class="NOT_IMPLEMENTED",
+            message_parameters={"feature": "RDD Support for Spark Connect"},
+        )
 
     def cache(self) -> "DataFrame":
         if self._plan is None:
@@ -1862,10 +1875,16 @@ class DataFrame:
         return self.storageLevel != StorageLevel.NONE
 
     def foreach(self, *args: Any, **kwargs: Any) -> None:
-        raise NotImplementedError("foreach() is not implemented.")
+        raise PySparkNotImplementedError(
+            error_class="NOT_IMPLEMENTED",
+            message_parameters={"feature": "foreach()"},
+        )
 
     def foreachPartition(self, *args: Any, **kwargs: Any) -> None:
-        raise NotImplementedError("foreachPartition() is not implemented.")
+        raise PySparkNotImplementedError(
+            error_class="NOT_IMPLEMENTED",
+            message_parameters={"feature": "foreachPartition()"},
+        )
 
     def toLocalIterator(self, prefetchPartitions: bool = False) -> Iterator[Row]:
         from pyspark.sql.connect.conversion import ArrowTableToRowsConversion
@@ -1891,10 +1910,16 @@ class DataFrame:
     toLocalIterator.__doc__ = PySparkDataFrame.toLocalIterator.__doc__
 
     def checkpoint(self, *args: Any, **kwargs: Any) -> None:
-        raise NotImplementedError("checkpoint() is not implemented.")
+        raise PySparkNotImplementedError(
+            error_class="NOT_IMPLEMENTED",
+            message_parameters={"feature": "checkpoint()"},
+        )
 
     def localCheckpoint(self, *args: Any, **kwargs: Any) -> None:
-        raise NotImplementedError("localCheckpoint() is not implemented.")
+        raise PySparkNotImplementedError(
+            error_class="NOT_IMPLEMENTED",
+            message_parameters={"feature": "localCheckpoint()"},
+        )
 
     def to_pandas_on_spark(
         self, index_col: Optional[Union[str, List[str]]] = None
@@ -1912,9 +1937,9 @@ class DataFrame:
         from pyspark.pandas.frame import DataFrame as PandasOnSparkDataFrame
         from pyspark.pandas.internal import InternalFrame
 
-        index_spark_columns, index_names = _get_index_map(self, index_col)
+        index_spark_columns, index_names = _get_index_map(self, index_col)  # type: ignore[arg-type]
         internal = InternalFrame(
-            spark_frame=self,
+            spark_frame=self,  # type: ignore[arg-type]
             index_spark_columns=index_spark_columns,
             index_names=index_names,  # type: ignore[arg-type]
         )
@@ -1981,7 +2006,10 @@ class DataFrame:
     writeStream.__doc__ = PySparkDataFrame.writeStream.__doc__
 
     def toJSON(self, *args: Any, **kwargs: Any) -> None:
-        raise NotImplementedError("toJSON() is not implemented.")
+        raise PySparkNotImplementedError(
+            error_class="NOT_IMPLEMENTED",
+            message_parameters={"feature": "toJSON()"},
+        )
 
     def sameSemantics(self, other: "DataFrame") -> bool:
         assert self._plan is not None

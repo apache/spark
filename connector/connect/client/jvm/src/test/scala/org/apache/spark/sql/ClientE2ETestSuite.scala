@@ -36,6 +36,7 @@ import org.apache.spark.sql.connect.client.SparkConnectClient
 import org.apache.spark.sql.connect.client.util.{IntegrationTestUtils, RemoteSparkSession}
 import org.apache.spark.sql.connect.client.util.SparkConnectServerUtils.port
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper {
@@ -882,6 +883,19 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper {
       spark.read.schema("123").csv(spark.createDataset(Seq.empty[String])(StringEncoder))
     }.getMessage
     assert(message.contains("PARSE_SYNTAX_ERROR"))
+  }
+
+  test("SparkSession.createDataFrame - large data set") {
+    val threshold = 1024 * 1024
+    withSQLConf(SQLConf.LOCAL_RELATION_CACHE_THRESHOLD.key -> threshold.toString) {
+      val count = 2
+      val suffix = "abcdef"
+      val str = scala.util.Random.alphanumeric.take(1024 * 1024).mkString + suffix
+      val data = Seq.tabulate(count)(i => (i, str))
+      val df = spark.createDataFrame(data)
+      assert(df.count() === count)
+      assert(!df.filter(df("_2").endsWith(suffix)).isEmpty)
+    }
   }
 }
 
