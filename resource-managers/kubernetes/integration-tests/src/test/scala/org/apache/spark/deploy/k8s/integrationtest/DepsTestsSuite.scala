@@ -371,7 +371,7 @@ private[spark] trait DepsTestsSuite { k8sSuite: KubernetesSuite =>
   }
 
   private def setPythonSparkConfProperties(conf: SparkAppConf): Unit = {
-    sparkAppConf.set("spark.kubernetes.container.image", pyImage)
+    conf.set("spark.kubernetes.container.image", pyImage)
   }
 
   private def tryDepsTest(runTest: => Unit): Unit = {
