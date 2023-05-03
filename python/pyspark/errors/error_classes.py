@@ -566,6 +566,11 @@ ERROR_CLASSES_JSON = """
       "Unknown explain mode: '<explain_mode>'. Accepted explain modes are 'simple', 'extended', 'codegen', 'cost', 'formatted'."
     ]
   },
+  "UNKNOWN_INTERRUPT_TYPE" : {
+    "message" : [
+      "Unknown interrupt type: '<interrupt_type>'. Accepted interrupt types are 'all'."
+    ]
+  },
   "UNKNOWN_RESPONSE" : {
     "message" : [
       "Unknown response: <response>."

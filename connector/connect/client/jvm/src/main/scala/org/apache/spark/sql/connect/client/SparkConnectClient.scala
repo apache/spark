@@ -184,6 +184,17 @@ private[sql] class SparkConnectClient(
     analyze(request)
   }
 
+  private[sql] def interruptAll(): proto.InterruptResponse = {
+    val builder = proto.InterruptRequest.newBuilder()
+    val request = builder
+      .setUserContext(userContext)
+      .setSessionId(sessionId)
+      .setClientType(userAgent)
+      .setInterruptType(proto.InterruptRequest.InterruptType.INTERRUPT_TYPE_ALL)
+      .build()
+    stub.interrupt(request)
+  }
+
   def copy(): SparkConnectClient = {
     new SparkConnectClient(userContext, channelBuilder, userAgent)
   }
