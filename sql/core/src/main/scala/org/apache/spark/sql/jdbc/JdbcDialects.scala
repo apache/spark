@@ -121,7 +121,7 @@ abstract class JdbcDialect extends Serializable with Logging {
   /**
    * Converts a LocalDateTime representing a TimestampNTZ type to an
    * instance of `java.sql.Timestamp`.
-   * @param LocalDateTime representing a TimestampNTZType.
+   * @param ldt representing a TimestampNTZType.
    * @return A Java Timestamp representing this LocalDateTime.
    */
   @Since("3.5.0")
