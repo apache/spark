@@ -32,10 +32,8 @@ from pyspark.profiler import Profiler
 from pyspark.rdd import _prepare_for_python_RDD, PythonEvalType
 from pyspark.sql.column import Column, _to_java_column, _to_seq
 from pyspark.sql.types import (
-    ArrayType,
     BinaryType,
     DataType,
-    MapType,
     StringType,
     StructType,
     _parse_datatype_string,
