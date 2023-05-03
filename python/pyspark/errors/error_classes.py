@@ -34,6 +34,11 @@ ERROR_CLASSES_JSON = """
       "Attribute `<attr_name>` in provided object `<obj_name>` is not callable."
     ]
   },
+  "ATTRIBUTE_NOT_SUPPORTED" : {
+    "message" : [
+      "Attribute `<attr_name>` is not supported."
+    ]
+  },
   "BROADCAST_VARIABLE_NOT_LOADED": {
     "message": [
       "Broadcast variable `<variable>` not loaded."
