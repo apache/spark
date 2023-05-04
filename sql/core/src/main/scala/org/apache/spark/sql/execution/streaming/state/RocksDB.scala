@@ -56,6 +56,10 @@ class RocksDB(
     hadoopConf: Configuration = new Configuration,
     loggingId: String = "") extends Logging {
 
+  case class RocksDBCheckpoint(checkpointDir: File, version: Long, numKeys: Long)
+
+  @volatile private var latestCheckpoint: Option[RocksDBCheckpoint] = None
+
   RocksDBLoader.loadLibrary()
 
   // Java wrapper objects linking to native RocksDB objects
@@ -116,6 +120,8 @@ class RocksDB(
   private val acquireLock = new Object
 
   @volatile private var db: NativeRocksDB = _
+  @volatile private var changelogWriter: Option[ChangelogWriter] = None
+  private val useChangelogCheckpointing: Boolean = true
   @volatile private var loadedVersion = -1L   // -1 = nothing valid is loaded
   @volatile private var numKeysOnLoadedVersion = 0L
   @volatile private var numKeysOnWritingVersion = 0L
@@ -136,8 +142,8 @@ class RocksDB(
     try {
       if (loadedVersion != version) {
         closeDB()
-        val metadata = fileManager.loadCheckpointFromDfs(version, workingDir)
-        openDB()
+        val latestSnapshotVersion = fileManager.getLatestSnapshotVersion(version)
+        val metadata = fileManager.loadCheckpointFromDfs(latestSnapshotVersion, workingDir)
 
         val numKeys = if (!conf.trackTotalNumberOfRows) {
           // we don't track the total number of rows - discard the number being track
@@ -150,8 +156,25 @@ class RocksDB(
           metadata.numKeys
         }
         numKeysOnWritingVersion = numKeys
-        numKeysOnLoadedVersion = numKeys
+        openDB()
 
+        for (v <- latestSnapshotVersion + 1 to version) {
+          var changelogReader: ChangelogReader = null
+          try {
+            changelogReader = fileManager.getChangelogReader(v)
+            while (changelogReader.hasNext) {
+              val byteArrayPair = changelogReader.next()
+              if (byteArrayPair.value != null) {
+                put(byteArrayPair.key, byteArrayPair.value)
+              } else {
+                remove(byteArrayPair.key)
+              }
+            }
+          } finally {
+            if (changelogReader != null) changelogReader.close()
+          }
+        }
+        numKeysOnLoadedVersion = numKeysOnWritingVersion
         loadedVersion = version
         fileManagerMetrics = fileManager.latestLoadCheckpointMetrics
       }
@@ -163,6 +186,9 @@ class RocksDB(
       case t: Throwable =>
         loadedVersion = -1  // invalidate loaded data
         throw t
+    }
+    if (useChangelogCheckpointing) {
+      changelogWriter = Some(fileManager.getChangeLogWriter(version + 1))
     }
     this
   }
@@ -187,6 +213,7 @@ class RocksDB(
       }
     }
     db.put(writeOptions, key, value)
+    changelogWriter.foreach(_.put(key, value))
   }
 
   /**
@@ -201,6 +228,7 @@ class RocksDB(
       }
     }
     db.delete(writeOptions, key)
+    changelogWriter.foreach(_.delete(key))
   }
 
   /**
@@ -286,44 +314,37 @@ class RocksDB(
    */
   def commit(): Long = {
     val newVersion = loadedVersion + 1
-    val checkpointDir = createTempDir("checkpoint")
-    var rocksDBBackgroundThreadPaused = false
     try {
-      // Make sure the directory does not exist. Native RocksDB fails if the directory to
-      // checkpoint exists.
-      Utils.deleteRecursively(checkpointDir)
 
       logInfo(s"Flushing updates for $newVersion")
       val flushTimeMs = timeTakenMs { db.flush(flushOptions) }
 
-      val compactTimeMs = if (conf.compactOnCommit) {
-        logInfo("Compacting")
-        timeTakenMs { db.compactRange() }
-      } else 0
-
-      logInfo("Pausing background work")
-      val pauseTimeMs = timeTakenMs {
-        db.pauseBackgroundWork() // To avoid files being changed while committing
-        rocksDBBackgroundThreadPaused = true
-      }
-
-      logInfo(s"Creating checkpoint for $newVersion in $checkpointDir")
+      val checkpointDir = createTempDir("checkpoint")
+      // Make sure the directory does not exist. Native RocksDB fails if the directory to
+      // checkpoint exists.
+      Utils.deleteRecursively(checkpointDir)
       val checkpointTimeMs = timeTakenMs {
         val cp = Checkpoint.create(db)
         cp.createCheckpoint(checkpointDir.toString)
+        synchronized {
+          latestCheckpoint = Some(
+            RocksDBCheckpoint(checkpointDir, newVersion, numKeysOnWritingVersion))
+        }
       }
 
       logInfo(s"Syncing checkpoint for $newVersion to DFS")
       val fileSyncTimeMs = timeTakenMs {
-        fileManager.saveCheckpointToDfs(checkpointDir, newVersion, numKeysOnWritingVersion)
+        if (useChangelogCheckpointing) {
+          changelogWriter.foreach(_.commit())
+        } else {
+          uploadSnapshot()
+        }
       }
+
       numKeysOnLoadedVersion = numKeysOnWritingVersion
       loadedVersion = newVersion
-      fileManagerMetrics = fileManager.latestSaveCheckpointMetrics
       commitLatencyMs ++= Map(
         "flush" -> flushTimeMs,
-        "compact" -> compactTimeMs,
-        "pause" -> pauseTimeMs,
         "checkpoint" -> checkpointTimeMs,
         "fileSync" -> fileSyncTimeMs
       )
@@ -334,11 +355,25 @@ class RocksDB(
         loadedVersion = -1  // invalidate loaded version
         throw t
     } finally {
-      if (rocksDBBackgroundThreadPaused) db.continueBackgroundWork()
-      silentDeleteRecursively(checkpointDir, s"committing $newVersion")
       // reset resources as either 1) we already pushed the changes and it has been committed or
       // 2) commit has failed and the current version is "invalidated".
       release()
+    }
+  }
+
+  def uploadSnapshot(): Unit = {
+    val localCheckpoint = synchronized {
+      val checkpoint = latestCheckpoint
+      latestCheckpoint = None
+      checkpoint
+    }
+    localCheckpoint match {
+      case RocksDBCheckpoint(localDir, version, numKeys) =>
+        val uploadTime = timeTakenMs {
+          fileManager.saveCheckpointToDfs(localDir, version, numKeys)
+        }
+        logInfo(s"Upload snapshot of version $version, time taken: $uploadTime ms")
+      case _ =>
     }
   }
 
@@ -353,6 +388,9 @@ class RocksDB(
   }
 
   def cleanup(): Unit = {
+    if (useChangelogCheckpointing) {
+      uploadSnapshot()
+    }
     val cleanupTime = timeTakenMs {
       fileManager.deleteOldVersions(conf.minVersionsToRetain)
     }
