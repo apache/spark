@@ -103,8 +103,7 @@ class JacksonParser(
    * to a value according to a desired schema. This is a wrapper for the method
    * `makeConverter()` to handle a row wrapped with an array.
    */
-  private def makeRootConverter(dt: DataType): JsonParser
-    => Iterable[InternalRow] = {
+  private def makeRootConverter(dt: DataType): JsonParser => Iterable[InternalRow] = {
     dt match {
       case st: StructType => makeStructRootConverter(st)
       case mt: MapType => makeMapRootConverter(mt)
@@ -112,8 +111,7 @@ class JacksonParser(
     }
   }
 
-  private def makeStructRootConverter(st: StructType): JsonParser
-    => Iterable[InternalRow] = {
+  private def makeStructRootConverter(st: StructType): JsonParser => Iterable[InternalRow] = {
     val elementConverter = makeConverter(st)
     val fieldConverters = st.map(_.dataType).map(makeConverter).toArray
     val jsonFilters = if (SQLConf.get.jsonFilterPushDown) {
@@ -151,8 +149,7 @@ class JacksonParser(
       }
   }
 
-  private def makeMapRootConverter(mt: MapType): JsonParser
-    => Iterable[InternalRow] = {
+  private def makeMapRootConverter(mt: MapType): JsonParser => Iterable[InternalRow] = {
     val fieldConverter = makeConverter(mt.valueType)
     (parser: JsonParser) =>
       parseJsonToken[Iterable[InternalRow]](parser, mt) {
@@ -160,8 +157,7 @@ class JacksonParser(
       }
   }
 
-  private def makeArrayRootConverter(at: ArrayType): JsonParser
-    => Iterable[InternalRow] = {
+  private def makeArrayRootConverter(at: ArrayType): JsonParser => Iterable[InternalRow] = {
     val elemConverter = makeConverter(at.elementType)
     (parser: JsonParser) =>
       parseJsonToken[Iterable[InternalRow]](parser, at) {
