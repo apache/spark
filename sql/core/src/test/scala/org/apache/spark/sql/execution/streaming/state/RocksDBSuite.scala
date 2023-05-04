@@ -34,11 +34,11 @@ import org.apache.spark.util.{ThreadUtils, Utils}
 class RocksDBSuite extends SparkFunSuite {
 
   test("RocksDB: get, put, iterator, commit, load") {
-    def testOps(compactOnCommit: Boolean): Unit = {
+    def testOps(enableChangelogCheckpointing: Boolean): Unit = {
       val remoteDir = Utils.createTempDir().toString
       new File(remoteDir).delete()  // to make sure that the directory gets created
 
-      val conf = RocksDBConf().copy(compactOnCommit = compactOnCommit)
+      val conf = RocksDBConf().copy(enableChangelogCheckpointing = enableChangelogCheckpointing)
       withDB(remoteDir, conf = conf) { db =>
         assert(db.get("a") === null)
         assert(iterator(db).isEmpty)
@@ -95,9 +95,9 @@ class RocksDBSuite extends SparkFunSuite {
       }
     }
 
-    for (compactOnCommit <- Seq(false, true)) {
-      withClue(s"compactOnCommit = $compactOnCommit") {
-        testOps(compactOnCommit)
+    for (enableChangelogCheckpointing <- Seq(false, true)) {
+      withClue(s"enableChangelogCheckpointing = $enableChangelogCheckpointing") {
+        testOps(enableChangelogCheckpointing)
       }
     }
   }
