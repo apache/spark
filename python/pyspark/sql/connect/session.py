@@ -489,6 +489,9 @@ class SparkSession:
         except Exception:
             pass
 
+    def interrupt_all(self) -> None:
+        self.client.interrupt_all()
+
     def stop(self) -> None:
         # Stopping the session will only close the connection to the current session (and
         # the life cycle of the session is maintained by the server),
