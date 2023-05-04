@@ -264,7 +264,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
       TimestampNTZAnalyzerTestCase(newName, inputFile, newResultFile)
   }
 
-  /** An date time test case with default timestamp as TimestampNTZType */
+  /** A CTE test case with special handling */
   protected case class CTETestCase(
       name: String, inputFile: String, resultFile: String) extends TestCase with CTETest {
     override def asAnalyzerTest(newName: String, newResultFile: String): TestCase =
