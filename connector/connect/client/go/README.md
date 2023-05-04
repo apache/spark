@@ -1,3 +1,60 @@
+## Summary
+
+This folder contains Spark Connect Go client implementation. People could reference to Go module (library) in this folder
+and write Spark Connect Go application connecting to a remote Spark driver (Spark Connect server).
+
+## Spark Connect Go Application Example
+
+A very simple example in Go looks like following:
+
+```
+func main() {
+    remote := "localhost:15002"
+	spark, _ := sql.SparkSession.Builder.Remote(remote).Build()
+	defer spark.Stop()
+
+	df, _ := spark.Sql("select 'apple' as word, 123 as count union all select 'orange' as word, 456 as count")
+	df.Show(100, false)
+}
+```
+
+## High Level Design
+
+Following [diagram](https://textik.com/#ac299c8f32c4c342) shows main code in current prototype:
+
+```
+    +-------------------+                                                                              
+    |                   |                                                                              
+    |   dataFrameImpl   |                                                                              
+    |                   |                                                                              
+    +-------------------+                                                                              
+              |                                                                                        
+              |                                                                                        
+              +                                                                                        
+    +-------------------+                                                                              
+    |                   |                                                                              
+    | sparkSessionImpl  |                                                                              
+    |                   |                                                                              
+    +-------------------+                                                                              
+              |                                                                                        
+              |                                                                                        
+              +                                                                                        
++---------------------------+               +----------------+                                         
+|                           |               |                |                                         
+| SparkConnectServiceClient |--------------+|  Spark Driver  |                                         
+|                           |               |                |                                         
++---------------------------+               +----------------+
+
+```
+
+`SparkConnectServiceClient` is GRPC client which talks to Spark Driver. `sparkSessionImpl` generates `dataFrameImpl`
+instances. `dataFrameImpl` uses the GRPC client in `sparkSessionImpl` to communicate with Spark Driver.
+
+We will mimic the logic in Spark Connect Scala implementation, and adopt Go common practices, e.g. returning `error` object for
+error handling.
+
+## Misc Helper Information
+
 - Prepare your environment to generate proto Go files:
 
 See https://grpc.io/docs/languages/go/quickstart/
