@@ -25,7 +25,9 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.{SparkConf, TestUtils}
 import org.apache.spark.sql.catalyst.expressions.codegen.CodeGenerator
+import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.SQLHelper
+import org.apache.spark.sql.catalyst.plans.logical.{Command, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.catalyst.util.{fileToString, stringToFile}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.NANOS_PER_SECOND
@@ -193,6 +195,9 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
   /** Trait that indicates the default timestamp type is TimestampNTZType. */
   protected trait TimestampNTZTest
 
+  /** Trait that indicates CTE test cases need their create view versions */
+  protected trait CTETest
+
   protected trait UDFTest {
     val udf: TestUDF
   }
@@ -259,6 +264,13 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
       TimestampNTZAnalyzerTestCase(newName, inputFile, newResultFile)
   }
 
+  /** An date time test case with default timestamp as TimestampNTZType */
+  protected case class CTETestCase(
+      name: String, inputFile: String, resultFile: String) extends TestCase with CTETest {
+    override def asAnalyzerTest(newName: String, newResultFile: String): TestCase =
+      CTEAnalyzerTestCase(newName, inputFile, newResultFile)
+  }
+
   /** These are versions of the above test cases, but only exercising analysis. */
   protected case class RegularAnalyzerTestCase(
       name: String, inputFile: String, resultFile: String)
@@ -281,6 +293,9 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
   protected case class TimestampNTZAnalyzerTestCase(
       name: String, inputFile: String, resultFile: String)
       extends AnalyzerTest with TimestampNTZTest
+  protected case class CTEAnalyzerTestCase(
+      name: String, inputFile: String, resultFile: String)
+      extends AnalyzerTest with CTETest
 
   protected def createScalaTestCase(testCase: TestCase): Unit = {
     if (ignoreList.exists(t =>
@@ -375,6 +390,8 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
     val queries = tempQueries.map(_.trim).filter(_ != "").toSeq
       // Fix misplacement when comment is at the end of the query.
       .map(_.split("\n").filterNot(_.startsWith("--")).mkString("\n")).map(_.trim).filter(_ != "")
+      // Expand the queries if it's CTETest
+      .flatMap(query => expandCTEQuery(query, testCase))
 
     val settingLines = comments.filter(_.startsWith("--SET ")).map(_.substring(6))
     val settings = settingLines.flatMap(_.split(",").map { kv =>
@@ -415,6 +432,26 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
             throw e
         }
       }
+    }
+  }
+
+  protected def expandCTEQuery(query: String, testCase: TestCase): Seq[String] = {
+    testCase match {
+      case _: CTETest => try {
+        val logicalPlan: LogicalPlan = spark.sessionState.sqlParser.parsePlan(query)
+        logicalPlan match {
+          case _: Command =>
+            Seq(query)
+          case _ =>
+            val createView = s"CREATE temporary VIEW cte_view AS $query"
+            val selectFromView = "SELECT * FROM cte_view"
+            val dropViewIfExists = "DROP VIEW IF EXISTS cte_view"
+            Seq(query, createView, selectFromView, dropViewIfExists)
+        }
+      } catch {
+        case _: ParseException => Seq(query)
+      }
+      case _ => Seq(query)
     }
   }
 
@@ -557,6 +594,8 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
         AnsiTestCase(testCaseName, absPath, resultFile) :: Nil
       } else if (file.getAbsolutePath.startsWith(s"$inputFilePath${File.separator}timestampNTZ")) {
         TimestampNTZTestCase(testCaseName, absPath, resultFile) :: Nil
+      } else if (file.getAbsolutePath.startsWith(s"$inputFilePath${File.separator}cte.sql")) {
+        CTETestCase(testCaseName, absPath, resultFile) :: Nil
       } else {
         RegularTestCase(testCaseName, absPath, resultFile) :: Nil
       }
