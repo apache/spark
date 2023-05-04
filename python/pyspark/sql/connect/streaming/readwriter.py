@@ -342,9 +342,7 @@ DataStreamReader.__doc__ = PySparkDataStreamReader.__doc__
 
 
 class DataStreamWriter:
-    def __init__(
-        self, plan: "LogicalPlan", session: "SparkSession"
-    ) -> None:
+    def __init__(self, plan: "LogicalPlan", session: "SparkSession") -> None:
         self._session = session
         self._write_stream = WriteStreamOperation(plan)
         self._write_proto = self._write_stream.write_op

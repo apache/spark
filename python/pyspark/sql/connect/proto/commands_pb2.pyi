@@ -744,8 +744,6 @@ class WriteStreamOperationStart(google.protobuf.message.Message):
     def HasField(
         self,
         field_name: typing_extensions.Literal[
-            "_foreach",
-            b"_foreach",
             "available_now",
             b"available_now",
             "continuous_checkpoint_interval",
@@ -771,8 +769,6 @@ class WriteStreamOperationStart(google.protobuf.message.Message):
     def ClearField(
         self,
         field_name: typing_extensions.Literal[
-            "_foreach",
-            b"_foreach",
             "available_now",
             b"available_now",
             "continuous_checkpoint_interval",
@@ -805,10 +801,6 @@ class WriteStreamOperationStart(google.protobuf.message.Message):
             b"trigger",
         ],
     ) -> None: ...
-    @typing.overload
-    def WhichOneof(
-        self, oneof_group: typing_extensions.Literal["_foreach", b"_foreach"]
-    ) -> typing_extensions.Literal["foreach"] | None: ...
     @typing.overload
     def WhichOneof(
         self, oneof_group: typing_extensions.Literal["sink_destination", b"sink_destination"]

@@ -355,14 +355,14 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
         catalogTable = catalogTable)
       resultDf.createOrReplaceTempView(query.name)
       query
-    } else if (source == SOURCE_NAME_FOREACH && foreachWriter != null) {
-      assertNotPartitioned(SOURCE_NAME_FOREACH)
-      val sink = ForeachWriterTable[T](foreachWriter, ds.exprEnc)
-      startQuery(sink, extraOptions, catalogTable = catalogTable)
     } else if (source == SOURCE_NAME_FOREACH) {
       assertNotPartitioned(SOURCE_NAME_FOREACH)
-      val sink = new ForeachWriterTable[UnsafeRow](
-        pythonForeachWriter, Right((x: InternalRow) => x.asInstanceOf[UnsafeRow]))
+      val sink = if (foreachWriter != null) {
+        ForeachWriterTable[T](foreachWriter, ds.exprEnc)
+      } else {
+        new ForeachWriterTable[UnsafeRow](
+          pythonForeachWriter, Right((x: InternalRow) => x.asInstanceOf[UnsafeRow]))
+      }
       startQuery(sink, extraOptions, catalogTable = catalogTable)
     } else if (source == SOURCE_NAME_FOREACH_BATCH) {
       assertNotPartitioned(SOURCE_NAME_FOREACH_BATCH)
@@ -463,7 +463,7 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
     this
   }
 
-  def foreachPython(writer: PythonForeachWriter): DataStreamWriter[T] = {
+  private[sql] def foreachPython(writer: PythonForeachWriter): DataStreamWriter[T] = {
     this.source = SOURCE_NAME_FOREACH
     this.pythonForeachWriter = if (writer != null) {
       ds.sparkSession.sparkContext.clean(writer)
