@@ -24,7 +24,7 @@ import org.apache.spark.sql.types.StructType;
  * Trait for tables that support custom schemas for write operations including INSERT INTO commands
  * whose target table columns have explicit or implicit default values.
  *
- * @since 3.4.0
+ * @since 3.4.1
  */
 @Evolving
 public interface SupportsCustomSchemaWrite {
