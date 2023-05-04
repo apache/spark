@@ -21,6 +21,8 @@ import java.io.File
 import java.sql.Timestamp
 import java.text.SimpleDateFormat
 
+import org.apache.hadoop.fs.Path
+
 import org.apache.spark.TestUtils
 import org.apache.spark.paths.SparkPath
 import org.apache.spark.sql.{AnalysisException, Column, DataFrame, QueryTest, Row}
@@ -422,7 +424,8 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
 
     assert(partitions.length == 1) // 1 partition
     assert(partitions.head.files.length == 1) // 1 file in that partition
-    assert(partitions.head.files.head.getPath.toString == f0(METADATA_FILE_PATH)) // the file is f0
+    assert(partitions.head.files.head.getPath ==
+        new Path(f0(METADATA_FILE_PATH).toString)) // the file is f0
 
     // check result
     checkAnswer(
@@ -467,7 +470,8 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
 
     assert(partitions.length == 1) // 1 partition
     assert(partitions.head.files.length == 1) // 1 file in that partition
-    assert(partitions.head.files.head.getPath.toString == f1(METADATA_FILE_PATH)) // the file is f1
+    assert(partitions.head.files.head.getPath ==
+      new Path(f1(METADATA_FILE_PATH).toString)) // the file is f1
 
     // check result
     checkAnswer(
