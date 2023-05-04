@@ -103,7 +103,7 @@ class JacksonParser(
    * to a value according to a desired schema. This is a wrapper for the method
    * `makeConverter()` to handle a row wrapped with an array.
    */
-  private def makeRootConverter(dt: DataType): (JsonParser, () => UTF8String)
+  private def makeRootConverter(dt: DataType): JsonParser
     => Iterable[InternalRow] = {
     dt match {
       case st: StructType => makeStructRootConverter(st)
@@ -112,7 +112,7 @@ class JacksonParser(
     }
   }
 
-  private def makeStructRootConverter(st: StructType): (JsonParser, () => UTF8String)
+  private def makeStructRootConverter(st: StructType): JsonParser
     => Iterable[InternalRow] = {
     val elementConverter = makeConverter(st)
     val fieldConverters = st.map(_.dataType).map(makeConverter).toArray
@@ -121,7 +121,7 @@ class JacksonParser(
     } else {
       new NoopFilters
     }
-    (parser: JsonParser, record: () => UTF8String) =>
+    (parser: JsonParser) =>
       parseJsonToken[Iterable[InternalRow]](parser, st) {
         case START_OBJECT => convertObject(parser, st, fieldConverters, jsonFilters, isRoot = true)
         // SPARK-3308: support reading top level JSON arrays and take every element
@@ -147,23 +147,23 @@ class JacksonParser(
             array.toArray[InternalRow](schema)
           }
         case START_ARRAY =>
-          throw QueryExecutionErrors.cannotParseJsonArraysAsStructsError(record().toString)
+          throw QueryExecutionErrors.cannotParseJsonArraysAsStructsError("")
       }
   }
 
-  private def makeMapRootConverter(mt: MapType): (JsonParser, () => UTF8String)
+  private def makeMapRootConverter(mt: MapType): JsonParser
     => Iterable[InternalRow] = {
     val fieldConverter = makeConverter(mt.valueType)
-    (parser: JsonParser, _: () => UTF8String) =>
+    (parser: JsonParser) =>
       parseJsonToken[Iterable[InternalRow]](parser, mt) {
         case START_OBJECT => Some(InternalRow(convertMap(parser, fieldConverter)))
       }
   }
 
-  private def makeArrayRootConverter(at: ArrayType): (JsonParser, () => UTF8String)
+  private def makeArrayRootConverter(at: ArrayType): JsonParser
     => Iterable[InternalRow] = {
     val elemConverter = makeConverter(at.elementType)
-    (parser: JsonParser, _: () => UTF8String) =>
+    (parser: JsonParser) =>
       parseJsonToken[Iterable[InternalRow]](parser, at) {
         case START_ARRAY => Some(InternalRow(convertArray(parser, elemConverter)))
         case START_OBJECT if at.elementType.isInstanceOf[StructType] =>
@@ -567,7 +567,7 @@ class JacksonParser(
         // but it works on any token stream and not just strings
         parser.nextToken() match {
           case null => None
-          case _ => rootConverter.apply(parser, () => recordLiteral(record)) match {
+          case _ => rootConverter.apply(parser) match {
             case null => throw QueryExecutionErrors.rootConverterReturnNullError()
             case rows => rows.toSeq
           }
