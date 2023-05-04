@@ -283,3 +283,31 @@ message Status {
   Timestamp trade_time = 2;
   Status status = 3;
 }
+
+// Contains a representative sample of all types, using the groupings defined
+// here: https://protobuf.dev/programming-guides/field_presence/#presence-in-proto3-apis
+message Proto3AllTypes {
+  enum NestedEnum {
+    NOTHING = 0;
+    FIRST = 1;
+    SECOND = 2;
+  }
+
+  int64 int = 1;
+  string text = 2;
+  NestedEnum enum_val = 3;
+  OtherExample message = 4;
+
+  optional int64 optional_int = 5;
+  optional string optional_text = 6;
+  optional NestedEnum optional_enum_val = 7;
+  optional OtherExample optional_message = 8;
+
+  repeated int64 repeated_num = 9;
+  repeated OtherExample repeated_message = 10;
+  oneof payload {
+    int32 option_a = 11;
+    string option_b = 12;
+  }
+  map<string, string> map = 13;
+}

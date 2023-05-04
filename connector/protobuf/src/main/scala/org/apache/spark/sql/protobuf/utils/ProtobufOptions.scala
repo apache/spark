@@ -46,6 +46,41 @@ private[sql] class ProtobufOptions(
   // record has more depth than the allowed value for recursive fields, it will be truncated
   // and corresponding fields are ignored (dropped).
   val recursiveFieldMaxDepth: Int = parameters.getOrElse("recursive.fields.max.depth", "-1").toInt
+
+  // Whether to render fields with zero values when deserializing Protobufs to a Spark struct.
+  // When a field is empty in the serialized Protobuf, this library will deserialize them as
+  // null by default. However, this flag can control whether to render the type-specific zero value.
+  // This operates similarly to `includingDefaultValues` in protobuf-java-util's JsonFormat, or
+  // `emitDefaults` in golang/protobuf's jsonpb.
+  //
+  // As an example:
+  // ```
+  // syntax = "proto3";
+  // message Person {
+  //   string name = 1;
+  //   int64 age = 2;
+  //   optional string middle_name = 3;
+  //   optional int64 salary = 4;
+  // }
+  // ```
+  //
+  // And we have a proto constructed like:
+  // `Person(age=0, middle_name="")
+  //
+  // The result after calling from_protobuf without this flag set would be:
+  // `{"name": null, "age": null, "middle_name": "", "salary": null}`
+  // (age is null because zero-value singular fields are not in the wire format in proto3).
+  //
+  //
+  // With this flag it would be:
+  // `{"name": "", "age": 0, "middle_name": "", "salary": null}`
+  //
+  // Ref: https://protobuf.dev/programming-guides/proto3/#default for information about
+  //      type-specific defaults.
+  // Ref: https://protobuf.dev/programming-guides/field_presence/ for information about
+  //      what information is available in a serialized proto.
+  val emitDefaultValues: Boolean =
+    parameters.getOrElse("emit.default.values", false.toString).toBoolean
 }
 
 private[sql] object ProtobufOptions {

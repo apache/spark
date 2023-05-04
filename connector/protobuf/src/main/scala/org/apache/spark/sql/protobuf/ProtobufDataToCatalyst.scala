@@ -21,6 +21,7 @@ import scala.util.control.NonFatal
 
 import com.google.protobuf.DynamicMessage
 
+import org.apache.spark.sql.catalyst.NoopFilters
 import org.apache.spark.sql.catalyst.expressions.{ExpectsInputTypes, Expression, SpecificInternalRow, UnaryExpression}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode}
 import org.apache.spark.sql.catalyst.util.{FailFastMode, ParseMode, PermissiveMode}
@@ -63,7 +64,12 @@ private[protobuf] case class ProtobufDataToCatalyst(
   @transient private lazy val fieldsNumbers =
     messageDescriptor.getFields.asScala.map(f => f.getNumber).toSet
 
-  @transient private lazy val deserializer = new ProtobufDeserializer(messageDescriptor, dataType)
+  @transient private lazy val deserializer =
+    new ProtobufDeserializer(
+      messageDescriptor,
+      dataType,
+      new NoopFilters,
+      protobufOptions.emitDefaultValues)
 
   @transient private var result: DynamicMessage = _
 
