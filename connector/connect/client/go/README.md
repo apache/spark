@@ -9,7 +9,7 @@ A very simple example in Go looks like following:
 
 ```
 func main() {
-    remote := "localhost:15002"
+	remote := "localhost:15002"
 	spark, _ := sql.SparkSession.Builder.Remote(remote).Build()
 	defer spark.Stop()
 
