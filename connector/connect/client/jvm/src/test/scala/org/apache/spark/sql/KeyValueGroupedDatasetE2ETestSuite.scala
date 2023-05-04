@@ -199,14 +199,27 @@ class KeyValueGroupedDatasetE2ETestSuite extends QueryTest with SQLHelper {
         ";9,8"))
   }
 
-  test("agg, keyAs") {
+  test("agg , keyAs, mapValues") {
     val ds = spark
       .range(10)
       .groupByKey(v => v % 2)
       .keyAs[Double]
+      .mapValues(_ * 2)
       .agg(count("*"))
 
     checkDatasetUnorderly(ds, (0.0, 5L), (1.0, 5L))
+  }
+
+  test("agg, mapValues") {
+    val session: SparkSession = spark
+    import session.implicits._
+    val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
+    val values = ds
+      .groupByKey(_._1)
+      .mapValues(_._2)
+      .agg(count("*"))
+
+    checkDatasetUnorderly(values, ("a", 2L), ("b", 2L), ("c", 1L))
   }
 
   test("typed aggregation: expr") {
@@ -418,6 +431,18 @@ class KeyValueGroupedDatasetE2ETestSuite extends QueryTest with SQLHelper {
       ds.groupByKey(_.length).reduceGroups(_ + _),
       (3, "abcxyz"),
       (5, "hello"))
+  }
+
+  test("reduceGroups, keyAs, mapValues") {
+    val ds = Seq("abc", "xyz", "hello").toDS()
+    checkDatasetUnorderly(
+      ds.groupByKey(_.length)
+        .keyAs[Double]
+        .mapValues(v => v + "-")
+        .mapValues(v => v.length + v)
+        .reduceGroups(_ + _),
+      (3.0, "4abc-4xyz-"),
+      (5.0, "6hello-"))
   }
 
   test("groupby") {
