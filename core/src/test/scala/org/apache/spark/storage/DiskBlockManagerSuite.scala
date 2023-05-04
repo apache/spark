@@ -108,7 +108,7 @@ class DiskBlockManagerSuite extends SparkFunSuite {
     assert(Utils.getConfiguredLocalDirs(testConf).map(
       rootDir => new File(rootDir, DiskBlockManager.MERGE_DIRECTORY))
       .filter(mergeDir => mergeDir.exists()).length === 2)
-    // mergeDir0 can not be skipped evenif it already exists
+    // mergeDir0 can not be skipped even if it already exists
     assert(mergeDir0.list().length === testConf.get(config.DISKSTORE_SUB_DIRECTORIES))
     // Sub directories get created under mergeDir1
     assert(mergeDir1.list().length === testConf.get(config.DISKSTORE_SUB_DIRECTORIES))
