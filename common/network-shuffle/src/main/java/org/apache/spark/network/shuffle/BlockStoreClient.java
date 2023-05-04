@@ -170,7 +170,7 @@ public abstract class BlockStoreClient implements Closeable {
     checkInit();
     int maxRetries = transportConf.maxIORetries();
     int retryWaitTime = transportConf.ioRetryWaitTimeMs();
-    retry(0, maxRetries, retryWaitTime, () -> {
+    retry(1, maxRetries, retryWaitTime, () -> {
       CompletableFuture<Map<String, String[]>> tempHostLocalDirsCompletable =
               new CompletableFuture<>();
       getHostLocalDirsInternal(host, port, execIds, tempHostLocalDirsCompletable);
@@ -223,7 +223,7 @@ public abstract class BlockStoreClient implements Closeable {
             .exceptionally(e -> {
               boolean isIOException = e instanceof IOException
                       || (e.getCause() != null && e.getCause() instanceof IOException);
-              if (times >= maxRetries || isIOException) {
+              if (times >= maxRetries || !isIOException) {
                 future.completeExceptionally(e);
               } else {
                 executorService.execute(() -> {
