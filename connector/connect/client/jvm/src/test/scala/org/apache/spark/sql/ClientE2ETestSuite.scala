@@ -1057,16 +1057,30 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
   test("multi-level joinWith, rows") {
     val session: SparkSession = spark
     import session.implicits._
-    val ds1 = Seq(1, 1, 2).toDF()
-    val ds2 = Seq(("a", 1), ("b", 2)).toDF()
+    val ds1 = Seq(("a", 1), ("b", 2)).toDF().as("a")
+    val ds2 = Seq(("a", 1), ("b", 2)).toDF().as("b")
+    val ds3 = Seq(("a", 1), ("b", 2)).toDF().as("c")
 
-    val joined = ds1.joinWith(ds2, $"value" === $"_2").joinWith(ds2, $"_1" === $"_2")
+    val joined = ds1
+      .joinWith(ds2, $"a._2" === $"b._2")
+      .as("ab")
+      .joinWith(ds3, $"ab._1._2" === $"c._2")
 
-    println(joined.collect())
+    val expectedSchema = StructType(
+      Seq(
+        StructField(
+          "_1",
+          StructType(
+            Seq(
+              StructField("_1", new StructType(), nullable = false),
+              StructField("_2", new StructType(), nullable = false))),
+          nullable = false),
+        StructField("_2", new StructType(), nullable = false)))
+    assert(joined.schema === expectedSchema)
 
-//    checkSameResult(
-//      Seq((Row(1), Row("a", 1)), (Row(1), Row("a", 1)), (Row(2), Row("b", 2))),
-//      joined)
+    checkSameResult(
+      Seq(((Row("a", 1), Row("a", 1)), Row("a", 1)), ((Row("b", 2), Row("b", 2)), Row("b", 2))),
+      joined)
   }
 }
 

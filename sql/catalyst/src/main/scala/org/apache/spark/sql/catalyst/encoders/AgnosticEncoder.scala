@@ -111,7 +111,7 @@ object AgnosticEncoders {
 
   object ProductEncoder {
     val cachedCls = new ConcurrentHashMap[Int, Class[_]]
-    def tuple(
+    private[sql] def tuple(
         encoders: Seq[AgnosticEncoder[_]],
         fieldNullables: Option[Seq[Boolean]] = None): AgnosticEncoder[_] = {
       val fields = encoders.zipWithIndex.map {
@@ -125,6 +125,10 @@ object AgnosticEncoders {
       val cls = cachedCls.computeIfAbsent(encoders.size,
         _ => Utils.getContextOrSparkClassLoader.loadClass(s"scala.Tuple${encoders.size}"))
       ProductEncoder[Any](ClassTag(cls), fields)
+    }
+
+    private[sql] def isTuple(tag: ClassTag[_]): Boolean = {
+      tag.runtimeClass.getName.startsWith("scala.Tuple")
     }
   }
 

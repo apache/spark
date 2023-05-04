@@ -55,10 +55,10 @@ private[sql] class SparkResult[T](
       RowEncoder.encoderFor(schema).asInstanceOf[AgnosticEncoder[T]]
     } else {
       encoder match {
-        case ProductEncoder(clsTag, fields) =>
+        case ProductEncoder(clsTag, fields) if ProductEncoder.isTuple(clsTag) =>
+          // Tuple fields are position based
           assert(fields.length == schema.fields.length)
           val updatedFields = fields.zipWithIndex.map { case (f, id) =>
-            // Recursively updates the fields
             updateProductEncoderField(f, schema.fields(id).dataType)
           }
           ProductEncoder[T](clsTag, updatedFields)
@@ -69,15 +69,20 @@ private[sql] class SparkResult[T](
     ExpressionEncoder(agnosticEncoder)
   }
 
+  /**
+   * Recursively update the fields of the ProductEncoder fields. A tuple ProductEncoder may
+   * contains [[UnboundRowEncoder]], which need to be updated to [[RowEncoder]] using the data
+   * schema of the field.
+   */
   private def updateProductEncoderField(f: EncoderField, dataType: DataType): EncoderField = {
     f.enc match {
       case UnboundRowEncoder =>
         // Replace the row encoder with the encoder inferred from the schema.
         f.copy(enc = RowEncoder.encoderFor(dataType.asInstanceOf[StructType]))
-      case ProductEncoder(clsTag, fields) =>
-        // Recursively continue updating the product encoder
+      case ProductEncoder(clsTag, fields) if ProductEncoder.isTuple(clsTag) =>
+        // Recursively continue updating the tuple product encoder
         val schema = dataType.asInstanceOf[StructType]
-        assert(fields.length <= schema.fields.length)
+        assert(fields.length == schema.fields.length)
         val updatedFields = fields.zipWithIndex.map { case (f, id) =>
           updateProductEncoderField(f, schema.fields(id).dataType)
         }
