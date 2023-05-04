@@ -69,6 +69,8 @@ class FailureSafeParser[IN](
           e.getCause match {
             case exception: SparkRuntimeException if exception.getErrorClass
               .equals("MALFORMED_RECORD_IN_PARSING.CANNOT_PARSE_JSON_ARRAYS_AS_STRUCTS") =>
+              // SPARK-42298 we recreate the exception here to make sure the error message
+              // have the record content.
               throw QueryExecutionErrors.cannotParseJsonArraysAsStructsError(e.record().toString)
             case _ => throw QueryExecutionErrors.malformedRecordsDetectedInRecordParsingError(
               toResultRow(e.partialResult(), e.record).toString, e)
