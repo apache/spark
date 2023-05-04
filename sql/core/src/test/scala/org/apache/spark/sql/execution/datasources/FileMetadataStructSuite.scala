@@ -82,7 +82,7 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
 
   private def getMetadataForFile(f: File): Map[String, Any] = {
     Map(
-      METADATA_FILE_PATH -> f.toURI.toString,
+      METADATA_FILE_PATH -> s"file://${f.getCanonicalPath}",
       METADATA_FILE_NAME -> f.getName,
       METADATA_FILE_SIZE -> f.length(),
       // test file is small enough so we would not do splitting files,
@@ -129,7 +129,7 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
 
           // 2. read both f0 and f1
           val df = spark.read.format(testFileFormat).schema(fileSchema)
-            .load(new File(dir, "data").getCanonicalPath + "/*")
+            .load(s"file://${new File(dir, "data").getCanonicalPath}/*")
 
           val realF0 = new File(dir, "data/f0").listFiles()
             .filter(_.getName.endsWith(s".$testFileFormat")).head
@@ -682,7 +682,7 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
       val sourceFile = new File(dir, "/source/new-streaming-data").listFiles()
         .filter(_.getName.endsWith(".json")).head
       val sourceFileMetadata = Map(
-        METADATA_FILE_PATH -> sourceFile.toURI.toString,
+        METADATA_FILE_PATH -> s"file://${sourceFile.getCanonicalPath}",
         METADATA_FILE_NAME -> sourceFile.getName,
         METADATA_FILE_SIZE -> sourceFile.length(),
         METADATA_FILE_BLOCK_START -> 0,
