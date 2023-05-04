@@ -30,6 +30,7 @@ import org.apache.spark.sql.functions.{lit, struct, typedLit}
 import org.apache.spark.sql.protobuf.protos.Proto2Messages.Proto2AllTypes
 import org.apache.spark.sql.protobuf.protos.SimpleMessageProtos._
 import org.apache.spark.sql.protobuf.protos.SimpleMessageProtos.SimpleMessageRepeated.NestedEnum
+import org.apache.spark.sql.protobuf.utils.ProtobufOptions
 import org.apache.spark.sql.protobuf.utils.ProtobufUtils
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
@@ -1154,8 +1155,9 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
         )
 
         // Enable option to convert to json.
-        val dfJson = inputDF.select(from_protobuf_wrapper(
-          $"binary", name, descFilePathOpt, Map("convert.any.fields.to.json" -> "true")).as("proto")
+        val options = Map(ProtobufOptions.CONVERT_ANY_FIELDS_TO_JSON_CONFIG -> "true")
+        val dfJson = inputDF.select(
+          from_protobuf_wrapper($"binary", name, descFilePathOpt, options).as("proto")
         )
         // Now 'details' should be a string.
         assert(dfJson.schema.toDDL == "proto STRUCT<event_name: STRING, details: STRING>")
@@ -1217,9 +1219,9 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
       )
 
       // String for items with 'convert.to.json' option enabled.
-
+      val options = Map(ProtobufOptions.CONVERT_ANY_FIELDS_TO_JSON_CONFIG -> "true")
       val dfJson = inputDF.select(from_protobuf_wrapper(
-        $"binary", name, descFilePathOpt, Map("convert.any.fields.to.json" -> "true")).as("proto")
+        $"binary", name, descFilePathOpt, options).as("proto")
       )
       // Now 'details' should be a string.
       assert(dfJson.schema.toDDL == "proto STRUCT<description: STRING, items: ARRAY<STRING>>")

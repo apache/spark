@@ -32,6 +32,8 @@ private[sql] class ProtobufOptions(
     extends FileSourceOptions(parameters)
     with Logging {
 
+  import ProtobufOptions._
+
   def this(parameters: Map[String, String], conf: Configuration) = {
     this(CaseInsensitiveMap(parameters), conf)
   }
@@ -57,8 +59,8 @@ private[sql] class ProtobufOptions(
   val recursiveFieldMaxDepth: Int = parameters.getOrElse("recursive.fields.max.depth", "-1").toInt
 
   /**
-   * This option enables converting Protobuf 'Any' fields to JSON. At runtime, such 'Any' fields
-   * can contain arbitrary Protobuf messages as binary data.
+   * This option ("convert.any.fields.to.json") enables converting Protobuf 'Any' fields to JSON.
+   * At runtime, such 'Any' fields can contain arbitrary Protobuf messages as binary data.
    *
    * By default when this option is not enabled, such field behaves like normal Protobuf message
    * with two fields (`STRUCT<type_url: STRING, value: BINARY>`). The binary `value` field is not
@@ -102,7 +104,7 @@ private[sql] class ProtobufOptions(
    * In addition schema safety is also reduced making downstream processing error prone.
    */
   val convertAnyFieldsToJson: Boolean =
-    parameters.getOrElse("convert.any.fields.to.json", "false").toBoolean
+    parameters.getOrElse(CONVERT_ANY_FIELDS_TO_JSON_CONFIG, "false").toBoolean
 
   // Whether to render fields with zero values when deserializing Protobuf to a Spark struct.
   // When a field is empty in the serialized Protobuf, this library will deserialize them as
@@ -148,4 +150,6 @@ private[sql] object ProtobufOptions {
       .getOrElse(new Configuration())
     new ProtobufOptions(CaseInsensitiveMap(parameters), hadoopConf)
   }
+
+  val CONVERT_ANY_FIELDS_TO_JSON_CONFIG = "convert.any.fields.to.json"
 }
