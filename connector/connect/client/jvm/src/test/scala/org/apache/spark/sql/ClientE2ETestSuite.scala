@@ -1053,6 +1053,21 @@ class ClientE2ETestSuite extends RemoteSparkSession with SQLHelper with PrivateM
       Seq(((("a", 1), ("a", 1)), ("a", 1)), ((("b", 2), ("b", 2)), ("b", 2))),
       ds1.joinWith(ds2, $"a._2" === $"b._2").as("ab").joinWith(ds3, $"ab._1._2" === $"c._2"))
   }
+
+  test("multi-level joinWith, rows") {
+    val session: SparkSession = spark
+    import session.implicits._
+    val ds1 = Seq(1, 1, 2).toDF()
+    val ds2 = Seq(("a", 1), ("b", 2)).toDF()
+
+    val joined = ds1.joinWith(ds2, $"value" === $"_2").joinWith(ds2, $"_1" === $"_2")
+
+    println(joined.collect())
+
+//    checkSameResult(
+//      Seq((Row(1), Row("a", 1)), (Row(1), Row("a", 1)), (Row(2), Row("b", 2))),
+//      joined)
+  }
 }
 
 private[sql] case class ClassData(a: String, b: Int)
