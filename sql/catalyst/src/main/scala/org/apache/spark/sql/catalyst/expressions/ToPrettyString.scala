@@ -28,6 +28,7 @@ import org.apache.spark.unsafe.types.UTF8String
  * several differences with casting value to string:
  *  - It prints null values (either from column or struct field) as "NULL".
  *  - It prints binary values (either from column or struct field) using the hex format.
+ *  - It prints map values (either from column or struct field) using the another format like {k:v}.
  */
 case class ToPrettyString(child: Expression, timeZoneId: Option[String] = None)
   extends UnaryExpression with TimeZoneAwareExpression with ToStringBase {
@@ -44,6 +45,10 @@ case class ToPrettyString(child: Expression, timeZoneId: Option[String] = None)
 
   override protected def leftBracket: String = "{"
   override protected def rightBracket: String = "}"
+
+  override def kvPairSeparator: String = ":"
+
+  override protected def elementSeparator: String = ","
 
   override protected def nullString: String = "NULL"
 

@@ -1431,7 +1431,7 @@ class DatasetSuite extends QueryTest
       """+---+----+---+
         ||  b|   a|  c|
         |+---+----+---+
-        ||  0|NULL|  1|
+        ||  0|null|  1|
         ||  0|    |  1|
         ||  0|ab c|  1|
         ||  0|1098|  1|

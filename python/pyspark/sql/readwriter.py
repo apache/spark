@@ -198,7 +198,7 @@ class DataFrameReader(OptionUtils):
         +---+----+
         |age|name|
         +---+----+
-        |100|NULL|
+        |100|null|
         +---+----+
         """
         self._jreader = self._jreader.option(key, to_str(value))
@@ -240,7 +240,7 @@ class DataFrameReader(OptionUtils):
         +---+----+
         |age|name|
         +---+----+
-        |100|NULL|
+        |100|null|
         +---+----+
         """
         for k in options:
@@ -295,7 +295,7 @@ class DataFrameReader(OptionUtils):
         +---+----+
         |age|name|
         +---+----+
-        |100|NULL|
+        |100|null|
         +---+----+
         """
         if format is not None:
@@ -695,7 +695,7 @@ class DataFrameReader(OptionUtils):
         +---+----+
         |age|name|
         +---+----+
-        |100|NULL|
+        |100|null|
         +---+----+
         """
         self._set_opts(
@@ -1839,7 +1839,7 @@ class DataFrameWriter(OptionUtils):
         +---+----+
         |age|name|
         +---+----+
-        |100|NULL|
+        |100|null|
         +---+----+
         """
         self.mode(mode)

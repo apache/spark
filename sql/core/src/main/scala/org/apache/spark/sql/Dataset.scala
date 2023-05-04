@@ -279,19 +279,44 @@ class Dataset[T] private[sql](
         Dataset.ofRows(sparkSession, LocalRelation(c.output, c.rows))
       case _ => toDF()
     }
-    val castCols = newDf.logicalPlan.output.map { col =>
-      Column(ToPrettyString(col))
+
+    val useLegacyFormat = sparkSession.conf.get(SQLConf.LEGACY_FORMAT_OF_DATAFRAME_SHOW)
+    val castExpr = if (useLegacyFormat) {
+      (col: Attribute) => {
+        // Since binary types in top-level schema fields have a specific format to print,
+        // so we do not cast them to strings here.
+        if (col.dataType == BinaryType) {
+          Column(col)
+        } else {
+          Column(col).cast(StringType)
+        }
+      }
+    } else {
+      (col: Attribute) => Column(ToPrettyString(col))
     }
+
+    val castCols = newDf.logicalPlan.output.map { col => castExpr(col)}
     val data = newDf.select(castCols: _*).take(numRows + 1)
+
+    val format: Any => String = if (useLegacyFormat) {
+      case null => "null"
+      case binary: Array[Byte] => binary.map("%02X".format(_)).mkString("[", " ", "]")
+      case cell =>
+        // Escapes meta-characters not to break the `showString` format
+        SchemaUtils.escapeMetaCharacters(cell.toString)
+    } else {
+      cell: Any =>
+        assert(cell != null, "ToPrettyString is not nullable and should not return null value")
+        // Escapes meta-characters not to break the `showString` format
+        SchemaUtils.escapeMetaCharacters(cell.toString)
+    }
 
     // For array values, replace Seq and Array with square brackets
     // For cells that are beyond `truncate` characters, replace it with the
     // first `truncate-3` and "..."
     schema.fieldNames.map(SchemaUtils.escapeMetaCharacters).toSeq +: data.map { row =>
       row.toSeq.map { cell =>
-        assert(cell != null, "ToPrettyString is not nullable and should not return null value")
-        // Escapes meta-characters not to break the `showString` format
-        val str = SchemaUtils.escapeMetaCharacters(cell.toString)
+        val str = format(cell)
         if (truncate > 0 && str.length > truncate) {
           // do not show ellipses for strings shorter than 4 characters.
           if (truncate < 4) str.substring(0, truncate)
@@ -2426,8 +2451,8 @@ class Dataset[T] private[sql](
    *   // +----+----+----+----+
    *   // |col0|col1|col2|col3|
    *   // +----+----+----+----+
-   *   // |   1|   2|   3|NULL|
-   *   // |   5|   4|NULL|   6|
+   *   // |   1|   2|   3|null|
+   *   // |   5|   4|null|   6|
    *   // +----+----+----+----+
    *
    *   df2.unionByName(df1, true).show
@@ -2436,8 +2461,8 @@ class Dataset[T] private[sql](
    *   // +----+----+----+----+
    *   // |col1|col0|col3|col2|
    *   // +----+----+----+----+
-   *   // |   4|   5|   6|NULL|
-   *   // |   2|   1|NULL|   3|
+   *   // |   4|   5|   6|null|
+   *   // |   2|   1|null|   3|
    *   // +----+----+----+----+
    * }}}
    *

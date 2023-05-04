@@ -828,7 +828,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
         val ret2 = cast(
           Literal.create(Map("1" -> "a".getBytes, "2" -> null, "3" -> "c".getBytes)),
           StringType)
-        checkEvaluation(ret2, s"${lb}1 -> a, 2 ->${if (legacyCast) "" else " null"}, 3 -> c$rb")
+        checkEvaluation(ret2, s"${lb}1 -> a, 2 -> ${if (legacyCast) "" else "null"}, 3 -> c$rb")
         val ret3 = cast(
           Literal.create(Map(
             1 -> Date.valueOf("2014-12-03"),

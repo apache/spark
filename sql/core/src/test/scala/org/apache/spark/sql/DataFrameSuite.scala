@@ -3613,6 +3613,64 @@ class DataFrameSuite extends QueryTest
     val df = Seq("0.5944910").toDF("a")
     checkAnswer(df.selectExpr("cast(a as decimal(7,7)) div 100"), Row(0))
   }
+
+  test("SPARK-43063: showString: Make the representation of null prettier") {
+    withSQLConf((SQLConf.LEGACY_FORMAT_OF_DATAFRAME_SHOW.key, "false")) {
+      val df1 =
+        spark.sql("SELECT null")
+      assert(df1.showString(1, truncate = 0) ===
+        """+----+
+          ||NULL|
+          |+----+
+          ||NULL|
+          |+----+
+          |""".stripMargin)
+
+      val df2 =
+        spark.sql("SELECT array(1, null)")
+      assert(df2.showString(1, truncate = 0) ===
+        """+--------------+
+          ||array(1, NULL)|
+          |+--------------+
+          ||[1, NULL]     |
+          |+--------------+
+          |""".stripMargin)
+    }
+  }
+
+  test("SPARK-43384: showString: Make the representation of the map data type prettier") {
+    withSQLConf((SQLConf.LEGACY_FORMAT_OF_DATAFRAME_SHOW.key, "false")) {
+      val df1 =
+        spark.sql("SELECT map('key', 'value')")
+      assert(df1.showString(1, truncate = 0) ===
+        """+---------------+
+          ||map(key, value)|
+          |+---------------+
+          ||{key:value}    |
+          |+---------------+
+          |""".stripMargin)
+
+      val df2 =
+        spark.sql("SELECT map('k1', 'v1', 'k2', 'v2')")
+      assert(df2.showString(1, truncate = 0) ===
+        """+-------------------+
+          ||map(k1, v1, k2, v2)|
+          |+-------------------+
+          ||{k1:v1,k2:v2}      |
+          |+-------------------+
+          |""".stripMargin)
+
+      val df3 =
+        spark.sql("SELECT array(map('k1', 'v1', 'k2', 'v2'))")
+      assert(df3.showString(1, truncate = 0) ===
+        """+--------------------------+
+          ||array(map(k1, v1, k2, v2))|
+          |+--------------------------+
+          ||[{k1:v1,k2:v2}]           |
+          |+--------------------------+
+          |""".stripMargin)
+    }
+  }
 }
 
 case class GroupByKey(a: Int, b: Int)

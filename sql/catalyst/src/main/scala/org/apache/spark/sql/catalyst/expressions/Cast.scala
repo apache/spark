@@ -596,6 +596,10 @@ case class Cast(
 
   protected val (leftBracket, rightBracket) = if (legacyCastToStr) ("[", "]") else ("{", "}")
 
+  override def kvPairSeparator: String = " -> "
+
+  override protected def elementSeparator: String = ", "
+
   override protected def nullString: String = if (legacyCastToStr) "" else "null"
 
   // In ANSI mode, Spark always use plain string representation on casting Decimal values

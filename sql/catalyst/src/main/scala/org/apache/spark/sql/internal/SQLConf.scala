@@ -2267,6 +2267,14 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val LEGACY_FORMAT_OF_DATAFRAME_SHOW = buildConf("spark.sql.legacy.showStyleOfDataframe")
+    .internal()
+    .doc(s"If it is set to false, Dataframe.show() will output the result in a different style, " +
+      s"for example map will output it in {k:v} instead of {k -> v}")
+    .version("3.5.0")
+    .booleanConf
+    .createWithDefault(true)
+
   val STREAMING_FILE_COMMIT_PROTOCOL_CLASS =
     buildConf("spark.sql.streaming.commitProtocolClass")
       .version("2.1.0")

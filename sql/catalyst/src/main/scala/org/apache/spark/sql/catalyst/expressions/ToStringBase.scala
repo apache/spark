@@ -38,6 +38,12 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
   protected def leftBracket: String
   protected def rightBracket: String
 
+  // The separator that are used in casting key-value pairs to strings.
+  protected def kvPairSeparator: String
+
+  // The separator that are used to separate multiple elements.
+  protected def elementSeparator: String
+
   // The string value to use to represent null elements in array/struct/map.
   protected def nullString: String
 
@@ -98,22 +104,20 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
           val keyToUTF8String = castToString(kt)
           val valueToUTF8String = castToString(vt)
           builder.append(keyToUTF8String(keyArray.get(0, kt)).asInstanceOf[UTF8String])
-          builder.append(" ->")
+          builder.append(kvPairSeparator)
           if (valueArray.isNullAt(0)) {
             if (nullString.nonEmpty) builder.append(nullString)
           } else {
-            builder.append(" ")
             builder.append(valueToUTF8String(valueArray.get(0, vt)).asInstanceOf[UTF8String])
           }
           var i = 1
           while (i < map.numElements) {
-            builder.append(", ")
+            builder.append(elementSeparator)
             builder.append(keyToUTF8String(keyArray.get(i, kt)).asInstanceOf[UTF8String])
-            builder.append(" ->")
+            builder.append(kvPairSeparator)
             if (valueArray.isNullAt(i)) {
-              if (nullString.nonEmpty) builder.append(" " + nullString)
+              if (nullString.nonEmpty) builder.append(nullString)
             } else {
-              builder.append(" ")
               builder.append(valueToUTF8String(valueArray.get(i, vt))
                 .asInstanceOf[UTF8String])
             }
@@ -262,10 +266,10 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
     }
   }
 
-  private def appendNull(buffer: ExprValue, isFirstElement: Boolean): Block = {
+  private def appendNull(buffer: ExprValue, nonFillBlank: Boolean = true): Block = {
     if (nullString.isEmpty) {
       EmptyBlock
-    } else if (isFirstElement) {
+    } else if (nonFillBlank) {
       code"""$buffer.append("$nullString");"""
     } else {
       code"""$buffer.append(" $nullString");"""
@@ -295,14 +299,14 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
        |$buffer.append("[");
        |if ($array.numElements() > 0) {
        |  if ($array.isNullAt(0)) {
-       |    ${appendNull(buffer, isFirstElement = true)}
+       |    ${appendNull(buffer, nonFillBlank = true)}
        |  } else {
        |    $buffer.append($elementToStringFunc(${CodeGenerator.getValue(array, et, "0")}));
        |  }
        |  for (int $loopIndex = 1; $loopIndex < $array.numElements(); $loopIndex++) {
        |    $buffer.append(",");
        |    if ($array.isNullAt($loopIndex)) {
-       |      ${appendNull(buffer, isFirstElement = false)}
+       |      ${appendNull(buffer, nonFillBlank = false)}
        |    } else {
        |      $buffer.append(" ");
        |      $buffer.append($elementToStringFunc(${CodeGenerator.getValue(array, et, loopIndex)}));
@@ -350,21 +354,19 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
        |$buffer.append("$leftBracket");
        |if ($map.numElements() > 0) {
        |  $buffer.append($keyToStringFunc($getMapFirstKey));
-       |  $buffer.append(" ->");
+       |  $buffer.append("$kvPairSeparator");
        |  if ($map.valueArray().isNullAt(0)) {
-       |    ${appendNull(buffer, isFirstElement = true)}
+       |    ${appendNull(buffer)}
        |  } else {
-       |    $buffer.append(" ");
        |    $buffer.append($valueToStringFunc($getMapFirstValue));
        |  }
        |  for (int $loopIndex = 1; $loopIndex < $map.numElements(); $loopIndex++) {
-       |    $buffer.append(", ");
+       |    $buffer.append("$elementSeparator");
        |    $buffer.append($keyToStringFunc($getMapKeyArray));
-       |    $buffer.append(" ->");
+       |    $buffer.append("$kvPairSeparator");
        |    if ($map.valueArray().isNullAt($loopIndex)) {
-       |      ${appendNull(buffer, isFirstElement = false)}
+       |      ${appendNull(buffer)}
        |    } else {
-       |      $buffer.append(" ");
        |      $buffer.append($valueToStringFunc($getMapValueArray));
        |    }
        |  }
@@ -386,7 +388,7 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
       code"""
          |${if (i != 0) code"""$buffer.append(",");""" else EmptyBlock}
          |if ($row.isNullAt($i)) {
-         |  ${appendNull(buffer, isFirstElement = i == 0)}
+         |  ${appendNull(buffer, nonFillBlank = i == 0)}
          |} else {
          |  ${if (i != 0) code"""$buffer.append(" ");""" else EmptyBlock}
          |
