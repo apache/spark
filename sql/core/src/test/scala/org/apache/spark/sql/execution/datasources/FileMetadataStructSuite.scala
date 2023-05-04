@@ -21,8 +21,6 @@ import java.io.File
 import java.sql.Timestamp
 import java.text.SimpleDateFormat
 
-import org.apache.hadoop.fs.Path
-
 import org.apache.spark.TestUtils
 import org.apache.spark.paths.SparkPath
 import org.apache.spark.sql.{AnalysisException, Column, DataFrame, QueryTest, Row}
@@ -84,7 +82,7 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
 
   private def getMetadataForFile(f: File): Map[String, Any] = {
     Map(
-      METADATA_FILE_PATH -> s"file://${f.getCanonicalPath}",
+      METADATA_FILE_PATH -> f.toURI.toString,
       METADATA_FILE_NAME -> f.getName,
       METADATA_FILE_SIZE -> f.length(),
       // test file is small enough so we would not do splitting files,
@@ -131,7 +129,7 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
 
           // 2. read both f0 and f1
           val df = spark.read.format(testFileFormat).schema(fileSchema)
-            .load(s"file://${new File(dir, "data").getCanonicalPath}/*")
+            .load(new File(dir, "data").getCanonicalPath + "/*")
 
           val realF0 = new File(dir, "data/f0").listFiles()
             .filter(_.getName.endsWith(s".$testFileFormat")).head
@@ -424,8 +422,7 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
 
     assert(partitions.length == 1) // 1 partition
     assert(partitions.head.files.length == 1) // 1 file in that partition
-    assert(partitions.head.files.head.getPath ==
-        new Path(f0(METADATA_FILE_PATH).toString)) // the file is f0
+    assert(partitions.head.files.head.getPath.toString == f0(METADATA_FILE_PATH)) // the file is f0
 
     // check result
     checkAnswer(
@@ -470,8 +467,7 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
 
     assert(partitions.length == 1) // 1 partition
     assert(partitions.head.files.length == 1) // 1 file in that partition
-    assert(partitions.head.files.head.getPath ==
-      new Path(f1(METADATA_FILE_PATH).toString)) // the file is f1
+    assert(partitions.head.files.head.getPath.toString == f1(METADATA_FILE_PATH)) // the file is f1
 
     // check result
     checkAnswer(
@@ -686,7 +682,7 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
       val sourceFile = new File(dir, "/source/new-streaming-data").listFiles()
         .filter(_.getName.endsWith(".json")).head
       val sourceFileMetadata = Map(
-        METADATA_FILE_PATH -> s"file://${sourceFile.getCanonicalPath}",
+        METADATA_FILE_PATH -> sourceFile.toURI.toString,
         METADATA_FILE_NAME -> sourceFile.getName,
         METADATA_FILE_SIZE -> sourceFile.length(),
         METADATA_FILE_BLOCK_START -> 0,
