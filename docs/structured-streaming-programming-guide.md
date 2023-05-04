@@ -2372,12 +2372,12 @@ Here are the configs regarding to RocksDB instance of the state store provider:
   </tr>
   <tr>
     <td>spark.sql.streaming.stateStore.rocksdb.writeBufferCacheRatio</td>
-    <td>Total memory to be occupied by write buffers as a fraction of memory allocated across all RocksDB instances on a single node.</td>
+    <td>Total memory to be occupied by write buffers as a fraction of memory allocated across all RocksDB instances on a single node using maxMemoryUsageMB.</td>
     <td>0.5</td>
   </tr>
   <tr>
     <td>spark.sql.streaming.stateStore.rocksdb.highPriorityPoolRatio</td>
-    <td>Total memory to be occupied by filter and index blocks as a fraction of memory allocated across all RocksDB instances on a single node.</td>
+    <td>Total memory to be occupied by blocks in high priority pool as a fraction of memory allocated across all RocksDB instances on a single node using maxMemoryUsageMB.</td>
     <td>0.1</td>
   </tr>
 </table>
