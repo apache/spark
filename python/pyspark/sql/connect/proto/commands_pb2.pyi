@@ -723,7 +723,7 @@ class WriteStreamOperationStart(google.protobuf.message.Message):
     path: builtins.str
     table_name: builtins.str
     @property
-    def foreach(self) -> global___Foreach: ...
+    def foreach(self) -> global___StreamingForeachWriter: ...
     def __init__(
         self,
         *,
@@ -739,7 +739,7 @@ class WriteStreamOperationStart(google.protobuf.message.Message):
         query_name: builtins.str = ...,
         path: builtins.str = ...,
         table_name: builtins.str = ...,
-        foreach: global___Foreach | None = ...,
+        foreach: global___StreamingForeachWriter | None = ...,
     ) -> None: ...
     def HasField(
         self,
@@ -814,7 +814,7 @@ class WriteStreamOperationStart(google.protobuf.message.Message):
 
 global___WriteStreamOperationStart = WriteStreamOperationStart
 
-class Foreach(google.protobuf.message.Message):
+class StreamingForeachWriter(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
     COMMAND_FIELD_NUMBER: builtins.int
@@ -834,7 +834,7 @@ class Foreach(google.protobuf.message.Message):
         field_name: typing_extensions.Literal["command", b"command", "python_ver", b"python_ver"],
     ) -> None: ...
 
-global___Foreach = Foreach
+global___StreamingForeachWriter = StreamingForeachWriter
 
 class WriteStreamOperationStartResult(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor

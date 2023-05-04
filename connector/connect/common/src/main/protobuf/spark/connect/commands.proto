@@ -210,10 +210,10 @@ message WriteStreamOperationStart {
     string table_name = 12;
   }
 
-  Foreach foreach = 13;
+  StreamingForeachWriter foreach = 13;
 }
 
-message Foreach {
+message StreamingForeachWriter {
   // (Required) The encoded commands of the Python foreach function
   bytes command = 1;
   // (Required) Python version being used in the client.
