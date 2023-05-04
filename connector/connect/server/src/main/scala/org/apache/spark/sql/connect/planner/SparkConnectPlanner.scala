@@ -1385,7 +1385,8 @@ class SparkConnectPlanner(val session: SparkSession) {
       accumulator = null)
   }
 
-  private def transformPythonForeachFunction(fun: proto.Foreach): SimplePythonFunction = {
+  private def transformPythonForeachFunction(
+      fun: proto.StreamingPythonForeachWriter): SimplePythonFunction = {
     SimplePythonFunction(
       command = fun.getCommand.toByteArray,
       // Empty environment variables
@@ -2309,7 +2310,7 @@ class SparkConnectPlanner(val session: SparkSession) {
     }
 
     if (writeOp.hasForeach) {
-      val foreach = writeOp.getForeach
+      val foreach = writeOp.getForeach.getPythonWriter
       val pythonFcn = transformPythonForeachFunction(foreach)
       writer.foreachPython(new PythonForeachWriter(pythonFcn, dataset.schema))
     }

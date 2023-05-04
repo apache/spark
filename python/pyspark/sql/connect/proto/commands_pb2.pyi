@@ -817,6 +817,35 @@ global___WriteStreamOperationStart = WriteStreamOperationStart
 class StreamingForeachWriter(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
+    PYTHON_WRITER_FIELD_NUMBER: builtins.int
+    @property
+    def python_writer(self) -> global___StreamingPythonForeachWriter: ...
+    def __init__(
+        self,
+        *,
+        python_writer: global___StreamingPythonForeachWriter | None = ...,
+    ) -> None: ...
+    def HasField(
+        self,
+        field_name: typing_extensions.Literal[
+            "python_writer", b"python_writer", "writer", b"writer"
+        ],
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "python_writer", b"python_writer", "writer", b"writer"
+        ],
+    ) -> None: ...
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["writer", b"writer"]
+    ) -> typing_extensions.Literal["python_writer"] | None: ...
+
+global___StreamingForeachWriter = StreamingForeachWriter
+
+class StreamingPythonForeachWriter(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
     COMMAND_FIELD_NUMBER: builtins.int
     PYTHON_VER_FIELD_NUMBER: builtins.int
     command: builtins.bytes
@@ -834,7 +863,7 @@ class StreamingForeachWriter(google.protobuf.message.Message):
         field_name: typing_extensions.Literal["command", b"command", "python_ver", b"python_ver"],
     ) -> None: ...
 
-global___StreamingForeachWriter = StreamingForeachWriter
+global___StreamingPythonForeachWriter = StreamingPythonForeachWriter
 
 class WriteStreamOperationStartResult(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor

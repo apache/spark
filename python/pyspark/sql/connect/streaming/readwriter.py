@@ -556,8 +556,8 @@ class DataStreamWriter:
 
         serializer = AutoBatchedSerializer(CPickleSerializer())
         command = (func, None, serializer, serializer)
-        self._write_proto.foreach.command = CloudPickleSerializer().dumps(command)
-        self._write_proto.foreach.python_ver = "%d.%d" % sys.version_info[:2]
+        self._write_proto.foreach.python_writer.command = CloudPickleSerializer().dumps(command)
+        self._write_proto.foreach.python_writer.python_ver = "%d.%d" % sys.version_info[:2]
         return self
 
     foreach.__doc__ = PySparkDataStreamWriter.foreach.__doc__
