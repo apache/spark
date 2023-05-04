@@ -42,7 +42,7 @@ trait MapInBatchExec extends UnaryExecNode with PythonSQLMetrics {
   protected val pythonEvalType: Int
 
   private lazy val isBarrier = func.exists {
-    case pythonUDF: PythonUDF => pythonUDF.isBarrier
+    case pyudf: PythonUDF => pyudf.getTagValue(PythonUDF.BARRIER_TAG).contains(true)
     case _ => false
   }
 

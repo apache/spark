@@ -84,6 +84,7 @@ class PandasMapOpsMixin:
         pyspark.sql.functions.pandas_udf
         """
         from pyspark.sql import DataFrame
+        from pyspark.sql.udf import _is_barrier
         from pyspark.sql.pandas.functions import pandas_udf
 
         assert isinstance(self, DataFrame)
@@ -93,7 +94,7 @@ class PandasMapOpsMixin:
             func, returnType=schema, functionType=PythonEvalType.SQL_MAP_PANDAS_ITER_UDF
         )  # type: ignore[call-overload]
         udf_column = udf(*[self[col] for col in self.columns])
-        jdf = self._jdf.mapInPandas(udf_column._jc.expr())
+        jdf = self._jdf.mapInPandas(udf_column._jc.expr(), _is_barrier(func))
         return DataFrame(jdf, self.sparkSession)
 
     def mapInArrow(
@@ -148,6 +149,7 @@ class PandasMapOpsMixin:
         pyspark.sql.DataFrame.mapInPandas
         """
         from pyspark.sql import DataFrame
+        from pyspark.sql.udf import _is_barrier
         from pyspark.sql.pandas.functions import pandas_udf
 
         assert isinstance(self, DataFrame)
@@ -157,7 +159,7 @@ class PandasMapOpsMixin:
             func, returnType=schema, functionType=PythonEvalType.SQL_MAP_ARROW_ITER_UDF
         )  # type: ignore[call-overload]
         udf_column = udf(*[self[col] for col in self.columns])
-        jdf = self._jdf.pythonMapInArrow(udf_column._jc.expr())
+        jdf = self._jdf.pythonMapInArrow(udf_column._jc.expr(), _is_barrier(func))
         return DataFrame(jdf, self.sparkSession)
 
 

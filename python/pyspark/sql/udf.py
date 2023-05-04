@@ -62,7 +62,10 @@ def _is_barrier(obj: Any) -> bool:
 
 
 def barrier(f: Callable) -> Callable:
-    """Mark functon should be executed in barrier mode."""
+    """
+    This API is a developer API.
+    Mark functon should be executed in barrier mode.
+    """
 
     # since 3.5.0, we introduce a internal decorator 'barrier' for developer only,
     # which is dedicated for integration with external ML training frameworks including
@@ -429,7 +432,7 @@ class UserDefinedFunction:
         jdt = spark._jsparkSession.parseDataType(self.returnType.json())
         assert sc._jvm is not None
         judf = sc._jvm.org.apache.spark.sql.execution.python.UserDefinedPythonFunction(
-            self._name, wrapped_func, jdt, self.evalType, self.deterministic, _is_barrier(func)
+            self._name, wrapped_func, jdt, self.evalType, self.deterministic
         )
         return judf
 

@@ -22,6 +22,7 @@ import org.apache.spark.api.python.{PythonEvalType, PythonFunction}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateFunction
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
+import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.catalyst.trees.TreePattern.{PYTHON_UDAF, PYTHON_UDF, TreePattern}
 import org.apache.spark.sql.catalyst.util.toPrettySQL
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -31,6 +32,11 @@ import org.apache.spark.sql.types.{DataType, StructType}
  * Helper functions for [[PythonUDF]]
  */
 object PythonUDF {
+
+  // A dedicated tag for barrier python UDF.
+  // If a PythonUDF was attached by this tag, it will be executed in the barrier mode.
+  private[sql] val BARRIER_TAG = TreeNodeTag[Boolean]("barrier")
+
   private[this] val SCALAR_TYPES = Set(
     PythonEvalType.SQL_BATCHED_UDF,
     PythonEvalType.SQL_SCALAR_PANDAS_UDF,
@@ -73,11 +79,10 @@ case class PythonUDF(
     children: Seq[Expression],
     evalType: Int,
     udfDeterministic: Boolean,
-    resultId: ExprId = NamedExpression.newExprId,
-    isBarrier: Boolean = false)
+    resultId: ExprId = NamedExpression.newExprId)
   extends Expression with PythonFuncExpression with Unevaluable {
 
-  if (isBarrier &&
+  if (this.getTagValue(PythonUDF.BARRIER_TAG).contains(true) &&
       evalType != PythonEvalType.SQL_MAP_PANDAS_ITER_UDF &&
       evalType != PythonEvalType.SQL_MAP_ARROW_ITER_UDF) {
     throw new IllegalArgumentException(

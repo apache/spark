@@ -3424,7 +3424,10 @@ class Dataset[T] private[sql](
    * This function uses Apache Arrow as serialization format between Java executors and Python
    * workers.
    */
-  private[sql] def mapInPandas(func: PythonUDF): DataFrame = {
+  private[sql] def mapInPandas(func: PythonUDF, isBarrier: Boolean = false): DataFrame = {
+    if (isBarrier) {
+      func.setTagValue(PythonUDF.BARRIER_TAG, true)
+    }
     Dataset.ofRows(
       sparkSession,
       MapInPandas(
@@ -3438,7 +3441,10 @@ class Dataset[T] private[sql](
    * defines a transformation: `iter(pyarrow.RecordBatch)` -> `iter(pyarrow.RecordBatch)`.
    * Each partition is each iterator consisting of `pyarrow.RecordBatch`s as batches.
    */
-  private[sql] def pythonMapInArrow(func: PythonUDF): DataFrame = {
+  private[sql] def pythonMapInArrow(func: PythonUDF, isBarrier: Boolean = false): DataFrame = {
+    if (isBarrier) {
+      func.setTagValue(PythonUDF.BARRIER_TAG, true)
+    }
     Dataset.ofRows(
       sparkSession,
       PythonMapInArrow(
