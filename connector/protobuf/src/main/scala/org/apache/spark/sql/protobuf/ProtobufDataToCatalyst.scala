@@ -72,7 +72,12 @@ private[protobuf] case class ProtobufDataToCatalyst(
         ProtobufUtils.buildTypeRegistry(messageDescriptor) // Loads only connected messages.
       case _ => TypeRegistry.getEmptyTypeRegistry // Default. Json conversion is not enabled.
     }
-    new ProtobufDeserializer(messageDescriptor, dataType, typeRegistry = typeRegistry)
+    new ProtobufDeserializer(
+      messageDescriptor,
+      dataType,
+      typeRegistry = typeRegistry,
+      emitDefaultValues = protobufOptions.emitDefaultValues
+    )
   }
 
   @transient private var result: DynamicMessage = _

@@ -39,7 +39,14 @@ private[sql] class ProtobufDeserializer(
     rootDescriptor: Descriptor,
     rootCatalystType: DataType,
     filters: StructFilters = new NoopFilters,
-    typeRegistry: TypeRegistry = TypeRegistry.getEmptyTypeRegistry) {
+    typeRegistry: TypeRegistry = TypeRegistry.getEmptyTypeRegistry,
+    emitDefaultValues: Boolean = false) {
+
+  def this(rootDescriptor: Descriptor, rootCatalystType: DataType) = {
+    this(
+      rootDescriptor, rootCatalystType, new NoopFilters, TypeRegistry.getEmptyTypeRegistry, false
+    )
+  }
 
   private val converter: Any => Option[InternalRow] =
     try {
@@ -69,9 +76,8 @@ private[sql] class ProtobufDeserializer(
 
   def deserialize(data: Message): Option[InternalRow] = converter(data)
 
-  // JsonFormatter use to convert Any fields (if the option is enabled)
+  // JsonFormatter used to convert Any fields (if the option is enabled).
   // This keeps original field names and does not include any extra whitespace in JSON.
-  // This is used to convert Any fields to json (if configured in Protobuf options).
   // If the runtime type for Any field is not found in the registry, it throws an exception.
   private val jsonPrinter = JsonFormat.printer
     .omittingInsignificantWhitespace()
@@ -303,14 +309,37 @@ private[sql] class ProtobufDeserializer(
       var skipRow = false
       while (i < validFieldIndexes.length && !skipRow) {
         val field = validFieldIndexes(i)
-        val value = if (field.isRepeated || field.hasDefaultValue || record.hasField(field)) {
-          record.getField(field)
-        } else null
+        val value = getFieldValue(record, field)
         fieldWriters(i)(fieldUpdater, value)
         skipRow = applyFilters(i)
         i += 1
       }
       skipRow
+    }
+  }
+
+  private def getFieldValue(record: DynamicMessage, field: FieldDescriptor): AnyRef = {
+    // We return a value if one of:
+    // - the field is repeated
+    // - the field is explicitly present in the serialized proto
+    // - the field is proto2 with a default
+    // - emitDefaultValues is set, and the field type is one where default values
+    //   are not present in the wire format. This includes singular proto3 scalars,
+    //   but not messages / oneof / proto2.
+    //   See [[ProtobufOptions]] and https://protobuf.dev/programming-guides/field_presence
+    //   for more information.
+    //
+    // Repeated fields have to be treated separately as they cannot have `hasField`
+    // called on them.
+    if (
+      field.isRepeated
+        || record.hasField(field)
+        || field.hasDefaultValue
+        || (!field.hasPresence && this.emitDefaultValues)
+    ) {
+      record.getField(field)
+    } else {
+      null
     }
   }
 

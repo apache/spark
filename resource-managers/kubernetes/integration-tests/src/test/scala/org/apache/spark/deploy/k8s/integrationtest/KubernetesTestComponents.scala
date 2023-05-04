@@ -23,7 +23,7 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable
 
 import io.fabric8.kubernetes.api.model.NamespaceBuilder
-import io.fabric8.kubernetes.client.DefaultKubernetesClient
+import io.fabric8.kubernetes.client.KubernetesClient
 import org.scalatest.concurrent.Eventually
 
 import org.apache.spark.SparkConf
@@ -33,7 +33,7 @@ import org.apache.spark.internal.config.JARS
 import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.internal.config.UI.UI_ENABLED
 
-private[spark] class KubernetesTestComponents(defaultClient: DefaultKubernetesClient) {
+private[spark] class KubernetesTestComponents(val kubernetesClient: KubernetesClient) {
 
   val namespaceOption = Option(System.getProperty(CONFIG_KEY_KUBE_NAMESPACE))
   val hasUserSpecifiedNamespace = namespaceOption.isDefined
@@ -42,11 +42,10 @@ private[spark] class KubernetesTestComponents(defaultClient: DefaultKubernetesCl
   val serviceAccountName =
     Option(System.getProperty(CONFIG_KEY_KUBE_SVC_ACCOUNT))
       .getOrElse("default")
-  val kubernetesClient = defaultClient.inNamespace(namespace)
   val clientConfig = kubernetesClient.getConfiguration
 
   def createNamespace(): Unit = {
-    defaultClient.namespaces.create(new NamespaceBuilder()
+    kubernetesClient.namespaces.create(new NamespaceBuilder()
       .withNewMetadata()
       .withName(namespace)
       .endMetadata()
@@ -54,9 +53,9 @@ private[spark] class KubernetesTestComponents(defaultClient: DefaultKubernetesCl
   }
 
   def deleteNamespace(): Unit = {
-    defaultClient.namespaces.withName(namespace).delete()
+    kubernetesClient.namespaces.withName(namespace).delete()
     Eventually.eventually(KubernetesSuite.TIMEOUT, KubernetesSuite.INTERVAL) {
-      val namespaceList = defaultClient
+      val namespaceList = kubernetesClient
         .namespaces()
         .list()
         .getItems

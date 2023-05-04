@@ -50,6 +50,7 @@ from py4j.java_gateway import GatewayClient, JavaClass, JavaGateway, JavaObject,
 
 from pyspark.serializers import CloudPickleSerializer
 from pyspark.sql.utils import has_numpy, get_active_spark_context
+from pyspark.errors import PySparkNotImplementedError, PySparkTypeError
 
 if has_numpy:
     import numpy as np
@@ -718,8 +719,9 @@ class StructField(DataType):
         return self.dataType.fromInternal(obj)
 
     def typeName(self) -> str:  # type: ignore[override]
-        raise TypeError(
-            "StructField does not have typeName. " "Use typeName on its type explicitly instead."
+        raise PySparkTypeError(
+            error_class="INVALID_TYPENAME_CALL",
+            message_parameters={},
         )
 
 
@@ -898,7 +900,10 @@ class StructType(DataType):
         elif isinstance(key, slice):
             return StructType(self.fields[key])
         else:
-            raise TypeError("StructType keys should be strings, integers or slices")
+            raise PySparkTypeError(
+                error_class="NOT_INT_OR_SLICE_OR_STR",
+                message_parameters={"arg_name": "key", "arg_type": type(key).__name__},
+            )
 
     def simpleString(self) -> str:
         return "struct<%s>" % (",".join(f.simpleString() for f in self))
@@ -1090,14 +1095,20 @@ class UserDefinedType(DataType):
         """
         Underlying SQL storage type for this UDT.
         """
-        raise NotImplementedError("UDT must implement sqlType().")
+        raise PySparkNotImplementedError(
+            error_class="NOT_IMPLEMENTED",
+            message_parameters={"feature": "sqlType()"},
+        )
 
     @classmethod
     def module(cls) -> str:
         """
         The Python module of the UDT.
         """
-        raise NotImplementedError("UDT must implement module().")
+        raise PySparkNotImplementedError(
+            error_class="NOT_IMPLEMENTED",
+            message_parameters={"feature": "module()"},
+        )
 
     @classmethod
     def scalaUDT(cls) -> str:
@@ -1132,13 +1143,19 @@ class UserDefinedType(DataType):
         """
         Converts a user-type object into a SQL datum.
         """
-        raise NotImplementedError("UDT must implement toInternal().")
+        raise PySparkNotImplementedError(
+            error_class="NOT_IMPLEMENTED",
+            message_parameters={"feature": "toInternal()"},
+        )
 
     def deserialize(self, datum: Any) -> Any:
         """
         Converts a SQL datum into a user-type object.
         """
-        raise NotImplementedError("UDT must implement fromInternal().")
+        raise PySparkNotImplementedError(
+            error_class="NOT_IMPLEMENTED",
+            message_parameters={"feature": "fromInternal()"},
+        )
 
     def simpleString(self) -> str:
         return "udt"
@@ -1584,7 +1601,10 @@ def _infer_type(
         if obj.typecode in _array_type_mappings:
             return ArrayType(_array_type_mappings[obj.typecode](), False)
         else:
-            raise TypeError("not supported type: array(%s)" % obj.typecode)
+            raise PySparkTypeError(
+                error_class="UNSUPPORTED_DATA_TYPE",
+                message_parameters={"data_type": f"array({obj.typecode})"},
+            )
     else:
         try:
             return _infer_schema(
@@ -1593,7 +1613,10 @@ def _infer_type(
                 infer_array_from_first_element=infer_array_from_first_element,
             )
         except TypeError:
-            raise TypeError("not supported type: %s" % type(obj))
+            raise PySparkTypeError(
+                error_class="UNSUPPORTED_DATA_TYPE",
+                message_parameters={"data_type": type(obj).__name__},
+            )
 
 
 def _infer_schema(
@@ -1624,7 +1647,10 @@ def _infer_schema(
         items = sorted(row.__dict__.items())
 
     else:
-        raise TypeError("Can not infer schema for type: %s" % type(row))
+        raise PySparkTypeError(
+            error_class="CANNOT_INFER_SCHEMA_FOR_TYPE",
+            message_parameters={"data_type": type(row).__name__},
+        )
 
     fields = []
     for k, v in items:
@@ -1641,8 +1667,11 @@ def _infer_schema(
                     True,
                 )
             )
-        except TypeError as e:
-            raise TypeError("Unable to infer the type of the field {}.".format(k)) from e
+        except TypeError:
+            raise PySparkTypeError(
+                error_class="CANNOT_INFER_TYPE_FOR_FIELD",
+                message_parameters={"field_name": k},
+            )
     return StructType(fields)
 
 
@@ -1713,7 +1742,10 @@ def _merge_type(
         return a
     elif type(a) is not type(b):
         # TODO: type cast (such as int -> long)
-        raise TypeError(new_msg("Can not merge type %s and %s" % (type(a), type(b))))
+        raise PySparkTypeError(
+            error_class="CANNOT_MERGE_TYPE",
+            message_parameters={"data_type1": type(a).__name__, "data_type2": type(b).__name__},
+        )
 
     # same type
     if isinstance(a, StructType):
@@ -1801,7 +1833,10 @@ def _create_converter(dataType: DataType) -> Callable:
         elif hasattr(obj, "__dict__"):  # object
             d = obj.__dict__
         else:
-            raise TypeError("Unexpected obj type: %s" % type(obj))
+            raise PySparkTypeError(
+                error_class="UNSUPPORTED_DATA_TYPE",
+                message_parameters={"data_type": type(obj).__name__},
+            )
 
         if convert_fields:
             return tuple([conv(d.get(name)) for name, conv in zip(names, converters)])
@@ -1860,7 +1895,7 @@ def _make_type_verifier(
     >>> _make_type_verifier(ArrayType(StringType()))(set()) # doctest: +IGNORE_EXCEPTION_DETAIL
     Traceback (most recent call last):
         ...
-    TypeError:...
+    pyspark.errors.exceptions.base.PySparkTypeError:...
     >>> _make_type_verifier(MapType(StringType(), IntegerType()))({})
     >>> _make_type_verifier(StructType([]))(())
     >>> _make_type_verifier(StructType([]))([])
@@ -1883,7 +1918,9 @@ def _make_type_verifier(
     Traceback (most recent call last):
         ...
     ValueError:...
-    >>> _make_type_verifier(MapType(StringType(), IntegerType()))({None: 1})
+    >>> _make_type_verifier(  # doctest: +IGNORE_EXCEPTION_DETAIL
+    ...     MapType(StringType(), IntegerType())
+    ...     )({None: 1})
     Traceback (most recent call last):
         ...
     ValueError:...
@@ -1929,8 +1966,13 @@ def _make_type_verifier(
     def verify_acceptable_types(obj: Any) -> None:
         # subclass of them can not be fromInternal in JVM
         if type(obj) not in _acceptable_types[_type]:
-            raise TypeError(
-                new_msg("%s can not accept object %r in type %s" % (dataType, obj, type(obj)))
+            raise PySparkTypeError(
+                error_class="CANNOT_ACCEPT_OBJECT_IN_TYPE",
+                message_parameters={
+                    "data_type": str(dataType),
+                    "obj_name": str(obj),
+                    "obj_type": type(obj).__name__,
+                },
             )
 
     if isinstance(dataType, (StringType, CharType, VarcharType)):
@@ -2043,8 +2085,13 @@ def _make_type_verifier(
                 for f, verifier in verifiers:
                     verifier(d.get(f))
             else:
-                raise TypeError(
-                    new_msg("StructType can not accept object %r in type %s" % (obj, type(obj)))
+                raise PySparkTypeError(
+                    error_class="CANNOT_ACCEPT_OBJECT_IN_TYPE",
+                    message_parameters={
+                        "data_type": "StructType",
+                        "obj_name": str(obj),
+                        "obj_type": type(obj).__name__,
+                    },
                 )
 
         verify_value = verify_struct
@@ -2183,7 +2230,13 @@ class Row(tuple):
         True
         """
         if not hasattr(self, "__fields__"):
-            raise TypeError("Cannot convert a Row class into dict")
+            raise PySparkTypeError(
+                error_class="CANNOT_CONVERT_TYPE",
+                message_parameters={
+                    "from_type": "Row",
+                    "to_type": "dict",
+                },
+            )
 
         if recursive:
 
@@ -2368,7 +2421,10 @@ class NumpyArrayConverter:
         else:
             jtpe = self._from_numpy_type_to_java_type(obj.dtype, gateway)
             if jtpe is None:
-                raise TypeError("The type of array scalar '%s' is not supported" % (obj.dtype))
+                raise PySparkTypeError(
+                    error_class="UNSUPPORTED_NUMPY_ARRAY_SCALAR",
+                    message_parameters={"dtype": str(obj.dtype)},
+                )
         jarr = gateway.new_array(jtpe, len(obj))
         for i in range(len(plist)):
             jarr[i] = plist[i]

@@ -1524,4 +1524,10 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       assert(l.childOutputs == l.plan.output)
     }
   }
+
+  test("SPARK-43293: __qualified_access_only should be ignored in normal columns") {
+    val attr = $"a".int.markAsQualifiedAccessOnly()
+    val rel = LocalRelation(attr)
+    checkAnalysis(rel.select($"a"), rel.select(attr.markAsAllowAnyAccess()))
+  }
 }

@@ -784,6 +784,12 @@
     ],
     "sqlState" : "XX000"
   },
+  "INTERNAL_ERROR_BROADCAST" : {
+    "message" : [
+      "<message>"
+    ],
+    "sqlState" : "XX000"
+  },
   "INTERVAL_ARITHMETIC_OVERFLOW" : {
     "message" : [
       "<message>.<alternative>"
@@ -1001,6 +1007,11 @@
       "PATTERN" : {
         "message" : [
           "<value>."
+        ]
+      },
+      "REGEX_GROUP_INDEX" : {
+        "message" : [
+          "Expects group index between 0 and <groupCount>, but got <groupIndex>."
         ]
       },
       "ZERO_INDEX" : {
@@ -3741,16 +3752,6 @@
       "The specified group index cannot be less than zero."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2007" : {
-    "message" : [
-      "Regex group count is <groupCount>, but the specified group index is <groupIndex>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2010" : {
-    "message" : [
-      "Window Functions do not support merging."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2011" : {
     "message" : [
       "Unexpected data type <dataType>."
@@ -3759,11 +3760,6 @@
   "_LEGACY_ERROR_TEMP_2013" : {
     "message" : [
       "Negative values found in <frequencyExpression>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2014" : {
-    "message" : [
-      "<funcName> is not matched at addNewFunction."
     ]
   },
   "_LEGACY_ERROR_TEMP_2015" : {
@@ -3794,11 +3790,6 @@
   "_LEGACY_ERROR_TEMP_2021" : {
     "message" : [
       "Couldn't find a primary constructor on <cls>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2022" : {
-    "message" : [
-      "Unsupported natural join type <joinType>."
     ]
   },
   "_LEGACY_ERROR_TEMP_2023" : {

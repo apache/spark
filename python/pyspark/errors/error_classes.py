@@ -34,6 +34,11 @@ ERROR_CLASSES_JSON = """
       "Attribute `<attr_name>` in provided object `<obj_name>` is not callable."
     ]
   },
+  "ATTRIBUTE_NOT_SUPPORTED" : {
+    "message" : [
+      "Attribute `<attr_name>` is not supported."
+    ]
+  },
   "BROADCAST_VARIABLE_NOT_LOADED": {
     "message": [
       "Broadcast variable `<variable>` not loaded."
@@ -42,6 +47,11 @@ ERROR_CLASSES_JSON = """
   "CALL_BEFORE_INITIALIZE": {
     "message": [
       "Not supported to call `<func_name>` before initialize <object>."
+    ]
+  },
+  "CANNOT_ACCEPT_OBJECT_IN_TYPE": {
+    "message": [
+      "`<data_type>` can not accept object `<obj_name>` in type `<obj_type>`."
     ]
   },
   "CANNOT_ACCESS_TO_DUNDER": {
@@ -69,9 +79,29 @@ ERROR_CLASSES_JSON = """
       "Cannot convert column into bool: please use '&' for 'and', '|' for 'or', '~' for 'not' when building DataFrame boolean expressions."
     ]
   },
+  "CANNOT_CONVERT_TYPE": {
+    "message": [
+      "Cannot convert <from_type> into <to_type>."
+    ]
+  },
   "CANNOT_INFER_ARRAY_TYPE": {
     "message": [
       "Can not infer Array Type from an list with None as the first element."
+    ]
+  },
+  "CANNOT_INFER_SCHEMA_FOR_TYPE": {
+    "message": [
+      "Can not infer schema for type: `<data_type>`."
+    ]
+  },
+  "CANNOT_INFER_TYPE_FOR_FIELD": {
+    "message": [
+      "Unable to infer the type of the field `<field_name>`."
+    ]
+  },
+  "CANNOT_MERGE_TYPE": {
+    "message": [
+      "Can not merge type `<data_type1>` and `<data_type2>`."
     ]
   },
   "CANNOT_OPEN_SOCKET": {
@@ -119,6 +149,11 @@ ERROR_CLASSES_JSON = """
       "Argument `<arg_name>`(type: <arg_type>) should only contain a type in [<allowed_types>], got <return_type>"
     ]
   },
+  "EXCEED_RETRY" : {
+    "message" : [
+      "Retries exceeded but no exception caught."
+    ]
+  },
   "HIGHER_ORDER_FUNCTION_SHOULD_RETURN_COLUMN" : {
     "message" : [
       "Function `<func_name>` should return Column, got <return_type>."
@@ -140,9 +175,24 @@ ERROR_CLASSES_JSON = """
       "Invalid call to `<func_name>` on unresolved object."
     ]
   },
+  "INVALID_CONNECT_URL" : {
+    "message" : [
+      "Invalid URL for Spark Connect: <detail>"
+    ]
+  },
   "INVALID_ITEM_FOR_CONTAINER": {
     "message": [
       "All items in `<arg_name>` should be in <allowed_types>, got <item_type>."
+    ]
+  },
+  "INVALID_PANDAS_UDF" : {
+    "message" : [
+      "Invalid function: <detail>"
+    ]
+  },
+  "INVALID_PANDAS_UDF_TYPE" : {
+    "message" : [
+      "`<arg_name>` should be one the values from PandasUDFType, got <arg_type>"
     ]
   },
   "INVALID_RETURN_TYPE_FOR_PANDAS_UDF": {
@@ -153,6 +203,11 @@ ERROR_CLASSES_JSON = """
   "INVALID_TIMEOUT_TIMESTAMP" : {
     "message" : [
       "Timeout timestamp (<timestamp>) cannot be earlier than the current watermark (<watermark>)."
+    ]
+  },
+  "INVALID_TYPENAME_CALL" : {
+    "message" : [
+      "StructField does not have typeName. Use typeName on its type explicitly instead."
     ]
   },
   "INVALID_UDF_EVAL_TYPE" : {
@@ -330,9 +385,19 @@ ERROR_CLASSES_JSON = """
       "Argument `<arg_name>` should be a float, int, list or str, got <arg_type>."
     ]
   },
+  "NOT_IMPLEMENTED" : {
+    "message" : [
+      "<feature> is not implemented."
+    ]
+  },
   "NOT_INT" : {
     "message" : [
       "Argument `<arg_name>` should be an int, got <arg_type>."
+    ]
+  },
+  "NOT_INT_OR_SLICE_OR_STR" : {
+    "message" : [
+      "Argument `<arg_name>` should be an int, slice or str, got <arg_type>."
     ]
   },
   "NOT_IN_BARRIER_STAGE" : {
@@ -496,6 +561,21 @@ ERROR_CLASSES_JSON = """
       "Unexpected response from iterator server."
     ]
   },
+  "UNKNOWN_EXPLAIN_MODE" : {
+    "message" : [
+      "Unknown explain mode: '<explain_mode>'. Accepted explain modes are 'simple', 'extended', 'codegen', 'cost', 'formatted'."
+    ]
+  },
+  "UNKNOWN_INTERRUPT_TYPE" : {
+    "message" : [
+      "Unknown interrupt type: '<interrupt_type>'. Accepted interrupt types are 'all'."
+    ]
+  },
+  "UNKNOWN_RESPONSE" : {
+    "message" : [
+      "Unknown response: <response>."
+    ]
+  },
   "UNSUPPORTED_DATA_TYPE" : {
     "message" : [
       "Unsupported DataType `<data_type>`."
@@ -509,6 +589,11 @@ ERROR_CLASSES_JSON = """
   "UNSUPPORTED_DATA_TYPE_FOR_ARROW_VERSION" : {
     "message" : [
       "<data_type> is only supported with pyarrow 2.0.0 and above."
+    ]
+  },
+  "UNSUPPORTED_JOIN_TYPE" : {
+    "message" : [
+      "Unsupported join type: <join_type>. Supported join types include: \\"inner\\", \\"outer\\", \\"full\\", \\"fullouter\\", \\"full_outer\\", \\"leftouter\\", \\"left\\", \\"left_outer\\", \\"rightouter\\", \\"right\\", \\"right_outer\\", \\"leftsemi\\", \\"left_semi\\", \\"semi\\", \\"leftanti\\", \\"left_anti\\", \\"anti\\", \\"cross\\"."
     ]
   },
   "UNSUPPORTED_LITERAL" : {
@@ -529,6 +614,16 @@ ERROR_CLASSES_JSON = """
   "UNSUPPORTED_PARAM_TYPE_FOR_HIGHER_ORDER_FUNCTION" : {
     "message" : [
       "Function `<func_name>` should use only POSITIONAL or POSITIONAL OR KEYWORD arguments."
+    ]
+  },
+  "UNSUPPORTED_SIGNATURE" : {
+    "message" : [
+      "Unsupported signature: <signature>."
+    ]
+  },
+  "UNSUPPORTED_WITH_ARROW_OPTIMIZATION" : {
+    "message" : [
+      "<feature> is not supported with Arrow optimization enabled in Python UDFs. Disable 'spark.sql.execution.pythonUDF.arrow.enabled' to workaround.."
     ]
   },
   "VALUE_NOT_ACCESSIBLE": {

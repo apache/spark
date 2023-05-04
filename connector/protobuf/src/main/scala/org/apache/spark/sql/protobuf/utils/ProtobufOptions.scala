@@ -57,16 +57,16 @@ private[sql] class ProtobufOptions(
   val recursiveFieldMaxDepth: Int = parameters.getOrElse("recursive.fields.max.depth", "-1").toInt
 
   /**
-   * This option enables converting Protobuf 'Any' fields to JSON. At runtime such 'Any' fields
-   * can contain arbitrary Protobuf message serialized as binary data.
+   * This option enables converting Protobuf 'Any' fields to JSON. At runtime, such 'Any' fields
+   * can contain arbitrary Protobuf messages as binary data.
    *
    * By default when this option is not enabled, such field behaves like normal Protobuf message
    * with two fields (`STRUCT<type_url: STRING, value: BINARY>`). The binary `value` field is not
-   * interpreted. This might not be convenient in practice.
+   * interpreted. The binary data might not be convenient in practice to work with.
    *
    * One option is to deserialize it into actual Protobuf message and convert it to Spark STRUCT.
    * But this is not feasible since the schema for `from_protobuf()` is needed at query compile
-   * time and can not change at run time. As a result this is not feasible.
+   * time and can not change at runtime. As a result, this option is not feasible.
    *
    * Another option is parse the binary and deserialize the Protobuf message into JSON string.
    * This this lot more readable than the binary data. This configuration option enables
@@ -103,6 +103,42 @@ private[sql] class ProtobufOptions(
    */
   val convertAnyFieldsToJson: Boolean =
     parameters.getOrElse("convert.any.fields.to.json", "false").toBoolean
+
+  // Whether to render fields with zero values when deserializing Protobuf to a Spark struct.
+  // When a field is empty in the serialized Protobuf, this library will deserialize them as
+  // null by default. However, this flag can control whether to render the type-specific zero value.
+  // This operates similarly to `includingDefaultValues` in protobuf-java-util's JsonFormat, or
+  // `emitDefaults` in golang/protobuf's jsonpb.
+  //
+  // As an example:
+  // ```
+  // syntax = "proto3";
+  // message Person {
+  //   string name = 1;
+  //   int64 age = 2;
+  //   optional string middle_name = 3;
+  //   optional int64 salary = 4;
+  // }
+  // ```
+  //
+  // And we have a proto constructed like:
+  // `Person(age=0, middle_name="")`
+  //
+  // The result after calling from_protobuf() without this flag set would be:
+  // `{"name": null, "age": null, "middle_name": "", "salary": null}`
+  // (age is null because zero-value singular fields are not in the wire format in proto3).
+  //
+  //
+  // With this flag it would be:
+  // `{"name": "", "age": 0, "middle_name": "", "salary": null}`
+  // ("salary" remains null, since it is declared explicitly as an optional field)
+  //
+  // Ref: https://protobuf.dev/programming-guides/proto3/#default for information about
+  //      type-specific defaults.
+  // Ref: https://protobuf.dev/programming-guides/field_presence/ for information about
+  //      what information is available in a serialized proto.
+  val emitDefaultValues: Boolean =
+    parameters.getOrElse("emit.default.values", false.toString).toBoolean
 }
 
 private[sql] object ProtobufOptions {
