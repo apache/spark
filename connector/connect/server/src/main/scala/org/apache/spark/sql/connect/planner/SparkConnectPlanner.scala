@@ -1914,11 +1914,41 @@ class SparkConnectPlanner(val session: SparkSession) {
 
   private def transformKeyValueGroupedAggregate(rel: proto.Aggregate): LogicalPlan = {
     val input = transformRelation(rel.getInput)
-    val ds = UntypedKeyValueGroupedDataset(input, rel.getGroupingExpressionsList, Seq.empty)
+    var ds = UntypedKeyValueGroupedDataset(input, rel.getGroupingExpressionsList, Seq.empty)
+
+    val aggExprs: Seq[proto.Expression] = rel.getAggregateExpressionsList.asScala.toSeq match {
+      case Seq(expr)
+          if expr.hasUnresolvedFunction &&
+            expr.getUnresolvedFunction.getFunctionName == "map_values" =>
+        // Apply mapValue functions before handling agg expressions
+        if (expr.getUnresolvedFunction.getArgumentsCount < 2) {
+          throw InvalidPlanInput("map_values requires at least two child expressions")
+        }
+        val args = expr.getUnresolvedFunction.getArgumentsList.asScala.toSeq
+        val mapValueFunc = TypedScalaUdf(args.head)
+
+        // Recompute the dataset's logical plan and data attributes after applying the mapFunc.
+        val withNewData = AppendColumns(
+          mapValueFunc.function,
+          mapValueFunc.inEnc,
+          mapValueFunc.outEnc,
+          ds.analyzed,
+          ds.dataAttributes)
+
+        val projected = Project(withNewData.newColumns ++ ds.groupingAttributes, withNewData)
+        val analyzed = session.sessionState.executePlan(projected).analyzed
+        ds = ds.copy(
+          vEncoder = mapValueFunc.outEnc,
+          analyzed = analyzed,
+          dataAttributes = withNewData.newColumns)
+        args.drop(1)
+      case e => e
+    }
 
     val keyColumn = TypedAggUtils.aggKeyColumn(ds.kEncoder, ds.groupingAttributes)
-    val namedColumns = rel.getAggregateExpressionsList.asScala.toSeq
-      .map(expr => transformExpressionWithTypedReduceExpression(expr, input))
+    val namedColumns = aggExprs
+      .map(expr =>
+        transformExpressionWithTypedReduceExpression(expr, input, Some(ds.dataAttributes)))
       .map(toNamedExpression)
     logical.Aggregate(ds.groupingAttributes, keyColumn +: namedColumns, ds.analyzed)
   }
@@ -2010,12 +2040,16 @@ class SparkConnectPlanner(val session: SparkSession) {
 
   private def transformExpressionWithTypedReduceExpression(
       expr: proto.Expression,
-      plan: LogicalPlan): Expression = {
+      plan: LogicalPlan,
+      dataAttribute: Option[Seq[Attribute]] = None): Expression = {
     expr.getExprTypeCase match {
       case proto.Expression.ExprTypeCase.UNRESOLVED_FUNCTION
           if expr.getUnresolvedFunction.getFunctionName == "reduce" =>
         // The reduce func needs the input data attribute, thus handle it specially here
-        transformTypedReduceExpression(expr.getUnresolvedFunction, plan.output)
+        transformTypedReduceExpression(
+          expr.getUnresolvedFunction,
+          dataAttribute.getOrElse(plan.output)
+        ) // if not yet computed, obtain it from the plan
       case _ => transformExpression(expr)
     }
   }

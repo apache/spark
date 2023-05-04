@@ -549,14 +549,21 @@ private class KeyValueGroupedDatasetImpl[K, V, IK, IV](
   }
 
   override protected def aggUntyped(columns: TypedColumn[_, _]*): Dataset[_] = {
-    // TODO(SPARK-43415): For each column, apply the valueMap func first
+    // Apply mapValues changes to columns.
+    val aggCols: Seq[Column] =
+      if (valueMapFunc == UdfUtils.identical()) columns
+      // As we cannot chain the mapValues on the columns as what we did for udfs,
+      // we has to use an unresolved function to pass the mapValues function.
+      // The mapValues function is defined as: mapValuesUdf, [aggExprs]+.
+      // The action on receiving this function: For each column, apply the mapValuesUdf first
+      else Seq(Column.fn("map_values", getMapValuesUdf +: columns: _*))
     val rEnc = ProductEncoder.tuple(kEncoder +: columns.map(_.encoder)) // apply keyAs change
     sparkSession.newDataset(rEnc) { builder =>
       builder.getAggregateBuilder
         .setInput(plan.getRoot)
         .setGroupType(proto.Aggregate.GroupType.GROUP_TYPE_GROUPBY)
         .addAllGroupingExpressions(groupingExprs)
-        .addAllAggregateExpressions(columns.map(_.expr).asJava)
+        .addAllAggregateExpressions(aggCols.map(_.expr).asJava)
     }
   }
 
@@ -570,6 +577,14 @@ private class KeyValueGroupedDatasetImpl[K, V, IK, IV](
     val expr = Column.fn("reduce", input).expr
     val aggregator: TypedColumn[V, V] = new TypedColumn[V, V](expr, vEncoder)
     agg(aggregator)
+  }
+
+  private def getMapValuesUdf: Column = {
+    val udf = ScalarUserDefinedFunction(
+      function = valueMapFunc,
+      inputEncoders = ivEncoder :: Nil,
+      outputEncoder = vEncoder)
+    udf.apply(col("*"))
   }
 
   private def getUdf[U: Encoder](nf: AnyRef, outputEncoder: AgnosticEncoder[U])(
