@@ -190,12 +190,8 @@ class StreamingQueryManager:
     def get(self, id: str) -> StreamingQuery:
         cmd = pb2.StreamingQueryManagerCommand()
         cmd.get = id
-        response = self._execute_streaming_query_manager_cmd(cmd)
-        if response.HasField("query"):
-            query = response.query
-            return StreamingQuery(self._session, query.id.id, query.id.run_id, query.name)
-        else:
-            return None
+        query = self._execute_streaming_query_manager_cmd(cmd).query
+        return StreamingQuery(self._session, query.id.id, query.id.run_id, query.name)
 
     get.__doc__ = PySparkStreamingQueryManager.get.__doc__
 
@@ -225,7 +221,7 @@ class StreamingQueryManager:
     def resetTerminated(self) -> None:
         cmd = pb2.StreamingQueryManagerCommand()
         cmd.reset_terminated = True
-        self._execute_streaming_query_manager_cmd(cmd)
+        self._execute_streaming_query_manager_cmd(cmd).active.active_queries
         return None
 
     resetTerminated.__doc__ = PySparkStreamingQueryManager.resetTerminated.__doc__

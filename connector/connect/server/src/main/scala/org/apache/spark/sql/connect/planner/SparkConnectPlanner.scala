@@ -2466,16 +2466,14 @@ class SparkConnectPlanner(val session: SparkSession) {
 
       case StreamingQueryManagerCommand.CommandCase.GET =>
         val query = session.streams.get(command.getGet)
-        if (query != null) {
-          respBuilder.getQueryBuilder
-            .setId(
-              StreamingQueryInstanceId
-                .newBuilder()
-                .setId(query.id.toString)
-                .setRunId(query.runId.toString)
-                .build())
-            .setName(SparkConnectService.convertNullString(query.name))
-        }
+        respBuilder.getQueryBuilder
+          .setId(
+            StreamingQueryInstanceId
+              .newBuilder()
+              .setId(query.id.toString)
+              .setRunId(query.runId.toString)
+              .build())
+          .setName(SparkConnectService.convertNullString(query.name))
 
       case StreamingQueryManagerCommand.CommandCase.AWAIT_ANY_TERMINATION =>
         if (command.getAwaitAnyTermination.hasTimeoutMs) {
