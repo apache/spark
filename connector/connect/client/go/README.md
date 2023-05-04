@@ -53,13 +53,29 @@ instances. `dataFrameImpl` uses the GRPC client in `sparkSessionImpl` to communi
 We will mimic the logic in Spark Connect Scala implementation, and adopt Go common practices, e.g. returning `error` object for
 error handling.
 
-## Misc Helper Information
+## How to Run Spark Connect Go Application
 
-- Prepare your environment to generate proto Go files:
+1. Install Golang: https://go.dev/doc/install.
 
-See https://grpc.io/docs/languages/go/quickstart/
+2. Download Spark distribution (3.4.0+), unzip the folder.
 
-- Command example to generate protobuf Go files:
+3. Start Spark Connect server by running command:
+
+```
+sbin/start-connect-server.sh --packages org.apache.spark:spark-connect_2.12:3.4.0
+```
+
+4. In this repo, `cd connector/connect/client/go`, run Go application:
+
+```
+go run examples/spark-connect-example-spark-session/main.go
+```
+
+## How to Generate protobuf Go Binding
+
+1. Prepare your environment for protobuf: https://grpc.io/docs/languages/go/quickstart/
+
+2. Command example to generate protobuf Go files:
 
 ```
 gen_package=connector/connect/client/go/generated/proto
@@ -83,10 +99,4 @@ protoc -I=./connector/connect/common/src/main/protobuf/ \
   --go-grpc_opt=Mspark/connect/relations.proto=$gen_package \
   --go-grpc_opt=Mspark/connect/types.proto=$gen_package \
   ./connector/connect/common/src/main/protobuf/spark/connect/*.proto
-```
-
-- Command example to start Spark connect server:
-
-```
-sbin/start-connect-server.sh --packages org.apache.spark:spark-connect_2.12:3.4.0
 ```
