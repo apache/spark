@@ -111,7 +111,7 @@ class DataFrame:
                 repl_eager_eval_enabled,
                 repl_eager_eval_max_num_rows,
                 repl_eager_eval_truncate,
-            ) = self._session._get_configs(
+            ) = self._session._client.get_configs(
                 "spark.sql.repl.eagerEval.enabled",
                 "spark.sql.repl.eagerEval.maxNumRows",
                 "spark.sql.repl.eagerEval.truncate",
@@ -131,7 +131,7 @@ class DataFrame:
             repl_eager_eval_enabled,
             repl_eager_eval_max_num_rows,
             repl_eager_eval_truncate,
-        ) = self._session._get_configs(
+        ) = self._session._client.get_configs(
             "spark.sql.repl.eagerEval.enabled",
             "spark.sql.repl.eagerEval.maxNumRows",
             "spark.sql.repl.eagerEval.truncate",
