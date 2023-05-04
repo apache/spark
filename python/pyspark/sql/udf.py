@@ -61,6 +61,47 @@ def _is_barrier(obj: Any) -> bool:
     )
 
 
+def barrier(f: Callable) -> Callable:
+    """Mark functon should be executed in barrier mode."""
+
+    # since 3.5.0, we introduce a internal decorator 'barrier' for developer only,
+    # which is dedicated for integration with external ML training frameworks including
+    # PyTorch and XGBoost.
+    # It indicates whether this UDF will be executed on barrier mode, and is only accepted
+    # in methods 'mapInPandas' and 'mapInArrow'.
+    # For example:
+    #
+    # df = spark.createDataFrame([(1, 21), (2, 30)], ("id", "age"))
+    #
+    # @barrier
+    # def filter_func(iterator):
+    #     for pdf in iterator:
+    #         yield pdf[pdf.id == 1]
+    #
+    # filter_func._is_barrier # This UDF is marked barrier
+    # output: True
+    #
+    # df.mapInPandas(filter_func, df.schema).collect()
+    # output: [Row(id=1, age=21)]
+    #
+    # df.mapInPandas(filter_func, df.schema).show()
+    # error:
+    # ...
+    # : org.apache.spark.scheduler.BarrierJobUnsupportedRDDChainException:
+    #     [SPARK-24820][SPARK-24821]: Barrier execution mode does not allow
+    #     the following pattern of RDD chain within a barrier stage:
+    # 1. Ancestor RDDs that have different number of partitions from the resulting RDD
+    #     (e.g. union()/coalesce()/first()/take()/PartitionPruningRDD). A workaround for
+    #     first()/take() can be barrierRdd.collect().head (scala) or barrierRdd.collect()[0]
+    #     (python).
+    # 2. An RDD that depends on multiple barrier RDDs (e.g. barrierRdd1.zip(barrierRdd2)).
+    # ...
+
+    wrapped = f
+    wrapped._is_barrier = True  # type: ignore[attr-defined]
+    return wrapped
+
+
 def _wrap_function(
     sc: SparkContext, func: Callable[..., Any], returnType: "DataTypeOrString"
 ) -> JavaObject:
@@ -258,37 +299,6 @@ class UserDefinedFunction:
         )
         self.evalType = evalType
         self.deterministic = deterministic
-
-        # since 3.5.0, we introduce an internal optional function attribute '_is_barrier',
-        # which is dedicated for integration with external ML training frameworks including
-        # PyTorch and XGBoost.
-        # It indicates whether this UDF will be executed on barrier mode, and is only accepted
-        # in methods 'mapInPandas' and 'mapInArrow'.
-        # For example:
-        #
-        # df = spark.createDataFrame([(1, 21), (2, 30)], ("id", "age"))
-        #
-        # def filter_func(iterator):
-        #     for pdf in iterator:
-        #         yield pdf[pdf.id == 1]
-        #
-        # filter_func._is_barrier = True # Mark this UDF is barrier
-        #
-        # df.mapInPandas(filter_func, df.schema).collect()
-        # output: [Row(id=1, age=21)]
-        #
-        # df.mapInPandas(filter_func, df.schema).show()
-        # error:
-        # ...
-        # : org.apache.spark.scheduler.BarrierJobUnsupportedRDDChainException:
-        #     [SPARK-24820][SPARK-24821]: Barrier execution mode does not allow
-        #     the following pattern of RDD chain within a barrier stage:
-        # 1. Ancestor RDDs that have different number of partitions from the resulting RDD
-        #     (e.g. union()/coalesce()/first()/take()/PartitionPruningRDD). A workaround for
-        #     first()/take() can be barrierRdd.collect().head (scala) or barrierRdd.collect()[0]
-        #     (python).
-        # 2. An RDD that depends on multiple barrier RDDs (e.g. barrierRdd1.zip(barrierRdd2)).
-        # ...
         self._is_barrier = _is_barrier(func)
 
     @property

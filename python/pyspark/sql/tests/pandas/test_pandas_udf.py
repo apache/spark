@@ -338,43 +338,59 @@ class PandasUDFTestsMixin:
         self.assertEqual(df.first()[0], datetime.timedelta(microseconds=123))
 
     def test_barrier_pandas_udf(self):
+        from pyspark.sql.udf import barrier
+
         df = self.spark.createDataFrame([(1, 21), (2, 30)], ("id", "age"))
 
-        def filter_func(iterator):
+        def filter_func_1(iterator):
             for pdf in iterator:
                 yield pdf[pdf.id == 1]
 
-        rows1 = df.mapInPandas(filter_func, df.schema).collect()
+        rows1 = df.mapInPandas(filter_func_1, df.schema).collect()
 
-        filter_func._is_barrier = True
-        rows2 = df.mapInPandas(filter_func, df.schema).collect()
+        @barrier
+        def filter_func_2(iterator):
+            for pdf in iterator:
+                yield pdf[pdf.id == 1]
+
+        self.assertTrue(filter_func_2._is_barrier)
+
+        rows2 = df.mapInPandas(filter_func_2, df.schema).collect()
 
         self.assertEqual(rows1, rows2)
 
         # can not register a barrier udf.
         with self.assertRaises(ValueError):
-            self.spark.udf.register("filter_func", filter_func)
+            self.spark.udf.register("filter_func", filter_func_2)
 
     def test_barrier_arrow_udf(self):
         import pyarrow as pa
+        from pyspark.sql.udf import barrier
 
         df = self.spark.createDataFrame([(1, 21), (2, 30)], ("id", "age"))
 
-        def filter_func(iterator):
+        def filter_func_1(iterator):
             for batch in iterator:
                 pdf = batch.to_pandas()
                 yield pa.RecordBatch.from_pandas(pdf[pdf.id == 1])
 
-        rows1 = df.mapInArrow(filter_func, df.schema).collect()
+        rows1 = df.mapInArrow(filter_func_1, df.schema).collect()
 
-        filter_func._is_barrier = True
-        rows2 = df.mapInArrow(filter_func, df.schema).collect()
+        @barrier
+        def filter_func_2(iterator):
+            for batch in iterator:
+                pdf = batch.to_pandas()
+                yield pa.RecordBatch.from_pandas(pdf[pdf.id == 1])
+
+        self.assertTrue(filter_func_2._is_barrier)
+
+        rows2 = df.mapInArrow(filter_func_2, df.schema).collect()
 
         self.assertEqual(rows1, rows2)
 
         # can not register a barrier udf.
         with self.assertRaises(ValueError):
-            self.spark.udf.register("filter_func", filter_func)
+            self.spark.udf.register("filter_func", filter_func_2)
 
 
 class PandasUDFTests(PandasUDFTestsMixin, ReusedSQLTestCase):

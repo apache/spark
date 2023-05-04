@@ -542,6 +542,8 @@ class TorchDistributor(Distributor):
         Callable
             The wrapped function ready for use with `mapPartitions`
         """
+        from pyspark.sql.udf import barrier
+
         num_processes = self.num_processes
         use_gpu = self.use_gpu
         input_params = self.input_params
@@ -558,6 +560,7 @@ class TorchDistributor(Distributor):
             schema_json = None
 
         # Spark task program
+        @barrier
         def wrapped_train_fn(iterator):  # type: ignore[no-untyped-def]
             import os
             import pandas as pd
@@ -645,7 +648,6 @@ class TorchDistributor(Distributor):
 
                 yield pyarrow.RecordBatch.from_pandas(pd.DataFrame(data={"chunk": chunks}))
 
-        wrapped_train_fn._is_barrier = True  # type: ignore[attr-defined]
         return wrapped_train_fn
 
     def _run_distributed_training(

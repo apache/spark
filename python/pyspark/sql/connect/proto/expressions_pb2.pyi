@@ -1255,6 +1255,8 @@ class PythonUDF(google.protobuf.message.Message):
     is_barrier: builtins.bool
     """(Optional) Whether this PythonUDF should be executed in barrier mode.
     Right now, barrier PythonUDF is only allowed in operators 'MapInPandas' and 'MapInArrow'.
+    This field is dedicated for Spark ML, to integrate with external ML framework like PyTorch
+    and XGBoost.
     """
     def __init__(
         self,
