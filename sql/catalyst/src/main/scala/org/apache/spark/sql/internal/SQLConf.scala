@@ -1383,7 +1383,7 @@ object SQLConf {
         "When false, all running tasks will remain until finished.")
       .version("3.2.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   val THRIFTSERVER_QUERY_TIMEOUT =
     buildConf("spark.sql.thriftServer.queryTimeout")
