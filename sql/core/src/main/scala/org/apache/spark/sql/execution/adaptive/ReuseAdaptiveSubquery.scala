@@ -33,10 +33,13 @@ case class ReuseAdaptiveSubquery(
 
     plan.transformAllExpressionsWithPruning(_.containsPattern(PLAN_EXPRESSION)) {
       case sub: ExecSubqueryExpression =>
-        val newPlan = reuseMap.getOrElseUpdate(sub.plan.canonicalized, sub.plan)
-        if (newPlan.ne(sub.plan)) {
-          sub.withNewPlan(ReusedSubqueryExec(newPlan))
-        } else {
+        // `InsertAdaptiveSparkPlan` compiles subquery for each exprId, then the java object
+        // is always `eq` if two subqueries have same exprId.
+        // Check if the subquery can be reused manually instead of call `getOrElseUpdate`.
+        reuseMap.get(sub.plan.canonicalized).map { subquery =>
+          sub.withNewPlan(ReusedSubqueryExec(subquery))
+        }.getOrElse {
+          reuseMap.put(sub.plan.canonicalized, sub.plan)
           sub
         }
     }
