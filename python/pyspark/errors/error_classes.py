@@ -34,6 +34,11 @@ ERROR_CLASSES_JSON = """
       "Attribute `<attr_name>` in provided object `<obj_name>` is not callable."
     ]
   },
+  "ATTRIBUTE_NOT_SUPPORTED" : {
+    "message" : [
+      "Attribute `<attr_name>` is not supported."
+    ]
+  },
   "AXIS_LENGTH_MISMATCH" : {
     "message" : [
       "Length mismatch: Expected axis has <expected_length> element, new values have <actual_length> elements."
@@ -589,6 +594,11 @@ ERROR_CLASSES_JSON = """
   "UNKNOWN_EXPLAIN_MODE" : {
     "message" : [
       "Unknown explain mode: '<explain_mode>'. Accepted explain modes are 'simple', 'extended', 'codegen', 'cost', 'formatted'."
+    ]
+  },
+  "UNKNOWN_INTERRUPT_TYPE" : {
+    "message" : [
+      "Unknown interrupt type: '<interrupt_type>'. Accepted interrupt types are 'all'."
     ]
   },
   "UNKNOWN_RESPONSE" : {
