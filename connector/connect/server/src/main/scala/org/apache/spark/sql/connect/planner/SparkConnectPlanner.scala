@@ -1993,14 +1993,18 @@ class SparkConnectPlanner(val session: SparkSession) {
 
     // Convert the data.
     val bytes = if (rows.isEmpty) {
-      ArrowConverters.createEmptyArrowBatch(schema, timeZoneId)
+      ArrowConverters.createEmptyArrowBatch(
+        schema,
+        timeZoneId,
+        errorOnDuplicatedFieldNames = false)
     } else {
       val batches = ArrowConverters.toBatchWithSchemaIterator(
         rows.iterator,
         schema,
         maxRecordsPerBatch,
         maxBatchSize,
-        timeZoneId)
+        timeZoneId,
+        errorOnDuplicatedFieldNames = false)
       assert(batches.hasNext)
       val bytes = batches.next()
       assert(!batches.hasNext, s"remaining batches: ${batches.size}")

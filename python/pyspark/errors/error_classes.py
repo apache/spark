@@ -149,6 +149,11 @@ ERROR_CLASSES_JSON = """
       "Argument `<arg_name>`(type: <arg_type>) should only contain a type in [<allowed_types>], got <return_type>"
     ]
   },
+  "DUPLICATED_FIELD_NAME_IN_ARROW_STRUCT" : {
+    "message" : [
+      "Duplicated field names in Arrow Struct are not allowed, got <field_names>"
+    ]
+  },
   "EXCEED_RETRY" : {
     "message" : [
       "Retries exceeded but no exception caught."

@@ -2835,6 +2835,23 @@ object SQLConf {
       .version("3.0.0")
       .fallbackConf(BUFFER_SIZE)
 
+  val PANDAS_STRUCT_HANDLING_MODE =
+    buildConf("spark.sql.execution.pandas.structHandlingMode")
+      .doc(
+        "The conversion mode of struct type when creating pandas DataFrame. " +
+        "When \"legacy\"," +
+        "1. when Arrow optimization is disabled, convert to Row object, " +
+        "2. when Arrow optimization is enabled, convert to dict or raise an Exception " +
+        "if there are duplicated nested field names. " +
+        "When \"row\", convert to Row object regardless of Arrow optimization. " +
+        "When \"dict\", convert to dict and use suffixed key names, e.g., a_0, a_1, " +
+        "if there are duplicated nested field names, regardless of Arrow optimization."
+      )
+      .version("3.5.0")
+      .stringConf
+      .checkValues(Set("legacy", "row", "dict"))
+      .createWithDefaultString("legacy")
+
   val PYSPARK_SIMPLIFIED_TRACEBACK =
     buildConf("spark.sql.execution.pyspark.udf.simplifiedTraceback.enabled")
       .doc(
@@ -4854,6 +4871,8 @@ class SQLConf extends Serializable with Logging {
   def arrowMaxRecordsPerBatch: Int = getConf(ARROW_EXECUTION_MAX_RECORDS_PER_BATCH)
 
   def pandasUDFBufferSize: Int = getConf(PANDAS_UDF_BUFFER_SIZE)
+
+  def pandasStructHandlingMode: String = getConf(PANDAS_STRUCT_HANDLING_MODE)
 
   def pysparkSimplifiedTraceback: Boolean = getConf(PYSPARK_SIMPLIFIED_TRACEBACK)
 

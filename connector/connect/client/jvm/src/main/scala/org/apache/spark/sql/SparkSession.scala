@@ -121,7 +121,8 @@ class SparkSession private[sql] (
     newDataset(encoder) { builder =>
       if (data.nonEmpty) {
         val timeZoneId = conf.get("spark.sql.session.timeZone")
-        val (arrowData, arrowDataSize) = ConvertToArrow(encoder, data, timeZoneId, allocator)
+        val (arrowData, arrowDataSize) =
+          ConvertToArrow(encoder, data, timeZoneId, errorOnDuplicatedFieldNames = true, allocator)
         if (arrowDataSize <= conf.get("spark.sql.session.localRelationCacheThreshold").toInt) {
           builder.getLocalRelationBuilder
             .setSchema(encoder.schema.json)
