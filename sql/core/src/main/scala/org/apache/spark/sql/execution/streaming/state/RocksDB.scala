@@ -121,7 +121,7 @@ class RocksDB(
 
   @volatile private var db: NativeRocksDB = _
   @volatile private var changelogWriter: Option[ChangelogWriter] = None
-  private val useChangelogCheckpointing: Boolean = true
+  private val enableChangelogCheckpointing: Boolean = conf.enableChangelogCheckpointing
   @volatile private var loadedVersion = -1L   // -1 = nothing valid is loaded
   @volatile private var numKeysOnLoadedVersion = 0L
   @volatile private var numKeysOnWritingVersion = 0L
@@ -187,7 +187,7 @@ class RocksDB(
         loadedVersion = -1  // invalidate loaded data
         throw t
     }
-    if (useChangelogCheckpointing) {
+    if (enableChangelogCheckpointing) {
       changelogWriter = Some(fileManager.getChangeLogWriter(version + 1))
     }
     this
@@ -334,7 +334,7 @@ class RocksDB(
 
       logInfo(s"Syncing checkpoint for $newVersion to DFS")
       val fileSyncTimeMs = timeTakenMs {
-        if (useChangelogCheckpointing) {
+        if (enableChangelogCheckpointing) {
           changelogWriter.foreach(_.commit())
         } else {
           uploadSnapshot()
@@ -368,7 +368,7 @@ class RocksDB(
       checkpoint
     }
     localCheckpoint match {
-      case RocksDBCheckpoint(localDir, version, numKeys) =>
+      case Some(RocksDBCheckpoint(localDir, version, numKeys)) =>
         val uploadTime = timeTakenMs {
           fileManager.saveCheckpointToDfs(localDir, version, numKeys)
         }
@@ -388,7 +388,7 @@ class RocksDB(
   }
 
   def cleanup(): Unit = {
-    if (useChangelogCheckpointing) {
+    if (enableChangelogCheckpointing) {
       uploadSnapshot()
     }
     val cleanupTime = timeTakenMs {
@@ -589,6 +589,7 @@ class ByteArrayPair(var key: Array[Byte] = null, var value: Array[Byte] = null) 
 case class RocksDBConf(
     minVersionsToRetain: Int,
     compactOnCommit: Boolean,
+    enableChangelogCheckpointing: Boolean,
     blockSizeKB: Long,
     blockCacheSizeMB: Long,
     lockAcquireTimeoutMs: Long,
@@ -623,6 +624,8 @@ object RocksDBConf {
 
   // Configuration that specifies whether to compact the RocksDB data every time data is committed
   private val COMPACT_ON_COMMIT_CONF = SQLConfEntry("compactOnCommit", "false")
+  private val ENABLE_CHANGELOG_CHECKPOINTING_CONF = SQLConfEntry(
+    "enableChangelogCheckpointing", "false")
   private val BLOCK_SIZE_KB_CONF = SQLConfEntry("blockSizeKB", "4")
   private val BLOCK_CACHE_SIZE_MB_CONF = SQLConfEntry("blockCacheSizeMB", "8")
   // See SPARK-42794 for details.
@@ -744,6 +747,7 @@ object RocksDBConf {
     RocksDBConf(
       storeConf.minVersionsToRetain,
       getBooleanConf(COMPACT_ON_COMMIT_CONF),
+      getBooleanConf(ENABLE_CHANGELOG_CHECKPOINTING_CONF),
       getPositiveLongConf(BLOCK_SIZE_KB_CONF),
       getPositiveLongConf(BLOCK_CACHE_SIZE_MB_CONF),
       getPositiveLongConf(LOCK_ACQUIRE_TIMEOUT_MS_CONF),

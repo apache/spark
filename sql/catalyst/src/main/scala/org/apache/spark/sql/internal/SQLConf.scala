@@ -1940,6 +1940,19 @@ object SQLConf {
       // 5 is the default table format version for RocksDB 6.20.3.
       .createWithDefault(5)
 
+  /**
+   * Note: this is defined in `RocksDBConf.FORMAT_VERSION`. These two places should be updated
+   * together.
+   */
+  val STATE_STORE_ROCKSDB_CHANGE_CHECKPOINTING_ENABLED =
+    buildConf("spark.sql.streaming.stateStore.rocksdb.enableChangelogCheckpointing")
+      .internal()
+      .doc("Enable RocksDB state store to checkpoint a version of the state" +
+        " by uploading the changelog.")
+      .version("3.4.1")
+      .booleanConf
+      .createWithDefault(false)
+
   val STREAMING_AGGREGATION_STATE_FORMAT_VERSION =
     buildConf("spark.sql.streaming.aggregation.stateFormatVersion")
       .internal()
