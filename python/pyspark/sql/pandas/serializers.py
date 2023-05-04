@@ -207,7 +207,6 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
             _check_series_convert_timestamps_internal,
             _convert_dict_to_map_items,
         )
-        from pandas.api.types import is_categorical_dtype
 
         # Make input conform to [(series1, type1), (series2, type2), ...]
         if not isinstance(series, (list, tuple)) or (
@@ -226,9 +225,6 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
                 s = _check_series_convert_timestamps_internal(s, self._timezone)
             elif t is not None and pa.types.is_map(t):
                 s = _convert_dict_to_map_items(s)
-            elif is_categorical_dtype(s.dtype):
-                # Note: This can be removed once minimum pyarrow version is >= 0.16.1
-                s = s.astype(s.dtypes.categories.dtype)
             try:
                 array = pa.Array.from_pandas(s, mask=mask, type=t, safe=self._safecheck)
             except TypeError as e:
