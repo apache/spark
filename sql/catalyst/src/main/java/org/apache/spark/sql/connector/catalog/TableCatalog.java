@@ -200,6 +200,14 @@ public interface TableCatalog extends CatalogPlugin {
   }
 
   /**
+   * Return whether to reserve schema nullability of query output or forcibly use nullable schema
+   * on creating table implicitly, e.g. CTAS/RTAS.
+   */
+  default boolean createTableReserveSchemaNullability() {
+    return false;
+  }
+
+  /**
    * Apply a set of {@link TableChange changes} to a table in the catalog.
    * <p>
    * Implementations may reject the requested changes. If any change is rejected, none of the
