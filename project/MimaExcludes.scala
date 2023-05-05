@@ -71,6 +71,7 @@ object MimaExcludes {
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.ExceptionFailure.apply"),
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.ExceptionFailure.copy"),
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.ExceptionFailure.this"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.ExceptionFailure$"),
 
     // SPARK-43169: shaded and generated protobuf code
     ProblemFilters.exclude[Problem]("org.sparkproject.spark_core.protobuf.*"),
