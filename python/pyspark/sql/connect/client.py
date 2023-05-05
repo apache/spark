@@ -173,7 +173,8 @@ class ChannelBuilder:
             raise PySparkValueError(
                 error_class="INVALID_CONNECT_URL",
                 message_parameters={
-                    "detail": "URL scheme must be set to `sc`.",
+                    "detail": "The URL must start with 'sc://'. Please update the URL to "
+                    "follow the correct format, e.g., 'sc://hostname:port'.",
                 },
             )
         # Rewrite the URL to use http as the scheme so that we can leverage
@@ -185,8 +186,8 @@ class ChannelBuilder:
             raise PySparkValueError(
                 error_class="INVALID_CONNECT_URL",
                 message_parameters={
-                    "detail": f"Path component for connection URI `{self.url.path}` "
-                    f"must be empty.",
+                    "detail": f"The path component '{self.url.path}' must be empty. Please update "
+                    f"the URL to follow the correct format, e.g., 'sc://hostname:port'.",
                 },
             )
         self._extract_attributes()
@@ -210,7 +211,9 @@ class ChannelBuilder:
                     raise PySparkValueError(
                         error_class="INVALID_CONNECT_URL",
                         message_parameters={
-                            "detail": f"Parameter '{p}' is not a valid parameter key-value pair.",
+                            "detail": f"Parameter '{p}' should be provided as a "
+                            f"key-value pair separated by an equal sign (=). Please update "
+                            f"the parameter to follow the correct format, e.g., 'key=value'.",
                         },
                     )
                 self.params[kv[0]] = urllib.parse.unquote(kv[1])
@@ -226,8 +229,9 @@ class ChannelBuilder:
             raise PySparkValueError(
                 error_class="INVALID_CONNECT_URL",
                 message_parameters={
-                    "detail": f"Target destination {self.url.netloc} does not match "
-                    f"'<host>:<port>' pattern.",
+                    "detail": f"Target destination '{self.url.netloc}' should match the "
+                    f"'<host>:<port>' pattern. Please update the destination to follow "
+                    f"the correct format, e.g., 'hostname:port'.",
                 },
             )
 
