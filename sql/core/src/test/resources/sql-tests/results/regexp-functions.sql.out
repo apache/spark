@@ -4,12 +4,15 @@ SELECT regexp_extract('1a 2b 14m', '\\d+')
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.SparkIllegalArgumentException
+org.apache.spark.SparkRuntimeException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2007",
+  "errorClass" : "INVALID_PARAMETER_VALUE.REGEX_GROUP_INDEX",
+  "sqlState" : "22023",
   "messageParameters" : {
+    "functionName" : "`regexp_extract`",
     "groupCount" : "0",
-    "groupIndex" : "1"
+    "groupIndex" : "1",
+    "parameter" : "`idx`"
   }
 }
 
@@ -27,12 +30,15 @@ SELECT regexp_extract('1a 2b 14m', '\\d+', 1)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.SparkIllegalArgumentException
+org.apache.spark.SparkRuntimeException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2007",
+  "errorClass" : "INVALID_PARAMETER_VALUE.REGEX_GROUP_INDEX",
+  "sqlState" : "22023",
   "messageParameters" : {
+    "functionName" : "`regexp_extract`",
     "groupCount" : "0",
-    "groupIndex" : "1"
+    "groupIndex" : "1",
+    "parameter" : "`idx`"
   }
 }
 
@@ -42,12 +48,15 @@ SELECT regexp_extract('1a 2b 14m', '\\d+', 2)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.SparkIllegalArgumentException
+org.apache.spark.SparkRuntimeException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2007",
+  "errorClass" : "INVALID_PARAMETER_VALUE.REGEX_GROUP_INDEX",
+  "sqlState" : "22023",
   "messageParameters" : {
+    "functionName" : "`regexp_extract`",
     "groupCount" : "0",
-    "groupIndex" : "2"
+    "groupIndex" : "2",
+    "parameter" : "`idx`"
   }
 }
 
@@ -116,12 +125,15 @@ SELECT regexp_extract('1a 2b 14m', '(\\d+)([a-z]+)', 3)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.SparkIllegalArgumentException
+org.apache.spark.SparkRuntimeException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2007",
+  "errorClass" : "INVALID_PARAMETER_VALUE.REGEX_GROUP_INDEX",
+  "sqlState" : "22023",
   "messageParameters" : {
+    "functionName" : "`regexp_extract`",
     "groupCount" : "2",
-    "groupIndex" : "3"
+    "groupIndex" : "3",
+    "parameter" : "`idx`"
   }
 }
 
@@ -175,12 +187,15 @@ SELECT regexp_extract_all('1a 2b 14m', '\\d+')
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.SparkIllegalArgumentException
+org.apache.spark.SparkRuntimeException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2007",
+  "errorClass" : "INVALID_PARAMETER_VALUE.REGEX_GROUP_INDEX",
+  "sqlState" : "22023",
   "messageParameters" : {
+    "functionName" : "`regexp_extract_all`",
     "groupCount" : "0",
-    "groupIndex" : "1"
+    "groupIndex" : "1",
+    "parameter" : "`idx`"
   }
 }
 
@@ -198,12 +213,15 @@ SELECT regexp_extract_all('1a 2b 14m', '\\d+', 1)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.SparkIllegalArgumentException
+org.apache.spark.SparkRuntimeException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2007",
+  "errorClass" : "INVALID_PARAMETER_VALUE.REGEX_GROUP_INDEX",
+  "sqlState" : "22023",
   "messageParameters" : {
+    "functionName" : "`regexp_extract_all`",
     "groupCount" : "0",
-    "groupIndex" : "1"
+    "groupIndex" : "1",
+    "parameter" : "`idx`"
   }
 }
 
@@ -213,12 +231,15 @@ SELECT regexp_extract_all('1a 2b 14m', '\\d+', 2)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.SparkIllegalArgumentException
+org.apache.spark.SparkRuntimeException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2007",
+  "errorClass" : "INVALID_PARAMETER_VALUE.REGEX_GROUP_INDEX",
+  "sqlState" : "22023",
   "messageParameters" : {
+    "functionName" : "`regexp_extract_all`",
     "groupCount" : "0",
-    "groupIndex" : "2"
+    "groupIndex" : "2",
+    "parameter" : "`idx`"
   }
 }
 
@@ -287,12 +308,15 @@ SELECT regexp_extract_all('1a 2b 14m', '(\\d+)([a-z]+)', 3)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.SparkIllegalArgumentException
+org.apache.spark.SparkRuntimeException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_2007",
+  "errorClass" : "INVALID_PARAMETER_VALUE.REGEX_GROUP_INDEX",
+  "sqlState" : "22023",
   "messageParameters" : {
+    "functionName" : "`regexp_extract_all`",
     "groupCount" : "2",
-    "groupIndex" : "3"
+    "groupIndex" : "3",
+    "parameter" : "`idx`"
   }
 }
 

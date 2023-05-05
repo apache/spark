@@ -18,13 +18,14 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import scala.collection.mutable
+import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.catalyst.catalog.UnresolvedCatalogRelation
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
-import org.apache.spark.sql.connector.catalog.CatalogV2Util
+import org.apache.spark.sql.connector.write.SupportsCustomSchemaWrite
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.SQLConf
@@ -214,8 +215,11 @@ case class ResolveDefaultColumns(
         throw QueryCompilationErrors.defaultReferencesNotAllowedInMergeCondition()
       }
     }
+    val columnsWithDefaults = ArrayBuffer.empty[String]
     val defaultExpressions: Seq[Expression] = schema.fields.map {
-      case f if f.metadata.contains(CURRENT_DEFAULT_COLUMN_METADATA_KEY) => analyze(f, "MERGE")
+      case f if f.metadata.contains(CURRENT_DEFAULT_COLUMN_METADATA_KEY) =>
+        columnsWithDefaults.append(normalizeFieldName(f.name))
+        analyze(f, "MERGE")
       case _ => Literal(null)
     }
     val columnNamesToExpressions: Map[String, Expression] =
@@ -228,7 +232,8 @@ case class ResolveDefaultColumns(
       }.getOrElse(action)
     }
     val newNotMatchedActions: Seq[MergeAction] = m.notMatchedActions.map { action: MergeAction =>
-      replaceExplicitDefaultValuesInMergeAction(action, columnNamesToExpressions).map { r =>
+      val expanded = addMissingDefaultValuesForMergeAction(action, m, columnsWithDefaults.toSeq)
+      replaceExplicitDefaultValuesInMergeAction(expanded, columnNamesToExpressions).map { r =>
         replaced = true
         r
       }.getOrElse(action)
@@ -246,6 +251,38 @@ case class ResolveDefaultColumns(
         notMatchedBySourceActions = newNotMatchedBySourceActions)
     } else {
       m
+    }
+  }
+
+  /** Adds a new expressions to a merge action to generate missing default column values. */
+  def addMissingDefaultValuesForMergeAction(
+      action: MergeAction,
+      m: MergeIntoTable,
+      columnNamesWithDefaults: Seq[String]): MergeAction = {
+    action match {
+      case i: InsertAction =>
+        val targetColumns: Set[String] = i.assignments.map(_.key).flatMap { expr =>
+          expr match {
+            case a: AttributeReference => Seq(normalizeFieldName(a.name))
+            case u: UnresolvedAttribute => Seq(u.nameParts.map(normalizeFieldName).mkString("."))
+            case _ => Seq()
+          }
+        }.toSet
+        val targetTable: String = m.targetTable match {
+          case SubqueryAlias(id, _) => id.name
+          case d: DataSourceV2Relation => d.name
+        }
+        val missingColumnNamesWithDefaults = columnNamesWithDefaults.filter { name =>
+          !targetColumns.contains(normalizeFieldName(name)) &&
+            !targetColumns.contains(
+              s"${normalizeFieldName(targetTable)}.${normalizeFieldName(name)}")
+        }
+        val newAssignments: Seq[Assignment] = missingColumnNamesWithDefaults.map { key =>
+          Assignment(UnresolvedAttribute(key), UnresolvedAttribute(CURRENT_DEFAULT_COLUMN_NAME))
+        }
+        i.copy(assignments = i.assignments ++ newAssignments)
+      case _ =>
+        action
     }
   }
 
@@ -547,9 +584,14 @@ case class ResolveDefaultColumns(
         name: String => colNamesToFields.getOrElse(normalizeFieldName(name), return None)
       }
     val userSpecifiedColNames: Set[String] = userSpecifiedCols.toSet
+      .map(normalizeFieldName)
     val nonUserSpecifiedFields: Seq[StructField] =
       schema.fields.filter {
-        field => !userSpecifiedColNames.contains(field.name)
+        field => !userSpecifiedColNames.contains(
+          normalizeFieldName(
+            field.name
+          )
+        )
       }
     Some(StructType(userSpecifiedFields ++
       getStructFieldsForDefaultExpressions(nonUserSpecifiedFields)))
@@ -589,8 +631,10 @@ case class ResolveDefaultColumns(
     resolved.collectFirst {
       case r: UnresolvedCatalogRelation =>
         r.tableMeta.schema
-      case d: DataSourceV2Relation if !d.skipSchemaResolution && !d.isStreaming =>
-        CatalogV2Util.v2ColumnsToStructType(d.table.columns())
+      case DataSourceV2Relation(table: SupportsCustomSchemaWrite, _, _, _, _) =>
+        table.customSchemaForInserts
+      case r: NamedRelation if !r.skipSchemaResolution =>
+        r.schema
       case v: View if v.isTempViewStoringAnalyzedPlan =>
         v.schema
     }
