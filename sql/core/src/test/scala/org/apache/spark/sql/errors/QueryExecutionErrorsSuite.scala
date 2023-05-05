@@ -30,7 +30,7 @@ import org.apache.spark._
 import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.analysis.{Parameter, UnresolvedGenerator}
-import org.apache.spark.sql.catalyst.expressions.{Grouping, Literal}
+import org.apache.spark.sql.catalyst.expressions.{Grouping, Literal, RowNumber}
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 import org.apache.spark.sql.catalyst.expressions.objects.InitializeJavaBean
 import org.apache.spark.sql.catalyst.util.BadRecordException
@@ -140,6 +140,25 @@ class QueryExecutionErrorsSuite
     }
   }
 
+  test("INVALID_PARAMETER_VALUE.AES_SALTED_MAGIC: AES decrypt failure - invalid salt") {
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        sql(
+          """
+            |SELECT aes_decrypt(
+            |  unbase64('INVALID_SALT_ERGxwEOTDpDD4bQvDtQaNe+gXGudCcUk='),
+            |  '0000111122223333',
+            |  'CBC', 'PKCS')
+            |""".stripMargin).collect()
+      },
+      errorClass = "INVALID_PARAMETER_VALUE.AES_SALTED_MAGIC",
+      parameters = Map(
+        "parameter" -> "`expr`",
+        "functionName" -> "`aes_decrypt`",
+        "saltedMagic" -> "0x20D5402C80D200B4"),
+      sqlState = "22023")
+  }
+
   test("UNSUPPORTED_FEATURE: unsupported combinations of AES modes and padding") {
     val key16 = "abcdefghijklmnop"
     val key32 = "abcdefghijklmnop12345678ABCDEFGH"
@@ -157,18 +176,20 @@ class QueryExecutionErrorsSuite
     }
 
     // Unsupported AES mode and padding in encrypt
-    checkUnsupportedMode(df1.selectExpr(s"aes_encrypt(value, '$key16', 'CBC')"),
-      "CBC", "DEFAULT")
+    checkUnsupportedMode(df1.selectExpr(s"aes_encrypt(value, '$key16', 'CBC', 'None')"),
+      "CBC", "None")
     checkUnsupportedMode(df1.selectExpr(s"aes_encrypt(value, '$key16', 'ECB', 'NoPadding')"),
       "ECB", "NoPadding")
 
     // Unsupported AES mode and padding in decrypt
     checkUnsupportedMode(df2.selectExpr(s"aes_decrypt(value16, '$key16', 'GSM')"),
-    "GSM", "DEFAULT")
+      "GSM", "DEFAULT")
     checkUnsupportedMode(df2.selectExpr(s"aes_decrypt(value16, '$key16', 'GCM', 'PKCS')"),
-    "GCM", "PKCS")
+      "GCM", "PKCS")
     checkUnsupportedMode(df2.selectExpr(s"aes_decrypt(value32, '$key32', 'ECB', 'None')"),
-    "ECB", "None")
+      "ECB", "None")
+    checkUnsupportedMode(df2.selectExpr(s"aes_decrypt(value32, '$key32', 'CBC', 'NoPadding')"),
+      "CBC", "NoPadding")
   }
 
   test("UNSUPPORTED_FEATURE: unsupported types (map and struct) in lit()") {
@@ -471,7 +492,7 @@ class QueryExecutionErrorsSuite
     }
   }
 
-  test("UNRECOGNIZED_SQL_TYPE: unrecognized SQL type -100") {
+  test("UNRECOGNIZED_SQL_TYPE: unrecognized SQL type DATALINK") {
     Utils.classForName("org.h2.Driver")
 
     val properties = new Properties()
@@ -481,7 +502,8 @@ class QueryExecutionErrorsSuite
     val url = "jdbc:h2:mem:testdb0"
     val urlWithUserAndPass = "jdbc:h2:mem:testdb0;user=testUser;password=testPass"
     val tableName = "test.table1"
-    val unrecognizedColumnType = -100
+    val unrecognizedColumnType = java.sql.Types.DATALINK
+    val unrecognizedColumnTypeName = "h2" + java.sql.Types.DATALINK.toString
 
     var conn: java.sql.Connection = null
     try {
@@ -518,6 +540,7 @@ class QueryExecutionErrorsSuite
           val resultSetMetaData = mock(classOf[ResultSetMetaData])
           when(resultSetMetaData.getColumnCount).thenReturn(1)
           when(resultSetMetaData.getColumnType(1)).thenReturn(unrecognizedColumnType)
+          when(resultSetMetaData.getColumnTypeName(1)).thenReturn(unrecognizedColumnTypeName)
 
           val resultSet = mock(classOf[ResultSet])
           when(resultSet.next()).thenReturn(true).thenReturn(false)
@@ -545,7 +568,7 @@ class QueryExecutionErrorsSuite
         spark.read.jdbc(urlWithUserAndPass, tableName, new Properties()).collect()
       },
       errorClass = "UNRECOGNIZED_SQL_TYPE",
-      parameters = Map("typeName" -> unrecognizedColumnType.toString),
+      parameters = Map("typeName" -> unrecognizedColumnTypeName, "jdbcType" -> "DATALINK"),
       sqlState = "42704")
 
     JdbcDialects.unregisterDialect(testH2DialectUnrecognizedSQLType)
@@ -833,6 +856,18 @@ class QueryExecutionErrorsSuite
       parameters = Map(
         "message" -> ("""A method named "nonexistent" is not declared in """ +
           "any enclosing class nor any supertype")),
+      sqlState = "XX000")
+  }
+
+  test("INTERNAL_ERROR: Aggregate Window Functions do not support merging") {
+    val e = intercept[SparkException] {
+      RowNumber().mergeExpressions
+    }
+    checkError(
+      exception = e,
+      errorClass = "INTERNAL_ERROR",
+      parameters = Map(
+        "message" -> "The aggregate window function `row_number` does not support merging."),
       sqlState = "XX000")
   }
 }

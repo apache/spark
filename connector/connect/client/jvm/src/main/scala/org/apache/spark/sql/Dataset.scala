@@ -23,13 +23,16 @@ import scala.collection.mutable
 import scala.util.control.NonFatal
 
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.api.java.function._
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
-import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{PrimitiveLongEncoder, ProductEncoder, StringEncoder, UnboundRowEncoder}
+import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders._
 import org.apache.spark.sql.catalyst.expressions.RowOrdering
 import org.apache.spark.sql.connect.client.SparkResult
-import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, StorageLevelProtoConverter}
+import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, StorageLevelProtoConverter, UdfUtils}
+import org.apache.spark.sql.expressions.ScalarUserDefinedFunction
 import org.apache.spark.sql.functions.{struct, to_json}
+import org.apache.spark.sql.streaming.DataStreamWriter
 import org.apache.spark.sql.types.{Metadata, StructType}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.Utils
@@ -1273,6 +1276,35 @@ class Dataset[T] private[sql] (
   }
 
   /**
+   * (Scala-specific) Returns a [[KeyValueGroupedDataset]] where the data is grouped by the given
+   * key `func`.
+   *
+   * @group typedrel
+   * @since 3.5.0
+   */
+  def groupByKey[K: Encoder](func: T => K): KeyValueGroupedDataset[K, T] = {
+    val kEncoder = encoderFor[K]
+    new KeyValueGroupedDatasetImpl[K, T, K, T](
+      this,
+      sparkSession,
+      plan,
+      kEncoder,
+      kEncoder,
+      func,
+      UdfUtils.identical())
+  }
+
+  /**
+   * (Java-specific) Returns a [[KeyValueGroupedDataset]] where the data is grouped by the given
+   * key `func`.
+   *
+   * @group typedrel
+   * @since 3.5.0
+   */
+  def groupByKey[K](func: MapFunction[T, K], encoder: Encoder[K]): KeyValueGroupedDataset[K, T] =
+    groupByKey(UdfUtils.mapFunctionToScalaFunc(func))(encoder)
+
+  /**
    * Create a multi-dimensional rollup for the current Dataset using the specified columns, so we
    * can run aggregation on them. See [[RelationalGroupedDataset]] for all the available aggregate
    * functions.
@@ -2316,6 +2348,24 @@ class Dataset[T] private[sql] (
     dropDuplicates(colNames)
   }
 
+  def dropDuplicatesWithinWatermark(): Dataset[T] = {
+    dropDuplicatesWithinWatermark(this.columns)
+  }
+
+  def dropDuplicatesWithinWatermark(colNames: Seq[String]): Dataset[T] = {
+    throw new UnsupportedOperationException("dropDuplicatesWithinWatermark is not implemented.")
+  }
+
+  def dropDuplicatesWithinWatermark(colNames: Array[String]): Dataset[T] = {
+    dropDuplicatesWithinWatermark(colNames.toSeq)
+  }
+
+  @scala.annotation.varargs
+  def dropDuplicatesWithinWatermark(col1: String, cols: String*): Dataset[T] = {
+    val colNames: Seq[String] = col1 +: cols
+    dropDuplicatesWithinWatermark(colNames)
+  }
+
   /**
    * Computes basic statistics for numeric and string columns, including count, mean, stddev, min,
    * and max. If no columns are given, this function computes statistics for all numerical or
@@ -2467,6 +2517,150 @@ class Dataset[T] private[sql] (
    * @since 3.4.0
    */
   def transform[U](t: Dataset[T] => Dataset[U]): Dataset[U] = t(this)
+
+  /**
+   * (Scala-specific) Returns a new Dataset that only contains elements where `func` returns
+   * `true`.
+   *
+   * @group typedrel
+   * @since 3.5.0
+   */
+  def filter(func: T => Boolean): Dataset[T] = {
+    val udf = ScalarUserDefinedFunction(
+      function = func,
+      inputEncoders = encoder :: Nil,
+      outputEncoder = PrimitiveBooleanEncoder)
+    sparkSession.newDataset[T](encoder) { builder =>
+      builder.getFilterBuilder
+        .setInput(plan.getRoot)
+        .setCondition(udf.apply(col("*")).expr)
+    }
+  }
+
+  /**
+   * (Java-specific) Returns a new Dataset that only contains elements where `func` returns
+   * `true`.
+   *
+   * @group typedrel
+   * @since 3.5.0
+   */
+  def filter(f: FilterFunction[T]): Dataset[T] = {
+    filter(UdfUtils.filterFuncToScalaFunc(f))
+  }
+
+  /**
+   * (Scala-specific) Returns a new Dataset that contains the result of applying `func` to each
+   * element.
+   *
+   * @group typedrel
+   * @since 3.5.0
+   */
+  def map[U: Encoder](f: T => U): Dataset[U] = {
+    mapPartitions(UdfUtils.mapFuncToMapPartitionsAdaptor(f))
+  }
+
+  /**
+   * (Java-specific) Returns a new Dataset that contains the result of applying `func` to each
+   * element.
+   *
+   * @group typedrel
+   * @since 3.5.0
+   */
+  def map[U](f: MapFunction[T, U], encoder: Encoder[U]): Dataset[U] = {
+    map(UdfUtils.mapFunctionToScalaFunc(f))(encoder)
+  }
+
+  /**
+   * (Scala-specific) Returns a new Dataset that contains the result of applying `func` to each
+   * partition.
+   *
+   * @group typedrel
+   * @since 3.5.0
+   */
+  def mapPartitions[U: Encoder](func: Iterator[T] => Iterator[U]): Dataset[U] = {
+    val outputEncoder = encoderFor[U]
+    val udf = ScalarUserDefinedFunction(
+      function = func,
+      inputEncoders = encoder :: Nil,
+      outputEncoder = outputEncoder)
+    sparkSession.newDataset(outputEncoder) { builder =>
+      builder.getMapPartitionsBuilder
+        .setInput(plan.getRoot)
+        .setFunc(udf.apply(col("*")).expr.getCommonInlineUserDefinedFunction)
+    }
+  }
+
+  /**
+   * (Java-specific) Returns a new Dataset that contains the result of applying `f` to each
+   * partition.
+   *
+   * @group typedrel
+   * @since 3.5.0
+   */
+  def mapPartitions[U](f: MapPartitionsFunction[T, U], encoder: Encoder[U]): Dataset[U] = {
+    mapPartitions(UdfUtils.mapPartitionsFuncToScalaFunc(f))(encoder)
+  }
+
+  /**
+   * (Scala-specific) Returns a new Dataset by first applying a function to all elements of this
+   * Dataset, and then flattening the results.
+   *
+   * @group typedrel
+   * @since 3.5.0
+   */
+  def flatMap[U: Encoder](func: T => TraversableOnce[U]): Dataset[U] =
+    mapPartitions(UdfUtils.flatMapFuncToMapPartitionsAdaptor(func))
+
+  /**
+   * (Java-specific) Returns a new Dataset by first applying a function to all elements of this
+   * Dataset, and then flattening the results.
+   *
+   * @group typedrel
+   * @since 3.5.0
+   */
+  def flatMap[U](f: FlatMapFunction[T, U], encoder: Encoder[U]): Dataset[U] = {
+    flatMap(UdfUtils.flatMapFuncToScalaFunc(f))(encoder)
+  }
+
+  /**
+   * Applies a function `f` to all rows.
+   *
+   * @group action
+   * @since 3.5.0
+   */
+  def foreach(f: T => Unit): Unit = {
+    foreachPartition(UdfUtils.foreachFuncToForeachPartitionsAdaptor(f))
+  }
+
+  /**
+   * (Java-specific) Runs `func` on each element of this Dataset.
+   *
+   * @group action
+   * @since 3.5.0
+   */
+  def foreach(func: ForeachFunction[T]): Unit = foreach(UdfUtils.foreachFuncToScalaFunc(func))
+
+  /**
+   * Applies a function `f` to each partition of this Dataset.
+   *
+   * @group action
+   * @since 3.5.0
+   */
+  def foreachPartition(f: Iterator[T] => Unit): Unit = {
+    // Delegate to mapPartition with empty result.
+    mapPartitions(UdfUtils.foreachPartitionFuncToMapPartitionsAdaptor(f))(RowEncoder(Seq.empty))
+      .collect()
+  }
+
+  /**
+   * (Java-specific) Runs `func` on each partition of this Dataset.
+   *
+   * @group action
+   * @since 3.5.0
+   */
+  def foreachPartition(func: ForeachPartitionFunction[T]): Unit = {
+    foreachPartition(UdfUtils.foreachPartitionFuncToScalaFunc(func))
+  }
 
   /**
    * Returns the first `n` rows in the Dataset.
@@ -2772,6 +2966,16 @@ class Dataset[T] private[sql] (
   }
 
   /**
+   * Interface for saving the content of the streaming Dataset out into external storage.
+   *
+   * @group basic
+   * @since 3.5.0
+   */
+  def writeStream: DataStreamWriter[T] = {
+    new DataStreamWriter[T](this)
+  }
+
+  /**
    * Persist this Dataset with the default storage level (`MEMORY_AND_DISK`).
    *
    * @group basic
@@ -2853,20 +3057,41 @@ class Dataset[T] private[sql] (
         .getStorageLevel)
   }
 
+  /**
+   * Defines an event time watermark for this [[Dataset]]. A watermark tracks a point in time
+   * before which we assume no more late data is going to arrive.
+   *
+   * Spark will use this watermark for several purposes: <ul> <li>To know when a given time window
+   * aggregation can be finalized and thus can be emitted when using output modes that do not
+   * allow updates.</li> <li>To minimize the amount of state that we need to keep for on-going
+   * aggregations, `mapGroupsWithState` and `dropDuplicates` operators.</li> </ul> The current
+   * watermark is computed by looking at the `MAX(eventTime)` seen across all of the partitions in
+   * the query minus a user specified `delayThreshold`. Due to the cost of coordinating this value
+   * across partitions, the actual watermark used is only guaranteed to be at least
+   * `delayThreshold` behind the actual event time. In some cases we may still process records
+   * that arrive more than `delayThreshold` late.
+   *
+   * @param eventTime
+   *   the name of the column that contains the event time of the row.
+   * @param delayThreshold
+   *   the minimum delay to wait to data to arrive late, relative to the latest record that has
+   *   been processed in the form of an interval (e.g. "1 minute" or "5 hours"). NOTE: This should
+   *   not be negative.
+   *
+   * @group streaming
+   * @since 3.5.0
+   */
   def withWatermark(eventTime: String, delayThreshold: String): Dataset[T] = {
-    throw new UnsupportedOperationException("withWatermark is not implemented.")
+    sparkSession.newDataset(encoder) { builder =>
+      builder.getWithWatermarkBuilder
+        .setInput(plan.getRoot)
+        .setEventTime(eventTime)
+        .setDelayThreshold(delayThreshold)
+    }
   }
 
   def observe(name: String, expr: Column, exprs: Column*): Dataset[T] = {
     throw new UnsupportedOperationException("observe is not implemented.")
-  }
-
-  def foreach(f: T => Unit): Unit = {
-    throw new UnsupportedOperationException("foreach is not implemented.")
-  }
-
-  def foreachPartition(f: Iterator[T] => Unit): Unit = {
-    throw new UnsupportedOperationException("foreach is not implemented.")
   }
 
   def checkpoint(): Dataset[T] = {

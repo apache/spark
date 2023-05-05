@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch,
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.trees.{BinaryLike, TernaryLike, UnaryLike}
+import org.apache.spark.sql.catalyst.types.PhysicalDataType
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types._
@@ -154,12 +155,7 @@ abstract class PercentileBase
       return Seq.empty
     }
 
-    val ordering = child.dataType match {
-      case numericType: NumericType => numericType.ordering
-      case intervalType: YearMonthIntervalType => intervalType.ordering
-      case intervalType: DayTimeIntervalType => intervalType.ordering
-      case otherType => QueryExecutionErrors.unsupportedTypeError(otherType)
-    }
+    val ordering = PhysicalDataType.ordering(child.dataType)
     val sortedCounts = if (reverse) {
       buffer.toSeq.sortBy(_._1)(ordering.asInstanceOf[Ordering[AnyRef]].reverse)
     } else {

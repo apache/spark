@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, EliminateSubqueryAliases, FieldName, NamedRelation, PartitionSpec, ResolvedIdentifier, UnresolvedException}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, AssignmentUtils, EliminateSubqueryAliases, FieldName, NamedRelation, PartitionSpec, ResolvedIdentifier, UnresolvedException}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.catalog.FunctionResource
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSet, Expression, MetadataAttribute, NamedExpression, Unevaluable, V2ExpressionUtils}
@@ -389,11 +389,46 @@ case class WriteDelta(
   }
 }
 
+trait V2CreateTableAsSelectPlan extends V2CreateTablePlan with AnalysisOnlyCommand {
+  def query: LogicalPlan
+
+  override lazy val resolved: Boolean = childrenResolved && {
+    // the table schema is created from the query schema, so the only resolution needed is to check
+    // that the columns referenced by the table's partitioning exist in the query schema
+    val references = partitioning.flatMap(_.references).toSet
+    references.map(_.fieldNames).forall(query.schema.findNestedField(_).isDefined)
+  }
+
+  override def childrenToAnalyze: Seq[LogicalPlan] = Seq(name, query)
+
+  override def tableSchema: StructType = query.schema
+
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[LogicalPlan]): V2CreateTableAsSelectPlan = {
+    assert(!isAnalyzed)
+    newChildren match {
+      case Seq(newName, newQuery) =>
+        withNameAndQuery(newName, newQuery)
+      case others =>
+        throw new IllegalArgumentException("Must be 2 children: " + others)
+    }
+  }
+
+  protected def withNameAndQuery(
+      newName: LogicalPlan,
+      newQuery: LogicalPlan): V2CreateTableAsSelectPlan
+}
+
 /** A trait used for logical plan nodes that create or replace V2 table definitions. */
 trait V2CreateTablePlan extends LogicalPlan {
-  def tableName: Identifier
+  def name: LogicalPlan
   def partitioning: Seq[Transform]
   def tableSchema: StructType
+
+  def tableName: Identifier = {
+    assert(name.resolved)
+    name.asInstanceOf[ResolvedIdentifier].identifier
+  }
 
   /**
    * Creates a copy of this node with the new partitioning transforms. This method is used to
@@ -414,11 +449,6 @@ case class CreateTable(
 
   override def child: LogicalPlan = name
 
-  override def tableName: Identifier = {
-    assert(child.resolved)
-    child.asInstanceOf[ResolvedIdentifier].identifier
-  }
-
   override protected def withNewChildInternal(newChild: LogicalPlan): V2CreateTablePlan =
     copy(name = newChild)
 
@@ -437,36 +467,20 @@ case class CreateTableAsSelect(
     tableSpec: TableSpec,
     writeOptions: Map[String, String],
     ignoreIfExists: Boolean,
-    analyzedQuery: Option[LogicalPlan] = None)
-  extends BinaryCommand with V2CreateTablePlan with KeepAnalyzedQuery {
+    isAnalyzed: Boolean = false)
+  extends V2CreateTableAsSelectPlan {
 
-  override def tableSchema: StructType = query.schema
-  override def left: LogicalPlan = name
-  override def right: LogicalPlan = query
-
-  override def tableName: Identifier = {
-    assert(left.resolved)
-    left.asInstanceOf[ResolvedIdentifier].identifier
-  }
-
-  override lazy val resolved: Boolean = childrenResolved && {
-    // the table schema is created from the query schema, so the only resolution needed is to check
-    // that the columns referenced by the table's partitioning exist in the query schema
-    val references = partitioning.flatMap(_.references).toSet
-    references.map(_.fieldNames).forall(query.schema.findNestedField(_).isDefined)
-  }
+  override def markAsAnalyzed(ac: AnalysisContext): LogicalPlan = copy(isAnalyzed = true)
 
   override def withPartitioning(rewritten: Seq[Transform]): V2CreateTablePlan = {
     this.copy(partitioning = rewritten)
   }
 
-  override def storeAnalyzedQuery(): Command = copy(analyzedQuery = Some(query))
-
-  override protected def withNewChildrenInternal(
-    newLeft: LogicalPlan,
-    newRight: LogicalPlan
-  ): CreateTableAsSelect =
-    copy(name = newLeft, query = newRight)
+  override protected def withNameAndQuery(
+      newName: LogicalPlan,
+      newQuery: LogicalPlan): CreateTableAsSelect = {
+    copy(name = newName, query = newQuery)
+  }
 }
 
 /**
@@ -485,11 +499,6 @@ case class ReplaceTable(
     orCreate: Boolean) extends UnaryCommand with V2CreateTablePlan {
 
   override def child: LogicalPlan = name
-
-  override def tableName: Identifier = {
-    assert(child.resolved)
-    child.asInstanceOf[ResolvedIdentifier].identifier
-  }
 
   override protected def withNewChildInternal(newChild: LogicalPlan): V2CreateTablePlan =
     copy(name = newChild)
@@ -512,34 +521,19 @@ case class ReplaceTableAsSelect(
     tableSpec: TableSpec,
     writeOptions: Map[String, String],
     orCreate: Boolean,
-    analyzedQuery: Option[LogicalPlan] = None)
-  extends BinaryCommand with V2CreateTablePlan with KeepAnalyzedQuery {
+    isAnalyzed: Boolean = false)
+  extends V2CreateTableAsSelectPlan {
 
-  override def tableSchema: StructType = query.schema
-  override def left: LogicalPlan = name
-  override def right: LogicalPlan = query
-
-  override lazy val resolved: Boolean = childrenResolved && {
-    // the table schema is created from the query schema, so the only resolution needed is to check
-    // that the columns referenced by the table's partitioning exist in the query schema
-    val references = partitioning.flatMap(_.references).toSet
-    references.map(_.fieldNames).forall(query.schema.findNestedField(_).isDefined)
-  }
-
-  override def tableName: Identifier = {
-    assert(name.resolved)
-    name.asInstanceOf[ResolvedIdentifier].identifier
-  }
-
-  override def storeAnalyzedQuery(): Command = copy(analyzedQuery = Some(query))
-
-  override protected def withNewChildrenInternal(
-      newLeft: LogicalPlan,
-      newRight: LogicalPlan): LogicalPlan =
-    copy(name = newLeft, query = newRight)
+  override def markAsAnalyzed(ac: AnalysisContext): LogicalPlan = copy(isAnalyzed = true)
 
   override def withPartitioning(rewritten: Seq[Transform]): V2CreateTablePlan = {
     this.copy(partitioning = rewritten)
+  }
+
+  override protected def withNameAndQuery(
+      newName: LogicalPlan,
+      newQuery: LogicalPlan): ReplaceTableAsSelect = {
+    copy(name = newName, query = newQuery)
   }
 }
 
@@ -690,6 +684,9 @@ case class UpdateTable(
     table: LogicalPlan,
     assignments: Seq[Assignment],
     condition: Option[Expression]) extends UnaryCommand with SupportsSubquery {
+
+  lazy val aligned: Boolean = AssignmentUtils.aligned(table.output, assignments)
+
   override def child: LogicalPlan = table
   override protected def withNewChildInternal(newChild: LogicalPlan): UpdateTable =
     copy(table = newChild)
@@ -711,6 +708,21 @@ case class MergeIntoTable(
     matchedActions: Seq[MergeAction],
     notMatchedActions: Seq[MergeAction],
     notMatchedBySourceActions: Seq[MergeAction]) extends BinaryCommand with SupportsSubquery {
+
+  lazy val aligned: Boolean = {
+    val actions = matchedActions ++ notMatchedActions ++ notMatchedBySourceActions
+    actions.forall {
+      case UpdateAction(_, assignments) =>
+        AssignmentUtils.aligned(targetTable.output, assignments)
+      case _: DeleteAction =>
+        true
+      case InsertAction(_, assignments) =>
+        AssignmentUtils.aligned(targetTable.output, assignments)
+      case _ =>
+        false
+    }
+  }
+
   def duplicateResolved: Boolean = targetTable.outputSet.intersect(sourceTable.outputSet).isEmpty
 
   def skipSchemaResolution: Boolean = targetTable match {
@@ -784,6 +796,7 @@ case class Assignment(key: Expression, value: Expression) extends Expression
   override def dataType: DataType = throw new UnresolvedException("nullable")
   override def left: Expression = key
   override def right: Expression = value
+  override def sql: String = s"${key.sql} = ${value.sql}"
   override protected def withNewChildrenInternal(
     newLeft: Expression, newRight: Expression): Assignment = copy(key = newLeft, value = newRight)
 }

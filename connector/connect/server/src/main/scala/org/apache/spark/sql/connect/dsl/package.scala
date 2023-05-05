@@ -596,6 +596,17 @@ package object dsl {
               .addAllColumnNames(colNames.asJava))
           .build()
 
+      def deduplicateWithinWatermark(colNames: Seq[String]): Relation =
+        Relation
+          .newBuilder()
+          .setDeduplicate(
+            Deduplicate
+              .newBuilder()
+              .setInput(logicalPlan)
+              .addAllColumnNames(colNames.asJava)
+              .setWithinWatermark(true))
+          .build()
+
       def distinct(): Relation =
         Relation
           .newBuilder()

@@ -113,21 +113,24 @@ def determine_modules_to_test(changed_modules, deduplicated=True):
     ... # doctest: +NORMALIZE_WHITESPACE
     ['avro', 'connect', 'docker-integration-tests', 'examples', 'hive', 'hive-thriftserver',
      'mllib', 'protobuf', 'pyspark-connect', 'pyspark-ml', 'pyspark-mllib', 'pyspark-pandas',
-     'pyspark-pandas-slow', 'pyspark-sql', 'repl', 'sparkr', 'sql', 'sql-kafka-0-10']
+     'pyspark-pandas-connect', 'pyspark-pandas-slow', 'pyspark-sql', 'repl', 'sparkr', 'sql',
+     'sql-kafka-0-10']
     >>> sorted([x.name for x in determine_modules_to_test(
     ...     [modules.sparkr, modules.sql], deduplicated=False)])
     ... # doctest: +NORMALIZE_WHITESPACE
     ['avro', 'connect', 'docker-integration-tests', 'examples', 'hive', 'hive-thriftserver',
      'mllib', 'protobuf', 'pyspark-connect', 'pyspark-ml', 'pyspark-mllib', 'pyspark-pandas',
-     'pyspark-pandas-slow', 'pyspark-sql', 'repl', 'sparkr', 'sql', 'sql-kafka-0-10']
+     'pyspark-pandas-connect', 'pyspark-pandas-slow', 'pyspark-sql', 'repl', 'sparkr', 'sql',
+     'sql-kafka-0-10']
     >>> sorted([x.name for x in determine_modules_to_test(
     ...     [modules.sql, modules.core], deduplicated=False)])
     ... # doctest: +NORMALIZE_WHITESPACE
     ['avro', 'catalyst', 'connect', 'core', 'docker-integration-tests', 'examples', 'graphx',
      'hive', 'hive-thriftserver', 'mllib', 'mllib-local', 'protobuf', 'pyspark-connect',
-     'pyspark-core', 'pyspark-ml', 'pyspark-mllib', 'pyspark-pandas', 'pyspark-pandas-slow',
-     'pyspark-resource', 'pyspark-sql', 'pyspark-streaming', 'repl', 'root', 'sparkr', 'sql',
-     'sql-kafka-0-10', 'streaming', 'streaming-kafka-0-10', 'streaming-kinesis-asl']
+     'pyspark-core', 'pyspark-ml', 'pyspark-mllib', 'pyspark-pandas', 'pyspark-pandas-connect',
+     'pyspark-pandas-slow', 'pyspark-resource', 'pyspark-sql', 'pyspark-streaming', 'repl', 'root',
+     'sparkr', 'sql', 'sql-kafka-0-10', 'streaming', 'streaming-kafka-0-10',
+     'streaming-kinesis-asl']
     """
     modules_to_test = set()
     for module in changed_modules:

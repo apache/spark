@@ -26,6 +26,7 @@ from typing import cast
 import io
 from contextlib import redirect_stdout
 
+from pyspark import StorageLevel
 from pyspark.sql import SparkSession, Row
 from pyspark.sql.functions import col, lit, count, sum, mean, struct
 from pyspark.sql.pandas.utils import pyarrow_version_less_than_minimum
@@ -938,6 +939,9 @@ class DataFrameTestsMixin:
                 nonlocal observed_metrics
                 observed_metrics = event.progress.observedMetrics
 
+            def onQueryIdle(self, event):
+                pass
+
             def onQueryTerminated(self, event):
                 pass
 
@@ -1006,7 +1010,7 @@ class DataFrameTestsMixin:
         # field types mismatch will cause exception at runtime.
         self.assertRaisesRegex(
             Exception,
-            "FloatType\\(\\) can not accept",
+            "CANNOT_ACCEPT_OBJECT_IN_TYPE",
             lambda: rdd.toDF("key: float, value: string").collect(),
         )
 
@@ -1019,6 +1023,23 @@ class DataFrameTestsMixin:
         df = rdd.map(lambda row: row.key).toDF(IntegerType())
         self.assertEqual(df.schema.simpleString(), "struct<value:int>")
         self.assertEqual(df.collect(), [Row(key=i) for i in range(100)])
+
+    def test_print_schema(self):
+        df = self.spark.createDataFrame([(1, (2, 2))], ["a", "b"])
+
+        with io.StringIO() as buf, redirect_stdout(buf):
+            df.printSchema(1)
+            self.assertEqual(1, buf.getvalue().count("long"))
+            self.assertEqual(0, buf.getvalue().count("_1"))
+            self.assertEqual(0, buf.getvalue().count("_2"))
+
+            buf.truncate(0)
+            buf.seek(0)
+
+            df.printSchema(2)
+            self.assertEqual(3, buf.getvalue().count("long"))
+            self.assertEqual(1, buf.getvalue().count("_1"))
+            self.assertEqual(1, buf.getvalue().count("_2"))
 
     def test_join_without_on(self):
         df1 = self.spark.range(1).toDF("a")
@@ -1076,21 +1097,26 @@ class DataFrameTestsMixin:
 
     def test_cache_table(self):
         spark = self.spark
-        with self.tempView("tab1", "tab2"):
-            spark.createDataFrame([(2, 2), (3, 3)]).createOrReplaceTempView("tab1")
-            spark.createDataFrame([(2, 4), (3, 4)]).createOrReplaceTempView("tab2")
-            self.assertFalse(spark.catalog.isCached("tab1"))
-            self.assertFalse(spark.catalog.isCached("tab2"))
+        tables = ["tab1", "tab2", "tab3"]
+        with self.tempView(*tables):
+            for i, tab in enumerate(tables):
+                spark.createDataFrame([(2, i), (3, i)]).createOrReplaceTempView(tab)
+                self.assertFalse(spark.catalog.isCached(tab))
             spark.catalog.cacheTable("tab1")
+            spark.catalog.cacheTable("tab3", StorageLevel.OFF_HEAP)
             self.assertTrue(spark.catalog.isCached("tab1"))
             self.assertFalse(spark.catalog.isCached("tab2"))
+            self.assertTrue(spark.catalog.isCached("tab3"))
             spark.catalog.cacheTable("tab2")
             spark.catalog.uncacheTable("tab1")
+            spark.catalog.uncacheTable("tab3")
             self.assertFalse(spark.catalog.isCached("tab1"))
             self.assertTrue(spark.catalog.isCached("tab2"))
+            self.assertFalse(spark.catalog.isCached("tab3"))
             spark.catalog.clearCache()
             self.assertFalse(spark.catalog.isCached("tab1"))
             self.assertFalse(spark.catalog.isCached("tab2"))
+            self.assertFalse(spark.catalog.isCached("tab3"))
             self.assertRaisesRegex(
                 AnalysisException,
                 "does_not_exist",
@@ -1428,7 +1454,8 @@ class DataFrameTestsMixin:
                 os.environ["TZ"] = orig_env_tz
             time.tzset()
 
-    @unittest.skipIf(not have_pandas, pandas_requirement_message)  # type: ignore
+    # TODO(SPARK-43354): Re-enable test_create_dataframe_from_pandas_with_day_time_interval
+    @unittest.skip("Fails in PyPy Python 3.8, should enable.")
     def test_create_dataframe_from_pandas_with_day_time_interval(self):
         # SPARK-37277: Test DayTimeIntervalType in createDataFrame without Arrow.
         import pandas as pd
@@ -1699,6 +1726,30 @@ class DataFrameTestsMixin:
             error_class="NOT_COLUMN_OR_STR",
             message_parameters={"arg_name": "condition", "arg_type": "int"},
         )
+
+    def test_duplicate_field_names(self):
+        data = [
+            Row(Row("a", 1), Row(2, 3, "b", 4, "c", "d")),
+            Row(Row("w", 6), Row(7, 8, "x", 9, "y", "z")),
+        ]
+        schema = (
+            StructType()
+            .add("struct", StructType().add("x", StringType()).add("x", IntegerType()))
+            .add(
+                "struct",
+                StructType()
+                .add("a", IntegerType())
+                .add("x", IntegerType())
+                .add("x", StringType())
+                .add("y", IntegerType())
+                .add("y", StringType())
+                .add("x", StringType()),
+            )
+        )
+        df = self.spark.createDataFrame(data, schema=schema)
+
+        self.assertEqual(df.schema, schema)
+        self.assertEqual(df.collect(), data)
 
 
 class QueryExecutionListenerTests(unittest.TestCase, SQLTestUtils):

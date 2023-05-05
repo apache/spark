@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.internal
 
-import java.util.{Locale, NoSuchElementException, Properties, TimeZone}
+import java.util.{Locale, Properties, TimeZone}
 import java.util
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
@@ -1740,8 +1740,9 @@ object SQLConf {
 
   val FILES_MIN_PARTITION_NUM = buildConf("spark.sql.files.minPartitionNum")
     .doc("The suggested (not guaranteed) minimum number of split file partitions. " +
-      "If not set, the default value is `spark.default.parallelism`. This configuration is " +
-      "effective only when using file-based sources such as Parquet, JSON and ORC.")
+      s"If not set, the default value is `${LEAF_NODE_DEFAULT_PARALLELISM.key}`. " +
+      "This configuration is effective only when using file-based sources " +
+      "such as Parquet, JSON and ORC.")
     .version("3.1.0")
     .intConf
     .checkValue(v => v > 0, "The min partition number must be a positive integer.")
@@ -1805,6 +1806,13 @@ object SQLConf {
     .internal()
     .doc("Whether to replace hash aggregate node with sort aggregate based on children's ordering")
     .version("3.3.0")
+    .booleanConf
+    .createWithDefault(false)
+
+  val USE_PARTITION_EVALUATOR = buildConf("spark.sql.execution.usePartitionEvaluator")
+    .internal()
+    .doc("When true, use PartitionEvaluator to execute SQL operators.")
+    .version("3.5.0")
     .booleanConf
     .createWithDefault(false)
 
@@ -2428,7 +2436,7 @@ object SQLConf {
   val STREAMING_NO_DATA_PROGRESS_EVENT_INTERVAL =
     buildConf("spark.sql.streaming.noDataProgressEventInterval")
       .internal()
-      .doc("How long to wait between two progress events when there is no data")
+      .doc("How long to wait before providing query idle event when there is no data")
       .version("2.1.1")
       .timeConf(TimeUnit.MILLISECONDS)
       .createWithDefault(10000L)
@@ -2826,6 +2834,23 @@ object SQLConf {
         "pipelined; however, it might degrade performance. See SPARK-27870.")
       .version("3.0.0")
       .fallbackConf(BUFFER_SIZE)
+
+  val PANDAS_STRUCT_HANDLING_MODE =
+    buildConf("spark.sql.execution.pandas.structHandlingMode")
+      .doc(
+        "The conversion mode of struct type when creating pandas DataFrame. " +
+        "When \"legacy\"," +
+        "1. when Arrow optimization is disabled, convert to Row object, " +
+        "2. when Arrow optimization is enabled, convert to dict or raise an Exception " +
+        "if there are duplicated nested field names. " +
+        "When \"row\", convert to Row object regardless of Arrow optimization. " +
+        "When \"dict\", convert to dict and use suffixed key names, e.g., a_0, a_1, " +
+        "if there are duplicated nested field names, regardless of Arrow optimization."
+      )
+      .version("3.5.0")
+      .stringConf
+      .checkValues(Set("legacy", "row", "dict"))
+      .createWithDefaultString("legacy")
 
   val PYSPARK_SIMPLIFIED_TRACEBACK =
     buildConf("spark.sql.execution.pyspark.udf.simplifiedTraceback.enabled")
@@ -3243,6 +3268,15 @@ object SQLConf {
       .version("3.4.0")
       .booleanConf
       .createWithDefault(true)
+
+  val DECORRELATE_SUBQUERY_LEGACY_INCORRECT_COUNT_HANDLING_ENABLED =
+    buildConf("spark.sql.optimizer.decorrelateSubqueryLegacyIncorrectCountHandling.enabled")
+      .internal()
+      .doc("If enabled, revert to legacy incorrect behavior for certain subqueries with COUNT or " +
+        "similar aggregates: see SPARK-43098.")
+      .version("3.5.0")
+      .booleanConf
+      .createWithDefault(false)
 
   val OPTIMIZE_ONE_ROW_RELATION_SUBQUERY =
     buildConf("spark.sql.optimizer.optimizeOneRowRelationSubquery")
@@ -4195,6 +4229,15 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val LOCAL_RELATION_CACHE_THRESHOLD =
+    buildConf("spark.sql.session.localRelationCacheThreshold")
+      .doc("The threshold for the size in bytes of local relations to be cached at " +
+        "the driver side after serialization.")
+      .version("3.5.0")
+      .intConf
+      .checkValue(_ >= 0, "The threshold of cached local relations must not be negative")
+      .createWithDefault(64 * 1024 * 1024)
+
   /**
    * Holds information about keys that have been deprecated.
    *
@@ -4829,6 +4872,8 @@ class SQLConf extends Serializable with Logging {
 
   def pandasUDFBufferSize: Int = getConf(PANDAS_UDF_BUFFER_SIZE)
 
+  def pandasStructHandlingMode: String = getConf(PANDAS_STRUCT_HANDLING_MODE)
+
   def pysparkSimplifiedTraceback: Boolean = getConf(PYSPARK_SIMPLIFIED_TRACEBACK)
 
   def pandasGroupedMapAssignColumnsByName: Boolean =
@@ -5028,6 +5073,8 @@ class SQLConf extends Serializable with Logging {
   def allowsTempViewCreationWithMultipleNameparts: Boolean =
     getConf(SQLConf.ALLOW_TEMP_VIEW_CREATION_WITH_MULTIPLE_NAME_PARTS)
 
+  def usePartitionEvaluator: Boolean = getConf(SQLConf.USE_PARTITION_EVALUATOR)
+
   /** ********************** SQLConf functionality methods ************ */
 
   /** Set Spark SQL configuration properties. */
@@ -5063,7 +5110,7 @@ class SQLConf extends Serializable with Logging {
         // Try to use the default value
         Option(getConfigEntry(key)).map { e => e.stringConverter(e.readFrom(reader)) }
       }.
-      getOrElse(throw QueryExecutionErrors.noSuchElementExceptionError(key))
+      getOrElse(throw QueryExecutionErrors.sqlConfigNotFoundError(key))
   }
 
   /**

@@ -23,8 +23,9 @@ import numpy as np
 import pandas as pd
 from pandas.api.types import CategoricalDtype
 
-from pyspark.sql import functions as F, Column
+from pyspark.sql import functions as F, Column as PySparkColumn
 from pyspark.sql.types import BooleanType, DateType, StringType
+from pyspark.sql.utils import is_remote
 
 from pyspark.pandas._typing import Dtype, IndexOpsLike, SeriesOrIndex
 from pyspark.pandas.base import column_op, IndexOpsMixin
@@ -84,25 +85,49 @@ class DateOps(DataTypeOps):
         from pyspark.pandas.base import column_op
 
         _sanitize_list_like(right)
-        return column_op(Column.__lt__)(left, right)
+        if is_remote():
+            from pyspark.sql.connect.column import Column as ConnectColumn
+
+            Column = ConnectColumn
+        else:
+            Column = PySparkColumn  # type: ignore[assignment]
+        return column_op(Column.__lt__)(left, right)  # type: ignore[arg-type]
 
     def le(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         from pyspark.pandas.base import column_op
 
         _sanitize_list_like(right)
-        return column_op(Column.__le__)(left, right)
+        if is_remote():
+            from pyspark.sql.connect.column import Column as ConnectColumn
+
+            Column = ConnectColumn
+        else:
+            Column = PySparkColumn  # type: ignore[assignment]
+        return column_op(Column.__le__)(left, right)  # type: ignore[arg-type]
 
     def ge(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         from pyspark.pandas.base import column_op
 
         _sanitize_list_like(right)
-        return column_op(Column.__ge__)(left, right)
+        if is_remote():
+            from pyspark.sql.connect.column import Column as ConnectColumn
+
+            Column = ConnectColumn
+        else:
+            Column = PySparkColumn  # type: ignore[assignment]
+        return column_op(Column.__ge__)(left, right)  # type: ignore[arg-type]
 
     def gt(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         from pyspark.pandas.base import column_op
 
         _sanitize_list_like(right)
-        return column_op(Column.__gt__)(left, right)
+        if is_remote():
+            from pyspark.sql.connect.column import Column as ConnectColumn
+
+            Column = ConnectColumn
+        else:
+            Column = PySparkColumn  # type: ignore[assignment]
+        return column_op(Column.__gt__)(left, right)  # type: ignore[arg-type]
 
     def astype(self, index_ops: IndexOpsLike, dtype: Union[str, type, Dtype]) -> IndexOpsLike:
         dtype, spark_type = pandas_on_spark_type(dtype)

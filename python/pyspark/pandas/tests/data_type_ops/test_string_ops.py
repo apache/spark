@@ -30,7 +30,7 @@ if extension_object_dtypes_available:
     from pandas import StringDtype
 
 
-class StringOpsTest(OpsTestBase):
+class StringOpsTestsMixin:
     @property
     def bool_pdf(self):
         return pd.DataFrame({"this": ["x", "y", "z"], "that": ["z", "y", "x"]})
@@ -233,10 +233,14 @@ class StringOpsTest(OpsTestBase):
         self.assert_eq(pser >= pser, psser >= psser)
 
 
+class StringOpsTests(StringOpsTestsMixin, OpsTestBase):
+    pass
+
+
 @unittest.skipIf(
     not extension_object_dtypes_available, "pandas extension object dtypes are not available"
 )
-class StringExtensionOpsTest(StringOpsTest):
+class StringExtensionOpsTest(StringOpsTests):
     @property
     def pser(self):
         return pd.Series(["x", "y", "z", None], dtype="string")

@@ -1044,8 +1044,8 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
   test("SPARK-38336 INSERT INTO statements with tables with default columns: negative tests") {
     object Errors {
       val COMMON_SUBSTRING = " has a DEFAULT value"
-      val COLUMN_DEFAULT_NOT_FOUND = "`default` cannot be resolved."
       val BAD_SUBQUERY = "subquery expressions are not allowed in DEFAULT values"
+      val TARGET_TABLE_NOT_FOUND = "The table or view `t` cannot be found"
     }
     // The default value fails to analyze.
     withTable("t") {
@@ -1096,7 +1096,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
     withTable("t") {
       assert(intercept[AnalysisException] {
         sql("insert into t values(false, default)")
-      }.getMessage.contains(Errors.COLUMN_DEFAULT_NOT_FOUND))
+      }.getMessage.contains(Errors.TARGET_TABLE_NOT_FOUND))
     }
     // The default value parses but the type is not coercible.
     withTable("t") {
@@ -1982,6 +1982,40 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         }
       }
     }
+  }
+
+  test("SPARK-43071: INSERT INTO from queries whose final operators are not projections") {
+    def runTest(insert: String, expected: Seq[Row]): Unit = {
+      withTable("t1", "t2") {
+        sql("create table t1(i boolean, s bigint default 42) using parquet")
+        sql("insert into t1 values (true, 41), (false, default)")
+        sql("create table t2(i boolean default true, s bigint default 42, " +
+          "t string default 'abc') using parquet")
+        sql(insert)
+        checkAnswer(spark.table("t2"), expected)
+      }
+    }
+    def expectFail(insert: String): Unit = {
+      withTable("t1", "t2") {
+        sql("create table t1(i boolean, s bigint default 42) using parquet")
+        sql("insert into t1 values (true, 41), (false, default)")
+        sql("create table t2(i boolean default true, s bigint default 42, " +
+          "t string default 'abc') using parquet")
+        assert(intercept[AnalysisException](sql(insert)).errorClass.get.startsWith(
+          "UNRESOLVED_COLUMN"))
+      }
+    }
+    // The DEFAULT references in these query patterns are detected and replaced.
+    runTest("insert into t2 (i, s) select default, s from t1 order by s limit 1",
+      Seq(Row(true, 41L, "abc")))
+    runTest("insert into t2 (i, s) select default, s from t1 order by s limit 1 offset 1",
+      Seq(Row(true, 42L, "abc")))
+    runTest("insert into t2 (i, s) select default, default from t1 inner join t1 using (i, s)",
+      Seq(Row(true, 42L, "abc"),
+        Row(true, 42L, "abc")))
+    // The DEFAULT references in these query patterns are not detected.
+    expectFail("insert into t2 (i, s) select default, 41L union all select default, 42L")
+    expectFail("insert into t2 (i, s) select default, min(s) from t1 group by i")
   }
 
   test("Stop task set if FileAlreadyExistsException was thrown") {

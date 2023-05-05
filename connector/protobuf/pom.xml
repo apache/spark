@@ -82,6 +82,12 @@
       <version>${protobuf.version}</version>
       <scope>compile</scope>
     </dependency>
+    <dependency>
+      <groupId>com.google.protobuf</groupId>
+      <artifactId>protobuf-java-util</artifactId>
+      <version>${protobuf.version}</version>
+      <scope>compile</scope>
+    </dependency>
   </dependencies>
   <build>
     <outputDirectory>target/scala-${scala.binary.version}/classes</outputDirectory>
@@ -92,7 +98,7 @@
         <artifactId>maven-shade-plugin</artifactId>
         <configuration>
           <shadedArtifactAttached>false</shadedArtifactAttached>
-          <shadeTestJar>true</shadeTestJar>
+          <shadeTestJar>false</shadeTestJar>
           <artifactSet>
             <includes>
               <include>com.google.protobuf:*</include>
@@ -145,6 +151,7 @@
                     <include>src/test/resources/protobuf</include>
                   </inputDirectories>
                   <addSources>test</addSources>
+                  <includeStdTypes>true</includeStdTypes>
                 </configuration>
               </execution>
             </executions>

@@ -31,9 +31,9 @@ def normalize_text(s):
     return "\n".join(map(str.strip, s.strip().split("\n")))
 
 
-class CsvTest(PandasOnSparkTestCase, TestUtils):
+class CsvTestsMixin:
     def setUp(self):
-        self.tmp_dir = tempfile.mkdtemp(prefix=CsvTest.__name__)
+        self.tmp_dir = tempfile.mkdtemp(prefix=CsvTests.__name__)
 
     def tearDown(self):
         shutil.rmtree(self.tmp_dir, ignore_errors=True)
@@ -428,6 +428,10 @@ class CsvTest(PandasOnSparkTestCase, TestUtils):
             output_path = "%s/%s/%s" % (self.tmp_dir, partition_path, output_paths[0])
             with open(output_path) as f:
                 self.assertEqual(f.read(), expected)
+
+
+class CsvTests(CsvTestsMixin, PandasOnSparkTestCase, TestUtils):
+    pass
 
 
 if __name__ == "__main__":

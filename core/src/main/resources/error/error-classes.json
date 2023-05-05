@@ -95,6 +95,16 @@
     ],
     "sqlState" : "42825"
   },
+  "CANNOT_MERGE_SCHEMAS" : {
+    "message" : [
+      "Failed merging schemas:",
+      "Initial schema:",
+      "<left>",
+      "Schema that cannot be merged with the initial schema:",
+      "<right>."
+    ],
+    "sqlState" : "42KD9"
+  },
   "CANNOT_MODIFY_CONFIG" : {
     "message" : [
       "Cannot modify the value of the Spark config: <key>.",
@@ -356,6 +366,11 @@
           "The <functionName> does not support ordering on type <dataType>."
         ]
       },
+      "INVALID_ROW_LEVEL_OPERATION_ASSIGNMENTS" : {
+        "message" : [
+          "<errors>"
+        ]
+      },
       "IN_SUBQUERY_DATA_TYPE_MISMATCH" : {
         "message" : [
           "The data type of one or more elements in the left hand side of an IN subquery is not compatible with the data type of the output of the subquery. Mismatched columns: [<mismatchedColumns>], left side: [<leftType>], right side: [<rightType>]."
@@ -533,6 +548,11 @@
     ],
     "sqlState" : "22012",
     "isTransient": false
+  },
+  "DUPLICATED_FIELD_NAME_IN_ARROW_STRUCT" : {
+    "message" : [
+      "Duplicated field names in Arrow Struct are not allowed, got <fieldNames>."
+    ]
   },
   "DUPLICATED_MAP_KEY" : {
     "message" : [
@@ -773,6 +793,12 @@
     ],
     "sqlState" : "XX000"
   },
+  "INTERNAL_ERROR_BROADCAST" : {
+    "message" : [
+      "<message>"
+    ],
+    "sqlState" : "XX000"
+  },
   "INTERVAL_ARITHMETIC_OVERFLOW" : {
     "message" : [
       "<message>.<alternative>"
@@ -982,9 +1008,19 @@
           "expects a binary value with 16, 24 or 32 bytes, but got <actualLength> bytes."
         ]
       },
+      "AES_SALTED_MAGIC" : {
+        "message" : [
+          "Initial bytes from input <saltedMagic> do not match 'Salted__' (0x53616C7465645F5F)."
+        ]
+      },
       "PATTERN" : {
         "message" : [
           "<value>."
+        ]
+      },
+      "REGEX_GROUP_INDEX" : {
+        "message" : [
+          "Expects group index between 0 and <groupCount>, but got <groupIndex>."
         ]
       },
       "ZERO_INDEX" : {
@@ -1427,6 +1463,11 @@
   "SORT_BY_WITHOUT_BUCKETING" : {
     "message" : [
       "sortBy must be used together with bucketBy."
+    ]
+  },
+  "SQL_CONF_NOT_FOUND" : {
+    "message" : [
+      "The SQL config <sqlConf> cannot be found. Please verify that the config exists."
     ]
   },
   "STAR_GROUP_BY_POS" : {
@@ -3710,11 +3751,6 @@
       "Unsuccessful try to zip maps with <size> unique keys due to exceeding the array size limit <maxRoundedArrayLength>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2004" : {
-    "message" : [
-      "no default for type <dataType>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2005" : {
     "message" : [
       "Type <dataType> does not support ordered operations."
@@ -3725,16 +3761,6 @@
       "The specified group index cannot be less than zero."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2007" : {
-    "message" : [
-      "Regex group count is <groupCount>, but the specified group index is <groupIndex>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2010" : {
-    "message" : [
-      "Window Functions do not support merging."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2011" : {
     "message" : [
       "Unexpected data type <dataType>."
@@ -3743,11 +3769,6 @@
   "_LEGACY_ERROR_TEMP_2013" : {
     "message" : [
       "Negative values found in <frequencyExpression>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2014" : {
-    "message" : [
-      "<funcName> is not matched at addNewFunction."
     ]
   },
   "_LEGACY_ERROR_TEMP_2015" : {
@@ -3778,11 +3799,6 @@
   "_LEGACY_ERROR_TEMP_2021" : {
     "message" : [
       "Couldn't find a primary constructor on <cls>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2022" : {
-    "message" : [
-      "Unsupported natural join type <joinType>."
     ]
   },
   "_LEGACY_ERROR_TEMP_2023" : {
@@ -4809,12 +4825,6 @@
   "_LEGACY_ERROR_TEMP_2246" : {
     "message" : [
       "Table does not support dynamic partition overwrite: <table>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2247" : {
-    "message" : [
-      "Failed merging schema:",
-      "<schema>."
     ]
   },
   "_LEGACY_ERROR_TEMP_2248" : {

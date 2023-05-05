@@ -746,12 +746,12 @@ object RegExpReplace {
 }
 
 object RegExpExtractBase {
-  def checkGroupIndex(groupCount: Int, groupIndex: Int): Unit = {
+  def checkGroupIndex(prettyName: String, groupCount: Int, groupIndex: Int): Unit = {
     if (groupIndex < 0) {
       throw QueryExecutionErrors.regexGroupIndexLessThanZeroError
     } else if (groupCount < groupIndex) {
       throw QueryExecutionErrors.regexGroupIndexExceedGroupCountError(
-        groupCount, groupIndex)
+        prettyName, groupCount, groupIndex)
     }
   }
 }
@@ -857,7 +857,7 @@ case class RegExpExtract(subject: Expression, regexp: Expression, idx: Expressio
     if (m.find) {
       val mr: MatchResult = m.toMatchResult
       val index = r.asInstanceOf[Int]
-      RegExpExtractBase.checkGroupIndex(mr.groupCount, index)
+      RegExpExtractBase.checkGroupIndex(prettyName, mr.groupCount, index)
       val group = mr.group(index)
       if (group == null) { // Pattern matched, but it's an optional group
         UTF8String.EMPTY_UTF8
@@ -887,7 +887,7 @@ case class RegExpExtract(subject: Expression, regexp: Expression, idx: Expressio
       ${initLastMatcherCode(ctx, subject, regexp, matcher)}
       if ($matcher.find()) {
         java.util.regex.MatchResult $matchResult = $matcher.toMatchResult();
-        $classNameRegExpExtractBase.checkGroupIndex($matchResult.groupCount(), $idx);
+        $classNameRegExpExtractBase.checkGroupIndex("$prettyName", $matchResult.groupCount(), $idx);
         if ($matchResult.group($idx) == null) {
           ${ev.value} = UTF8String.EMPTY_UTF8;
         } else {
@@ -950,7 +950,7 @@ case class RegExpExtractAll(subject: Expression, regexp: Expression, idx: Expres
     while(m.find) {
       val mr: MatchResult = m.toMatchResult
       val index = r.asInstanceOf[Int]
-      RegExpExtractBase.checkGroupIndex(mr.groupCount, index)
+      RegExpExtractBase.checkGroupIndex(prettyName, mr.groupCount, index)
       val group = mr.group(index)
       if (group == null) { // Pattern matched, but it's an optional group
         matchResults += UTF8String.EMPTY_UTF8
@@ -982,7 +982,10 @@ case class RegExpExtractAll(subject: Expression, regexp: Expression, idx: Expres
          | java.util.ArrayList $matchResults = new java.util.ArrayList<UTF8String>();
          | while ($matcher.find()) {
          |   java.util.regex.MatchResult $matchResult = $matcher.toMatchResult();
-         |   $classNameRegExpExtractBase.checkGroupIndex($matchResult.groupCount(), $idx);
+         |   $classNameRegExpExtractBase.checkGroupIndex(
+         |     "$prettyName",
+         |     $matchResult.groupCount(),
+         |     $idx);
          |   if ($matchResult.group($idx) == null) {
          |     $matchResults.add(UTF8String.EMPTY_UTF8);
          |   } else {

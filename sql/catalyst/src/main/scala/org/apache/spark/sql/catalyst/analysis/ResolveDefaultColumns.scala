@@ -18,15 +18,16 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import scala.collection.mutable
+import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.catalog.{SessionCatalog, UnresolvedCatalogRelation}
+import org.apache.spark.sql.catalyst.catalog.UnresolvedCatalogRelation
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
+import org.apache.spark.sql.connector.write.SupportsCustomSchemaWrite
 import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -47,16 +48,17 @@ import org.apache.spark.sql.types._
  * (1, 5)
  * (4, 6)
  *
- * @param catalog  the catalog to use for looking up the schema of INSERT INTO table objects.
+ * @param resolveRelation function to resolve relations from the catalog. This should generally map
+ *                        to the 'resolveRelationOrTempView' method of the ResolveRelations rule.
  */
-case class ResolveDefaultColumns(catalog: SessionCatalog) extends Rule[LogicalPlan] {
+case class ResolveDefaultColumns(
+    resolveRelation: UnresolvedRelation => LogicalPlan) extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = {
     plan.resolveOperatorsWithPruning(
       (_ => SQLConf.get.enableDefaultColumns), ruleId) {
       case i: InsertIntoStatement if insertsFromInlineTable(i) =>
         resolveDefaultColumnsForInsertFromInlineTable(i)
-      case i@InsertIntoStatement(_, _, _, project: Project, _, _)
-        if !project.projectList.exists(_.isInstanceOf[Star]) =>
+      case i: InsertIntoStatement if insertsFromProject(i).isDefined =>
         resolveDefaultColumnsForInsertFromProject(i)
       case u: UpdateTable =>
         resolveDefaultColumnsForUpdate(u)
@@ -88,6 +90,25 @@ case class ResolveDefaultColumns(catalog: SessionCatalog) extends Rule[LogicalPl
         true
       case _ =>
         false
+    }
+  }
+
+  /**
+   * Checks if a logical plan is an INSERT INTO command where the inserted data comes from a SELECT
+   * list, with possible other unary operators like sorting and/or alias(es) in between.
+   */
+  private def insertsFromProject(i: InsertIntoStatement): Option[Project] = {
+    var node = i.query
+    def matches(node: LogicalPlan): Boolean = node match {
+      case _: GlobalLimit | _: LocalLimit | _: Offset | _: SubqueryAlias | _: Sort => true
+      case _ => false
+    }
+    while (matches(node)) {
+      node = node.children.head
+    }
+    node match {
+      case p: Project => Some(p)
+      case _ => None
     }
   }
 
@@ -130,14 +151,24 @@ case class ResolveDefaultColumns(catalog: SessionCatalog) extends Rule[LogicalPl
       getInsertTableSchemaWithoutPartitionColumns(i)
     insertTableSchemaWithoutPartitionColumns.map { schema =>
       val regenerated: InsertIntoStatement = regenerateUserSpecifiedCols(i, schema)
-      val project: Project = i.query.asInstanceOf[Project]
-      val (expanded: Project, addedDefaults: Boolean) =
-        addMissingDefaultValuesForInsertFromProject(project, schema, i.userSpecifiedCols.size)
-      val replaced: Option[LogicalPlan] =
-        replaceExplicitDefaultValuesForInputOfInsertInto(schema, expanded, addedDefaults)
-      replaced.map { r =>
-        regenerated.copy(query = r)
-      }.getOrElse(i)
+      val project: Project = insertsFromProject(i).get
+      if (project.projectList.exists(_.isInstanceOf[Star])) {
+        i
+      } else {
+        val (expanded: Project, addedDefaults: Boolean) =
+          addMissingDefaultValuesForInsertFromProject(project, schema, i.userSpecifiedCols.size)
+        val replaced: Option[LogicalPlan] =
+          replaceExplicitDefaultValuesForInputOfInsertInto(schema, expanded, addedDefaults)
+        replaced.map { r =>
+          // Replace the INSERT INTO source relation, copying unary operators until we reach the
+          // original projection which we replace with the new projection with new values.
+          def replace(plan: LogicalPlan): LogicalPlan = plan match {
+            case _: Project => r
+            case u: UnaryNode => u.withNewChildren(Seq(replace(u.child)))
+          }
+          regenerated.copy(query = replace(regenerated.query))
+        }.getOrElse(i)
+      }
     }.getOrElse(i)
   }
 
@@ -184,8 +215,11 @@ case class ResolveDefaultColumns(catalog: SessionCatalog) extends Rule[LogicalPl
         throw QueryCompilationErrors.defaultReferencesNotAllowedInMergeCondition()
       }
     }
+    val columnsWithDefaults = ArrayBuffer.empty[String]
     val defaultExpressions: Seq[Expression] = schema.fields.map {
-      case f if f.metadata.contains(CURRENT_DEFAULT_COLUMN_METADATA_KEY) => analyze(f, "MERGE")
+      case f if f.metadata.contains(CURRENT_DEFAULT_COLUMN_METADATA_KEY) =>
+        columnsWithDefaults.append(normalizeFieldName(f.name))
+        analyze(f, "MERGE")
       case _ => Literal(null)
     }
     val columnNamesToExpressions: Map[String, Expression] =
@@ -198,7 +232,8 @@ case class ResolveDefaultColumns(catalog: SessionCatalog) extends Rule[LogicalPl
       }.getOrElse(action)
     }
     val newNotMatchedActions: Seq[MergeAction] = m.notMatchedActions.map { action: MergeAction =>
-      replaceExplicitDefaultValuesInMergeAction(action, columnNamesToExpressions).map { r =>
+      val expanded = addMissingDefaultValuesForMergeAction(action, m, columnsWithDefaults.toSeq)
+      replaceExplicitDefaultValuesInMergeAction(expanded, columnNamesToExpressions).map { r =>
         replaced = true
         r
       }.getOrElse(action)
@@ -216,6 +251,38 @@ case class ResolveDefaultColumns(catalog: SessionCatalog) extends Rule[LogicalPl
         notMatchedBySourceActions = newNotMatchedBySourceActions)
     } else {
       m
+    }
+  }
+
+  /** Adds a new expressions to a merge action to generate missing default column values. */
+  def addMissingDefaultValuesForMergeAction(
+      action: MergeAction,
+      m: MergeIntoTable,
+      columnNamesWithDefaults: Seq[String]): MergeAction = {
+    action match {
+      case i: InsertAction =>
+        val targetColumns: Set[String] = i.assignments.map(_.key).flatMap { expr =>
+          expr match {
+            case a: AttributeReference => Seq(normalizeFieldName(a.name))
+            case u: UnresolvedAttribute => Seq(u.nameParts.map(normalizeFieldName).mkString("."))
+            case _ => Seq()
+          }
+        }.toSet
+        val targetTable: String = m.targetTable match {
+          case SubqueryAlias(id, _) => id.name
+          case d: DataSourceV2Relation => d.name
+        }
+        val missingColumnNamesWithDefaults = columnNamesWithDefaults.filter { name =>
+          !targetColumns.contains(normalizeFieldName(name)) &&
+            !targetColumns.contains(
+              s"${normalizeFieldName(targetTable)}.${normalizeFieldName(name)}")
+        }
+        val newAssignments: Seq[Assignment] = missingColumnNamesWithDefaults.map { key =>
+          Assignment(UnresolvedAttribute(key), UnresolvedAttribute(CURRENT_DEFAULT_COLUMN_NAME))
+        }
+        i.copy(assignments = i.assignments ++ newAssignments)
+      case _ =>
+        action
     }
   }
 
@@ -517,9 +584,14 @@ case class ResolveDefaultColumns(catalog: SessionCatalog) extends Rule[LogicalPl
         name: String => colNamesToFields.getOrElse(normalizeFieldName(name), return None)
       }
     val userSpecifiedColNames: Set[String] = userSpecifiedCols.toSet
+      .map(normalizeFieldName)
     val nonUserSpecifiedFields: Seq[StructField] =
       schema.fields.filter {
-        field => !userSpecifiedColNames.contains(field.name)
+        field => !userSpecifiedColNames.contains(
+          normalizeFieldName(
+            field.name
+          )
+        )
       }
     Some(StructType(userSpecifiedFields ++
       getStructFieldsForDefaultExpressions(nonUserSpecifiedFields)))
@@ -550,44 +622,21 @@ case class ResolveDefaultColumns(catalog: SessionCatalog) extends Rule[LogicalPl
    * Returns the schema for the target table of a DML command, looking into the catalog if needed.
    */
   private def getSchemaForTargetTable(table: LogicalPlan): Option[StructType] = {
-    // First find the source relation. Note that we use 'collectFirst' to descend past any
-    // SubqueryAlias nodes that may be present.
-    val source: Option[LogicalPlan] = table.collectFirst {
+    val resolved = table match {
+      case r: UnresolvedRelation if !r.skipSchemaResolution && !r.isStreaming =>
+        resolveRelation(r)
+      case other =>
+        other
+    }
+    resolved.collectFirst {
+      case r: UnresolvedCatalogRelation =>
+        r.tableMeta.schema
+      case DataSourceV2Relation(table: SupportsCustomSchemaWrite, _, _, _, _) =>
+        table.customSchemaForInserts
       case r: NamedRelation if !r.skipSchemaResolution =>
-        // Here we only resolve the default columns in the tables that require schema resolution
-        // during write operations.
-        r
-      case r: UnresolvedCatalogRelation => r
-    }
-    // Check if the target table is already resolved. If so, return the computed schema.
-    source.foreach { r =>
-      if (r.schema.fields.nonEmpty) {
-        return Some(r.schema)
-      }
-    }
-    // Lookup the relation from the catalog by name. This either succeeds or returns some "not
-    // found" error. In the latter cases, return out of this rule without changing anything and let
-    // the analyzer return a proper error message elsewhere.
-    val tableName: TableIdentifier = source match {
-      case Some(r: UnresolvedRelation) => TableIdentifier(r.name)
-      case Some(r: UnresolvedCatalogRelation) => r.tableMeta.identifier
-      case _ => return None
-    }
-    // First try to get the table metadata directly. If that fails, check for views below.
-    if (catalog.tableExists(tableName)) {
-      return Some(catalog.getTableMetadata(tableName).schema)
-    }
-    val lookup: LogicalPlan = try {
-      catalog.lookupRelation(tableName)
-    } catch {
-      case _: AnalysisException => return None
-    }
-    lookup match {
-      case SubqueryAlias(_, r: UnresolvedCatalogRelation) =>
-        Some(r.tableMeta.schema)
-      case SubqueryAlias(_, r: View) if r.isTempView =>
-        Some(r.desc.schema)
-      case _ => None
+        r.schema
+      case v: View if v.isTempViewStoringAnalyzedPlan =>
+        v.schema
     }
   }
 

@@ -22,7 +22,6 @@ import random
 import warnings
 from collections.abc import Iterable
 from functools import reduce
-from html import escape as html_escape
 from typing import (
     Any,
     Callable,
@@ -535,7 +534,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         >>> with tempfile.TemporaryDirectory() as d:
         ...     # Create a table with Rate source.
         ...     df.writeStream.toTable(
-        ...         "my_table", checkpointLocation=d) # doctest: +ELLIPSIS
+        ...         "my_table", checkpointLocation=d)
         <...streaming.query.StreamingQuery object at 0x...>
         """
         return DataStreamWriter(self)
@@ -576,13 +575,22 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
                 )
         return self._schema
 
-    def printSchema(self) -> None:
+    def printSchema(self, level: Optional[int] = None) -> None:
         """Prints out the schema in the tree format.
+        Optionally allows to specify how many levels to print if schema is nested.
 
         .. versionadded:: 1.3.0
 
         .. versionchanged:: 3.4.0
             Supports Spark Connect.
+
+        Parameters
+        ----------
+        level : int, optional, default None
+            How many levels to print for nested schemas.
+
+            .. versionchanged:: 3.5.0
+                Added Level parameter.
 
         Examples
         --------
@@ -592,8 +600,24 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         root
          |-- age: long (nullable = true)
          |-- name: string (nullable = true)
+
+        >>> df = spark.createDataFrame([(1, (2,2))], ["a", "b"])
+        >>> df.printSchema(1)
+        root
+         |-- a: long (nullable = true)
+         |-- b: struct (nullable = true)
+
+        >>> df.printSchema(2)
+        root
+         |-- a: long (nullable = true)
+         |-- b: struct (nullable = true)
+         |    |-- _1: long (nullable = true)
+         |    |-- _2: long (nullable = true)
         """
-        print(self._jdf.schema().treeString())
+        if level:
+            print(self._jdf.schema().treeString(level))
+        else:
+            print(self._jdf.schema().treeString())
 
     def explain(
         self, extended: Optional[Union[bool, str]] = None, mode: Optional[str] = None
@@ -936,32 +960,10 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         if not self._support_repr_html:
             self._support_repr_html = True
         if self.sparkSession._jconf.isReplEagerEvalEnabled():
-            max_num_rows = max(self.sparkSession._jconf.replEagerEvalMaxNumRows(), 0)
-            sock_info = self._jdf.getRowsToPython(
-                max_num_rows,
+            return self._jdf.htmlString(
+                self.sparkSession._jconf.replEagerEvalMaxNumRows(),
                 self.sparkSession._jconf.replEagerEvalTruncate(),
             )
-            rows = list(_load_from_socket(sock_info, BatchedSerializer(CPickleSerializer())))
-            head = rows[0]
-            row_data = rows[1:]
-            has_more_data = len(row_data) > max_num_rows
-            row_data = row_data[:max_num_rows]
-
-            html = "<table border='1'>\n"
-            # generate table head
-            html += "<tr><th>%s</th></tr>\n" % "</th><th>".join(map(lambda x: html_escape(x), head))
-            # generate table rows
-            for row in row_data:
-                html += "<tr><td>%s</td></tr>\n" % "</td><td>".join(
-                    map(lambda x: html_escape(x), row)
-                )
-            html += "</table>\n"
-            if has_more_data:
-                html += "only showing top %d %s\n" % (
-                    max_num_rows,
-                    "row" if max_num_rows == 1 else "rows",
-                )
-            return html
         else:
             return None
 
@@ -1294,6 +1296,41 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         +---+----+
         """
         jdf = self._jdf.limit(num)
+        return DataFrame(jdf, self.sparkSession)
+
+    def offset(self, num: int) -> "DataFrame":
+        """Returns a new :class: `DataFrame` by skipping the first `n` rows.
+
+        .. versionadded:: 3.5.0
+
+        Parameters
+        ----------
+        num : int
+            Number of records to skip.
+
+        Returns
+        -------
+        :class:`DataFrame`
+            Subset of the records
+
+        Examples
+        --------
+        >>> df = spark.createDataFrame(
+        ...     [(14, "Tom"), (23, "Alice"), (16, "Bob")], ["age", "name"])
+        >>> df.offset(1).show()
+        +---+-----+
+        |age| name|
+        +---+-----+
+        | 23|Alice|
+        | 16|  Bob|
+        +---+-----+
+        >>> df.offset(10).show()
+        +---+----+
+        |age|name|
+        +---+----+
+        +---+----+
+        """
+        jdf = self._jdf.offset(num)
         return DataFrame(jdf, self.sparkSession)
 
     def take(self, num: int) -> List[Row]:
@@ -2308,8 +2345,8 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         | name|height|
         +-----+------+
         |  Bob|    85|
-        |Alice|  null|
-        | null|    80|
+        |Alice|  NULL|
+        | NULL|    80|
         +-----+------+
         >>> df.join(df2, 'name', 'outer').select('name', 'height').sort(desc("name")).show()
         +-----+------+
@@ -2317,7 +2354,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         +-----+------+
         |  Tom|    80|
         |  Bob|    85|
-        |Alice|  null|
+        |Alice|  NULL|
         +-----+------+
 
         Outer join for both DataFrams with multiple columns.
@@ -2996,6 +3033,40 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         jc = self._jdf.apply(name)
         return Column(jc)
 
+    def __dir__(self) -> List[str]:
+        """
+        Examples
+        --------
+        >>> from pyspark.sql.functions import lit
+
+        Create a dataframe with a column named 'id'.
+
+        >>> df = spark.range(3)
+        >>> [attr for attr in dir(df) if attr[0] == 'i'][:7] # Includes column id
+        ['id', 'inputFiles', 'intersect', 'intersectAll', 'isEmpty', 'isLocal', 'isStreaming']
+
+        Add a column named 'i_like_pancakes'.
+
+        >>> df = df.withColumn('i_like_pancakes', lit(1))
+        >>> [attr for attr in dir(df) if attr[0] == 'i'][:7] # Includes columns i_like_pancakes, id
+        ['i_like_pancakes', 'id', 'inputFiles', 'intersect', 'intersectAll', 'isEmpty', 'isLocal']
+
+        Try to add an existed column 'inputFiles'.
+
+        >>> df = df.withColumn('inputFiles', lit(2))
+        >>> [attr for attr in dir(df) if attr[0] == 'i'][:7] # Doesn't duplicate inputFiles
+        ['i_like_pancakes', 'id', 'inputFiles', 'intersect', 'intersectAll', 'isEmpty', 'isLocal']
+
+        Try to add a column named 'id2'.
+
+        >>> df = df.withColumn('id2', lit(3))
+        >>> [attr for attr in dir(df) if attr[0] == 'i'][:7] # result includes id2 and sorted
+        ['i_like_pancakes', 'id', 'id2', 'inputFiles', 'intersect', 'intersectAll', 'isEmpty']
+        """
+        attrs = set(super().__dir__())
+        attrs.update(self.columns)
+        return sorted(attrs)
+
     @overload
     def select(self, *cols: "ColumnOrName") -> "DataFrame":
         ...
@@ -3278,10 +3349,10 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         +-----+----+-----+
         | name| age|count|
         +-----+----+-----+
-        | null|null|    2|
-        |Alice|null|    1|
+        | NULL|NULL|    2|
+        |Alice|NULL|    1|
         |Alice|   2|    1|
-        |  Bob|null|    1|
+        |  Bob|NULL|    1|
         |  Bob|   5|    1|
         +-----+----+-----+
         """
@@ -3327,12 +3398,12 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         +-----+----+-----+
         | name| age|count|
         +-----+----+-----+
-        | null|null|    2|
-        | null|   2|    1|
-        | null|   5|    1|
-        |Alice|null|    1|
+        | NULL|NULL|    2|
+        | NULL|   2|    1|
+        | NULL|   5|    1|
+        |Alice|NULL|    1|
         |Alice|   2|    1|
-        |  Bob|null|    1|
+        |  Bob|NULL|    1|
         |  Bob|   5|    1|
         +-----+----+-----+
         """
@@ -3600,6 +3671,9 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         ...            # Trigger alert
         ...            pass
         ...
+        ...    def onQueryIdle(self, event):
+        ...        pass
+        ...
         ...    def onQueryTerminated(self, event):
         ...        pass
         ...
@@ -3778,8 +3852,8 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         +----+----+----+----+
         |col0|col1|col2|col3|
         +----+----+----+----+
-        |   1|   2|   3|null|
-        |null|   4|   5|   6|
+        |   1|   2|   3|NULL|
+        |NULL|   4|   5|   6|
         +----+----+----+----+
         """
         return DataFrame(self._jdf.unionByName(other._jdf, allowMissingColumns), self.sparkSession)
@@ -3963,6 +4037,62 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             jdf = self._jdf.dropDuplicates(self._jseq(subset))
         return DataFrame(jdf, self.sparkSession)
 
+    def dropDuplicatesWithinWatermark(self, subset: Optional[List[str]] = None) -> "DataFrame":
+        """Return a new :class:`DataFrame` with duplicate rows removed,
+         optionally only considering certain columns, within watermark.
+
+         This only works with streaming :class:`DataFrame`, and watermark for the input
+         :class:`DataFrame` must be set via :func:`withWatermark`.
+
+        For a streaming :class:`DataFrame`, this will keep all data across triggers as intermediate
+        state to drop duplicated rows. The state will be kept to guarantee the semantic, "Events
+        are deduplicated as long as the time distance of earliest and latest events are smaller
+        than the delay threshold of watermark." Users are encouraged to set the delay threshold of
+        watermark longer than max timestamp differences among duplicated events.
+
+        Note: too late data older than watermark will be dropped.
+
+         .. versionadded:: 3.5.0
+
+         Parameters
+         ----------
+         subset : List of column names, optional
+             List of columns to use for duplicate comparison (default All columns).
+
+         Returns
+         -------
+         :class:`DataFrame`
+             DataFrame without duplicates.
+
+         Examples
+         --------
+         >>> from pyspark.sql import Row
+         >>> from pyspark.sql.functions import timestamp_seconds
+         >>> df = spark.readStream.format("rate").load().selectExpr(
+         ...     "value % 5 AS value", "timestamp")
+         >>> df.select("value", df.timestamp.alias("time")).withWatermark("time", '10 minutes')
+         DataFrame[value: bigint, time: timestamp]
+
+         Deduplicate the same rows.
+
+         >>> df.dropDuplicatesWithinWatermark() # doctest: +SKIP
+
+         Deduplicate values on 'value' columns.
+
+         >>> df.dropDuplicatesWithinWatermark(['value'])  # doctest: +SKIP
+        """
+        if subset is not None and (not isinstance(subset, Iterable) or isinstance(subset, str)):
+            raise PySparkTypeError(
+                error_class="NOT_LIST_OR_TUPLE",
+                message_parameters={"arg_name": "subset", "arg_type": type(subset).__name__},
+            )
+
+        if subset is None:
+            jdf = self._jdf.dropDuplicatesWithinWatermark()
+        else:
+            jdf = self._jdf.dropDuplicatesWithinWatermark(self._jseq(subset))
+        return DataFrame(jdf, self.sparkSession)
+
     def dropna(
         self,
         how: str = "any",
@@ -4090,10 +4220,10 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         +---+------+-----+----+
         |age|height| name|bool|
         +---+------+-----+----+
-        | 10|  80.5|Alice|null|
-        |  5|  50.0|  Bob|null|
-        | 50|  50.0|  Tom|null|
-        | 50|  50.0| null|true|
+        | 10|  80.5|Alice|NULL|
+        |  5|  50.0|  Bob|NULL|
+        | 50|  50.0|  Tom|NULL|
+        | 50|  50.0| NULL|true|
         +---+------+-----+----+
 
         Fill all null values with ``False`` for boolean columns.
@@ -4103,9 +4233,9 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         | age|height| name| bool|
         +----+------+-----+-----+
         |  10|  80.5|Alice|false|
-        |   5|  null|  Bob|false|
-        |null|  null|  Tom|false|
-        |null|  null| null| true|
+        |   5|  NULL|  Bob|false|
+        |NULL|  NULL|  Tom|false|
+        |NULL|  NULL| NULL| true|
         +----+------+-----+-----+
 
         Fill all null values with to 50 and "unknown" for 'age' and 'name' column respectively.
@@ -4114,10 +4244,10 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         +---+------+-------+----+
         |age|height|   name|bool|
         +---+------+-------+----+
-        | 10|  80.5|  Alice|null|
-        |  5|  null|    Bob|null|
-        | 50|  null|    Tom|null|
-        | 50|  null|unknown|true|
+        | 10|  80.5|  Alice|NULL|
+        |  5|  NULL|    Bob|NULL|
+        | 50|  NULL|    Tom|NULL|
+        | 50|  NULL|unknown|true|
         +---+------+-------+----+
         """
         if not isinstance(value, (float, int, str, bool, dict)):
@@ -4245,9 +4375,9 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         | age|height| name|
         +----+------+-----+
         |  20|    80|Alice|
-        |   5|  null|  Bob|
-        |null|    20|  Tom|
-        |null|  null| null|
+        |   5|  NULL|  Bob|
+        |NULL|    20|  Tom|
+        |NULL|  NULL| NULL|
         +----+------+-----+
 
         Replace 'Alice' to null in all columns.
@@ -4256,10 +4386,10 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         +----+------+----+
         | age|height|name|
         +----+------+----+
-        |  10|    80|null|
-        |   5|  null| Bob|
-        |null|    10| Tom|
-        |null|  null|null|
+        |  10|    80|NULL|
+        |   5|  NULL| Bob|
+        |NULL|    10| Tom|
+        |NULL|  NULL|NULL|
         +----+------+----+
 
         Replace 'Alice' to 'A', and 'Bob' to 'B' in the 'name' column.
@@ -4269,9 +4399,9 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         | age|height|name|
         +----+------+----+
         |  10|    80|   A|
-        |   5|  null|   B|
-        |null|    10| Tom|
-        |null|  null|null|
+        |   5|  NULL|   B|
+        |NULL|    10| Tom|
+        |NULL|  NULL|NULL|
         +----+------+----+
         """
         if value is _NoValue:
@@ -4320,9 +4450,11 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             and not isinstance(to_replace, dict)
         ):
             raise PySparkTypeError(
-                "If to_replace is not a dict, value should be "
-                "a bool, float, int, string, list, tuple or None. "
-                "Got {0}".format(type(value))
+                error_class="NOT_BOOL_OR_FLOAT_OR_INT_OR_LIST_OR_NONE_OR_STR_OR_TUPLE",
+                message_parameters={
+                    "arg_name": "value",
+                    "arg_type": type(value).__name__,
+                },
             )
 
         if isinstance(to_replace, (list, tuple)) and isinstance(value, (list, tuple)):
@@ -4515,7 +4647,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
                 },
             )
         if relativeError < 0:
-            raise PySparkTypeError(
+            raise PySparkValueError(
                 error_class="NEGATIVE_VALUE",
                 message_parameters={
                     "arg_name": "relativeError",
@@ -4576,7 +4708,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         if not method:
             method = "pearson"
         if not method == "pearson":
-            raise PySparkTypeError(
+            raise PySparkValueError(
                 error_class="VALUE_NOT_PEARSON",
                 message_parameters={"arg_name": "method", "arg_value": method},
             )

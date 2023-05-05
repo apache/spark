@@ -16,10 +16,11 @@
  */
 package org.apache.spark.sql.application
 
-import scala.util.control.NonFatal
-
 import ammonite.compiler.CodeClassWrapper
 import ammonite.util.Bind
+import java.io.{InputStream, OutputStream}
+import java.util.concurrent.Semaphore
+import scala.util.control.NonFatal
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.sql.SparkSession
@@ -43,7 +44,14 @@ object ConnectRepl {
       |    /_/
       |""".stripMargin
 
-  def main(args: Array[String]): Unit = {
+  def main(args: Array[String]): Unit = doMain(args)
+
+  private[application] def doMain(
+      args: Array[String],
+      semaphore: Option[Semaphore] = None,
+      inputStream: InputStream = System.in,
+      outputStream: OutputStream = System.out,
+      errorStream: OutputStream = System.err): Unit = {
     // Build the client.
     val client =
       try {
@@ -67,22 +75,33 @@ object ConnectRepl {
 
     // Build the session.
     val spark = SparkSession.builder().client(client).build()
+    val sparkBind = new Bind("spark", spark)
 
-    // Add the proper imports.
-    val imports =
+    // Add the proper imports and register a [[ClassFinder]].
+    val predefCode =
       """
         |import org.apache.spark.sql.functions._
         |import spark.implicits._
         |import spark.sql
+        |import org.apache.spark.sql.connect.client.AmmoniteClassFinder
+        |
+        |spark.registerClassFinder(new AmmoniteClassFinder(repl.sess))
         |""".stripMargin
-
     // Please note that we make ammonite generate classes instead of objects.
     // Classes tend to have superior serialization behavior when using UDFs.
     val main = ammonite.Main(
       welcomeBanner = Option(splash),
-      predefCode = imports,
+      predefCode = predefCode,
       replCodeWrapper = CodeClassWrapper,
-      scriptCodeWrapper = CodeClassWrapper)
-    main.run(new Bind("spark", spark))
+      scriptCodeWrapper = CodeClassWrapper,
+      inputStream = inputStream,
+      outputStream = outputStream,
+      errorStream = errorStream)
+    if (semaphore.nonEmpty) {
+      // Used for testing.
+      main.run(sparkBind, new Bind[Semaphore]("semaphore", semaphore.get))
+    } else {
+      main.run(sparkBind)
+    }
   }
 }

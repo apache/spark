@@ -22,6 +22,7 @@ from pyspark.errors.exceptions.base import (
     AnalysisException as BaseAnalysisException,
     IllegalArgumentException as BaseIllegalArgumentException,
     ArithmeticException as BaseArithmeticException,
+    UnsupportedOperationException as BaseUnsupportedOperationException,
     ArrayIndexOutOfBoundsException as BaseArrayIndexOutOfBoundsException,
     DateTimeException as BaseDateTimeException,
     NumberFormatException as BaseNumberFormatException,
@@ -49,6 +50,10 @@ def convert_exception(info: "ErrorInfo", message: str) -> SparkConnectException:
     if "classes" in info.metadata:
         classes = json.loads(info.metadata["classes"])
 
+    if "stackTrace" in info.metadata:
+        stackTrace = info.metadata["stackTrace"]
+        message += f"\n\nJVM stacktrace:\n{stackTrace}"
+
     if "org.apache.spark.sql.catalyst.parser.ParseException" in classes:
         return ParseException(message)
     # Order matters. ParseException inherits AnalysisException.
@@ -65,6 +70,8 @@ def convert_exception(info: "ErrorInfo", message: str) -> SparkConnectException:
         return IllegalArgumentException(message)
     elif "java.lang.ArithmeticException" in classes:
         return ArithmeticException(message)
+    elif "java.lang.UnsupportedOperationException" in classes:
+        return UnsupportedOperationException(message)
     elif "java.lang.ArrayIndexOutOfBoundsException" in classes:
         return ArrayIndexOutOfBoundsException(message)
     elif "java.time.DateTimeException" in classes:
@@ -144,6 +151,12 @@ class PythonException(SparkConnectGrpcException, BasePythonException):
 class ArithmeticException(SparkConnectGrpcException, BaseArithmeticException):
     """
     Arithmetic exception thrown from Spark Connect.
+    """
+
+
+class UnsupportedOperationException(SparkConnectGrpcException, BaseUnsupportedOperationException):
+    """
+    Unsupported operation exception thrown from Spark Connect.
     """
 
 

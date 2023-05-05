@@ -21,7 +21,7 @@ check_dependencies(__name__)
 
 from typing import cast, overload, Callable, Dict, List, Optional, TYPE_CHECKING, Union
 
-from pyspark.sql.connect.plan import DataSource, LogicalPlan, WriteStreamOperation
+from pyspark.sql.connect.plan import DataSource, LogicalPlan, Read, WriteStreamOperation
 import pyspark.sql.connect.proto as pb2
 from pyspark.sql.connect.readwriter import OptionUtils, to_str
 from pyspark.sql.connect.streaming.query import StreamingQuery
@@ -30,6 +30,7 @@ from pyspark.sql.streaming.readwriter import (
     DataStreamWriter as PySparkDataStreamWriter,
 )
 from pyspark.sql.types import Row, StructType
+from pyspark.errors import PySparkTypeError, PySparkValueError, PySparkNotImplementedError
 
 if TYPE_CHECKING:
     from pyspark.sql.connect.session import SparkSession
@@ -64,7 +65,10 @@ class DataStreamReader(OptionUtils):
         elif isinstance(schema, str):
             self._schema = schema
         else:
-            raise TypeError("schema should be StructType or string")
+            raise PySparkTypeError(
+                error_class="NOT_STR_OR_STRUCT",
+                message_parameters={"arg_name": "schema", "arg_type": type(schema).__name__},
+            )
         return self
 
     schema.__doc__ = PySparkDataStreamReader.schema.__doc__
@@ -94,12 +98,11 @@ class DataStreamReader(OptionUtils):
         if schema is not None:
             self.schema(schema)
         self.options(**options)
-        if path is not None:
-            if type(path) != str or len(path.strip()) == 0:
-                raise ValueError(
-                    "If the path is provided for stream, it needs to be a "
-                    + "non-empty string. List of paths are not supported."
-                )
+        if path is not None and (type(path) != str or len(path.strip()) == 0):
+            raise PySparkValueError(
+                error_class="VALUE_NOT_NON_EMPTY_STR",
+                message_parameters={"arg_name": "path", "arg_value": str(path)},
+            )
 
         plan = DataSource(
             format=self._format,
@@ -164,13 +167,91 @@ class DataStreamReader(OptionUtils):
         if isinstance(path, str):
             return self.load(path=path, format="json")
         else:
-            raise TypeError("path can be only a single string")
+            raise PySparkTypeError(
+                error_class="NOT_STR",
+                message_parameters={"arg_name": "path", "arg_type": type(path).__name__},
+            )
 
     json.__doc__ = PySparkDataStreamReader.json.__doc__
 
-    # def orc() TODO
-    # def parquet() TODO
-    # def text() TODO
+    def orc(
+        self,
+        path: str,
+        mergeSchema: Optional[bool] = None,
+        pathGlobFilter: Optional[Union[bool, str]] = None,
+        recursiveFileLookup: Optional[Union[bool, str]] = None,
+    ) -> "DataFrame":
+        self._set_opts(
+            mergeSchema=mergeSchema,
+            pathGlobFilter=pathGlobFilter,
+            recursiveFileLookup=recursiveFileLookup,
+        )
+        if isinstance(path, str):
+            return self.load(path=path, format="orc")
+        else:
+            raise PySparkTypeError(
+                error_class="NOT_STR",
+                message_parameters={"arg_name": "path", "arg_type": type(path).__name__},
+            )
+
+    orc.__doc__ = PySparkDataStreamReader.orc.__doc__
+
+    def parquet(
+        self,
+        path: str,
+        mergeSchema: Optional[bool] = None,
+        pathGlobFilter: Optional[Union[bool, str]] = None,
+        recursiveFileLookup: Optional[Union[bool, str]] = None,
+        datetimeRebaseMode: Optional[Union[bool, str]] = None,
+        int96RebaseMode: Optional[Union[bool, str]] = None,
+    ) -> "DataFrame":
+        self._set_opts(
+            mergeSchema=mergeSchema,
+            pathGlobFilter=pathGlobFilter,
+            recursiveFileLookup=recursiveFileLookup,
+            datetimeRebaseMode=datetimeRebaseMode,
+            int96RebaseMode=int96RebaseMode,
+        )
+        self._set_opts(
+            mergeSchema=mergeSchema,
+            pathGlobFilter=pathGlobFilter,
+            recursiveFileLookup=recursiveFileLookup,
+            datetimeRebaseMode=datetimeRebaseMode,
+            int96RebaseMode=int96RebaseMode,
+        )
+        if isinstance(path, str):
+            return self.load(path=path, format="parquet")
+        else:
+            raise PySparkTypeError(
+                error_class="NOT_STR",
+                message_parameters={"arg_name": "path", "arg_type": type(path).__name__},
+            )
+
+    parquet.__doc__ = PySparkDataStreamReader.parquet.__doc__
+
+    def text(
+        self,
+        path: str,
+        wholetext: bool = False,
+        lineSep: Optional[str] = None,
+        pathGlobFilter: Optional[Union[bool, str]] = None,
+        recursiveFileLookup: Optional[Union[bool, str]] = None,
+    ) -> "DataFrame":
+        self._set_opts(
+            wholetext=wholetext,
+            lineSep=lineSep,
+            pathGlobFilter=pathGlobFilter,
+            recursiveFileLookup=recursiveFileLookup,
+        )
+        if isinstance(path, str):
+            return self.load(path=path, format="text")
+        else:
+            raise PySparkTypeError(
+                error_class="NOT_STR",
+                message_parameters={"arg_name": "path", "arg_type": type(path).__name__},
+            )
+
+    text.__doc__ = PySparkDataStreamReader.text.__doc__
 
     def csv(
         self,
@@ -241,11 +322,17 @@ class DataStreamReader(OptionUtils):
         if isinstance(path, str):
             return self.load(path=path, format="csv")
         else:
-            raise TypeError("path can be only a single string")
+            raise PySparkTypeError(
+                error_class="NOT_STR",
+                message_parameters={"arg_name": "path", "arg_type": type(path).__name__},
+            )
 
     csv.__doc__ = PySparkDataStreamReader.csv.__doc__
 
-    # def table() TODO. Use Read(table_name) relation.
+    def table(self, tableName: str) -> "DataFrame":
+        return self._df(Read(tableName, self._options, is_streaming=True))
+
+    table.__doc__ = PySparkDataStreamReader.table.__doc__
 
 
 DataStreamReader.__doc__ = PySparkDataStreamReader.__doc__
@@ -334,38 +421,56 @@ class DataStreamWriter:
         params = [processingTime, once, continuous, availableNow]
 
         if params.count(None) == 4:
-            raise ValueError("No trigger provided")
+            raise PySparkValueError(
+                error_class="ONLY_ALLOW_SINGLE_TRIGGER",
+                message_parameters={},
+            )
         elif params.count(None) < 3:
-            raise ValueError("Multiple triggers not allowed.")
+            raise PySparkValueError(
+                error_class="ONLY_ALLOW_SINGLE_TRIGGER",
+                message_parameters={},
+            )
 
         if processingTime is not None:
             if type(processingTime) != str or len(processingTime.strip()) == 0:
-                raise ValueError(
-                    "Value for processingTime must be a non empty string. Got: %s" % processingTime
+                raise PySparkValueError(
+                    error_class="VALUE_NOT_NON_EMPTY_STR",
+                    message_parameters={
+                        "arg_name": "processingTime",
+                        "arg_value": str(processingTime),
+                    },
                 )
             self._write_proto.processing_time_interval = processingTime.strip()
 
         elif once is not None:
             if once is not True:
-                raise ValueError("Value for once must be True. Got: %s" % once)
+                raise PySparkValueError(
+                    error_class="VALUE_NOT_TRUE",
+                    message_parameters={"arg_name": "once", "arg_value": str(once)},
+                )
             self._write_proto.once = True
 
         elif continuous is not None:
             if type(continuous) != str or len(continuous.strip()) == 0:
-                raise ValueError(
-                    "Value for continuous must be a non empty string. Got: %s" % continuous
+                raise PySparkValueError(
+                    error_class="VALUE_NOT_NON_EMPTY_STR",
+                    message_parameters={"arg_name": "continuous", "arg_value": str(continuous)},
                 )
             self._write_proto.continuous_checkpoint_interval = continuous.strip()
 
         else:
             if availableNow is not True:
-                raise ValueError("Value for availableNow must be True. Got: %s" % availableNow)
+                raise PySparkValueError(
+                    error_class="VALUE_NOT_TRUE",
+                    message_parameters={"arg_name": "availableNow", "arg_value": str(availableNow)},
+                )
             self._write_proto.available_now = True
 
         return self
 
     trigger.__doc__ = PySparkDataStreamWriter.trigger.__doc__
 
+    # TODO (SPARK-43054): Implement and uncomment the doc
     @overload
     def foreach(self, f: Callable[[Row], None]) -> "DataStreamWriter":
         ...
@@ -375,9 +480,21 @@ class DataStreamWriter:
         ...
 
     def foreach(self, f: Union[Callable[[Row], None], "SupportsProcess"]) -> "DataStreamWriter":
-        raise NotImplementedError("foreach() is not implemented.")
+        raise PySparkNotImplementedError(
+            error_class="NOT_IMPLEMENTED",
+            message_parameters={"feature": "foreach()"},
+        )
 
-    foreach.__doc__ = PySparkDataStreamWriter.foreach.__doc__
+    # foreach.__doc__ = PySparkDataStreamWriter.foreach.__doc__
+
+    # TODO (SPARK-42944): Implement and uncomment the doc
+    def foreachBatch(self, func: Callable[["DataFrame", int], None]) -> "DataStreamWriter":
+        raise PySparkNotImplementedError(
+            error_class="NOT_IMPLEMENTED",
+            message_parameters={"feature": "foreachBatch()"},
+        )
+
+    # foreachBatch.__doc__ = PySparkDataStreamWriter.foreachBatch.__doc__
 
     def _start_internal(
         self,
@@ -460,10 +577,32 @@ class DataStreamWriter:
 
 
 def _test() -> None:
-    # TODO(SPARK-43031): port _test() from legacy query.py.
-    pass
+    import sys
+    import doctest
+    from pyspark.sql import SparkSession as PySparkSession
+    import pyspark.sql.connect.streaming.readwriter
+
+    globs = pyspark.sql.connect.readwriter.__dict__.copy()
+
+    globs["spark"] = (
+        PySparkSession.builder.appName("sql.connect.streaming.readwriter tests")
+        .remote("local[4]")
+        .getOrCreate()
+    )
+
+    (failure_count, test_count) = doctest.testmod(
+        pyspark.sql.connect.streaming.readwriter,
+        globs=globs,
+        optionflags=doctest.ELLIPSIS
+        | doctest.NORMALIZE_WHITESPACE
+        | doctest.IGNORE_EXCEPTION_DETAIL,
+    )
+
+    globs["spark"].stop()
+
+    if failure_count:
+        sys.exit(-1)
 
 
 if __name__ == "__main__":
-    # TODO(SPARK-43031): Add this file dev/sparktestsupport/modules.py to enable testing in CI.
     _test()

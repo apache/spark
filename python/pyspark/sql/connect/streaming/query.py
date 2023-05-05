@@ -16,17 +16,20 @@
 #
 
 import json
+import sys
 from typing import TYPE_CHECKING, Any, cast, Dict, List, Optional
 
-from pyspark.errors import StreamingQueryException
+from pyspark.errors import StreamingQueryException, PySparkValueError
 import pyspark.sql.connect.proto as pb2
 from pyspark.sql.streaming.query import (
     StreamingQuery as PySparkStreamingQuery,
+    StreamingQueryManager as PySparkStreamingQueryManager,
+)
+from pyspark.errors.exceptions.connect import (
+    StreamingQueryException as CapturedStreamingQueryException,
 )
 
-__all__ = [
-    "StreamingQuery",  # TODO(SPARK-43032): "StreamingQueryManager"
-]
+__all__ = ["StreamingQuery", "StreamingQueryManager"]
 
 if TYPE_CHECKING:
     from pyspark.sql.connect.session import SparkSession
@@ -66,7 +69,21 @@ class StreamingQuery:
     isActive.__doc__ = PySparkStreamingQuery.isActive.__doc__
 
     def awaitTermination(self, timeout: Optional[int] = None) -> Optional[bool]:
-        raise NotImplementedError()
+        cmd = pb2.StreamingQueryCommand()
+        if timeout is not None:
+            if not isinstance(timeout, (int, float)) or timeout <= 0:
+                raise PySparkValueError(
+                    error_class="VALUE_NOT_POSITIVE",
+                    message_parameters={"arg_name": "timeout", "arg_value": type(timeout).__name__},
+                )
+            cmd.await_termination.timeout_ms = int(timeout * 1000)
+            terminated = self._execute_streaming_query_cmd(cmd).await_termination.terminated
+            return terminated
+        else:
+            await_termination_cmd = pb2.StreamingQueryCommand.AwaitTerminationCommand()
+            cmd.await_termination.CopyFrom(await_termination_cmd)
+            self._execute_streaming_query_cmd(cmd)
+            return None
 
     awaitTermination.__doc__ = PySparkStreamingQuery.awaitTermination.__doc__
 
@@ -125,7 +142,19 @@ class StreamingQuery:
     explain.__doc__ = PySparkStreamingQuery.explain.__doc__
 
     def exception(self) -> Optional[StreamingQueryException]:
-        raise NotImplementedError()
+        cmd = pb2.StreamingQueryCommand()
+        cmd.exception = True
+        exception = self._execute_streaming_query_cmd(cmd).exception
+        if not exception.HasField("exception_message"):
+            return None
+        else:
+            # Drop the Java StreamingQueryException type info
+            # exception_message maps to the return value of original
+            # StreamingQueryException's toString method
+            msg = exception.exception_message.split(": ", 1)[1]
+            if exception.HasField("stack_trace"):
+                msg += f"\n\nJVM stacktrace:\n{exception.stack_trace}"
+            return CapturedStreamingQueryException(msg, reason=exception.error_class)
 
     exception.__doc__ = PySparkStreamingQuery.exception.__doc__
 
@@ -145,14 +174,112 @@ class StreamingQuery:
         return cast(pb2.StreamingQueryCommandResult, properties["streaming_query_command_result"])
 
 
-# TODO(SPARK-43032) class StreamingQueryManager:
+class StreamingQueryManager:
+    def __init__(self, session: "SparkSession") -> None:
+        self._session = session
+
+    @property
+    def active(self) -> List[StreamingQuery]:
+        cmd = pb2.StreamingQueryManagerCommand()
+        cmd.active = True
+        queries = self._execute_streaming_query_manager_cmd(cmd).active.active_queries
+        return [StreamingQuery(self._session, q.id.id, q.id.run_id, q.name) for q in queries]
+
+    active.__doc__ = PySparkStreamingQueryManager.active.__doc__
+
+    def get(self, id: str) -> StreamingQuery:
+        cmd = pb2.StreamingQueryManagerCommand()
+        cmd.get = id
+        query = self._execute_streaming_query_manager_cmd(cmd).query
+        return StreamingQuery(self._session, query.id.id, query.id.run_id, query.name)
+
+    get.__doc__ = PySparkStreamingQueryManager.get.__doc__
+
+    def awaitAnyTermination(self, timeout: Optional[int] = None) -> Optional[bool]:
+        cmd = pb2.StreamingQueryManagerCommand()
+        if timeout is not None:
+            if not isinstance(timeout, (int, float)) or timeout <= 0:
+                raise PySparkValueError(
+                    error_class="VALUE_NOT_POSITIVE",
+                    message_parameters={"arg_name": "timeout", "arg_value": type(timeout).__name__},
+                )
+            cmd.await_any_termination.timeout_ms = int(timeout * 1000)
+            terminated = self._execute_streaming_query_manager_cmd(
+                cmd
+            ).await_any_termination.terminated
+            return terminated
+        else:
+            await_any_termination_cmd = (
+                pb2.StreamingQueryManagerCommand.AwaitAnyTerminationCommand()
+            )
+            cmd.await_any_termination.CopyFrom(await_any_termination_cmd)
+            self._execute_streaming_query_manager_cmd(cmd)
+            return None
+
+    awaitAnyTermination.__doc__ = PySparkStreamingQueryManager.awaitAnyTermination.__doc__
+
+    def resetTerminated(self) -> None:
+        cmd = pb2.StreamingQueryManagerCommand()
+        cmd.reset_terminated = True
+        self._execute_streaming_query_manager_cmd(cmd).active.active_queries
+        return None
+
+    resetTerminated.__doc__ = PySparkStreamingQueryManager.resetTerminated.__doc__
+
+    def addListener(self, listener: Any) -> None:
+        # TODO(SPARK-42941): Change listener type to Connect StreamingQueryListener
+        # and implement below
+        raise NotImplementedError("addListener() is not implemented.")
+
+    # TODO(SPARK-42941): uncomment below
+    # addListener.__doc__ = PySparkStreamingQueryManager.addListener.__doc__
+
+    def removeListener(self, listener: Any) -> None:
+        # TODO(SPARK-42941): Change listener type to Connect StreamingQueryListener
+        # and implement below
+        raise NotImplementedError("removeListener() is not implemented.")
+
+    # TODO(SPARK-42941): uncomment below
+    # removeListener.__doc__ = PySparkStreamingQueryManager.removeListener.__doc__
+
+    def _execute_streaming_query_manager_cmd(
+        self, cmd: pb2.StreamingQueryManagerCommand
+    ) -> pb2.StreamingQueryManagerCommandResult:
+        exec_cmd = pb2.Command()
+        exec_cmd.streaming_query_manager_command.CopyFrom(cmd)
+        (_, properties) = self._session.client.execute_command(exec_cmd)
+        return cast(
+            pb2.StreamingQueryManagerCommandResult,
+            properties["streaming_query_manager_command_result"],
+        )
 
 
 def _test() -> None:
-    # TODO(SPARK-43031): port _test() from legacy query.py.
-    pass
+    import doctest
+    import os
+    from pyspark.sql import SparkSession as PySparkSession
+    import pyspark.sql.connect.streaming.query
+
+    os.chdir(os.environ["SPARK_HOME"])
+
+    globs = pyspark.sql.connect.streaming.query.__dict__.copy()
+
+    globs["spark"] = (
+        PySparkSession.builder.appName("sql.connect.streaming.query tests")
+        .remote("local[4]")
+        .getOrCreate()
+    )
+
+    (failure_count, test_count) = doctest.testmod(
+        pyspark.sql.connect.streaming.query,
+        globs=globs,
+        optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE | doctest.REPORT_NDIFF,
+    )
+    globs["spark"].stop()
+
+    if failure_count:
+        sys.exit(-1)
 
 
 if __name__ == "__main__":
-    # TODO(SPARK-43031): Add this file dev/sparktestsupport/modules.py to enable testing in CI.
     _test()

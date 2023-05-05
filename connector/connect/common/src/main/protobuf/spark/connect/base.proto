@@ -129,6 +129,9 @@ message AnalyzePlanRequest {
   message TreeString {
     // (Required) The logical plan to be analyzed.
     Plan plan = 1;
+
+    // (Optional) Max level of the schema.
+    optional int32 level = 2;
   }
 
   message IsLocal {
@@ -303,6 +306,12 @@ message ExecutePlanResponse {
 
     // Response for commands on a streaming query.
     StreamingQueryCommandResult streaming_query_command_result = 9;
+
+    // Response for 'SparkContext.resources'.
+    GetResourcesCommandResult get_resources_command_result = 10;
+
+    // Response for commands on the streaming query manager.
+    StreamingQueryManagerCommandResult streaming_query_manager_command_result = 11;
 
     // Support arbitrary result objects.
     google.protobuf.Any extension = 999;
@@ -536,6 +545,74 @@ message AddArtifactsResponse {
   repeated ArtifactSummary artifacts = 1;
 }
 
+// Request to get current statuses of artifacts at the server side.
+message ArtifactStatusesRequest {
+  // (Required)
+  //
+  // The session_id specifies a spark session for a user id (which is specified
+  // by user_context.user_id). The session_id is set by the client to be able to
+  // collate streaming responses from different queries within the dedicated session.
+  string session_id = 1;
+
+  // User context
+  UserContext user_context = 2;
+
+  // Provides optional information about the client sending the request. This field
+  // can be used for language or version specific information and is only intended for
+  // logging purposes and will not be interpreted by the server.
+  optional string client_type = 3;
+
+  // The name of the artifact is expected in the form of a "Relative Path" that is made up of a
+  // sequence of directories and the final file element.
+  // Examples of "Relative Path"s: "jars/test.jar", "classes/xyz.class", "abc.xyz", "a/b/X.jar".
+  // The server is expected to maintain the hierarchy of files as defined by their name. (i.e
+  // The relative path of the file on the server's filesystem will be the same as the name of
+  // the provided artifact)
+  repeated string names = 4;
+}
+
+// Response to checking artifact statuses.
+message ArtifactStatusesResponse {
+  message ArtifactStatus {
+    // Exists or not particular artifact at the server.
+    bool exists = 1;
+  }
+
+  // A map of artifact names to their statuses.
+  map<string, ArtifactStatus> statuses = 1;
+}
+
+message InterruptRequest {
+  // (Required)
+  //
+  // The session_id specifies a spark session for a user id (which is specified
+  // by user_context.user_id). The session_id is set by the client to be able to
+  // collate streaming responses from different queries within the dedicated session.
+  string session_id = 1;
+
+  // (Required) User context
+  UserContext user_context = 2;
+
+  // Provides optional information about the client sending the request. This field
+  // can be used for language or version specific information and is only intended for
+  // logging purposes and will not be interpreted by the server.
+  optional string client_type = 3;
+
+  // (Required) The type of interrupt to execute.
+  InterruptType interrupt_type = 4;
+
+  enum InterruptType {
+    INTERRUPT_TYPE_UNSPECIFIED = 0;
+
+    // Interrupt all running executions within session with provided session_id.
+    INTERRUPT_TYPE_ALL = 1;
+  }
+}
+
+message InterruptResponse {
+  string session_id = 1;
+}
+
 // Main interface for the SparkConnect service.
 service SparkConnectService {
 
@@ -553,5 +630,11 @@ service SparkConnectService {
   // Add artifacts to the session and returns a [[AddArtifactsResponse]] containing metadata about
   // the added artifacts.
   rpc AddArtifacts(stream AddArtifactsRequest) returns (AddArtifactsResponse) {}
+
+  // Check statuses of artifacts in the session and returns them in a [[ArtifactStatusesResponse]]
+  rpc ArtifactStatus(ArtifactStatusesRequest) returns (ArtifactStatusesResponse) {}
+
+  // Interrupts running executions
+  rpc Interrupt(InterruptRequest) returns (InterruptResponse) {}
 }
 
