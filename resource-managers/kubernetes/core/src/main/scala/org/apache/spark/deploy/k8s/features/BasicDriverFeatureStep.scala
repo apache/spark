@@ -53,6 +53,7 @@ private[spark] class BasicDriverFeatureStep(conf: KubernetesDriverConf)
 
   // Memory settings
   private val driverMemoryMiB = conf.get(DRIVER_MEMORY)
+  private val driverLimitMemoryMiB = conf.get(KUBERNETES_DRIVER_LIMIT_MEMORY)
 
   // The default memory overhead factor to use, derived from the deprecated
   // `spark.kubernetes.memoryOverheadFactor` config or the default overhead values.
@@ -87,6 +88,8 @@ private[spark] class BasicDriverFeatureStep(conf: KubernetesDriverConf)
       Seq(ENV_APPLICATION_ID -> conf.appId) ++ conf.environment)
     val driverCpuQuantity = new Quantity(driverCoresRequest)
     val driverMemoryQuantity = new Quantity(s"${driverMemoryWithOverheadMiB}Mi")
+    val driverMemoryLimitQuantity =
+      new Quantity(s"${driverLimitMemoryMiB.getOrElse(driverMemoryWithOverheadMiB)}Mi")
     val maybeCpuLimitQuantity = driverLimitCores.map { limitCores =>
       ("cpu", new Quantity(limitCores))
     }
@@ -125,16 +128,16 @@ private[spark] class BasicDriverFeatureStep(conf: KubernetesDriverConf)
         .endEnv()
       .addAllToEnv(driverCustomEnvs.asJava)
       .addNewEnv()
-        .withName(ENV_DRIVER_BIND_ADDRESS)
-        .withValueFrom(new EnvVarSourceBuilder()
-          .withNewFieldRef("v1", "status.podIP")
-          .build())
-        .endEnv()
+      .withName(ENV_DRIVER_BIND_ADDRESS)
+      .withValueFrom(new EnvVarSourceBuilder()
+        .withNewFieldRef("v1", "status.podIP")
+        .build())
+      .endEnv()
       .editOrNewResources()
-        .addToRequests("cpu", driverCpuQuantity)
-        .addToLimits(maybeCpuLimitQuantity.toMap.asJava)
-        .addToRequests("memory", driverMemoryQuantity)
-        .addToLimits("memory", driverMemoryQuantity)
+      .addToRequests("cpu", driverCpuQuantity)
+      .addToLimits(maybeCpuLimitQuantity.toMap.asJava)
+      .addToRequests("memory", driverMemoryQuantity)
+      .addToLimits("memory", driverMemoryLimitQuantity)
         .addToLimits(driverResourceQuantities.asJava)
         .endResources()
       .build()

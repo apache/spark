@@ -311,6 +311,29 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
     assert(systemProperties(MEMORY_OVERHEAD_FACTOR.key) === expectedFactor.toString)
   }
 
+  test(s"Pod memory limit setting is respected") {
+    val memoryRequested = 32000
+    val memoryLimit = 65536
+    val expectedFactor = 0.2
+
+    // main app resource, memory and memory limit
+    val sparkConf = new SparkConf(false)
+      .set(CONTAINER_IMAGE, "spark-driver:latest")
+      .set(DRIVER_MEMORY.key, s"${memoryRequested}m")
+      .set(KUBERNETES_DRIVER_LIMIT_MEMORY.key, s"${memoryLimit}m")
+      .set(DRIVER_MEMORY_OVERHEAD_FACTOR, expectedFactor)
+
+    val conf = KubernetesTestConf.createDriverConf(
+      sparkConf = sparkConf)
+    val step = new BasicDriverFeatureStep(conf)
+    val pod = step.configurePod(SparkPod.initialPod())
+    val mem = amountAndFormat(pod.container.getResources.getRequests.get("memory"))
+    val memLimit = amountAndFormat(pod.container.getResources.getLimits.get("memory"))
+    val expected = (memoryRequested + memoryRequested * expectedFactor).toInt
+    assert(mem === s"${expected}Mi")
+    assert(memLimit === s"${memoryLimit}Mi")
+  }
+
   test("SPARK-35493: make spark.blockManager.port be able to be fallen back to in driver pod") {
     val initPod = SparkPod.initialPod()
     val sparkConf = new SparkConf()

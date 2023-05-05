@@ -22,6 +22,7 @@ import java.util.concurrent.TimeUnit
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.{ConfigBuilder, PYSPARK_DRIVER_PYTHON, PYSPARK_PYTHON}
+import org.apache.spark.network.util._
 
 private[spark] object Config extends Logging {
 
@@ -280,6 +281,20 @@ private[spark] object Config extends Logging {
       .doc("Specify the hard cpu limit for the driver pod")
       .version("2.3.0")
       .stringConf
+      .createOptional
+
+  val KUBERNETES_DRIVER_LIMIT_MEMORY =
+    ConfigBuilder("spark.kubernetes.driver.limit.memory")
+      .doc("Specify the hard memory limit for the driver pod")
+      .version("3.4.1")
+      .bytesConf(ByteUnit.MiB)
+      .createOptional
+
+  val KUBERNETES_EXECUTOR_LIMIT_MEMORY =
+    ConfigBuilder("spark.kubernetes.executor.limit.memory")
+      .doc("Specify the hard memory limit for the executor pod")
+      .version("3.4.1")
+      .bytesConf(ByteUnit.MiB)
       .createOptional
 
   val KUBERNETES_DRIVER_REQUEST_CORES =

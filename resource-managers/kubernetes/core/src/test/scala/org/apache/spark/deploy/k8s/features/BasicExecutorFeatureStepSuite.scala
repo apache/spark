@@ -510,6 +510,29 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
     assert(mem === s"${expected}Mi")
   }
 
+  test(s"Pod memory limit setting is respected") {
+
+    val memoryLimit = 65536
+    // main app resource, memory limit set
+    val sparkConf = new SparkConf(false)
+      .set(CONTAINER_IMAGE, "spark-driver:latest")
+      .set(KUBERNETES_EXECUTOR_LIMIT_MEMORY.key, s"${memoryLimit}m")
+
+    val conf = KubernetesTestConf.createExecutorConf(
+      sparkConf = sparkConf)
+    ResourceProfile.clearDefaultProfile()
+    val resourceProfile = ResourceProfile.getOrCreateDefaultProfile(sparkConf)
+    val step = new BasicExecutorFeatureStep(conf, new SecurityManager(baseConf),
+      resourceProfile)
+    val pod = step.configurePod(SparkPod.initialPod())
+    val memRequests = amountAndFormat(pod.container.getResources.getRequests.get("memory"))
+    val memLimits = amountAndFormat(pod.container.getResources.getLimits.get("memory"))
+    val memRequestsExpected = 1408
+
+    assert(memLimits === s"${memoryLimit}Mi")
+    assert(memRequests === s"${memRequestsExpected}Mi")
+  }
+
   test("SPARK-39546: Support ports definition in executor pod template") {
     val baseDriverPod = SparkPod.initialPod()
     val ports = new ContainerPortBuilder()
