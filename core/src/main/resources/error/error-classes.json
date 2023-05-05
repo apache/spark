@@ -3136,7 +3136,7 @@
       "Expected only partition pruning predicates: <nonPartitionPruningPredicates>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1206" : {
+  "COLUMN_NOT_DEFINED" : {
     "message" : [
       "<colType> column <colName> is not defined in table <tableName>, defined table columns are: <tableCols>."
     ]
