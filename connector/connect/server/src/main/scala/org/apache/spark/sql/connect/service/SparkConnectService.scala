@@ -324,6 +324,7 @@ object SparkConnectService {
    * Based on the `key` find or create a new SparkSession.
    */
   def getOrCreateIsolatedSession(userId: String, sessionId: String): SessionHolder = {
+    println(s"##### getOrCreateIsolatedSession userId=$userId, sessionId=$sessionId")
     userSessionMapping.get(
       (userId, sessionId),
       () => {
@@ -332,6 +333,7 @@ object SparkConnectService {
   }
 
   private def newIsolatedSession(): SparkSession = {
+    println(s"##### newIsolatedSession is called")
     SparkSession.active.newSession()
   }
 

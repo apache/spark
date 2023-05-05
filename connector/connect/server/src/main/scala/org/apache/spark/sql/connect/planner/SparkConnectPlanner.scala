@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.sql.connect.planner
 
 import java.nio.ByteBuffer
@@ -31,7 +32,7 @@ import io.grpc.stub.StreamObserver
 import org.apache.commons.lang3.exception.ExceptionUtils
 import org.apache.spark.{Partition, SparkEnv, TaskContext}
 
-import org.apache.spark.api.python.{PythonEvalType, PythonUtils, SimplePythonFunction}
+import org.apache.spark.api.python.{PythonEvalType, PythonUtils, SimplePythonFunction, StreamingPythonRunner}
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.{ExecutePlanResponse, SqlCommand, StreamingQueryCommand, StreamingQueryCommandResult, StreamingQueryInstanceId, WriteStreamOperationStart, WriteStreamOperationStartResult}
 import org.apache.spark.connect.proto.ExecutePlanResponse.SqlCommandResult
@@ -2385,9 +2386,14 @@ class SparkConnectPlanner(val session: SparkSession) {
     if (writeOp.hasForEachBatch) {
       println("##### write stream has ForEachBatch")
       val forEachBatchUDF = transformPythonUDF(writeOp.getForEachBatch)
-      val func = forEachBatchFunc(_, _, forEachBatchUDF)
+      val runner = StreamingPythonRunner(forEachBatchUDF.func)
 
-      writer.foreachBatch(func)
+      println("##### start runner init")
+      runner.init(sessionId)
+
+      // val func = forEachBatchFunc(_, _, forEachBatchUDF)
+
+      // writer.foreachBatch(func)
     }
 
     val query = writeOp.getPath match {

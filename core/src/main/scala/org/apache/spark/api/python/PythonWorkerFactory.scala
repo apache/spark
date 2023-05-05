@@ -110,6 +110,57 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
     }
   }
 
+  def createStreamingWorker(): (Socket, Option[Int]) = {
+    var serverSocket: ServerSocket = null
+    try {
+      serverSocket = new ServerSocket(0, 1, InetAddress.getLoopbackAddress())
+
+      val streamingWorkerModule = "pyspark.streaming_worker"
+
+      // Create and start the worker
+      val pb = new ProcessBuilder(Arrays.asList(pythonExec, "-m", streamingWorkerModule))
+      val workerEnv = pb.environment()
+      workerEnv.putAll(envVars.asJava)
+      workerEnv.put("PYTHONPATH", pythonPath)
+      // This is equivalent to setting the -u flag; we use it because ipython doesn't support -u:
+      workerEnv.put("PYTHONUNBUFFERED", "YES")
+      workerEnv.put("PYTHON_WORKER_FACTORY_PORT", serverSocket.getLocalPort.toString)
+      workerEnv.put("PYTHON_WORKER_FACTORY_SECRET", authHelper.secret)
+      if (Utils.preferIPv6) {
+        workerEnv.put("SPARK_PREFER_IPV6", "True")
+      }
+      val worker = pb.start()
+
+      // Redirect worker stdout and stderr
+      redirectStreamsToStderr(worker.getInputStream, worker.getErrorStream)
+
+      // Wait for it to connect to our socket, and validate the auth secret.
+      serverSocket.setSoTimeout(10000)
+
+      try {
+        val socket = serverSocket.accept()
+        authHelper.authClient(socket)
+        // TODO: When we drop JDK 8, we can just use worker.pid()
+        val pid = new DataInputStream(socket.getInputStream).readInt()
+        if (pid < 0) {
+          throw new IllegalStateException("Python failed to launch worker with code " + pid)
+        }
+        self.synchronized {
+          simpleWorkers.put(socket, worker)
+        }
+        return (socket, Some(pid))
+      } catch {
+        case e: Exception =>
+          throw new SparkException("Python worker failed to connect back.", e)
+      }
+    } finally {
+      if (serverSocket != null) {
+        serverSocket.close()
+      }
+    }
+    null
+  }
+
   /**
    * Connect to a worker launched through pyspark/daemon.py (by default), which forks python
    * processes itself to avoid the high cost of forking from Java. This currently only works
