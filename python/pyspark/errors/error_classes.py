@@ -425,6 +425,11 @@ ERROR_CLASSES_JSON = """
       "Argument `<arg_name>` should be a list[Column]."
     ]
   },
+  "NOT_LIST_OF_COLUMN_OR_STR" : {
+    "message" : [
+      "Argument `<arg_name>` should be a list[Column]."
+    ]
+  },
   "NOT_LIST_OF_FLOAT_OR_INT" : {
     "message" : [
       "Argument `<arg_name>` should be a list[float, int], got <arg_type>."
