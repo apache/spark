@@ -67,6 +67,11 @@ object MimaExcludes {
     // Avro source implementation is internal.
     ProblemFilters.exclude[Problem]("org.apache.spark.sql.v2.avro.*"),
 
+    // SPARK-43033: Avoid task retries due to AssertNotNull checks
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.ExceptionFailure.apply"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.ExceptionFailure.copy"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.ExceptionFailure.this"),
+
     // SPARK-43169: shaded and generated protobuf code
     ProblemFilters.exclude[Problem]("org.sparkproject.spark_core.protobuf.*"),
     ProblemFilters.exclude[Problem]("org.apache.spark.status.protobuf.StoreTypes*"),
