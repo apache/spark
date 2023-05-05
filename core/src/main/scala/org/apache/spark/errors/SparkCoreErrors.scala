@@ -286,7 +286,7 @@ private[spark] object SparkCoreErrors {
 
   def clusterSchedulerError(message: String): Throwable = {
     new SparkException(
-      errorClass = "TRANSIENT_LEGACY_ERROR_TEMP_3029",
+      errorClass = "_LEGACY_ERROR_TEMP_3029",
       messageParameters = Map("message" -> message),
       cause = null
     )
@@ -461,7 +461,7 @@ private[spark] object SparkCoreErrors {
 
   def outOfMemoryError(requestedBytes: Long, receivedBytes: Long): OutOfMemoryError = {
     new SparkOutOfMemoryError(
-      "TRANSIENT_UNABLE_TO_ACQUIRE_MEMORY",
+      "UNABLE_TO_ACQUIRE_MEMORY",
       Map(
         "requestedBytes" -> requestedBytes.toString,
         "receivedBytes" -> receivedBytes.toString).asJava)

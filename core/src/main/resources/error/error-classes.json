@@ -15,7 +15,8 @@
     "message" : [
       "Lateral column alias <name> is ambiguous and has <n> matches."
     ],
-    "sqlState" : "42702"
+    "sqlState" : "42702",
+    "isTransient": false
   },
   "AMBIGUOUS_REFERENCE" : {
     "message" : [
@@ -105,7 +106,8 @@
     "message" : [
       "Cannot parse decimal."
     ],
-    "sqlState" : "22018"
+    "sqlState" : "22018",
+    "isTransient": false
   },
   "CANNOT_PARSE_JSON_FIELD" : {
     "message" : [
@@ -235,6 +237,7 @@
     "message" : [
       "Cannot resolve <sqlExpr> due to data type mismatch:"
     ],
+    "isTransient": false,
     "subClass" : {
       "ARRAY_FUNCTION_DIFF_TYPES" : {
         "message" : [
@@ -351,6 +354,11 @@
       "INVALID_ORDERING_TYPE" : {
         "message" : [
           "The <functionName> does not support ordering on type <dataType>."
+        ]
+      },
+      "INVALID_ROW_LEVEL_OPERATION_ASSIGNMENTS" : {
+        "message" : [
+          "<errors>"
         ]
       },
       "IN_SUBQUERY_DATA_TYPE_MISMATCH" : {
@@ -528,7 +536,8 @@
     "message" : [
       "Division by zero. Use `try_divide` to tolerate divisor being 0 and return NULL instead. If necessary set <config> to \"false\" to bypass this error."
     ],
-    "sqlState" : "22012"
+    "sqlState" : "22012",
+    "isTransient": false
   },
   "DUPLICATED_MAP_KEY" : {
     "message" : [
@@ -978,6 +987,11 @@
           "expects a binary value with 16, 24 or 32 bytes, but got <actualLength> bytes."
         ]
       },
+      "AES_SALTED_MAGIC" : {
+        "message" : [
+          "Initial bytes from input <saltedMagic> do not match 'Salted__' (0x53616C7465645F5F)."
+        ]
+      },
       "PATTERN" : {
         "message" : [
           "<value>."
@@ -1425,6 +1439,11 @@
       "sortBy must be used together with bucketBy."
     ]
   },
+  "SQL_CONF_NOT_FOUND" : {
+    "message" : [
+      "The SQL config <sqlConf> cannot be found. Please verify that the config exists."
+    ]
+  },
   "STAR_GROUP_BY_POS" : {
     "message" : [
       "Star (*) is not allowed in a select list when GROUP BY an ordinal position is used."
@@ -1546,7 +1565,7 @@
   },
   "UNRECOGNIZED_SQL_TYPE" : {
     "message" : [
-      "Unrecognized SQL type <typeName>."
+      "Unrecognized SQL type - name: <typeName>, id: <jdbcType>."
     ],
     "sqlState" : "42704"
   },
@@ -3706,11 +3725,6 @@
       "Unsuccessful try to zip maps with <size> unique keys due to exceeding the array size limit <maxRoundedArrayLength>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2004" : {
-    "message" : [
-      "no default for type <dataType>."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2005" : {
     "message" : [
       "Type <dataType> does not support ordered operations."
@@ -5500,7 +5514,7 @@
       "<errorMsg>"
     ]
   },
-  "TRANSIENT_LEGACY_ERROR_TEMP_3029" : {
+  "_LEGACY_ERROR_TEMP_3029" : {
     "message" : [
       "Exiting due to error from cluster scheduler: <message>"
     ]
@@ -5520,7 +5534,7 @@
       "Error occurred while waiting for replication to finish"
     ]
   },
-  "TRANSIENT_LEGACY_ERROR_TEMP_3033" : {
+  "_LEGACY_ERROR_TEMP_3033" : {
     "message" : [
       "Unable to register with external shuffle server due to : <message>"
     ]
@@ -5550,12 +5564,12 @@
       "get() failed for block <blockId> even though we held a lock"
     ]
   },
-  "TRANSIENT_LEGACY_ERROR_TEMP_3039" : {
+  "_LEGACY_ERROR_TEMP_3039" : {
     "message" : [
       "BlockManager returned null for BlockStatus query: <blockId>"
     ]
   },
-  "TRANSIENT_LEGACY_ERROR_TEMP_3040" : {
+  "_LEGACY_ERROR_TEMP_3040" : {
     "message" : [
       "BlockManagerMasterEndpoint returned false, expected true."
     ]

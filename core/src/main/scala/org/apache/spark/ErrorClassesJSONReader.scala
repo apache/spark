@@ -20,7 +20,6 @@ package org.apache.spark
 import java.net.URL
 
 import scala.collection.JavaConverters._
-import scala.collection.immutable.Map
 
 import com.fasterxml.jackson.annotation.JsonIgnore
 import com.fasterxml.jackson.core.`type`.TypeReference
@@ -66,8 +65,6 @@ class ErrorClassesJsonReader(jsonFileURLs: Seq[URL]) {
     val errorInfo = errorInfoMap.getOrElse(
       mainErrorClass,
       throw SparkException.internalError(s"Cannot find main error class '$errorClass'"))
-    assert(errorInfo.subClass.isDefined == subErrorClass.isDefined)
-
     if (subErrorClass.isEmpty) {
       errorInfo.messageTemplate
     } else {
@@ -85,6 +82,13 @@ class ErrorClassesJsonReader(jsonFileURLs: Seq[URL]) {
       .flatMap(_.sqlState)
       .orNull
   }
+  def isTransient(errorClass: String): Boolean = {
+    Option(errorClass)
+      .flatMap(_.split('.').headOption)
+      .flatMap(errorInfoMap.get)
+      .flatMap(_.isTransient)
+      .getOrElse(true)
+  }
 }
 
 private object ErrorClassesJsonReader {
@@ -95,7 +99,7 @@ private object ErrorClassesJsonReader {
     val map = mapper.readValue(url, new TypeReference[Map[String, ErrorInfo]]() {})
     val errorClassWithDots = map.collectFirst {
       case (errorClass, _) if errorClass.contains('.') => errorClass
-      case (_, ErrorInfo(_, Some(map), _)) if map.keys.exists(_.contains('.')) =>
+      case (_, ErrorInfo(_, Some(map), _, _)) if map.keys.exists(_.contains('.')) =>
         map.keys.collectFirst { case s if s.contains('.') => s }.get
     }
     if (errorClassWithDots.isEmpty) {
@@ -116,9 +120,10 @@ private object ErrorClassesJsonReader {
  *                The error message is constructed by concatenating the lines with newlines.
  */
 private case class ErrorInfo(
-    message: Seq[String],
-    subClass: Option[Map[String, ErrorSubInfo]],
-    sqlState: Option[String]) {
+                              message: Seq[String],
+                              subClass: Option[Map[String, ErrorSubInfo]],
+                              sqlState: Option[String],
+                              isTransient: Option[Boolean]) {
   // For compatibility with multi-line error messages
   @JsonIgnore
   val messageTemplate: String = message.mkString("\n")

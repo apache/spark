@@ -67,7 +67,7 @@ private[spark] object SparkThrowableHelper {
   }
 
   def isTransientError(errorClass: String): Boolean = {
-    errorClass.startsWith("TRANSIENT")
+    errorReader.isTransient(errorClass)
   }
 
   def getMessage(e: SparkThrowable with Throwable, format: ErrorMessageFormat.Value): String = {
