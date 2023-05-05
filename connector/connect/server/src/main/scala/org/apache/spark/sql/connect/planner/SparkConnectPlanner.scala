@@ -645,32 +645,44 @@ class SparkConnectPlanner(val session: SparkSession) {
   }
 
   /**
-   * This is the untyped version of [[KeyValueGroupedDataset]].
+   * This is the untyped version of [[org.apache.spark.sql.KeyValueGroupedDataset]].
    */
   private case class UntypedKeyValueGroupedDataset(
       kEncoder: ExpressionEncoder[_],
       vEncoder: ExpressionEncoder[_],
-      valueDeserializer: Expression,
       analyzed: LogicalPlan,
       dataAttributes: Seq[Attribute],
       groupingAttributes: Seq[Attribute],
-      sortOrder: Seq[SortOrder])
+      sortOrder: Seq[SortOrder]) {
+    val valueDeserializer: Expression =
+      UnresolvedDeserializer(vEncoder.deserializer, dataAttributes)
+  }
+
   private object UntypedKeyValueGroupedDataset {
     def apply(
         input: proto.Relation,
         groupingExprs: java.util.List[proto.Expression],
         sortingExprs: java.util.List[proto.Expression]): UntypedKeyValueGroupedDataset = {
-      apply(transformRelation(input), groupingExprs, sortingExprs)
+
+      // Compute sort order
+      val sortExprs =
+        sortingExprs.asScala.toSeq.map(expr => transformExpression(expr))
+      val sortOrder: Seq[SortOrder] = MapGroups.sortOrder(sortExprs)
+
+      apply(transformRelation(input), groupingExprs, sortOrder)
     }
 
     private def apply(
         logicalPlan: LogicalPlan,
         groupingExprs: java.util.List[proto.Expression],
-        sortingExprs: java.util.List[proto.Expression]): UntypedKeyValueGroupedDataset = {
+        sortOrder: Seq[SortOrder]): UntypedKeyValueGroupedDataset = {
+      // If created via ds#groupByKey, then there should be only one groupingFunc.
+      // If created via relationalGroupedDS#as, then we are expecting a dummy groupingFuc
+      // (for types) + groupingExprs
       if (groupingExprs.size() == 1) {
-        createFromGroupByKeyFunc(logicalPlan, groupingExprs, sortingExprs)
+        createFromGroupByKeyFunc(logicalPlan, groupingExprs, sortOrder)
       } else if (groupingExprs.size() > 1) {
-        createFromRelationalDataset(logicalPlan, groupingExprs, sortingExprs)
+        createFromRelationalDataset(logicalPlan, groupingExprs, sortOrder)
       } else {
         throw InvalidPlanInput(
           "The grouping expression cannot be absent for KeyValueGroupedDataset")
@@ -680,68 +692,42 @@ class SparkConnectPlanner(val session: SparkSession) {
     private def createFromRelationalDataset(
         logicalPlan: LogicalPlan,
         groupingExprs: java.util.List[proto.Expression],
-        sortingExprs: java.util.List[proto.Expression]): UntypedKeyValueGroupedDataset = {
+        sortOrder: Seq[SortOrder]): UntypedKeyValueGroupedDataset = {
       assert(groupingExprs.size() >= 1)
-      val dummyFunc = unpackUdf(groupingExprs.get(0).getCommonInlineUserDefinedFunction)
+      val dummyFunc = TypedScalaUdf(groupingExprs.get(0))
       val groupExprs = groupingExprs.asScala.toSeq.drop(1).map(expr => transformExpression(expr))
-
-      val vEnc = ExpressionEncoder(dummyFunc.inputEncoders.head)
-      val kEnc = ExpressionEncoder(dummyFunc.outputEncoder)
 
       val (qe, aliasedGroupings) =
         RelationalGroupedDataset.handleGroupingExpression(logicalPlan, session, groupExprs)
 
-      val dataAttributes = logicalPlan.output
-      val valueDeserializer = UnresolvedDeserializer(vEnc.deserializer, dataAttributes)
       UntypedKeyValueGroupedDataset(
-        kEnc,
-        vEnc,
-        valueDeserializer,
+        dummyFunc.outEnc,
+        dummyFunc.inEnc,
         qe.analyzed,
-        dataAttributes,
+        logicalPlan.output,
         aliasedGroupings,
-        Seq.empty)
+        sortOrder)
     }
 
     private def createFromGroupByKeyFunc(
         logicalPlan: LogicalPlan,
         groupingExprs: java.util.List[proto.Expression],
-        sortingExprs: java.util.List[proto.Expression]): UntypedKeyValueGroupedDataset = {
+        sortOrder: Seq[SortOrder]): UntypedKeyValueGroupedDataset = {
       assert(groupingExprs.size() == 1)
-      val groupFunc = groupingExprs.asScala.toSeq
-        .map(expr => unpackUdf(expr.getCommonInlineUserDefinedFunction))
-        .head
+      val groupFunc = TypedScalaUdf(groupingExprs.get(0))
+      val vEnc = groupFunc.inEnc
+      val kEnc = groupFunc.outEnc
 
-      assert(groupFunc.inputEncoders.size == 1)
-      val vEnc = ExpressionEncoder(groupFunc.inputEncoders.head)
-      val kEnc = ExpressionEncoder(groupFunc.outputEncoder)
-
-      val withGroupingKey = new AppendColumns(
-        groupFunc.function.asInstanceOf[Any => Any],
-        vEnc.clsTag.runtimeClass,
-        vEnc.schema,
-        UnresolvedDeserializer(vEnc.deserializer),
-        kEnc.namedExpressions,
-        logicalPlan)
-
+      val withGroupingKey = AppendColumns(groupFunc.function, vEnc, kEnc, logicalPlan)
       // The input logical plan of KeyValueGroupedDataset need to be executed and analyzed
       val analyzed = session.sessionState.executePlan(withGroupingKey).analyzed
-      val dataAttributes = logicalPlan.output
-      val groupingAttributes = withGroupingKey.newColumns
-      val valueDeserializer = UnresolvedDeserializer(vEnc.deserializer, dataAttributes)
-
-      // Compute sort order
-      val sortExprs =
-        sortingExprs.asScala.toSeq.map(expr => transformExpression(expr))
-      val sortOrder: Seq[SortOrder] = MapGroups.sortOrder(sortExprs)
 
       UntypedKeyValueGroupedDataset(
         kEnc,
         vEnc,
-        valueDeserializer,
         analyzed,
-        dataAttributes,
-        groupingAttributes,
+        logicalPlan.output,
+        withGroupingKey.newColumns,
         sortOrder)
     }
   }
@@ -761,6 +747,15 @@ class SparkConnectPlanner(val session: SparkSession) {
     }
   }
   private object TypedScalaUdf {
+    def apply(expr: proto.Expression): TypedScalaUdf = {
+      if (expr.hasCommonInlineUserDefinedFunction
+        && expr.getCommonInlineUserDefinedFunction.hasScalarScalaUdf) {
+        apply(expr.getCommonInlineUserDefinedFunction)
+      } else {
+        throw InvalidPlanInput(s"Expecting a Scala UDF, but get ${expr.getExprTypeCase}")
+      }
+    }
+
     def apply(commonUdf: proto.CommonInlineUserDefinedFunction): TypedScalaUdf = {
       val udf = unpackUdf(commonUdf)
       val outEnc = ExpressionEncoder(udf.outputEncoder)

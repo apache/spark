@@ -199,14 +199,13 @@ class KeyValueGroupedDatasetE2ETestSuite extends QueryTest {
   }
 
   test("agg, keyAs") {
-    val values = spark
+    val ds = spark
       .range(10)
       .groupByKey(v => v % 2)
       .keyAs[Double]
       .agg(count("*"))
-      .collectAsList()
 
-    assert(values == Arrays.asList[(Double, Long)]((0, 5), (1, 5)))
+    checkDatasetUnorderly(ds, (0.0, 5L), (1.0, 5L))
   }
 
   test("typed aggregation: expr") {
@@ -328,9 +327,10 @@ class KeyValueGroupedDatasetE2ETestSuite extends QueryTest {
 
   test("reduceGroups") {
     val ds = Seq("abc", "xyz", "hello").toDS()
-    val values = ds.groupByKey(_.length).reduceGroups(_ + _).collectAsList()
-
-    assert(values == Arrays.asList[(Int, String)]((3, "abcxyz"), (5, "hello")))
+    checkDatasetUnorderly(
+      ds.groupByKey(_.length).reduceGroups(_ + _),
+      (3, "abcxyz"),
+      (5, "hello"))
   }
 
   test("groupby") {
@@ -341,19 +341,23 @@ class KeyValueGroupedDatasetE2ETestSuite extends QueryTest {
       .flatMapSortedGroups($"seq", expr("length(key)"), $"value") { (g, iter) =>
         Iterator(g, iter.mkString(", "))
       }
-      .collectAsList()
 
-    assert(
-      aggregated == Arrays
-        .asList[String]("a", "(a,1,10), (a,2,20)", "b", "(b,2,1), (b,1,2)", "c", "(c,1,1)"))
+    checkDatasetUnorderly(
+      aggregated,
+      "a",
+      "(a,1,10), (a,2,20)",
+      "b",
+      "(b,1,2), (b,2,1)",
+      "c",
+      "(c,1,1)")
   }
 
   test("groupby - keyAs, keys") {
     val ds = Seq(("a", 1, 10), ("a", 2, 20), ("b", 2, 1), ("b", 1, 2), ("c", 1, 1))
       .toDF("key", "seq", "value")
     val grouped = ds.groupBy($"value").as[String, (String, Int, Int)]
-    val keys = grouped.keyAs[String].keys.sort($"value").collectAsList()
+    val keys = grouped.keyAs[String].keys.sort($"value")
 
-    assert(keys == Arrays.asList[String]("1", "2", "10", "20"))
+    checkDataset(keys, "1", "2", "10", "20")
   }
 }
