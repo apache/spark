@@ -266,7 +266,7 @@ object FileFormat {
    */
   val BASE_METADATA_EXTRACTORS: Map[String, PartitionedFile => Any] = Map(
     FILE_PATH -> { pf: PartitionedFile =>
-      // Use new Path(Path.toString).toString as a form of canonicalization
+      // Use `new Path(Path.toString)` as a form of canonicalization
       new Path(pf.filePath.toPath.toString).toUri.toString
     },
     FILE_NAME -> { pf: PartitionedFile =>
