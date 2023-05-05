@@ -180,7 +180,7 @@ private class ShuffleStatus(
   def updateMapOutput(mapId: Long, bmAddress: BlockManagerId): Unit = withWriteLock {
     try {
       val mapIndex = mapIdToMapIndex.get(mapId)
-      val mapStatusOpt = mapIndex.map(mapStatuses(_))
+      val mapStatusOpt = Option(mapIndex.map(mapStatuses(_)).getOrElse(null))
       mapStatusOpt match {
         case Some(mapStatus) =>
           logInfo(s"Updating map output for ${mapId} to ${bmAddress}")
