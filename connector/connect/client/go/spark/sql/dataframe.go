@@ -25,7 +25,6 @@ import (
 	"github.com/apache/arrow/go/v12/arrow/ipc"
 	"github.com/apache/spark/go/v_3_4/generated/proto"
 	"io"
-	"log"
 )
 
 type DataFrame interface {
@@ -87,16 +86,16 @@ func (df *dataFrameImpl) Show(numRows int, truncate bool) error {
 }
 
 func showArrowBatch(arrowBatch *proto.ExecutePlanResponse_ArrowBatch) error {
-	reader := bytes.NewReader(arrowBatch.Data)
+	return showArrowBatchData(arrowBatch.Data)
+}
+
+func showArrowBatchData(data []byte) error {
+	reader := bytes.NewReader(data)
 	arrowReader, err := ipc.NewReader(reader)
 	if err != nil {
 		return fmt.Errorf("failed to create arrow reader: %w", err)
 	}
 	defer arrowReader.Release()
-	schema := arrowReader.Schema()
-	for _, f := range schema.Fields() {
-		log.Printf("Field: %s", f.Name)
-	}
 
 	record, err := arrowReader.Read()
 	if err != nil {
