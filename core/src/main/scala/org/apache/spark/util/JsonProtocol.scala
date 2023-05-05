@@ -1555,18 +1555,13 @@ private[spark] object JsonProtocol {
   }
 
   def stackTraceFromJson(json: JsonNode): Array[StackTraceElement] = {
-    jsonOption(json)
-      .map(
-        _.extractElements
-          .map { line =>
-            val declaringClass = line.get("Declaring Class").extractString
-            val methodName = line.get("Method Name").extractString
-            val fileName = jsonOption(line.get("File Name")).map(_.extractString).orNull
-            val lineNumber = line.get("Line Number").extractInt
-            new StackTraceElement(declaringClass, methodName, fileName, lineNumber)
-          }
-          .toArray)
-      .getOrElse(Array[StackTraceElement]())
+    jsonOption(json).map(_.extractElements.map { line =>
+      val declaringClass = line.get("Declaring Class").extractString
+      val methodName = line.get("Method Name").extractString
+      val fileName = jsonOption(line.get("File Name")).map(_.extractString).orNull
+      val lineNumber = line.get("Line Number").extractInt
+      new StackTraceElement(declaringClass, methodName, fileName, lineNumber)
+    }.toArray).getOrElse(Array[StackTraceElement]())
   }
 
   def exceptionFromJson(json: JsonNode): Exception = {
