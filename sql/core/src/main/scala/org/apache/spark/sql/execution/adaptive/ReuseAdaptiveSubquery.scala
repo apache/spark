@@ -33,9 +33,9 @@ case class ReuseAdaptiveSubquery(
 
     plan.transformAllExpressionsWithPruning(_.containsPattern(PLAN_EXPRESSION)) {
       case sub: ExecSubqueryExpression =>
-        // `InsertAdaptiveSparkPlan` compiles subquery for each exprId, then the java object
-        // is always `eq` if two subqueries have same exprId.
-        // Check if the subquery can be reused manually instead of call `getOrElseUpdate`.
+        // The subquery can be already reused (the same Java object) due to filter pushdown
+        // of table cache. If it happens, we just need to wrap the current subquery with
+        // `ReusedSubqueryExec` and no need to update the `reuseMap`.
         reuseMap.get(sub.plan.canonicalized).map { subquery =>
           sub.withNewPlan(ReusedSubqueryExec(subquery))
         }.getOrElse {
