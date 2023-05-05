@@ -38,58 +38,6 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
-CREATE temporary VIEW cte_view AS WITH s AS (SELECT 1 FROM s) SELECT * FROM s
--- !query schema
-struct<>
--- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
-  "sqlState" : "42P01",
-  "messageParameters" : {
-    "relationName" : "`s`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 60,
-    "stopIndex" : 60,
-    "fragment" : "s"
-  } ]
-}
-
-
--- !query
-SELECT * FROM cte_view
--- !query schema
-struct<>
--- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
-  "sqlState" : "42P01",
-  "messageParameters" : {
-    "relationName" : "`cte_view`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 15,
-    "stopIndex" : 22,
-    "fragment" : "cte_view"
-  } ]
-}
-
-
--- !query
-DROP VIEW IF EXISTS cte_view
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
 WITH r AS (SELECT (SELECT * FROM r))
 SELECT * FROM r
 -- !query schema
@@ -113,59 +61,6 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
-CREATE temporary VIEW cte_view AS WITH r AS (SELECT (SELECT * FROM r))
-SELECT * FROM r
--- !query schema
-struct<>
--- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
-  "sqlState" : "42P01",
-  "messageParameters" : {
-    "relationName" : "`r`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 68,
-    "stopIndex" : 68,
-    "fragment" : "r"
-  } ]
-}
-
-
--- !query
-SELECT * FROM cte_view
--- !query schema
-struct<>
--- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
-  "sqlState" : "42P01",
-  "messageParameters" : {
-    "relationName" : "`cte_view`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 15,
-    "stopIndex" : 22,
-    "fragment" : "cte_view"
-  } ]
-}
-
-
--- !query
-DROP VIEW IF EXISTS cte_view
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
 WITH t AS (SELECT 1 FROM t) SELECT * FROM t
 -- !query schema
 struct<1:int>
@@ -173,32 +68,6 @@ struct<1:int>
 1
 1
 1
-
-
--- !query
-CREATE temporary VIEW cte_view AS WITH t AS (SELECT 1 FROM t) SELECT * FROM t
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-SELECT * FROM cte_view
--- !query schema
-struct<1:int>
--- !query output
-1
-1
-1
-
-
--- !query
-DROP VIEW IF EXISTS cte_view
--- !query schema
-struct<>
--- !query output
-
 
 
 -- !query
@@ -224,58 +93,6 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
-CREATE temporary VIEW cte_view AS WITH s1 AS (SELECT 1 FROM s2), s2 AS (SELECT 1 FROM s1) SELECT * FROM s1, s2
--- !query schema
-struct<>
--- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
-  "sqlState" : "42P01",
-  "messageParameters" : {
-    "relationName" : "`s2`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 61,
-    "stopIndex" : 62,
-    "fragment" : "s2"
-  } ]
-}
-
-
--- !query
-SELECT * FROM cte_view
--- !query schema
-struct<>
--- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
-  "sqlState" : "42P01",
-  "messageParameters" : {
-    "relationName" : "`cte_view`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 15,
-    "stopIndex" : 22,
-    "fragment" : "cte_view"
-  } ]
-}
-
-
--- !query
-DROP VIEW IF EXISTS cte_view
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
 WITH t1 AS (SELECT * FROM t2), t2 AS (SELECT 2 FROM t1) SELECT * FROM t1 cross join t2
 -- !query schema
 struct<id:int,2:int>
@@ -284,33 +101,6 @@ struct<id:int,2:int>
 0	2
 1	2
 1	2
-
-
--- !query
-CREATE temporary VIEW cte_view AS WITH t1 AS (SELECT * FROM t2), t2 AS (SELECT 2 FROM t1) SELECT * FROM t1 cross join t2
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-SELECT * FROM cte_view
--- !query schema
-struct<id:int,2:int>
--- !query output
-0	2
-0	2
-1	2
-1	2
-
-
--- !query
-DROP VIEW IF EXISTS cte_view
--- !query schema
-struct<>
--- !query output
-
 
 
 -- !query
@@ -345,84 +135,12 @@ struct<c1:int,c2:int>
 
 
 -- !query
-CREATE temporary VIEW cte_view AS WITH CTE1 AS (
-  SELECT b.id AS id
-  FROM   T2 a
-         CROSS JOIN (SELECT id AS id FROM T2) b
-)
-SELECT t1.id AS c1,
-       t2.id AS c2
-FROM   CTE1 t1
-       CROSS JOIN CTE1 t2
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-SELECT * FROM cte_view
--- !query schema
-struct<c1:int,c2:int>
--- !query output
-0	0
-0	0
-0	0
-0	0
-0	1
-0	1
-0	1
-0	1
-1	0
-1	0
-1	0
-1	0
-1	1
-1	1
-1	1
-1	1
-
-
--- !query
-DROP VIEW IF EXISTS cte_view
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
 WITH t(x) AS (SELECT 1)
 SELECT * FROM t WHERE x = 1
 -- !query schema
 struct<x:int>
 -- !query output
 1
-
-
--- !query
-CREATE temporary VIEW cte_view AS WITH t(x) AS (SELECT 1)
-SELECT * FROM t WHERE x = 1
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-SELECT * FROM cte_view
--- !query schema
-struct<x:int>
--- !query output
-1
-
-
--- !query
-DROP VIEW IF EXISTS cte_view
--- !query schema
-struct<>
--- !query output
-
 
 
 -- !query
@@ -435,83 +153,12 @@ struct<x:int,y:int>
 
 
 -- !query
-CREATE temporary VIEW cte_view AS WITH t(x, y) AS (SELECT 1, 2)
-SELECT * FROM t WHERE x = 1 AND y = 2
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-SELECT * FROM cte_view
--- !query schema
-struct<x:int,y:int>
--- !query output
-1	2
-
-
--- !query
-DROP VIEW IF EXISTS cte_view
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
 WITH t(x, x) AS (SELECT 1, 2)
 SELECT * FROM t
 -- !query schema
 struct<x:int,x:int>
 -- !query output
 1	2
-
-
--- !query
-CREATE temporary VIEW cte_view AS WITH t(x, x) AS (SELECT 1, 2)
-SELECT * FROM t
--- !query schema
-struct<>
--- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "COLUMN_ALREADY_EXISTS",
-  "sqlState" : "42711",
-  "messageParameters" : {
-    "columnName" : "`x`"
-  }
-}
-
-
--- !query
-SELECT * FROM cte_view
--- !query schema
-struct<>
--- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
-  "sqlState" : "42P01",
-  "messageParameters" : {
-    "relationName" : "`cte_view`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 15,
-    "stopIndex" : 22,
-    "fragment" : "cte_view"
-  } ]
-}
-
-
--- !query
-DROP VIEW IF EXISTS cte_view
--- !query schema
-struct<>
--- !query output
-
 
 
 -- !query
@@ -579,45 +226,6 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
-CREATE temporary VIEW cte_view AS WITH t AS (SELECT 1 FROM non_existing_table)
-SELECT 2
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-SELECT * FROM cte_view
--- !query schema
-struct<>
--- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
-  "sqlState" : "42P01",
-  "messageParameters" : {
-    "relationName" : "`non_existing_table`"
-  },
-  "queryContext" : [ {
-    "objectType" : "VIEW",
-    "objectName" : "cte_view",
-    "startIndex" : 26,
-    "stopIndex" : 43,
-    "fragment" : "non_existing_table"
-  } ]
-}
-
-
--- !query
-DROP VIEW IF EXISTS cte_view
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
 SELECT count(*) FROM (
   WITH q1(x) AS (SELECT random() FROM range(1, 5))
     SELECT * FROM q1
@@ -628,35 +236,6 @@ SELECT count(*) FROM (
 struct<count(1):bigint>
 -- !query output
 4
-
-
--- !query
-CREATE temporary VIEW cte_view AS SELECT count(*) FROM (
-  WITH q1(x) AS (SELECT random() FROM range(1, 5))
-    SELECT * FROM q1
-  UNION
-    SELECT * FROM q1
-) ss
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-SELECT * FROM cte_view
--- !query schema
-struct<count(1):bigint>
--- !query output
-4
-
-
--- !query
-DROP VIEW IF EXISTS cte_view
--- !query schema
-struct<>
--- !query output
-
 
 
 -- !query
@@ -684,46 +263,6 @@ struct<c1:int>
 
 
 -- !query
-CREATE temporary VIEW cte_view AS WITH w1(c1) AS
- (WITH w2(c2) AS
-  (WITH w3(c3) AS
-   (WITH w4(c4) AS
-    (WITH w5(c5) AS
-     (WITH w6(c6) AS
-      (WITH w7(c7) AS
-       (WITH w8(c8) AS
-        (SELECT 1)
-        SELECT * FROM w8)
-       SELECT * FROM w7)
-      SELECT * FROM w6)
-     SELECT * FROM w5)
-    SELECT * FROM w4)
-   SELECT * FROM w3)
-  SELECT * FROM w2)
-SELECT * FROM w1
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-SELECT * FROM cte_view
--- !query schema
-struct<c1:int>
--- !query output
-1
-
-
--- !query
-DROP VIEW IF EXISTS cte_view
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
 SELECT ( WITH cte(foo) AS ( VALUES(id) )
          SELECT (SELECT foo FROM cte) )
 FROM t
@@ -747,90 +286,12 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
-CREATE temporary VIEW cte_view AS SELECT ( WITH cte(foo) AS ( VALUES(id) )
-         SELECT (SELECT foo FROM cte) )
-FROM t
--- !query schema
-struct<>
--- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "_LEGACY_ERROR_TEMP_2304",
-  "messageParameters" : {
-    "sqlExpr" : "outer(t.id)"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 70,
-    "stopIndex" : 71,
-    "fragment" : "id"
-  } ]
-}
-
-
--- !query
-SELECT * FROM cte_view
--- !query schema
-struct<>
--- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
-  "sqlState" : "42P01",
-  "messageParameters" : {
-    "relationName" : "`cte_view`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 15,
-    "stopIndex" : 22,
-    "fragment" : "cte_view"
-  } ]
-}
-
-
--- !query
-DROP VIEW IF EXISTS cte_view
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
 WITH same_name AS (SELECT 42)
 SELECT * FROM same_name, (SELECT 10) AS same_name
 -- !query schema
 struct<42:int,10:int>
 -- !query output
 42	10
-
-
--- !query
-CREATE temporary VIEW cte_view AS WITH same_name AS (SELECT 42)
-SELECT * FROM same_name, (SELECT 10) AS same_name
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-SELECT * FROM cte_view
--- !query schema
-struct<42:int,10:int>
--- !query output
-42	10
-
-
--- !query
-DROP VIEW IF EXISTS cte_view
--- !query schema
-struct<>
--- !query output
-
 
 
 -- !query
@@ -858,91 +319,12 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
-CREATE temporary VIEW cte_view AS WITH same_name(x) AS (SELECT 42)
-SELECT same_name.x FROM (SELECT 10) AS same_name(x), same_name
--- !query schema
-struct<>
--- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "AMBIGUOUS_REFERENCE",
-  "sqlState" : "42704",
-  "messageParameters" : {
-    "name" : "`same_name`.`x`",
-    "referenceNames" : "[`same_name`.`x`, `same_name`.`x`]"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 75,
-    "stopIndex" : 85,
-    "fragment" : "same_name.x"
-  } ]
-}
-
-
--- !query
-SELECT * FROM cte_view
--- !query schema
-struct<>
--- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
-  "sqlState" : "42P01",
-  "messageParameters" : {
-    "relationName" : "`cte_view`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 15,
-    "stopIndex" : 22,
-    "fragment" : "cte_view"
-  } ]
-}
-
-
--- !query
-DROP VIEW IF EXISTS cte_view
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
 WITH q AS (SELECT 'foo' AS x)
 SELECT x, typeof(x) FROM q
 -- !query schema
 struct<x:string,typeof(x):string>
 -- !query output
 foo	string
-
-
--- !query
-CREATE temporary VIEW cte_view AS WITH q AS (SELECT 'foo' AS x)
-SELECT x, typeof(x) FROM q
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-SELECT * FROM cte_view
--- !query schema
-struct<x:string,typeof(x):string>
--- !query output
-foo	string
-
-
--- !query
-DROP VIEW IF EXISTS cte_view
--- !query schema
-struct<>
--- !query output
-
 
 
 -- !query
@@ -970,60 +352,6 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
-CREATE temporary VIEW cte_view AS with cte as (select id as id_alias from t)
-select id from cte
--- !query schema
-struct<>
--- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-  "sqlState" : "42703",
-  "messageParameters" : {
-    "objectName" : "`id`",
-    "proposal" : "`cte`.`id_alias`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 85,
-    "stopIndex" : 86,
-    "fragment" : "id"
-  } ]
-}
-
-
--- !query
-SELECT * FROM cte_view
--- !query schema
-struct<>
--- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
-  "sqlState" : "42P01",
-  "messageParameters" : {
-    "relationName" : "`cte_view`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 15,
-    "stopIndex" : 22,
-    "fragment" : "cte_view"
-  } ]
-}
-
-
--- !query
-DROP VIEW IF EXISTS cte_view
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
 with r1 as (select * from r2),
      r2 as (select 1)
 select 2
@@ -1048,77 +376,12 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
-CREATE temporary VIEW cte_view AS with r1 as (select * from r2),
-     r2 as (select 1)
-select 2
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-SELECT * FROM cte_view
--- !query schema
-struct<>
--- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
-  "sqlState" : "42P01",
-  "messageParameters" : {
-    "relationName" : "`r2`"
-  },
-  "queryContext" : [ {
-    "objectType" : "VIEW",
-    "objectName" : "cte_view",
-    "startIndex" : 27,
-    "stopIndex" : 28,
-    "fragment" : "r2"
-  } ]
-}
-
-
--- !query
-DROP VIEW IF EXISTS cte_view
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
 SELECT * FROM
   (WITH q AS (select 1 x) SELECT x+1 AS y FROM q)
 -- !query schema
 struct<y:int>
 -- !query output
 2
-
-
--- !query
-CREATE temporary VIEW cte_view AS SELECT * FROM
-  (WITH q AS (select 1 x) SELECT x+1 AS y FROM q)
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-SELECT * FROM cte_view
--- !query schema
-struct<y:int>
--- !query output
-2
-
-
--- !query
-DROP VIEW IF EXISTS cte_view
--- !query schema
-struct<>
--- !query output
-
 
 
 -- !query
@@ -1130,59 +393,11 @@ struct<scalarsubquery():int>
 
 
 -- !query
-CREATE temporary VIEW cte_view AS select (with q as (select 1 x) select * from q)
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-SELECT * FROM cte_view
--- !query schema
-struct<scalarsubquery():int>
--- !query output
-1
-
-
--- !query
-DROP VIEW IF EXISTS cte_view
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
 select 1 in (with q as (select 1) select * from q)
 -- !query schema
 struct<(1 IN (listquery())):boolean>
 -- !query output
 true
-
-
--- !query
-CREATE temporary VIEW cte_view AS select 1 in (with q as (select 1) select * from q)
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-SELECT * FROM cte_view
--- !query schema
-struct<(1 IN (listquery())):boolean>
--- !query output
-true
-
-
--- !query
-DROP VIEW IF EXISTS cte_view
--- !query schema
-struct<>
--- !query output
-
 
 
 -- !query
@@ -1210,60 +425,6 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
-CREATE temporary VIEW cte_view AS SELECT * FROM
-  (WITH q AS (select 1 x) SELECT x+1 AS y FROM q),
-  q
--- !query schema
-struct<>
--- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
-  "sqlState" : "42P01",
-  "messageParameters" : {
-    "relationName" : "`q`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 102,
-    "stopIndex" : 102,
-    "fragment" : "q"
-  } ]
-}
-
-
--- !query
-SELECT * FROM cte_view
--- !query schema
-struct<>
--- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
-  "sqlState" : "42P01",
-  "messageParameters" : {
-    "relationName" : "`cte_view`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 15,
-    "stopIndex" : 22,
-    "fragment" : "cte_view"
-  } ]
-}
-
-
--- !query
-DROP VIEW IF EXISTS cte_view
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
 WITH T1 as (select 1 a)
 select *
 from
@@ -1274,56 +435,6 @@ from
 struct<a:int,b:int,a:int>
 -- !query output
 1	2	1
-
-
--- !query
-CREATE temporary VIEW cte_view AS WITH T1 as (select 1 a)
-select *
-from
-  T1 x,
-  (WITH T1 as (select 2 b) select * from T1) y,
-  T1 z
--- !query schema
-struct<>
--- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "COLUMN_ALREADY_EXISTS",
-  "sqlState" : "42711",
-  "messageParameters" : {
-    "columnName" : "`a`"
-  }
-}
-
-
--- !query
-SELECT * FROM cte_view
--- !query schema
-struct<>
--- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
-  "sqlState" : "42P01",
-  "messageParameters" : {
-    "relationName" : "`cte_view`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 15,
-    "stopIndex" : 22,
-    "fragment" : "cte_view"
-  } ]
-}
-
-
--- !query
-DROP VIEW IF EXISTS cte_view
--- !query schema
-struct<>
--- !query output
-
 
 
 -- !query
@@ -1339,34 +450,6 @@ struct<c:int,a:int>
 
 
 -- !query
-CREATE temporary VIEW cte_view AS WITH TTtt as (select 1 a),
-     `tTTt_2` as (select 2 a)
-select *
-from
-  (WITH TtTt as (select 3 c) select * from ttTT, `tttT_2`)
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-SELECT * FROM cte_view
--- !query schema
-struct<c:int,a:int>
--- !query output
-3	2
-
-
--- !query
-DROP VIEW IF EXISTS cte_view
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
 select
   (WITH q AS (select T.x) select * from q)
 from (select 1 x, 2 y) T
@@ -1374,32 +457,6 @@ from (select 1 x, 2 y) T
 struct<scalarsubquery(x):int>
 -- !query output
 1
-
-
--- !query
-CREATE temporary VIEW cte_view AS select
-  (WITH q AS (select T.x) select * from q)
-from (select 1 x, 2 y) T
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-SELECT * FROM cte_view
--- !query schema
-struct<scalarsubquery(x):int>
--- !query output
-1
-
-
--- !query
-DROP VIEW IF EXISTS cte_view
--- !query schema
-struct<>
--- !query output
-
 
 
 -- !query
@@ -1413,32 +470,6 @@ struct<scalarsubquery(x, y):int>
 
 
 -- !query
-CREATE temporary VIEW cte_view AS select
-  (WITH q AS (select 3 z) select x + t.y + z from q)
-from (select 1 x, 2 y) T
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-SELECT * FROM cte_view
--- !query schema
-struct<scalarsubquery(x, y):int>
--- !query output
-6
-
-
--- !query
-DROP VIEW IF EXISTS cte_view
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
 WITH q1 as (select 1 x)
 select * from
   (with q2 as (select * from q1) select * from q2)
@@ -1449,32 +480,6 @@ struct<x:int>
 
 
 -- !query
-CREATE temporary VIEW cte_view AS WITH q1 as (select 1 x)
-select * from
-  (with q2 as (select * from q1) select * from q2)
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-SELECT * FROM cte_view
--- !query schema
-struct<x:int>
--- !query output
-1
-
-
--- !query
-DROP VIEW IF EXISTS cte_view
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
 WITH q1 as (select 1 x)
 select * from
   (with q1 as (select x+1 from q1) select * from q1)
@@ -1482,32 +487,6 @@ select * from
 struct<(x + 1):int>
 -- !query output
 2
-
-
--- !query
-CREATE temporary VIEW cte_view AS WITH q1 as (select 1 x)
-select * from
-  (with q1 as (select x+1 from q1) select * from q1)
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-SELECT * FROM cte_view
--- !query schema
-struct<(x + 1):int>
--- !query output
-2
-
-
--- !query
-DROP VIEW IF EXISTS cte_view
--- !query schema
-struct<>
--- !query output
-
 
 
 -- !query
@@ -1541,31 +520,6 @@ struct<j:int>
 
 
 -- !query
-CREATE temporary VIEW cte_view AS with cte1 as (Select id as j from t)
-select * from cte1 where j = (select max(j) from cte1 as cte2)
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-SELECT * FROM cte_view
--- !query schema
-struct<j:int>
--- !query output
-2
-
-
--- !query
-DROP VIEW IF EXISTS cte_view
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
 with cte AS (SELECT * FROM va) SELECT * FROM cte
 -- !query schema
 struct<>
@@ -1588,58 +542,6 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
-CREATE temporary VIEW cte_view AS with cte AS (SELECT * FROM va) SELECT * FROM cte
--- !query schema
-struct<>
--- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
-  "sqlState" : "42P01",
-  "messageParameters" : {
-    "relationName" : "`va`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 62,
-    "stopIndex" : 63,
-    "fragment" : "va"
-  } ]
-}
-
-
--- !query
-SELECT * FROM cte_view
--- !query schema
-struct<>
--- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
-  "sqlState" : "42P01",
-  "messageParameters" : {
-    "relationName" : "`cte_view`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 15,
-    "stopIndex" : 22,
-    "fragment" : "cte_view"
-  } ]
-}
-
-
--- !query
-DROP VIEW IF EXISTS cte_view
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
 with cte as (select * from cte) select * from cte
 -- !query schema
 struct<>
@@ -1659,58 +561,6 @@ org.apache.spark.sql.AnalysisException
     "fragment" : "cte"
   } ]
 }
-
-
--- !query
-CREATE temporary VIEW cte_view AS with cte as (select * from cte) select * from cte
--- !query schema
-struct<>
--- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
-  "sqlState" : "42P01",
-  "messageParameters" : {
-    "relationName" : "`cte`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 62,
-    "stopIndex" : 64,
-    "fragment" : "cte"
-  } ]
-}
-
-
--- !query
-SELECT * FROM cte_view
--- !query schema
-struct<>
--- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
-  "sqlState" : "42P01",
-  "messageParameters" : {
-    "relationName" : "`cte_view`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 15,
-    "stopIndex" : 22,
-    "fragment" : "cte_view"
-  } ]
-}
-
-
--- !query
-DROP VIEW IF EXISTS cte_view
--- !query schema
-struct<>
--- !query output
-
 
 
 -- !query

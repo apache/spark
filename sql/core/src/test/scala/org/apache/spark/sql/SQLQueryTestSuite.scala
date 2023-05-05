@@ -25,7 +25,6 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.{SparkConf, TestUtils}
 import org.apache.spark.sql.catalyst.expressions.codegen.CodeGenerator
-import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.plans.logical.{Command, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
@@ -390,8 +389,6 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
     val queries = tempQueries.map(_.trim).filter(_ != "").toSeq
       // Fix misplacement when comment is at the end of the query.
       .map(_.split("\n").filterNot(_.startsWith("--")).mkString("\n")).map(_.trim).filter(_ != "")
-      // Expand the queries if it's CTETest
-      .flatMap(query => expandCTEQuery(query, testCase))
 
     val settingLines = comments.filter(_.startsWith("--SET ")).map(_.substring(6))
     val settings = settingLines.flatMap(_.split(",").map { kv =>
@@ -435,23 +432,27 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
     }
   }
 
-  protected def expandCTEQuery(query: String, testCase: TestCase): Seq[String] = {
-    testCase match {
-      case _: CTETest => try {
-        val logicalPlan: LogicalPlan = spark.sessionState.sqlParser.parsePlan(query)
-        logicalPlan match {
-          case _: Command =>
-            Seq(query)
-          case _ =>
-            val createView = s"CREATE temporary VIEW cte_view AS $query"
-            val selectFromView = "SELECT * FROM cte_view"
-            val dropViewIfExists = "DROP VIEW IF EXISTS cte_view"
-            Seq(query, createView, selectFromView, dropViewIfExists)
-        }
-      } catch {
-        case _: ParseException => Seq(query)
+  def expandCTEQueryAndCompareResult(session: SparkSession, query: String, output: ExecutionOutput): Unit = {
+    val logicalPlan: LogicalPlan = session.sessionState.sqlParser.parsePlan(query)
+    // For non-command query with CTE, compare the results of selecting from view created on the original query.
+    if (!logicalPlan.isInstanceOf[Command] && output.schema.get != emptySchema) {
+      val createView = s"CREATE temporary VIEW cte_view AS $query"
+      val selectFromView = "SELECT * FROM cte_view"
+      val dropViewIfExists = "DROP VIEW IF EXISTS cte_view"
+      session.sql(createView)
+      val (selectViewSchema, selectViewOutput) =
+        handleExceptions(getNormalizedQueryExecutionResult(session, selectFromView))
+      // Compare results.
+      assertResult(output.schema.get,
+        s"Schema did not match for CTE query and select from its view: \n$output") {
+        selectViewSchema
       }
-      case _ => Seq(query)
+      assertResult(output.output,
+        s"Result did not match for CTE query and select from its view: \n${output.sql}") {
+        selectViewOutput
+      }
+      // Drop view.
+      session.sql(dropViewIfExists)
     }
   }
 
@@ -509,10 +510,14 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
           val (schema, output) =
             handleExceptions(getNormalizedQueryExecutionResult(localSparkSession, sql))
           // We might need to do some query canonicalization in the future.
-          ExecutionOutput(
+          val executionOutput = ExecutionOutput(
             sql = sql,
             schema = Some(schema),
             output = output.mkString("\n").replaceAll("\\s+$", ""))
+          if (testCase.isInstanceOf[CTETest]) {
+            expandCTEQueryAndCompareResult(localSparkSession, sql, executionOutput)
+          }
+          executionOutput
       }
     }
 
