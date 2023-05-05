@@ -39,7 +39,7 @@ case class ReuseAdaptiveSubquery(
         reuseMap.get(sub.plan.canonicalized).map { subquery =>
           sub.withNewPlan(ReusedSubqueryExec(subquery))
         }.getOrElse {
-          reuseMap.put(sub.plan.canonicalized, sub.plan)
+          reuseMap.putIfAbsent(sub.plan.canonicalized, sub.plan)
           sub
         }
     }
