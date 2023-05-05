@@ -2465,7 +2465,7 @@ class SparkConnectPlanner(val session: SparkSession) {
             .asJava)
 
       case StreamingQueryManagerCommand.CommandCase.GET =>
-        val query = session.streams.get(command.getGet)
+        val query = session.streams.get(command.getGetQuery)
         if (query != null) {
           respBuilder.getQueryBuilder
             .setId(

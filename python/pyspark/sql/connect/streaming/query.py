@@ -189,7 +189,7 @@ class StreamingQueryManager:
 
     def get(self, id: str) -> Optional[StreamingQuery]:
         cmd = pb2.StreamingQueryManagerCommand()
-        cmd.get = id
+        cmd.get_query = id
         response = self._execute_streaming_query_manager_cmd(cmd)
         if response.HasField("query"):
             query = response.query
