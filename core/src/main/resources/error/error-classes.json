@@ -356,11 +356,6 @@
           "The <functionName> does not support ordering on type <dataType>."
         ]
       },
-      "INVALID_ROW_LEVEL_OPERATION_ASSIGNMENTS" : {
-        "message" : [
-          "<errors>"
-        ]
-      },
       "IN_SUBQUERY_DATA_TYPE_MISMATCH" : {
         "message" : [
           "The data type of one or more elements in the left hand side of an IN subquery is not compatible with the data type of the output of the subquery. Mismatched columns: [<mismatchedColumns>], left side: [<leftType>], right side: [<rightType>]."
@@ -987,11 +982,6 @@
           "expects a binary value with 16, 24 or 32 bytes, but got <actualLength> bytes."
         ]
       },
-      "AES_SALTED_MAGIC" : {
-        "message" : [
-          "Initial bytes from input <saltedMagic> do not match 'Salted__' (0x53616C7465645F5F)."
-        ]
-      },
       "PATTERN" : {
         "message" : [
           "<value>."
@@ -1439,11 +1429,6 @@
       "sortBy must be used together with bucketBy."
     ]
   },
-  "SQL_CONF_NOT_FOUND" : {
-    "message" : [
-      "The SQL config <sqlConf> cannot be found. Please verify that the config exists."
-    ]
-  },
   "STAR_GROUP_BY_POS" : {
     "message" : [
       "Star (*) is not allowed in a select list when GROUP BY an ordinal position is used."
@@ -1455,7 +1440,7 @@
       "Static partition column <staticName> is also specified in the column list."
     ]
   },
-  "TRANSIENT_STREAM_FAILED" : {
+  "STREAM_FAILED" : {
     "message" : [
       "Query [id = <id>, runId = <runId>] terminated with exception: <message>"
     ]
@@ -1475,7 +1460,7 @@
     ],
     "sqlState" : "42P01"
   },
-  "TRANSIENT_TASK_WRITE_FAILED" : {
+  "TASK_WRITE_FAILED" : {
     "message" : [
       "Task failed while writing rows to <path>."
     ]
@@ -4024,7 +4009,7 @@
       "Cannot remove reserved property: <property>."
     ]
   },
-  "TRANSIENT_LEGACY_ERROR_TEMP_2070" : {
+  "_LEGACY_ERROR_TEMP_2070" : {
     "message" : [
       "Writing job failed."
     ]
