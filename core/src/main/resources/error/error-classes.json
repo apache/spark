@@ -783,6 +783,12 @@
     ],
     "sqlState" : "42704"
   },
+  "INSERT_COLUMN_ARITY_MISMATCH" : {
+    "message" : [
+      "<tableName> requires that the data to be inserted have the same number of columns as the target table: target table has <targetColumns> column(s) but the inserted data has <insertedColumns> column(s), including <staticPartCols> partition column(s) having constant value(s)."
+    ],
+    "sqlState" : "21S01"
+  },
   "INTERNAL_ERROR" : {
     "message" : [
       "<message>"
@@ -2967,11 +2973,6 @@
   "_LEGACY_ERROR_TEMP_1167" : {
     "message" : [
       "Bucket sorting column '<sortCol>' should not be part of partition columns '<normalizedPartCols>'."
-    ]
-  },
-  "INSERT_COLUMN_ARITY_MISMATCH" : {
-    "message" : [
-      "<tableName> requires that the data to be inserted have the same number of columns as the target table: target table has <targetColumns> column(s) but the inserted data has <insertedColumns> column(s), including <staticPartCols> partition column(s) having constant value(s)."
     ]
   },
   "_LEGACY_ERROR_TEMP_1169" : {

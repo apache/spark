@@ -80,7 +80,7 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
       exception = intercept[ParseException] {
         body
       },
-      errorClass = "INSERT_COLUMN_ARITY_MISMATCH",
+      errorClass = "_LEGACY_ERROR_TEMP_0035",
       parameters = Map("message" -> message),
       context = expectedContext)
   }
@@ -1258,7 +1258,8 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
           """INSERT INTO TABLE dp_test PARTITION(dp)
             |SELECT key, value, key % 5 FROM src""".stripMargin)
       },
-      errorClass = "_LEGACY_ERROR_TEMP_1168",
+      errorClass = "INSERT_COLUMN_ARITY_MISMATCH",
+      sqlState = "21S01",
       parameters = Map(
         "tableName" -> "`spark_catalog`.`default`.`dp_test`",
         "targetColumns" -> "4",

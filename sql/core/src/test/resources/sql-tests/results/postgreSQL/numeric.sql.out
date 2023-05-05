@@ -3833,6 +3833,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INSERT_COLUMN_ARITY_MISMATCH",
+  "sqlState" : "21S01",
   "messageParameters" : {
     "insertedColumns" : "5",
     "staticPartCols" : "0",

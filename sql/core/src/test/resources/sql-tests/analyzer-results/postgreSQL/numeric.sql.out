@@ -3842,6 +3842,7 @@ INSERT INTO num_result SELECT t1.id, t2.id, t1.val, t2.val, t1.val * t2.val
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "INSERT_COLUMN_ARITY_MISMATCH",
+  "sqlState" : "21S01",
   "messageParameters" : {
     "insertedColumns" : "5",
     "staticPartCols" : "0",
