@@ -2506,6 +2506,7 @@ def udf(
 ) -> Union["UserDefinedFunctionLike", Callable[[Callable[..., Any]], "UserDefinedFunctionLike"]]:
     from pyspark.rdd import PythonEvalType
 
+    # TODO: it's confusing that evalType will be updated later when _create_arrow_py_udf
     if f is None or isinstance(f, (str, DataType)):
         # If DataType has been passed as a positional argument
         # for decorator use it as a returnType
