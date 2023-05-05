@@ -25,6 +25,7 @@ import java.util.Locale
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.analysis.{IndexAlreadyExistsException, NonEmptyNamespaceException, NoSuchIndexException}
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.connector.expressions.NamedReference
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -103,8 +104,8 @@ private object PostgresDialect extends JdbcDialect with SQLConfHelper {
     case _ => None
   }
 
-  override def convertJavaTimestampToTimestampNTZ(t: Timestamp): LocalDateTime = {
-    t.toLocalDateTime
+  override def convertJavaTimestampToTimestampNTZ(t: Timestamp): Long = {
+    DateTimeUtils.localDateTimeToMicros(t.toLocalDateTime)
   }
 
   override def convertTimestampNTZToJavaTimestamp(ldt: LocalDateTime): Timestamp = {

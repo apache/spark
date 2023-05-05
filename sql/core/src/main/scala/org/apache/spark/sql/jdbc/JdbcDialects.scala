@@ -111,11 +111,11 @@ abstract class JdbcDialect extends Serializable with Logging {
    * JDBC dialects should override this function to provide implementations that suite their
    * JDBC drivers.
    * @param t Timestamp returned from JDBC driver getTimestamp method.
-   * @return A LocalDateTime representing the same wall clock time as the timestamp in database.
+   * @return A Long value representing the same wall clock time as the timestamp in database.
    */
   @Since("3.5.0")
-  def convertJavaTimestampToTimestampNTZ(t: Timestamp): LocalDateTime = {
-    DateTimeUtils.microsToLocalDateTime(DateTimeUtils.fromJavaTimestampNoRebase(t))
+  def convertJavaTimestampToTimestampNTZ(t: Timestamp): Long = {
+    DateTimeUtils.fromJavaTimestampNoRebase(t)
   }
 
   /**

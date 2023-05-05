@@ -493,8 +493,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
       (rs: ResultSet, row: InternalRow, pos: Int) =>
         val t = rs.getTimestamp(pos + 1)
         if (t != null) {
-          row.setLong(pos,
-            DateTimeUtils.localDateTimeToMicros(dialect.convertJavaTimestampToTimestampNTZ(t)))
+          row.setLong(pos, dialect.convertJavaTimestampToTimestampNTZ(t))
         } else {
           row.update(pos, null)
         }
