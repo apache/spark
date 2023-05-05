@@ -881,7 +881,25 @@ class FileMetadataStructSuite extends QueryTest with SharedSparkSession {
 
 
   Seq("parquet", "json", "csv", "text", "orc").foreach { format =>
-    test(s"metadata file path and name are url encoded for format: $format") {
+    test(s"metadata file path is url encoded for format: $format") {
+      withTempPath { f =>
+        val dirWithSpace = s"$f/with space"
+        spark.range(10)
+          .selectExpr("cast(id as string) as str")
+          .repartition(1)
+          .write
+          .format(format)
+          .mode("append")
+          .save(dirWithSpace)
+
+        val encodedPath = SparkPath.fromPathString(dirWithSpace).urlEncoded
+        val df = spark.read.format(format).load(dirWithSpace)
+        val metadataPath = df.select(METADATA_FILE_PATH).as[String].head()
+        assert(metadataPath.contains(encodedPath))
+      }
+    }
+
+    test(s"metadata file name is url encoded for format: $format") {
       val suffix = if (format == "text") ".txt" else s".$format"
       withTempPath { f =>
         val dirWithSpace = s"$f/with space"
