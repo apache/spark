@@ -255,8 +255,13 @@ object FileFormat {
       fileModificationTime: Long): InternalRow = {
     fieldNames.zipWithIndex.foreach { case (name, i) =>
       name match {
-        case FILE_PATH => row.update(i, UTF8String.fromString(filePath.toString))
-        case FILE_NAME => row.update(i, UTF8String.fromString(filePath.getName))
+        case FILE_PATH =>
+          // Use new Path(Path.toString).toString as a form of canonicalization
+          val pathString = new Path(filePath.toString).toString
+          row.update(i, UTF8String.fromString(pathString))
+        case FILE_NAME =>
+          val fileName = filePath.toUri.getRawPath.split("/").lastOption.getOrElse("")
+          row.update(i, UTF8String.fromString(fileName))
         case FILE_SIZE => row.update(i, fileSize)
         case FILE_BLOCK_START => row.update(i, fileBlockStart)
         case FILE_BLOCK_LENGTH => row.update(i, fileBlockLength)
