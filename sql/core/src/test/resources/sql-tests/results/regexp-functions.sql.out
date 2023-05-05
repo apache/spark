@@ -68,10 +68,12 @@ struct<>
 -- !query output
 org.apache.spark.SparkRuntimeException
 {
-  "errorClass" : "INVALID_PARAMETER_VALUE.NEGATIVE_REGEX_GROUP_INDEX",
+  "errorClass" : "INVALID_PARAMETER_VALUE.REGEX_GROUP_INDEX",
   "sqlState" : "22023",
   "messageParameters" : {
     "functionName" : "`regexp_extract`",
+    "groupCount" : "0",
+    "groupIndex" : "-1",
     "parameter" : "`idx`"
   }
 }
@@ -150,10 +152,12 @@ struct<>
 -- !query output
 org.apache.spark.SparkRuntimeException
 {
-  "errorClass" : "INVALID_PARAMETER_VALUE.NEGATIVE_REGEX_GROUP_INDEX",
+  "errorClass" : "INVALID_PARAMETER_VALUE.REGEX_GROUP_INDEX",
   "sqlState" : "22023",
   "messageParameters" : {
     "functionName" : "`regexp_extract`",
+    "groupCount" : "2",
+    "groupIndex" : "-1",
     "parameter" : "`idx`"
   }
 }
@@ -261,10 +265,12 @@ struct<>
 -- !query output
 org.apache.spark.SparkRuntimeException
 {
-  "errorClass" : "INVALID_PARAMETER_VALUE.NEGATIVE_REGEX_GROUP_INDEX",
+  "errorClass" : "INVALID_PARAMETER_VALUE.REGEX_GROUP_INDEX",
   "sqlState" : "22023",
   "messageParameters" : {
     "functionName" : "`regexp_extract_all`",
+    "groupCount" : "0",
+    "groupIndex" : "-1",
     "parameter" : "`idx`"
   }
 }
@@ -343,10 +349,12 @@ struct<>
 -- !query output
 org.apache.spark.SparkRuntimeException
 {
-  "errorClass" : "INVALID_PARAMETER_VALUE.NEGATIVE_REGEX_GROUP_INDEX",
+  "errorClass" : "INVALID_PARAMETER_VALUE.REGEX_GROUP_INDEX",
   "sqlState" : "22023",
   "messageParameters" : {
     "functionName" : "`regexp_extract_all`",
+    "groupCount" : "2",
+    "groupIndex" : "-1",
     "parameter" : "`idx`"
   }
 }

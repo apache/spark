@@ -357,16 +357,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       messageParameters = Map("dataType" -> dataType))
   }
 
-  def regexGroupIndexLessThanZeroError(funcName: String): RuntimeException = {
-    new SparkRuntimeException(
-      errorClass = "INVALID_PARAMETER_VALUE.NEGATIVE_REGEX_GROUP_INDEX",
-      messageParameters = Map(
-        "parameter" -> toSQLId("idx"),
-        "functionName" -> toSQLId(funcName)
-      ))
-  }
-
-  def regexGroupIndexExceedGroupCountError(
+  def invalidRegexGroupIndexError(
       funcName: String,
       groupCount: Int,
       groupIndex: Int): RuntimeException = {

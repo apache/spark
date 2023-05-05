@@ -424,17 +424,21 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkErrorInExpression[SparkRuntimeException](
       expr,
       row11,
-      "INVALID_PARAMETER_VALUE.NEGATIVE_REGEX_GROUP_INDEX",
+      "INVALID_PARAMETER_VALUE.REGEX_GROUP_INDEX",
       Map("parameter" -> "`idx`",
-        "functionName" -> "`regexp_extract`"
+        "functionName" -> "`regexp_extract`",
+        "groupCount" -> "2",
+        "groupIndex" -> "-1"
       )
     )
     checkErrorInExpression[SparkRuntimeException](
       expr,
       row12,
-      "INVALID_PARAMETER_VALUE.NEGATIVE_REGEX_GROUP_INDEX",
+      "INVALID_PARAMETER_VALUE.REGEX_GROUP_INDEX",
       Map("parameter" -> "`idx`",
-        "functionName" -> "`regexp_extract`"
+        "functionName" -> "`regexp_extract`",
+        "groupCount" -> "0",
+        "groupIndex" -> "-1"
       )
     )
     // Test escaping of arguments
@@ -513,17 +517,21 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkErrorInExpression[SparkRuntimeException](
       expr,
       row12,
-      "INVALID_PARAMETER_VALUE.NEGATIVE_REGEX_GROUP_INDEX",
+      "INVALID_PARAMETER_VALUE.REGEX_GROUP_INDEX",
       Map("parameter" -> "`idx`",
-        "functionName" -> "`regexp_extract_all`"
+        "functionName" -> "`regexp_extract_all`",
+        "groupCount" -> "2",
+        "groupIndex" -> "-1"
       )
     )
     checkErrorInExpression[SparkRuntimeException](
       expr,
       row13,
-      "INVALID_PARAMETER_VALUE.NEGATIVE_REGEX_GROUP_INDEX",
+      "INVALID_PARAMETER_VALUE.REGEX_GROUP_INDEX",
       Map("parameter" -> "`idx`",
-        "functionName" -> "`regexp_extract_all`"
+        "functionName" -> "`regexp_extract_all`",
+        "groupCount" -> "0",
+        "groupIndex" -> "-1"
       )
     )
   }

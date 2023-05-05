@@ -1009,11 +1009,6 @@
           "Initial bytes from input <saltedMagic> do not match 'Salted__' (0x53616C7465645F5F)."
         ]
       },
-      "NEGATIVE_REGEX_GROUP_INDEX" : {
-        "message" : [
-          "The specified group index cannot be less than zero."
-        ]
-      },
       "PATTERN" : {
         "message" : [
           "<value>."
