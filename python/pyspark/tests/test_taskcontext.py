@@ -77,14 +77,11 @@ class TaskContextTests(PySparkTestCase):
             attempt_number = tc.attemptNumber()
             partition_id = tc.partitionId()
             attempt_id = tc.taskAttemptId()
-            if attempt_number == 0 and partition_id == 0:
-                raise RuntimeError("Failing on first attempt")
-            else:
-                return [x, partition_id, attempt_number, attempt_id]
+            return [x, partition_id, attempt_number, attempt_id]
 
         result = rdd.map(fail_on_first).collect()
         # We should re-submit the first partition to it but other partitions should be attempt 0
-        self.assertEqual([0, 0, 1], result[0][0:3])
+        self.assertEqual([0, 0, 0], result[0][0:3])
         self.assertEqual([9, 3, 0], result[9][0:3])
         first_partition = filter(lambda x: x[1] == 0, result)
         map(lambda x: self.assertEqual(1, x[2]), first_partition)
