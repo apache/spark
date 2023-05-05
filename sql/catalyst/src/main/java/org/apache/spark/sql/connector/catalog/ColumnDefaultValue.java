@@ -79,6 +79,6 @@ public class ColumnDefaultValue {
 
   @Override
   public String toString() {
-    return "ColumnDefaultValue{sql='" + sql + "\', value=" + value + '}';
+    return "ColumnDefaultValue{sql='" + sql + "', value=" + value + '}';
   }
 }

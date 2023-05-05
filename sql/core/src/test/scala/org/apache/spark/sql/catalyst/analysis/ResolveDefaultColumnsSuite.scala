@@ -21,7 +21,7 @@ import org.apache.spark.sql.{AnalysisException, QueryTest}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
-import org.apache.spark.sql.connector.catalog.{Table, TableCapability}
+import org.apache.spark.sql.connector.catalog.{Column, Table, TableCapability}
 import org.apache.spark.sql.connector.write.SupportsCustomSchemaWrite
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.test.SharedSparkSession
@@ -140,8 +140,8 @@ class ResolveDefaultColumnsSuite extends QueryTest with SharedSparkSession {
     override def schema: StructType = StructType.fromAttributes(output)
     override def capabilities(): java.util.Set[TableCapability] =
       new java.util.HashSet[TableCapability]()
-    override def customSchemaForInserts: StructType =
-      StructType(schema.fields.dropRight(numMetadataColumns))
+    override def customColumnsForInserts: Array[Column] =
+      columns().dropRight(numMetadataColumns)
   }
 
   /** Helper method to generate a DSV2 relation using the above table type. */

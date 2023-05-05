@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
+import org.apache.spark.sql.connector.catalog.CatalogV2Util
 import org.apache.spark.sql.connector.write.SupportsCustomSchemaWrite
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
@@ -298,16 +299,12 @@ case class ResolveDefaultColumns(
         val replaced: Option[Seq[Assignment]] =
           replaceExplicitDefaultValuesForUpdateAssignments(
             u.assignments, CommandType.Merge, columnNamesToExpressions)
-        replaced.map { r =>
-          Some(u.copy(assignments = r))
-        }.getOrElse(None)
+        replaced.map { r => u.copy(assignments = r) }
       case i: InsertAction =>
         val replaced: Option[Seq[Assignment]] =
           replaceExplicitDefaultValuesForUpdateAssignments(
             i.assignments, CommandType.Merge, columnNamesToExpressions)
-        replaced.map { r =>
-          Some(i.copy(assignments = r))
-        }.getOrElse(None)
+        replaced.map { r => i.copy(assignments = r) }
       case _ => Some(action)
     }
   }
@@ -527,7 +524,7 @@ case class ResolveDefaultColumns(
    *
    * @param input the input expression to examine.
    * @param defaultExpr the default to return if [[input]] is an unresolved "DEFAULT" reference.
-   * @param isInsert the type of command we are currently processing.
+   * @param command the type of command we are currently processing.
    * @param addAlias if true, wraps the result with an alias of the original default column name.
    * @return [[defaultExpr]] if [[input]] is an unresolved "DEFAULT" attribute reference.
    */
@@ -632,7 +629,7 @@ case class ResolveDefaultColumns(
       case r: UnresolvedCatalogRelation =>
         r.tableMeta.schema
       case DataSourceV2Relation(table: SupportsCustomSchemaWrite, _, _, _, _) =>
-        table.customSchemaForInserts
+        CatalogV2Util.v2ColumnsToStructType(table.customColumnsForInserts())
       case r: NamedRelation if !r.skipSchemaResolution =>
         r.schema
       case v: View if v.isTempViewStoringAnalyzedPlan =>

@@ -18,7 +18,8 @@
 package org.apache.spark.sql.connector.write;
 
 import org.apache.spark.annotation.Evolving;
-import org.apache.spark.sql.types.StructType;
+import org.apache.spark.sql.connector.catalog.Column;
+import org.apache.spark.sql.connector.catalog.Table;
 
 /**
  * Trait for tables that support custom schemas for write operations including INSERT INTO commands
@@ -27,12 +28,12 @@ import org.apache.spark.sql.types.StructType;
  * @since 3.4.1
  */
 @Evolving
-public interface SupportsCustomSchemaWrite {
+public interface SupportsCustomSchemaWrite extends Table {
     /**
      * Represents a table with a custom schema to use for resolving DEFAULT column references when
      * inserting into the table. For example, this can be useful for excluding hidden pseudocolumns.
      *
      * @return the new schema to use for this process.
      */
-    StructType customSchemaForInserts();
+    Column[] customColumnsForInserts();
 }
