@@ -487,7 +487,7 @@ private[hive] class HiveClientImpl(
       unsupportedFeatures += "skewed columns"
     }
 
-    if (h.getStorageHandler != null) {
+    if (h.getProperty("storage_handler") != null) {
       unsupportedFeatures += "storage handler"
     }
 
