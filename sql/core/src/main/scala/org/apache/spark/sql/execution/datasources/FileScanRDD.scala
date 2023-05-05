@@ -159,11 +159,14 @@ class FileScanRDD(
         metadataColumns.map(_.name).map {
           case FILE_PATH =>
             val columnVector = new ConstantColumnVector(c.numRows(), StringType)
-            columnVector.setUtf8String(UTF8String.fromString(path.toString))
+            // Use new Path(Path.toString).toString as a form of canonicalization
+            val pathString = new Path(path.toString).toString
+            columnVector.setUtf8String(UTF8String.fromString(pathString))
             columnVector
           case FILE_NAME =>
             val columnVector = new ConstantColumnVector(c.numRows(), StringType)
-            columnVector.setUtf8String(UTF8String.fromString(path.getName))
+            val fileName = path.toUri.getRawPath.split("/").lastOption.getOrElse("")
+            columnVector.setUtf8String(UTF8String.fromString(fileName))
             columnVector
           case FILE_SIZE =>
             val columnVector = new ConstantColumnVector(c.numRows(), LongType)
