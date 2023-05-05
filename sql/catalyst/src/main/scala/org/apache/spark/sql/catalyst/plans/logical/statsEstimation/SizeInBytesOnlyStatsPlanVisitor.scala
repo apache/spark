@@ -79,7 +79,17 @@ object SizeInBytesOnlyStatsPlanVisitor extends LogicalPlanVisitor[Statistics] {
 
   override def visitFilter(p: Filter): Statistics = visitUnaryNode(p)
 
-  override def visitGenerate(p: Generate): Statistics = default(p)
+  override def visitGenerate(p: Generate): Statistics = {
+    val statistics = default(p)
+    val ratio = p.generator.rowsRatio
+    var sizeInBytes =
+      EstimationUtils.ceil(BigDecimal(statistics.sizeInBytes) * ratio)
+    if (sizeInBytes == 0) {
+      sizeInBytes = 1
+    }
+    val generateRows = statistics.rowCount.map(c => EstimationUtils.ceil(BigDecimal(c) * ratio))
+    Statistics(sizeInBytes, generateRows)
+  }
 
   override def visitGlobalLimit(p: GlobalLimit): Statistics = {
     val limit = p.limitExpr.eval().asInstanceOf[Int]

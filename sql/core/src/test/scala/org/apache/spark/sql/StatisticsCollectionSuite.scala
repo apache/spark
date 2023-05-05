@@ -27,6 +27,7 @@ import scala.collection.mutable
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.CatalogColumnStat
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils
 import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, DateTimeUtils}
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{withDefaultTimeZone, PST, UTC}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{getZoneId, TimeZoneUTC}
@@ -848,5 +849,22 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
     checkError(e,
       errorClass = "SCHEMA_NOT_FOUND",
       parameters = Map("schemaName" -> "`db_not_exists`"))
+  }
+
+  test("SPARK-43385: The Generator's statistics should be" +
+    " ratio times greater than the child nodes") {
+    val baseDf = Seq((1, "Yi")).toDF("id", "name")
+    val baseSizeInBytes = baseDf.queryExecution.optimizedPlan.stats.sizeInBytes
+
+    Seq(5L, 10L, 100L, 1000L).foreach { ratio =>
+      spark.sessionState.conf.setConf(SQLConf.GENERATOR_ROWS_RATIO, ratio)
+      val df = {
+        baseDf.explode($"name") {
+          case Row(name: String) => (0 until ratio.toInt).map(i => Tuple1(s"$name-$i")).toSeq
+        }
+      }
+      val stats = df.queryExecution.optimizedPlan.stats
+      assert(stats.sizeInBytes == EstimationUtils.ceil(BigDecimal(baseSizeInBytes) * ratio))
+    }
   }
 }

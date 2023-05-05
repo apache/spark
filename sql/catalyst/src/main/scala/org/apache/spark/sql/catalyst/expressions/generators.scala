@@ -68,6 +68,11 @@ trait Generator extends Expression {
   override def eval(input: InternalRow): TraversableOnce[InternalRow]
 
   /**
+   * Ratio of the row count of output rows to the row count of input rows.
+   */
+  def rowsRatio: Long = 1L
+
+  /**
    * Notifies that there are no more rows to process, clean up code, and additional
    * rows can be made here.
    */
@@ -123,6 +128,8 @@ case class UserDefinedGenerator(
     // Convert the objects into Scala Type before calling function, we need schema to support UDT
     function(convertToScala(inputRow(input)))
   }
+
+  override def rowsRatio: Long = SQLConf.get.generatorRowsRatio
 
   override def toString: String = s"UserDefinedGenerator(${children.mkString(",")})"
 
@@ -322,6 +329,8 @@ case class GeneratorOuter(child: Generator) extends UnaryExpression with Generat
 
   override protected def withNewChildInternal(newChild: Expression): GeneratorOuter =
     copy(child = newChild.asInstanceOf[Generator])
+
+  override def rowsRatio: Long = child.rowsRatio
 }
 
 /**
@@ -542,6 +551,8 @@ case class SQLKeywords() extends LeafExpression with Generator with CodegenFallb
       InternalRow(UTF8String.fromString(keyword), isReserved)
     }
   }
+
+  override def rowsRatio: Long = keywords.size
 
   override def prettyName: String = "sql_keywords"
 }

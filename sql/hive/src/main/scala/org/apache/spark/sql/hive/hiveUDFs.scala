@@ -33,6 +33,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, CodegenFallback, ExprCode}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block.BlockHelper
 import org.apache.spark.sql.hive.HiveShim._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 /**
@@ -244,6 +245,8 @@ private[hive] case class HiveGenericUDTF(
     function.process(wrap(inputProjection(input), wrappers, udtInput, inputDataTypes))
     collector.collectRows()
   }
+
+  override def rowsRatio: Long = SQLConf.get.generatorRowsRatio
 
   protected class UDTFCollector extends Collector {
     var collected = new ArrayBuffer[InternalRow]

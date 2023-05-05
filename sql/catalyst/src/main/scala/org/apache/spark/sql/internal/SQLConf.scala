@@ -2560,6 +2560,13 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val GENERATOR_ROWS_RATIO =
+    buildConf("spark.sql.statistics.generator.rows.ratio")
+      .doc("Ratio of the row count of output rows to the row count of input rows for UDTF.")
+      .version("3.4.0")
+      .longConf
+      .createWithDefault(1L)
+
   val CBO_ENABLED =
     buildConf("spark.sql.cbo.enabled")
       .doc("Enables CBO for estimation of plan statistics when set true.")
@@ -4795,6 +4802,8 @@ class SQLConf extends Serializable with Logging {
   def histogramNumBins: Int = getConf(HISTOGRAM_NUM_BINS)
 
   def percentileAccuracy: Int = getConf(PERCENTILE_ACCURACY)
+
+  def generatorRowsRatio: Long = getConf(SQLConf.GENERATOR_ROWS_RATIO)
 
   def cboEnabled: Boolean = getConf(SQLConf.CBO_ENABLED)
 

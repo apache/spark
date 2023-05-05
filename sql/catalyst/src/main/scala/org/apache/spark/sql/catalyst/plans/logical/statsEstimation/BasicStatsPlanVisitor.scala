@@ -56,7 +56,7 @@ object BasicStatsPlanVisitor extends LogicalPlanVisitor[Statistics] {
     FilterEstimation(p).estimate.getOrElse(fallback(p))
   }
 
-  override def visitGenerate(p: Generate): Statistics = default(p)
+  override def visitGenerate(p: Generate): Statistics = fallback(p)
 
   override def visitGlobalLimit(p: GlobalLimit): Statistics = fallback(p)
 
