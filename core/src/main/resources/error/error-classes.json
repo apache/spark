@@ -2969,7 +2969,7 @@
       "Bucket sorting column '<sortCol>' should not be part of partition columns '<normalizedPartCols>'."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1168" : {
+  "INSERT_COLUMN_ARITY_MISMATCH" : {
     "message" : [
       "<tableName> requires that the data to be inserted have the same number of columns as the target table: target table has <targetColumns> column(s) but the inserted data has <insertedColumns> column(s), including <staticPartCols> partition column(s) having constant value(s)."
     ]

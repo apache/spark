@@ -80,7 +80,7 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
       exception = intercept[ParseException] {
         body
       },
-      errorClass = "_LEGACY_ERROR_TEMP_0035",
+      errorClass = "INSERT_COLUMN_ARITY_MISMATCH",
       parameters = Map("message" -> message),
       context = expectedContext)
   }
