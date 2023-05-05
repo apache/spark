@@ -119,8 +119,8 @@ private[sql] class AvroDeserializer(
         s"schema is incompatible (avroType = $avroType, sqlType = ${catalystType.sql})"
 
     val realDataType = SchemaConverters.toSqlType(avroType).dataType
-    val confKey = SQLConf.LEGACY_AVRO_PREVENT_READING_INCORRECT_SAME_ENCODED_TYPES
-    val preventReadingIncorrectType = SQLConf.get.getConf(confKey)
+    val confKey = SQLConf.LEGACY_AVRO_ALLOW_READING_WITH_INCOMPATIBLE_SCHEMA
+    val preventReadingIncorrectType = !SQLConf.get.getConf(confKey)
     def isNotExactType: Boolean = {
       preventReadingIncorrectType && !realDataType.acceptsType(catalystType)
     }

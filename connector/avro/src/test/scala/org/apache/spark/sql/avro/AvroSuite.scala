@@ -643,10 +643,11 @@ abstract class AvroSuite
   test("SPARK-43380: Fix Avro data type conversion issues to avoid producing incorrect results") {
     withTempPath { path =>
       sql("SELECT 13.1234567890 a").write.format("avro").save(path.toString)
+      // With the flag disabled, we will throw an exception if there is a mismatch
       val e = intercept[SparkException] {
         spark.read.schema("a DECIMAL(4, 3)").format("avro").load(path.toString).collect()
       }
-      val confKey = SQLConf.LEGACY_AVRO_PREVENT_READING_INCORRECT_SAME_ENCODED_TYPES.key
+      val confKey = SQLConf.LEGACY_AVRO_ALLOW_READING_WITH_INCOMPATIBLE_SCHEMA.key
       ExceptionUtils.getRootCause(e) match {
         case ex: IncompatibleSchemaException =>
           assert(ex.getMessage.contains("rescuedDataColumn"))
@@ -659,8 +660,8 @@ abstract class AvroSuite
         spark.read.schema("a DECIMAL(5, 3)").format("avro").load(path.toString),
         Row(new java.math.BigDecimal("13.123"))
       )
-      withSQLConf(confKey -> "false") {
-        // With the flag disabled, we return a null silently, which isn't great
+      withSQLConf(confKey -> "true") {
+        // With the flag enabled, we return a null silently, which isn't great
         checkAnswer(
           spark.read.schema("a DECIMAL(4, 3)").format("avro").load(path.toString),
           Row(null)
