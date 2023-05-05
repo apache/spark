@@ -1004,7 +1004,7 @@ class DataFrameTestsMixin:
 
         # number of fields must match.
         self.assertRaisesRegex(
-            Exception, "Length of object", lambda: rdd.toDF("key: int").collect()
+            Exception, "LENGTH_SHOULD_BE_THE_SAME", lambda: rdd.toDF("key: int").collect()
         )
 
         # field types mismatch will cause exception at runtime.

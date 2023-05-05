@@ -111,7 +111,7 @@ ERROR_CLASSES_JSON = """
   },
   "CANNOT_PARSE_DATATYPE": {
     "message": [
-      "Unable to parse datatype from schema. <error>."
+      "Unable to parse datatype. <msg>."
     ]
   },
   "CANNOT_PROVIDE_METADATA": {
@@ -395,6 +395,11 @@ ERROR_CLASSES_JSON = """
       "<feature> is not implemented."
     ]
   },
+  "NOT_INSTANCE_OF" : {
+    "message" : [
+      "<value> is not an instance of type <data_type>."
+    ]
+  },
   "NOT_INT" : {
     "message" : [
       "Argument `<arg_name>` should be an int, got <arg_type>."
@@ -566,9 +571,19 @@ ERROR_CLASSES_JSON = """
       "pandas iterator UDF should exhaust the input iterator."
     ]
   },
+  "TOO_MANY_VALUES" : {
+    "message" : [
+      "Expected <expected> values for `<item>`, got <actual>."
+    ]
+  },
   "UNEXPECTED_RESPONSE_FROM_SERVER" : {
     "message" : [
       "Unexpected response from iterator server."
+    ]
+  },
+  "UNEXPECTED_TUPLE_WITH_STRUCT" : {
+    "message" : [
+      "Unexpected tuple <tuple> with StructType."
     ]
   },
   "UNKNOWN_EXPLAIN_MODE" : {
@@ -646,6 +661,11 @@ ERROR_CLASSES_JSON = """
       "Value for `<arg_name>` must be 'any' or 'all', got '<arg_value>'."
     ]
   },
+  "VALUE_NOT_BETWEEN" : {
+    "message" : [
+      "Value for `<arg_name>` must be between <min> and <max>."
+    ]
+  },
   "VALUE_NOT_NON_EMPTY_STR" : {
     "message" : [
       "Value for `<arg_name>` must be a non empty string, got '<arg_value>'."
@@ -668,7 +688,7 @@ ERROR_CLASSES_JSON = """
   },
   "VALUE_OUT_OF_BOUND" : {
     "message" : [
-      "Value for `<arg_name>` must be between <min> and <max>."
+      "Value for `<arg_name>` must be greater than <lower_bound> or less than <upper_bound>, got <actual>"
     ]
   },
   "WRONG_NUM_ARGS_FOR_HIGHER_ORDER_FUNCTION" : {
