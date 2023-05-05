@@ -128,8 +128,7 @@ private[sql] class AvroDeserializer(
       new IncompatibleSchemaException(errorPrefix + "the original encoded data type is " +
         s"${realDataType.catalogString}, however you're trying to read the field as " +
         s"${provided.catalogString}, which would lead to an incorrect answer. To allow reading " +
-        s"this field, either add the 'rescuedDataColumn' option to rescue the column or disable " +
-        s"the SQL configuration: `${confKey.key}`.")
+        s"this field, enable the SQL configuration: `${confKey.key}`.")
     }
 
     (avroType.getType, catalystType) match {

@@ -650,7 +650,6 @@ abstract class AvroSuite
       val confKey = SQLConf.LEGACY_AVRO_ALLOW_READING_WITH_INCOMPATIBLE_SCHEMA.key
       ExceptionUtils.getRootCause(e) match {
         case ex: IncompatibleSchemaException =>
-          assert(ex.getMessage.contains("rescuedDataColumn"))
           assert(ex.getMessage.contains(confKey))
         case other =>
           fail(s"Received unexpected exception", other)
