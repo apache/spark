@@ -2429,7 +2429,6 @@ class DatasetSuite extends QueryTest
       assert(parquetFiles.size === 10)
     }
   }
-
 }
 
 class DatasetLargeResultCollectingSuite extends QueryTest

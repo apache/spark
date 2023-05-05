@@ -4144,7 +4144,7 @@
       "<ddl> is not supported temporarily."
     ]
   },
-  "TRANSIENT_LEGACY_ERROR_TEMP_2097" : {
+  "_LEGACY_ERROR_TEMP_2097" : {
     "message" : [
       "Could not execute broadcast in <timeout> secs. You can increase the timeout for broadcasts via <broadcastTimeout> or disable broadcast join by setting <autoBroadcastJoinThreshold> to -1."
     ]
@@ -4179,7 +4179,7 @@
       "End of the iterator."
     ]
   },
-  "TRANSIENT_LEGACY_ERROR_TEMP_2105" : {
+  "_LEGACY_ERROR_TEMP_2105" : {
     "message" : [
       "Could not allocate memory to grow BytesToBytesMap."
     ]
@@ -4189,7 +4189,7 @@
       "Can't acquire <size> bytes memory to build hash relation, got <got> bytes."
     ]
   },
-  "TRANSIENT_LEGACY_ERROR_TEMP_2107" : {
+  "_LEGACY_ERROR_TEMP_2107" : {
     "message" : [
       "There is not enough memory to build hash map."
     ]
@@ -4837,7 +4837,7 @@
       "Cannot broadcast the table that is larger than <maxBroadcastTableBytes>GB: <dataSize> GB."
     ]
   },
-  "TRANSIENT_LEGACY_ERROR_TEMP_2250" : {
+  "_LEGACY_ERROR_TEMP_2250" : {
     "message" : [
       "Not enough memory to build and broadcast the table to all worker nodes. As a workaround, you can either disable broadcast by setting <autoBroadcastjoinThreshold> to -1 or increase the spark driver memory by setting <driverMemory> to a higher value<analyzeTblMsg>"
     ]
@@ -4857,7 +4857,7 @@
       "Data source <sourceName> does not support continuous processing."
     ]
   },
-  "TRANSIENT_LEGACY_ERROR_TEMP_2254" : {
+  "_LEGACY_ERROR_TEMP_2254" : {
     "message" : [
       "Data read failed."
     ]

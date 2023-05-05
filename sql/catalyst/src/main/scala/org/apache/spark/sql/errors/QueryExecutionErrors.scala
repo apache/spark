@@ -1112,7 +1112,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
 
   def executeBroadcastTimeoutError(timeout: Long, ex: Option[TimeoutException]): Throwable = {
     new SparkException(
-      errorClass = "TRANSIENT_LEGACY_ERROR_TEMP_2097",
+      errorClass = "_LEGACY_ERROR_TEMP_2097",
       messageParameters = Map(
         "timeout" -> timeout.toString(),
         "broadcastTimeout" -> toSQLConf(SQLConf.BROADCAST_TIMEOUT.key),
@@ -1174,7 +1174,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
 
   def cannotAllocateMemoryToGrowBytesToBytesMapError(): Throwable = {
     new SparkException(
-      errorClass = "TRANSIENT_LEGACY_ERROR_TEMP_2105",
+      errorClass = "_LEGACY_ERROR_TEMP_2105",
       messageParameters = Map.empty,
       cause = null)
   }
@@ -1188,7 +1188,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
 
   def cannotAcquireMemoryToBuildUnsafeHashedRelationError(): Throwable = {
     new SparkOutOfMemoryError(
-      "TRANSIENT_LEGACY_ERROR_TEMP_2107", Collections.emptyMap())
+      "_LEGACY_ERROR_TEMP_2107", Collections.emptyMap())
   }
 
   def rowLargerThan256MUnsupportedError(): SparkUnsupportedOperationException = {
@@ -2376,7 +2376,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       "."
     }
     new SparkException(
-      errorClass = "TRANSIENT_LEGACY_ERROR_TEMP_2250",
+      errorClass = "_LEGACY_ERROR_TEMP_2250",
       messageParameters = Map(
         "autoBroadcastjoinThreshold" -> SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key,
         "driverMemory" -> SparkLauncher.DRIVER_MEMORY,
@@ -2410,7 +2410,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
 
   def failedToReadDataError(failureReason: Throwable): Throwable = {
     new SparkException(
-      errorClass = "TRANSIENT_LEGACY_ERROR_TEMP_2254",
+      errorClass = "_LEGACY_ERROR_TEMP_2254",
       messageParameters = Map.empty,
       cause = failureReason)
   }
@@ -2792,5 +2792,4 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
         "location" -> toSQLValue(location.toString, StringType),
         "identifier" -> toSQLId(tableId.nameParts)))
   }
-
 }
