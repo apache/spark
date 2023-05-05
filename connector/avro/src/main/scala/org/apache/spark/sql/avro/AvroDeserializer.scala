@@ -36,6 +36,7 @@ import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, DateTim
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.MILLIS_PER_DAY
 import org.apache.spark.sql.catalyst.util.RebaseDateTime.RebaseSpec
 import org.apache.spark.sql.execution.datasources.DataSourceUtils
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -117,6 +118,20 @@ private[sql] class AvroDeserializer(
     val incompatibleMsg = errorPrefix +
         s"schema is incompatible (avroType = $avroType, sqlType = ${catalystType.sql})"
 
+    val realDataType = SchemaConverters.toSqlType(avroType).dataType
+    val confKey = SQLConf.LEGACY_AVRO_PREVENT_READING_INCORRECT_SAME_ENCODED_TYPES
+    val preventReadingIncorrectType = SQLConf.get.getConf(confKey)
+    def isNotExactType: Boolean = {
+      preventReadingIncorrectType && !realDataType.acceptsType(catalystType)
+    }
+    def incorrectTypeException(provided: DataType): IncompatibleSchemaException = {
+      new IncompatibleSchemaException(errorPrefix + "the original encoded data type is " +
+        s"${realDataType.catalogString}, however you're trying to read the field as " +
+        s"${provided.catalogString}, which would lead to an incorrect answer. To allow reading " +
+        s"this field, either add the 'rescuedDataColumn' option to rescue the column or disable " +
+        s"the SQL configuration: `${confKey.key}`.")
+    }
+
     (avroType.getType, catalystType) match {
       case (NULL, NullType) => (updater, ordinal, _) =>
         updater.setNullAt(ordinal)
@@ -127,6 +142,26 @@ private[sql] class AvroDeserializer(
 
       case (INT, IntegerType) => (updater, ordinal, value) =>
         updater.setInt(ordinal, value.asInstanceOf[Int])
+
+      case (INT, DateType) if isNotExactType =>
+        throw incorrectTypeException(DateType)
+
+      case (LONG, DateType) if isNotExactType =>
+        throw new IncompatibleSchemaException(incompatibleMsg)
+
+      case (INT, y: YearMonthIntervalType) if isNotExactType =>
+        throw incorrectTypeException(y)
+
+      case (LONG, dt: DayTimeIntervalType) if isNotExactType =>
+        throw incorrectTypeException(dt)
+
+      case (LONG, dt: TimestampType)
+        if preventReadingIncorrectType && realDataType.isInstanceOf[DayTimeIntervalType] =>
+        throw incorrectTypeException(dt)
+
+      case (LONG, dt: TimestampNTZType)
+        if preventReadingIncorrectType && realDataType.isInstanceOf[DayTimeIntervalType] =>
+        throw incorrectTypeException(dt)
 
       case (INT, DateType) => (updater, ordinal, value) =>
         updater.setInt(ordinal, dateRebaseFunc(value.asInstanceOf[Int]))
@@ -204,17 +239,28 @@ private[sql] class AvroDeserializer(
         }
         updater.set(ordinal, bytes)
 
-      case (FIXED, _: DecimalType) => (updater, ordinal, value) =>
+      case (FIXED, dt: DecimalType) =>
         val d = avroType.getLogicalType.asInstanceOf[LogicalTypes.Decimal]
-        val bigDecimal = decimalConversions.fromFixed(value.asInstanceOf[GenericFixed], avroType, d)
-        val decimal = createDecimal(bigDecimal, d.getPrecision, d.getScale)
-        updater.setDecimal(ordinal, decimal)
+        if (preventReadingIncorrectType &&
+          d.getPrecision - d.getScale > dt.precision - dt.scale) {
+          throw incorrectTypeException(dt)
+        }
+        (updater, ordinal, value) =>
+          val bigDecimal =
+            decimalConversions.fromFixed(value.asInstanceOf[GenericFixed], avroType, d)
+          val decimal = createDecimal(bigDecimal, d.getPrecision, d.getScale)
+          updater.setDecimal(ordinal, decimal)
 
-      case (BYTES, _: DecimalType) => (updater, ordinal, value) =>
+      case (BYTES, dt: DecimalType) =>
         val d = avroType.getLogicalType.asInstanceOf[LogicalTypes.Decimal]
-        val bigDecimal = decimalConversions.fromBytes(value.asInstanceOf[ByteBuffer], avroType, d)
-        val decimal = createDecimal(bigDecimal, d.getPrecision, d.getScale)
-        updater.setDecimal(ordinal, decimal)
+        if (preventReadingIncorrectType &&
+          d.getPrecision - d.getScale > dt.precision - dt.scale) {
+          throw incorrectTypeException(dt)
+        }
+        (updater, ordinal, value) =>
+          val bigDecimal = decimalConversions.fromBytes(value.asInstanceOf[ByteBuffer], avroType, d)
+          val decimal = createDecimal(bigDecimal, d.getPrecision, d.getScale)
+          updater.setDecimal(ordinal, decimal)
 
       case (RECORD, st: StructType) =>
         // Avro datasource doesn't accept filters with nested attributes. See SPARK-32328.

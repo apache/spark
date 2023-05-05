@@ -32,6 +32,7 @@ import org.apache.avro.file.{DataFileReader, DataFileWriter}
 import org.apache.avro.generic.{GenericData, GenericDatumReader, GenericDatumWriter, GenericRecord}
 import org.apache.avro.generic.GenericData.{EnumSymbol, Fixed}
 import org.apache.commons.io.FileUtils
+import org.apache.commons.lang3.exception.ExceptionUtils
 
 import org.apache.spark.{SPARK_VERSION_SHORT, SparkConf, SparkException, SparkUpgradeException}
 import org.apache.spark.TestUtils.assertExceptionMsg
@@ -636,6 +637,39 @@ abstract class AvroSuite
       sql("SELECT 3.14 a").write.format("avro").save(path.toString)
       val data = spark.read.schema("a DECIMAL(4, 3)").format("avro").load(path.toString).collect()
       assert(data.map(_ (0)).contains(new java.math.BigDecimal("3.140")))
+    }
+  }
+
+  test("SPARK-43380: Fix Avro data type conversion issues to avoid producing incorrect results") {
+    withTempPath { path =>
+      sql("SELECT 13.1234567890 a").write.format("avro").save(path.toString)
+      val e = intercept[SparkException] {
+        spark.read.schema("a DECIMAL(4, 3)").format("avro").load(path.toString).collect()
+      }
+      val confKey = SQLConf.LEGACY_AVRO_PREVENT_READING_INCORRECT_SAME_ENCODED_TYPES.key
+      ExceptionUtils.getRootCause(e) match {
+        case ex: IncompatibleSchemaException =>
+          assert(ex.getMessage.contains("rescuedDataColumn"))
+          assert(ex.getMessage.contains(confKey))
+        case other =>
+          fail(s"Received unexpected exception", other)
+      }
+      // The following used to work, so it should still work with the flag enabled
+      checkAnswer(
+        spark.read.schema("a DECIMAL(5, 3)").format("avro").load(path.toString),
+        Row(new java.math.BigDecimal("13.123"))
+      )
+      withSQLConf(confKey -> "false") {
+        // With the flag disabled, we return a null silently, which isn't great
+        checkAnswer(
+          spark.read.schema("a DECIMAL(4, 3)").format("avro").load(path.toString),
+          Row(null)
+        )
+        checkAnswer(
+          spark.read.schema("a DECIMAL(5, 3)").format("avro").load(path.toString),
+          Row(new java.math.BigDecimal("13.123"))
+        )
+      }
     }
   }
 
