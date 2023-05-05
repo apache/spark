@@ -873,7 +873,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       e: Throwable,
       path: String): Throwable = {
     new SparkException(
-      errorClass = "TRANSIENT_LEGACY_ERROR_TEMP_2064",
+      errorClass = "_LEGACY_ERROR_TEMP_2064",
       messageParameters = Map("path" -> path),
       cause = e)
   }
@@ -2727,7 +2727,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
 
   def invalidBucketFile(path: String): Throwable = {
     new SparkException(
-      errorClass = "TRANSIENT_INVALID_BUCKET_FILE",
+      errorClass = "INVALID_BUCKET_FILE",
       messageParameters = Map("path" -> path),
       cause = null)
   }

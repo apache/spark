@@ -802,7 +802,7 @@
     ],
     "sqlState" : "22003"
   },
-  "TRANSIENT_INVALID_BUCKET_FILE" : {
+  "INVALID_BUCKET_FILE" : {
     "message" : [
       "Invalid bucket file: <path>."
     ]
@@ -3989,7 +3989,7 @@
       "Parquet column cannot be converted in file <filePath>. Column: <column>, Expected: <logicalType>, Found: <physicalType>."
     ]
   },
-  "TRANSIENT_LEGACY_ERROR_TEMP_2064" : {
+  "_LEGACY_ERROR_TEMP_2064" : {
     "message" : [
       "Encountered error while reading file <path>. Details:"
     ]
