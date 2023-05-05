@@ -210,6 +210,7 @@ private[spark] trait PVTestsSuite { k8sSuite: KubernetesSuite =>
         CONTAINER_MOUNT_PATH)
       .set(s"spark.kubernetes.executor.volumes.persistentVolumeClaim.data.options.claimName",
         PVC_NAME)
+      .set(s"spark.executor.instances", "2")
     val file = Utils.createTempFile(FILE_CONTENTS, HOST_PATH)
     try {
       setupLocalStorage()
