@@ -1499,7 +1499,7 @@
     ],
     "sqlState" : "54000"
   },
-  "TRANSIENT_UNABLE_TO_ACQUIRE_MEMORY" : {
+  "UNABLE_TO_ACQUIRE_MEMORY" : {
     "message" : [
       "Unable to acquire <requestedBytes> bytes of memory, got <receivedBytes>."
     ],
@@ -3725,6 +3725,11 @@
       "Unsuccessful try to zip maps with <size> unique keys due to exceeding the array size limit <maxRoundedArrayLength>."
     ]
   },
+  "_LEGACY_ERROR_TEMP_2004" : {
+    "message" : [
+      "no default for type <dataType>."
+    ]
+  },
   "_LEGACY_ERROR_TEMP_2005" : {
     "message" : [
       "Type <dataType> does not support ordered operations."
@@ -4184,7 +4189,7 @@
       "Could not allocate memory to grow BytesToBytesMap."
     ]
   },
-  "TRANSIENT_LEGACY_ERROR_TEMP_2106" : {
+  "_LEGACY_ERROR_TEMP_2106" : {
     "message" : [
       "Can't acquire <size> bytes memory to build hash relation, got <got> bytes."
     ]
@@ -5367,7 +5372,7 @@
       "Unexpected Py4J server <class>."
     ]
   },
-  "TRANSIENT_LEGACY_ERROR_TEMP_3001" : {
+  "_LEGACY_ERROR_TEMP_3001" : {
     "message" : [
       "EOFException occurred while reading the port number from <daemonModule>'s stdout<additionalMessage>."
     ]

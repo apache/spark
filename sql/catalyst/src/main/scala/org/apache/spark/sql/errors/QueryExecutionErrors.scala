@@ -1181,7 +1181,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
 
   def cannotAcquireMemoryToBuildLongHashedRelationError(size: Long, got: Long): Throwable = {
     new SparkException(
-      errorClass = "TRANSIENT_LEGACY_ERROR_TEMP_2106",
+      errorClass = "_LEGACY_ERROR_TEMP_2106",
       messageParameters = Map("size" -> size.toString(), "got" -> got.toString()),
       cause = null)
   }

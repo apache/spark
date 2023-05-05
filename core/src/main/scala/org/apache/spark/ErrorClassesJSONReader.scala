@@ -120,10 +120,10 @@ private object ErrorClassesJsonReader {
  *                The error message is constructed by concatenating the lines with newlines.
  */
 private case class ErrorInfo(
-                              message: Seq[String],
-                              subClass: Option[Map[String, ErrorSubInfo]],
-                              sqlState: Option[String],
-                              isTransient: Option[Boolean]) {
+   message: Seq[String],
+   subClass: Option[Map[String, ErrorSubInfo]],
+   sqlState: Option[String],
+   isTransient: Option[Boolean]) {
   // For compatibility with multi-line error messages
   @JsonIgnore
   val messageTemplate: String = message.mkString("\n")
