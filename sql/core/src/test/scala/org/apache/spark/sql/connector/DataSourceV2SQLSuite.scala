@@ -132,7 +132,7 @@ class DataSourceV2SQLSuiteV1Filter
         errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
         parameters = Map(
           "objectName" -> "`invalid_col`",
-          "proposal" -> "`testcat`.`tbl`.`id`, `testcat`.`tbl`.`data`"),
+          "proposal" -> "`id`, `data`"),
         context = ExpectedContext(
           fragment = "DESCRIBE testcat.tbl invalid_col",
           start = 0,
@@ -2069,8 +2069,7 @@ class DataSourceV2SQLSuiteV1Filter
         errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
         parameters = Map(
           "objectName" -> "`dummy`",
-          "proposal" -> ("`testcat`.`ns1`.`ns2`.`tbl`.`p`, `testcat`.`ns1`.`ns2`.`tbl`.`id`, " +
-            "`testcat`.`ns1`.`ns2`.`tbl`.`age`, `testcat`.`ns1`.`ns2`.`tbl`.`name`")
+          "proposal" -> "`name`, `age`, `id`, `p`"
         ),
         context = ExpectedContext(
           fragment = "dummy='abc'",
@@ -2081,8 +2080,7 @@ class DataSourceV2SQLSuiteV1Filter
         errorClass = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
         parameters = Map(
           "objectName" -> "`dummy`",
-          "proposal" -> ("`testcat`.`ns1`.`ns2`.`tbl`.`p`, `testcat`.`ns1`.`ns2`.`tbl`.`id`, " +
-            "`testcat`.`ns1`.`ns2`.`tbl`.`age`, `testcat`.`ns1`.`ns2`.`tbl`.`name`")
+          "proposal" -> "`name`, `age`, `id`, `p`"
         ),
         context = ExpectedContext(
           fragment = "dummy",

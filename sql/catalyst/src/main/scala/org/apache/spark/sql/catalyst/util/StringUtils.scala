@@ -94,7 +94,7 @@ object StringUtils extends Logging {
     val newTestStrings = if (maybeQualified) {
       testStrings
     } else {
-      testStrings.map(UnresolvedAttribute.parseAttributeName(_).map(quoteIfNeeded).mkString("."))
+      testStrings.map(UnresolvedAttribute.parseAttributeName(_).last).map(quoteIfNeeded)
     }
 
     newTestStrings.sortBy(LevenshteinDistance.getDefaultInstance.apply(_, baseString))
