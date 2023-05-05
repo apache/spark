@@ -159,8 +159,8 @@ class FileScanRDD(
         metadataColumns.map(_.name).map {
           case FILE_PATH =>
             val columnVector = new ConstantColumnVector(c.numRows(), StringType)
-            // Use new Path(Path.toString).toString as a form of canonicalization
-            val pathString = new Path(path.toString).toString
+            // Use `new Path(Path.toString)` as a form of canonicalization
+            val pathString = new Path(path.toString).toUri.toString
             columnVector.setUtf8String(UTF8String.fromString(pathString))
             columnVector
           case FILE_NAME =>
