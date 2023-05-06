@@ -1039,7 +1039,7 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.shuffle.localDisk.file.output.buffer</code></td>
   <td>32k</td>
   <td>
-    The file system for this buffer size after each partition is written in in all local disk shuffle writers.
+    The file system for this buffer size after each partition is written in all local disk shuffle writers.
     In KiB unless otherwise specified.
   </td>
   <td>3.5.0</td>
