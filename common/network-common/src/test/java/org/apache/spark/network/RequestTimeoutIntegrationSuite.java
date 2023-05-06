@@ -110,7 +110,7 @@ public class RequestTimeoutIntegrationSuite {
       }
     };
 
-    context = new TransportContext(conf, handler);
+    context = new TransportContext(conf, handler, true);
     server = context.createServer();
     clientFactory = context.createClientFactory();
     TransportClient client = clientFactory.createClient(TestUtils.getLocalHost(), server.getPort());
@@ -157,7 +157,7 @@ public class RequestTimeoutIntegrationSuite {
       }
     };
 
-    context = new TransportContext(conf, handler);
+    context = new TransportContext(conf, handler, true);
     server = context.createServer();
     clientFactory = context.createClientFactory();
 
@@ -208,7 +208,7 @@ public class RequestTimeoutIntegrationSuite {
       }
     };
 
-    context = new TransportContext(conf, handler);
+    context = new TransportContext(conf, handler, true);
     server = context.createServer();
     clientFactory = context.createClientFactory();
     TransportClient client = clientFactory.createClient(TestUtils.getLocalHost(), server.getPort());
