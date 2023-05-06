@@ -24,7 +24,7 @@ license: |
 
 ## Upgrading from Core 3.4 to 3.5
 
-- Since Spark 3.4, `spark.shuffle.unsafe.file.output.buffer` is deprecated though still works. Use `spark.shuffle.localDisk.file.output.buffer` instead.
+- Since Spark 3.5, `spark.shuffle.unsafe.file.output.buffer` is deprecated though still works. Use `spark.shuffle.localDisk.file.output.buffer` instead.
 
 ## Upgrading from Core 3.3 to 3.4
 
