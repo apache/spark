@@ -29,6 +29,7 @@ import (
 
 type DataFrame interface {
 	Show(numRows int, truncate bool) error
+	Collect() ([]Row, error)
 }
 
 type dataFrameImpl struct {
@@ -83,6 +84,41 @@ func (df *dataFrameImpl) Show(numRows int, truncate bool) error {
 	}
 
 	return fmt.Errorf("did not get arrow batch in response")
+}
+
+func (df *dataFrameImpl) Collect() ([]Row, error) {
+	plan := &proto.Plan{
+		OpType: &proto.Plan_Root{
+			Root: &proto.Relation{
+				Common: &proto.RelationCommon{
+					PlanId: newPlanId(),
+				},
+				RelType: df.relation.RelType,
+			},
+		},
+	}
+
+	responseClient, err := df.sparkSession.executePlan(plan)
+	if err != nil {
+		return nil, fmt.Errorf("failed to execute plan in Collect: %w", err)
+	}
+
+	for {
+		response, err := responseClient.Recv()
+		if err != nil {
+			return nil, fmt.Errorf("failed to receive plan execution response: %w", err)
+		}
+		arrowBatch := response.GetArrowBatch()
+		if arrowBatch == nil {
+			continue
+		}
+
+		// TODO convert arrowBatch to []Row
+
+		return nil, nil
+	}
+
+	return nil, fmt.Errorf("did not get arrow batch in response")
 }
 
 func showArrowBatch(arrowBatch *proto.ExecutePlanResponse_ArrowBatch) error {

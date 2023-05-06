@@ -14,41 +14,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package main
+package sql
 
-import (
-	"flag"
-	"github.com/apache/spark/go/v_3_4/spark/sql"
-	"log"
-)
+import "github.com/apache/spark/go/v_3_4/generated/proto"
 
-var (
-	remote = flag.String("remote", "localhost:15002",
-		"the remote address of Spark Connect server to connect to")
-)
+type StructField struct {
+	Name     string
+	DataType proto.DataType
+	Nullable bool // default should be true
+}
 
-func main() {
-	spark, err := sql.SparkSession.Builder.Remote(*remote).Build()
-	if err != nil {
-		log.Fatalf("Failed: %s", err.Error())
-	}
-	defer spark.Stop()
-
-	df, err := spark.Sql("select 'apple' as word, 123 as count union all select 'orange' as word, 456 as count")
-	if err != nil {
-		log.Fatalf("Failed: %s", err.Error())
-	}
-
-	err = df.Show(100, false)
-	if err != nil {
-		log.Fatalf("Failed: %s", err.Error())
-	}
-
-	rows, err := df.Collect()
-	if err != nil {
-		log.Fatalf("Failed: %s", err.Error())
-	}
-	for _, row := range rows {
-		log.Printf("Row: %v", row)
-	}
+type StructType struct {
+	TypeName string
+	Fields   []StructField
 }
