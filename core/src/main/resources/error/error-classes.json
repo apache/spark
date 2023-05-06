@@ -3752,11 +3752,6 @@
       "Type <dataType> does not support ordered operations."
     ]
   },
-  "_LEGACY_ERROR_TEMP_2006" : {
-    "message" : [
-      "The specified group index cannot be less than zero."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_2011" : {
     "message" : [
       "Unexpected data type <dataType>."
