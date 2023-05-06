@@ -46,7 +46,7 @@ import static org.apache.spark.network.util.NettyUtils.getRemoteAddress;
  * for the Client's responses to the Server's requests.
  *
  * This class also handles timeouts from a {@link io.netty.handler.timeout.IdleStateHandler}.
- * We consider a connection timed out if there are outstanding fetch or RPC requests but no traffic
+ * We consider a connection idle if there are outstanding fetch or RPC requests but no traffic
  * on the channel for at least `requestTimeoutMs`. Note that this is duplex traffic; we will not
  * timeout if the client is continuously sending but getting no responses, for simplicity.
  */
@@ -163,14 +163,11 @@ public class TransportChannelHandler extends SimpleChannelInboundHandler<Message
         if (e.state() == IdleState.ALL_IDLE && isActuallyOverdue) {
           if (responseHandler.hasOutstandingRequests()) {
             String address = getRemoteAddress(ctx.channel());
-            logger.error("Connection to {} has been quiet for {} ms while there are outstanding " +
-              "requests. Assuming connection is dead; please adjust" +
-              " spark.{}.io.connectionTimeout if this is wrong.",
-              address, requestTimeoutNs / 1000 / 1000, transportContext.getConf().getModuleName());
-            client.timeOut();
-            ctx.close();
-          } else if (closeIdleConnections) {
-            // While CloseIdleConnections is enable, we also close idle connection
+            logger.warn("Connection to {} has been quiet for {} ms while there are outstanding " +
+              "requests. ", address, requestTimeoutNs / 1000 / 1000);
+          }
+          // if CloseIdleConnections is enabled, close idle connection
+          if (closeIdleConnections) {
             client.timeOut();
             ctx.close();
           }
