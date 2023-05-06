@@ -68,10 +68,10 @@ object MimaExcludes {
     ProblemFilters.exclude[Problem]("org.apache.spark.sql.v2.avro.*"),
 
     // SPARK-43033: Avoid task retries due to AssertNotNull checks
-    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.ExceptionFailure.apply"),
-    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.ExceptionFailure.copy"),
-    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.ExceptionFailure.this"),
-    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.ExceptionFailure$"),
+    ProblemFilters.exclude[Problem]("org.apache.spark.ExceptionFailure.apply"),
+    ProblemFilters.exclude[Problem]("org.apache.spark.ExceptionFailure.copy"),
+    ProblemFilters.exclude[Problem]("org.apache.spark.ExceptionFailure.this"),
+    ProblemFilters.exclude[Problem]("org.apache.spark.ExceptionFailure$"),
 
     // SPARK-43169: shaded and generated protobuf code
     ProblemFilters.exclude[Problem]("org.sparkproject.spark_core.protobuf.*"),
