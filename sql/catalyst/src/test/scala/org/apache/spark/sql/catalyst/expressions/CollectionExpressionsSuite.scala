@@ -778,6 +778,7 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     checkExceptionInExpression[IllegalArgumentException](
       new Sequence(Literal(1), Literal(2), Literal(-1)), EmptyRow, "boundaries: 1 to 2 by -1")
 
+    // SPARK-43393: test Sequence overflow checking
     checkExceptionInExpression[IllegalArgumentException](
       new Sequence(Literal(Int.MinValue), Literal(Int.MaxValue), Literal(1)), EmptyRow,
         s"Too long sequence: ${BigInt(Int.MaxValue) - BigInt{Int.MinValue} + 1}. " +
