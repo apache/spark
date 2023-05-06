@@ -243,7 +243,7 @@ class StreamingTestsForeach(ReusedSQLTestCase):
             def open(self, partition):
                 pass
 
-        tester.assert_invalid_writer(WriterWithoutProcess(), "does not have a 'process'")
+        tester.assert_invalid_writer(WriterWithoutProcess(), "ATTRIBUTE_NOT_CALLABLE")
 
         class WriterWithNonCallableProcess:
             process = True
