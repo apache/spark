@@ -18107,9 +18107,9 @@ def filter_value(col: "ColumnOrName", f: Callable[[Column], Column]) -> Column:
     +----+
     |even|
     +----+
-    |null|
+    |NULL|
     |   2|
-    |null|
+    |NULL|
     +----+
     """
     return _invoke_higher_order_function("FilterValue", [col], [f])
