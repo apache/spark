@@ -770,10 +770,6 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     // test sequence boundaries checking
 
     checkExceptionInExpression[IllegalArgumentException](
-      new Sequence(Literal(Int.MinValue), Literal(Int.MaxValue), Literal(1)),
-      EmptyRow, s"Too long sequence: 4294967296. Should be <= $MAX_ROUNDED_ARRAY_LENGTH")
-
-    checkExceptionInExpression[IllegalArgumentException](
       new Sequence(Literal(1), Literal(2), Literal(0)), EmptyRow, "boundaries: 1 to 2 by 0")
     checkExceptionInExpression[IllegalArgumentException](
       new Sequence(Literal(2), Literal(1), Literal(0)), EmptyRow, "boundaries: 2 to 1 by 0")
@@ -781,6 +777,26 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
       new Sequence(Literal(2), Literal(1), Literal(1)), EmptyRow, "boundaries: 2 to 1 by 1")
     checkExceptionInExpression[IllegalArgumentException](
       new Sequence(Literal(1), Literal(2), Literal(-1)), EmptyRow, "boundaries: 1 to 2 by -1")
+
+    checkExceptionInExpression[IllegalArgumentException](
+      new Sequence(Literal(Int.MinValue), Literal(Int.MaxValue), Literal(1)), EmptyRow,
+        s"Too long sequence: ${BigInt(Int.MaxValue) - BigInt{Int.MinValue} + 1}. " +
+        s"Should be <= $MAX_ROUNDED_ARRAY_LENGTH")
+    checkExceptionInExpression[IllegalArgumentException](
+      new Sequence(Literal(0L), Literal(Long.MaxValue), Literal(1L)), EmptyRow,
+      s"Too long sequence: ${BigInt(Long.MaxValue) + 1}. Should be <= $MAX_ROUNDED_ARRAY_LENGTH")
+    checkExceptionInExpression[IllegalArgumentException](
+      new Sequence(Literal(0L), Literal(Long.MinValue), Literal(-1L)), EmptyRow,
+        s"Too long sequence: ${(0 - BigInt(Long.MinValue)) + 1}. " +
+        s"Should be <= $MAX_ROUNDED_ARRAY_LENGTH")
+    checkExceptionInExpression[IllegalArgumentException](
+      new Sequence(Literal(Long.MinValue), Literal(Long.MaxValue), Literal(1L)), EmptyRow,
+        s"Too long sequence: ${BigInt(Long.MaxValue) - BigInt{Long.MinValue} + 1}. " +
+        s"Should be <= $MAX_ROUNDED_ARRAY_LENGTH")
+    checkExceptionInExpression[IllegalArgumentException](
+      new Sequence(Literal(Long.MaxValue), Literal(Long.MinValue), Literal(-1L)), EmptyRow,
+        s"Too long sequence: ${BigInt(Long.MaxValue) - BigInt{Long.MinValue} + 1}. " +
+        s"Should be <= $MAX_ROUNDED_ARRAY_LENGTH")
 
     // test sequence with one element (zero step or equal start and stop)
 

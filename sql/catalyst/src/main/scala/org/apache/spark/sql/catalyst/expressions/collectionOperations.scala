@@ -3448,13 +3448,32 @@ object Sequence {
         || (estimatedStep == num.zero && start == stop),
       s"Illegal sequence boundaries: $start to $stop by $step")
 
-    val len = if (start == stop) 1L else 1L + (stop.toLong - start.toLong) / estimatedStep.toLong
-
-    require(
-      len <= MAX_ROUNDED_ARRAY_LENGTH,
-      s"Too long sequence: $len. Should be <= $MAX_ROUNDED_ARRAY_LENGTH")
-
-    len.toInt
+    try {
+      val delta = Math.subtractExact(stop.toLong, start.toLong)
+      if (delta == Long.MinValue && estimatedStep.toLong == -1L) {
+        // We must special-case division of Long.MinValue by -1 to catch potential unchecked
+        // overflow in next operation. Division does not have a builtin overflow check. We
+        // previously special-case div-by-zero.
+        throw new ArithmeticException("Long overflow (Long.MinValue / -1)")
+      }
+      val len = if (stop == start) 1L else Math.addExact(1L, (delta / estimatedStep.toLong))
+      require(
+        len <= MAX_ROUNDED_ARRAY_LENGTH,
+        s"Too long sequence: $len. Should be <= $MAX_ROUNDED_ARRAY_LENGTH"
+      )
+      len.toInt
+    } catch {
+      // We handle overflows in the previous try block by raising an appropriate exception.
+      case _: ArithmeticException =>
+        val safeLen =
+          BigInt(1) + (BigInt(stop.toLong) - BigInt(start.toLong)) / BigInt(estimatedStep.toLong)
+        require(
+          safeLen <= MAX_ROUNDED_ARRAY_LENGTH,
+          s"Too long sequence: $safeLen. Should be <= $MAX_ROUNDED_ARRAY_LENGTH"
+        )
+        throw new RuntimeException("Unreachable code reached.")
+      case e: Exception => throw e
+    }
   }
 
   private def genSequenceLengthCode(
@@ -3464,7 +3483,10 @@ object Sequence {
       step: String,
       estimatedStep: String,
       len: String): String = {
+    val BigInt = classOf[java.math.BigInteger].getName
+    val delta = ctx.freshName("delta")
     val longLen = ctx.freshName("longLen")
+    val safeLen = ctx.freshName("safeLen")
     s"""
        |if (!(($estimatedStep > 0 && $start <= $stop) ||
        |  ($estimatedStep < 0 && $start >= $stop) ||
@@ -3472,12 +3494,42 @@ object Sequence {
        |  throw new IllegalArgumentException(
        |    "Illegal sequence boundaries: " + $start + " to " + $stop + " by " + $step);
        |}
-       |long $longLen = $stop == $start ? 1L : 1L + ((long) $stop - $start) / $estimatedStep;
-       |if ($longLen > $MAX_ROUNDED_ARRAY_LENGTH) {
-       |  throw new IllegalArgumentException(
-       |    "Too long sequence: " + $longLen + ". Should be <= $MAX_ROUNDED_ARRAY_LENGTH");
+       |// We must pre-declare len here to avoid scope-visbility errors in the encapsulating
+       |// generated code.
+       |int $len;
+       |try {
+       |  long $delta = Math.subtractExact((long) $stop, (long) $start);
+       |  if ($delta == Long.MIN_VALUE && (long) $estimatedStep == (long) -1) {
+       |    // We must special-case division of Long.MinValue by -1 to catch potential unchecked
+       |    // overflow in next operation. Division does not have a builtin overflow check. We
+       |    // previously special-case div-by-zero.
+       |    throw new ArithmeticException("Long overflow (Long.MIN_VALUE / -1)");
+       |  }
+       |  long $longLen =
+       |    $stop == $start ? 1L : Math.addExact(1L, $delta / ((long) $estimatedStep));
+       |  if ($longLen > $MAX_ROUNDED_ARRAY_LENGTH) {
+       |    throw new IllegalArgumentException(
+       |      "Too long sequence: " + $longLen + ". Should be <= $MAX_ROUNDED_ARRAY_LENGTH"
+       |    );
+       |  }
+       |  $len = (int) $longLen;
+       |} catch (ArithmeticException _) {
+       |  // We handle overflows in the previous try block by raising an appropriate exception.
+       |  $BigInt $safeLen = $BigInt.ONE.add(
+       |    $BigInt.valueOf((long) $stop).subtract($BigInt.valueOf((long) $start)).divide(
+       |      $BigInt.valueOf((long) $estimatedStep)
+       |    )
+       |  );
+       |  if ($safeLen.compareTo($BigInt.valueOf($MAX_ROUNDED_ARRAY_LENGTH)) > 0) {
+       |    throw new IllegalArgumentException(
+       |      "Too long sequence: " + $safeLen.toString() +
+       |      ". Should be <= $MAX_ROUNDED_ARRAY_LENGTH"
+       |    );
+       |  }
+       |  throw new RuntimeException("Unreachable code reached.");
+       |} catch (Exception e) {
+       |  throw e;
        |}
-       |int $len = (int) $longLen;
        """.stripMargin
   }
 }
