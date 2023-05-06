@@ -357,13 +357,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase {
       messageParameters = Map("dataType" -> dataType))
   }
 
-  def regexGroupIndexLessThanZeroError(): SparkIllegalArgumentException = {
-    new SparkIllegalArgumentException(
-      errorClass = "_LEGACY_ERROR_TEMP_2006",
-      messageParameters = Map.empty)
-  }
-
-  def regexGroupIndexExceedGroupCountError(
+  def invalidRegexGroupIndexError(
       funcName: String,
       groupCount: Int,
       groupIndex: Int): RuntimeException = {
