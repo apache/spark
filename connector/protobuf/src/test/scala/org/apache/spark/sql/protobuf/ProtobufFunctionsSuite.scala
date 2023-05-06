@@ -361,15 +361,23 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
 
     val df = Seq(dynamicMessage.toByteArray).toDF("value")
 
+    // Test that roundtrip serde works correctly both with and without enums as ints.
     checkWithFileAndClassName("SimpleMessageEnum") {
       case (name, descFilePathOpt) =>
-        val fromProtoDF = df.select(
-          from_protobuf_wrapper($"value", name, descFilePathOpt).as("value_from"))
-        val toProtoDF = fromProtoDF.select(
-          to_protobuf_wrapper($"value_from", name, descFilePathOpt).as("value_to"))
-        val toFromProtoDF = toProtoDF.select(
-          from_protobuf_wrapper($"value_to", name, descFilePathOpt).as("value_to_from"))
-        checkAnswer(fromProtoDF.select($"value_from.*"), toFromProtoDF.select($"value_to_from.*"))
+        List(
+          Map.empty[String, String],
+          Map("enums.as.ints" -> "false"),
+          Map("enums.as.ints" -> "true"))
+          .foreach(opts => {
+            val fromProtoDF = df.select(
+              from_protobuf_wrapper($"value", name, descFilePathOpt, opts).as("value_from"))
+            val toProtoDF = fromProtoDF.select(
+              to_protobuf_wrapper($"value_from", name, descFilePathOpt).as("value_to"))
+            val toFromProtoDF = toProtoDF.select(
+              from_protobuf_wrapper($"value_to", name, descFilePathOpt, opts).as("value_to_from"))
+            checkAnswer(fromProtoDF.select($"value_from.*"),
+              toFromProtoDF.select($"value_to_from.*"))
+          })
     }
   }
 
@@ -1462,6 +1470,53 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
           descFilePathOpt,
           Map("emit.default.values" -> "true")).as("proto")),
         expected)
+    }
+  }
+
+  test("test enum deserialization") {
+    val message = spark.range(1).select(
+      lit(SimpleMessageEnum
+        .newBuilder()
+        .setKey("key")
+        .setValue("value")
+        .setBasicEnum(BasicEnumMessage.BasicEnum.FIRST)
+        .setNestedEnum(SimpleMessageEnum.NestedEnum.NESTED_SECOND)
+        .build().toByteArray).as("raw_proto"))
+
+    val expected = spark.range(1).select(
+      struct(
+        lit("key").as("key"),
+        lit("value").as("value"),
+        lit("FIRST").as("basic_enum"),
+        lit("NESTED_SECOND").as("nested_enum")
+      ).as("proto")
+    )
+
+    // With enums.as.ints, we expect the numerical value
+    // to be returned when deserializing.
+    val expectedWithOption = spark.range(1).select(
+      struct(
+        lit("key").as("key"),
+        lit("value").as("value"),
+        lit(1).as("basic_enum"),
+        lit(2).as("nested_enum")
+      ).as("proto")
+    )
+
+    checkWithFileAndClassName("SimpleMessageEnum") { case (name, descFilePathOpt) =>
+      List(Map.empty[String, String], Map("enums.as.ints" -> "false")).foreach(opts => {
+        checkAnswer(
+          message.select(
+            from_protobuf_wrapper($"raw_proto", name, descFilePathOpt, opts).as("proto")),
+          expected)
+      })
+      checkAnswer(
+        message.select(from_protobuf_wrapper(
+          $"raw_proto",
+          name,
+          descFilePathOpt,
+          Map("enums.as.ints" -> "true")).as("proto")),
+        expectedWithOption)
     }
   }
 

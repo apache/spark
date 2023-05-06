@@ -110,6 +110,19 @@ private[sql] class ProtobufSerializer(
               enumSymbols.mkString("\"", "\", \"", "\""))
           }
           fieldDescriptor.getEnumType.findValueByName(data)
+      case (IntegerType, ENUM) =>
+        val enumValues: Set[Int] =
+          fieldDescriptor.getEnumType.getValues.asScala.map(e => e.getNumber).toSet
+        (getter, ordinal) =>
+          val data = getter.getInt(ordinal)
+          if (!enumValues.contains(data)) {
+            throw QueryCompilationErrors.cannotConvertCatalystTypeToProtobufEnumTypeError(
+              catalystPath,
+              toFieldStr(protoPath),
+              data.toString,
+              enumValues.mkString("", ",", ""))
+          }
+          fieldDescriptor.getEnumType.findValueByNumber(data)
       case (StringType, STRING) =>
         (getter, ordinal) => {
           String.valueOf(getter.getUTF8String(ordinal))

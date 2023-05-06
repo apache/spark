@@ -141,6 +141,30 @@ private[sql] class ProtobufOptions(
   //      what information is available in a serialized proto.
   val emitDefaultValues: Boolean =
     parameters.getOrElse("emit.default.values", false.toString).toBoolean
+
+  // Whether to render enum fields as their integer values.
+  //
+  // As an example, consider the following message type:
+  // ```
+  // syntax = "proto3";
+  // message Person {
+  //   enum Job {
+  //     NONE = 0;
+  //     ENGINEER = 1;
+  //     DOCTOR = 2;
+  //   }
+  //   Job job = 1;
+  // }
+  // ```
+  //
+  // If we have an instance of this message like `Person(job = ENGINEER)`, then the
+  // default deserialization will be:
+  // `{"job": "ENGINEER"}`
+  //
+  // But with this option set the deserialization will be:
+  // `{"job": 1}`
+  val enumsAsInts: Boolean =
+    parameters.getOrElse("enums.as.ints", false.toString).toBoolean
 }
 
 private[sql] object ProtobufOptions {
